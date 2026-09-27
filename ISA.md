@@ -226,9 +226,9 @@ Why: the transports and the model ladder shipped on 2026-09-25 with tests, but n
 the phone. Each item below is built and unverified, or ruled and unbuilt.
 
 - [ ] ISC-17 — a phone on the home Wi-Fi reaches the Mac's `:8443` listener, pins it after the
-  code comparison, and reads data with the tailnet off. The macOS firewall permits the signed
-  `sjel-status` (checked 2026-09-27 with `socketfilterfw --getappblocked`); the app is installed,
-  and the phone is not yet registered. Falsifier: `curl -k
+  code comparison, and reads data with the tailnet off. The Sjel build of 2026-09-27 20:58 is on
+  the phone; the phone is not yet registered. The macOS firewall blocked `sjel-status` again after
+  that evening's rebuild (`socketfilterfw --getappblocked`), so it needs `--unblockapp` once more. Falsifier: `curl -k
   https://<LAN address>:8443/health` from another device does not answer 200.
 - [ ] ISC-18 — the assistant drawer calls the model ladder (`dashboard/src/lib/intelligence`)
   for at least one task and shows which rung answered. Falsifier: `rg "intelligence/backends"

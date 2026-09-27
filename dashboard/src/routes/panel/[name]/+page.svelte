@@ -40,7 +40,7 @@
 {:else if !capability.up}
   <PageHeader badge="Panel" title={titleCase(name)} />
   <!-- Not an error state. On-demand is the design: nothing but the shell and
-       axon-status runs until you open something, and opening it starts it. -->
+       sjel-status runs until you open something, and opening it starts it. -->
   <div class="card offer">
     <p class="lead">{name} is not running.</p>
     <p class="muted">It starts on demand. Nothing runs in the background until you open it.</p>

@@ -213,18 +213,18 @@ describe("couplingFromRustPath", () => {
     // This is why graphify's import edges were unusable: `use std::sync::OnceLock` says
     // nothing about which unit owns anything.
     const edges = couplingFromRustPath(
-      "capabilities/axon-status/src/main.rs",
+      "capabilities/sjel-status/src/main.rs",
       "use std::sync::OnceLock;\nuse axum::Router;\nuse serde_json::json;",
     );
     expect(edges).toEqual([]);
   });
 
   test("a doc comment naming another unit is not coupling", () => {
-    // The near-miss that killed text-substring confirmation: axon-status/src/main.rs
+    // The near-miss that killed text-substring confirmation: sjel-status/src/main.rs
     // mentions "scouting" only in a `//!` comment about retired port literals, and a
     // whole-file substring check accepted it as a real import.
     const edges = couplingFromRustPath(
-      "capabilities/axon-status/src/main.rs",
+      "capabilities/sjel-status/src/main.rs",
       "//! also retired the hardcoded transit/scouting port literals this file used to carry",
     );
     expect(edges).toEqual([]);
@@ -234,7 +234,7 @@ describe("couplingFromRustPath", () => {
 describe("couplingFromCargo", () => {
   test("a path dependency naming another unit is coupling", () => {
     const edges = couplingFromCargo(
-      "capabilities/axon-status/Cargo.toml",
+      "capabilities/sjel-status/Cargo.toml",
       [
         "[dependencies]",
         'sjel-server = { path = "../../libs/sjel-server" }',

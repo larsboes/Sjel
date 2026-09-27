@@ -1,6 +1,6 @@
 <script lang="ts">
   /**
-   * Operator-pinned links, straight from the overlay's links.toml via axon-status.
+   * Operator-pinned links, straight from the overlay's links.toml via sjel-status.
    *
    * The shell owns the card; the overlay owns the entries. A deployment that pins
    * nothing renders nothing — no empty-state prose for a purely optional surface.
@@ -18,7 +18,7 @@
     try {
       links = (await axonStatus.links()).links;
     } catch {
-      // The card is decoration: an unreachable axon-status already renders loudly in
+      // The card is decoration: an unreachable sjel-status already renders loudly in
       // the surfaces that own health, so this stays quiet and empty.
     }
   });

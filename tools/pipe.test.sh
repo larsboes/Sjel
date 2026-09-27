@@ -51,9 +51,9 @@ fi
 
 # --- flags reach grep ------------------------------------------------------
 # Every call site passes one: -x for whole-line container names, -E for the runtime status line.
-( set -o pipefail; printf 'axon-status\naxon-status-extra\n' | stream_matches -x "axon-status" )
+( set -o pipefail; printf 'sjel-status\nsjel-status-extra\n' | stream_matches -x "sjel-status" )
 [ $? -eq 0 ] || fail "-x did not match a whole line"
-( set -o pipefail; printf 'axon-status-extra\n' | stream_matches -x "axon-status" )
+( set -o pipefail; printf 'sjel-status-extra\n' | stream_matches -x "sjel-status" )
 [ $? -ne 0 ] || fail "-x matched a line it should not have"
 ( set -o pipefail; printf 'status  running\n' | stream_matches -E '^status[[:space:]]+running' )
 [ $? -eq 0 ] || fail "-E did not match"

@@ -14,6 +14,6 @@ path = "src/lib.rs"
 [dependencies]
 # The only dependency, and it is the point of the crate. `blocking` because every
 # outbound fetcher in Axon runs inside `spawn_blocking` or a CLI; the async
-# `reqwest::Client` sites in the workspace are all tests plus axon-status' proxy,
+# `reqwest::Client` sites in the workspace are all tests plus sjel-status' proxy,
 # and none of them build a client with options worth centralising.
 reqwest = { workspace = true, features = ["blocking"] }

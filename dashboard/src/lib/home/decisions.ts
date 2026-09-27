@@ -123,7 +123,7 @@ export interface DecisionKind<Source = unknown, Row = unknown> {
   band: number;
   /** The name used in the "Unavailable: …" line when `load` rejects. */
   label: string;
-  /** The capability this kind reads, or null for axon-status itself. */
+  /** The capability this kind reads, or null for sjel-status itself. */
   capability: string | null;
   /** Commitments expire whether or not you look at them; reading never does. */
   lane?: "commitment" | "reading";

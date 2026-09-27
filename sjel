@@ -72,7 +72,7 @@ Usage: sjel capability <command>
   ingest <url> | feed [days]
 
 health polls each capability's ready_path where it declares one and its health_path
-otherwise, which is what axon-status judges availability on. Four states:
+otherwise, which is what sjel-status judges availability on. Four states:
 
   up       answered 200
   down     should be answering and did not. The only state that exits non-zero

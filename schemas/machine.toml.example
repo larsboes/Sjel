@@ -112,8 +112,8 @@ capabilities = ["home-assistant", "vaultwarden"]
 #     `endpoint`, so no consumer works the address out for itself. Every other manifest field is
 #     BLANKED there — a manifest describes how its OWNER runs the service, and projecting
 #     `autostart` or `backup_target` onto a client would claim authority it does not have.
-#   * axon-status polls its health at that endpoint and reports it, read-only.
-#   * `service-runner.sh`, `backup.sh` and axon-status's start/stop REFUSE it by name.
+#   * sjel-status polls its health at that endpoint and reports it, read-only.
+#   * `service-runner.sh`, `backup.sh` and sjel-status's start/stop REFUSE it by name.
 #     Independently managed overlays stay separate operational authorities: lifecycle, secrets
 #     and backups belong to whoever owns the host.
 #   * an id that resolves to nothing is an error everywhere, never a quiet fall back to loopback

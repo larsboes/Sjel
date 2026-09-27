@@ -107,7 +107,7 @@ async function main(): Promise<void> {
   const outDir = outIdx >= 0 ? args[outIdx + 1] : join(SJEL_ROOT, manifest.fixturesDir);
 
   // Before the first request, because the alternative is what happened to
-  // `/api/axon-status/upstreams`: a path no capability serves resolves to a real port, hits
+  // `/api/sjel-status/upstreams`: a path no capability serves resolves to a real port, hits
   // that capability's proxy fallback, and comes back as a 404 from a THIRD capability with
   // nothing in the message pointing at demo.toml. Reading the route manifests answers it
   // here, in one sentence, with the stack already up and nothing recorded yet.

@@ -284,10 +284,10 @@ cmd_enable() {  # <name>
 #
 # Emits the enabled set as JSON so non-shell consumers never learn to parse TOML:
 # tools/lib/toml.sh stays the only parser (README.md#one-manifest-per-concern), and everyone else reads
-# this. Three consumers today — service-runner.sh's up/down fan-out, axon-status
+# this. Three consumers today — service-runner.sh's up/down fan-out, sjel-status
 # (which dials each health URL and starts capabilities on demand), and
 # dashboard/vite.config.ts (which builds its proxy table from it). That third reader
-# is the trigger axon-status's own source comment named: the port literals it used to
+# is the trigger sjel-status's own source comment named: the port literals it used to
 # duplicate now live in one manifest each.
 #
 # Order is dependency-first, straight out of the same _resolve the enable path uses —
@@ -335,7 +335,7 @@ _emit_service() {  # <name> <manifest> <scope> [endpoint]
   # presence signal (backup.sh refuses a run without one), `backup_sqlite` is what decides
   # whether a run holds the capability down, and the two day fields are what timely MEANS
   # for this data. A consumer that shows a backup surface needs all four and has no other
-  # legal way to get them — axon-status is forbidden from parsing TOML (README.md#one-manifest-per-concern).
+  # legal way to get them — sjel-status is forbidden from parsing TOML (README.md#one-manifest-per-concern).
   #
   # `backup_sqlite_online` is the fifth and the counter-example that keeps the fourth
   # honest: capabilities/store's file is copied while it is open, so a run holds nothing

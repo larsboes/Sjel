@@ -72,5 +72,5 @@ tower-http = { workspace = true, features = ["cors"] }
 
 [dev-dependencies]
 # `ServiceExt::oneshot`, so the origin test drives the wired Router with no listener
-# and no port. The same pattern capabilities/axon-status already uses.
+# and no port. The same pattern capabilities/sjel-status already uses.
 tower = { workspace = true, features = ["util"] }

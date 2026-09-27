@@ -150,14 +150,14 @@ pub fn undeclared_routes(source: &str, routes: &[Route]) -> Vec<String> {
 ///
 /// ```text
 /// .route(
-///     "/api/axon-status/capabilities/:name/start",
+///     "/api/sjel-status/capabilities/:name/start",
 ///     post(start_handler),
 /// )
 /// ```
 ///
 /// — was invisible. Measured across this repo on 2026-08-31: **22 routes in
 /// seven capabilities**, of which three were served and undeclared, including
-/// `start` and `stop` on `axon-status`, the two calls that start and stop every
+/// `start` and `stop` on `sjel-status`, the two calls that start and stop every
 /// capability on the machine. The formatter decides where a line breaks; a
 /// detector that reads differently on either side of that decision is a
 /// detector that passes for reasons unrelated to the thing it checks.
@@ -167,7 +167,7 @@ pub fn undeclared_routes(source: &str, routes: &[Route]) -> Vec<String> {
 /// URL — and the routes it could then miss are exactly what this exists to
 /// catch. So the cost lands on prose instead. A comment that spells the mount
 /// call out byte for byte reads as a served path; write about it without
-/// quoting it, the way `capabilities/axon-status/src/main.rs` does at the two
+/// quoting it, the way `capabilities/sjel-status/src/main.rs` does at the two
 /// mounts that occasioned this.
 fn served_paths(source: &str) -> Vec<String> {
     const MARKER: &str = ".route(";

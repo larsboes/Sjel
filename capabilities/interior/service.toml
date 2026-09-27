@@ -27,7 +27,7 @@ idle_timeout = "300"
 # iframe". Seit `dashboard/src/routes/interior/` (PRD B27) ist das falsch: die Seite gehoert
 # der Shell, und die Capability liefert die Zahlen.
 #
-# `proxy_api_only` ist die Folge und keine Verzierung. Ohne sie haengt axon-status die
+# `proxy_api_only` ist die Folge und keine Verzierung. Ohne sie haengt sjel-status die
 # Capability unter `/interior` ein und faengt damit genau den Pfad ab, unter dem die
 # Dashboard-Route liegt — die Seite waere durch ihre eigene API ersetzt. So mountet die
 # Capability nur `/interior/api`, und `/interior` bleibt die Shell. calendar, finance und

@@ -1,6 +1,6 @@
 [workspace]
 members = [
-    "capabilities/axon-status",
+    "capabilities/sjel-status",
     "capabilities/calendar",
     "capabilities/comms",
     "capabilities/devices",
@@ -78,7 +78,7 @@ license = "AGPL-3.0-only"
 # capabilities/interior stays out of the `thiserror` entry: it is on 2.0 while six members are
 # on 1.0, and moving either way would be a version change. It says so at its own declaration.
 #
-# capabilities/axon-status stays out of the `tower` entry for the same reason: it declares 0.4
+# capabilities/sjel-status stays out of the `tower` entry for the same reason: it declares 0.4
 # as a normal dependency and moving it to 0.5 is a version change, which Q77 puts on a
 # Dependabot commit rather than on a security one. Both versions were already in Cargo.lock
 # before this entry existed — 0.5.3 arrives through axum 0.7 and reqwest 0.13 — so the six

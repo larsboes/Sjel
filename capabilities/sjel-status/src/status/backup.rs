@@ -66,7 +66,7 @@ pub(crate) fn now_epoch() -> u64 {
 /// Process memory rather than a file on purpose: a run's progress is a fact about THIS
 /// process, and the durable record of a backup is the receipt `backup.sh` writes. That
 /// split is what lets a slow run survive a page refresh — the page is not holding the
-/// state — while a restart of axon-status correctly forgets a run it can no longer
+/// state — while a restart of sjel-status correctly forgets a run it can no longer
 /// observe, instead of leaving a "running" marker on disk that nothing will ever clear.
 #[derive(Clone, Serialize)]
 pub(crate) struct BackupRun {
@@ -98,7 +98,7 @@ pub(crate) static BACKUP_RUNS: OnceLock<Mutex<HashMap<String, BackupRun>>> = Onc
 /// there before or after one `insert`, and both are readable.
 ///
 /// The cost of the alternative is the argument. `unwrap()` on a poisoned lock is a second
-/// panic, so one panic anywhere under this guard would make `GET /api/axon-status/backups`
+/// panic, so one panic anywhere under this guard would make `GET /api/sjel-status/backups`
 /// answer 500 for the life of the process, and every later `POST .../backup` with it — a
 /// backup page that reports nothing, forever, because something once panicked while it was
 /// being drawn. `capabilities/scouting/src/config.rs`'s `env_lock` made the same call for
@@ -196,7 +196,7 @@ pub(crate) async fn backups_handler() -> Result<Json<Value>, (StatusCode, Json<V
 ///
 /// Asynchronous because a real run tars, hashes, ships over ssh and verifies a remote
 /// byte count — minutes, not one HTTP request. The response says the run was accepted;
-/// `GET /api/axon-status/backups` says how it went, and keeps saying so across a page
+/// `GET /api/sjel-status/backups` says how it went, and keeps saying so across a page
 /// refresh because the state lives here rather than in the page.
 pub(crate) async fn backup_handler(
     Path(name): Path<String>,

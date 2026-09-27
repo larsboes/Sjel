@@ -61,7 +61,7 @@ bun capabilities/knowledge-graph/server.ts   # serve on SJEL_PORT (default 4244)
 ```
 
 It starts on demand: opening a unit on the dashboard's self-model page asks
-axon-status to bring it up, so a stopped knowledge-graph is the normal state rather
+sjel-status to bring it up, so a stopped knowledge-graph is the normal state rather
 than a fault.
 
 ## Ownership boundary

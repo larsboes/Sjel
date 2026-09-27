@@ -53,7 +53,7 @@ export function extractRouteContext(pathname: string): RouteContext {
       pathname,
       domain: 'system',
       label: 'Systems',
-      contextSummary: 'Systems: health and telemetry from axon-status and macmon.',
+      contextSummary: 'Systems: health and telemetry from sjel-status and macmon.',
       quickPrompts: ['System health', 'Hardware status'],
     };
   }

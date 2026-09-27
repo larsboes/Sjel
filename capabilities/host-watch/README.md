@@ -74,14 +74,14 @@ Action kind went back to the vault, which is the right ruling and the wrong home
 this: a runaway process is machine state, not an action a human wrote. So the findings
 stayed machine data and moved into a table this capability owns.
 
-**Who serves them.** `axon-status`, at `GET /api/axon-status/host-watch`, and the
+**Who serves them.** `sjel-status`, at `GET /api/sjel-status/host-watch`, and the
 dashboard's decision ladder ranks them at band 900. This capability is a scheduled job —
 it runs and exits, and the manifest schema refuses a port on a job because nothing would
-be listening on it — so something always-on has to publish the rows. `axon-status` is
+be listening on it — so something always-on has to publish the rows. `sjel-status` is
 that process and already answers "what is wrong with this machine"; the shape is the one
 `/backups` already has, publishing receipts written by `tools/backup.sh`. Ownership does
 not move with the surface: the content, the lifecycle and the table are this
-capability's, and axon-status only reads.
+capability's, and sjel-status only reads.
 
 **One row per run of a condition.** A partial unique index keeps at most one *open*
 finding per condition, so a breach that persists for a week is one row whose note is

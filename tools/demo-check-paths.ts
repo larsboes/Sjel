@@ -9,8 +9,8 @@
 // a 501 on the published site — read by a visitor, not by a build.
 //
 // `tools/lib/demo-endpoints.test.ts` already asserts that every declared path RESOLVES. That
-// is a question about prefixes: `/axon-status/api/axon-status/upstreams` resolves, because
-// `/axon-status` is a prefix axon-status owns. It has not been a route since 2026-08-28, when
+// is a question about prefixes: `/sjel-status/api/sjel-status/upstreams` resolves, because
+// `/sjel-status` is a prefix sjel-status owns. It has not been a route since 2026-08-28, when
 // PRD Q41 retired `tools/upstream-checker` and the endpoint went with it — and the manifest
 // carried it for eleven days, because resolving and being served are different questions.
 //

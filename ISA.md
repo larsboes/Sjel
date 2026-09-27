@@ -188,7 +188,7 @@ identifier `com.lifeos.mobile`. Lars chose "everything, staged" over a brand-onl
   Rust, shell and TypeScript (b2a56912), and the runner hands a service both
   names (a25702c7). Done 2026-09-27: the overlay's keys, the nine library crates are `sjel-*`
   (c36a237d), and the private overlay repository and folder carry the Sjel name, with the old
-  folder name kept as a symlink. Deliberately unchanged: the `axon-status` capability (its name is
+  folder name kept as a symlink. Deliberately unchanged: the `sjel-status` capability (its name is
   the shell's URL mount the phone calls), `axon-fda-launcher` (renaming drops its Full Disk Access
   grant), Linux systemd unit names, the `X-Axon-*` request headers, and "Axon" in prose. Each of
   those is a separate decision, recorded under Not yet specified.
@@ -222,7 +222,7 @@ the phone. Each item below is built and unverified, or ruled and unbuilt.
 
 - [ ] ISC-17 — a phone on the home Wi-Fi reaches the Mac's `:8443` listener, pins it after the
   code comparison, and reads data with the tailnet off. Blocked by an operator act: the macOS
-  firewall must admit the signed `axon-status` once. Falsifier: `curl -k
+  firewall must admit the signed `sjel-status` once. Falsifier: `curl -k
   https://<LAN address>:8443/health` from another device does not answer 200.
 - [ ] ISC-18 — the assistant drawer calls the model ladder (`dashboard/src/lib/intelligence`)
   for at least one task and shows which rung answered. Falsifier: `rg "intelligence/backends"
@@ -280,7 +280,7 @@ the phone. Each item below is built and unverified, or ruled and unbuilt.
   missing from demo.toml now say why instead of showing a host's 404 page. Still open: people
   (the wedge's second half) is absent until a synthetic seeder for the entity store exists, and
   Home lists Calendar, Tasks, Scouting, Mail and Feed as unavailable on the anchor date.
-- **The names ISC-13 kept.** `axon-status` (a service rename changes the phone app's allowed
+- **The names ISC-13 kept.** `sjel-status` (a service rename changes the phone app's allowed
   paths), `axon-fda-launcher` (a new binary name needs a new Full Disk Access grant), Linux
   `axon-<cap>` systemd units, the `X-Axon-*` signed-request headers (a protocol change for paired
   phones) and "Axon" in prose and doctrine. Each can move with a fallback when it is worth it.
@@ -334,7 +334,7 @@ the phone. Each item below is built and unverified, or ruled and unbuilt.
   `sjel_config::database_url_override`, used by those three. The four that hand-roll the
   same two lines (calendar, finance, tasks, trips) are left alone and recorded below.
 - **2026-08-20 — `upstream-checker` published the checkout's absolute path.** Its `--json`
-  `manifest` field was `$SJEL_ROOT/upstreams.toml`, which axon-status serves and the demo
+  `manifest` field was `$SJEL_ROOT/upstreams.toml`, which sjel-status serves and the demo
   records. `tools/check-site-payload` refused to publish over it, which is the job that
   gate has. Now repo-relative.
 - **2026-08-19 — `.github/ISSUE_TEMPLATE/` stays.** Axon is public and an external

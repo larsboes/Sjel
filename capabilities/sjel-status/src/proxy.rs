@@ -10,14 +10,14 @@
 //! was not a swap: it needed this file first.
 //!
 //! Supervising a dev server to get a reverse proxy cost 95.5 MB across node, esbuild and bun,
-//! against 24.9 MB for all three Rust servers combined. axon-status already had to stay up, it
+//! against 24.9 MB for all three Rust servers combined. sjel-status already had to stay up, it
 //! already resolves the registry (`status/registry.rs`), and it already links a reqwest client.
 //!
 //! # Routing, and why `fallback` rather than a layer
 //!
-//! Proxy matching runs as the router's fallback, so axon-status' own routes always win. That is
+//! Proxy matching runs as the router's fallback, so sjel-status' own routes always win. That is
 //! not a stylistic choice. `transit` declares `proxy_extra = ["/api"]`, and a bare `/api` prefix
-//! evaluated *before* routing would swallow `/api/axon-status/health` and send this surface's own
+//! evaluated *before* routing would swallow `/api/sjel-status/health` and send this surface's own
 //! health to transit. As a fallback it cannot: the real route matches first, and only genuinely
 //! unrouted paths are offered to the proxy.
 //!
@@ -29,14 +29,14 @@
 //!   are paths that predate the uniform rule.
 //! - Spine and portless entries are skipped, as they are there.
 //!
-//! One rule Vite never needed: **this surface must not proxy to itself.** `/axon-status` resolves
+//! One rule Vite never needed: **this surface must not proxy to itself.** `/sjel-status` resolves
 //! to the port this process is listening on, and forwarding to it would re-enter this fallback and
 //! loop until the connection pool gave out. Excluded by port, not by name, so a rename cannot
 //! reintroduce it.
 //!
 //! That exclusion alone made the mirror a lie, and cost the whole Capabilities page. Vite proxies
-//! `/axon-status` -> 8082 *with the prefix stripped*, so the client asks for
-//! `/axon-status/api/axon-status/capabilities` and 8082 receives `/api/axon-status/capabilities`.
+//! `/sjel-status` -> 8082 *with the prefix stripped*, so the client asks for
+//! `/sjel-status/api/sjel-status/capabilities` and 8082 receives `/api/sjel-status/capabilities`.
 //! Serving the bundle from this process removed the hop but not the prefix the client still sends,
 //! and an unrouted path is a page: all ten `axonStatus.*` calls in `dashboard/src/lib/api.ts`
 //! answered **200 with the SPA's own HTML**, `JSON.parse` threw on `<!doctype`, and the page that
@@ -140,7 +140,7 @@ impl Proxy {
             // self-route back in.
             // Compared on BOTH, because either alone has a hole: a port override would let the
             // name back in, and a rename would let the port back in.
-            if svc.port == own_port || svc.name == "axon-status" {
+            if svc.port == own_port || svc.name == "sjel-status" {
                 continue;
             }
             let target = format!("http://127.0.0.1:{}", svc.port);
@@ -195,7 +195,7 @@ impl Proxy {
 /// The comms credential, read from the same config the comms server reads.
 fn comms_authorization() -> Option<HeaderValue> {
     // The same three candidates comms itself resolves, in the same order
-    // (`capabilities/comms/src/config.rs`). Re-derived rather than imported because axon-status
+    // (`capabilities/comms/src/config.rs`). Re-derived rather than imported because sjel-status
     // does not depend on comms and must not start doing so to read one path.
     let path = if let Ok(p) = sjel_config::env_var("SJEL_COMMS_CONFIG") {
         sjel_config::expand_tilde(&p)
@@ -226,31 +226,40 @@ fn comms_authorization() -> Option<HeaderValue> {
 
 /// This surface's own name, as the dashboard addresses it. One constant, because the routing
 /// table must never carry it (see the module docs' self-proxy rule) and this layer must always.
-pub(crate) const SELF_PREFIX: &str = "/axon-status";
+pub(crate) const SELF_PREFIX: &str = "/sjel-status";
 
-/// Strip a leading `/axon-status` segment before routing, mirroring the rewrite Vite's dev
+/// Strip a leading `/sjel-status` segment before routing, mirroring the rewrite Vite's dev
 /// proxy performs (`dashboard/vite.config.ts`, `rewrite: path.replace(^/<name>, "")`).
 ///
 /// Must run before *any* routing, so it is installed as an empty outer router's
 /// `fallback_service` (see `main.rs`) rather than with `Router::layer`. `Router::layer` maps
 /// each route's service and the fallback, which leaves matchit deciding first -- measured, and
 /// it fails in the most confusing available way: the path matches nothing, reaches the proxy
-/// fallback, is rewritten there, and `/api/axon-status/capabilities` then matches transit's
+/// fallback, is rewritten there, and `/api/sjel-status/capabilities` then matches transit's
 /// `proxy_extra = ["/api"]` and is answered by port 3000.
 ///
 /// Ordering it before routing does not reintroduce what the module docs reject. They reject
 /// resolving the PROXY table before routing; this resolves no table. It removes one prefix no
-/// route and no page can claim: axon-status registers only `/health`, `/routes` and
-/// `/api/axon-status/*`, and `dashboard/src/routes/` has no `axon-status` entry. After the
+/// route and no page can claim: sjel-status registers only `/health`, `/routes` and
+/// `/api/sjel-status/*`, and `dashboard/src/routes/` has no `sjel-status` entry. After the
 /// rewrite the ordinary router -- real routes first, proxy fallback second -- decides as it
 /// always did.
 ///
-/// Strips once, never in a loop. A crafted `/axon-status/axon-status/x` becomes
-/// `/axon-status/x`, which then finds no route and is served as a page. That is a dead end,
+/// Strips once, never in a loop. A crafted `/sjel-status/sjel-status/x` becomes
+/// `/sjel-status/x`, which then finds no route and is served as a page. That is a dead end,
 /// not recursion, because the layer sees each request exactly once.
+/// The shell's name before 2026-09-27. An app installed earlier still calls
+/// `/axon-status/api/axon-status/...`, so both the mount and the API segment keep answering.
+pub(crate) const LEGACY_SELF_PREFIX: &str = "/axon-status";
+const API_PREFIX: &str = "/api/sjel-status";
+const LEGACY_API_PREFIX: &str = "/api/axon-status";
+
 pub(crate) async fn strip_self_prefix(mut req: Request, next: Next) -> Response {
-    if matches(req.uri().path(), SELF_PREFIX) {
-        let rest = &req.uri().path()[SELF_PREFIX.len()..];
+    let prefix = [SELF_PREFIX, LEGACY_SELF_PREFIX]
+        .into_iter()
+        .find(|p| matches(req.uri().path(), p));
+    if let Some(prefix) = prefix {
+        let rest = &req.uri().path()[prefix.len()..];
         let rest = if rest.is_empty() { "/" } else { rest };
         let query = req
             .uri()
@@ -261,6 +270,17 @@ pub(crate) async fn strip_self_prefix(mut req: Request, next: Next) -> Response 
         // whole of it and a parse round-trip is exact. A malformed result is left alone rather
         // than guessed at: the unrewritten path still reaches a handler.
         if let Ok(uri) = format!("{rest}{query}").parse::<Uri>() {
+            *req.uri_mut() = uri;
+        }
+    }
+    if matches(req.uri().path(), LEGACY_API_PREFIX) {
+        let rest = req.uri().path()[LEGACY_API_PREFIX.len()..].to_string();
+        let query = req
+            .uri()
+            .query()
+            .map(|q| format!("?{q}"))
+            .unwrap_or_default();
+        if let Ok(uri) = format!("{API_PREFIX}{rest}{query}").parse::<Uri>() {
             *req.uri_mut() = uri;
         }
     }
@@ -280,7 +300,7 @@ pub(crate) async fn fallback(State(proxy): State<Proxy>, req: Request) -> Respon
         // health check and was the shell's index page. The routing table is resolved once at
         // startup, so a capability enabled afterwards has no route until this process restarts —
         // which is the documented behaviour above, not a bug, but it fails as a plausible success.
-        // When a capability path answers HTML, restart axon-status before believing anything else.
+        // When a capability path answers HTML, restart sjel-status before believing anything else.
         None => serve_ui(&proxy.ui_dir, req).await,
     }
 }
@@ -475,12 +495,12 @@ mod tests {
     fn self_prefix_is_stripped_so_own_routes_match() {
         // Every axonStatus.* call in dashboard/src/lib/api.ts has this shape.
         assert_eq!(
-            strip("/axon-status/api/axon-status/capabilities"),
-            "/api/axon-status/capabilities"
+            strip("/sjel-status/api/sjel-status/capabilities"),
+            "/api/sjel-status/capabilities"
         );
         assert_eq!(
-            strip("/axon-status/api/axon-status/health"),
-            "/api/axon-status/health"
+            strip("/sjel-status/api/sjel-status/health"),
+            "/api/sjel-status/health"
         );
     }
 
@@ -488,36 +508,36 @@ mod tests {
     fn start_and_stop_reach_their_handlers() {
         // These two are why the page could not start an on-demand capability: same dead prefix.
         assert_eq!(
-            strip("/axon-status/api/axon-status/capabilities/finance/start"),
-            "/api/axon-status/capabilities/finance/start"
+            strip("/sjel-status/api/sjel-status/capabilities/finance/start"),
+            "/api/sjel-status/capabilities/finance/start"
         );
         assert_eq!(
-            strip("/axon-status/api/axon-status/capabilities/finance/stop"),
-            "/api/axon-status/capabilities/finance/stop"
+            strip("/sjel-status/api/sjel-status/capabilities/finance/stop"),
+            "/api/sjel-status/capabilities/finance/stop"
         );
     }
 
     #[test]
     fn a_query_string_survives_the_rewrite() {
         assert_eq!(
-            strip("/axon-status/api/axon-status/repos?dirty=1"),
-            "/api/axon-status/repos?dirty=1"
+            strip("/sjel-status/api/sjel-status/repos?dirty=1"),
+            "/api/sjel-status/repos?dirty=1"
         );
     }
 
     #[test]
     fn the_bare_prefix_becomes_the_index_rather_than_an_empty_path() {
-        assert_eq!(strip("/axon-status"), "/");
+        assert_eq!(strip("/sjel-status"), "/");
     }
 
     #[test]
     fn another_capability_is_left_alone() {
         // Segment matching, same rule as the proxy table: only OUR name, and only whole.
         assert_eq!(strip("/comms/api/feed"), "/comms/api/feed");
-        assert_eq!(strip("/axon-statusish/api"), "/axon-statusish/api");
+        assert_eq!(strip("/sjel-statusish/api"), "/sjel-statusish/api");
         assert_eq!(
-            strip("/api/axon-status/capabilities"),
-            "/api/axon-status/capabilities"
+            strip("/api/sjel-status/capabilities"),
+            "/api/sjel-status/capabilities"
         );
     }
 
@@ -525,7 +545,7 @@ mod tests {
     fn a_doubled_prefix_strips_once_and_stops() {
         // One pass per request. The result finds no route and is served as a page, which is a
         // dead end rather than recursion.
-        assert_eq!(strip("/axon-status/axon-status/x"), "/axon-status/x");
+        assert_eq!(strip("/sjel-status/sjel-status/x"), "/sjel-status/x");
     }
 
     fn svc(name: &str, port: &str, api_only: bool, extra: &[&str]) -> crate::status::Service {
@@ -585,10 +605,10 @@ mod tests {
     #[test]
     fn never_proxies_to_itself() {
         let t = table(&[
-            svc("axon-status", "8082", false, &[]),
+            svc("sjel-status", "8082", false, &[]),
             svc("comms", "8083", false, &[]),
         ]);
-        assert!(t.iter().all(|r| r.prefix != "/axon-status"));
+        assert!(t.iter().all(|r| r.prefix != "/sjel-status"));
         assert!(t.iter().any(|r| r.prefix == "/comms"));
     }
 

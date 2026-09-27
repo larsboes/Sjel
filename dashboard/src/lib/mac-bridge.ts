@@ -14,7 +14,7 @@ import { invoke } from '@tauri-apps/api/core';
 export const NOT_CONFIGURED = 'axon-node: not configured';
 
 /** The path the settings panel calls to test the address. It is on the allow-list. */
-export const HEALTH_PATH = '/axon-status/api/axon-status/health';
+export const HEALTH_PATH = '/sjel-status/api/sjel-status/health';
 
 export interface MacResponse {
   status: number;

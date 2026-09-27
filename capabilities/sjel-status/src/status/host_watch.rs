@@ -10,7 +10,7 @@ use super::*;
 /// up has to. That is this process — the one `autostart = "true"` surface, and already
 /// the machine's answer to "what is wrong here".
 ///
-/// The precedent is next door: `/api/axon-status/backups` publishes receipts written by
+/// The precedent is next door: `/api/sjel-status/backups` publishes receipts written by
 /// `tools/backup.sh`, which is also a job with no server. Reading across a capability
 /// boundary inside the one shared file is what that file is for
 /// (`capabilities/store/README.md`, "cross-schema joins within one database are a single
@@ -98,7 +98,7 @@ mod tests {
     use super::*;
 
     fn scratch(name: &str) -> std::path::PathBuf {
-        let dir = std::env::temp_dir().join(format!("axon-status-hw-{}", std::process::id()));
+        let dir = std::env::temp_dir().join(format!("sjel-status-hw-{}", std::process::id()));
         std::fs::create_dir_all(&dir).expect("a writable temp directory");
         let path = dir.join(format!("{name}.db"));
         for tail in ["", "-wal", "-shm"] {

@@ -223,7 +223,7 @@ AX="$SJEL_ROOT/axon.toml"
   #
   # Dashed, and labelled distinctly from the code-level coupling in self.json: `requires=`
   # means "must be up", not "is compiled in". Conflating the two would misread the spine —
-  # dashboard requires axon-status over HTTP and shares no code with it at all.
+  # dashboard requires sjel-status over HTTP and shares no code with it at all.
   #
   # Both globs: capabilities sit two levels down, the spine's own manifests one level down.
   for st in "$SJEL_ROOT"/capabilities/*/service.toml "$SJEL_ROOT"/*/service.toml; do

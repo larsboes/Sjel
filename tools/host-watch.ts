@@ -16,7 +16,7 @@
 // It filed a `tasks` record until PRD Q48 (2026-08-27) retired that capability: the
 // Action kind went back to the vault, and a runaway process is not an action a human
 // wrote — it is machine state. So the findings became host-watch's own rows in the
-// shared store (capabilities/store), read by axon-status and ranked on the dashboard's
+// shared store (capabilities/store), read by sjel-status and ranked on the dashboard's
 // decision ladder at band 900.
 //
 // Owning the table changed one thing beyond the transport, and it had to. Under `tasks`

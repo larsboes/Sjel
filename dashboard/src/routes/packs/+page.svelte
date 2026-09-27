@@ -1,7 +1,7 @@
 <script lang="ts">
   // What Sjel has put into each agent harness on this machine.
   //
-  // The whole page is one GET. axon-status shells `tools/harnesses status --json`, which
+  // The whole page is one GET. sjel-status shells `tools/harnesses status --json`, which
   // is the same code path the CLI and the session hook read, so this view and the terminal
   // can never disagree about what is deployed.
   import { onMount } from "svelte";
@@ -73,7 +73,7 @@
 {:else if error}
   <div class="card err-card">
     <p class="err"><Icon name="alert" /> Could not read the Pack state</p>
-    <p class="err-hint">axon-status answers this by running <code>tools/harnesses status --json</code>.</p>
+    <p class="err-hint">sjel-status answers this by running <code>tools/harnesses status --json</code>.</p>
     <p class="err-detail">{error}</p>
   </div>
 {:else if view}

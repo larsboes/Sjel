@@ -12,8 +12,8 @@ ready_path  = "/ready"   # availability is judged on this, not on liveness (#126
 # here observes anything between visits, and a process that is up only because it was up at boot
 # is R3's definition of a cost with no purpose.
 #
-# Starting it is not manual: axon-status owns capability lifecycle and the shell routes start
-# requests through it (`capabilities/axon-status/src/status/lifecycle.rs`), so the page that needs
+# Starting it is not manual: sjel-status owns capability lifecycle and the shell routes start
+# requests through it (`capabilities/sjel-status/src/status/lifecycle.rs`), so the page that needs
 # this capability is what brings it up.
 autostart   = "false"
 # `/finance` is a dashboard route, so only `/finance/api` is proxied to this process.

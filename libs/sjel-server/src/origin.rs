@@ -213,8 +213,8 @@ mod tests {
             "SJEL_TRIPS_ALLOWED_ORIGIN_HOSTS"
         );
         assert_eq!(
-            allowed_hosts_var("axon-status"),
-            "SJEL_AXON_STATUS_ALLOWED_ORIGIN_HOSTS"
+            allowed_hosts_var("sjel-status"),
+            "SJEL_SJEL_STATUS_ALLOWED_ORIGIN_HOSTS"
         );
     }
 }

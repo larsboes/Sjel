@@ -172,27 +172,27 @@ paths = [
   "/api/search?from=9900001&to=9900002&time=2026-03-16T09:00:00",
 ]
 
-[capability.axon-status]
+[capability.sjel-status]
 # No `writes`: every answer here is derived from the manifests in this checkout plus the
 # state of the machine recording it. On a clean CI runner that is honestly a clean CI
 # runner — capabilities up because the job started them, one repo on main, no overlay.
 # Nothing to invent, and inventing it would be the only way to get it wrong.
 #
-# `/api/axon-status/upstreams` stood in this list until 2026-09-08 and had not been a route
+# `/api/sjel-status/upstreams` stood in this list until 2026-09-08 and had not been a route
 # since 2026-08-28: PRD Q41 retired `tools/upstream-checker`, whose verdict was the endpoint's
-# only content, and the handler went with it (`capabilities/axon-status/src/status/health.rs`
+# only content, and the handler went with it (`capabilities/sjel-status/src/status/health.rs`
 # keeps the reasoning where the code was). The dashboard's types went at the same time
 # (`dashboard/src/lib/api.ts`, `UpstreamEntry` / `UpstreamAudit`), so nothing has asked for it
 # in eleven days — the manifest was the last thing that still named it, and the recorder would
-# have taken axon-status' proxy fallback and failed the Pages build on a 404 from transit.
+# have taken sjel-status' proxy fallback and failed the Pages build on a 404 from transit.
 # The verdict half is not lost: `self.json` carries `{name, verdict}` per upstreams.toml row
 # and `/self` above serves it. `tools/demo-check-paths` is what refuses the next one.
 paths = [
-  "/axon-status/api/axon-status/health",
-  "/axon-status/api/axon-status/capabilities",
-  "/axon-status/api/axon-status/self",
-  "/axon-status/api/axon-status/repos",
-  "/axon-status/api/axon-status/backups",
+  "/sjel-status/api/sjel-status/health",
+  "/sjel-status/api/sjel-status/capabilities",
+  "/sjel-status/api/sjel-status/self",
+  "/sjel-status/api/sjel-status/repos",
+  "/sjel-status/api/sjel-status/backups",
 ]
 
 # ─── Deliberately absent ──────────────────────────────────────────────────────

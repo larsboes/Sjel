@@ -1,4 +1,4 @@
-//! axon-status — what is enabled on this machine, what is up, and the one thing
+//! sjel-status — what is enabled on this machine, what is up, and the one thing
 //! allowed to bring a capability up.
 //!
 //! It knows nothing about which capabilities exist. The manifests do, and
@@ -34,24 +34,24 @@ use status::*;
 const ROUTES: &[route_manifest::Route] = &[
     r("GET", "/health", "Liveness."),
     r("GET", "/routes", "This manifest."),
-    r("GET", "/api/axon-status/health", "Aggregate health across enabled capabilities."),
-    r("GET", "/api/axon-status/routes", "Every enabled capability's route manifest, in one map."),
-    r("GET", "/api/axon-status/lan", "The local-network listener for paired devices: port, host and the certificate fingerprint a phone pins."),
-    r("GET", "/api/axon-status/capabilities", "Enabled capabilities, their ports and whether each is up."),
-    r("GET", "/api/axon-status/self", "This machine's resolved Axon model."),
-    r("GET", "/api/axon-status/repos", "Axon and overlay repo state."),
-    r("GET", "/api/axon-status/links", "Operator-pinned links from the overlay's links.toml."),
-    r("GET", "/api/axon-status/backups", "Every capability with a backup contract: last success, age, and whether it is overdue."),
-    r("GET", "/api/axon-status/host-watch", "Open findings from the hourly host watch: a runaway process or a filling disk."),
-    r("GET", "/api/axon-status/packs", "Every Pack skill against every agent harness: deployed, drifted, or unowned at the destination."),
-    r("POST", "/api/axon-status/capabilities/:name/backup", "Request a backup of one capability. Accepts the run and returns; poll /backups for the outcome."),
+    r("GET", "/api/sjel-status/health", "Aggregate health across enabled capabilities."),
+    r("GET", "/api/sjel-status/routes", "Every enabled capability's route manifest, in one map."),
+    r("GET", "/api/sjel-status/lan", "The local-network listener for paired devices: port, host and the certificate fingerprint a phone pins."),
+    r("GET", "/api/sjel-status/capabilities", "Enabled capabilities, their ports and whether each is up."),
+    r("GET", "/api/sjel-status/self", "This machine's resolved Axon model."),
+    r("GET", "/api/sjel-status/repos", "Axon and overlay repo state."),
+    r("GET", "/api/sjel-status/links", "Operator-pinned links from the overlay's links.toml."),
+    r("GET", "/api/sjel-status/backups", "Every capability with a backup contract: last success, age, and whether it is overdue."),
+    r("GET", "/api/sjel-status/host-watch", "Open findings from the hourly host watch: a runaway process or a filling disk."),
+    r("GET", "/api/sjel-status/packs", "Every Pack skill against every agent harness: deployed, drifted, or unowned at the destination."),
+    r("POST", "/api/sjel-status/capabilities/:name/backup", "Request a backup of one capability. Accepts the run and returns; poll /backups for the outcome."),
     // Undeclared until 2026-08-31, and served the whole time. The dashboard's panel page
     // calls both; `/routes` denied they existed. The coverage test below did not catch it:
     // its detector required the path literal to sit immediately after the opening paren,
     // and these two are the only mounts in this file long enough for rustfmt to wrap. It
     // skips the whitespace now (PRD D19) — this pair is why.
-    r("POST", "/api/axon-status/capabilities/:name/start", "Start one capability and wait for it to answer. Idempotent: an already-running capability returns up=true."),
-    r("POST", "/api/axon-status/capabilities/:name/stop", "Stop one capability. Refuses to report success while its port still answers, because something outside the pid file holding it is the case worth seeing."),
+    r("POST", "/api/sjel-status/capabilities/:name/start", "Start one capability and wait for it to answer. Idempotent: an already-running capability returns up=true."),
+    r("POST", "/api/sjel-status/capabilities/:name/stop", "Stop one capability. Refuses to report success while its port still answers, because something outside the pid file holding it is the case worth seeing."),
 ];
 
 /// Shorthand so the table above reads as a table.
@@ -64,7 +64,7 @@ const fn r(
 }
 
 async fn routes() -> axum::Json<serde_json::Value> {
-    axum::Json(route_manifest::manifest("axon-status", ROUTES))
+    axum::Json(route_manifest::manifest("sjel-status", ROUTES))
 }
 
 #[tokio::main]
@@ -78,7 +78,7 @@ async fn main() {
     // The other half of on-demand. This process is already the only thing allowed to
     // start a capability, so it is also the only sensible place to stop one — anything
     // else would be a second lifecycle owner. It runs here rather than as a launchd
-    // job for the same reason: a reaper that outlives axon-status could stop panels
+    // job for the same reason: a reaper that outlives sjel-status could stop panels
     // while nothing is left to bring them back.
     let _idle_reaper = IdlePanelReaper::start();
 
@@ -87,7 +87,7 @@ async fn main() {
     // follows the machine's, and `dashboard/vite.config.ts` said the same about its own proxy.
     let services = registry().await.unwrap_or_else(|e| {
         eprintln!(
-            "[axon-status] registry unavailable ({e}); serving the shell with no capability routes"
+            "[sjel-status] registry unavailable ({e}); serving the shell with no capability routes"
         );
         Vec::new()
     });
@@ -98,12 +98,12 @@ async fn main() {
     // shell that 404s every page while every API route works is a confusing way to learn that.
     if !std::path::Path::new(&ui_dir).is_dir() {
         eprintln!(
-            "[axon-status] no dashboard bundle at {ui_dir} — API routes work, pages will 404. Build it: cd dashboard && bun run build"
+            "[sjel-status] no dashboard bundle at {ui_dir} — API routes work, pages will 404. Build it: cd dashboard && bun run build"
         );
     }
     let shell = proxy::Proxy::new(&services, &port.to_string(), ui_dir);
     eprintln!(
-        "[axon-status] shell: {} capability route(s)",
+        "[sjel-status] shell: {} capability route(s)",
         shell.route_count()
     );
 
@@ -124,7 +124,7 @@ async fn main() {
         lan::start(build_router(shell.clone()), verifier);
     }
     sjel_server::serve(
-        "axon-status",
+        "sjel-status",
         sjel_server::Reach::Loopback,
         port,
         build_router(shell),
@@ -143,9 +143,9 @@ async fn lan_handler() -> Json<Value> {
 }
 
 /// This capability's name, for the origin guard's env var
-/// (`SJEL_AXON_STATUS_ALLOWED_ORIGIN_HOSTS` -- the doubling is what the derivation
+/// (`SJEL_SJEL_STATUS_ALLOWED_ORIGIN_HOSTS` -- the doubling is what the derivation
 /// produces, and `libs/sjel-server/src/origin.rs` asserts exactly this string).
-const CAPABILITY: &str = "axon-status";
+const CAPABILITY: &str = "sjel-status";
 
 /// The wired router, so a test can drive the real thing rather than a handler.
 ///
@@ -181,32 +181,32 @@ fn build_router(shell: proxy::Proxy) -> Router {
     let app = Router::new()
         .route("/routes", get(routes))
         .route("/health", get(health_handler))
-        .route("/api/axon-status/health", get(axon_status_health_handler))
-        .route("/api/axon-status/routes", get(routes_handler))
-        .route("/api/axon-status/lan", get(lan_handler))
-        .route("/api/axon-status/capabilities", get(capabilities_handler))
-        .route("/api/axon-status/self", get(self_model_handler))
-        .route("/api/axon-status/links", get(links_handler))
-        .route("/api/axon-status/repos", get(repos_handler))
+        .route("/api/sjel-status/health", get(sjel_status_health_handler))
+        .route("/api/sjel-status/routes", get(routes_handler))
+        .route("/api/sjel-status/lan", get(lan_handler))
+        .route("/api/sjel-status/capabilities", get(capabilities_handler))
+        .route("/api/sjel-status/self", get(self_model_handler))
+        .route("/api/sjel-status/links", get(links_handler))
+        .route("/api/sjel-status/repos", get(repos_handler))
         .route(
-            "/api/axon-status/capabilities/:name/start",
+            "/api/sjel-status/capabilities/:name/start",
             post(start_handler),
         )
         .route(
-            "/api/axon-status/capabilities/:name/stop",
+            "/api/sjel-status/capabilities/:name/stop",
             post(stop_handler),
         )
-        .route("/api/axon-status/backups", get(backups_handler))
-        .route("/api/axon-status/host-watch", get(host_watch_handler))
-        .route("/api/axon-status/packs", get(packs_handler))
+        .route("/api/sjel-status/backups", get(backups_handler))
+        .route("/api/sjel-status/host-watch", get(host_watch_handler))
+        .route("/api/sjel-status/packs", get(packs_handler))
         .route(
-            "/api/axon-status/capabilities/:name/backup",
+            "/api/sjel-status/capabilities/:name/backup",
             post(backup_handler),
         )
         // Everything the routes above did not claim: a capability prefix, or a page of the
         // shell. Registered as the fallback and not as a layer on purpose -- transit declares
         // `proxy_extra = ["/api"]`, and that prefix evaluated before routing would swallow this
-        // surface's own `/api/axon-status/*`.
+        // surface's own `/api/sjel-status/*`.
         .fallback(proxy::fallback)
         // ADD NEW ROUTES ABOVE THIS LINE. Below it they lose the origin guard.
         .layer(axum::middleware::from_fn_with_state(
@@ -219,7 +219,7 @@ fn build_router(shell: proxy::Proxy) -> Router {
     //
     // `Router::layer` was the first attempt and is wrong here, for a reason worth keeping:
     // it applies the middleware to each route's service and to the fallback, so matchit has
-    // already chosen by the time the middleware sees the request. `/axon-status/api/...`
+    // already chosen by the time the middleware sees the request. `/sjel-status/api/...`
     // therefore matched nothing, went to the fallback, and only then had its prefix removed --
     // at which point the proxy read the rewritten path and matched transit's `proxy_extra`
     // `/api`, sending this surface's own capability list to port 3000. The 502 was measured,
@@ -652,6 +652,37 @@ mod origin_tests {
             .status()
     }
 
+    /// The shell was axon-status until 2026-09-27, and an app installed before then calls its old
+    /// mount and API segment. Each old path gets the new path's answer from the API itself, not the
+    /// page fallback (which would answer 200 text/html).
+    #[tokio::test]
+    async fn the_pre_rename_paths_still_reach_the_status_api() {
+        async fn reply(path: &str) -> (StatusCode, String) {
+            let response = router()
+                .oneshot(Request::builder().uri(path).body(Body::empty()).unwrap())
+                .await
+                .expect("the router answers");
+            let kind = response
+                .headers()
+                .get(axum::http::header::CONTENT_TYPE)
+                .and_then(|v| v.to_str().ok())
+                .unwrap_or_default()
+                .to_string();
+            (response.status(), kind)
+        }
+        let current = reply("/sjel-status/api/sjel-status/capabilities").await;
+        assert!(
+            current.1.contains("json"),
+            "the new path is the API, got {current:?}"
+        );
+        for legacy in [
+            "/axon-status/api/axon-status/capabilities",
+            "/api/axon-status/capabilities",
+        ] {
+            assert_eq!(reply(legacy).await, current, "{legacy}");
+        }
+    }
+
     /// Each of these three takes `Path(name)` and no body, so a hostile page
     /// can send it as a CORS *simple* request: no preflight, and the absence of
     /// an `Access-Control-Allow-Origin` header withholds only the reply. The
@@ -659,9 +690,9 @@ mod origin_tests {
     #[tokio::test]
     async fn a_foreign_origin_cannot_start_stop_or_back_up_a_capability() {
         for path in [
-            "/api/axon-status/capabilities/not-a-capability/start",
-            "/api/axon-status/capabilities/not-a-capability/stop",
-            "/api/axon-status/capabilities/not-a-capability/backup",
+            "/api/sjel-status/capabilities/not-a-capability/start",
+            "/api/sjel-status/capabilities/not-a-capability/stop",
+            "/api/sjel-status/capabilities/not-a-capability/backup",
         ] {
             assert_eq!(
                 answer("POST", path, Some("https://evil.example")).await,
@@ -678,11 +709,11 @@ mod origin_tests {
     #[tokio::test]
     async fn a_foreign_origin_reaches_neither_the_status_reads_nor_the_proxy() {
         for path in [
-            "/api/axon-status/capabilities",
-            "/api/axon-status/self",
-            "/api/axon-status/repos",
+            "/api/sjel-status/capabilities",
+            "/api/sjel-status/self",
+            "/api/sjel-status/repos",
             "/finance/api/dashboard",
-            "/axon-status/api/axon-status/capabilities",
+            "/sjel-status/api/sjel-status/capabilities",
         ] {
             assert_eq!(
                 answer("GET", path, Some("https://evil.example")).await,

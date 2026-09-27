@@ -95,7 +95,7 @@ export interface KindState {
  *
  * The PROMISE is memoised, not a flag. A flag records the attempt before the POST answers,
  * and `POST …/capabilities/{name}/start` blocks until the capability replies
- * (capabilities/axon-status/src/main.rs, "Start one capability and wait for it to answer"),
+ * (capabilities/sjel-status/src/main.rs, "Start one capability and wait for it to answer"),
  * so the second kind on the same capability — `feed`, after `mail` — would read while comms
  * was still booting and get the proxy's 502 for a stopped capability. That failed its whole
  * lane behind "Unavailable: Feed" on exactly the cold machine this function exists for.

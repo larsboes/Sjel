@@ -1394,6 +1394,34 @@ export const interior = {
       jsonInit('PUT', { items }),
     ),
 
+  /**
+   * Where the pieces actually stand, as rows.
+   *
+   * The as-is layer, and not a proposal: a placement is one row per piece, a layout is a file.
+   * The `ref` the page drags is called `item_id` here, because that is what the column is named.
+   */
+  placements: (flat: string) =>
+    request<Array<{ item_id: string; flat: string; x: number; y: number; rot: number }>>(
+      `/interior/api/placements/${encodeURIComponent(flat)}`,
+    ),
+
+  /**
+   * What the as-is arrangement looks like, and whether it would pass.
+   *
+   * A second endpoint beside `previewLayout` because the arrangement arrives in the body: a
+   * placement is a row in the store, not a file whose header carries the reason a piece stands
+   * where it does (PRD Q60). The plan and the verdict are the same computation either way.
+   */
+  previewPlacements: (items: InteriorPlacedItem[]) =>
+    request<InteriorLayoutDetail>('/interior/api/placements/preview', jsonInit('POST', { items })),
+
+  /** Hard edges for dragging in the as-is layer. The arrangement it must fit around is the body. */
+  allowedPositionsFor: (items: InteriorPlacedItem[], ref: string, rot: number) =>
+    request<InteriorAllowed>(
+      '/interior/api/placements/allowed',
+      jsonInit('POST', { items, ref, rot }),
+    ),
+
   /** URL for a picture stored in the overlay. Nothing is embedded; it is fetched when shown. */
   mediaUrl: (path: string) =>
     `/interior/api/media/${path.split('/').map(encodeURIComponent).join('/')}`,
@@ -1527,7 +1555,7 @@ export const hasPanel = (c: CapabilityView): boolean => c.panel_port !== '';
 /**
  * Where a panel lives, as seen from THIS browser.
  *
- * Composed here rather than served by axon-status, because a panel is loaded by a
+ * Composed here rather than served by sjel-status, because a panel is loaded by a
  * browser and has to be reachable on the host that browser is already on. Serving
  * `127.0.0.1:<port>` to a shell opened at `localhost` makes the two different sites:
  * Chrome then partitions the frame's storage, and a framework whose client init touches
@@ -1610,7 +1638,7 @@ export interface RepoStatus {
 }
 
 // `UpstreamEntry` / `UpstreamAudit` were here until 2026-08-28, typing the payload of
-// `GET /axon-status/upstreams` for the `/upstreams` page. Both are gone with that endpoint
+// `GET /sjel-status/upstreams` for the `/upstreams` page. Both are gone with that endpoint
 // and that route: their `status` field ('ok' | 'na' | 'warn' | 'fail') was
 // `tools/upstream-checker`'s verdict, and PRD Q41 retired the checker.
 //
@@ -1631,7 +1659,7 @@ export type BackupState =
    *  its data — and Sjel will not invent a cadence to fill the gap. */
   | 'unknown';
 
-/** An in-flight or finished run, as the server remembers it. Null when axon-status has
+/** An in-flight or finished run, as the server remembers it. Null when sjel-status has
  *  not been asked for a backup of this capability since it started. */
 export interface BackupRun {
   state: 'running' | 'succeeded' | 'failed';
@@ -1716,41 +1744,41 @@ export interface PacksView {
 }
 
 export const axonStatus = {
-  health: () => request<AxonStatusHealth>('/axon-status/api/axon-status/health'),
-  capabilities: () => request<CapabilityView[]>('/axon-status/api/axon-status/capabilities'),
-  backups: () => request<{ backups: BackupStatus[] }>('/axon-status/api/axon-status/backups'),
+  health: () => request<AxonStatusHealth>('/sjel-status/api/sjel-status/health'),
+  capabilities: () => request<CapabilityView[]>('/sjel-status/api/sjel-status/capabilities'),
+  backups: () => request<{ backups: BackupStatus[] }>('/sjel-status/api/sjel-status/backups'),
   /** Accepts the run and returns — it does not wait for it. Poll `backups()` for the
    *  outcome, which is also what lets a slow run survive a page refresh. */
   backup: (name: string) =>
     request<{ name: string; accepted: boolean; holds_service: boolean }>(
-      `/axon-status/api/axon-status/capabilities/${encodeURIComponent(name)}/backup`,
+      `/sjel-status/api/sjel-status/capabilities/${encodeURIComponent(name)}/backup`,
       { method: 'POST' },
     ),
-  self: () => request<SelfModelResponse>('/axon-status/api/axon-status/self'),
-  repos: () => request<{ repos: RepoStatus[] }>('/axon-status/api/axon-status/repos'),
-  links: () => request<{ links: PinnedLink[] }>('/axon-status/api/axon-status/links'),
+  self: () => request<SelfModelResponse>('/sjel-status/api/sjel-status/self'),
+  repos: () => request<{ repos: RepoStatus[] }>('/sjel-status/api/sjel-status/repos'),
+  links: () => request<{ links: PinnedLink[] }>('/sjel-status/api/sjel-status/links'),
   /** Open findings from the hourly host watch. Served here rather than by host-watch
    *  itself because that capability is a scheduled job with no port: it runs, writes to
    *  its own table, and exits. Same shape as `backups()`, which publishes a job's
    *  receipts for the same reason. */
   hostWatch: (signal?: AbortSignal) =>
     request<{ findings: HostWatchFinding[] }>(
-      '/axon-status/api/axon-status/host-watch',
+      '/sjel-status/api/sjel-status/host-watch',
       signal ? { signal } : undefined,
     ).then((response) => response.findings),
   /** Every Pack skill against every agent harness. Served here rather than by `packs`
    *  itself because that capability is `kind = "data"`: it owns the deployment ledgers and
    *  nothing starts, so it has no port. Same reason as `hostWatch()` above. */
   packs: (signal?: AbortSignal) =>
-    request<PacksView>('/axon-status/api/axon-status/packs', signal ? { signal } : undefined),
+    request<PacksView>('/sjel-status/api/sjel-status/packs', signal ? { signal } : undefined),
   start: (name: string, signal?: AbortSignal) =>
     request<{ name: string; up: boolean; detail: string }>(
-      `/axon-status/api/axon-status/capabilities/${encodeURIComponent(name)}/start`,
+      `/sjel-status/api/sjel-status/capabilities/${encodeURIComponent(name)}/start`,
       { method: 'POST', signal },
     ),
   stop: (name: string) =>
     request<{ name: string; up: boolean; detail: string }>(
-      `/axon-status/api/axon-status/capabilities/${encodeURIComponent(name)}/stop`,
+      `/sjel-status/api/sjel-status/capabilities/${encodeURIComponent(name)}/stop`,
       { method: 'POST' },
     ),
 };

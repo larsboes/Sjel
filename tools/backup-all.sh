@@ -8,7 +8,7 @@
 #
 # The set is DERIVED, never typed. A capability is in scope because its manifest declares
 # `backup_target`, which is the same field tools/backup.sh already refuses to run without and the
-# same one axon-status reads to decide a row belongs in its registry. One definition, three
+# same one sjel-status reads to decide a row belongs in its registry. One definition, three
 # readers.
 #
 # Runs every contract even when one fails, and exits non-zero if any did. Stopping at the first

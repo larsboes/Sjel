@@ -4,8 +4,8 @@ A self-describing HTTP surface. Spine-owned shared code with no domain of its
 own — see [Three architectural nouns](../../README.md#three-architectural-nouns).
 
 Every capability serves `GET /routes` beside `/health`, listing method, path and
-a one-line summary. `axon-status` fans out across the enabled capabilities and
-aggregates them at `GET /api/axon-status/routes`.
+a one-line summary. `sjel-status` fans out across the enabled capabilities and
+aggregates them at `GET /api/sjel-status/routes`.
 
 ## Why this and not a rename
 
@@ -15,7 +15,7 @@ Axon's HTTP surface carries five conventions across seven capabilities:
 |---|---|
 | `/api/…` behind an API-only proxy | `calendar`, `trips` |
 | bare paths | `comms`, `scouting`, `punctuality` |
-| self-prefixed `/api/<name>/…` | `soundscape`, `axon-status` |
+| self-prefixed `/api/<name>/…` | `soundscape`, `sjel-status` |
 | both `/health` and `/api/health` | `transit` |
 
 Converging those means renaming public routes and rewiring every caller — a

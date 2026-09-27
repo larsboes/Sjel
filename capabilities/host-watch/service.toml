@@ -21,7 +21,7 @@ schedule = "1h"
 # No `port`: it runs, observes, and exits. `schedule` and `autostart` are mutually
 # exclusive and the runner refuses a manifest carrying both — this is a job, not a service.
 # That exclusion is also why the findings are READ somewhere else: nothing is listening
-# here, so axon-status publishes them (see README.md, "How it reports").
+# here, so sjel-status publishes them (see README.md, "How it reports").
 #
 # No `requires` since PRD Q48 (2026-08-27). It required `tasks` because filing a task WAS
 # the alert surface; the capability retired, and the findings became rows in this

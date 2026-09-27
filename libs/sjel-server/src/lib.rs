@@ -13,7 +13,7 @@
 //!
 //! What is deliberately NOT here: CORS. Whether a server carries
 //! `CorsLayer::permissive()` is a per-capability security decision that must
-//! stay visible in that capability's own source — axon-status, which can
+//! stay visible in that capability's own source — sjel-status, which can
 //! start and stop the machine's capabilities, correctly carries none, and a
 //! helper that silently added it would have widened that surface.
 
@@ -313,8 +313,8 @@ mod http_tests {
             "/api/items?x=1"
         );
         assert_eq!(
-            device_signed_path("/axon-status/api/axon-status/health"),
-            "/api/axon-status/health"
+            device_signed_path("/sjel-status/api/sjel-status/health"),
+            "/api/sjel-status/health"
         );
         assert_eq!(
             device_signed_path("/api/suggest?q=Berlin"),

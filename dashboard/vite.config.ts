@@ -117,7 +117,7 @@ function bundleGuard(): Plugin {
       // with no error and no failed request. It reached the served bundle exactly that way,
       // because MapLibre asks for its worker through a TEMPLATE literal
       // (`new URL(\`./${name}\`, import.meta.url)`) that Rollup cannot follow, so nothing was
-      // emitted and the missing path fell through axon-status' SPA fallback as 200 text/html.
+      // emitted and the missing path fell through sjel-status' SPA fallback as 200 text/html.
       //
       // src/lib/map/surface.ts hands MapLibre a Vite-built worker instead. This asserts the
       // build actually produced one, because the runtime symptom of its absence is silence.
@@ -184,7 +184,7 @@ function bundleGuard(): Plugin {
 // The proxy table is derived, not written. `tools/capability.sh registry` reads the
 // service.toml manifests through tools/lib/toml.sh, the shell-side TOML parser
 // (README.md#one-manifest-per-concern), so a capability's port is declared in exactly one file and this config,
-// axon-status and the runner all read the same number.
+// sjel-status and the runner all read the same number.
 //
 // Read once at dev-server start: enabling a capability or moving a port means
 // restarting the dashboard, which is honest — the shell's shape follows the machine's.

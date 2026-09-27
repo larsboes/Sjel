@@ -42,7 +42,7 @@ backup_retain = "14"
 # `backup_stale_days` was 7, inherited unchanged from capabilities/postgres. It was
 # wrong for a daily schedule and 2026-08-26 proved it: the daily run had failed silently
 # on every attempt since 2026-08-24 — the launchd plist's PATH omitted `/usr/local/bin`,
-# so `container` was never found — and axon-status reported "due" for three days,
+# so `container` was never found — and sjel-status reported "due" for three days,
 # because "overdue" waited for day 7. Three missed runs of a daily job is a fault, not a
 # reminder. 2 (2026-08-28, PRD Q47): one missed run is "due", two is a problem. A stale
 # threshold has to be reachable by the cadence that is supposed to meet it, and seven

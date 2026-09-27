@@ -5,7 +5,7 @@
 # were wrong for two years in ways nobody could see, and none of them can be tested through
 # the CLI on a machine that has no services running. CI has none.
 #
-# Where to poll is copied from capabilities/axon-status/src/status/registry.rs, which
+# Where to poll is copied from capabilities/sjel-status/src/status/registry.rs, which
 # already owns that question for the dashboard, and where the two disagreed the CLI was the
 # one that was wrong. What the answer MEANS is not copied and cannot be: that surface has
 # `up: Option<bool>` and no `off` at all, so the third state below is this CLI's own and is
@@ -26,10 +26,10 @@ CAPABILITY_FS=$'\037'
 # Where to poll one capability, and on what.
 #
 # Mirrors `probe_url` and `readiness_url` in
-# capabilities/axon-status/src/status/registry.rs. Two properties came from there, and the
+# capabilities/sjel-status/src/status/registry.rs. Two properties came from there, and the
 # CLI had neither:
 #
-#   Readiness first. Until 2026-08-07 axon-status polled `health_path` everywhere, and five
+#   Readiness first. Until 2026-08-07 sjel-status polled `health_path` everywhere, and five
 #   database-backed capabilities answered it from a stateless handler that could not see
 #   their database — reporting themselves up through an outage that failed every query
 #   behind them (Axon#126). A capability that declares no `ready_path` is unchanged.
@@ -41,7 +41,7 @@ CAPABILITY_FS=$'\037'
 #   absent from `axon capability list` and `axon capability health` entirely.
 #
 # Prints nothing when there is nothing to poll. The caller reports that as unknown, which is
-# what axon-status does too: "a capability without such a surface is reported as unknown
+# what sjel-status does too: "a capability without such a surface is reported as unknown
 # rather than silently down".
 capability_probe_url() {  # <scope> <port> <endpoint> <health_path> <ready_path>
   local scope="$1" port="$2" endpoint="$3" health_path="$4" path="${5:-}"
@@ -68,7 +68,7 @@ capability_base_url() {  # <scope> <port> <endpoint>
 
 # up / off / down — three states, because "down" was carrying two meanings.
 #
-# `autostart` is what separates the last two, and axon-status already reasons this way:
+# `autostart` is what separates the last two, and sjel-status already reasons this way:
 # `idle_timeout_secs` refuses to reap anything with `autostart = "true"` because "a
 # capability the machine is supposed to keep running is never idle by definition". Turn that
 # around and a capability the machine is NOT supposed to keep running is not faulty when it
@@ -76,7 +76,7 @@ capability_base_url() {  # <scope> <port> <endpoint>
 #
 # The case that forced it: `dashboard` declares port 47117 and `autostart = "false"`. That
 # port is the hot-reload dev server, started by hand for an editing session; the shell it
-# serves has been served by axon-status on its own port since 2026-08-29. So
+# serves has been served by sjel-status on its own port since 2026-08-29. So
 # `axon capability health` printed `down dashboard http://127.0.0.1:47117/` while the
 # dashboard answered 200, and exited non-zero for it. That line sent at least two sessions to
 # a dead URL.
@@ -90,7 +90,7 @@ capability_base_url() {  # <scope> <port> <endpoint>
 # vaultwarden` and exited 0 (measured 2026-09-08). Wrong three times over — the state, the
 # exit status, and an instruction to start another host's service with this machine's
 # supervisor. A withheld authority is not a declaration that the capability is optional, and
-# axon-status agrees: `CapabilityView.up` is an Option<bool> with no `off` to land in.
+# sjel-status agrees: `CapabilityView.up` is an Option<bool> with no `off` to land in.
 #
 # A LOCAL capability with no `autostart` line stays off, and that is deliberate rather than
 # an oversight: `tools/capability.sh`'s own `_is_autostart` and `_emit_line` both read an

@@ -24,7 +24,7 @@ impl RegistryVerifier {
             Ok(store) => Some(Self { store }),
             Err(error) => {
                 eprintln!(
-                    "[axon-status] device registry unavailable, no device-key admission: {error}"
+                    "[sjel-status] device registry unavailable, no device-key admission: {error}"
                 );
                 None
             }
@@ -94,7 +94,7 @@ mod tests {
     #[test]
     fn a_paired_device_is_admitted_once_on_its_signature() {
         let dir =
-            std::env::temp_dir().join(format!("axon-status-device-gate-{}", std::process::id()));
+            std::env::temp_dir().join(format!("sjel-status-device-gate-{}", std::process::id()));
         std::fs::create_dir_all(&dir).unwrap();
         let store = DevicesStore::open(&dir.join("axon.db")).unwrap();
         let key = Ed25519KeyPair::from_seed_unchecked(&[5u8; 32]).unwrap();

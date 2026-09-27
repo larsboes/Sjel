@@ -63,12 +63,12 @@ use crate::sync::{self, LocalStore, Outgoing, Reply, SendError, SyncStatus, Tran
 /// ## Why this set, and why it adds no exposure
 ///
 /// The set is the mount table of the shell's proxy, restricted to the
-/// capabilities the dashboard calls. `capabilities/axon-status/src/proxy.rs`
+/// capabilities the dashboard calls. `capabilities/sjel-status/src/proxy.rs`
 /// (`Proxy::new`) mounts every registry entry with a port at `/<name>`, or at
 /// `/<name>/api` where its `service.toml` sets `proxy_api_only = "true"`
 /// (calendar, finance, interior, traveler, trips), and passes each
 /// `proxy_extra` prefix through unstripped (transit's `/api`, which is how
-/// `transit` in `dashboard/src/lib/api.ts` calls it). `/axon-status/` is the
+/// `transit` in `dashboard/src/lib/api.ts` calls it). `/sjel-status/` is the
 /// shell's own API, which `strip_self_prefix` in the same file serves.
 ///
 /// PRD Q94 puts that shell behind `tailscale serve`, so a phone browser on the
@@ -95,7 +95,7 @@ use crate::sync::{self, LocalStore, Outgoing, Reply, SendError, SyncStatus, Tran
 /// Not listed: capabilities the shell proxies but the dashboard does not call
 /// (punctuality, soundscape) and scouting's `/discover`.
 pub const ALLOWED_PATHS: &[&str] = &[
-    "/axon-status/",
+    "/sjel-status/",
     "/calendar/api/",
     "/comms/",
     "/devices/api/",
@@ -1254,9 +1254,9 @@ mod tests {
             "/interior/api/items?room=kitchen&limit=5",
             "/interior/api/media/photos/lamp.jpg",
             "/interior/api/roomplan/asset",
-            "/axon-status/api/axon-status/health",
-            "/axon-status/api/axon-status/start/interior",
-            "/axon-status/api/axon-status/capabilities",
+            "/sjel-status/api/sjel-status/health",
+            "/sjel-status/api/sjel-status/start/interior",
+            "/sjel-status/api/sjel-status/capabilities",
             "/calendar/api/entries",
             "/comms/feed?limit=5",
             "/comms/ingest",

@@ -12,7 +12,7 @@
 //   committed   structure, provenance, code rollup, coupling map — all derived from
 //               tracked files, so two runs on an unchanged tree are byte-identical and
 //               the artifact survives a fresh clone.
-//   fused       live process health (axon-status owns it) and open issue counts (the
+//   fused       live process health (sjel-status owns it) and open issue counts (the
 //               tracker owns them). Copying either into a committed file would give one
 //               fact two homes and make the file lie the moment a process stops or an
 //               issue is triaged.

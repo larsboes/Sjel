@@ -20,7 +20,7 @@ browser extension and `curl` callers for which a dedicated header is one fewer t
 get wrong.
 
 `/health` and `/ready` answer before the gate. They are what the runner, the dashboard
-proxy and axon-status poll to find out whether a process is alive; behind a token they
+proxy and sjel-status poll to find out whether a process is alive; behind a token they
 would report a healthy capability as down, and their answer carries nothing a caller
 could not learn by observing that the port accepts a connection. `/routes` is **not**
 exempt: a route manifest describes the surface, which is not liveness.
@@ -76,7 +76,7 @@ secret, which is why it may live in a tracked-shape file.
 Shared rather than per-capability because it gates one thing: whether an inbound request
 reached this machine legitimately. Twelve tokens would be twelve secrets for one boundary
 and twelve injections in every client that fans out across capabilities — the dashboard's
-Vite proxy and axon-status' `/routes` aggregation both do exactly that.
+Vite proxy and sjel-status' `/routes` aggregation both do exactly that.
 
 A capability may still pass its own token to `InboundAuth::resolve`, and it wins. comms'
 `api_secret_file` is the one caller that does, because the browser extension, `axon-clip`
@@ -103,15 +103,15 @@ device on the LAN could write opportunity state without auth.
 
 The gate arrived for the same reason one level up. Exactly one of twelve Rust
 capabilities authenticated an inbound request — comms, on its mutating routes only. The
-other eleven treated the loopback bind as the whole boundary, axon-status among them,
-which serves `POST /api/axon-status/capabilities/:name/start|stop`: process control.
+other eleven treated the loopback bind as the whole boundary, sjel-status among them,
+which serves `POST /api/sjel-status/capabilities/:name/start|stop`: process control.
 "Reachable from the phone" and "unauthenticated process control" cannot both be true, so
 the check belongs in the crate all twelve already route their startup through rather
 than in twelve copies that drift.
 
 CORS is deliberately not in here. Whether a server carries `CorsLayer::permissive()` is
 a per-capability security decision that stays visible in that capability's source —
-axon-status, which can start and stop the machine's capabilities, correctly carries
+sjel-status, which can start and stop the machine's capabilities, correctly carries
 none.
 
 ## The browser-origin refusal (`origin`)
@@ -177,7 +177,7 @@ and every consumer. `cargo tree` is what exposes the architectural edge.
 ## Consumers
 
 Every capability server. Measured 2026-09-06, twelve capabilities declare the path
-dependency: `comms-server`, `calendar-server`, `axon-status`, `finance-server`,
+dependency: `comms-server`, `calendar-server`, `sjel-status`, `finance-server`,
 `interior`, `places-server`, `soundscape`, `transit-server`, `punctuality-server`,
 `scout-server`, `trips-server` and `vault-server`. `cargo tree` is the current answer;
 this list is a snapshot.

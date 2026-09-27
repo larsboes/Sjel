@@ -43,7 +43,7 @@
     await refresh();
     try {
       const answer = await request<{ enabled: boolean; lan?: { port: number; host: string; fingerprint: string } }>(
-        '/axon-status/api/axon-status/lan',
+        '/sjel-status/api/sjel-status/lan',
       );
       lan = answer.enabled && answer.lan ? answer.lan : null;
     } catch {

@@ -33,7 +33,7 @@ at all.
   somebody is editing it, which is the one failure the whole drift design exists to
   prevent. A timed read-only *check* would be safe, and is not built until something needs
   it.
-- **It serves no HTTP of its own.** `axon-status` answers `GET /api/axon-status/packs` by
+- **It serves no HTTP of its own.** `sjel-status` answers `GET /api/sjel-status/packs` by
   shelling `tools/harnesses status --json`, the same way it already shells
   `tools/capability.sh registry`, `tools/repos`, `tools/backup.sh` and
   `tools/service-runner.sh`. A second server for a JSON passthrough would be a port and a
@@ -73,7 +73,7 @@ Cut this manifest the day the ledgers stop being state worth keeping — if a fu
 derives ownership from the destination itself rather than from a recorded digest, the file
 it protects is gone and so is the reason for the row.
 
-Promote it to a process capability with its own port and panel only when `axon-status`
+Promote it to a process capability with its own port and panel only when `sjel-status`
 starts needing logic that is specific to Packs rather than a passthrough. Until then, a
 process here would be a port, a binary, a health check and a dashboard mount bought for a
 JSON file that another service already hands over for free.

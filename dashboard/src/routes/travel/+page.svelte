@@ -482,7 +482,7 @@
   onMount(() => {
     void (async () => {
       // Trips is an on-demand capability. Opening its native workspace is the demand;
-      // axon-status owns process control, while every data call still goes to Trips.
+      // sjel-status owns process control, while every data call still goes to Trips.
       try {
         await axonStatus.start("trips");
       } catch {

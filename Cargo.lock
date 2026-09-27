@@ -594,25 +594,6 @@ name = "axon-fda-launcher"
 version = "0.1.0"
 
 [[package]]
-name = "axon-status"
-version = "0.1.0"
-dependencies = [
- "axum",
- "devices",
- "reqwest",
- "ring",
- "route-manifest",
- "serde",
- "serde_json",
- "sjel-config",
- "sjel-server",
- "sjel-store",
- "tokio",
- "tower 0.4.13",
- "tower-http",
-]
-
-[[package]]
 name = "axum"
 version = "0.7.9"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -4860,6 +4841,25 @@ dependencies = [
  "sjel-config",
  "tokio",
  "tokio-rustls",
+]
+
+[[package]]
+name = "sjel-status"
+version = "0.1.0"
+dependencies = [
+ "axum",
+ "devices",
+ "reqwest",
+ "ring",
+ "route-manifest",
+ "serde",
+ "serde_json",
+ "sjel-config",
+ "sjel-server",
+ "sjel-store",
+ "tokio",
+ "tower 0.4.13",
+ "tower-http",
 ]
 
 [[package]]

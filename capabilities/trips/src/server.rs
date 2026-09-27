@@ -1848,7 +1848,7 @@ mod readiness_tests {
 
     /// The contract the dashboard depends on: an unreachable database is reported as
     /// unavailable rather than as a healthy service (#126). Before the split, the only
-    /// surface axon-status polled was `health`, which is a literal and answers 200 here.
+    /// surface sjel-status polled was `health`, which is a literal and answers 200 here.
     #[tokio::test]
     async fn readiness_fails_when_the_database_is_unreachable() {
         // A file where a directory has to be: the store cannot be opened there,

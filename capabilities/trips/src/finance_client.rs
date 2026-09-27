@@ -93,7 +93,7 @@ pub fn trip_spending_at(base_url: &str, plan_id: &str) -> Result<TripSpending, U
     // The inbound gate is on every route except /health and /ready, so without
     // the token a gated finance reads as "not running" — the one wrong answer
     // this must not give. Resolved per request, so rotating the token file needs
-    // no restart here (the axon-status precedent).
+    // no restart here (the sjel-status precedent).
     if let Some(bearer) = sjel_server::InboundAuth::from_deployment().bearer_header() {
         request = request.header(reqwest::header::AUTHORIZATION, bearer);
     }

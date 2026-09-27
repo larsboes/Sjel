@@ -5,7 +5,7 @@ import UIKit
 import WebKit
 
 // Finds Axon nodes on the local network (PRD Q119). The Mac advertises `_axon._tcp` with its host,
-// port and certificate fingerprint in the TXT record (capabilities/axon-status/src/lan.rs), so a
+// port and certificate fingerprint in the TXT record (capabilities/sjel-status/src/lan.rs), so a
 // browse result is enough to connect: no service resolution, no connection from here.
 //
 // The first browse shows iOS's local-network permission prompt, which needs

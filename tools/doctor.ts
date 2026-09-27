@@ -466,10 +466,10 @@ export function formatFetchAge(fetchEpochSeconds: number | null, nowEpochSeconds
 // cleanup() removes the staging tree and the tarball, so nothing else here can answer "when was
 // the last successful backup".
 //
-// Read directly rather than through axon-status. That surface reads the same files and its
+// Read directly rather than through sjel-status. That surface reads the same files and its
 // `backup_state` is the rule mirrored below — but it deliberately drops `target`, `tarball` and
 // `sha256` from its projection so no destination can reach an HTTP response
-// (capabilities/axon-status/src/status/backup.rs, on the Receipt struct), and those are exactly
+// (capabilities/sjel-status/src/status/backup.rs, on the Receipt struct), and those are exactly
 // the fields needed to go and look at the archive. It also has to be running, and doctor's whole
 // point is to work on a machine where things are not.
 //
@@ -497,7 +497,7 @@ export function parseReceiptTimestamp(stamp: string): number | null {
   return Math.floor(Date.UTC(y, mo - 1, d, h, mi, s) / 1000);
 }
 
-/// Age against the capability's own two thresholds — the port of axon-status' `backup_state`,
+/// Age against the capability's own two thresholds — the port of sjel-status' `backup_state`,
 /// including why the two words differ: `due` means the data is older than the owner said it
 /// should be, `overdue` means the schedule that should have refreshed it did not. `never` outranks
 /// everything, because a capability with a backup contract and no receipt has the problem whatever
@@ -2330,7 +2330,7 @@ const CHECKS: Check[] = [
   //
   // D10 is the argument for both halves. The vault's only backup died and stayed dead for 27 days
   // before anyone noticed, and what made it invisible was not a subtle bug — it was that nothing
-  // asked. The dashboard has shown backup ages since (axon-status' /backups), but a dashboard is
+  // asked. The dashboard has shown backup ages since (sjel-status' /backups), but a dashboard is
   // something you have to open; doctor is what runs before a change, and it said nothing about
   // backups at all.
   //
@@ -2395,7 +2395,7 @@ const CHECKS: Check[] = [
             receipt = JSON.parse(readFileSync(receiptPath, "utf8")) as BackupReceipt;
           } catch {
             // An unreadable receipt is not a fresh backup. Falling through to `never` is the
-            // honest reading and matches axon-status, which parses the same file with the same
+            // honest reading and matches sjel-status, which parses the same file with the same
             // "unparseable means no usable receipt" rule.
             ctx.bad(`${service.name} — ${receiptPath} is not readable JSON; treat this contract as unverified`);
             continue;

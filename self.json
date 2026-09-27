@@ -19,19 +19,6 @@
       }
     },
     {
-      "name": "axon-status",
-      "kind": "capability",
-      "service": {
-        "kind": "process",
-        "requires": [],
-        "port": "8082"
-      },
-      "code": {
-        "files": 15,
-        "nodes": 160
-      }
-    },
-    {
       "name": "backup",
       "kind": "capability",
       "service": {
@@ -127,13 +114,13 @@
       "service": {
         "kind": "process",
         "requires": [
-          "axon-status"
+          "sjel-status"
         ],
         "port": "47117"
       },
       "code": {
         "files": 226,
-        "nodes": 1692
+        "nodes": 1694
       }
     },
     {
@@ -336,7 +323,7 @@
       },
       "code": {
         "files": 36,
-        "nodes": 732
+        "nodes": 739
       }
     },
     {
@@ -580,6 +567,19 @@
       }
     },
     {
+      "name": "sjel-status",
+      "kind": "capability",
+      "service": {
+        "kind": "process",
+        "requires": [],
+        "port": "8082"
+      },
+      "code": {
+        "files": 15,
+        "nodes": 164
+      }
+    },
+    {
       "name": "sjel-store",
       "kind": "lib",
       "code": {
@@ -730,56 +730,6 @@
     }
   ],
   "coupling": [
-    {
-      "from": "axon-status",
-      "to": "devices",
-      "kinds": [
-        "cargo-dep"
-      ],
-      "evidence": [
-        "capabilities/axon-status/Cargo.toml"
-      ]
-    },
-    {
-      "from": "axon-status",
-      "to": "route-manifest",
-      "kinds": [
-        "cargo-dep"
-      ],
-      "evidence": [
-        "capabilities/axon-status/Cargo.toml"
-      ]
-    },
-    {
-      "from": "axon-status",
-      "to": "sjel-config",
-      "kinds": [
-        "cargo-dep"
-      ],
-      "evidence": [
-        "capabilities/axon-status/Cargo.toml"
-      ]
-    },
-    {
-      "from": "axon-status",
-      "to": "sjel-server",
-      "kinds": [
-        "cargo-dep"
-      ],
-      "evidence": [
-        "capabilities/axon-status/Cargo.toml"
-      ]
-    },
-    {
-      "from": "axon-status",
-      "to": "sjel-store",
-      "kinds": [
-        "cargo-dep"
-      ],
-      "evidence": [
-        "capabilities/axon-status/Cargo.toml"
-      ]
-    },
     {
       "from": "calendar",
       "to": "civil-date",
@@ -1488,6 +1438,56 @@
       ],
       "evidence": [
         "libs/sjel-server/Cargo.toml"
+      ]
+    },
+    {
+      "from": "sjel-status",
+      "to": "devices",
+      "kinds": [
+        "cargo-dep"
+      ],
+      "evidence": [
+        "capabilities/sjel-status/Cargo.toml"
+      ]
+    },
+    {
+      "from": "sjel-status",
+      "to": "route-manifest",
+      "kinds": [
+        "cargo-dep"
+      ],
+      "evidence": [
+        "capabilities/sjel-status/Cargo.toml"
+      ]
+    },
+    {
+      "from": "sjel-status",
+      "to": "sjel-config",
+      "kinds": [
+        "cargo-dep"
+      ],
+      "evidence": [
+        "capabilities/sjel-status/Cargo.toml"
+      ]
+    },
+    {
+      "from": "sjel-status",
+      "to": "sjel-server",
+      "kinds": [
+        "cargo-dep"
+      ],
+      "evidence": [
+        "capabilities/sjel-status/Cargo.toml"
+      ]
+    },
+    {
+      "from": "sjel-status",
+      "to": "sjel-store",
+      "kinds": [
+        "cargo-dep"
+      ],
+      "evidence": [
+        "capabilities/sjel-status/Cargo.toml"
       ]
     },
     {
@@ -2233,7 +2233,7 @@
   ],
   "graph": {
     "present": true,
-    "nodes": 23263,
+    "nodes": 23280,
     "external": 36,
     "stale": [],
     "unmatched": [

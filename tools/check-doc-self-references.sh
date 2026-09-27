@@ -3,7 +3,7 @@
 # A doc must never cite its own repo-relative path as if it were a pointer to
 # somewhere else ("see `capabilities/x/README.md`" written inside that very
 # file). The class is real: the 2026-07-28 decisions/ dissolution's link
-# rewriter left four such self-references (axon-status, punctuality — two
+# rewriter left four such self-references (sjel-status, punctuality — two
 # each), all reading like cross-references and all going nowhere.
 #
 # Pure file-based check over the tracked docs, same contract as the sibling

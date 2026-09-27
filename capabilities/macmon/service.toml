@@ -23,7 +23,7 @@ health_path = "/json"
 # running.
 # false since 2026-08-29. macmon polls the SMC every 5 s forever, and its only consumer is one
 # page you open occasionally — which is precisely the idle draw R2 refuses to enable by default.
-# axon-status starts it when /systems is opened, the same way finance and punctuality now start.
+# sjel-status starts it when /systems is opened, the same way finance and punctuality now start.
 #
 # It was `true` while the binary was not installed, so the Systems page has been degrading to
 # "no metrics" for weeks and the watchdog logged "nohup: macmon: No such file or directory".

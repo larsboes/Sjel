@@ -116,7 +116,7 @@ jobs:
       # fails here with a compiler's error message instead of inside a service start.
       # --release because the manifests' command paths name target/release/ binaries.
       - name: Build the demo's capability servers
-        run: cargo build --locked --release -p axon-status -p calendar -p finance -p trips
+        run: cargo build --locked --release -p sjel-status -p calendar -p finance -p trips
 
       - name: Install dashboard dependencies
         working-directory: dashboard

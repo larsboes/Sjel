@@ -1,14 +1,14 @@
 [package]
-name = "axon-status"
+name = "sjel-status"
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true
 license.workspace = true
-description = "Aggregates live health from Axon's own HTTP-surfaced capabilities (transit-server, scout-server) for dashboard. Not LifeOS Pulse -- see capabilities/axon-status/README.md."
+description = "Aggregates live health from Axon's own HTTP-surfaced capabilities (transit-server, scout-server) for dashboard. Not LifeOS Pulse -- see capabilities/sjel-status/README.md."
 publish = false
 
 [[bin]]
-name = "axon-status"
+name = "sjel-status"
 path = "src/main.rs"
 
 [dependencies]

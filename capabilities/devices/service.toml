@@ -1,5 +1,5 @@
 # Device enrollment and revocation for one Axon deployment.
-# The service is reached through axon-status' same-origin proxy; it owns durable device
+# The service is reached through sjel-status' same-origin proxy; it owns durable device
 # security state, not host health or capability lifecycle.
 kind            = "process"
 name            = "devices"

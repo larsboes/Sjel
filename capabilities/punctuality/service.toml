@@ -36,6 +36,6 @@ health_path = "/health"
 # the factor's absence.
 #
 # So the choice the old comment named — always-on, or enrichment never happens — is settled
-# the first way, and `axon-status`' lifecycle route stays the thing that stops and starts it
-# by hand (`capabilities/axon-status/src/status/lifecycle.rs`).
+# the first way, and `sjel-status`' lifecycle route stays the thing that stops and starts it
+# by hand (`capabilities/sjel-status/src/status/lifecycle.rs`).
 autostart   = "true"

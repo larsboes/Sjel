@@ -1,7 +1,7 @@
 import { axonStatus, hasPanel, type CapabilityView } from "./api";
 
 /**
- * What this machine actually runs, asked of axon-status rather than compiled in.
+ * What this machine actually runs, asked of sjel-status rather than compiled in.
  *
  * One module-level rune store rather than a per-component fetch: the nav, the home
  * page and the capabilities page all render the same answer, and three independent
@@ -19,7 +19,7 @@ class CapabilityStore {
       this.items = await axonStatus.capabilities();
       this.offline = false;
     } catch {
-      // axon-status is down. The shell keeps rendering, it just cannot say what is up.
+      // sjel-status is down. The shell keeps rendering, it just cannot say what is up.
       // The last known list is deliberately kept: a nav that empties itself on one
       // failed poll is worse than a stale one.
       this.offline = true;

@@ -5,8 +5,8 @@
 //! Until this module existed, exactly one of twelve Rust capabilities
 //! authenticated an inbound request — comms, whose `src/server/auth.rs` carried
 //! a constant-time Bearer / `X-Axon-Token` check on its mutating routes. The
-//! other eleven relied entirely on the loopback bind, including axon-status,
-//! which serves `POST /api/axon-status/capabilities/:name/start|stop`: process
+//! other eleven relied entirely on the loopback bind, including sjel-status,
+//! which serves `POST /api/sjel-status/capabilities/:name/start|stop`: process
 //! control. "Reachable from the phone" and "unauthenticated process control"
 //! cannot both be true, so the check moved to the crate all twelve already
 //! route their startup through. A second copy of this check is the drift the
@@ -51,7 +51,7 @@
 //! whether an inbound request reached this machine legitimately. Twelve tokens
 //! would be twelve secrets for one boundary and twelve injections in every
 //! client that fans out across capabilities — the dashboard's Vite proxy and
-//! axon-status' `/routes` aggregation both do exactly that.
+//! sjel-status' `/routes` aggregation both do exactly that.
 //!
 //! The value is referenced, never inlined, following the pattern comms
 //! established for `api_secret_file`: `<overlay>/config/deployment.env`
@@ -75,7 +75,7 @@ use axum::{Json, Router};
 use serde_json::json;
 
 /// Paths that answer before the gate. Liveness and readiness are what a proxy,
-/// the runner and axon-status poll to find out whether a process is alive at
+/// the runner and sjel-status poll to find out whether a process is alive at
 /// all; behind a token they would report a healthy capability as down, and the
 /// answer carries nothing an unauthenticated caller could not learn by
 /// observing that the port accepts a connection.
@@ -84,7 +84,7 @@ use serde_json::json;
 /// capability last took delivery of data, as one integer — never what the data is, how much of
 /// it there is, or where it came from. A caller who can reach the port can already watch it
 /// accept connections; learning that a collector last succeeded at T tells them nothing further
-/// about the operator. It is exempt because the surface that reads it, axon-status, polls every
+/// about the operator. It is exempt because the surface that reads it, sjel-status, polls every
 /// capability and must not need each one's credential to ask a liveness-shaped question — the
 /// alternative is a status page that reports a healthy capability as unknown, which is exactly
 /// the failure the two paths above are exempt to prevent.
@@ -95,7 +95,7 @@ const EXEMPT_PATHS: &[&str] = &["/health", "/ready", "/__axon/freshness"];
 pub const DEVICE_SIGNATURE_HEADER: &str = "x-axon-signature";
 
 /// The largest body the gate buffers to check a device signature. Same ceiling as the shell's
-/// proxy (`capabilities/axon-status/src/proxy.rs`, `forward`), which buffers it anyway.
+/// proxy (`capabilities/sjel-status/src/proxy.rs`, `forward`), which buffers it anyway.
 const MAX_SIGNED_BODY_BYTES: usize = 8 * 1024 * 1024;
 
 /// Checks one `axon-device-auth/v1` signed request against the device registry.
@@ -279,7 +279,7 @@ impl InboundAuth {
     }
 
     /// `Bearer <token>`, for a process that calls a sibling capability through
-    /// this same gate — axon-status polling `/routes` is the only one today.
+    /// this same gate — sjel-status polling `/routes` is the only one today.
     /// `None` when no token is configured, which is also when no sibling
     /// requires one.
     pub fn bearer_header(&self) -> Option<String> {
@@ -579,7 +579,7 @@ mod tests {
         let proven = &[("tailscale-user-login", OPERATOR)];
         assert_eq!(status(&auth, Method::GET, "/feed", proven), 200);
         assert_eq!(
-            status(&auth, Method::GET, "/api/axon-status/capabilities", proven),
+            status(&auth, Method::GET, "/api/sjel-status/capabilities", proven),
             200
         );
     }
@@ -657,7 +657,7 @@ mod tests {
             status(
                 &auth,
                 Method::POST,
-                "/api/axon-status/capabilities/comms/stop",
+                "/api/sjel-status/capabilities/comms/stop",
                 &[("tailscale-user-login", "guest@example.com")]
             ),
             401
@@ -683,7 +683,7 @@ mod tests {
 
     #[test]
     fn health_stays_exempt_for_an_unknown_identity() {
-        // axon-status polls every capability's /health. Gating it would report a
+        // sjel-status polls every capability's /health. Gating it would report a
         // healthy capability as down, which is what the exemption exists to stop.
         let auth = tailnet(InboundAuth::with_token(None));
         assert_eq!(
@@ -708,7 +708,7 @@ mod tests {
             status(
                 &auth,
                 Method::POST,
-                "/api/axon-status/capabilities/comms/start",
+                "/api/sjel-status/capabilities/comms/start",
                 &[]
             ),
             401

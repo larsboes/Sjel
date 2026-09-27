@@ -85,7 +85,7 @@ describe("a kind reports the class its capability published, and never one of it
 
   test("a kind that reports no class is one whose contract states none", () => {
     // The list, so a kind going silent shows up as a failing test rather than as a chip
-    // that stopped appearing. `host` and `system` read axon-status, which serves machine
+    // that stopped appearing. `host` and `system` read sjel-status, which serves machine
     // state and no content. The two trips kinds are an OPEN operator ruling: 12 of 13 live
     // plans name third parties, four with full names, so a plan is arguably c2 — and B50
     // says in as many words that inventing that answer is the failure mode, so they stay

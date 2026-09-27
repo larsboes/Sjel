@@ -16,7 +16,7 @@ pub(crate) async fn is_up(client: &reqwest::Client, svc: &Service) -> bool {
 }
 
 pub(crate) async fn health_handler() -> Json<Value> {
-    Json(json!({ "ok": true, "service": "axon-status" }))
+    Json(json!({ "ok": true, "service": "sjel-status" }))
 }
 
 /// Version identity for the spine repo and the overlay, read at request time.
@@ -93,7 +93,7 @@ pub(crate) async fn self_model_handler() -> Result<Json<Value>, (StatusCode, Jso
 
 /// The dashboard's long-standing contract: name -> {up, url}. Same shape as before,
 /// now covering every enabled capability instead of two compiled-in names.
-pub(crate) async fn axon_status_health_handler(
+pub(crate) async fn sjel_status_health_handler(
 ) -> Result<Json<AxonStatusHealth>, (StatusCode, Json<Value>)> {
     let services = registry().await.map_err(bad_gateway)?;
     let client = reqwest::Client::new();

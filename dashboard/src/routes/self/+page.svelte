@@ -102,7 +102,7 @@
    * Open a unit at file level.
    *
    * knowledge-graph starts on demand, so a first call while it is down is the
-   * normal case rather than a fault: ask axon-status to bring it up, then try
+   * normal case rather than a fault: ask sjel-status to bring it up, then try
    * once more. A second failure is reported as itself.
    */
   const insideDetail = $derived(

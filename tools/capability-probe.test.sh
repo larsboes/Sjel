@@ -7,7 +7,7 @@
 # running the CLI: they need capabilities that are running, capabilities that are refusing,
 # and a capability on another host, and CI has none of the three.
 #
-# The rules are copied from capabilities/axon-status/src/status/registry.rs, which owns this
+# The rules are copied from capabilities/sjel-status/src/status/registry.rs, which owns this
 # question for the dashboard. Where the two disagreed, the CLI was wrong.
 set -uo pipefail
 
@@ -78,7 +78,7 @@ is "a capability with neither has no base URL" \
 #
 # The whole reason for three states. `dashboard` declares port 47117 and
 # autostart = "false"; that port is the hot-reload dev server, and the shell it serves has
-# been served by axon-status since 2026-08-29. Calling it "down" was wrong twice, and it set
+# been served by sjel-status since 2026-08-29. Calling it "down" was wrong twice, and it set
 # a non-zero exit for a machine that was entirely healthy.
 
 is "a 200 is up whatever the manifest declares" up "$(capability_state 200 false)"
@@ -113,10 +113,10 @@ is "an external row is down even if an autostart value did leak through" \
 #
 # @tsv plus `read` was the bug that printed `http://127.0.0.1:8082true`: tab is IFS
 # whitespace, so a run of tabs collapses and every field after an empty one shifts left. This
-# is that row — axon-status, which declares no ready_path — read back with the separator the
+# is that row — sjel-status, which declares no ready_path — read back with the separator the
 # library chose.
 
-row="axon-status${CAPABILITY_FS}capability${CAPABILITY_FS}8082${CAPABILITY_FS}${CAPABILITY_FS}/health${CAPABILITY_FS}${CAPABILITY_FS}true"
+row="sjel-status${CAPABILITY_FS}capability${CAPABILITY_FS}8082${CAPABILITY_FS}${CAPABILITY_FS}/health${CAPABILITY_FS}${CAPABILITY_FS}true"
 IFS="$CAPABILITY_FS" read -r f_name f_scope f_port f_endpoint f_health f_ready f_auto <<EOF
 $row
 EOF
@@ -130,7 +130,7 @@ is "and the whole row still resolves to the right probe" \
 
 # The known-bad half: the same row through a tab, which is what was there. If this ever
 # stops being wrong, the separator no longer matters and this file can lose the section.
-tab_row="$(printf 'axon-status\tcapability\t8082\t\t/health\t\ttrue')"
+tab_row="$(printf 'sjel-status\tcapability\t8082\t\t/health\t\ttrue')"
 IFS="$(printf '\t')" read -r t_name t_scope t_port t_endpoint t_health t_ready t_auto <<EOF
 $tab_row
 EOF

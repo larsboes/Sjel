@@ -617,7 +617,7 @@ start_process() {
     # a page someone has open, or another job — and stopping it would make a background tick reach
     # out and break something in front of a person.
     #
-    # `idle-stop`, not `stop`: the verb axon-status' reaper already uses, and for the same reason.
+    # `idle-stop`, not `stop`: the verb sjel-status' reaper already uses, and for the same reason.
     # A finished job is not a maintenance window, so it must not leave a hold that turns the next
     # start into a silent no-op.
     #
@@ -663,7 +663,7 @@ start_process() {
   (
     cd "$CAP_ROOT/${WORKDIR:-.}"
     # One number, one declaration. The manifest's `port` (after any machine-local
-    # override) is what the dashboard proxies to and what axon-status polls, so it has
+    # override) is what the dashboard proxies to and what sjel-status polls, so it has
     # to be what the process binds -- otherwise the registry describes a service that
     # is listening somewhere else. A capability honours SJEL_PORT above its own config;
     # one that ignores it is free to, and simply has to keep its config in step.
@@ -1284,7 +1284,7 @@ persistence_loaded() {
       command -v launchctl >/dev/null 2>&1 || { echo unknown; return 0; }
       # `grep -c`, not `grep -q`, and the reason is this script's `set -o pipefail`: -q exits at
       # the first match, `launchctl list` then dies of SIGPIPE, and pipefail turns a FOUND label
-      # into a failed pipeline. It reported the loaded axon-status agent as not loaded, and
+      # into a failed pipeline. It reported the loaded sjel-status agent as not loaded, and
       # whether it did so depended on where in the output the label happened to sit. -c consumes
       # the whole stream, so the producer always finishes.
       hits="$(launchctl list 2>/dev/null | grep -cE "${UNIT_LABEL_PREFIX//./\\.}\.${CAP}\$" || true)"
@@ -1493,7 +1493,7 @@ case "$CMD" in
     fi
     ;;
   idle-stop)
-    # axon-status's idle reaper spells `stop --no-hold` this way, and keeps its own verb because
+    # sjel-status's idle reaper spells `stop --no-hold` this way, and keeps its own verb because
     # it is a distinct decision with a distinct owner: an unread page is not a maintenance window,
     # so holding it would mean the next thing to ask for the panel gets a silent no-op until the
     # lock aged out. A capability with no idle_timeout in its manifest is never a target.

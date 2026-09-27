@@ -1027,7 +1027,7 @@ Routes:
 - `GET /health` → liveness. Answers from the process alone, so a start completes without a
   database and an unreachable store does not read as a crash.
 - `GET /ready` → readiness: liveness plus a reachable database, `503` when it is not. This is
-  what `axon-status` judges availability on, and what the dashboard reports.
+  what `sjel-status` judges availability on, and what the dashboard reports.
 
 Binds `127.0.0.1`, not `0.0.0.0`: `/ingest` makes the server fetch a URL on
 request, so anything that can reach the port can use it to reach whatever the

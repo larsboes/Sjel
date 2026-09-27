@@ -1,6 +1,6 @@
 
 
-# axon-status
+# sjel-status
 
 What this machine has enabled, what is up, and the one thing allowed to start it.
 Not LifeOS Pulse (`~/.claude/LIFEOS/PULSE/pulse.ts`, port `31337`); see
@@ -29,32 +29,32 @@ capabilities, so it answers to this machine only. The dashboard reaches it throu
 Vite's proxy, which runs here too.
 
 The bind was the whole boundary until `libs/sjel-server` grew the inbound gate, and for
-`POST /api/axon-status/capabilities/:name/start|stop` that was never enough on its own —
+`POST /api/sjel-status/capabilities/:name/start|stop` that was never enough on its own —
 it is process control. When the deployment declares `SJEL_INBOUND_TOKEN_FILE`
 (`schemas/deployment.env.example`), every route here except `/health` asks for that
-token. `/api/axon-status/routes` then presents it when polling siblings, because a gated
+token. `/api/sjel-status/routes` then presents it when polling siblings, because a gated
 capability that refused this process would otherwise be reported as not running.
 
 ## Endpoints
 
-- `GET /health` — basic liveness check for axon-status itself
-- `GET /api/axon-status/health` — `{ok, version, uptime_seconds, capabilities:
+- `GET /health` — basic liveness check for sjel-status itself
+- `GET /api/sjel-status/health` — `{ok, version, uptime_seconds, capabilities:
   {<name>: {up, url}}}`, one entry per enabled capability that declares a health
   surface, each backed by a live 2s-timeout `GET`. `ok` means the **autostart set**
   is up. Once capabilities start on demand, a stopped on-demand capability is the
   normal state, not a fault.
-- `GET /api/axon-status/capabilities` — the registry plus live state: kind, scope,
+- `GET /api/sjel-status/capabilities` — the registry plus live state: kind, scope,
   port, `requires`, `up` (`null` when nothing is declared to poll, meaning unknown
   rather than down) and `panel_url` for a capability that serves its own UI.
-There was a `GET /api/axon-status/upstreams` here until 2026-08-28. It shelled out to
+There was a `GET /api/sjel-status/upstreams` here until 2026-08-28. It shelled out to
 `tools/upstream-checker --json --offline` and served a per-entry `ok`/`na`/`warn`/`fail`
 status. PRD Q41 retired that script; the status field *was* its verdict, so recomputing it
 in this process would rebuild the plumbing the item deleted. Dependabot
 (`.github/dependabot.yml`) reports drift on GitHub now, and the verdict half of that feed was never the checker's anyway —
 `/self` already carries it, straight from `upstreams.toml` via `tools/self generate`.
-- `POST /api/axon-status/capabilities/:name/start` — bring one up (via
+- `POST /api/sjel-status/capabilities/:name/start` — bring one up (via
   `service-runner.sh resume`, which also lifts a maintenance hold)
-- `POST /api/axon-status/capabilities/:name/stop` — take one down and hold it
+- `POST /api/sjel-status/capabilities/:name/stop` — take one down and hold it
 
 ### Why a process-control endpoint is safe here, and when it stops being safe
 
@@ -72,7 +72,7 @@ Needs `SJEL_ROOT` set, because it shells out to the repo's own tools and its own
 exports it, so the normal path needs nothing:
 
 ```bash
-tools/service-runner.sh start axon-status
+tools/service-runner.sh start sjel-status
 ```
 
 ## Why this shape: the name and the port
@@ -80,8 +80,8 @@ tools/service-runner.sh start axon-status
 Migrated from its dissolved `decisions/` entry on 2026-07-28: this governs one
 thing, so it lives with that thing (README.md#decisions-live-with-their-owner).
 
-**Decision:** the health-aggregation capability for the root `dashboard` is `capabilities/axon-status`,
-binary `axon-status`, default port `8082`. Not `pulse`, not `31337`.
+**Decision:** the health-aggregation capability for the root `dashboard` is `capabilities/sjel-status`,
+binary `sjel-status`, default port `8082`. Not `pulse`, not `31337`.
 
 **Why:** the shelved bulk-port attempt preserved in Git history named its capability `pulse` and
 defaulted to port `31337` — both already belong to the real LifeOS
@@ -90,7 +90,7 @@ Life Dashboard (`~/.claude/LIFEOS/PULSE/pulse.ts`, documented everywhere in Life
 is a collision waiting to happen the moment both run at once, and it was never a deliberate
 migration — the shelved capability was three stub routes returning hardcoded static data
 (`uptime_seconds: 0`, a fake `{"pulse": "up"}` capabilities map), not a real port of LifeOS
-Pulse's actual functionality. `capabilities/axon-status` replaces it with real aggregation:
+Pulse's actual functionality. `capabilities/sjel-status` replaces it with real aggregation:
 live `GET /health` calls out to every enabled capability with a health surface — read from
 the registry, not a hand-list — reporting actual reachability, not a canned response. `8082`
 sits next to scouting's `8081`... — actually next to nothing taken (`8081` was never real;
@@ -99,7 +99,7 @@ scouting's true default is `8084`, since `8080` belongs to vaultwarden — see
 
 **Forecloses:** no Axon capability may claim port `31337` or the name "Pulse"/"pulse" — that
 identity belongs to LifeOS, whether or not any machine still runs it. The root `dashboard`
-proxied LifeOS Pulse as a distinct upstream from `axon-status`, never conflated into one
+proxied LifeOS Pulse as a distinct upstream from `sjel-status`, never conflated into one
 capability; that proxy and the panel behind it were deleted on 2026-08-25 with the rest of
 the LifeOS delta (PRD D6). A reader who wants that data again adds it back as an upstream,
 not as a route on this capability.
@@ -122,7 +122,7 @@ network log. A 404 would have named it in seconds.
 The rule is deliberately narrow: one directory the build owns outright, not "any path with a file
 extension", which would break a client route containing a dot. A related trap is documented at
 `fallback` in `src/proxy.rs` — a capability path with no route also lands on the shell and answers
-HTML, which is why a capability endpoint returning HTML means "restart axon-status" rather than
+HTML, which is why a capability endpoint returning HTML means "restart sjel-status" rather than
 "the endpoint is healthy".
 
 ## Considered and declined

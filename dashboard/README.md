@@ -132,7 +132,7 @@ MapLibre and its stylesheet stay in a separate async bundle — `vite.config.ts`
 fails the build if either reaches the eager import graph, **and if MapLibre's worker asset is
 not emitted**. That second assertion exists because its absence is silent: MapLibre asks for its
 worker through a template literal Rollup cannot follow, so no asset was built, the request fell
-through axon-status' SPA fallback as `200 text/html`, `new Worker` was handed the app shell and
+through sjel-status' SPA fallback as `200 text/html`, `new Worker` was handed the app shell and
 died — and every map on the served bundle rendered a blank canvas and sat on "Loading map…"
 forever, with no error and no failed request. `surface.ts` hands MapLibre a Vite-built worker
 through `setWorkerUrl` instead. A map loads when it approaches the
@@ -216,8 +216,8 @@ manifests as JSON, and two consumers read it:
   are loopback-only. A deployment that declares `SJEL_INBOUND_TOKEN_FILE` gates them
   too, and this proxy does not yet inject that token — the wiring belongs with
   `tailscale serve`, which is what makes the token necessary in the first place.
-- `axon-status` serves the same registry plus live health at
-  `/axon-status/api/axon-status/capabilities`, which is what the nav, the home page and
+- `sjel-status` serves the same registry plus live health at
+  `/sjel-status/api/sjel-status/capabilities`, which is what the nav, the home page and
   the Capabilities page render.
 
 A capability that declares `panel_port` appears on `/projects`. It does not grow the main
@@ -228,7 +228,7 @@ the user starts one, then open as separate pages.
 |---|---|---|
 | transit | `3000` | `/transit/*`, plus `/api/*` unstripped |
 | scouting | `8084` | `/scouting/*`, plus `/discover` unstripped |
-| axon-status | `8082` | `/axon-status/*` |
+| sjel-status | `8082` | `/sjel-status/*` |
 | comms | `8083` | `/comms/*` |
 | punctuality | `8085` | `/punctuality/*` (no UI consumer yet — transit reads it server-side) |
 | trips | `8086` | `/trips/*` |
@@ -241,7 +241,7 @@ and it already went stale once — trust the registry when the two disagree.
 ### Project pages are addressed from the browser, never from the server
 
 `panelUrl()` in `src/lib/api.ts` composes a panel's address from `location.hostname` and
-the manifest's `panel_port`. axon-status deliberately does not send an absolute URL.
+the manifest's `panel_port`. sjel-status deliberately does not send an absolute URL.
 
 Same-host addressing also survives the shell being reached over Tailscale, where
 `127.0.0.1` would point at the phone. The dashboard deliberately links to the project
@@ -551,7 +551,7 @@ the next capability that wants one — cite this decision instead, or write a ne
 trigger differs. A capability HTTP surface is added *only* when a concrete consumer is named
 (here: the root `dashboard`), never speculatively "because the pattern exists." `pulse`'s
 HTTP surface is a separate decision (name/port collision with the real LifeOS Pulse dashboard —
-resolved by `capabilities/axon-status/README.md`).
+resolved by `capabilities/sjel-status/README.md`).
 
 ## Why this shape: Svelte 5 is the single frontend standard
 

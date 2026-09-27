@@ -20,7 +20,7 @@
 # provides it, and the id is free to differ from the capability name.
 #
 # What this deliberately does NOT do: resolve loopback. A locally managed capability is
-# unchanged by every line in this file — axon-status still builds its own 127.0.0.1 URL
+# unchanged by every line in this file — sjel-status still builds its own 127.0.0.1 URL
 # from the manifest port, and it should, because that is not a reference to anything.
 # Absent `provided_by`, nothing here has an opinion.
 #

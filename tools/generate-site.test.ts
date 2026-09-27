@@ -16,13 +16,13 @@ const MODEL = {
   schema: 1,
   generator: "tools/self.ts",
   units: [
-    { name: "axon-status", kind: "capability" as const, service: { kind: "process", requires: ["store"], port: "8082" } },
+    { name: "sjel-status", kind: "capability" as const, service: { kind: "process", requires: ["store"], port: "8082" } },
     { name: "vaultwarden", kind: "capability" as const, service: { kind: "container", requires: [], image: "vaultwarden/server" } },
     { name: "sjel-config", kind: "lib" as const },
     { name: "writing", kind: "pack" as const },
     { name: "tools", kind: "spine" as const },
   ],
-  coupling: [{ from: "axon-status", to: "sjel-config", kinds: ["cargo-dep"], evidence: ["capabilities/axon-status/Cargo.toml"] }],
+  coupling: [{ from: "sjel-status", to: "sjel-config", kinds: ["cargo-dep"], evidence: ["capabilities/sjel-status/Cargo.toml"] }],
   upstreams: [
     { name: "bun", verdict: "adopt" },
     { name: "stop-slop", verdict: "reject" },

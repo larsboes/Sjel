@@ -5,18 +5,18 @@
 #
 # `bun run dev` — but NOT supervised any more. See `autostart` below.
 #
-# The shell is served by axon-status from the bundle `build` produces
-# (`capabilities/axon-status/src/proxy.rs`). What that took was not a swap: every API call in
+# The shell is served by sjel-status from the bundle `build` produces
+# (`capabilities/sjel-status/src/proxy.rs`). What that took was not a swap: every API call in
 # the SPA is a relative fetch, and the proxy that mapped `/comms/...` onto a port existed only
 # in Vite's dev server — `vite.config.ts` builds it when `command === "serve"` and `preview`
 # declares none, so the built bundle had never had a working API path in any mode.
 #
 # Measured 2026-08-29: supervising the dev server cost 95.5 MB across node, esbuild and bun,
-# against 24.9 MB for all three Rust servers combined. axon-status already had to stay up.
+# against 24.9 MB for all three Rust servers combined. sjel-status already had to stay up.
 #
 # This command stays because hot reload is worth having on the machine you edit on. It is now
 # a thing you start when you want it, on this port, alongside the always-on shell on
-# axon-status'"'"' — two modes, one of them supervised.
+# sjel-status'"'"' — two modes, one of them supervised.
 kind        = "process"
 name        = "dashboard"
 command     = ["bun", "run", "dev"]
@@ -28,7 +28,7 @@ health_path = "/"
 #   tools/service-runner.sh start dashboard
 autostart   = "false"
 
-# The bundle axon-status serves, and the command that makes it. Declared together on purpose:
+# The bundle sjel-status serves, and the command that makes it. Declared together on purpose:
 # `build_output` alone is inert — tools/service-runner.sh's `maybe_build` returns early when no
 # build is declared — so it would have been a field that documented an intention nothing acted on.
 #
@@ -38,9 +38,9 @@ autostart   = "false"
 build        = ["bun", "run", "build"]
 build_output = "dashboard/dist"
 
-# The shell asks axon-status what is enabled and what is up, and routes start requests
+# The shell asks sjel-status what is enabled and what is up, and routes start requests
 # through it. Declared for ordering and for the manifest-integrity gate.
-requires = ["axon-status"]
+requires = ["sjel-status"]
 
 # macmon is deliberately NOT in `requires`, and no longer needs a `sidecars` exemption
 # either — it is capabilities/macmon now, enabled per machine like anything else.

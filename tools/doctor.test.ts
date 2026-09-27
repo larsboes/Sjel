@@ -679,13 +679,13 @@ describe("scheduled producers", () => {
       [
         "PID\tStatus\tLabel",
         "-\t0\tcom.axon.sparpreis-watch",
-        "787\t0\tcom.axon.axon-status",
+        "787\t0\tcom.axon.sjel-status",
         "-\t1\tcom.axon.backup",
       ].join("\n"),
     );
     expect(jobs.size).toBe(3);
     expect(jobs.get("com.axon.backup")).toEqual({ pid: null, lastExit: 1 });
-    expect(jobs.get("com.axon.axon-status")).toEqual({ pid: 787, lastExit: 0 });
+    expect(jobs.get("com.axon.sjel-status")).toEqual({ pid: 787, lastExit: 0 });
     // The header must not become a job. It would make `loaded` true for a label called "Label",
     // which is harmless — and it would also make the table's size a lie in any count derived here.
     expect(jobs.has("Label")).toBe(false);

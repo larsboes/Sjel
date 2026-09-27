@@ -429,7 +429,7 @@ describe('generative UI widgets', () => {
 
   it('emits telemetry_pulse card for system health query', async () => {
     mockFetch((url) => {
-      if (url.includes('axon-status/health')) {
+      if (url.includes('sjel-status/health')) {
         return json({ ok: true, capabilities: { calendar: { up: true }, transit: { up: false } } });
       }
       return json({

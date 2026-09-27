@@ -11,7 +11,7 @@
 # backup (bare repo on homepi)" — and `direction = "capture"`, "Axon config backs it up +
 # monitors", since the registry was written. Measured 2026-08-29: the vault's git checkout has
 # no remote and never had one, `tmutil` reports no Time Machine destination on the host at all,
-# no LaunchAgent references the path, and axon-status' backup registry held exactly `finance`
+# no LaunchAgent references the path, and sjel-status' backup registry held exactly `finance`
 # and `store`. A restic repository on the target does hold a snapshot — from 2026-08-02, taken
 # by a binary that is not installed on this machine. Twenty-seven days, unnoticed, because
 # nothing was watching a mount that no manifest owned.

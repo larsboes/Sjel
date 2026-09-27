@@ -147,7 +147,7 @@ async fn health() -> Json<Value> {
 /// Readiness: whether the vault this server exists to read is actually there.
 ///
 /// Liveness cannot answer it — the process is fine while the iCloud folder is
-/// not — and `axon-status` judges availability on this endpoint where a
+/// not — and `sjel-status` judges availability on this endpoint where a
 /// manifest declares one (#126).
 async fn ready(State(state): State<AppState>) -> ApiResponse {
     match with_vault(&state, |vault| tasks::projects_root(vault).map(|_| ())).await {
@@ -311,7 +311,7 @@ fn build_router(state: AppState) -> Router {
 mod readiness_tests {
     use super::*;
 
-    /// The contract `axon-status` depends on: a vault that is not there is
+    /// The contract `sjel-status` depends on: a vault that is not there is
     /// reported unavailable rather than as a healthy service (#126). The case
     /// is real — the vault lives in iCloud Drive, which can be absent on a
     /// freshly signed-in machine.

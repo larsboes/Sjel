@@ -161,7 +161,7 @@ freshness_stale_hours  = "24"             # past this age nothing is arriving, a
                                           #
                                           # A capability that declares these serves `GET /__axon/freshness`
                                           # answering `{"last_arrival_at": <epoch seconds>}`, or `null` if
-                                          # nothing ever arrived. axon-status polls it; tools/doctor reports it.
+                                          # nothing ever arrived. sjel-status polls it; tools/doctor reports it.
                                           # The path is a convention, not a field, so one shape works for every
                                           # capability -- same namespace as ytalbum's `/__axon/idle`. It answers
                                           # before the inbound gate (libs/sjel-server/src/auth.rs), because one
@@ -231,7 +231,7 @@ freshness_stale_hours  = "24"             # past this age nothing is arriving, a
 # ready_path  = "/ready"                    # optional; READINESS: can it actually serve. Declare it
 #                                           # when the capability needs something it does not control
 #                                           # — a database, an external API — and answer it by
-#                                           # touching that thing. axon-status judges availability on
+#                                           # touching that thing. sjel-status judges availability on
 #                                           # this where it exists and falls back to health_path
 #                                           # where it does not, so adding one changes what the
 #                                           # dashboard reports and omitting one changes nothing.
@@ -281,7 +281,7 @@ freshness_stale_hours  = "24"             # past this age nothing is arriving, a
 # panel_port  = "4242"                      # a capability that serves its OWN UI (README.md#three-architectural-nouns); the shell
 # panel_path  = "/"                         # mounts it. Omit when the dashboard renders the widget.
 # idle_timeout = "300"                      # optional, seconds. Stop this panel once nobody has looked
-#                                           # at it for that long; axon-status polls
+#                                           # at it for that long; sjel-status polls
 #                                           # http://127.0.0.1:<panel_port>/__axon/idle and stops it via
 #                                           # `service-runner.sh idle-stop` (no maintenance hold, so
 #                                           # anything may start it again). A panel served by

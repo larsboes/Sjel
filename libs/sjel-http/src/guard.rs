@@ -559,7 +559,7 @@ mod tests {
     fn a_redirect_off_the_public_internet_into_this_network_is_refused() {
         for inside in [
             // Loopback, where every Axon capability binds.
-            "http://127.0.0.1:8082/api/axon-status/capabilities",
+            "http://127.0.0.1:8082/api/sjel-status/capabilities",
             "http://[::1]:8090/api/dashboard",
             // The cloud metadata service, which is why `is_public` refuses link-local.
             "http://169.254.169.254/latest/meta-data/",

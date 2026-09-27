@@ -17,13 +17,13 @@
 
   // Polled rather than pushed, on the same 5s beat as the capability list. That poll is
   // also what makes a slow run survive a page refresh: the run state lives in
-  // axon-status, so a reload re-reads it instead of losing it.
+  // sjel-status, so a reload re-reads it instead of losing it.
   async function loadBackups(): Promise<void> {
     try {
       const r = await axonStatus.backups();
       backups = Object.fromEntries(r.backups.map((b) => [b.capability, b]));
     } catch {
-      // axon-status being unreachable is already reported by the capabilities poll;
+      // sjel-status being unreachable is already reported by the capabilities poll;
       // a second copy of the same message helps nobody.
     }
   }
@@ -98,8 +98,8 @@
 {#if capabilities.offline}
   <p class="offline">
     <Icon name="wifi-off" />
-    axon-status is unavailable. Start it with:
-    <code>tools/service-runner.sh start axon-status</code>
+    sjel-status is unavailable. Start it with:
+    <code>tools/service-runner.sh start sjel-status</code>
   </p>
 {:else}
   {#if error}

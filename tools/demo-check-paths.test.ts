@@ -21,7 +21,7 @@ import {
 import { SJEL_ROOT, loadManifest } from "./lib/demo-endpoints.ts";
 
 /** A manifest with one capability block, otherwise the committed file's own header values. */
-function manifestWith(paths: string[], capability = "axon-status", extra = ""): string {
+function manifestWith(paths: string[], capability = "sjel-status", extra = ""): string {
   return [
     '[demo]',
     'seed = "axon-demo-v1"',
@@ -47,7 +47,7 @@ function planted(body: string) {
 
 describe("the committed demo.toml", () => {
   test("declares only paths a capability's own route manifest serves", () => {
-    // The regression this file exists for. `/api/axon-status/upstreams` sat in this list for
+    // The regression this file exists for. `/api/sjel-status/upstreams` sat in this list for
     // eleven days after PRD Q41 deleted the handler, resolving correctly the whole time.
     expect(undeclaredPaths(loadManifest())).toEqual([]);
   });
@@ -56,13 +56,13 @@ describe("the committed demo.toml", () => {
 describe("undeclaredPaths", () => {
   test("refuses a path no capability serves, and names where it would have gone", () => {
     const { dir, manifest } = planted(
-      manifestWith(["/axon-status/api/axon-status/health", "/axon-status/api/axon-status/upstreams"]),
+      manifestWith(["/sjel-status/api/sjel-status/health", "/sjel-status/api/sjel-status/upstreams"]),
     );
     try {
       const problems = undeclaredPaths(manifest);
       expect(problems).toHaveLength(1);
-      expect(problems[0]).toContain("/axon-status/api/axon-status/upstreams");
-      expect(problems[0]).toContain("as '/api/axon-status/upstreams'");
+      expect(problems[0]).toContain("/sjel-status/api/sjel-status/upstreams");
+      expect(problems[0]).toContain("as '/api/sjel-status/upstreams'");
       expect(problems[0]).toContain("501");
     } finally {
       rmSync(dir, { recursive: true, force: true });
@@ -105,22 +105,22 @@ describe("undeclaredPaths", () => {
 describe("unrecordedPaths", () => {
   const fixtures = () => {
     const dir = mkdtempSync(join(tmpdir(), "axon-demo-fixtures-"));
-    mkdirSync(join(dir, "axon-status", "api", "axon-status"), { recursive: true });
-    writeFileSync(join(dir, "axon-status/api/axon-status/health.json"), "{}\n");
+    mkdirSync(join(dir, "sjel-status", "api", "sjel-status"), { recursive: true });
+    writeFileSync(join(dir, "sjel-status/api/sjel-status/health.json"), "{}\n");
     return dir;
   };
 
   test("passes when the recording holds every declared path", () => {
     const dir = fixtures();
     const { dir: manifestDir, manifest } = planted(
-      manifestWith(["/axon-status/api/axon-status/health"]),
+      manifestWith(["/sjel-status/api/sjel-status/health"]),
     );
     try {
       writeFileSync(
         join(dir, "index.json"),
         JSON.stringify({
           routes: {
-            "/axon-status/api/axon-status/health": "axon-status/api/axon-status/health.json",
+            "/sjel-status/api/sjel-status/health": "sjel-status/api/sjel-status/health.json",
           },
         }),
       );
@@ -135,8 +135,8 @@ describe("unrecordedPaths", () => {
     const dir = fixtures();
     const { dir: manifestDir, manifest } = planted(
       manifestWith([
-        "/axon-status/api/axon-status/health",
-        "/axon-status/api/axon-status/capabilities",
+        "/sjel-status/api/sjel-status/health",
+        "/sjel-status/api/sjel-status/capabilities",
       ]),
     );
     try {
@@ -144,13 +144,13 @@ describe("unrecordedPaths", () => {
         join(dir, "index.json"),
         JSON.stringify({
           routes: {
-            "/axon-status/api/axon-status/health": "axon-status/api/axon-status/health.json",
+            "/sjel-status/api/sjel-status/health": "sjel-status/api/sjel-status/health.json",
           },
         }),
       );
       const problems = unrecordedPaths(manifest, dir);
       expect(problems).toHaveLength(1);
-      expect(problems[0]).toContain("/axon-status/api/axon-status/capabilities");
+      expect(problems[0]).toContain("/sjel-status/api/sjel-status/capabilities");
       expect(problems[0]).toContain("501");
     } finally {
       rmSync(dir, { recursive: true, force: true });
@@ -161,13 +161,13 @@ describe("unrecordedPaths", () => {
   test("refuses an index entry naming a fixture that is not on disk", () => {
     const dir = fixtures();
     const { dir: manifestDir, manifest } = planted(
-      manifestWith(["/axon-status/api/axon-status/health"]),
+      manifestWith(["/sjel-status/api/sjel-status/health"]),
     );
     try {
       writeFileSync(
         join(dir, "index.json"),
         JSON.stringify({
-          routes: { "/axon-status/api/axon-status/health": "axon-status/api/axon-status/gone.json" },
+          routes: { "/sjel-status/api/sjel-status/health": "sjel-status/api/sjel-status/gone.json" },
         }),
       );
       const problems = unrecordedPaths(manifest, dir);
@@ -182,7 +182,7 @@ describe("unrecordedPaths", () => {
   test("a missing recording is a refusal, never a pass", () => {
     // The failure mode a "skip if absent" gate would have: green on the machine that never
     // recorded anything, which is every machine but the one that publishes.
-    const { dir, manifest } = planted(manifestWith(["/axon-status/api/axon-status/health"]));
+    const { dir, manifest } = planted(manifestWith(["/sjel-status/api/sjel-status/health"]));
     try {
       expect(unrecordedPaths(manifest, join(dir, "nothing-here"))).toHaveLength(1);
     } finally {
@@ -193,14 +193,14 @@ describe("unrecordedPaths", () => {
 
 describe("declaredRoutes", () => {
   test("reads the table through every shape rustfmt wraps it into", () => {
-    // One line per entry (axon-status), four lines per entry (finance), and the long struct
+    // One line per entry (sjel-status), four lines per entry (finance), and the long struct
     // form (trips) — the three shapes in this tree, asserted so a reformat cannot quietly
     // empty the parse and turn every check above green.
-    expect(declaredRoutes("axon-status")).toContain("/api/axon-status/capabilities/:name/start");
-    expect(declaredRoutes("axon-status")).not.toContain("/api/axon-status/upstreams");
+    expect(declaredRoutes("sjel-status")).toContain("/api/sjel-status/capabilities/:name/start");
+    expect(declaredRoutes("sjel-status")).not.toContain("/api/sjel-status/upstreams");
     expect(declaredRoutes("finance")).toContain("/__axon/freshness");
     expect(declaredRoutes("trips")).toContain("/api/plans/:id/cost");
-    for (const capability of ["axon-status", "calendar", "comms", "finance", "scouting", "transit", "trips"]) {
+    for (const capability of ["sjel-status", "calendar", "comms", "finance", "scouting", "transit", "trips"]) {
       expect(declaredRoutes(capability).length).toBeGreaterThan(3);
     }
   });

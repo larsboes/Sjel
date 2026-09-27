@@ -137,7 +137,7 @@ export function boot(): Promise<Booted> {
     //
     // Rollup only follows `new URL("literal", import.meta.url)`, so it emits no asset at all and
     // the URL MapLibre computes points at a file that was never built. On this shell that path
-    // falls through axon-status' SPA fallback and answers 200 with the app shell, so `new Worker`
+    // falls through sjel-status' SPA fallback and answers 200 with the app shell, so `new Worker`
     // is handed HTML, dies, and MapLibre reports nothing: a blank canvas and "Loading map…"
     // forever, with no error and no failed request to find. Measured 2026-09-06 — no build in
     // this repository had ever emitted that file, so every map on the served bundle was dead.

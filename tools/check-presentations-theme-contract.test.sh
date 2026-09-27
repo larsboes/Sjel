@@ -20,7 +20,7 @@ plant() { # plant <case> <deck-roles-csv> <diagram-roles-csv> -> echoes the case
   local root="$SCRATCH/$1"
   rm -rf "$root"
   mkdir -p "$root/themes"
-  local deck_tuples diagram_tuples role
+  local deck_tuples="" diagram_tuples="" role
   for role in ${2//,/ }; do deck_tuples="$deck_tuples\"$role\", "; done
   for role in ${3//,/ }; do diagram_tuples="$diagram_tuples\"$role\", "; done
   printf 'REQUIRED_ROLES = (\n    %s\n)\n' "${deck_tuples%, }" > "$root/deck.py"

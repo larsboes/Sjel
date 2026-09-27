@@ -98,6 +98,12 @@ jobs:
         uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2
         with:
           bun-version: latest
+      # The dashboard's tests import its modules, and mac-bridge.ts imports @tauri-apps/api, so its
+      # locked dependencies are installed first. --frozen-lockfile --ignore-scripts, as
+      # tools/check-bun-install-policy.sh requires of every install here.
+      - name: install the dashboard's dependencies
+        working-directory: dashboard
+        run: bun install --frozen-lockfile --ignore-scripts
       - name: bun test
         run: bun test
 

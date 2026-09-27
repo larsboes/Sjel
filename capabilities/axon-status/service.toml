@@ -8,7 +8,8 @@ name        = "axon-status"
 command     = ["target/release/axon-status"]
 # Signed after the build so the firewall grant for the Same Wi-Fi listener survives rebuilds
 # (tools/codesign-binary.sh says why). A machine without an identity keeps the ad-hoc signature.
-build       = ["sh", "-c", "cargo build --locked --release --bin axon-status && tools/codesign-binary.sh \"${CARGO_TARGET_DIR:-target}/release/axon-status\" dev.axon.axon-status"]
+# No quotes inside the command: tools/lib/toml.sh keeps a backslash-escaped quote literally.
+build       = ["sh", "-c", "cargo build --locked --release --bin axon-status && tools/codesign-binary.sh ${CARGO_TARGET_DIR:-target}/release/axon-status dev.axon.axon-status"]
 port        = "8082"
 health_path = "/health"
 autostart   = "true"

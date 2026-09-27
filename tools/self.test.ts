@@ -184,8 +184,8 @@ describe("rollUp", () => {
     ];
     const exists = tree(...nodes.map((n) => n.source_file!));
     expect(rollUp(nodes, exists).units.map((u) => u.name)).toEqual([
-      "sjel-config",
       "comms",
+      "sjel-config",
       "transit",
     ]);
   });

@@ -14,6 +14,12 @@
 kind     = "process"
 name     = "people-registry"
 command  = ["tools/people-registry-refresh.sh"]
+# The refresh drives the vault CLI (target/release/vault), which the vault service does not build:
+# its manifest builds vault-server only. Without these two lines a fresh or cleaned checkout ran
+# this job into "vault binary not built" every 6h. build_output names the artifact to look for,
+# because the command itself is a script that always exists.
+build        = ["cargo", "build", "--locked", "--release", "-p", "vault", "--bin", "vault"]
+build_output = "target/release/vault"
 
 # 6h, carried over from the unit it replaces. The registry is derived from Atlas/People and goes
 # stale the moment a person note is added; the script refuses to install an empty or malformed

@@ -14,6 +14,7 @@
   import { assistantStore } from "$lib/assistant/assistant.svelte";
   import MacConnection from "$lib/MacConnection.svelte";
   import DeviceRegistry from "$lib/DeviceRegistry.svelte";
+  import { canClaimOnThisDevice } from "$lib/devices";
   import SyncStatus from "$lib/SyncStatus.svelte";
   import OmniSearch from "$lib/omni/OmniSearch.svelte";
   import { omniStore } from "$lib/omni/omni.svelte";
@@ -328,7 +329,9 @@
       <span>Sjel</span>
       <span class="mono">{capabilities.items.length} capabilities</span>
       <MacConnection />
-      {#if capabilities.byName("devices")}
+      <!-- An unregistered phone gets 401 for the capability list, so it would never see the
+           link it needs to register (2026-09-27). The iOS app always shows it. -->
+      {#if capabilities.byName("devices") || canClaimOnThisDevice()}
         <DeviceRegistry />
       {/if}
     </div>

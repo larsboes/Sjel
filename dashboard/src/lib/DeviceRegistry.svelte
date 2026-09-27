@@ -1,6 +1,6 @@
 <script lang="ts">
   import Overlay from './Overlay.svelte';
-  import { request } from './api';
+  import { ApiError, request } from './api';
   import { comparisonCode } from './connection/transports';
   import {
     canClaimOnThisDevice,
@@ -32,7 +32,12 @@
     try {
       records = (await devices.list()).devices;
     } catch (error) {
-      result = { ok: false, text: failure(error) };
+      // A phone that is not registered yet cannot list devices; that is the expected state
+      // before its first claim, not an error.
+      result =
+        canClaim && error instanceof ApiError && error.status === 401
+          ? { ok: true, text: 'This iPhone is not registered yet. Paste a pairing payload from the Mac below.' }
+          : { ok: false, text: failure(error) };
     } finally {
       busy = false;
     }

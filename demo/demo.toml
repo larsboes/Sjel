@@ -236,3 +236,49 @@ demonstration: Transit's `reliability` and `delay_risk_score` come back null her
 the capability that measures them is not running. That is the designed behaviour — absence \
 degrades, it never fails — and the demo shows it rather than inventing a number.\
 """
+
+# Added 2026-09-27. The dashboard called these seven and demo.toml named none of them, so the
+# shim treated their paths as static assets and GitHub Pages answered with its own 404 page,
+# which the People page printed whole. Each is absent for the reason below until a seeder exists.
+
+[absent.entities]
+reason = """
+entities is absent because the entity store holds the people in someone's life, which is C2, and \
+no synthetic seeder for people, places and dated facts exists yet.
+"""
+
+[absent.devices]
+reason = """
+devices is absent because a device registry holds paired devices and their public keys, and a \
+published page has no device to pair.
+"""
+
+[absent.traveler]
+reason = """
+traveler is absent because the traveler profile is one person's preferences and documents, and no \
+synthetic profile has been written for it yet.
+"""
+
+[absent.interior]
+reason = """
+interior is absent because its rooms, scans and items describe one real flat, and no synthetic \
+flat has been written for it yet.
+"""
+
+[absent.vault]
+reason = """
+vault is absent because it reads an Obsidian vault on the machine it runs on, and a published \
+page has no vault.
+"""
+
+[absent.knowledge-graph]
+reason = """
+knowledge-graph is absent because it serves the code graph built on the machine it runs on, and \
+that graph names that machine's paths.
+"""
+
+[absent.macmon]
+reason = """
+macmon is absent because it reports the live temperature and load of one Mac, and a recording of \
+it would describe a machine that is not there.
+"""

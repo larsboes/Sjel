@@ -76,6 +76,33 @@ function owner(path: string, prefixes: DemoIndex["prefixes"]): string | null {
  * stripped back before it can be looked up. Passed in rather than imported, because $app/paths
  * is the layout's dependency and this file stays a plain module.
  */
+/**
+ * Pins the page's clock to the demo's anchor date, running forward from there.
+ *
+ * The recording is made around the anchor (demo.toml `anchor`): trips start days after it and the
+ * calendar fixtures cover a window around it. The pages ask for ranges around "now", so with the
+ * real clock a demo ages: on 2026-09-27 its March recording showed no upcoming trip and five
+ * sources as unavailable. `new Date()` and `Date.now()` answer anchor time instead; a date built
+ * from explicit arguments is unchanged.
+ */
+function installDemoClock(anchor: string): void {
+  const RealDate = Date;
+  const pinned = RealDate.parse(`${anchor}T09:00:00`);
+  if (Number.isNaN(pinned)) return;
+  const loadedAt = RealDate.now();
+  const now = () => pinned + (RealDate.now() - loadedAt);
+  class DemoDate extends RealDate {
+    constructor(...args: unknown[]) {
+      if (args.length === 0) super(now());
+      else super(...(args as [number]));
+    }
+    static override now(): number {
+      return now();
+    }
+  }
+  globalThis.Date = DemoDate as DateConstructor;
+}
+
 export async function installDemoFetch(base: string): Promise<DemoIndex> {
   const real = globalThis.fetch.bind(globalThis);
   const res = await real(`${base}/fixtures/index.json`);
@@ -87,6 +114,7 @@ export async function installDemoFetch(base: string): Promise<DemoIndex> {
   }
   index = (await res.json()) as DemoIndex;
   const manifest = index;
+  installDemoClock(manifest.anchor);
 
   globalThis.fetch = async (input: RequestInfo | URL, init?: RequestInit): Promise<Response> => {
     const raw =

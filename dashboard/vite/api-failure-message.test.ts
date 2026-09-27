@@ -6,6 +6,12 @@ import { describeFailure } from '../src/lib/api';
 // every page rendered "Request failed (500)". That reads as a bug in the page
 // rather than a service nobody started, which sends the reader to the wrong place.
 describe('describeFailure', () => {
+  test('an HTML page is never the message, and a 404 names the missing capability', () => {
+    const page = '<!DOCTYPE html><html><head><title>404</title></head><body>File not found</body></html>';
+    expect(describeFailure(404, page, '/entities/api/entities')).toBe('entities is not available here (404)');
+    expect(describeFailure(502, page, '/finance/api/x')).not.toContain('<html');
+  });
+
   test('a bare 5xx from a proxied capability names the capability and the fix', () => {
     const message = describeFailure(500, '', '/finance/api/subscriptions');
     expect(message).toContain('finance is not running');

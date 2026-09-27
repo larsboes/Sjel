@@ -19,9 +19,16 @@ function errorMessage(body: string): string {
     const parsed = JSON.parse(body);
     if (parsed && typeof parsed === 'object' && typeof parsed.error === 'string') return parsed.error;
   } catch {
-    // Not JSON — the raw body is the best message available.
+    // Not JSON — the raw body is the best message available, unless it is a web page.
   }
+  // An HTML page is a host's or proxy's page, not the capability's message: printing it put a
+  // whole GitHub 404 page on the demo's People page (2026-09-27).
+  if (isHtml(body)) return '';
   return body;
+}
+
+function isHtml(body: string): boolean {
+  return /<\s*!doctype\s+html|<\s*html[\s>]/i.test(body);
 }
 
 /**
@@ -46,6 +53,12 @@ function capabilityFrom(path: string): string | null {
  */
 export function describeFailure(status: number, body: string, path: string): string {
   const capability = capabilityFrom(path);
+  // A 404 that answers with a web page came from the host or a proxy, not from the capability:
+  // the capability is not served here (the demo site has no entities, for one). A 404 with no
+  // body or a JSON body stays a wrong route, below.
+  if (capability && status === 404 && isHtml(body)) {
+    return `${capability} is not available here (404)`;
+  }
   const named = errorMessage(body).trim();
   if (named) return capability ? `${capability}: ${named}` : named;
   if (capability && status >= 500) {

@@ -565,7 +565,22 @@ pub fn svg(model: &Model, layout: &Layout) -> Result<String, ModelError> {
 }
 
 /// Plan plus Verdikt in einer Datei — damit ein Bild nie ohne sein Urteil weitergereicht wird.
-pub fn page(model: &Model, layouts: &[Layout]) -> Result<String, ModelError> {
+/// Woher die Positionen auf einem Blatt stammen.
+///
+/// Der Satz unter dem Titel behauptete bis 2026-09-26, nichts sei von Hand gesetzt. Fuer einen
+/// Vorschlag stimmt das: jede Zahl kommt aus dem Modell. Fuer den Ist-Zustand stimmt es **nicht** —
+/// dort ist jede Position eine Zeile in `interior_placement`, und die hat ein Mensch geschrieben.
+/// Ein Blatt, das seine eigene Herkunft falsch nennt, ist genau die Sorte Aussage, gegen die der
+/// Rest dieser Datei gebaut ist: es sieht aus wie ein gerechnetes Ergebnis und ist eine Eingabe.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub enum Herkunft {
+    /// Ein Vorschlag: die Positionen stehen in `layouts/*.toml`, alle Zahlen aus dem Modell.
+    Vorschlag,
+    /// Der Zustand: die Positionen stehen in `interior_placement` und sind gesetzt worden.
+    IstZustand,
+}
+
+pub fn page(model: &Model, layouts: &[Layout], herkunft: Herkunft) -> Result<String, ModelError> {
     // Der Titel kommt aus dem Modell. Hier stand der Name dieser einen Wohnung im Quelltext.
     let mut h = String::from(
         r##"<!doctype html><meta charset="utf-8"><title>Wohnung — Plaene</title>
@@ -585,8 +600,16 @@ ul{margin:8px 0;padding-left:20px}
 .meta{font:13px ui-monospace,Menlo,monospace;color:#5B5F63}
 </style><div class="wrap"><h1>{TITEL} — Pläne</h1>
 <p class="meta">Aus dem gemessenen Modell erzeugt. Jede Zahl stammt aus <code>room.toml</code>,
-<code>rules.toml</code> und dem Inventar; nichts auf dieser Seite ist von Hand gesetzt.</p>"##)
-        .replace("{TITEL}", &esc(&model.room.flat.name));
+<code>rules.toml</code> und dem Inventar; {HERKUNFT}</p>"##)
+        .replace("{TITEL}", &esc(&model.room.flat.name))
+        .replace(
+            "{HERKUNFT}",
+            match herkunft {
+                Herkunft::Vorschlag => "nichts auf dieser Seite ist von Hand gesetzt.",
+                Herkunft::IstZustand => "die Positionen des Ist-Zustands hat ein Mensch gesetzt, \
+                     das Modell liefert dazu nur den Raum und die Masse der Stuecke.",
+            },
+        );
 
     for l in layouts {
         let r = check_layout(model, l)?;

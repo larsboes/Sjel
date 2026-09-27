@@ -4,13 +4,68 @@
      four-item lists the check reads as three. Shortening them would delete information to move
      a score, so the category is muted here deliberately. Every other check stays live. -->
 
-# Sjel
+<h1 align="center">Sjel</h1>
 
-**Your life's data on your own devices, with one assistant that can act on it.**
+<p align="center"><b>Your life's data on your own devices, with one assistant that can act on it.</b></p>
 
-The command is `sjel`, and `axon` still works. Settings are named `SJEL_*`, and the earlier
-`AXON_*` names are still read. Crates still use the name Axon. Open work is in [ISA.md](ISA.md).
-The engineering doctrine starts at [Start here](#start-here).
+<p align="center">
+  <a href="LICENSE"><img alt="License: AGPL-3.0" src="https://img.shields.io/badge/license-AGPL--3.0-blue"></a>
+  <a href="https://github.com/larsboes/Sjel/actions/workflows/ci.yml"><img alt="CI" src="https://github.com/larsboes/Sjel/actions/workflows/ci.yml/badge.svg"></a>
+  <a href="https://larsboes.github.io/Sjel/"><img alt="Live demo" src="https://img.shields.io/badge/demo-live-0a7d8c"></a>
+</p>
+
+<p align="center">
+  <img alt="Sjel's travel hub on a desktop, from the live demo" src=".github/assets/travel.png" width="72%">
+  &nbsp;
+  <img alt="Sjel's travel hub on a phone, from the live demo" src=".github/assets/phone.png" width="22%">
+</p>
+
+<p align="center">
+  <a href="https://larsboes.github.io/Sjel/">Live demo</a> ·
+  <a href="#quick-start">Quick start</a> ·
+  <a href="#measured">Measured</a> ·
+  <a href="ISA.md">Open work</a>
+</p>
+
+## What it does
+
+- Keeps the people, places, trips, money, home and calendar of one person or household as typed
+  data on hardware they control.
+- An assistant reads that data and proposes actions. Anything that leaves Sjel or cannot be
+  undone asks first.
+- Runs each task on the best model in reach: the device's own, then the Mac's, then fixed rules.
+  Data about other people reaches a cloud model only pseudonymized.
+- The phone reaches its node over the same Wi-Fi, Tailscale or a server of its own, and every
+  device signs its requests with a key that never leaves it.
+- Everything beyond the core is an optional first-party extension in this repository.
+
+## Quick start
+
+~~~sh
+git clone https://github.com/larsboes/Sjel.git
+cd Sjel
+tools/install.sh
+tools/doctor
+~~~
+
+macOS and Linux. [Start here](#start-here) covers the installer, the private overlay and the
+first services. The command is `sjel`, and `axon` still works. Settings written with the earlier
+`AXON_*` names are still read.
+
+## Measured
+
+Each number names the command that reproduces it.
+
+| What | Result | Reproduce |
+|---|---|---|
+| Pseudonymizer recall, reversible path | 48/48 (100.0%), gate ≥ 91.7%, measured 2026-09-27 | `cargo run -p comms --bin comms-redaction-eval -- --pseudonymized <corpus>` |
+| Redaction recall, destructive path | 48/48 (100.0%), gate ≥ 91.7%, measured 2026-09-27 | the same command without `--pseudonymized` |
+| Feed ranking (bge-m3) | 0.941 pairwise, 0.994 mean nDCG, 6/6 useful top-1 | `bun capabilities/comms/eval/run-relevance.ts`, result in `capabilities/comms/eval/results/2026-08-30-bge-m3-ollama.md` |
+| Tests | 829 TypeScript tests and 107 Rust test binaries, CI green | `sjel test` and `cargo test --workspace` |
+
+The redaction corpus (24 fixtures) lives in the private overlay, so its two rows cannot be re-run
+from a public clone. The relevance corpus is public
+(`capabilities/comms/eval/relevance-corpus.json`) and needs a local bge-m3.
 
 ## What it is
 

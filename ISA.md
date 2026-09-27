@@ -198,12 +198,15 @@ identifier `com.lifeos.mobile`. Lars chose "everything, staged" over a brand-onl
 Why: the top of the README is the product definition, and the sources behind the design go into one
 curated place. The README is still 870 lines of doctrine below 230 of product.
 
-- [ ] ISC-14 — the README opens like a large open-source project (Graphify, Ollama): logo,
+- [x] ISC-14 — the README opens like a large open-source project (Graphify, Ollama): logo,
   badges, a screenshot of phone and dashboard showing travel and people first (the areas a
   stranger meets first), what it does, a three-command start, and a
   table of measured results (pseudonymizer 48/48, redaction recall 100% on the frozen corpus,
   Feed ranking 0.941 pairwise, the 1.5 s Same Wi-Fi fallback). Falsifier: a number in that
-  table without a command or file that reproduces it.
+  table without a command or file that reproduces it. Done 2026-09-27: text wordmark (no logo yet), badges, the
+  travel hub on desktop and phone from the live demo, What it does, Quick start, and a Measured
+  table whose redaction rows were re-run that day. The 1.5 s fallback left the table: it is a
+  setting, not a measurement.
 - [ ] ISC-15 — `research/` states why the project exists: the problem it answers and the
   sources that show the problem is real. It grows over time; the first version holds at least
   one sourced entry, and the demo site shows it. Falsifier: an entry without a source, or a
@@ -272,13 +275,11 @@ the phone. Each item below is built and unverified, or ruled and unbuilt.
 - **`self.json` cannot regenerate.** graphify's semantic step calls
   `deepseek-ai/deepseek-v4-flash`, retired on 2026-08-07, so `tools/self generate` refuses. Commit
   `2f0feb6` says it regenerated `self.json`; only `ARCHITECTURE.md` changed.
-- **The demo site has aged and shows a raw error.** Measured 2026-09-27 on
-  `larsboes.github.io/Sjel/`: its data is dated around 2026-03-16, so Travel shows 0 upcoming
-  trips; People prints GitHub's 404 page as its error text, because the demo does not seed the
-  entities service and the page's error path does not recognise an HTML answer; Home lists
-  Calendar, Tasks, Scouting, Mail and Feed as unavailable. The landing README's screenshots need
-  a demo that shows the product. Two fixes: seed entities (and date the demo relative to the
-  build), and make the People page's error say that entities is not in this demo.
+- **The demo site shows two areas less than it could.** Fixed 2026-09-27 (22793de3): the page
+  clock runs on the recording's anchor date, so Travel shows 2 upcoming trips, and seven services
+  missing from demo.toml now say why instead of showing a host's 404 page. Still open: people
+  (the wedge's second half) is absent until a synthetic seeder for the entity store exists, and
+  Home lists Calendar, Tasks, Scouting, Mail and Feed as unavailable on the anchor date.
 - **The names ISC-13 kept.** `axon-status` (a service rename changes the phone app's allowed
   paths), `axon-fda-launcher` (a new binary name needs a new Full Disk Access grant), Linux
   `axon-<cap>` systemd units, the `X-Axon-*` signed-request headers (a protocol change for paired

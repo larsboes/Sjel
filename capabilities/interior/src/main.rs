@@ -43,6 +43,8 @@ fn usage() -> ! {
   {roomplan} [--capture D]       was in der RoomPlan-Aufnahme steht, gegen room.toml
                                  [--write]  Entwurf als draft.json neben die Aufnahme
                                  [--json]   dieselbe Auskunft als JSON
+  {placements} [--set id=x,y[,r]]  wo die Stuecke WIRKLICH stehen, und was noch keinen
+                                 Platz hat [--plan f] [--json]
   {layouts}                      Layouts auf der Platte
   {check} <layout> [--json]      gegen rules.toml pruefen (Exit 1 bei hartem Verstoss)
   {toleranz} <layout> [--json]   bis zu welchem Messfehler das Verdikt haelt
@@ -63,6 +65,7 @@ fn usage() -> ! {
         t = bold("interior"),
         model = bold("model"),
         roomplan = bold("roomplan"),
+        placements = bold("placements"),
         layouts = bold("layouts"),
         plan = bold("plan"),
         inventory = bold("inventory"),
@@ -194,6 +197,9 @@ async fn main() {
     match cmd {
         "roomplan" => {
             std::process::exit(roomplan_show(&model, &argv));
+        }
+        "placements" => {
+            std::process::exit(placements_show(&model, &argv));
         }
         "model" => {
             println!("\n{}\n", bold(&model.room.flat.name));
@@ -471,7 +477,7 @@ async fn main() {
                     }
                 }
             }
-            let html = match plan::page(&model, &layouts) {
+            let html = match plan::page(&model, &layouts, plan::Herkunft::Vorschlag) {
                 Ok(h) => h,
                 Err(e) => {
                     eprintln!("{}", red(&e.to_string()));
@@ -1462,6 +1468,201 @@ fn roomplan_show(model: &Model, argv: &[String]) -> i32 {
     }
     println!();
     0
+}
+
+/// Wo die Stuecke WIRKLICH stehen — und was noch keinen Platz hat.
+///
+/// `interior_placement` stand seit B25 leer, weil nichts sie schrieb. Das hier ist der Weg
+/// hinein: `--set bett_bestand=x,y[,rot]` schreibt eine Position. Ohne `--set` wird nur gelesen,
+/// und ohne Fundstelle wird nicht geschrieben. Eine Platzierung ist eine Zeile und kein
+/// Vorschlag — das ist der Unterschied, den die Tabelle traegt.
+///
+/// `--plan <datei>` legt einen Plan des Ist-Zustands daneben. Er wird aus denselben
+/// [`PlacedItem`]-Zeilen gebaut wie ein Layout, damit die Zeichnung nicht zwei Fassungen
+/// desselben Stuecks kennt: ein Stueck an einer Stelle ist dieselbe Form, ob es nun steht oder
+/// vorgeschlagen ist, und nur der Zustand unterscheidet die beiden.
+fn placements_show(model: &Model, argv: &[String]) -> i32 {
+    let flat = model.room.flat.id.clone();
+    let st = match interior::store::Store::open(&sjel_config::database_path()) {
+        Ok(s) => s,
+        Err(e) => {
+            eprintln!("{}", red(&format!("Datenbank nicht erreichbar: {e}")));
+            return 2;
+        }
+    };
+
+    // Erst schreiben, dann lesen: die Ausgabe soll den Zustand NACH den Argumenten zeigen und
+    // nicht den davor. Ein Bericht, der die Zeile noch nicht kennt, die gerade geschrieben wurde,
+    // liest sich wie ein Schreibfehler.
+    let mut geschrieben = 0usize;
+    let mut i = 0usize;
+    while i < argv.len() {
+        if argv[i] == "--set" {
+            let Some(roh) = argv.get(i + 1) else {
+                eprintln!("{}", red("--set braucht id=x,y[,rot]"));
+                return 2;
+            };
+            let Some((id, x, y, rot)) = parse_platzierung(roh) else {
+                eprintln!("{}", red(&format!("--set {roh} ist nicht id=x,y[,rot]")));
+                return 2;
+            };
+            if !model.catalogue.contains_key(&id) {
+                eprintln!(
+                    "{}",
+                    red(&format!("`{id}` steht nicht im Katalog — nichts geschrieben"))
+                );
+                return 2;
+            }
+            if let Err(e) = st.place(&interior::store::Placement {
+                item_id: id,
+                flat: flat.clone(),
+                x,
+                y,
+                rot,
+            }) {
+                eprintln!("{}", red(&format!("nicht geschrieben: {e}")));
+                return 2;
+            }
+            geschrieben += 1;
+            i += 2;
+            continue;
+        }
+        i += 1;
+    }
+
+    let platziert = match st.placements(&flat) {
+        Ok(p) => p,
+        Err(e) => {
+            eprintln!("{}", red(&format!("Platzierungen laden nicht: {e}")));
+            return 2;
+        }
+    };
+    let nach_id: std::collections::BTreeMap<&str, &interior::store::Placement> =
+        platziert.iter().map(|p| (p.item_id.as_str(), p)).collect();
+
+    // Nur Besitz: ein Wunsch hat keinen Platz, er hat eine Begruendung.
+    let mut besessen: Vec<(&String, &interior::store::Item)> = model
+        .catalogue
+        .iter()
+        .filter(|(id, _)| {
+            model.states.get(*id).copied() == Some(interior::store::State::Owned)
+        })
+        .collect();
+    besessen.sort_by(|a, b| a.0.cmp(b.0));
+
+    let mut gesetzt: Vec<(&String, &interior::store::Placement)> = Vec::new();
+    let mut ohne: Vec<(&String, &interior::store::Item)> = Vec::new();
+    for (id, item) in &besessen {
+        match nach_id.get(id.as_str()) {
+            Some(p) => gesetzt.push((id, p)),
+            None => ohne.push((id, item)),
+        }
+    }
+    // Eine Platzierung fuer ein Stueck, das nicht mehr im Besitz ist, ist keine Kleinigkeit —
+    // sie zeigt auf etwas, das nicht mehr da ist, und keine Liste oben haette sie genannt.
+    let verwaist: Vec<&&str> = nach_id
+        .iter()
+        .filter(|(id, _)| !besessen.iter().any(|(b, _)| b.as_str() == **id))
+        .map(|(id, _)| id)
+        .collect();
+
+    if argv.iter().any(|a| a == "--json") {
+        let wert = serde_json::json!({
+            "flat": flat,
+            "geschrieben": geschrieben,
+            "besessen": besessen.len(),
+            "platziert": gesetzt.iter().map(|(id, p)| serde_json::json!({
+                "id": id, "x": p.x, "y": p.y, "rot": p.rot
+            })).collect::<Vec<_>>(),
+            "ohne_platz": ohne.iter().map(|(id, _)| id.to_string()).collect::<Vec<_>>(),
+            "verwaist": verwaist,
+        });
+        println!("{}", serde_json::to_string_pretty(&wert).unwrap_or_default());
+        return 0;
+    }
+
+    println!("\n{}\n", bold("Ist-Zustand"));
+    println!(
+        "  besessen   {}   {}",
+        besessen.len(),
+        dim("Plaetze sind eine Zeile je Stueck; ein Layout ist ein Vorschlag und eine Datei")
+    );
+    println!("  gesetzt    {}", bold(&gesetzt.len().to_string()));
+    for (id, p) in &gesetzt {
+        println!(
+            "    {:<28} x={:<5} y={:<5} rot={:<4} {}",
+            id,
+            p.x,
+            p.y,
+            p.rot,
+            dim(&model.catalogue[*id].label)
+        );
+    }
+    println!("\n  {} {}", bold(&format!("ohne Platz {}", ohne.len())), dim("(davon weiss der Plan noch nichts)"));
+    for (id, item) in &ohne {
+        println!("    {:<28} {}", id, dim(&item.label));
+    }
+    if !verwaist.is_empty() {
+        println!(
+            "\n  {}",
+            yellow(&format!(
+                "Platzierungen ohne Stueck im Besitz: {} — sie zeigen auf etwas, das nicht mehr da ist",
+                verwaist.iter().map(|s| **s).collect::<Vec<_>>().join(", ")
+            ))
+        );
+    }
+
+    if let Some(datei) = flag(argv, "plan") {
+        let layout = interior::model::Layout {
+            name: "ist-zustand".to_string(),
+            id: "ist-zustand".to_string(),
+            items: gesetzt
+                .iter()
+                .map(|(id, p)| interior::model::PlacedItem {
+                    reference: (*id).clone(),
+                    x: p.x,
+                    y: p.y,
+                    rot: p.rot,
+                    size: None,
+                    kind: None,
+                })
+                .collect(),
+        };
+        match plan::page(model, std::slice::from_ref(&layout), plan::Herkunft::IstZustand) {
+            Ok(html) => match std::fs::write(&datei, &html) {
+                Ok(()) => println!("\n  {} {}", green("Ist-Plan geschrieben:"), datei),
+                Err(e) => {
+                    eprintln!("{}", red(&format!("{datei}: {e}")));
+                    return 1;
+                }
+            },
+            Err(e) => {
+                eprintln!("{}", red(&format!("Plan nicht gebaut: {e}")));
+                return 1;
+            }
+        }
+    }
+    println!();
+    0
+}
+
+/// `id=x,y` oder `id=x,y,rot`. Die Kennung darf kein `=` enthalten, weil `=` das Feld trennt.
+fn parse_platzierung(roh: &str) -> Option<(String, i32, i32, i32)> {
+    let (id, rest) = roh.split_once('=')?;
+    if id.is_empty() {
+        return None;
+    }
+    let teile: Vec<&str> = rest.split(',').map(str::trim).collect();
+    if teile.len() < 2 || teile.len() > 3 {
+        return None;
+    }
+    let x = teile[0].parse::<i32>().ok()?;
+    let y = teile[1].parse::<i32>().ok()?;
+    let rot = match teile.get(2) {
+        Some(r) => r.parse::<i32>().ok()?,
+        None => 0,
+    };
+    Some((id.to_string(), x, y, rot))
 }
 
 /// Cent als Euro mit Komma. Die einzige Rechnung, die eine Anzeige fuehren darf.

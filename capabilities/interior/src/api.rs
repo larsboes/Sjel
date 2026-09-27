@@ -1514,7 +1514,7 @@ async fn index(State(s): State<Arc<AppState>>) -> Result<Html<String>, (StatusCo
         .layout_names()
         .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
     let layouts: Vec<_> = names.iter().filter_map(|n| m.load_layout(n).ok()).collect();
-    plan::page(&m, &layouts)
+    plan::page(&m, &layouts, plan::Herkunft::Vorschlag)
         .map(Html)
         .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))
 }

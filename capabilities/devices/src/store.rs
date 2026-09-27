@@ -250,6 +250,9 @@ pub struct Device {
     pub revoked_at: Option<i64>,
 }
 
+/// label, platform, public_key, status, created_at, expires_at, device_id
+type RequestRow = (String, String, String, String, i64, i64, Option<String>);
+
 type DeviceRow = (
     String,
     String,
@@ -471,7 +474,7 @@ impl DevicesStore {
     /// One request as the phone polls it. A pending request past its time reads `expired`.
     pub fn pairing_request(&self, id: &str) -> Result<PairingRequest, StoreError> {
         let conn = self.connection()?;
-        let row: Option<(String, String, String, String, i64, i64, Option<String>)> = conn
+        let row: Option<RequestRow> = conn
             .query_row(
                 "SELECT label, platform, public_key, status, created_at, expires_at, device_id
                  FROM devices_pairing_requests WHERE id = ?1",

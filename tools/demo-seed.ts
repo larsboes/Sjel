@@ -361,6 +361,34 @@ const SEEDERS: Record<string, (ctx: Ctx) => Promise<string>> = {
       `${imported.created} subscriptions, ${proposals.proposed} investment proposals`
     );
   },
+  // People go in the way the People page adds them: POST an entity with its field values,
+  // then one fact per place. Places is not in the demo, so each fact is stored without a
+  // coordinate and says so (`geocode.status = "unavailable"`); the list and Home still work.
+  async entities(ctx) {
+    const create = ctx.url("/entities/api/entities");
+    const facts = (id: string) => ctx.url(`/entities/api/entities/${encodeURIComponent(id)}/facts`);
+    let factCount = 0;
+    for (const c of VOCABULARY.contacts) {
+      const birthday = `1991${addDays(ctx.anchor, c.birthdayOffset).slice(4)}`;
+      const person = await post<{ id: string }>(create, {
+        kind: "person",
+        name: c.name,
+        values: { relation: c.relation, sleeping_option: c.sleeping, interests: [...c.interests], birthday },
+      });
+      await post(facts(person.id), { predicate: "home_base", place: c.homeBase });
+      factCount++;
+      if ("away" in c && c.away) {
+        await post(facts(person.id), {
+          predicate: "away",
+          place: c.away.city,
+          valid_from: addDays(ctx.anchor, c.away.fromOffset),
+          valid_to: addDays(ctx.anchor, c.away.toOffset),
+        });
+        factCount++;
+      }
+    }
+    return `${VOCABULARY.contacts.length} people, ${factCount} place facts`;
+  },
 };
 
 // ─── Finance inputs ───────────────────────────────────────────────────────────

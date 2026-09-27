@@ -77,6 +77,9 @@ paths = [
   "/calendar/api/rhythms",
   "/calendar/api/windows?from=2026-03-16&to=2026-05-01",
   "/calendar/api/trip-drafts?from=2026-03-16&to=2026-05-01&max_gap_days=5",
+  # Home's window: the anchor to four months after it (routes/+page.svelte, horizonEndKey).
+  "/calendar/api/entries?from=2026-03-16&to=2026-07-16",
+  "/calendar/api/contexts?from=2026-03-16&to=2026-07-16",
 ]
 
 [capability.trips]
@@ -99,6 +102,21 @@ expand = [
   # reason rather than a confident zero, which is the behaviour worth demonstrating.
   { from = "/trips/api/plans", id_field = "id", into = "/trips/api/plans/{id}/cost" },
   { from = "/trips/api/plans", id_field = "id", into = "/trips/api/plans/{id}/pack" },
+]
+
+[capability.entities]
+writes = "entities"
+# Seeded through POST /api/entities and /facts, the routes the People page calls. The names,
+# relations and cities are invented (tools/lib/demo-data.ts, VOCABULARY.contacts).
+# `?kind=person` first: demo-seed proves the store is empty by reading paths[0].
+paths = [
+  "/entities/api/entities?kind=person",
+  "/entities/api/fields?kind=person",
+  "/entities/api/located?day=2026-03-16",
+]
+expand = [
+  { from = "/entities/api/entities?kind=person", list_field = "entities", id_field = "id", into = "/entities/api/entities/{id}" },
+  { from = "/entities/api/entities?kind=person", list_field = "entities", id_field = "id", into = "/entities/api/entities/{id}/sources" },
 ]
 
 [capability.finance]
@@ -133,6 +151,9 @@ paths = [
   "/comms/feed/origins",
   "/comms/sources",
   "/comms/triage",
+  # Home's own reads (routes/+page.svelte, lib/home/kinds): the shim matches the exact query.
+  "/comms/triage?status=proposed",
+  "/comms/feed?days=30",
   # mail-llm-rung: counts only, and empty until a pass has run. An empty state
   # is the honest demo of a rung that ships in shadow.
   "/comms/triage/classify/report",
@@ -150,6 +171,8 @@ writes = "scouting"
 paths = [
   "/scouting/opportunities",
   "/scouting/sources",
+  # Home asks without dismissed entries (lib/home/kinds/opportunity.ts).
+  "/scouting/opportunities?include_dismissed=false",
   "/discover?adapter=demo-origin&limit=20",
 ]
 
@@ -240,12 +263,6 @@ degrades, it never fails — and the demo shows it rather than inventing a numbe
 # Added 2026-09-27. The dashboard called these seven and demo.toml named none of them, so the
 # shim treated their paths as static assets and GitHub Pages answered with its own 404 page,
 # which the People page printed whole. Each is absent for the reason below until a seeder exists.
-
-[absent.entities]
-reason = """
-entities is absent because the entity store holds the people in someone's life, which is C2, and \
-no synthetic seeder for people, places and dated facts exists yet.
-"""
 
 [absent.devices]
 reason = """

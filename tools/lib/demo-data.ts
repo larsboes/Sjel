@@ -158,6 +158,18 @@ export const VOCABULARY = {
     "Noor Lindqvist",
   ],
 
+  /** What the entity store holds about each of `people`. `birthdayOffset` is days after the
+   *  anchor, so Home has a birthday to raise; `away` is an absence covering the anchor, so the
+   *  People map has somebody somewhere else today. Home cities come from `cities`. */
+  contacts: [
+    { name: "Mara Velten", relation: "Friend", homeBase: "Ghent", sleeping: "yes", interests: ["climbing", "film"], birthdayOffset: 9 },
+    { name: "Tomas Iversen", relation: "Colleague", homeBase: "Copenhagen", sleeping: "ask", interests: ["cycling"], birthdayOffset: 140, away: { city: "Lisbon", fromOffset: -3, toOffset: 5 } },
+    { name: "Juno Halvorsen", relation: "Friend", homeBase: "Tallinn", sleeping: "ask", interests: ["sailing", "board games"], birthdayOffset: 200 },
+    { name: "Priya Rasmussen", relation: "Cousin", homeBase: "Turin", sleeping: "yes", interests: ["cooking"], birthdayOffset: 31 },
+    { name: "Emil Sandoval", relation: "Neighbour", homeBase: "Ghent", sleeping: "none", interests: ["gardening"], birthdayOffset: 260 },
+    { name: "Noor Lindqvist", relation: "Friend", homeBase: "Lisbon", sleeping: "yes", interests: ["photography", "running"], birthdayOffset: 75 },
+  ],
+
   /** Real cities, none of them the principal's, with coordinates so a map renders.
    *  `region` is what the trips UI shows next to the name. */
   cities: [

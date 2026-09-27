@@ -85,7 +85,8 @@ function expanded(cap: DemoCapability, bodies: Map<string, unknown>): string[] {
         `demo.toml: [capability.${cap.name}] expands '${rule.from}', which is not one of its paths`,
       );
     }
-    const list = Array.isArray(body) ? body : [];
+    const holder = rule.list_field ? (body as Record<string, unknown> | null)?.[rule.list_field] : body;
+    const list = Array.isArray(holder) ? holder : [];
     for (const row of list) {
       const id = (row as Record<string, unknown>)?.[rule.id_field];
       if (typeof id !== "string" || id === "") continue;

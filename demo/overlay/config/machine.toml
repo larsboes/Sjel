@@ -32,7 +32,7 @@ container_runtime = "docker"
 # That manifest exists to own a backup contract (kind = "data"), and this deployment's
 # database is a scratch file deleted between runs — a backup surface for it would describe
 # something nobody could restore. Single line, per the tools/lib/toml.sh contract.
-capabilities = ["sjel-status", "calendar", "comms", "finance", "scouting", "transit", "trips"]
+capabilities = ["sjel-status", "calendar", "comms", "entities", "finance", "scouting", "transit", "trips"]
 
 # No [[state_mount]] blocks. A state mount records where a tool on a real machine actually
 # persists data; this deployment persists nothing that outlives the job that built it.

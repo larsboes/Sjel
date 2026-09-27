@@ -33,6 +33,9 @@ export interface ExpandRule {
   from: string;
   id_field: string;
   into: string;
+  /** The key holding the list when the body is an object, e.g. `entities` for `{ entities: [...] }`.
+   *  Absent means the body is the list. */
+  list_field?: string;
 }
 
 export interface DemoCapability {

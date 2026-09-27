@@ -1509,7 +1509,9 @@ fn placements_show(model: &Model, argv: &[String]) -> i32 {
             if !model.catalogue.contains_key(&id) {
                 eprintln!(
                     "{}",
-                    red(&format!("`{id}` steht nicht im Katalog — nichts geschrieben"))
+                    red(&format!(
+                        "`{id}` steht nicht im Katalog — nichts geschrieben"
+                    ))
                 );
                 return 2;
             }
@@ -1544,9 +1546,7 @@ fn placements_show(model: &Model, argv: &[String]) -> i32 {
     let mut besessen: Vec<(&String, &interior::store::Item)> = model
         .catalogue
         .iter()
-        .filter(|(id, _)| {
-            model.states.get(*id).copied() == Some(interior::store::State::Owned)
-        })
+        .filter(|(id, _)| model.states.get(*id).copied() == Some(interior::store::State::Owned))
         .collect();
     besessen.sort_by(|a, b| a.0.cmp(b.0));
 
@@ -1577,7 +1577,10 @@ fn placements_show(model: &Model, argv: &[String]) -> i32 {
             "ohne_platz": ohne.iter().map(|(id, _)| id.to_string()).collect::<Vec<_>>(),
             "verwaist": verwaist,
         });
-        println!("{}", serde_json::to_string_pretty(&wert).unwrap_or_default());
+        println!(
+            "{}",
+            serde_json::to_string_pretty(&wert).unwrap_or_default()
+        );
         return 0;
     }
 
@@ -1598,7 +1601,11 @@ fn placements_show(model: &Model, argv: &[String]) -> i32 {
             dim(&model.catalogue[*id].label)
         );
     }
-    println!("\n  {} {}", bold(&format!("ohne Platz {}", ohne.len())), dim("(davon weiss der Plan noch nichts)"));
+    println!(
+        "\n  {} {}",
+        bold(&format!("ohne Platz {}", ohne.len())),
+        dim("(davon weiss der Plan noch nichts)")
+    );
     for (id, item) in &ohne {
         println!("    {:<28} {}", id, dim(&item.label));
     }
@@ -1628,7 +1635,11 @@ fn placements_show(model: &Model, argv: &[String]) -> i32 {
                 })
                 .collect(),
         };
-        match plan::page(model, std::slice::from_ref(&layout), plan::Herkunft::IstZustand) {
+        match plan::page(
+            model,
+            std::slice::from_ref(&layout),
+            plan::Herkunft::IstZustand,
+        ) {
             Ok(html) => match std::fs::write(&datei, &html) {
                 Ok(()) => println!("\n  {} {}", green("Ist-Plan geschrieben:"), datei),
                 Err(e) => {

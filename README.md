@@ -6,7 +6,7 @@
 
 <h1 align="center">Sjel</h1>
 
-<p align="center"><b>Your life's data on your own devices, with one assistant that can act on it.</b></p>
+<p align="center"><b>One household's people, places, trips, money, home and calendar, on devices the household owns, with one assistant that works on that data.</b></p>
 
 <p align="center">
   <a href="LICENSE"><img alt="License: AGPL-3.0" src="https://img.shields.io/badge/license-AGPL--3.0-blue"></a>
@@ -15,32 +15,72 @@
 </p>
 
 <p align="center">
-  <img alt="Sjel's travel hub on a desktop, from the live demo" src=".github/assets/travel.png" width="72%">
+  <img alt="Sjel's travel hub on a desktop, from the live demo" src=".github/assets/travel.png" width="72%" title="Travel hub, live demo, synthetic data">
   &nbsp;
   <img alt="Sjel's travel hub on a phone, from the live demo" src=".github/assets/phone.png" width="22%">
 </p>
 
+<p align="center"><sub>Screenshots: the travel hub in the live demo, synthetic data.</sub></p>
+
 <p align="center">
   <a href="https://larsboes.github.io/Sjel/">Live demo</a> ·
-  <a href="#quick-start">Quick start</a> ·
+  <a href="#try-it">Try it</a> ·
+  <a href="#how-it-works">How it works</a> ·
   <a href="#measured">Measured</a> ·
-  <a href="research/why-sjel.md">Why</a> ·
+  <a href="research/README.md">Research</a> ·
   <a href="ISA.md">Open work</a>
 </p>
 
-## What it does
+## What it is
 
-- Keeps the people, places, trips, money, home and calendar of one person or household as typed
-  data on hardware they control.
-- An assistant reads that data and proposes actions. Anything that leaves Sjel or cannot be
-  undone asks first.
-- Runs each task on the best model in reach: the device's own, then the Mac's, then fixed rules.
-  Data about other people reaches a cloud model only pseudonymized.
-- The phone reaches its node over the same Wi-Fi, Tailscale or a server of its own, and every
-  device signs its requests with a key that never leaves it.
-- Everything beyond the core is an optional first-party extension in this repository.
+Sjel stores the facts of one person's or one household's life as typed data: people, places,
+trips, money, home and calendar. The data stays on hardware the household controls. Screens show
+that data, and an assistant works on it.
 
-## Quick start
+Sjel has a small core and optional extensions. All extensions live in this repository. Each
+installation switches on the extensions it needs.
+
+## How it works
+
+```mermaid
+flowchart LR
+  phone["iPhone app<br/>offline copy"] -- "signed requests<br/>same Wi-Fi · Tailscale · own server" --> node
+  web["Web browser"] --> node
+  subgraph node["Node: a Mac or Linux machine"]
+    core["Core<br/>entities · devices · data classes · pseudonymizer"]
+    ext["Extensions<br/>travel · money · people · home · calendar"]
+  end
+  node -- "device model → Mac model → fixed rules" --> models["Models"]
+```
+
+1. One node, a Mac or a Linux machine, holds the data and accepts every write. Other devices send
+   changes to it. A phone edit made on an old copy is refused, and the phone shows both versions.
+2. A phone pairs once. It signs every request with its own key, whichever connection it uses.
+3. Every value has a data class: Public, Mine, Others (facts about other people) or Secret. A class
+   goes up by itself. Only a person, with a written reason, can lower it.
+4. Data about other people never reaches a cloud model (`libs/content-item`, `cloud_admission`).
+5. Home shows only what still waits for a decision.
+
+## State
+
+| Feature | State |
+|---|---|
+| Typed people, places, trips, money, home and calendar, with a source on every value | Built |
+| iPhone app with an offline copy, paired by device key | Built |
+| Same Wi-Fi, Tailscale and own-server connections | Built |
+| Pseudonymizer in front of cloud model calls, for the owner's own data | Built, one caller (`comms`) |
+| Data about other people sent to a cloud model pseudonymized, or synced end-to-end encrypted | Target |
+| Model selection: the device's own model, then the Mac's, then fixed rules | Built, not yet used by the assistant |
+| Assistant that proposes actions and asks before anything that leaves Sjel or cannot be undone | Target. Today it routes by keyword. |
+| Mac app | Target |
+| iCloud connection, encrypted by Sjel | Target |
+
+## Try it
+
+The [live demo](https://larsboes.github.io/Sjel/) runs the web interface on synthetic data. No
+install needed.
+
+To run your own node:
 
 ~~~sh
 git clone https://github.com/larsboes/Sjel.git
@@ -49,9 +89,9 @@ tools/install.sh
 tools/doctor
 ~~~
 
-macOS and Linux. [Start here](CONTRIBUTING.md#start-here) covers the installer, the private overlay and the
-first services. The command is `sjel`, and `axon` still works. Settings written with the earlier
-`AXON_*` names are still read.
+You get the web interface at `http://localhost:8082` and the `sjel` command. The installer asks
+where to keep your private settings, which live outside this repository. macOS and Linux.
+[Start here](CONTRIBUTING.md#start-here) covers the details.
 
 ## Measured
 
@@ -64,88 +104,38 @@ Each number names the command that reproduces it.
 | Feed ranking (bge-m3) | 0.941 pairwise, 0.994 mean nDCG, 6/6 useful top-1 | `bun capabilities/comms/eval/run-relevance.ts`, result in `capabilities/comms/eval/results/2026-08-30-bge-m3-ollama.md` |
 | Tests | 829 TypeScript tests and 107 Rust test binaries, CI green | `sjel test` and `cargo test --workspace` |
 
-The redaction corpus (24 fixtures) lives in the private overlay, so its two rows cannot be re-run
+The redaction corpus (24 fixtures) lives in the private settings, so its two rows cannot be re-run
 from a public clone. The relevance corpus is public
-(`capabilities/comms/eval/relevance-corpus.json`) and needs a local bge-m3.
+(`capabilities/comms/eval/relevance-corpus.json`) and needs a local bge-m3. Offline use and pairing
+time are not measured yet.
 
-## What it is
+## Structure
 
-Sjel stores the facts of one person's or one household's life as typed data: people, places,
-trips, money, home and calendar. The data stays on hardware its owner controls. An assistant
-reads the data and proposes actions.
+An extension is a directory under `capabilities/` with a `service.toml`. `sjel capability list`
+shows the ones on this machine.
 
-Sjel has a small core and optional extensions. All extensions are first-party and live in this
-repository. Each installation switches on the extensions it needs.
-
-## The core
-
-| Part | Function | Code |
-|---|---|---|
-| Entity store | Typed people, places, organisations and dated facts. Each value has a source and a data class. | `capabilities/entities` |
-| Devices and sync | Pairing, one Ed25519 key per device, signed requests, an offline copy and an outbox on the phone | `capabilities/devices`, `plugins/device-identity`, `dashboard/src-tauri/src/sync.rs` |
-| Data classes | C0 Public, C1 Mine, C2 Others (facts about other people), C3 Secret. Every value carries one. | `libs/content-item` |
-| Pseudonymizer | Replaces identifying details with reversible tokens before a cloud call | `libs/pseudonymize`, `capabilities/comms/src/cloud_derivative.rs` |
-| Capability contract | How an extension declares its service, port, data and backup | `schemas/`, `service.toml` files, `libs/sjel-server` |
-| Model selection | Picks the model for each task at runtime: the device's own, the Mac's, or deterministic rules | `dashboard/src/lib/intelligence`, `plugins/foundation-models`, `libs/inference` |
-| Assistant | One panel that knows the current domain and acts through typed tools | `dashboard/src/lib/assistant` |
-
-## Rules
-
-1. A task runs on the best model the device can reach: its own Apple model, then the Mac's, then
-   deterministic rules. The result shows which one answered.
-2. A paired device's key admits its requests. Every connection type carries the same signed
-   requests.
-3. Sjel detects what the devices can do and chooses the defaults. Other options are under
-   Advanced.
-4. C2 data leaves the owner's devices only end-to-end encrypted, with keys on those devices, or
-   pseudonymized. A test proves each path. A failing test closes the path.
-5. Summaries and labels appear without a confirmation. A reversible change applies by itself
-   only after a frozen test set shows it is reliable. A change that leaves Sjel, or cannot be
-   undone, always asks.
-6. Screens and assistant tools come from the typed data.
-7. A statement about the system cites the file, command or measurement that proves it.
-
-## Extensions
-
-A selection. `axon capability list` shows all of them.
-
-| Area | Extensions |
+| Part | Contents |
 |---|---|
-| Travel | `trips`, `transit`, `traveler`, `scouting`, `sparpreis-watch`, `punctuality` |
+| Core | `capabilities/entities`, `capabilities/devices`, `libs/content-item`, `libs/pseudonymize`, `libs/sjel-server`, `dashboard/src/lib/intelligence` |
+| Travel | `trips`, `transit`, `traveler`, `scouting`, `punctuality`, `sparpreis-watch` (Deutsche Bahn fare alerts) |
 | People | `entities-sync`, `entities-google-sync`, `places`, `people-registry` |
 | Money | `finance`, `finance-prices` |
 | Home | `interior`, `home-assistant`, `soundscape`, `printing` |
 | Time and knowledge | `calendar`, `comms`, `knowledge-base`, `knowledge-graph`, `vault` |
 | Machines | `host-patch`, `host-watch`, `host-net`, `macmon`, `backup`, `container-refresh` |
-| Agents | `Packs/`, `tools/harnesses`, `agentbox`, `shell` |
-
-## Surfaces
-
-| Surface | State |
-|---|---|
-| iPhone app | Tauri, iOS 16 and later. Admitted views work offline. |
-| Web shell | The same interface in a browser, served by the Mac |
-| Assistant panel | Keyword-routed. Model selection exists and has no caller yet. |
-| Mac app | Planned, from the `machNotch` notch app. It will host iCloud sync. |
-
-## Connections
-
-| Connection | Needs | State |
-|---|---|---|
-| Same Wi-Fi | Bonjour discovery and a 16-character code, compared once | Built |
-| Tailscale | The Tailscale app on each device | Built |
-| Own server or hosted node | A server with a valid certificate | Built in the app |
-| iCloud | An Apple account. Records in CloudKit, encrypted by Sjel. | Not built |
-
-The app tries the Same Wi-Fi address first, for 1.5 seconds, then the main address.
+| Interfaces | `dashboard` (web and iPhone), `sjel-status` (the node's web server) |
 
 ## Scope
 
 - Sjel does not ask for passwords or MFA codes of other services.
 - Only first-party extensions run. There is no extension store.
 - Prose stays in Obsidian. Sjel stores the structured facts and links to the notes.
-- One node accepts writes. The other devices propose changes to it.
 - Supported platforms: macOS, Linux and iOS.
+
+## Research
+
+[`research/`](research/README.md) collects the studies and benchmarks behind the project,
+including the ones that argue against it.
 
 ## License
 

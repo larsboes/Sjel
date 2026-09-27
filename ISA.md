@@ -226,19 +226,39 @@ Why: the transports and the model ladder shipped on 2026-09-25 with tests, but n
 the phone. Each item below is built and unverified, or ruled and unbuilt.
 
 - [ ] ISC-17 — a phone on the home Wi-Fi reaches the Mac's `:8443` listener, pins it after the
-  code comparison, and reads data with the tailnet off. Blocked by an operator act: the macOS
-  firewall must admit the signed `sjel-status` once. Falsifier: `curl -k
+  code comparison, and reads data with the tailnet off. The macOS firewall permits the signed
+  `sjel-status` (checked 2026-09-27 with `socketfilterfw --getappblocked`); the app is installed,
+  and the phone is not yet registered. Falsifier: `curl -k
   https://<LAN address>:8443/health` from another device does not answer 200.
 - [ ] ISC-18 — the assistant drawer calls the model ladder (`dashboard/src/lib/intelligence`)
   for at least one task and shows which rung answered. Falsifier: `rg "intelligence/backends"
   dashboard/src` finds no caller outside the module and its test.
 - [ ] ISC-19 — `machNotch` moves into this repository and grows into the Mac app. It hosts
   the CloudKit relay, and a test reads a record back as Apple stores it and finds ciphertext
-  (README, rule 4). Falsifier: a field name or value of a C2 record readable in the stored record.
+  ([product rule 4](CONTRIBUTING.md#product-rules)). Falsifier: a field name or value of a C2 record readable in the stored record.
 - [ ] ISC-20 — the comms review queue sends pseudonymized jobs through `prepare_pseudonymized`
-  (README, rule 4). Falsifier: a queued job whose payload carries a raw C2 entity.
+  ([product rule 4](CONTRIBUTING.md#product-rules)). Falsifier: a queued job whose payload carries a raw C2 entity.
 - [ ] ISC-21 — the family deployment runs for a week without Lars touching it.
   Falsifier: any fix to it made by Lars in that week.
+
+### F6 · What the old PRD still owes
+
+Why: the vault PRD (`Projects/Axon/PRD Axon.md`) is archived and stays so, because 528 citations
+in 260 files point into it. A read on 2026-09-27 found about 90% of it settled decision log. The
+rest is below or under Not yet specified; nothing new goes into the PRD.
+
+- [ ] ISC-22 — the three success criteria are measured again: no raw data about other people in
+  the egress log, a trip planned in under 30 minutes, and one surface in place of five apps.
+  Falsifier: any of the three has no command or log query that shows its current value.
+- [ ] ISC-23 — every outbound model call appears in the egress log with its token count and cost.
+  Falsifier: a call site that reaches a cloud model without writing a log row.
+- [ ] ISC-24 — a reviewed provider list (`providers.toml`: provider, highest data class, review
+  date, expiry after 12 months) gates cloud calls, or the ruling is withdrawn. Falsifier: a cloud
+  call to a provider the list does not name.
+- [ ] ISC-25 — the product rules answer the counter-evidence in `research/`: a cloud request
+  carries only the fields its task needs (Staab et al.), and confirmations are rare enough to be
+  read (Akhawe and Felt), with the prompt rate measured. Falsifier: rule 4 or 5 unchanged with
+  no measurement that answers the source.
 
 ## Not yet specified
 
@@ -270,11 +290,11 @@ the phone. Each item below is built and unverified, or ruled and unbuilt.
 - **The pseudonymizer as its own library.** Grow the data classes and the reversible
   pseudonymizer into a standalone Rust crate with its own README. Performance work (unsafe Rust included)
   only after a benchmark says where the time goes.
-- **Private Cloud Compute as a ladder rung**, for pseudonymized prompts only (README, rule 4). The plugin
+- **Private Cloud Compute as a ladder rung**, for pseudonymized prompts only ([product rule 4](CONTRIBUTING.md#product-rules)). The plugin
   reports its availability today and never calls it.
 - **A fast structured-decision model as a rung**, the kind Jev is (typesafe.ai, 2026). Candidate,
   not measured.
-- **Generative interface from the typed core** (README, rule 6). No design yet.
+- **Generative interface from the typed core** ([product rule 6](CONTRIBUTING.md#product-rules)). No design yet.
 - **The on-device model path is untested on an eligible device.** The iPhone 14 Pro reports
   `deviceNotEligible`; a 15 Pro or later, or a Simulator, is needed.
 - **`self.json` cannot regenerate.** graphify's semantic step calls
@@ -282,9 +302,10 @@ the phone. Each item below is built and unverified, or ruled and unbuilt.
   `2f0feb6` says it regenerated `self.json`; only `ARCHITECTURE.md` changed.
 - **The demo site shows two areas less than it could.** Fixed 2026-09-27 (22793de3): the page
   clock runs on the recording's anchor date, so Travel shows 2 upcoming trips, and seven services
-  missing from demo.toml now say why instead of showing a host's 404 page. Still open: people
-  (the wedge's second half) is absent until a synthetic seeder for the entity store exists, and
-  Home lists Calendar, Tasks, Scouting, Mail and Feed as unavailable on the anchor date.
+  missing from demo.toml now say why instead of showing a host's 404 page. People followed
+  the same day (eceddd96): six invented people seeded through the entity store's own routes, and
+  Home's own queries recorded, so only Tasks (vault, absent by design) is unavailable. Still open:
+  Home raises no birthday row for a person whose birthday is nine days after the anchor.
 - **The names ISC-13 kept.** `sjel-status` (a service rename changes the phone app's allowed
   paths), `axon-fda-launcher` (a new binary name needs a new Full Disk Access grant), Linux
   `axon-<cap>` systemd units, the `X-Axon-*` signed-request headers (a protocol change for paired
@@ -351,3 +372,11 @@ the phone. Each item below is built and unverified, or ruled and unbuilt.
   retirement itself; #185 and #186 went to `Packs/travel/ISA.md`.
 - 2026-09-26 · F3 to F5 and five Not-yet-specified entries added from the session that named
   Sjel, switched the license and moved the product document into the README.
+- **From the old PRD, not yet planned.** Device loss as a threat (what a stolen phone exposes).
+  A health domain (energy, sleep, training, records). Item intake: scan an object, share a link,
+  one wishlist. Travel: route composition, "where should I base myself", an accommodation source.
+  People: Google Contacts beyond inbound, a TELOS import, trips from a person, meetup capture.
+  An autonomy gate for a structured-decision model (apply at ≥ 0.95 confidence, otherwise a
+  card). shellcheck as shell analysis. `tools/backup.sh` skipping private capability manifests.
+  The PRD's non-goals, which conflict with Sjel ("not a product", "tailnet only") and need a new
+  ruling rather than a copy.

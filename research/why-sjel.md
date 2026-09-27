@@ -8,7 +8,7 @@ A person's life is spread over many separate apps and services. Each one keeps i
 data on its own servers, and the person has little say in what happens to it. Sjel is one system
 that holds that data on hardware the person controls. It aims to be simple enough for someone
 without technical experience, and to carry an assistant that can act on the data ([README.md, What
-it does](../README.md#what-it-does)).
+it does](../README.md#what-it-is)).
 
 ## What the sources show
 
@@ -29,15 +29,12 @@ comfortable with ([Pew Research Center,
 able to export their data, but they normally cannot keep running the software on it. Kleppmann,
 Wiggins, van Hardenberg and McGranaghan set seven ideals against this, among them "the network is
 optional" and "you retain ultimate ownership and control" ([Local-first software, Onward!
-2019](https://www.inkandswitch.com/essay/local-first/)). Sjel takes those two as requirements: the
-node runs without a network, and the data lives on the person's own devices.
+2019](https://www.inkandswitch.com/essay/local-first/)).
 
 **Data that stays on the device has no central point of attack.** Apple builds its assistant on
 that principle. When a request needs a larger model, Private Cloud Compute processes it and keeps
 nothing after the response ([Apple Security Research,
-2024-06-10](https://security.apple.com/blog/private-cloud-compute/)). Sjel's model order follows
-the same idea: the device's own model first, then the owner's Mac, and a cloud model only with
-pseudonymized data ([README.md, What it does](../README.md#what-it-does)).
+2024-06-10](https://security.apple.com/blog/private-cloud-compute/)).
 
 ## What the sources do not show
 

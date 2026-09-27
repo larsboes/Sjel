@@ -1,12 +1,12 @@
 # Contributing to Sjel
 
-Axon accepts changes that improve the reusable public shell. Personal data and deployment state
+Sjel accepts changes that improve the reusable public shell. Personal data and deployment state
 stay in a private overlay. The same boundary covers credentials, private host details, and
 operator-specific policy.
 
 ## Before writing code
 
-Name the consumer and the outcome. An interesting technology without a concrete Axon consumer
+Name the consumer and the outcome. An interesting technology without a concrete Sjel consumer
 remains an idea, not an implementation commitment.
 
 No backlog entry is required to start. Add a claim to the owning `ISA.md` only when something
@@ -15,14 +15,14 @@ Write it as a claim with the probe that would falsify it, not as a description. 
 takes reports from outside the project; it is not where this project's work is planned.
 
 Before external code or adopted design influence enters the tree, record its canonical source in
-`upstreams.toml`. Record the license and verdict there too, then state precisely what Axon
+`upstreams.toml`. Record the license and verdict there too, then state precisely what Sjel
 adopts. No version: the register holds none since 2026-09-02, because every dependency tracks its
 upstream's latest release (#patch-first).
 
 ## Work on one change
 
 Start from current `main` and create a branch named for the change: `<area>-<short-slug>`. Keep
-the diff inside one coherent boundary. Put reusable code and doctrine in Axon; use synthetic fixtures for
+the diff inside one coherent boundary. Put reusable code and doctrine in Sjel; use synthetic fixtures for
 data-shaped tests. Never copy an active overlay or secret value into public work. Workstation paths
 and private logs must also stay out of commits and GitHub text, including screenshots and test
 failures.
@@ -148,6 +148,25 @@ Releases before 2026-09-26 were published under the MIT license and stay availab
 The rules below govern every change to this repository. Each section is the owner of its rule; code
 comments and capability READMEs link here.
 
+## Product rules
+
+Every change keeps to these. Rules 1, 4 and 5 describe the target behaviour; the README's
+[State](README.md#state) table shows how much of it is built.
+
+1. A task runs on the best model the device can reach: its own Apple model, then the Mac's, then
+   deterministic rules. The result shows which one answered.
+2. A paired device's key admits its requests. Every connection type carries the same signed
+   requests.
+3. Sjel detects what the devices can do and chooses the defaults. Other options are under
+   Advanced.
+4. C2 data leaves the owner's devices only end-to-end encrypted, with keys on those devices, or
+   pseudonymized. A test proves each path. A failing test closes the path.
+5. Summaries and labels appear without a confirmation. A reversible change applies by itself
+   only after a frozen test set shows it is reliable. A change that leaves Sjel, or cannot be
+   undone, always asks.
+6. Screens and assistant tools come from the typed data.
+7. A statement about the system cites the file, command or measurement that proves it.
+
 ## Start here
 
 Sjel supports macOS and Linux. The guided installer detects the platform, creates or connects a
@@ -177,7 +196,7 @@ contract, install, or review decision.
 2. **One feed, many views.** Capabilities keep domain ownership, but publish typed events with
    provenance, time, confidence and state. The dashboard sorts and connects those events; it
    does not become another data silo.
-3. **Data and mechanism never blur.** Axon owns public code, schemas, renderers and explicitly
+3. **Data and mechanism never blur.** Sjel owns public code, schemas, renderers and explicitly
    public first-party datasets. The active private overlay owns private content, secrets, machine
    configuration and history. Both sides use the same bounded
    contracts: data may select an allow-listed behavior, never become executable code.
@@ -197,10 +216,10 @@ contract, install, or review decision.
 7. **Self-hosted by default, distributed when earned.** One home-server deployment should serve
    phone and desktop clients. Kubernetes, WASM or a native shell enter only for a measured
    portability, isolation or performance need.
-8. **English is the shared surface.** Axon-authored interfaces, documentation, prompts,
+8. **English is the shared surface.** Sjel-authored interfaces, documentation, prompts,
    summaries, explanations and errors default to English. Source material and explicitly
    locale-specific capabilities may remain multilingual; accepting multilingual input must not
-   silently change Axon's output language.
+   silently change Sjel's output language.
 
 ## Feed, Scouting, and Obsidian boundaries
 
@@ -247,7 +266,7 @@ profile. It may accept a feed item as a candidate and may publish a scored resul
 feed, but it does not own security updates, system changes, watched repositories, general news
 or interesting articles. Those remain valid feed items without ever entering Scouting.
 
-Obsidian is an external personal writing surface, not a second Axon-wide database. Each
+Obsidian is an external personal writing surface, not a second Sjel-wide database. Each
 capability owns its own explicit vault contract: `comms` can discover links only in configured
 exact notes or headings and can export a distilled keeper, `scouting` can read typed
 opportunity notes and link matches, and `trips` can import or later synchronize trip plans.
@@ -257,7 +276,7 @@ capability's notes by implication.
 
 The harness-swappable, public-core-plus-private-overlay shape isn't invented from nothing. It
 descends from Daniel Miessler's [LifeOS](https://github.com/danielmiessler/LifeOS), the upstream
-AI-operator project. Axon carried a reviewed delta against a LifeOS installation until
+AI-operator project. Sjel carried a reviewed delta against a LifeOS installation until
 2026-08-25, when that delta and its sync tooling were deleted; the shape it taught stayed. See
 `upstreams.toml`'s `[lifeos]` entry for what was consumed and why it stopped.
 
@@ -265,7 +284,7 @@ AI-operator project. Axon carried a reviewed delta against a LifeOS installation
 
 ### Public core and private overlays
 
-Axon contains everything that can be public. Private data, vault contents, backups and deployment
+Sjel contains everything that can be public. Private data, vault contents, backups and deployment
 configuration live in one selected overlay. A host, residence or user account is not automatically
 a repository boundary: split overlays only when their trust, lifecycle or ownership genuinely
 cannot be managed together. Access control belongs at the service and data-contract boundary.
@@ -286,8 +305,8 @@ workstation paths; it cannot see aggregation, which is why this is a rule rather
 
 ### What the installer owns in an agent harness
 
-`~/.claude` belongs to its operator, not to Axon, and the installer's authority over it stops at an
-additive merge of a baseline Axon owns, plus offers. Stated here because the discipline was already
+`~/.claude` belongs to its operator, not to Sjel, and the installer's authority over it stops at an
+additive merge of a baseline Sjel owns, plus offers. Stated here because the discipline was already
 implemented in three separate tools and written down in none, which is the shape a boundary erodes
 in.
 
@@ -306,11 +325,11 @@ not present is reported and skipped.
 
 ### Integrate-first topology
 
-A personal or self-authored project folds into Axon by default. It stays separate only when it has
+A personal or self-authored project folds into Sjel by default. It stays separate only when it has
 an independent product identity, a device-sync lifecycle of its own, collaborators, or is itself
 an overlay. Separate projects integrate through declared contracts and state mounts. They are
 never left as invisible local dependencies. The overlay relationship recurses: a capability with
-more than one non-interchangeable deployment still gets exactly one shared pattern in Axon, and
+more than one non-interchangeable deployment still gets exactly one shared pattern in Sjel, and
 several hosts may consume one overlay when they form one operational trust boundary.
 
 Base-plus-plugin and repository topology are separate decisions. The base defines contracts and
@@ -319,7 +338,7 @@ other.
 
 ### Three architectural nouns
 
-Axon uses three nouns and no residual category:
+Sjel uses three nouns and no residual category:
 
 - **Spine** is the fresh-install core: root manifests, `schemas/`, `tools/`, `libs/` and the
   `dashboard/` shell. There is no literal `spine/` directory.
@@ -394,7 +413,7 @@ Configuration has one owner per concern:
 | `axon.toml` | Shared platform defaults and the shipped overlay fallback; never machine-specific state |
 | `axon.local.toml` | This checkout's active overlay location; gitignored and written by the installer |
 | `upstreams.toml` | External code and adopted influence: url, verdict, license and why. No version — every entry tracks its upstream's latest |
-| `toolchain.toml` | Host executables Axon commands assume, with requiredness, scope and install hints |
+| `toolchain.toml` | Host executables Sjel commands assume, with requiredness, scope and install hints |
 | `systems.toml` | Systems, services and projects that have a role in the setup |
 | `<overlay>/config/machine.toml` | OS, container runtime, enabled capabilities and state mounts for this machine. An overlay owning several machines uses `<overlay>/config/machines/<name>.toml` instead, selected by `axon.local.toml` or the hostname |
 | `<overlay>/config/deployment.env` | facts true of the whole deployment rather than one machine or one capability — the home timezone, and `SJEL_INBOUND_TOKEN_FILE`, the reference to the shared secret every capability server authenticates inbound requests against (`libs/sjel-server/README.md`). Declared once because several capabilities need it and independent copies drift silently (`schemas/deployment.env.example`) |
@@ -418,7 +437,7 @@ tools/toolchain-check --workflow restore # before a restore, not after it holds 
 
 ### State mounts record reality
 
-Axon does not relocate an adopted tool's data directory. The active machine manifest records where
+Sjel does not relocate an adopted tool's data directory. The active machine manifest records where
 the tool really persists data, its class, sync policy and direction. Backup and monitoring walk
 that registry. Dotfiles and shell configuration are state mounts with injection direction, not
 special cases.
@@ -429,7 +448,7 @@ special cases.
 
 Every consumed external dependency gets a verdict in `upstreams.toml` first. **No entry, no
 entry.** The manifest records, per upstream, the URL, the verdict, the licence and the `why` that
-argues for it — four fields and nothing else. The consuming README also records what Axon
+argues for it — four fields and nothing else. The consuming README also records what Sjel
 adopted: runtime, idea, architecture, algorithm, code or asset. A local clone or archive path is
 never durable provenance.
 
@@ -547,7 +566,7 @@ tag is rebuilt under the same name, and `upstreams.toml`'s `pin` recorded an aud
 `Cargo.lock` and `bun.lock` for what is compiled, and `<overlay>/data/*/last.json` for what the
 last scheduled run did. Every one of those describes a machine rather than an intention.
 `toolchain.toml`'s `min_version` rows are the exception that proves the rule: they are FLOORS —
-the oldest release Axon's use of a tool is known to work on — and never a version to install.
+the oldest release Sjel's use of a tool is known to work on — and never a version to install.
 
 **One binary, one owner.** On macOS `brew` owns `bun`, `uv`, `gitleaks` and `osv-scanner`, so
 `host-patch.sh` never calls `bun upgrade` or `uv self update`. A second updater for one file is
@@ -646,7 +665,7 @@ virtiofs mount does not meet.
 Retrieve that new archive into a private scratch location, compare its SHA-256 with the receipt,
 then run `tools/restore.sh <capability> <archive> --receipt <receipt.json>`. The explicit receipt
 makes the command reject the wrong capability, archive name, byte count or SHA-256 before
-extraction. Restore defaults to a new `/tmp` directory and refuses the Axon checkout or active
+extraction. Restore defaults to a new `/tmp` directory and refuses the Sjel checkout or active
 overlay as a destination. It separates the recovery stages explicitly:
 
 1. **Retrieve:** copy the named archive from the backup target without applying it.
@@ -685,7 +704,7 @@ Shell scripts remain compatible with macOS Bash 3.2. Do not use associative arra
 ### Language tooling
 
 Use `uv` for Python and `bun` for TypeScript. Do not add `pip`, `npm` or bare `node` commands to
-Axon code, launchers or documentation. The runtime choice belongs in `toolchain.toml`; an external
+Sjel code, launchers or documentation. The runtime choice belongs in `toolchain.toml`; an external
 package consumed as code also belongs in `upstreams.toml`.
 
 ### Capabilities are data
@@ -717,7 +736,7 @@ There is deliberately no separate CLI reference. `docs/axon-cli.md` was one, and
 restated something `axon help` already prints — a command table, the harness names, the discovery
 instruction `AGENTS.md` carries verbatim. A second copy of a generated surface is the kind of doc
 that rots first and is believed longest. `tools/install.sh` owns the installation contract: it
-links `~/.local/bin/axon` to the tracked launcher, never overwrites a non-Axon command at that
+links `~/.local/bin/axon` to the tracked launcher, never overwrites a non-Sjel command at that
 path, and reports the exact shell-path action when `~/.local/bin` is absent from `PATH`.
 
 ## Releases
@@ -737,7 +756,7 @@ Judge a change against those three before opening a pull request. A contract cha
 patch is what breaks an overlay on an update it was told was safe.
 
 Deployment overlays stay untagged. An overlay is deployment state rather than a public release
-line, and its commit identity stays independent of the Axon version it runs against.
+line, and its commit identity stays independent of the Sjel version it runs against.
 
 ### Cutting and consuming a release
 
@@ -761,7 +780,7 @@ new evidence.
 
 A shallow usage install is not a dead end: `git fetch --unshallow` promotes it to a development one
 without reinstalling. The tree exists either way, because it has to — every tool resolves
-`SJEL_ROOT` from its own location, and no shape of Axon runs without a directory tree.
+`SJEL_ROOT` from its own location, and no shape of Sjel runs without a directory tree.
 
 **A release tarball instead of a clone was rejected.** Measured at decision time, a `--depth 1`
 clone transferred 3.12 MiB and landed 11.4 MB in 586 files — most of that weight a lockfile the
@@ -773,14 +792,14 @@ need a second update mechanism for the same job.
 `toolchain.toml`, so skipping it removes no dependency and only removes capability. The run path
 would survive — `capability.sh`, `service-runner.sh`, `watchdog.sh` and `packs.sh` make zero git
 calls — but `tools/doctor` makes thirteen that carry weight, and `tools/update.sh` and `tools/self`
-lose the update path and version truth entirely. Axon's version identity *is* the release tag, so a
+lose the update path and version truth entirely. Sjel's version identity *is* the release tag, so a
 git-free install would need a stamped version file, a second source for one fact, plus a second
 update mechanism: extracting over an existing tree leaves behind files upstream deleted. New
 evidence would be git ceasing to be a host requirement, or the run path growing a consumer that
 cannot assume it.
 
 The agent-readable install page is the primary route and the one-liner is the terminal alternative.
-Axon's install contains real decisions — overlay location, container runtime, capability selection,
+Sjel's install contains real decisions — overlay location, container runtime, capability selection,
 secrets — and an agent walking those with a permission gate per step beats a script asking the same
 questions blind. Both land in the same `tools/install.sh` prompts.
 
@@ -814,7 +833,7 @@ source.
 `tools/generate-marketplace.ts` reads every `Packs/<name>/pack.toml` and generates
 `.claude-plugin/marketplace.json` plus one `Packs/<name>/.claude-plugin/plugin.json` per pack, so
 this repo is directly addable as a Claude Code marketplace (`claude plugin marketplace add
-/path/to/Axon`) and each Pack installs as a native plugin. `tools/check-marketplace-fresh.sh`
+/path/to/Sjel`) and each Pack installs as a native plugin. `tools/check-marketplace-fresh.sh`
 gates staleness in CI, the same way `tools/check-architecture-fresh.sh` gates ARCHITECTURE.md —
 never hand-edit the generated JSON.
 
@@ -828,7 +847,7 @@ is read — an overlay Pack is private and never appears in the committed market
 
 Every Pack has a README and SPDX license field. Adapted material names its canonical upstream,
 license and adopted influence. Preserve required notices and nearby lineage comments
-where Axon's changes would otherwise obscure origin.
+where Sjel's changes would otherwise obscure origin.
 
 ## Documentation
 
@@ -871,7 +890,7 @@ decision-log directory.
 ### Quarries and one-way migration
 
 Legacy tooling and LifeOS-mono archives are quarries, not dependencies. Migrate
-material into Axon deliberately, redact it, verify the new owner, and leave the source until the
+material into Sjel deliberately, redact it, verify the new owner, and leave the source until the
 user explicitly approves removal. Never bulk-import their history or treat an archive location as
 permanent provenance.
 
@@ -908,8 +927,8 @@ standing specification type.
 | Shared code with no domain | `libs/<name>/` | Requires a second consumer and its own crate in the Cargo workspace |
 | Shared contract | `schemas/` | Import it; do not redefine it |
 | Agent workflow | `Packs/<pack>/skills/<name>/` | Public and runtime-configured through the overlay |
-| System or project Axon connects to | `systems.toml` | Private URLs go in the overlay extension |
-| Host executable required by Axon | `toolchain.toml` | Add `upstream = <id>` only when it is also consumed code |
+| System or project Sjel connects to | `systems.toml` | Private URLs go in the overlay extension |
+| Host executable required by Sjel | `toolchain.toml` | Add `upstream = <id>` only when it is also consumed code |
 | Machine fact or private state | Active overlay | Resolve it dynamically; never copy it into public prose |
 | Shared operator logic | `tools/lib/` | Source it from every caller |
 | Interesting unjudged lead | The owning ISA's `## Not yet specified` | Promote to a claim through the provenance gate when adopted |
@@ -931,7 +950,7 @@ One web app is the visible form of the gluing layer: **installer, maintainer, an
 
 | Path | Holds |
 |---|---|
-| `axon.toml` | Axon manifest: platform name, the release-tag pattern, default overlay root. Tracked and shared, so nothing machine-specific lives here |
+| `axon.toml` | Sjel manifest: platform name, the release-tag pattern, default overlay root. Tracked and shared, so nothing machine-specific lives here |
 | `axon.local.toml` | this machine's overlay root, and optionally which of that overlay's machines this is. Gitignored, one per machine, written by `tools/install.sh` (`axon.local.toml.example` is the template) |
 | `<overlay>/config/machine.toml` | this machine's identity: os, container runtime, enabled capabilities, state-mount registry. One file per machine once an overlay holds more than one, under `config/machines/` |
 | `<overlay>/config/deployment.env` | this deployment's shared facts, resolved by `libs/sjel-config` and `libs/sjel-server` for every capability that needs one. A capability may still override, but may not silently disagree |
@@ -976,7 +995,7 @@ flowchart TB
     subgraph HARNESS["agent harnesses (swappable)"]
         H["Claude Code · Codex · opencode · pi"]
     end
-    subgraph AXON["Axon (public shell)"]
+    subgraph AXON["Sjel (public shell)"]
         C["control surface (web):<br/>install · maintain · dashboards"]
         M["axon.toml + upstreams.toml"]
         S["schemas/"]

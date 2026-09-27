@@ -101,9 +101,13 @@ jobs:
       # The dashboard's tests import its modules, and mac-bridge.ts imports @tauri-apps/api, so its
       # locked dependencies are installed first. --frozen-lockfile --ignore-scripts, as
       # tools/check-bun-install-policy.sh requires of every install here.
+      # svelte-kit sync writes .svelte-kit/tsconfig.json, which is where the $lib alias the
+      # dashboard's modules import through is declared.
       - name: install the dashboard's dependencies
         working-directory: dashboard
-        run: bun install --frozen-lockfile --ignore-scripts
+        run: |
+          bun install --frozen-lockfile --ignore-scripts
+          bunx svelte-kit sync
       - name: bun test
         run: bun test
 

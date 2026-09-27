@@ -226,9 +226,10 @@ curated place. The README is still 870 lines of doctrine below 230 of product.
 Why: the transports and the model ladder shipped on 2026-09-25 with tests, but nothing ran on
 the phone. Each item below is built and unverified, or ruled and unbuilt.
 
-- [ ] ISC-17 — a phone on the home Wi-Fi reaches the Mac's `:8443` listener, pins it after the
+- [x] ISC-17 — a phone on the home Wi-Fi reaches the Mac's `:8443` listener, pins it after the
   code comparison, and reads data with the tailnet off. The phone is registered (ISC-12) and pinned the
-  Mac from the QR code; reading with the tailnet off is not yet checked. The firewall permits `sjel-status` (checked 21:33). Falsifier: `curl -k
+  Mac from the QR code; Lars confirmed on 2026-09-27 that the app reads
+  over the home Wi-Fi. The firewall permits `sjel-status` (checked 21:33). Falsifier: `curl -k
   https://<LAN address>:8443/health` from another device does not answer 200.
 - [ ] ISC-18 — the assistant drawer calls the model ladder (`dashboard/src/lib/intelligence`)
   for at least one task and shows which rung answered. Falsifier: `rg "intelligence/backends"
@@ -304,8 +305,9 @@ rest is below or under Not yet specified; nothing new goes into the PRD.
   clock runs on the recording's anchor date, so Travel shows 2 upcoming trips, and seven services
   missing from demo.toml now say why instead of showing a host's 404 page. People followed
   the same day (eceddd96): six invented people seeded through the entity store's own routes, and
-  Home's own queries recorded, so only Tasks (vault, absent by design) is unavailable. Still open:
-  Home raises no birthday row for a person whose birthday is nine days after the anchor.
+  Home's own queries recorded, so only Tasks (vault, absent by design) is unavailable. The missing
+  birthday row was the seed: Home's radar looks 7 days ahead and Mara's birthday was 9 days out;
+  it is 5 now.
 - **The names ISC-13 kept.** `sjel-status` (a service rename changes the phone app's allowed
   paths), `axon-fda-launcher` (a new binary name needs a new Full Disk Access grant), Linux
   `axon-<cap>` systemd units, the `X-Axon-*` signed-request headers (a protocol change for paired

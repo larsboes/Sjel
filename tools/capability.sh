@@ -107,10 +107,10 @@ _cap_dirs() {  # names of every <root>/capabilities/<name>/ directory, one per l
 }
 
 # A spine component may carry a service.toml at the repo root (today: dashboard/,
-# README.md#three-architectural-nouns). Discovered by glob rather than listed, so the list can never go
+# CONTRIBUTING.md#three-architectural-nouns). Discovered by glob rather than listed, so the list can never go
 # stale: a top-level service.toml IS the declaration. Spine services are always in the
 # registry and never in machine.toml's `capabilities` — the spine exists on every
-# machine by definition, which is exactly README.md#three-architectural-nouns's membership test.
+# machine by definition, which is exactly CONTRIBUTING.md#three-architectural-nouns's membership test.
 _spine_names() {  # names of every <root>/<name>/service.toml, one per line
   local f
   for f in "$SJEL_ROOT"/*/service.toml; do
@@ -283,7 +283,7 @@ cmd_enable() {  # <name>
 # --- registry (the one place manifest facts leave the shell) --------------
 #
 # Emits the enabled set as JSON so non-shell consumers never learn to parse TOML:
-# tools/lib/toml.sh stays the only parser (README.md#one-manifest-per-concern), and everyone else reads
+# tools/lib/toml.sh stays the only parser (CONTRIBUTING.md#one-manifest-per-concern), and everyone else reads
 # this. Three consumers today — service-runner.sh's up/down fan-out, sjel-status
 # (which dials each health URL and starts capabilities on demand), and
 # dashboard/vite.config.ts (which builds its proxy table from it). That third reader
@@ -335,7 +335,7 @@ _emit_service() {  # <name> <manifest> <scope> [endpoint]
   # presence signal (backup.sh refuses a run without one), `backup_sqlite` is what decides
   # whether a run holds the capability down, and the two day fields are what timely MEANS
   # for this data. A consumer that shows a backup surface needs all four and has no other
-  # legal way to get them — sjel-status is forbidden from parsing TOML (README.md#one-manifest-per-concern).
+  # legal way to get them — sjel-status is forbidden from parsing TOML (CONTRIBUTING.md#one-manifest-per-concern).
   #
   # `backup_sqlite_online` is the fifth and the counter-example that keeps the fourth
   # honest: capabilities/store's file is copied while it is open, so a run holds nothing

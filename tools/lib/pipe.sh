@@ -20,7 +20,7 @@
 # The fix is not to drop pipefail — pipefail is why a failing producer is not silently read as
 # "no match". It is to stop asking the question in a way that kills the producer.
 #
-# bash 3.2-safe (README.md#portable-shell).
+# bash 3.2-safe (CONTRIBUTING.md#portable-shell).
 
 # stream_matches <grep args...> — true when stdin matches, false when it does not.
 #

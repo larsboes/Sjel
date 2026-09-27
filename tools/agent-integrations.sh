@@ -9,7 +9,7 @@
 #
 # It resolved a version from upstreams.toml `pin` until 2026-09-02 (Q77). That field is
 # deleted and the register records url/verdict/license/why only, so `uv tool run --from
-# graphifyy` resolves whatever PyPI has today (README.md#patch-first). The cost is named
+# graphifyy` resolves whatever PyPI has today (CONTRIBUTING.md#patch-first). The cost is named
 # rather than hidden: a broken graphify release reaches this machine on the day it ships.
 #
 # ## Why this exists rather than a checked-in copy
@@ -41,7 +41,7 @@
 # integration_write_marker / integration_harnesses / integration_description.
 # Never edit another upstream's functions to add yours (C15, 2026-09-11). Never write a
 # version here, and never write one into upstreams.toml either: an upstream's integration
-# is consumed at its latest release (Q77, README.md#patch-first).
+# is consumed at its latest release (Q77, CONTRIBUTING.md#patch-first).
 #
 # Usage:
 #   tools/agent-integrations.sh list                              what is available, and where

@@ -27,7 +27,7 @@
 # The env file's CONTENTS are deliberately not in that stream: they are secrets, and they are
 # compared by env_diff(), which reports key names only and never writes them anywhere.
 #
-# bash 3.2-safe (README.md#portable-shell). jq is a declared host requirement (toolchain.toml).
+# bash 3.2-safe (CONTRIBUTING.md#portable-shell). jq is a declared host requirement (toolchain.toml).
 
 # --- canonical forms -------------------------------------------------------------------
 

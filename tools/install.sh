@@ -192,7 +192,7 @@ else
       cp -R "$SKELETON/." "$OVERLAY_PATH/"
       # Stamp the generic deployment label into the scaffolded README and allowlist (they ship
       # the __OVERLAY_NAME__ placeholder — see tools/templates/overlay-skeleton). sed -i.bak +
-      # rm is the portable in-place form: GNU and BSD sed disagree on bare -i (README.md#portable-shell).
+      # rm is the portable in-place form: GNU and BSD sed disagree on bare -i (CONTRIBUTING.md#portable-shell).
       for f in "$OVERLAY_PATH/README.md" "$OVERLAY_PATH/.ignore-allowlist"; do
         [ -f "$f" ] && sed -i.bak "s/__OVERLAY_NAME__/$OVERLAY_NAME/g" "$f" && rm -f "$f.bak"
       done

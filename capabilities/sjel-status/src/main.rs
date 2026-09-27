@@ -3,7 +3,7 @@
 //!
 //! It knows nothing about which capabilities exist. The manifests do, and
 //! `tools/capability.sh registry` renders them as JSON so this process never learns
-//! to parse TOML (README.md#one-manifest-per-concern — `tools/lib/toml.sh` stays the only parser). That
+//! to parse TOML (CONTRIBUTING.md#one-manifest-per-concern — `tools/lib/toml.sh` stays the only parser). That
 //! also retired the hardcoded transit/scouting port literals this file used to carry:
 //! its own source comment named the flip condition — "if a third reader of these
 //! ports shows up" — and additional capability consumers plus the dashboard proxy met it.

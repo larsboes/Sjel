@@ -27,7 +27,7 @@ pub(super) fn reddit_permalink(url: &str) -> Option<String> {
 /// browser UA alike. The parsing below is against the shape the endpoint still
 /// returns for an authorized caller; making it reachable needs a registered
 /// Reddit app and an OAuth token against `oauth.reddit.com`, which is a secret
-/// only the operator provisions (README.md#secrets). Until then a Reddit paste
+/// only the operator provisions (CONTRIBUTING.md#secrets). Until then a Reddit paste
 /// fails with the message below rather than silently landing as an empty item.
 pub(super) fn fetch_reddit(permalink: &str) -> Result<(Option<String>, Option<String>, String)> {
     let http = http_client()?;

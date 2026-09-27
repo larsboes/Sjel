@@ -3,7 +3,7 @@
 //!
 //! Nothing in this file names a path on this machine. Classes, protected paths, expected
 //! services and thresholds are deployment facts, so they live in the overlay
-//! (README.md#public-core-and-private-overlays). `schemas/storage-policy.toml.example` is
+//! (CONTRIBUTING.md#public-core-and-private-overlays). `schemas/storage-policy.toml.example` is
 //! the shape.
 //!
 //! `reclaim_argv` is the one function here that can destroy something. It decides whether

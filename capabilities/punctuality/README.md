@@ -6,7 +6,7 @@ How reliable a German train actually is, measured rather than predicted.
 
 This capability folds Deutsche Bahn's own published stop history into per-station
 statistics and answers questions about them. It is deliberately the bottom rung of the
-intelligence ladder (README.md#implementation-languages-and-intelligence): a lookup table over millions of observed stops
+intelligence ladder (CONTRIBUTING.md#implementation-languages-and-intelligence): a lookup table over millions of observed stops
 is not a placeholder for a model, it is the number a model has to beat. Without it,
 "our prediction is good" is not a claim anyone can check.
 
@@ -199,7 +199,7 @@ partial writes, and partial writes cannot produce exact quantiles.
 ## The contract
 
 `punctuality-server` on `:8085` is how other capabilities read this. `capabilities/transit`
-is the first consumer and reaches it over HTTP, never by linking this crate (README.md#schemas-and-dependency-direction).
+is the first consumer and reaches it over HTTP, never by linking this crate (CONTRIBUTING.md#schemas-and-dependency-direction).
 
 | Endpoint | What |
 |---|---|
@@ -257,7 +257,7 @@ in either direction.
 ## Why this shape: Rust over a second engine
 
 Migrated from its dissolved `decisions/` entry on 2026-07-28: this governs one
-thing, so it lives with that thing (README.md#decisions-live-with-their-owner).
+thing, so it lives with that thing (CONTRIBUTING.md#decisions-live-with-their-owner).
 
 ## Decision
 

@@ -14,7 +14,7 @@ concurrency:
   cancel-in-progress: true
 
 # Every job that needs Bun installs `latest` rather than a pinned literal. Patch first
-# (README.md#patch-first): the runtime CI tests against should be the one a contributor's
+# (CONTRIBUTING.md#patch-first): the runtime CI tests against should be the one a contributor's
 # package manager just installed, and a version held in a workflow is a version nothing moves.
 # It was three literals plus tools/check-bun-pin.sh keeping them equal until 2026-09-02; with
 # no literal anywhere there is nothing left to diverge, so the class the gate caught (#40)

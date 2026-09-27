@@ -5,7 +5,7 @@
 # (single source of truth); this file only resolves paths and dependencies.
 #
 # Why bash and not a `pyproject.toml` project: Axon has no Python project
-# anywhere (README.md#cargo-and-bun-are-the-build-path), and the sibling skills
+# anywhere (CONTRIBUTING.md#cargo-and-bun-are-the-build-path), and the sibling skills
 # that need Python deps all use exactly this shape. `uv run --with` also keeps
 # dependencies pinned per invocation without a lockfile to maintain.
 #

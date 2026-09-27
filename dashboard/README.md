@@ -525,10 +525,10 @@ tell that host which place is on the itinerary.
 ## Why this shape: capabilities expose HTTP, the shell only mounts
 
 Migrated from its dissolved `decisions/` entry on 2026-07-28: this governs one
-thing, so it lives with that thing (README.md#decisions-live-with-their-owner).
+thing, so it lives with that thing (CONTRIBUTING.md#decisions-live-with-their-owner).
 
 **Decision:** `capabilities/transit` and `capabilities/scouting` each grow a second binary —
-`transit-server` / `scout-server` (Rust, Axum, per README.md#implementation-languages-and-intelligence) — alongside their existing CLI
+`transit-server` / `scout-server` (Rust, Axum, per CONTRIBUTING.md#implementation-languages-and-intelligence) — alongside their existing CLI
 binary (`transit`, `scout`). Migrated back in one capability at a time from a shelved bulk port
 (preserved in Git history), declared properly this time — a real `[[bin]]` in each capability's
 `Cargo.toml`, named by its `service.toml` — not left as an untracked `cargo run`-only binary the
@@ -556,7 +556,7 @@ resolved by `capabilities/sjel-status/README.md`).
 ## Why this shape: Svelte 5 is the single frontend standard
 
 Migrated from its dissolved `decisions/` entry on 2026-07-28: this governs one
-thing, so it lives with that thing (README.md#decisions-live-with-their-owner).
+thing, so it lives with that thing (CONTRIBUTING.md#decisions-live-with-their-owner).
 
 # Decision: Svelte is Axon's frontend standard
 

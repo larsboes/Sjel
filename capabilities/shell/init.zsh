@@ -55,7 +55,7 @@ fi
 # never be called by name: `ytalbum` and `interior` were invisible to the shell by
 # construction, and the only way to run one was to type its absolute path. The overlay
 # is where a capability goes when it is inseparable from what it is pointed at
-# (README.md#placement-guide), which is a statement about privacy, not about whether it
+# (CONTRIBUTING.md#placement-guide), which is a statement about privacy, not about whether it
 # has a command.
 #
 # Public first, so a name present in both resolves to the public one. That ordering
@@ -79,7 +79,7 @@ export PATH
 # --- Claude Code ---
 # Env vars (agent teams, MCP CLI, telemetry-off, auto-compact) are NOT exported here.
 # They live in tools/templates/claude-code/settings.base.json's `env` block — the single
-# home claude-code-config.ts deploys to ~/.claude/settings.json on every machine (README.md#one-manifest-per-concern:
+# home claude-code-config.ts deploys to ~/.claude/settings.json on every machine (CONTRIBUTING.md#one-manifest-per-concern:
 # one concern, one manifest). settings.json is the right scope: these vars are Claude-Code-
 # only, so a shell-wide export bought nothing. Deployment-specific backend config (Vertex,
 # model IDs) is overlay shell config, never shipped public — see README's overlay note.

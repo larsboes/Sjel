@@ -25,7 +25,7 @@
 // already been seen. Durable plan state is the alert surface.
 //
 // It talks to trips and transit over HTTP and never to their databases — the documented
-// composition edge (README.md#schemas-and-dependency-direction). Fare context (bc,
+// composition edge (CONTRIBUTING.md#schemas-and-dependency-direction). Fare context (bc,
 // d_ticket, first_class) is replayed from the watched query, so a drop is a drop in the
 // price the traveller would actually pay.
 

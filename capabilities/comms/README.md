@@ -101,7 +101,7 @@ digest, diagram and chart rungs, `media.rs` for the feed-summary drain). A
 refused item stores a `local_refused` row saying so. The cloud side is the same
 shape: `content_item::cloud_admission` is the policy and `tier_allows` here is a
 thin wrapper that adds the transformation-version pin (see the root
-[README](../../README.md#data-classes)). Public Feed
+[README](../../CONTRIBUTING.md#data-classes)). Public Feed
 sources default to `c0`; mail defaults to `c1`, while deterministic metadata
 rules raise likely tax, receipt, financial or health mail to `c2` and
 authentication or account-recovery mail to `c3`. A mail that names a person the
@@ -836,7 +836,7 @@ embedder would score it as if the paper had said it (#78).
 with a descriptive UA, an API-format UA and a browser UA alike. The parser is
 written against the shape that endpoint still returns for an authorized caller;
 reaching it needs a registered Reddit app and an OAuth token against
-`oauth.reddit.com`, which is a secret the operator provisions (README.md#secrets). Until then a Reddit paste fails loudly instead of storing an empty item.
+`oauth.reddit.com`, which is a secret the operator provisions (CONTRIBUTING.md#secrets). Until then a Reddit paste fails loudly instead of storing an empty item.
 
 **A site that publishes its own text is a rung nobody has built.**
 [llms.txt](https://llmstxt.org) proposes that a site expose a curated index of
@@ -1194,7 +1194,7 @@ the built-in one on the same pages.
 ## Tests
 
 `cargo test -- --list` counts them; the hand-written number here was wrong twice, so it is
-gone (README.md#documentation-stays-owned-and-current). The store tests need no server since
+gone (CONTRIBUTING.md#documentation-stays-owned-and-current). The store tests need no server since
 PRD Q45: each takes a temp file of its own, which is the isolation the per-pid
 schema used to buy, without a schema anyone can leak into a backup.
 

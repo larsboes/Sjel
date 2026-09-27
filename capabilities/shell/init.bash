@@ -5,10 +5,10 @@
 # Kept deliberately parallel to init.zsh: same tool detection, same Bitwarden/mkcert/
 # gh wiring, same capability-CLI PATH sweep. The two can't share a file (zsh vs bash
 # syntax), but they must not drift — a change to one usually wants the same change here.
-# bash 3.2-safe (README.md#portable-shell): no mapfile/readarray, no associative arrays.
+# bash 3.2-safe (CONTRIBUTING.md#portable-shell): no mapfile/readarray, no associative arrays.
 
 # SJEL_ROOT is the one bootstrap fact ~/.bashrc must set before sourcing this (the bash
-# mirror of ~/.zshrc's first line — README.md#dynamic-paths-and-current-facts's single sanctioned rc exception). Without it
+# mirror of ~/.zshrc's first line — CONTRIBUTING.md#dynamic-paths-and-current-facts's single sanctioned rc exception). Without it
 # nothing below can resolve, so bail softly rather than guessing a hardcoded path.
 if [ -z "${SJEL_ROOT:-}" ]; then
   echo "init.bash: SJEL_ROOT is unset — add it to ~/.bashrc (see capabilities/shell/README.md)" >&2
@@ -41,7 +41,7 @@ export PATH
 export OPENCODE_DISABLE_SHARE=true
 export OPENCODE_DISABLE_MODELS_FETCH=true
 # Claude Code env (agent teams, MCP CLI, telemetry-off, auto-compact) is NOT exported here
-# — it lives in tools/templates/claude-code/settings.base.json (README.md#one-manifest-per-concern), same as init.zsh.
+# — it lives in tools/templates/claude-code/settings.base.json (CONTRIBUTING.md#one-manifest-per-concern), same as init.zsh.
 # Deployment-specific backend config (Vertex, model IDs) is overlay shell config — see README.
 
 # --- Bitwarden SSH agent ---

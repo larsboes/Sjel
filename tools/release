@@ -22,7 +22,7 @@
 #   tools/release --notes-only               # print the notes that WOULD be generated, cut nothing
 #   tools/release -h
 #
-# Exit 0 = tag created (or notes printed), 1 = gate/usage failure. bash 3.2-safe (README.md#portable-shell).
+# Exit 0 = tag created (or notes printed), 1 = gate/usage failure. bash 3.2-safe (CONTRIBUTING.md#portable-shell).
 set -euo pipefail
 
 TOOLS_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"

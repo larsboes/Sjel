@@ -11,7 +11,7 @@ live preview + JD-tailoring call).
 file by a profile tag, render it. Typst does the templating *and* the selection logic itself
 (array `.filter()` over the parsed data) — no separate compiled glue needed, and no build step
 (this repo compiles the capabilities that share Rust types across a serde boundary; `cv` has no
-such cross-capability dependency — see `README.md#cargo-and-bun-are-the-build-path`, which already
+such cross-capability dependency — see `CONTRIBUTING.md#cargo-and-bun-are-the-build-path`, which already
 establishes that interpreted tools here are invoked directly).
 
 ## Considered and declined

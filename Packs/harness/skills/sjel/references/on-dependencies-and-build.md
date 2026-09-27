@@ -28,4 +28,4 @@ Generated-architecture freshness is `tools/check-architecture-fresh.sh`, and
 Any build layer above those two is argued per case: name what it buys and what toolchain cost it
 adds. An interpreted tool stays interpreted when wrapping it adds machinery without improving
 correctness. Record the reason beside the tool that enforces the decision. See
-README.md#cargo-and-bun-are-the-build-path.
+CONTRIBUTING.md#cargo-and-bun-are-the-build-path.

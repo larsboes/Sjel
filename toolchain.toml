@@ -1,13 +1,13 @@
 # Every host binary Axon assumes is already installed on the machine. No entry, no check.
 #
 # WHY THIS IS NOT upstreams.toml. upstreams.toml is "external CODE Axon builds or consumes,"
-# with an audit verdict + license (README.md#dependency-verdicts-and-provenance). This file is a different concern: "what
+# with an audit verdict + license (CONTRIBUTING.md#dependency-verdicts-and-provenance). This file is a different concern: "what
 # host tool must be on PATH for Axon's own scripts to run, and how do you install it." Most
 # entries here (git, jq, uv, gh, restic, docker, cargo) are host infrastructure with no
 # upstreams.toml entry at all — Axon doesn't build them, it just calls them. The few that are
 # ALSO adopted code (bun, bitwarden-cli, apfel, macmon, the scanners) carry `upstream = <id>`
 # pointing at their upstreams.toml section; the license/why live THERE, never restated here
-# (README.md#schemas-and-dependency-direction "import, never redefine"; README.md#one-manifest-per-concern no duplication).
+# (CONTRIBUTING.md#schemas-and-dependency-direction "import, never redefine"; CONTRIBUTING.md#one-manifest-per-concern no duplication).
 #
 # Read by tools/toolchain-check (the only parser), surfaced by tools/install.sh (bootstrap)
 # and tools/doctor (ongoing). Single-line TOML only (tools/lib/toml.sh contract, bash 3.2-safe).
@@ -61,7 +61,7 @@ install_linux = "apt-get install -y git"
 
 [bash]
 required = "yes"
-why = "every tools/*.sh runs here; Axon targets bash 3.2 (README.md#portable-shell) so the stock macOS shell is enough"
+why = "every tools/*.sh runs here; Axon targets bash 3.2 (CONTRIBUTING.md#portable-shell) so the stock macOS shell is enough"
 install_macos = "preinstalled (3.2)"
 install_linux = "preinstalled"
 
@@ -76,13 +76,13 @@ required = "yes"
 upstream = "bun"
 min_version = "1.3.0" # UI Security Scanner API used by the tree-local bunfigs.
 version_cmd = "bun --version"
-why = "the TS runtime (README.md#language-tooling): doctor, packs-codex, dashboard, panel-server all run on it"
+why = "the TS runtime (CONTRIBUTING.md#language-tooling): doctor, packs-codex, dashboard, panel-server all run on it"
 install_macos = "brew install oven-sh/bun/bun"
 install_linux = "curl -fsSL https://bun.sh/install | bash"
 
 [uv]
 required = "yes"
-why = "the Python runtime (README.md#language-tooling): printctl and any uv-run script assume it"
+why = "the Python runtime (CONTRIBUTING.md#language-tooling): printctl and any uv-run script assume it"
 install_macos = "brew install uv"
 install_linux = "curl -LsSf https://astral.sh/uv/install.sh | sh"
 
@@ -96,7 +96,7 @@ install_linux = "apt-get install -y gh   # or: https://cli.github.com"
 required = "yes"
 bin = "bw"
 upstream = "bitwarden-cli"
-why = "the canonical secret store CLI (README.md#secrets): setup-secret.sh, bw-unlock, backup restore"
+why = "the canonical secret store CLI (CONTRIBUTING.md#secrets): setup-secret.sh, bw-unlock, backup restore"
 install_macos = "brew install bitwarden-cli"
 install_linux = "npm i -g @bitwarden/cli   # or the latest GitHub release"
 
@@ -105,7 +105,7 @@ install_linux = "npm i -g @bitwarden/cli   # or the latest GitHub release"
 [restic]
 required = "optional"
 needed_by = ["workflow:backup"]
-why = "encrypted 3-2-1 backups (README.md#backups-before-migrations); backup.sh needs it, nothing else does"
+why = "encrypted 3-2-1 backups (CONTRIBUTING.md#backups-before-migrations); backup.sh needs it, nothing else does"
 install_macos = "brew install restic"
 install_linux = "apt-get install -y restic"
 
@@ -210,7 +210,7 @@ install_linux = "apt-get install -y libreoffice"
 [cargo]
 required = "optional"
 needed_by = ["workflow:build"]
-why = "the Rust toolchain, and the build path for every Rust capability: each service.toml declares `build = [\"cargo\", \"build\", ...]` and tools/service-runner.sh runs it before starting the binary (README.md#cargo-and-bun-are-the-build-path)"
+why = "the Rust toolchain, and the build path for every Rust capability: each service.toml declares `build = [\"cargo\", \"build\", ...]` and tools/service-runner.sh runs it before starting the binary (CONTRIBUTING.md#cargo-and-bun-are-the-build-path)"
 install_macos = "brew install rustup && rustup default stable   # or: brew install rust"
 install_linux = "curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh"
 

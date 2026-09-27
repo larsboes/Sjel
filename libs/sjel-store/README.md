@@ -3,7 +3,7 @@
 One home for **how a capability opens the shared database, and when its migration runs**.
 
 A shared library, not a capability: no domain of its own, no CLI
-(README.md#three-architectural-nouns). Consumers declare an `sjel-store` path dependency in the
+(CONTRIBUTING.md#three-architectural-nouns). Consumers declare an `sjel-store` path dependency in the
 workspace.
 
 ## One file, table prefixes

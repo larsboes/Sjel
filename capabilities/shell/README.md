@@ -9,7 +9,7 @@ sibling files, one per shell family:
 - **bash** (Linux/WSL nodes): `~/.bashrc` exports `SJEL_ROOT` and sources
   `init.bash`, then `axon-overlay/config/shell/*.bash` for the machine-specific
   bits. The `SJEL_ROOT` line is the bash mirror of `~/.zshrc`'s first line —
-  README.md#dynamic-paths-and-current-facts's one sanctioned rc-file bootstrap exception. `install.sh` does not
+  CONTRIBUTING.md#dynamic-paths-and-current-facts's one sanctioned rc-file bootstrap exception. `install.sh` does not
   inject either line; wiring the login rc file stays a manual, per-machine step
   (same as zsh).
 
@@ -24,7 +24,7 @@ sibling files, one per shell family:
 
 Kept deliberately parallel — the two can't share a file (zsh vs bash syntax),
 so a change to one usually wants the same change in the other. Each stays a
-single file on purpose (README.md#documentation-stays-owned-and-current, docs minimalism) — split only once
+single file on purpose (CONTRIBUTING.md#documentation-stays-owned-and-current, docs minimalism) — split only once
 it's actually too big to navigate.
 
 ## Why this shape: Claude Code and AI backend env
@@ -33,7 +33,7 @@ Claude-Code-only env vars (experimental agent teams, MCP CLI, telemetry-off,
 auto-compact window) are **not** exported from these shell files. They live in
 `tools/templates/claude-code/settings.base.json`'s `env` block — the single home
 `tools/claude-code-config` deploys into `~/.claude/settings.json` on every
-machine (README.md#one-manifest-per-concern: one concern, one manifest). `settings.json` is the correct
+machine (CONTRIBUTING.md#one-manifest-per-concern: one concern, one manifest). `settings.json` is the correct
 scope: those vars only affect Claude Code, so a shell-wide export bought nothing
 and duplicated the fact in two places.
 

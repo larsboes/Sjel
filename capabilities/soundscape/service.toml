@@ -5,7 +5,7 @@
 # dashboard brings it up when its surface is opened, which is what sjel-status is for.
 #
 # The panel is this same port: the binary serves the built UI bundle alongside its
-# own API, so the surface arrives and leaves with the capability (README.md#three-architectural-nouns)
+# own API, so the surface arrives and leaves with the capability (CONTRIBUTING.md#three-architectural-nouns)
 # rather than living in the spine shell.
 kind        = "process"
 name        = "soundscape"

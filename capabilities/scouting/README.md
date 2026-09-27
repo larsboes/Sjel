@@ -32,7 +32,7 @@ reading keepers remain owned by `capabilities/comms`.
 pipeline is genuinely reusable and reasonably well-tested (unit tests across
 store/score/merge/sources/adapters/config/vault_linker; `pipeline`, `embed`, `source`,
 `sources/mod` and `server` carry none — `cargo test -- --list` is the count, per
-README.md#documentation-stays-owned-and-current's no-live-counts-in-prose clause) — proven out again by
+CONTRIBUTING.md#documentation-stays-owned-and-current's no-live-counts-in-prose clause) — proven out again by
 `adapters/transit_fare.rs` (`capabilities/store/README.md`'s correlation section, Phase 2), which plugs a fare-search source
 from an entirely different capability's crate into this same pipeline with zero changes to
 `score`/`pipeline`/`store`.
@@ -151,7 +151,7 @@ until something starts both, which is exactly what the runner's `up --all` did t
 
 This crate is big, but it isn't one lump. `wc -l src/**/*.rs` gives the current size and
 `cargo test -- --list` the current test count; what matters here is which part carries which
-risk, and that doesn't change when a number does (README.md#documentation-stays-owned-and-current — the hand-counted totals
+risk, and that doesn't change when a number does (CONTRIBUTING.md#documentation-stays-owned-and-current — the hand-counted totals
 that used to open this section had drifted by the time anyone read them).
 
 | Part | Status |
@@ -202,7 +202,7 @@ into an adapter yet:
 
 ## Alternatives considered (adopt-before-build check)
 
-Axon doctrine (README.md#dependency-verdicts-and-provenance, `upstreams.toml`) requires checking for an existing tool
+Axon doctrine (CONTRIBUTING.md#dependency-verdicts-and-provenance, `upstreams.toml`) requires checking for an existing tool
 before building custom. Researched before writing this section:
 
 **Whole capability** — nothing found that does "aggregate heterogeneous sources → score

@@ -58,7 +58,7 @@ require "capabilities/soundscape/README.md" "bun install --frozen-lockfile --ign
 # this repository (a red gate there is a red gate nobody can act on — the reason the root bunfig
 # carries the bazel-* carve-out), and bazel-* is the retired Bazel root symlinks the root bunfig
 # already ignores for tests. Upstream's `-path` prune is what carries the vendored carve-out,
-# because bash 3.2.57 — the stock macOS shell this repository targets (README.md#portable-shell)
+# because bash 3.2.57 — the stock macOS shell this repository targets (CONTRIBUTING.md#portable-shell)
 # — cannot PARSE a `case` statement inside a command substitution containing a pipeline: measured
 # 2026-09-22, `/bin/bash -c 'X="$(printf a | while read l; do case "$l" in a) ;; esac; done)"'`
 # is a syntax error on 3.2.57 and parses on bash 5. Writing the carve-out as a `case` in the

@@ -23,7 +23,7 @@
  * Pruning is deliberately confined to ids this file declares. A plugin the tool never
  * declared is a UI install, and deleting it is not this tool's business.
  *
- * Zero hardcoded paths (README.md#one-manifest-per-concern): overlay from
+ * Zero hardcoded paths (CONTRIBUTING.md#one-manifest-per-concern): overlay from
  * axon.local.toml/axon.toml, vault from this machine's machine.toml [[state_mount]]
  * with data_class = "vault", plugin set from the overlay manifest.
  *

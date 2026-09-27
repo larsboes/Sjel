@@ -6,7 +6,7 @@
 //!
 //! Four verbs, two questions. `report` and `apply` are about the machine and read the
 //! overlay's `config/storage-policy.toml`, so core Axon stays generic and "normal here"
-//! stays machine-specific (README.md#public-core-and-private-overlays). `target` and
+//! stays machine-specific (CONTRIBUTING.md#public-core-and-private-overlays). `target` and
 //! `prune` are about this checkout, read no policy, and work on a clone with no overlay.
 //!
 //! Rust, not TypeScript. This replaced `tools/storage.ts` on 2026-09-03 under the owner's

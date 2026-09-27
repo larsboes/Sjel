@@ -14,7 +14,7 @@
 #   tools/protection-zones check            the policy is present, parseable and non-contradictory
 #   tools/protection-zones claude-fragment  deny rules derived from the zones, for the managed fragment
 #
-# Exit 0 = clean, 1 = violation, 2 = usage error. bash 3.2-safe (README.md#portable-shell).
+# Exit 0 = clean, 1 = violation, 2 = usage error. bash 3.2-safe (CONTRIBUTING.md#portable-shell).
 #
 # Public code defines the semantics; real paths live in <overlay>/config/protection-zones.toml
 # and never enter this repository, a fixture, or a log.

@@ -83,7 +83,7 @@ the whole design:
 
 1. **The agent binary lives only in an image.** Consumed as the release tarball, sha256-verified
    on the host before the build and again inside it, so the image needs no Node and no npm and
-   README.md#language-tooling is satisfied rather than excepted. Which release is decided at
+   CONTRIBUTING.md#language-tooling is satisfied rather than excepted. Which release is decided at
    build time — GitHub's `/releases/latest` — and the checksum comes from that release's own
    published `SHA256SUMS`, never from a literal in this repository.
 2. **The box is disposable, and its default network is nothing.** `--rm` discards the container
@@ -93,7 +93,7 @@ the whole design:
    second bullet above — so the honest version of this claim is narrower: *the closed box reaches
    nothing, including the model; the open box reaches everything.* The allow-list Q24 wanted is
    not reproduced here, and pretending otherwise would be the failure this repo names in
-   README.md#decisions-live-with-their-owner.
+   CONTRIBUTING.md#decisions-live-with-their-owner.
 3. **Exactly two things cross the boundary,** both by mount: one project directory at
    `/workspace`, and the agent's config directory. Never the host's own agent config — mounting
    that would hand the container your sessions, settings and credentials, which upstream's
@@ -139,7 +139,7 @@ box. What changed on 2026-09-02 is only how the box reaches across it.
   name rather than accepting it untested. `tools/service-runner.sh` still supports it for
   container capabilities, where the claim is availability rather than isolation.
 - **npm-installing the agent into a `node:22` image**, the shape of the writeup this was built
-  from. Declined on two counts: README.md#language-tooling bans npm in Axon code, and the release binary makes the
+  from. Declined on two counts: CONTRIBUTING.md#language-tooling bans npm in Axon code, and the release binary makes the
   entire Node layer unnecessary. The writeup also predates the project's rename, so its package
   (`@mariozechner/pi-coding-agent`) stopped receiving releases at 0.73.1 while pi moved on to
   0.82.x under `@earendil-works`.
@@ -171,7 +171,7 @@ readable. Changing the model or the endpoint is the overlay's `agentbox.toml` an
    access control, and on an untrusted network the honest move is to bind back to loopback and
    let the box stop working.
 2. **The key**, in the overlay's gitignored env file. Write it yourself, in your own terminal;
-   never through an agent turn (README.md#secrets). `secrets/agentbox-model-key.md` in the overlay has the
+   never through an agent turn (CONTRIBUTING.md#secrets). `secrets/agentbox-model-key.md` in the overlay has the
    command.
 3. **`<overlay>/config/agentbox.toml`** — copy `agentbox.toml.example`, set the model id and
    port.
@@ -242,7 +242,7 @@ The cost, stated: a self-update fetches its own bytes, and this launcher never s
 sha256 above covers what `agentbox host-install` puts on disk and nothing else.
 
 There was a separate `agentbox gate` verb, and a cooldown on how old the release was, until
-2026-09-02. Q74 removed the adoption hold (README.md#patch-first), and with it gone the verb
+2026-09-02. Q74 removed the adoption hold (CONTRIBUTING.md#patch-first), and with it gone the verb
 refused nothing at all — it resolved a repository, printed two lines and returned 0. It is
 deleted rather than kept, because a step that cannot say no is how a green line comes to read as
 a passed check. What remains is the sha256, which was never in the gate, and the printed

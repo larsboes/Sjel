@@ -30,7 +30,7 @@ every reader.
 **A `recreate` is a real interruption, so it is the narrow case.** `recreate` stops the container,
 removes it and starts a new one from the current declaration. Declared state survives by
 construction — every state path is a named volume or a host mount — and undeclared in-container
-state does not, which is the rule `README.md#state-mounts-record-reality` already sets.
+state does not, which is the rule `CONTRIBUTING.md#state-mounts-record-reality` already sets.
 
 **It will not restart what somebody stopped.** `recreate` clears the maintenance hold on its way
 through (`tools/service-runner.sh` `recreate_service`), and `start_service` brings the capability

@@ -35,7 +35,7 @@ from pathlib import Path
 # whose config lives in the axon-overlay overlay — which is not necessarily this machine's
 # own active overlay. So it deliberately does NOT go through tools/lib/paths.sh /
 # SJEL_PERSONAL_ROOT (that resolves only the active overlay); it reads axon-overlay directly
-# via its own SJEL_HOME_ROOT env var. See README.md#public-core-and-private-overlays (three recognized overlays).
+# via its own SJEL_HOME_ROOT env var. See CONTRIBUTING.md#public-core-and-private-overlays (three recognized overlays).
 def _home_overlay_root() -> Path:
     raw = os.environ.get("SJEL_HOME_ROOT") or os.environ.get("SJEL_OVERLAY_ROOT") or os.environ.get("SJEL_PERSONAL_ROOT")
     if not raw:

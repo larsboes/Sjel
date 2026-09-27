@@ -1,7 +1,7 @@
 //! Shared travel types (Station/Leg/Journey/SplitResult). Ported from
 //! LifeOS-mono's `schemas/travel` crate and folded in as a module here --
 //! same call as `scouting`'s `opportunity.rs`: it's ~40 lines used by one
-//! consumer, not worth a second crate (Axon README.md#documentation-stays-owned-and-current).
+//! consumer, not worth a second crate (Axon CONTRIBUTING.md#documentation-stays-owned-and-current).
 
 use serde::{Deserialize, Serialize};
 

@@ -11,7 +11,7 @@
 # Parsing contract: the scalars and the capabilities array go through tools/lib/toml.sh,
 # which is single-line only (`key = "value"` / `key = ["a", "b"]`). The [[state_mount]]
 # array-of-tables is beyond that parser on purpose and is read by tools/doctor via Bun.TOML
-# — which is why doctor is TypeScript (README.md#cargo-and-bun-are-the-build-path).
+# — which is why doctor is TypeScript (CONTRIBUTING.md#cargo-and-bun-are-the-build-path).
 
 # THIS FILE IS THE ONLY COPY. An overlay does not carry its own machine.toml.example:
 # tools/install.sh writes a real machine.toml from the values it detects, and every overlay
@@ -126,7 +126,7 @@ capabilities = ["home-assistant", "vaultwarden"]
 #
 # NOT for secrets. A unit file sits unencrypted in the operator's home and is read by a supervisor
 # that logs; a credential belongs in the capability's env_file, which comes from Vaultwarden
-# (README.md#secrets).
+# (CONTRIBUTING.md#secrets).
 #
 # [capability.dashboard]
 # env = ["__VITE_ADDITIONAL_SERVER_ALLOWED_HOSTS=this-host.example.ts.net"]
@@ -135,7 +135,7 @@ capabilities = ["home-assistant", "vaultwarden"]
 
 # --- state mounts (optional, repeatable) ---------------------------------
 # Where a tool on this machine actually persists data. Axon records the tool's own default
-# location, it never relocates it (README.md#state-mounts-record-reality).
+# location, it never relocates it (CONTRIBUTING.md#state-mounts-record-reality).
 # `tool` must match a systems.toml id, or doctor reports an undeclared system.
 #   data_class = "public" | "personal" | "vault"
 #   sync       = "git" | "restic" | "rsync" | "none"

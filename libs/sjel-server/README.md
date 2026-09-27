@@ -161,7 +161,7 @@ fails when any `capabilities/*/src/*.rs` that builds a `Router`
 also constructs its own `axum::serve` or `TcpListener::bind`. It lives in doctor rather
 than a repo gate because half the servers it has to cover are in the overlay, outside this
 repo, and a gate that globs Axon alone would report a clean policy while an overlay server
-binds the LAN (README.md#documentation-stays-owned-and-current, same reasoning as the decision path-rot sweep).
+binds the LAN (CONTRIBUTING.md#documentation-stays-owned-and-current, same reasoning as the decision path-rot sweep).
 
 The identity gate's other half is not in this repository at all: it is the shape of
 `tailscale serve` on the host. doctor's **Tailnet identity gate** section is what reads

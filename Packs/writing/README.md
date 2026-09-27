@@ -244,7 +244,7 @@ fixture included.
 ## Considered and declined
 
 Evaluated while auditing this pack, none adopted. Recorded under
-`README.md#decisions-live-with-their-owner` rather than deleted, so the same sources
+`CONTRIBUTING.md#decisions-live-with-their-owner` rather than deleted, so the same sources
 do not get re-evaluated from scratch.
 
 - **[ASD-STE100 Simplified Technical English](https://asd-ste100.org)** (ASD, Brussels;

@@ -22,7 +22,7 @@
 //! It was one, until a second capability needed the same job.
 //! `capabilities/transit` reads a ticket file into text plus optional Markdown
 //! and had grown its own `Document`/`DocumentBackend` vocabulary for it — the
-//! same job under a second set of names, already diverged. README.md#schemas-and-dependency-direction
+//! same job under a second set of names, already diverged. CONTRIBUTING.md#schemas-and-dependency-direction
 //! promotes code to `libs/` at the second real consumer, provided it owns no
 //! domain of its own, and this owns none: no store, no config, no HTTP client.
 //! Fetching, normalization and what to do with an empty body all stay with the

@@ -11,7 +11,7 @@
 # `up: Option<bool>` and no `off` at all, so the third state below is this CLI's own and is
 # argued for where it is defined rather than cited to a file that does not hold it.
 #
-# bash 3.2-safe (README.md#portable-shell).
+# bash 3.2-safe (CONTRIBUTING.md#portable-shell).
 
 # Unit Separator, not a tab.
 #

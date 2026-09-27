@@ -3,7 +3,7 @@
 # The overlay half of `capabilities/host-net`. Core Axon owns the parsing, the scope
 # classification and the exit codes, and knows no process name; every name below is
 # machine-specific and therefore lives in the active overlay
-# (README.md#public-core-and-private-overlays).
+# (CONTRIBUTING.md#public-core-and-private-overlays).
 #
 # Copy to <overlay>/config/host-net-policy.toml and fill in.
 #

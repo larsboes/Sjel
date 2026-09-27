@@ -108,7 +108,7 @@ struct Scape {
 impl Default for Scape {
     /// Mirrors the browser engine's own defaults. Two sources of truth for a
     /// default is one too many, but until the param shape moves into schemas/
-    /// (README.md#one-manifest-per-concern, once both surfaces read it) keeping them equal is the contract.
+    /// (CONTRIBUTING.md#one-manifest-per-concern, once both surfaces read it) keeping them equal is the contract.
     fn default() -> Self {
         Self {
             preset: "edm".into(),

@@ -4,7 +4,7 @@ One home for **turning a fetched document into text**, and for the question of w
 read which kind of document.
 
 A shared library, not a capability: no domain of its own, no store, no HTTP client, no upstream
-verdict of its own (README.md#three-architectural-nouns). Consumers declare an
+verdict of its own (CONTRIBUTING.md#three-architectural-nouns). Consumers declare an
 `sjel-extraction` path dependency in the workspace.
 
 ## Why it exists
@@ -13,7 +13,7 @@ It was `capabilities/comms/src/extraction.rs` until a second capability needed t
 
 `capabilities/transit` reads a ticket file into text plus optional Markdown, and had grown its
 own `Document` / `DocumentBackend` vocabulary for it — the same job under a second set of names,
-already diverged from the first. README.md#schemas-and-dependency-direction promotes code to
+already diverged from the first. CONTRIBUTING.md#schemas-and-dependency-direction promotes code to
 `libs/` at the second real consumer, provided it owns no domain of its own. This owns none.
 
 The promotion is placement, not redesign: the two readers below are the ones comms had, byte for

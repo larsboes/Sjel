@@ -20,7 +20,7 @@
 # of one binary is a shape this deployment has already paid for — a ~/.local/bin yt-dlp shadowed
 # brew's copy on PATH and returned HTTP 403 on every media URL while --dump-json kept working
 # (PRD §13). Nothing here compares the host's bun against a workflow's either: both CI workflows
-# install `latest` (README.md#patch-first), so there is no second number to agree with.
+# install `latest` (CONTRIBUTING.md#patch-first), so there is no second number to agree with.
 #
 # NOT run here either: any image or container scan. grype lives in
 # .github/workflows/security.yml, which installs it itself and runs whether or not this machine

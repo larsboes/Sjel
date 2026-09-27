@@ -71,7 +71,7 @@ about; a read command that might write is not a read command.
 ## Machine facts live in the overlay
 
 Every process name is in `<overlay>/config/host-net-policy.toml`; this capability's code
-contains none (README.md#public-core-and-private-overlays). Shape:
+contains none (CONTRIBUTING.md#public-core-and-private-overlays). Shape:
 `schemas/host-net-policy.toml.example`.
 
 Entries match on the executable's basename, never on a port. A mesh VPN is assigned fresh
@@ -118,7 +118,7 @@ every naive pattern. Awk would have to be right about the same things with no wa
 scheduled job with no port whose README declines both a panel and a server; three interactive
 listing verbs on a job nobody invokes is the wrong owner. Its TypeScript runtime is justified
 narrowly, by a policy file shape `tools/lib/toml.sh` cannot parse, and that justification does
-not transfer (README.md#implementation-languages-and-intelligence puts backend logic in Rust).
+not transfer (CONTRIBUTING.md#implementation-languages-and-intelligence puts backend logic in Rust).
 host-watch is the consumer here, and consumes one verdict.
 
 **Read from the right, never by column index.** macOS documents no column contract for

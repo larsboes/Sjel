@@ -6,7 +6,7 @@
 # silently discarded. Every Axon deployment, current or future, runs this
 # the same way — there is no fleet/central-registry concept; each checkout
 # maintains itself, per
-# `README.md#documentation-stays-owned-and-current`'s bring-your-
+# `CONTRIBUTING.md#documentation-stays-owned-and-current`'s bring-your-
 # own-check philosophy.
 #
 #   tools/update.sh            # fetch + ff-only pull + doctor
@@ -33,7 +33,7 @@ SJEL_ROOT="$(cd "$TOOLS_DIR/.." && pwd)"
 # schemas/machine.toml.example.
 source "$TOOLS_DIR/lib/paths.sh"
 # The categorized version-to-version delta (capabilities/upstreams/toolchain/commits), shared
-# with tools/release so the "what changed" view and the release notes never drift (README.md#documentation-stays-owned-and-current).
+# with tools/release so the "what changed" view and the release notes never drift (CONTRIBUTING.md#documentation-stays-owned-and-current).
 source "$TOOLS_DIR/lib/delta.sh"
 
 NO_PULL=0; CHECK=0

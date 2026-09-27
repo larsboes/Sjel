@@ -4,7 +4,7 @@
 // TOML parsing via Bun's built-in Bun.TOML — machine.toml uses array-of-tables
 // ([[state_mount]]) that tools/lib/toml.sh's grep/sed single-line contract
 // can't parse, which is why this is TS, not bash. It stays an interpreted command with no
-// build step of its own (README.md#cargo-and-bun-are-the-build-path).
+// build step of its own (CONTRIBUTING.md#cargo-and-bun-are-the-build-path).
 //
 // Delegates each rule to the script that owns it rather than reimplementing it: the host
 // toolchain to tools/toolchain-check, boot persistence to tools/service-runner.sh. Upstream
@@ -12,8 +12,8 @@
 // script on 2026-08-28 and Dependabot answers the question now, on GitHub rather than to a
 // local health command. The same reasoning applies to the systems.toml/connection checks
 // below: this extends the existing state-mount reality-check idiom (systems.toml stays the one
-// hand-authored registry, README.md#one-manifest-per-concern) rather than adding a second manifest or a
-// separate tool — see README.md#documentation-stays-owned-and-current.
+// hand-authored registry, CONTRIBUTING.md#one-manifest-per-concern) rather than adding a second manifest or a
+// separate tool — see CONTRIBUTING.md#documentation-stays-owned-and-current.
 //
 //   tools/doctor            # full report, offline (no GitHub calls)
 //   tools/doctor --online   # also probe declared systems and fetch origin/main
@@ -22,7 +22,7 @@
 //
 // Exit 0 = all checks pass, 1 = one or more failed. Invoke via the tools/doctor
 // launcher (exec bun run), not this file directly, to match the printctl/uv
-// launcher pattern (README.md#language-tooling).
+// launcher pattern (CONTRIBUTING.md#language-tooling).
 
 import { existsSync, lstatSync, readdirSync, readFileSync, readlinkSync, statSync } from "node:fs";
 import { basename, resolve, join, relative } from "node:path";
@@ -317,7 +317,7 @@ export function findPlaintextSecretsInEnvTemplate(text: string): string[] {
 // cannot tell an absent path from a rotten one. Measured when this ran as a Bazel test, before
 // PRD Q44 retired Bazel on 2026-08-25: 16 findings against the real tree's 0, every one of
 // them that blindness. Same reasoning as the topology sweep folded into
-// README.md#documentation-stays-owned-and-current: extend doctor, don't add a tool.
+// CONTRIBUTING.md#documentation-stays-owned-and-current: extend doctor, don't add a tool.
 //
 // Blind to semantic rot (reasoning that stopped applying while the paths stayed valid). Path
 // rot was 100% of what the 2026-07-28 audit found by hand, so this is the cheap majority.
@@ -369,7 +369,7 @@ export function findDecisionPathRot(
   return out;
 }
 
-// Pure, unit-testable core of the why-block half of the Decision freshness sweep. README.md#decisions-live-with-their-owner puts
+// Pure, unit-testable core of the why-block half of the Decision freshness sweep. CONTRIBUTING.md#decisions-live-with-their-owner puts
 // a decision's reasoning in the README of whatever it governs, under a `## Why this shape:`
 // heading, so the rot check has to follow the prose there rather than only watching decisions/.
 //
@@ -822,7 +822,7 @@ function gitOut(...args: string[]): string {
 }
 
 // Which tags are release tags — axon.toml [release] tag_glob, the one home shared with
-// tools/lib/version.sh (README.md#the-release-line). Resolved once at load; a missing key is a
+// tools/lib/version.sh (CONTRIBUTING.md#the-release-line). Resolved once at load; a missing key is a
 // broken manifest and should stop the tool, not be papered over with a literal.
 const RELEASE_TAG_GLOB = releaseTagGlob(SJEL_ROOT);
 
@@ -1796,7 +1796,7 @@ const CHECKS: Check[] = [
   // and grep this repo's own tracked files for hardcoded sibling-system paths
   // that bypass tools/lib/paths.sh's indirection — the two classes of drift
   // that hand-authored manifests silently accumulate (see
-  // README.md#documentation-stays-owned-and-current for the
+  // CONTRIBUTING.md#documentation-stays-owned-and-current for the
   // discovered-in-the-wild example: a sync script's env-overridable default
   // path diverging from the mount its own machine.toml declared).
   {
@@ -1809,7 +1809,7 @@ const CHECKS: Check[] = [
         ctx.systemsToml = await readToml(systemsTomlPath);
         const systemIds = new Set(Object.keys(ctx.systemsToml));
         // Direction that's actually meaningful: machine.toml's [[state_mount]] is the
-        // narrower, path-bearing list (README.md#one-manifest-per-concern — "one manifest per concern");
+        // narrower, path-bearing list (CONTRIBUTING.md#one-manifest-per-concern — "one manifest per concern");
         // systems.toml is the broader identity/why registry. A mount with no
         // matching identity entry is a real gap (doctor already flags via `bad`
         // below). The reverse is NOT generally a gap — most local=yes systems
@@ -2014,7 +2014,7 @@ const CHECKS: Check[] = [
   // claim, so the guarantee gets a check.
   //
   // Lives in doctor rather than a repo gate for the same reason the decision path-rot
-  // sweep does (README.md#documentation-stays-owned-and-current): half the servers it has to
+  // sweep does (CONTRIBUTING.md#documentation-stays-owned-and-current): half the servers it has to
   // cover are in the overlay, outside this repo, and a gate that only globs Axon would report
   // a clean bind policy while an overlay server binds the LAN. doctor reads both real trees.
   {
@@ -2559,7 +2559,7 @@ const CHECKS: Check[] = [
     name: "Doctrine freshness (README why-blocks)",
     run(ctx) {
       try {
-        // README.md#decisions-live-with-their-owner: a call's reasoning lives beside the thing it governs, under `## Why this shape:`.
+        // CONTRIBUTING.md#decisions-live-with-their-owner: a call's reasoning lives beside the thing it governs, under `## Why this shape:`.
         // This checks the prose still matches the tree -- every path a block names must resolve, and
         // every path it declares deliberately absent must stay absent.
         const whyBlocks: Array<{ slug: string; text: string; assertsAbsent: string[]; dir: string }> = [];
@@ -2581,7 +2581,7 @@ const CHECKS: Check[] = [
           bases,
         );
 
-        // decisions/ was dissolved on 2026-07-28 (README.md#decisions-live-with-their-owner). Nothing may cite it again: an empty slug
+        // decisions/ was dissolved on 2026-07-28 (CONTRIBUTING.md#decisions-live-with-their-owner). Nothing may cite it again: an empty slug
         // set makes every `decisions/<slug>` reference a finding, which is the guard against the
         // folder quietly coming back one entry at a time.
         const dangling = findDanglingDecisionRefs(
@@ -2596,7 +2596,7 @@ const CHECKS: Check[] = [
           if (r.kind === "missing") ctx.bad(`${r.slug} names ${r.path}, which no longer exists`);
           else ctx.bad(`${r.slug} declares ${r.path} absent, but it exists now`);
         }
-        for (const d of dangling) ctx.bad(`${d.file} cites decisions/${d.slug}; that directory was dissolved (README.md#decisions-live-with-their-owner)`);
+        for (const d of dangling) ctx.bad(`${d.file} cites decisions/${d.slug}; that directory was dissolved (CONTRIBUTING.md#decisions-live-with-their-owner)`);
 
         if (rot.length === 0 && dangling.length === 0) {
           ctx.ok(`${whyBlocks.length} why-blocks — every named path resolves, every asserted absence holds`);
@@ -2706,7 +2706,7 @@ const CHECKS: Check[] = [
   // always the check here that could not answer offline, and it spent most of its life
   // printing a manifest-format result under a supply-chain heading. What it did answer
   // without the network — that every entry has a verdict — is doctrine about a documentation
-  // file, and README.md#dependency-verdicts-and-provenance now says plainly that a human
+  // file, and CONTRIBUTING.md#dependency-verdicts-and-provenance now says plainly that a human
   // owns it.
 
   // There was an "Accepted-finding policies" check here until 2026-09-02. It delegated to
@@ -2903,7 +2903,7 @@ const CHECKS: Check[] = [
 
   // Session orientation — the dynamic, always-current answer to "what's
   // the state of this checkout right now," replacing a hand-maintained status
-  // doc (README.md#documentation-stays-owned-and-current forbids adding one: nothing executable
+  // doc (CONTRIBUTING.md#documentation-stays-owned-and-current forbids adding one: nothing executable
   // would reference it). Point of this section: a fresh agent session in this repo runs
   // `tools/doctor` first and gets branch/HEAD/dirty-file-count for free,
   // instead of a static file someone has to remember to update.
@@ -2919,7 +2919,7 @@ const CHECKS: Check[] = [
       const dirtyCount = dirtyProc.stdout.toString().split("\n").filter(Boolean).length;
       if (dirtyCount === 0) ctx.ok("working tree clean");
       else ctx.warn(`${dirtyCount} uncommitted change(s) — git status for detail`);
-      // The backlog is ISAs (README.md#the-backlog-is-isas), so this counts unchecked claims
+      // The backlog is ISAs (CONTRIBUTING.md#the-backlog-is-isas), so this counts unchecked claims
       // across every tracked ISA.md rather than naming a tracker. Derived, not remembered: a
       // hand-maintained number here would be the status doc this section exists to replace.
       // `--others --exclude-standard` so an ISA written this session counts before it is
@@ -2935,7 +2935,7 @@ const CHECKS: Check[] = [
           return sum;
         }
       }, 0);
-      ctx.ok(`open backlog: ${openClaims} claim(s) across ${isaFiles.length} ISA(s) · doctrine: README.md`);
+      ctx.ok(`open backlog: ${openClaims} claim(s) across ${isaFiles.length} ISA(s) · doctrine: CONTRIBUTING.md`);
     },
   },
 ];

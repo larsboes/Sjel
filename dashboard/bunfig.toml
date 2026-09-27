@@ -5,7 +5,7 @@
 # on Bun 1.4.2 on 2026-09-22, `bun install` run from dashboard/ ignores ../bunfig.toml entirely,
 # and the same was measured from a subdirectory of a scratch tree with a pristine hold in its
 # parent. Axon has no root package.json, so a hold written into the root file would guard a door
-# that is already open -- README.md#patch-first's own words about Homebrew formulae and the bot
+# that is already open -- CONTRIBUTING.md#patch-first's own words about Homebrew formulae and the bot
 # that was never installed. The root bunfig.toml therefore still carries [test] and nothing else,
 # and says so.
 #
@@ -48,7 +48,7 @@
 #
 # ---- [install.security] scanner: the detection half ------------------------------------------
 #
-# README.md#patch-first named "nothing detects a malicious release" as one of two gaps. The
+# CONTRIBUTING.md#patch-first named "nothing detects a malicious release" as one of two gaps. The
 # cooldown is a bet on someone else noticing; this is the noticing, read at install time. It is
 # the Socket scanner (SocketDev, MIT, registered in upstreams.toml), which is the category that
 # catches malware and typosquats -- tools/audit's osv-scanner already covers CVEs and cannot see

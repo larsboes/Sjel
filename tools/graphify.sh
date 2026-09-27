@@ -9,7 +9,7 @@
 # ~/.omlx/settings.json file the server owns; it is exported only to graphify's child process
 # and never printed. tools/setup-secret.sh does NOT apply to the optional NVIDIA key: that
 # script only provisions capabilities/<name>/service.toml-backed secrets, and this is a tools/
-# script, not a capability. The cloud key still goes through Vaultwarden (README.md#secrets).
+# script, not a capability. The cloud key still goes through Vaultwarden (CONTRIBUTING.md#secrets).
 #
 # Backend selection (semantic extraction of docs, on top of the always-free AST pass):
 # see tools/graphify.env.example. Local-first: defaults to oMLX, falls back to the
@@ -49,7 +49,7 @@ GRAPHIFY_BACKENDS="${GRAPHIFY_BACKENDS:-${GRAPHIFY_BACKEND:-omlx}}"
 #
 # Keys are read from the file the registry names and are NEVER echoed, interpolated into a URL, or
 # passed as an argv element. tools/materialize-inference-key is the only thing that writes those
-# files, straight from `bw get notes` at mode 0600 (README.md#secrets).
+# files, straight from `bw get notes` at mode 0600 (CONTRIBUTING.md#secrets).
 _inference_json="$SJEL_PERSONAL_ROOT/config/inference.json"
 
 _registry_field() {  # _registry_field <backend-id> <field>

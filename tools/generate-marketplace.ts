@@ -3,7 +3,7 @@
 // (.claude-plugin/marketplace.json, plus one Packs/<pack>/.claude-plugin/plugin.json
 // per pack) from pack.toml.
 //
-// Generated, like ARCHITECTURE.md (README.md, "Generated architecture"): never
+// Generated, like ARCHITECTURE.md (CONTRIBUTING.md, "Generated architecture"): never
 // hand-edit the JSON this writes, re-run this script instead.
 // Verify without writing back: tools/check-marketplace-fresh.sh
 //
@@ -13,7 +13,7 @@
 //
 // Reads only this repo's Packs/, never an overlay's: marketplace.json is a
 // committed public artifact, and an overlay Pack is private
-// (README.md#harness-neutral-packs). A pack whose manifest names a `deployer` is
+// (CONTRIBUTING.md#harness-neutral-packs). A pack whose manifest names a `deployer` is
 // owned by that tool alone and is skipped here too, matching every other generic
 // adapter (tools/lib/pack-deploy.ts).
 //

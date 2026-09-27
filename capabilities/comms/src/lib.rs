@@ -8,7 +8,7 @@
 //! sending, and arbitrary label changes are outside this capability.
 
 // The readers moved to `libs/extraction` at the second real consumer
-// (README.md#schemas-and-dependency-direction; `capabilities/transit` is the
+// (CONTRIBUTING.md#schemas-and-dependency-direction; `capabilities/transit` is the
 // other one). Re-exported under the name every call site here already uses, so
 // the promotion cost no `crate::extraction::…` path a rewrite.
 pub use content_item;

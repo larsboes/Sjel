@@ -541,7 +541,7 @@ dependency for a field that would only ever return a hardcoded fallback constant
 "machinery with nothing behind it" pattern this repo already strips elsewhere (scouting's CV
 generator). `Journey.delay_risk_score` stayed in the schema for exactly that reason, and is
 now filled -- not by a model, by a measurement. `transit-server` asks
-`capabilities/punctuality` over HTTP (never by linking it, README.md#schemas-and-dependency-direction) for the
+`capabilities/punctuality` over HTTP (never by linking it, CONTRIBUTING.md#schemas-and-dependency-direction) for the
 share of that train type's stops at the destination, in the arrival hour, that ran at
 least six minutes off schedule. See `src/punctuality.rs`.
 

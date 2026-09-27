@@ -223,7 +223,7 @@ pub(crate) fn manifest_key(root: &std::path::Path) -> Option<Vec<(PathBuf, Syste
     // Spine services at the repo root, capabilities under capabilities/, and the same
     // directory in the active overlay — the globs capability.sh itself uses
     // (`_spine_names`, `_cap_dirs`). A top-level service.toml IS the declaration
-    // (README.md#three-architectural-nouns), so there is no list to keep in sync here
+    // (CONTRIBUTING.md#three-architectural-nouns), so there is no list to keep in sync here
     // either.
     //
     // The overlay directory belongs in the key even though the registry it guards is

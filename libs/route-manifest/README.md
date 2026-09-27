@@ -1,7 +1,7 @@
 # libs/route-manifest
 
 A self-describing HTTP surface. Spine-owned shared code with no domain of its
-own — see [Three architectural nouns](../../README.md#three-architectural-nouns).
+own — see [Three architectural nouns](../../CONTRIBUTING.md#three-architectural-nouns).
 
 Every capability serves `GET /routes` beside `/health`, listing method, path and
 a one-line summary. `sjel-status` fans out across the enabled capabilities and

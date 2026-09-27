@@ -1,5 +1,5 @@
 #!/bin/bash
-# tools/sysmon — system resource overview. Adopted, not built (README.md#upstream-first):
+# tools/sysmon — system resource overview. Adopted, not built (CONTRIBUTING.md#upstream-first):
 # a thin launcher over two pinned upstreams
 # (upstreams.toml: bottom, macmon), plus a report mode built from plain macOS commands
 # since neither TUI has a non-interactive one-shot output.

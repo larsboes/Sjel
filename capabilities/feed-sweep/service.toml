@@ -39,7 +39,7 @@ schedule = "6h"
 # Nothing can reach a process that is not there, and a port would put an entry in the dashboard's
 # proxy table pointing at exactly that.
 
-# The contract it calls, not the code it shares (README.md#schemas-and-dependency-direction).
+# The contract it calls, not the code it shares (CONTRIBUTING.md#schemas-and-dependency-direction).
 # `requires` keeps the two enabled together, so a machine cannot end up scheduling a sweep
 # against a capability it does not have.
 requires = ["comms"]

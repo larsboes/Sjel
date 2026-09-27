@@ -21,7 +21,7 @@
 //! local `Document` struct saying the same three things — text, optional
 //! markdown, which reader produced it — under a second set of names, which is
 //! what made this capability the second consumer that promoted that crate out
-//! of `capabilities/comms` (README.md#schemas-and-dependency-direction). The
+//! of `capabilities/comms` (CONTRIBUTING.md#schemas-and-dependency-direction). The
 //! two readers below stay here: they are this capability's, they key off a
 //! ticket's file extension, and which one runs is an operator setting rather
 //! than a property of the input class.

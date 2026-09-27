@@ -6,7 +6,7 @@ It captures and posts, nothing more. Extraction, normalization, storage, scoring
 
 ## Why it lives here and not in `capabilities/`
 
-Settled 2026-07-31 (#82). It is the client half of one capability's `/ingest` route, with no other consumer, no data of its own and no process to run, so README.md#integrate-first-topology's integrate-first default holds and none of its escape hatches apply. What was chosen against: a top-level `capabilities/axon-clip/`. That would have bought a directory and a concept while the thing still only ever talks to comms over HTTP, and a capability with no `service.toml` has nowhere to declare `requires = ["comms"]` anyway.
+Settled 2026-07-31 (#82). It is the client half of one capability's `/ingest` route, with no other consumer, no data of its own and no process to run, so CONTRIBUTING.md#integrate-first-topology's integrate-first default holds and none of its escape hatches apply. What was chosen against: a top-level `capabilities/axon-clip/`. That would have bought a directory and a concept while the thing still only ever talks to comms over HTTP, and a capability with no `service.toml` has nowhere to declare `requires = ["comms"]` anyway.
 
 ## What it does
 

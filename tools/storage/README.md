@@ -49,7 +49,7 @@ JSON reader had no way to see it.
 
 Every path, threshold and reclaim command is a deployment fact and lives in the overlay at
 `<overlay>/config/storage-policy.toml`. Nothing in this crate names a path on this machine
-(README.md#public-core-and-private-overlays). `schemas/storage-policy.toml.example` is the
+(CONTRIBUTING.md#public-core-and-private-overlays). `schemas/storage-policy.toml.example` is the
 shape, and a unit test deserialises it so the template cannot rot away from the parser.
 
 Two rules keep `apply` safe, both carried over unchanged and both tested:

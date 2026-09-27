@@ -29,7 +29,7 @@
 # required tool present & new enough, 1 = an in-scope required/runtime tool missing or outdated,
 # 2 = usage error. --json is the exception: a miss is data in the payload, never a non-zero exit —
 # its one caller is doctor, which wants the feed regardless.
-# bash 3.2-safe (README.md#portable-shell).
+# bash 3.2-safe (CONTRIBUTING.md#portable-shell).
 
 set -u
 

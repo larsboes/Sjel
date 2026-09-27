@@ -51,7 +51,7 @@ bw unlock            # sets a session; the token is not a secret value
 
 ## Creating or rotating a secret — stop and hand off
 
-Never generate, paste, or write a secret value through an agent turn (README.md#secrets). Ask the
+Never generate, paste, or write a secret value through an agent turn (CONTRIBUTING.md#secrets). Ask the
 human to run, in their own terminal:
 
 ```bash
@@ -64,7 +64,7 @@ prints it.
 ## Data class
 
 `c2` (Others) and `c3` (Secret) material never reaches a cloud model. That one is enforced in code
-(README.md#data-classes): the derivative builder refuses to produce a preview, the tier check
+(CONTRIBUTING.md#data-classes): the derivative builder refuses to produce a preview, the tier check
 refuses the dispatch, dispatch re-reads the row's current class, and the table's CHECK constraint
 refuses the row.
 

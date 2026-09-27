@@ -14,7 +14,7 @@
 // agents/ — a Pack MAY carry Packs/<pack>/agents/ of Claude-Code-native subagent
 // .md files. Claude Code scans agent directories recursively, so the whole
 // directory deploys as ONE owned unit at ~/.claude/agents/<pack>. Deliberately
-// not a pack.toml field (README.md#harness-neutral-packs): it is a Claude-only
+// not a pack.toml field (CONTRIBUTING.md#harness-neutral-packs): it is a Claude-only
 // convention, and other harnesses' deployers simply never look for it.
 //
 // Two things packs.sh did that are gone on purpose:

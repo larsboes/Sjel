@@ -20,7 +20,7 @@
 # warning. ver_gt exists so an ordering question is answered by an ordering, and
 # ver_numeric exists so a tag that cannot be ordered says so instead of guessing.
 #
-# Portable shell, bash 3.2 compatible (README.md#portable-shell). `sort -V` is present on BSD/macOS and
+# Portable shell, bash 3.2 compatible (CONTRIBUTING.md#portable-shell). `sort -V` is present on BSD/macOS and
 # GNU alike, so nothing here needs coreutils.
 
 # norm_ver <tag> — strip a leading v.

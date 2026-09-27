@@ -6,7 +6,7 @@ What Axon has deployed into each agent harness on this machine, and the proof th
 This capability owns the deployment ledgers under `~/.local/state/axon/pack-deployments/`
 — one JSON file per harness, each recording every deployed unit, the Pack source it came
 from, and the digest that was installed. It owns nothing else. The deployers stay in
-`tools/`, where operator machinery belongs (`README.md#three-architectural-nouns`).
+`tools/`, where operator machinery belongs (`CONTRIBUTING.md#three-architectural-nouns`).
 
 ## Why this is a capability and not only a directory of tools
 

@@ -15,7 +15,7 @@
 #                       `name` and the `backup_*` fields apply; every lifecycle verb
 #                       refuses it by name. See the "Data kind" section at the bottom.
 #
-# A spine component (today only dashboard/, README.md#three-architectural-nouns) may carry a service.toml
+# A spine component (today only dashboard/, CONTRIBUTING.md#three-architectural-nouns) may carry a service.toml
 # at the repo root instead of under capabilities/ — same schema, always in the
 # registry because the spine exists on every machine by definition.
 
@@ -46,12 +46,12 @@ tag      = "stable"                       # REQUIRED, and it names a CHANNEL, no
 
 # Optional — runtime dependencies on OTHER capabilities, by directory name.
 # The dependency is on the capability's CONTRACT (HTTP surface + schema), never its
-# code (README.md#schemas-and-dependency-direction). tools/capability.sh resolves this transitively on enable;
+# code (CONTRIBUTING.md#schemas-and-dependency-direction). tools/capability.sh resolves this transitively on enable;
 # tools/check-manifest-integrity.sh proves every target exists. NB: bare array line,
 # no inline comment (toml_array contract).
 # requires = ["postgres"]
 
-# Optional — the capability's dashboard panel (shell model, README.md#three-architectural-nouns).
+# Optional — the capability's dashboard panel (shell model, CONTRIBUTING.md#three-architectural-nouns).
 # The spine's dashboard/ discovers enabled capabilities via <overlay>/config/machine.toml
 # and mounts
 # each panel from the capability's own HTTP surface: http://127.0.0.1:<panel_port><panel_path>.
@@ -204,7 +204,7 @@ freshness_stale_hours  = "24"             # past this age nothing is arriving, a
 # panel_build = ["bun", "run", "build"]
 #                                           # optional, and only for a capability that ships its own
 #                                           # UI. Runs in <capability>/ui/ — fixed by
-#                                           # README.md#placement-guide, so it is not a manifest
+#                                           # CONTRIBUTING.md#placement-guide, so it is not a manifest
 #                                           # fact — immediately BEFORE `build`, on the same
 #                                           # trigger. Assumes ui/node_modules is installed; that
 #                                           # install is an operator step (the capability's README),
@@ -278,7 +278,7 @@ freshness_stale_hours  = "24"             # past this age nothing is arriving, a
 #                                           # convention, not configuration, and needs no field.
 # proxy_api_only = "true"                   # optional. When the dashboard owns /<name> as a page,
 #                                           # proxy only /<name>/api and still strip /<name>.
-# panel_port  = "4242"                      # a capability that serves its OWN UI (README.md#three-architectural-nouns); the shell
+# panel_port  = "4242"                      # a capability that serves its OWN UI (CONTRIBUTING.md#three-architectural-nouns); the shell
 # panel_path  = "/"                         # mounts it. Omit when the dashboard renders the widget.
 # idle_timeout = "300"                      # optional, seconds. Stop this panel once nobody has looked
 #                                           # at it for that long; sjel-status polls

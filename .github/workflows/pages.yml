@@ -65,7 +65,7 @@ jobs:
       - name: Set up Bun
         uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2
         with:
-          bun-version: latest   # patch first, as in ci.yml — README.md#patch-first
+          bun-version: latest   # patch first, as in ci.yml — CONTRIBUTING.md#patch-first
 
       # paths.sh resolves the overlay before anything else runs; with no axon.local.toml it falls
       # back to axon.toml's shipped default. Same minimal seed ci.yml uses.

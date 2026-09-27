@@ -2,7 +2,7 @@
 # check-marketplace-fresh.sh — the marketplace.json / plugin.json freshness gate (CI: repo gates).
 # Fails if the generated Claude Code plugin marketplace is stale relative to the
 # pack.toml files it is generated from, or carries a stale plugin.json for a pack
-# that no longer exists or is no longer generic (see README.md, "Generated architecture").
+# that no longer exists or is no longer generic (see CONTRIBUTING.md, "Generated architecture").
 #
 # Never writes into the checkout: it regenerates into a scratch root and diffs,
 # because a gate that fixes what it finds reports green over a change nobody reviewed.

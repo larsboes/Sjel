@@ -233,7 +233,7 @@ fn default_subscriptions_dir() -> String {
 }
 
 /// comms' loopback port. A capability calling another capability's HTTP contract
-/// rather than linking its crate is the direction `README.md#schemas-and-dependency-direction`
+/// rather than linking its crate is the direction `CONTRIBUTING.md#schemas-and-dependency-direction`
 /// asks for, and the port is the deployment's, so the overlay may override it.
 const DEFAULT_COMMS_BASE_URL: &str = "http://127.0.0.1:8083";
 

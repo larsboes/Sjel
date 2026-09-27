@@ -34,7 +34,7 @@
 # the whole workspace every time, which is how a safe tool becomes a tool nobody runs. Export
 # CARGO_TARGET_DIR to choose it; anything inside a checkout of this repository is refused.
 #
-# bash 3.2-safe (README.md#portable-shell).
+# bash 3.2-safe (CONTRIBUTING.md#portable-shell).
 set -euo pipefail
 
 _here="$(cd "$(dirname "${BASH_SOURCE[0]:-$0}")" && pwd)"

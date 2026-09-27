@@ -25,7 +25,7 @@
 // tools/graphify.sh). The rollup therefore emits unit names and counts only — never a
 // graphify id.
 
-/** The three nouns of README.md#three-architectural-nouns, plus the two spine directories that hold code. */
+/** The three nouns of CONTRIBUTING.md#three-architectural-nouns, plus the two spine directories that hold code. */
 export type UnitKind = "capability" | "lib" | "spine" | "pack";
 
 export interface Unit {
@@ -106,7 +106,7 @@ export function classifyPath(
  *
  * `dashboard` is the spine shell and owns its whole directory, so it has no `<name>`
  * segment to read — it IS the unit. `tools` and `schemas` are the same shape. The
- * three-noun model (README.md#three-architectural-nouns) is what decides these are units at all: a Pack is as much
+ * three-noun model (CONTRIBUTING.md#three-architectural-nouns) is what decides these are units at all: a Pack is as much
  * a thing that can couple to a capability as another capability is.
  */
 export function unitForPath(path: string): Unit | null {

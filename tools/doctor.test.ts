@@ -2,7 +2,7 @@
 // checks doctor.ts's "Systems (systems.toml)" section and "Undeclared
 // connections" sweep are built on. Guards against the silent-green failure
 // mode a grep-pattern sweep is otherwise prone to (pattern typo, path
-// convention change) — see README.md#documentation-stays-owned-and-current.
+// convention change) — see CONTRIBUTING.md#documentation-stays-owned-and-current.
 // Run: bun test tools/doctor.test.ts
 
 import { describe, expect, test } from "bun:test";
@@ -406,7 +406,7 @@ describe("findDanglingDecisionRefs", () => {
 
   test("a live entry is not reported", () => {
     expect(findDanglingDecisionRefs(
-      [{ path: "README.md", text: "See `README.md#three-architectural-nouns`." }], alive,
+      [{ path: "README.md", text: "See `CONTRIBUTING.md#three-architectural-nouns`." }], alive,
     )).toEqual([]);
   });
 

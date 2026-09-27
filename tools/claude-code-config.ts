@@ -41,7 +41,7 @@
 // denies /etc writes), prints the exact privileged command for you to run yourself. Deploying
 // a security policy to /etc is an explicit, user-run action by design.
 //
-// TS-via-bun, not bash: JSON deep-merge/compare in bash 3.2 (README.md#portable-shell) isn't worth
+// TS-via-bun, not bash: JSON deep-merge/compare in bash 3.2 (CONTRIBUTING.md#portable-shell) isn't worth
 // hand-rolling; bun parses/emits JSON natively with no npm dependency (bun is already in
 // upstreams.toml), the same call already made for tools/doctor — see that file's header.
 // Invoke via the tools/claude-code-config launcher (exec bun run), not directly.
@@ -192,7 +192,7 @@ function deployUserLayer(): never {
   const baseline = readJson(baselinePath, "baseline");
 
   // ~/.claude is the Claude Code config dir; CLAUDE_CONFIG_DIR overrides it (the harness's
-  // own env var). Mirrors packs.sh honouring CLAUDE_SKILLS_DIR — README.md#dynamic-paths-and-current-facts, derived & overridable.
+  // own env var). Mirrors packs.sh honouring CLAUDE_SKILLS_DIR — CONTRIBUTING.md#dynamic-paths-and-current-facts, derived & overridable.
   const configDir = process.env.CLAUDE_CONFIG_DIR
     ? expandHome(process.env.CLAUDE_CONFIG_DIR)
     : join(HOME, ".claude");

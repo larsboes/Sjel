@@ -8,7 +8,7 @@
 //
 // Read-only on purpose. Nothing here creates, moves or pushes a tag: a browser button that
 // writes to git needs a gate in front of it, and tags are cut by tools/release under its own
-// clean/on-main/not-behind/doctor gate (README.md#cutting-and-consuming-a-release).
+// clean/on-main/not-behind/doctor gate (CONTRIBUTING.md#cutting-and-consuming-a-release).
 //
 // The remote is normalised to an https URL because its only consumer is an <a href>.
 // An ssh remote (git@github.com:owner/repo.git) is not a URL a browser can follow.
@@ -129,7 +129,7 @@ if (!axonRoot) {
 const overlayRoot = process.env.SJEL_PERSONAL_ROOT;
 
 // One home for "which tags are release tags" — axon.toml [release] tag_glob, shared with
-// tools/lib/version.sh and tools/doctor.ts (README.md#the-release-line).
+// tools/lib/version.sh and tools/doctor.ts (CONTRIBUTING.md#the-release-line).
 const releaseGlob = releaseTagGlob(axonRoot);
 
 const repos = [read(axonRoot, "spine", releaseGlob)];

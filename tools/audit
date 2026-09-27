@@ -79,7 +79,7 @@ else
   # Build-artifact dirs stay out: generated, not code, and capabilities/*/target alone runs to
   # thousands of files (6879 measured in scouting/target). Same set .gitignore excludes.
   # to-integrate/ joins them for the reason .gitignore excludes it
-  # (README.md#scratch-is-not-documentation): pre-git scratch holding whole vendored projects,
+  # (CONTRIBUTING.md#scratch-is-not-documentation): pre-git scratch holding whole vendored projects,
   # not Axon's code. bazel-* stays listed after PRD Q44 retired Bazel — the symlinks it left
   # still point at multi-gigabyte trees on existing checkouts.
   args="scan source -r --config $SJEL_ROOT/osv-scanner.toml"

@@ -31,7 +31,7 @@ overlay = "~/.axon-overlay"
 # deleted the adoption hold. All three readers went with it in the same change:
 # capabilities/agentbox's host-install gate, renovate.json5's minimumReleaseAge restatement, and
 # this file's own claim to be their one home. There is no replacement value, because there is
-# nothing to wait out (README.md#patch-first).
+# nothing to wait out (CONTRIBUTING.md#patch-first).
 #
 # [audit] expiry_warn_days stood here too, and had one reader: tools/audit's expiry clock, which
 # warned before an osv-scanner.toml ignoreUntil lapsed. osv-scanner enforces those dates itself
@@ -40,7 +40,7 @@ overlay = "~/.axon-overlay"
 # header argues against, which is why both blocks are deleted rather than left as history.
 
 [release]
-# Which tags are release tags (README.md#the-release-line). Six call sites across bash and
+# Which tags are release tags (CONTRIBUTING.md#the-release-line). Six call sites across bash and
 # TypeScript ask git "what version is this checkout" — tools/update.sh, tools/repos.ts and
 # tools/doctor.ts, twice each — and every one of them used a bare `git describe --tags`. That
 # answers with ANY reachable tag, so an archive marker, a vendor tag or a nightly silently

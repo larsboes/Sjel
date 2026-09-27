@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
 # Thin launcher: the logic lives in claude-code-config.ts. TypeScript runs through
-# bun (Axon README.md#language-tooling) — deep-merging JSON into ~/.claude/settings.json is exactly
-# the kind of structured-data work bash 3.2 (README.md#portable-shell) can't do safely, the same
+# bun (Axon CONTRIBUTING.md#language-tooling) — deep-merging JSON into ~/.claude/settings.json is exactly
+# the kind of structured-data work bash 3.2 (CONTRIBUTING.md#portable-shell) can't do safely, the same
 # reasoning that makes tools/doctor a bun launcher. See claude-code-config.ts's
-# header for the full why (README.md#decisions-live-with-their-owner: an implemented call is recorded where it lives).
+# header for the full why (CONTRIBUTING.md#decisions-live-with-their-owner: an implemented call is recorded where it lives).
 _here="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 exec bun run "$_here/claude-code-config.ts" "$@"

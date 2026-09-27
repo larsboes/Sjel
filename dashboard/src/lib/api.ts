@@ -1549,7 +1549,7 @@ export interface CapabilityView {
   health_url: string | null;
 }
 
-/** A capability that serves its own UI (README.md#three-architectural-nouns) declares a panel port. */
+/** A capability that serves its own UI (CONTRIBUTING.md#three-architectural-nouns) declares a panel port. */
 export const hasPanel = (c: CapabilityView): boolean => c.panel_port !== '';
 
 /**

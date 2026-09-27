@@ -12,7 +12,7 @@
 # purged from disk, including ~161MB of orphaned Library state and two root-owned dangling
 # symlinks (/usr/local/bin/cursor, /usr/local/bin/kiro) left behind by hand-uninstalls. The
 # three kept harnesses are the ones named below: Claude Code, pi-agent, opencode. Bringing any
-# declined tool back is a normal verdict-gate decision (README.md#dependency-verdicts-and-provenance), never a bare
+# declined tool back is a normal verdict-gate decision (CONTRIBUTING.md#dependency-verdicts-and-provenance), never a bare
 # `brew install` or a manual .app drop.
 #
 # Fields (single-line TOML only, see tools/lib/toml.sh):

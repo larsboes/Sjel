@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Thin launcher: self-model logic lives in self.ts. TypeScript runs through bun
-# (README.md#language-tooling) — this parses upstreams.toml via Bun.TOML and does set arithmetic
+# (CONTRIBUTING.md#language-tooling) — this parses upstreams.toml via Bun.TOML and does set arithmetic
 # over a multi-thousand-node graph, neither of which tools/lib/toml.sh can express.
 # Mirrors the tools/doctor and printctl launcher pattern.
 _here="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"

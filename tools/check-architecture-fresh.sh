@@ -3,7 +3,7 @@
 # Fails if ARCHITECTURE.md is stale relative to the manifests it is generated from.
 # Never writes into the checkout: it regenerates into a scratch file and diffs, because
 # a gate that fixes what it finds reports green over a change nobody reviewed.
-# See README.md, "Generated architecture".
+# See CONTRIBUTING.md, "Generated architecture".
 set -e
 
 _lib="$(cd "$(dirname "${BASH_SOURCE[0]:-$0}")/lib" && pwd)"

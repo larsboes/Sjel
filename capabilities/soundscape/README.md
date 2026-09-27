@@ -20,7 +20,7 @@ reload, be identical on every surface, and be changeable from a phone. The brows
 owns oscillators, scheduling, and the arrangement clock.
 
 That is what earns a capability rather than a `libs/` entry: a bounded domain with
-its own state and its own contract, per `README.md#placement-guide`.
+its own state and its own contract, per `CONTRIBUTING.md#placement-guide`.
 
 ### What this process deliberately does not own
 
@@ -68,7 +68,7 @@ starts itself on boot is a machine making noise decisions nobody asked for. The
 dashboard brings it up when its surface is opened.
 
 The UI is served from this same process, so the panel arrives and leaves with the
-capability (README.md#three-architectural-nouns) instead of living in the spine shell. The bundle
+capability (CONTRIBUTING.md#three-architectural-nouns) instead of living in the spine shell. The bundle
 path comes from `SJEL_SOUNDSCAPE_UI` and defaults to `capabilities/soundscape/ui/dist`,
 the directory `bun run build` writes — a build output, never a checked-in one.
 

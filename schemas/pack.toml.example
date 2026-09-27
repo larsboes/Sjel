@@ -39,7 +39,7 @@ deployer     = "packs-axon"              # optional: a dedicated tool owns this 
 # (https://code.claude.com/docs/en/sub-agents). packs-claude deploys it as ONE
 # owned unit at ~/.claude/agents/<name> if present -- deliberately not named here,
 # since a Claude-Code-only concept doesn't belong in the neutral manifest shape
-# (see README.md#harness-neutral-packs). See Packs/academic-writing/ for a
+# (see CONTRIBUTING.md#harness-neutral-packs). See Packs/academic-writing/ for a
 # worked example (5 review-lens agents + 3 adversarial-skeptic agents).
 #
 # A pack MAY likewise carry an extensions/ directory of pi-only .ts agent

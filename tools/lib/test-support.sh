@@ -15,7 +15,7 @@
 # Same shape, opposite direction — green in CI, red only on the machine of whoever exported the
 # variables. See isolate_axon_env below.
 #
-# bash 3.2-safe (README.md#portable-shell).
+# bash 3.2-safe (CONTRIBUTING.md#portable-shell).
 
 # in_ci — true when this is an automated run. GitHub Actions sets CI=true; so does essentially
 # every other runner, which is the point: the guard should not know which one it is under.

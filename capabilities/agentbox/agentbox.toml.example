@@ -4,7 +4,7 @@
 # What belongs here: which agent, which model, where the model answers, how much of
 # the machine the box may use. What does NOT: the agent's version and checksum (that
 # is capabilities/agentbox/profiles/<agent>/profile.toml, tracked and shared) and the
-# model API key (that is the gitignored env file below, README.md#secrets).
+# model API key (that is the gitignored env file below, CONTRIBUTING.md#secrets).
 
 agent = "pi"                     # a directory under capabilities/agentbox/profiles/
 

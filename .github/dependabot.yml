@@ -6,7 +6,7 @@
 # `cooldown:` is written out in EVERY block, and that is the ruling rather than noise. Dependabot
 # applies a three-day cooldown to version updates even when `cooldown` is not configured —
 # GitHub's own options reference states it — so omitting the key does not mean "no hold", it
-# silently reinstates a hold nobody chose. Patch first (README.md#patch-first): a hold that needs
+# silently reinstates a hold nobody chose. Patch first (CONTRIBUTING.md#patch-first): a hold that needs
 # a human to end it is a hold that ends late.
 #
 # THE VALUE IS NO LONGER THE SAME IN EVERY BLOCK, and that is the change of 2026-09-22 (Q109).

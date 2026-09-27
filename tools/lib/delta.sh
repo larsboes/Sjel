@@ -1,11 +1,11 @@
 #!/bin/bash
 # tools/lib/delta.sh — the version-to-version delta, shared by tools/update.sh (the consumer's
 # "what would I get if I updated" preview) and tools/release (the notes for a new tag). One home
-# so the two never drift (README.md#documentation-stays-owned-and-current). Sourced AFTER tools/lib/paths.sh (which exports SJEL_ROOT and
-# sources toml.sh); it pulls in version.sh itself. bash 3.2-safe (README.md#portable-shell), no bash-4 syntax.
+# so the two never drift (CONTRIBUTING.md#documentation-stays-owned-and-current). Sourced AFTER tools/lib/paths.sh (which exports SJEL_ROOT and
+# sources toml.sh); it pulls in version.sh itself. bash 3.2-safe (CONTRIBUTING.md#portable-shell), no bash-4 syntax.
 #
 # The delta is computed live from git + the manifests — there is no committed CHANGELOG to rot
-# (README.md#documentation-stays-owned-and-current, same reason ARCHITECTURE.md is generated). Everything degrades gracefully before any
+# (CONTRIBUTING.md#documentation-stays-owned-and-current, same reason ARCHITECTURE.md is generated). Everything degrades gracefully before any
 # release tag exists: latest_release_ref() returns empty and callers fall back to origin/main.
 
 _delta_dir="$(cd "$(dirname "${BASH_SOURCE[0]:-$0}")" && pwd)"
@@ -112,7 +112,7 @@ EOF
   [ "$any" -eq 0 ] && echo "  (no change)"
   echo
 
-  # --- commits: capped, with an explicit remainder count (no silent truncation, README.md#documentation-stays-owned-and-current) ---
+  # --- commits: capped, with an explicit remainder count (no silent truncation, CONTRIBUTING.md#documentation-stays-owned-and-current) ---
   echo "Commits ($from..$to):"
   local log n cap=15
   log="$(git -C "$SJEL_ROOT" log --oneline "$from..$to" 2>/dev/null || true)"

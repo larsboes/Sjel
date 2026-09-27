@@ -2,7 +2,7 @@
 
 A declared markdown root, and the only way to get a file out of it. Spine-owned
 shared code with no domain of its own — see
-[Three architectural nouns](../../README.md#three-architectural-nouns).
+[Three architectural nouns](../../CONTRIBUTING.md#three-architectural-nouns).
 
 Two capabilities read markdown out of a knowledge store the operator points them
 at. Scouting resolves opportunity notes and interest profiles; calendar imports

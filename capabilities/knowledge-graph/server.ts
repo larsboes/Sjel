@@ -249,7 +249,7 @@ const UNIT_NODE_CAP = 400;
  * units in the first place -- the two must agree or a unit on the self-model
  * page drills into nothing. Spine directories ARE the unit and have no
  * `<name>` segment; the three nouns each nest one level down
- * (README.md#three-architectural-nouns).
+ * (CONTRIBUTING.md#three-architectural-nouns).
  */
 function unitPrefixes(unit: string): string[] {
   if (unit.includes("/") || unit.includes("..")) return [];

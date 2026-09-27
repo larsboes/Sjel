@@ -34,7 +34,7 @@ path = "src/server.rs"
 sjel-http = { path = "../../libs/sjel-http" }
 sjel-config = { path = "../../libs/sjel-config" }
 # The shared shape of "what a reader got out of a file"
-# (README.md#schemas-and-dependency-direction). This capability is the second
+# (CONTRIBUTING.md#schemas-and-dependency-direction). This capability is the second
 # consumer that earned the promotion; before it, `document.rs` carried its own
 # `Document` struct saying the same thing under other names.
 #

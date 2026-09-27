@@ -161,7 +161,7 @@ function precompressed(path: string, accept: string): { path: string; encoding: 
 }
 
 Bun.serve({
-  hostname: "127.0.0.1", // loopback only, same contract as libs/sjel-server (README.md#security-and-data)
+  hostname: "127.0.0.1", // loopback only, same contract as libs/sjel-server (CONTRIBUTING.md#security-and-data)
   port,
   async fetch(request) {
     const url = new URL(request.url);

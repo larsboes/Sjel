@@ -12,7 +12,7 @@
 // what an on-demand capability is for.
 //
 // It talks to comms over HTTP and never to comms' database. That is the documented composition
-// edge (README.md#schemas-and-dependency-direction): a capability depends on another's contract,
+// edge (CONTRIBUTING.md#schemas-and-dependency-direction): a capability depends on another's contract,
 // never its code. It is also what keeps a second process out of that store — `Store::open` runs
 // the whole migration on every call, and two openers doing that concurrently deadlock on the
 // table locks a no-op `ALTER TABLE` still takes.

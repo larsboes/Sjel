@@ -1,5 +1,5 @@
 # dashboard — the spine's shell, so this manifest sits at the repo root rather than
-# under capabilities/ and is always in the registry (README.md#three-architectural-nouns: the spine is
+# under capabilities/ and is always in the registry (CONTRIBUTING.md#three-architectural-nouns: the spine is
 # what exists on a fresh machine after the minimal install). Shape:
 # schemas/service.toml.example.
 #

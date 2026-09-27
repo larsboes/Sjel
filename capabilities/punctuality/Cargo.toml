@@ -12,7 +12,7 @@ name = "punctuality"
 path = "src/lib.rs"
 
 # punctuality-cli, not punctuality: capabilities/punctuality/punctuality is the shell
-# entry point this capability puts on PATH (README.md#placement-guide), and it is that
+# entry point this capability puts on PATH (CONTRIBUTING.md#placement-guide), and it is that
 # script which execs this binary. Two things named `punctuality` on PATH is the collision
 # the suffix avoids. Same reason capabilities/comms names its binary comms-cli.
 [[bin]]
@@ -20,7 +20,7 @@ name = "punctuality-cli"
 path = "src/main.rs"
 
 # punctuality-server: the HTTP contract capabilities/transit reads this through, since a
-# capability depends on another's surface and never its code (README.md#schemas-and-dependency-direction). The one
+# capability depends on another's surface and never its code (CONTRIBUTING.md#schemas-and-dependency-direction). The one
 # place in this crate that needs an async runtime -- ingest and the CLI are batch jobs.
 [[bin]]
 name = "punctuality-server"

@@ -11,7 +11,7 @@
 # tools half is testable on any checkout, and tools/tool-index.test.sh drives it against a
 # planted tools/ directory.
 #
-# Reads $SJEL_ROOT. bash 3.2-safe (README.md#portable-shell).
+# Reads $SJEL_ROOT. bash 3.2-safe (CONTRIBUTING.md#portable-shell).
 
 # One line about one tool, read from the tool.
 #

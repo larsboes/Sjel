@@ -9,7 +9,7 @@ separate capability with its own name and port.
 
 It knows no capability names. `tools/capability.sh registry` renders the
 `service.toml` manifests as JSON and this process reads that, so
-`tools/lib/toml.sh` stays the only TOML parser (README.md#one-manifest-per-concern) and a port
+`tools/lib/toml.sh` stays the only TOML parser (CONTRIBUTING.md#one-manifest-per-concern) and a port
 literal lives in exactly one file.
 
 `src/main.rs` is the composition root for configuration, route assembly, bind,
@@ -78,7 +78,7 @@ tools/service-runner.sh start sjel-status
 ## Why this shape: the name and the port
 
 Migrated from its dissolved `decisions/` entry on 2026-07-28: this governs one
-thing, so it lives with that thing (README.md#decisions-live-with-their-owner).
+thing, so it lives with that thing (CONTRIBUTING.md#decisions-live-with-their-owner).
 
 **Decision:** the health-aggregation capability for the root `dashboard` is `capabilities/sjel-status`,
 binary `sjel-status`, default port `8082`. Not `pulse`, not `31337`.
@@ -131,7 +131,7 @@ HTML, which is why a capability endpoint returning HTML means "restart sjel-stat
   returning a hint JSON payload. Axum's default 404 already covers this;
   the handler added nothing a real client needs. Dropped.
 - **Parsing `service.toml` in Rust** — would have meant a second TOML parser
-  against README.md#one-manifest-per-concern, and a `toml` crate as a new upstream for facts the shell
+  against CONTRIBUTING.md#one-manifest-per-concern, and a `toml` crate as a new upstream for facts the shell
   already reads. The registry subcommand emits JSON instead; `serde_json` was
   already a dependency.
 - ~~**A generic capability list read from config**~~ — declined on 2026-07-18 while

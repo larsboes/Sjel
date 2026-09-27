@@ -2,7 +2,7 @@
 //!
 //! The policy is the whole machine-specific half of this capability, and it lives in the
 //! overlay at `<overlay>/config/host-net-policy.toml`. Nothing in this crate carries a process
-//! name (README.md#public-core-and-private-overlays).
+//! name (CONTRIBUTING.md#public-core-and-private-overlays).
 
 use serde::{Deserialize, Serialize};
 

@@ -1,6 +1,6 @@
 #!/bin/bash
 # capabilities/cv/cv — build tailored CV PDFs from the master file.
-# Portable shell only (README.md#portable-shell) — no bash-4-only syntax.
+# Portable shell only (CONTRIBUTING.md#portable-shell) — no bash-4-only syntax.
 set -euo pipefail
 
 _dir="$(cd "$(dirname "${BASH_SOURCE[0]:-$0}")" && pwd)"

@@ -8,7 +8,7 @@
 // The pattern itself lives in axon.toml `[release] tag_glob`, not in this file. tools/update.sh
 // and tools/lib/delta.sh ask the same question from bash, and tools/doctor and tools/self exec
 // bun directly without sourcing a shell library — so a tracked manifest key is the only home both
-// sides can actually read. See README.md#the-release-line.
+// sides can actually read. See CONTRIBUTING.md#the-release-line.
 
 import { readFileSync } from "node:fs";
 import { join } from "node:path";

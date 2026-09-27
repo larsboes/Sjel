@@ -12,7 +12,7 @@
 // declares it can be type-checked, and the lockfile is how it declares the check is
 // reproducible. Nothing here names a capability.
 //
-// TypeScript rather than bash under README.md#language-tooling and the tools/doctor
+// TypeScript rather than bash under CONTRIBUTING.md#language-tooling and the tools/doctor
 // precedent: this parses package.json, and tools/lib/toml.sh's single-line grep contract is
 // a TOML reader, not a JSON one.
 //

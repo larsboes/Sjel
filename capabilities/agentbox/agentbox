@@ -1,6 +1,6 @@
 #!/bin/bash
 # capabilities/agentbox/agentbox — run a coding agent inside a disposable container.
-# Portable shell only (README.md#portable-shell) — no bash-4-only syntax.
+# Portable shell only (CONTRIBUTING.md#portable-shell) — no bash-4-only syntax.
 set -euo pipefail
 
 _dir="$(cd "$(dirname "${BASH_SOURCE[0]:-$0}")" && pwd)"
@@ -129,7 +129,7 @@ read_api_key() {
   key_var="${key_var:-AGENTBOX_MODEL_API_KEY}"
   key_path="$SJEL_PERSONAL_ROOT/$key_file"
   if [ ! -f "$key_path" ]; then
-    die "no $key_path — create it with '$key_var=<your model server key>' (chmod 600). Never generated here (README.md#secrets)"
+    die "no $key_path — create it with '$key_var=<your model server key>' (chmod 600). Never generated here (CONTRIBUTING.md#secrets)"
   fi
   # \042 = ", \047 = ' — strip either style of quoting around the value.
   API_KEY="$(grep -E "^$key_var=" "$key_path" | head -n1 | cut -d= -f2- | tr -d '\042\047')"

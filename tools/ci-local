@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Thin launcher: the logic lives in ci-local.ts. TypeScript runs through bun
-# (README.md#language-tooling) — this parses .github/workflows/ci.yml via Bun.YAML, which
+# (CONTRIBUTING.md#language-tooling) — this parses .github/workflows/ci.yml via Bun.YAML, which
 # tools/lib/toml.sh's single-line grep/sed contract cannot express and which no shell
 # should try. Mirrors the tools/doctor and tools/self launcher pattern.
 _here="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"

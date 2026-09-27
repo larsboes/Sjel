@@ -1,7 +1,7 @@
 # libs/content-item
 
 The `content-item-v2` reader contract in Rust. Spine-owned shared code with no
-domain of its own — see [Three architectural nouns](../../README.md#three-architectural-nouns).
+domain of its own — see [Three architectural nouns](../../CONTRIBUTING.md#three-architectural-nouns).
 
 `schemas/content-item.schema.json` is the normative artifact. This crate exists
 so that the capabilities emitting it cannot drift from one another by hand.

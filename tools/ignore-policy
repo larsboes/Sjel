@@ -15,7 +15,7 @@
 #   tools/ignore-policy print  <overlay-dir>   # same, to stdout, writing nothing
 #   tools/ignore-policy check  <overlay-dir>   # fail on drift, a missing block, or bad ordering
 #
-# Exit 0 = clean, 1 = violation, 2 = usage error. bash 3.2-safe (README.md#portable-shell).
+# Exit 0 = clean, 1 = violation, 2 = usage error. bash 3.2-safe (CONTRIBUTING.md#portable-shell).
 #
 # What this deliberately does NOT do: migrate an existing overlay. Axon#194 puts that in each
 # overlay's own repository, with its allowlist reviewed by whoever owns that deployment.

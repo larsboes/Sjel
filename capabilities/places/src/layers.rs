@@ -788,7 +788,7 @@ mod db_tests {
     /// The neighbour tables the layers read, created in the test's own file under the
     /// prefixes production uses. It restates their shape rather than linking their
     /// crates, because a capability depends on another's surface and never its code
-    /// (README.md#schemas-and-dependency-direction) — the columns named here ARE the
+    /// (CONTRIBUTING.md#schemas-and-dependency-direction) — the columns named here ARE the
     /// coupling the cross-capability join creates, so writing them down is the point.
     /// Kept to the columns these queries project.
     fn create_neighbour_tables(path: &std::path::Path) -> Connection {

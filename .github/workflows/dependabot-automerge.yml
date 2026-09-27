@@ -13,7 +13,7 @@ name: Dependabot auto-merge
 # WHAT THIS IS NOT. It is not a review waiver. `--auto` queues the merge behind the base
 # branch's required checks — the merge happens only if CI passes, and a red check leaves the
 # pull request open and waiting, which is the whole safety property. What Axon gave up is the
-# WAIT, not the check (README.md#patch-first names the cost: a compromised publish reaches this
+# WAIT, not the check (CONTRIBUTING.md#patch-first names the cost: a compromised publish reaches this
 # repository within a day). .github/workflows/security.yml's image scan is deliberately
 # report-only for the same reason — a red-by-upstream image must not hold a dependency bump.
 #

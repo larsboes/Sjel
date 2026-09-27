@@ -184,7 +184,7 @@ maintenance_hold_active() {
 }
 
 # A capability's manifest lives with the capability, in public Axon or in the active
-# overlay; the spine's own shell (dashboard/, README.md#three-architectural-nouns)
+# overlay; the spine's own shell (dashboard/, CONTRIBUTING.md#three-architectural-nouns)
 # carries one at the repo root instead, because it is not a capability and never appears
 # in machine.toml's enabled set. paths.sh owns the resolution order and the
 # declared-twice refusal, so this stays the only place that turns a name into a manifest.
@@ -492,7 +492,7 @@ maybe_build() {  # [force] — build when the artifact is missing, or always on 
   fi
   # The panel first, because the server binary serves that bundle: a start that compiles
   # the binary and then fails on the UI leaves a capability answering /health with a 404
-  # panel. Fixed directory, not a declared one — README.md#placement-guide puts a
+  # panel. Fixed directory, not a declared one — CONTRIBUTING.md#placement-guide puts a
   # capability's own UI at <capability>/ui/, so the manifest has no per-capability fact to
   # state. node_modules is assumed installed, the same assumption dashboard/service.toml's
   # `bun run dev` already makes.
@@ -789,7 +789,7 @@ start_service() {
 #
 # Removal is safe for declared state by construction: container_init mounts every state path as a
 # named volume or a host path, both of which outlive the container. What does NOT survive is state
-# written inside the container and never declared -- which README.md#state-mounts-record-reality
+# written inside the container and never declared -- which CONTRIBUTING.md#state-mounts-record-reality
 # says should not exist, and which this makes visible if it does.
 #
 # The bounded part of the rollback is the manifest: the new container is built from the same
@@ -830,7 +830,7 @@ inspect_json() {
 }
 
 # The classes report_arg_drift walks, in the order an operator would act on them. Each one is an
-# argument that `run -d` takes at creation and `start` cannot change (README.md#state-mounts-record-reality).
+# argument that `run -d` takes at creation and `start` cannot change (CONTRIBUTING.md#state-mounts-record-reality).
 RUNARG_CLASSES="port mount cap network"
 
 # report_arg_drift — print every difference between the declaration and the container, exit 1 if
@@ -1071,7 +1071,7 @@ persistence_path_dirs() {
 #
 # NOT for secrets. A unit file sits unencrypted in the operator's home and is read by a supervisor
 # that logs; a credential belongs in the capability's env_file, which comes from Vaultwarden
-# (README.md#secrets). Nothing here enforces that — it is a contract, stated where it is violated.
+# (CONTRIBUTING.md#secrets). Nothing here enforces that — it is a contract, stated where it is violated.
 persistence_env_block() {
   local line key val out=""
   [ -f "$SJEL_MACHINE_TOML" ] || return 0

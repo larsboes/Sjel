@@ -48,7 +48,7 @@ path = "src/digest_eval_main.rs"
 sjel-http = { path = "../../libs/sjel-http" }
 sjel-config = { path = "../../libs/sjel-config" }
 # The readers this capability used to own, promoted at the second consumer
-# (README.md#schemas-and-dependency-direction). Default features on: this is the
+# (CONTRIBUTING.md#schemas-and-dependency-direction). Default features on: this is the
 # consumer that wants the whole ladder, including the PDF rung, so the `xberg`
 # dependency moved with the code rather than staying here.
 sjel-extraction = { path = "../../libs/extraction" }

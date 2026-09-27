@@ -183,7 +183,7 @@ function bundleGuard(): Plugin {
 
 // The proxy table is derived, not written. `tools/capability.sh registry` reads the
 // service.toml manifests through tools/lib/toml.sh, the shell-side TOML parser
-// (README.md#one-manifest-per-concern), so a capability's port is declared in exactly one file and this config,
+// (CONTRIBUTING.md#one-manifest-per-concern), so a capability's port is declared in exactly one file and this config,
 // sjel-status and the runner all read the same number.
 //
 // Read once at dev-server start: enabling a capability or moving a port means

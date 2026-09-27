@@ -1,7 +1,7 @@
 //! Filling `Journey.delay_risk_score` from `capabilities/punctuality`.
 //!
 //! Over HTTP, never by linking that crate: a capability depends on another's contract,
-//! not its code (README.md#schemas-and-dependency-direction). This module is the whole dependency, and it is a
+//! not its code (CONTRIBUTING.md#schemas-and-dependency-direction). This module is the whole dependency, and it is a
 //! one-way one — punctuality knows nothing about transit.
 //!
 //! Absence degrades, it never fails. If punctuality is not running, or has never
@@ -19,7 +19,7 @@ use serde::{Deserialize, Serialize};
 /// Where punctuality-server listens.
 ///
 /// The literal mirrors `capabilities/punctuality/service.toml`'s `port`, which is one
-/// duplication more than README.md#dynamic-paths-and-current-facts likes. It is here rather than hidden because the honest
+/// duplication more than CONTRIBUTING.md#dynamic-paths-and-current-facts likes. It is here rather than hidden because the honest
 /// fix is a spine mechanism — service-runner.sh exporting a declared `requires =`
 /// sibling's port the way it already exports `SJEL_PORT` for the capability itself — and
 /// building that for a single consumer would be inventing a convention from one example.

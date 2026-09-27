@@ -50,7 +50,7 @@
 # measured on 1.4.2 on 2026-09-22, an install run from dashboard/ ignores this file entirely.
 # This repository has no root package.json, so nothing installs from here, and an
 # `[install] minimumReleaseAge` written into this file would be a control that reads as present
-# and gates nothing: the shape README.md#patch-first describes as a hold guarding a door that was
+# and gates nothing: the shape CONTRIBUTING.md#patch-first describes as a hold guarding a door that was
 # already open.
 #
 # The npm-only 24h hold (Q109) therefore lives in the two trees that actually resolve

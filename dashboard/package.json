@@ -3,7 +3,7 @@
   "private": true,
   "version": "0.1.0",
   "type": "module",
-  "description": "Axon — the spine's shell: what is enabled on this machine, what it is saying, and what starts on demand.",
+  "description": "Sjel — the spine's shell: what is enabled on this machine, what it is saying, and what starts on demand.",
   "overrides": {
     "cookie": "0.7.2",
     "nanoid": "3.3.18",
@@ -20,7 +20,7 @@
   },
   "dependencies": {
     "@sveltejs/kit": "^2.0.0",
-    "@tauri-apps/api": "^2.8.0",
+    "@tauri-apps/api": "^2.12.0",
     "@tauri-apps/plugin-notification": "2.4.0",
     "maplibre-gl": "6.7.0",
     "mermaid": "11.17.2",

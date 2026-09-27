@@ -1,6 +1,6 @@
 //! The local-network listener: a TLS port on every interface that admits paired devices only.
 //!
-//! PRD Q119 makes the device key the trust root, so a phone on the same Wi-Fi reaches Axon with no
+//! PRD Q119 makes the device key the trust root, so a phone on the same Wi-Fi reaches Sjel with no
 //! tailnet and no account. Two things replace what `tailscale serve` provided:
 //!
 //! - **Encryption and the server's identity.** A self-signed certificate made on first start and
@@ -20,7 +20,7 @@ use std::sync::Arc;
 use sha2::{Digest, Sha256};
 
 /// The Bonjour service type the Mac advertises and the phone browses for.
-pub const SERVICE_TYPE: &str = "_axon._tcp";
+pub const SERVICE_TYPE: &str = "_sjel._tcp";
 
 const PORT_KEY: &str = "SJEL_LAN_PORT";
 const CERT_FILE: &str = "lan-cert.der";

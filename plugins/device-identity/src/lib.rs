@@ -99,7 +99,7 @@ pub fn init<R: Runtime>() -> TauriPlugin<R> {
             #[cfg(target_os = "ios")]
             let handle = api.register_ios_plugin(init_plugin_device_identity)?;
             #[cfg(target_os = "android")]
-            compile_error!("Axon device identity currently supports iOS only.");
+            compile_error!("Sjel device identity currently supports iOS only.");
             app.manage(DeviceIdentity(handle));
             Ok(())
         })

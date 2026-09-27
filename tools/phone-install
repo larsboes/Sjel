@@ -16,7 +16,7 @@ set -euo pipefail
 
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 DASH="$ROOT/dashboard"
-IPA="$DASH/src-tauri/gen/apple/build/arm64/LifeOS.ipa"
+IPA="$DASH/src-tauri/gen/apple/build/arm64/Sjel.ipa"
 
 build=1
 device=""
@@ -33,7 +33,7 @@ if [ -n "$(git -C "$ROOT" status --porcelain -- dashboard)" ]; then
 fi
 
 if [ "$build" = 1 ]; then
-  log="$(mktemp -t axon-ios-build)"
+  log="$(mktemp -t sjel-ios-build)"
   echo "phone-install: building (log: $log)"
   if ! (cd "$DASH" && cargo tauri ios build --debug) >"$log" 2>&1; then
     tail -30 "$log" >&2

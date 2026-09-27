@@ -1,6 +1,6 @@
-//! Tauri bridge for finding an Axon node on the local network (PRD Q119).
+//! Tauri bridge for finding a Sjel node on the local network (PRD Q119).
 //!
-//! The iOS target browses Bonjour for `_axon._tcp` (`libs/sjel-server/src/lan.rs`) and returns
+//! The iOS target browses Bonjour for `_sjel._tcp` (`libs/sjel-server/src/lan.rs`) and returns
 //! each node's host, port and certificate fingerprint from its TXT record. The WebView calls it
 //! as `plugin:local-network|browse`; this crate only registers it. What is found is unverified
 //! until the person compares the fingerprint with the one the Mac shows.

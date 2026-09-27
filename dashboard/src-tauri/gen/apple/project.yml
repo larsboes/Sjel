@@ -43,8 +43,8 @@ targets:
         UILaunchStoryboardName: LaunchScreen
         UIRequiredDeviceCapabilities: [arm64, metal]
         NSCameraUsageDescription: Sjel uses the camera and LiDAR to capture room geometry offline.
-        NSLocalNetworkUsageDescription: Axon looks for your Mac on this Wi-Fi so it can connect without a VPN.
-        NSBonjourServices: [_axon._tcp]
+        NSLocalNetworkUsageDescription: Sjel looks for your Mac on this Wi-Fi so it can connect without a VPN.
+        NSBonjourServices: [_sjel._tcp]
         UISupportedInterfaceOrientations:
           - UIInterfaceOrientationPortrait
           - UIInterfaceOrientationLandscapeLeft

@@ -4,7 +4,7 @@ import Tauri
 import UIKit
 import WebKit
 
-// Finds Axon nodes on the local network (PRD Q119). The Mac advertises `_axon._tcp` with its host,
+// Finds Sjel nodes on the local network (PRD Q119). The Mac advertises `_sjel._tcp` with its host,
 // port and certificate fingerprint in the TXT record (capabilities/sjel-status/src/lan.rs), so a
 // browse result is enough to connect: no service resolution, no connection from here.
 //
@@ -38,7 +38,7 @@ final class LocalNetworkPlugin: Plugin {
 
     browser?.cancel()
     let browser = NWBrowser(
-      for: .bonjourWithTXTRecord(type: "_axon._tcp", domain: nil), using: .tcp)
+      for: .bonjourWithTXTRecord(type: "_sjel._tcp", domain: nil), using: .tcp)
     self.browser = browser
 
     // Every handler runs on the main queue, so these need no lock.

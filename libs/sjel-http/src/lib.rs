@@ -91,7 +91,7 @@ impl std::fmt::Display for Purpose {
 /// reports the same number and a server sees one product rather than nine.
 pub fn user_agent(purpose: Purpose) -> String {
     format!(
-        "Axon-{}/{} (+{UPSTREAM})",
+        "Sjel-{}/{} (+{UPSTREAM})",
         header_token(purpose.0),
         env!("CARGO_PKG_VERSION")
     )
@@ -194,9 +194,9 @@ mod tests {
     use super::*;
 
     #[test]
-    fn the_user_agent_names_axon_and_the_upstream_repository() {
+    fn the_user_agent_names_sjel_and_the_upstream_repository() {
         let ua = user_agent(Purpose::new("comms-digest"));
-        assert!(ua.starts_with("Axon-comms-digest/"), "{ua}");
+        assert!(ua.starts_with("Sjel-comms-digest/"), "{ua}");
         assert!(ua.ends_with(&format!("(+{UPSTREAM})")), "{ua}");
         assert!(ua.contains("github.com/larsboes/Sjel"), "{ua}");
     }
@@ -211,7 +211,7 @@ mod tests {
 
     #[test]
     fn an_empty_purpose_still_produces_a_product_token() {
-        assert!(user_agent(Purpose::new("")).starts_with("Axon-unnamed/"));
+        assert!(user_agent(Purpose::new("")).starts_with("Sjel-unnamed/"));
     }
 
     #[test]

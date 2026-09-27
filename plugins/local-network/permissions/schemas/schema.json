@@ -313,10 +313,10 @@
           "markdownDescription": "Find an Axon node on the local network.\n#### This default permission set includes:\n\n- `allow-browse`"
         },
         {
-          "description": "Browse Bonjour for _axon._tcp for a few seconds and return what was found.",
+          "description": "Browse Bonjour for _sjel._tcp for a few seconds and return what was found.",
           "type": "string",
           "const": "allow-browse",
-          "markdownDescription": "Browse Bonjour for _axon._tcp for a few seconds and return what was found."
+          "markdownDescription": "Browse Bonjour for _sjel._tcp for a few seconds and return what was found."
         }
       ]
     }

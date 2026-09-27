@@ -49,7 +49,7 @@ Denies the browse command without any pre-configured scope.
 </td>
 <td>
 
-Browse Bonjour for _axon._tcp for a few seconds and return what was found.
+Browse Bonjour for _sjel._tcp for a few seconds and return what was found.
 
 </td>
 </tr>

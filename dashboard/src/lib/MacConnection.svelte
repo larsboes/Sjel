@@ -165,7 +165,7 @@
                   <input
                     type="url"
                     bind:value={draft}
-                    placeholder="https://<name>.ts.net or https://axon.example.com"
+                    placeholder="https://<name>.ts.net or https://sjel.example.com"
                     autocapitalize="off"
                     autocomplete="off"
                     spellcheck="false"

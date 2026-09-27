@@ -39,7 +39,7 @@ const ROUTES: &[route_manifest::Route] = &[
     r("GET", "/api/sjel-status/lan", "The local-network listener for paired devices: port, host and the certificate fingerprint a phone pins."),
     r("GET", "/api/sjel-status/capabilities", "Enabled capabilities, their ports and whether each is up."),
     r("GET", "/api/sjel-status/self", "This machine's resolved Axon model."),
-    r("GET", "/api/sjel-status/repos", "Axon and overlay repo state."),
+    r("GET", "/api/sjel-status/repos", "Sjel and overlay repo state."),
     r("GET", "/api/sjel-status/links", "Operator-pinned links from the overlay's links.toml."),
     r("GET", "/api/sjel-status/backups", "Every capability with a backup contract: last success, age, and whether it is overdue."),
     r("GET", "/api/sjel-status/host-watch", "Open findings from the hourly host watch: a runaway process or a filling disk."),

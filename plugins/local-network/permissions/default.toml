@@ -6,5 +6,5 @@ permissions = ["allow-browse"]
 
 [[permission]]
 identifier = "allow-browse"
-description = "Browse Bonjour for _axon._tcp for a few seconds and return what was found."
+description = "Browse Bonjour for _sjel._tcp for a few seconds and return what was found."
 commands.allow = ["browse"]

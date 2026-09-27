@@ -71,13 +71,13 @@ fn local_host_name() -> String {
         .unwrap_or_else(|| "axon".to_string())
 }
 
-/// Registers `_axon._tcp` with macOS's own `dns-sd`, so no mDNS library enters the tree. The
+/// Registers `_sjel._tcp` with macOS's own `dns-sd`, so no mDNS library enters the tree. The
 /// registration lives as long as the child process, which lives as long as this one.
 fn advertise(port: u16, host: &str, fingerprint: &str) {
     let spawned = tokio::process::Command::new("dns-sd")
         .args([
             "-R",
-            &format!("Axon on {host}"),
+            &format!("Sjel on {host}"),
             lan::SERVICE_TYPE,
             "local",
             &port.to_string(),

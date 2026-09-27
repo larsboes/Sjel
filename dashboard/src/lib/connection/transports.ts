@@ -48,7 +48,7 @@ export const TRANSPORTS: readonly TransportOption[] = [
     id: 'icloud',
     title: 'iCloud',
     summary: 'Encrypted sync through your Apple account.',
-    pros: ['Works from anywhere, and the Mac can sleep', 'Only your devices hold the key (PRD Q120)'],
+    pros: ['Works from anywhere, and the Mac can sleep', 'Only your devices hold the key'],
     cons: ['Apple devices only', 'Not built yet'],
     availability: 'later',
   },

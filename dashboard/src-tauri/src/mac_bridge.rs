@@ -1166,7 +1166,7 @@ mod tests {
             assert_eq!(local.pin_sha256, pin);
         }
         for bad in [
-            "https://axon.example.com",
+            "https://sjel.example.com",
             "https://8.8.8.8",
             "https://a.b.local",
             "http://lars-mac.local",
@@ -1224,7 +1224,7 @@ mod tests {
     #[test]
     fn accepts_any_https_host() {
         for good in [
-            "https://axon.example.com",
+            "https://sjel.example.com",
             "https://home.example.org:8443",
             "https://mac.example-tailnet.ts.net",
         ] {

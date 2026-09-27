@@ -180,12 +180,18 @@ identifier `com.lifeos.mobile`. Lars chose "everything, staged" over a brand-onl
   key are gone. Falsifier: `com.lifeos.mobile` remains in `tauri.conf.json`, or the new app
   fails `devices/api/devices/me`. Done in code (725e70f: `com.larsboes.sjel`, the IPA signs).
   Open: install the Sjel app and pair it.
-- [ ] ISC-13 — internal names move with a fallback: crates, `AXON_*` variables (the old name
+- [x] ISC-13 — internal names move with a fallback: crates, `AXON_*` variables (the old name
   still read), launchd labels and the overlay. Falsifier: a service that ran before the change
   does not start after it, or a variable is renamed with no fallback reader. Progress,
   2026-09-26: the skill is `sjel` (ec52c11c); launchd labels are `com.sjel.*` with the old units
   removed (0479a731, 15 of 15 moved); settings are `SJEL_*`, read with the `AXON_*` fallback in
-  Rust, shell and TypeScript. Open: the overlay's keys, the crates, the overlay repository.
+  Rust, shell and TypeScript (b2a56912), and the runner hands a service both
+  names (a25702c7). Done 2026-09-27: the overlay's keys, the nine library crates are `sjel-*`
+  (c36a237d), and the private overlay repository and folder carry the Sjel name, with the old
+  folder name kept as a symlink. Deliberately unchanged: the `axon-status` capability (its name is
+  the shell's URL mount the phone calls), `axon-fda-launcher` (renaming drops its Full Disk Access
+  grant), Linux systemd unit names, the `X-Axon-*` request headers, and "Axon" in prose. Each of
+  those is a separate decision, recorded under Not yet specified.
 
 ### F4 · The documents a stranger reads
 
@@ -266,6 +272,10 @@ the phone. Each item below is built and unverified, or ruled and unbuilt.
 - **`self.json` cannot regenerate.** graphify's semantic step calls
   `deepseek-ai/deepseek-v4-flash`, retired on 2026-08-07, so `tools/self generate` refuses. Commit
   `2f0feb6` says it regenerated `self.json`; only `ARCHITECTURE.md` changed.
+- **The names ISC-13 kept.** `axon-status` (a service rename changes the phone app's allowed
+  paths), `axon-fda-launcher` (a new binary name needs a new Full Disk Access grant), Linux
+  `axon-<cap>` systemd units, the `X-Axon-*` signed-request headers (a protocol change for paired
+  phones) and "Axon" in prose and doctrine. Each can move with a fallback when it is worth it.
 - **A scheduled job cannot build a capability it requires.** A launchd unit's PATH holds the
   directories of its own command and build tool only. feed-sweep requires comms and starts it
   when it is down; after the 2026-09-26 checkout move comms needed a rebuild, and feed-sweep's

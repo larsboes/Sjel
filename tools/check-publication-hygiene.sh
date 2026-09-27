@@ -56,7 +56,7 @@ legacy_tooling_path='~/Developer/'"Tooling"
 # tag `axon-personal-cents`, which is a field name in a ledger format and exposes nothing — and
 # it turned this gate red on every push to main from the commit that introduced it. A marker
 # exists to catch a deployment being named, not a string starting with the same letters.
-instance_markers="(axon-personal|axon-family|axon-work|lifeos-mono|obsidian-mono|DS220|Open Telekom Cloud|${legacy_tooling_path})([^-A-Za-z0-9]|$)"
+instance_markers="(sjel-personal|sjel-family|axon-personal|axon-family|axon-work|lifeos-mono|obsidian-mono|DS220|Open Telekom Cloud|${legacy_tooling_path})([^-A-Za-z0-9]|$)"
 while IFS= read -r path; do
   [ -n "$path" ] || continue
   case "$path" in

@@ -368,13 +368,14 @@ PID_FILE="/tmp/axon-$CAP.pid"
 PROC_LOG="/tmp/axon-$CAP.log"
 PROC_ERR="/tmp/axon-$CAP.err"
 
-COMMAND=(); BUILD_CMD=(); PANEL_BUILD_CMD=(); WORKDIR=""; PORT=""; HEALTH_PATH=""; BUILD_OUTPUT=""
+COMMAND=(); BUILD_CMD=(); PANEL_BUILD_CMD=(); WORKDIR=""; PORT=""; HEALTH_PATH=""; BUILD_OUTPUT=""; SIGN_ID=""
 
 process_init() {
   while IFS= read -r line; do [ -n "$line" ] && COMMAND+=("$line"); done < <(toml_array command "$MANIFEST")
   while IFS= read -r line; do [ -n "$line" ] && BUILD_CMD+=("$line"); done < <(toml_array build "$MANIFEST")
   while IFS= read -r line; do [ -n "$line" ] && PANEL_BUILD_CMD+=("$line"); done < <(toml_array panel_build "$MANIFEST")
   BUILD_OUTPUT="$(toml_get build_output "$MANIFEST")"
+  SIGN_ID="$(toml_get sign "$MANIFEST")"
   WORKDIR="$(toml_get workdir "$MANIFEST")"
   PORT="$(toml_get port "$MANIFEST")"
   HEALTH_PATH="$(toml_get health_path "$MANIFEST")"
@@ -503,7 +504,17 @@ maybe_build() {  # [force] — build when the artifact is missing, or always on 
   # In the capability's own workdir, not the repo root: `bun run build` has to run where
   # the package.json is. A capability without a workdir (every Rust one) still builds at
   # the root, which is where cargo resolves the workspace and its shared target/.
-  ( cd "$CAP_ROOT/${WORKDIR:-.}" && "${BUILD_CMD[@]}" )
+  ( cd "$CAP_ROOT/${WORKDIR:-.}" && "${BUILD_CMD[@]}" ) || return 1
+  # `sign = "<identifier>"` signs the built command binary with a stable identity, so a
+  # firewall or privacy grant survives rebuilds (tools/codesign-binary.sh). Here, after the
+  # build, and not inside the build command: the unit's PATH is derived from the build
+  # command's first word, and wrapping cargo in `sh -c` left cargo off it (2026-09-27, the
+  # shell stayed down until built by hand).
+  if [ -n "$SIGN_ID" ]; then
+    local bin="${COMMAND[0]}"
+    case "$bin" in /*) ;; *) bin="$CAP_ROOT/$bin" ;; esac
+    "$TOOLS_DIR/codesign-binary.sh" "$bin" "$SIGN_ID"
+  fi
 }
 
 wait_healthy() {  # returns 0 as soon as the service answers; 1 after the deadline

@@ -6,10 +6,11 @@
 kind        = "process"
 name        = "sjel-status"
 command     = ["target/release/sjel-status"]
-# Signed after the build so the firewall grant for the Same Wi-Fi listener survives rebuilds
-# (tools/codesign-binary.sh says why). A machine without an identity keeps the ad-hoc signature.
-# No quotes inside the command: tools/lib/toml.sh keeps a backslash-escaped quote literally.
-build       = ["sh", "-c", "cargo build --locked --release --bin sjel-status && tools/codesign-binary.sh ${CARGO_TARGET_DIR:-target}/release/sjel-status dev.sjel.sjel-status"]
+# Signed after each build, by the runner, so the firewall grant for the Same Wi-Fi listener
+# survives rebuilds (tools/codesign-binary.sh says why). The build command stays plain cargo: the
+# launchd unit's PATH comes from its first word.
+build       = ["cargo", "build", "--locked", "--release", "--bin", "sjel-status"]
+sign        = "dev.sjel.sjel-status"
 port        = "8082"
 health_path = "/health"
 autostart   = "true"

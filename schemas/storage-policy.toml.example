@@ -2,7 +2,7 @@
 #
 # tools/storage knows no path on this machine. What counts as a reclaimable class,
 # what is protected, and what "low on space" means are all deployment facts, so they
-# live here rather than in core Axon (README.md#generic-in-axon-specific-in-the-overlay).
+# live here rather than in core Axon (CONTRIBUTING.md#public-core-and-private-overlays).
 #
 # Replace every <placeholder> and delete the classes this host does not have.
 

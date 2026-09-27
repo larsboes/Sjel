@@ -38,7 +38,7 @@ graphify-out/
 # `tools/agent-integrations.sh install opencode`.
 .opencode/
 
-# PLAN.md is deliberately NOT ignored here any more (README.md#the-backlog-is-issues).
+# PLAN.md is deliberately NOT ignored here any more (CONTRIBUTING.md#the-backlog-is-isas).
 # Ignoring it is what let capabilities/PLAN.md grow into documentation ten tracked files
 # cited while staying invisible to every gate. A stray plan file should show up as
 # untracked in `git status` and get dealt with, not disappear.

@@ -3,7 +3,7 @@
 # The overlay half of Axon#177. Core Axon's tools/host-watch.ts owns the parsing, the
 # ratio arithmetic and the task hand-off, and knows no process name; every number and
 # name below is machine-specific and therefore lives in the active overlay
-# (README.md#generic-in-axon-specific-in-the-overlay).
+# (CONTRIBUTING.md#public-core-and-private-overlays).
 #
 # The disk half is NOT declared here. tools/storage.ts already reads its thresholds from
 # storage-policy.toml and host-watch consumes that verdict; a second set of free-space

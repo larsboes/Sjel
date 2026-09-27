@@ -38,7 +38,7 @@
 //
 // Knows no fact about this machine. Every budget, threshold and allowlisted process
 // comes from the overlay's config/host-watch-policy.toml, the same split
-// tools/storage already uses (README.md#generic-in-axon-specific-in-the-overlay).
+// tools/storage already uses (CONTRIBUTING.md#public-core-and-private-overlays).
 // The pure functions below are exported for tools/host-watch.test.ts.
 
 import { Database } from "bun:sqlite";

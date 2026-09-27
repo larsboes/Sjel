@@ -24,6 +24,7 @@
   <a href="https://larsboes.github.io/Sjel/">Live demo</a> ·
   <a href="#quick-start">Quick start</a> ·
   <a href="#measured">Measured</a> ·
+  <a href="research/why-sjel.md">Why</a> ·
   <a href="ISA.md">Open work</a>
 </p>
 

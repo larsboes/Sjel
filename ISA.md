@@ -207,13 +207,18 @@ curated place. The README is still 870 lines of doctrine below 230 of product.
   travel hub on desktop and phone from the live demo, What it does, Quick start, and a Measured
   table whose redaction rows were re-run that day. The 1.5 s fallback left the table: it is a
   setting, not a measurement.
-- [ ] ISC-15 — `research/` states why the project exists: the problem it answers and the
+- [x] ISC-15 — `research/` states why the project exists: the problem it answers and the
   sources that show the problem is real. It grows over time; the first version holds at least
   one sourced entry, and the demo site shows it. Falsifier: an entry without a source, or a
-  claim its source does not support.
-- [ ] ISC-16 — the engineering doctrine lives in `CONTRIBUTING.md`, and no link points at a
+  claim its source does not support. Done 2026-09-27: `research/why-sjel.md` with four sourced
+  claims and a list of what the sources do not show; `tools/generate-research.ts` renders it at
+  `/research` on the demo site.
+- [x] ISC-16 — the engineering doctrine lives in `CONTRIBUTING.md`, and no link points at a
   README anchor that no longer exists. About 208 links point into it today. Falsifier:
-  `git grep "README.md#"` finds an anchor missing from `README.md`.
+  `git grep "README.md#"` finds an anchor missing from `README.md`. Done 2026-09-27
+  (b88ad6d6): 124 files now cite `CONTRIBUTING.md#<section>`. Five older citations of deleted headings now
+  point at the sections that replaced them. `upstreams.toml` keeps `pins-and-cooldown` on purpose:
+  those strings record adoptions decided under that rule.
 
 ### F5 · The session's work, proven on real devices
 

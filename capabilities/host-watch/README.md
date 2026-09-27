@@ -126,7 +126,7 @@ resource hog would be a poor joke given what it watches for.
 
 Every threshold and allowed process name is in
 `<overlay>/config/host-watch-policy.toml`; this capability's code contains no process
-name and no number (README.md#generic-in-axon-specific-in-the-overlay). Shape:
+name and no number (CONTRIBUTING.md#public-core-and-private-overlays). Shape:
 `schemas/host-watch-policy.toml.example`.
 
 The network half reads a second file, `<overlay>/config/host-net-policy.toml`, which belongs

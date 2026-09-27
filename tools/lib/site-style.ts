@@ -104,7 +104,7 @@ export interface PageOptions {
   description: string;
   /** Prefix back to the site root: "" at the root, "../" one level down. */
   root: string;
-  current: "overview" | "docs" | "demo";
+  current: "overview" | "docs" | "demo" | "research";
   body: string;
   footer: string;
 }
@@ -133,6 +133,7 @@ ${opts.footer}
   ${link("", "Dashboard", "demo")}
   ${link("docs/index.html", "Reference", "docs")}
   ${link("docs/self-model.html", "Self-model", "overview")}
+  ${link("research/index.html", "Research", "research")}
   <span class="sep"></span>
   <a href="https://github.com/larsboes/Sjel">Source</a>
 </p>

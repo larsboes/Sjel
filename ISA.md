@@ -175,11 +175,12 @@ identifier `com.lifeos.mobile`. Lars chose "everything, staged" over a brand-onl
   alias. Falsifier: `sjel help` fails, or an existing `axon` call in a tool or skill breaks.
   Evidence, 2026-09-26: `axon` is a tracked symlink to `sjel` (902a7a7); both answer `help`,
   the capability-probe, runargs, bootstrap, persistence and doctor tests pass.
-- [ ] ISC-12 — the iPhone app has a Sjel bundle identifier and the phone is paired again.
+- [x] ISC-12 — the iPhone app has a Sjel bundle identifier and the phone is paired again.
   Changing the identifier makes iOS treat it as a new app: its offline copy and its Keychain
   key are gone. Falsifier: `com.lifeos.mobile` remains in `tauri.conf.json`, or the new app
   fails `devices/api/devices/me`. Done in code (725e70f: `com.larsboes.sjel`, the IPA signs).
-  Open: install the Sjel app and pair it.
+  Done 2026-09-27 21:38: paired by scanning the Mac's QR code (20ef0075, 7a9595d3); the node
+  lists the iPhone `active` and saw its first signed request 16 s later.
 - [x] ISC-13 — internal names move with a fallback: crates, `AXON_*` variables (the old name
   still read), launchd labels and the overlay. Falsifier: a service that ran before the change
   does not start after it, or a variable is renamed with no fallback reader. Progress,
@@ -226,9 +227,8 @@ Why: the transports and the model ladder shipped on 2026-09-25 with tests, but n
 the phone. Each item below is built and unverified, or ruled and unbuilt.
 
 - [ ] ISC-17 — a phone on the home Wi-Fi reaches the Mac's `:8443` listener, pins it after the
-  code comparison, and reads data with the tailnet off. The Sjel build of 2026-09-27 20:58 is on
-  the phone; the phone is not yet registered. The macOS firewall blocked `sjel-status` again after
-  that evening's rebuild (`socketfilterfw --getappblocked`), so it needs `--unblockapp` once more. Falsifier: `curl -k
+  code comparison, and reads data with the tailnet off. The phone is registered (ISC-12) and pinned the
+  Mac from the QR code; reading with the tailnet off is not yet checked. The firewall permits `sjel-status` (checked 21:33). Falsifier: `curl -k
   https://<LAN address>:8443/health` from another device does not answer 200.
 - [ ] ISC-18 — the assistant drawer calls the model ladder (`dashboard/src/lib/intelligence`)
   for at least one task and shows which rung answered. Falsifier: `rg "intelligence/backends"

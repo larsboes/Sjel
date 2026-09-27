@@ -37,6 +37,34 @@ const ROUTES: &[route_manifest::Route] = &[
         summary: "Claim one pairing challenge with a device label and Ed25519 public key.",
         request_schema: Some(route_manifest::schema_of::<ClaimRequest>),
     },
+    route_manifest::Route {
+        method: "POST",
+        path: "/api/pairing/requests",
+        summary: "A device asks to join with its label and Ed25519 public key; the owner allows or denies it.",
+        request_schema: Some(route_manifest::schema_of::<JoinRequest>),
+    },
+    route_manifest::get(
+        "GET",
+        "/api/pairing/requests",
+        "Requests still waiting for the owner, each with the six-digit code of its key.",
+    ),
+    route_manifest::get(
+        "GET",
+        "/api/pairing/requests/:id",
+        "One request's state; the device polls it until it is approved, denied or expired.",
+    ),
+    route_manifest::Route {
+        method: "POST",
+        path: "/api/pairing/requests/:id/approve",
+        summary: "Allow one waiting device: register the key it asked with.",
+        request_schema: None,
+    },
+    route_manifest::Route {
+        method: "POST",
+        path: "/api/pairing/requests/:id/deny",
+        summary: "Deny one waiting device.",
+        request_schema: None,
+    },
     route_manifest::get(
         "GET",
         "/api/devices",
@@ -59,6 +87,15 @@ const ROUTES: &[route_manifest::Route] = &[
 struct ClaimRequest {
     challenge_id: String,
     code: String,
+    label: String,
+    platform: String,
+    algorithm: String,
+    /// Hex-encoded 32-byte Ed25519 public key. The private key never crosses this API.
+    public_key: String,
+}
+
+#[derive(Debug, Deserialize, JsonSchema)]
+struct JoinRequest {
     label: String,
     platform: String,
     algorithm: String,
@@ -151,6 +188,48 @@ async fn claim(State(state): State<Arc<AppState>>, Json(request): Json<ClaimRequ
     }
 }
 
+async fn request_join(
+    State(state): State<Arc<AppState>>,
+    Json(request): Json<JoinRequest>,
+) -> Response {
+    let result = blocking(&state, move |state| {
+        state.store.request_pairing(
+            request.label,
+            request.platform,
+            request.algorithm,
+            request.public_key,
+        )
+    })
+    .await;
+    match result {
+        Ok(join) => (StatusCode::CREATED, json_value(join)).into_response(),
+        Err(error) => error.into_response(),
+    }
+}
+
+async fn pending_requests(State(state): State<Arc<AppState>>) -> Reply {
+    let requests = blocking(&state, |state| state.store.pending_requests()).await?;
+    Ok(json_value(json!({ "requests": requests })))
+}
+
+async fn join_status(State(state): State<Arc<AppState>>, Path(id): Path<String>) -> Reply {
+    Ok(json_value(
+        blocking(&state, move |state| state.store.pairing_request(&id)).await?,
+    ))
+}
+
+async fn approve_join(State(state): State<Arc<AppState>>, Path(id): Path<String>) -> Reply {
+    Ok(json_value(
+        blocking(&state, move |state| state.store.decide_request(&id, true)).await?,
+    ))
+}
+
+async fn deny_join(State(state): State<Arc<AppState>>, Path(id): Path<String>) -> Reply {
+    Ok(json_value(
+        blocking(&state, move |state| state.store.decide_request(&id, false)).await?,
+    ))
+}
+
 async fn list_devices(State(state): State<Arc<AppState>>) -> Reply {
     let devices: Vec<Device> = blocking(&state, |state| state.store.list()).await?;
     Ok(json_value(json!({ "devices": devices })))
@@ -224,6 +303,13 @@ fn router(state: Arc<AppState>) -> Router {
         .route("/routes", get(routes))
         .route("/api/pairing/challenges", post(create_challenge))
         .route("/api/pairing/claims", post(claim))
+        .route(
+            "/api/pairing/requests",
+            post(request_join).get(pending_requests),
+        )
+        .route("/api/pairing/requests/:id", get(join_status))
+        .route("/api/pairing/requests/:id/approve", post(approve_join))
+        .route("/api/pairing/requests/:id/deny", post(deny_join))
         .route("/api/devices", get(list_devices))
         .route("/api/devices/:id/revoke", post(revoke))
         .merge(signed)

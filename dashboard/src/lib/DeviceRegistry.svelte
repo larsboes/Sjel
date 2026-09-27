@@ -2,14 +2,17 @@
   import Overlay from './Overlay.svelte';
   import { ApiError, request } from './api';
   import { comparisonCode } from './connection/transports';
+  import { renderSVG } from 'uqr';
   import {
     canClaimOnThisDevice,
     devices,
     getDeviceIdentity,
+    pairingQrPayload,
     resetDeviceIdentity,
     type DeviceRecord,
     type PairingChallenge,
   } from './devices';
+  import { setupSheet } from './setup/setup-state.svelte';
 
   let open = $state(false);
   let busy = $state(false);
@@ -179,37 +182,51 @@
       created and kept by the device's platform key store; it is never entered here.
     </p>
 
-    <section class="pairing">
-      <div class="section-heading">
-        <div>
-          <h3>Pair a device</h3>
-          {#if lan && !canClaim}
-            <p class="hint">
-              Same Wi-Fi is on ({lan.host}.local, port {lan.port}). When a phone finds this Mac, it shows a code. It must be
-              <strong class="code">{comparisonCode(lan.fingerprint)}</strong>.
-            </p>
-          {/if}
-          <p class="hint">Generate a one-time challenge, then use its code or payload in the device setup flow.</p>
+    {#if canClaim}
+      <section class="pairing">
+        <h3>This iPhone</h3>
+        <button type="button" onclick={() => { open = false; setupSheet.open = true; }}>Set up this iPhone</button>
+      </section>
+    {:else}
+      <section class="pairing">
+        <div class="section-heading">
+          <div>
+            <h3>Add an iPhone</h3>
+            {#if lan}
+              <p class="hint">Open Sjel on the iPhone and scan this code. No code at hand? Tap “Find my Mac” on the iPhone, and this Mac asks you to allow it.</p>
+            {:else}
+              <p class="hint">Same Wi-Fi is off on this node, so an iPhone cannot find it or scan a code for it.</p>
+            {/if}
+          </div>
+          <button type="button" disabled={busy} onclick={() => void createChallenge()}>{challenge ? 'New code' : 'Add iPhone'}</button>
         </div>
-        <button type="button" disabled={busy} onclick={() => void createChallenge()}>New code</button>
-      </div>
-      {#if challenge}
-        {@const currentChallenge = challenge}
-        <div class="code-block">
-          <span class="label">One-time code</span>
-          <code>{currentChallenge.code}</code>
-          <span class="hint">Expires {date(currentChallenge.expires_at)}</span>
-          <button type="button" class="quiet" disabled={busy} onclick={() => void copy(currentChallenge.code, 'Code')}>Copy code</button>
-        </div>
-        <label>
-          Pairing payload
-          <textarea readonly rows="4" value={currentChallenge.qr_payload}></textarea>
-        </label>
-        <button type="button" class="quiet" disabled={busy} onclick={() => void copy(currentChallenge.qr_payload, 'Pairing payload')}>Copy payload</button>
-      {/if}
-    </section>
+        {#if challenge && lan}
+          {@const qr = pairingQrPayload({ host: lan.host, port: lan.port, fingerprint: lan.fingerprint, challenge_id: challenge.challenge_id, code: challenge.code })}
+          <!-- uqr draws the SVG from the code's modules only; no text from outside reaches it. -->
+          <div class="qr" role="img" aria-label="Pairing code for the Sjel iPhone app">{@html renderSVG(qr, { border: 2 })}</div>
+          <p class="hint">Works once, until {date(challenge.expires_at)}.</p>
+        {/if}
+        {#if challenge}
+          {@const currentChallenge = challenge}
+          <details>
+            <summary>Enter by hand instead</summary>
+            <div class="code-block">
+              <span class="label">One-time code</span>
+              <code>{currentChallenge.code}</code>
+              <button type="button" class="quiet" disabled={busy} onclick={() => void copy(currentChallenge.code, 'Code')}>Copy code</button>
+            </div>
+            <label>
+              Pairing payload
+              <textarea readonly rows="4" value={currentChallenge.qr_payload}></textarea>
+            </label>
+            <button type="button" class="quiet" disabled={busy} onclick={() => void copy(currentChallenge.qr_payload, 'Pairing payload')}>Copy payload</button>
+          </details>
+        {/if}
+      </section>
+    {/if}
 
     {#if canClaim}
+      <details class="claim-manual"><summary>Enter a pairing payload by hand</summary>
       <section class="claim">
         <div class="section-heading">
           <div>
@@ -230,6 +247,7 @@
         </label>
         <button type="button" disabled={busy || !payloadDraft.trim()} onclick={() => void claimThisDevice()}>Register this iPhone</button>
       </section>
+      </details>
     {/if}
 
     <section>
@@ -272,6 +290,18 @@
 {/if}
 
 <style>
+  .qr {
+    width: min(240px, 70vw);
+    margin: 0.5rem auto;
+    background: #fff;
+    padding: 6px;
+    border-radius: 8px;
+  }
+  .qr :global(svg) {
+    display: block;
+    width: 100%;
+    height: auto;
+  }
   .link {
     background: none;
     border: 0;
@@ -448,9 +478,5 @@
       align-items: stretch;
       flex-direction: column;
     }
-  }
-  .code {
-    font-family: var(--font-mono, ui-monospace, monospace);
-    letter-spacing: 0.05em;
   }
 </style>

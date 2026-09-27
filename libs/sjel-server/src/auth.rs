@@ -120,14 +120,33 @@ pub trait DeviceVerifier: Send + Sync {
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct AdmittedDevice(pub String);
 
-/// Set on the one unsigned request the LAN listener admits: a pairing claim, which a device sends
-/// before it has a registered key. The one-time code in its body is what protects it
-/// (`capabilities/devices`).
+/// Set on the unsigned requests the LAN listener admits, which a device sends before it has a
+/// registered key: a pairing claim (its one-time code protects it), a request to join, and that
+/// request's state (the owner allows or denies a join on the node). See `unsigned_pairing_route`.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct AdmittedPairingClaim;
 
 /// The pairing claim as the shell mounts it (`capabilities/devices/README.md`, Contract).
 pub const PAIRING_CLAIM_PATH: &str = "/devices/api/pairing/claims";
+/// A device's request to join, and its state under `/<id>`, as the shell mounts them.
+pub const PAIRING_REQUESTS_PATH: &str = "/devices/api/pairing/requests";
+
+/// The requests an unpaired device may send on the LAN listener: claim a code, ask to join, and
+/// read one join request's state. Listing, allowing and denying requests stay with the owner.
+pub fn unsigned_pairing_route(method: &Method, path: &str) -> bool {
+    if method == Method::POST {
+        return path == PAIRING_CLAIM_PATH || path == PAIRING_REQUESTS_PATH;
+    }
+    if method == Method::GET {
+        if let Some(id) = path
+            .strip_prefix(PAIRING_REQUESTS_PATH)
+            .and_then(|rest| rest.strip_prefix('/'))
+        {
+            return !id.is_empty() && !id.contains('/');
+        }
+    }
+    false
+}
 
 /// The target a device signs: the path the capability sees after the shell removes its mount.
 /// `/api/...` is not mounted and stays as it is. Mirrors `signed_path` in
@@ -415,7 +434,7 @@ async fn gate(State(auth): State<InboundAuth>, mut request: Request, next: Next)
         }
     }
     if auth.lan_devices_only && !exempt {
-        if request.method() == Method::POST && request.uri().path() == PAIRING_CLAIM_PATH {
+        if unsigned_pairing_route(request.method(), request.uri().path()) {
             request.extensions_mut().insert(AdmittedPairingClaim);
             return next.run(request).await;
         }
@@ -547,6 +566,29 @@ pub fn token_from_file(path: &Path) -> Option<String> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn an_unpaired_device_may_claim_ask_and_poll_but_not_list_or_decide() {
+        let admitted = |m: Method, p: &str| unsigned_pairing_route(&m, p);
+        assert!(admitted(Method::POST, "/devices/api/pairing/claims"));
+        assert!(admitted(Method::POST, "/devices/api/pairing/requests"));
+        assert!(admitted(
+            Method::GET,
+            "/devices/api/pairing/requests/join_ab12"
+        ));
+        assert!(!admitted(Method::GET, "/devices/api/pairing/requests"));
+        assert!(!admitted(Method::GET, "/devices/api/pairing/requests/"));
+        assert!(!admitted(
+            Method::POST,
+            "/devices/api/pairing/requests/join_ab12/approve"
+        ));
+        assert!(!admitted(
+            Method::GET,
+            "/devices/api/pairing/requests/join_ab12/approve"
+        ));
+        assert!(!admitted(Method::POST, "/devices/api/pairing/challenges"));
+        assert!(!admitted(Method::GET, "/devices/api/devices"));
+    }
 
     fn headers(pairs: &[(&str, &str)]) -> HeaderMap {
         let mut map = HeaderMap::new();

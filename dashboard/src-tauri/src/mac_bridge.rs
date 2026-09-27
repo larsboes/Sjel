@@ -518,6 +518,19 @@ fn classify(error: reqwest::Error, what: &str) -> SendError {
     }
 }
 
+/// The requests a device sends before it is registered. Mirrors `unsigned_pairing_route` in
+/// `libs/sjel-server/src/auth.rs`, which admits exactly these on the LAN listener.
+fn unsigned_pairing_request(method: &str, path: &str) -> bool {
+    let path = path.split('?').next().unwrap_or(path);
+    match method {
+        "POST" => path == "/devices/api/pairing/claims" || path == "/devices/api/pairing/requests",
+        "GET" => path
+            .strip_prefix("/devices/api/pairing/requests/")
+            .is_some_and(|id| !id.is_empty() && !id.contains('/')),
+        _ => false,
+    }
+}
+
 fn signed_path(path: &str) -> &str {
     if path == "/api" || path.starts_with("/api/") {
         return path;
@@ -649,7 +662,13 @@ impl ReqwestTransport {
         let mut headers = filter_headers(&request.headers).map_err(fail)?;
         let body = request.body.as_deref().unwrap_or("").as_bytes();
         // Signed per attempt, so a second address never sees a nonce the first one consumed.
-        if let Some(signer) = &self.signer {
+        // The pairing requests go unsigned: a device sends them before its key is registered,
+        // and the node refuses an unknown key's signature rather than ignoring it.
+        if let Some(signer) = self
+            .signer
+            .as_ref()
+            .filter(|_| !unsigned_pairing_request(method.as_str(), &request.path))
+        {
             headers.extend(
                 signed_request(signer.as_ref(), method.as_str(), &request.path, body)
                     .map_err(fail)?,
@@ -1109,6 +1128,35 @@ mod tests {
 
     use super::*;
 
+    #[test]
+    fn pairing_requests_go_unsigned_and_nothing_else_does() {
+        assert!(unsigned_pairing_request(
+            "POST",
+            "/devices/api/pairing/claims"
+        ));
+        assert!(unsigned_pairing_request(
+            "POST",
+            "/devices/api/pairing/requests"
+        ));
+        assert!(unsigned_pairing_request(
+            "GET",
+            "/devices/api/pairing/requests/join_1"
+        ));
+        assert!(!unsigned_pairing_request(
+            "GET",
+            "/devices/api/pairing/requests"
+        ));
+        assert!(!unsigned_pairing_request(
+            "POST",
+            "/devices/api/pairing/requests/join_1/approve"
+        ));
+        assert!(!unsigned_pairing_request("GET", "/devices/api/devices/me"));
+        assert!(!unsigned_pairing_request(
+            "GET",
+            "/sjel-status/api/sjel-status/health"
+        ));
+    }
+
     fn base(url: &str) -> Url {
         validate_base(url, true).expect("valid base")
     }
@@ -1191,8 +1239,12 @@ mod tests {
         };
         let name = rustls::pki_types::ServerName::try_from("anything.local").unwrap();
         let now = rustls::pki_types::UnixTime::now();
-        assert!(verifier.verify_server_cert(&cert, &[], &name, &[], now).is_ok());
-        assert!(verifier.verify_server_cert(&other, &[], &name, &[], now).is_err());
+        assert!(verifier
+            .verify_server_cert(&cert, &[], &name, &[], now)
+            .is_ok());
+        assert!(verifier
+            .verify_server_cert(&other, &[], &name, &[], now)
+            .is_err());
         assert_eq!(decode_pin(&hex(&pin)).unwrap(), pin);
         assert!(pinned_tls(pin).is_ok());
     }
@@ -1228,7 +1280,10 @@ mod tests {
             "https://home.example.org:8443",
             "https://mac.example-tailnet.ts.net",
         ] {
-            assert!(validate_base(good, false).is_ok(), "{good} must be accepted");
+            assert!(
+                validate_base(good, false).is_ok(),
+                "{good} must be accepted"
+            );
         }
     }
 

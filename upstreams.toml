@@ -705,3 +705,15 @@ url = "https://github.com/rustls/rustls"
 verdict = "adopt"
 license = "Apache-2.0 OR ISC OR MIT"
 why = "Declared directly on 2026-09-25 for the local-network transport (PRD Q119): the Mac's LAN listener (libs/sjel-server/src/lan.rs, with tokio-rustls and hyper-util) and the phone's pinned-certificate client (dashboard/src-tauri/src/mac_bridge.rs). It was already in both trees through reqwest's default TLS. The phone's verifier accepts exactly one certificate, by SHA-256, and still checks the handshake signature with the provider's own functions, so pinning replaces the chain check and nothing else. The provider is named explicitly in both places, because ServerConfig::builder() panics when a tree enables two"
+
+[tauri-plugin-barcode-scanner]
+url = "https://github.com/tauri-apps/plugins-workspace/tree/v2/plugins/barcode-scanner"
+verdict = "adopt"
+license = "MIT OR Apache-2.0"
+why = "The phone scans the Mac's pairing QR code (dashboard/src/lib/setup/SetupSjel.svelte), which carries the node's address, certificate fingerprint and a one-time code. The official Tauri plugin, so adopt rather than a hand-written AVCaptureMetadataOutput bridge. Mobile only; the app calls it through invoke('plugin:barcode-scanner|scan') and does not take the npm wrapper. Added 2026-09-27 at 2.4.6 (2026-08-31): 2.5.0 was under a day old. Read: ios/Sources/BarcodeScannerPlugin.swift asks for camera access itself and returns the decoded string only."
+
+[uqr]
+url = "https://github.com/unjs/uqr"
+verdict = "adopt"
+license = "MIT"
+why = "Draws the pairing QR code on the Mac as SVG (dashboard/src/lib/DeviceRegistry.svelte). No dependencies of its own, ESM, renders from the encoded modules only. Added 2026-09-27 at 0.1.3 (2026-04-03)."

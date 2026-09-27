@@ -63,6 +63,9 @@ pub fn run() {
         mac_bridge::sync_resolve,
     ]);
 
+    #[cfg(mobile)]
+    let builder = builder.plugin(tauri_plugin_barcode_scanner::init());
+
     builder
         .plugin(tauri_plugin_notification::init())
         .setup(|app| {

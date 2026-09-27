@@ -10,6 +10,10 @@ use crate::auth::{self, SignedRequest};
 
 const CODE_ALPHABET: &[u8; 32] = b"ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
 const CHALLENGE_TTL_SECONDS: i64 = 10 * 60;
+/// How long a phone's "ask to join" waits for the owner to allow it.
+const REQUEST_TTL_SECONDS: i64 = 10 * 60;
+/// Unanswered requests at once. A device on the same Wi-Fi can ask; it cannot flood the list.
+const MAX_PENDING_REQUESTS: i64 = 5;
 
 #[derive(Debug)]
 pub enum StoreError {
@@ -107,6 +111,131 @@ pub struct PairingChallenge {
     pub qr_payload: String,
 }
 
+/// A phone's request to join, waiting for the owner to allow or deny it on the node.
+#[derive(Debug, Clone, Serialize)]
+pub struct PairingRequest {
+    pub id: String,
+    pub label: String,
+    pub platform: String,
+    /// Six digits derived from the requesting key (`key_code`). The phone shows the same digits,
+    /// so the owner can tell their phone's request from anyone else's.
+    pub key_code: String,
+    /// `pending`, `approved`, `denied` or `expired`.
+    pub status: String,
+    pub created_at: i64,
+    pub expires_at: i64,
+    /// The registered device, once the request is approved.
+    pub device: Option<Device>,
+}
+
+/// Six digits from the SHA-256 of a public key, shown as `482 913`. The phone computes the same
+/// value from its own key (`dashboard/src/lib/devices.ts`, `keyCode`). It tells requests apart; it
+/// is not a secret. The TLS pin the phone compares in the same step is what stops a relay.
+pub fn key_code(public_key: &str) -> String {
+    let digest = Sha256::digest(
+        format!(
+            "sjel-pairing-key/v1:{}",
+            public_key.trim().to_ascii_lowercase()
+        )
+        .as_bytes(),
+    );
+    let value = u32::from_be_bytes([digest[0], digest[1], digest[2], digest[3]]) % 1_000_000;
+    let digits = format!("{value:06}");
+    format!("{} {}", &digits[..3], &digits[3..])
+}
+
+/// Label, platform, algorithm and key as a claim and a request both check them. Returns the
+/// normalized key and its fingerprint.
+fn validate_identity(
+    label: &str,
+    platform: &str,
+    algorithm: &str,
+    public_key: &str,
+) -> Result<(String, String), StoreError> {
+    if label.trim().is_empty() || label.chars().count() > 80 {
+        return Err(StoreError::Invalid(
+            "label must contain 1 to 80 characters".into(),
+        ));
+    }
+    if platform.trim().is_empty() || platform.chars().count() > 40 {
+        return Err(StoreError::Invalid(
+            "platform must contain 1 to 40 characters".into(),
+        ));
+    }
+    if algorithm != "ed25519" {
+        return Err(StoreError::Invalid(
+            "algorithm must be ed25519 in axon-pairing/v1".into(),
+        ));
+    }
+    let normalized_key = public_key.trim().to_ascii_lowercase();
+    public_key_bytes(&normalized_key)?;
+    let fingerprint = fingerprint(&normalized_key)?;
+    Ok((normalized_key, fingerprint))
+}
+
+/// Registers one device inside the caller's transaction.
+fn insert_device(
+    tx: &rusqlite::Transaction<'_>,
+    label: &str,
+    platform: &str,
+    algorithm: &str,
+    normalized_key: &str,
+    fingerprint: &str,
+    created_at: i64,
+) -> Result<Device, StoreError> {
+    // The native identity derives its local id from the first 16 bytes of this digest.
+    // Keeping the registry id deterministic means a device can sign immediately after
+    // claiming without persisting a second identifier beside its Keychain key.
+    let device_id = format!("dev_{}", &fingerprint[..32]);
+    let duplicate: Option<String> = tx
+        .query_row(
+            "SELECT id FROM devices_devices WHERE fingerprint = ?1",
+            params![fingerprint],
+            |row| row.get(0),
+        )
+        .optional()
+        .map_err(db)?;
+    if duplicate.is_some() {
+        return Err(StoreError::Conflict(
+            "this device key is already registered".into(),
+        ));
+    }
+    tx.execute(
+        "INSERT INTO devices_devices
+         (id, label, platform, algorithm, public_key, fingerprint, status,
+          created_at, last_seen_at, revoked_at)
+         VALUES (?1, ?2, ?3, ?4, ?5, ?6, 'active', ?7, NULL, NULL)",
+        params![
+            device_id,
+            label.trim(),
+            platform.trim(),
+            algorithm,
+            normalized_key,
+            fingerprint,
+            created_at
+        ],
+    )
+    .map_err(|error| {
+        if error.to_string().contains("UNIQUE") {
+            StoreError::Conflict("this device key is already registered".into())
+        } else {
+            db(error)
+        }
+    })?;
+    Ok(Device {
+        id: device_id,
+        label: label.trim().to_string(),
+        platform: platform.trim().to_string(),
+        algorithm: algorithm.to_string(),
+        public_key: normalized_key.to_string(),
+        fingerprint: fingerprint.to_string(),
+        status: "active".into(),
+        created_at,
+        last_seen_at: None,
+        revoked_at: None,
+    })
+}
+
 #[derive(Debug, Clone, Serialize)]
 pub struct Device {
     pub id: String,
@@ -194,28 +323,8 @@ impl DevicesStore {
         algorithm: String,
         public_key: String,
     ) -> Result<Device, StoreError> {
-        if label.trim().is_empty() || label.chars().count() > 80 {
-            return Err(StoreError::Invalid(
-                "label must contain 1 to 80 characters".into(),
-            ));
-        }
-        if platform.trim().is_empty() || platform.chars().count() > 40 {
-            return Err(StoreError::Invalid(
-                "platform must contain 1 to 40 characters".into(),
-            ));
-        }
-        if algorithm != "ed25519" {
-            return Err(StoreError::Invalid(
-                "algorithm must be ed25519 in axon-pairing/v1".into(),
-            ));
-        }
-        let normalized_key = public_key.trim().to_ascii_lowercase();
-        public_key_bytes(&normalized_key)?;
-        let fingerprint = fingerprint(&normalized_key)?;
-        // The native identity derives its local id from the first 16 bytes of this digest.
-        // Keeping the registry id deterministic means a device can sign immediately after
-        // claiming without persisting a second identifier beside its Keychain key.
-        let device_id = format!("dev_{}", &fingerprint[..32]);
+        let (normalized_key, fingerprint) =
+            validate_identity(&label, &platform, &algorithm, &public_key)?;
         let created_at = now();
         let conn = self.connection()?;
         let tx = conn.unchecked_transaction().map_err(db)?;
@@ -242,59 +351,237 @@ impl DevicesStore {
         if digest_hex(&code.trim().to_ascii_uppercase()) != expected_hash {
             return Err(StoreError::Invalid("pairing code is incorrect".into()));
         }
-        let duplicate: Option<String> = tx
-            .query_row(
-                "SELECT id FROM devices_devices WHERE fingerprint = ?1",
-                params![fingerprint],
-                |row| row.get(0),
-            )
-            .optional()
-            .map_err(db)?;
-        if duplicate.is_some() {
-            return Err(StoreError::Conflict(
-                "this device key is already registered".into(),
-            ));
-        }
-        tx.execute(
-            "INSERT INTO devices_devices
-             (id, label, platform, algorithm, public_key, fingerprint, status,
-              created_at, last_seen_at, revoked_at)
-             VALUES (?1, ?2, ?3, ?4, ?5, ?6, 'active', ?7, NULL, NULL)",
-            params![
-                device_id,
-                label.trim(),
-                platform.trim(),
-                algorithm,
-                normalized_key,
-                fingerprint,
-                created_at
-            ],
-        )
-        .map_err(|error| {
-            if error.to_string().contains("UNIQUE") {
-                StoreError::Conflict("this device key is already registered".into())
-            } else {
-                db(error)
-            }
-        })?;
+        let device = insert_device(
+            &tx,
+            &label,
+            &platform,
+            &algorithm,
+            &normalized_key,
+            &fingerprint,
+            created_at,
+        )?;
         tx.execute(
             "UPDATE devices_pairing_challenges SET consumed_at = ?2 WHERE id = ?1",
             params![challenge_id, created_at],
         )
         .map_err(db)?;
         tx.commit().map_err(db)?;
-        Ok(Device {
-            id: device_id,
+        Ok(device)
+    }
+
+    /// A phone asks to join. It waits, `pending`, until the owner allows or denies it on the node.
+    pub fn request_pairing(
+        &self,
+        label: String,
+        platform: String,
+        algorithm: String,
+        public_key: String,
+    ) -> Result<PairingRequest, StoreError> {
+        let (normalized_key, fingerprint) =
+            validate_identity(&label, &platform, &algorithm, &public_key)?;
+        let created_at = now();
+        let conn = self.connection()?;
+        let tx = conn.unchecked_transaction().map_err(db)?;
+        let registered: Option<String> = tx
+            .query_row(
+                "SELECT status FROM devices_devices WHERE fingerprint = ?1",
+                params![fingerprint],
+                |row| row.get(0),
+            )
+            .optional()
+            .map_err(db)?;
+        match registered.as_deref() {
+            Some("active") => {
+                return Err(StoreError::Conflict(
+                    "this device key is already registered".into(),
+                ))
+            }
+            Some(_) => {
+                return Err(StoreError::Conflict(
+                    "this device key was revoked; create a new identity on the device".into(),
+                ))
+            }
+            None => {}
+        }
+        let pending: i64 = tx
+            .query_row(
+                "SELECT COUNT(*) FROM devices_pairing_requests
+                 WHERE status = 'pending' AND expires_at > ?1",
+                params![created_at],
+                |row| row.get(0),
+            )
+            .map_err(db)?;
+        if pending >= MAX_PENDING_REQUESTS {
+            return Err(StoreError::Conflict(
+                "too many devices are waiting to join; allow or deny them on the node first".into(),
+            ));
+        }
+        let id = random_hex(16, "join_")?;
+        let expires_at = created_at + REQUEST_TTL_SECONDS;
+        tx.execute(
+            "INSERT INTO devices_pairing_requests
+             (id, label, platform, algorithm, public_key, fingerprint, status,
+              created_at, expires_at, decided_at, device_id)
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6, 'pending', ?7, ?8, NULL, NULL)",
+            params![
+                id,
+                label.trim(),
+                platform.trim(),
+                algorithm,
+                normalized_key,
+                fingerprint,
+                created_at,
+                expires_at
+            ],
+        )
+        .map_err(db)?;
+        tx.commit().map_err(db)?;
+        Ok(PairingRequest {
+            id,
             label: label.trim().to_string(),
             platform: platform.trim().to_string(),
-            algorithm,
-            public_key: normalized_key,
-            fingerprint,
-            status: "active".into(),
+            key_code: key_code(&normalized_key),
+            status: "pending".into(),
             created_at,
-            last_seen_at: None,
-            revoked_at: None,
+            expires_at,
+            device: None,
         })
+    }
+
+    /// The requests still waiting for the owner, oldest first.
+    pub fn pending_requests(&self) -> Result<Vec<PairingRequest>, StoreError> {
+        let conn = self.connection()?;
+        let mut statement = conn
+            .prepare(
+                "SELECT id FROM devices_pairing_requests
+                 WHERE status = 'pending' AND expires_at > ?1
+                 ORDER BY created_at, id",
+            )
+            .map_err(db)?;
+        let ids = statement
+            .query_map(params![now()], |row| row.get::<_, String>(0))
+            .map_err(db)?
+            .collect::<rusqlite::Result<Vec<_>>>()
+            .map_err(db)?;
+        drop(statement);
+        drop(conn);
+        ids.iter().map(|id| self.pairing_request(id)).collect()
+    }
+
+    /// One request as the phone polls it. A pending request past its time reads `expired`.
+    pub fn pairing_request(&self, id: &str) -> Result<PairingRequest, StoreError> {
+        let conn = self.connection()?;
+        let row: Option<(String, String, String, String, i64, i64, Option<String>)> = conn
+            .query_row(
+                "SELECT label, platform, public_key, status, created_at, expires_at, device_id
+                 FROM devices_pairing_requests WHERE id = ?1",
+                params![id],
+                |row| {
+                    Ok((
+                        row.get(0)?,
+                        row.get(1)?,
+                        row.get(2)?,
+                        row.get(3)?,
+                        row.get(4)?,
+                        row.get(5)?,
+                        row.get(6)?,
+                    ))
+                },
+            )
+            .optional()
+            .map_err(db)?;
+        let Some((label, platform, public_key, status, created_at, expires_at, device_id)) = row
+        else {
+            return Err(StoreError::NotFound("pairing request not found".into()));
+        };
+        let status = if status == "pending" && expires_at <= now() {
+            "expired".to_string()
+        } else {
+            status
+        };
+        drop(conn);
+        let device = match device_id {
+            Some(device_id) => self
+                .list()?
+                .into_iter()
+                .find(|device| device.id == device_id),
+            None => None,
+        };
+        Ok(PairingRequest {
+            id: id.to_string(),
+            label,
+            platform,
+            key_code: key_code(&public_key),
+            status,
+            created_at,
+            expires_at,
+            device,
+        })
+    }
+
+    /// The owner's answer. Allowing registers the device with the key it asked with.
+    pub fn decide_request(&self, id: &str, allow: bool) -> Result<PairingRequest, StoreError> {
+        let decided_at = now();
+        let conn = self.connection()?;
+        let tx = conn.unchecked_transaction().map_err(db)?;
+        let row: Option<(String, String, String, String, String, String, i64)> = tx
+            .query_row(
+                "SELECT label, platform, algorithm, public_key, fingerprint, status, expires_at
+                 FROM devices_pairing_requests WHERE id = ?1",
+                params![id],
+                |row| {
+                    Ok((
+                        row.get(0)?,
+                        row.get(1)?,
+                        row.get(2)?,
+                        row.get(3)?,
+                        row.get(4)?,
+                        row.get(5)?,
+                        row.get(6)?,
+                    ))
+                },
+            )
+            .optional()
+            .map_err(db)?;
+        let Some((label, platform, algorithm, public_key, fingerprint, status, expires_at)) = row
+        else {
+            return Err(StoreError::NotFound("pairing request not found".into()));
+        };
+        if status != "pending" {
+            return Err(StoreError::Conflict(format!(
+                "pairing request was already {status}"
+            )));
+        }
+        if expires_at <= decided_at {
+            return Err(StoreError::Conflict("pairing request has expired".into()));
+        }
+        if allow {
+            let device = insert_device(
+                &tx,
+                &label,
+                &platform,
+                &algorithm,
+                &public_key,
+                &fingerprint,
+                decided_at,
+            )?;
+            tx.execute(
+                "UPDATE devices_pairing_requests
+                 SET status = 'approved', decided_at = ?2, device_id = ?3 WHERE id = ?1",
+                params![id, decided_at, device.id],
+            )
+            .map_err(db)?;
+        } else {
+            tx.execute(
+                "UPDATE devices_pairing_requests
+                 SET status = 'denied', decided_at = ?2 WHERE id = ?1",
+                params![id, decided_at],
+            )
+            .map_err(db)?;
+        }
+        tx.commit().map_err(db)?;
+        drop(conn);
+        self.pairing_request(id)
     }
 
     pub fn list(&self) -> Result<Vec<Device>, StoreError> {
@@ -540,6 +827,21 @@ fn migrate(conn: &rusqlite::Connection, prefix: &str) -> Result<(), Box<dyn std:
             expires_at    INTEGER NOT NULL,
             consumed_at   INTEGER
         );
+        CREATE TABLE IF NOT EXISTS {prefix}_pairing_requests (
+            id            TEXT PRIMARY KEY,
+            label         TEXT NOT NULL,
+            platform      TEXT NOT NULL,
+            algorithm     TEXT NOT NULL CHECK (algorithm = 'ed25519'),
+            public_key    TEXT NOT NULL,
+            fingerprint   TEXT NOT NULL,
+            status        TEXT NOT NULL CHECK (status IN ('pending', 'approved', 'denied')),
+            created_at    INTEGER NOT NULL,
+            expires_at    INTEGER NOT NULL,
+            decided_at    INTEGER,
+            device_id     TEXT
+        );
+        CREATE INDEX IF NOT EXISTS idx_{prefix}_pairing_requests_status
+            ON {prefix}_pairing_requests(status, expires_at);
         CREATE TABLE IF NOT EXISTS {prefix}_request_nonces (
             device_id   TEXT NOT NULL,
             nonce       TEXT NOT NULL,
@@ -582,6 +884,92 @@ mod tests {
         std::fs::create_dir(&dir).unwrap();
         let store = DevicesStore::open(&dir.join("axon.db")).unwrap();
         (TestDir(dir), store)
+    }
+
+    fn key(seed: u8) -> String {
+        let keypair = ring::signature::Ed25519KeyPair::from_seed_unchecked(&[seed; 32]).unwrap();
+        auth::hex(keypair.public_key().as_ref())
+    }
+
+    #[test]
+    fn a_join_request_waits_and_allowing_it_registers_the_key() {
+        let (_dir, store) = store();
+        let public_key = key(21);
+        let join = store
+            .request_pairing(
+                "iPhone".into(),
+                "ios".into(),
+                "ed25519".into(),
+                public_key.clone(),
+            )
+            .unwrap();
+        assert_eq!(join.status, "pending");
+        assert_eq!(join.key_code, key_code(&public_key));
+        assert_eq!(store.pending_requests().unwrap().len(), 1);
+        assert!(
+            store.list().unwrap().is_empty(),
+            "nothing registers before the owner allows it"
+        );
+
+        let allowed = store.decide_request(&join.id, true).unwrap();
+        assert_eq!(allowed.status, "approved");
+        let device = allowed
+            .device
+            .expect("an approved request names its device");
+        assert_eq!(device.public_key, public_key);
+        assert_eq!(store.list().unwrap().len(), 1);
+        assert!(store.pending_requests().unwrap().is_empty());
+        assert!(matches!(
+            store.decide_request(&join.id, false),
+            Err(StoreError::Conflict(_))
+        ));
+        assert!(matches!(
+            store.request_pairing("iPhone".into(), "ios".into(), "ed25519".into(), public_key),
+            Err(StoreError::Conflict(_))
+        ));
+    }
+
+    #[test]
+    fn a_denied_request_registers_nothing() {
+        let (_dir, store) = store();
+        let join = store
+            .request_pairing("iPhone".into(), "ios".into(), "ed25519".into(), key(22))
+            .unwrap();
+        assert_eq!(
+            store.decide_request(&join.id, false).unwrap().status,
+            "denied"
+        );
+        assert!(store.list().unwrap().is_empty());
+        assert!(store.pending_requests().unwrap().is_empty());
+    }
+
+    #[test]
+    fn at_most_five_requests_wait_at_once() {
+        let (_dir, store) = store();
+        for seed in 30..35 {
+            store
+                .request_pairing("Phone".into(), "ios".into(), "ed25519".into(), key(seed))
+                .unwrap();
+        }
+        assert!(matches!(
+            store.request_pairing("Phone".into(), "ios".into(), "ed25519".into(), key(35)),
+            Err(StoreError::Conflict(_))
+        ));
+    }
+
+    #[test]
+    fn the_key_code_is_six_digits_and_stable() {
+        let code = key_code(&key(40));
+        assert_eq!(code.len(), 7);
+        assert!(code.chars().enumerate().all(|(i, c)| if i == 3 {
+            c == ' '
+        } else {
+            c.is_ascii_digit()
+        }));
+        assert_eq!(code, key_code(&key(40).to_ascii_uppercase()));
+        assert_ne!(code, key_code(&key(41)));
+        // The same vector is pinned in dashboard/vite/pairing.test.ts, so both sides agree.
+        assert_eq!(key_code(&"ab".repeat(32)), "571 846");
     }
 
     #[test]

@@ -15,6 +15,9 @@
   import MacConnection from "$lib/MacConnection.svelte";
   import DeviceRegistry from "$lib/DeviceRegistry.svelte";
   import { canClaimOnThisDevice } from "$lib/devices";
+  import SetupSjel from "$lib/setup/SetupSjel.svelte";
+  import JoinPrompt from "$lib/setup/JoinPrompt.svelte";
+  import { inTauri } from "$lib/mac-bridge";
   import SyncStatus from "$lib/SyncStatus.svelte";
   import OmniSearch from "$lib/omni/OmniSearch.svelte";
   import { omniStore } from "$lib/omni/omni.svelte";
@@ -323,6 +326,12 @@
       {@render children()}
     {/key}
   </main>
+
+  {#if canClaimOnThisDevice()}
+    <SetupSjel />
+  {:else if !inTauri() && capabilities.byName("devices")}
+    <JoinPrompt />
+  {/if}
 
   <footer>
     <div class="inner">

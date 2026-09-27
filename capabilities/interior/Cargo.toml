@@ -18,15 +18,15 @@ path = "src/lib.rs"
 [dependencies]
 # Pflicht, kein Komfort: doctors "Server bind policy" weist jede Capability zurueck, die sich
 # einen eigenen Listener baut.
-axon-server = { path = "../../libs/axon-server" }
+sjel-server = { path = "../../libs/sjel-server" }
 # Loest SJEL_PERSONAL_ROOT auf. Jede Zahl, die diese Capability rechnet, liegt unter
 # <overlay>/data/interior — hier liegt keine.
-axon-config = { path = "../../libs/axon-config" }
+sjel-config = { path = "../../libs/sjel-config" }
 # `/routes` neben `/health`, wie jede andere Capability mit HTTP-Oberflaeche.
 route-manifest = { path = "../../libs/route-manifest" }
 # Das Inventar sind Zeilen (PRD Q58/B25). Eine Datei fuer alle Capabilities, `interior_`
-# als Praefix — libs/axon-store/README.md hat das Warum.
-axon-store = { path = "../../libs/axon-store" }
+# als Praefix — libs/sjel-store/README.md hat das Warum.
+sjel-store = { path = "../../libs/sjel-store" }
 # Shared Ed25519 device verification for the authenticated sync ingress.
 devices = { path = "../devices" }
 # Die eine Art, eine Datei aus einer erklaerten Vault-Wurzel zu holen, plus die markierte

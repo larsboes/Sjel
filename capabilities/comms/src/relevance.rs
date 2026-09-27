@@ -17,7 +17,7 @@ use sha2::{Digest, Sha256};
 
 use crate::config::RelevanceConfig;
 use crate::store::FeedItem;
-use axon_inference::{ResolvedRole, TextRole};
+use sjel_inference::{ResolvedRole, TextRole};
 
 // The selected multilingual E5 model accepts 512 tokens. A conservative
 // character cap avoids sending and tokenizing long transcripts that the model
@@ -762,7 +762,7 @@ mod stub_embedding {
 mod repair_tests {
     use super::*;
     use crate::config::RelevanceConfig;
-    use axon_inference::{Api, Backend};
+    use sjel_inference::{Api, Backend};
 
     fn role(base_url: &str) -> ResolvedRole {
         ResolvedRole {

@@ -731,8 +731,8 @@ pub fn looks_like_html(body: &str) -> bool {
 /// never on the async runtime: a blocking reqwest client driven from a Tokio
 /// worker panics at run time rather than failing to compile.
 pub fn blocking_client() -> Result<reqwest::blocking::Client, String> {
-    axon_http::builder(
-        axon_http::Purpose::new("finance-price"),
+    sjel_http::builder(
+        sjel_http::Purpose::new("finance-price"),
         Duration::from_secs(15),
     )
     .cookie_store(true)

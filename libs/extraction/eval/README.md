@@ -24,7 +24,7 @@ text. This one scores whether a reader can read a page at all.
 ## Running it
 
 ```sh
-cargo run -p axon-extraction --bin extraction-gate -- libs/extraction/eval/ocr-corpus.json
+cargo run -p sjel-extraction --bin extraction-gate -- libs/extraction/eval/ocr-corpus.json
 ```
 
 By hand. `cargo test` never runs an engine: the scoring rule lives in

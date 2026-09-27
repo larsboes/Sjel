@@ -911,7 +911,7 @@ The five tables live in the shared SQLite file — `SJEL_DB_PATH`, else
 `$SJEL_PERSONAL_ROOT/data/axon/axon.db` — under the table prefix `calendar`, so they are
 `calendar_entries`, `calendar_rhythms`, `calendar_contexts`,
 `calendar_trip_materializations` and `calendar_google_exports`
-(libs/axon-store/README.md). PRD Q45 (2026-08-27) moved them there from a Postgres
+(libs/sjel-store/README.md). PRD Q45 (2026-08-27) moved them there from a Postgres
 schema.
 
 Where the file lives is a deployment fact, not a capability one, so a `database_url` left

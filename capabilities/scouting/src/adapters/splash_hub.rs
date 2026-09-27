@@ -189,8 +189,8 @@ impl SourceAdapter for SplashHubAdapter {
     fn search(&self, query: &SearchQuery) -> Result<Vec<Opportunity>, SourceError> {
         let fetched_at = chrono_now();
         let url = self.url();
-        let client = axon_http::client(
-            axon_http::Purpose::new("scouting-splash-hub"),
+        let client = sjel_http::client(
+            sjel_http::Purpose::new("scouting-splash-hub"),
             crate::http::TIMEOUT,
         )
         .map_err(|e| SourceError::Fetch(format!("client build: {e}")))?;

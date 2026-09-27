@@ -1248,8 +1248,8 @@ fn cmd_relevance(args: &[String], cfg: &Config) {
     let force = args.iter().any(|value| value == "--force");
 
     let base = format!("http://127.0.0.1:{}", cfg.port);
-    let client = match axon_http::client(
-        axon_http::Purpose::new("comms-cli"),
+    let client = match sjel_http::client(
+        sjel_http::Purpose::new("comms-cli"),
         std::time::Duration::from_secs(600),
     ) {
         Ok(client) => client,

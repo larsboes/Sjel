@@ -52,7 +52,7 @@ impl Store {
                     approved_at = {now}
                  RETURNING preview_hash, approved_at",
                 prefix = self.prefix,
-                now = axon_store::NOW
+                now = sjel_store::NOW
             ),
             params![
                 &approval.source,
@@ -109,7 +109,7 @@ impl Store {
         // approved, with no window in which the approval could vanish between the
         // check and the insert. A transaction buys that, and the read still has to
         // match all four columns, so a stale hash is refused the way it was.
-        let transaction = axon_store::write_transaction(&mut conn)?;
+        let transaction = sjel_store::write_transaction(&mut conn)?;
         let approved_at = transaction
             .query_row(
                 &format!(
@@ -327,9 +327,9 @@ impl Store {
                      next_attempt = EXCLUDED.next_attempt",
                 prefix = self.prefix,
                 retryable = retryable_digest_states_sql(),
-                now = axon_store::NOW,
+                now = sjel_store::NOW,
                 backoff =
-                    axon_store::now_offset("'+' || (5 * (1 << MAX(?11 - 1, 0))) || ' minutes'")
+                    sjel_store::now_offset("'+' || (5 * (1 << MAX(?11 - 1, 0))) || ' minutes'")
             ),
             params![
                 &digest.source,
@@ -469,7 +469,7 @@ impl Store {
                 table = table,
                 order = order,
                 retryable = retryable_digest_states_sql(),
-                now = axon_store::NOW
+                now = sjel_store::NOW
             ),
             params![
                 &source,
@@ -618,7 +618,7 @@ impl Store {
                      OR (j.status = 'running' AND j.started_at < {stale}))
                    AND j.provider_calls < 5",
                     prefix = self.prefix,
-                    stale = axon_store::now_offset("'-5 minutes'")
+                    stale = sjel_store::now_offset("'-5 minutes'")
                 ),
                 params![&job_id],
                 |row| {
@@ -749,8 +749,8 @@ impl Store {
                        AND provider_calls < 5
                      RETURNING provider_calls, preview_hash",
                     self.prefix,
-                    now = axon_store::NOW,
-                    stale = axon_store::now_offset("'-5 minutes'")
+                    now = sjel_store::NOW,
+                    stale = sjel_store::now_offset("'-5 minutes'")
                 ),
                 params![&job_id],
                 |row| Ok((row.get::<_, i32>(0)?, row.get::<_, String>(1)?)),
@@ -782,7 +782,7 @@ impl Store {
     ) -> Result<bool, Box<dyn std::error::Error>> {
         let result = serde_json::to_string(result)?;
         let mut conn = self.conn()?;
-        let transaction = axon_store::write_transaction(&mut conn)?;
+        let transaction = sjel_store::write_transaction(&mut conn)?;
         let attempt_updated = transaction.execute(
             &format!(
                 "UPDATE {}_content_cloud_attempts
@@ -790,7 +790,7 @@ impl Store {
                      completed_at = {now}, last_error = NULL
                  WHERE attempt_id = ?2 AND job_id = ?1 AND status = 'running'",
                 self.prefix,
-                now = axon_store::NOW
+                now = sjel_store::NOW
             ),
             params![&job_id, &attempt_id, &result],
         )?;
@@ -801,7 +801,7 @@ impl Store {
                      completed_at = {now}, last_error = NULL
                  WHERE job_id = ?1 AND status = 'running'",
                 self.prefix,
-                now = axon_store::NOW
+                now = sjel_store::NOW
             ),
             params![&job_id, &result],
         )?;
@@ -822,14 +822,14 @@ impl Store {
     ) -> Result<bool, Box<dyn std::error::Error>> {
         let error: String = error.chars().take(500).collect();
         let mut conn = self.conn()?;
-        let transaction = axon_store::write_transaction(&mut conn)?;
+        let transaction = sjel_store::write_transaction(&mut conn)?;
         let attempt_updated = transaction.execute(
             &format!(
                 "UPDATE {}_content_cloud_attempts
                  SET status = 'failed', last_error = ?3, completed_at = {now}
                  WHERE attempt_id = ?2 AND job_id = ?1 AND status = 'running'",
                 self.prefix,
-                now = axon_store::NOW
+                now = sjel_store::NOW
             ),
             params![&job_id, &attempt_id, &error],
         )?;
@@ -839,7 +839,7 @@ impl Store {
                  SET status = 'failed', last_error = ?2, completed_at = {now}
                  WHERE job_id = ?1 AND status = 'running'",
                 self.prefix,
-                now = axon_store::NOW
+                now = sjel_store::NOW
             ),
             params![&job_id, &error],
         )?;

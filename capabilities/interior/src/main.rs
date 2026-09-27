@@ -499,7 +499,7 @@ async fn main() {
 async fn interior_serve() {
     // Der Port kommt aus service.toml und wird als SJEL_PORT gesetzt; 8092 ist der Wert, unter
     // dem die Vorgaengerfassung erreichbar war, damit vorhandene Lesezeichen weiter stimmen.
-    let port: u16 = axon_config::env_var("SJEL_PORT")
+    let port: u16 = sjel_config::env_var("SJEL_PORT")
         .ok()
         .and_then(|v| v.parse().ok())
         .unwrap_or(8092);
@@ -671,7 +671,7 @@ fn inventory_import(argv: &[String]) -> i32 {
             return 2;
         }
     };
-    let store = match interior::store::Store::open(&axon_config::database_path()) {
+    let store = match interior::store::Store::open(&sjel_config::database_path()) {
         Ok(s) => s,
         Err(e) => {
             eprintln!("{}", red(&format!("Datenbank nicht erreichbar: {e}")));
@@ -733,7 +733,7 @@ fn inventory_import(argv: &[String]) -> i32 {
 /// nicht baut: `service.toml` erzeugt dort nur `--bin trips-server`, und `which trips` findet
 /// nichts. Ein Reparaturweg, den die Fehlermeldung nennt und die Maschine nicht hat, ist keiner.
 fn vault_writeback() -> i32 {
-    let st = match interior::store::Store::open(&axon_config::database_path()) {
+    let st = match interior::store::Store::open(&sjel_config::database_path()) {
         Ok(s) => s,
         Err(e) => {
             eprintln!("{}", red(&format!("Datenbank nicht erreichbar: {e}")));
@@ -790,7 +790,7 @@ fn vault_writeback() -> i32 {
 
 fn inventory_show() -> i32 {
     use interior::store::State;
-    let store = match interior::store::Store::open(&axon_config::database_path()) {
+    let store = match interior::store::Store::open(&sjel_config::database_path()) {
         Ok(s) => s,
         Err(e) => {
             eprintln!("{}", red(&format!("Datenbank nicht erreichbar: {e}")));
@@ -1176,7 +1176,7 @@ fn cmd_kaufen(model: &Model, argv: &[String]) -> i32 {
     // Ohne Saldo laeuft die Reihenfolge trotzdem: sie ist eine Ordnung und keine Zeitachse,
     // und die Zeitachse ist der Zusatz. Ein `finance`, das hier nichts geschrieben hat, ist
     // kein Grund, die Frage nach dem Was-zuerst unbeantwortet zu lassen.
-    let saldo = interior::store::Store::open(&axon_config::database_path())
+    let saldo = interior::store::Store::open(&sjel_config::database_path())
         .ok()
         .and_then(|s| s.borrow_connection().ok())
         .and_then(|conn| interior::budget::monatssaldo(&conn).ok().flatten());

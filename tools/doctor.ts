@@ -1669,10 +1669,10 @@ const CHECKS: Check[] = [
     // file, so "is it there and does it open" is a machine-level question with one answer,
     // which is what makes it a doctor check rather than nine readiness handlers.
     //
-    // Resolved exactly as `axon_config::database_path()` resolves it — SJEL_DB_PATH first,
+    // Resolved exactly as `sjel_config::database_path()` resolves it — SJEL_DB_PATH first,
     // then the overlay — because a doctor that checked a different file than the capabilities
     // open would report on nothing. Absent is a WARNING, not a failure: a machine that has
-    // never run a capability legitimately has no database yet, and `axon_store::pool_for`
+    // never run a capability legitimately has no database yet, and `sjel_store::pool_for`
     // creates it on first open.
     name: "Shared store (SQLite)",
     run(ctx) {
@@ -2006,7 +2006,7 @@ const CHECKS: Check[] = [
     },
   },
 
-  // Server bind policy. libs/axon-server exists so a capability server cannot
+  // Server bind policy. libs/sjel-server exists so a capability server cannot
   // bind the LAN or skip the SJEL_PORT contract by accident, and its README said
   // so while two servers contradicted it: scout-server bound 0.0.0.0 with
   // permissive CORS behind a mutating POST, and comms-server hand-rolled its
@@ -2018,7 +2018,7 @@ const CHECKS: Check[] = [
   // cover are in the overlay, outside this repo, and a gate that only globs Axon would report
   // a clean bind policy while an overlay server binds the LAN. doctor reads both real trees.
   {
-    name: "Server bind policy (axon-server)",
+    name: "Server bind policy (sjel-server)",
     run(ctx) {
       // Both roots. This is a security gate, not a public-code style rule: a server the
       // overlay owns can bind 0.0.0.0 just as wrongly as one in Axon, and it would be
@@ -2050,13 +2050,13 @@ const CHECKS: Check[] = [
               // inbound token, `serve` spells the reach and the gate out (comms passes
               // its own `api_secret_file` token). Both go through the same bind and the
               // same middleware, so accepting only the first would flag a correct server.
-              if (!/axon_server::serve(_local)?\s*\(/.test(production)) {
-                ctx.warn(`${label}/${cap.name}/src/${sourcePath} builds a Router but neither serves it nor uses axon_server`);
+              if (!/sjel_server::serve(_local)?\s*\(/.test(production)) {
+                ctx.warn(`${label}/${cap.name}/src/${sourcePath} builds a Router but neither serves it nor uses sjel_server`);
               }
               continue;
             }
             offenders++;
-            ctx.bad(`${label}/${cap.name}/src/${sourcePath} binds its own listener — use axon_server::serve_local (loopback + port contract)`);
+            ctx.bad(`${label}/${cap.name}/src/${sourcePath} binds its own listener — use sjel_server::serve_local (loopback + port contract)`);
           }
         }
       }
@@ -2072,7 +2072,7 @@ const CHECKS: Check[] = [
   // against tailscale 1.102.3, 2026-09-06). A raw TCP forward injects nothing.
   //
   // So a serve config switched from web to TCP turns every tailnet request into
-  // something the gate cannot distinguish from a loopback one, and libs/axon-server
+  // something the gate cannot distinguish from a loopback one, and libs/sjel-server
   // falls through to the token rule — which on this deployment is no rule at all. The
   // gate would stop gating, silently, with every process still healthy and every test
   // still green. That is the exact failure shape PRD §13 records four times over, so
@@ -2084,14 +2084,14 @@ const CHECKS: Check[] = [
       const envPath = join(ctx.overlayPath, "config", "deployment.env");
       if (!existsSync(envPath)) return ctx.ok("no deployment.env — no tailnet gate declared");
       // Either key: AXON_TAILNET_OPERATOR is its name before the 2026-09-26 rename, and
-      // libs/axon-config's deployment_value reads both the same way.
+      // libs/sjel-config's deployment_value reads both the same way.
       const lines = readFileSync(envPath, "utf8").split("\n").map((l) => l.trim());
       const valueOf = (key: string) =>
         lines.find((l) => l.startsWith(`${key}=`))?.slice(key.length + 1).trim() || undefined;
       const declared = valueOf("SJEL_TAILNET_OPERATOR") ?? valueOf("AXON_TAILNET_OPERATOR");
       if (!declared) {
         // Not a failure. The undeclared deployment is the one that predates this gate,
-        // and libs/axon-server ignores the identity header entirely in that state.
+        // and libs/sjel-server ignores the identity header entirely in that state.
         return ctx.ok("no operator declared — the identity header is ignored, not trusted");
       }
 
@@ -2799,7 +2799,7 @@ const CHECKS: Check[] = [
   // (2026-08-28) ratified it and named tools/doctor as the checker; it stayed unimplemented
   // until 2026-09-03, when tools/storage grew the `target` verb that can answer it.
   //
-  // Delegated, not reimplemented, exactly as the toolchain check above is: axon-storage
+  // Delegated, not reimplemented, exactly as the toolchain check above is: sjel-storage
   // owns the walk, the buckets, the ratio and the toolchain comparison, and doctor reads
   // its verdict. A warn rather than a bad, for the reason Q53 itself gives about gates that
   // fire when nothing is wrong: a checkout mid-refactor legitimately carries a debug tree
@@ -2817,9 +2817,9 @@ const CHECKS: Check[] = [
         return;
       }
       const targetDir = process.env.CARGO_TARGET_DIR || join(ctx.root, "target");
-      const bin = join(targetDir, "release", "axon-storage");
+      const bin = join(targetDir, "release", "sjel-storage");
       if (!existsSync(bin)) {
-        ctx.warn("axon-storage not built — run `axon storage target` to check R6");
+        ctx.warn("sjel-storage not built — run `axon storage target` to check R6");
         return;
       }
       const proc = Bun.spawnSync({ cmd: [bin, "target", "--json"], stdout: "pipe", stderr: "pipe" });
@@ -2827,7 +2827,7 @@ const CHECKS: Check[] = [
       try {
         data = JSON.parse(proc.stdout.toString());
       } catch {
-        ctx.warn("axon-storage target did not emit JSON — run `axon storage target` for detail");
+        ctx.warn("sjel-storage target did not emit JSON — run `axon storage target` for detail");
         return;
       }
       const gb = (b: number) => `${(b / 1024 ** 3).toFixed(1)} GB`;

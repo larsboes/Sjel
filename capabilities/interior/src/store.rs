@@ -453,7 +453,7 @@ pub enum Schreibergebnis {
 }
 
 pub struct Store {
-    pool: axon_store::Pool,
+    pool: sjel_store::Pool,
     prefix: String,
 }
 
@@ -479,7 +479,7 @@ impl Store {
 
     pub fn open_with_prefix(database_path: &Path, prefix: &str) -> Result<Self, Fehler> {
         validate_prefix(prefix)?;
-        let pool = axon_store::open_pool(database_path, prefix, |conn| {
+        let pool = sjel_store::open_pool(database_path, prefix, |conn| {
             Self::run_migration(conn, prefix)
         })?;
         Ok(Self {
@@ -488,7 +488,7 @@ impl Store {
         })
     }
 
-    fn conn(&self) -> Result<axon_store::PooledClient, Fehler> {
+    fn conn(&self) -> Result<sjel_store::PooledClient, Fehler> {
         Ok(self.pool.get()?)
     }
 
@@ -497,12 +497,12 @@ impl Store {
     /// Genau ein Konsument: `budget::monatssaldo` liest `finance_transaction_projection`. Das
     /// ist erlaubt und der Grund fuer die eine geteilte Datei; es ist nur nichts, das
     /// versehentlich passieren soll, deshalb hat es einen eigenen, benannten Weg.
-    pub fn borrow_connection(&self) -> Result<axon_store::PooledClient, Fehler> {
+    pub fn borrow_connection(&self) -> Result<sjel_store::PooledClient, Fehler> {
         self.conn()
     }
 
     /// Die Tabellen, wie sie sind — nicht die Geschichte, die zu ihnen gefuehrt hat. Die Datei
-    /// beginnt leer, also gibt es keine ALTER-Kette zu bewahren (libs/axon-store/README.md).
+    /// beginnt leer, also gibt es keine ALTER-Kette zu bewahren (libs/sjel-store/README.md).
     fn run_migration(conn: &Connection, prefix: &str) -> Result<(), Fehler> {
         conn.execute_batch(&format!(
             "
@@ -650,8 +650,8 @@ impl Store {
     /// `{prefix}_item_state` und `{prefix}_placement` zeigen mit `ON DELETE CASCADE` auf
     /// `{prefix}_item(id)`; ein DROP der Elterntabelle loescht sie deshalb mit. Der uebliche
     /// Ausweg — `PRAGMA foreign_keys = off` vor dem `BEGIN` — steht hier nicht offen: dieser
-    /// Code laeuft in der Transaktion, die `axon_store::migrate_once` schon geoeffnet hat, und
-    /// die Pragma ist innerhalb einer Transaktion wirkungslos (libs/axon-store/src/lib.rs:328).
+    /// Code laeuft in der Transaktion, die `sjel_store::migrate_once` schon geoeffnet hat, und
+    /// die Pragma ist innerhalb einer Transaktion wirkungslos (libs/sjel-store/src/lib.rs:328).
     /// Also werden beide Tabellen vorher kopiert und hinterher wieder gefuellt, im selben
     /// Umlauf: faellt irgendetwas davon aus, nimmt der Rollback alles mit.
     ///
@@ -752,7 +752,7 @@ impl Store {
     /// Zurueck kommt die Revision, die die Zeile jetzt traegt.
     pub fn upsert_item(&self, it: &Item) -> Result<i64, Fehler> {
         let p = &self.prefix;
-        let now = axon_store::now_offset("'+0 seconds'");
+        let now = sjel_store::now_offset("'+0 seconds'");
         let spalten = WRITE_COLUMNS.join(", ");
         let platzhalter = (1..=WRITE_COLUMNS.len())
             .map(|i| format!("?{i}"))
@@ -785,7 +785,7 @@ impl Store {
     /// Ein Lesen vorher und ein Schreiben danach waere genau das Fenster, in dem der zweite
     /// Schreiber still gewinnt. Ein einzelnes Statement im Autocommit nimmt die Schreibsperre
     /// schon beim Start, bevor es liest; das Upgrade-Problem der verzoegerten Transaktion
-    /// (`axon_store::write_transaction`, PRD 0.19) entsteht erst mit einem zweiten Statement
+    /// (`sjel_store::write_transaction`, PRD 0.19) entsteht erst mit einem zweiten Statement
     /// davor und tritt hier nicht auf.
     ///
     /// Trifft das Statement keine Zeile, sagt erst das Lesen danach, warum: gibt es den Eintrag
@@ -797,7 +797,7 @@ impl Store {
         erwartet: i64,
     ) -> Result<Schreibergebnis, Fehler> {
         let p = &self.prefix;
-        let now = axon_store::now_offset("'+0 seconds'");
+        let now = sjel_store::now_offset("'+0 seconds'");
         let setzen = WRITE_COLUMNS
             .iter()
             .enumerate()
@@ -848,7 +848,7 @@ impl Store {
                 "INSERT INTO {p}_item_state (item_id, state, since, note)
                  VALUES (?1, ?2, {now}, ?3)",
                 p = p,
-                now = axon_store::now_offset("'+0 seconds'")
+                now = sjel_store::now_offset("'+0 seconds'")
             ),
             params![item_id, state.as_str(), note],
         )?;
@@ -956,7 +956,7 @@ impl Store {
                  ON CONFLICT(item_id, flat) DO UPDATE SET
                     x=excluded.x, y=excluded.y, rot=excluded.rot, since={now}",
                 p = p,
-                now = axon_store::now_offset("'+0 seconds'")
+                now = sjel_store::now_offset("'+0 seconds'")
             ),
             params![pl.item_id, pl.flat, pl.x, pl.y, pl.rot],
         )?;
@@ -1022,8 +1022,8 @@ impl Store {
                     t_ausgeklappt: row.get(8)?,
                     laenge: row.get(9)?,
                     anzahl: row.get(10)?,
-                    zustaende: axon_store::json_column(row, 11)?,
-                    unsicher: axon_store::json_column(row, 12)?,
+                    zustaende: sjel_store::json_column(row, 11)?,
+                    unsicher: sjel_store::json_column(row, 12)?,
                     platzbedarf_zone: row.get(13)?,
                     platzbedarf_block: row.get(14)?,
                     preis_cent: row.get(15)?,
@@ -1036,8 +1036,8 @@ impl Store {
                     mitnahme: row.get(22)?,
                     prioritaet: row.get(23)?,
                     basiert_auf: row.get(24)?,
-                    ersetzt: axon_store::json_column(row, 25)?,
-                    varianten: axon_store::json_column(row, 26)?,
+                    ersetzt: sjel_store::json_column(row, 25)?,
+                    varianten: sjel_store::json_column(row, 26)?,
                     ziel: row.get(27)?,
                     hinweis: row.get(28)?,
                     begruendung: row.get(29)?,
@@ -1058,7 +1058,7 @@ impl Store {
                     waterproof: row.get(44)?,
                     quick_dry: row.get(45)?,
                     pack_location: row.get(46)?,
-                    trip_types: axon_store::json_column(row, 47)?,
+                    trip_types: sjel_store::json_column(row, 47)?,
                     revision: row.get(48)?,
                 },
                 state.as_deref().and_then(State::parse),

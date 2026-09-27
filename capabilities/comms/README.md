@@ -1050,7 +1050,7 @@ store with only the built-in classification heuristics.
 
 The nineteen tables live in the shared SQLite file — `SJEL_DB_PATH`, else
 `$SJEL_PERSONAL_ROOT/data/axon/axon.db` — under the table prefix `comms`, so
-`comms.feed_items` is `comms_feed_items` (`libs/axon-store/README.md`). PRD Q45
+`comms.feed_items` is `comms_feed_items` (`libs/sjel-store/README.md`). PRD Q45
 (2026-08-27) moved them there from a Postgres schema. The path is a deployment
 fact rather than a capability one, so there is no `database_url` field any more:
 `capabilities/places` joins mail against this data, and a file per capability
@@ -1078,7 +1078,7 @@ addresses and personal rules belong in the overlay.
 Every HTTP route except `/health` and `/ready` requires the shared token referenced
 by `api_secret_file` — reads included, since a feed entry and a mail proposal are
 personal content and the loopback bind is no longer treated as the boundary. The check
-itself is `libs/axon-server`'s inbound gate, shared with every other capability;
+itself is `libs/sjel-server`'s inbound gate, shared with every other capability;
 `api_secret_file` still wins over the deployment-wide `SJEL_INBOUND_TOKEN_FILE`, and an
 unconfigured token closes those routes with `403` rather than opening them. The local
 dashboard never puts the token in its browser bundle: its Vite proxy resolves the same

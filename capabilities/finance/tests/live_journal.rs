@@ -12,7 +12,7 @@
 use std::collections::BTreeSet;
 
 fn journal() -> Option<(std::path::PathBuf, String)> {
-    let path = axon_config::env_var_os("SJEL_FINANCE_JOURNAL")?;
+    let path = sjel_config::env_var_os("SJEL_FINANCE_JOURNAL")?;
     let path = std::path::PathBuf::from(path);
     if !path.is_file() {
         eprintln!("SJEL_FINANCE_JOURNAL is set but names no file; skipping");

@@ -53,7 +53,7 @@ fn read_toml<T: serde::de::DeserializeOwned>(path: &Path) -> Result<T, ModelErro
 /// `<overlay>/data/interior`. Kein Fallback auf ein Verzeichnis im Repo: eine Planung gegen
 /// erfundene Masse waere schlimmer als gar keine.
 pub fn data_dir() -> Result<PathBuf, ModelError> {
-    axon_config::overlay_data_dir("interior").ok_or(ModelError::NoOverlay)
+    sjel_config::overlay_data_dir("interior").ok_or(ModelError::NoOverlay)
 }
 
 /// Private, human-facing interior assets such as photos and RoomPlan captures.
@@ -66,7 +66,7 @@ pub fn data_dir() -> Result<PathBuf, ModelError> {
 /// photos from a directory nobody chose.
 pub fn assets_dir() -> Result<PathBuf, ModelError> {
     let fallback = data_dir()?;
-    match axon_config::overlay_config("interior.json") {
+    match sjel_config::overlay_config("interior.json") {
         Some(config) => assets_dir_from(&config, fallback),
         None => Ok(fallback),
     }
@@ -96,7 +96,7 @@ fn assets_dir_from(config: &Path, fallback: PathBuf) -> Result<PathBuf, ModelErr
     match object.get("assets_root") {
         None => Ok(fallback),
         Some(serde_json::Value::String(root)) if !root.trim().is_empty() => {
-            Ok(axon_config::expand_tilde(root))
+            Ok(sjel_config::expand_tilde(root))
         }
         Some(other) => Err(malformed(format!(
             "assets_root muss ein nicht leerer Pfad sein, steht aber als {other}"
@@ -650,7 +650,7 @@ pub fn flats() -> Result<Vec<String>, ModelError> {
 /// zweiter Raum zum Vergleich existiert (PRD B28), waere ein stiller Standard genau der Weg, auf
 /// dem ein Plan der falschen Wohnung als der richtige durchgeht.
 pub fn default_flat() -> Result<String, ModelError> {
-    if let Ok(v) = axon_config::env_var("SJEL_INTERIOR_FLAT") {
+    if let Ok(v) = sjel_config::env_var("SJEL_INTERIOR_FLAT") {
         if !v.trim().is_empty() {
             return Ok(v);
         }
@@ -681,7 +681,7 @@ impl Model {
         // Overlay. Ein leerer Katalog ist kein Fehler beim Laden — er faellt dort auf, wo
         // ein Layout ein Stueck nennt, das es nicht gibt, und das ist die Stelle mit dem
         // besseren Fehlertext.
-        let store = crate::store::Store::open(&axon_config::database_path())
+        let store = crate::store::Store::open(&sjel_config::database_path())
             .map_err(|e| ModelError::Store(e.to_string()))?;
         let rows = store
             .catalogue()

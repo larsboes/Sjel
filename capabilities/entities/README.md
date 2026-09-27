@@ -38,7 +38,7 @@ reply's `geocode` says which. Refusing the fact would lose what the operator typ
 ## Data
 
 C2 throughout: facts about named people. The rows live in the overlay's database
-(`axon_config::database_path`). The server has no CORS, and the shared origin guard refuses
+(`sjel_config::database_path`). The server has no CORS, and the shared origin guard refuses
 a foreign browser origin. The dashboard reaches it through its same-origin proxy.
 
 ## Import

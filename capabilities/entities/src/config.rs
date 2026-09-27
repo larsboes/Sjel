@@ -1,9 +1,9 @@
 //! Config. This crate is public, so nothing personal lives here: the rows are in the
-//! overlay's database (`axon_config::database_path`), and the port is the runner's.
+//! overlay's database (`sjel_config::database_path`), and the port is the runner's.
 
 use std::path::PathBuf;
 
-use axon_config::{database_path, resolve_port};
+use sjel_config::{database_path, resolve_port};
 
 pub struct Config {
     pub database_path: PathBuf,
@@ -21,9 +21,9 @@ impl Config {
         Self {
             database_path: database_path(),
             port: resolve_port(None, None, 8097),
-            places_url: axon_config::env_var("SJEL_PLACES_URL")
+            places_url: sjel_config::env_var("SJEL_PLACES_URL")
                 .unwrap_or_else(|_| "http://127.0.0.1:8093".to_string()),
-            model_url: axon_config::env_var("SJEL_LOCAL_MODEL_URL")
+            model_url: sjel_config::env_var("SJEL_LOCAL_MODEL_URL")
                 .unwrap_or_else(|_| "http://127.0.0.1:8091".to_string()),
         }
     }

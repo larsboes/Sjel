@@ -66,7 +66,7 @@ pub fn role_for(
     cfg: &Config,
     directive: &Directive,
     source_chars: usize,
-) -> Option<axon_inference::ResolvedRole> {
+) -> Option<sjel_inference::ResolvedRole> {
     let shape = directive.shape_for(source_chars);
     if directive.depth == Depth::Standard {
         if let Some(light) = cfg.light_summarization_role() {
@@ -121,7 +121,7 @@ pub fn unattended_producer_revisions(cfg: &Config) -> Vec<String> {
 /// The `Target` shape is deliberately plain data: `libs/summarize` never learns
 /// what an `InferenceConfig` is, so a capability with no inference dependency
 /// can still call it.
-pub(crate) fn to_target(cfg: &Config, role: &axon_inference::ResolvedRole) -> Target {
+pub(crate) fn to_target(cfg: &Config, role: &sjel_inference::ResolvedRole) -> Target {
     // Two questions, and Q39 is where they stopped having one answer. A trusted
     // peer may see any class (`trusted_for_every_class`) and must not queue
     // behind this machine's GPU gate (`is_loopback`), because it has its own.
@@ -216,7 +216,7 @@ impl SourceText {
 /// An unresolved role produces `Outcome::Unconfigured` before the verdict is
 /// consulted at all, so the value is unobservable — but defaulting it closed
 /// keeps that true if the order ever changes.
-fn reach_for(gathered: &SourceText, role: Option<&axon_inference::ResolvedRole>) -> Reach {
+fn reach_for(gathered: &SourceText, role: Option<&sjel_inference::ResolvedRole>) -> Reach {
     match role {
         Some(role) => gathered.reach(role.cloud_data_tier.map(|tier| tier.as_str())),
         None => Reach::LoopbackOnly,
@@ -282,8 +282,8 @@ fn source_text(store: &Store, cfg: &Config, source: &str, id: &str) -> Result<Op
 /// construction, so this never reaches a remote target.
 fn calendar_entry_text(cfg: &Config, id: &str) -> Result<Option<SourceText>> {
     let base = cfg.calendar_context.base_url.trim_end_matches('/');
-    let http = axon_http::client(
-        axon_http::Purpose::new("comms-digest"),
+    let http = sjel_http::client(
+        sjel_http::Purpose::new("comms-digest"),
         std::time::Duration::from_millis(cfg.calendar_context.timeout_ms),
     )?;
     let response = http
@@ -360,7 +360,7 @@ fn write_digest(
     id: &str,
     directive: &Directive,
     gathered: &SourceText,
-    role: Option<axon_inference::ResolvedRole>,
+    role: Option<sjel_inference::ResolvedRole>,
 ) -> Result<StoredDigest> {
     let previous = store
         .content_digest(source, id)
@@ -965,7 +965,7 @@ pub const LOCAL_REFUSED: &str = "local_refused";
 /// `producer_revisions` can hold it and the reader can see at a glance which
 /// provider wrote what. "Honest" here means it names Cloudflare and the Llama
 /// build, not "cloud".
-pub fn cloud_producer_revision(role: &axon_inference::ResolvedRole) -> String {
+pub fn cloud_producer_revision(role: &sjel_inference::ResolvedRole) -> String {
     summarize::producer(&role.cache_key(), summarize::DIGEST_PROMPT_REVISION)
 }
 
@@ -977,7 +977,7 @@ pub fn cloud_producer_revision(role: &axon_inference::ResolvedRole) -> String {
 pub fn store_cloud_digest(
     store: &Store,
     job: &crate::store::CloudDispatchJob,
-    role: &axon_inference::ResolvedRole,
+    role: &sjel_inference::ResolvedRole,
     text: &str,
     shape: summarize::Shape,
 ) -> std::result::Result<(), String> {
@@ -1309,7 +1309,7 @@ mod tests {
         /// reach a closed port and the row would read `http_error`. Asserting
         /// `local_refused` therefore asserts that no request was attempted, with
         /// no network mock to be wrong about.
-        fn unreachable_local_role() -> axon_inference::InferenceConfig {
+        fn unreachable_local_role() -> sjel_inference::InferenceConfig {
             serde_json::from_value(serde_json::json!({
                 "backends": {
                     "omlx": { "api": "openai", "base_url": "http://127.0.0.1:9/v1" },
@@ -1380,7 +1380,7 @@ mod tests {
         /// A light rung too small to hold anything, so every source is
         /// `Rung::OverWindow` and the drain's over-window branch is the one
         /// under test.
-        fn over_window_light_role() -> axon_inference::InferenceConfig {
+        fn over_window_light_role() -> sjel_inference::InferenceConfig {
             serde_json::from_value(serde_json::json!({
                 "backends": {
                     "omlx": { "api": "openai", "base_url": "http://127.0.0.1:9/v1" },

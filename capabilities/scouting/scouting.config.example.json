@@ -68,7 +68,7 @@
   "_comment_sources_rss_once": "An entry like this would enable RSS-based scouting:",
   "_comment_sources_rss_demo": "{\"id\": \"conference-rss\", \"adapter\": \"rss\", \"url\": \"https://example.com/feed.xml\", \"enabled\": true}",
 
-  "_comment_calendar_base_url": "Base URL of capabilities/calendar for `scout --promote-calendar`. Loopback only — calendar binds through libs/axon-server's serve_local. Defaults to http://127.0.0.1:8087, calendar's own default port.",
+  "_comment_calendar_base_url": "Base URL of capabilities/calendar for `scout --promote-calendar`. Loopback only — calendar binds through libs/sjel-server's serve_local. Defaults to http://127.0.0.1:8087, calendar's own default port.",
   "calendar_base_url": "http://127.0.0.1:8087",
 
   "_comment_home_timezone": "Your home timezone, used to turn Luma's UTC instants into the naive local wall time calendar stores. DECLARE IT ONCE, in the overlay's config/deployment.env as SJEL_HOME_TIMEZONE (schemas/deployment.env.example) — calendar needs the same value, and two independent copies agree until one is edited. Setting it here still overrides, but a value that disagrees with the deployment declaration is an error naming both files. NO DEFAULT either way: promoting without one would silently write the wrong hour, so --promote-calendar refuses until it resolves (or --timezone is passed). Accepts UTC, a fixed ±HH:MM offset, or one of the supported IANA zones listed in src/localtime.rs.",

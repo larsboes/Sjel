@@ -9,14 +9,14 @@
 
 use std::path::Path;
 
-use axon_store::QueryAll;
 use rusqlite::{params, Connection, OptionalExtension, Row};
 use serde::{Deserialize, Serialize};
+use sjel_store::QueryAll;
 
 pub type Fallible<T> = Result<T, Box<dyn std::error::Error>>;
 
 pub struct PlacesStore {
-    pool: axon_store::Pool,
+    pool: sjel_store::Pool,
     /// Prefixes this capability's tables in the one shared file (PRD Q45):
     /// `places` here means `places_places` and its three siblings.
     prefix: String,
@@ -162,7 +162,7 @@ impl PlacesStore {
 
     pub fn open_with_prefix(database_path: &Path, prefix: &str) -> Fallible<Self> {
         validate_prefix(prefix)?;
-        let pool = axon_store::open_pool(database_path, prefix, |conn| {
+        let pool = sjel_store::open_pool(database_path, prefix, |conn| {
             Self::run_migration(conn, prefix)
         })?;
         Ok(Self {
@@ -171,7 +171,7 @@ impl PlacesStore {
         })
     }
 
-    pub(crate) fn conn(&self) -> Fallible<axon_store::PooledClient> {
+    pub(crate) fn conn(&self) -> Fallible<sjel_store::PooledClient> {
         Ok(self.pool.get()?)
     }
 
@@ -548,7 +548,7 @@ impl PlacesStore {
     ) -> Fallible<usize> {
         let prefix = self.prefix.clone();
         let mut conn = self.conn()?;
-        let tx = axon_store::write_transaction(&mut conn)?;
+        let tx = sjel_store::write_transaction(&mut conn)?;
         tx.execute(
             &format!("DELETE FROM {prefix}_climate_normals WHERE place_id = ?1"),
             params![&place_id],

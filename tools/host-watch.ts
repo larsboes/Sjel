@@ -379,7 +379,7 @@ async function runHostNet(): Promise<NetReport | null> {
 }
 
 /**
- * Where the shared SQLite file is, resolved exactly the way `axon_config::database_path()`
+ * Where the shared SQLite file is, resolved exactly the way `sjel_config::database_path()`
  * resolves it — `SJEL_DB_PATH` first, then the overlay. A tool that opened a different
  * file than the capabilities do would write findings nothing reads.
  */
@@ -391,14 +391,14 @@ function databasePath(): string {
   return join(overlay, "data", "axon", "axon.db");
 }
 
-/** The canonical stamp, spelled the way `axon_store::NOW` spells it. */
+/** The canonical stamp, spelled the way `sjel_store::NOW` spells it. */
 const NOW = "strftime('%Y-%m-%d %H:%M:%f+00:00','now')";
 
 /**
  * Open the shared store and make sure this capability's one table is there.
  *
  * `CREATE TABLE IF NOT EXISTS` on every run, which is what every Rust capability's
- * migration does too (libs/axon-store) — a job that runs hourly and might be the first
+ * migration does too (libs/sjel-store) — a job that runs hourly and might be the first
  * thing to touch a fresh database cannot assume someone else went first.
  *
  * The partial unique index is the contract: at most one OPEN finding per condition. A

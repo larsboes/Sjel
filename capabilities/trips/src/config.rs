@@ -1,11 +1,11 @@
 //! Public, zero-personal-data config for the Trips store.
 //!
-//! The store path comes from `axon_config::database_path` — `SJEL_DB_PATH`, else
+//! The store path comes from `sjel_config::database_path` — `SJEL_DB_PATH`, else
 //! `<overlay>/data/axon/axon.db`. One file for every capability (PRD Q45), so
 //! there is no per-capability database to resolve any more.
 
-use axon_config::{database_path, expand_tilde, resolve_port};
 use serde::Deserialize;
+use sjel_config::{database_path, expand_tilde, resolve_port};
 use std::path::PathBuf;
 
 #[derive(Debug, Clone, Deserialize)]
@@ -93,7 +93,7 @@ fn default_trips_dir() -> String {
 }
 
 fn file_config() -> Option<TripsFileConfig> {
-    let overlay = axon_config::env_var("SJEL_PERSONAL_ROOT").ok()?;
+    let overlay = sjel_config::env_var("SJEL_PERSONAL_ROOT").ok()?;
     let path = expand_tilde(&overlay).join("config").join("trips.json");
     let body = std::fs::read_to_string(path).ok()?;
     serde_json::from_str(&body).ok()
@@ -110,10 +110,10 @@ fn obsidian_from_personal_config() -> Option<ObsidianConfig> {
 /// The gear notes directory, from `SJEL_TRIPS_GEAR_DIR` or the overlay's
 /// `config/trips.json`. Absent when there is no overlay to resolve against.
 fn gear_items_dir() -> Option<PathBuf> {
-    if let Ok(explicit) = axon_config::env_var("SJEL_TRIPS_GEAR_DIR") {
+    if let Ok(explicit) = sjel_config::env_var("SJEL_TRIPS_GEAR_DIR") {
         return Some(expand_tilde(&explicit));
     }
-    let overlay = expand_tilde(&axon_config::env_var("SJEL_PERSONAL_ROOT").ok()?);
+    let overlay = expand_tilde(&sjel_config::env_var("SJEL_PERSONAL_ROOT").ok()?);
     let configured = file_config()
         .and_then(|c| c.gear)
         .map(|gear| gear.items_dir)
@@ -129,11 +129,11 @@ fn gear_items_dir() -> Option<PathBuf> {
 impl Config {
     pub fn load() -> Self {
         let port = resolve_port(None, None, 8086);
-        let obsidian = match axon_config::env_var("SJEL_TRIPS_OBSIDIAN_ROOT") {
+        let obsidian = match sjel_config::env_var("SJEL_TRIPS_OBSIDIAN_ROOT") {
             Ok(root) => Some(ObsidianConfig {
                 root: expand_tilde(&root),
                 trips_dir: PathBuf::from(
-                    axon_config::env_var("SJEL_TRIPS_OBSIDIAN_DIR")
+                    sjel_config::env_var("SJEL_TRIPS_OBSIDIAN_DIR")
                         .unwrap_or_else(|_| default_trips_dir()),
                 ),
             }),

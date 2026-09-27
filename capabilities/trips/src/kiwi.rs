@@ -160,8 +160,8 @@ impl Default for KiwiClient {
 
 impl KiwiClient {
     pub fn new() -> Self {
-        let client = axon_http::client(
-            axon_http::Purpose::new("trips-kiwi"),
+        let client = sjel_http::client(
+            sjel_http::Purpose::new("trips-kiwi"),
             std::time::Duration::from_secs(30),
         )
         .expect("reqwest client with a fixed timeout should always build");

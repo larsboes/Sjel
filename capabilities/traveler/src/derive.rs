@@ -176,7 +176,7 @@ pub fn derive(store: &TravelerStore, trips_prefix: &str) -> Fallible<DerivedTrav
 
     let not_taken: Vec<String> = if table_exists(&conn, &format!("{trips_prefix}_retrospectives"))?
     {
-        use axon_store::QueryAll;
+        use sjel_store::QueryAll;
         conn.query_all(
             &format!(
                 "SELECT plan_id FROM {trips_prefix}_retrospectives WHERE again = 'not_taken' \
@@ -190,7 +190,7 @@ pub fn derive(store: &TravelerStore, trips_prefix: &str) -> Fallible<DerivedTrav
     };
 
     let rows: Vec<PlanRow> = {
-        use axon_store::QueryAll;
+        use sjel_store::QueryAll;
         conn.query_all(
             &format!(
                 "SELECT id, date_start, date_end, created_at, travelers, transport_modes, \

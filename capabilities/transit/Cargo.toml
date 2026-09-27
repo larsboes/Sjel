@@ -30,9 +30,9 @@ path = "src/server.rs"
 
 [dependencies]
 # Outbound HTTP goes through one factory: the user-agent, the timeout and the
-# connection pool are decided there, not at each call site (libs/axon-http).
-axon-http = { path = "../../libs/axon-http" }
-axon-config = { path = "../../libs/axon-config" }
+# connection pool are decided there, not at each call site (libs/sjel-http).
+sjel-http = { path = "../../libs/sjel-http" }
+sjel-config = { path = "../../libs/sjel-config" }
 # The shared shape of "what a reader got out of a file"
 # (README.md#schemas-and-dependency-direction). This capability is the second
 # consumer that earned the promotion; before it, `document.rs` carried its own
@@ -43,9 +43,9 @@ axon-config = { path = "../../libs/axon-config" }
 # CLI as a subprocess is to keep a bundled Tesseract and an ONNX runtime out of
 # this capability's build. Taking that dependency by promotion would reverse a
 # decision made on purpose. See `src/document.rs`, "Shells out to the xberg CLI".
-axon-extraction = { path = "../../libs/extraction", default-features = false }
-axon-server = { path = "../../libs/axon-server" }
-axon-store = { path = "../../libs/axon-store" }
+sjel-extraction = { path = "../../libs/extraction", default-features = false }
+sjel-server = { path = "../../libs/sjel-server" }
+sjel-store = { path = "../../libs/sjel-store" }
 route-manifest = { path = "../../libs/route-manifest" }
 # Leg times: bahn.de serves naive station-local strings; this turns them into
 # UTC instants for the additive departure_utc/arrival_utc fields (PRD X1).

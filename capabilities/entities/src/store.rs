@@ -98,21 +98,21 @@ pub struct Patch {
 }
 
 pub struct EntitiesStore {
-    pool: axon_store::Pool,
+    pool: sjel_store::Pool,
     prefix: String,
 }
 
 impl EntitiesStore {
     pub fn open(database_path: &Path) -> std::result::Result<Self, Box<dyn std::error::Error>> {
         let pool =
-            axon_store::open_pool(database_path, PREFIX, |conn| Self::migrate(conn, PREFIX))?;
+            sjel_store::open_pool(database_path, PREFIX, |conn| Self::migrate(conn, PREFIX))?;
         Ok(Self {
             pool,
             prefix: PREFIX.to_string(),
         })
     }
 
-    fn conn(&self) -> Result<axon_store::PooledClient> {
+    fn conn(&self) -> Result<sjel_store::PooledClient> {
         self.pool.get().map_err(db)
     }
 
@@ -502,7 +502,7 @@ impl EntitiesStore {
         let values = self.checked_values(&conn, kind, values)?;
         let id = new_id("ent");
         let at = now();
-        let tx = axon_store::write_transaction(&mut conn).map_err(db)?;
+        let tx = sjel_store::write_transaction(&mut conn).map_err(db)?;
         let p = &self.prefix;
         tx.execute(
             &format!(
@@ -539,7 +539,7 @@ impl EntitiesStore {
         let mut conn = self.conn()?;
         let values = self.checked_values(&conn, &current.kind, &patch.values)?;
         let at = now();
-        let tx = axon_store::write_transaction(&mut conn).map_err(db)?;
+        let tx = sjel_store::write_transaction(&mut conn).map_err(db)?;
         let p = &self.prefix;
         // The revision is compared again inside the write lock, so two writers that both
         // read revision 3 cannot both land.
@@ -587,7 +587,7 @@ impl EntitiesStore {
     pub fn delete(&self, id: &str) -> Result<bool> {
         let mut conn = self.conn()?;
         let p = &self.prefix;
-        let tx = axon_store::write_transaction(&mut conn).map_err(db)?;
+        let tx = sjel_store::write_transaction(&mut conn).map_err(db)?;
         tx.execute(
             &format!(
                 "INSERT OR IGNORE INTO {p}_excluded (system, external_id, name, excluded_at)
@@ -698,7 +698,7 @@ impl EntitiesStore {
         let snapshot = serde_json::json!({ "entity": gone, "external": externals }).to_string();
         let mut conn = self.conn()?;
         let p = &self.prefix;
-        let tx = axon_store::write_transaction(&mut conn).map_err(db)?;
+        let tx = sjel_store::write_transaction(&mut conn).map_err(db)?;
         let run = |sql: String, args: &[&dyn rusqlite::ToSql]| tx.execute(&sql, args).map_err(db);
         run(
             format!(

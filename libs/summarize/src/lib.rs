@@ -703,8 +703,8 @@ pub(crate) fn complete(target: &Target, prompt: &str, max_tokens: u32) -> Outcom
         },
         _ => None,
     };
-    let http = match axon_http::client(
-        axon_http::Purpose::new("summarize"),
+    let http = match sjel_http::client(
+        sjel_http::Purpose::new("summarize"),
         Duration::from_secs(120),
     ) {
         Ok(client) => client,

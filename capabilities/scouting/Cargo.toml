@@ -24,12 +24,12 @@ path = "src/server.rs"
 
 [dependencies]
 # Outbound HTTP goes through one factory: the user-agent, the timeout and the
-# connection pool are decided there, not at each call site (libs/axon-http).
-axon-http = { path = "../../libs/axon-http" }
-axon-config = { path = "../../libs/axon-config" }
-axon-inference = { path = "../../libs/inference" }
-axon-server = { path = "../../libs/axon-server" }
-axon-store = { path = "../../libs/axon-store" }
+# connection pool are decided there, not at each call site (libs/sjel-http).
+sjel-http = { path = "../../libs/sjel-http" }
+sjel-config = { path = "../../libs/sjel-config" }
+sjel-inference = { path = "../../libs/inference" }
+sjel-server = { path = "../../libs/sjel-server" }
+sjel-store = { path = "../../libs/sjel-store" }
 # The data-class vocabulary and its fail-closed default. Named here rather than
 # spelled out: a second crate deciding what `c1` means is what §6.1 forbids.
 content-item = { path = "../../libs/content-item" }

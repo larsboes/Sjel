@@ -43,7 +43,7 @@ use crate::travel::{Journey, JourneyRanking, RankFactor};
 const DEFAULT_BASE_URL: &str = "http://127.0.0.1:8096";
 
 pub fn base_url() -> String {
-    axon_config::env_var("SJEL_TRAVELER_URL").unwrap_or_else(|_| DEFAULT_BASE_URL.to_string())
+    sjel_config::env_var("SJEL_TRAVELER_URL").unwrap_or_else(|_| DEFAULT_BASE_URL.to_string())
 }
 
 /// The weights, exactly as the profile serves them.
@@ -125,8 +125,8 @@ impl ProfileSnapshot {
 pub fn read_profile() -> Option<ProfileSnapshot> {
     // Short, like the punctuality lookup: this is an enhancement on a localhost
     // service and waiting on it would make a search slower than not ranking.
-    let client = axon_http::client(
-        axon_http::Purpose::new("transit-traveler"),
+    let client = sjel_http::client(
+        sjel_http::Purpose::new("transit-traveler"),
         std::time::Duration::from_secs(3),
     )
     .ok()?;

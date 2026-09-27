@@ -821,7 +821,7 @@ async fn sync_trip_plan(State(state): State<AppState>, Path(plan_id): Path<Strin
     let config = state.config.clone();
     match tokio::task::spawn_blocking(move || -> Result<Value, String> {
         let store = CalendarStore::open(&database_path).map_err(|e| e.to_string())?;
-        let client = axon_http::client(axon_http::Purpose::new("calendar-trips"), std::time::Duration::from_secs(20))
+        let client = sjel_http::client(sjel_http::Purpose::new("calendar-trips"), std::time::Duration::from_secs(20))
             .map_err(|e| format!("client build: {e}"))?;
         let base = config.trips_base_url.trim_end_matches('/').to_string();
 
@@ -984,8 +984,8 @@ async fn materialize_trip(
         }
         let store = CalendarStore::open(&database_path).map_err(|e| e.to_string())?;
 
-        let client = axon_http::client(
-            axon_http::Purpose::new("calendar-trips"),
+        let client = sjel_http::client(
+            sjel_http::Purpose::new("calendar-trips"),
             std::time::Duration::from_secs(20),
         )
         .map_err(|e| format!("client build: {e}"))?;
@@ -1581,7 +1581,7 @@ async fn main() {
         database_path: Arc::new(config.database_path.clone()),
         config: Arc::new(config),
     };
-    axon_server::serve_local("calendar-server", port, build_router(state)).await;
+    sjel_server::serve_local("calendar-server", port, build_router(state)).await;
 }
 
 /// This capability's name, for the origin guard's env var
@@ -1648,7 +1648,7 @@ fn build_router(state: AppState) -> Router {
         // ADD NEW ROUTES ABOVE THIS LINE. Below it they lose the origin guard.
         .layer(axum::middleware::from_fn_with_state(
             CAPABILITY,
-            axon_server::origin::refuse_foreign_origins,
+            sjel_server::origin::refuse_foreign_origins,
         ))
         .layer(CorsLayer::permissive())
         .with_state(state)
@@ -1737,7 +1737,7 @@ mod route_manifest_tests {
     }
 }
 
-/// The router-level proof that `libs/axon-server`'s predicate tests cannot give:
+/// The router-level proof that `libs/sjel-server`'s predicate tests cannot give:
 /// a route registered BELOW the `.layer()` call passes every test of
 /// `origin_allowed_by` and still answers a hostile page.
 ///

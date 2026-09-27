@@ -80,7 +80,7 @@ const REQUEST_TIMEOUT: Duration = Duration::from_secs(60);
 /// stub without touching process env — the reason `geocode.rs`'s own db_tests
 /// pass a URL explicitly under cargo's thread-parallel harness.
 pub fn archive_url() -> String {
-    axon_config::env_var("SJEL_PLACES_OPEN_METEO_URL")
+    sjel_config::env_var("SJEL_PLACES_OPEN_METEO_URL")
         .ok()
         .filter(|value| !value.trim().is_empty())
         .unwrap_or_else(|| ARCHIVE_URL.to_string())
@@ -426,7 +426,7 @@ pub fn fetch_normals(
 
     let (period_start, period_end, years) = normals_period(today);
     throttle();
-    let client = axon_http::client(axon_http::Purpose::new("places-climate"), REQUEST_TIMEOUT)?;
+    let client = sjel_http::client(sjel_http::Purpose::new("places-climate"), REQUEST_TIMEOUT)?;
     // Exactly six parameters, and PLC-13's falsifier is a seventh: the plan's
     // dates, a traveler, an amount and a place name all have nowhere to go here.
     let response = client

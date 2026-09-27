@@ -25,7 +25,7 @@ pub const MANAGED: &[&str] = &["emails", "phones", "birthday", "company", "role"
 const PERSON_FIELDS: &str = "names,emailAddresses,phoneNumbers,birthdays,organizations,addresses";
 
 pub fn env_path() -> PathBuf {
-    axon_config::overlay_config("entities.env").unwrap_or_else(|| PathBuf::from("entities.env"))
+    sjel_config::overlay_config("entities.env").unwrap_or_else(|| PathBuf::from("entities.env"))
 }
 
 /// The three keys, or an error naming the missing one, the file, and the step that writes it.
@@ -89,8 +89,8 @@ fn authorised() -> Result<(reqwest::blocking::Client, String), String> {
     let body = std::fs::read_to_string(&path)
         .map_err(|e| format!("cannot read {}: {e}", path.display()))?;
     let (id, secret, refresh) = credentials(&body, &path.display().to_string())?;
-    let client = axon_http::client(
-        axon_http::Purpose::new("entities-google"),
+    let client = sjel_http::client(
+        sjel_http::Purpose::new("entities-google"),
         Duration::from_secs(30),
     )
     .map_err(|e| e.to_string())?;

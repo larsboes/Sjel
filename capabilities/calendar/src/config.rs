@@ -4,7 +4,7 @@
 //! runtime, never from this repo.
 //!
 //! Resolution for the store path:
-//!   `axon_config::database_path` -- `$SJEL_DB_PATH`, else
+//!   `sjel_config::database_path` -- `$SJEL_DB_PATH`, else
 //!   `$SJEL_PERSONAL_ROOT/data/axon/axon.db`. It is a deployment fact, not a
 //!   capability one, so `calendar.json` cannot move this capability off the
 //!   shared file on its own.
@@ -22,7 +22,7 @@ use std::path::PathBuf;
 
 use serde::Deserialize;
 
-use axon_config::{database_path, expand_tilde, overlay_config, resolve_port};
+use sjel_config::{database_path, expand_tilde, overlay_config, resolve_port};
 
 /// Where the Google credential and the calendar to sync are named.
 #[derive(Debug, Clone, Deserialize)]
@@ -133,7 +133,7 @@ impl Config {
 /// configured X" error can name the exact path the operator has to create,
 /// rather than describing one.
 pub fn config_path() -> PathBuf {
-    if let Ok(path) = axon_config::env_var("SJEL_CALENDAR_CONFIG") {
+    if let Ok(path) = sjel_config::env_var("SJEL_CALENDAR_CONFIG") {
         return expand_tilde(&path);
     }
     if let Some(path) = overlay_config("calendar.json") {
@@ -191,11 +191,11 @@ impl Config {
             database_path: database_path(),
             port: resolve_port(Some("SJEL_CALENDAR_PORT"), file.port, 8087),
             // Deployment declaration first, capability override second — one
-            // implementation in axon_config so calendar and scouting cannot drift.
+            // implementation in sjel_config so calendar and scouting cannot drift.
             // A conflict resolves to None deliberately: the caller's own
             // refuse-to-guess error then fires, which is the fail-closed direction
             // for a value that silently shifts every stored wall time when wrong.
-            home_timezone: axon_config::resolve_home_timezone(
+            home_timezone: sjel_config::resolve_home_timezone(
                 file.home_timezone.as_deref(),
                 "calendar.json",
             )
@@ -266,7 +266,7 @@ mod tests {
         /// Clears the Sjel name and its pre-rename Axon name, so a value the operator's shell
         /// still exports under the old name cannot stand in for the setting under test.
         fn unset(mut self, key: &'static str) -> Self {
-            for name in std::iter::once(key.to_string()).chain(axon_config::env::legacy_name(key)) {
+            for name in std::iter::once(key.to_string()).chain(sjel_config::env::legacy_name(key)) {
                 self.restore.push((name.clone(), std::env::var(&name).ok()));
                 std::env::remove_var(&name);
             }
@@ -310,7 +310,7 @@ mod tests {
     /// therefore without the race that made this flaky.
     ///
     /// The overlay still has to be moved out of the way, and that is not
-    /// cosmetic: `axon_config::deployment_home_timezone` reads
+    /// cosmetic: `sjel_config::deployment_home_timezone` reads
     /// `<overlay>/config/deployment.env`, and a deployment that declares a zone
     /// there answers this question with it. Writing the environment means
     /// taking the lock.

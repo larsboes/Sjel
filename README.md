@@ -29,7 +29,7 @@ repository. Each installation switches on the extensions it needs.
 | Devices and sync | Pairing, one Ed25519 key per device, signed requests, an offline copy and an outbox on the phone | `capabilities/devices`, `plugins/device-identity`, `dashboard/src-tauri/src/sync.rs` |
 | Data classes | C0 Public, C1 Mine, C2 Others (facts about other people), C3 Secret. Every value carries one. | `libs/content-item` |
 | Pseudonymizer | Replaces identifying details with reversible tokens before a cloud call | `libs/pseudonymize`, `capabilities/comms/src/cloud_derivative.rs` |
-| Capability contract | How an extension declares its service, port, data and backup | `schemas/`, `service.toml` files, `libs/axon-server` |
+| Capability contract | How an extension declares its service, port, data and backup | `schemas/`, `service.toml` files, `libs/sjel-server` |
 | Model selection | Picks the model for each task at runtime: the device's own, the Mac's, or deterministic rules | `dashboard/src/lib/intelligence`, `plugins/foundation-models`, `libs/inference` |
 | Assistant | One panel that knows the current domain and acts through typed tools | `dashboard/src/lib/assistant` |
 
@@ -347,7 +347,7 @@ Configuration has one owner per concern:
 | `toolchain.toml` | Host executables Axon commands assume, with requiredness, scope and install hints |
 | `systems.toml` | Systems, services and projects that have a role in the setup |
 | `<overlay>/config/machine.toml` | OS, container runtime, enabled capabilities and state mounts for this machine. An overlay owning several machines uses `<overlay>/config/machines/<name>.toml` instead, selected by `axon.local.toml` or the hostname |
-| `<overlay>/config/deployment.env` | facts true of the whole deployment rather than one machine or one capability — the home timezone, and `SJEL_INBOUND_TOKEN_FILE`, the reference to the shared secret every capability server authenticates inbound requests against (`libs/axon-server/README.md`). Declared once because several capabilities need it and independent copies drift silently (`schemas/deployment.env.example`) |
+| `<overlay>/config/deployment.env` | facts true of the whole deployment rather than one machine or one capability — the home timezone, and `SJEL_INBOUND_TOKEN_FILE`, the reference to the shared secret every capability server authenticates inbound requests against (`libs/sjel-server/README.md`). Declared once because several capabilities need it and independent copies drift silently (`schemas/deployment.env.example`) |
 
 `tools/lib/toml.sh` is the parser for single-line scalar and array fields. More complex TOML goes
 through the shared Bun parser; no caller grows another partial parser or duplicates manifest data.
@@ -884,7 +884,7 @@ One web app is the visible form of the gluing layer: **installer, maintainer, an
 | `axon.toml` | Axon manifest: platform name, the release-tag pattern, default overlay root. Tracked and shared, so nothing machine-specific lives here |
 | `axon.local.toml` | this machine's overlay root, and optionally which of that overlay's machines this is. Gitignored, one per machine, written by `tools/install.sh` (`axon.local.toml.example` is the template) |
 | `<overlay>/config/machine.toml` | this machine's identity: os, container runtime, enabled capabilities, state-mount registry. One file per machine once an overlay holds more than one, under `config/machines/` |
-| `<overlay>/config/deployment.env` | this deployment's shared facts, resolved by `libs/axon-config` and `libs/axon-server` for every capability that needs one. A capability may still override, but may not silently disagree |
+| `<overlay>/config/deployment.env` | this deployment's shared facts, resolved by `libs/sjel-config` and `libs/sjel-server` for every capability that needs one. A capability may still override, but may not silently disagree |
 | `profiles.toml` | named Pack sets (`tools/packs-codex use <profile>`). Tracked and shared: a profile says which Packs belong together, while which machine deploys them stays in the overlay |
 | `upstreams.toml` | every external project: url, verdict, license, why |
 | `README.md` | human-facing architecture and durable repository doctrine |

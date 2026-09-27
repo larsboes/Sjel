@@ -112,8 +112,8 @@ pub fn record(person: &Value) -> Option<Incoming> {
 
 /// Reads every person note through vault.
 pub fn fetch(vault_url: &str) -> Result<Vec<Incoming>, String> {
-    let client = axon_http::client(
-        axon_http::Purpose::new("entities-obsidian"),
+    let client = sjel_http::client(
+        sjel_http::Purpose::new("entities-obsidian"),
         Duration::from_secs(60),
     )
     .map_err(|e| e.to_string())?;

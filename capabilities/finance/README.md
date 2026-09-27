@@ -317,7 +317,7 @@ The thirteen tables live in the shared SQLite file — `SJEL_DB_PATH`, else
 `finance_holding_projection`, `finance_holding_projection_state`,
 `finance_holding_projection_sources`, `finance_prices`, `finance_fx_rates`,
 `finance_price_fetches`, `finance_decisions` and `finance_decision_events`
-(`libs/axon-store/README.md`). PRD Q45
+(`libs/sjel-store/README.md`). PRD Q45
 (2026-08-27) moved them there from a Postgres schema, and the path is a deployment
 fact rather than a capability one: `$SJEL_FINANCE_DATABASE_URL` is gone, because a
 file per capability would drop the join `capabilities/places` builds its spend layer

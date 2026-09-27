@@ -194,7 +194,7 @@ impl InboundAuth {
     /// A capability-supplied token wins over the deployment-wide one.
     ///
     /// Precedence, not merging, and deliberately not the conflict error
-    /// `axon_config::resolve_home_timezone` raises: two timezones are a
+    /// `sjel_config::resolve_home_timezone` raises: two timezones are a
     /// mistake, whereas two tokens are a deployment mid-rotation or a
     /// capability whose clients predate the shared file. Both are legitimate.
     pub fn resolve(capability_token: Option<String>) -> Self {
@@ -510,9 +510,9 @@ fn constant_time_eq(a: &[u8], b: &[u8]) -> bool {
 /// `SJEL_INBOUND_TOKEN_FILE` (or `SJEL_INBOUND_TOKEN_FILE`) from `<overlay>/config/deployment.env`, then that
 /// file's contents.
 fn deployment_token() -> Option<String> {
-    let body = std::fs::read_to_string(axon_config::overlay_config("deployment.env")?).ok()?;
-    let reference = axon_config::deployment_value(&body, "SJEL_INBOUND_TOKEN_FILE")?;
-    token_from_file(&axon_config::expand_tilde(&reference))
+    let body = std::fs::read_to_string(sjel_config::overlay_config("deployment.env")?).ok()?;
+    let reference = sjel_config::deployment_value(&body, "SJEL_INBOUND_TOKEN_FILE")?;
+    token_from_file(&sjel_config::expand_tilde(&reference))
 }
 
 /// Reads a token out of a private file: the trimmed contents, or `auth.api_key`
@@ -771,7 +771,7 @@ mod tests {
     #[test]
     fn a_token_file_is_read_raw_or_as_the_api_key_of_a_json_settings_file() {
         let dir = std::env::temp_dir().join(format!(
-            "axon-server-token-{}-{:?}",
+            "sjel-server-token-{}-{:?}",
             std::process::id(),
             std::thread::current().id()
         ));

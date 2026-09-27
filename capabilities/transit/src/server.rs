@@ -514,10 +514,10 @@ async fn main() {
         config,
     };
 
-    // Port contract and loopback bind live in axon_server; the old 0.0.0.0 bind
+    // Port contract and loopback bind live in sjel_server; the old 0.0.0.0 bind
     // here was never a documented decision and is retired with it.
-    let port = axon_server::resolve_port(Some("TRANSIT_PORT"), None, 3000);
-    axon_server::serve_local("transit-server", port, build_router(state)).await;
+    let port = sjel_server::resolve_port(Some("TRANSIT_PORT"), None, 3000);
+    sjel_server::serve_local("transit-server", port, build_router(state)).await;
 }
 
 /// This capability's name, for the origin guard's env var
@@ -552,7 +552,7 @@ fn build_router(state: AppState) -> Router {
         // ADD NEW ROUTES ABOVE THIS LINE. Below it they lose the origin guard.
         .layer(axum::middleware::from_fn_with_state(
             CAPABILITY,
-            axon_server::origin::refuse_foreign_origins,
+            sjel_server::origin::refuse_foreign_origins,
         ))
         .layer(CorsLayer::permissive())
         .with_state(state)
@@ -570,7 +570,7 @@ mod route_manifest_tests {
     }
 }
 
-/// The router-level proof that `libs/axon-server`'s predicate tests cannot give:
+/// The router-level proof that `libs/sjel-server`'s predicate tests cannot give:
 /// a route registered BELOW the `.layer()` call passes every test of
 /// `origin_allowed_by` and still answers a hostile page.
 ///

@@ -15,9 +15,9 @@
 
 use crate::geocode::{GeocodeQuery, Geocoder, StructuredQuery};
 use crate::layers::{normalize_eva, parse_station_ref};
-use axon_store::QueryAll;
 use candidate_fingerprint::CandidateKey;
 use rusqlite::{params, OptionalExtension};
+use sjel_store::QueryAll;
 
 use crate::store::{stable_id, validate_prefix, Fallible, Place, PlaceVisit, PlacesStore};
 use serde_json::Value;
@@ -36,7 +36,7 @@ const AMEX_COUNTRY_COLUMN: &str = "Land";
 /// Where transit's suggest surface answers (`capabilities/transit/service.toml`
 /// port 3000, `GET /api/suggest`). Overridable for tests and odd deployments.
 pub fn transit_url() -> String {
-    axon_config::env_var("SJEL_PLACES_TRANSIT_URL")
+    sjel_config::env_var("SJEL_PLACES_TRANSIT_URL")
         .ok()
         .filter(|value| !value.trim().is_empty())
         .unwrap_or_else(|| "http://127.0.0.1:3000".to_string())
@@ -210,7 +210,7 @@ pub fn amex_profile_from(config: &Value) -> Fallible<AmexProfile> {
 }
 
 fn load_amex_profile() -> Fallible<AmexProfile> {
-    let path = axon_config::overlay_config("finance.json")
+    let path = sjel_config::overlay_config("finance.json")
         .ok_or("SJEL_PERSONAL_ROOT is not set; the raw exports live in the private overlay")?;
     let body = std::fs::read_to_string(&path)
         .map_err(|error| format!("could not read {}: {error}", path.display()))?;
@@ -218,7 +218,7 @@ fn load_amex_profile() -> Fallible<AmexProfile> {
 }
 
 fn raw_import_dir() -> Fallible<PathBuf> {
-    let dir = axon_config::overlay_root()
+    let dir = sjel_config::overlay_root()
         .ok_or("SJEL_PERSONAL_ROOT is not set; the raw exports live in the private overlay")?
         .join("data/finance/import/raw");
     if !dir.is_dir() {
@@ -825,8 +825,8 @@ pub fn stations(store: &PlacesStore, today: &str) -> Fallible<()> {
     let mut existing = 0_usize;
     let mut unresolved: Vec<String> = Vec::new();
 
-    let client = axon_http::client(
-        axon_http::Purpose::new("places-backfill"),
+    let client = sjel_http::client(
+        sjel_http::Purpose::new("places-backfill"),
         std::time::Duration::from_secs(15),
     )?;
     let suggest_base = transit_url();
@@ -1221,13 +1221,13 @@ pub fn resolve_unnamed_place(
 }
 
 fn people_dir() -> Fallible<PathBuf> {
-    if let Ok(dir) = axon_config::env_var("SJEL_PLACES_PEOPLE_DIR") {
-        return Ok(axon_config::expand_tilde(&dir));
+    if let Ok(dir) = sjel_config::env_var("SJEL_PLACES_PEOPLE_DIR") {
+        return Ok(sjel_config::expand_tilde(&dir));
     }
     // The vault root the finance capability already declares in the overlay
     // (finance.json `obsidian.root`) — one declaration of where the vault is.
     let path =
-        axon_config::overlay_config("finance.json").ok_or("SJEL_PERSONAL_ROOT is not set")?;
+        sjel_config::overlay_config("finance.json").ok_or("SJEL_PERSONAL_ROOT is not set")?;
     let body = std::fs::read_to_string(&path)?;
     let config: Value = serde_json::from_str(&body)?;
     let root = config
@@ -1235,12 +1235,12 @@ fn people_dir() -> Fallible<PathBuf> {
         .and_then(|obsidian| obsidian.get("root"))
         .and_then(Value::as_str)
         .ok_or("finance.json declares no obsidian.root; set SJEL_PLACES_PEOPLE_DIR instead")?;
-    Ok(axon_config::expand_tilde(root).join("Atlas/People"))
+    Ok(sjel_config::expand_tilde(root).join("Atlas/People"))
 }
 
 pub fn vault(store: &PlacesStore, today: &str) -> Fallible<()> {
     // Exported place notes in the overlay.
-    let places_dir = axon_config::overlay_root()
+    let places_dir = sjel_config::overlay_root()
         .ok_or("SJEL_PERSONAL_ROOT is not set")?
         .join("data/places/vault-notes");
     let mut place_notes = 0_usize;
@@ -1887,7 +1887,7 @@ pub fn takeout_from(store: &PlacesStore, dir: &Path, today: &str) -> Fallible<Ta
 }
 
 pub fn takeout(store: &PlacesStore, today: &str) -> Fallible<()> {
-    let root = axon_config::overlay_root()
+    let root = sjel_config::overlay_root()
         .ok_or("SJEL_PERSONAL_ROOT is not set; Takeout exports live in the private overlay")?
         .join("data/places/import/raw");
     let mut dirs: Vec<PathBuf> = std::fs::read_dir(&root)

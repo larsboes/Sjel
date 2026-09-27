@@ -197,7 +197,7 @@ impl RailBackend {
     /// From `SJEL_TRANSIT_BACKEND` ("dbweb" | "dbnav"); anything else falls
     /// back to the default loudly via the log rather than failing the process.
     pub fn from_env() -> Self {
-        match axon_config::env_var("SJEL_TRANSIT_BACKEND").as_deref() {
+        match sjel_config::env_var("SJEL_TRANSIT_BACKEND").as_deref() {
             Ok("dbweb") => Self::DbWeb,
             Ok("dbnav") | Err(_) => Self::DbNav,
             Ok(other) => {
@@ -235,7 +235,7 @@ struct Endpoints {
 
 impl Endpoints {
     fn from_env() -> Self {
-        Self::resolve(|var| axon_config::env_var(var).ok())
+        Self::resolve(|var| sjel_config::env_var(var).ok())
     }
 
     /// Split from `from_env` so the resolution rules are testable without mutating the
@@ -281,8 +281,8 @@ impl HafasClient {
         // own live smoke test: a `--search` call stalled past 600s with no
         // recovery). 15s is generous for a single journey-search POST; a
         // real network issue should fail fast and loud, not hang silently.
-        let client = axon_http::client(
-            axon_http::Purpose::new("transit-hafas"),
+        let client = sjel_http::client(
+            sjel_http::Purpose::new("transit-hafas"),
             std::time::Duration::from_secs(15),
         )
         .expect("reqwest client with a fixed timeout should always build");

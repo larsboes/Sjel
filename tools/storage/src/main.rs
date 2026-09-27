@@ -1,4 +1,4 @@
-//! axon-storage — what is filling this disk, and what is safe to reclaim.
+//! sjel-storage — what is filling this disk, and what is safe to reclaim.
 //!
 //! `sysmon report` answers "am I full" with one `df` line. This answers "what is filling
 //! me", which `df` structurally cannot: the 46 GB that started this was 215 individually
@@ -37,14 +37,14 @@ use std::process::{Command, ExitCode, Stdio};
 use measure::{fmt_bytes, size_of};
 use policy::{disk_state, expand_glob, is_applicable, reclaim_argv, StorageClass, GB};
 
-const HELP: &str = "axon-storage — what is filling this disk, and what is safe to reclaim.
+const HELP: &str = "sjel-storage — what is filling this disk, and what is safe to reclaim.
 
-  axon-storage report [--json]     free/used/total, every policy class, what is flagged
-  axon-storage apply  [--json]     run each applicable class's reclaim command
-  axon-storage target [--json]     the Cargo target dir against PRD §9's R6 ratio
-  axon-storage prune [--incremental] [--target] [--node-modules] [--dry-run]
+  sjel-storage report [--json]     free/used/total, every policy class, what is flagged
+  sjel-storage apply  [--json]     run each applicable class's reclaim command
+  sjel-storage target [--json]     the Cargo target dir against PRD §9's R6 ratio
+  sjel-storage prune [--incremental] [--target] [--node-modules] [--dry-run]
                                    repo-scoped reclaim, no policy involved
-  axon-storage -h                  this help
+  sjel-storage -h                  this help
 
 Policy: <overlay>/config/storage-policy.toml — see schemas/storage-policy.toml.example.
 
@@ -102,7 +102,7 @@ fn main() -> ExitCode {
 /// `CARGO_TARGET_DIR` belongs to a different checkout. Walking up from the cwd is the
 /// fallback for `cargo run` and for a direct invocation.
 fn repo_root() -> Result<PathBuf, String> {
-    if let Ok(root) = axon_config::env_var("SJEL_ROOT") {
+    if let Ok(root) = sjel_config::env_var("SJEL_ROOT") {
         if !root.trim().is_empty() {
             return Ok(PathBuf::from(root));
         }
@@ -127,12 +127,12 @@ fn repo_root() -> Result<PathBuf, String> {
 
 /// The overlay's policy file.
 ///
-/// Resolved through `axon_config::overlay_root`, exactly as `capabilities/host-net` resolves
+/// Resolved through `sjel_config::overlay_root`, exactly as `capabilities/host-net` resolves
 /// its own policy — so `SJEL_PERSONAL_ROOT` is the one input, and the axon.local.toml →
 /// axon.toml order stays owned by `tools/lib/paths.sh` and `libs/overlay/overlay.ts`. A
 /// third copy of that order in Rust is what this avoids; the launcher sources `paths.sh`.
 fn policy_path() -> Result<PathBuf, String> {
-    let root = axon_config::overlay_root().ok_or_else(|| {
+    let root = sjel_config::overlay_root().ok_or_else(|| {
         "no overlay — SJEL_PERSONAL_ROOT is unset. Run this through tools/storage/storage \
          or `axon storage`, which source tools/lib/paths.sh."
             .to_string()

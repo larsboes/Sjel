@@ -164,7 +164,7 @@ freshness_stale_hours  = "24"             # past this age nothing is arriving, a
                                           # nothing ever arrived. axon-status polls it; tools/doctor reports it.
                                           # The path is a convention, not a field, so one shape works for every
                                           # capability -- same namespace as ytalbum's `/__axon/idle`. It answers
-                                          # before the inbound gate (libs/axon-server/src/auth.rs), because one
+                                          # before the inbound gate (libs/sjel-server/src/auth.rs), because one
                                           # integer about WHEN is liveness-shaped and a status page must not
                                           # need every capability's credential to draw itself.
                                           #

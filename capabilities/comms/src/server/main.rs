@@ -292,7 +292,7 @@ async fn routes() -> Json<Value> {
 
 /// Assemble the public HTTP surface.
 ///
-/// The authentication boundary is no longer here: `axon_server::authenticated`
+/// The authentication boundary is no longer here: `sjel_server::authenticated`
 /// wraps this router, and it gates every path except `/health` and `/ready`.
 /// Kept separate from `main` so tests can exercise the real middleware stack
 /// over an ephemeral loopback listener.
@@ -502,8 +502,8 @@ async fn project_library_after_write(
 /// and a page open in the operator's own browser is already inside loopback.
 /// Without this, an unconfigured secret would leave those routes open instead
 /// of closed, which is the one direction this must never move.
-fn inbound_auth(cfg: &Config) -> axon_server::InboundAuth {
-    axon_server::InboundAuth::resolve(cfg.api_secret.clone()).refuse_without_token()
+fn inbound_auth(cfg: &Config) -> sjel_server::InboundAuth {
+    sjel_server::InboundAuth::resolve(cfg.api_secret.clone()).refuse_without_token()
 }
 
 #[tokio::main]
@@ -519,12 +519,12 @@ async fn main() {
 
     let app = build_router(&cfg.dashboard_origin);
 
-    // Bind, the gate and the exit-on-failure behaviour all live in axon_server
+    // Bind, the gate and the exit-on-failure behaviour all live in sjel_server
     // now; this file used to hand-roll the first and the third, and owned a
     // second copy of the second.
-    axon_server::serve(
+    sjel_server::serve(
         "comms-server",
-        axon_server::Reach::Loopback,
+        sjel_server::Reach::Loopback,
         cfg.port,
         app,
         auth,
@@ -558,9 +558,9 @@ mod tests {
         // `with_token`, not `resolve`: `resolve` would fall back to the machine's
         // own deployment.env, so a test would pass or fail on whether the
         // operator running it has an overlay token.
-        let auth = axon_server::InboundAuth::with_token(api_secret.map(str::to_string))
+        let auth = sjel_server::InboundAuth::with_token(api_secret.map(str::to_string))
             .refuse_without_token();
-        let app = axon_server::authenticated(build_router("http://127.0.0.1:47117"), auth);
+        let app = sjel_server::authenticated(build_router("http://127.0.0.1:47117"), auth);
         let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
         let addr = listener.local_addr().unwrap();
         tokio::spawn(async move {

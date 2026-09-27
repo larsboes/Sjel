@@ -14,7 +14,7 @@
 //!   make an extractor read the local disk.
 //! - [`check_destination`] refuses a URL that resolves inside this machine or this
 //!   network. `http://127.0.0.1:8086/api/plans` is still http, and every Axon service
-//!   binds loopback (`libs/axon-server`), so without it an ingested link drives an
+//!   binds loopback (`libs/sjel-server`), so without it an ingested link drives an
 //!   internal API from the outside. CodeQL `rust/request-forgery` reported exactly
 //!   that against comms' `extract_article`.
 //! - [`redirect_policy`] refuses a *hop* that leaves the public internet for this

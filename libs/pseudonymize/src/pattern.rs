@@ -13,7 +13,7 @@
 
 /// The entity decoder, re-exported rather than copied. `libs/extraction` owns the table and
 /// the ordering argument (`&amp;` last); a second table is how the two drift apart.
-pub use axon_extraction::decode_basic_entities;
+pub use sjel_extraction::decode_basic_entities;
 
 pub fn looks_like_url(value: &str) -> bool {
     value.starts_with("http://") || value.starts_with("https://") || value.starts_with("www.")

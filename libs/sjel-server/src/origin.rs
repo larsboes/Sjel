@@ -97,7 +97,7 @@ pub fn origin_allowed_by(origin: Option<&str>, allowed_hosts: Option<&str>) -> b
 
 /// The same predicate, reading `SJEL_<CAPABILITY>_ALLOWED_ORIGIN_HOSTS`.
 pub fn origin_allowed(capability: &str, origin: Option<&str>) -> bool {
-    let allowed_hosts = axon_config::env_var(&allowed_hosts_var(capability)).ok();
+    let allowed_hosts = sjel_config::env_var(&allowed_hosts_var(capability)).ok();
     origin_allowed_by(origin, allowed_hosts.as_deref())
 }
 

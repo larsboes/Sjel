@@ -1,5 +1,5 @@
 [package]
-name = "axon-pseudonymize"
+name = "sjel-pseudonymize"
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true
@@ -8,7 +8,7 @@ description = "Reversible bidirectional session pseudonymization for cloud evalu
 publish = false
 
 [lib]
-name = "axon_pseudonymize"
+name = "sjel_pseudonymize"
 path = "src/lib.rs"
 
 [dependencies]
@@ -16,7 +16,7 @@ aho-corasick.workspace = true
 # The entity decoder only (`pattern::decode_basic_entities`). `libs/extraction` owns that
 # table; default features off, so the `xberg` PDF rung is not linked into a consumer that
 # only needs the decoder.
-axon-extraction = { path = "../extraction", default-features = false }
+sjel-extraction = { path = "../extraction", default-features = false }
 serde = { workspace = true, features = ["derive"] }
 serde_json.workspace = true
 sha2.workspace = true

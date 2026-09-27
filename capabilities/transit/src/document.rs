@@ -30,7 +30,7 @@ use std::io::Write;
 use std::path::PathBuf;
 use std::process::Command;
 
-use axon_extraction::Extraction;
+use sjel_extraction::Extraction;
 
 use crate::config::{Config, DocumentBackend};
 

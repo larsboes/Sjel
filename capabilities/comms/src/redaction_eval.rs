@@ -161,7 +161,7 @@ pub fn evaluate_file_with(path: &Path, mode: Mode) -> Result<EvaluationReport> {
 fn evaluate(
     corpus: Corpus,
     mode: Mode,
-    registry: &axon_pseudonymize::EntityRegistry,
+    registry: &sjel_pseudonymize::EntityRegistry,
 ) -> Result<EvaluationReport> {
     let mut report = EvaluationReport {
         minimum_recall_percent: corpus.acceptance.minimum_recall_percent,
@@ -326,7 +326,7 @@ mod tests {
             }"#,
         )
         .unwrap();
-        let empty = axon_pseudonymize::EntityRegistry::builder().build();
+        let empty = sjel_pseudonymize::EntityRegistry::builder().build();
         let report = evaluate(corpus, Mode::Pseudonymized, &empty).unwrap();
         assert_eq!(report.total(), 5);
         assert_eq!(report.caught(), 5, "{:?}", report.leaks);

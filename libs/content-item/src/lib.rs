@@ -713,7 +713,7 @@ impl std::error::Error for CloudRefusal {}
 /// Two lanes exist and nothing else does:
 /// - `c0` unchanged, to any declared tier. A tier reviewed for pseudonymized
 ///   personal content admits public content too — breadth, not equality, the
-///   containment `axon_inference::CloudDataTier::admits_at_least` states.
+///   containment `sjel_inference::CloudDataTier::admits_at_least` states.
 /// - `c1` as a `c1` derivative, to `pseudonymized_personal` only.
 ///
 /// Everything else is refused, `c2` and `c3` first (Q27: one holds other

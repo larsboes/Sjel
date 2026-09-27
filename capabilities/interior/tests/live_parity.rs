@@ -30,7 +30,7 @@ use serde_json::Value;
 /// `SJEL_PERSONAL_ROOT` wird gelesen und nie gesetzt: welches Overlay gemeint ist, entscheidet
 /// die Umgebung, nicht der Test.
 fn live() -> Option<(Model, Value)> {
-    axon_config::env_var_os("SJEL_PERSONAL_ROOT")?;
+    sjel_config::env_var_os("SJEL_PERSONAL_ROOT")?;
     let flat = match default_flat() {
         Ok(f) => f,
         Err(e) => {

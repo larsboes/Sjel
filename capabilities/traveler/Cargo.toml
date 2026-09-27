@@ -21,12 +21,12 @@ path = "src/server.rs"
 # endpoints are ISO dates — the one thing this lib exists to do without pulling
 # a date crate in for it.
 civil-date = { path = "../../libs/civil-date" }
-axon-config = { path = "../../libs/axon-config" }
+sjel-config = { path = "../../libs/sjel-config" }
 # The bind, the inbound gate and the browser-origin refusal. This capability
 # serves personal state, so the origin guard is load-bearing rather than
-# decorative (libs/axon-server/src/origin.rs).
-axon-server = { path = "../../libs/axon-server" }
-axon-store = { path = "../../libs/axon-store" }
+# decorative (libs/sjel-server/src/origin.rs).
+sjel-server = { path = "../../libs/sjel-server" }
+sjel-store = { path = "../../libs/sjel-store" }
 route-manifest = { path = "../../libs/route-manifest" }
 serde = { workspace = true, features = ["derive"] }
 serde_json.workspace = true

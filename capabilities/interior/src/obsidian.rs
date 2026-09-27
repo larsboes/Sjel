@@ -325,16 +325,16 @@ pub fn write_all(
 /// `None` heisst: keine Bruecke, und das ist die richtige Antwort fuer einen Host ohne Vault —
 /// kein Vault, keine Schreibvorgaenge, und die Zeilen bleiben trotzdem der Bestand.
 pub fn vault_root() -> Option<PathBuf> {
-    if let Ok(p) = axon_config::env_var("SJEL_INTERIOR_OBSIDIAN_ROOT") {
+    if let Ok(p) = sjel_config::env_var("SJEL_INTERIOR_OBSIDIAN_ROOT") {
         if !p.trim().is_empty() {
-            return Some(axon_config::expand_tilde(&p));
+            return Some(sjel_config::expand_tilde(&p));
         }
     }
-    let pfad = axon_config::overlay_config("interior.json")?;
+    let pfad = sjel_config::overlay_config("interior.json")?;
     let text = std::fs::read_to_string(pfad).ok()?;
     let wert: serde_json::Value = serde_json::from_str(&text).ok()?;
     let root = wert.get("obsidian")?.get("root")?.as_str()?;
-    Some(axon_config::expand_tilde(root))
+    Some(sjel_config::expand_tilde(root))
 }
 
 /// `write_all` gegen die erklaerte Wurzel, oder `None`, wenn keine erklaert ist.

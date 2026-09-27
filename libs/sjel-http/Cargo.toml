@@ -1,5 +1,5 @@
 [package]
-name = "axon-http"
+name = "sjel-http"
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true
@@ -8,7 +8,7 @@ description = "One home for outbound HTTP: the blocking client factory, the user
 publish = false
 
 [lib]
-name = "axon_http"
+name = "sjel_http"
 path = "src/lib.rs"
 
 [dependencies]

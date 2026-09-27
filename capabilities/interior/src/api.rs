@@ -4,7 +4,7 @@
 //! fertiges SVG/HTML, das aus dem Modell erzeugt wurde. Ein Frontend, das eigene Masse haelt
 //! oder eigene Regeln auslegt, waere die Drift, die dieses Programm verhindern soll.
 //!
-//! Gebunden wird ueber `axon_server::serve_local` — Loopback, wie es die Bind-Policy von
+//! Gebunden wird ueber `sjel_server::serve_local` — Loopback, wie es die Bind-Policy von
 //! `axon doctor` fuer jede Capability in beiden Roots verlangt.
 
 use crate::clearance::check_layout;
@@ -343,7 +343,7 @@ async fn api_flats(
 }
 
 fn node_id() -> String {
-    axon_config::env_var("SJEL_NODE_ID").unwrap_or_else(|_| "node_mac".to_string())
+    sjel_config::env_var("SJEL_NODE_ID").unwrap_or_else(|_| "node_mac".to_string())
 }
 
 async fn signed_sync_auth(
@@ -1520,7 +1520,7 @@ async fn index(State(s): State<Arc<AppState>>) -> Result<Html<String>, (StatusCo
 }
 
 pub async fn serve(flat: &str, port: u16) {
-    let database = axon_config::database_path();
+    let database = sjel_config::database_path();
     let device_store = devices::store::DevicesStore::open(&database)
         .unwrap_or_else(|error| panic!("interior: cannot open device registry: {error}"));
     let state = Arc::new(AppState {
@@ -1528,7 +1528,7 @@ pub async fn serve(flat: &str, port: u16) {
         device_store,
         database,
     });
-    axon_server::serve_local("interior", port, build_router(state)).await;
+    sjel_server::serve_local("interior", port, build_router(state)).await;
 }
 
 /// Der Name dieser Capability, fuer die Umgebungsvariable der Origin-Sperre
@@ -1604,7 +1604,7 @@ fn build_router(state: Arc<AppState>) -> Router {
         // NEUE ROUTEN UEBER DIESE ZEILE. Darunter verlieren sie die Origin-Sperre.
         .layer(axum::middleware::from_fn_with_state(
             CAPABILITY,
-            axon_server::origin::refuse_foreign_origins,
+            sjel_server::origin::refuse_foreign_origins,
         ))
         .with_state(state)
 }
@@ -1624,7 +1624,7 @@ mod route_manifest_tests {
     }
 }
 
-/// Der Beweis auf Router-Ebene, den die Praedikat-Tests in `libs/axon-server` nicht fuehren
+/// Der Beweis auf Router-Ebene, den die Praedikat-Tests in `libs/sjel-server` nicht fuehren
 /// koennen: eine Route UNTER dem `.layer()`-Aufruf besteht jeden Test von
 /// `origin_allowed_by` und antwortet einer fremden Seite trotzdem.
 ///
@@ -1646,7 +1646,7 @@ mod origin_tests {
         if let Some(origin) = origin {
             anfrage = anfrage.header("origin", origin);
         }
-        let database = axon_config::database_path();
+        let database = sjel_config::database_path();
         build_router(Arc::new(AppState {
             flat: "wohnung".to_string(),
             device_store: devices::store::DevicesStore::open(&database).unwrap(),

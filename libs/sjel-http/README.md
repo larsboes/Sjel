@@ -1,4 +1,4 @@
-# axon-http
+# sjel-http
 
 One home for **outbound HTTP**: the blocking client, the user-agent every Axon
 request carries, and the timeout no caller can forget.
@@ -22,8 +22,8 @@ single site showed:
 ## Using it
 
 ```rust
-let client = axon_http::client(
-    axon_http::Purpose::new("places-geocode"),
+let client = sjel_http::client(
+    sjel_http::Purpose::new("places-geocode"),
     Duration::from_secs(20),
 )?;
 ```
@@ -49,8 +49,8 @@ a Tokio worker panics at run time. Every caller in Axon is either a CLI or insid
 
 ## Why its own crate
 
-`libs/axon-config` was the alternative and is the wrong host: `host-net`,
-`interior`, `soundscape`, `vault` and `tools/storage` depend on axon-config and
+`libs/sjel-config` was the alternative and is the wrong host: `host-net`,
+`interior`, `soundscape`, `vault` and `tools/storage` depend on sjel-config and
 make no outbound request, and `reqwest` brings a TLS stack with it. A lib here is
 spine-owned shared code with no domain of its own (ARCHITECTURE.md, "Libs"), and
 "how Axon talks to the network" is exactly that.

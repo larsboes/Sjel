@@ -242,7 +242,7 @@ the phone. Each item below is built and unverified, or ruled and unbuilt.
   1.102.2, xberg 1.0.5 → 1.0.14.
 - **The remaining three database-URL call sites.** calendar, finance and trips each
   hand-roll the same `std::env::var("SJEL_<CAP>_DATABASE_URL")` two-liner that
-  `axon_config::database_url_override` now owns. Four until 2026-08-27, when PRD Q48
+  `sjel_config::database_url_override` now owns. Four until 2026-08-27, when PRD Q48
   retired `tasks` and deleted its copy — the entry below still says four because that is
   what was true when it was written. They work, so this is deduplication rather
   than a defect, and the repo's rule is that shared logic moves into the lib. Not swept in
@@ -313,7 +313,7 @@ the phone. Each item below is built and unverified, or ruled and unbuilt.
   no `postgres.env` — landed on a fallback naming the real database, `dbname=axon
   password=axon`. The only thing between a demo seeding run and the live store was that the
   real password is not the word `axon`. Fixed with one shared
-  `axon_config::database_url_override`, used by those three. The four that hand-roll the
+  `sjel_config::database_url_override`, used by those three. The four that hand-roll the
   same two lines (calendar, finance, tasks, trips) are left alone and recorded below.
 - **2026-08-20 — `upstream-checker` published the checkout's absolute path.** Its `--json`
   `manifest` field was `$SJEL_ROOT/upstreams.toml`, which axon-status serves and the demo

@@ -359,8 +359,8 @@ fn non_empty(s: &str) -> Option<String> {
 }
 
 fn fetch_with_headers(url: &str) -> Result<String, SourceError> {
-    let client = axon_http::client(
-        axon_http::Purpose::new("scouting-luma"),
+    let client = sjel_http::client(
+        sjel_http::Purpose::new("scouting-luma"),
         crate::http::TIMEOUT,
     )
     .map_err(|e| SourceError::Fetch(format!("client build: {e}")))?;

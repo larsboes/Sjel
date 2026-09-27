@@ -118,7 +118,7 @@ pub fn require(
 /// Read the overlay policy. `Ok(None)` means there is no overlay to read one from, which the
 /// caller reports as a setup problem rather than as a clean host.
 pub fn load() -> Result<Option<(std::path::PathBuf, Policy)>, String> {
-    let Some(path) = axon_config::overlay_config("host-net-policy.toml") else {
+    let Some(path) = sjel_config::overlay_config("host-net-policy.toml") else {
         return Ok(None);
     };
     if !path.exists() {

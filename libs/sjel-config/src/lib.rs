@@ -62,7 +62,7 @@ pub fn overlay_data_dir(capability: &str) -> Option<PathBuf> {
 /// to it: the only thing standing between a demo seeding run and the live store
 /// was that the real password was not the word `axon`. A fallback that looks
 /// like production is worse than one that obviously is not.
-/// Nothing is created here; `axon_store::pool_for` makes the directory when a
+/// Nothing is created here; `sjel_store::pool_for` makes the directory when a
 /// caller actually opens the file.
 pub fn database_path() -> PathBuf {
     if let Some(explicit) = crate::env_var("SJEL_DB_PATH")
@@ -274,7 +274,7 @@ mod tests {
     /// SJEL_PERSONAL_ROOT at it. Returns the guard so the caller holds it.
     fn with_deployment_env(body: Option<&str>) -> (EnvGuard, std::path::PathBuf) {
         let root = std::env::temp_dir().join(format!(
-            "axon-config-tz-{}-{:?}",
+            "sjel-config-tz-{}-{:?}",
             std::process::id(),
             std::thread::current().id()
         ));

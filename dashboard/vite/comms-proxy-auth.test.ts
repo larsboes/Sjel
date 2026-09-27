@@ -91,7 +91,7 @@ describe("Comms proxy request boundary", () => {
     expect(hasSameOrigin({ host: "127.0.0.1:47117", origin: "null" })).toBe(false);
   });
 
-  // Reads used to go unsigned. libs/axon-server's inbound gate asks every path
+  // Reads used to go unsigned. libs/sjel-server's inbound gate asks every path
   // except /health and /ready for the token, so a read that arrives without one
   // is a 401 and a blank Comms page, not a slightly safer request.
   test("injects authorization for every proxied request, reads included", () => {

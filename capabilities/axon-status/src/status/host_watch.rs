@@ -44,7 +44,7 @@ pub(crate) struct HostWatchFinding {
 /// endpoint feeds a list of things to decide about, and a condition that cleared has
 /// nothing left to decide.
 fn read_findings(database: &std::path::Path) -> Result<Vec<HostWatchFinding>, String> {
-    let pool = axon_store::pool_for(database).map_err(|e| e.to_string())?;
+    let pool = sjel_store::pool_for(database).map_err(|e| e.to_string())?;
     let conn = pool.get().map_err(|e| e.to_string())?;
     let mut statement = match conn.prepare(
         "SELECT id, key, title, note, first_seen, last_seen
@@ -76,7 +76,7 @@ fn read_findings(database: &std::path::Path) -> Result<Vec<HostWatchFinding>, St
 }
 
 pub(crate) async fn host_watch_handler() -> (StatusCode, Json<Value>) {
-    let database = axon_config::database_path();
+    let database = sjel_config::database_path();
     // Blocking file I/O off the async runtime, the same rule every other store reader in
     // this repo follows: a busy writer makes a read wait out `busy_timeout`, and that is
     // five seconds of a runtime worker other handlers need.
@@ -123,7 +123,7 @@ mod tests {
     #[test]
     fn only_open_findings_are_served() {
         let path = scratch("open-only");
-        let pool = axon_store::pool_for(&path).unwrap();
+        let pool = sjel_store::pool_for(&path).unwrap();
         let conn = pool.get().unwrap();
         conn.execute_batch(
             "CREATE TABLE host_watch_findings (

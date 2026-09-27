@@ -583,8 +583,8 @@ async fn main() {
 
     // Was 0.0.0.0, which put an unauthenticated POST /opportunities/:id/status on
     // the LAN. Nothing documented that bind as a decision; it was the last of the
-    // three divergences libs/axon-server exists to end.
-    axon_server::serve_local("scout-server", cfg.port, build_router()).await;
+    // three divergences libs/sjel-server exists to end.
+    sjel_server::serve_local("scout-server", cfg.port, build_router()).await;
 }
 
 /// This capability's name, for the origin guard's env var
@@ -625,9 +625,9 @@ fn build_router() -> Router {
         // ADD NEW ROUTES ABOVE THIS LINE. Below it they lose the origin guard.
         .layer(axum::middleware::from_fn_with_state(
             CAPABILITY,
-            axon_server::origin::refuse_foreign_origins,
+            sjel_server::origin::refuse_foreign_origins,
         ))
-        // CorsLayer stays here rather than in axon_server: it is a per-capability
+        // CorsLayer stays here rather than in sjel_server: it is a per-capability
         // security decision and belongs where it can be seen. It decides what a
         // permitted answer may say; the guard above decides who may ask.
         .layer(CorsLayer::permissive())
@@ -645,7 +645,7 @@ mod route_manifest_tests {
     }
 }
 
-/// The router-level proof that `libs/axon-server`'s predicate tests cannot give:
+/// The router-level proof that `libs/sjel-server`'s predicate tests cannot give:
 /// a route registered BELOW the `.layer()` call passes every test of
 /// `origin_allowed_by` and still answers a hostile page.
 ///

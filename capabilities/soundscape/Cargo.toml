@@ -12,8 +12,8 @@ name = "soundscape"
 path = "src/main.rs"
 
 [dependencies]
-axon-config = { path = "../../libs/axon-config" }
-axon-server = { path = "../../libs/axon-server" }
+sjel-config = { path = "../../libs/sjel-config" }
+sjel-server = { path = "../../libs/sjel-server" }
 route-manifest = { path = "../../libs/route-manifest" }
 axum.workspace = true
 # Not `full`: these are the drivers this crate reaches for, verified with a lone

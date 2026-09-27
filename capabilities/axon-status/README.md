@@ -28,7 +28,7 @@ Bound to **127.0.0.1**, not `0.0.0.0`: this process starts and stops the machine
 capabilities, so it answers to this machine only. The dashboard reaches it through
 Vite's proxy, which runs here too.
 
-The bind was the whole boundary until `libs/axon-server` grew the inbound gate, and for
+The bind was the whole boundary until `libs/sjel-server` grew the inbound gate, and for
 `POST /api/axon-status/capabilities/:name/start|stop` that was never enough on its own —
 it is process control. When the deployment declares `SJEL_INBOUND_TOKEN_FILE`
 (`schemas/deployment.env.example`), every route here except `/health` asks for that

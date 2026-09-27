@@ -35,7 +35,7 @@
 //! scouting reads `type`/`summary`/`category`, calendar reads `start`/`end`/
 //! `status`, and neither has an opinion about the other's.
 //!
-//! Not tilde expansion: `axon_config::expand_tilde` owns that, and the caller
+//! Not tilde expansion: `sjel_config::expand_tilde` owns that, and the caller
 //! applies it before declaring a root.
 
 pub mod projection;

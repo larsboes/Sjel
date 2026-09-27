@@ -38,7 +38,7 @@
 //! — this crate owns no config, no store and no HTTP client, which is what
 //! makes it a `libs/` member at all.
 
-use axon_inference::ResolvedRole;
+use sjel_inference::ResolvedRole;
 
 use crate::{Document, Extraction, ExtractionError, Result};
 
@@ -107,8 +107,8 @@ mod tests {
         // the error names where the measurement has to happen.
         let role = ResolvedRole {
             backend_name: "ollama".into(),
-            backend: axon_inference::Backend {
-                api: axon_inference::Api::Ollama,
+            backend: sjel_inference::Backend {
+                api: sjel_inference::Api::Ollama,
                 base_url: "http://127.0.0.1:11434".into(),
                 api_key_file: None,
                 provided_by: None,

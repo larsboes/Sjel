@@ -28,8 +28,8 @@ const KEY_FILE: &str = "lan-key.der";
 
 /// The deployment's LAN port, or `None` when the listener is not enabled.
 pub fn deployment_port() -> Option<u16> {
-    let body = std::fs::read_to_string(axon_config::overlay_config("deployment.env")?).ok()?;
-    axon_config::deployment_value(&body, PORT_KEY)?.parse().ok()
+    let body = std::fs::read_to_string(sjel_config::overlay_config("deployment.env")?).ok()?;
+    sjel_config::deployment_value(&body, PORT_KEY)?.parse().ok()
 }
 
 /// The listener's certificate and key, and the fingerprint a phone pins.

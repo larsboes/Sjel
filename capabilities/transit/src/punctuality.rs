@@ -27,7 +27,7 @@ use serde::{Deserialize, Serialize};
 const DEFAULT_BASE_URL: &str = "http://127.0.0.1:8085";
 
 pub fn base_url() -> String {
-    axon_config::env_var("SJEL_PUNCTUALITY_URL").unwrap_or_else(|_| DEFAULT_BASE_URL.to_string())
+    sjel_config::env_var("SJEL_PUNCTUALITY_URL").unwrap_or_else(|_| DEFAULT_BASE_URL.to_string())
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -207,8 +207,8 @@ enum Want {
 fn lookup(stops: Vec<StopQuery>) -> Option<Vec<Option<StopStats>>> {
     // Short on purpose: this is an enhancement on a localhost service. Waiting on
     // it would make a journey search slower than not having the number at all.
-    let client = axon_http::client(
-        axon_http::Purpose::new("transit-punctuality"),
+    let client = sjel_http::client(
+        sjel_http::Purpose::new("transit-punctuality"),
         std::time::Duration::from_secs(3),
     )
     .ok()?;

@@ -116,8 +116,8 @@ struct FeedItem {
 }
 
 fn fetch_url(url: &str) -> Result<String, SourceError> {
-    let client = axon_http::client(
-        axon_http::Purpose::new("scouting-rss"),
+    let client = sjel_http::client(
+        sjel_http::Purpose::new("scouting-rss"),
         crate::http::TIMEOUT,
     )
     .map_err(|e| SourceError::Fetch(format!("client: {e}")))?;

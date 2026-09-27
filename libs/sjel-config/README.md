@@ -1,4 +1,4 @@
-# axon-config
+# sjel-config
 
 Shared overlay/config resolution for Axon's Rust capabilities: tilde expansion, overlay
 paths (`SJEL_PERSONAL_ROOT`), the store's location, the deployment's home timezone, and the

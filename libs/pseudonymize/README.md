@@ -52,7 +52,7 @@ rung recognises.
 ## Usage
 
 ```rust
-use axon_pseudonymize::{Pseudonymizer, EntityRegistry};
+use sjel_pseudonymize::{Pseudonymizer, EntityRegistry};
 
 let registry = EntityRegistry::builder()
     .add_people(["Lars", "Anna"])

@@ -28,8 +28,8 @@ pub(super) fn strip_tags(s: &str) -> String {
 /// the URL the caller handed over leaves `302 -> http://169.254.169.254/` as a
 /// complete bypass, so every hop is re-checked and the chain is capped at three.
 pub(super) fn http_client() -> Result<reqwest::blocking::Client> {
-    Ok(axon_http::builder(
-        axon_http::Purpose::new("comms-media"),
+    Ok(sjel_http::builder(
+        sjel_http::Purpose::new("comms-media"),
         std::time::Duration::from_secs(30),
     )
     .gzip(true)

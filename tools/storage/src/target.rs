@@ -4,7 +4,7 @@
 //! may not exceed `target/release` by more than 3×. The rule is deliberately a ratio and
 //! not a GB figure — `target/release` is an internal control with the same crates, the
 //! same machine and the same moment, differing only in profile, so it survives a bigger
-//! disk. Q53 names `tools/doctor` as the checker; doctor runs `axon-storage target --json`
+//! disk. Q53 names `tools/doctor` as the checker; doctor runs `sjel-storage target --json`
 //! and reports what comes back.
 //!
 //! The second question this answers is the one that produced the mess. Measured 2026-09-03,
@@ -342,7 +342,7 @@ mod tests {
             std::fs::create_dir_all(debug.join(bucket)).unwrap();
             std::fs::write(debug.join(bucket).join("f"), vec![0u8; 16 * 1024]).unwrap();
         }
-        std::fs::write(debug.join("axon-storage"), vec![0u8; 16 * 1024]).unwrap();
+        std::fs::write(debug.join("sjel-storage"), vec![0u8; 16 * 1024]).unwrap();
 
         let p = profile(&root, "debug");
         assert_eq!(p.units, 1, "one .fingerprint entry is one compilation unit");

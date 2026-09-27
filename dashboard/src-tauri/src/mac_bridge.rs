@@ -5,12 +5,12 @@
 //! Inside the Tauri bundle a relative `fetch('/interior/api/items')` resolves
 //! against the app's own origin and reaches nothing. An absolute WebView fetch
 //! to the Mac would carry `Origin: tauri://localhost`, which
-//! `libs/axon-server/src/origin.rs` (`origin_allowed_by`) refuses. Admitting
+//! `libs/sjel-server/src/origin.rs` (`origin_allowed_by`) refuses. Admitting
 //! that origin would admit every Tauri app on the phone, not this one.
 //!
 //! A request made here sends no `Origin` header, so origin.rs passes it the way
 //! it passes curl. `tailscale serve` still injects the caller's tailnet
-//! identity, so the tailnet gate in `libs/axon-server/src/tailnet.rs` applies
+//! identity, so the tailnet gate in `libs/sjel-server/src/tailnet.rs` applies
 //! without a shared secret in the app.
 //!
 //! ## Why it is not a general proxy
@@ -80,7 +80,7 @@ use crate::sync::{self, LocalStore, Outgoing, Reply, SendError, SyncStatus, Tran
 /// Token-guarded routes: comms is the one capability that sets
 /// `refuse_without_token` (`capabilities/comms/src/server/main.rs`,
 /// `inbound_auth`), and a tailnet identity never satisfies it
-/// (`libs/axon-server/src/auth.rs`). The bridge sends no token. But the shell
+/// (`libs/sjel-server/src/auth.rs`). The bridge sends no token. But the shell
 /// adds comms' bearer token to every request it forwards to `/comms`
 /// (`inject_comms_auth` in `proxy.rs`), so `POST /comms/ingest` works through
 /// the bridge exactly as it works from the phone browser. The server refuses
@@ -152,7 +152,7 @@ pub struct Settings {
     pub local: Option<LocalEndpoint>,
 }
 
-/// The node's local-network listener (`libs/axon-server/src/lan.rs`): its address and the
+/// The node's local-network listener (`libs/sjel-server/src/lan.rs`): its address and the
 /// SHA-256 of the self-signed certificate this device accepts from it, and no other.
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub struct LocalEndpoint {
@@ -732,7 +732,7 @@ fn decode_pin(pin: &str) -> Result<[u8; 32], String> {
 
 /// A TLS client that accepts exactly one certificate, identified by its SHA-256.
 ///
-/// The node's local listener has a self-signed certificate (`libs/axon-server/src/lan.rs`), so no
+/// The node's local listener has a self-signed certificate (`libs/sjel-server/src/lan.rs`), so no
 /// chain or host name can be checked; the pin replaces both. The handshake signature is still
 /// verified with the provider's own functions, which proves the peer holds the pinned key.
 #[derive(Debug)]

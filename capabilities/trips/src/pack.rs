@@ -16,7 +16,7 @@
 //!
 //! ## `item_ref` is a soft reference with no foreign key
 //!
-//! It holds an `interior_item.id`. `libs/axon-store` sets
+//! It holds an `interior_item.id`. `libs/sjel-store` sets
 //! `PRAGMA foreign_keys = ON` on every pooled connection, so a cross-prefix FK
 //! would make interior's own deletes fail against a trips row and would order
 //! trips' migration behind interior's. The shape follows `interior_placement`,
@@ -41,7 +41,7 @@ use rusqlite::params;
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
 
-use axon_store::QueryAll;
+use sjel_store::QueryAll;
 
 use crate::store::{TripStage, TripsStore};
 
@@ -247,7 +247,7 @@ pub fn replace_items(
         return Ok(false);
     }
     let now = crate::store::stamp();
-    let transaction = axon_store::write_transaction(&mut conn)?;
+    let transaction = sjel_store::write_transaction(&mut conn)?;
     transaction.execute(
         &format!("DELETE FROM {prefix}_pack_list_items WHERE pack_list_id = ?1"),
         params![&list_id],

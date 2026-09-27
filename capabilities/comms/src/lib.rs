@@ -11,9 +11,9 @@
 // (README.md#schemas-and-dependency-direction; `capabilities/transit` is the
 // other one). Re-exported under the name every call site here already uses, so
 // the promotion cost no `crate::extraction::…` path a rewrite.
-pub use axon_extraction as extraction;
-pub use axon_summarize as summarize;
 pub use content_item;
+pub use sjel_extraction as extraction;
+pub use sjel_summarize as summarize;
 
 pub mod capacity;
 pub mod cloud_derivative;
@@ -63,7 +63,7 @@ pub enum CommsError {
     // Transparent: the reader already names itself and the class it refused,
     // so wrapping it in "extraction error: …" would only repeat the noun.
     #[error(transparent)]
-    Extraction(#[from] axon_extraction::ExtractionError),
+    Extraction(#[from] sjel_extraction::ExtractionError),
     #[error("config error: {0}")]
     Config(String),
     #[error("auth error: {0}")]

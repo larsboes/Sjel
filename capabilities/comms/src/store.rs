@@ -18,11 +18,11 @@
 use std::collections::BTreeMap;
 use std::path::Path;
 
-use axon_store::QueryAll;
 use rusqlite::types::ToSql;
 use rusqlite::{params, Connection, OptionalExtension, Row, TransactionBehavior};
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
+use sjel_store::QueryAll;
 
 use crate::evaluation::{EvaluationFactor, EvaluationFactorContext, FeedEvaluation};
 use crate::provenance::{self, StageProvenance};
@@ -33,7 +33,7 @@ pub struct Store {
     /// Shared with every other `Store` in this process on the same database. A
     /// `Store` is now a cheap handle rather than a connection, which is what makes
     /// 43 handlers each opening one acceptable.
-    pool: axon_store::Pool,
+    pool: sjel_store::Pool,
     /// Prefixes this capability's tables in the one shared file (PRD Q45):
     /// `comms` here means `comms_feed_items` and its eighteen siblings.
     prefix: String,
@@ -1120,7 +1120,7 @@ pub(crate) mod db_tests {
                     &format!(
                         "UPDATE {}_gmail_action_jobs SET next_attempt = {now} WHERE job_id = ?1",
                         store.prefix,
-                        now = axon_store::NOW
+                        now = sjel_store::NOW
                     ),
                     params![restore.job_id],
                 )
@@ -1251,7 +1251,7 @@ pub(crate) mod db_tests {
                 &format!(
                     "UPDATE {}_triage_items SET purge_after = {past} WHERE id = ?1",
                     store.prefix,
-                    past = axon_store::now_offset("'-1 second'")
+                    past = sjel_store::now_offset("'-1 second'")
                 ),
                 params!["thread:expired"],
             )
@@ -3251,7 +3251,7 @@ pub(crate) mod db_tests {
                 &format!(
                     "UPDATE {prefix}_feed_origins SET first_seen = {past} WHERE feed_id = ?1",
                     prefix = store.prefix,
-                    past = axon_store::now_offset("'-2 hours'")
+                    past = sjel_store::now_offset("'-2 hours'")
                 ),
                 params![&later.id],
             )
@@ -3624,7 +3624,7 @@ pub(crate) mod db_tests {
                         SET next_attempt = {past}
                       WHERE source = ?1 AND item_id = ?2",
                     prefix = store.prefix,
-                    past = axon_store::now_offset("'-1 hour'")
+                    past = sjel_store::now_offset("'-1 hour'")
                 ),
                 params![&source, &item_id],
             )
@@ -3643,7 +3643,7 @@ pub(crate) mod db_tests {
     /// these eight threads do no DDL at all. Kept at eight anyway: this is the
     /// shape that failed reliably before, and it is the only place the
     /// in-process guard is exercised under real contention rather than in
-    /// isolation (libs/axon-store has the isolated cases).
+    /// isolation (libs/sjel-store has the isolated cases).
     #[test]
     fn concurrent_openers_do_not_deadlock() {
         let path = test_database("open_race");

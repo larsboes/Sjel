@@ -31,7 +31,7 @@ const MIN_REQUEST_SPACING: Duration = Duration::from_secs(1);
 /// env-overridable-URL seam transit's hafas.rs uses, so tests point the real
 /// client at a local stub instead of mocking it.
 pub fn nominatim_url() -> String {
-    axon_config::env_var("SJEL_PLACES_NOMINATIM_URL")
+    sjel_config::env_var("SJEL_PLACES_NOMINATIM_URL")
         .ok()
         .filter(|value| !value.trim().is_empty())
         .unwrap_or_else(|| NOMINATIM_URL.to_string())
@@ -201,11 +201,11 @@ impl<'a> Geocoder<'a> {
 
         throttle();
         // The Nominatim usage policy requires an identifying User-Agent, and
-        // axon_http's is exactly the shape it asks for: a product name and a
+        // sjel_http's is exactly the shape it asks for: a product name and a
         // contact URL, not a spoofed browser. (Contrast transit's hafas.rs,
         // which records why it does the opposite for an undocumented endpoint.)
-        let client = axon_http::client(
-            axon_http::Purpose::new("places-geocode"),
+        let client = sjel_http::client(
+            sjel_http::Purpose::new("places-geocode"),
             Duration::from_secs(20),
         )?;
         let url = match query {

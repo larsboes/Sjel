@@ -1,7 +1,7 @@
-# axon-server
+# sjel-server
 
 The one way a capability server comes up: `resolve_port` (re-exported from
-`axon-config`: `SJEL_PORT` from the runner first, capability escape hatch second, config
+`sjel-config`: `SJEL_PORT` from the runner first, capability escape hatch second, config
 third, shipped default last), a loopback-only bind, **the inbound authentication gate**,
 uniform startup logging, and a named single-line exit on bind failure instead of a panic
 backtrace.
@@ -135,7 +135,7 @@ into trips), and a browser always sends one on a cross-origin request.
 ```rust
 .layer(axum::middleware::from_fn_with_state(
     "places",
-    axon_server::origin::refuse_foreign_origins,
+    sjel_server::origin::refuse_foreign_origins,
 ))
 ```
 
@@ -170,7 +170,7 @@ unobserved (PRD §13, the pattern recorded four times).
 
 ## Build boundary
 
-This is a normal workspace crate. Consumers declare an `axon-server` path dependency,
+This is a normal workspace crate. Consumers declare an `sjel-server` path dependency,
 and the one root `Cargo.lock` keeps the `axum::Router` type identical across the library
 and every consumer. `cargo tree` is what exposes the architectural edge.
 

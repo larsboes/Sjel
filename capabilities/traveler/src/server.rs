@@ -230,10 +230,10 @@ fn router(store: Arc<TravelerStore>) -> Router {
         .route("/api/profile", get(get_profile).put(put_profile))
         .route("/api/profile/derived", get(get_derived))
         // Below every route, because axum's `layer` wraps only what is
-        // registered before it (libs/axon-server/src/origin.rs).
+        // registered before it (libs/sjel-server/src/origin.rs).
         .layer(middleware::from_fn_with_state(
             "traveler",
-            axon_server::origin::refuse_foreign_origins,
+            sjel_server::origin::refuse_foreign_origins,
         ))
         .with_state(store)
 }
@@ -247,7 +247,7 @@ pub async fn serve() {
             std::process::exit(1);
         }
     };
-    axon_server::serve_local("traveler", config.port, router(Arc::new(store))).await;
+    sjel_server::serve_local("traveler", config.port, router(Arc::new(store))).await;
 }
 
 fn main() {
@@ -432,7 +432,7 @@ mod http_tests {
 
     /// The guard has to be on the wired router, not merely available. A route
     /// registered after the layer would lose it and every predicate test would
-    /// still pass (libs/axon-server/src/origin.rs states the trap).
+    /// still pass (libs/sjel-server/src/origin.rs states the trap).
     #[tokio::test]
     async fn a_foreign_browser_origin_is_refused_on_the_wired_router() {
         let (base, dir) = scratch_server("origin").await;

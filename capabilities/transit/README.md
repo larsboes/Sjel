@@ -7,7 +7,7 @@ here, rebuilt clean (see Redactions + Verdict). `transit` and `capabilities/scou
 database and a `crate_index` (see Architecture); the cross-capability correlation story that
 motivates that sharing lives in `capabilities/store/README.md`, and PRD Q45 (2026-08-27) moved
 it from a Postgres schema per capability to a table prefix per capability in one SQLite file
-(libs/axon-store/README.md).
+(libs/sjel-store/README.md).
 
 ## Verdict
 
@@ -100,7 +100,7 @@ only transit's own API (see `server.rs`'s own comment on that boundary).
 
 **Port:** `SJEL_PORT` (exported by the runner from the manifest) wins, then `TRANSIT_PORT`
 for runs outside the runner, then the shipped default `3000`. Binds loopback only, via
-`libs/axon-server`.
+`libs/sjel-server`.
 
 **Endpoints:**
 
@@ -426,7 +426,7 @@ cancelled train was in that response to confirm the flag end to end.
 
 `store.rs`'s `TransitStore` owns `transit_trips`/`transit_trip_legs`/`transit_trip_sessions` in
 the shared SQLite file — same table-prefix convention every store-owning capability follows, see
-libs/axon-store/README.md. A recorded journey can come from three
+libs/sjel-store/README.md. A recorded journey can come from three
 places, all tagged via `trigger_reason`:
 
 - **`manual`** — a direct `transit search`/`transit split` CLI call. One-shot, on-demand, no
@@ -525,7 +525,7 @@ a clear message rather than silently defaulting to someone else's stations. `sco
 transit_fare` reuses this same config for its route (see "Trip persistence" above) — it has no
 separate route config of its own.
 
-`database_path` comes from `axon_config::database_path`: `SJEL_DB_PATH`, else
+`database_path` comes from `sjel_config::database_path`: `SJEL_DB_PATH`, else
 `<overlay>/data/axon/axon.db`. It is a deployment fact, not a capability one, so a `database_url`
 left in `transit.json` is ignored — a file per capability would drop the cross-capability joins
 the shared instance existed for. Nothing to redact any more: a path carries no password, which is

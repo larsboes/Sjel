@@ -623,7 +623,7 @@ async fn health(State(app): State<App>) -> Json<serde_json::Value> {
 /// state is simply in-memory — guessing a location for someone's data is worse than
 /// not persisting it.
 fn state_path() -> Option<std::path::PathBuf> {
-    axon_config::overlay_data_dir("soundscape").map(|d| d.join("scape.json"))
+    sjel_config::overlay_data_dir("soundscape").map(|d| d.join("scape.json"))
 }
 
 /// What was playing last time, or the defaults. A file we cannot read is reported
@@ -723,7 +723,7 @@ fn spawn_persister(app: &App, path: std::path::PathBuf) {
 /// `panel_build`), never a checked-in directory; the runner overrides it when the
 /// capability is installed somewhere else.
 fn ui_dir() -> String {
-    axon_config::env_var("SJEL_SOUNDSCAPE_UI")
+    sjel_config::env_var("SJEL_SOUNDSCAPE_UI")
         .unwrap_or_else(|_| "capabilities/soundscape/ui/dist".to_string())
 }
 
@@ -767,8 +767,8 @@ async fn main() {
         // an unknown path is a route, not a 404.
         .fallback_service(ServeDir::new(&dir).fallback(ServeFile::new(&index)));
 
-    let port = axon_config::resolve_port(Some("SJEL_SOUNDSCAPE_PORT"), None, 8088);
-    axon_server::serve_local("soundscape", port, router).await;
+    let port = sjel_config::resolve_port(Some("SJEL_SOUNDSCAPE_PORT"), None, 8088);
+    sjel_server::serve_local("soundscape", port, router).await;
 }
 
 #[cfg(test)]

@@ -21,7 +21,7 @@ minutes of the node clock. Accepted nonces are retained for ten minutes and are 
 revocation is checked again at the nonce commit.
 
 The Axon status shell also admits a request on a valid device signature (PRD Q119: the device
-key, not the network, is the trust root). Its gate (`libs/axon-server/src/auth.rs`,
+key, not the network, is the trust root). Its gate (`libs/sjel-server/src/auth.rs`,
 `with_device_verifier`) checks every request that carries `X-Axon-Signature` against this registry
 through `DevicesStore::authenticate_scoped`, before it reaches any capability. A valid signature
 admits the request and the shell sends the deployment token upstream; an invalid one is refused

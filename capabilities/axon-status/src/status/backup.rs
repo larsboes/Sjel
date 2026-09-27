@@ -2,7 +2,7 @@ use super::*;
 
 /// Resolve the active deployment overlay that owns backup receipts.
 pub(crate) fn overlay_root() -> Result<PathBuf, String> {
-    axon_config::env_var("SJEL_OVERLAY_ROOT")
+    sjel_config::env_var("SJEL_OVERLAY_ROOT")
         .map(PathBuf::from)
         .map_err(|_| {
             "SJEL_OVERLAY_ROOT is not set — start this through tools/service-runner.sh, or export it"

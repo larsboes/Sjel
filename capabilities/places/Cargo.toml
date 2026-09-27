@@ -20,11 +20,11 @@ path = "src/main.rs"
 # dependencies of its own, which is why the four copies existed.
 civil-date = { path = "../../libs/civil-date" }
 # Outbound HTTP goes through one factory: the user-agent, the timeout and the
-# connection pool are decided there, not at each call site (libs/axon-http).
-axon-http = { path = "../../libs/axon-http" }
-axon-config = { path = "../../libs/axon-config" }
-axon-server = { path = "../../libs/axon-server" }
-axon-store = { path = "../../libs/axon-store" }
+# connection pool are decided there, not at each call site (libs/sjel-http).
+sjel-http = { path = "../../libs/sjel-http" }
+sjel-config = { path = "../../libs/sjel-config" }
+sjel-server = { path = "../../libs/sjel-server" }
+sjel-store = { path = "../../libs/sjel-store" }
 # The candidate identity, shared with capabilities/finance, which mints it.
 # A lib rather than a dependency on finance: a capability does not link another
 # capability's crate, and the shape belongs to neither of them alone.

@@ -49,7 +49,7 @@ CAPABILITIES="$(toml_array capabilities "$SJEL_MACHINE_TOML")"
 [ -n "$CAPABILITIES" ] || { echo "demo-up: no capabilities in $SJEL_MACHINE_TOML" >&2; exit 1; }
 
 # One variable for the whole stack, not one per capability. Every capability resolves its
-# store through axon_config::database_path(), which reads SJEL_DB_PATH first — so this moves
+# store through sjel_config::database_path(), which reads SJEL_DB_PATH first — so this moves
 # all of them onto a throwaway database without any of them carrying a demo branch. It used
 # to be a loop exporting SJEL_<NAME>_DATABASE_URL, which existed because each capability had
 # its own connection string; they share one file now, and cross-capability joins in the

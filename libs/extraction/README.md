@@ -5,7 +5,7 @@ read which kind of document.
 
 A shared library, not a capability: no domain of its own, no store, no HTTP client, no upstream
 verdict of its own (README.md#three-architectural-nouns). Consumers declare an
-`axon-extraction` path dependency in the workspace.
+`sjel-extraction` path dependency in the workspace.
 
 ## Why it exists
 
@@ -117,7 +117,7 @@ clearing**. Six synthetic pages committed as bytes, judgements written from thei
 before any engine ran, fixed acceptance, append-only results including the failures.
 
 ```sh
-cargo run -p axon-extraction --bin extraction-gate -- libs/extraction/eval/ocr-corpus.json
+cargo run -p sjel-extraction --bin extraction-gate -- libs/extraction/eval/ocr-corpus.json
 ```
 
 Scoring is hermetic and lives in `src/gate.rs`, unit-tested against a recorded engine output, so
@@ -128,8 +128,8 @@ table.
 
 ## Dependency rule
 
-`thiserror` and `axon-inference`, plus `serde`/`serde_json` for the corpus, plus `xberg` and
+`thiserror` and `sjel-inference`, plus `serde`/`serde_json` for the corpus, plus `xberg` and
 `tokio` behind the feature above. Nothing else. Every consumer inherits this surface, so it
-stays small enough to read — and `axon-inference` was checked against that rule rather than
+stays small enough to read — and `sjel-inference` was checked against that rule rather than
 assumed: it adds no crate to `capabilities/comms` or `capabilities/transit` that each did not
 already declare directly.

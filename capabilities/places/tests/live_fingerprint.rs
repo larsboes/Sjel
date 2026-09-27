@@ -25,7 +25,7 @@ use std::path::PathBuf;
 
 /// The three artifacts the proof needs, or `None` with a reason printed.
 fn overlay() -> Option<(AmexProfile, PathBuf, PathBuf)> {
-    let root = axon_config::env_var_os("SJEL_PERSONAL_ROOT")?;
+    let root = sjel_config::env_var_os("SJEL_PERSONAL_ROOT")?;
     let root = PathBuf::from(root);
     let config = root.join("config/finance.json");
     let raw = root.join("data/finance/import/raw");

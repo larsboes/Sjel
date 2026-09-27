@@ -32,9 +32,9 @@
 //!
 //! # Why its own crate
 //!
-//! `libs/axon-config` was the alternative, and it is the wrong host: five members
+//! `libs/sjel-config` was the alternative, and it is the wrong host: five members
 //! (`host-net`, `interior`, `soundscape`, `vault`, `tools/storage`) depend on
-//! axon-config and make no outbound request, and `reqwest` brings a TLS stack with
+//! sjel-config and make no outbound request, and `reqwest` brings a TLS stack with
 //! it. A lib in this repository is spine-owned shared code with no domain of its own
 //! (ARCHITECTURE.md, "Libs"), and "how Axon talks to the network" is exactly that.
 
@@ -135,7 +135,7 @@ fn header_token(raw: &str) -> String {
 /// [`guard::redirect_policy`] is set here rather than left to the caller because a
 /// redirect is the one hop a caller cannot see. Thirty-three of the thirty-four call
 /// sites in this workspace ran reqwest's default, which follows ten hops and checks
-/// nothing (`rg 'axon_http::(client|builder)\('` against `rg '\.redirect\('`,
+/// nothing (`rg 'sjel_http::(client|builder)\('` against `rg '\.redirect\('`,
 /// 2026-09-08).
 ///
 /// The result is not cached — the caller's extra options are invisible to this crate,

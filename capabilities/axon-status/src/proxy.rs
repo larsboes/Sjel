@@ -84,8 +84,8 @@ pub(crate) struct Route {
 pub(crate) struct Proxy {
     routes: Arc<Vec<Route>>,
     /// Comms authenticates every route except `/health` and `/ready`
-    /// (`libs/axon-server/src/auth.rs`). Resolved once at startup with
-    /// `axon_server::auth::token_from_file`, which is the same reader the server itself uses --
+    /// (`libs/sjel-server/src/auth.rs`). Resolved once at startup with
+    /// `sjel_server::auth::token_from_file`, which is the same reader the server itself uses --
     /// so this is not a fourth implementation of the token shape, it is the first Rust consumer
     /// of the one that already existed. `None` stays fail-closed: comms answers 401 and the page
     /// says so, which is the honest outcome of an unconfigured credential.
@@ -175,7 +175,7 @@ impl Proxy {
         Self {
             routes: Arc::new(routes),
             comms_authorization: comms_authorization(),
-            device_authorization: axon_server::InboundAuth::from_deployment()
+            device_authorization: sjel_server::InboundAuth::from_deployment()
                 .bearer_header()
                 .and_then(|value| HeaderValue::from_str(&value).ok()),
             client: reqwest::Client::new(),
@@ -197,9 +197,9 @@ fn comms_authorization() -> Option<HeaderValue> {
     // The same three candidates comms itself resolves, in the same order
     // (`capabilities/comms/src/config.rs`). Re-derived rather than imported because axon-status
     // does not depend on comms and must not start doing so to read one path.
-    let path = if let Ok(p) = axon_config::env_var("SJEL_COMMS_CONFIG") {
-        axon_config::expand_tilde(&p)
-    } else if let Some(p) = axon_config::overlay_config("comms.json") {
+    let path = if let Ok(p) = sjel_config::env_var("SJEL_COMMS_CONFIG") {
+        sjel_config::expand_tilde(&p)
+    } else if let Some(p) = sjel_config::overlay_config("comms.json") {
         p
     } else {
         std::path::PathBuf::from("capabilities/comms/comms.config.json")
@@ -220,7 +220,7 @@ fn comms_authorization() -> Option<HeaderValue> {
         .get("api_secret_file")?
         .as_str()?
         .to_string();
-    let token = axon_server::token_from_file(&axon_config::expand_tilde(&secret_file))?;
+    let token = sjel_server::token_from_file(&sjel_config::expand_tilde(&secret_file))?;
     HeaderValue::from_str(&format!("Bearer {token}")).ok()
 }
 
@@ -368,11 +368,11 @@ async fn forward(proxy: &Proxy, route: Route, req: Request) -> Response {
         }
     } else if parts
         .extensions
-        .get::<axon_server::AdmittedDevice>()
+        .get::<sjel_server::AdmittedDevice>()
         .is_some()
         || parts
             .extensions
-            .get::<axon_server::AdmittedPairingClaim>()
+            .get::<sjel_server::AdmittedPairingClaim>()
             .is_some()
     {
         if let Some(auth) = &proxy.device_authorization {

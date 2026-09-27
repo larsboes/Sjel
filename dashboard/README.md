@@ -206,7 +206,7 @@ manifests as JSON, and two consumers read it:
 
   Comms is the one authenticated proxy contract. Every one of its routes except
   `/health` and `/ready` is guarded by the capability's `api_secret_file` — reads
-  included, since it moved onto `libs/axon-server`'s shared inbound gate. Vite reads
+  included, since it moved onto `libs/sjel-server`'s shared inbound gate. Vite reads
   that private reference only in the server process, rejects cross-origin mutations,
   and injects the bearer token on every proxied request without exposing it to
   dashboard JavaScript. A token change therefore requires restarting both `comms` and
@@ -289,7 +289,7 @@ authority for synchronized state.
 
 **Transports, 2026-09-25 (PRD Q119).** The device key is the trust root, so the network a
 request arrives on no longer decides admission. The shell's gate admits a valid device signature
-on any listener (`libs/axon-server/src/auth.rs`, `with_device_verifier`), and the app offers
+on any listener (`libs/sjel-server/src/auth.rs`, `with_device_verifier`), and the app offers
 every way to connect side by side, each with its pros and cons (`src/lib/MacConnection.svelte`,
 `src/lib/connection/transports.ts`):
 

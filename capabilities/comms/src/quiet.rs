@@ -35,7 +35,7 @@
 //! reads it from here, so there is exactly one definition of what "the light
 //! rung" resolves to on a machine.
 
-use axon_inference::{InferenceConfig, ResolvedRole};
+use sjel_inference::{InferenceConfig, ResolvedRole};
 
 use crate::summarize;
 

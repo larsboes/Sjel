@@ -37,7 +37,7 @@ impl Store {
         enforce_tier: bool,
     ) -> Result<bool, Box<dyn std::error::Error>> {
         let mut conn = self.conn()?;
-        let transaction = axon_store::write_transaction(&mut conn)?;
+        let transaction = sjel_store::write_transaction(&mut conn)?;
         let tier = provenance::ranking_tier(&evaluation.mode);
         let gate = if enforce_tier {
             format!(
@@ -65,7 +65,7 @@ impl Store {
                     evaluated_at = {now}
                  {gate}",
                 prefix = self.prefix,
-                now = axon_store::NOW
+                now = sjel_store::NOW
             ),
             params![
                 &evaluation.feed_id,
@@ -243,7 +243,7 @@ impl Store {
                     payload = excluded.payload,
                     refreshed_at = {now}",
                 prefix = self.prefix,
-                now = axon_store::NOW
+                now = sjel_store::NOW
             ),
             params![&kind, &revision, &payload],
         )?;

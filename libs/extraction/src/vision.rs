@@ -404,7 +404,7 @@ mod tests {
 
     /// One lock for every env-touching test in this module: cargo runs a
     /// crate's tests as parallel threads of ONE process, and `SJEL_VISOCR_BIN`
-    /// is process-global. Same shape as `libs/axon-config`'s.
+    /// is process-global. Same shape as `libs/sjel-config`'s.
     static ENV_LOCK: std::sync::Mutex<()> = std::sync::Mutex::new(());
 
     fn env_lock() -> std::sync::MutexGuard<'static, ()> {

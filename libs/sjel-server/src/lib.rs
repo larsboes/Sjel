@@ -36,9 +36,9 @@ pub use auth::{
     DeviceVerifier, InboundAuth, DEVICE_SIGNATURE_HEADER, PAIRING_CLAIM_PATH,
 };
 
-// Re-exported so a server binary that depends only on axon-server still gets the
+// Re-exported so a server binary that depends only on sjel-server still gets the
 // port contract.
-pub use axon_config::resolve_port;
+pub use sjel_config::resolve_port;
 
 /// How far a capability server's listener reaches.
 ///

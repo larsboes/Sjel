@@ -101,8 +101,8 @@ pub(crate) fn is_operator(login: &str, operator: &str) -> bool {
 /// between the two. Absent yields `None`, which leaves every server behaving as
 /// it did before this module existed.
 pub fn deployment_operator() -> Option<String> {
-    let body = std::fs::read_to_string(axon_config::overlay_config("deployment.env")?).ok()?;
-    axon_config::deployment_value(&body, OPERATOR_KEY)
+    let body = std::fs::read_to_string(sjel_config::overlay_config("deployment.env")?).ok()?;
+    sjel_config::deployment_value(&body, OPERATOR_KEY)
 }
 
 #[cfg(test)]

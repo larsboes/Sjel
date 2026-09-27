@@ -22,7 +22,7 @@ use sha2::{Digest, Sha256};
 
 pub const PREVIEW_SCHEMA_VERSION: &str = "cloud-derivative-preview-v1";
 pub const REDACTION_VERSION: &str = "deterministic-entity-redaction-v3";
-pub const PSEUDONYMIZE_VERSION: &str = axon_pseudonymize::PSEUDONYMIZE_VERSION;
+pub const PSEUDONYMIZE_VERSION: &str = sjel_pseudonymize::PSEUDONYMIZE_VERSION;
 pub const PASSTHROUGH_VERSION: &str = "bounded-public-v1";
 /// `entity_detection` of a [`prepare_pseudonymized`] preview.
 pub const PSEUDONYMIZE_DETECTION: &str = "local-reversible-v1";
@@ -309,7 +309,7 @@ pub fn prepare(input: &CloudDocumentInput) -> Result<CloudDerivativePreview, Loc
 #[derive(Debug, Clone)]
 pub struct PseudonymizedPreview {
     pub preview: CloudDerivativePreview,
-    pub session: axon_pseudonymize::PseudonymizerSession,
+    pub session: sjel_pseudonymize::PseudonymizerSession,
 }
 
 /// Build the reviewable, reversible pseudonymized derivative for one stored item.
@@ -335,7 +335,7 @@ pub struct PseudonymizedPreview {
 ///   approve-then-requeue comparison needs.
 pub fn prepare_pseudonymized(
     input: &CloudDocumentInput,
-    registry: &axon_pseudonymize::EntityRegistry,
+    registry: &sjel_pseudonymize::EntityRegistry,
 ) -> Result<PseudonymizedPreview, LocalOnlyRefused> {
     if !crate::content_item::has_cloud_lane(&input.data_class) {
         return Err(LocalOnlyRefused);
@@ -349,8 +349,8 @@ pub fn prepare_pseudonymized(
     };
     let derivative_data_class = if needs_redaction { "c1" } else { "c0" };
 
-    let mut session = axon_pseudonymize::PseudonymizerSession::new();
-    let field = |value: &str, session: &mut axon_pseudonymize::PseudonymizerSession| {
+    let mut session = sjel_pseudonymize::PseudonymizerSession::new();
+    let field = |value: &str, session: &mut sjel_pseudonymize::PseudonymizerSession| {
         if needs_redaction {
             session.tokenize_text(value, registry)
         } else {
@@ -370,7 +370,7 @@ pub fn prepare_pseudonymized(
     }
     if let Some(author) = present(&input.author) {
         let value = if needs_redaction {
-            session.tokenize_whole(&author, axon_pseudonymize::EntityType::Identity)
+            session.tokenize_whole(&author, sjel_pseudonymize::EntityType::Identity)
         } else {
             author.trim().to_string()
         };
@@ -575,12 +575,12 @@ pub fn source_revision(input: &CloudDocumentInput) -> String {
 }
 
 /// Rung 1 and rung 2 of PRD §6.2, destructive form: each recognised word becomes a fixed
-/// marker. The detectors are `axon_pseudonymize::pattern` — the same functions the
+/// marker. The detectors are `sjel_pseudonymize::pattern` — the same functions the
 /// reversible path calls — so the two transformations cannot disagree about what a phone
 /// number or a self-introduction looks like. Their rationale (the D14 gaps, the `i'm`/`im`
 /// apostrophe, the gated handle rule) is documented there.
 fn transform_text(value: &str, redact: bool, redactions: &mut Vec<RedactionFinding>) -> String {
-    use axon_pseudonymize::pattern::{
+    use sjel_pseudonymize::pattern::{
         introduces_person, looks_like_email, looks_like_handle, looks_like_iban,
         looks_like_person_name, looks_like_phone, looks_like_sensitive_number, looks_like_token,
         looks_like_url, names_a_person_in_apposition,
@@ -1010,7 +1010,7 @@ mod tests {
 
     /// `libs/inference` owns the tier vocabulary (Q26): a tier is what an
     /// operator reviewed one provider to receive, and a role is where that
-    /// declaration lives, so `axon_inference::CloudDataTier` is the original and
+    /// declaration lives, so `sjel_inference::CloudDataTier` is the original and
     /// its serde form is the config spelling.
     ///
     /// `libs/content-item` carries a copy in `CLOUD_DATA_TIERS` because it is
@@ -1028,7 +1028,7 @@ mod tests {
     /// level up at the tier instead of the class.
     #[test]
     fn the_tier_vocabulary_is_spelled_the_same_way_in_both_crates() {
-        use axon_inference::CloudDataTier;
+        use sjel_inference::CloudDataTier;
         let declared = [CloudDataTier::Public, CloudDataTier::PseudonymizedPersonal];
         // Exhaustive and armless on purpose: a variant added to
         // `libs/inference` stops this matching, which is the only signal a
@@ -1119,8 +1119,8 @@ mod tests {
         }
     }
 
-    fn alice_registry() -> axon_pseudonymize::EntityRegistry {
-        axon_pseudonymize::EntityRegistry::builder()
+    fn alice_registry() -> sjel_pseudonymize::EntityRegistry {
+        sjel_pseudonymize::EntityRegistry::builder()
             .add_person("Alice")
             .build()
     }
@@ -1230,7 +1230,7 @@ mod tests {
     }
 
     /// The four probes the reversible path leaked before both paths shared
-    /// `axon_pseudonymize::pattern`. Both transformations must remove each of them.
+    /// `sjel_pseudonymize::pattern`. Both transformations must remove each of them.
     #[test]
     fn both_paths_remove_numbers_written_with_slashes_dots_or_a_hash() {
         for (text, secret) in [

@@ -18,7 +18,7 @@ is why it exists (PRD Q63 → B30).
 
 ```sh
 SJEL_VISOCR_BIN=target/tools/visocr \
-  cargo run -p axon-extraction --bin extraction-gate -- libs/extraction/eval/ocr-corpus.json
+  cargo run -p sjel-extraction --bin extraction-gate -- libs/extraction/eval/ocr-corpus.json
 ```
 
 Verbatim output is preserved at `../recorded/apple-vision-2026-09-02.json` and is what

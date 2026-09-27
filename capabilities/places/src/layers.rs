@@ -5,8 +5,8 @@
 //! The wire shapes here are the dashboard map's contract; every collection is
 //! GeoJSON with `[longitude, latitude]` coordinate order.
 
-use axon_store::QueryAll;
 use rusqlite::params;
+use sjel_store::QueryAll;
 
 use crate::geocode::{GeocodeQuery, Geocoder};
 use crate::store::{validate_prefix, Fallible, PlacesStore};

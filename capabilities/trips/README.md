@@ -108,7 +108,7 @@ twenty-four:
 
 **Foreign origins are refused.** Since 2026-09-05 (PRD Q91) every route here answers 403 to a
 browser whose `Origin` is not one the dashboard is served from, using the shared predicate in
-`libs/axon-server/src/origin.rs` (set `SJEL_TRIPS_ALLOWED_ORIGIN_HOSTS` to name the
+`libs/sjel-server/src/origin.rs` (set `SJEL_TRIPS_ALLOWED_ORIGIN_HOSTS` to name the
 deployment's hosts). The reason is the plan-search body: it carries the operator's feasible
 calendar windows and a companion hint, and `CorsLayer::permissive()` made every route above
 it readable by any page open in the operator's browser. It also closes an older leak —
@@ -234,7 +234,7 @@ have closed it.
 Rows live in the shared SQLite file — `SJEL_DB_PATH`, else
 `$SJEL_PERSONAL_ROOT/data/axon/axon.db` — under the table prefix `trips`, so the three
 tables are `trips_plans`, `trips_plan_items` and `trips_retrospectives`
-(libs/axon-store/README.md). `trips_retrospectives` is one row per plan —
+(libs/sjel-store/README.md). `trips_retrospectives` is one row per plan —
 `plan_id` is the PRIMARY KEY, so a second POST is a correction rather than a
 second row — with `ON DELETE CASCADE`, which is enforced because
 `PRAGMA foreign_keys = ON` is set per connection. No personal station,

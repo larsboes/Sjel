@@ -197,7 +197,7 @@ pub(crate) struct CapabilityView {
 /// `tools/lib/paths.sh` exports it, so anything started by `service-runner.sh`
 /// inherits it; a hand-started run has to say where it is.
 pub(crate) fn axon_root() -> Result<PathBuf, String> {
-    axon_config::env_var("SJEL_ROOT")
+    sjel_config::env_var("SJEL_ROOT")
         .map(PathBuf::from)
         .map_err(|_| {
             "SJEL_ROOT is not set — start this through tools/service-runner.sh, or export it"
@@ -217,7 +217,7 @@ pub(crate) fn axon_root() -> Result<PathBuf, String> {
 pub(crate) fn manifest_key(root: &std::path::Path) -> Option<Vec<(PathBuf, SystemTime)>> {
     // Same env contract as SJEL_ROOT above: tools/lib/paths.sh exports it, so anything
     // started by service-runner.sh inherits it.
-    let machine_toml = axon_config::env_var("SJEL_MACHINE_TOML").ok()?;
+    let machine_toml = sjel_config::env_var("SJEL_MACHINE_TOML").ok()?;
     let mut paths = vec![PathBuf::from(machine_toml)];
 
     // Spine services at the repo root, capabilities under capabilities/, and the same
@@ -232,7 +232,7 @@ pub(crate) fn manifest_key(root: &std::path::Path) -> Option<Vec<(PathBuf, Syste
     // invisible until a restart. SJEL_OVERLAY_CAPS_DIR comes from tools/lib/paths.sh,
     // and its absence is normal — a deployment need not own any overlay capability.
     let mut dirs = vec![root.to_path_buf(), root.join("capabilities")];
-    if let Ok(overlay_caps) = axon_config::env_var("SJEL_OVERLAY_CAPS_DIR") {
+    if let Ok(overlay_caps) = sjel_config::env_var("SJEL_OVERLAY_CAPS_DIR") {
         dirs.push(PathBuf::from(overlay_caps));
     }
     for dir in dirs {

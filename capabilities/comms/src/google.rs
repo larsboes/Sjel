@@ -55,8 +55,8 @@ fn now_secs() -> u64 {
 fn client() -> Result<reqwest::blocking::Client> {
     // 30s, matching comms' other outbound fetches (src/sources.rs, src/media.rs).
     // This carried no timeout before.
-    axon_http::builder(
-        axon_http::Purpose::new("comms-google"),
+    sjel_http::builder(
+        sjel_http::Purpose::new("comms-google"),
         std::time::Duration::from_secs(30),
     )
     .gzip(true)

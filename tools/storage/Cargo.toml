@@ -1,5 +1,5 @@
 [package]
-name = "axon-storage"
+name = "sjel-storage"
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true
@@ -7,18 +7,18 @@ license.workspace = true
 description = "What is filling this disk and what is safe to reclaim: the overlay's storage policy, the Cargo target dir against PRD 9's R6 ratio, and a repo-scoped prune."
 publish = false
 
-# axon-storage, not storage: tools/storage/storage is the launcher that execs this, and
+# sjel-storage, not storage: tools/storage/storage is the launcher that execs this, and
 # two things called `storage` on PATH is the collision the prefix avoids. Same reasoning
 # as capabilities/host-net's host-net-cli.
 [[bin]]
-name = "axon-storage"
+name = "sjel-storage"
 path = "src/main.rs"
 
 [dependencies]
 # The overlay's location, read from SJEL_PERSONAL_ROOT exactly as capabilities/host-net
 # reads its own policy. Zero external dependencies of its own
-# (libs/axon-config/Cargo.toml), so this stays a four-crate build.
-axon-config = { path = "../../libs/axon-config" }
+# (libs/sjel-config/Cargo.toml), so this stays a four-crate build.
+sjel-config = { path = "../../libs/sjel-config" }
 
 # --json, the policy file, and target/.rustc_info.json. All three were already resolved in
 # the workspace lock before this crate existed (serde 1.0.229, serde_json 1.0.151, toml

@@ -59,11 +59,11 @@ const FARE_PAUSE: Duration = Duration::from_millis(250);
 const DEPARTURE_TIME: &str = "T09:00:00";
 
 fn base_url(variable: &str, port: u16) -> String {
-    axon_config::env_var(variable).unwrap_or_else(|_| format!("http://127.0.0.1:{port}"))
+    sjel_config::env_var(variable).unwrap_or_else(|_| format!("http://127.0.0.1:{port}"))
 }
 
 fn client(timeout: Duration) -> Result<reqwest::blocking::Client, String> {
-    axon_http::client(axon_http::Purpose::new("trips-upstream"), timeout)
+    sjel_http::client(sjel_http::Purpose::new("trips-upstream"), timeout)
         .map_err(|error| format!("client build: {error}"))
 }
 

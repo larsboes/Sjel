@@ -25,8 +25,8 @@ pub enum Resolved {
 }
 
 pub fn resolve(places_url: &str, place: &str) -> Resolved {
-    let client = match axon_http::client(
-        axon_http::Purpose::new("entities-geocode"),
+    let client = match sjel_http::client(
+        sjel_http::Purpose::new("entities-geocode"),
         Duration::from_secs(20),
     ) {
         Ok(client) => client,

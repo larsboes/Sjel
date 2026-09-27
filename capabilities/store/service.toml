@@ -2,7 +2,7 @@
 # See schemas/service.toml.example for the field reference.
 #
 # `kind = "data"`: no image, no command, nothing to start. Nine capabilities open this
-# file themselves through `axon_config::database_path()`, so there is no process here to
+# file themselves through `sjel_config::database_path()`, so there is no process here to
 # supervise — `tools/service-runner.sh` refuses every lifecycle verb by name rather than
 # looking for an image this manifest deliberately does not have.
 #
@@ -12,7 +12,7 @@
 kind = "data"
 name = "store"
 
-# Overlay-relative, and the default `axon_config::database_path()` resolves. A deployment
+# Overlay-relative, and the default `sjel_config::database_path()` resolves. A deployment
 # that moves the file with `SJEL_DB_PATH` leaves this contract describing a path that is
 # not the database any more; `tools/backup.sh` refuses to run on a missing source rather
 # than shipping an archive of nothing, which is the failure that must stay loud.

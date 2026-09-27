@@ -1,5 +1,5 @@
 [package]
-name = "axon-server"
+name = "sjel-server"
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true
@@ -8,11 +8,11 @@ description = "The one way a capability server binds and authenticates: 127.0.0.
 publish = false
 
 [lib]
-name = "axon_server"
+name = "sjel_server"
 path = "src/lib.rs"
 
 [dependencies]
-axon-config = { path = "../axon-config" }
+sjel-config = { path = "../sjel-config" }
 axum.workspace = true
 # The gate's refusal bodies are JSON because every consumer already parses the
 # capability's errors that way. No new build cost: axum's default features

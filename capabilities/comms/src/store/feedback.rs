@@ -58,7 +58,7 @@ pub(super) fn insert_interaction(
         &format!(
             "INSERT INTO {prefix}_feed_interactions (feed_id, event, surface, occurred_at)
              VALUES (?1,?2,?3,{now})",
-            now = axon_store::NOW
+            now = sjel_store::NOW
         ),
         params![&feed_id, &event, &surface],
     )?;

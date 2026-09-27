@@ -25,8 +25,8 @@ use std::path::Path;
 use serde::{Deserialize, Serialize};
 
 use crate::score::TelosProfile;
-use axon_config::overlay_config;
-use axon_inference::{InferenceConfig, ResolvedRole, TextRole};
+use sjel_config::overlay_config;
+use sjel_inference::{InferenceConfig, ResolvedRole, TextRole};
 
 /// The role name this capability asks for. Declared in `inference.json`.
 pub const EMBEDDING_ROLE: &str = "embedding";

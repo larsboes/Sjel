@@ -27,7 +27,7 @@ Cross-capability reads are how the layers assemble: one shared database was chos
 *explicitly* to enable correlation joins (`capabilities/store/README.md`), and
 PRD Q45 (2026-08-27) kept that property while replacing the schema per capability
 with a table prefix per capability in one SQLite file
-(`libs/axon-store/README.md`). places reads `finance_*`, `trips_*` and `transit_*`
+(`libs/sjel-store/README.md`). places reads `finance_*`, `trips_*` and `transit_*`
 read-only and owns writes only under its own `places` prefix.
 
 The five tables live in the shared file — `SJEL_DB_PATH`, else
@@ -159,7 +159,7 @@ mirrors). The register behind this surface is C2 (D4), and the refusal is what
 keeps a hostile page in the operator's browser from reading it or driving the
 confirm route cross-site.
 
-Since 2026-09-05 the predicate itself lives in `libs/axon-server/src/origin.rs`,
+Since 2026-09-05 the predicate itself lives in `libs/sjel-server/src/origin.rs`,
 because `trips` needs the same refusal for its plan-search body and a second copy
 of a security predicate is drift. **Every new route must be registered above the
 `.layer()` call in `build_router`**: axum wraps only the routes added before it,

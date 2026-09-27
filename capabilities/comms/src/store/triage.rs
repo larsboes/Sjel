@@ -112,12 +112,12 @@ impl Store {
         );
         // `?5` is Unix seconds; the column holds the canonical stamp, so the
         // conversion is SQL rather than Rust.
-        let internal_date = format!("strftime('{}', ?5, 'unixepoch')", axon_store::STAMP_FORMAT);
+        let internal_date = format!("strftime('{}', ?5, 'unixepoch')", sjel_store::STAMP_FORMAT);
         let mut conn = self.conn()?;
         // BEGIN IMMEDIATE, not the default deferred begin: this reads the stored
         // class and then writes, and SQLite answers a failed upgrade to the
         // writer lock with SQLITE_BUSY that `busy_timeout` deliberately does not
-        // retry (`axon_store::migrate_once`). Two sweeps and a dashboard write
+        // retry (`sjel_store::migrate_once`). Two sweeps and a dashboard write
         // reach this at once.
         let transaction = conn.transaction_with_behavior(TransactionBehavior::Immediate)?;
         let stored: Option<(String, String)> = transaction
@@ -205,7 +205,7 @@ impl Store {
                 preserve_class = preserve_class,
                 preserve_stream = preserve_stream,
                 internal_date = internal_date,
-                now = axon_store::NOW
+                now = sjel_store::NOW
             ),
             params![&item.id,
                 &item.from_addr,
@@ -242,7 +242,7 @@ impl Store {
                          rules_version = excluded.rules_version,
                          decided_at = excluded.decided_at",
                     prefix = self.prefix,
-                    now = axon_store::NOW
+                    now = sjel_store::NOW
                 ),
                 params![
                     &item.id,
@@ -666,7 +666,7 @@ impl Store {
                     AND i.status IN ('proposed','approved')
                   ORDER BY i.internal_date DESC NULLS LAST",
                 prefix = self.prefix,
-                now = axon_store::NOW
+                now = sjel_store::NOW
             ),
             [],
             |row| {
@@ -758,7 +758,7 @@ impl Store {
     /// carries the stamp of the write that moved the category, unless it
     /// already had one. The deadline is
     /// derived here from the state and the attempt count, in the canonical
-    /// stamp format the column's other values are in — `axon_store::now_offset`
+    /// stamp format the column's other values are in — `sjel_store::now_offset`
     /// exists because `datetime('now','+1 minute')` renders 19 characters into
     /// a column that holds 29, and one column at two widths stops `ORDER BY`
     /// being time order.
@@ -775,7 +775,7 @@ impl Store {
             "CASE WHEN ?3 IN ({retryable}) AND ?18 < {cap} THEN {offset} ELSE NULL END",
             retryable = retryable_model_verdict_states_sql(),
             cap = MAX_MODEL_VERDICT_ATTEMPTS,
-            offset = axon_store::now_offset("'+' || MIN(?18 + 1, 5) || ' minutes'"),
+            offset = sjel_store::now_offset("'+' || MIN(?18 + 1, 5) || ' minutes'"),
         );
         // ?2 is the mode. `applied_at` is DB-owned for the same reason
         // `next_attempt` is: a machine write onto the category axis has to
@@ -786,7 +786,7 @@ impl Store {
         // it says (review, 2026-09-05).
         let applied_arm = format!(
             "CASE WHEN ?2 = 'applied' THEN COALESCE(?21,{now}) ELSE ?21 END",
-            now = axon_store::NOW
+            now = sjel_store::NOW
         );
         let conn = self.conn()?;
         conn.execute(
@@ -823,7 +823,7 @@ impl Store {
                      applied_at = excluded.applied_at,
                      decided_at = excluded.decided_at",
                 prefix = self.prefix,
-                now = axon_store::NOW,
+                now = sjel_store::NOW,
                 backoff_arm = backoff_arm,
                 applied_arm = applied_arm,
             ),
@@ -1121,7 +1121,7 @@ impl Store {
                         waiting_at = CASE WHEN ?1 THEN {now} ELSE NULL END
                   WHERE id = ?2",
                 self.prefix,
-                now = axon_store::NOW
+                now = sjel_store::NOW
             ),
             params![&waiting, &id],
         )?;
@@ -1172,7 +1172,7 @@ impl Store {
                         gmail_sync_status = 'synced', gmail_sync_error = NULL
                      WHERE id = ?1",
                     self.prefix,
-                    now = axon_store::NOW
+                    now = sjel_store::NOW
                 ),
                 params![&id],
             )?,
@@ -1185,8 +1185,8 @@ impl Store {
                         gmail_sync_status = 'synced', gmail_sync_error = NULL
                      WHERE id = ?1",
                     self.prefix,
-                    now = axon_store::NOW,
-                    purge = axon_store::now_offset("'+30 days'")
+                    now = sjel_store::NOW,
+                    purge = sjel_store::now_offset("'+30 days'")
                 ),
                 params![&id],
             )?,
@@ -1199,7 +1199,7 @@ impl Store {
                         gmail_sync_status = 'synced', gmail_sync_error = NULL
                      WHERE id = ?1",
                     self.prefix,
-                    now = axon_store::NOW
+                    now = sjel_store::NOW
                 ),
                 params![&id],
             )?,
@@ -1221,7 +1221,7 @@ impl Store {
         let mut conn = self.conn()?;
         // No `FOR UPDATE`: SQLite has no row locks and needs none here. The
         // transaction is the lock, because there is exactly one writer.
-        let transaction = axon_store::write_transaction(&mut conn)?;
+        let transaction = sjel_store::write_transaction(&mut conn)?;
         let Some(source_status) = transaction
             .query_row(
                 &format!(
@@ -1293,7 +1293,7 @@ impl Store {
     /// be at the requested location. Replaying a completed job is harmless.
     pub fn complete_gmail_action(&self, job_id: i64) -> Result<bool, Box<dyn std::error::Error>> {
         let mut conn = self.conn()?;
-        let transaction = axon_store::write_transaction(&mut conn)?;
+        let transaction = sjel_store::write_transaction(&mut conn)?;
         let Some((id, action, state)) = transaction
             .query_row(
                 &format!(
@@ -1328,7 +1328,7 @@ impl Store {
                         purge_after = NULL, gmail_location = 'archive', gmail_observed_at = {now},
                         gmail_sync_status = 'synced', gmail_sync_error = NULL WHERE id = ?1",
                     self.prefix,
-                    now = axon_store::NOW
+                    now = sjel_store::NOW
                 ),
                 params![&id],
             )?,
@@ -1340,8 +1340,8 @@ impl Store {
                         gmail_location = 'trash', gmail_observed_at = {now},
                         gmail_sync_status = 'synced', gmail_sync_error = NULL WHERE id = ?1",
                     self.prefix,
-                    now = axon_store::NOW,
-                    purge = axon_store::now_offset("'+30 days'")
+                    now = sjel_store::NOW,
+                    purge = sjel_store::now_offset("'+30 days'")
                 ),
                 params![&id],
             )?,
@@ -1352,7 +1352,7 @@ impl Store {
                         purge_after = NULL, gmail_location = 'inbox', gmail_observed_at = {now},
                         gmail_sync_status = 'synced', gmail_sync_error = NULL WHERE id = ?1",
                     self.prefix,
-                    now = axon_store::NOW
+                    now = sjel_store::NOW
                 ),
                 params![&id],
             )?,
@@ -1367,7 +1367,7 @@ impl Store {
                     state = 'completed', updated_at = {now}, completed_at = {now}, last_error = NULL
                  WHERE job_id = ?1",
                 self.prefix,
-                now = axon_store::NOW
+                now = sjel_store::NOW
             ),
             params![&job_id],
         )?;
@@ -1382,7 +1382,7 @@ impl Store {
     ) -> Result<String, Box<dyn std::error::Error>> {
         let bounded_error = error.chars().take(240).collect::<String>();
         let mut conn = self.conn()?;
-        let transaction = axon_store::write_transaction(&mut conn)?;
+        let transaction = sjel_store::write_transaction(&mut conn)?;
         // `LEAST(attempts + 1, 5)` becomes SQLite's two-argument `MIN`, and the
         // whole `now() + interval '1 minute' * n` becomes one `now_offset` with a
         // computed modifier -- so the deadline lands in the canonical format the
@@ -1398,8 +1398,8 @@ impl Store {
                      WHERE job_id = ?1 AND state = 'queued'
                      RETURNING triage_id, state",
                     self.prefix,
-                    now = axon_store::NOW,
-                    backoff = axon_store::now_offset("'+' || MIN(attempts + 1, 5) || ' minutes'")
+                    now = sjel_store::NOW,
+                    backoff = sjel_store::now_offset("'+' || MIN(attempts + 1, 5) || ' minutes'")
                 ),
                 params![&job_id, &bounded_error],
                 |row| Ok((row.get::<_, String>(0)?, row.get::<_, String>(1)?)),
@@ -1433,7 +1433,7 @@ impl Store {
         id: &str,
     ) -> Result<GmailActionJob, Box<dyn std::error::Error>> {
         let mut conn = self.conn()?;
-        let transaction = axon_store::write_transaction(&mut conn)?;
+        let transaction = sjel_store::write_transaction(&mut conn)?;
         let Some(job) = transaction
             .query_row(
                 &format!(
@@ -1466,7 +1466,7 @@ impl Store {
                     next_attempt = {now}, updated_at = {now}, completed_at = NULL
                  WHERE job_id = ?1",
                 self.prefix,
-                now = axon_store::NOW
+                now = sjel_store::NOW
             ),
             params![&job_id],
         )?;
@@ -1490,7 +1490,7 @@ impl Store {
         id: &str,
     ) -> Result<bool, Box<dyn std::error::Error>> {
         let mut conn = self.conn()?;
-        let transaction = axon_store::write_transaction(&mut conn)?;
+        let transaction = sjel_store::write_transaction(&mut conn)?;
         let canceled = transaction
             .query_row(
                 &format!(
@@ -1504,7 +1504,7 @@ impl Store {
                      RETURNING triage_id",
                     self.prefix,
                     self.prefix,
-                    now = axon_store::NOW
+                    now = sjel_store::NOW
                 ),
                 params![&id],
                 |row| row.get::<_, String>(0),
@@ -1539,7 +1539,7 @@ impl Store {
                  WHERE state = 'queued' AND next_attempt <= {now}
                  ORDER BY next_attempt, job_id LIMIT ?1",
                 self.prefix,
-                now = axon_store::NOW
+                now = sjel_store::NOW
             ),
             params![limit.clamp(1, 100)],
             |row| {
@@ -1607,8 +1607,8 @@ impl Store {
                     gmail_sync_status = 'synced', gmail_sync_error = NULL
                  WHERE id = ?2",
                 self.prefix,
-                now = axon_store::NOW,
-                purge = axon_store::now_offset("'+30 days'")
+                now = sjel_store::NOW,
+                purge = sjel_store::now_offset("'+30 days'")
             ),
             params![&location, &id],
         )?;
@@ -1620,14 +1620,14 @@ impl Store {
     /// longer apply it. A Trash retention deadline, if present, remains active.
     pub fn observe_gmail_missing(&self, id: &str) -> Result<bool, Box<dyn std::error::Error>> {
         let mut conn = self.conn()?;
-        let transaction = axon_store::write_transaction(&mut conn)?;
+        let transaction = sjel_store::write_transaction(&mut conn)?;
         transaction.execute(
             &format!(
                 "UPDATE {}_gmail_action_jobs SET
                     state = 'canceled', updated_at = {now}, completed_at = {now}
                  WHERE triage_id = ?1 AND state IN ('queued','abandoned')",
                 self.prefix,
-                now = axon_store::NOW
+                now = sjel_store::NOW
             ),
             params![&id],
         )?;
@@ -1638,7 +1638,7 @@ impl Store {
                     gmail_sync_status = 'synced', gmail_sync_error = NULL
                  WHERE id = ?1",
                 self.prefix,
-                now = axon_store::NOW
+                now = sjel_store::NOW
             ),
             params![&id],
         )?;
@@ -1650,7 +1650,7 @@ impl Store {
     /// own Trash retention; this cleanup is strictly Axon's local copy.
     pub fn purge_expired_trashed(&self) -> Result<u64, Box<dyn std::error::Error>> {
         let mut conn = self.conn()?;
-        let transaction = axon_store::write_transaction(&mut conn)?;
+        let transaction = sjel_store::write_transaction(&mut conn)?;
         transaction.execute(
             &format!(
                 "DELETE FROM {prefix}_content_cloud_jobs
@@ -1659,7 +1659,7 @@ impl Store {
                     WHERE status IN ('trashed','missing') AND purge_after <= {now}
                  )",
                 prefix = self.prefix,
-                now = axon_store::NOW
+                now = sjel_store::NOW
             ),
             [],
         )?;
@@ -1671,7 +1671,7 @@ impl Store {
                     WHERE status IN ('trashed','missing') AND purge_after <= {now}
                  )",
                 prefix = self.prefix,
-                now = axon_store::NOW
+                now = sjel_store::NOW
             ),
             [],
         )?;
@@ -1680,7 +1680,7 @@ impl Store {
                 "DELETE FROM {}_triage_items
                  WHERE status IN ('trashed','missing') AND purge_after <= {now}",
                 self.prefix,
-                now = axon_store::NOW
+                now = sjel_store::NOW
             ),
             [],
         )?;
@@ -1778,7 +1778,7 @@ impl Store {
         matches: &[RelevanceMatch],
     ) -> Result<(), Box<dyn std::error::Error>> {
         let mut conn = self.conn()?;
-        let transaction = axon_store::write_transaction(&mut conn)?;
+        let transaction = sjel_store::write_transaction(&mut conn)?;
         transaction.execute(
             &format!(
                 "DELETE FROM {}_triage_relevance WHERE triage_id = ?1",
@@ -1794,7 +1794,7 @@ impl Store {
                          profile_revision, scored_at)
                      VALUES (?1,?2,?3,?4,?5,?6,?7,{now})",
                     prefix = self.prefix,
-                    now = axon_store::NOW
+                    now = sjel_store::NOW
                 ),
                 params![
                     &triage_id,
@@ -2020,7 +2020,7 @@ impl Store {
         enforce_tier: bool,
     ) -> Result<bool, Box<dyn std::error::Error>> {
         let mut conn = self.conn()?;
-        let transaction = axon_store::write_transaction(&mut conn)?;
+        let transaction = sjel_store::write_transaction(&mut conn)?;
         let tier = provenance::ranking_tier(&evaluation.mode);
         let gate = if enforce_tier {
             format!(
@@ -2048,7 +2048,7 @@ impl Store {
                     evaluated_at = {now}
                  {gate}",
                 prefix = self.prefix,
-                now = axon_store::NOW
+                now = sjel_store::NOW
             ),
             params![
                 &evaluation.feed_id,

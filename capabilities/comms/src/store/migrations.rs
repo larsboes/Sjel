@@ -23,8 +23,8 @@ impl Store {
         // `rebuild_data_class_vocabulary` for why the dance cannot run there.
         rebuild_data_class_vocabulary(database_path, prefix)?;
         // A pool checkout, and the migration runs once per process per (file,
-        // prefix) rather than once per open -- libs/axon-store/README.md has why.
-        let pool = axon_store::open_pool(database_path, prefix, |conn| {
+        // prefix) rather than once per open -- libs/sjel-store/README.md has why.
+        let pool = sjel_store::open_pool(database_path, prefix, |conn| {
             Self::run_migration(conn, prefix)
         })?;
         Ok(Self {
@@ -39,7 +39,7 @@ impl Store {
     /// unwrap could only fail on a poisoned mutex, which is to say never in
     /// practice; a checkout can genuinely fail — the file is unreachable, or every
     /// connection is busy — and a store method has somewhere to put that.
-    pub(super) fn conn(&self) -> Result<axon_store::PooledClient, Box<dyn std::error::Error>> {
+    pub(super) fn conn(&self) -> Result<sjel_store::PooledClient, Box<dyn std::error::Error>> {
         Ok(self.pool.get()?)
     }
 
@@ -347,7 +347,7 @@ impl Store {
             -- and a new column would need the swap_in_rebuilt_table dance below.
             -- ON DELETE CASCADE covers the Trash purge with no new retention
             -- mechanism (`PRAGMA foreign_keys = ON` is set per connection in
-            -- libs/axon-store).
+            -- libs/sjel-store).
             CREATE TABLE IF NOT EXISTS {prefix}_triage_rules (
                 triage_id TEXT PRIMARY KEY
                     REFERENCES {prefix}_triage_items(id) ON DELETE CASCADE,
@@ -543,7 +543,7 @@ impl Store {
             -- end feed-personalization 2026-09-03 -----------------------------
             ",
             prefix = prefix,
-            now = axon_store::NOW,
+            now = sjel_store::NOW,
             triage_items = triage_items_ddl(&format!("{prefix}_triage_items")),
             feed_items = feed_items_ddl(&format!("{prefix}_feed_items")),
             cloud_derivatives =
@@ -689,7 +689,7 @@ fn cloud_derivatives_ddl(table: &str) -> String {
                 approved_at TEXT NOT NULL DEFAULT ({now}),
                 PRIMARY KEY (source, item_id)
             );",
-        now = axon_store::NOW
+        now = sjel_store::NOW
     )
 }
 
@@ -703,7 +703,7 @@ fn cloud_derivatives_ddl(table: &str) -> String {
 /// behind a probe of what the file actually holds.
 ///
 /// It runs before the pool rather than inside [`Store::run_migration`] because
-/// the dance needs foreign keys off. `axon_store::migrate_once` hands the
+/// the dance needs foreign keys off. `sjel_store::migrate_once` hands the
 /// migration an already-open transaction, `PRAGMA foreign_keys` is a documented
 /// no-op inside one, and `DROP TABLE` with enforcement on performs an implicit
 /// DELETE that fires `ON DELETE CASCADE` -- which would take the seven tables
@@ -717,7 +717,7 @@ fn rebuild_data_class_vocabulary(
 ) -> Result<(), Box<dyn std::error::Error>> {
     // The migration's own once-per-process discipline, under its own key so
     // neither guard can answer for the other.
-    axon_store::once_per_target(
+    sjel_store::once_per_target(
         &database_path.to_string_lossy(),
         &format!("{prefix}-data-class-c0-c3"),
         || rebuild_data_class_vocabulary_now(database_path, prefix),
@@ -731,8 +731,8 @@ fn rebuild_data_class_vocabulary_now(
     prefix: &str,
 ) -> Result<(), Box<dyn std::error::Error>> {
     // `Connection::open` creates the *file* and no directory above it, and this
-    // runs before `axon_store::open_pool`, which is where the mkdir normally
-    // happens (`canonical_key`, libs/axon-store/src/lib.rs:180-190). Without
+    // runs before `sjel_store::open_pool`, which is where the mkdir normally
+    // happens (`canonical_key`, libs/sjel-store/src/lib.rs:180-190). Without
     // this line a first run against a path whose directory does not exist yet
     // fails with SQLITE_CANTOPEN, on the one code path nobody re-runs by hand.
     // Mirrored rather than shared because that helper is private to the pool.
@@ -743,9 +743,9 @@ fn rebuild_data_class_vocabulary_now(
     let mut conn = Connection::open(database_path)?;
     conn.busy_timeout(Duration::from_millis(5_000))?;
     // Every pooled connection in this process gets `foreign_keys = ON` from
-    // axon-store's CONNECTION_PRAGMAS (libs/axon-store/src/lib.rs:165), because
+    // sjel-store's CONNECTION_PRAGMAS (libs/sjel-store/src/lib.rs:165), because
     // the pragma is per-connection and SQLite leaves it off unless asked
-    // (documented at libs/axon-store/src/lib.rs:60). This rebuild does not use
+    // (documented at libs/sjel-store/src/lib.rs:60). This rebuild does not use
     // that pool — it owns a raw connection — and it turns the pragma explicitly
     // OFF, because the drop/rename dance below would otherwise cascade:
     // `comms_content_cloud_attempts` references `comms_content_cloud_jobs`, and
@@ -1080,7 +1080,7 @@ mod db_tests {
             CREATE INDEX idx_comms_triage_stream ON comms_triage_items(stream);
             CREATE INDEX idx_comms_triage_first_seen ON comms_triage_items(first_seen);
             ",
-            now = axon_store::NOW
+            now = sjel_store::NOW
         ))
         .expect("the old schema installs");
         conn

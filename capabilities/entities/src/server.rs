@@ -468,7 +468,7 @@ async fn entity_sources(State(state): State<Arc<AppState>>, Path(id): Path<Strin
         if s.store.get(&id)?.is_none() {
             return Err(StoreError::NotFound(format!("no entity {id}")));
         }
-        let vault_url = axon_config::env_var("SJEL_VAULT_URL")
+        let vault_url = sjel_config::env_var("SJEL_VAULT_URL")
             .unwrap_or_else(|_| "http://127.0.0.1:8094".into());
         let mut obsidian: Option<Result<Vec<entities::sync::Incoming>, String>> = None;
         let sources: Vec<Value> = s
@@ -583,10 +583,10 @@ fn router(state: Arc<AppState>) -> Router {
         .route("/api/duplicates/distinct", post(mark_distinct))
         .route("/api/entities/:id/merge", post(merge_entity))
         // Below every route: `layer` wraps only what is registered before it
-        // (libs/axon-server/src/origin.rs).
+        // (libs/sjel-server/src/origin.rs).
         .layer(middleware::from_fn_with_state(
             "entities",
-            axon_server::origin::refuse_foreign_origins,
+            sjel_server::origin::refuse_foreign_origins,
         ))
         .with_state(state)
 }
@@ -600,7 +600,7 @@ fn run_sync(
 ) -> Result<(), String> {
     let (records, managed): (Vec<entities::sync::Incoming>, &[&str]) = match system {
         "obsidian" => {
-            let vault_url = axon_config::env_var("SJEL_VAULT_URL")
+            let vault_url = sjel_config::env_var("SJEL_VAULT_URL")
                 .unwrap_or_else(|_| "http://127.0.0.1:8094".into());
             (
                 entities::obsidian::fetch(&vault_url)?,
@@ -653,7 +653,7 @@ pub async fn serve(config: Config, store: EntitiesStore) {
         places_url: config.places_url.clone(),
         model_url: config.model_url.clone(),
     });
-    axon_server::serve_local("entities", config.port, router(state)).await;
+    sjel_server::serve_local("entities", config.port, router(state)).await;
 }
 
 fn main() {

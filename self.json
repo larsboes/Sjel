@@ -19,30 +19,6 @@
       }
     },
     {
-      "name": "axon-config",
-      "kind": "lib",
-      "code": {
-        "files": 4,
-        "nodes": 39
-      }
-    },
-    {
-      "name": "axon-http",
-      "kind": "lib",
-      "code": {
-        "files": 4,
-        "nodes": 61
-      }
-    },
-    {
-      "name": "axon-server",
-      "kind": "lib",
-      "code": {
-        "files": 7,
-        "nodes": 119
-      }
-    },
-    {
       "name": "axon-status",
       "kind": "capability",
       "service": {
@@ -53,14 +29,6 @@
       "code": {
         "files": 15,
         "nodes": 160
-      }
-    },
-    {
-      "name": "axon-store",
-      "kind": "lib",
-      "code": {
-        "files": 3,
-        "nodes": 50
       }
     },
     {
@@ -285,8 +253,8 @@
       "name": "harness",
       "kind": "pack",
       "code": {
-        "files": 244,
-        "nodes": 4875
+        "files": 245,
+        "nodes": 4893
       }
     },
     {
@@ -368,7 +336,7 @@
       },
       "code": {
         "files": 36,
-        "nodes": 731
+        "nodes": 732
       }
     },
     {
@@ -588,6 +556,38 @@
       }
     },
     {
+      "name": "sjel-config",
+      "kind": "lib",
+      "code": {
+        "files": 4,
+        "nodes": 39
+      }
+    },
+    {
+      "name": "sjel-http",
+      "kind": "lib",
+      "code": {
+        "files": 4,
+        "nodes": 61
+      }
+    },
+    {
+      "name": "sjel-server",
+      "kind": "lib",
+      "code": {
+        "files": 7,
+        "nodes": 119
+      }
+    },
+    {
+      "name": "sjel-store",
+      "kind": "lib",
+      "code": {
+        "files": 3,
+        "nodes": 50
+      }
+    },
+    {
       "name": "soundscape",
       "kind": "capability",
       "service": {
@@ -731,46 +731,6 @@
   ],
   "coupling": [
     {
-      "from": "axon-server",
-      "to": "axon-config",
-      "kinds": [
-        "cargo-dep"
-      ],
-      "evidence": [
-        "libs/axon-server/Cargo.toml"
-      ]
-    },
-    {
-      "from": "axon-status",
-      "to": "axon-config",
-      "kinds": [
-        "cargo-dep"
-      ],
-      "evidence": [
-        "capabilities/axon-status/Cargo.toml"
-      ]
-    },
-    {
-      "from": "axon-status",
-      "to": "axon-server",
-      "kinds": [
-        "cargo-dep"
-      ],
-      "evidence": [
-        "capabilities/axon-status/Cargo.toml"
-      ]
-    },
-    {
-      "from": "axon-status",
-      "to": "axon-store",
-      "kinds": [
-        "cargo-dep"
-      ],
-      "evidence": [
-        "capabilities/axon-status/Cargo.toml"
-      ]
-    },
-    {
       "from": "axon-status",
       "to": "devices",
       "kinds": [
@@ -791,43 +751,33 @@
       ]
     },
     {
-      "from": "calendar",
-      "to": "axon-config",
+      "from": "axon-status",
+      "to": "sjel-config",
       "kinds": [
         "cargo-dep"
       ],
       "evidence": [
-        "capabilities/calendar/Cargo.toml"
+        "capabilities/axon-status/Cargo.toml"
       ]
     },
     {
-      "from": "calendar",
-      "to": "axon-http",
+      "from": "axon-status",
+      "to": "sjel-server",
       "kinds": [
         "cargo-dep"
       ],
       "evidence": [
-        "capabilities/calendar/Cargo.toml"
+        "capabilities/axon-status/Cargo.toml"
       ]
     },
     {
-      "from": "calendar",
-      "to": "axon-server",
+      "from": "axon-status",
+      "to": "sjel-store",
       "kinds": [
         "cargo-dep"
       ],
       "evidence": [
-        "capabilities/calendar/Cargo.toml"
-      ]
-    },
-    {
-      "from": "calendar",
-      "to": "axon-store",
-      "kinds": [
-        "cargo-dep"
-      ],
-      "evidence": [
-        "capabilities/calendar/Cargo.toml"
+        "capabilities/axon-status/Cargo.toml"
       ]
     },
     {
@@ -871,43 +821,43 @@
       ]
     },
     {
-      "from": "comms",
-      "to": "axon-config",
+      "from": "calendar",
+      "to": "sjel-config",
       "kinds": [
         "cargo-dep"
       ],
       "evidence": [
-        "capabilities/comms/Cargo.toml"
+        "capabilities/calendar/Cargo.toml"
       ]
     },
     {
-      "from": "comms",
-      "to": "axon-http",
+      "from": "calendar",
+      "to": "sjel-http",
       "kinds": [
         "cargo-dep"
       ],
       "evidence": [
-        "capabilities/comms/Cargo.toml"
+        "capabilities/calendar/Cargo.toml"
       ]
     },
     {
-      "from": "comms",
-      "to": "axon-server",
+      "from": "calendar",
+      "to": "sjel-server",
       "kinds": [
         "cargo-dep"
       ],
       "evidence": [
-        "capabilities/comms/Cargo.toml"
+        "capabilities/calendar/Cargo.toml"
       ]
     },
     {
-      "from": "comms",
-      "to": "axon-store",
+      "from": "calendar",
+      "to": "sjel-store",
       "kinds": [
         "cargo-dep"
       ],
       "evidence": [
-        "capabilities/comms/Cargo.toml"
+        "capabilities/calendar/Cargo.toml"
       ]
     },
     {
@@ -963,6 +913,46 @@
     {
       "from": "comms",
       "to": "route-manifest",
+      "kinds": [
+        "cargo-dep"
+      ],
+      "evidence": [
+        "capabilities/comms/Cargo.toml"
+      ]
+    },
+    {
+      "from": "comms",
+      "to": "sjel-config",
+      "kinds": [
+        "cargo-dep"
+      ],
+      "evidence": [
+        "capabilities/comms/Cargo.toml"
+      ]
+    },
+    {
+      "from": "comms",
+      "to": "sjel-http",
+      "kinds": [
+        "cargo-dep"
+      ],
+      "evidence": [
+        "capabilities/comms/Cargo.toml"
+      ]
+    },
+    {
+      "from": "comms",
+      "to": "sjel-server",
+      "kinds": [
+        "cargo-dep"
+      ],
+      "evidence": [
+        "capabilities/comms/Cargo.toml"
+      ]
+    },
+    {
+      "from": "comms",
+      "to": "sjel-store",
       "kinds": [
         "cargo-dep"
       ],
@@ -982,36 +972,6 @@
     },
     {
       "from": "devices",
-      "to": "axon-config",
-      "kinds": [
-        "cargo-dep"
-      ],
-      "evidence": [
-        "capabilities/devices/Cargo.toml"
-      ]
-    },
-    {
-      "from": "devices",
-      "to": "axon-server",
-      "kinds": [
-        "cargo-dep"
-      ],
-      "evidence": [
-        "capabilities/devices/Cargo.toml"
-      ]
-    },
-    {
-      "from": "devices",
-      "to": "axon-store",
-      "kinds": [
-        "cargo-dep"
-      ],
-      "evidence": [
-        "capabilities/devices/Cargo.toml"
-      ]
-    },
-    {
-      "from": "devices",
       "to": "route-manifest",
       "kinds": [
         "cargo-dep"
@@ -1021,43 +981,33 @@
       ]
     },
     {
-      "from": "entities",
-      "to": "axon-config",
+      "from": "devices",
+      "to": "sjel-config",
       "kinds": [
         "cargo-dep"
       ],
       "evidence": [
-        "capabilities/entities/Cargo.toml"
+        "capabilities/devices/Cargo.toml"
       ]
     },
     {
-      "from": "entities",
-      "to": "axon-http",
+      "from": "devices",
+      "to": "sjel-server",
       "kinds": [
         "cargo-dep"
       ],
       "evidence": [
-        "capabilities/entities/Cargo.toml"
+        "capabilities/devices/Cargo.toml"
       ]
     },
     {
-      "from": "entities",
-      "to": "axon-server",
+      "from": "devices",
+      "to": "sjel-store",
       "kinds": [
         "cargo-dep"
       ],
       "evidence": [
-        "capabilities/entities/Cargo.toml"
-      ]
-    },
-    {
-      "from": "entities",
-      "to": "axon-store",
-      "kinds": [
-        "cargo-dep"
-      ],
-      "evidence": [
-        "capabilities/entities/Cargo.toml"
+        "capabilities/devices/Cargo.toml"
       ]
     },
     {
@@ -1081,6 +1031,46 @@
       ]
     },
     {
+      "from": "entities",
+      "to": "sjel-config",
+      "kinds": [
+        "cargo-dep"
+      ],
+      "evidence": [
+        "capabilities/entities/Cargo.toml"
+      ]
+    },
+    {
+      "from": "entities",
+      "to": "sjel-http",
+      "kinds": [
+        "cargo-dep"
+      ],
+      "evidence": [
+        "capabilities/entities/Cargo.toml"
+      ]
+    },
+    {
+      "from": "entities",
+      "to": "sjel-server",
+      "kinds": [
+        "cargo-dep"
+      ],
+      "evidence": [
+        "capabilities/entities/Cargo.toml"
+      ]
+    },
+    {
+      "from": "entities",
+      "to": "sjel-store",
+      "kinds": [
+        "cargo-dep"
+      ],
+      "evidence": [
+        "capabilities/entities/Cargo.toml"
+      ]
+    },
+    {
       "from": "extraction",
       "to": "inference",
       "kinds": [
@@ -1088,46 +1078,6 @@
       ],
       "evidence": [
         "libs/extraction/Cargo.toml"
-      ]
-    },
-    {
-      "from": "finance",
-      "to": "axon-config",
-      "kinds": [
-        "cargo-dep"
-      ],
-      "evidence": [
-        "capabilities/finance/Cargo.toml"
-      ]
-    },
-    {
-      "from": "finance",
-      "to": "axon-http",
-      "kinds": [
-        "cargo-dep"
-      ],
-      "evidence": [
-        "capabilities/finance/Cargo.toml"
-      ]
-    },
-    {
-      "from": "finance",
-      "to": "axon-server",
-      "kinds": [
-        "cargo-dep"
-      ],
-      "evidence": [
-        "capabilities/finance/Cargo.toml"
-      ]
-    },
-    {
-      "from": "finance",
-      "to": "axon-store",
-      "kinds": [
-        "cargo-dep"
-      ],
-      "evidence": [
-        "capabilities/finance/Cargo.toml"
       ]
     },
     {
@@ -1181,8 +1131,48 @@
       ]
     },
     {
+      "from": "finance",
+      "to": "sjel-config",
+      "kinds": [
+        "cargo-dep"
+      ],
+      "evidence": [
+        "capabilities/finance/Cargo.toml"
+      ]
+    },
+    {
+      "from": "finance",
+      "to": "sjel-http",
+      "kinds": [
+        "cargo-dep"
+      ],
+      "evidence": [
+        "capabilities/finance/Cargo.toml"
+      ]
+    },
+    {
+      "from": "finance",
+      "to": "sjel-server",
+      "kinds": [
+        "cargo-dep"
+      ],
+      "evidence": [
+        "capabilities/finance/Cargo.toml"
+      ]
+    },
+    {
+      "from": "finance",
+      "to": "sjel-store",
+      "kinds": [
+        "cargo-dep"
+      ],
+      "evidence": [
+        "capabilities/finance/Cargo.toml"
+      ]
+    },
+    {
       "from": "host-net",
-      "to": "axon-config",
+      "to": "sjel-config",
       "kinds": [
         "cargo-dep"
       ],
@@ -1192,42 +1182,12 @@
     },
     {
       "from": "inference",
-      "to": "axon-http",
+      "to": "sjel-http",
       "kinds": [
         "cargo-dep"
       ],
       "evidence": [
         "libs/inference/Cargo.toml"
-      ]
-    },
-    {
-      "from": "interior",
-      "to": "axon-config",
-      "kinds": [
-        "cargo-dep"
-      ],
-      "evidence": [
-        "capabilities/interior/Cargo.toml"
-      ]
-    },
-    {
-      "from": "interior",
-      "to": "axon-server",
-      "kinds": [
-        "cargo-dep"
-      ],
-      "evidence": [
-        "capabilities/interior/Cargo.toml"
-      ]
-    },
-    {
-      "from": "interior",
-      "to": "axon-store",
-      "kinds": [
-        "cargo-dep"
-      ],
-      "evidence": [
-        "capabilities/interior/Cargo.toml"
       ]
     },
     {
@@ -1271,43 +1231,33 @@
       ]
     },
     {
-      "from": "places",
-      "to": "axon-config",
+      "from": "interior",
+      "to": "sjel-config",
       "kinds": [
         "cargo-dep"
       ],
       "evidence": [
-        "capabilities/places/Cargo.toml"
+        "capabilities/interior/Cargo.toml"
       ]
     },
     {
-      "from": "places",
-      "to": "axon-http",
+      "from": "interior",
+      "to": "sjel-server",
       "kinds": [
         "cargo-dep"
       ],
       "evidence": [
-        "capabilities/places/Cargo.toml"
+        "capabilities/interior/Cargo.toml"
       ]
     },
     {
-      "from": "places",
-      "to": "axon-server",
+      "from": "interior",
+      "to": "sjel-store",
       "kinds": [
         "cargo-dep"
       ],
       "evidence": [
-        "capabilities/places/Cargo.toml"
-      ]
-    },
-    {
-      "from": "places",
-      "to": "axon-store",
-      "kinds": [
-        "cargo-dep"
-      ],
-      "evidence": [
-        "capabilities/places/Cargo.toml"
+        "capabilities/interior/Cargo.toml"
       ]
     },
     {
@@ -1341,6 +1291,46 @@
       ]
     },
     {
+      "from": "places",
+      "to": "sjel-config",
+      "kinds": [
+        "cargo-dep"
+      ],
+      "evidence": [
+        "capabilities/places/Cargo.toml"
+      ]
+    },
+    {
+      "from": "places",
+      "to": "sjel-http",
+      "kinds": [
+        "cargo-dep"
+      ],
+      "evidence": [
+        "capabilities/places/Cargo.toml"
+      ]
+    },
+    {
+      "from": "places",
+      "to": "sjel-server",
+      "kinds": [
+        "cargo-dep"
+      ],
+      "evidence": [
+        "capabilities/places/Cargo.toml"
+      ]
+    },
+    {
+      "from": "places",
+      "to": "sjel-store",
+      "kinds": [
+        "cargo-dep"
+      ],
+      "evidence": [
+        "capabilities/places/Cargo.toml"
+      ]
+    },
+    {
       "from": "pseudonymize",
       "to": "extraction",
       "kinds": [
@@ -1348,46 +1338,6 @@
       ],
       "evidence": [
         "libs/pseudonymize/Cargo.toml"
-      ]
-    },
-    {
-      "from": "punctuality",
-      "to": "axon-config",
-      "kinds": [
-        "cargo-dep"
-      ],
-      "evidence": [
-        "capabilities/punctuality/Cargo.toml"
-      ]
-    },
-    {
-      "from": "punctuality",
-      "to": "axon-http",
-      "kinds": [
-        "cargo-dep"
-      ],
-      "evidence": [
-        "capabilities/punctuality/Cargo.toml"
-      ]
-    },
-    {
-      "from": "punctuality",
-      "to": "axon-server",
-      "kinds": [
-        "cargo-dep"
-      ],
-      "evidence": [
-        "capabilities/punctuality/Cargo.toml"
-      ]
-    },
-    {
-      "from": "punctuality",
-      "to": "axon-store",
-      "kinds": [
-        "cargo-dep"
-      ],
-      "evidence": [
-        "capabilities/punctuality/Cargo.toml"
       ]
     },
     {
@@ -1401,43 +1351,43 @@
       ]
     },
     {
-      "from": "scouting",
-      "to": "axon-config",
+      "from": "punctuality",
+      "to": "sjel-config",
       "kinds": [
         "cargo-dep"
       ],
       "evidence": [
-        "capabilities/scouting/Cargo.toml"
+        "capabilities/punctuality/Cargo.toml"
       ]
     },
     {
-      "from": "scouting",
-      "to": "axon-http",
+      "from": "punctuality",
+      "to": "sjel-http",
       "kinds": [
         "cargo-dep"
       ],
       "evidence": [
-        "capabilities/scouting/Cargo.toml"
+        "capabilities/punctuality/Cargo.toml"
       ]
     },
     {
-      "from": "scouting",
-      "to": "axon-server",
+      "from": "punctuality",
+      "to": "sjel-server",
       "kinds": [
         "cargo-dep"
       ],
       "evidence": [
-        "capabilities/scouting/Cargo.toml"
+        "capabilities/punctuality/Cargo.toml"
       ]
     },
     {
-      "from": "scouting",
-      "to": "axon-store",
+      "from": "punctuality",
+      "to": "sjel-store",
       "kinds": [
         "cargo-dep"
       ],
       "evidence": [
-        "capabilities/scouting/Cargo.toml"
+        "capabilities/punctuality/Cargo.toml"
       ]
     },
     {
@@ -1482,6 +1432,46 @@
     },
     {
       "from": "scouting",
+      "to": "sjel-config",
+      "kinds": [
+        "cargo-dep"
+      ],
+      "evidence": [
+        "capabilities/scouting/Cargo.toml"
+      ]
+    },
+    {
+      "from": "scouting",
+      "to": "sjel-http",
+      "kinds": [
+        "cargo-dep"
+      ],
+      "evidence": [
+        "capabilities/scouting/Cargo.toml"
+      ]
+    },
+    {
+      "from": "scouting",
+      "to": "sjel-server",
+      "kinds": [
+        "cargo-dep"
+      ],
+      "evidence": [
+        "capabilities/scouting/Cargo.toml"
+      ]
+    },
+    {
+      "from": "scouting",
+      "to": "sjel-store",
+      "kinds": [
+        "cargo-dep"
+      ],
+      "evidence": [
+        "capabilities/scouting/Cargo.toml"
+      ]
+    },
+    {
+      "from": "scouting",
       "to": "transit",
       "kinds": [
         "cargo-dep"
@@ -1491,23 +1481,13 @@
       ]
     },
     {
-      "from": "soundscape",
-      "to": "axon-config",
+      "from": "sjel-server",
+      "to": "sjel-config",
       "kinds": [
         "cargo-dep"
       ],
       "evidence": [
-        "capabilities/soundscape/Cargo.toml"
-      ]
-    },
-    {
-      "from": "soundscape",
-      "to": "axon-server",
-      "kinds": [
-        "cargo-dep"
-      ],
-      "evidence": [
-        "capabilities/soundscape/Cargo.toml"
+        "libs/sjel-server/Cargo.toml"
       ]
     },
     {
@@ -1521,8 +1501,28 @@
       ]
     },
     {
+      "from": "soundscape",
+      "to": "sjel-config",
+      "kinds": [
+        "cargo-dep"
+      ],
+      "evidence": [
+        "capabilities/soundscape/Cargo.toml"
+      ]
+    },
+    {
+      "from": "soundscape",
+      "to": "sjel-server",
+      "kinds": [
+        "cargo-dep"
+      ],
+      "evidence": [
+        "capabilities/soundscape/Cargo.toml"
+      ]
+    },
+    {
       "from": "summarize",
-      "to": "axon-http",
+      "to": "sjel-http",
       "kinds": [
         "cargo-dep"
       ],
@@ -1532,52 +1532,12 @@
     },
     {
       "from": "tools",
-      "to": "axon-config",
+      "to": "sjel-config",
       "kinds": [
         "cargo-dep"
       ],
       "evidence": [
         "tools/storage/Cargo.toml"
-      ]
-    },
-    {
-      "from": "transit",
-      "to": "axon-config",
-      "kinds": [
-        "cargo-dep"
-      ],
-      "evidence": [
-        "capabilities/transit/Cargo.toml"
-      ]
-    },
-    {
-      "from": "transit",
-      "to": "axon-http",
-      "kinds": [
-        "cargo-dep"
-      ],
-      "evidence": [
-        "capabilities/transit/Cargo.toml"
-      ]
-    },
-    {
-      "from": "transit",
-      "to": "axon-server",
-      "kinds": [
-        "cargo-dep"
-      ],
-      "evidence": [
-        "capabilities/transit/Cargo.toml"
-      ]
-    },
-    {
-      "from": "transit",
-      "to": "axon-store",
-      "kinds": [
-        "cargo-dep"
-      ],
-      "evidence": [
-        "capabilities/transit/Cargo.toml"
       ]
     },
     {
@@ -1602,7 +1562,7 @@
     },
     {
       "from": "transit",
-      "to": "station-time",
+      "to": "sjel-config",
       "kinds": [
         "cargo-dep"
       ],
@@ -1611,33 +1571,43 @@
       ]
     },
     {
-      "from": "traveler",
-      "to": "axon-config",
+      "from": "transit",
+      "to": "sjel-http",
       "kinds": [
         "cargo-dep"
       ],
       "evidence": [
-        "capabilities/traveler/Cargo.toml"
+        "capabilities/transit/Cargo.toml"
       ]
     },
     {
-      "from": "traveler",
-      "to": "axon-server",
+      "from": "transit",
+      "to": "sjel-server",
       "kinds": [
         "cargo-dep"
       ],
       "evidence": [
-        "capabilities/traveler/Cargo.toml"
+        "capabilities/transit/Cargo.toml"
       ]
     },
     {
-      "from": "traveler",
-      "to": "axon-store",
+      "from": "transit",
+      "to": "sjel-store",
       "kinds": [
         "cargo-dep"
       ],
       "evidence": [
-        "capabilities/traveler/Cargo.toml"
+        "capabilities/transit/Cargo.toml"
+      ]
+    },
+    {
+      "from": "transit",
+      "to": "station-time",
+      "kinds": [
+        "cargo-dep"
+      ],
+      "evidence": [
+        "capabilities/transit/Cargo.toml"
       ]
     },
     {
@@ -1661,43 +1631,33 @@
       ]
     },
     {
-      "from": "trips",
-      "to": "axon-config",
+      "from": "traveler",
+      "to": "sjel-config",
       "kinds": [
         "cargo-dep"
       ],
       "evidence": [
-        "capabilities/trips/Cargo.toml"
+        "capabilities/traveler/Cargo.toml"
       ]
     },
     {
-      "from": "trips",
-      "to": "axon-http",
+      "from": "traveler",
+      "to": "sjel-server",
       "kinds": [
         "cargo-dep"
       ],
       "evidence": [
-        "capabilities/trips/Cargo.toml"
+        "capabilities/traveler/Cargo.toml"
       ]
     },
     {
-      "from": "trips",
-      "to": "axon-server",
+      "from": "traveler",
+      "to": "sjel-store",
       "kinds": [
         "cargo-dep"
       ],
       "evidence": [
-        "capabilities/trips/Cargo.toml"
-      ]
-    },
-    {
-      "from": "trips",
-      "to": "axon-store",
-      "kinds": [
-        "cargo-dep"
-      ],
-      "evidence": [
-        "capabilities/trips/Cargo.toml"
+        "capabilities/traveler/Cargo.toml"
       ]
     },
     {
@@ -1742,7 +1702,7 @@
     },
     {
       "from": "trips",
-      "to": "station-time",
+      "to": "sjel-config",
       "kinds": [
         "cargo-dep"
       ],
@@ -1751,23 +1711,43 @@
       ]
     },
     {
-      "from": "vault",
-      "to": "axon-config",
+      "from": "trips",
+      "to": "sjel-http",
       "kinds": [
         "cargo-dep"
       ],
       "evidence": [
-        "capabilities/vault/Cargo.toml"
+        "capabilities/trips/Cargo.toml"
       ]
     },
     {
-      "from": "vault",
-      "to": "axon-server",
+      "from": "trips",
+      "to": "sjel-server",
       "kinds": [
         "cargo-dep"
       ],
       "evidence": [
-        "capabilities/vault/Cargo.toml"
+        "capabilities/trips/Cargo.toml"
+      ]
+    },
+    {
+      "from": "trips",
+      "to": "sjel-store",
+      "kinds": [
+        "cargo-dep"
+      ],
+      "evidence": [
+        "capabilities/trips/Cargo.toml"
+      ]
+    },
+    {
+      "from": "trips",
+      "to": "station-time",
+      "kinds": [
+        "cargo-dep"
+      ],
+      "evidence": [
+        "capabilities/trips/Cargo.toml"
       ]
     },
     {
@@ -1793,6 +1773,26 @@
     {
       "from": "vault",
       "to": "route-manifest",
+      "kinds": [
+        "cargo-dep"
+      ],
+      "evidence": [
+        "capabilities/vault/Cargo.toml"
+      ]
+    },
+    {
+      "from": "vault",
+      "to": "sjel-config",
+      "kinds": [
+        "cargo-dep"
+      ],
+      "evidence": [
+        "capabilities/vault/Cargo.toml"
+      ]
+    },
+    {
+      "from": "vault",
+      "to": "sjel-server",
       "kinds": [
         "cargo-dep"
       ],
@@ -2233,7 +2233,7 @@
   ],
   "graph": {
     "present": true,
-    "nodes": 23242,
+    "nodes": 23263,
     "external": 36,
     "stale": [],
     "unmatched": [

@@ -884,7 +884,7 @@ pub fn agreement(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use axon_inference::InferenceConfig;
+    use sjel_inference::InferenceConfig;
 
     /// Apple's on-device model: 4,096 tokens shared between prompt and reply.
     const APPLE_WINDOW: u32 = 4_096;

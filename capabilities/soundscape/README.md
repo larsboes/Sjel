@@ -59,7 +59,7 @@ because that one is a real disagreement about what exists.
 
 ## Port and the UI bundle
 
-Default `8088`, resolved through `libs/axon-config` (`SJEL_PORT`, then
+Default `8088`, resolved through `libs/sjel-config` (`SJEL_PORT`, then
 `SJEL_SOUNDSCAPE_PORT`, then the default). Declared once in `service.toml`;
 nothing else hardcodes it.
 

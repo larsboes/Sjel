@@ -169,8 +169,8 @@ fn parse_arxiv_entries(body: &str, limit: usize) -> Vec<Discovered> {
 }
 
 fn http_client() -> Result<reqwest::blocking::Client> {
-    Ok(axon_http::client(
-        axon_http::Purpose::new("comms-sources"),
+    Ok(sjel_http::client(
+        sjel_http::Purpose::new("comms-sources"),
         std::time::Duration::from_secs(30),
     )?)
 }

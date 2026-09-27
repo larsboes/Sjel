@@ -31,7 +31,7 @@
         "object",
         "null"
       ],
-      "description": "The node's local-network listener (libs/axon-server/src/lan.rs). Tried before canonical_base_url with a short connect timeout.",
+      "description": "The node's local-network listener (libs/sjel-server/src/lan.rs). Tried before canonical_base_url with a short connect timeout.",
       "required": [
         "base_url",
         "pin_sha256"

@@ -68,7 +68,7 @@
 //!
 //! Its dependency surface stays intentionally narrow: `rusqlite`, `r2d2` and
 //! `r2d2_sqlite` are the complete database stack shared by store-owning
-//! capabilities. Path resolution is NOT here — `axon_config::database_path`
+//! capabilities. Path resolution is NOT here — `sjel_config::database_path`
 //! owns where the file lives, because that is overlay knowledge.
 
 use std::collections::HashMap;
@@ -97,7 +97,7 @@ pub type Pool = r2d2::Pool<SqliteConnectionManager>;
 /// ISO-8601 with a space separator. Interpolate it where Postgres had `now()`:
 ///
 /// ```text
-/// format!("UPDATE {p}_tasks SET updated_at = {now}", p = self.prefix, now = axon_store::NOW)
+/// format!("UPDATE {p}_tasks SET updated_at = {now}", p = self.prefix, now = sjel_store::NOW)
 /// ```
 ///
 /// Two properties decided the shape, and both are load-bearing:
@@ -449,7 +449,7 @@ mod tests {
     /// sharing a (path, prefix) would see each other's result and pass for the
     /// wrong reason.
     fn database(tag: &str) -> String {
-        format!("/tmp/axon-store-test/{tag}.db")
+        format!("/tmp/sjel-store-test/{tag}.db")
     }
 
     /// A throwaway file per test. A temp file is the whole test fixture now —
@@ -457,7 +457,7 @@ mod tests {
     /// the directory goes with the process's temp dir.
     fn temp_database(tag: &str) -> std::path::PathBuf {
         let dir = std::env::temp_dir().join(format!(
-            "axon-store-{}-{:?}",
+            "sjel-store-{}-{:?}",
             std::process::id(),
             std::thread::current().id()
         ));

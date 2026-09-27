@@ -9,15 +9,15 @@
 
 use std::path::Path;
 
-use axon_store::QueryAll;
 use rusqlite::{params, Connection, OptionalExtension};
+use sjel_store::QueryAll;
 
 use crate::opportunity::Opportunity;
 
 pub struct Store {
     /// Shared with every other store in this process on the same file, so
     /// opening one is a checkout rather than an open.
-    pool: axon_store::Pool,
+    pool: sjel_store::Pool,
     /// Prefixes this capability's tables in the one shared file (PRD Q45):
     /// `scouting` here means `scouting_opportunities` and its three siblings.
     prefix: String,
@@ -40,8 +40,8 @@ impl Store {
         prefix: &str,
     ) -> Result<Self, Box<dyn std::error::Error>> {
         // A pool checkout, and the migration runs once per process per (file,
-        // prefix) rather than once per open -- libs/axon-store/README.md has why.
-        let pool = axon_store::open_pool(database_path, prefix, |conn| {
+        // prefix) rather than once per open -- libs/sjel-store/README.md has why.
+        let pool = sjel_store::open_pool(database_path, prefix, |conn| {
             Self::init_schema(conn, prefix)
         })?;
         Ok(Self {
@@ -55,7 +55,7 @@ impl Store {
     /// A `Result` where this used to be `self.conn.lock().unwrap()`: that unwrap
     /// could only fail on a poisoned mutex, whereas a checkout can genuinely fail
     /// when the file is unreachable or every connection is busy.
-    fn conn(&self) -> Result<axon_store::PooledClient, Box<dyn std::error::Error>> {
+    fn conn(&self) -> Result<sjel_store::PooledClient, Box<dyn std::error::Error>> {
         Ok(self.pool.get()?)
     }
 
@@ -300,7 +300,7 @@ impl Store {
         //
         // Insert-or-nothing first, then update only if nothing was inserted. The
         // transaction is what makes the pair one decision.
-        let transaction = axon_store::write_transaction(&mut conn)?;
+        let transaction = sjel_store::write_transaction(&mut conn)?;
         let inserted = transaction.execute(
             &format!(
                 "INSERT INTO {prefix}_proposed_sources

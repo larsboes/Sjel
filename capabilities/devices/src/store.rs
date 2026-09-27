@@ -135,17 +135,17 @@ type DeviceRow = (
 );
 
 pub struct DevicesStore {
-    pool: axon_store::Pool,
+    pool: sjel_store::Pool,
 }
 
 impl DevicesStore {
     pub fn open(path: &Path) -> Result<Self, StoreError> {
         let pool =
-            axon_store::open_pool(path, "devices", |conn| migrate(conn, "devices")).map_err(db)?;
+            sjel_store::open_pool(path, "devices", |conn| migrate(conn, "devices")).map_err(db)?;
         Ok(Self { pool })
     }
 
-    fn connection(&self) -> Result<axon_store::PooledClient, StoreError> {
+    fn connection(&self) -> Result<sjel_store::PooledClient, StoreError> {
         self.pool.get().map_err(db)
     }
 

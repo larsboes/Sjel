@@ -9,19 +9,19 @@
 
 use crate::ingest::CellKey;
 use crate::stats::Cell;
-use axon_store::QueryAll;
 use rusqlite::{params, Connection, OptionalExtension, Row, Transaction};
+use sjel_store::QueryAll;
 use std::collections::HashMap;
 use std::path::Path;
 
 pub struct Store {
     /// Pooled like its six siblings, though this capability is the one that gains
     /// least from it: it opens a store twice per process, not once per request. It
-    /// is here because the shared axon-store crate owns both migration and pooling, so
+    /// is here because the shared sjel-store crate owns both migration and pooling, so
     /// a consumer that wants its migration half carries its pool half too — and
     /// carrying the dependency while hand-rolling a second connection strategy
     /// beside it would be the worse of the two outcomes.
-    pool: axon_store::Pool,
+    pool: sjel_store::Pool,
     /// Prefixes this capability's tables in the one shared file (PRD Q45):
     /// `punctuality` here means `punctuality_stop_stats` and its two siblings.
     prefix: String,
@@ -105,8 +105,8 @@ impl Store {
     ) -> Result<Self, Box<dyn std::error::Error>> {
         validate_prefix(prefix)?;
         // A pool checkout, and the migration runs once per process per (file,
-        // prefix) rather than once per open -- libs/axon-store/README.md has why.
-        let pool = axon_store::open_pool(database_path, prefix, |conn| {
+        // prefix) rather than once per open -- libs/sjel-store/README.md has why.
+        let pool = sjel_store::open_pool(database_path, prefix, |conn| {
             Self::run_migration(conn, prefix)
         })?;
         Ok(Self {
@@ -120,7 +120,7 @@ impl Store {
     /// Held across a whole transaction by `replace_stats`, which is the intended
     /// use of a checkout rather than a problem with one: the connection is this
     /// caller's until it is dropped, and r2d2 hands the next caller a different one.
-    fn conn(&self) -> Result<axon_store::PooledClient, Box<dyn std::error::Error>> {
+    fn conn(&self) -> Result<sjel_store::PooledClient, Box<dyn std::error::Error>> {
         Ok(self.pool.get()?)
     }
 
@@ -207,7 +207,7 @@ impl Store {
             );
             ",
             prefix = prefix,
-            now = axon_store::NOW
+            now = sjel_store::NOW
         ))?;
 
         // SQLite has no portable `ADD COLUMN IF NOT EXISTS`. Older deployments
@@ -244,7 +244,7 @@ impl Store {
     ) -> Result<(), Box<dyn std::error::Error>> {
         let prefix = self.prefix.clone();
         let mut conn = self.conn()?;
-        let tx = axon_store::write_transaction(&mut conn)?;
+        let tx = sjel_store::write_transaction(&mut conn)?;
         replace_stats_tx(&tx, &prefix, cells, stations)?;
         tx.commit()?;
         Ok(())
@@ -261,7 +261,7 @@ impl Store {
     ) -> Result<(), Box<dyn std::error::Error>> {
         let prefix = self.prefix.clone();
         let mut conn = self.conn()?;
-        let tx = axon_store::write_transaction(&mut conn)?;
+        let tx = sjel_store::write_transaction(&mut conn)?;
         replace_stats_tx(&tx, &prefix, cells, stations)?;
         tx.execute(&format!("DELETE FROM {prefix}_ingest_months"), [])?;
         insert_months(&tx, &prefix, months)?;
@@ -280,7 +280,7 @@ impl Store {
     ) -> Result<(), Box<dyn std::error::Error>> {
         let prefix = self.prefix.clone();
         let mut conn = self.conn()?;
-        let tx = axon_store::write_transaction(&mut conn)?;
+        let tx = sjel_store::write_transaction(&mut conn)?;
         let mut select = tx.prepare(&format!(
             "SELECT n, canceled, sum_delay, counts FROM {prefix}_stop_stats
              WHERE eva = ?1 AND train_type = ?2 AND hour = ?3 AND weekend = ?4"
@@ -306,7 +306,7 @@ impl Store {
                             row.get::<_, i64>(0)?,
                             row.get::<_, i64>(1)?,
                             row.get::<_, i64>(2)?,
-                            axon_store::json_column::<Vec<i32>>(row, 3)?,
+                            sjel_store::json_column::<Vec<i32>>(row, 3)?,
                         ))
                     },
                 )
@@ -348,7 +348,7 @@ impl Store {
     ) -> Result<(), Box<dyn std::error::Error>> {
         let prefix = self.prefix.clone();
         let mut conn = self.conn()?;
-        let tx = axon_store::write_transaction(&mut conn)?;
+        let tx = sjel_store::write_transaction(&mut conn)?;
         tx.execute(&format!("DELETE FROM {prefix}_ingest_months"), [])?;
         insert_months(&tx, &prefix, months)?;
         tx.commit()?;
@@ -579,7 +579,7 @@ fn row_to_stat(r: &Row) -> rusqlite::Result<StatRow> {
         share_late_6: r.get(10)?,
         cancel_rate: r.get(11)?,
         sum_delay: r.get(12)?,
-        counts: axon_store::json_column(r, 13)?,
+        counts: sjel_store::json_column(r, 13)?,
     })
 }
 

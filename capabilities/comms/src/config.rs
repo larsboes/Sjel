@@ -13,7 +13,7 @@ use std::path::PathBuf;
 
 use crate::content_item;
 use crate::rules::Rule;
-use axon_inference::{InferenceConfig, ResolvedRole};
+use sjel_inference::{InferenceConfig, ResolvedRole};
 
 #[derive(Debug, Clone, Deserialize, Default)]
 #[serde(default)]
@@ -287,7 +287,7 @@ impl Default for MailModelConfig {
 #[derive(Debug, Clone)]
 pub struct Config {
     /// The one shared SQLite file, under the table prefix `comms` (PRD Q45).
-    /// Resolved by `axon_config::database_path`: `SJEL_DB_PATH`, else
+    /// Resolved by `sjel_config::database_path`: `SJEL_DB_PATH`, else
     /// `<overlay>/data/axon/axon.db`. A deployment fact, not a capability one:
     /// a file per capability would drop the cross-capability joins the shared
     /// instance existed for, so `SJEL_COMMS_DATABASE_URL` and a `database_url`
@@ -377,22 +377,22 @@ pub struct Config {
     pub mail_model: Option<MailModelConfig>,
 }
 
-// One implementation, in libs/axon-config, re-exported under the name this
+// One implementation, in libs/sjel-config, re-exported under the name this
 // module's call sites already use. comms was the last capability still carrying
 // its own copies of these helpers.
-pub(crate) use axon_config::expand_tilde;
+pub(crate) use sjel_config::expand_tilde;
 
 /// Resolve an API-key reference without ever storing or logging its value.
 /// JSON files use `.auth.api_key` (the oMLX settings shape); non-JSON files use
 /// their trimmed contents. Parsed JSON without that field deliberately has no
 /// raw-content fallback.
 ///
-/// The reader itself moved to `libs/axon-server` when the inbound gate did:
+/// The reader itself moved to `libs/sjel-server` when the inbound gate did:
 /// both this file and `<overlay>/config/deployment.env`'s
 /// `SJEL_INBOUND_TOKEN_FILE` name a file holding the same kind of value, and two
 /// readers of one shape is the drift the move removes.
 pub(crate) fn api_key_from_file(path: Option<&str>) -> Option<String> {
-    axon_server::token_from_file(&expand_tilde(path?))
+    sjel_server::token_from_file(&expand_tilde(path?))
 }
 
 /// `"22-7"` -> `(22, 7)`. Returns `None` for anything it does not fully
@@ -406,24 +406,24 @@ fn parse_quiet_hours(value: &str) -> Option<(u32, u32)> {
 }
 
 fn config_path() -> PathBuf {
-    if let Ok(p) = axon_config::env_var("SJEL_COMMS_CONFIG") {
+    if let Ok(p) = sjel_config::env_var("SJEL_COMMS_CONFIG") {
         return expand_tilde(&p);
     }
-    if let Some(p) = axon_config::overlay_config("comms.json") {
+    if let Some(p) = sjel_config::overlay_config("comms.json") {
         return p;
     }
     PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("comms.config.json")
 }
 
 fn default_google_env_path() -> PathBuf {
-    axon_config::overlay_config("comms.env").unwrap_or_else(|| PathBuf::from("comms.env"))
+    sjel_config::overlay_config("comms.env").unwrap_or_else(|| PathBuf::from("comms.env"))
 }
 
 /// The one normaliser, and it is the guard's own: the configured entries and the
 /// URL being checked have to be compared as the same shape or the comparison is a
 /// coin toss. [`ingest_allowed_origins`] calls it on every entry;
-/// `axon_http::guard::origin_is_allowed` calls it on the URL.
-pub(crate) use axon_http::guard::normalize_origin;
+/// `sjel_http::guard::origin_is_allowed` calls it on the URL.
+pub(crate) use sjel_http::guard::normalize_origin;
 
 /// Origins `POST /ingest` may fetch even though they resolve to an address
 /// inside this machine or this network (Q74).
@@ -486,7 +486,7 @@ impl Config {
 
         // The runner's port contract, resolved in one place for every capability.
         // No capability-specific escape-hatch env var here: comms never had one.
-        let port = axon_config::resolve_port(None, file.port, 8083);
+        let port = sjel_config::resolve_port(None, file.port, 8083);
         let api_secret = api_key_from_file(file.api_secret_file.as_deref());
         let dashboard_origin = file
             .dashboard_origin
@@ -503,7 +503,7 @@ impl Config {
             .inbox_sweep_quiet_hours
             .as_deref()
             .and_then(parse_quiet_hours);
-        let inference = InferenceConfig::load(axon_config::overlay_config);
+        let inference = InferenceConfig::load(sjel_config::overlay_config);
         let keeper_export_dir = file.keeper_export_dir.map(|p| expand_tilde(&p));
         // An empty root reads as "not configured", not as the current directory.
         // `comms.config.example.json` ships every optional string blank, so a copied
@@ -557,7 +557,7 @@ impl Config {
         let mail_model = file.mail_model;
 
         Self {
-            database_path: axon_config::database_path(),
+            database_path: sjel_config::database_path(),
             google_env_path,
             port,
             api_secret,
@@ -696,7 +696,7 @@ mod tests {
         let _config = EnvGuard::take("SJEL_COMMS_CONFIG");
         let _overlay = EnvGuard::take("SJEL_PERSONAL_ROOT");
         let _explicit = EnvGuard::take("SJEL_DB_PATH");
-        assert_eq!(Config::load().database_path, axon_config::database_path());
+        assert_eq!(Config::load().database_path, sjel_config::database_path());
     }
 
     #[test]
@@ -716,7 +716,7 @@ mod tests {
         /// Clears the setting under its Sjel name and its pre-rename Axon name, so a value
         /// the operator's shell still exports under the old name cannot stand in for it.
         fn take(key: &'static str) -> Self {
-            let names = std::iter::once(key.to_string()).chain(axon_config::env::legacy_name(key));
+            let names = std::iter::once(key.to_string()).chain(sjel_config::env::legacy_name(key));
             Self(
                 names
                     .map(|name| {

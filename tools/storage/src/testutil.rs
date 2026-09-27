@@ -14,7 +14,7 @@ static SEQ: AtomicU32 = AtomicU32::new(0);
 /// process id alone is not unique — the counter is what keeps two tests apart.
 pub fn tempdir(name: &str) -> PathBuf {
     let n = SEQ.fetch_add(1, Ordering::Relaxed);
-    let dir = std::env::temp_dir().join(format!("axon-storage-{name}-{}-{n}", std::process::id()));
+    let dir = std::env::temp_dir().join(format!("sjel-storage-{name}-{}-{n}", std::process::id()));
     let _ = std::fs::remove_dir_all(&dir);
     std::fs::create_dir_all(&dir).expect("fixture directory");
     dir

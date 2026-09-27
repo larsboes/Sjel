@@ -262,8 +262,8 @@ export function rollUp(
  * How one unit's code reaches into another's, as declared in ground truth.
  *
  * Axon does not couple units by depending on published crates. A capability pulls a lib
- * in by path — `#[path = "../../../libs/axon-config/src/lib.rs"] mod axon_config;` in a
- * source file, `axon-config = { path = "../../libs/axon-config" }` in its Cargo.toml.
+ * in by path — `#[path = "../../../libs/sjel-config/src/lib.rs"] mod sjel_config;` in a
+ * source file, `sjel-config = { path = "../../libs/sjel-config" }` in its Cargo.toml.
  * Both are literal strings in tracked files, which makes them exact: there is nothing to
  * infer and no graph to trust. This is the ground truth that replaced graphify's import
  * edges after those were shown to be both false-positive and false-negative here (see the

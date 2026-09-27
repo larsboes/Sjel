@@ -194,8 +194,8 @@ pub fn promote_saved_luma(
 
     // A local calendar POST, on the 20s calendar itself uses for its own
     // outbound calls. It had no timeout before.
-    let client = axon_http::client(
-        axon_http::Purpose::new("scouting-calendar"),
+    let client = sjel_http::client(
+        sjel_http::Purpose::new("scouting-calendar"),
         std::time::Duration::from_secs(20),
     )?;
     let url = format!(

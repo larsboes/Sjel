@@ -590,76 +590,13 @@ dependencies = [
 ]
 
 [[package]]
-name = "axon-config"
-version = "0.1.0"
-
-[[package]]
-name = "axon-extraction"
-version = "0.1.0"
-dependencies = [
- "axon-inference",
- "serde",
- "serde_json",
- "thiserror 1.0.69",
- "tokio",
- "xberg",
-]
-
-[[package]]
 name = "axon-fda-launcher"
 version = "0.1.0"
-
-[[package]]
-name = "axon-http"
-version = "0.1.0"
-dependencies = [
- "reqwest",
-]
-
-[[package]]
-name = "axon-inference"
-version = "0.1.0"
-dependencies = [
- "axon-http",
- "reqwest",
- "serde",
- "serde_json",
-]
-
-[[package]]
-name = "axon-pseudonymize"
-version = "0.1.0"
-dependencies = [
- "aho-corasick",
- "axon-extraction",
- "serde",
- "serde_json",
- "sha2 0.10.9",
-]
-
-[[package]]
-name = "axon-server"
-version = "0.1.0"
-dependencies = [
- "axon-config",
- "axum",
- "hyper-util",
- "rcgen",
- "reqwest",
- "rustls",
- "serde_json",
- "sha2 0.10.9",
- "tokio",
- "tokio-rustls",
-]
 
 [[package]]
 name = "axon-status"
 version = "0.1.0"
 dependencies = [
- "axon-config",
- "axon-server",
- "axon-store",
  "axum",
  "devices",
  "reqwest",
@@ -667,39 +604,12 @@ dependencies = [
  "route-manifest",
  "serde",
  "serde_json",
+ "sjel-config",
+ "sjel-server",
+ "sjel-store",
  "tokio",
  "tower 0.4.13",
  "tower-http",
-]
-
-[[package]]
-name = "axon-storage"
-version = "0.1.0"
-dependencies = [
- "axon-config",
- "serde",
- "serde_json",
- "toml 0.8.23",
-]
-
-[[package]]
-name = "axon-store"
-version = "0.1.0"
-dependencies = [
- "r2d2",
- "r2d2_sqlite",
- "rusqlite",
- "serde",
- "serde_json",
-]
-
-[[package]]
-name = "axon-summarize"
-version = "0.1.0"
-dependencies = [
- "axon-http",
- "reqwest",
- "serde_json",
 ]
 
 [[package]]
@@ -955,10 +865,6 @@ dependencies = [
 name = "calendar"
 version = "0.1.0"
 dependencies = [
- "axon-config",
- "axon-http",
- "axon-server",
- "axon-store",
  "axum",
  "civil-date",
  "content-item",
@@ -968,6 +874,10 @@ dependencies = [
  "rusqlite",
  "serde",
  "serde_json",
+ "sjel-config",
+ "sjel-http",
+ "sjel-server",
+ "sjel-store",
  "tokio",
  "tower 0.5.3",
  "tower-http",
@@ -1160,14 +1070,6 @@ dependencies = [
 name = "comms"
 version = "0.1.0"
 dependencies = [
- "axon-config",
- "axon-extraction",
- "axon-http",
- "axon-inference",
- "axon-pseudonymize",
- "axon-server",
- "axon-store",
- "axon-summarize",
  "axum",
  "base64 0.23.1",
  "content-item",
@@ -1178,6 +1080,14 @@ dependencies = [
  "serde",
  "serde_json",
  "sha2 0.10.9",
+ "sjel-config",
+ "sjel-extraction",
+ "sjel-http",
+ "sjel-inference",
+ "sjel-pseudonymize",
+ "sjel-server",
+ "sjel-store",
+ "sjel-summarize",
  "thiserror 1.0.69",
  "tokio",
  "tower-http",
@@ -1492,9 +1402,6 @@ checksum = "7cd812cc2bc1d69d4764bd80df88b4317eaef9e773c75226407d9bc0876b211c"
 name = "devices"
 version = "0.1.0"
 dependencies = [
- "axon-config",
- "axon-server",
- "axon-store",
  "axum",
  "getrandom 0.3.4",
  "ring",
@@ -1504,6 +1411,9 @@ dependencies = [
  "serde",
  "serde_json",
  "sha2 0.10.9",
+ "sjel-config",
+ "sjel-server",
+ "sjel-store",
  "tokio",
 ]
 
@@ -1618,10 +1528,6 @@ dependencies = [
 name = "entities"
 version = "0.1.0"
 dependencies = [
- "axon-config",
- "axon-http",
- "axon-server",
- "axon-store",
  "axum",
  "civil-date",
  "reqwest",
@@ -1630,6 +1536,10 @@ dependencies = [
  "schemars",
  "serde",
  "serde_json",
+ "sjel-config",
+ "sjel-http",
+ "sjel-server",
+ "sjel-store",
  "tokio",
 ]
 
@@ -1794,10 +1704,6 @@ dependencies = [
 name = "finance"
 version = "0.1.0"
 dependencies = [
- "axon-config",
- "axon-http",
- "axon-server",
- "axon-store",
  "axum",
  "candidate-fingerprint",
  "civil-date",
@@ -1810,6 +1716,10 @@ dependencies = [
  "serde",
  "serde_json",
  "sha2 0.10.9",
+ "sjel-config",
+ "sjel-http",
+ "sjel-server",
+ "sjel-store",
  "tokio",
  "tower 0.5.3",
  "tower-http",
@@ -2205,9 +2115,9 @@ checksum = "7f24254aa9a54b5c858eaee2f5bccdb46aaf0e486a595ed5fd8f86ba55232a70"
 name = "host-net"
 version = "0.1.0"
 dependencies = [
- "axon-config",
  "serde",
  "serde_json",
+ "sjel-config",
  "toml 0.8.23",
 ]
 
@@ -2608,9 +2518,6 @@ dependencies = [
 name = "interior"
 version = "0.1.0"
 dependencies = [
- "axon-config",
- "axon-server",
- "axon-store",
  "axum",
  "civil-date",
  "devices",
@@ -2621,6 +2528,9 @@ dependencies = [
  "serde",
  "serde_json",
  "sha2 0.10.9",
+ "sjel-config",
+ "sjel-server",
+ "sjel-store",
  "thiserror 2.0.19",
  "tokio",
  "toml 0.8.23",
@@ -3706,10 +3616,6 @@ checksum = "19f132c84eca552bf34cab8ec81f1c1dcc229b811638f9d283dceabe58c5569e"
 name = "places"
 version = "0.1.0"
 dependencies = [
- "axon-config",
- "axon-http",
- "axon-server",
- "axon-store",
  "axum",
  "candidate-fingerprint",
  "civil-date",
@@ -3720,6 +3626,10 @@ dependencies = [
  "serde",
  "serde_json",
  "sha2 0.10.9",
+ "sjel-config",
+ "sjel-http",
+ "sjel-server",
+ "sjel-store",
  "tokio",
 ]
 
@@ -3893,10 +3803,6 @@ name = "punctuality"
 version = "0.1.0"
 dependencies = [
  "arrow",
- "axon-config",
- "axon-http",
- "axon-server",
- "axon-store",
  "axum",
  "parquet",
  "reqwest",
@@ -3904,6 +3810,10 @@ dependencies = [
  "rusqlite",
  "serde",
  "serde_json",
+ "sjel-config",
+ "sjel-http",
+ "sjel-server",
+ "sjel-store",
  "thiserror 1.0.69",
  "tokio",
  "tower-http",
@@ -4631,11 +4541,6 @@ checksum = "94143f37725109f92c262ed2cf5e59bce7498c01bcc1502d7b9afe439a4e9f49"
 name = "scouting"
 version = "0.1.0"
 dependencies = [
- "axon-config",
- "axon-http",
- "axon-inference",
- "axon-server",
- "axon-store",
  "axum",
  "content-item",
  "markdown-root",
@@ -4644,6 +4549,11 @@ dependencies = [
  "rusqlite",
  "serde",
  "serde_json",
+ "sjel-config",
+ "sjel-http",
+ "sjel-inference",
+ "sjel-server",
+ "sjel-store",
  "thiserror 1.0.69",
  "tokio",
  "tower 0.5.3",
@@ -4893,6 +4803,96 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "8ee5873ec9cce0195efcb7a4e9507a04cd49aec9c83d0389df45b1ef7ba2e649"
 
 [[package]]
+name = "sjel-config"
+version = "0.1.0"
+
+[[package]]
+name = "sjel-extraction"
+version = "0.1.0"
+dependencies = [
+ "serde",
+ "serde_json",
+ "sjel-inference",
+ "thiserror 1.0.69",
+ "tokio",
+ "xberg",
+]
+
+[[package]]
+name = "sjel-http"
+version = "0.1.0"
+dependencies = [
+ "reqwest",
+]
+
+[[package]]
+name = "sjel-inference"
+version = "0.1.0"
+dependencies = [
+ "reqwest",
+ "serde",
+ "serde_json",
+ "sjel-http",
+]
+
+[[package]]
+name = "sjel-pseudonymize"
+version = "0.1.0"
+dependencies = [
+ "aho-corasick",
+ "serde",
+ "serde_json",
+ "sha2 0.10.9",
+ "sjel-extraction",
+]
+
+[[package]]
+name = "sjel-server"
+version = "0.1.0"
+dependencies = [
+ "axum",
+ "hyper-util",
+ "rcgen",
+ "reqwest",
+ "rustls",
+ "serde_json",
+ "sha2 0.10.9",
+ "sjel-config",
+ "tokio",
+ "tokio-rustls",
+]
+
+[[package]]
+name = "sjel-storage"
+version = "0.1.0"
+dependencies = [
+ "serde",
+ "serde_json",
+ "sjel-config",
+ "toml 0.8.23",
+]
+
+[[package]]
+name = "sjel-store"
+version = "0.1.0"
+dependencies = [
+ "r2d2",
+ "r2d2_sqlite",
+ "rusqlite",
+ "serde",
+ "serde_json",
+]
+
+[[package]]
+name = "sjel-summarize"
+version = "0.1.0"
+dependencies = [
+ "reqwest",
+ "serde_json",
+ "sjel-http",
+]
+
+[[package]]
 name = "skrifa"
 version = "0.42.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -4953,12 +4953,12 @@ dependencies = [
 name = "soundscape"
 version = "0.1.0"
 dependencies = [
- "axon-config",
- "axon-server",
  "axum",
  "route-manifest",
  "serde",
  "serde_json",
+ "sjel-config",
+ "sjel-server",
  "tokio",
  "tokio-stream",
  "tower-http",
@@ -5581,11 +5581,6 @@ dependencies = [
 name = "transit"
 version = "0.1.0"
 dependencies = [
- "axon-config",
- "axon-extraction",
- "axon-http",
- "axon-server",
- "axon-store",
  "axum",
  "html2text",
  "mailparse",
@@ -5596,6 +5591,11 @@ dependencies = [
  "rusqlite",
  "serde",
  "serde_json",
+ "sjel-config",
+ "sjel-extraction",
+ "sjel-http",
+ "sjel-server",
+ "sjel-store",
  "station-time",
  "thiserror 1.0.69",
  "tokio",
@@ -5607,9 +5607,6 @@ dependencies = [
 name = "traveler"
 version = "0.1.0"
 dependencies = [
- "axon-config",
- "axon-server",
- "axon-store",
  "axum",
  "civil-date",
  "reqwest",
@@ -5618,6 +5615,9 @@ dependencies = [
  "schemars",
  "serde",
  "serde_json",
+ "sjel-config",
+ "sjel-server",
+ "sjel-store",
  "tokio",
 ]
 
@@ -5625,11 +5625,6 @@ dependencies = [
 name = "trips"
 version = "0.1.0"
 dependencies = [
- "axon-config",
- "axon-http",
- "axon-pseudonymize",
- "axon-server",
- "axon-store",
  "axum",
  "civil-date",
  "markdown-root",
@@ -5639,6 +5634,11 @@ dependencies = [
  "schemars",
  "serde",
  "serde_json",
+ "sjel-config",
+ "sjel-http",
+ "sjel-pseudonymize",
+ "sjel-server",
+ "sjel-store",
  "station-time",
  "thiserror 1.0.69",
  "tokio",
@@ -5834,14 +5834,14 @@ dependencies = [
 name = "vault"
 version = "0.1.0"
 dependencies = [
- "axon-config",
- "axon-server",
  "axum",
  "content-item",
  "markdown-root",
  "route-manifest",
  "serde",
  "serde_json",
+ "sjel-config",
+ "sjel-server",
  "tokio",
  "tower 0.5.3",
  "tower-http",

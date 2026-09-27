@@ -6,7 +6,7 @@ use std::io::Read;
 
 use serde::{Deserialize, Serialize};
 
-use axon_inference::ResolvedRole;
+use sjel_inference::ResolvedRole;
 
 pub const RESULT_SCHEMA_VERSION: &str = "cloud-content-analysis-v1";
 pub const TASK_VERSION: &str = "content-analysis-v1";
@@ -172,8 +172,8 @@ fn chat(role: &ResolvedRole, mut body: serde_json::Value) -> Result<String, Stri
     if !role.is_cloud_endpoint() {
         return Err("the selected role is not an approved HTTPS cloud endpoint".into());
     }
-    let client = axon_http::client(
-        axon_http::Purpose::new("comms-cloud"),
+    let client = sjel_http::client(
+        sjel_http::Purpose::new("comms-cloud"),
         std::time::Duration::from_secs(120),
     )
     .map_err(|_| "cloud request could not be prepared".to_string())?;
@@ -378,7 +378,7 @@ mod tests {
         for (key, value) in more {
             object.insert(key.clone(), value.clone());
         }
-        let config: axon_inference::InferenceConfig = serde_json::from_value(serde_json::json!({
+        let config: sjel_inference::InferenceConfig = serde_json::from_value(serde_json::json!({
             "backends": { "hosted": { "api": "openai", "base_url": "https://example.invalid/v1" } },
             "roles": { "probe": declaration },
         }))

@@ -17,10 +17,10 @@ path = "src/server.rs"
 
 [dependencies]
 civil-date = { path = "../../libs/civil-date" }
-axon-config = { path = "../../libs/axon-config" }
-axon-http = { path = "../../libs/axon-http" }
-axon-server = { path = "../../libs/axon-server" }
-axon-store = { path = "../../libs/axon-store" }
+sjel-config = { path = "../../libs/sjel-config" }
+sjel-http = { path = "../../libs/sjel-http" }
+sjel-server = { path = "../../libs/sjel-server" }
+sjel-store = { path = "../../libs/sjel-store" }
 route-manifest = { path = "../../libs/route-manifest" }
 serde = { workspace = true, features = ["derive"] }
 serde_json.workspace = true

@@ -17,7 +17,7 @@ use serde::{Deserialize, Serialize};
 /// strengthens the case for the spine mechanism that comment defers
 /// (service-runner exporting declared siblings' ports).
 pub fn finance_base_url() -> String {
-    axon_config::env_var("SJEL_FINANCE_URL").unwrap_or_else(|_| "http://127.0.0.1:8090".to_string())
+    sjel_config::env_var("SJEL_FINANCE_URL").unwrap_or_else(|_| "http://127.0.0.1:8090".to_string())
 }
 
 /// Long enough for a loopback query, short enough that a stopped finance never
@@ -87,14 +87,14 @@ pub fn trip_spending(plan_id: &str) -> Result<TripSpending, Unreachable> {
 /// a test.
 pub fn trip_spending_at(base_url: &str, plan_id: &str) -> Result<TripSpending, Unreachable> {
     let url = format!("{}/api/trips/{}/spending", base_url, urlencode(plan_id));
-    let client = axon_http::client(axon_http::Purpose::new("trips-finance"), TIMEOUT)
+    let client = sjel_http::client(sjel_http::Purpose::new("trips-finance"), TIMEOUT)
         .map_err(|error| Unreachable::new(format!("finance client: {error}")))?;
     let mut request = client.get(&url);
     // The inbound gate is on every route except /health and /ready, so without
     // the token a gated finance reads as "not running" — the one wrong answer
     // this must not give. Resolved per request, so rotating the token file needs
     // no restart here (the axon-status precedent).
-    if let Some(bearer) = axon_server::InboundAuth::from_deployment().bearer_header() {
+    if let Some(bearer) = sjel_server::InboundAuth::from_deployment().bearer_header() {
         request = request.header(reqwest::header::AUTHORIZATION, bearer);
     }
     // `without_url` before the message is built: reqwest prints the full request

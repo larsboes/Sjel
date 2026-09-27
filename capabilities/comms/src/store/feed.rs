@@ -152,7 +152,7 @@ impl Store {
                          THEN excluded.data_classification_version
                          ELSE {items}.data_classification_version END",
                 prefix = self.prefix,
-                now = axon_store::NOW,
+                now = sjel_store::NOW,
                 items = format!("{}_feed_items", self.prefix)
             ),
             params![&item.id,
@@ -193,7 +193,7 @@ impl Store {
                      WHERE CASE excluded.tier WHEN 'human' THEN 30 WHEN 'model' THEN 20 WHEN 'deterministic' THEN 10 ELSE 0 END >=
                            CASE {prefix}_feed_raw_content.tier WHEN 'human' THEN 30 WHEN 'model' THEN 20 WHEN 'deterministic' THEN 10 ELSE 0 END",
                     prefix = self.prefix,
-                    now = axon_store::NOW,
+                    now = sjel_store::NOW,
                 ),
                 params![&item.id, raw, &provenance::EXTRACTION_REVISION],
             )?;
@@ -346,7 +346,7 @@ impl Store {
                     WHEN 'human' THEN 30 WHEN 'model' THEN 20
                     WHEN 'deterministic' THEN 10 ELSE 0 END",
                 self.prefix,
-                now = axon_store::NOW
+                now = sjel_store::NOW
             ),
             params![
                 &transcript,
@@ -394,7 +394,7 @@ impl Store {
             _ => "unkept",
         };
         let mut conn = self.conn()?;
-        let transaction = axon_store::write_transaction(&mut conn)?;
+        let transaction = sjel_store::write_transaction(&mut conn)?;
         // Read inside the transaction rather than keying the ledger off the
         // UPDATE's row count: an UPDATE that sets a column to the value it
         // already holds still reports one row affected, so a second press of
@@ -461,7 +461,7 @@ impl Store {
                     WHEN 'human' THEN 30 WHEN 'model' THEN 20
                     WHEN 'deterministic' THEN 10 ELSE 0 END",
                 self.prefix,
-                now = axon_store::NOW
+                now = sjel_store::NOW
             ),
             params![&summary, &id, &producer_revision],
         )?;
@@ -531,7 +531,7 @@ impl Store {
         flags: &[QualityFlag],
     ) -> Result<(), Box<dyn std::error::Error>> {
         let mut conn = self.conn()?;
-        let transaction = axon_store::write_transaction(&mut conn)?;
+        let transaction = sjel_store::write_transaction(&mut conn)?;
         transaction.execute(
             &format!(
                 "DELETE FROM {}_feed_quality_flags WHERE feed_id = ?1",
@@ -546,7 +546,7 @@ impl Store {
                         (feed_id, signal, reason, evidence, derived_at)
                      VALUES (?1, ?2, ?3, ?4, {now})",
                     prefix = self.prefix,
-                    now = axon_store::NOW
+                    now = sjel_store::NOW
                 ),
                 params![&feed_id, &flag.signal, &flag.reason, &flag.evidence],
             )?;
@@ -610,7 +610,7 @@ impl Store {
                 self.prefix,
                 // `interval '5 minutes' * power(2, n)` becomes a computed modifier:
                 // SQLite has no `power`, and `1 << n` is the same doubling.
-                backoff = axon_store::now_offset(
+                backoff = sjel_store::now_offset(
                     "'+' || (5 * (1 << CASE WHEN summary_attempt_revision IS NOT ?3 \
                                 THEN 0 ELSE summary_attempts END)) || ' minutes'"
                 )
@@ -805,7 +805,7 @@ impl Store {
                             AND (summary_next_attempt IS NULL OR summary_next_attempt <= {now})))
                  ORDER BY created_at DESC",
                 self.prefix,
-                now = axon_store::NOW
+                now = sjel_store::NOW
             ),
             params![&producer_revision],
             row_to_feed_full,
@@ -997,7 +997,7 @@ impl Store {
         matches: &[RelevanceMatch],
     ) -> Result<bool, Box<dyn std::error::Error>> {
         let mut conn = self.conn()?;
-        let transaction = axon_store::write_transaction(&mut conn)?;
+        let transaction = sjel_store::write_transaction(&mut conn)?;
         let incoming_tier = matches
             .first()
             .map(|matched| provenance::ranking_tier(&matched.mode))
@@ -1031,7 +1031,7 @@ impl Store {
                         (feed_id, profile_key, profile_label, score, rationale, mode, profile_revision, scored_at)
                      VALUES (?1,?2,?3,?4,?5,?6,?7,{now})",
                     prefix = self.prefix,
-                now = axon_store::NOW
+                now = sjel_store::NOW
             ),
                 params![
                     &feed_id,

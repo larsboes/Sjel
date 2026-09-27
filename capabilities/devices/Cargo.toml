@@ -12,9 +12,9 @@ name = "devices-server"
 path = "src/server.rs"
 
 [dependencies]
-axon-config = { path = "../../libs/axon-config" }
-axon-server = { path = "../../libs/axon-server" }
-axon-store = { path = "../../libs/axon-store" }
+sjel-config = { path = "../../libs/sjel-config" }
+sjel-server = { path = "../../libs/sjel-server" }
+sjel-store = { path = "../../libs/sjel-store" }
 route-manifest = { path = "../../libs/route-manifest" }
 axum.workspace = true
 getrandom.workspace = true

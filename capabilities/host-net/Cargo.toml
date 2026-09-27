@@ -17,8 +17,8 @@ path = "src/main.rs"
 
 [dependencies]
 # Overlay resolution only — <overlay>/config/host-net-policy.toml. Zero external
-# dependencies of its own (libs/axon-config/Cargo.toml), so this stays a three-crate build.
-axon-config = { path = "../../libs/axon-config" }
+# dependencies of its own (libs/sjel-config/Cargo.toml), so this stays a three-crate build.
+sjel-config = { path = "../../libs/sjel-config" }
 
 # --json, `tailscale status --json`, and the policy file. All three were already resolved in
 # the workspace lock before this crate existed (serde 1.0.229, serde_json 1.0.151, toml 0.8.23

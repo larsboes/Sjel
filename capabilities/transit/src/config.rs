@@ -23,8 +23,8 @@
 //! `--to` explicitly, erroring with a clear message rather than silently
 //! defaulting to someone else's stations.
 
-use axon_config::{database_path, expand_tilde};
 use serde::Deserialize;
+use sjel_config::{database_path, expand_tilde};
 use std::path::PathBuf;
 
 #[derive(Debug, Clone, Deserialize, Default)]
@@ -43,7 +43,7 @@ pub struct Config {
     pub default_to_eva: Option<String>,
     pub default_time: Option<String>,
     /// The one shared SQLite file `store::TransitStore` opens, under the table
-    /// prefix `transit` (PRD Q45). Resolved by `axon_config::database_path`:
+    /// prefix `transit` (PRD Q45). Resolved by `sjel_config::database_path`:
     /// `SJEL_DB_PATH`, else `<overlay>/data/axon/axon.db`. Not a per-capability
     /// setting any more -- a file per capability would drop the cross-capability
     /// joins the shared instance existed for, so a `database_url` in
@@ -70,7 +70,7 @@ pub struct Config {
 /// The readers a ticket file can go through.
 ///
 /// These names are also what `document::read` reports back as
-/// `axon_extraction::Extraction::producer`, so a reply and this setting cannot
+/// `sjel_extraction::Extraction::producer`, so a reply and this setting cannot
 /// disagree about which reader ran. Neither is registered in that crate's
 /// class registry: `for_class` answers "who reads a PDF", and this answers
 /// "which reader did the operator install", which is a different question.
@@ -111,10 +111,10 @@ impl DocumentBackend {
 }
 
 fn config_path() -> PathBuf {
-    if let Ok(p) = axon_config::env_var("SJEL_TRANSIT_CONFIG") {
+    if let Ok(p) = sjel_config::env_var("SJEL_TRANSIT_CONFIG") {
         return expand_tilde(&p);
     }
-    if let Ok(overlay) = axon_config::env_var("SJEL_PERSONAL_ROOT") {
+    if let Ok(overlay) = sjel_config::env_var("SJEL_PERSONAL_ROOT") {
         return expand_tilde(&overlay).join("config").join("transit.json");
     }
     PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("transit.config.json")
@@ -163,7 +163,7 @@ mod tests {
         /// Clears the setting under its Sjel name and its pre-rename Axon name, so a value
         /// the operator's shell still exports under the old name cannot stand in for it.
         fn take(key: &'static str) -> Self {
-            let names = std::iter::once(key.to_string()).chain(axon_config::env::legacy_name(key));
+            let names = std::iter::once(key.to_string()).chain(sjel_config::env::legacy_name(key));
             Self(
                 names
                     .map(|name| {
@@ -222,6 +222,6 @@ mod tests {
     fn the_store_path_comes_from_the_deployment_not_from_transit_json() {
         let _config = EnvGuard::take("SJEL_TRANSIT_CONFIG");
         let _overlay = EnvGuard::take("SJEL_PERSONAL_ROOT");
-        assert_eq!(Config::load().database_path, axon_config::database_path());
+        assert_eq!(Config::load().database_path, sjel_config::database_path());
     }
 }

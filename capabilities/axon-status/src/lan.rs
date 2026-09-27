@@ -2,15 +2,15 @@
 //!
 //! Opt-in with `SJEL_LAN_PORT` in `<overlay>/config/deployment.env`. The same router is served on
 //! a second port with TLS on every interface, behind the devices-only gate
-//! (`libs/axon-server/src/lan.rs`). The certificate fingerprint is advertised in the Bonjour TXT
+//! (`libs/sjel-server/src/lan.rs`). The certificate fingerprint is advertised in the Bonjour TXT
 //! record and served at `/api/axon-status/lan`, so the pairing screen can show it for the person
 //! to compare with what the phone found.
 
 use std::sync::{Arc, OnceLock};
 
-use axon_server::lan::{self, LanIdentity};
-use axon_server::DeviceVerifier;
 use serde::Serialize;
+use sjel_server::lan::{self, LanIdentity};
+use sjel_server::DeviceVerifier;
 
 #[derive(Clone, Serialize)]
 pub(crate) struct LanInfo {
@@ -32,7 +32,7 @@ pub(crate) fn start(router: axum::Router, verifier: Arc<dyn DeviceVerifier>) {
     let Some(port) = lan::deployment_port() else {
         return;
     };
-    let Some(dir) = axon_config::overlay_data_dir("lan") else {
+    let Some(dir) = sjel_config::overlay_data_dir("lan") else {
         eprintln!("[axon-status] SJEL_LAN_PORT is set but no overlay is; the LAN listener needs one for its key");
         return;
     };
@@ -51,7 +51,7 @@ pub(crate) fn start(router: axum::Router, verifier: Arc<dyn DeviceVerifier>) {
         service: lan::SERVICE_TYPE,
     });
     advertise(port, &host, &identity.fingerprint);
-    let auth = axon_server::InboundAuth::from_deployment().with_device_verifier(verifier);
+    let auth = sjel_server::InboundAuth::from_deployment().with_device_verifier(verifier);
     tokio::spawn(async move { lan::serve_lan("axon-status", port, router, auth, &identity).await });
 }
 

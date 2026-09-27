@@ -15,8 +15,8 @@
 //! only supplies defaults; `main.rs`/`server_main.rs` override individual
 //! fields from `--flag` values where a flag exists for that field.
 
-use axon_config::{database_path, expand_tilde, resolve_port};
 use serde::Deserialize;
+use sjel_config::{database_path, expand_tilde, resolve_port};
 use std::path::PathBuf;
 
 use crate::sources::SourceEntry;
@@ -103,7 +103,7 @@ pub struct Config {
     /// and zero-config single-source runs.
     pub events_dir: Option<PathBuf>,
     /// The one shared SQLite file this capability's tables live in, under the
-    /// prefix `scouting` (PRD Q45). Resolved by `axon_config::database_path`:
+    /// prefix `scouting` (PRD Q45). Resolved by `sjel_config::database_path`:
     /// `SJEL_DB_PATH`, else `<overlay>/data/axon/axon.db`. It is a deployment
     /// fact rather than a capability one, so a `database_url` left in
     /// `scouting.json` is ignored -- a file per capability would drop the
@@ -117,7 +117,7 @@ pub struct Config {
     pub port: u16,
     /// Base URL of `capabilities/calendar` for the Luma → calendar promotion
     /// (`calendar_promote`). Loopback by default and expected to stay that
-    /// way — calendar binds through `libs/axon-server`'s `serve_local`.
+    /// way — calendar binds through `libs/sjel-server`'s `serve_local`.
     pub calendar_base_url: String,
     /// The operator's home timezone, used to turn Luma's UTC instants into
     /// the naive local wall time calendar stores. Intentionally has **no
@@ -135,10 +135,10 @@ pub struct Config {
 }
 
 fn config_path() -> PathBuf {
-    if let Ok(p) = axon_config::env_var("SJEL_SCOUTING_CONFIG") {
+    if let Ok(p) = sjel_config::env_var("SJEL_SCOUTING_CONFIG") {
         return expand_tilde(&p);
     }
-    if let Ok(overlay) = axon_config::env_var("SJEL_PERSONAL_ROOT") {
+    if let Ok(overlay) = sjel_config::env_var("SJEL_PERSONAL_ROOT") {
         return expand_tilde(&overlay).join("config").join("scouting.json");
     }
     PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("scouting.config.json")
@@ -166,7 +166,7 @@ impl Config {
             .interest_profile_dir
             .map(|p| expand_tilde(&p))
             .unwrap_or_else(|| {
-                axon_config::overlay_data_dir("scouting")
+                sjel_config::overlay_data_dir("scouting")
                     .map(|d| d.join("interest-profile"))
                     .unwrap_or_else(|| PathBuf::from("data/interest-profile"))
             });
@@ -178,7 +178,7 @@ impl Config {
             .filter(|p| p.exists());
 
         let opp_embeddings_path = file.opp_embeddings_path.map(|p| expand_tilde(&p));
-        // Port contract lives in axon_config::resolve_port. The default is 8084,
+        // Port contract lives in sjel_config::resolve_port. The default is 8084,
         // not 8080: vaultwarden's manifest publishes 8080 on the host, and two
         // capabilities shipping the same default port is a collision waiting on
         // whoever starts both — which is exactly what happened the first time
@@ -198,10 +198,10 @@ impl Config {
                 .calendar_base_url
                 .unwrap_or_else(|| crate::calendar_promote::DEFAULT_CALENDAR_BASE_URL.to_string()),
             // Deployment declaration first, capability override second — one
-            // implementation in axon_config so scouting and calendar cannot drift.
+            // implementation in sjel_config so scouting and calendar cannot drift.
             // A conflict resolves to None deliberately: `--promote-calendar` then
             // refuses for its own reason rather than promoting at a guessed hour.
-            home_timezone: axon_config::resolve_home_timezone(
+            home_timezone: sjel_config::resolve_home_timezone(
                 file.home_timezone.as_deref(),
                 "scouting.json",
             )
@@ -313,7 +313,7 @@ mod tests {
             let saved = keys
                 .iter()
                 .flat_map(|key| {
-                    std::iter::once(key.to_string()).chain(axon_config::env::legacy_name(key))
+                    std::iter::once(key.to_string()).chain(sjel_config::env::legacy_name(key))
                 })
                 .map(|key| {
                     let previous = std::env::var(&key).ok();
@@ -352,6 +352,6 @@ mod tests {
     #[test]
     fn the_store_path_comes_from_the_deployment_not_from_scouting_json() {
         let _env = EnvGuard::take(&["SJEL_SCOUTING_CONFIG", "SJEL_PERSONAL_ROOT"]);
-        assert_eq!(Config::load().database_path, axon_config::database_path());
+        assert_eq!(Config::load().database_path, sjel_config::database_path());
     }
 }

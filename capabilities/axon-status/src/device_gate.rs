@@ -1,14 +1,14 @@
 //! The shell's device verifier: a paired device's signature admits a request (PRD Q119).
 //!
 //! The protocol and the registry belong to `capabilities/devices`; this file only adapts
-//! `DevicesStore::authenticate_scoped` to `axon_server::DeviceVerifier`. The nonce is consumed in
+//! `DevicesStore::authenticate_scoped` to `sjel_server::DeviceVerifier`. The nonce is consumed in
 //! the `shell` scope, so a request the shell admits to `/devices/api/devices/me` is not refused
 //! there as a replay.
 
-use axon_server::DeviceVerifier;
 use axum::http::HeaderMap;
 use devices::auth::SignedRequest;
 use devices::store::DevicesStore;
+use sjel_server::DeviceVerifier;
 
 const NONCE_SCOPE: &str = "shell";
 
@@ -20,7 +20,7 @@ impl RegistryVerifier {
     /// The registry in the deployment's shared database, or `None` when it cannot be opened.
     /// Without it the shell admits on the tailnet identity and the token only, as before.
     pub(crate) fn open() -> Option<Self> {
-        match DevicesStore::open(&axon_config::database_path()) {
+        match DevicesStore::open(&sjel_config::database_path()) {
             Ok(store) => Some(Self { store }),
             Err(error) => {
                 eprintln!(
@@ -90,7 +90,7 @@ mod tests {
     }
 
     /// The real registry and a real key: a paired device is admitted once, a replay and a
-    /// changed body are refused. The shell's signed path is `axon_server::device_signed_path`.
+    /// changed body are refused. The shell's signed path is `sjel_server::device_signed_path`.
     #[test]
     fn a_paired_device_is_admitted_once_on_its_signature() {
         let dir =
@@ -110,7 +110,7 @@ mod tests {
             )
             .unwrap();
         let verifier = RegistryVerifier { store };
-        let path = axon_server::device_signed_path("/interior/api/items?room=k");
+        let path = sjel_server::device_signed_path("/interior/api/items?room=k");
         let headers = signed_headers(&key, &device.id, &"0a".repeat(16), path, b"lamp");
 
         assert_eq!(

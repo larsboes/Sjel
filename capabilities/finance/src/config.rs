@@ -4,7 +4,7 @@
 //! supplies all of it, which is what keeps this capability publishable while the
 //! data it operates on is the most private in the system.
 //!
-//! The store path comes from `axon_config::database_path`: `$SJEL_DB_PATH`, else
+//! The store path comes from `sjel_config::database_path`: `$SJEL_DB_PATH`, else
 //! `$SJEL_PERSONAL_ROOT/data/axon/axon.db`. It is a deployment fact rather than a
 //! capability one (PRD Q45), so `$SJEL_FINANCE_DATABASE_URL` is gone -- a file per
 //! capability would drop the cross-capability joins places builds its spend layer
@@ -13,8 +13,8 @@
 use crate::import::CsvMapping;
 use crate::investment::{HoldingsCoverage, InvestmentCsvMapping};
 use crate::planning::PlanningConfig;
-use axon_config::{database_path, expand_tilde, resolve_port};
 use serde::{Deserialize, Serialize};
+use sjel_config::{database_path, expand_tilde, resolve_port};
 use std::path::PathBuf;
 
 /// Where subscription notes live. Journal and budget configuration are separate
@@ -238,7 +238,7 @@ fn default_subscriptions_dir() -> String {
 const DEFAULT_COMMS_BASE_URL: &str = "http://127.0.0.1:8083";
 
 fn file_config() -> Option<FinanceFileConfig> {
-    let overlay = axon_config::env_var("SJEL_PERSONAL_ROOT").ok()?;
+    let overlay = sjel_config::env_var("SJEL_PERSONAL_ROOT").ok()?;
     let path = expand_tilde(&overlay).join("config").join("finance.json");
     let body = std::fs::read_to_string(path).ok()?;
     serde_json::from_str(&body).ok()
@@ -248,11 +248,11 @@ impl Config {
     pub fn load() -> Self {
         let port = resolve_port(None, None, 8090);
         let personal = file_config();
-        let obsidian = match axon_config::env_var("SJEL_FINANCE_OBSIDIAN_ROOT") {
+        let obsidian = match sjel_config::env_var("SJEL_FINANCE_OBSIDIAN_ROOT") {
             Ok(root) => Some(ObsidianConfig {
                 root: expand_tilde(&root),
                 subscriptions_dir: PathBuf::from(
-                    axon_config::env_var("SJEL_FINANCE_OBSIDIAN_DIR")
+                    sjel_config::env_var("SJEL_FINANCE_OBSIDIAN_DIR")
                         .unwrap_or_else(|_| default_subscriptions_dir()),
                 ),
             }),
@@ -285,15 +285,15 @@ impl Config {
             .map(|config| config.instruments.clone())
             .unwrap_or_default();
         let targets = personal.as_ref().and_then(|config| config.targets.clone());
-        let decisions_root = axon_config::env_var("SJEL_FINANCE_DECISIONS_ROOT")
+        let decisions_root = sjel_config::env_var("SJEL_FINANCE_DECISIONS_ROOT")
             .ok()
             .map(|root| expand_tilde(&root))
             .or_else(|| {
-                axon_config::env_var("SJEL_PERSONAL_ROOT")
+                sjel_config::env_var("SJEL_PERSONAL_ROOT")
                     .ok()
                     .map(|root| expand_tilde(&root))
             });
-        let comms_base_url = axon_config::env_var("SJEL_COMMS_BASE_URL")
+        let comms_base_url = sjel_config::env_var("SJEL_COMMS_BASE_URL")
             .ok()
             .or_else(|| {
                 personal
@@ -301,7 +301,7 @@ impl Config {
                     .and_then(|config| config.comms_base_url.clone())
             })
             .unwrap_or_else(|| DEFAULT_COMMS_BASE_URL.to_string());
-        let journal = axon_config::env_var("SJEL_FINANCE_JOURNAL")
+        let journal = sjel_config::env_var("SJEL_FINANCE_JOURNAL")
             .ok()
             .map(|path| expand_tilde(&path))
             .or_else(|| {
@@ -310,7 +310,7 @@ impl Config {
                     .and_then(|config| config.journal.as_ref())
                     .map(|path| expand_tilde(path))
             });
-        let investment_snapshot = axon_config::env_var("SJEL_FINANCE_INVESTMENT_SNAPSHOT")
+        let investment_snapshot = sjel_config::env_var("SJEL_FINANCE_INVESTMENT_SNAPSHOT")
             .ok()
             .map(|path| expand_tilde(&path))
             .or_else(|| {
@@ -319,7 +319,7 @@ impl Config {
                     .and_then(|config| config.investment_snapshot.as_ref())
                     .map(|path| expand_tilde(path))
             });
-        let balance_snapshot = axon_config::env_var("SJEL_FINANCE_BALANCE_SNAPSHOT")
+        let balance_snapshot = sjel_config::env_var("SJEL_FINANCE_BALANCE_SNAPSHOT")
             .ok()
             .map(|path| expand_tilde(&path))
             .or_else(|| {

@@ -48,8 +48,8 @@ fn ingest_cmd(args: &[String]) -> Result<(), Box<dyn std::error::Error>> {
     let from = flag(args, "--from").unwrap_or_else(|| FIRST_FULL_COVERAGE_MONTH.to_string());
     let to = flag(args, "--to");
 
-    let client = axon_http::client(
-        axon_http::Purpose::new("punctuality-dataset"),
+    let client = sjel_http::client(
+        sjel_http::Purpose::new("punctuality-dataset"),
         std::time::Duration::from_secs(1800),
     )?;
     let months = dataset::select(dataset::list_months(&client)?, &from, to.as_deref())?;

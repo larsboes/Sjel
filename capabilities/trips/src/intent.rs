@@ -253,7 +253,7 @@ fn preview(raw: &str) -> String {
 
 /// The local model's chat-completions endpoint, `SJEL_INTENT_URL` first.
 fn model_url() -> String {
-    axon_config::env_var("SJEL_INTENT_URL")
+    sjel_config::env_var("SJEL_INTENT_URL")
         .unwrap_or_else(|_| "http://127.0.0.1:8091/v1/chat/completions".into())
 }
 
@@ -274,10 +274,10 @@ pub fn query_model_within(
     timeout: std::time::Duration,
 ) -> Result<IntentDraft, String> {
     let url = model_url();
-    let model = axon_config::env_var("SJEL_INTENT_MODEL")
+    let model = sjel_config::env_var("SJEL_INTENT_MODEL")
         .unwrap_or_else(|_| "apple-foundationmodel".into());
 
-    let client = axon_http::client(axon_http::Purpose::new("trips-intent"), timeout)
+    let client = sjel_http::client(sjel_http::Purpose::new("trips-intent"), timeout)
         .map_err(|e| format!("client build: {e}"))?;
 
     let response = client
@@ -308,7 +308,7 @@ pub fn query_model_within(
 
 /// Whether a word is a pseudonym token such as `<EMAIL_01>` or `<PERSON_02>`.
 ///
-/// `axon_pseudonymize` mints tokens as `<PREFIX_NN>`. Trimmed like a place name, a
+/// `sjel_pseudonymize` mints tokens as `<PREFIX_NN>`. Trimmed like a place name, a
 /// token becomes `EMAIL`, a capitalised word that the heuristic would take as a
 /// destination. So a token is never a destination.
 pub fn is_pseudonym_token(word: &str) -> bool {
@@ -531,8 +531,8 @@ pub fn heuristic_draft_on(sentence: &str, today: &str) -> IntentDraft {
 /// (PRD §6.2c).
 pub fn resolve_draft_pseudonymized(
     sentence: &str,
-    registry: &axon_pseudonymize::EntityRegistry,
-    session: &mut axon_pseudonymize::PseudonymizerSession,
+    registry: &sjel_pseudonymize::EntityRegistry,
+    session: &mut sjel_pseudonymize::PseudonymizerSession,
 ) -> Result<IntentDraft, String> {
     resolve_draft_pseudonymized_with(sentence, registry, session, query_model)
 }
@@ -541,8 +541,8 @@ pub fn resolve_draft_pseudonymized(
 /// not depend on a live model on 127.0.0.1:8091.
 pub fn resolve_draft_pseudonymized_with(
     sentence: &str,
-    registry: &axon_pseudonymize::EntityRegistry,
-    session: &mut axon_pseudonymize::PseudonymizerSession,
+    registry: &sjel_pseudonymize::EntityRegistry,
+    session: &mut sjel_pseudonymize::PseudonymizerSession,
     model: impl FnOnce(&str) -> Result<IntentDraft, String>,
 ) -> Result<IntentDraft, String> {
     let sentence = sentence.trim();
@@ -586,8 +586,8 @@ pub fn resolve_draft_or_heuristic_with(
     sentence: &str,
     model: impl FnOnce(&str) -> Result<IntentDraft, String>,
 ) -> Result<IntentDraft, String> {
-    let registry = axon_pseudonymize::Pseudonymizer::builder().build();
-    let mut session = axon_pseudonymize::PseudonymizerSession::new();
+    let registry = sjel_pseudonymize::Pseudonymizer::builder().build();
+    let mut session = sjel_pseudonymize::PseudonymizerSession::new();
     resolve_draft_pseudonymized_with(sentence, &registry, &mut session, model)
 }
 
@@ -762,8 +762,8 @@ mod tests {
 
     #[test]
     fn intent_pseudonymization_protects_entities_and_rehydrates_draft() {
-        let registry = axon_pseudonymize::Pseudonymizer::builder().build();
-        let mut session = axon_pseudonymize::PseudonymizerSession::new();
+        let registry = sjel_pseudonymize::Pseudonymizer::builder().build();
+        let mut session = sjel_pseudonymize::PseudonymizerSession::new();
         let sentence = "Trip to Berlin by train with traveler contact user@axon.local";
         let seen = std::cell::RefCell::new(String::new());
         let draft = resolve_draft_pseudonymized_with(sentence, &registry, &mut session, |text| {

@@ -46,7 +46,7 @@ cover the declared contracts.
 **Not a parser.** What a markdown file *means* — frontmatter, an event, an
 interest profile — belongs to the capability that declared the root.
 
-**Not tilde expansion.** `axon_config::expand_tilde` owns that; the caller
+**Not tilde expansion.** `sjel_config::expand_tilde` owns that; the caller
 applies it before declaring a root.
 
 ## Writing back: the marked region

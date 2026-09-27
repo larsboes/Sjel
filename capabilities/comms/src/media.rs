@@ -128,13 +128,13 @@ fn finish_extraction(item: &mut FeedItem, raw: Option<String>, source: Transcrip
 /// this runs behind an HTTP endpoint — the check belongs here, at the one door
 /// every caller goes through, not at each call site.
 fn check_scheme(url: &str) -> Result<()> {
-    axon_http::guard::check_scheme(url).map_err(|refusal| CommsError::Other(refusal.to_string()))
+    sjel_http::guard::check_scheme(url).map_err(|refusal| CommsError::Other(refusal.to_string()))
 }
 
 /// Refuse a URL that resolves to an address inside this machine or this network.
 ///
 /// The rule, its allowlist escape and the two residuals it does not close are
-/// `axon_http::guard::check_destination`. What is comms' own is why the door is
+/// `sjel_http::guard::check_destination`. What is comms' own is why the door is
 /// here at all: `POST /ingest` (`server/feed.rs`) takes the URL from the request
 /// body, and `server/source_handlers.rs` fetches URLs an external feed produced,
 /// so an ingested link would otherwise drive a loopback-bound Axon API from the
@@ -146,7 +146,7 @@ fn check_destination(url: &str) -> Result<()> {
     // only after the address check has already failed, so an ordinary fetch never
     // reads the config file. That laziness was the reason this was a free function
     // rather than a `Config` field, and passing the closure is what preserves it.
-    axon_http::guard::check_destination(url, config::ingest_allowed_origins)
+    sjel_http::guard::check_destination(url, config::ingest_allowed_origins)
         .map_err(|refusal| CommsError::Other(refusal.to_string()))
 }
 
@@ -374,7 +374,7 @@ mod tests {
     /// The window is wide enough that a probe text is `Rung::Light`, so an
     /// `over_window` verdict cannot be mistaken for a refusal, and the closed
     /// port means anything that does reach the model comes back `http_error`.
-    fn unreachable_light_role() -> axon_inference::InferenceConfig {
+    fn unreachable_light_role() -> sjel_inference::InferenceConfig {
         serde_json::from_value(serde_json::json!({
             "backends": {
                 "foundation-models": { "api": "openai", "base_url": "http://127.0.0.1:9/v1" },

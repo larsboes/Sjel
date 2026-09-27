@@ -31,7 +31,7 @@ The four tables live in the shared SQLite file — `SJEL_DB_PATH`, else
 `$SJEL_PERSONAL_ROOT/data/axon/axon.db` — under the table prefix `punctuality`, so they are
 `punctuality_stop_stats`, `punctuality_stations`, `punctuality_ingest_months` and
 `punctuality_ingest_runs`
-(libs/axon-store/README.md). PRD Q45 (2026-08-27) moved them there from a Postgres schema.
+(libs/sjel-store/README.md). PRD Q45 (2026-08-27) moved them there from a Postgres schema.
 
 ## Where the numbers come from
 

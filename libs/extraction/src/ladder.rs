@@ -22,7 +22,7 @@
 //! `ExtractionError` exists to make: "no rung here" is not "this rung read this
 //! document and failed".
 
-use axon_inference::ResolvedRole;
+use sjel_inference::ResolvedRole;
 
 use crate::vision::VisionOcr;
 use crate::{math, ocr_role, Document, Extraction, ExtractionError, Extractor, Result};

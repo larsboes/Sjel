@@ -66,7 +66,7 @@ pub fn get_checked(url: &str) -> Result<String, SourceError> {
     // 30s, the timeout src/sources/rss.rs already used for the same job. This
     // built a client with no timeout at all, so one unresponsive host held a
     // scouting run open indefinitely.
-    let client = axon_http::client(axon_http::Purpose::new("scouting-fetch"), TIMEOUT)
+    let client = sjel_http::client(sjel_http::Purpose::new("scouting-fetch"), TIMEOUT)
         .map_err(|e| SourceError::Fetch(format!("client build: {e}")))?;
     send_checked(url, client.get(url))
 }

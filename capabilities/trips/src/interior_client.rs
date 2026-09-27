@@ -17,7 +17,7 @@ use serde::Serialize;
 /// capability to hardcode a sibling's port, which is the same argument `finance_client`
 /// already records for the spine mechanism that would end it.
 pub fn interior_base_url() -> String {
-    axon_config::env_var("SJEL_INTERIOR_URL")
+    sjel_config::env_var("SJEL_INTERIOR_URL")
         .unwrap_or_else(|_| "http://127.0.0.1:8092".to_string())
 }
 
@@ -74,7 +74,7 @@ pub fn create_item<T: Serialize>(item: &T, state: &str, note: &str) -> Written {
         Err(reason) => return Written::Refused(reason),
     };
 
-    let client = match axon_http::client(axon_http::Purpose::new("trips-interior"), TIMEOUT) {
+    let client = match sjel_http::client(sjel_http::Purpose::new("trips-interior"), TIMEOUT) {
         Ok(client) => client,
         Err(error) => return Written::Unreachable(format!("interior client: {error}")),
     };
@@ -85,7 +85,7 @@ pub fn create_item<T: Serialize>(item: &T, state: &str, note: &str) -> Written {
     // interior reads as "not running", which would turn a refused write into a false
     // unreachable — the same rule `finance_client` states, resolved per request so a rotated
     // token needs no restart.
-    if let Some(bearer) = axon_server::InboundAuth::from_deployment().bearer_header() {
+    if let Some(bearer) = sjel_server::InboundAuth::from_deployment().bearer_header() {
         request = request.header(reqwest::header::AUTHORIZATION, bearer);
     }
     let response = match request.send() {

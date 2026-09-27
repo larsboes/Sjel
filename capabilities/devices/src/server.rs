@@ -229,15 +229,15 @@ fn router(state: Arc<AppState>) -> Router {
         .merge(signed)
         .layer(middleware::from_fn_with_state(
             "devices",
-            axon_server::origin::refuse_foreign_origins,
+            sjel_server::origin::refuse_foreign_origins,
         ))
         .with_state(state)
 }
 
 #[tokio::main]
 async fn main() {
-    let database_path = axon_config::database_path();
-    let port = axon_config::resolve_port(None, None, 8098);
+    let database_path = sjel_config::database_path();
+    let port = sjel_config::resolve_port(None, None, 8098);
     let store = match DevicesStore::open(&database_path) {
         Ok(store) => store,
         Err(error) => {
@@ -245,7 +245,7 @@ async fn main() {
             std::process::exit(1);
         }
     };
-    axon_server::serve_local("devices", port, router(Arc::new(AppState { store }))).await;
+    sjel_server::serve_local("devices", port, router(Arc::new(AppState { store }))).await;
 }
 
 #[cfg(test)]

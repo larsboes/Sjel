@@ -1,9 +1,9 @@
-# libs/axon-store
+# libs/sjel-store
 
 One home for **how a capability opens the shared database, and when its migration runs**.
 
 A shared library, not a capability: no domain of its own, no CLI
-(README.md#three-architectural-nouns). Consumers declare an `axon-store` path dependency in the
+(README.md#three-architectural-nouns). Consumers declare an `sjel-store` path dependency in the
 workspace.
 
 ## One file, table prefixes
@@ -19,7 +19,7 @@ prefix** in a single SQLite file:
 Cross-capability joins survive because it is still one database. That property is why the shared
 instance existed at all, and it is the one that could not be traded away.
 
-Where the file lives is not this crate's decision — `axon_config::database_path` owns that
+Where the file lives is not this crate's decision — `sjel_config::database_path` owns that
 (`SJEL_DB_PATH`, else `<overlay>/data/axon/axon.db`), because it is overlay knowledge. Nor is
 how it is kept: `capabilities/store` declares that, in the one manifest that owns the file
 (`kind = "data"`, `backup_sqlite_online`). A capability opens the database; it does not own it.
@@ -30,11 +30,11 @@ how it is kept: `capabilities/store` declares that, in the one manifest that own
 2026-08-27 21:23:35.871+00:00
 ```
 
-UTC, millisecond resolution, ISO-8601 with a space separator. `axon_store::NOW` is the SQL
+UTC, millisecond resolution, ISO-8601 with a space separator. `sjel_store::NOW` is the SQL
 expression that renders it; interpolate it where Postgres had `now()`:
 
 ```rust
-format!("UPDATE {p}_tasks SET updated_at = {now}", p = self.prefix, now = axon_store::NOW)
+format!("UPDATE {p}_tasks SET updated_at = {now}", p = self.prefix, now = sjel_store::NOW)
 ```
 
 Two properties decided the shape, and both are load-bearing.
@@ -56,7 +56,7 @@ custom function would exist only inside this process.
 for a purge date and `now() + interval '1 minute' * n` for a retry backoff.
 `datetime('now','+30 days')` is the obvious translation and the wrong one: it renders 19
 characters into a column holding 29, so one column would carry two widths and `ORDER BY` on it
-would stop being time order. `axon_store::now_offset` applies the same format to a shifted
+would stop being time order. `sjel_store::now_offset` applies the same format to a shifted
 clock, and takes a SQL *expression* because a backoff is computed from the row being written:
 
 ```rust
@@ -64,7 +64,7 @@ now_offset("'+30 days'")                                  // a literal deadline
 now_offset("'+' || MIN(attempts + 1, 5) || ' minutes'")   // a computed one
 ```
 
-`axon_store::STAMP_FORMAT` is the last of the three, for the one case neither covers: a stamp
+`sjel_store::STAMP_FORMAT` is the last of the three, for the one case neither covers: a stamp
 that is not derived from the clock. comms writes Gmail's `internalDate` with
 `strftime('{STAMP_FORMAT}', ?5, 'unixepoch')`, where Postgres had `to_timestamp($5)`.
 
@@ -132,7 +132,7 @@ The translation table, settled while porting tasks, transit and trips:
 |---|---|
 | `CREATE SCHEMA x; x.t` | `x_t` |
 | `$1`, `$2` | `?1`, `?2` |
-| `now()` | `{now}` from `axon_store::NOW` |
+| `now()` | `{now}` from `sjel_store::NOW` |
 | `to_char(now(), 'YYYY-MM-DD')` | `date('now')` |
 | `now() - interval '7 days'` | `datetime('now','-7 days')` |
 | `TIMESTAMPTZ` | `TEXT` |
@@ -141,7 +141,7 @@ The translation table, settled while porting tasks, transit and trips:
 | `col::TEXT` on a TEXT column | drop the cast |
 | `$1::text IS NULL OR c = $1` | `?1 IS NULL OR c = ?1` |
 | `LIMIT $2` with a NULL bound | `LIMIT COALESCE(?2, -1)` |
-| `now() + interval '30 days'` | `axon_store::now_offset("'+30 days'")` |
+| `now() + interval '30 days'` | `sjel_store::now_offset("'+30 days'")` |
 | `to_timestamp($5)` (epoch seconds) | `strftime('{STAMP_FORMAT}', ?5, 'unixepoch')` |
 | `col = ANY($3)` / `col <> ALL($3)` | `col IN (SELECT value FROM json_each(?3))`, list bound as JSON |
 | `LEAST(a, b)` / `GREATEST(a, b)` | `MIN(a, b)` / `MAX(a, b)` (two-argument scalar form) |
@@ -194,7 +194,7 @@ string is a prefix of the longer: `'…12:00:00'` sorts before `'…12:00:00.000
 The vocabulary is rusqlite's, with one addition. `query_row` is the one-row read;
 `query_row(…).optional()` (via `rusqlite::OptionalExtension`) is the might-not-exist read. Only
 the many-row read has no one-call form in rusqlite — prepare, `query_map`, collect — so
-`axon_store::QueryAll::query_all` is that one method, and there are no others. Inventing a second
+`sjel_store::QueryAll::query_all` is that one method, and there are no others. Inventing a second
 name for something rusqlite already has would be the expensive mistake.
 
 `query_all` prepares through the connection's statement cache (`prepare_cached`), keyed on the SQL
@@ -205,7 +205,7 @@ cached statement is never shared. Its capacity is raised from rusqlite's default
 because comms alone has 18 `query_all` sites and would otherwise evict its own statements.
 
 ```rust
-use axon_store::QueryAll;
+use sjel_store::QueryAll;
 use rusqlite::OptionalExtension;
 
 let task  = conn.query_row(&sql, [&id], row_to_task).optional()?;   // 0 or 1
@@ -214,7 +214,7 @@ conn.execute(&sql, params![&id, &title])?;                          // write
 conn.execute_batch(&ddl)?;                                          // migration
 ```
 
-`axon_store::json_column(row, index)` is the second addition, and the last. SQLite has no JSON
+`sjel_store::json_column(row, index)` is the second addition, and the last. SQLite has no JSON
 type, so everything Postgres held as `jsonb` (`places.geocode_cache.response`) or `integer[]`
 (`punctuality.stop_stats.counts`) is TEXT here, beside the TEXT columns capabilities were already
 serializing by hand. It fails as a column conversion naming the index, where a bare `from_str` at

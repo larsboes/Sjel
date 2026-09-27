@@ -901,7 +901,7 @@ async fn people_presence(
 
 /// Which routes the origin guard covers, and the rule that decides it.
 ///
-/// The predicate and its doc block live in `libs/axon-server/src/origin.rs`
+/// The predicate and its doc block live in `libs/sjel-server/src/origin.rs`
 /// now, because `trips` needs the same refusal for the plan-search body and a
 /// second copy of a security predicate is drift. What stays here is the wiring
 /// and the reason it is wired this way.
@@ -937,7 +937,7 @@ fn build_router(state: AppState) -> Router {
         // ADD NEW ROUTES ABOVE THIS LINE. Below it they lose the C2 guard.
         .layer(middleware::from_fn_with_state(
             CAPABILITY,
-            axon_server::origin::refuse_foreign_origins,
+            sjel_server::origin::refuse_foreign_origins,
         ))
         .with_state(state)
 }
@@ -947,7 +947,7 @@ pub async fn serve() {
     let state = AppState {
         database_path: Arc::new(config.database_path),
     };
-    axon_server::serve_local("places-server", config.port, build_router(state)).await;
+    sjel_server::serve_local("places-server", config.port, build_router(state)).await;
 }
 
 #[cfg(test)]
@@ -1158,12 +1158,12 @@ mod tests {
     }
 
     /// The router-level proof the two predicate tests (now in
-    /// `libs/axon-server/src/origin.rs`) could not give: a foreign `Origin`
+    /// `libs/sjel-server/src/origin.rs`) could not give: a foreign `Origin`
     /// gets 403 from the WIRED router, so a route registered below the
     /// `.layer()` call fails here rather than shipping unguarded.
     ///
     /// Driven over a real loopback listener rather than through
-    /// `tower::ServiceExt`, which is the pattern `libs/axon-server`'s own
+    /// `tower::ServiceExt`, which is the pattern `libs/sjel-server`'s own
     /// `http_tests` already use and which needs no new dependency.
     #[tokio::test]
     async fn a_foreign_origin_cannot_read_people_presence() {

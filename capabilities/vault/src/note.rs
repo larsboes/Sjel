@@ -152,11 +152,11 @@ fn load_scoped(root: &MarkdownRoot, prefix: &str) -> Result<(Vec<Note>, Vec<Stri
 /// this tool needs, and a dependency to read one key is a dependency to audit.
 pub fn resolve_root(explicit: Option<String>) -> Result<MarkdownRoot, String> {
     if let Some(p) = explicit {
-        return MarkdownRoot::declare(axon_config::expand_tilde(&p))
+        return MarkdownRoot::declare(sjel_config::expand_tilde(&p))
             .map_err(|e| format!("--root: {e}"));
     }
 
-    let cfg = axon_config::overlay_config("knowledge.toml").ok_or_else(|| {
+    let cfg = sjel_config::overlay_config("knowledge.toml").ok_or_else(|| {
         "no vault root: pass --root, or declare vault_root in the overlay's config/knowledge.toml"
             .to_string()
     })?;
@@ -170,5 +170,5 @@ pub fn resolve_root(explicit: Option<String>) -> Result<MarkdownRoot, String> {
         .map(|(_, v)| v.trim().trim_matches('"').to_string())
         .ok_or_else(|| format!("{} declares no vault_root", cfg.to_string_lossy()))?;
 
-    MarkdownRoot::declare(axon_config::expand_tilde(&value)).map_err(|e| format!("vault_root: {e}"))
+    MarkdownRoot::declare(sjel_config::expand_tilde(&value)).map_err(|e| format!("vault_root: {e}"))
 }

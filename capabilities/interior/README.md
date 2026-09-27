@@ -27,7 +27,7 @@ die Drift, gegen die das hier existiert.
 ## Diese Capability kennt keine Wohnung
 
 Jede Zahl kommt zur Laufzeit aus dem privaten Overlay, aufgelöst über
-`axon_config::overlay_data_dir("interior")`. Ohne `SJEL_PERSONAL_ROOT` bricht sie ab statt zu
+`sjel_config::overlay_data_dir("interior")`. Ohne `SJEL_PERSONAL_ROOT` bricht sie ab statt zu
 raten: eine Planung gegen erfundene Maße wäre schlimmer als gar keine.
 
 Fotos und RoomPlan-Aufnahmen sind ebenfalls privat, aber keine Maschinenmodell-Daten. Ihr

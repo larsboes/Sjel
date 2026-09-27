@@ -131,7 +131,7 @@ pub fn disk_state(free_bytes: u64, warn_gb: f64, critical_gb: f64) -> &'static s
 /// `~backup/data` is a directory named `~backup`, and expanding it would silently point
 /// the scan somewhere else.
 ///
-/// `axon_config::expand_tilde` covers the `~/` half but reads `HOME` from the process,
+/// `sjel_config::expand_tilde` covers the `~/` half but reads `HOME` from the process,
 /// which the tests here have to vary, and it does not accept a bare `~`.
 pub fn expand_home(p: &str, home: &str) -> String {
     if p == "~" {

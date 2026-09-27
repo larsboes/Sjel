@@ -73,7 +73,7 @@ async fn main() {
 
     // SJEL_PORT first (the runner exports it from the manifest + machine override);
     // SJEL_STATUS_PORT stays as the manual escape hatch for running outside the runner.
-    let port = axon_server::resolve_port(Some("SJEL_STATUS_PORT"), None, 8082);
+    let port = sjel_server::resolve_port(Some("SJEL_STATUS_PORT"), None, 8082);
 
     // The other half of on-demand. This process is already the only thing allowed to
     // start a capability, so it is also the only sensible place to stop one — anything
@@ -91,7 +91,7 @@ async fn main() {
         );
         Vec::new()
     });
-    let ui_dir = axon_config::env_var("SJEL_DASHBOARD_DIST")
+    let ui_dir = sjel_config::env_var("SJEL_DASHBOARD_DIST")
         .unwrap_or_else(|_| "dashboard/dist".to_string());
     // Said at startup rather than discovered as a blank page. The bundle is a build artifact
     // (`dashboard/service.toml` `build`), so a fresh checkout has none until it is built, and a
@@ -108,24 +108,24 @@ async fn main() {
     );
 
     // This process can start and stop the machine's capabilities, so it answers to
-    // this machine only (axon_server binds loopback).
+    // this machine only (sjel_server binds loopback).
     // A paired device is admitted on its key as well as the operator's tailnet identity
     // (PRD Q119); the bind stays loopback.
     let verifier = device_gate::RegistryVerifier::open().map(std::sync::Arc::new);
     let auth = match &verifier {
         Some(verifier) => {
-            axon_server::InboundAuth::from_deployment().with_device_verifier(verifier.clone())
+            sjel_server::InboundAuth::from_deployment().with_device_verifier(verifier.clone())
         }
-        None => axon_server::InboundAuth::from_deployment(),
+        None => sjel_server::InboundAuth::from_deployment(),
     };
     // The same router on the local network, for paired devices only, when the deployment
     // enabled it. Without the registry there is nothing to admit, so it does not start.
     if let Some(verifier) = verifier {
         lan::start(build_router(shell.clone()), verifier);
     }
-    axon_server::serve(
+    sjel_server::serve(
         "axon-status",
-        axon_server::Reach::Loopback,
+        sjel_server::Reach::Loopback,
         port,
         build_router(shell),
         auth,
@@ -144,7 +144,7 @@ async fn lan_handler() -> Json<Value> {
 
 /// This capability's name, for the origin guard's env var
 /// (`SJEL_AXON_STATUS_ALLOWED_ORIGIN_HOSTS` -- the doubling is what the derivation
-/// produces, and `libs/axon-server/src/origin.rs` asserts exactly this string).
+/// produces, and `libs/sjel-server/src/origin.rs` asserts exactly this string).
 const CAPABILITY: &str = "axon-status";
 
 /// The wired router, so a test can drive the real thing rather than a handler.
@@ -166,7 +166,7 @@ const CAPABILITY: &str = "axon-status";
 ///
 /// So the guard refuses the request. It is the same one places, trips and the six
 /// capabilities of the B48 fan-out carry, which is the point: "who may talk to
-/// this capability from a browser" is one predicate in `libs/axon-server`, not a
+/// this capability from a browser" is one predicate in `libs/sjel-server`, not a
 /// per-capability opinion.
 ///
 /// ## Where the layer sits
@@ -211,7 +211,7 @@ fn build_router(shell: proxy::Proxy) -> Router {
         // ADD NEW ROUTES ABOVE THIS LINE. Below it they lose the origin guard.
         .layer(axum::middleware::from_fn_with_state(
             CAPABILITY,
-            axon_server::origin::refuse_foreign_origins,
+            sjel_server::origin::refuse_foreign_origins,
         ))
         .with_state(shell);
 
@@ -619,7 +619,7 @@ mod route_manifest_tests {
 
 /// The router-level proof that no predicate test can give: the guard has to be
 /// wired below the routes AND below the fallback, and a `Router` that forgot
-/// either still passes every test in `libs/axon-server/src/origin.rs`.
+/// either still passes every test in `libs/sjel-server/src/origin.rs`.
 ///
 /// The capability name in every POST here is deliberately one this machine does
 /// not have. `lifecycle` looks the name up in the registry and answers 404

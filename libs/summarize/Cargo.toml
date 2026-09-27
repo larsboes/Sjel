@@ -1,5 +1,5 @@
 [package]
-name = "axon-summarize"
+name = "sjel-summarize"
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true
@@ -8,13 +8,13 @@ description = "One adaptive digest engine: the shape follows the source's length
 publish = false
 
 [lib]
-name = "axon_summarize"
+name = "sjel_summarize"
 path = "src/lib.rs"
 
 # This crate owns its HTTP and JSON dependencies directly.
 [dependencies]
 # Outbound HTTP goes through one factory: the user-agent, the timeout and the
-# connection pool are decided there, not at each call site (libs/axon-http).
-axon-http = { path = "../axon-http" }
+# connection pool are decided there, not at each call site (libs/sjel-http).
+sjel-http = { path = "../sjel-http" }
 serde_json.workspace = true
 reqwest = { workspace = true, features = ["json", "blocking"] }

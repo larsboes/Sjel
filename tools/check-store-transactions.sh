@@ -9,7 +9,7 @@
 # is a 400 the operator sees: `POST /feed/<id>/status → {"error":"database is
 # locked"}`, which is what failed the Pages build on 2026-09-07.
 #
-# libs/axon-store/src/lib.rs has taken the lock up front in `migrate_once`
+# libs/sjel-store/src/lib.rs has taken the lock up front in `migrate_once`
 # since it was written, and states the reason above it. The reasoning was never
 # migration-specific; `write_transaction` carries it to every writer, and this
 # gate is what stops the deferred form coming back by omission — which is how
@@ -17,14 +17,14 @@
 # file.
 #
 # WHAT IS ALLOWED, and why the exemption is a path and not a comment marker:
-# libs/axon-store owns both spellings — it defines `write_transaction` and it
+# libs/sjel-store owns both spellings — it defines `write_transaction` and it
 # calls `transaction_with_behavior` inside it and inside `migrate_once`. An
 # opt-out comment would let any call site declare itself exempt, which is the
 # property this gate exists to remove.
 #
 # A read-only transaction legitimately wants the deferred form. None exists in
 # the workspace today. When one does, it belongs behind a named helper in
-# libs/axon-store beside this one, so the choice is made once and reviewed once,
+# libs/sjel-store beside this one, so the choice is made once and reviewed once,
 # rather than by a call site that looks identical to a writer.
 #
 # Pure file-based check, same contract as the sibling gates: no git, no network,
@@ -35,7 +35,7 @@ set -e
 
 # A nested checkout is not part of the tree being checked. `.claude/worktrees/`
 # holds full copies of this repository while a fleet of agents is working in it,
-# and each copy carries its own `libs/axon-store/src/lib.rs`. CI never sees them
+# and each copy carries its own `libs/sjel-store/src/lib.rs`. CI never sees them
 # — it checks out clean — so this gate passed there and failed here, which is the
 # wrong way round for a gate whose whole value is being fast enough to run
 # locally. Found on 2026-09-08 by running it against a tree with 15 live
@@ -43,7 +43,7 @@ set -e
 PRUNE='-name .claude -o -name node_modules -o -name target -o -name .git'
 
 # The owner of the primitive. Everything else is a caller.
-OWNER="libs/axon-store/"
+OWNER="libs/sjel-store/"
 
 fail=0
 scanned=0
@@ -68,7 +68,7 @@ while IFS= read -r f; do
   # `.transaction()` with no argument. `transaction_with_behavior(...)` does not
   # match, because the `(` here must be immediately followed by `)`.
   if grep -qE '\.transaction\(\)' "$f"; then
-    echo "FAIL [$rel]: begins a deferred transaction — use axon_store::write_transaction:" >&2
+    echo "FAIL [$rel]: begins a deferred transaction — use sjel_store::write_transaction:" >&2
     grep -nE '\.transaction\(\)' "$f" | head -5 >&2
     hits=$((hits + 1))
     fail=1

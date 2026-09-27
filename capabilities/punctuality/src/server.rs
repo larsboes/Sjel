@@ -284,8 +284,8 @@ async fn main() {
     };
 
     // SJEL_PORT is what service-runner.sh exports from the manifest, so the port lives
-    // in one file rather than two -- resolution itself lives in axon_server.
-    let port = axon_server::resolve_port(None, None, 8085);
+    // in one file rather than two -- resolution itself lives in sjel_server.
+    let port = sjel_server::resolve_port(None, None, 8085);
 
     let app = Router::new()
         .route("/routes", get(routes))
@@ -297,9 +297,9 @@ async fn main() {
 
     // 127.0.0.1: this reads a database of public data, but it is still a local service
     // with no auth, and binding it to the LAN would be a decision nobody made. That
-    // rationale is now axon_server::serve_local's policy (this crate's bind-failure
+    // rationale is now sjel_server::serve_local's policy (this crate's bind-failure
     // behavior became the shared default there, too).
-    axon_server::serve_local("punctuality-server", port, app).await;
+    sjel_server::serve_local("punctuality-server", port, app).await;
 }
 
 #[cfg(test)]

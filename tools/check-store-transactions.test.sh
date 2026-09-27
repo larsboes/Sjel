@@ -68,7 +68,7 @@ mkdir -p "$root/capabilities/comms/src"
 cat > "$root/capabilities/comms/src/store.rs" <<'RS'
 fn set_status(&self) -> Result<(), Box<dyn Error>> {
     let mut conn = self.conn()?;
-    let transaction = axon_store::write_transaction(&mut conn)?;
+    let transaction = sjel_store::write_transaction(&mut conn)?;
     transaction.commit()?;
     Ok(())
 }
@@ -92,33 +92,33 @@ expect_pass "transaction_with_behavior is not the deferred form" "$root"
 # files, which the empty-sweep guard below refuses on purpose — the two cases
 # would otherwise plant the same shape and expect opposite answers.
 root=$(tree owner-exempt)
-mkdir -p "$root/libs/axon-store/src" "$root/capabilities/x/src"
-cat > "$root/libs/axon-store/src/lib.rs" <<'RS'
+mkdir -p "$root/libs/sjel-store/src" "$root/capabilities/x/src"
+cat > "$root/libs/sjel-store/src/lib.rs" <<'RS'
 // The library that owns the primitive may spell it either way.
 let t = conn.transaction()?;
 RS
 echo "fn ok() {}" > "$root/capabilities/x/src/lib.rs"
-expect_pass "libs/axon-store owns both spellings" "$root"
+expect_pass "libs/sjel-store owns both spellings" "$root"
 
 root=$(tree lookalike-not-exempt)
-mkdir -p "$root/libs/axon-store-extras/src"
-cat > "$root/libs/axon-store-extras/src/lib.rs" <<'RS'
+mkdir -p "$root/libs/sjel-store-extras/src"
+cat > "$root/libs/sjel-store-extras/src/lib.rs" <<'RS'
 let t = conn.transaction()?;
 RS
 expect_fail_with "a path that merely starts like the owner is not exempt" "$root" \
-  "libs/axon-store-extras/src/lib.rs"
+  "libs/sjel-store-extras/src/lib.rs"
 
 # --- a nested checkout is not part of this tree ----------------------------
 #
 # The failure this guards was live on 2026-09-08: a fleet of agents left full
 # copies of the repository under .claude/worktrees/, each carrying its own
-# libs/axon-store/src/lib.rs, and the gate reported eight failures against files
+# libs/sjel-store/src/lib.rs, and the gate reported eight failures against files
 # that were not the tree it was asked about. CI never saw it, because CI checks
 # out clean.
 
 root=$(tree nested-checkout-pruned)
-mkdir -p "$root/.claude/worktrees/wf-1/libs/axon-store/src" "$root/capabilities/x/src"
-echo "let t = conn.transaction()?;" > "$root/.claude/worktrees/wf-1/libs/axon-store/src/lib.rs"
+mkdir -p "$root/.claude/worktrees/wf-1/libs/sjel-store/src" "$root/capabilities/x/src"
+echo "let t = conn.transaction()?;" > "$root/.claude/worktrees/wf-1/libs/sjel-store/src/lib.rs"
 mkdir -p "$root/.claude/worktrees/wf-1/capabilities/y/src"
 echo "let t = conn.transaction()?;" > "$root/.claude/worktrees/wf-1/capabilities/y/src/lib.rs"
 echo "fn ok() {}" > "$root/capabilities/x/src/lib.rs"
@@ -144,8 +144,8 @@ expect_fail_with "an empty sweep is a broken gate, not a clean tree" "$root" \
 # A tree whose only Rust file is inside the owner also scans nothing, and must
 # fail for the same reason rather than passing on the owner's exemption.
 root=$(tree only-owner-rust)
-mkdir -p "$root/libs/axon-store/src"
-echo "let t = conn.transaction()?;" > "$root/libs/axon-store/src/lib.rs"
+mkdir -p "$root/libs/sjel-store/src"
+echo "let t = conn.transaction()?;" > "$root/libs/sjel-store/src/lib.rs"
 expect_fail_with "a sweep that skips everything it found is still empty" "$root" \
   "no *.rs files scanned"
 

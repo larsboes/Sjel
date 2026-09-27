@@ -123,8 +123,8 @@ fn empty(from_cache: bool) -> LoadedTravelContext {
 
 fn fetch(config: &TravelContextConfig) -> Result<Vec<TravelContext>, Box<dyn std::error::Error>> {
     let url = format!("{}/api/plans", config.base_url.trim_end_matches('/'));
-    let plans = axon_http::client(
-        axon_http::Purpose::new("comms-travel"),
+    let plans = sjel_http::client(
+        sjel_http::Purpose::new("comms-travel"),
         Duration::from_millis(config.timeout_ms.clamp(250, 10_000)),
     )?
     .get(url)

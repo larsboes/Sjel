@@ -2360,7 +2360,7 @@ fn read_feed_items(base_url: &str) -> Vec<finance::decision::FeedEvidence> {
         return Vec::new();
     };
     let mut request = client.get(format!("{}/feed", base_url.trim_end_matches('/')));
-    if let Some(header) = axon_server::InboundAuth::from_deployment().bearer_header() {
+    if let Some(header) = sjel_server::InboundAuth::from_deployment().bearer_header() {
         request = request.header("Authorization", header);
     }
     let Ok(body) = request.send().and_then(reqwest::blocking::Response::text) else {
@@ -2459,7 +2459,7 @@ async fn trip_spending(State(state): State<AppState>, Path(id): Path<String>) ->
 async fn main() {
     let config = Config::load();
     let port = config.port;
-    axon_server::serve_local("finance-server", port, build_router(state_from(config))).await;
+    sjel_server::serve_local("finance-server", port, build_router(state_from(config))).await;
 }
 
 /// This capability's name, for the origin guard's env var
@@ -2559,7 +2559,7 @@ fn build_router(state: AppState) -> Router {
         // ADD NEW ROUTES ABOVE THIS LINE. Below it they lose the origin guard.
         .layer(axum::middleware::from_fn_with_state(
             CAPABILITY,
-            axon_server::origin::refuse_foreign_origins,
+            sjel_server::origin::refuse_foreign_origins,
         ))
         .layer(CorsLayer::permissive())
         .with_state(state)
@@ -3013,7 +3013,7 @@ mod tests {
     }
 }
 
-/// The router-level proof that `libs/axon-server`'s predicate tests cannot give:
+/// The router-level proof that `libs/sjel-server`'s predicate tests cannot give:
 /// a route registered BELOW the `.layer()` call passes every test of
 /// `origin_allowed_by` and still answers a hostile page.
 ///

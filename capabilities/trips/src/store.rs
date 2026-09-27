@@ -2,10 +2,10 @@ use std::path::Path;
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::time::{SystemTime, UNIX_EPOCH};
 
-use axon_store::QueryAll;
 use rusqlite::{params, Connection, OptionalExtension, Row};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
+use sjel_store::QueryAll;
 
 static NEXT_ID: AtomicU64 = AtomicU64::new(0);
 
@@ -293,7 +293,7 @@ pub struct PlanDetails {
 pub struct TripsStore {
     /// Shared with every other store in this process on the same file, so
     /// opening one is a checkout rather than an open.
-    pool: axon_store::Pool,
+    pool: sjel_store::Pool,
     /// Prefixes this capability's tables in the one shared file (PRD Q45):
     /// `trips` here means `trips_plans` and `trips_plan_items`.
     prefix: String,
@@ -393,8 +393,8 @@ impl TripsStore {
     ) -> Result<Self, Box<dyn std::error::Error>> {
         validate_prefix(prefix)?;
         // A pool checkout, and the migration runs once per process per (file,
-        // prefix) rather than once per open -- libs/axon-store/README.md has why.
-        let pool = axon_store::open_pool(database_path, prefix, |conn| {
+        // prefix) rather than once per open -- libs/sjel-store/README.md has why.
+        let pool = sjel_store::open_pool(database_path, prefix, |conn| {
             Self::run_migration(conn, prefix)
         })?;
         Ok(Self {
@@ -408,7 +408,7 @@ impl TripsStore {
     /// A `Result` where this used to be `self.conn.lock().unwrap()`: that unwrap
     /// could only fail on a poisoned mutex, whereas a checkout can genuinely fail
     /// when the file is unreachable or every connection is busy.
-    fn conn(&self) -> Result<axon_store::PooledClient, Box<dyn std::error::Error>> {
+    fn conn(&self) -> Result<sjel_store::PooledClient, Box<dyn std::error::Error>> {
         Ok(self.pool.get()?)
     }
 
@@ -429,7 +429,7 @@ impl TripsStore {
     /// empty, so the columns those ALTERs added are declared here and the
     /// widened `item_type` list is the one the `CREATE TABLE` carries. Folding
     /// is only correct because no deployed SQLite file predates it — see
-    /// libs/axon-store/README.md, "Writing a capability's DDL".
+    /// libs/sjel-store/README.md, "Writing a capability's DDL".
     fn run_migration(conn: &Connection, prefix: &str) -> Result<(), Box<dyn std::error::Error>> {
         conn.execute_batch(&format!(
             "
@@ -510,7 +510,7 @@ impl TripsStore {
 
     /// Widen the retrospective vocabulary on a file that predates it.
     ///
-    /// `libs/axon-store/README.md` states that folding a widened `CHECK` into
+    /// `libs/sjel-store/README.md` states that folding a widened `CHECK` into
     /// the `CREATE TABLE` is the translation, "and it is only correct because no
     /// deployed SQLite file predates it". That held for every widening until
     /// this one: `not_taken` was added on 2026-09-23 to a table machines had
@@ -577,7 +577,7 @@ impl TripsStore {
     /// capability, and the queries belong beside the shape that reads them.
     pub fn borrow_connection(
         &self,
-    ) -> Result<axon_store::PooledClient, Box<dyn std::error::Error>> {
+    ) -> Result<sjel_store::PooledClient, Box<dyn std::error::Error>> {
         self.conn()
     }
 
@@ -1524,15 +1524,15 @@ fn row_to_plan(row: &Row) -> rusqlite::Result<TripPlan> {
     Ok(TripPlan {
         id: row.get(0)?,
         title: row.get(1)?,
-        origin: axon_store::json_column(row, 2)?,
-        destinations: axon_store::json_column(row, 3)?,
+        origin: sjel_store::json_column(row, 2)?,
+        destinations: sjel_store::json_column(row, 3)?,
         date_start: row.get(4)?,
         date_end: row.get(5)?,
         interests: row.get(6)?,
         status: row.get(7)?,
-        travelers: axon_store::json_column(row, 8)?,
-        transport_modes: axon_store::json_column(row, 9)?,
-        stages: axon_store::json_column(row, 10)?,
+        travelers: sjel_store::json_column(row, 8)?,
+        transport_modes: sjel_store::json_column(row, 9)?,
+        stages: sjel_store::json_column(row, 10)?,
         cover_image_url: row.get(11)?,
         source: source_kind
             .zip(source_ref)
@@ -1552,7 +1552,7 @@ fn row_to_item(row: &Row) -> rusqlite::Result<PlanItem> {
         day: row.get(3)?,
         external_id: row.get(4)?,
         title: row.get(5)?,
-        payload: axon_store::json_column(row, 6)?,
+        payload: sjel_store::json_column(row, 6)?,
         created_at: row.get(7)?,
     })
 }
@@ -1564,7 +1564,7 @@ mod tests {
 
     /// A file whose retrospective table predates `not_taken`.
     ///
-    /// The narrowing this guards is not hypothetical: `libs/axon-store/README.md`
+    /// The narrowing this guards is not hypothetical: `libs/sjel-store/README.md`
     /// states that folding a widened `CHECK` into the `CREATE TABLE` is correct
     /// "only because no deployed SQLite file predates it", and every machine
     /// running trips has a file that does. SQLite cannot alter a constraint, so

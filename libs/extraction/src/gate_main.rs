@@ -1,7 +1,7 @@
 //! Runs one OCR engine over the frozen DE/EN corpus and prints the scorecard.
 //!
 //! ```sh
-//! cargo run -p axon-extraction --bin extraction-gate -- libs/extraction/eval/ocr-corpus.json
+//! cargo run -p sjel-extraction --bin extraction-gate -- libs/extraction/eval/ocr-corpus.json
 //! ```
 //!
 //! From the repository root, which is where `cargo run -p` is typed: `cargo run`
@@ -10,7 +10,7 @@
 //! for the same reason.
 //!
 //! By hand, never from `cargo test`. Scoring is hermetic and lives in
-//! [`axon_extraction::gate`]; this binary is the half that needs an engine, a
+//! [`sjel_extraction::gate`]; this binary is the half that needs an engine, a
 //! host that has it, and the operator's decision to run it — the same shape
 //! `comms-extraction-eval` and `bun run-relevance.ts` already have.
 //!
@@ -21,8 +21,8 @@
 use std::collections::BTreeMap;
 use std::path::{Path, PathBuf};
 
-use axon_extraction::gate::{evaluate, Corpus, Scorecard};
-use axon_extraction::vision;
+use sjel_extraction::gate::{evaluate, Corpus, Scorecard};
+use sjel_extraction::vision;
 
 fn main() {
     let mut corpus_path = PathBuf::from("libs/extraction/eval/ocr-corpus.json");

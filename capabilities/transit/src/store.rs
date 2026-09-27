@@ -31,15 +31,15 @@
 use std::path::Path;
 
 use crate::travel::Journey;
-use axon_store::QueryAll;
 use rusqlite::{params, Connection, OptionalExtension, Row};
+use sjel_store::QueryAll;
 
 pub type TripWithLegs = (TripRow, Vec<TripLegRow>);
 
 pub struct TransitStore {
     /// Shared with every other store in this process on the same file, so
     /// opening one is a checkout rather than an open.
-    pool: axon_store::Pool,
+    pool: sjel_store::Pool,
     /// Prefixes this capability's tables in the one shared file (PRD Q45):
     /// `transit` here means `transit_trips`, `transit_trip_legs` and
     /// `transit_trip_sessions`.
@@ -60,8 +60,8 @@ impl TransitStore {
         prefix: &str,
     ) -> Result<Self, Box<dyn std::error::Error>> {
         // A pool checkout, and the migration runs once per process per (file,
-        // prefix) rather than once per open -- libs/axon-store/README.md has why.
-        let pool = axon_store::open_pool(database_path, prefix, |conn| {
+        // prefix) rather than once per open -- libs/sjel-store/README.md has why.
+        let pool = sjel_store::open_pool(database_path, prefix, |conn| {
             Self::init_schema(conn, prefix)
         })?;
         Ok(Self {
@@ -75,7 +75,7 @@ impl TransitStore {
     /// A `Result` where this used to be `self.conn.lock().unwrap()`: that unwrap
     /// could only fail on a poisoned mutex, whereas a checkout can genuinely fail
     /// when the file is unreachable or every connection is busy.
-    fn conn(&self) -> Result<axon_store::PooledClient, Box<dyn std::error::Error>> {
+    fn conn(&self) -> Result<sjel_store::PooledClient, Box<dyn std::error::Error>> {
         Ok(self.pool.get()?)
     }
 
@@ -86,7 +86,7 @@ impl TransitStore {
     /// `session_id` and eight coordinate columns with `ADD COLUMN IF NOT
     /// EXISTS`. SQLite has neither form, and the file starts empty, so those
     /// columns are declared here and the widened CHECK is the one the
-    /// `CREATE TABLE` carries -- see libs/axon-store/README.md, "Writing a
+    /// `CREATE TABLE` carries -- see libs/sjel-store/README.md, "Writing a
     /// capability's DDL", for why folding is the translation.
     fn init_schema(conn: &Connection, prefix: &str) -> Result<(), Box<dyn std::error::Error>> {
         conn.execute_batch(&format!(
@@ -196,7 +196,7 @@ impl TransitStore {
             .into());
         }
         let mut conn = self.conn()?;
-        let tx = axon_store::write_transaction(&mut conn)?;
+        let tx = sjel_store::write_transaction(&mut conn)?;
 
         let existing: Option<String> = tx
             .query_row(
@@ -297,7 +297,7 @@ impl TransitStore {
     /// `list_trips` read them identically and the column order is positional.
     fn legs_of(
         &self,
-        conn: &axon_store::PooledClient,
+        conn: &sjel_store::PooledClient,
         trip_id: &str,
     ) -> Result<Vec<TripLegRow>, Box<dyn std::error::Error>> {
         Ok(conn.query_all(
@@ -575,7 +575,7 @@ fn insert_legs(
     Ok(())
 }
 
-/// A trip's stored timestamps are unix seconds as text, not `axon_store::NOW`.
+/// A trip's stored timestamps are unix seconds as text, not `sjel_store::NOW`.
 ///
 /// Deliberately left alone by the SQLite move: `created_at` and `priced_at` are
 /// written from Rust rather than by the statement, and changing what they hold

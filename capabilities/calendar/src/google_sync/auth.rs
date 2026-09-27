@@ -123,10 +123,10 @@ pub(super) fn read_env_key(env_path: &Path, key: &str) -> SyncResult<String> {
 
 pub(super) fn http_client() -> SyncResult<reqwest::blocking::Client> {
     // 20s, matching calendar's other outbound calls. It carried no timeout at
-    // all until axon_http made one an argument, so a hung Google token endpoint
+    // all until sjel_http made one an argument, so a hung Google token endpoint
     // hung the sync thread with it.
-    axon_http::builder(
-        axon_http::Purpose::new("calendar-google-auth"),
+    sjel_http::builder(
+        sjel_http::Purpose::new("calendar-google-auth"),
         std::time::Duration::from_secs(20),
     )
     .gzip(true)

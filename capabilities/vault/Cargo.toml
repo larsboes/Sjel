@@ -22,8 +22,8 @@ name = "vault-server"
 path = "src/server.rs"
 
 [dependencies]
-axon-config = { path = "../../libs/axon-config" }
-axon-server = { path = "../../libs/axon-server" }
+sjel-config = { path = "../../libs/sjel-config" }
+sjel-server = { path = "../../libs/sjel-server" }
 # The C0-C3 vocabulary and the Q9a folder rule. Declared, never re-implemented:
 # a second definition of what `c2` means is what PRD §6.1 forbids by name.
 content-item = { path = "../../libs/content-item" }

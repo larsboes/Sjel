@@ -57,7 +57,7 @@ describe("production Rust server policy", () => {
   test("test-only listener constructs are excluded", () => {
     const source = `
 fn build_router() -> Router { Router::new() }
-fn main() { axon_server::serve_local("fixture", 1234, build_router()); }
+fn main() { sjel_server::serve_local("fixture", 1234, build_router()); }
 
 #[cfg(test)]
 mod tests {
@@ -68,7 +68,7 @@ mod tests {
 }`;
 
     expect(findProductionListenerConstructs(source)).toEqual([]);
-    expect(stripRustCfgTestItems(source)).toContain("axon_server::serve_local");
+    expect(stripRustCfgTestItems(source)).toContain("sjel_server::serve_local");
   });
 
   test("production listener constructs remain findings", () => {

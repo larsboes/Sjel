@@ -3,7 +3,7 @@
 The one SQLite file every capability's tables live in. Nine capabilities open it directly, so
 cross-domain joins are a single connection; nothing runs here, and the manifest exists so one
 owner declares how the file is backed up. Why a shared store exists at all is below; how a
-capability talks to it is `libs/axon-store/README.md`.
+capability talks to it is `libs/sjel-store/README.md`.
 
 ## Verdict
 
@@ -82,8 +82,8 @@ row type in the backlog view.
 
 | Path | Purpose |
 |---|---|
-| `<overlay>/data/axon/axon.db` | the database. Resolved by `axon_config::database_path()`; `SJEL_DB_PATH` overrides it, and is the one variable that moves a deployment |
-| `<overlay>/data/axon/axon.db-wal`, `-shm` | SQLite's own sidecars. WAL mode is set on every connection open (`libs/axon-store`), not stored in this repo |
+| `<overlay>/data/axon/axon.db` | the database. Resolved by `sjel_config::database_path()`; `SJEL_DB_PATH` overrides it, and is the one variable that moves a deployment |
+| `<overlay>/data/axon/axon.db-wal`, `-shm` | SQLite's own sidecars. WAL mode is set on every connection open (`libs/sjel-store`), not stored in this repo |
 | `<overlay>/data/axon/axon-local-*.lock` | cross-process admission locks, one file per inference backend (`capabilities/comms/src/local_gate.rs`). Not state, and deliberately not backed up |
 | `service.toml` | `kind = "data"`: the backup contract, and the only manifest that owns this file |
 
@@ -113,8 +113,8 @@ capabilities that read it are the processes.
 - **The backup contract names a path, and `SJEL_DB_PATH` can move the file out from under it.**
   A deployment that sets it must update `backup_sqlite_online` too. `tools/backup.sh` refuses to
   run on a missing source rather than shipping an archive of nothing, so the mistake is loud.
-- **Timestamps are TEXT in one canonical 29-character format** (`axon_store::NOW`). Two widths in
-  one column stop `ORDER BY` being time order; `libs/axon-store/README.md` has the format and the
+- **Timestamps are TEXT in one canonical 29-character format** (`sjel_store::NOW`). Two widths in
+  one column stop `ORDER BY` being time order; `libs/sjel-store/README.md` has the format and the
   translation table, and every capability writes through that constant rather than its own.
 - **One writer at a time.** WAL plus `busy_timeout` is what makes nine processes on one file safe
   at the measured write rate. A transaction that reads and then writes takes the write lock up

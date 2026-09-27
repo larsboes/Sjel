@@ -431,13 +431,13 @@ pub fn opportunity_text(opp: &Opportunity) -> String {
 /// degradation, not a failure.
 pub fn embed_opportunities(
     opportunities: &[Opportunity],
-    role: &axon_inference::ResolvedRole,
+    role: &sjel_inference::ResolvedRole,
 ) -> Option<std::collections::HashMap<String, Vec<f32>>> {
     if opportunities.is_empty() {
         return Some(std::collections::HashMap::new());
     }
     let texts: Vec<String> = opportunities.iter().map(opportunity_text).collect();
-    match role.embed(&texts, axon_inference::TextRole::Document) {
+    match role.embed(&texts, sjel_inference::TextRole::Document) {
         Ok(vectors) => Some(
             opportunities
                 .iter()

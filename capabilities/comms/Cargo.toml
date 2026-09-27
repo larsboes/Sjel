@@ -44,19 +44,19 @@ path = "src/digest_eval_main.rs"
 
 [dependencies]
 # Outbound HTTP goes through one factory: the user-agent, the timeout and the
-# connection pool are decided there, not at each call site (libs/axon-http).
-axon-http = { path = "../../libs/axon-http" }
-axon-config = { path = "../../libs/axon-config" }
+# connection pool are decided there, not at each call site (libs/sjel-http).
+sjel-http = { path = "../../libs/sjel-http" }
+sjel-config = { path = "../../libs/sjel-config" }
 # The readers this capability used to own, promoted at the second consumer
 # (README.md#schemas-and-dependency-direction). Default features on: this is the
 # consumer that wants the whole ladder, including the PDF rung, so the `xberg`
 # dependency moved with the code rather than staying here.
-axon-extraction = { path = "../../libs/extraction" }
-axon-inference = { path = "../../libs/inference" }
-axon-server = { path = "../../libs/axon-server" }
-axon-store = { path = "../../libs/axon-store" }
-axon-summarize = { path = "../../libs/summarize" }
-axon-pseudonymize = { path = "../../libs/pseudonymize" }
+sjel-extraction = { path = "../../libs/extraction" }
+sjel-inference = { path = "../../libs/inference" }
+sjel-server = { path = "../../libs/sjel-server" }
+sjel-store = { path = "../../libs/sjel-store" }
+sjel-summarize = { path = "../../libs/summarize" }
+sjel-pseudonymize = { path = "../../libs/pseudonymize" }
 content-item = { path = "../../libs/content-item" }
 # The shared machine->vault projection mechanism (PRD Q49). comms declares the
 # shape of a saved link; libs/markdown-root does the writing, the containment and
@@ -71,7 +71,7 @@ thiserror.workspace = true
 # depend on whichever SQLite the host ships; upstreams.toml [rusqlite] has the
 # measurement that settled it. Blocking, matching reqwest's "blocking" feature --
 # the `comms` CLI path carries no async runtime, only comms-server does. The pool
-# stays (axon-store owns it): 43 handlers here call `Store::open`.
+# stays (sjel-store owns it): 43 handlers here call `Store::open`.
 rusqlite.workspace = true
 # feed_items PK is the sha256 of the canonical URL (store::feed_id). sha2 is
 # already in the root workspace's resolved Cargo.lock (transitive today), so this
@@ -88,7 +88,7 @@ base64 = "0.23"
 # tokio feature is visible (a workspace build unifies them away).
 # `time` for the ingest tickers (`interval`, `interval_at`), `sync` for EXPORT_LOCK's
 # `tokio::sync::Mutex`, `net` for the `TcpListener` the server tests bind.
-# This list is what comms asks for, not what it resolves to: `axon-extraction` above is
+# This list is what comms asks for, not what it resolves to: `sjel-extraction` above is
 # taken with its default `xberg` rung on, and that rung declares `tokio = full` for a
 # stated reason (libs/extraction/Cargo.toml). So comms still builds tokio with all 19
 # features while the other twelve capabilities now land between 11 and 16. Trimming here

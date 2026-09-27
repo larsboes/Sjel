@@ -119,7 +119,7 @@ export function hasSameOrigin(headers: IncomingHttpHeaders): boolean {
  * Attach the private token to every proxied Comms request.
  *
  * Mutations only, until Comms moved onto the shared inbound gate in
- * `libs/axon-server`: that gate admits `/health` and `/ready` and asks every
+ * `libs/sjel-server`: that gate admits `/health` and `/ready` and asks every
  * other path for the token, reads included. Sending it on a read costs nothing —
  * the value stays in this Vite process and never reaches browser JavaScript,
  * exactly as on a write — while withholding it would 401 every Comms page.

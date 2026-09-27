@@ -16,9 +16,9 @@ path = "src/main.rs"
 # scheduled job with no port of its own (the manifest schema refuses one), so the
 # machine's always-on status surface publishes them — the same shape /backups already
 # has with tools/backup.sh's receipts. Read-only: host-watch owns the table.
-axon-config = { path = "../../libs/axon-config" }
-axon-store = { path = "../../libs/axon-store" }
-axon-server = { path = "../../libs/axon-server" }
+sjel-config = { path = "../../libs/sjel-config" }
+sjel-store = { path = "../../libs/sjel-store" }
+sjel-server = { path = "../../libs/sjel-server" }
 # The device registry, for one call: the shell admits a paired device on its signature
 # (src/device_gate.rs, PRD Q119). The protocol stays owned by capabilities/devices.
 devices = { path = "../devices" }

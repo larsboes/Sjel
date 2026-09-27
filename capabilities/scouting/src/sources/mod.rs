@@ -195,8 +195,8 @@ pub struct SourceManifest {
     pub data_class: String,
 }
 
-use axon_config::expand_tilde;
 use markdown_root::MarkdownRoot;
+use sjel_config::expand_tilde;
 
 impl SourceEntry {
     /// Resolve into a runtime manifest: expand `~`, compute absolute doc path.

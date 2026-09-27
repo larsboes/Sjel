@@ -72,7 +72,7 @@ struct Registry {
 const MIN_NAME_CHARS: usize = 3;
 
 static REGISTRY: OnceLock<Registry> = OnceLock::new();
-static ENTITY_REGISTRY: OnceLock<axon_pseudonymize::EntityRegistry> = OnceLock::new();
+static ENTITY_REGISTRY: OnceLock<sjel_pseudonymize::EntityRegistry> = OnceLock::new();
 
 fn path() -> Option<PathBuf> {
     if let Ok(p) = std::env::var(ENV_PATH) {
@@ -80,7 +80,7 @@ fn path() -> Option<PathBuf> {
             return Some(PathBuf::from(p));
         }
     }
-    axon_config::overlay_root().map(|r| r.join(OVERLAY_REL))
+    sjel_config::overlay_root().map(|r| r.join(OVERLAY_REL))
 }
 
 fn load() -> Registry {
@@ -147,8 +147,8 @@ fn load_from_path(p: Option<&std::path::Path>) -> Registry {
     }
 }
 
-fn entity_registry_from(registry: &Registry) -> axon_pseudonymize::EntityRegistry {
-    axon_pseudonymize::EntityRegistry::builder()
+fn entity_registry_from(registry: &Registry) -> sjel_pseudonymize::EntityRegistry {
+    sjel_pseudonymize::EntityRegistry::builder()
         .add_people(registry.all.iter().cloned())
         .build()
 }
@@ -172,7 +172,7 @@ pub fn state() -> State {
 /// `cloud_derivative::prepare_pseudonymized` passes this, so the two paths protect the same
 /// set of people. Empty when the registry is absent or unreadable, exactly as rung 0 of the
 /// destructive path is; [`state`] tells the two cases apart.
-pub fn entity_registry() -> &'static axon_pseudonymize::EntityRegistry {
+pub fn entity_registry() -> &'static sjel_pseudonymize::EntityRegistry {
     ENTITY_REGISTRY.get_or_init(|| entity_registry_from(registry()))
 }
 
@@ -225,7 +225,7 @@ mod tests {
             2,
             "names under three characters are skipped"
         );
-        let mut session = axon_pseudonymize::PseudonymizerSession::new();
+        let mut session = sjel_pseudonymize::PseudonymizerSession::new();
         let out = session.tokenize_text("ERIKA MUSTERMANN und Erika", &registry);
         assert!(!out.to_lowercase().contains("erika"), "{out}");
         assert!(!out.to_lowercase().contains("mustermann"), "{out}");

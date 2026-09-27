@@ -104,7 +104,7 @@ where
 {
     let root = state.vault_root.clone();
     let joined = tokio::task::spawn_blocking(move || {
-        MarkdownRoot::declare(axon_config::expand_tilde(&root))
+        MarkdownRoot::declare(sjel_config::expand_tilde(&root))
             .map_err(|e| format!("vault_root: {e}"))
             .and_then(|vault| work(&vault))
     })
@@ -247,8 +247,8 @@ async fn main() {
     let state = AppState {
         vault_root: Arc::new(vault.path().to_string_lossy().into_owned()),
     };
-    let port = axon_server::resolve_port(None, None, 8094);
-    axon_server::serve_local("vault-server", port, build_router(state)).await;
+    let port = sjel_server::resolve_port(None, None, 8094);
+    sjel_server::serve_local("vault-server", port, build_router(state)).await;
 }
 
 /// This capability's name, for the origin guard's env var
@@ -285,10 +285,10 @@ fn build_router(state: AppState) -> Router {
         // answers with 89 real people's names and the dates they were last
         // named in the Journal — the same names `names.rs` exists to redact
         // before anything leaves this machine. Loopback is not what holds that
-        // in: `InboundAuth::refuse_without_token` (libs/axon-server/src/auth.rs)
+        // in: `InboundAuth::refuse_without_token` (libs/sjel-server/src/auth.rs)
         // states the rule, that a page open in the operator's own browser is
         // already inside the loopback boundary. What holds it in is the token
-        // `axon_server::serve_local` resolves through
+        // `sjel_server::serve_local` resolves through
         // `InboundAuth::from_deployment()`, and a deployment that declares none
         // leaves this route readable by any origin. Whether this server should
         // refuse without a token is an operator ruling and not a comment's to
@@ -301,7 +301,7 @@ fn build_router(state: AppState) -> Router {
         // ADD NEW ROUTES ABOVE THIS LINE. Below it they lose the origin guard.
         .layer(axum::middleware::from_fn_with_state(
             CAPABILITY,
-            axon_server::origin::refuse_foreign_origins,
+            sjel_server::origin::refuse_foreign_origins,
         ))
         .layer(CorsLayer::permissive())
         .with_state(state)
@@ -502,7 +502,7 @@ mod route_manifest_tests {
     }
 }
 
-/// The router-level proof that `libs/axon-server`'s own predicate tests cannot
+/// The router-level proof that `libs/sjel-server`'s own predicate tests cannot
 /// give: a route registered BELOW the `.layer()` call passes every test of
 /// `origin_allowed_by` and still answers a hostile page.
 ///

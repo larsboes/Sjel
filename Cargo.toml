@@ -16,10 +16,10 @@ members = [
     "capabilities/transit",
     "capabilities/trips",
     "capabilities/vault",
-    "libs/axon-config",
-    "libs/axon-http",
-    "libs/axon-server",
-    "libs/axon-store",
+    "libs/sjel-config",
+    "libs/sjel-http",
+    "libs/sjel-server",
+    "libs/sjel-store",
     "libs/candidate-fingerprint",
     "libs/civil-date",
     "libs/content-item",
@@ -65,7 +65,7 @@ license = "AGPL-3.0-only"
 # `dep = { workspace = true, features = [...] }` with the list it had before. That is
 # reqwest (five distinct sets across twelve declarations), tokio (three), tower-http (two:
 # "cors" for the API servers, "fs" for the two that serve a bundle) and serde ("derive" in
-# eighteen members, bare in libs/axon-store, whose narrow dependency surface is deliberate).
+# eighteen members, bare in libs/sjel-store, whose narrow dependency surface is deliberate).
 #
 # Not a bump: no requirement here resolves to a different version than it did before, and
 # Cargo.lock is unchanged. Q77 says roll on the latest, hold nothing — so raising a floor is

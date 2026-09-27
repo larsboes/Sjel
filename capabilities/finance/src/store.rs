@@ -12,8 +12,8 @@
 
 use std::path::Path;
 
-use axon_store::QueryAll;
 use rusqlite::{params, Connection, OptionalExtension, Row};
+use sjel_store::QueryAll;
 
 use crate::analytics::{TransactionKind, TransactionRow};
 use crate::import::{CandidateState, TransactionCandidate};
@@ -27,7 +27,7 @@ use crate::subscription::{BillingCycle, PricePoint, State, StateChange, Subscrip
 type Fallible<T> = Result<T, Box<dyn std::error::Error>>;
 
 pub struct FinanceStore {
-    pool: axon_store::Pool,
+    pool: sjel_store::Pool,
     /// Prefixes this capability's tables in the one shared file (PRD Q45):
     /// `finance` here means `finance_subscriptions` and its seven siblings.
     prefix: String,
@@ -57,7 +57,7 @@ impl FinanceStore {
 
     pub fn open_with_prefix(database_path: &Path, prefix: &str) -> Fallible<Self> {
         validate_prefix(prefix)?;
-        let pool = axon_store::open_pool(database_path, prefix, |conn| {
+        let pool = sjel_store::open_pool(database_path, prefix, |conn| {
             Self::run_migration(conn, prefix)
         })?;
         Ok(Self {
@@ -66,7 +66,7 @@ impl FinanceStore {
         })
     }
 
-    fn conn(&self) -> Fallible<axon_store::PooledClient> {
+    fn conn(&self) -> Fallible<sjel_store::PooledClient> {
         Ok(self.pool.get()?)
     }
 
@@ -646,7 +646,7 @@ impl FinanceStore {
     ) -> Fallible<bool> {
         let prefix = &self.prefix;
         let mut conn = self.conn()?;
-        let transaction = axon_store::write_transaction(&mut conn)?;
+        let transaction = sjel_store::write_transaction(&mut conn)?;
         let canonical = transaction.execute(
             &format!(
                 "UPDATE {prefix}_transaction_candidates
@@ -677,7 +677,7 @@ impl FinanceStore {
     pub fn replace_transaction_projection(&self, rows: &[TransactionRow]) -> Fallible<()> {
         let prefix = &self.prefix;
         let mut conn = self.conn()?;
-        let transaction = axon_store::write_transaction(&mut conn)?;
+        let transaction = sjel_store::write_transaction(&mut conn)?;
         transaction.execute(&format!("DELETE FROM {prefix}_transaction_projection"), [])?;
         {
             let mut insert = transaction.prepare(&format!(
@@ -735,7 +735,7 @@ impl FinanceStore {
     pub fn replace_holding_projection(&self, snapshot: &ReviewedHoldingsSnapshot) -> Fallible<()> {
         let prefix = &self.prefix;
         let mut conn = self.conn()?;
-        let transaction = axon_store::write_transaction(&mut conn)?;
+        let transaction = sjel_store::write_transaction(&mut conn)?;
         transaction.execute(&format!("DELETE FROM {prefix}_holding_projection"), [])?;
         transaction.execute(
             &format!("DELETE FROM {prefix}_holding_projection_state"),
@@ -807,7 +807,7 @@ impl FinanceStore {
     pub fn clear_holding_projection(&self) -> Fallible<()> {
         let prefix = &self.prefix;
         let mut conn = self.conn()?;
-        let transaction = axon_store::write_transaction(&mut conn)?;
+        let transaction = sjel_store::write_transaction(&mut conn)?;
         transaction.execute(&format!("DELETE FROM {prefix}_holding_projection"), [])?;
         transaction.execute(
             &format!("DELETE FROM {prefix}_holding_projection_state"),

@@ -183,8 +183,8 @@ pub fn summarize(text: &str, cfg: &Config, data_class: &str) -> SummarizeOutcome
         None
     };
 
-    let http = match axon_http::client(
-        axon_http::Purpose::new("comms-summarize"),
+    let http = match sjel_http::client(
+        sjel_http::Purpose::new("comms-summarize"),
         std::time::Duration::from_secs(120),
     ) {
         Ok(c) => c,
@@ -249,7 +249,7 @@ pub fn summarize(text: &str, cfg: &Config, data_class: &str) -> SummarizeOutcome
 pub fn summarizer_reachable(cfg: &Config) -> bool {
     cfg.light_summarization_role()
         .as_ref()
-        .is_some_and(axon_inference::ResolvedRole::model_reachable)
+        .is_some_and(sjel_inference::ResolvedRole::model_reachable)
 }
 
 /// Summarize one stored item, if it has a transcript and no summary yet.

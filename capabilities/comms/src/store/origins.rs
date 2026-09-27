@@ -20,7 +20,7 @@ impl Store {
                     label = COALESCE(excluded.label, {prefix}_feed_origins.label),
                     last_seen = {now}",
                 prefix = self.prefix,
-                now = axon_store::NOW
+                now = sjel_store::NOW
             ),
             params![&feed_id, &source_id, &source_ref, &label],
         )?;
@@ -52,7 +52,7 @@ impl Store {
     pub fn list_origin_summaries(&self) -> Result<Vec<OriginSummary>, Box<dyn std::error::Error>> {
         let conn = self.conn()?;
         // The `::text` casts are gone with the timestamp type: these columns are
-        // TEXT, and the canonical stamp sorts as text (libs/axon-store/README.md).
+        // TEXT, and the canonical stamp sorts as text (libs/sjel-store/README.md).
         Ok(conn.query_all(
             &format!(
                 "SELECT source_id, COUNT(DISTINCT feed_id), MIN(first_seen), MAX(last_seen)
@@ -85,7 +85,7 @@ impl Store {
     pub fn list_feed_runs(&self, days: i32) -> Result<Vec<FeedRun>, Box<dyn std::error::Error>> {
         let conn = self.conn()?;
         // Two translations here, and both depend on the canonical stamp being a
-        // format SQLite's own date functions can read (libs/axon-store/README.md):
+        // format SQLite's own date functions can read (libs/sjel-store/README.md):
         //
         //   CURRENT_DATE - $1::int         -> date('now', '-N days')
         //   a - b > interval 'N minutes'   -> julianday(a) - julianday(b) > N/1440

@@ -234,8 +234,8 @@ pub fn parse_verdict(reply: &str) -> Verdict {
 /// Asks the on-device model whether two records are one person. Any failure is a verdict of
 /// "could not tell" with the reason, so a model that is down never blocks the list.
 pub fn judge(model_url: &str, a: &Value, b: &Value) -> Verdict {
-    let client = match axon_http::client(
-        axon_http::Purpose::new("entities-judge"),
+    let client = match sjel_http::client(
+        sjel_http::Purpose::new("entities-judge"),
         Duration::from_secs(30),
     ) {
         Ok(client) => client,

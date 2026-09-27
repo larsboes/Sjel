@@ -89,7 +89,7 @@ describe("classifyPath", () => {
 describe("unitForPath", () => {
   test("maps each of the three nouns plus the spine directories", () => {
     expect(unitForPath("capabilities/comms/src/main.rs")).toEqual({ name: "comms", kind: "capability" });
-    expect(unitForPath("libs/axon-config/src/lib.rs")).toEqual({ name: "axon-config", kind: "lib" });
+    expect(unitForPath("libs/sjel-config/src/lib.rs")).toEqual({ name: "sjel-config", kind: "lib" });
     expect(unitForPath("Packs/writing/skills/x.md")).toEqual({ name: "writing", kind: "pack" });
     expect(unitForPath("dashboard/src/routes/+page.svelte")).toEqual({ name: "dashboard", kind: "spine" });
     expect(unitForPath("tools/doctor.ts")).toEqual({ name: "tools", kind: "spine" });
@@ -180,11 +180,11 @@ describe("rollUp", () => {
     const nodes = [
       { id: "1", source_file: "capabilities/transit/a.rs" },
       { id: "2", source_file: "capabilities/comms/a.rs" },
-      { id: "3", source_file: "libs/axon-config/a.rs" },
+      { id: "3", source_file: "libs/sjel-config/a.rs" },
     ];
     const exists = tree(...nodes.map((n) => n.source_file!));
     expect(rollUp(nodes, exists).units.map((u) => u.name)).toEqual([
-      "axon-config",
+      "sjel-config",
       "comms",
       "transit",
     ]);
@@ -195,10 +195,10 @@ describe("couplingFromRustPath", () => {
   test("a #[path] include reaching another unit is coupling", () => {
     const edges = couplingFromRustPath(
       "capabilities/calendar/src/lib.rs",
-      '#[path = "../../../libs/axon-config/src/lib.rs"]\npub(crate) mod axon_config;',
+      '#[path = "../../../libs/sjel-config/src/lib.rs"]\npub(crate) mod sjel_config;',
     );
     expect(edges).toHaveLength(1);
-    expect(edges[0]).toMatchObject({ from: "calendar", to: "axon-config", kind: "rust-path" });
+    expect(edges[0]).toMatchObject({ from: "calendar", to: "sjel-config", kind: "rust-path" });
   });
 
   test("a #[path] include staying inside its own unit is not coupling", () => {
@@ -237,11 +237,11 @@ describe("couplingFromCargo", () => {
       "capabilities/axon-status/Cargo.toml",
       [
         "[dependencies]",
-        'axon-server = { path = "../../libs/axon-server" }',
-        'axon-config = { path = "../../libs/axon-config" }',
+        'sjel-server = { path = "../../libs/sjel-server" }',
+        'sjel-config = { path = "../../libs/sjel-config" }',
       ].join("\n"),
     );
-    expect(edges.map((e) => e.to).sort()).toEqual(["axon-config", "axon-server"]);
+    expect(edges.map((e) => e.to).sort()).toEqual(["sjel-config", "sjel-server"]);
   });
 
   test("registry dependencies are not unit coupling", () => {
@@ -275,25 +275,25 @@ describe("mergeCoupling", () => {
     // but whose modules no source file includes by #[path]. Keeping the kinds is what
     // lets a reader tell that apart from drift instead of guessing.
     const merged = mergeCoupling([
-      { from: "calendar", to: "axon-config", kind: "rust-path", file: "a.rs", evidence: "x" },
-      { from: "calendar", to: "axon-config", kind: "cargo-dep", file: "Cargo.toml", evidence: "y" },
+      { from: "calendar", to: "sjel-config", kind: "rust-path", file: "a.rs", evidence: "x" },
+      { from: "calendar", to: "sjel-config", kind: "cargo-dep", file: "Cargo.toml", evidence: "y" },
       { from: "scouting", to: "transit", kind: "cargo-dep", file: "Cargo.toml", evidence: "z" },
     ]);
     expect(merged).toHaveLength(2);
-    expect(merged[0]).toMatchObject({ from: "calendar", to: "axon-config", kinds: ["cargo-dep", "rust-path"] });
+    expect(merged[0]).toMatchObject({ from: "calendar", to: "sjel-config", kinds: ["cargo-dep", "rust-path"] });
     expect(merged[1]).toMatchObject({ from: "scouting", to: "transit", kinds: ["cargo-dep"] });
   });
 
   test("output is sorted, so the committed artifact is stable", () => {
     const merged = mergeCoupling([
-      { from: "trips", to: "axon-server", kind: "rust-path", file: "a", evidence: "x" },
-      { from: "comms", to: "axon-server", kind: "rust-path", file: "b", evidence: "y" },
-      { from: "comms", to: "axon-config", kind: "rust-path", file: "c", evidence: "z" },
+      { from: "trips", to: "sjel-server", kind: "rust-path", file: "a", evidence: "x" },
+      { from: "comms", to: "sjel-server", kind: "rust-path", file: "b", evidence: "y" },
+      { from: "comms", to: "sjel-config", kind: "rust-path", file: "c", evidence: "z" },
     ]);
     expect(merged.map((m) => `${m.from}->${m.to}`)).toEqual([
-      "comms->axon-config",
-      "comms->axon-server",
-      "trips->axon-server",
+      "comms->sjel-config",
+      "comms->sjel-server",
+      "trips->sjel-server",
     ]);
   });
 });

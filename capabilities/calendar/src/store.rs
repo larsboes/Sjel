@@ -7,9 +7,9 @@ use std::path::Path;
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::time::{SystemTime, UNIX_EPOCH};
 
-use axon_store::QueryAll;
 use rusqlite::{params, Connection, OptionalExtension, Row, Transaction};
 use serde_json::Value;
+use sjel_store::QueryAll;
 
 use crate::correlate;
 use crate::date;
@@ -60,7 +60,7 @@ fn validate_prefix(prefix: &str) -> StoreResult<()> {
 pub struct CalendarStore {
     /// Shared with every other store in this process on the same file, so
     /// opening one is a checkout rather than an open.
-    pool: axon_store::Pool,
+    pool: sjel_store::Pool,
     /// Prefixes this capability's tables in the one shared file (PRD Q45):
     /// `calendar` here means `calendar_entries` and its four siblings.
     prefix: String,
@@ -74,8 +74,8 @@ impl CalendarStore {
     pub fn open_with_prefix(database_path: &Path, prefix: &str) -> StoreResult<Self> {
         validate_prefix(prefix)?;
         // A pool checkout, and the migration runs once per process per (file,
-        // prefix) rather than once per open -- libs/axon-store/README.md has why.
-        let pool = axon_store::open_pool(database_path, prefix, |conn| {
+        // prefix) rather than once per open -- libs/sjel-store/README.md has why.
+        let pool = sjel_store::open_pool(database_path, prefix, |conn| {
             Self::run_migration(conn, prefix)
         })?;
         Ok(Self {
@@ -89,7 +89,7 @@ impl CalendarStore {
     /// A `Result` where this used to be `self.conn.lock().unwrap()`: that unwrap
     /// could only fail on a poisoned mutex, whereas a checkout can genuinely fail
     /// when the file is unreachable or every connection is busy.
-    fn conn(&self) -> StoreResult<axon_store::PooledClient> {
+    fn conn(&self) -> StoreResult<sjel_store::PooledClient> {
         Ok(self.pool.get()?)
     }
 
@@ -835,7 +835,7 @@ impl CalendarStore {
             updated_at: now_text(),
         };
         let mut conn = self.conn()?;
-        let tx = axon_store::write_transaction(&mut conn)?;
+        let tx = sjel_store::write_transaction(&mut conn)?;
         tx.execute(
             &format!(
                 "INSERT INTO {prefix}_rhythms \
@@ -915,7 +915,7 @@ impl CalendarStore {
         )?;
         rhythm.updated_at = now_text();
         let mut conn = self.conn()?;
-        let tx = axon_store::write_transaction(&mut conn)?;
+        let tx = sjel_store::write_transaction(&mut conn)?;
         tx.execute(
             &format!(
                 "UPDATE {prefix}_rhythms SET kind=?2, title=?3, location=?4, byweekday=?5, \
@@ -953,7 +953,7 @@ impl CalendarStore {
     /// ordinary manual-looking entries.
     pub fn delete_rhythm(&self, id: &str, delete_instances: bool) -> StoreResult<bool> {
         let mut conn = self.conn()?;
-        let tx = axon_store::write_transaction(&mut conn)?;
+        let tx = sjel_store::write_transaction(&mut conn)?;
         if delete_instances {
             delete_future_instances(&tx, &self.prefix, id)?;
         }
@@ -978,7 +978,7 @@ impl CalendarStore {
             None => return Ok(None),
         };
         let mut conn = self.conn()?;
-        let tx = axon_store::write_transaction(&mut conn)?;
+        let tx = sjel_store::write_transaction(&mut conn)?;
         let created = insert_instances(&tx, &self.prefix, &rhythm)?;
         tx.commit()?;
         Ok(Some(created))

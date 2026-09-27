@@ -1,5 +1,5 @@
 [package]
-name = "axon-extraction"
+name = "sjel-extraction"
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true
@@ -8,7 +8,7 @@ description = "One home for turning a fetched document into the text a consumer 
 publish = false
 
 [lib]
-name = "axon_extraction"
+name = "sjel_extraction"
 path = "src/lib.rs"
 
 # The frozen DE/EN corpus gate. Run by hand, never by `cargo test`: scoring is
@@ -40,10 +40,10 @@ thiserror.workspace = true
 # a server, and "which model answers this job on this machine" already has one
 # home; a second answer is the defect that library exists to end. Not optional
 # and not feature-gated, unlike `xberg` below: this adds no crate to either
-# consumer's build that it did not already have (`axon-inference` links serde,
+# consumer's build that it did not already have (`sjel-inference` links serde,
 # serde_json and reqwest, and `capabilities/comms` and `capabilities/transit`
 # each declare all three directly).
-axon-inference = { path = "../inference" }
+sjel-inference = { path = "../inference" }
 # The corpus gate reads its judgements from `eval/ocr-corpus.json` and writes a
 # recording back. Both are `serde`'s job, and both are already in every
 # consumer's tree.

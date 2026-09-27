@@ -29,7 +29,7 @@
 //! derivative to the pseudonymized tier, which is correct for the analysis task
 //! a human approved and wrong for a job a timer created.
 
-use axon_inference::ResolvedRole;
+use sjel_inference::ResolvedRole;
 
 use crate::cloud_derivative::{self, CloudDocumentInput};
 use crate::cloud_dispatch;
@@ -212,7 +212,7 @@ fn provider_is_cooling(store: &Store, provider_role: &str) -> bool {
 /// would not — that one also admits a redacted `c1` derivative, which
 /// belongs to the reviewed queue and not to a timer.
 fn tier_cleared_roles(
-    inference: &axon_inference::InferenceConfig,
+    inference: &sjel_inference::InferenceConfig,
     data_class: &str,
 ) -> Vec<(String, ResolvedRole)> {
     let mut roles = inference
@@ -247,8 +247,8 @@ fn tier_cleared_roles(
 /// which providers can cover for it.
 fn tier_rank(role: &ResolvedRole) -> u8 {
     match role.cloud_data_tier {
-        Some(axon_inference::CloudDataTier::Public) => 0,
-        Some(axon_inference::CloudDataTier::PseudonymizedPersonal) => 1,
+        Some(sjel_inference::CloudDataTier::Public) => 0,
+        Some(sjel_inference::CloudDataTier::PseudonymizedPersonal) => 1,
         None => u8::MAX,
     }
 }
@@ -467,7 +467,7 @@ mod tests {
     use super::*;
     use crate::store::CloudDispatchJob;
 
-    fn inference(tiers: &[(&str, &str, u16)]) -> axon_inference::InferenceConfig {
+    fn inference(tiers: &[(&str, &str, u16)]) -> sjel_inference::InferenceConfig {
         let mut roles = serde_json::Map::new();
         for (name, tier, priority) in tiers {
             roles.insert(

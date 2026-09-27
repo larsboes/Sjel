@@ -1,5 +1,5 @@
 [package]
-name = "axon-store"
+name = "sjel-store"
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true
@@ -8,7 +8,7 @@ description = "One home for how a capability opens the shared SQLite file: pool 
 publish = false
 
 [lib]
-name = "axon_store"
+name = "sjel_store"
 path = "src/lib.rs"
 
 [dependencies]

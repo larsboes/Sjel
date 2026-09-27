@@ -1,7 +1,7 @@
 # Local dev fallback config (see config.rs / README) -- never commit real values.
 scouting.config.json
 # Local dev fallback data when no overlay is configured. The database is not here either:
-# it is the one shared file every capability opens, resolved by axon_config (see store.rs).
+# it is the one shared file every capability opens, resolved by sjel_config (see store.rs).
 data/interest-profile/*.md
 /target
 

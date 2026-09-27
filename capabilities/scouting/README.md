@@ -331,7 +331,7 @@ file resolves.
 The four tables live in the shared SQLite file — `SJEL_DB_PATH`, else
 `$SJEL_PERSONAL_ROOT/data/axon/axon.db` — under the table prefix `scouting`, so they are
 `scouting_opportunities`, `scouting_links`, `scouting_source_state` and
-`scouting_proposed_sources` (`libs/axon-store/README.md`). PRD Q45 (2026-08-27) moved them
+`scouting_proposed_sources` (`libs/sjel-store/README.md`). PRD Q45 (2026-08-27) moved them
 there from a Postgres schema. The path is a deployment fact rather than a capability one, so
 a `database_url` left in `scouting.json` is ignored: a file per capability would drop the
 cross-capability correlation with `transit` that Phase 2 exists for.

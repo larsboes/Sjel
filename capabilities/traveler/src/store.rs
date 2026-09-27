@@ -16,7 +16,7 @@ use std::path::Path;
 use rusqlite::{params, Connection, OptionalExtension, Row};
 use serde_json::Value;
 
-use axon_store::QueryAll;
+use sjel_store::QueryAll;
 
 use crate::model::{ProfileInput, TravelProfile, DEFAULT_PROFILE_ID};
 
@@ -26,7 +26,7 @@ type Fallible<T> = Result<T, Box<dyn std::error::Error>>;
 pub const PREFIX: &str = "traveler";
 
 pub struct TravelerStore {
-    pool: axon_store::Pool,
+    pool: sjel_store::Pool,
     prefix: String,
 }
 
@@ -60,7 +60,7 @@ impl TravelerStore {
 
     pub fn open_with_prefix(database_path: &Path, prefix: &str) -> Fallible<Self> {
         validate_prefix(prefix)?;
-        let pool = axon_store::open_pool(database_path, prefix, |conn| {
+        let pool = sjel_store::open_pool(database_path, prefix, |conn| {
             Self::run_migration(conn, prefix)
         })?;
         Ok(Self {
@@ -69,7 +69,7 @@ impl TravelerStore {
         })
     }
 
-    pub(crate) fn conn(&self) -> Fallible<axon_store::PooledClient> {
+    pub(crate) fn conn(&self) -> Fallible<sjel_store::PooledClient> {
         Ok(self.pool.get()?)
     }
 
@@ -190,7 +190,7 @@ impl TravelerStore {
     ) -> Fallible<PutOutcome> {
         let mut conn = self.conn()?;
         let prefix = self.prefix.clone();
-        let tx = axon_store::write_transaction(&mut conn)?;
+        let tx = sjel_store::write_transaction(&mut conn)?;
 
         let current: Option<u32> = tx
             .query_row(
@@ -227,7 +227,7 @@ impl TravelerStore {
                      basis = excluded.basis,
                      revision = excluded.revision,
                      updated_at = excluded.updated_at",
-                stamp = axon_store::STAMP_FORMAT
+                stamp = sjel_store::STAMP_FORMAT
             ),
             params![
                 id,
@@ -274,13 +274,13 @@ pub(crate) fn validate_prefix(prefix: &str) -> Fallible<()> {
 fn row_to_profile(row: &Row<'_>) -> rusqlite::Result<TravelProfile> {
     Ok(TravelProfile {
         id: row.get(0)?,
-        hard: axon_store::json_column(row, 1)?,
-        soft: axon_store::json_column(row, 2)?,
-        journey: axon_store::json_column(row, 3)?,
-        interests: axon_store::json_column(row, 4)?,
-        pace: axon_store::json_column(row, 5)?,
-        anchors: axon_store::json_column(row, 6)?,
-        basis: axon_store::json_column(row, 7)?,
+        hard: sjel_store::json_column(row, 1)?,
+        soft: sjel_store::json_column(row, 2)?,
+        journey: sjel_store::json_column(row, 3)?,
+        interests: sjel_store::json_column(row, 4)?,
+        pace: sjel_store::json_column(row, 5)?,
+        anchors: sjel_store::json_column(row, 6)?,
+        basis: sjel_store::json_column(row, 7)?,
         revision: row.get(8)?,
         updated_at: row.get(9)?,
     })

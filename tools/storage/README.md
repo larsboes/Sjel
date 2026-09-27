@@ -4,7 +4,7 @@
 which `df` structurally cannot. The 46 GB that started this tool was 215 individually
 unremarkable 230 MB cache blocks. No per-file view showed it.
 
-The crate is `axon-storage`, a member of the root Cargo workspace. Operator machinery lives
+The crate is `sjel-storage`, a member of the root Cargo workspace. Operator machinery lives
 in `tools/` and its backend logic is Rust, so `tools/` holds a Cargo member
 (`Packs/harness/skills/sjel/references/on-placement.md`,
 `Packs/harness/skills/sjel/references/on-dependencies-and-build.md`). Run it as
@@ -74,7 +74,7 @@ on its own stated grounds — a GB figure would be "a guess wearing a gate's clo
 would need revising the first time a bigger disk arrives. A ratio does not.
 
 Q53 named `tools/doctor` as the checker. Doctor had no such section until 2026-09-03; it
-has one now, and it reads `axon-storage target --json` rather than re-deriving the walk.
+has one now, and it reads `sjel-storage target --json` rather than re-deriving the walk.
 
 `target` reports the compilation-unit count per profile beside the ratio. Q53's argument for
 `target/release` being a valid control is "same crates, same machine, same moment", and a

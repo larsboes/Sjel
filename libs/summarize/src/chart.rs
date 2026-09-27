@@ -30,7 +30,7 @@
 //! form: ordered categories get a line, everything else gets bars. One less
 //! model output to validate, and the same answer every time.
 
-// This is an ordinary submodule of axon-summarize; keep sibling imports grouped
+// This is an ordinary submodule of sjel-summarize; keep sibling imports grouped
 // through the parent module.
 use super::{complete, truncate, Outcome, Reach, Target, INPUT_CAP};
 

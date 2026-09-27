@@ -797,8 +797,8 @@ impl ResolvedRole {
         if self.backend.base_url.trim().is_empty() || self.model.trim().is_empty() {
             return false;
         }
-        let client = match axon_http::client(
-            axon_http::Purpose::new("inference-probe"),
+        let client = match sjel_http::client(
+            sjel_http::Purpose::new("inference-probe"),
             std::time::Duration::from_secs(3),
         ) {
             Ok(client) => client,
@@ -890,8 +890,8 @@ impl ResolvedRole {
             return Ok(Vec::new());
         }
         let endpoint = self.rerank_endpoint()?;
-        let client = axon_http::client(
-            axon_http::Purpose::new("inference-rerank"),
+        let client = sjel_http::client(
+            sjel_http::Purpose::new("inference-rerank"),
             std::time::Duration::from_secs(120),
         )
         .map_err(|error| format!("client build: {error}"))?;
@@ -962,8 +962,8 @@ impl ResolvedRole {
         }
         self.refuse_ungoverned_cloud_call("text to embed")?;
         let endpoint = self.embedding_endpoint();
-        let client = axon_http::client(
-            axon_http::Purpose::new("inference-embed"),
+        let client = sjel_http::client(
+            sjel_http::Purpose::new("inference-embed"),
             std::time::Duration::from_secs(120),
         )
         .map_err(|error| format!("client build: {error}"))?;
@@ -1226,7 +1226,7 @@ mod tests {
 
     fn write_temp_key(name: &str, content: &str) -> PathBuf {
         let directory =
-            std::env::temp_dir().join(format!("axon-inference-key-{}-{name}", std::process::id()));
+            std::env::temp_dir().join(format!("sjel-inference-key-{}-{name}", std::process::id()));
         std::fs::create_dir_all(&directory).unwrap();
         let path = directory.join("key");
         std::fs::write(&path, content).unwrap();
@@ -1477,7 +1477,7 @@ mod tests {
     #[test]
     fn relative_key_files_resolve_beside_the_private_config() {
         let directory =
-            std::env::temp_dir().join(format!("axon-inference-config-{}", std::process::id()));
+            std::env::temp_dir().join(format!("sjel-inference-config-{}", std::process::id()));
         std::fs::create_dir_all(&directory).unwrap();
         let config_path = directory.join("inference.json");
         std::fs::write(

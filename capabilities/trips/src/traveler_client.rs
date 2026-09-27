@@ -26,7 +26,7 @@ use serde::Deserialize;
 /// mechanism those comments defer — service-runner exporting a declared sibling's
 /// port the way it exports `SJEL_PORT` — is now well past justified by the count.
 pub fn traveler_base_url() -> String {
-    axon_config::env_var("SJEL_TRAVELER_URL")
+    sjel_config::env_var("SJEL_TRAVELER_URL")
         .unwrap_or_else(|_| "http://127.0.0.1:8096".to_string())
 }
 
@@ -57,7 +57,7 @@ struct HardBody {
 /// The airports the traveller named, best first. `None` when the profile cannot be
 /// read at all — a different fact from an empty list, which means they named none.
 pub fn home_airports() -> Option<Vec<String>> {
-    let client = axon_http::client(axon_http::Purpose::new("trips-traveler"), TIMEOUT).ok()?;
+    let client = sjel_http::client(sjel_http::Purpose::new("trips-traveler"), TIMEOUT).ok()?;
     let envelope: ProfileEnvelope = client
         .get(format!("{}/api/profile", traveler_base_url()))
         .send()
@@ -69,7 +69,7 @@ pub fn home_airports() -> Option<Vec<String>> {
 
 /// The soft ranking weights stated or derived in traveler profile, if available.
 pub fn soft_weights() -> Option<SoftWeights> {
-    let client = axon_http::client(axon_http::Purpose::new("trips-traveler"), TIMEOUT).ok()?;
+    let client = sjel_http::client(sjel_http::Purpose::new("trips-traveler"), TIMEOUT).ok()?;
     let envelope: ProfileEnvelope = client
         .get(format!("{}/api/profile", traveler_base_url()))
         .send()

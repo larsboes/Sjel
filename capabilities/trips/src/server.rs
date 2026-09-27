@@ -1127,7 +1127,7 @@ struct FlightWhenParams {
 /// sibling's port, so the spine mechanism that comment deferred (service-runner
 /// exporting declared siblings' ports) is justified and tracked as follow-up.
 fn calendar_base_url() -> String {
-    axon_config::env_var("SJEL_CALENDAR_URL")
+    sjel_config::env_var("SJEL_CALENDAR_URL")
         .unwrap_or_else(|_| "http://127.0.0.1:8087".to_string())
 }
 
@@ -1221,8 +1221,8 @@ async fn flight_when(Query(params): Query<FlightWhenParams>) -> ApiResponse {
         grid.dedup_by(|later, earlier| later.date == earlier.date);
 
         let entries: Result<Vec<trips::windows::CalendarSpan>, String> = (|| {
-            let client = axon_http::client(
-                axon_http::Purpose::new("trips-calendar"),
+            let client = sjel_http::client(
+                sjel_http::Purpose::new("trips-calendar"),
                 std::time::Duration::from_secs(3),
             )
             .map_err(|error| error.to_string())?;
@@ -1559,7 +1559,7 @@ struct PackQuery {
 /// Where interior serves its inventory. Same hardcoded-sibling-port shape, and
 /// the same caveat, as `calendar_base_url` above.
 fn interior_base_url() -> String {
-    axon_config::env_var("SJEL_INTERIOR_URL")
+    sjel_config::env_var("SJEL_INTERIOR_URL")
         .unwrap_or_else(|_| "http://127.0.0.1:8092".to_string())
 }
 
@@ -1822,7 +1822,7 @@ fn build_router(state: AppState) -> Router {
         ))
         .layer(axum::middleware::from_fn_with_state(
             CAPABILITY,
-            axon_server::origin::refuse_foreign_origins,
+            sjel_server::origin::refuse_foreign_origins,
         ))
         .layer(CorsLayer::permissive())
         .with_state(state)
@@ -1837,9 +1837,9 @@ async fn main() {
         travel: Arc::new(config.travel),
         export_lock: Arc::new(tokio::sync::Mutex::new(())),
     };
-    // Loopback via axon_server; the old 0.0.0.0 bind here was never a
+    // Loopback via sjel_server; the old 0.0.0.0 bind here was never a
     // documented decision and is retired with it.
-    axon_server::serve_local("trips-server", config.port, build_router(state)).await;
+    sjel_server::serve_local("trips-server", config.port, build_router(state)).await;
 }
 
 #[cfg(test)]

@@ -11,7 +11,8 @@ const LEGACY_PREFIX: &str = "AXON_";
 
 /// The pre-rename name of a `SJEL_` setting, or `None` for any other name.
 pub fn legacy_name(name: &str) -> Option<String> {
-    name.strip_prefix(PREFIX).map(|rest| format!("{LEGACY_PREFIX}{rest}"))
+    name.strip_prefix(PREFIX)
+        .map(|rest| format!("{LEGACY_PREFIX}{rest}"))
 }
 
 /// [`std::env::var`] for a `SJEL_` name, falling back to its `AXON_` name.
@@ -54,8 +55,14 @@ mod tests {
         assert_eq!(legacy_name("SJEL_DB_PATH").as_deref(), Some("AXON_DB_PATH"));
         assert_eq!(legacy_name("HOME"), None);
         let body = "AXON_LAN_PORT=8443\nSJEL_HOME_TIMEZONE=Europe/Berlin\nAXON_HOME_TIMEZONE=UTC\n";
-        assert_eq!(deployment_value(body, "SJEL_LAN_PORT").as_deref(), Some("8443"));
-        assert_eq!(deployment_value(body, "SJEL_HOME_TIMEZONE").as_deref(), Some("Europe/Berlin"));
+        assert_eq!(
+            deployment_value(body, "SJEL_LAN_PORT").as_deref(),
+            Some("8443")
+        );
+        assert_eq!(
+            deployment_value(body, "SJEL_HOME_TIMEZONE").as_deref(),
+            Some("Europe/Berlin")
+        );
         assert_eq!(deployment_value(body, "SJEL_ABSENT"), None);
         assert_eq!(deployment_value("SJEL_EMPTY=\n", "SJEL_EMPTY"), None);
     }

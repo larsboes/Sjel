@@ -257,7 +257,8 @@ mod tests {
         }
 
         fn set(mut self, key: &'static str, value: &str) -> Self {
-            self.restore.push((key.to_string(), std::env::var(key).ok()));
+            self.restore
+                .push((key.to_string(), std::env::var(key).ok()));
             std::env::set_var(key, value);
             self
         }

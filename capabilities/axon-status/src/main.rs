@@ -91,8 +91,8 @@ async fn main() {
         );
         Vec::new()
     });
-    let ui_dir =
-        axon_config::env_var("SJEL_DASHBOARD_DIST").unwrap_or_else(|_| "dashboard/dist".to_string());
+    let ui_dir = axon_config::env_var("SJEL_DASHBOARD_DIST")
+        .unwrap_or_else(|_| "dashboard/dist".to_string());
     // Said at startup rather than discovered as a blank page. The bundle is a build artifact
     // (`dashboard/service.toml` `build`), so a fresh checkout has none until it is built, and a
     // shell that 404s every page while every API route works is a confusing way to learn that.

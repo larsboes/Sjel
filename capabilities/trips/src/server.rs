@@ -1127,7 +1127,8 @@ struct FlightWhenParams {
 /// sibling's port, so the spine mechanism that comment deferred (service-runner
 /// exporting declared siblings' ports) is justified and tracked as follow-up.
 fn calendar_base_url() -> String {
-    axon_config::env_var("SJEL_CALENDAR_URL").unwrap_or_else(|_| "http://127.0.0.1:8087".to_string())
+    axon_config::env_var("SJEL_CALENDAR_URL")
+        .unwrap_or_else(|_| "http://127.0.0.1:8087".to_string())
 }
 
 /// Calendar's `GET /api/entries` for a day range, as `flight_when` asks for it.
@@ -1558,7 +1559,8 @@ struct PackQuery {
 /// Where interior serves its inventory. Same hardcoded-sibling-port shape, and
 /// the same caveat, as `calendar_base_url` above.
 fn interior_base_url() -> String {
-    axon_config::env_var("SJEL_INTERIOR_URL").unwrap_or_else(|_| "http://127.0.0.1:8092".to_string())
+    axon_config::env_var("SJEL_INTERIOR_URL")
+        .unwrap_or_else(|_| "http://127.0.0.1:8092".to_string())
 }
 
 /// `item_ref` -> the item, or `None` when interior could not be reached.

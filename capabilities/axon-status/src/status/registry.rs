@@ -197,10 +197,12 @@ pub(crate) struct CapabilityView {
 /// `tools/lib/paths.sh` exports it, so anything started by `service-runner.sh`
 /// inherits it; a hand-started run has to say where it is.
 pub(crate) fn axon_root() -> Result<PathBuf, String> {
-    axon_config::env_var("SJEL_ROOT").map(PathBuf::from).map_err(|_| {
-        "SJEL_ROOT is not set — start this through tools/service-runner.sh, or export it"
-            .to_string()
-    })
+    axon_config::env_var("SJEL_ROOT")
+        .map(PathBuf::from)
+        .map_err(|_| {
+            "SJEL_ROOT is not set — start this through tools/service-runner.sh, or export it"
+                .to_string()
+        })
 }
 
 /// Every file `tools/capability.sh registry` reads, with its mtime — the cache key

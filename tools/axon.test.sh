@@ -41,7 +41,7 @@ contains "$out" "cargo <args...>"
 out="$("$AXON" help gates)"
 contains "$out" "repo-gates job"
 contains "$out" "bun-tests job"
-contains "$out" "axon cargo test"
+contains "$out" "sjel cargo test"
 [ -x "$ROOT/tools/ci-local" ] || fail "tools/ci-local is not executable"
 
 out="$("$AXON" help cargo)"

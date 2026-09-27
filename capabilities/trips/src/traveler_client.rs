@@ -26,7 +26,8 @@ use serde::Deserialize;
 /// mechanism those comments defer — service-runner exporting a declared sibling's
 /// port the way it exports `SJEL_PORT` — is now well past justified by the count.
 pub fn traveler_base_url() -> String {
-    axon_config::env_var("SJEL_TRAVELER_URL").unwrap_or_else(|_| "http://127.0.0.1:8096".to_string())
+    axon_config::env_var("SJEL_TRAVELER_URL")
+        .unwrap_or_else(|_| "http://127.0.0.1:8096".to_string())
 }
 
 /// Long enough for a loopback query, short enough that a stopped traveler never

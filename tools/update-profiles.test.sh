@@ -21,7 +21,7 @@ fail() { echo "FAIL: $1"; fails=$((fails + 1)); }
 # --- build a real remote ---------------------------------------------------------------
 REMOTE="$WORK/remote"
 mkdir -p "$REMOTE/tools/lib"
-for f in tools/update.sh tools/lib/paths.sh tools/lib/toml.sh tools/lib/delta.sh tools/lib/version.sh; do
+for f in tools/update.sh tools/lib/paths.sh tools/lib/env-compat.sh tools/lib/toml.sh tools/lib/delta.sh tools/lib/version.sh; do
   [ -f "$_root/$f" ] || { echo "missing input: $f"; exit 1; }
   cp "$_root/$f" "$REMOTE/$f"
 done

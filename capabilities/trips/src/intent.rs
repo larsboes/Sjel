@@ -274,8 +274,8 @@ pub fn query_model_within(
     timeout: std::time::Duration,
 ) -> Result<IntentDraft, String> {
     let url = model_url();
-    let model =
-        axon_config::env_var("SJEL_INTENT_MODEL").unwrap_or_else(|_| "apple-foundationmodel".into());
+    let model = axon_config::env_var("SJEL_INTENT_MODEL")
+        .unwrap_or_else(|_| "apple-foundationmodel".into());
 
     let client = axon_http::client(axon_http::Purpose::new("trips-intent"), timeout)
         .map_err(|e| format!("client build: {e}"))?;

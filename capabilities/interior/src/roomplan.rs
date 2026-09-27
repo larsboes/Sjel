@@ -93,10 +93,11 @@ pub struct Element {
     /// Ausdehnung im lokalen Rahmen, in Metern. Fuer Waende und Objekte ist `y` die Hoehe; die
     /// Bodenplatte ist die Ausnahme, dort ist `z` die Staerke.
     pub dimensions_m: [f64; 3],
-    /// Spaltenweise 4x4-Matrix, wie `dashboard/src/lib/roomplan.ts` sie liest: die Verschiebung
-    /// steht in `[12..15]`. USD schreibt zeilenweise mit der Verschiebung in der vierten Zeile;
-    /// die Umsetzung passiert in [`transform`]. Ohne sie laege jedes Element an der falschen
-    /// Stelle, und zwar plausibel falsch.
+    /// 16 Zahlen in der Reihenfolge, in der `dashboard/src/lib/roomplan.ts` sie liest: die
+    /// Verschiebung steht in `[12..15]`.
+    ///
+    /// USD schreibt zeilenweise mit der Verschiebung in der vierten Zeile, und das ist dieselbe
+    /// Reihenfolge. [`transform`] begruendet, warum hier **nicht** transponiert wird.
     pub transform: [f64; 16],
     /// Immer `"low"`: die USDZ traegt kein Vertrauen, siehe Modulkopf.
     pub confidence: &'static str,
@@ -179,7 +180,11 @@ impl Scan {
             .map(|e| e.dimensions_m[achse])
             .collect();
         let erste = *werte.first()?;
-        if werte.iter().all(|w| (w - erste).abs() < 1e-9) {
+        // Ein Mikrometer und nicht Gleichheit: die Maschenausgabe traegt Werte wie -0,15999998
+        // neben 0,16, und ein Gleichheitsvergleich erklaert elf einheitliche Waende plus eine
+        // gerundete fuer uneinig. Ein Mikrometer liegt weit unter allem, was dieses Programm in
+        // Zentimetern ausdruecken kann.
+        if werte.iter().all(|w| (w - erste).abs() < 1e-6) {
             Some(erste)
         } else {
             None
@@ -358,12 +363,20 @@ fn zeichenkette(text: &str, feld: &str) -> Option<String> {
     Some(rest[auf..zu].to_string())
 }
 
-/// Die `matrix4d xformOp:transform`, umgesetzt von zeilenweise auf spaltenweise.
+/// Die `matrix4d xformOp:transform`, **ohne** Umsetzung.
 ///
-/// USD ist zeilenweise mit der Verschiebung in der **vierten Zeile**; `roomplan.ts` liest sie aus
-/// `transform[12..15]`, also aus der vierten **Spalte**. Beides ist dieselbe Information in zwei
-/// Reihenfolgen, und sie zu verwechseln verschiebt jedes Element an eine Stelle, die plausibel
-/// aussieht. `out[spalte * 4 + zeile] = zeile[spalte]`.
+/// Das sieht nach einem vergessenen Rechenschritt aus und ist genau richtig. Der Client liest die
+/// Verschiebung aus `transform[12..15]`; USD schreibt sie in die vierte **Zeile** eines
+/// zeilenweise abgelegten Feldes, und die liegt bei 12 bis 15. Beides faellt zusammen, weil USD
+/// den Punkt als Zeilenvektor fuehrt (`p' = p · M`) und das Client-Format als Spaltenvektor
+/// (`p' = M · p`): die beiden Fassungen sind Transponierte voneinander, und die Transponierung
+/// schiebt die Verschiebung in der einen in die vierte Zeile und in der anderen in die vierte
+/// Spalte — dieselben vier Indizes.
+///
+/// Wer hier transponiert, schiebt jedes Element nach (0, 0, 0). Das ist nicht nur falsch, es
+/// sieht auch plausibel aus: die Aufnahme hat dann eben einen Schwerpunkt im Ursprung, und
+/// nichts meldet es. Ein erster Anlauf dieses Moduls tat genau das, und
+/// `die_verschiebung_landet_in_der_vierten_spalte` hat es gefangen.
 fn transform(text: &str) -> Option<[f64; 16]> {
     let start = text.find("matrix4d xformOp:transform")?;
     let rest = &text[start..];
@@ -390,7 +403,7 @@ fn transform(text: &str) -> Option<[f64; 16]> {
     let mut out = [0.0f64; 16];
     for (z, zeile) in zeilen.iter().enumerate() {
         for (s, wert) in zeile.iter().enumerate() {
-            out[s * 4 + z] = *wert;
+            out[z * 4 + s] = *wert;
         }
     }
     Some(out)
@@ -409,7 +422,10 @@ pub fn parse_usda(name: &str, text: &str) -> Option<Element> {
     let transform = transform(text)?;
     let mut spanne = [0.0f64; 3];
     for achse in 0..3 {
-        let min = punkte.iter().map(|p| p[achse]).fold(f64::INFINITY, f64::min);
+        let min = punkte
+            .iter()
+            .map(|p| p[achse])
+            .fold(f64::INFINITY, f64::min);
         let max = punkte
             .iter()
             .map(|p| p[achse])
@@ -564,7 +580,10 @@ pub fn captures_root(flat: &str) -> Result<PathBuf, ScanError> {
 pub fn capture_dates(flat: &str) -> Result<Vec<PathBuf>, ScanError> {
     let root = captures_root(flat)?;
     let mut dates: Vec<PathBuf> = std::fs::read_dir(&root)
-        .map_err(|source| ScanError::Read { path: root.clone(), source })?
+        .map_err(|source| ScanError::Read {
+            path: root.clone(),
+            source,
+        })?
         .filter_map(|e| e.ok())
         .map(|e| e.path())
         .filter(|p| p.is_dir())
@@ -594,7 +613,12 @@ pub fn latest_capture(flat: &str) -> Result<PathBuf, ScanError> {
 /// Geschrieben wird `draft.json`. Ein bereits vorhandener Entwurf wird ersetzt: er ist aus der
 /// USDZ abgeleitet und traegt keine Information, die dabei verloren gehen koennte. Das **Review**
 /// daneben (`review.json`) wird nicht angefasst, und die USDZ selbst schon gar nicht.
-pub fn write_draft(scan: &Scan, flat: &str, verzeichnis: &Path, heute: &str) -> std::io::Result<PathBuf> {
+pub fn write_draft(
+    scan: &Scan,
+    flat: &str,
+    verzeichnis: &Path,
+    heute: &str,
+) -> std::io::Result<PathBuf> {
     let pfad = verzeichnis.join("draft.json");
     let inhalt = draft(scan, flat, heute);
     std::fs::write(&pfad, serde_json::to_vec_pretty(&inhalt)?)?;
@@ -684,10 +708,10 @@ pub struct Diff {
     pub scan_oeffnungen: Vec<(String, String, f64, f64)>,
     /// Tueren und Fenster aus `room.toml`: Kennung, Breite in Zentimetern.
     pub modell_oeffnungen: Vec<(String, i32)>,
-    /// Flaeche der oberen Bodenseite aus dem Scan.
+    /// Der Boden, den die Aufnahme zeigt, als Flaeche der oberen Bodenseite.
     pub scan_grundflaeche_m2: Option<f64>,
-    /// Was `room.toml` als innen gemessen fuehrt.
-    pub modell_grundflaeche_m2: f64,
+    /// Die innere Grundflaeche, die `room.toml` kennt.
+    pub modell_innenflaeche_m2: f64,
     /// Gesamtlaenge aller Waende aus dem Scan, in Zentimetern. Nicht die Summe aus `room.toml`:
     /// der Scan trennt Waende an ihren Oeffnungen, `room.toml` fuehrt eine Wand mit einer
     /// Oeffnung darin, und die beiden Summen sind deshalb nicht dieselbe Groesse. Der Wert steht
@@ -703,6 +727,18 @@ impl Diff {
     pub fn offene_frage_beantwortet(&self) -> bool {
         self.scan_wandhoehe_cm.is_some() && self.modell_hoehe_cm == 0
     }
+}
+
+/// Die innere Grundflaeche, die das Modell kennt: das Polygon des Hauptraums (die Kuechennische
+/// ist Teil davon) plus das Bad.
+///
+/// Gerechnet und nicht aus `[flat.flaeche]` gelesen — dieselbe Begruendung, die `Room::area_m2`
+/// schon fuehrt: eine abgeschriebene Zahl kann von der Geometrie abdriften, aus der jede Pruefung
+/// sie ableitet. Die Aufnahme zeigt die ganze Wohnung und nicht nur einen Raum, und
+/// `innen_gemessen_m2` in `room.toml` ist genau diese Summe; gelesen wird sie hier trotzdem
+/// nicht.
+fn modell_innenflaeche_m2(room: &Room) -> f64 {
+    room.area_m2() + room.bad.as_ref().map_or(0.0, |bad| bad.flaeche_m2)
 }
 
 /// Der Scan gegen das gemessene Modell. Rechnet, schreibt nichts.
@@ -743,7 +779,7 @@ pub fn diff(scan: &Scan, room: &Room) -> Diff {
             .map(|o| (o.id.clone(), o.breite))
             .collect(),
         scan_grundflaeche_m2: scan.bodenflaeche_m2(),
-        modell_grundflaeche_m2: room.hauptraum.flaeche_m2,
+        modell_innenflaeche_m2: modell_innenflaeche_m2(room),
         scan_wandlaenge_cm: scan
             .flaechen()
             .filter(|e| e.category == "Wall")
@@ -785,8 +821,9 @@ mod tests {
             out.extend_from_slice(inhalt.as_bytes());
 
             zentral.extend_from_slice(&0x0201_4b50u32.to_le_bytes());
-            zentral.extend_from_slice(&20u16.to_le_bytes());
-            zentral.extend_from_slice(&0u16.to_le_bytes());
+            zentral.extend_from_slice(&20u16.to_le_bytes()); // Version, die es schrieb
+            zentral.extend_from_slice(&20u16.to_le_bytes()); // Version, die es braucht
+            zentral.extend_from_slice(&0u16.to_le_bytes()); // Flags
             zentral.extend_from_slice(&VERFAHREN_GESPEICHERT.to_le_bytes());
             zentral.extend_from_slice(&0u16.to_le_bytes());
             zentral.extend_from_slice(&0x0021u16.to_le_bytes());
@@ -866,18 +903,24 @@ def Xform "Wall0" (
         let lokal = bytes.iter().position(|_| true).unwrap();
         bytes[lokal + 8] = 8;
         let zentral_start = u32::from_le_bytes([
-            bytes[bytes.len() - 6], bytes[bytes.len() - 5],
-            bytes[bytes.len() - 4], bytes[bytes.len() - 3],
+            bytes[bytes.len() - 6],
+            bytes[bytes.len() - 5],
+            bytes[bytes.len() - 4],
+            bytes[bytes.len() - 3],
         ]) as usize;
         bytes[zentral_start + 10] = 8;
-        let path = std::env::temp_dir().join(format!("interior-deflate-{}.usdz", std::process::id()));
+        let path =
+            std::env::temp_dir().join(format!("interior-deflate-{}.usdz", std::process::id()));
         std::fs::write(&path, &bytes).expect("Testdatei");
         match zip_eintraege(&bytes, &path) {
             Err(ScanError::Komprimiert { verfahren, .. }) => assert_eq!(verfahren, 8),
             Err(other) => panic!("erwartet Komprimiert, bekommen: {other:?}"),
             // Kein `{:?}` auf dem Erfolgsfall: der traegt die Nutzdaten, und ein Test, der bei
             // einem Fehlschlag ein Archiv ausdruckt, ist beim Lesen schlimmer als nutzlos.
-            Ok(gelesen) => panic!("erwartet einen Fehler, gelesen wurden {} Eintraege", gelesen.len()),
+            Ok(gelesen) => panic!(
+                "erwartet einen Fehler, gelesen wurden {} Eintraege",
+                gelesen.len()
+            ),
         }
         let _ = std::fs::remove_file(&path);
     }
@@ -915,7 +958,7 @@ def Xform "Wall0" (
         let w = parse_usda("Wall0.usda", &wand_usda()).expect("Wand");
         let f = parse_usda("Window0.usda", fenster).expect("Fenster");
         assert!(w.ist_flaeche() && !w.ist_oeffnung() && !w.ist_objekt());
-        assert!(f.ist_oeffnung() && f.ist_tuer() == false);
+        assert!(f.ist_oeffnung() && !f.ist_tuer());
         assert!(f.dimensions_m[0] > 0.0);
     }
 
@@ -927,7 +970,10 @@ def Xform "Wall0" (
     matrix4d xformOp:transform = ( (1, 0, 0, 0), (0, 1, 0, 0), (0, 0, 1, 0), (0, 0, 0, 1) )
 } }"#;
         let t = parse_usda("Door0.usda", tuer).expect("Tuer");
-        assert!(t.ist_tuer(), "der Zustand in der Kategorie macht sie nicht zu etwas anderem");
+        assert!(
+            t.ist_tuer(),
+            "der Zustand in der Kategorie macht sie nicht zu etwas anderem"
+        );
     }
 
     /// Die Koerper sind flach, und ihre Flaeche steht nicht in ihrer Spanne. Der Test haelt den
@@ -946,21 +992,32 @@ def Xform "Wall0" (
     }
 }"#;
         let flaeche = obere_flaeche_m2(text).expect("Flaeche");
-        assert!((flaeche - 12.0).abs() < 1e-9, "erwartet 12, bekommen {flaeche}");
+        assert!(
+            (flaeche - 12.0).abs() < 1e-9,
+            "erwartet 12, bekommen {flaeche}"
+        );
     }
 
     /// Nur nach oben zeigende Dreiecke zaehlen. Sonst waere die Flaeche die doppelte.
+    ///
+    /// Das zweite Dreieck benutzt die Punkte 3 bis 5 und nicht noch einmal 0 bis 2: eine
+    /// Maschenausgabe, die zwei Flaechen mit verschiedener Richtung teilt, muss die Punkte doppelt
+    /// fuehren, sonst traegt ein Punkt zwei Normalen zugleich. Die echte Bodenplatte tut das auch —
+    /// sie traegt 28 Facetten auf 84 Punkte.
     #[test]
     fn die_unterseite_zaehlt_nicht_mit() {
         let text = r#"def Mesh "Floor0"
 {
     int[] faceVertexCounts = [3, 3]
-    int[] faceVertexIndices = [0, 1, 2, 0, 1, 2]
+    int[] faceVertexIndices = [0, 1, 2, 3, 4, 5]
     normal3f[] normals = [(0, 0, 1), (0, 0, 1), (0, 0, 1), (0, 0, -1), (0, 0, -1), (0, 0, -1)]
     point3f[] points = [(0, 0, 0), (2, 0, 0), (0, 3, 0), (0, 0, 0), (2, 0, 0), (0, 3, 0)]
 }"#;
         let flaeche = obere_flaeche_m2(text).expect("Flaeche");
-        assert!((flaeche - 3.0).abs() < 1e-9, "erwartet 3, bekommen {flaeche}");
+        assert!(
+            (flaeche - 3.0).abs() < 1e-9,
+            "erwartet 3, bekommen {flaeche}"
+        );
     }
 
     /// Ein widerspruechiger Scan gibt keine Zahl heraus. Eine Wandhoehe aus zwoelf Waenden, von
@@ -971,7 +1028,10 @@ def Xform "Wall0" (
         let mut b = a.clone();
         b.dimensions_m[1] = 111.0;
         a.dimensions_m[1] = 222.0;
-        let scan = Scan { elements: vec![a, b], ..Default::default() };
+        let scan = Scan {
+            elements: vec![a, b],
+            ..Default::default()
+        };
         assert_eq!(scan.wandhoehe_m(), None);
         let eines = Scan {
             elements: vec![parse_usda("Wall0.usda", &wand_usda()).expect("Wand")],
@@ -1001,7 +1061,10 @@ def Xform "Wall0" (
         assert_eq!(d["room"]["openings"].as_array().map(|a| a.len()), Some(0));
         assert_eq!(d["room"]["objects"].as_array().map(|a| a.len()), Some(1));
         let e = &d["room"]["surfaces"][0];
-        assert_eq!(e["transform"][12], 1.0, "der Client liest die Verschiebung hier");
+        assert_eq!(
+            e["transform"][12], 1.0,
+            "der Client liest die Verschiebung hier"
+        );
         assert_eq!(e["confidence"], "low");
     }
 }

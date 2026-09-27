@@ -1320,12 +1320,15 @@ fn roomplan_show(model: &Model, argv: &[String]) -> i32 {
                 "id": id, "breite_cm": b
             })).collect::<Vec<_>>(),
             "scan_grundflaeche_m2": d.scan_grundflaeche_m2,
-            "modell_grundflaeche_m2": d.modell_grundflaeche_m2,
+            "modell_innenflaeche_m2": d.modell_innenflaeche_m2,
             "scan_objekte": d.scan_objekte.iter().map(|(n, m)| serde_json::json!({
                 "element": n, "cm": m
             })).collect::<Vec<_>>(),
         });
-        println!("{}", serde_json::to_string_pretty(&inhalt).unwrap_or_default());
+        println!(
+            "{}",
+            serde_json::to_string_pretty(&inhalt).unwrap_or_default()
+        );
         return 0;
     }
 
@@ -1368,7 +1371,10 @@ fn roomplan_show(model: &Model, argv: &[String]) -> i32 {
                 );
             }
         }
-        None => println!("    {}", red("die Waende widersprechen sich, also keine Zahl")),
+        None => println!(
+            "    {}",
+            red("die Waende widersprechen sich, also keine Zahl")
+        ),
     }
     match scan.wandstaerke_m() {
         Some(m) => println!(
@@ -1399,7 +1405,10 @@ fn roomplan_show(model: &Model, argv: &[String]) -> i32 {
     for (id, b) in &d.modell_oeffnungen {
         println!("    {:<26} breit {:>5} cm", id, b);
     }
-    println!("\n    {}", yellow("zwischen den Listen wird keine Identitaet behauptet:"));
+    println!(
+        "\n    {}",
+        yellow("zwischen den Listen wird keine Identitaet behauptet:")
+    );
     println!(
         "    {}",
         dim("welcher Scan-Eintrag welche Oeffnung ist, ist eine Entscheidung und keine Rechnung")
@@ -1408,9 +1417,9 @@ fn roomplan_show(model: &Model, argv: &[String]) -> i32 {
     println!("\n  {}", bold("Bodenflaeche"));
     match d.scan_grundflaeche_m2 {
         Some(m2) => {
-            let delta = m2 - d.modell_grundflaeche_m2;
-            let prozent = if d.modell_grundflaeche_m2 > 0.0 {
-                delta / d.modell_grundflaeche_m2 * 100.0
+            let delta = m2 - d.modell_innenflaeche_m2;
+            let prozent = if d.modell_innenflaeche_m2 > 0.0 {
+                delta / d.modell_innenflaeche_m2 * 100.0
             } else {
                 0.0
             };
@@ -1421,8 +1430,8 @@ fn roomplan_show(model: &Model, argv: &[String]) -> i32 {
             );
             println!(
                 "    room.toml   {:.2} m²  {}",
-                d.modell_grundflaeche_m2,
-                dim("innen gemessen")
+                d.modell_innenflaeche_m2,
+                dim("Hauptraum + Bad, aus dem Polygon gerechnet")
             );
             println!("    Abweichung  {:+.2} m²  ({:+.1} %)", delta, prozent);
         }

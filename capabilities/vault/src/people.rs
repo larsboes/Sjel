@@ -61,7 +61,14 @@ pub struct PersonFacts {
 
 /// Single-value keys the import reads. Measured 2026-09-25 across 89 notes: relation 26,
 /// company 12, birthday 3, coordinates 2, role 2, email 1 filled.
-pub const PROFILE_SCALARS: &[&str] = &["relation", "company", "role", "birthday", "email", "coordinates"];
+pub const PROFILE_SCALARS: &[&str] = &[
+    "relation",
+    "company",
+    "role",
+    "birthday",
+    "email",
+    "coordinates",
+];
 
 /// List keys the import reads: interests 8, skills 3, socials 1 filled on the same day.
 pub const PROFILE_LISTS: &[&str] = &["interests", "skills", "socials"];
@@ -82,7 +89,11 @@ fn raw_list(raw: &str, key: &str) -> Vec<String> {
         };
         let rest = rest.trim();
         if let Some(inline) = rest.strip_prefix('[').and_then(|r| r.strip_suffix(']')) {
-            return inline.split(',').map(clean).filter(|i| !i.is_empty()).collect();
+            return inline
+                .split(',')
+                .map(clean)
+                .filter(|i| !i.is_empty())
+                .collect();
         }
         let mut items = Vec::new();
         for next in lines.by_ref() {
@@ -351,8 +362,14 @@ mod tests {
         ron.raw_frontmatter = Some(raw.into());
         let profile = profile_of(&ron);
         assert_eq!(profile["relation"], serde_json::json!("colleague"));
-        assert!(!profile.contains_key("company"), "an empty key is not a value");
-        assert_eq!(profile["interests"], serde_json::json!(["bouldering", "jazz"]));
+        assert!(
+            !profile.contains_key("company"),
+            "an empty key is not a value"
+        );
+        assert_eq!(
+            profile["interests"],
+            serde_json::json!(["bouldering", "jazz"])
+        );
     }
 
     #[test]

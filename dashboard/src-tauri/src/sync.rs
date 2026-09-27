@@ -370,7 +370,10 @@ fn migrate(conn: &mut Connection) -> rusqlite::Result<()> {
         if (index as i64) < done {
             continue;
         }
-        let tx = conn.transaction()?;
+        // Immediate, the form tools/check-store-transactions.sh requires: the lock is taken up
+        // front instead of upgraded mid-transaction. This store is the phone's own file and cannot
+        // link axon_store, so the behaviour is named here.
+        let tx = conn.transaction_with_behavior(rusqlite::TransactionBehavior::Immediate)?;
         tx.execute_batch(sql)?;
         tx.pragma_update(None, "user_version", index as i64 + 1)?;
         tx.commit()?;

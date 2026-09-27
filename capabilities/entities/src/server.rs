@@ -468,8 +468,8 @@ async fn entity_sources(State(state): State<Arc<AppState>>, Path(id): Path<Strin
         if s.store.get(&id)?.is_none() {
             return Err(StoreError::NotFound(format!("no entity {id}")));
         }
-        let vault_url =
-            axon_config::env_var("SJEL_VAULT_URL").unwrap_or_else(|_| "http://127.0.0.1:8094".into());
+        let vault_url = axon_config::env_var("SJEL_VAULT_URL")
+            .unwrap_or_else(|_| "http://127.0.0.1:8094".into());
         let mut obsidian: Option<Result<Vec<entities::sync::Incoming>, String>> = None;
         let sources: Vec<Value> = s
             .store
@@ -600,8 +600,8 @@ fn run_sync(
 ) -> Result<(), String> {
     let (records, managed): (Vec<entities::sync::Incoming>, &[&str]) = match system {
         "obsidian" => {
-            let vault_url =
-                axon_config::env_var("SJEL_VAULT_URL").unwrap_or_else(|_| "http://127.0.0.1:8094".into());
+            let vault_url = axon_config::env_var("SJEL_VAULT_URL")
+                .unwrap_or_else(|_| "http://127.0.0.1:8094".into());
             (
                 entities::obsidian::fetch(&vault_url)?,
                 entities::obsidian::MANAGED,

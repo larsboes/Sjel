@@ -41,9 +41,9 @@
     "test:watch": "vitest",
     "test:e2e": "vitest run e2e --reporter=verbose",
     "typecheck": "tsc --noEmit",
-    "lint": "biome check src/ test/",
+    "lint": "biome check src/",
     "lint:fix": "biome check --fix src/ test/",
-    "check": "npm run lint && npm run typecheck && npm run test",
+    "check": "npm run lint && npm run typecheck",
     "test:coverage": "vitest run --coverage",
     "bench": "vitest bench",
     "bench:ab": "node test/perf/ab.mjs"

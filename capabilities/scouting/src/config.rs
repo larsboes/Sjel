@@ -312,7 +312,9 @@ mod tests {
             // exports under it cannot stand in for the setting under test.
             let saved = keys
                 .iter()
-                .flat_map(|key| std::iter::once(key.to_string()).chain(axon_config::env::legacy_name(key)))
+                .flat_map(|key| {
+                    std::iter::once(key.to_string()).chain(axon_config::env::legacy_name(key))
+                })
                 .map(|key| {
                     let previous = std::env::var(&key).ok();
                     std::env::remove_var(&key);

@@ -22,3 +22,19 @@ ignoreUntil = 2026-11-01
 # of them is the operator's own file. The other is a request body on a port that, until
 # 2026-09-08, answered any web page the operator had open.
 reason = "Unmaintained ttf-parser, non-optional and runtime-reachable, via lopdf 0.42.0 <- pdf-extract 0.12.0 <- transit (`cargo tree -p transit -i ttf-parser`, 2026-09-08). Two callers reach the parser: `transit import <file>`, where the file is the operator's own, and the raw body of `POST /api/tickets/extract`, which is whatever the caller sent. The second is why this is untrusted input, and it is more exposed than a file on disk: that route sat under CorsLayer::permissive() with no origin refusal, and it takes `Bytes` rather than a typed body, so a cross-origin simple POST reached the PDF parser with no preflight to stop it. `refuse_foreign_origins` now bounds its callers to the dashboard, the tailnet and non-browser clients. Scouting links transit for adapters/transit_fare.rs and calls no extractor, so it inherits the crate and not the reach. No known vulnerability, no CVSS, no affected function and no fixed version — this is an unmaintained-crate advisory, so the exception stands to its date: if a maintained pdf-extract alternative appears, take it, and keep transit's existing PDF fixtures green across the swap."
+
+# The two below reach dashboard/src-tauri/Cargo.lock only through gtk 0.18 <- muda/tao <- tauri,
+# which Tauri pulls in for Linux alone. The app ships for macOS and iOS: `cargo tree -i glib
+# --target aarch64-apple-darwin` and `--target aarch64-apple-ios` print nothing (2026-09-27), and
+# no CI job builds the app for Linux. A fix needs Tauri to move off GTK3 (gtk-rs 0.18 is its last
+# GTK3 release). This is the one exception here for a known vulnerability, and it holds only while
+# the app has no Linux build: adding one ends it, whatever the date says.
+[[IgnoredVulns]]
+id = "GHSA-wrw7-89jp-8q8g"
+ignoreUntil = 2026-12-01
+reason = "glib 0.18.5 VariantStrIter unsoundness (RUSTSEC-2024-0429; osv reports it under this id), fixed in 0.20. Reached only via gtk 0.18 <- muda/tao <- tauri 2.12 on Linux; the Sjel app builds for macOS and iOS only, where glib is not compiled. Upgrade path: Tauri on GTK4."
+
+[[IgnoredVulns]]
+id = "RUSTSEC-2024-0370"
+ignoreUntil = 2026-12-01
+reason = "Unmaintained proc-macro-error 1.0.4, build-time only, via glib-macros 0.18 <- glib <- gtk 0.18, the same Linux-only Tauri path as GHSA-wrw7-89jp-8q8g. No affected functions and no fixed version."

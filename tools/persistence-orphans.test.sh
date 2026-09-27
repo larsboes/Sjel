@@ -51,7 +51,7 @@ plant_unit nothing-declares-this                                # -> ORPHAN
 
 # Only the persistence section matters here; doctor legitimately fails other checks against a
 # planted HOME, and asserting on its exit code would be asserting on those instead.
-OUT="$( cd "$_root" && HOME="$FAKE_HOME" AXON_OVERLAY_ROOT="$OVERLAY" tools/doctor 2>&1 )"
+OUT="$( cd "$_root" && HOME="$FAKE_HOME" SJEL_OVERLAY_ROOT="$OVERLAY" tools/doctor 2>&1 )"
 PERSIST="$(printf '%s\n' "$OUT" | grep 'persistence is installed for' || true)"
 
 flagged() { printf '%s\n' "$PERSIST" | grep -q "persistence is installed for '$1'"; }

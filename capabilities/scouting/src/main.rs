@@ -461,7 +461,7 @@ fn resolve_home_timezone(
         .map(str::to_string)
         .or_else(|| cfg.home_timezone.clone())
         .ok_or_else(|| {
-            "no home timezone set — declare AXON_HOME_TIMEZONE in the overlay's \
+            "no home timezone set — declare SJEL_HOME_TIMEZONE in the overlay's \
              config/deployment.env (calendar resolves the same value), or pass \
              --timezone <zone> for this run. Luma reports events in UTC and calendar \
              stores local wall time, so promoting without one would write the wrong hour."

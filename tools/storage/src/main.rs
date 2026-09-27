@@ -97,12 +97,12 @@ fn main() -> ExitCode {
 
 /// This checkout's root.
 ///
-/// `AXON_ROOT` first, because `tools/lib/paths.sh` exports it and the launcher sources that
+/// `SJEL_ROOT` first, because `tools/lib/paths.sh` exports it and the launcher sources that
 /// — which is the only answer that stays right inside a git worktree, where the shared
 /// `CARGO_TARGET_DIR` belongs to a different checkout. Walking up from the cwd is the
 /// fallback for `cargo run` and for a direct invocation.
 fn repo_root() -> Result<PathBuf, String> {
-    if let Ok(root) = std::env::var("AXON_ROOT") {
+    if let Ok(root) = axon_config::env_var("SJEL_ROOT") {
         if !root.trim().is_empty() {
             return Ok(PathBuf::from(root));
         }
@@ -118,7 +118,7 @@ fn repo_root() -> Result<PathBuf, String> {
         }
         if !dir.pop() {
             return Err(
-                "no Axon checkout here — set AXON_ROOT or run this through tools/storage/storage"
+                "no Axon checkout here — set SJEL_ROOT or run this through tools/storage/storage"
                     .to_string(),
             );
         }
@@ -128,12 +128,12 @@ fn repo_root() -> Result<PathBuf, String> {
 /// The overlay's policy file.
 ///
 /// Resolved through `axon_config::overlay_root`, exactly as `capabilities/host-net` resolves
-/// its own policy — so `AXON_PERSONAL_ROOT` is the one input, and the axon.local.toml →
+/// its own policy — so `SJEL_PERSONAL_ROOT` is the one input, and the axon.local.toml →
 /// axon.toml order stays owned by `tools/lib/paths.sh` and `libs/overlay/overlay.ts`. A
 /// third copy of that order in Rust is what this avoids; the launcher sources `paths.sh`.
 fn policy_path() -> Result<PathBuf, String> {
     let root = axon_config::overlay_root().ok_or_else(|| {
-        "no overlay — AXON_PERSONAL_ROOT is unset. Run this through tools/storage/storage \
+        "no overlay — SJEL_PERSONAL_ROOT is unset. Run this through tools/storage/storage \
          or `axon storage`, which source tools/lib/paths.sh."
             .to_string()
     })?;

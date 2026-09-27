@@ -43,7 +43,7 @@ case "$CAP" in
   ''|*[!A-Za-z0-9._-]*) echo "restore.sh: invalid capability name" >&2; exit 1 ;;
 esac
 
-MANIFEST="$AXON_ROOT/capabilities/$CAP/service.toml"
+MANIFEST="$SJEL_ROOT/capabilities/$CAP/service.toml"
 [ -f "$MANIFEST" ] || { echo "restore.sh: no $MANIFEST" >&2; exit 1; }
 [ -f "$ARCHIVE" ] || { echo "restore.sh: archive not found: $ARCHIVE" >&2; exit 1; }
 ARCHIVE="$(cd "$(dirname "$ARCHIVE")" && pwd -P)/$(basename "$ARCHIVE")"
@@ -144,9 +144,9 @@ else
   DEST_NEEDS_CREATE=2
 fi
 
-AXON_REAL="$(cd "$AXON_ROOT" && pwd -P)"
-OVERLAY_REAL="$(cd "$AXON_PERSONAL_ROOT" 2>/dev/null && pwd -P || true)"
-path_within "$DEST" "$AXON_REAL" && fail "destination may not be inside the Axon checkout"
+SJEL_REAL="$(cd "$SJEL_ROOT" && pwd -P)"
+OVERLAY_REAL="$(cd "$SJEL_PERSONAL_ROOT" 2>/dev/null && pwd -P || true)"
+path_within "$DEST" "$SJEL_REAL" && fail "destination may not be inside the Axon checkout"
 [ -n "$OVERLAY_REAL" ] && path_within "$DEST" "$OVERLAY_REAL" \
   && fail "destination may not be inside the active private overlay"
 # Refused BEFORE the destination exists, for the reason the container preflight this replaces

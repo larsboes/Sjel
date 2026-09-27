@@ -32,17 +32,17 @@ set -u
 
 _here="$(cd "$(dirname "$0")" && pwd)"
 # shellcheck source=tools/lib/paths.sh
-. "$_here/lib/paths.sh"   # AXON_ROOT, AXON_PERSONAL_ROOT
+. "$_here/lib/paths.sh"   # SJEL_ROOT, SJEL_PERSONAL_ROOT
 
 # launchd hands a job PATH=/usr/bin:/bin:/usr/sbin:/sbin (plus tools/, from the rendered unit).
 # None of the package managers live there, so the first scheduled run on 2026-09-02 skipped
 # every step and reported "scanner-missing" for an audit whose scanners were installed. The
 # managers' homes are fixed by their installers, so they are named here rather than left to
 # whichever shell started the job: Homebrew (arm64 and Intel), rustup, and uv's tool shims.
-# AXON_HOST_PATCH_KEEP_PATH=1 leaves the caller's PATH alone — for a host with its own layout,
+# SJEL_HOST_PATCH_KEEP_PATH=1 leaves the caller's PATH alone — for a host with its own layout,
 # and for tools/host-patch.test.sh, which plants a PATH to prove what the script does without
 # each manager.
-if [ -z "${AXON_HOST_PATCH_KEEP_PATH:-}" ]; then
+if [ -z "${SJEL_HOST_PATCH_KEEP_PATH:-}" ]; then
   PATH="/opt/homebrew/bin:/opt/homebrew/sbin:/usr/local/bin:$HOME/.cargo/bin:$HOME/.local/bin:$PATH"
   export PATH
 fi
@@ -94,7 +94,7 @@ step rustup "rustup update"         rustup update
 
 echo
 echo "▸ tools/audit"
-"$AXON_ROOT/tools/audit"
+"$SJEL_ROOT/tools/audit"
 AUDIT_RC=$?
 case "$AUDIT_RC" in
   0) AUDIT="clean" ;;
@@ -104,11 +104,11 @@ esac
 
 # The receipt. tools/doctor reads it and says how old it is, which is the only way a launchd
 # job that stopped firing becomes visible without somebody going to look.
-if [ -n "${AXON_PERSONAL_ROOT:-}" ] && mkdir -p "$AXON_PERSONAL_ROOT/data/host-patch" 2>/dev/null; then
+if [ -n "${SJEL_PERSONAL_ROOT:-}" ] && mkdir -p "$SJEL_PERSONAL_ROOT/data/host-patch" 2>/dev/null; then
   printf '{"at":"%s","ran":"%s","skipped":"%s","failed":"%s","audit":"%s"}\n' \
     "$(date -u +%Y-%m-%dT%H:%M:%SZ)" "$(echo $RAN)" "$(echo $SKIPPED)" \
     "$(echo $FAILED)" "$AUDIT" \
-    > "$AXON_PERSONAL_ROOT/data/host-patch/last.json"
+    > "$SJEL_PERSONAL_ROOT/data/host-patch/last.json"
 else
   echo "host-patch: no overlay configured — no receipt written, so tools/doctor cannot report this run" >&2
 fi

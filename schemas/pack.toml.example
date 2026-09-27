@@ -6,7 +6,7 @@
 # Doctrine: skills are PUBLIC and stay in Axon. No personal value (host, path,
 # key) is ever inlined in a skill — it is redacted to a placeholder, and the
 # skill reads the real value at runtime from the overlay
-# ($AXON_PERSONAL_ROOT/config/<pack>.*). Harness adapters activate the same
+# ($SJEL_PERSONAL_ROOT/config/<pack>.*). Harness adapters activate the same
 # source: every adapter materializes COPIES — tools/packs-claude into Claude Code,
 # tools/packs-codex into Codex — over the shared engine in tools/lib/pack-deploy.ts.
 

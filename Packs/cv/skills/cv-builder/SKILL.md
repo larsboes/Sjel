@@ -10,7 +10,7 @@ Drive the CV through **`$CV`** — the source of truth; this skill is the runboo
 generation here: every build is a deterministic filter over the master file, never a rewrite.
 
 **This setup is not hardcoded.** The actual CV content (name, employer, contact info) lives in
-`$AXON_PERSONAL_ROOT/data/cv/master_cv.yaml`, never in this skill or in Axon. If that file is
+`$SJEL_PERSONAL_ROOT/data/cv/master_cv.yaml`, never in this skill or in Axon. If that file is
 missing, stop and tell the user to copy `capabilities/cv/master_cv.schema.yaml` there and fill
 it in — do not draft CV content yourself.
 
@@ -18,8 +18,8 @@ it in — do not draft CV content yourself.
 
 | var | value | notes |
 |-----|-------|-------|
-| `$CV` | `capabilities/cv/cv` | launcher, relative to `$AXON_ROOT` |
-| `$MASTER` | `$AXON_PERSONAL_ROOT/data/cv/master_cv.yaml` | the one file to maintain; `$CV` refuses to run without it |
+| `$CV` | `capabilities/cv/cv` | launcher, relative to `$SJEL_ROOT` |
+| `$MASTER` | `$SJEL_PERSONAL_ROOT/data/cv/master_cv.yaml` | the one file to maintain; `$CV` refuses to run without it |
 | `$PROFILE` | one of `$CV list-profiles`' output | e.g. `swe`, `quant`, `consulting`, `general` |
 | `$LANG` | `en` or `de` | defaults to `en` if the user doesn't say |
 
@@ -62,13 +62,13 @@ it in — do not draft CV content yourself.
   design. Free-section entries are the exception: their `label` and `meta` accept either a
   plain string or an `{en, de}` pair (added 2026-08-16 for "since Jun 2025" / "seit Juni 2025").
 - **Output PDFs and the master file are personal data** — they live under
-  `$AXON_PERSONAL_ROOT/data/cv/`, gitignored, never in this skill or in Axon's own repo. Don't
+  `$SJEL_PERSONAL_ROOT/data/cv/`, gitignored, never in this skill or in Axon's own repo. Don't
   copy CV content into this skill file, a commit message, or anywhere else in the public repo.
 
 ## Provenance and maintenance
 
-`$CV` → `$AXON_ROOT/capabilities/cv/cv` (bash launcher, execs `typst compile`). Re-verify on
+`$CV` → `$SJEL_ROOT/capabilities/cv/cv` (bash launcher, execs `typst compile`). Re-verify on
 drift:
-- master file present: `test -f "$AXON_PERSONAL_ROOT/data/cv/master_cv.yaml" && echo ok`
-- launcher present + executable: `test -x "$AXON_ROOT/capabilities/cv/cv" && echo ok`
+- master file present: `test -f "$SJEL_PERSONAL_ROOT/data/cv/master_cv.yaml" && echo ok`
+- launcher present + executable: `test -x "$SJEL_ROOT/capabilities/cv/cv" && echo ok`
 - deps on PATH: `command -v typst && command -v yq`

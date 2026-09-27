@@ -15,19 +15,19 @@ OVERLAY="$TEST_ROOT/overlay"
 mkdir -p "$OVERLAY/config"
 
 # The resolver reads the overlay through the two variables paths.sh exports. Sourcing paths.sh
-# and then pointing them at the fixture is the whole setup — no fake AXON_ROOT, because the one
+# and then pointing them at the fixture is the whole setup — no fake SJEL_ROOT, because the one
 # thing this file reads out of the repo is a capability's tracked manifest.
-AXON_ROOT="$ROOT"
-export AXON_ROOT
+SJEL_ROOT="$ROOT"
+export SJEL_ROOT
 source "$ROOT/tools/lib/toml.sh"
 source "$ROOT/tools/lib/external-ref.sh"
-AXON_OVERLAY_ROOT="$OVERLAY"
-AXON_MACHINE_TOML="$OVERLAY/config/machine.toml"
+SJEL_OVERLAY_ROOT="$OVERLAY"
+SJEL_MACHINE_TOML="$OVERLAY/config/machine.toml"
 
 fail() { echo "FAIL: $1" >&2; exit 1; }
 
 # --- 1. a declared provider resolves through the systems id ---------------------------------
-cat > "$AXON_MACHINE_TOML" <<'EOF'
+cat > "$SJEL_MACHINE_TOML" <<'EOF'
 os = "macos"
 container_runtime = "docker"
 capabilities = ["comms"]
@@ -56,7 +56,7 @@ got="$(capability_endpoint vaultwarden DOMAIN)" || fail "resolution must still s
 [ "$got" = "https://vault.provider.test" ] || fail "env_file DOMAIN overrode an explicit declaration"
 
 # --- 3. a machine that self-hosts is unchanged ----------------------------------------------
-cat > "$AXON_MACHINE_TOML" <<'EOF'
+cat > "$SJEL_MACHINE_TOML" <<'EOF'
 os = "linux"
 container_runtime = "docker"
 capabilities = ["vaultwarden"]
@@ -78,7 +78,7 @@ set -e
 # The one that matters most. A provided_by naming an id with no url means the operator said
 # something specific and got it wrong; resolving to a local address anyway would point a vault
 # client at whatever answers on this host.
-cat > "$AXON_MACHINE_TOML" <<'EOF'
+cat > "$SJEL_MACHINE_TOML" <<'EOF'
 os = "macos"
 container_runtime = "docker"
 capabilities = []
@@ -96,7 +96,7 @@ grep -q "no-such-system" "$TEST_ROOT/err" || fail "the error must name the unres
 grep -q "systems.local.toml" "$TEST_ROOT/err" || fail "the error must name the file to fix"
 
 # --- 6. the external set is exactly the sections that declare a provider --------------------
-cat > "$AXON_MACHINE_TOML" <<'EOF'
+cat > "$SJEL_MACHINE_TOML" <<'EOF'
 os = "macos"
 container_runtime = "docker"
 capabilities = ["comms"]

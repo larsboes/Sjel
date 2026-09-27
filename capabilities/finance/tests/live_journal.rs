@@ -2,7 +2,7 @@
 //!
 //! The journal this is aimed at is private: it lives in the active overlay and
 //! is canonical financial truth. So the path is never written down here. Point
-//! `AXON_FINANCE_JOURNAL` at a journal and the checks run against it; leave it
+//! `SJEL_FINANCE_JOURNAL` at a journal and the checks run against it; leave it
 //! unset and they report why they did nothing, which is what happens in CI and
 //! on any machine that does not hold the file.
 //!
@@ -12,10 +12,10 @@
 use std::collections::BTreeSet;
 
 fn journal() -> Option<(std::path::PathBuf, String)> {
-    let path = std::env::var_os("AXON_FINANCE_JOURNAL")?;
+    let path = axon_config::env_var_os("SJEL_FINANCE_JOURNAL")?;
     let path = std::path::PathBuf::from(path);
     if !path.is_file() {
-        eprintln!("AXON_FINANCE_JOURNAL is set but names no file; skipping");
+        eprintln!("SJEL_FINANCE_JOURNAL is set but names no file; skipping");
         return None;
     }
     let text = std::fs::read_to_string(&path).expect("the journal must be readable");
@@ -28,7 +28,7 @@ fn journal() -> Option<(std::path::PathBuf, String)> {
 #[test]
 fn the_live_journal_parses_with_every_source_id_intact() {
     let Some((path, text)) = journal() else {
-        eprintln!("set AXON_FINANCE_JOURNAL to run the live-journal proof; skipping");
+        eprintln!("set SJEL_FINANCE_JOURNAL to run the live-journal proof; skipping");
         return;
     };
 
@@ -91,7 +91,7 @@ fn the_live_journal_parses_with_every_source_id_intact() {
 #[test]
 fn the_live_journal_validates() {
     let Some((_, text)) = journal() else {
-        eprintln!("set AXON_FINANCE_JOURNAL to run the live-journal proof; skipping");
+        eprintln!("set SJEL_FINANCE_JOURNAL to run the live-journal proof; skipping");
         return;
     };
     if let Err(error) = finance::journal::validate(&text) {

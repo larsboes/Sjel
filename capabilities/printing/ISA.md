@@ -43,11 +43,11 @@ preset, and heat is gated behind an explicit human "go" that is a separate comma
       *Probe:* `printctl selftest` → "arm without --local", "arm with a --local path that is not a
       file", "arm with over-cap gcode" all refused, and "arm with within-cap gcode: allowed" so the
       gate is not simply always-off. The positive case writes to a throwaway arm file; the real one
-      at `$AXON_PERSONAL_ROOT/data/printing/.armed.json` was absent before and after.
+      at `$SJEL_PERSONAL_ROOT/data/printing/.armed.json` was absent before and after.
 - [x] P7 · Nothing personal lives in Axon: host, presets and caps resolve from the overlay.
       *Probe:* `rg '([0-9]{1,3}\.){3}[0-9]{1,3}|[a-z0-9-]+\.local\b|homepi'` over the capability,
       minus `args.local` false positives → no hits; the example config carries the literal
-      `PRINTER_LAN_IP` placeholder and `printctl.py` resolves `$AXON_PERSONAL_ROOT`. Validate the
+      `PRINTER_LAN_IP` placeholder and `printctl.py` resolves `$SJEL_PERSONAL_ROOT`. Validate the
       pattern against a planted fixture before trusting an empty result: bare `rg -E` is
       `--encoding` and errors out silently-looking, which reads exactly like "clean".
 

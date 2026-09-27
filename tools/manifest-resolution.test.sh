@@ -22,7 +22,7 @@ if [ ! -f "$LIB_DIR/paths.sh" ]; then
   exit 1
 fi
 
-# An operator's exported AXON_OVERLAY_ROOT outranks the scratch root's own axon.toml inside
+# An operator's exported SJEL_OVERLAY_ROOT outranks the scratch root's own axon.toml inside
 # paths.sh, which would make this test resolve the real overlay it is supposed to be replacing
 # (tools/lib/test-support.sh#isolate_axon_env).
 source "$LIB_DIR/test-support.sh"

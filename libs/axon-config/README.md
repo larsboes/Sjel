@@ -1,13 +1,13 @@
 # axon-config
 
 Shared overlay/config resolution for Axon's Rust capabilities: tilde expansion, overlay
-paths (`AXON_PERSONAL_ROOT`), the store's location, the deployment's home timezone, and the
-runner's port contract (`AXON_PORT` first, capability escape hatch second, config file
+paths (`SJEL_PERSONAL_ROOT`), the store's location, the deployment's home timezone, and the
+runner's port contract (`SJEL_PORT` first, capability escape hatch second, config file
 third, shipped default last).
 
 ## Where the store lives
 
-`database_path()` — `AXON_DB_PATH`, else `<overlay>/data/axon/axon.db`, else a scratch file
+`database_path()` — `SJEL_DB_PATH`, else `<overlay>/data/axon/axon.db`, else a scratch file
 under the temp directory. One file for every capability after PRD Q45 (2026-08-27), so it
 takes no capability argument: cross-capability joins are why the shared instance existed,
 and a file per capability would have dropped them. The last resort is deliberately obvious

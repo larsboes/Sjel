@@ -20,7 +20,7 @@ const FLAT: &str = "muster";
 /// Eine Kopie der Fixture, in der eine Zeile ersetzt ist.
 ///
 /// Jede Variante bekommt ihr eigenes Verzeichnis und ihren eigenen Wohnungsnamen, damit die
-/// Varianten nebeneinander existieren koennen: `AXON_PERSONAL_ROOT` ist prozessweit, und ein
+/// Varianten nebeneinander existieren koennen: `SJEL_PERSONAL_ROOT` ist prozessweit, und ein
 /// Test, der sie zwischen zwei Laeufen umsetzt, laeuft gegen jeden Nachbarn im selben Binary.
 fn variante(name: &str, ersetze: &[(&str, &str)]) -> Model {
     let wurzel = einmalige_wurzel();
@@ -63,8 +63,9 @@ fn einmalige_wurzel() -> PathBuf {
         let _ = std::fs::remove_dir_all(&wurzel);
         std::fs::create_dir_all(wurzel.join("data/interior/flats")).expect("Testwurzel");
         let db = wurzel.join("test.db");
-        std::env::set_var("AXON_PERSONAL_ROOT", &wurzel);
-        std::env::set_var("AXON_DB_PATH", &db);
+        std::env::set_var("SJEL_PERSONAL_ROOT", &wurzel);
+        std::env::set_var("SJEL_DB_PATH", &db);
+        std::env::remove_var("SJEL_INTERIOR_FLAT");
         std::env::remove_var("AXON_INTERIOR_FLAT");
         let store = interior::store::Store::open(&db).expect("die Testdatenbank oeffnet");
         interior::import::inventory(&store, &fixture().join("data/interior/inventory"))

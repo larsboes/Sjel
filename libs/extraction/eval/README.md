@@ -32,7 +32,7 @@ By hand. `cargo test` never runs an engine: the scoring rule lives in
 recording under `recorded/`. That is what lets a host with no macOS, no Vision and no binary
 still check the rule.
 
-`AXON_VISOCR_BIN` points at a `visocr` that is not on `PATH` — `tools/visocr/build.sh` puts one
+`SJEL_VISOCR_BIN` points at a `visocr` that is not on `PATH` — `tools/visocr/build.sh` puts one
 in `target/tools/` by default. `--record <file>` writes the engine's verbatim output back into
 `recorded/`, which is how the hermetic half stays honest.
 

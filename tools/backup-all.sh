@@ -35,21 +35,21 @@ source "$TOOLS_DIR/lib/paths.sh"
 # the same fix: name the missing binary instead of letting bash's `command not found` vanish
 # into a log nobody reads.
 #
-# AXON_BUN is how a machine whose supervisor cannot see the login PATH states the real path,
+# SJEL_BUN is how a machine whose supervisor cannot see the login PATH states the real path,
 # declared in the overlay's machine.toml under `[capability.backup] env` — the seam
 # persistence_env_block exists for, rather than a hand-edit of the generated unit.
-BUN="${AXON_BUN:-bun}"
+BUN="${SJEL_BUN:-bun}"
 case "$BUN" in
   /*)
     [ -x "$BUN" ] || {
-      echo "backup-all.sh: AXON_BUN='$BUN' is not an executable file" >&2
+      echo "backup-all.sh: SJEL_BUN='$BUN' is not an executable file" >&2
       exit 1
     }
     ;;
   *)
     command -v "$BUN" >/dev/null 2>&1 || {
       echo "backup-all.sh: '$BUN' not found on PATH (PATH=$PATH)." >&2
-      echo "backup-all.sh: set AXON_BUN to its absolute path in the overlay's machine.toml, [capability.backup] env." >&2
+      echo "backup-all.sh: set SJEL_BUN to its absolute path in the overlay's machine.toml, [capability.backup] env." >&2
       exit 1
     }
     ;;

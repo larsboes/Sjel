@@ -1,5 +1,5 @@
 {
-  "_note": "Public template. Copy to axon-overlay/config/transit.json and fill real values there — never here. transit resolves config from $AXON_PERSONAL_ROOT/config/transit.json at runtime (see src/config.rs Config::load).",
+  "_note": "Public template. Copy to axon-overlay/config/transit.json and fill real values there — never here. transit resolves config from $SJEL_PERSONAL_ROOT/config/transit.json at runtime (see src/config.rs Config::load).",
   "_comment_defaults": "Optional conveniences. default_from_eva also backs `plan --from` (Phase 3). Set your own home route so `search`/`split`/`plan` run with fewer flags. Leave unset and the CLI requires --from/--to explicitly (errors with a clear message rather than silently defaulting to someone else's stations).",
   "default_from_eva": "",
   "default_to_eva": "",

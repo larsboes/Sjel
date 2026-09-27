@@ -27,8 +27,8 @@ set. If an old month changes, disappears, or the ledger is being bootstrapped, i
 the selected window atomically so no month is double-counted. Every run records its window
 and timestamp in `punctuality_ingest_runs`.
 
-The four tables live in the shared SQLite file — `AXON_DB_PATH`, else
-`$AXON_PERSONAL_ROOT/data/axon/axon.db` — under the table prefix `punctuality`, so they are
+The four tables live in the shared SQLite file — `SJEL_DB_PATH`, else
+`$SJEL_PERSONAL_ROOT/data/axon/axon.db` — under the table prefix `punctuality`, so they are
 `punctuality_stop_stats`, `punctuality_stations`, `punctuality_ingest_months` and
 `punctuality_ingest_runs`
 (libs/axon-store/README.md). PRD Q45 (2026-08-27) moved them there from a Postgres schema.

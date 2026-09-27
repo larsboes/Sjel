@@ -15,7 +15,7 @@ name = "axon-storage"
 path = "src/main.rs"
 
 [dependencies]
-# The overlay's location, read from AXON_PERSONAL_ROOT exactly as capabilities/host-net
+# The overlay's location, read from SJEL_PERSONAL_ROOT exactly as capabilities/host-net
 # reads its own policy. Zero external dependencies of its own
 # (libs/axon-config/Cargo.toml), so this stays a four-crate build.
 axon-config = { path = "../../libs/axon-config" }

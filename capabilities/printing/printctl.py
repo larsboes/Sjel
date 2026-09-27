@@ -20,8 +20,8 @@ import argparse, json, os, sys, glob, subprocess, time, zipfile, urllib.request,
 # Axon doctrine: this file is public. No personal value (printer IP, preset
 # names) lives here — those come from the private overlay at runtime. The
 # config is resolved in order:
-#   1. $AXON_PRINTING_CONFIG (explicit override)
-#   2. $AXON_PERSONAL_ROOT/config/printing.json (the overlay; AXON_PERSONAL_ROOT
+#   1. $SJEL_PRINTING_CONFIG (explicit override)
+#   2. $SJEL_PERSONAL_ROOT/config/printing.json (the overlay; SJEL_PERSONAL_ROOT
 #      is exported by tools/lib/paths.sh / ~/.zshrc)
 #   3. printctl.config.json next to this file (local, gitignored — dev fallback)
 # See capabilities/printing/printctl.config.example.json for the shape.
@@ -63,17 +63,17 @@ DEFAULT_CFG = {
 }
 
 def _arm_file():
-    overlay = os.environ.get("AXON_PERSONAL_ROOT")
+    overlay = os.environ.get("SJEL_PERSONAL_ROOT")
     base = os.path.join(os.path.expanduser(overlay), "data", "printing") if overlay \
         else os.path.join(HOME, ".cache", "printctl")
     os.makedirs(base, exist_ok=True)
     return os.path.join(base, ".armed.json")
 
 def _cfg_path():
-    env = os.environ.get("AXON_PRINTING_CONFIG")
+    env = os.environ.get("SJEL_PRINTING_CONFIG")
     if env:
         return env
-    overlay = os.environ.get("AXON_PERSONAL_ROOT")
+    overlay = os.environ.get("SJEL_PERSONAL_ROOT")
     if overlay:
         return os.path.join(os.path.expanduser(overlay), "config", "printing.json")
     return os.path.join(_HERE, "printctl.config.json")

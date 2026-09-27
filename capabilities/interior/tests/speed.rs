@@ -16,8 +16,8 @@ fn eine_layoutpruefung_kostet_wenige_millisekunden() {
     let fixture = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/fixtures/overlay");
     let db = std::env::temp_dir().join(format!("interior-speed-{}.db", std::process::id()));
     let _ = std::fs::remove_file(&db);
-    std::env::set_var("AXON_PERSONAL_ROOT", &fixture);
-    std::env::set_var("AXON_DB_PATH", &db);
+    std::env::set_var("SJEL_PERSONAL_ROOT", &fixture);
+    std::env::set_var("SJEL_DB_PATH", &db);
     let store = interior::store::Store::open(&db).unwrap();
     interior::import::inventory(&store, &fixture.join("data/interior/inventory")).unwrap();
     let model = Model::load("muster").unwrap();

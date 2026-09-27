@@ -251,9 +251,9 @@ fn preview(raw: &str) -> String {
     raw.chars().take(160).collect()
 }
 
-/// The local model's chat-completions endpoint, `AXON_INTENT_URL` first.
+/// The local model's chat-completions endpoint, `SJEL_INTENT_URL` first.
 fn model_url() -> String {
-    std::env::var("AXON_INTENT_URL")
+    axon_config::env_var("SJEL_INTENT_URL")
         .unwrap_or_else(|_| "http://127.0.0.1:8091/v1/chat/completions".into())
 }
 
@@ -275,7 +275,7 @@ pub fn query_model_within(
 ) -> Result<IntentDraft, String> {
     let url = model_url();
     let model =
-        std::env::var("AXON_INTENT_MODEL").unwrap_or_else(|_| "apple-foundationmodel".into());
+        axon_config::env_var("SJEL_INTENT_MODEL").unwrap_or_else(|_| "apple-foundationmodel".into());
 
     let client = axon_http::client(axon_http::Purpose::new("trips-intent"), timeout)
         .map_err(|e| format!("client build: {e}"))?;
@@ -288,7 +288,7 @@ pub fn query_model_within(
             format!(
                 "could not reach the local model at {url} ({e}). Start it with \
                  `tools/service-runner.sh start foundation-models`, or point \
-                 AXON_INTENT_URL somewhere else."
+                 SJEL_INTENT_URL somewhere else."
             )
         })?;
 

@@ -15,7 +15,7 @@ host is enough.
 
 1. **In the overlay config (non-secret):** set `PIHOLE_HOST` (base URL/host of the Pi-hole; scheme +
    `:port` optional) in `<overlay>/config/home-assistant.vars` (override its root with
-   `$AXON_HOME_ROOT`). The tool fails cleanly, naming a missing/`TODO-` key, until it's filled in.
+   `$SJEL_HOME_ROOT`). The tool fails cleanly, naming a missing/`TODO-` key, until it's filled in.
 2. **In Bitwarden (secret only):** an item `home-assistant/pihole` (override with `$PIHOLE_BW_ITEM`)
    with the custom field `PIHOLE_PASSWORD` (the admin/API password). Provision via Axon
    `setup-secret.sh`. The item may not exist yet — the tool fails cleanly, naming the missing field,

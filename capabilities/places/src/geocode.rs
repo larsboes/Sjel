@@ -27,11 +27,11 @@ pub const NOMINATIM_URL: &str = "https://nominatim.openstreetmap.org/search";
 const PROVIDER: &str = "nominatim";
 const MIN_REQUEST_SPACING: Duration = Duration::from_secs(1);
 
-/// `AXON_PLACES_NOMINATIM_URL` overrides the endpoint — the same
+/// `SJEL_PLACES_NOMINATIM_URL` overrides the endpoint — the same
 /// env-overridable-URL seam transit's hafas.rs uses, so tests point the real
 /// client at a local stub instead of mocking it.
 pub fn nominatim_url() -> String {
-    std::env::var("AXON_PLACES_NOMINATIM_URL")
+    axon_config::env_var("SJEL_PLACES_NOMINATIM_URL")
         .ok()
         .filter(|value| !value.trim().is_empty())
         .unwrap_or_else(|| NOMINATIM_URL.to_string())

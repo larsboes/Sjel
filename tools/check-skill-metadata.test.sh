@@ -1,7 +1,7 @@
 #!/bin/bash
 # Planted-tree regression tests for check-skill-metadata.sh.
 #
-# Each case is a throwaway Packs tree the gate is pointed at with AXON_PACKS_ROOT, so
+# Each case is a throwaway Packs tree the gate is pointed at with SJEL_PACKS_ROOT, so
 # every red path is PROVEN rather than assumed: a gate that passes because it checked
 # nothing looks exactly like a gate that passes because everything is fine. That
 # ambiguity is the whole reason this gate exists (the validator went uncalled for six
@@ -30,7 +30,7 @@ skill() { # skill <packs-root> <pack> <name> <description>
 
 run() { # run <packs-root> [extra args...] -> output in $out, exit status in $status
   local root="$1"; shift
-  out=$(AXON_PACKS_ROOT="$root" "$CHECK" "$@" 2>&1)
+  out=$(SJEL_PACKS_ROOT="$root" "$CHECK" "$@" 2>&1)
   status=$?
 }
 
@@ -107,7 +107,7 @@ skill "$root" "demo" "demo-skill" "$GOOD"
 tmpbin="$SCRATCH/bin"
 rm -rf "$tmpbin"; mkdir -p "$tmpbin"
 ln -s "$(command -v dirname)" "$tmpbin/dirname"
-out=$(PATH="$tmpbin" AXON_PACKS_ROOT="$root" "$CHECK" 2>&1)
+out=$(PATH="$tmpbin" SJEL_PACKS_ROOT="$root" "$CHECK" 2>&1)
 status=$?
 if [ "$status" -ne 2 ] || ! printf '%s' "$out" | grep -qF "setup error"; then
   echo "FAIL: a missing python3 should be exit 2 and name a setup error, got exit $status:"

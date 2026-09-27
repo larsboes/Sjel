@@ -55,7 +55,7 @@ git -C "$REMOTE" add -A
 git -C "$REMOTE" commit --quiet -m "after the release"
 
 run_bootstrap() { # run_bootstrap <profile> <dir>
-  AXON_REMOTE="file://$REMOTE" AXON_REF=v9.9.9 AXON_PROFILE="$1" AXON_DIR="$2" \
+  SJEL_REMOTE="file://$REMOTE" SJEL_REF=v9.9.9 SJEL_PROFILE="$1" SJEL_DIR="$2" \
     bash "$BOOTSTRAP" 2>&1
 }
 
@@ -124,7 +124,7 @@ case "$out" in
   *) fail "bootstrap overwrote or ignored an existing directory. Got: $out" ;;
 esac
 
-out="$(AXON_REMOTE="file://$REMOTE" AXON_REF=v9.9.9 AXON_PROFILE=nonsense AXON_DIR="$WORK/bad" \
+out="$(SJEL_REMOTE="file://$REMOTE" SJEL_REF=v9.9.9 SJEL_PROFILE=nonsense SJEL_DIR="$WORK/bad" \
        bash "$BOOTSTRAP" 2>&1)"
 case "$out" in
   *"unknown profile"*) ;;

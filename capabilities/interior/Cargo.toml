@@ -19,7 +19,7 @@ path = "src/lib.rs"
 # Pflicht, kein Komfort: doctors "Server bind policy" weist jede Capability zurueck, die sich
 # einen eigenen Listener baut.
 axon-server = { path = "../../libs/axon-server" }
-# Loest AXON_PERSONAL_ROOT auf. Jede Zahl, die diese Capability rechnet, liegt unter
+# Loest SJEL_PERSONAL_ROOT auf. Jede Zahl, die diese Capability rechnet, liegt unter
 # <overlay>/data/interior — hier liegt keine.
 axon-config = { path = "../../libs/axon-config" }
 # `/routes` neben `/health`, wie jede andere Capability mit HTTP-Oberflaeche.
@@ -32,6 +32,10 @@ devices = { path = "../devices" }
 # Die eine Art, eine Datei aus einer erklaerten Vault-Wurzel zu holen, plus die markierte
 # Region. Null Abhaengigkeiten, und die Konflikterkennung liegt in der Datei selbst.
 markdown-root = { path = "../../libs/markdown-root" }
+# Der Tag, an dem ein Entwurf entsteht. Vier Capabilities hatten diese zwoelf Zeilen
+# abgeschrieben, statt eine zu teilen — libs/civil-date/README begruendet, warum das
+# Teilen keinen Datumsabhaengigkeit kostet, und genau darum geht es hier.
+civil-date = { path = "../../libs/civil-date" }
 rusqlite.workspace = true
 serde = { workspace = true, features = ["derive"] }
 serde_json.workspace = true

@@ -14,7 +14,7 @@ blanking rung 0.
 ## Why this is a capability and not a LaunchAgent
 
 Same reason as `capabilities/backup`, and with one concrete gain. The hand-written unit carried an
-explicit `AXON_PERSONAL_ROOT` with a comment explaining that launchd gives a job none of the
+explicit `SJEL_PERSONAL_ROOT` with a comment explaining that launchd gives a job none of the
 shell's exports. True — and unnecessary once the job runs through `tools/service-runner.sh`, which
 sources `tools/lib/paths.sh`, which exports it. One fewer machine-local value copied by hand into
 a generated file.

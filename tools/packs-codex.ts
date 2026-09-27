@@ -66,7 +66,7 @@ export {
   type SkillStatus,
 };
 
-const AXON_ROOT = resolve(import.meta.dir, "..");
+const SJEL_ROOT = resolve(import.meta.dir, "..");
 const HELP = `tools/packs-codex — materialize Axon Packs.
 
   tools/packs-codex status [<pack>|--all]  show source/install/drift state
@@ -79,7 +79,7 @@ const HELP = `tools/packs-codex — materialize Axon Packs.
 
 Environment:
   CODEX_SKILLS_DIR       destination (default: $HOME/.agents/skills)
-  AXON_CODEX_STATE_FILE ownership ledger override (mainly for tests)
+  SJEL_CODEX_STATE_FILE ownership ledger override (mainly for tests)
 `;
 
 /** Codex reads agents/openai.yaml for its own metadata; a malformed one is a deploy-time failure, not a runtime surprise. */
@@ -100,13 +100,13 @@ export function defaultCodexDeployConfig(): DeployConfig {
   const home = process.env.HOME ?? "";
   const stateHome = process.env.XDG_STATE_HOME ?? join(home, ".local", "state");
   return {
-    axonRoot: AXON_ROOT,
+    axonRoot: SJEL_ROOT,
     destination: resolve(process.env.CODEX_SKILLS_DIR ?? join(home, ".agents", "skills")),
     stateFile: resolve(
-      process.env.AXON_CODEX_STATE_FILE ?? join(stateHome, "axon", "pack-deployments", "codex.json"),
+      process.env.SJEL_CODEX_STATE_FILE ?? join(stateHome, "axon", "pack-deployments", "codex.json"),
     ),
     adapter: "codex",
-    stateEnvVar: "AXON_CODEX_STATE_FILE",
+    stateEnvVar: "SJEL_CODEX_STATE_FILE",
     validateAdapterFiles: validateCodexFiles,
   };
 }

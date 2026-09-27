@@ -391,10 +391,10 @@ fn valid_iso_date(value: &str) -> bool {
 /// It moves a role only when the role's declared backend is loopback and the
 /// role names a model on the target under `on_backend`. `InferenceConfig`'s
 /// resolution states why each of those two conditions is load-bearing.
-pub const BACKEND_OVERRIDE_ENV: &str = "AXON_INFERENCE_BACKEND";
+pub const BACKEND_OVERRIDE_ENV: &str = "SJEL_INFERENCE_BACKEND";
 
 /// Points at the config file directly. Mainly for tests and one-off runs.
-pub const CONFIG_PATH_ENV: &str = "AXON_INFERENCE_CONFIG";
+pub const CONFIG_PATH_ENV: &str = "SJEL_INFERENCE_CONFIG";
 
 /// Comma-separated `systems.local.toml` ids the operator has declared to be
 /// their own hardware, written by `tools/service-runner.sh` from the resolver
@@ -410,7 +410,7 @@ pub const CONFIG_PATH_ENV: &str = "AXON_INFERENCE_CONFIG";
 ///
 /// Unset means no trusted peers, which is this machine's state until the second
 /// host lands (B9) and is byte-for-byte the behaviour that shipped before Q39.
-pub const TRUSTED_PEERS_ENV: &str = "AXON_INFERENCE_TRUSTED_PEERS";
+pub const TRUSTED_PEERS_ENV: &str = "SJEL_INFERENCE_TRUSTED_PEERS";
 
 /// Split the declared ids out of the raw variable. Empty entries are dropped,
 /// so a trailing comma or a stray separator cannot declare the empty id — which

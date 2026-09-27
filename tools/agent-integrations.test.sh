@@ -2,21 +2,21 @@
 set -euo pipefail
 
 TOOLS_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-AXON_ROOT="$(cd "$TOOLS_DIR/.." && pwd)"
+SJEL_ROOT="$(cd "$TOOLS_DIR/.." && pwd)"
 SCRIPT="$TOOLS_DIR/agent-integrations.sh"
 
 tmp="$(mktemp -d)"
 trap 'rm -rf "$tmp"' EXIT
 export HOME="$tmp/home"
-export AXON_TEST_UV_LOG="$tmp/uv.log"
+export SJEL_TEST_UV_LOG="$tmp/uv.log"
 export PATH="$tmp/bin:/usr/bin:/bin:/usr/sbin:/sbin"
 mkdir -p "$HOME/.config/opencode" "$tmp/bin"
 
 cat > "$tmp/bin/uv" <<'STUB'
 #!/bin/bash
 set -euo pipefail
-printf '%s|%s\n' "$PWD" "$*" >> "$AXON_TEST_UV_LOG"
-if [ "${AXON_TEST_UV_FAIL:-0}" = 1 ]; then
+printf '%s|%s\n' "$PWD" "$*" >> "$SJEL_TEST_UV_LOG"
+if [ "${SJEL_TEST_UV_FAIL:-0}" = 1 ]; then
   exit 19
 fi
 platform="${*: -1}"
@@ -41,7 +41,7 @@ chmod +x "$tmp/bin/opencode"
 # No version is read from anywhere, and that is the assertion: upstreams.toml carries no
 # `pin` since Q77 (2026-09-02), so the installer is driven at whatever `uv tool run
 # --from graphifyy` resolves today.
-if grep -q '^pin = ' "$AXON_ROOT/upstreams.toml"; then
+if grep -q '^pin = ' "$SJEL_ROOT/upstreams.toml"; then
   echo "upstreams.toml still declares a pin — this script must not resolve one" >&2
   exit 1
 fi
@@ -62,10 +62,10 @@ $SCRIPT install opencode
 plugin="$HOME/.config/opencode/plugins/graphify.js"
 test -s "$plugin"
 grep -q 'graphify' "$plugin"
-grep -Fq "tool run --from graphifyy graphify install --platform opencode" "$AXON_TEST_UV_LOG"
+grep -Fq "tool run --from graphifyy graphify install --platform opencode" "$SJEL_TEST_UV_LOG"
 
-scratch="$(head -n 1 "$AXON_TEST_UV_LOG" | cut -d '|' -f 1)"
-test "$scratch" != "$AXON_ROOT"
+scratch="$(head -n 1 "$SJEL_TEST_UV_LOG" | cut -d '|' -f 1)"
+test "$scratch" != "$SJEL_ROOT"
 test ! -e "$scratch"
 
 first="$(cksum "$plugin")"
@@ -97,7 +97,7 @@ echo "$machine_output" | grep -q '^opencode|stale|' || {
 
 printf '%s\n' '// known-good graphify plugin' > "$plugin"
 before="$(cksum "$plugin")"
-if AXON_TEST_UV_FAIL=1 $SCRIPT install opencode >/dev/null 2>&1; then
+if SJEL_TEST_UV_FAIL=1 $SCRIPT install opencode >/dev/null 2>&1; then
   echo "failed upstream install unexpectedly succeeded" >&2
   exit 1
 fi

@@ -214,7 +214,7 @@ if (!res.ok || !tok.refresh_token) {
 
 // --- 5. persist into the overlay (git-ignored *.env), never printed ---
 const selectedOverlay = overlayRoot();
-if (!selectedOverlay) die("could not resolve the deployment overlay; run tools/install.sh or set AXON_OVERLAY_ROOT");
+if (!selectedOverlay) die("could not resolve the deployment overlay; run tools/install.sh or set SJEL_OVERLAY_ROOT");
 const cfgDir = join(selectedOverlay, "config");
 mkdirSync(cfgDir, { recursive: true });
 const envPath = join(cfgDir, ENV_FILE);

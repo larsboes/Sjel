@@ -37,8 +37,8 @@ import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node
 import { dirname, join, resolve, sep } from "node:path";
 import { fileURLToPath } from "node:url";
 
-const AXON_ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "..");
-const OUT_DIR = join(AXON_ROOT, "dashboard", "static", "basemap");
+const SJEL_ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "..");
+const OUT_DIR = join(SJEL_ROOT, "dashboard", "static", "basemap");
 
 /** The documented hosted style, the one constant `dashboard/src/lib/map/style.ts` used to
  *  point the browser at directly. `upstreams.toml` [openfreemap] governs it. */

@@ -252,7 +252,7 @@ async fn main() {
 }
 
 /// This capability's name, for the origin guard's env var
-/// (`AXON_VAULT_ALLOWED_ORIGIN_HOSTS`).
+/// (`SJEL_VAULT_ALLOWED_ORIGIN_HOSTS`).
 const CAPABILITY: &str = "vault";
 
 /// The wired router, so a test can drive the real thing rather than a handler.

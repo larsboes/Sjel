@@ -30,7 +30,7 @@ done
 [ -n "$LIB_DIR" ] || { echo "state-mount-resolution: cannot find paths.sh next to $_dir" >&2; exit 1; }
 
 # Every case below plants a machine.toml and asks which [[state_mount]] resolves. An operator's
-# exported AXON_MACHINE_TOML points that lookup at the real one instead of the planted one
+# exported SJEL_MACHINE_TOML points that lookup at the real one instead of the planted one
 # (tools/lib/test-support.sh#isolate_axon_env).
 source "$LIB_DIR/test-support.sh"
 isolate_axon_env

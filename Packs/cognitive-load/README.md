@@ -18,8 +18,8 @@ Two skills, one matched pair, merged into one pack 2026-09-17:
 
 ## Activate
 ```bash
-"$AXON_ROOT/tools/packs.sh" link cognitive-load    # → ~/.claude/skills/{attention-control,asd-ste100}
-"$AXON_ROOT/tools/packs-pi" deploy cognitive-load  # → registered in ~/.pi/agent/settings.json
+"$SJEL_ROOT/tools/packs.sh" link cognitive-load    # → ~/.claude/skills/{attention-control,asd-ste100}
+"$SJEL_ROOT/tools/packs-pi" deploy cognitive-load  # → registered in ~/.pi/agent/settings.json
 ```
 
 `asd-ste100` is mandatory reading on the Claude Code surface: `~/.claude/CLAUDE.md` requires STE

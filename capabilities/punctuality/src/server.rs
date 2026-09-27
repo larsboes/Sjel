@@ -283,7 +283,7 @@ async fn main() {
         store: Arc::new(store),
     };
 
-    // AXON_PORT is what service-runner.sh exports from the manifest, so the port lives
+    // SJEL_PORT is what service-runner.sh exports from the manifest, so the port lives
     // in one file rather than two -- resolution itself lives in axon_server.
     let port = axon_server::resolve_port(None, None, 8085);
 

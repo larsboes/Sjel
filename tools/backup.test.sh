@@ -28,16 +28,16 @@ source "$ROOT/tools/lib/test-support.sh"
 
 cat > "$FIXTURE/tools/lib/paths.sh" <<PATHS
 #!/bin/bash
-AXON_ROOT="$FIXTURE"
-AXON_PERSONAL_ROOT="$OVERLAY"
-AXON_MACHINE_TOML="$OVERLAY/config/machine.toml"
-export AXON_ROOT AXON_PERSONAL_ROOT AXON_MACHINE_TOML
+SJEL_ROOT="$FIXTURE"
+SJEL_PERSONAL_ROOT="$OVERLAY"
+SJEL_MACHINE_TOML="$OVERLAY/config/machine.toml"
+export SJEL_ROOT SJEL_PERSONAL_ROOT SJEL_MACHINE_TOML
 source "$FIXTURE/tools/lib/toml.sh"
 PATHS
 cat > "$FIXTURE/tools/lib/platform.sh" <<'PLATFORM'
 #!/bin/bash
-AXON_CONTAINER_RUNTIME="docker"
-export AXON_CONTAINER_RUNTIME
+SJEL_CONTAINER_RUNTIME="docker"
+export SJEL_CONTAINER_RUNTIME
 PLATFORM
 cat > "$FIXTURE/tools/lib/bw-agent.sh" <<'AGENT'
 #!/bin/bash

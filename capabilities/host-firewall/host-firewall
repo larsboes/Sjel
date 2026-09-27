@@ -38,8 +38,8 @@ _dir="$(cd "$(dirname "${BASH_SOURCE[0]:-$0}")" && pwd)"
 # shellcheck source=../../tools/lib/paths.sh
 source "$_dir/../../tools/lib/paths.sh"
 
-CONFIG="${AXON_HOST_FIREWALL_CONFIG:-$AXON_PERSONAL_ROOT/config/host-firewall.toml}"
-STATE="$AXON_PERSONAL_ROOT/data/host-firewall"
+CONFIG="${SJEL_HOST_FIREWALL_CONFIG:-$SJEL_PERSONAL_ROOT/config/host-firewall.toml}"
+STATE="$SJEL_PERSONAL_ROOT/data/host-firewall"
 SAVED="$STATE/previous.nft"
 
 die()  { echo "host-firewall: $*" >&2; exit 2; }

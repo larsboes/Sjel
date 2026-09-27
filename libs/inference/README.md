@@ -68,7 +68,7 @@ either — a shared node is reachable. And presence in `systems.local.toml` cann
 test: `[nvidia-nim]` is in that file and is a cloud provider.
 
 The resolver is the shell's, not this crate's. `external-ref.sh` reads the pair and
-`tools/service-runner.sh` exports the answer as `AXON_INFERENCE_TRUSTED_PEERS`, the same way
+`tools/service-runner.sh` exports the answer as `SJEL_INFERENCE_TRUSTED_PEERS`, the same way
 it already exports `[inference] backend` — Q39 says extend that resolver rather than invent
 a second one. **Unset means no trusted peers**, which is a single-host deployment's normal
 state and is byte-for-byte the behaviour that shipped before Q39.
@@ -102,7 +102,7 @@ declares that backend — callers degrade from `None` rather than from a failed 
 
 ## Config
 
-`<overlay>/config/inference.json`, or `AXON_INFERENCE_CONFIG` to point somewhere else.
+`<overlay>/config/inference.json`, or `SJEL_INFERENCE_CONFIG` to point somewhere else.
 Field docs live in `inference.config.example.json` beside this file.
 
 A missing config is not an error. Every consumer is expected to degrade to something that
@@ -134,7 +134,7 @@ Secure Note into that local file; it never prints the value.
 ## Machine override
 
 `machine.toml`'s `[inference] backend` names the one local model runtime this machine has.
-`service-runner.sh` exports it as `AXON_INFERENCE_BACKEND` for every process it starts —
+`service-runner.sh` exports it as `SJEL_INFERENCE_BACKEND` for every process it starts —
 the same path `[capability.<name>] port` already takes to reach a process. An Intel,
 Raspberry Pi or Linux machine says so once, in the file that already holds machine-local
 facts, and no capability config changes.

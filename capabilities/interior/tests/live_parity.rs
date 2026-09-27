@@ -11,7 +11,7 @@
 //! ist oeffentlich. Sie liegt deshalb neben der Wohnung, die sie beschreibt, unter
 //! `<overlay>/data/interior/flats/<id>/ts-baseline.json`.
 //!
-//! Ohne `AXON_PERSONAL_ROOT` meldet dieser Test, warum er nichts getan hat, und kehrt zurueck —
+//! Ohne `SJEL_PERSONAL_ROOT` meldet dieser Test, warum er nichts getan hat, und kehrt zurueck —
 //! der Zustand in CI und auf jedem Rechner, der die Dateien nicht haelt. Die Maschine selbst
 //! ist davon unabhaengig geprueft: `tests/engine.rs` laeuft ueberall.
 //!
@@ -27,15 +27,15 @@ use interior::model::{default_flat, Layout, Model, ModelError};
 use serde_json::Value;
 
 /// Das Modell der aktiven Wohnung und ihre aufgezeichnete Vorlage, oder `None` mit einem Grund.
-/// `AXON_PERSONAL_ROOT` wird gelesen und nie gesetzt: welches Overlay gemeint ist, entscheidet
+/// `SJEL_PERSONAL_ROOT` wird gelesen und nie gesetzt: welches Overlay gemeint ist, entscheidet
 /// die Umgebung, nicht der Test.
 fn live() -> Option<(Model, Value)> {
-    std::env::var_os("AXON_PERSONAL_ROOT")?;
+    axon_config::env_var_os("SJEL_PERSONAL_ROOT")?;
     let flat = match default_flat() {
         Ok(f) => f,
         Err(e) => {
             eprintln!(
-                "AXON_PERSONAL_ROOT ist gesetzt, aber keine Wohnung waehlbar ({e}); uebersprungen"
+                "SJEL_PERSONAL_ROOT ist gesetzt, aber keine Wohnung waehlbar ({e}); uebersprungen"
             );
             return None;
         }
@@ -44,7 +44,7 @@ fn live() -> Option<(Model, Value)> {
         Ok(m) => m,
         Err(e) => {
             eprintln!(
-                "AXON_PERSONAL_ROOT ist gesetzt, aber das Modell laedt nicht ({e}); uebersprungen"
+                "SJEL_PERSONAL_ROOT ist gesetzt, aber das Modell laedt nicht ({e}); uebersprungen"
             );
             return None;
         }
@@ -66,7 +66,7 @@ macro_rules! live_or_skip {
         match live() {
             Some(v) => v,
             None => {
-                eprintln!("setze AXON_PERSONAL_ROOT, um die Paritaet gegen die echte Wohnung zu pruefen; uebersprungen");
+                eprintln!("setze SJEL_PERSONAL_ROOT, um die Paritaet gegen die echte Wohnung zu pruefen; uebersprungen");
                 return;
             }
         }

@@ -1,5 +1,5 @@
 {
-  "_note": "Public template. Copy to axon-overlay/config/printing.json and fill real values there — never here. printctl resolves config from $AXON_PERSONAL_ROOT/config/printing.json at runtime (see printctl.py _cfg_path).",
+  "_note": "Public template. Copy to axon-overlay/config/printing.json and fill real values there — never here. printctl resolves config from $SJEL_PERSONAL_ROOT/config/printing.json at runtime (see printctl.py _cfg_path).",
 
   "printer_host": "PRINTER_LAN_IP",
   "moonraker_port": 7125,

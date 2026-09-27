@@ -39,16 +39,16 @@ const GRAPH = {
 };
 
 let root = "";
-const previousRoot = process.env.AXON_ROOT;
+const previousRoot = process.env.SJEL_ROOT;
 
-/** Point the server at a scratch AXON_ROOT holding `graph`, or none at all. */
+/** Point the server at a scratch SJEL_ROOT holding `graph`, or none at all. */
 function plant(graph: unknown | null): void {
   root = mkdtempSync(join(tmpdir(), "axon-kg-"));
   if (graph !== null) {
     mkdirSync(join(root, "graphify-out"), { recursive: true });
     writeFileSync(join(root, "graphify-out/graph.json"), JSON.stringify(graph));
   }
-  process.env.AXON_ROOT = root;
+  process.env.SJEL_ROOT = root;
 }
 
 const call = async (path: string): Promise<{ status: number; body: any }> => {
@@ -60,8 +60,8 @@ const call = async (path: string): Promise<{ status: number; body: any }> => {
 beforeEach(() => plant(GRAPH));
 afterEach(() => {
   rmSync(root, { recursive: true, force: true });
-  if (previousRoot === undefined) delete process.env.AXON_ROOT;
-  else process.env.AXON_ROOT = previousRoot;
+  if (previousRoot === undefined) delete process.env.SJEL_ROOT;
+  else process.env.SJEL_ROOT = previousRoot;
 });
 
 describe("GET /api/graph", () => {

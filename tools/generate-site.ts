@@ -38,7 +38,7 @@ import { dirname, join, resolve } from "node:path";
 import { loadManifest } from "./lib/demo-endpoints.ts";
 import { esc, page } from "./lib/site-style.ts";
 
-const AXON_ROOT = resolve(dirname(new URL(import.meta.url).pathname), "..");
+const SJEL_ROOT = resolve(dirname(new URL(import.meta.url).pathname), "..");
 
 interface Unit {
   name: string;
@@ -180,13 +180,13 @@ function main(): void {
     process.exit(0);
   }
   const outIdx = args.indexOf("--out");
-  const outDir = outIdx >= 0 ? args[outIdx + 1] : join(AXON_ROOT, "site");
+  const outDir = outIdx >= 0 ? args[outIdx + 1] : join(SJEL_ROOT, "site");
   // Since #170 the site root is the dashboard, so this page is no longer an index. It keeps
   // its own generator because it renders self.json rather than a per-unit view, and it is
   // written into /docs beside the reference pages under its own name.
   const nameIdx = args.indexOf("--name");
   const outName = nameIdx >= 0 ? args[nameIdx + 1] : "index.html";
-  const selfPath = join(AXON_ROOT, "self.json");
+  const selfPath = join(SJEL_ROOT, "self.json");
   if (!existsSync(selfPath)) {
     console.error(`generate-site: no self.json at ${selfPath} — run: tools/self generate`);
     process.exit(1);

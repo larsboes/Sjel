@@ -20,7 +20,7 @@ Cross-capability joins survive because it is still one database. That property i
 instance existed at all, and it is the one that could not be traded away.
 
 Where the file lives is not this crate's decision — `axon_config::database_path` owns that
-(`AXON_DB_PATH`, else `<overlay>/data/axon/axon.db`), because it is overlay knowledge. Nor is
+(`SJEL_DB_PATH`, else `<overlay>/data/axon/axon.db`), because it is overlay knowledge. Nor is
 how it is kept: `capabilities/store` declares that, in the one manifest that owns the file
 (`kind = "data"`, `backup_sqlite_online`). A capability opens the database; it does not own it.
 

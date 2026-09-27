@@ -28,12 +28,12 @@ name        = "foundation-models"
 # It replaced 311 lines of Swift that did strictly less: three endpoints, no streaming, no tool
 # calling, no structured output. There is no `build` any more — `brew install apfel`.
 #
-# `--port ${AXON_PORT}` is load-bearing. apfel defaults to 11434, which is Ollama's port and is
+# `--port ${SJEL_PORT}` is load-bearing. apfel defaults to 11434, which is Ollama's port and is
 # already a declared backend in this deployment's inference.json; two things fighting over one
 # port is the kind of collision that presents as a model answering wrongly rather than as an
 # error. Its README documents no port option and is wrong about that — Sources/CLI/CLIArguments.swift
 # has --port/--host and APFEL_PORT/APFEL_HOST. Read the source, not the README.
-command     = ["apfel", "--serve", "--port", "${AXON_PORT}"]
+command     = ["apfel", "--serve", "--port", "${SJEL_PORT}"]
 port        = "8091"
 health_path = "/health"
 

@@ -43,7 +43,7 @@ establishes that interpreted tools here are invoked directly).
   YAML prints its own asterisks. Bullets take a separate `label` for the bold part.
 - `templates/cv.typ` — the single Typst template. Reads the master file, filters by
   `--input profile=<x> --input lang=<y>`, renders.
-- `cv` — bash launcher (`build`, `--all`, `list-profiles`), resolves `$AXON_PERSONAL_ROOT` via
+- `cv` — bash launcher (`build`, `--all`, `list-profiles`), resolves `$SJEL_PERSONAL_ROOT` via
   `tools/lib/paths.sh`.
 
 The actual content (`master_cv.yaml`, real name/employer/contact info) and every rendered PDF
@@ -62,5 +62,5 @@ capabilities/cv/cv list-profiles                    # tags in use, read from mas
 ```
 
 Config: copy `master_cv.schema.yaml`'s shape into
-`$AXON_PERSONAL_ROOT/data/cv/master_cv.yaml` and fill in real content — nothing personal is
+`$SJEL_PERSONAL_ROOT/data/cv/master_cv.yaml` and fill in real content — nothing personal is
 stored in Axon.

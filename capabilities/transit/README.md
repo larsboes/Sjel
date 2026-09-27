@@ -98,7 +98,7 @@ the CLI uses — added for `dashboard` as a named consumer; see
 "no HTTP server" call. No `/discover` or cross-capability proxy routes — `transit-server` serves
 only transit's own API (see `server.rs`'s own comment on that boundary).
 
-**Port:** `AXON_PORT` (exported by the runner from the manifest) wins, then `TRANSIT_PORT`
+**Port:** `SJEL_PORT` (exported by the runner from the manifest) wins, then `TRANSIT_PORT`
 for runs outside the runner, then the shipped default `3000`. Binds loopback only, via
 `libs/axon-server`.
 
@@ -298,7 +298,7 @@ rendered as "Direct is cheapest" — a claim nobody had checked.
 
 ## Which rail backend answers, and why there are two
 
-`AXON_TRANSIT_BACKEND` picks it: `dbnav` (the default since 2026-08-20) or `dbweb`. Anything
+`SJEL_TRANSIT_BACKEND` picks it: `dbnav` (the default since 2026-08-20) or `dbweb`. Anything
 else falls back to the default rather than failing, because an unrecognised value is a typo far
 more often than it is an intent.
 
@@ -323,9 +323,9 @@ Three variables replace the endpoints, one per address, defaulting to the real o
 
 | Variable | Replaces |
 |---|---|
-| `AXON_TRANSIT_DBNAV_FAHRPLAN_URL` | dbnav journey search, the default backend's |
-| `AXON_TRANSIT_FAHRPLAN_URL` | dbweb journey search |
-| `AXON_TRANSIT_ORTE_URL` | station suggest, which is dbweb's regardless of backend |
+| `SJEL_TRANSIT_DBNAV_FAHRPLAN_URL` | dbnav journey search, the default backend's |
+| `SJEL_TRANSIT_FAHRPLAN_URL` | dbweb journey search |
+| `SJEL_TRANSIT_ORTE_URL` | station suggest, which is dbweb's regardless of backend |
 
 Empty or unset falls back to the real endpoint rather than requesting `""`, because a shell that
 exports unconditionally sets an empty value when it has nothing to put there.
@@ -512,8 +512,8 @@ cheapest-first, NULL prices last, shortest-duration tiebreak.
 
 Identical shape to `capabilities/scouting/src/config.rs`:
 
-1. `$AXON_TRANSIT_CONFIG` — explicit override, full path to a JSON file
-2. `$AXON_PERSONAL_ROOT/config/transit.json` — the overlay
+1. `$SJEL_TRANSIT_CONFIG` — explicit override, full path to a JSON file
+2. `$SJEL_PERSONAL_ROOT/config/transit.json` — the overlay
 3. `capabilities/transit/transit.config.json` — local, gitignored, dev fallback
 
 Unlike scouting, there is **no baked-in station-pair default at all**. The source service
@@ -525,7 +525,7 @@ a clear message rather than silently defaulting to someone else's stations. `sco
 transit_fare` reuses this same config for its route (see "Trip persistence" above) — it has no
 separate route config of its own.
 
-`database_path` comes from `axon_config::database_path`: `AXON_DB_PATH`, else
+`database_path` comes from `axon_config::database_path`: `SJEL_DB_PATH`, else
 `<overlay>/data/axon/axon.db`. It is a deployment fact, not a capability one, so a `database_url`
 left in `transit.json` is ignored — a file per capability would drop the cross-capability joins
 the shared instance existed for. Nothing to redact any more: a path carries no password, which is

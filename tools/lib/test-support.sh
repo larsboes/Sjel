@@ -11,7 +11,7 @@
 # platform-dependent assertion is not unusual, so the guard belongs to the convention rather
 # than to that one test.
 #
-# The second: a test that builds a scratch Axon root must not inherit the AXON_* environment.
+# The second: a test that builds a scratch Axon root must not inherit the SJEL_* environment.
 # Same shape, opposite direction — green in CI, red only on the machine of whoever exported the
 # variables. See isolate_axon_env below.
 #
@@ -44,9 +44,9 @@ skippable() {
   return 0
 }
 
-# isolate_axon_env — drop the AXON_* environment before a test builds its scratch root.
+# isolate_axon_env — drop the SJEL_* environment before a test builds its scratch root.
 #
-# tools/lib/paths.sh answers "which overlay am I" from an exported AXON_OVERLAY_ROOT first, and
+# tools/lib/paths.sh answers "which overlay am I" from an exported SJEL_OVERLAY_ROOT first, and
 # only then from axon.local.toml / axon.toml. That precedence is deliberate: it is the
 # per-invocation override tools/demo-up uses to run the published demo against demo/overlay
 # while the operator's real overlay stays put.
@@ -65,8 +65,13 @@ skippable() {
 # with the environment cleared.
 #
 # Call once, before resolving any scratch path. A test that wants its sandbox named explicitly
-# still exports AXON_OVERLAY_ROOT itself AFTER this (tools/check-site-payload.test.sh does).
+# still exports SJEL_OVERLAY_ROOT itself AFTER this (tools/check-site-payload.test.sh does).
+#
+# Both names are cleared: tools/lib/env-compat.sh refills a SJEL_ name from its pre-rename AXON_
+# name, so clearing only the new one hands the test the real value again.
 isolate_axon_env() {
-  unset AXON_ROOT AXON_OVERLAY_ROOT AXON_PERSONAL_ROOT AXON_MACHINE_TOML \
-        AXON_MACHINES_DIR AXON_CAPS_DIR AXON_OVERLAY_CAPS_DIR
+  local v
+  for v in ROOT OVERLAY_ROOT PERSONAL_ROOT MACHINE_TOML MACHINES_DIR CAPS_DIR OVERLAY_CAPS_DIR; do
+    unset "SJEL_$v" "AXON_$v"
+  done
 }

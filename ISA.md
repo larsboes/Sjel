@@ -111,7 +111,7 @@ are hidden and the shell looks thinner than the system is.
   rows carry `source: rss:demo-origin`, transit's journey is the origin's ICE 331 with
   `reliability: null` because punctuality is absent — the declared degradation.
 - [x] ISC-7 — transit's endpoints are env-overridable, so the demo can point the real parser
-  at a stub. Three, not the two this claim named: `AXON_TRANSIT_DBNAV_FAHRPLAN_URL` had to
+  at a stub. Three, not the two this claim named: `SJEL_TRANSIT_DBNAV_FAHRPLAN_URL` had to
   join them once dbnav became the default, or the default backend would have been the one
   path a stub cannot reach. Evidence: `every_endpoint_can_be_pointed_at_a_stub_and_otherwise_is_bahn_de`,
   plus a live CLI search against `tools/demo-origin` returning three parsed journeys on both
@@ -182,7 +182,10 @@ identifier `com.lifeos.mobile`. Lars chose "everything, staged" over a brand-onl
   Open: install the Sjel app and pair it.
 - [ ] ISC-13 — internal names move with a fallback: crates, `AXON_*` variables (the old name
   still read), launchd labels and the overlay. Falsifier: a service that ran before the change
-  does not start after it, or a variable is renamed with no fallback reader.
+  does not start after it, or a variable is renamed with no fallback reader. Progress,
+  2026-09-26: the skill is `sjel` (ec52c11c); launchd labels are `com.sjel.*` with the old units
+  removed (0479a731, 15 of 15 moved); settings are `SJEL_*`, read with the `AXON_*` fallback in
+  Rust, shell and TypeScript. Open: the overlay's keys, the crates, the overlay repository.
 
 ### F4 · The documents a stranger reads
 
@@ -220,7 +223,7 @@ the phone. Each item below is built and unverified, or ruled and unbuilt.
   (README, rule 4). Falsifier: a field name or value of a C2 record readable in the stored record.
 - [ ] ISC-20 — the comms review queue sends pseudonymized jobs through `prepare_pseudonymized`
   (README, rule 4). Falsifier: a queued job whose payload carries a raw C2 entity.
-- [ ] ISC-21 — the family deployment (`axon-family`) runs for a week without Lars touching it.
+- [ ] ISC-21 — the family deployment runs for a week without Lars touching it.
   Falsifier: any fix to it made by Lars in that week.
 
 ## Not yet specified
@@ -238,7 +241,7 @@ the phone. Each item below is built and unverified, or ruled and unbuilt.
 - **Operator installs past cooldown**, neither a security item: tailscale 1.98.9 →
   1.102.2, xberg 1.0.5 → 1.0.14.
 - **The remaining three database-URL call sites.** calendar, finance and trips each
-  hand-roll the same `std::env::var("AXON_<CAP>_DATABASE_URL")` two-liner that
+  hand-roll the same `std::env::var("SJEL_<CAP>_DATABASE_URL")` two-liner that
   `axon_config::database_url_override` now owns. Four until 2026-08-27, when PRD Q48
   retired `tasks` and deleted its copy — the entry below still says four because that is
   what was true when it was written. They work, so this is deduplication rather
@@ -299,7 +302,7 @@ the phone. Each item below is built and unverified, or ruled and unbuilt.
   than being deleted. Deleting it would leave drift findable only when someone looks.
 - **2026-08-20 — three capabilities never read their database variable, and the demo is
   what found it.** `tools/demo-up`'s whole mechanism is one exported
-  `AXON_<CAP>_DATABASE_URL` per capability. comms, scouting and transit ignored it, went
+  `SJEL_<CAP>_DATABASE_URL` per capability. comms, scouting and transit ignored it, went
   from their config file to `postgres_conn_from_shared_env`, and — the demo overlay having
   no `postgres.env` — landed on a fallback naming the real database, `dbname=axon
   password=axon`. The only thing between a demo seeding run and the live store was that the
@@ -307,7 +310,7 @@ the phone. Each item below is built and unverified, or ruled and unbuilt.
   `axon_config::database_url_override`, used by those three. The four that hand-roll the
   same two lines (calendar, finance, tasks, trips) are left alone and recorded below.
 - **2026-08-20 — `upstream-checker` published the checkout's absolute path.** Its `--json`
-  `manifest` field was `$AXON_ROOT/upstreams.toml`, which axon-status serves and the demo
+  `manifest` field was `$SJEL_ROOT/upstreams.toml`, which axon-status serves and the demo
   records. `tools/check-site-payload` refused to publish over it, which is the job that
   gate has. Now repo-relative.
 - **2026-08-19 — `.github/ISSUE_TEMPLATE/` stays.** Axon is public and an external

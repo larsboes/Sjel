@@ -7,7 +7,7 @@ CHECK="$(cd "$(dirname "${BASH_SOURCE[0]:-$0}")" && pwd)/check-publication-hygie
 
 SCRATCH="$(mktemp -d)"
 trap 'rm -rf "$SCRATCH"' EXIT
-export AXON_PUBLICATION_ROOT="$SCRATCH"
+export SJEL_PUBLICATION_ROOT="$SCRATCH"
 
 git -C "$SCRATCH" init -q
 printf '%s\n' 'container example: /home/agent/config' > "$SCRATCH/safe.txt"

@@ -521,7 +521,7 @@ async fn main() {
 }
 
 /// This capability's name, for the origin guard's env var
-/// (`AXON_TRANSIT_ALLOWED_ORIGIN_HOSTS`).
+/// (`SJEL_TRANSIT_ALLOWED_ORIGIN_HOSTS`).
 const CAPABILITY: &str = "transit";
 
 /// The wired router, so a test can drive the real thing rather than a handler.

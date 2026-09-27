@@ -53,7 +53,7 @@ import { dirname, join, relative, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { harnessById, isInstalled } from "./lib/harness-registry.ts";
 
-const AXON_ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "..");
+const SJEL_ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const PI = harnessById("pi");
 
 /* ── where pi lives ──────────────────────────────────────────────────────── */
@@ -129,8 +129,8 @@ interface ExtensionFile {
 /** Discovered, never listed: a new `Packs/<pack>/extensions/*.ts` is gated by existing. */
 function packExtensions(): ExtensionFile[] {
   const found: ExtensionFile[] = [];
-  for (const pack of readdirSync(join(AXON_ROOT, "Packs")).sort()) {
-    const dir = join(AXON_ROOT, "Packs", pack, "extensions");
+  for (const pack of readdirSync(join(SJEL_ROOT, "Packs")).sort()) {
+    const dir = join(SJEL_ROOT, "Packs", pack, "extensions");
     if (!existsSync(dir)) continue;
     for (const entry of readdirSync(dir).sort()) {
       if (!entry.endsWith(".ts") || entry.endsWith(".test.ts")) continue;
@@ -218,7 +218,7 @@ interface Compiler {
  * available, an empty cache does not (that would be a download).
  */
 function findCompiler(): Compiler | undefined {
-  const dashboard = join(AXON_ROOT, "dashboard", "node_modules", ".bin", "tsc");
+  const dashboard = join(SJEL_ROOT, "dashboard", "node_modules", ".bin", "tsc");
   if (existsSync(dashboard)) return { cmd: dashboard, via: "the dashboard's typescript" };
 
   const onPath = spawnSync("sh", ["-c", "command -v tsc"], { encoding: "utf8" }).stdout?.trim();
@@ -743,7 +743,7 @@ describe.skipIf(piConfigured)("pack extensions (not checked in this run)", () =>
 });
 
 test("this gate found the extensions it means to check", () => {
-  expect(packs.map((file) => relative(AXON_ROOT, file.path)).sort()).toContain(
-    relative(AXON_ROOT, join(AXON_ROOT, "Packs", "security", "extensions", "secrets-guard.ts")),
+  expect(packs.map((file) => relative(SJEL_ROOT, file.path)).sort()).toContain(
+    relative(SJEL_ROOT, join(SJEL_ROOT, "Packs", "security", "extensions", "secrets-guard.ts")),
   );
 });

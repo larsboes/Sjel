@@ -20,8 +20,8 @@ with the server instead of becoming detached process work.
 
 ## Port and binding
 
-Default: `8082`. Resolution order: `AXON_PORT` (exported by tools/service-runner.sh from
-the manifest plus any machine override) — `AXON_STATUS_PORT` (manual escape hatch when
+Default: `8082`. Resolution order: `SJEL_PORT` (exported by tools/service-runner.sh from
+the manifest plus any machine override) — `SJEL_STATUS_PORT` (manual escape hatch when
 running outside the runner) — `8082`.
 
 Bound to **127.0.0.1**, not `0.0.0.0`: this process starts and stops the machine's
@@ -30,7 +30,7 @@ Vite's proxy, which runs here too.
 
 The bind was the whole boundary until `libs/axon-server` grew the inbound gate, and for
 `POST /api/axon-status/capabilities/:name/start|stop` that was never enough on its own —
-it is process control. When the deployment declares `AXON_INBOUND_TOKEN_FILE`
+it is process control. When the deployment declares `SJEL_INBOUND_TOKEN_FILE`
 (`schemas/deployment.env.example`), every route here except `/health` asks for that
 token. `/api/axon-status/routes` then presents it when polling siblings, because a gated
 capability that refused this process would otherwise be reported as not running.
@@ -67,7 +67,7 @@ process control" cannot both be true.
 
 ## Running
 
-Needs `AXON_ROOT` set, because it shells out to the repo's own tools and its own path is
+Needs `SJEL_ROOT` set, because it shells out to the repo's own tools and its own path is
 `target/release/`, which locates a build output rather than the checkout. `tools/lib/paths.sh`
 exports it, so the normal path needs nothing:
 

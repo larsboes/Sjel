@@ -300,18 +300,18 @@ its note is the one fact here that no re-import and no re-run reproduces.
 `finance-cli decisions export` is the copy you can take when the server is down — never
 the only writer.
 
-The destination is `AXON_FINANCE_DECISIONS_ROOT` if it is set and the overlay root
-otherwise. The override is not a convenience: `AXON_DB_PATH` isolates the database and
+The destination is `SJEL_FINANCE_DECISIONS_ROOT` if it is set and the overlay root
+otherwise. The override is not a convenience: `SJEL_DB_PATH` isolates the database and
 nothing else, so a verification run that only overrides the database still writes month
 files into the owner's overlay and a subscriptions projection into their vault. Redirect
-those two with `AXON_FINANCE_DECISIONS_ROOT` and `AXON_FINANCE_OBSIDIAN_ROOT`; overriding
-`AXON_PERSONAL_ROOT` instead would redirect the config read as well, so the run would be
+those two with `SJEL_FINANCE_DECISIONS_ROOT` and `SJEL_FINANCE_OBSIDIAN_ROOT`; overriding
+`SJEL_PERSONAL_ROOT` instead would redirect the config read as well, so the run would be
 against a configuration that is not the one being tested.
 
 ## Configuration
 
-The thirteen tables live in the shared SQLite file — `AXON_DB_PATH`, else
-`$AXON_PERSONAL_ROOT/data/axon/axon.db` — under the table prefix `finance`, so they are
+The thirteen tables live in the shared SQLite file — `SJEL_DB_PATH`, else
+`$SJEL_PERSONAL_ROOT/data/axon/axon.db` — under the table prefix `finance`, so they are
 `finance_subscriptions`, `finance_price_points`, `finance_state_changes`,
 `finance_transaction_candidates`, `finance_transaction_projection`,
 `finance_holding_projection`, `finance_holding_projection_state`,
@@ -319,12 +319,12 @@ The thirteen tables live in the shared SQLite file — `AXON_DB_PATH`, else
 `finance_price_fetches`, `finance_decisions` and `finance_decision_events`
 (`libs/axon-store/README.md`). PRD Q45
 (2026-08-27) moved them there from a Postgres schema, and the path is a deployment
-fact rather than a capability one: `$AXON_FINANCE_DATABASE_URL` is gone, because a
+fact rather than a capability one: `$SJEL_FINANCE_DATABASE_URL` is gone, because a
 file per capability would drop the join `capabilities/places` builds its spend layer
 on. Vault location from
-the overlay's `config/finance.json`, or `AXON_FINANCE_OBSIDIAN_ROOT` for
+the overlay's `config/finance.json`, or `SJEL_FINANCE_OBSIDIAN_ROOT` for
 development. `journal` lives in that same private file and can also be set with
-`AXON_FINANCE_JOURNAL`. `schemas/finance.json.example` documents the
+`SJEL_FINANCE_JOURNAL`. `schemas/finance.json.example` documents the
 shape without carrying private deployment values. Named `csv_mappings` also live in
 that private file; the loopback API supplies them to the local review UI, where the
 operator can still edit every field before staging. A mapping explicitly declares

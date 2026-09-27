@@ -14,7 +14,7 @@ trap 'rm -rf "$SCRATCH"' EXIT
 
 # No overlay: the derived-term half of the check is inert here, which is also how it behaves
 # on a CI runner. The derived half is exercised by its own case at the bottom.
-unset AXON_OVERLAY_ROOT
+unset SJEL_OVERLAY_ROOT AXON_OVERLAY_ROOT
 
 fails=0
 
@@ -115,7 +115,7 @@ MACHINE="demohost-$(basename "$SCRATCH")"
 OVERLAY="$SCRATCH/$MACHINE-root"
 mkdir -p "$OVERLAY/config/machines"
 touch "$OVERLAY/config/machines/$MACHINE.toml"
-export AXON_OVERLAY_ROOT="$OVERLAY"
+export SJEL_OVERLAY_ROOT="$OVERLAY"
 
 plant fixture.json "{\"machine\":\"$MACHINE\"}"
 expect_reject "a machine name read from the active overlay"
@@ -124,9 +124,9 @@ plant fixture.json '{"machine":"unrelated-value"}'
 expect_pass "a payload naming no machine from the active overlay"
 
 # The demo overlay is tracked and public by design, so nothing is derived from it.
-export AXON_OVERLAY_ROOT="$SCRATCH/nested/demo/overlay"
-mkdir -p "$AXON_OVERLAY_ROOT/config/machines"
-touch "$AXON_OVERLAY_ROOT/config/machines/$MACHINE.toml"
+export SJEL_OVERLAY_ROOT="$SCRATCH/nested/demo/overlay"
+mkdir -p "$SJEL_OVERLAY_ROOT/config/machines"
+touch "$SJEL_OVERLAY_ROOT/config/machines/$MACHINE.toml"
 plant fixture.json "{\"machine\":\"$MACHINE\"}"
 expect_pass "the demo overlay's own machine name"
 

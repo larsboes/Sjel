@@ -16,7 +16,7 @@
 set -euo pipefail
 
 TOOLS_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-AXON_ROOT="$(cd "$TOOLS_DIR/.." && pwd)"
+SJEL_ROOT="$(cd "$TOOLS_DIR/.." && pwd)"
 
 case "${1:-}" in
   -h|--help) sed -n '2,13p' "$0"; exit 0 ;;
@@ -72,30 +72,30 @@ write_bun_global_hold() {
 # checkout), so installation puts both launchers in the conventional user bin directory. Never
 # replace an unrelated command: an existing non-symlink requires an explicit operator decision
 # instead of silently changing their PATH behavior.
-AXON_BIN_DIR="$HOME/.local/bin"
+SJEL_BIN_DIR="$HOME/.local/bin"
 for cli in sjel axon; do
-  AXON_BIN="$AXON_BIN_DIR/$cli"
-  if [ -L "$AXON_BIN" ] && [ "$(readlink "$AXON_BIN")" = "$AXON_ROOT/$cli" ]; then
-    echo "Sjel CLI: $AXON_BIN already points at this checkout."
-  elif [ -e "$AXON_BIN" ] || [ -L "$AXON_BIN" ]; then
-    echo "Sjel CLI: $AXON_BIN already exists and is not owned by this checkout, leaving it alone."
-    echo "  Run this checkout directly: $AXON_ROOT/$cli help"
+  SJEL_BIN="$SJEL_BIN_DIR/$cli"
+  if [ -L "$SJEL_BIN" ] && [ "$(readlink "$SJEL_BIN")" = "$SJEL_ROOT/$cli" ]; then
+    echo "Sjel CLI: $SJEL_BIN already points at this checkout."
+  elif [ -e "$SJEL_BIN" ] || [ -L "$SJEL_BIN" ]; then
+    echo "Sjel CLI: $SJEL_BIN already exists and is not owned by this checkout, leaving it alone."
+    echo "  Run this checkout directly: $SJEL_ROOT/$cli help"
   else
-    mkdir -p "$AXON_BIN_DIR"
-    ln -s "$AXON_ROOT/$cli" "$AXON_BIN"
-    echo "Sjel CLI: linked $AXON_BIN -> $AXON_ROOT/$cli"
+    mkdir -p "$SJEL_BIN_DIR"
+    ln -s "$SJEL_ROOT/$cli" "$SJEL_BIN"
+    echo "Sjel CLI: linked $SJEL_BIN -> $SJEL_ROOT/$cli"
   fi
 done
 case ":$PATH:" in
-  *":$AXON_BIN_DIR:"*) ;;
-  *) echo "Sjel CLI: add $AXON_BIN_DIR to PATH to run 'sjel' from any directory." ;;
+  *":$SJEL_BIN_DIR:"*) ;;
+  *) echo "Sjel CLI: add $SJEL_BIN_DIR to PATH to run 'sjel' from any directory." ;;
 esac
 
 # Where THIS machine's overlay location gets recorded. Gitignored and per-machine, so a
 # second node never has to edit the tracked axon.toml — that file keeps only a neutral
 # shipped default (consumed by tools/lib/paths.sh as the fallback, not here). See
 # schemas/machine.toml.example.
-AXON_LOCAL_TOML="$AXON_ROOT/axon.local.toml"
+SJEL_LOCAL_TOML="$SJEL_ROOT/axon.local.toml"
 SKELETON="$TOOLS_DIR/templates/overlay-skeleton"
 
 echo "Axon installer"
@@ -106,12 +106,12 @@ echo "==============="
 # only half the time. A usage install behaves differently in ways the operator will meet
 # later (tools/update.sh cannot compute a delta against a ref a tag-pinned clone does not
 # have, #58), so say it once, here, instead of letting it be discovered as a malfunction.
-if [ "$(git -C "$AXON_ROOT" rev-parse --is-shallow-repository 2>/dev/null)" = "true" ]; then
-  echo "Profile: usage — shallow clone pinned to $(git -C "$AXON_ROOT" describe --tags 2>/dev/null || echo 'a tag')."
+if [ "$(git -C "$SJEL_ROOT" rev-parse --is-shallow-repository 2>/dev/null)" = "true" ]; then
+  echo "Profile: usage — shallow clone pinned to $(git -C "$SJEL_ROOT" describe --tags 2>/dev/null || echo 'a tag')."
   echo "  To change Axon rather than run it, promote this checkout:"
-  echo "    git -C \"$AXON_ROOT\" config remote.origin.fetch '+refs/heads/*:refs/remotes/origin/*'"
-  echo "    git -C \"$AXON_ROOT\" fetch --unshallow origin"
-elif git -C "$AXON_ROOT" rev-parse --git-dir >/dev/null 2>&1; then
+  echo "    git -C \"$SJEL_ROOT\" config remote.origin.fetch '+refs/heads/*:refs/remotes/origin/*'"
+  echo "    git -C \"$SJEL_ROOT\" fetch --unshallow origin"
+elif git -C "$SJEL_ROOT" rev-parse --git-dir >/dev/null 2>&1; then
   echo "Profile: development — full history."
 else
   echo "Profile: not a git checkout — tools/update.sh and the version line will not work."
@@ -140,8 +140,8 @@ fi
 # a location decision has to be made. An already-configured machine's own value wins as
 # the prompt default; the tracked axon.toml is only consulted for the shipped fallback.
 CURRENT_OVERLAY=""
-if [ -f "$AXON_LOCAL_TOML" ]; then
-  CURRENT_OVERLAY="$(toml_get overlay "$AXON_LOCAL_TOML")"
+if [ -f "$SJEL_LOCAL_TOML" ]; then
+  CURRENT_OVERLAY="$(toml_get overlay "$SJEL_LOCAL_TOML")"
 fi
 
 # The suggested path is deliberately generic. Deployment ownership and topology belong inside
@@ -160,10 +160,10 @@ fi
 OVERLAY_PATH="${OVERLAY_RAW/#\~/$HOME}"
 
 if [ "$OVERLAY_RAW" != "$CURRENT_OVERLAY" ]; then
-  if [ -f "$AXON_LOCAL_TOML" ]; then
-    toml_set overlay "$OVERLAY_RAW" "$AXON_LOCAL_TOML"
+  if [ -f "$SJEL_LOCAL_TOML" ]; then
+    toml_set overlay "$OVERLAY_RAW" "$SJEL_LOCAL_TOML"
   else
-    cat > "$AXON_LOCAL_TOML" <<EOF
+    cat > "$SJEL_LOCAL_TOML" <<EOF
 # This machine's overlay location — gitignored, one per machine. Written by
 # tools/install.sh; tools/lib/paths.sh reads it and falls back to axon.toml's
 # shipped default. Everything else that differs per machine lives in that

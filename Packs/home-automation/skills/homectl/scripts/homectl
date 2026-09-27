@@ -54,49 +54,49 @@ import yaml
 
 # ── Path defaults (env-derived, all overridable via args — zero hardcoded paths) ──
 # Fall back to this file's own position rather than a guessed checkout location: the script
-# lives at <AXON_ROOT>/Packs/home-automation/skills/homectl/scripts/homectl, which is true on
+# lives at <SJEL_ROOT>/Packs/home-automation/skills/homectl/scripts/homectl, which is true on
 # every machine. The previous default was ~/Developer/Axon, a Mac-shaped path that does not
-# exist on the family Pi (Axon sits at ~/Axon there), so every invocation without AXON_ROOT
+# exist on the family Pi (Axon sits at ~/Axon there), so every invocation without SJEL_ROOT
 # died on a missing components.toml.
 # parents[5] is the canonical depth. Guard it: a copy of this script somewhere flat (a scratch
 # dir, a container /tmp) would otherwise die with an IndexError at import, before it can even
 # say what it was looking for.
 _PARENTS = Path(__file__).resolve().parents
 _SELF_ROOT = _PARENTS[5] if len(_PARENTS) > 5 else _PARENTS[-1]
-AXON_ROOT = Path(os.environ.get("AXON_ROOT") or _SELF_ROOT)
+SJEL_ROOT = Path(os.environ.get("SJEL_ROOT") or _SELF_ROOT)
 # Where the real values live. Resolved from the environment, else from axon.local.toml.
 def _home_overlay_root() -> Path:
-    raw = os.environ.get("AXON_HOME_ROOT") or os.environ.get("AXON_OVERLAY_ROOT") or os.environ.get("AXON_PERSONAL_ROOT")
+    raw = os.environ.get("SJEL_HOME_ROOT") or os.environ.get("SJEL_OVERLAY_ROOT") or os.environ.get("SJEL_PERSONAL_ROOT")
     if not raw:
         # The machine already declares its overlay in axon.local.toml; requiring the same
         # fact in the environment as well made homectl unusable from a plain shell on the
         # host that actually runs Home Assistant.
-        local = AXON_ROOT / "axon.local.toml"
+        local = SJEL_ROOT / "axon.local.toml"
         if local.is_file():
             with local.open("rb") as fh:
                 raw = tomllib.load(fh).get("overlay")
     if not raw:
         raise SystemExit("home-automation overlay is unresolved; set `overlay` in axon.local.toml, "
-                         "source tools/lib/paths.sh, or set AXON_HOME_ROOT")
+                         "source tools/lib/paths.sh, or set SJEL_HOME_ROOT")
     return Path(raw).expanduser()
 
 
-AXON_HOME_ROOT = _home_overlay_root()
+SJEL_HOME_ROOT = _home_overlay_root()
 
 # The templates and the component lockfile live in the OVERLAY, not in public Axon. Both
 # describe what a particular house has — which automations exist, which third-party
 # components run — and the set of them is an inventory even though every value is a
 # %%TOKEN%% and every pin is a public repo. Axon keeps the mechanism:
 # service.toml, TEMPLATING.md, the doctrine, and the .example scaffolding.
-DEF_CAPS = AXON_HOME_ROOT / "capabilities/home-assistant"
-DEF_VARS = AXON_HOME_ROOT / "config/home-assistant.vars"
-DEF_OUT = AXON_HOME_ROOT / "build/home-assistant"          # instance-specific output — never public Axon
+DEF_CAPS = SJEL_HOME_ROOT / "capabilities/home-assistant"
+DEF_VARS = SJEL_HOME_ROOT / "config/home-assistant.vars"
+DEF_OUT = SJEL_HOME_ROOT / "build/home-assistant"          # instance-specific output — never public Axon
 DEF_COMPONENTS = DEF_CAPS / "components.toml"
 # Home Assistant's own config root inside the overlay — the directory bind-mounted to /config.
 # Both vendor destinations hang off it. They used to hang off config/ directly, one level too
 # high, so a vendor run wrote into a directory HA never reads and reported "new vendor" for a
 # component that was already deployed.
-DEF_HA_CONFIG = AXON_HOME_ROOT / "config/home-assistant"
+DEF_HA_CONFIG = SJEL_HOME_ROOT / "config/home-assistant"
 DEF_DEST = DEF_HA_CONFIG / "custom_components"
 DEF_PACKAGES_DEST = DEF_HA_CONFIG / "integrations"  # HA packages: !include_dir_named integrations
 DEF_WWW_DEST = DEF_HA_CONFIG / "www"  # served at /local/<file>; a dashboard resource points here

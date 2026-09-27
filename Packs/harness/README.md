@@ -119,8 +119,8 @@ machine.
 ## Activate
 
 ```bash
-"$AXON_ROOT/tools/packs.sh" link harness      # → ~/.claude/skills/{suggest-skills,trim,harness-sync}
-"$AXON_ROOT/tools/packs-pi" deploy harness    # → registered in ~/.pi/agent/settings.json
+"$SJEL_ROOT/tools/packs.sh" link harness      # → ~/.claude/skills/{suggest-skills,trim,harness-sync}
+"$SJEL_ROOT/tools/packs-pi" deploy harness    # → registered in ~/.pi/agent/settings.json
                                              #   skills, and the vendored pi package by path
 ```
 
@@ -132,7 +132,7 @@ neither, so the checkout stays in the Pack and a customization is an edit rather
 re-vendor. Its dependencies are installed in place and never committed:
 
 ```bash
-cd "$AXON_ROOT/Packs/harness/pi-packages/pi-subagents" && bun install
+cd "$SJEL_ROOT/Packs/harness/pi-packages/pi-subagents" && bun install
 ```
 
 ## Attribution
@@ -203,7 +203,7 @@ because `app/` is not vendored:
 git clone --depth 1 https://github.com/a-Fig/Accordion /tmp/acc
 cd /tmp/acc/app && npm install && npm run build   # vite build, no Rust
 cd ../extension && node build-client.mjs          # → extension/dist/client
-cp -R /tmp/acc/extension/dist/client "$AXON_ROOT/Packs/harness/pi-packages/accordion/extension/dist/client"
+cp -R /tmp/acc/extension/dist/client "$SJEL_ROOT/Packs/harness/pi-packages/accordion/extension/dist/client"
 ```
 
 The extension loads without this and folds context normally; only the Map view is missing, and
@@ -213,9 +213,9 @@ worth knowing about, because it looks like a broken installation and is actually
 ### Setup, and what is on by default
 
 ```bash
-cd "$AXON_ROOT/Packs/harness/pi-packages/accordion"                        && bun install --frozen-lockfile --ignore-scripts   # the test runner
-cd "$AXON_ROOT/Packs/harness/pi-packages/accordion/extension"               && bun install
-cd "$AXON_ROOT/Packs/harness/pi-packages/accordion/conductors/ws/triptych" && bun install
+cd "$SJEL_ROOT/Packs/harness/pi-packages/accordion"                        && bun install --frozen-lockfile --ignore-scripts   # the test runner
+cd "$SJEL_ROOT/Packs/harness/pi-packages/accordion/extension"               && bun install
+cd "$SJEL_ROOT/Packs/harness/pi-packages/accordion/conductors/ws/triptych" && bun install
 ```
 
 The first install exists only to run the vendored suite; the other two are runtime.
@@ -225,7 +225,7 @@ The first install exists only to run the vendored suite; the other two are runti
 One command, from the package root:
 
 ```bash
-cd "$AXON_ROOT/Packs/harness/pi-packages/accordion" && bun run test
+cd "$SJEL_ROOT/Packs/harness/pi-packages/accordion" && bun run test
 ```
 
 22 files, 459 tests, all green since 2026-09-17. This is not ceremony: deltas (2) and (3) are

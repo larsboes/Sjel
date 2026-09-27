@@ -6,12 +6,12 @@
 # at install time, so a cargo-installed binary needs no absolute path in a tracked file.
 kind        = "process"
 name        = "macmon"
-command     = ["macmon", "serve", "--port", "${AXON_PORT}", "--interval", "5000"]
+command     = ["macmon", "serve", "--port", "${SJEL_PORT}", "--interval", "5000"]
 port        = "9911"
 health_path = "/json"
 
-# Why ${AXON_PORT} rather than the literal: macmon takes its port on argv and cannot read
-# the AXON_PORT env var an Axon-owned process would. Writing 9911 twice — once here, once
+# Why ${SJEL_PORT} rather than the literal: macmon takes its port on argv and cannot read
+# the SJEL_PORT env var an Axon-owned process would. Writing 9911 twice — once here, once
 # in `port` above — would let the machine.toml override move one and not the other, and
 # the dashboard proxies whatever `port` says. One fact, one home.
 #

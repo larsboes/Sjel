@@ -62,7 +62,7 @@ import {
 } from "./lib/pack-deploy.ts";
 import { activateProfileOnPi } from "./packs-pi.ts";
 
-const AXON_ROOT = new URL("..", import.meta.url).pathname.replace(/\/$/, "");
+const SJEL_ROOT = new URL("..", import.meta.url).pathname.replace(/\/$/, "");
 const argv = process.argv.slice(2);
 const flag = (name: string): string | undefined => {
   const i = argv.indexOf(`--${name}`);
@@ -465,7 +465,7 @@ function drift(): void {
         }
       }
       for (const rel of actual) console.log(`  only at destination     ${rel}`);
-      console.log(`  source:      ${relative(AXON_ROOT, unit.sourceRoot)}`);
+      console.log(`  source:      ${relative(SJEL_ROOT, unit.sourceRoot)}`);
       console.log(`  destination: ${unit.destination}`);
       console.log(`  discard it:  ${h.cli} sync ${row.pack}   (overwrites the destination)`);
       console.log(`  keep it:     tools/harnesses accept ${row.pack} ${row.skill} --from ${h.id}`);
@@ -486,7 +486,7 @@ function useProfile(): void {
   const profileName = positional[1];
   if (!profileName) throw new Error("usage: tools/harnesses use <profile> [--harness <id>]");
   const harnesses = selectedHarnesses();
-  const profile = readProfiles({ axonRoot: AXON_ROOT } as DeployConfig).find((p: Profile) => p.name === profileName);
+  const profile = readProfiles({ axonRoot: SJEL_ROOT } as DeployConfig).find((p: Profile) => p.name === profileName);
   if (!profile) throw new Error(`no such profile: '${profileName}'`);
   for (const h of harnesses) {
     console.log(`── ${h.label}`);
@@ -571,7 +571,7 @@ function promote(): void {
   const owner = Object.entries(readState(config).packs).find(([, record]) => record.skills[skill]);
   if (owner) throw new Error(`${skill} is already owned by Pack '${owner[0]}'; nothing to promote`);
 
-  const packDir = join(AXON_ROOT, "Packs", pack);
+  const packDir = join(SJEL_ROOT, "Packs", pack);
   const manifest = join(packDir, "pack.toml");
   // Read the manifest here rather than asking `existsSync` here and reading it after
   // the copy. Two answers to the same question, taken from two instants, and the
@@ -582,20 +582,20 @@ function promote(): void {
   try {
     body = readFileSync(manifest, "utf8");
   } catch {
-    throw new Error(`no Pack at ${relative(AXON_ROOT, packDir)}`);
+    throw new Error(`no Pack at ${relative(SJEL_ROOT, packDir)}`);
   }
   // Single-line TOML only: tools/lib/toml.sh cannot read an array across lines.
   const line = body.split("\n").find((l) => /^\s*skills\s*=/.test(l));
-  if (!line) throw new Error(`${relative(AXON_ROOT, manifest)} has no skills = [...] line`);
+  if (!line) throw new Error(`${relative(SJEL_ROOT, manifest)} has no skills = [...] line`);
   let updated: string;
   try {
     updated = skillsLineWith(line, skill);
   } catch (error) {
-    throw new Error(`${relative(AXON_ROOT, manifest)}: ${(error as Error).message}`);
+    throw new Error(`${relative(SJEL_ROOT, manifest)}: ${(error as Error).message}`);
   }
 
   const target = join(packDir, "skills", skill);
-  if (existsSync(target)) throw new Error(`${relative(AXON_ROOT, target)} already exists`);
+  if (existsSync(target)) throw new Error(`${relative(SJEL_ROOT, target)} already exists`);
 
   for (const rel of walk(source)) {
     const to = join(target, rel);
@@ -607,8 +607,8 @@ function promote(): void {
   // inside a replacement pattern and rewrite the line it was inserted into.
   writeFileSync(manifest, body.replace(line, () => updated));
 
-  console.log(`✓ copied ${skill} → ${relative(AXON_ROOT, target)}`);
-  console.log(`✓ added to ${relative(AXON_ROOT, manifest)}`);
+  console.log(`✓ copied ${skill} → ${relative(SJEL_ROOT, target)}`);
+  console.log(`✓ added to ${relative(SJEL_ROOT, manifest)}`);
   for (const message of adoptPack(config, pack)) console.log(`  ${message}`);
   console.log(`\nThe live copy is now claimed, not replaced. Next: review the files, then`);
   console.log(`deploy the Pack to the other harnesses that should carry it.`);
@@ -636,10 +636,10 @@ function accept(): void {
 
   // Refuse to bury uncommitted work in the Pack source. The destination copy is
   // about to overwrite it, and git is the only undo this move has.
-  const dirty = Bun.spawnSync(["git", "-C", AXON_ROOT, "status", "--porcelain", "--", relative(AXON_ROOT, unit.sourceRoot)]);
+  const dirty = Bun.spawnSync(["git", "-C", SJEL_ROOT, "status", "--porcelain", "--", relative(SJEL_ROOT, unit.sourceRoot)]);
   const pending = new TextDecoder().decode(dirty.stdout).trim();
   if (pending && !has("force")) {
-    throw new Error(`${relative(AXON_ROOT, unit.sourceRoot)} has uncommitted changes:\n${pending}\ncommit or stash them first, or pass --force to overwrite`);
+    throw new Error(`${relative(SJEL_ROOT, unit.sourceRoot)} has uncommitted changes:\n${pending}\ncommit or stash them first, or pass --force to overwrite`);
   }
 
   const incoming = walk(unit.destination);
@@ -652,12 +652,12 @@ function accept(): void {
   const removed = existing.filter((rel) => !incoming.includes(rel));
   for (const rel of removed) rmSync(join(unit.sourceRoot, rel));
 
-  console.log(`✓ ${incoming.length} files copied into ${relative(AXON_ROOT, unit.sourceRoot)}`);
+  console.log(`✓ ${incoming.length} files copied into ${relative(SJEL_ROOT, unit.sourceRoot)}`);
   for (const rel of removed) console.log(`  removed (absent at the destination): ${rel}`);
   // The ledger still holds the pre-edit digest and would keep reporting drift
   // that no longer exists, so re-record it now that the two agree.
   console.log(`  ${reconcileUnit(config, pack, unit)}`);
-  console.log(`\nReview before committing:  git -C ${AXON_ROOT} diff -- ${relative(AXON_ROOT, unit.sourceRoot)}`);
+  console.log(`\nReview before committing:  git -C ${SJEL_ROOT} diff -- ${relative(SJEL_ROOT, unit.sourceRoot)}`);
   console.log(`Then deploy the Pack to the other harnesses that carry it.`);
 }
 

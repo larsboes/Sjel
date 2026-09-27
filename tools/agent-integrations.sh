@@ -126,7 +126,7 @@ ASSISTANT_INTEGRATION_STATE_FILE=".graphify-upstream-installed"
 # tools/graphify.sh. See upstreams.toml [graphify].
 
 graphify_has_real_graph() {
-  [ -f "$AXON_ROOT/graphify-out/graph.json" ] && [ -s "$AXON_ROOT/graphify-out/graph.json" ]
+  [ -f "$SJEL_ROOT/graphify-out/graph.json" ] && [ -s "$SJEL_ROOT/graphify-out/graph.json" ]
 }
 
 graphify_install_command() {  # graphify_install_command <harness>

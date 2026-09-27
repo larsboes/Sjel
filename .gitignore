@@ -83,7 +83,7 @@ demo/overlay/config/finance.json
 # Everything tools/demo-up and tools/demo-seed generate UNDER the demo overlay's data root,
 # which since the decision ledger includes demo/overlay/data/finance/decisions/YYYY-MM.md:
 # `tools/demo-seed.ts` posts to the api/decisions/run route and the export lands wherever
-# AXON_PERSONAL_ROOT points, which during a demo run is this directory. `git ls-files demo/overlay` returns one
+# SJEL_PERSONAL_ROOT points, which during a demo run is this directory. `git ls-files demo/overlay` returns one
 # file and this is what keeps it that way.
 demo/overlay/data/
 

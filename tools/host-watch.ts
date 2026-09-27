@@ -380,14 +380,14 @@ async function runHostNet(): Promise<NetReport | null> {
 
 /**
  * Where the shared SQLite file is, resolved exactly the way `axon_config::database_path()`
- * resolves it — `AXON_DB_PATH` first, then the overlay. A tool that opened a different
+ * resolves it — `SJEL_DB_PATH` first, then the overlay. A tool that opened a different
  * file than the capabilities do would write findings nothing reads.
  */
 function databasePath(): string {
-  const fromEnv = (process.env.AXON_DB_PATH ?? "").trim();
+  const fromEnv = (process.env.SJEL_DB_PATH ?? "").trim();
   if (fromEnv) return fromEnv.startsWith("~/") ? join(process.env.HOME ?? "", fromEnv.slice(2)) : fromEnv;
   const overlay = overlayRoot();
-  if (!overlay) fail("no overlay to resolve the database path from; set AXON_DB_PATH");
+  if (!overlay) fail("no overlay to resolve the database path from; set SJEL_DB_PATH");
   return join(overlay, "data", "axon", "axon.db");
 }
 

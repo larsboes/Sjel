@@ -26,7 +26,7 @@ should be restricted to the LAN.
    mounted to `/config`, and ensure key-based SSH access to the host (the tool uses `BatchMode=yes` —
    no password prompt).
 2. **In the overlay config:** the connection facts live in the committed overlay at
-   `<overlay>/config/home-assistant.vars` (path via `$AXON_HOME_ROOT`, default
+   `<overlay>/config/home-assistant.vars` (path via `$SJEL_HOME_ROOT`, default
    the active deployment overlay): `ESPHOME_SSH` (an ssh target such as `user@host`), `ESPHOME_URL` (the
    dashboard base URL, e.g. `http://host:6052`), and `ESPHOME_CONTAINER` (the container name). All three
    are non-secret and committed there; each can be overridden per-run via the matching `$ESPHOME_*` env

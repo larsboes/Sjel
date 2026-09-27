@@ -51,7 +51,7 @@ fi
 # Appended, never prepended — a capability CLI must not shadow a system binary.
 #
 # BOTH roots, because a capability is not less real for living in the overlay. This
-# swept only $AXON_ROOT until 2026-08-30, so an overlay capability shipping a CLI could
+# swept only $SJEL_ROOT until 2026-08-30, so an overlay capability shipping a CLI could
 # never be called by name: `ytalbum` and `interior` were invisible to the shell by
 # construction, and the only way to run one was to type its absolute path. The overlay
 # is where a capability goes when it is inseparable from what it is pointed at
@@ -61,7 +61,7 @@ fi
 # Public first, so a name present in both resolves to the public one. That ordering
 # should never matter — `tools/doctor` refuses one capability name declared in two roots
 # — and it is written down here as the tie-break rather than left to glob order.
-for _root in "$AXON_ROOT" "$AXON_PERSONAL_ROOT"; do
+for _root in "$SJEL_ROOT" "$SJEL_PERSONAL_ROOT"; do
   [[ -n "$_root" && -d "$_root/capabilities" ]] || continue
   # (N) is null_glob for this glob only: a root whose capabilities/ is empty must
   # contribute nothing, not print "no matches found" on every shell start.
@@ -109,7 +109,7 @@ alias chrome-debug='"/Applications/Google Chrome.app/Contents/MacOS/Google Chrom
 # --- Bitwarden SSH agent ---
 # Route ssh through the Bitwarden desktop app's agent — keys live in the vault,
 # not on disk. Socket resolution is shared with tools/backup.sh via the lib.
-[[ -n "$AXON_ROOT" && -f "$AXON_ROOT/tools/lib/bw-agent.sh" ]] && source "$AXON_ROOT/tools/lib/bw-agent.sh"
+[[ -n "$SJEL_ROOT" && -f "$SJEL_ROOT/tools/lib/bw-agent.sh" ]] && source "$SJEL_ROOT/tools/lib/bw-agent.sh"
 
 # --- Bitwarden CLI session ---
 # Pick up a session cached by tools/bw-unlock so a new shell starts from the existing
@@ -123,7 +123,7 @@ alias chrome-debug='"/Applications/Google Chrome.app/Contents/MacOS/Google Chrom
 # so this stays a function rather than living inside bw-unlock.
 bwu() {
   local _s
-  _s="$("$AXON_ROOT/tools/bw-unlock")" || return 1
+  _s="$("$SJEL_ROOT/tools/bw-unlock")" || return 1
   export BW_SESSION="$_s"
 }
 

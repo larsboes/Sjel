@@ -32,7 +32,7 @@ It is not a mock of a capability, and none of the three gained a line of demo co
 fed by posting URLs to its ordinary `/ingest` route and fetches and extracts the pages itself;
 Scouting is pointed at the feed by a generated source declaration and parses it with its own
 `rss` adapter; Transit reads the origin through the endpoint overrides its HAFAS client already
-supports (`AXON_TRANSIT_FAHRPLAN_URL` and its two siblings), so its real parser does the work.
+supports (`SJEL_TRANSIT_FAHRPLAN_URL` and its two siblings), so its real parser does the work.
 What gets recorded is their output, not the origin's input.
 
 Comms' half of that needs one written permission. `POST /ingest` refuses a URL that resolves to

@@ -13,7 +13,7 @@ kind = "data"
 name = "store"
 
 # Overlay-relative, and the default `axon_config::database_path()` resolves. A deployment
-# that moves the file with `AXON_DB_PATH` leaves this contract describing a path that is
+# that moves the file with `SJEL_DB_PATH` leaves this contract describing a path that is
 # not the database any more; `tools/backup.sh` refuses to run on a missing source rather
 # than shipping an archive of nothing, which is the failure that must stay loud.
 #

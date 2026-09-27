@@ -19,7 +19,7 @@ comes from a Bitwarden item at runtime, never hardcoded.
    access tokens*). That token is `HA_TOKEN`.
 2. **In the overlay config:** set `HA_URL` (e.g. `http://<host>:8123`, or an `https://`
    reverse-proxy URL) in `<overlay>/config/home-assistant.vars` (override the root with
-   `$AXON_HOME_ROOT`). The WebSocket URL is derived from it.
+   `$SJEL_HOME_ROOT`). The WebSocket URL is derived from it.
 3. **In Bitwarden:** an item `home-assistant/ha` (override with `$HA_BW_ITEM`) holding only the
    secret field `HA_TOKEN` — the same item ha-cli uses. Provision via Axon `setup-secret.sh`.
 4. **Point `bw` at the vault once:** `bw config server <vault-url>`.

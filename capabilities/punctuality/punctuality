@@ -13,13 +13,13 @@ source "$_dir/../../tools/lib/paths.sh"
 # shape service.toml's `command` uses for punctuality-server. CARGO_TARGET_DIR is honoured
 # because a relocated target dir is how build output is kept out of the checkout; see
 # tools/storage/storage, which has done this since it replaced the TypeScript.
-BIN="${CARGO_TARGET_DIR:-$AXON_ROOT/target}/release/punctuality-cli"
+BIN="${CARGO_TARGET_DIR:-$SJEL_ROOT/target}/release/punctuality-cli"
 
 # Build on first use rather than making a clone's first run a confusing "not found".
 # Build output goes to stderr so `punctuality stations bonn | cut -f1` still works.
 if [ ! -x "$BIN" ]; then
   echo "punctuality: building (first run)…" >&2
-  (cd "$AXON_ROOT" && cargo build --locked --release --bin punctuality-cli) >&2
+  (cd "$SJEL_ROOT" && cargo build --locked --release --bin punctuality-cli) >&2
 fi
 
 exec "$BIN" "$@"

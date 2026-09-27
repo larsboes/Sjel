@@ -25,8 +25,8 @@ chmod +x "$FAKE_BIN/bw"
 
 OUTPUT="$(
   PATH="$FAKE_BIN:$PATH" \
-  AXON_ROOT="$ROOT" \
-  AXON_INFERENCE_KEY_OVERLAY="$OVERLAY" \
+  SJEL_ROOT="$ROOT" \
+  SJEL_INFERENCE_KEY_OVERLAY="$OVERLAY" \
   BW_SESSION="synthetic-session" \
   "$ROOT/tools/materialize-inference-key" gemini
 )"
@@ -44,7 +44,7 @@ esac
 grep -q "credential materialized" <<< "$OUTPUT"
 
 MISMATCH_ERROR="$TEST_ROOT/mismatch.err"
-if PATH="$FAKE_BIN:$PATH" AXON_ROOT="$ROOT" AXON_INFERENCE_KEY_OVERLAY="$OVERLAY" \
+if PATH="$FAKE_BIN:$PATH" SJEL_ROOT="$ROOT" SJEL_INFERENCE_KEY_OVERLAY="$OVERLAY" \
   BW_SESSION="synthetic-session" BW_FAKE_SERVER="https://other.test" \
   "$ROOT/tools/materialize-inference-key" gemini >/dev/null 2>"$MISMATCH_ERROR"; then
   echo "FAIL: a logged-in session on another server must stop before config changes" >&2
@@ -52,7 +52,7 @@ if PATH="$FAKE_BIN:$PATH" AXON_ROOT="$ROOT" AXON_INFERENCE_KEY_OVERLAY="$OVERLAY
 fi
 grep -q "run 'bw logout' yourself" "$MISMATCH_ERROR"
 
-if PATH="$FAKE_BIN:$PATH" AXON_ROOT="$ROOT" AXON_INFERENCE_KEY_OVERLAY="$OVERLAY" \
+if PATH="$FAKE_BIN:$PATH" SJEL_ROOT="$ROOT" SJEL_INFERENCE_KEY_OVERLAY="$OVERLAY" \
   BW_SESSION="synthetic-session" "$ROOT/tools/materialize-inference-key" unknown \
   >/dev/null 2>&1; then
   echo "FAIL: unknown providers must be rejected" >&2
@@ -76,7 +76,7 @@ printf '[family-vault]\nurl = "https://client-declared.test"\n' > "$OVERLAY/conf
 # "Replace the existing local key file?" prompt, `read` sees EOF under `set -e`, and the script
 # dies for a reason that has nothing to do with what is being tested here.
 rm -f "$OVERLAY/config/runtime-secrets/inference-gemini-api-key"
-if ! PATH="$FAKE_BIN:$PATH" AXON_ROOT="$ROOT" AXON_INFERENCE_KEY_OVERLAY="$OVERLAY" \
+if ! PATH="$FAKE_BIN:$PATH" SJEL_ROOT="$ROOT" SJEL_INFERENCE_KEY_OVERLAY="$OVERLAY" \
   BW_SESSION="synthetic-session" BW_FAKE_SERVER="https://client-declared.test" \
   "$ROOT/tools/materialize-inference-key" gemini >/dev/null 2>&1; then
   echo "FAIL: a CLI matching the client-declared vault must be accepted" >&2
@@ -85,7 +85,7 @@ fi
 
 # ...and the capability's own DOMAIN must NOT decide it once a client entry exists, or a
 # consuming machine is right back where it started.
-if PATH="$FAKE_BIN:$PATH" AXON_ROOT="$ROOT" AXON_INFERENCE_KEY_OVERLAY="$OVERLAY" \
+if PATH="$FAKE_BIN:$PATH" SJEL_ROOT="$ROOT" SJEL_INFERENCE_KEY_OVERLAY="$OVERLAY" \
   BW_SESSION="synthetic-session" BW_FAKE_SERVER="https://vault.test" \
   "$ROOT/tools/materialize-inference-key" gemini >/dev/null 2>&1; then
   echo "FAIL: the capability env DOMAIN must not override an explicit client declaration" >&2
@@ -97,7 +97,7 @@ fi
 # host, which is the one outcome worse than refusing.
 rm -f "$OVERLAY/config/systems.local.toml" "$OVERLAY/config/runtime-secrets/inference-gemini-api-key"
 DANGLING_ERROR="$TEST_ROOT/dangling.err"
-if PATH="$FAKE_BIN:$PATH" AXON_ROOT="$ROOT" AXON_INFERENCE_KEY_OVERLAY="$OVERLAY" \
+if PATH="$FAKE_BIN:$PATH" SJEL_ROOT="$ROOT" SJEL_INFERENCE_KEY_OVERLAY="$OVERLAY" \
   BW_SESSION="synthetic-session" BW_FAKE_SERVER="https://vault.test" \
   "$ROOT/tools/materialize-inference-key" gemini >/dev/null 2>"$DANGLING_ERROR"; then
   echo "FAIL: an unresolvable provider must not fall back to the capability's own DOMAIN" >&2
@@ -107,7 +107,7 @@ grep -q "family-vault" "$DANGLING_ERROR"
 
 # A self-hosting machine declares no provider and keeps the old behaviour exactly.
 rm -f "$OVERLAY/config/machine.toml" "$OVERLAY/config/runtime-secrets/inference-gemini-api-key"
-if ! PATH="$FAKE_BIN:$PATH" AXON_ROOT="$ROOT" AXON_INFERENCE_KEY_OVERLAY="$OVERLAY" \
+if ! PATH="$FAKE_BIN:$PATH" SJEL_ROOT="$ROOT" SJEL_INFERENCE_KEY_OVERLAY="$OVERLAY" \
   BW_SESSION="synthetic-session" BW_FAKE_SERVER="https://vault.test" \
   "$ROOT/tools/materialize-inference-key" gemini >/dev/null 2>&1; then
   echo "FAIL: without a client entry the capability DOMAIN must still be used" >&2

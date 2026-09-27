@@ -24,8 +24,8 @@ case "$#:${1:-}" in
 esac
 
 TOOLS_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-source "$TOOLS_DIR/lib/paths.sh"                 # AXON_ROOT, AXON_PERSONAL_ROOT, toml_*
-source "$TOOLS_DIR/lib/platform.sh"              # AXON_CONTAINER_RUNTIME (container-path exec)
+source "$TOOLS_DIR/lib/paths.sh"                 # SJEL_ROOT, SJEL_PERSONAL_ROOT, toml_*
+source "$TOOLS_DIR/lib/platform.sh"              # SJEL_CONTAINER_RUNTIME (container-path exec)
 source "$TOOLS_DIR/lib/external-ref.sh"          # capability_provider — whose data is this?
 # Best-effort: make the vault SSH agent available even if not launched from an
 # interactive shell (shared with init.zsh). No-op if the app isn't running.
@@ -42,7 +42,7 @@ case "$#:${1:-}" in
   *) usage ;;
 esac
 
-MANIFEST="$AXON_ROOT/capabilities/$CAP/service.toml"
+MANIFEST="$SJEL_ROOT/capabilities/$CAP/service.toml"
 [ -f "$MANIFEST" ] || { echo "backup.sh: no $MANIFEST" >&2; exit 1; }
 
 # Backup authority does not travel with a reference (retired-tracker#169). A capability this
@@ -51,7 +51,7 @@ MANIFEST="$AXON_ROOT/capabilities/$CAP/service.toml"
 # live data is and write a valid, empty archive. A backup that succeeds while backing up
 # nothing is worse than one that fails: it resets "last run" and you find out at restore time.
 if [ -n "$(capability_provider "$CAP")" ]; then
-  echo "backup.sh: '$CAP' is provided by another deployment — [capability.$CAP] provided_by in $AXON_MACHINE_TOML." >&2
+  echo "backup.sh: '$CAP' is provided by another deployment — [capability.$CAP] provided_by in $SJEL_MACHINE_TOML." >&2
   echo "  Its data lives on that host, and so does the authority to back it up. Run this there." >&2
   exit 1
 fi
@@ -99,8 +99,8 @@ for x in ${EXCLUDES[@]+"${EXCLUDES[@]}"}; do EXCLUDE_ARGS+=(--exclude "$x"); don
 # nothing about this: it compares member names, which are unchanged.
 #
 # Same per-machine override seam as [capability.<name>] port in tools/service-runner.sh.
-SRC_ROOT="$AXON_PERSONAL_ROOT"
-SRC_ROOT_DECL="$(toml_get_in "capability.$CAP" backup_source_root "$AXON_MACHINE_TOML")"
+SRC_ROOT="$SJEL_PERSONAL_ROOT"
+SRC_ROOT_DECL="$(toml_get_in "capability.$CAP" backup_source_root "$SJEL_MACHINE_TOML")"
 if [ -n "$SRC_ROOT_DECL" ]; then
   case "$SRC_ROOT_DECL" in "~/"*) SRC_ROOT_DECL="$HOME/${SRC_ROOT_DECL#\~/}" ;; esac
   case "$SRC_ROOT_DECL" in
@@ -155,17 +155,17 @@ done
 # The container runtime, resolved once — backup_container_paths needs it. Both remaining
 # runtimes name their own CLI, so the manifest value IS the command.
 runtime_exec() {
-  case "$AXON_CONTAINER_RUNTIME" in
-    docker|podman) echo "$AXON_CONTAINER_RUNTIME exec $NAME" ;;
-    *) echo "backup.sh: unsupported container_runtime '$AXON_CONTAINER_RUNTIME'" >&2; exit 1 ;;
+  case "$SJEL_CONTAINER_RUNTIME" in
+    docker|podman) echo "$SJEL_CONTAINER_RUNTIME exec $NAME" ;;
+    *) echo "backup.sh: unsupported container_runtime '$SJEL_CONTAINER_RUNTIME'" >&2; exit 1 ;;
   esac
 }
 
 # Where a capability's backups land is a fact about the machine, not about the
 # capability: the Mac ships vaultwarden's tarballs to the Pi, and the Pi cannot ship
 # them to itself (ISA anti-claim A3). Same override home as service-runner.sh's `ports`.
-if [ -f "$AXON_MACHINE_TOML" ]; then
-  TARGET_OVERRIDE="$(toml_get_in "capability.$CAP" backup_target "$AXON_MACHINE_TOML")"
+if [ -f "$SJEL_MACHINE_TOML" ]; then
+  TARGET_OVERRIDE="$(toml_get_in "capability.$CAP" backup_target "$SJEL_MACHINE_TOML")"
   if [ -n "$TARGET_OVERRIDE" ]; then TARGET_ID="$TARGET_OVERRIDE"; fi
 fi
 
@@ -190,16 +190,16 @@ if [ "${#PATHS[@]}" -gt 0 ]; then
     echo "backup.sh: rsync is required to stage declared backup paths" >&2; exit 1; }
 fi
 if [ -n "$SQLITE_REL" ]; then
-  [ -f "$AXON_PERSONAL_ROOT/$SQLITE_REL" ] || {
+  [ -f "$SJEL_PERSONAL_ROOT/$SQLITE_REL" ] || {
     echo "backup.sh: declared SQLite database is missing: $SQLITE_REL" >&2; exit 1; }
   command -v sqlite3 >/dev/null 2>&1 || {
     echo "backup.sh: sqlite3 is required to verify a cold SQLite backup" >&2; exit 1; }
 fi
 # The same preconditions, and one more: here sqlite3 TAKES the copy as well as verifying
-# it. A deployment that moved its database with AXON_DB_PATH and left the manifest behind
+# it. A deployment that moved its database with SJEL_DB_PATH and left the manifest behind
 # fails on the missing source rather than shipping an archive of nothing.
 if [ -n "$SQLITE_ONLINE_REL" ]; then
-  [ -f "$AXON_PERSONAL_ROOT/$SQLITE_ONLINE_REL" ] || {
+  [ -f "$SJEL_PERSONAL_ROOT/$SQLITE_ONLINE_REL" ] || {
     echo "backup.sh: declared SQLite database is missing: $SQLITE_ONLINE_REL" >&2; exit 1; }
   command -v sqlite3 >/dev/null 2>&1 || {
     echo "backup.sh: sqlite3 is required to take and verify a live SQLite backup" >&2; exit 1; }
@@ -208,7 +208,7 @@ fi
 # Remote coordinates are required only by push mode. Stream mode deliberately has no
 # destination knowledge: the authenticated caller owns transport and encrypted storage.
 if [ "$STREAM" -eq 0 ]; then
-  SYS_LOCAL="$AXON_PERSONAL_ROOT/config/systems.local.toml"
+  SYS_LOCAL="$SJEL_PERSONAL_ROOT/config/systems.local.toml"
   [ -f "$SYS_LOCAL" ] || { echo "backup.sh: no $SYS_LOCAL (target coordinates)" >&2; exit 1; }
   # A destination is a KIND plus its coordinates. `ssh` is the original and stays the default,
   # so every existing target entry keeps working without being edited.
@@ -280,8 +280,8 @@ if [ -n "$SQLITE_ONLINE_REL" ]; then
 fi
 
 TS="$(date -u +%Y%m%dT%H%M%SZ)"
-STAGE="$AXON_PERSONAL_ROOT/backup/staging/$CAP"
-TARBALL="$AXON_PERSONAL_ROOT/backup/staging/$CAP-$TS.tar.gz"
+STAGE="$SJEL_PERSONAL_ROOT/backup/staging/$CAP"
+TARBALL="$SJEL_PERSONAL_ROOT/backup/staging/$CAP-$TS.tar.gz"
 REMOTE_DIR=""
 if [ "$STREAM" -eq 0 ]; then REMOTE_DIR="$REMOTE_ROOT/$CAP"; fi
 CAPABILITY_HELD=0
@@ -411,7 +411,7 @@ fi
 # the thing that holds every other credential.
 if [ -n "$SQLITE_REL" ]; then
   echo "→ cold sqlite copy: $SQLITE_REL"
-  db_src="$AXON_PERSONAL_ROOT/$SQLITE_REL"
+  db_src="$SJEL_PERSONAL_ROOT/$SQLITE_REL"
   db_dst="$STAGE/$SQLITE_REL"; mkdir -p "$(dirname "$db_dst")"
   rm -f "$db_dst" "$db_dst-wal" "$db_dst-shm"
 
@@ -451,7 +451,7 @@ fi
 # are, which is what makes the same command safe here and dangerous there.
 if [ -n "$SQLITE_ONLINE_REL" ]; then
   echo "→ live sqlite copy: $SQLITE_ONLINE_REL"
-  db_src="$AXON_PERSONAL_ROOT/$SQLITE_ONLINE_REL"
+  db_src="$SJEL_PERSONAL_ROOT/$SQLITE_ONLINE_REL"
   db_dst="$STAGE/$SQLITE_ONLINE_REL"; mkdir -p "$(dirname "$db_dst")"
   rm -f "$db_dst" "$db_dst-wal" "$db_dst-shm"
 
@@ -524,10 +524,10 @@ TAG="$(toml_get tag "$MANIFEST")"
 # or an inspect that failed are all "unknown", and writing an empty string would make the
 # archive claim the answer is known to be nothing.
 IMAGE_DIGEST=""
-if [ -n "$IMAGE" ] && command -v "$AXON_CONTAINER_RUNTIME" >/dev/null 2>&1; then
-  _image_id="$("$AXON_CONTAINER_RUNTIME" inspect "$NAME" --format '{{.Image}}' 2>/dev/null || true)"
+if [ -n "$IMAGE" ] && command -v "$SJEL_CONTAINER_RUNTIME" >/dev/null 2>&1; then
+  _image_id="$("$SJEL_CONTAINER_RUNTIME" inspect "$NAME" --format '{{.Image}}' 2>/dev/null || true)"
   if [ -n "$_image_id" ]; then
-    IMAGE_DIGEST="$("$AXON_CONTAINER_RUNTIME" image inspect "$_image_id" \
+    IMAGE_DIGEST="$("$SJEL_CONTAINER_RUNTIME" image inspect "$_image_id" \
       --format '{{if .RepoDigests}}{{index .RepoDigests 0}}{{end}}' 2>/dev/null || true)"
     [ -n "$IMAGE_DIGEST" ] || IMAGE_DIGEST="$_image_id"
   fi
@@ -811,7 +811,7 @@ fi  # end destination-kind branch
 # ad-hoc script and reusing it would inherit its meaning.
 # Hand-built JSON rather than jq: bash 3.2 everywhere, no new dependency for eight fields
 # whose values are all either numeric or shell-controlled.
-RECEIPT_DIR="$AXON_PERSONAL_ROOT/backup/receipts"
+RECEIPT_DIR="$SJEL_PERSONAL_ROOT/backup/receipts"
 mkdir -p "$RECEIPT_DIR"
 contents=""
 [ "${#PATHS[@]}" -gt 0 ] && contents="paths"

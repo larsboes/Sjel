@@ -61,7 +61,7 @@ Two rules keep `apply` safe, both carried over unchanged and both tested:
    because it is a named tool's own cleanup verb — `brew cleanup`, `cargo clean` — that
    only its own CLI can express.
 
-The overlay is resolved through `AXON_PERSONAL_ROOT`, the same way
+The overlay is resolved through `SJEL_PERSONAL_ROOT`, the same way
 `capabilities/host-net` resolves its own policy. The `axon.local.toml` → `axon.toml` order
 stays owned by `tools/lib/paths.sh` and `libs/overlay/overlay.ts`; the launcher sources
 `paths.sh`, so this crate holds no third copy of it.

@@ -20,7 +20,7 @@ const config = {
     // being comparable to the one CI built. Read from the environment instead, so a
     // deploy step can still stamp something meaningful (a commit sha) without the
     // default build being nondeterministic.
-    version: { name: process.env.AXON_BUILD_VERSION ?? "dev" },
+    version: { name: process.env.SJEL_BUILD_VERSION ?? "dev" },
   },
 };
 

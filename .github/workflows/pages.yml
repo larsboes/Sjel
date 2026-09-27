@@ -56,7 +56,7 @@ jobs:
     env:
       # A GitHub Pages PROJECT site is served from /<repo>, and a static SPA has to be told:
       # its asset URLs and router links are baked in at build time.
-      AXON_PAGES_BASE: /Sjel
+      SJEL_PAGES_BASE: /Sjel
 
     steps:
       - name: Check out Axon
@@ -69,7 +69,7 @@ jobs:
 
       # paths.sh resolves the overlay before anything else runs; with no axon.local.toml it falls
       # back to axon.toml's shipped default. Same minimal seed ci.yml uses.
-      # tools/demo-up overrides it for its own steps by exporting AXON_OVERLAY_ROOT.
+      # tools/demo-up overrides it for its own steps by exporting SJEL_OVERLAY_ROOT.
       - name: Minimal overlay for path resolution
         run: |
           mkdir -p "$HOME/.axon-overlay/config"
@@ -130,7 +130,7 @@ jobs:
         run: tools/demo-up
 
       - name: Assemble the site
-        run: tools/demo-site --base "$AXON_PAGES_BASE"
+        run: tools/demo-site --base "$SJEL_PAGES_BASE"
 
       # demo-site runs the hygiene gate itself; this makes the refusal a named, visible step
       # rather than one line inside another script's output.

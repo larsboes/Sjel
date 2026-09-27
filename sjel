@@ -11,18 +11,18 @@ while [ -L "$SOURCE" ]; do
     *) SOURCE="$DIR/$TARGET" ;;
   esac
 done
-AXON_ROOT="$(cd -P "$(dirname "$SOURCE")" && pwd)"
+SJEL_ROOT="$(cd -P "$(dirname "$SOURCE")" && pwd)"
 
 # Where to poll a capability and what the answer means. In a library because none of it can
 # be tested through this CLI on a machine with no services running, and CI has none —
 # tools/capability-probe.test.sh drives the rules directly.
 # shellcheck source=tools/lib/capability-probe.sh
-. "$AXON_ROOT/tools/lib/capability-probe.sh"
+. "$SJEL_ROOT/tools/lib/capability-probe.sh"
 # What tools/ holds, for `sjel search`. A library for the same reason: `sjel search` calls
 # tools/capability.sh registry, which hard-fails without a machine.toml, so the whole verb
 # is unrunnable in CI — but the tools index is testable on any checkout.
 # shellcheck source=tools/lib/tool-index.sh
-. "$AXON_ROOT/tools/lib/tool-index.sh"
+. "$SJEL_ROOT/tools/lib/tool-index.sh"
 
 usage() {
   cat <<'EOF'
@@ -127,9 +127,9 @@ cargo, with the four things a run on this machine has to be protected from:
   a scratch CARGO_TARGET_DIR   the repository's target/release/<bin> IS the binary a
                                live service is running, and replacing it kills it
   --release refused            for the same reason
-  a scratch overlay            AXON_* is cleared, then pointed at a throwaway root
+  a scratch overlay            SJEL_* is cleared, then pointed at a throwaway root
   scratch projection roots     trips, finance, interior and comms export notes into
-                               the Obsidian vault from roots AXON_DB_PATH never touches
+                               the Obsidian vault from roots SJEL_DB_PATH never touches
 
   --print-env    show the environment it would use, and run nothing
 
@@ -143,7 +143,7 @@ EOF
 }
 
 capability_rows() {
-  "$AXON_ROOT/tools/capability.sh" registry |
+  "$SJEL_ROOT/tools/capability.sh" registry |
     jq -r --arg fs "$CAPABILITY_FS" \
       '.[] | select(.port != "" or .endpoint != "")
            | [.name, .scope, .port, .endpoint, (.health_path // ""), (.ready_path // ""), (.autostart // "")]
@@ -156,7 +156,7 @@ capability_rows() {
 # whose base URL the registry had already resolved.
 capability_url() {
   local name="$1" row scope port endpoint url
-  row="$("$AXON_ROOT/tools/capability.sh" registry |
+  row="$("$SJEL_ROOT/tools/capability.sh" registry |
     jq -r --arg name "$name" --arg fs "$CAPABILITY_FS" \
       '.[] | select(.name == $name) | [.scope, .port, .endpoint] | join($fs)' | head -n 1)"
   IFS="$CAPABILITY_FS" read -r scope port endpoint <<EOF
@@ -272,11 +272,11 @@ pack_command() {
   case "$command" in
     list)
       case "$harness" in
-        "") bun run "$AXON_ROOT/tools/packs-opencode.ts" list ;;
-        claude) bun run "$AXON_ROOT/tools/packs-claude.ts" status ;;
-        codex) "$AXON_ROOT/tools/packs-codex" status --all ;;
-        opencode) bun run "$AXON_ROOT/tools/packs-opencode.ts" list ;;
-        pi) bun run "$AXON_ROOT/tools/packs-pi.ts" list ;;
+        "") bun run "$SJEL_ROOT/tools/packs-opencode.ts" list ;;
+        claude) bun run "$SJEL_ROOT/tools/packs-claude.ts" status ;;
+        codex) "$SJEL_ROOT/tools/packs-codex" status --all ;;
+        opencode) bun run "$SJEL_ROOT/tools/packs-opencode.ts" list ;;
+        pi) bun run "$SJEL_ROOT/tools/packs-pi.ts" list ;;
         *) echo "sjel: unknown harness '$harness'" >&2; exit 1 ;;
       esac
       ;;
@@ -287,10 +287,10 @@ pack_command() {
         # ledger like every other harness, so status/deploy/sync/remove all mean
         # something here. It used to accept status alone, because symlinking had
         # no sync and no ownership to remove against.
-        claude) bun run "$AXON_ROOT/tools/packs-claude.ts" "$command" "$@" ;;
-        codex) "$AXON_ROOT/tools/packs-codex" "$command" "$@" ;;
-        opencode) bun run "$AXON_ROOT/tools/packs-opencode.ts" "$command" "$@" ;;
-        pi) bun run "$AXON_ROOT/tools/packs-pi.ts" "$command" "$@" ;;
+        claude) bun run "$SJEL_ROOT/tools/packs-claude.ts" "$command" "$@" ;;
+        codex) "$SJEL_ROOT/tools/packs-codex" "$command" "$@" ;;
+        opencode) bun run "$SJEL_ROOT/tools/packs-opencode.ts" "$command" "$@" ;;
+        pi) bun run "$SJEL_ROOT/tools/packs-pi.ts" "$command" "$@" ;;
         *) echo "sjel: unknown harness '$harness'" >&2; exit 1 ;;
       esac
       ;;
@@ -313,11 +313,11 @@ search() {
   search_tools "$query" && found=1 || true
   echo
   echo "Capabilities:"
-  "$AXON_ROOT/tools/capability.sh" registry |
+  "$SJEL_ROOT/tools/capability.sh" registry |
     jq -r '.[] | [.name, (.kind // "")] | @tsv' | grep -iF -- "$query" && found=1 || true
   echo
   echo "Packs:"
-  bun run "$AXON_ROOT/tools/packs-opencode.ts" list | grep -iF -- "$query" && found=1 || true
+  bun run "$SJEL_ROOT/tools/packs-opencode.ts" list | grep -iF -- "$query" && found=1 || true
   if [ "$found" -eq 0 ]; then
     echo
     echo "sjel: nothing matches '$query' in commands, tools, capabilities or Packs." >&2
@@ -329,17 +329,17 @@ case "${1:-help}" in
   help) shift; help "${1:-}" ;;
   -h|--help) usage ;;
   search) shift; search "$@" ;;
-  doctor) shift; exec "$AXON_ROOT/tools/doctor" "$@" ;;
-  context) shift; exec "$AXON_ROOT/tools/axon-context" "$@" ;;
+  doctor) shift; exec "$SJEL_ROOT/tools/doctor" "$@" ;;
+  context) shift; exec "$SJEL_ROOT/tools/axon-context" "$@" ;;
   # Same delegation as doctor: the launcher owns the overlay resolution and the lazy
   # release build, so there is one implementation of both.
-  storage) shift; exec "$AXON_ROOT/tools/storage/storage" "$@" ;;
+  storage) shift; exec "$SJEL_ROOT/tools/storage/storage" "$@" ;;
   # Same delegation again, and the job names are CI's own. `gates` and `test` are two
   # jobs of one workflow, not two tools: tools/ci-local reads the step list out of
   # .github/workflows/ci.yml so neither verb can drift from what the push will run.
-  gates) shift; exec "$AXON_ROOT/tools/ci-local" run repo-gates "$@" ;;
-  test) shift; exec "$AXON_ROOT/tools/ci-local" run bun-tests "$@" ;;
-  cargo) shift; exec "$AXON_ROOT/tools/cargo-hermetic" "$@" ;;
+  gates) shift; exec "$SJEL_ROOT/tools/ci-local" run repo-gates "$@" ;;
+  test) shift; exec "$SJEL_ROOT/tools/ci-local" run bun-tests "$@" ;;
+  cargo) shift; exec "$SJEL_ROOT/tools/cargo-hermetic" "$@" ;;
   capability) shift; capability_command "$@" ;;
   pack) shift; pack_command "$@" ;;
   *) echo "sjel: unknown command '$1'" >&2; echo "Run 'sjel help'." >&2; exit 1 ;;

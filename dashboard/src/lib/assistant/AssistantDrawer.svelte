@@ -40,7 +40,7 @@
   let touchStartY = 0;
   let touchDeltaY = $state(0);
 
-  // The route without the demo base (AXON_DEMO_BASE), so /travel is /travel on Pages too.
+  // The route without the demo base (SJEL_DEMO_BASE), so /travel is /travel on Pages too.
   const routePath = $derived(
     base && page.url.pathname.startsWith(base) ? page.url.pathname.slice(base.length) || '/' : page.url.pathname,
   );

@@ -194,14 +194,14 @@ pub enum RailBackend {
 }
 
 impl RailBackend {
-    /// From `AXON_TRANSIT_BACKEND` ("dbweb" | "dbnav"); anything else falls
+    /// From `SJEL_TRANSIT_BACKEND` ("dbweb" | "dbnav"); anything else falls
     /// back to the default loudly via the log rather than failing the process.
     pub fn from_env() -> Self {
-        match std::env::var("AXON_TRANSIT_BACKEND").as_deref() {
+        match axon_config::env_var("SJEL_TRANSIT_BACKEND").as_deref() {
             Ok("dbweb") => Self::DbWeb,
             Ok("dbnav") | Err(_) => Self::DbNav,
             Ok(other) => {
-                eprintln!("transit: unknown AXON_TRANSIT_BACKEND '{other}', using dbnav");
+                eprintln!("transit: unknown SJEL_TRANSIT_BACKEND '{other}', using dbnav");
                 Self::default()
             }
         }
@@ -222,12 +222,12 @@ impl RailBackend {
 /// hosts under different path prefixes, so a single prefix would have to be split back
 /// apart by whichever of them was being replaced.
 struct Endpoints {
-    /// dbweb journey search. `AXON_TRANSIT_FAHRPLAN_URL`.
+    /// dbweb journey search. `SJEL_TRANSIT_FAHRPLAN_URL`.
     fahrplan: String,
-    /// dbweb station suggest. `AXON_TRANSIT_ORTE_URL`. dbnav has no suggest path here:
+    /// dbweb station suggest. `SJEL_TRANSIT_ORTE_URL`. dbnav has no suggest path here:
     /// `suggest_stations` is dbweb-only regardless of backend.
     orte: String,
-    /// dbnav journey search. `AXON_TRANSIT_DBNAV_FAHRPLAN_URL`. Overridable too, and not
+    /// dbnav journey search. `SJEL_TRANSIT_DBNAV_FAHRPLAN_URL`. Overridable too, and not
     /// optional now that dbnav is the default — without it the default backend is the one
     /// a stub cannot reach.
     dbnav_fahrplan: String,
@@ -235,7 +235,7 @@ struct Endpoints {
 
 impl Endpoints {
     fn from_env() -> Self {
-        Self::resolve(|var| std::env::var(var).ok())
+        Self::resolve(|var| axon_config::env_var(var).ok())
     }
 
     /// Split from `from_env` so the resolution rules are testable without mutating the
@@ -250,9 +250,9 @@ impl Endpoints {
                 .unwrap_or_else(|| default.to_string())
         };
         Self {
-            fahrplan: or_default("AXON_TRANSIT_FAHRPLAN_URL", FAHRPLAN_URL),
-            orte: or_default("AXON_TRANSIT_ORTE_URL", ORTE_URL),
-            dbnav_fahrplan: or_default("AXON_TRANSIT_DBNAV_FAHRPLAN_URL", DBNAV_FAHRPLAN_URL),
+            fahrplan: or_default("SJEL_TRANSIT_FAHRPLAN_URL", FAHRPLAN_URL),
+            orte: or_default("SJEL_TRANSIT_ORTE_URL", ORTE_URL),
+            dbnav_fahrplan: or_default("SJEL_TRANSIT_DBNAV_FAHRPLAN_URL", DBNAV_FAHRPLAN_URL),
         }
     }
 }
@@ -1828,9 +1828,9 @@ mod tests {
     #[test]
     fn every_endpoint_can_be_pointed_at_a_stub_and_otherwise_is_bahn_de() {
         let stub = |var: &str| match var {
-            "AXON_TRANSIT_FAHRPLAN_URL" => Some("http://127.0.0.1:8099/fahrplan".to_string()),
-            "AXON_TRANSIT_ORTE_URL" => Some("http://127.0.0.1:8099/orte".to_string()),
-            "AXON_TRANSIT_DBNAV_FAHRPLAN_URL" => {
+            "SJEL_TRANSIT_FAHRPLAN_URL" => Some("http://127.0.0.1:8099/fahrplan".to_string()),
+            "SJEL_TRANSIT_ORTE_URL" => Some("http://127.0.0.1:8099/orte".to_string()),
+            "SJEL_TRANSIT_DBNAV_FAHRPLAN_URL" => {
                 Some("http://127.0.0.1:8099/dbnav/fahrplan".to_string())
             }
             _ => None,

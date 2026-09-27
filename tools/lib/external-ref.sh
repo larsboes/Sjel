@@ -27,19 +27,19 @@
 # bash 3.2-safe, single-line TOML only (tools/lib/toml.sh), like every other manifest
 # reader on the shell side.
 #
-# Requires: tools/lib/paths.sh sourced first (AXON_MACHINE_TOML, AXON_OVERLAY_ROOT), which
+# Requires: tools/lib/paths.sh sourced first (SJEL_MACHINE_TOML, SJEL_OVERLAY_ROOT), which
 # already sources toml.sh.
 
 # Where the private half of the systems map lives for the active overlay.
 axon_systems_local() {
-  echo "$AXON_OVERLAY_ROOT/config/systems.local.toml"
+  echo "$SJEL_OVERLAY_ROOT/config/systems.local.toml"
 }
 
 # capability_provider <name> — the systems id declared as this capability's external
 # provider on this machine, empty when the machine manages it itself.
 capability_provider() {
-  [ -f "$AXON_MACHINE_TOML" ] || return 0
-  toml_get_in "capability.$1" provided_by "$AXON_MACHINE_TOML"
+  [ -f "$SJEL_MACHINE_TOML" ] || return 0
+  toml_get_in "capability.$1" provided_by "$SJEL_MACHINE_TOML"
 }
 
 # external_capabilities — every capability name this machine declares an external provider
@@ -47,14 +47,14 @@ capability_provider() {
 # could disagree with the sections, and the failure mode of two lists is that the shorter
 # one silently wins.
 external_capabilities() {
-  [ -f "$AXON_MACHINE_TOML" ] || return 0
+  [ -f "$SJEL_MACHINE_TOML" ] || return 0
   local sec name
-  for sec in $(toml_sections "$AXON_MACHINE_TOML"); do
+  for sec in $(toml_sections "$SJEL_MACHINE_TOML"); do
     case "$sec" in
       capability.*) name="${sec#capability.}" ;;
       *) continue ;;
     esac
-    [ -n "$(toml_get_in "$sec" provided_by "$AXON_MACHINE_TOML")" ] || continue
+    [ -n "$(toml_get_in "$sec" provided_by "$SJEL_MACHINE_TOML")" ] || continue
     echo "$name"
   done
 }
@@ -89,7 +89,7 @@ capability_endpoint() {  # <name> [ENV_KEY]
       url=""
     fi
     if [ -z "$url" ]; then
-      echo "external-ref: $AXON_MACHINE_TOML declares [capability.$name] provided_by = \"$provider\"," >&2
+      echo "external-ref: $SJEL_MACHINE_TOML declares [capability.$name] provided_by = \"$provider\"," >&2
       echo "  but $systems has no [$provider] url = \"...\" to resolve it to." >&2
       echo "  Add that entry, or drop the provided_by line if this machine runs $name itself." >&2
       return 2
@@ -99,7 +99,7 @@ capability_endpoint() {  # <name> [ENV_KEY]
   fi
 
   if [ -n "$env_key" ]; then
-    env_file="$AXON_OVERLAY_ROOT/$(_capability_env_file "$name")"
+    env_file="$SJEL_OVERLAY_ROOT/$(_capability_env_file "$name")"
     if [ -f "$env_file" ]; then
       url="$(grep -m1 "^$env_key=" "$env_file" | cut -d= -f2-)"
       if [ -n "$url" ]; then
@@ -116,7 +116,7 @@ capability_endpoint() {  # <name> [ENV_KEY]
 # capability has no manifest here at all, which is the normal state for one this machine
 # only consumes — its manifest lives in whichever repo owns the host.
 _capability_env_file() {  # <name>
-  local mf="$AXON_ROOT/capabilities/$1/service.toml"
+  local mf="$SJEL_ROOT/capabilities/$1/service.toml"
   [ -f "$mf" ] || return 0
   toml_get env_file "$mf"
 }
@@ -171,7 +171,7 @@ trusted_peer_ids() {
 }
 
 # trusted_peers_env — the same list as one comma-separated line, which is the form
-# libs/inference reads as AXON_INFERENCE_TRUSTED_PEERS. Empty output and exit 0 when nothing
+# libs/inference reads as SJEL_INFERENCE_TRUSTED_PEERS. Empty output and exit 0 when nothing
 # is declared: no trusted peers is a valid and, until the second host lands, the normal state.
 trusted_peers_env() {
   local out="" id

@@ -20,19 +20,19 @@ set -e
 _lib="$(cd "$(dirname "${BASH_SOURCE[0]:-$0}")/lib" && pwd)"
 source "$_lib/paths.sh"
 
-if ! git -C "$AXON_ROOT" rev-parse --git-dir >/dev/null 2>&1; then
-  echo "FAIL: $AXON_ROOT is not a git checkout, so trackedness cannot be answered" >&2
+if ! git -C "$SJEL_ROOT" rev-parse --git-dir >/dev/null 2>&1; then
+  echo "FAIL: $SJEL_ROOT is not a git checkout, so trackedness cannot be answered" >&2
   exit 1
 fi
 
 fail=0
 checked=0
-for f in "$AXON_ROOT"/capabilities/*/README.md "$AXON_ROOT"/capabilities/*/service.toml \
-         "$AXON_ROOT"/Packs/*/pack.toml "$AXON_ROOT"/libs/*/README.md; do
+for f in "$SJEL_ROOT"/capabilities/*/README.md "$SJEL_ROOT"/capabilities/*/service.toml \
+         "$SJEL_ROOT"/Packs/*/pack.toml "$SJEL_ROOT"/libs/*/README.md; do
   [ -f "$f" ] || continue
   checked=$((checked + 1))
-  _rel="${f#"$AXON_ROOT"/}"
-  if [ -n "$(git -C "$AXON_ROOT" ls-files --others --exclude-standard -- "$_rel")" ]; then
+  _rel="${f#"$SJEL_ROOT"/}"
+  if [ -n "$(git -C "$SJEL_ROOT" ls-files --others --exclude-standard -- "$_rel")" ]; then
     echo "FAIL: $_rel is untracked but the architecture generator reads it — ARCHITECTURE.md would carry data nobody else can reproduce (local green, CI red)" >&2
     fail=1
   fi

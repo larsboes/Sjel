@@ -233,7 +233,7 @@ struct AppState {
     comms_base_url: Arc<String>,
     /// Where the human-readable copy of the decision ledger is written.
     ///
-    /// `AXON_FINANCE_DECISIONS_ROOT` if set, else the overlay root. The override
+    /// `SJEL_FINANCE_DECISIONS_ROOT` if set, else the overlay root. The override
     /// exists so a live check can redirect the WRITE without redirecting the
     /// config READ. `None` means no overlay is configured at all.
     overlay_root: Option<Arc<PathBuf>>,
@@ -272,7 +272,7 @@ fn no_vault() -> ApiResponse {
         json!({
             "ok": false,
             "capability": "finance",
-            "error": "no vault configured; set the overlay's config/finance.json or AXON_FINANCE_OBSIDIAN_ROOT"
+            "error": "no vault configured; set the overlay's config/finance.json or SJEL_FINANCE_OBSIDIAN_ROOT"
         }),
     )
 }
@@ -283,7 +283,7 @@ fn no_journal() -> ApiResponse {
         json!({
             "ok": false,
             "capability": "finance",
-            "error": "no journal configured; set the overlay's config/finance.json or AXON_FINANCE_JOURNAL"
+            "error": "no journal configured; set the overlay's config/finance.json or SJEL_FINANCE_JOURNAL"
         }),
     )
 }
@@ -2463,7 +2463,7 @@ async fn main() {
 }
 
 /// This capability's name, for the origin guard's env var
-/// (`AXON_FINANCE_ALLOWED_ORIGIN_HOSTS`).
+/// (`SJEL_FINANCE_ALLOWED_ORIGIN_HOSTS`).
 const CAPABILITY: &str = "finance";
 
 fn state_from(config: Config) -> AppState {

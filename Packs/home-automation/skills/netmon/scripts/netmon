@@ -8,7 +8,7 @@ is fetched from Bitwarden at runtime (never hardcoded, never printed).
 `dns`/`egress` read a resolver's query log over SSH. `passive` needs scapy + sudo.
 
 Nothing is hardcoded to one house — non-secret config lives in the axon-overlay overlay
-(config/home-assistant.vars via $AXON_HOME_ROOT); the one secret comes from Bitwarden:
+(config/home-assistant.vars via $SJEL_HOME_ROOT); the one secret comes from Bitwarden:
   - subnet:   --subnet or $NETMON_SUBNET, else NETMON_SUBNET from home-assistant.vars,
               else auto-derived from the primary interface (/24)
   - SSH:      $NETMON_SSH, else NETMON_SSH from home-assistant.vars — required only for dns/egress
@@ -39,9 +39,9 @@ CACHE = os.path.expanduser("~/.cache/netmon")
 BASELINE = os.path.join(CACHE, "baseline.json")
 BW_ITEM = os.environ.get("NETMON_BW_ITEM", "home-assistant/netmon")
 def _home_overlay_root() -> Path:
-    raw = os.environ.get("AXON_HOME_ROOT") or os.environ.get("AXON_OVERLAY_ROOT") or os.environ.get("AXON_PERSONAL_ROOT")
+    raw = os.environ.get("SJEL_HOME_ROOT") or os.environ.get("SJEL_OVERLAY_ROOT") or os.environ.get("SJEL_PERSONAL_ROOT")
     if not raw:
-        raise SystemExit("home-automation overlay is unresolved; source tools/lib/paths.sh or set AXON_HOME_ROOT")
+        raise SystemExit("home-automation overlay is unresolved; source tools/lib/paths.sh or set SJEL_HOME_ROOT")
     return Path(raw).expanduser()
 
 

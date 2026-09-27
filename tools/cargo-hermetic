@@ -11,14 +11,14 @@
 #      operator's deployment. That is the fourth silent failure, and it happened at 22:24 on
 #      2026-09-03 to a worktree that thought it was isolated.
 #
-#   2. Redirecting the database is NOT isolation. `AXON_DB_PATH` moves the SQLite file and
+#   2. Redirecting the database is NOT isolation. `SJEL_DB_PATH` moves the SQLite file and
 #      nothing else; trips, finance, interior and comms each resolve an Obsidian projection
 #      root from the OVERLAY, which that variable does not touch. A trips live check with the
 #      database redirected re-exported thirteen real vault notes and created a fourteenth.
 #      That is the third silent failure, and it is why every projection root is named below
 #      rather than left to a default.
 #
-#   3. An exported AXON_* environment leaks the operator's real overlay into anything that
+#   3. An exported SJEL_* environment leaks the operator's real overlay into anything that
 #      builds a scratch root. tools/lib/test-support.sh already owns that problem for the
 #      shell suites; this calls the same function rather than writing a second list.
 #
@@ -122,32 +122,32 @@ SANDBOX="$(mktemp -d "${TMPDIR:-/tmp}/axon-cargo-hermetic.XXXXXX")"
 trap 'rm -rf "$SANDBOX"' EXIT
 mkdir -p "$SANDBOX/overlay/config" "$SANDBOX/overlay/data/axon" "$SANDBOX/vault" "$SANDBOX/decisions"
 
-# An empty JSON object, not an absent file: comms resolves $AXON_COMMS_CONFIG first and only
+# An empty JSON object, not an absent file: comms resolves $SJEL_COMMS_CONFIG first and only
 # then the overlay and then a gitignored dev config next to its source. Pointing it at a file
 # that exists and configures nothing is what closes all three paths at once — an unset
 # variable would fall through to whichever of the other two happens to be on this disk.
 echo '{}' > "$SANDBOX/comms.json"
 
 export CARGO_TARGET_DIR="$TARGET"
-export AXON_PERSONAL_ROOT="$SANDBOX/overlay"
-export AXON_OVERLAY_ROOT="$SANDBOX/overlay"
-export AXON_DB_PATH="$SANDBOX/overlay/data/axon/axon.db"
-export AXON_COMMS_CONFIG="$SANDBOX/comms.json"
+export SJEL_PERSONAL_ROOT="$SANDBOX/overlay"
+export SJEL_OVERLAY_ROOT="$SANDBOX/overlay"
+export SJEL_DB_PATH="$SANDBOX/overlay/data/axon/axon.db"
+export SJEL_COMMS_CONFIG="$SANDBOX/comms.json"
 # The projection roots. Each of these is a directory a capability WRITES markdown into, and
-# each resolves independently of AXON_DB_PATH — which is the whole lesson of the third
+# each resolves independently of SJEL_DB_PATH — which is the whole lesson of the third
 # silent failure. Named one by one because a capability that grows a projection has to be
 # added here deliberately; a wildcard would silently cover nothing.
-export AXON_TRIPS_OBSIDIAN_ROOT="$SANDBOX/vault"
-export AXON_FINANCE_OBSIDIAN_ROOT="$SANDBOX/vault"
-export AXON_FINANCE_DECISIONS_ROOT="$SANDBOX/decisions"
-export AXON_INTERIOR_OBSIDIAN_ROOT="$SANDBOX/vault"
+export SJEL_TRIPS_OBSIDIAN_ROOT="$SANDBOX/vault"
+export SJEL_FINANCE_OBSIDIAN_ROOT="$SANDBOX/vault"
+export SJEL_FINANCE_DECISIONS_ROOT="$SANDBOX/decisions"
+export SJEL_INTERIOR_OBSIDIAN_ROOT="$SANDBOX/vault"
 
 if [ "${1:-}" = "--print-env" ]; then
   # The sandbox is torn down on exit, so these paths are what the run WOULD use, not
   # somewhere to go and look afterwards. Printed in a stable order for the test.
-  for var in CARGO_TARGET_DIR AXON_PERSONAL_ROOT AXON_OVERLAY_ROOT AXON_DB_PATH \
-             AXON_COMMS_CONFIG AXON_TRIPS_OBSIDIAN_ROOT AXON_FINANCE_OBSIDIAN_ROOT \
-             AXON_FINANCE_DECISIONS_ROOT AXON_INTERIOR_OBSIDIAN_ROOT; do
+  for var in CARGO_TARGET_DIR SJEL_PERSONAL_ROOT SJEL_OVERLAY_ROOT SJEL_DB_PATH \
+             SJEL_COMMS_CONFIG SJEL_TRIPS_OBSIDIAN_ROOT SJEL_FINANCE_OBSIDIAN_ROOT \
+             SJEL_FINANCE_DECISIONS_ROOT SJEL_INTERIOR_OBSIDIAN_ROOT; do
     eval "printf '%s=%s\n' \"\$var\" \"\$$var\""
   done
   exit 0
@@ -155,7 +155,7 @@ fi
 
 [ "$#" -gt 0 ] || die "needs a cargo subcommand, e.g. 'test --workspace --locked'. Run 'axon help cargo'."
 
-echo "cargo-hermetic: target $CARGO_TARGET_DIR, overlay $AXON_PERSONAL_ROOT" >&2
+echo "cargo-hermetic: target $CARGO_TARGET_DIR, overlay $SJEL_PERSONAL_ROOT" >&2
 # Not exec: the trap has to run so the sandbox goes away, and the exit status has to be
 # cargo's own.
 cargo "$@"

@@ -9,7 +9,7 @@
 //! (`demo/README.md`), so a guard that refuses it does not fail a test, it
 //! fails CI on an unrelated branch.
 //!
-//! One `#[test]`, because it sets `AXON_COMMS_CONFIG` and Rust runs a test
+//! One `#[test]`, because it sets `SJEL_COMMS_CONFIG` and Rust runs a test
 //! binary's tests as threads of one process.
 
 use std::io::{BufRead, BufReader, Write};
@@ -72,7 +72,7 @@ fn a_listed_loopback_origin_is_fetched_and_its_neighbours_are_not() {
         ),
     )
     .expect("the temp config is writable");
-    std::env::set_var("AXON_COMMS_CONFIG", &config);
+    std::env::set_var("SJEL_COMMS_CONFIG", &config);
 
     // What tools/demo-seed posts for each of its articles: a loopback URL and
     // no content, so the server fetches and extracts the page itself.
@@ -97,6 +97,8 @@ fn a_listed_loopback_origin_is_fetched_and_its_neighbours_are_not() {
         err.to_string().contains("resolves to a non-public address"),
         "unexpected error: {err}"
     );
+
+    std::env::remove_var("SJEL_COMMS_CONFIG");
 
     std::env::remove_var("AXON_COMMS_CONFIG");
     let _ = std::fs::remove_dir_all(&dir);

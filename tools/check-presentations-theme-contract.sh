@@ -37,11 +37,11 @@ set -u
 
 _here="$(cd "$(dirname "$0")" && pwd)"
 # shellcheck source=tools/lib/paths.sh
-. "$_here/lib/paths.sh"   # AXON_ROOT
+. "$_here/lib/paths.sh"   # SJEL_ROOT
 
-DECK_THEME="${AXON_DECK_THEME:-$AXON_ROOT/Packs/presentations/skills/slide-deck/scripts/deckkit/theme.py}"
-DIAGRAM_THEME="${AXON_DIAGRAM_THEME:-$AXON_ROOT/Packs/presentations/skills/diagrams/scripts/diagramkit/theme.py}"
-THEMES_DIR="${AXON_THEMES_DIR:-$AXON_ROOT/Packs/presentations/skills/slide-deck/assets/themes}"
+DECK_THEME="${SJEL_DECK_THEME:-$SJEL_ROOT/Packs/presentations/skills/slide-deck/scripts/deckkit/theme.py}"
+DIAGRAM_THEME="${SJEL_DIAGRAM_THEME:-$SJEL_ROOT/Packs/presentations/skills/diagrams/scripts/diagramkit/theme.py}"
+THEMES_DIR="${SJEL_THEMES_DIR:-$SJEL_ROOT/Packs/presentations/skills/slide-deck/assets/themes}"
 
 if ! command -v python3 >/dev/null 2>&1; then
   echo "check-presentations-theme-contract: python3 is not on PATH — setup error, not a finding." >&2

@@ -11,7 +11,7 @@
 # a runner has no overlay, no vault and no real database, so the fixtures are synthetic by
 # construction. The dangerous run is the LOCAL one — a machine where a real overlay is a
 # directory away, the real database is a file the demo's capabilities would open if
-# AXON_DB_PATH were not pointed elsewhere, and `tools/demo-site` is one command. There, "synthetic by construction" rests on three guards
+# SJEL_DB_PATH were not pointed elsewhere, and `tools/demo-site` is one command. There, "synthetic by construction" rests on three guards
 # holding, and this is what catches the case where one of them did not.
 #
 # Two families of marker, for two different reasons:
@@ -94,7 +94,7 @@ scan "a deployment-instance marker" \
 # overlay (nothing in it is private) or when there is none (CI).
 
 derived_terms() {
-  local overlay="${AXON_OVERLAY_ROOT:-}"
+  local overlay="${SJEL_OVERLAY_ROOT:-}"
   [ -n "$overlay" ] && [ -d "$overlay" ] || return 0
   case "$overlay" in *"/demo/overlay") return 0 ;; esac
 
@@ -119,7 +119,7 @@ derived_terms() {
     grep -Eo 'https?://[A-Za-z0-9._:-]+' | sed 's|https\?://||' | sort -u
 }
 
-AXON_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+SJEL_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 
 # A term that is ALREADY in this public repository cannot be leaked by publishing it again.
 #
@@ -130,7 +130,7 @@ AXON_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 # no chance of an allowlist quietly excusing something that matters. A private host, a personal
 # domain or a public-but-personal IP address is exactly what survives it.
 already_public() {  # already_public <term>
-  git -C "$AXON_ROOT" grep -qIF -- "$1" 2>/dev/null
+  git -C "$SJEL_ROOT" grep -qIF -- "$1" 2>/dev/null
 }
 
 while IFS= read -r term; do

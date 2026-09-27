@@ -495,7 +495,7 @@ async fn project_library_after_write(
 /// `api_secret_file` still wins, because the dashboard's Vite proxy, the
 /// browser extension and `axon-clip` all already hold that value; a deployment
 /// converges on one token by pointing that reference and
-/// `AXON_INBOUND_TOKEN_FILE` at the same file.
+/// `SJEL_INBOUND_TOKEN_FILE` at the same file.
 ///
 /// `refuse_without_token` because comms is the capability where the loopback
 /// bind was never the boundary: `POST /ingest` fetches an attacker-chosen URL,
@@ -512,7 +512,7 @@ async fn main() {
 
     let auth = inbound_auth(&cfg);
     if !auth.is_configured() {
-        eprintln!("warning: no inbound token is configured — every route except /health and /ready will reject all requests. Set api_secret_file (comms.config.example.json) or AXON_INBOUND_TOKEN_FILE (schemas/deployment.env.example).");
+        eprintln!("warning: no inbound token is configured — every route except /health and /ready will reject all requests. Set api_secret_file (comms.config.example.json) or SJEL_INBOUND_TOKEN_FILE (schemas/deployment.env.example).");
     }
 
     let _background_services = BackgroundServices::start(&cfg);

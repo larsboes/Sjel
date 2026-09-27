@@ -21,7 +21,7 @@
 # by the same rules — the runner reads them through the same interpreter.
 set -e
 
-# paths.sh sources toml.sh and exports AXON_ROOT — both are all we need here.
+# paths.sh sources toml.sh and exports SJEL_ROOT — both are all we need here.
 _lib="$(cd "$(dirname "${BASH_SOURCE[0]:-$0}")/lib" && pwd)"
 # The one `schedule` parser, shared with tools/service-runner.sh — a gate that accepted a spec the
 # runner then refused would be worse than no gate at all. Sourced BEFORE paths.sh, which unsets
@@ -31,7 +31,7 @@ source "$_lib/paths.sh"
 
 fail=0
 found=0
-for svc in "$AXON_ROOT"/capabilities/*/service.toml "$AXON_ROOT"/*/service.toml; do
+for svc in "$SJEL_ROOT"/capabilities/*/service.toml "$SJEL_ROOT"/*/service.toml; do
   [ -f "$svc" ] || continue          # empty glob → literal path, skip it
   found=1
   cap="$(basename "$(dirname "$svc")")"
@@ -150,7 +150,7 @@ fi
 # two manifests shipping the same default is the scouting-vs-vaultwarden 8080 collision,
 # which was found by starting the full enabled set instead of by a gate. Now it's a gate.
 port_lines=""
-for svc in "$AXON_ROOT"/capabilities/*/service.toml "$AXON_ROOT"/*/service.toml; do
+for svc in "$SJEL_ROOT"/capabilities/*/service.toml "$SJEL_ROOT"/*/service.toml; do
   [ -f "$svc" ] || continue
   cap="$(basename "$(dirname "$svc")")"
   hostports="$(toml_get port "$svc")"
@@ -176,4 +176,4 @@ if [ "$fail" -ne 0 ]; then
   exit 1
 fi
 
-echo "service.toml schema check passed ($(basename "$AXON_ROOT"): containers declaring name/image/tag, services with name/command/port, data units with a backup contract and nothing runnable, scheduled jobs with no port, no container fields, host ports unique)."
+echo "service.toml schema check passed ($(basename "$SJEL_ROOT"): containers declaring name/image/tag, services with name/command/port, data units with a backup contract and nothing runnable, scheduled jobs with no port, no container fields, host ports unique)."

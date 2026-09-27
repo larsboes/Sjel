@@ -34,7 +34,7 @@ copies for Codex). The manifest is single-line TOML: `name` (== dir), `descripti
 `links`, `deployer`. Rules that shape skill design:
 
 - **No personal value in a skill — ever.** Hosts, paths, keys are redacted to placeholders;
-  the skill reads real values at runtime from the overlay (`$AXON_PERSONAL_ROOT/config/...`).
+  the skill reads real values at runtime from the overlay (`$SJEL_PERSONAL_ROOT/config/...`).
   A skill that needs a house fact reads config; it never states it.
 - **Downward routing.** The description routes among *skills*; SKILL.md routes among
   *references*; references carry the depth. Three progressive-disclosure moves, in order of

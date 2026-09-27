@@ -3,7 +3,7 @@
 set -euo pipefail
 
 TOOLS_DIR="$(cd "$(dirname "${BASH_SOURCE[0]:-$0}")" && pwd)"
-AXON_ROOT="$(cd "$TOOLS_DIR/.." && pwd)"
+SJEL_ROOT="$(cd "$TOOLS_DIR/.." && pwd)"
 mode="${1:-}"
 target="${2:-}"
 
@@ -13,14 +13,14 @@ usage() {
 }
 
 print_path_if_present() {
-  [ -e "$AXON_ROOT/$1" ] && echo "read=$1"
+  [ -e "$SJEL_ROOT/$1" ] && echo "read=$1"
 }
 
 context_with() {
   local registry row
-  registry="$("$AXON_ROOT/tools/capability.sh" registry)"
+  registry="$("$SJEL_ROOT/tools/capability.sh" registry)"
   echo "mode=with"
-  echo "repo=$AXON_ROOT"
+  echo "repo=$SJEL_ROOT"
   if [ -z "$target" ]; then
     echo "capabilities:"
     printf '%s\n' "$registry" | jq -r '.[] | "  \(.name)\tkind=\(.kind)\thttp=\(if .port == "" then "none" else "registered" end)"'
@@ -51,23 +51,23 @@ unit_from_target() {
 context_on() {
   local normalized unit
   echo "mode=on"
-  echo "repo=$AXON_ROOT"
-  git -C "$AXON_ROOT" status --short --branch
+  echo "repo=$SJEL_ROOT"
+  git -C "$SJEL_ROOT" status --short --branch
   if [ -z "$target" ]; then
-    "$AXON_ROOT/tools/self" status
+    "$SJEL_ROOT/tools/self" status
     echo "read=README.md"
     echo "next=axon doctor"
     return
   fi
   normalized="${target#./}"
-  if [ -e "$AXON_ROOT/$normalized" ]; then
+  if [ -e "$SJEL_ROOT/$normalized" ]; then
     unit="$(unit_from_target "$normalized")"
     echo "target=$normalized"
   else
     unit="$target"
     echo "target=$target"
   fi
-  "$AXON_ROOT/tools/self" explain "$unit" --json 2>/dev/null || echo "self=unavailable-for-$unit"
+  "$SJEL_ROOT/tools/self" explain "$unit" --json 2>/dev/null || echo "self=unavailable-for-$unit"
   print_path_if_present "capabilities/$unit/README.md"
   print_path_if_present "capabilities/$unit/service.toml"
   print_path_if_present "capabilities/$unit/Cargo.toml"

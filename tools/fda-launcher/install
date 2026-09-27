@@ -1,11 +1,11 @@
 #!/usr/bin/env bash
 # tools/fda-launcher/install — build, sign and install axon-fda-launcher for this Mac.
 #
-# Installs to $AXON_PERSONAL_ROOT/bin/axon-fda-launcher: machine-local, outside target/, so a
+# Installs to $SJEL_PERSONAL_ROOT/bin/axon-fda-launcher: machine-local, outside target/, so a
 # cargo build never replaces the signed copy. macOS keys a Full Disk Access grant on the code
 # signature; an ad-hoc signature changes with every build and the grant would silently lapse.
 # So it is signed with the first valid code-signing identity in the keychain, or the one named
-# in AXON_CODESIGN_IDENTITY.
+# in SJEL_CODESIGN_IDENTITY.
 #
 # After the first install, grant it once: System Settings → Privacy & Security → Full Disk
 # Access → + → the installed path. Re-running this keeps the grant while the identity is the
@@ -15,19 +15,19 @@ TOOLS_DIR="$(cd "$(dirname "$0")/.." && pwd)"
 source "$TOOLS_DIR/lib/paths.sh"
 [ "$(uname -s)" = Darwin ] || { echo "fda-launcher: macOS only; nothing to do here"; exit 0; }
 
-identity="${AXON_CODESIGN_IDENTITY:-}"
+identity="${SJEL_CODESIGN_IDENTITY:-}"
 if [ -z "$identity" ]; then
   identity="$(security find-identity -v -p codesigning | awk 'NR==1 && $2 ~ /^[0-9A-F]{40}$/ {print $2}')"
 fi
 [ -n "$identity" ] || { echo "fda-launcher: no code-signing identity in the keychain" >&2; exit 1; }
 
-(cd "$AXON_ROOT" && cargo build --release -p axon-fda-launcher)
-dest_dir="$AXON_PERSONAL_ROOT/bin"
+(cd "$SJEL_ROOT" && cargo build --release -p axon-fda-launcher)
+dest_dir="$SJEL_PERSONAL_ROOT/bin"
 dest="$dest_dir/axon-fda-launcher"
 mkdir -p "$dest_dir"
 # CARGO_TARGET_DIR is honoured so a relocated target dir does not install a stale or
 # missing binary; same pattern as tools/storage/storage.
-cp "${CARGO_TARGET_DIR:-$AXON_ROOT/target}/release/axon-fda-launcher" "$dest.new"
+cp "${CARGO_TARGET_DIR:-$SJEL_ROOT/target}/release/axon-fda-launcher" "$dest.new"
 codesign --force --sign "$identity" --identifier dev.axon.fda-launcher --options runtime "$dest.new"
 mv "$dest.new" "$dest"
 codesign --verify --strict "$dest"

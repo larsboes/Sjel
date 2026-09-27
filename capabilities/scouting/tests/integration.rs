@@ -11,7 +11,7 @@
 //! Every fixture here is built by the test and removed on drop. No vault path,
 //! no real note and no personal profile enters this file.
 //!
-//! **Hermetic by construction.** `AXON_PERSONAL_ROOT` is pointed at an empty
+//! **Hermetic by construction.** `SJEL_PERSONAL_ROOT` is pointed at an empty
 //! temp directory before anything runs, so `embed::embedding_role()` finds no
 //! declared role and the scorer falls back to hash embedding. Without that the
 //! suite would reach the machine's configured oMLX backend and stop being a
@@ -35,7 +35,7 @@ fn isolate_from_the_operators_overlay() {
     ISOLATE.call_once(|| {
         let empty = std::env::temp_dir().join("axon-scouting-it-no-overlay");
         std::fs::create_dir_all(&empty).expect("empty overlay root");
-        std::env::set_var("AXON_PERSONAL_ROOT", &empty);
+        std::env::set_var("SJEL_PERSONAL_ROOT", &empty);
     });
 }
 

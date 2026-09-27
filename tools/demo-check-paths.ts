@@ -34,7 +34,7 @@ import { existsSync, readFileSync, readdirSync, statSync } from "node:fs";
 import { join } from "node:path";
 
 import {
-  AXON_ROOT,
+  SJEL_ROOT,
   DEMO_OVERLAY,
   loadManifest,
   registry,
@@ -59,7 +59,7 @@ const ID_PLACEHOLDER = "an-id";
  * "/health", ...)` on one line, the same call over four, and the long `route_manifest::Route {
  * method: ..., path: ... }` struct form trips uses.
  */
-export function declaredRoutes(capability: string, root = AXON_ROOT): string[] {
+export function declaredRoutes(capability: string, root = SJEL_ROOT): string[] {
   const src = join(root, "capabilities", capability, "src");
   if (!existsSync(src)) {
     throw new Error(`demo.toml names '${capability}', which has no capabilities/${capability}/src`);
@@ -122,7 +122,7 @@ export function declaredPaths(manifest: DemoManifest): Array<{ capability: strin
  * `tools/lib/demo-endpoints.test.ts` gives: whether the manifest is coherent is a fact about
  * the repository, and a workstation with a different capability set must not change the answer.
  */
-export function undeclaredPaths(manifest: DemoManifest, root = AXON_ROOT): string[] {
+export function undeclaredPaths(manifest: DemoManifest, root = SJEL_ROOT): string[] {
   const table = routes(registry(DEMO_OVERLAY));
   const cache = new Map<string, string[]>();
   const problems: string[] = [];

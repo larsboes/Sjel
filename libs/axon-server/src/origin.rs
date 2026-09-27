@@ -23,7 +23,7 @@
 //! trade-off vite.config.ts records). Known gap: the suffix also admits
 //! Tailscale Funnel sites — public pages on other people's tailnets, which do
 //! NOT authenticate at this tailnet's layer. Set
-//! `AXON_<CAPABILITY>_ALLOWED_ORIGIN_HOSTS` (comma-separated exact hosts, from
+//! `SJEL_<CAPABILITY>_ALLOWED_ORIGIN_HOSTS` (comma-separated exact hosts, from
 //! the overlay) to replace the suffix with the deployment's own names and close
 //! that gap without naming the machine in public code.
 //!
@@ -46,7 +46,7 @@ use axum::response::{IntoResponse, Json, Response};
 /// The env var one capability reads to replace the `.ts.net` suffix.
 fn allowed_hosts_var(capability: &str) -> String {
     format!(
-        "AXON_{}_ALLOWED_ORIGIN_HOSTS",
+        "SJEL_{}_ALLOWED_ORIGIN_HOSTS",
         capability.to_ascii_uppercase().replace('-', "_")
     )
 }
@@ -95,9 +95,9 @@ pub fn origin_allowed_by(origin: Option<&str>, allowed_hosts: Option<&str>) -> b
     }
 }
 
-/// The same predicate, reading `AXON_<CAPABILITY>_ALLOWED_ORIGIN_HOSTS`.
+/// The same predicate, reading `SJEL_<CAPABILITY>_ALLOWED_ORIGIN_HOSTS`.
 pub fn origin_allowed(capability: &str, origin: Option<&str>) -> bool {
-    let allowed_hosts = std::env::var(allowed_hosts_var(capability)).ok();
+    let allowed_hosts = axon_config::env_var(&allowed_hosts_var(capability)).ok();
     origin_allowed_by(origin, allowed_hosts.as_deref())
 }
 
@@ -206,15 +206,15 @@ mod tests {
     fn the_env_var_is_named_after_the_capability() {
         assert_eq!(
             allowed_hosts_var("places"),
-            "AXON_PLACES_ALLOWED_ORIGIN_HOSTS"
+            "SJEL_PLACES_ALLOWED_ORIGIN_HOSTS"
         );
         assert_eq!(
             allowed_hosts_var("trips"),
-            "AXON_TRIPS_ALLOWED_ORIGIN_HOSTS"
+            "SJEL_TRIPS_ALLOWED_ORIGIN_HOSTS"
         );
         assert_eq!(
             allowed_hosts_var("axon-status"),
-            "AXON_AXON_STATUS_ALLOWED_ORIGIN_HOSTS"
+            "SJEL_AXON_STATUS_ALLOWED_ORIGIN_HOSTS"
         );
     }
 }

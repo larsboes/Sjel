@@ -34,12 +34,12 @@ from pathlib import Path
 # Intentional cross-overlay reach: this administers the FAMILY home-assistant deployment,
 # whose config lives in the axon-overlay overlay — which is not necessarily this machine's
 # own active overlay. So it deliberately does NOT go through tools/lib/paths.sh /
-# AXON_PERSONAL_ROOT (that resolves only the active overlay); it reads axon-overlay directly
-# via its own AXON_HOME_ROOT env var. See README.md#public-core-and-private-overlays (three recognized overlays).
+# SJEL_PERSONAL_ROOT (that resolves only the active overlay); it reads axon-overlay directly
+# via its own SJEL_HOME_ROOT env var. See README.md#public-core-and-private-overlays (three recognized overlays).
 def _home_overlay_root() -> Path:
-    raw = os.environ.get("AXON_HOME_ROOT") or os.environ.get("AXON_OVERLAY_ROOT") or os.environ.get("AXON_PERSONAL_ROOT")
+    raw = os.environ.get("SJEL_HOME_ROOT") or os.environ.get("SJEL_OVERLAY_ROOT") or os.environ.get("SJEL_PERSONAL_ROOT")
     if not raw:
-        raise SystemExit("home-automation overlay is unresolved; source tools/lib/paths.sh or set AXON_HOME_ROOT")
+        raise SystemExit("home-automation overlay is unresolved; source tools/lib/paths.sh or set SJEL_HOME_ROOT")
     return Path(raw).expanduser()
 
 

@@ -3,8 +3,8 @@
 //! from the private overlay at runtime. Mirrors
 //! `capabilities/printing/printctl.py`'s `_cfg_path()`/`load_cfg()` exactly.
 //! Config is resolved in order:
-//!   1. `$AXON_SCOUTING_CONFIG` (explicit override, full path to a JSON file)
-//!   2. `$AXON_PERSONAL_ROOT/config/scouting.json` (the overlay; exported by
+//!   1. `$SJEL_SCOUTING_CONFIG` (explicit override, full path to a JSON file)
+//!   2. `$SJEL_PERSONAL_ROOT/config/scouting.json` (the overlay; exported by
 //!      `tools/lib/paths.sh` / `~/.zshrc`)
 //!   3. `capabilities/scouting/scouting.config.json` next to this crate's
 //!      source (local, gitignored -- dev fallback)
@@ -104,7 +104,7 @@ pub struct Config {
     pub events_dir: Option<PathBuf>,
     /// The one shared SQLite file this capability's tables live in, under the
     /// prefix `scouting` (PRD Q45). Resolved by `axon_config::database_path`:
-    /// `AXON_DB_PATH`, else `<overlay>/data/axon/axon.db`. It is a deployment
+    /// `SJEL_DB_PATH`, else `<overlay>/data/axon/axon.db`. It is a deployment
     /// fact rather than a capability one, so a `database_url` left in
     /// `scouting.json` is ignored -- a file per capability would drop the
     /// cross-capability correlation with `transit` that Phase 2 exists for.
@@ -135,10 +135,10 @@ pub struct Config {
 }
 
 fn config_path() -> PathBuf {
-    if let Ok(p) = std::env::var("AXON_SCOUTING_CONFIG") {
+    if let Ok(p) = axon_config::env_var("SJEL_SCOUTING_CONFIG") {
         return expand_tilde(&p);
     }
-    if let Ok(overlay) = std::env::var("AXON_PERSONAL_ROOT") {
+    if let Ok(overlay) = axon_config::env_var("SJEL_PERSONAL_ROOT") {
         return expand_tilde(&overlay).join("config").join("scouting.json");
     }
     PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("scouting.config.json")
@@ -284,7 +284,7 @@ mod tests {
     ///
     /// That was the first half. The second half is that restoring correctly is not
     /// enough while two tests hold guards at the same time — whichever finishes
-    /// first puts `AXON_PERSONAL_ROOT` back under the other, mid-assertion, and the
+    /// first puts `SJEL_PERSONAL_ROOT` back under the other, mid-assertion, and the
     /// other fails on a value it never set. Measured 2026-08-31: intermittent, and
     /// it passes eight runs out of eight in isolation, which is what made it a flake
     /// rather than a bug anyone chased.
@@ -293,7 +293,7 @@ mod tests {
     /// test, by construction: there is no way to take a second and deadlock against
     /// yourself, because the only constructor takes a list.
     struct EnvGuard {
-        saved: Vec<(&'static str, Option<String>)>,
+        saved: Vec<(String, Option<String>)>,
         _lock: std::sync::MutexGuard<'static, ()>,
     }
 
@@ -308,12 +308,15 @@ mod tests {
     impl EnvGuard {
         fn take(keys: &[&'static str]) -> Self {
             let lock = env_lock();
+            // The pre-rename Axon name is cleared too, so a value the operator's shell still
+            // exports under it cannot stand in for the setting under test.
             let saved = keys
                 .iter()
+                .flat_map(|key| std::iter::once(key.to_string()).chain(axon_config::env::legacy_name(key)))
                 .map(|key| {
-                    let previous = std::env::var(key).ok();
-                    std::env::remove_var(key);
-                    (*key, previous)
+                    let previous = std::env::var(&key).ok();
+                    std::env::remove_var(&key);
+                    (key, previous)
                 })
                 .collect();
             Self { saved, _lock: lock }
@@ -324,8 +327,8 @@ mod tests {
         fn drop(&mut self) {
             for (key, previous) in self.saved.drain(..) {
                 match previous {
-                    Some(value) => std::env::set_var(key, value),
-                    None => std::env::remove_var(key),
+                    Some(value) => std::env::set_var(&key, value),
+                    None => std::env::remove_var(&key),
                 }
             }
         }
@@ -335,7 +338,7 @@ mod tests {
     fn load_with_no_env_and_no_file_uses_defaults() {
         // Clear the overlay/override env vars so this test exercises the
         // "zero config" path deterministically regardless of the host's env.
-        let _env = EnvGuard::take(&["AXON_SCOUTING_CONFIG", "AXON_PERSONAL_ROOT", "AXON_PORT"]);
+        let _env = EnvGuard::take(&["SJEL_SCOUTING_CONFIG", "SJEL_PERSONAL_ROOT", "SJEL_PORT"]);
         let cfg = Config::load();
         assert_eq!(cfg.port, 8084);
         assert!(cfg.events_dir.is_none());
@@ -346,7 +349,7 @@ mod tests {
     /// the cross-capability correlation with `transit` is why it is shared.
     #[test]
     fn the_store_path_comes_from_the_deployment_not_from_scouting_json() {
-        let _env = EnvGuard::take(&["AXON_SCOUTING_CONFIG", "AXON_PERSONAL_ROOT"]);
+        let _env = EnvGuard::take(&["SJEL_SCOUTING_CONFIG", "SJEL_PERSONAL_ROOT"]);
         assert_eq!(Config::load().database_path, axon_config::database_path());
     }
 }

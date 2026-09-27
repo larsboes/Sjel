@@ -5,7 +5,7 @@
 // the app is the app: the same components, the same api.ts, the same error rendering. A demo
 // built out of a second, simpler UI would demonstrate the second UI.
 //
-// Tree-shaken out of a normal build. `import.meta.env.VITE_AXON_DEMO` is a literal at compile
+// Tree-shaken out of a normal build. `import.meta.env.VITE_SJEL_DEMO` is a literal at compile
 // time, so `if (!DEMO) return` becomes `if (true) return` and Rollup drops the rest — this file
 // costs a production bundle nothing, which is why it may sit in the eager import graph.
 //
@@ -23,7 +23,7 @@
 //                       a house rule, and leaving the shim to enforce it means a component
 //                       that grows one cannot quietly ship it.
 
-export const DEMO = import.meta.env.VITE_AXON_DEMO === "1";
+export const DEMO = import.meta.env.VITE_SJEL_DEMO === "1";
 
 export interface DemoIndex {
   seed: string;
@@ -82,7 +82,7 @@ export async function installDemoFetch(base: string): Promise<DemoIndex> {
   if (!res.ok) {
     throw new Error(
       `demo: no fixture index at ${base}/fixtures/index.json (${res.status}). ` +
-        "The bundle was built with VITE_AXON_DEMO=1 but tools/demo-record never ran.",
+        "The bundle was built with VITE_SJEL_DEMO=1 but tools/demo-record never ran.",
     );
   }
   index = (await res.json()) as DemoIndex;

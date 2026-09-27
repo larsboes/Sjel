@@ -17,7 +17,7 @@ const config = {
     // The published demo (#168) is served from a subdirectory of a GitHub Pages site, and a
     // static SPA cannot discover that at runtime — every asset URL and every router link is
     // baked in at build time. tools/demo-site sets it; nothing else does.
-    paths: { base: process.env.AXON_DEMO_BASE ?? "" },
+    paths: { base: process.env.SJEL_DEMO_BASE ?? "" },
   },
 };
 

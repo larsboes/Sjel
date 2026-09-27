@@ -89,7 +89,7 @@ Why: the number is already computed correctly and then discarded on the path alm
 every real search takes.
 
 - [x] ISC-1 — dbnav is the default rail backend: `RailBackend::default()` is `DbNav`,
-  and with `AXON_TRANSIT_BACKEND` unset a live search whose arriving transfer leg is
+  and with `SJEL_TRANSIT_BACKEND` unset a live search whose arriving transfer leg is
   regional returns a non-null `reliability`. Evidence: a live search on 2026-08-24
   returned a non-null probability over a two-train chain whose arriving leg is
   regional. The figures are in
@@ -261,7 +261,7 @@ In scope, too dim to state as a claim yet.
 
 | isc | type | check | threshold | tool | anchors_to |
 | --- | --- | --- | --- | --- | --- |
-| ISC-1 | command | live search, `AXON_TRANSIT_BACKEND` unset | `reliability` non-null | curl + jq | Goal |
+| ISC-1 | command | live search, `SJEL_TRANSIT_BACKEND` unset | `reliability` non-null | curl + jq | Goal |
 | ISC-2 | command | forced dbweb search with unmapped category | diagnostic present in response | curl + jq | Principles |
 | ISC-3 | file | read the table's evidence column | every entry cites an observed pair | Read | Principles |
 | ISC-4 | command | same query both backends | both non-null, within tolerance | curl + jq | Goal |

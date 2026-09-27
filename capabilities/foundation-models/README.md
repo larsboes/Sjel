@@ -126,7 +126,7 @@ one. What changed is the diagnostic when that estimate is wrong — a status cod
 typed cause. Worse to read, still loud, and not worth 311 lines of Swift to keep.
 
 **Loopback by default.** apfel binds `127.0.0.1` unless `--host` says otherwise, the same posture
-the retired shim enforced by having no option at all. `--port ${AXON_PORT}` in the manifest keeps
+the retired shim enforced by having no option at all. `--port ${SJEL_PORT}` in the manifest keeps
 it off apfel's 11434 default, which this deployment has already given to Ollama.
 
 ## Sources

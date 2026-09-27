@@ -10,28 +10,28 @@ let oldLegacy: string | undefined;
 
 beforeEach(() => {
   root = mkdtempSync(join(tmpdir(), "axon-overlay-test-"));
-  oldGeneric = process.env.AXON_OVERLAY_ROOT;
-  oldLegacy = process.env.AXON_PERSONAL_ROOT;
-  delete process.env.AXON_OVERLAY_ROOT;
-  delete process.env.AXON_PERSONAL_ROOT;
+  oldGeneric = process.env.SJEL_OVERLAY_ROOT;
+  oldLegacy = process.env.SJEL_PERSONAL_ROOT;
+  delete process.env.SJEL_OVERLAY_ROOT;
+  delete process.env.SJEL_PERSONAL_ROOT;
 });
 
 afterEach(() => {
   rmSync(root, { recursive: true, force: true });
-  if (oldGeneric === undefined) delete process.env.AXON_OVERLAY_ROOT;
-  else process.env.AXON_OVERLAY_ROOT = oldGeneric;
-  if (oldLegacy === undefined) delete process.env.AXON_PERSONAL_ROOT;
-  else process.env.AXON_PERSONAL_ROOT = oldLegacy;
+  if (oldGeneric === undefined) delete process.env.SJEL_OVERLAY_ROOT;
+  else process.env.SJEL_OVERLAY_ROOT = oldGeneric;
+  if (oldLegacy === undefined) delete process.env.SJEL_PERSONAL_ROOT;
+  else process.env.SJEL_PERSONAL_ROOT = oldLegacy;
 });
 
 describe("overlay resolution", () => {
   test("prefers the canonical environment contract", () => {
-    process.env.AXON_OVERLAY_ROOT = "/generic";
-    process.env.AXON_PERSONAL_ROOT = "/legacy";
-    expect(resolveOverlayRoot(root)).toEqual({ root: "/generic", source: "AXON_OVERLAY_ROOT" });
+    process.env.SJEL_OVERLAY_ROOT = "/generic";
+    process.env.SJEL_PERSONAL_ROOT = "/legacy";
+    expect(resolveOverlayRoot(root)).toEqual({ root: "/generic", source: "SJEL_OVERLAY_ROOT" });
   });
   test("keeps the historical environment alias compatible", () => {
-    process.env.AXON_PERSONAL_ROOT = "/legacy";
+    process.env.SJEL_PERSONAL_ROOT = "/legacy";
     expect(overlayRoot(root)).toBe("/legacy");
   });
   test("prefers the machine-local top-level key", () => {

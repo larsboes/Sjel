@@ -18,7 +18,7 @@ import {
   undeclaredPaths,
   unrecordedPaths,
 } from "./demo-check-paths.ts";
-import { AXON_ROOT, loadManifest } from "./lib/demo-endpoints.ts";
+import { SJEL_ROOT, loadManifest } from "./lib/demo-endpoints.ts";
 
 /** A manifest with one capability block, otherwise the committed file's own header values. */
 function manifestWith(paths: string[], capability = "axon-status", extra = ""): string {
@@ -217,9 +217,9 @@ describe("declaredRoutes", () => {
     }
   });
 
-  test("is read from the tree, not from a copy — AXON_ROOT is the default", () => {
-    expect(AXON_ROOT.endsWith("/tools")).toBe(false);
-    expect(declaredRoutes("finance", AXON_ROOT).length).toBeGreaterThan(20);
+  test("is read from the tree, not from a copy — SJEL_ROOT is the default", () => {
+    expect(SJEL_ROOT.endsWith("/tools")).toBe(false);
+    expect(declaredRoutes("finance", SJEL_ROOT).length).toBeGreaterThan(20);
   });
 });
 

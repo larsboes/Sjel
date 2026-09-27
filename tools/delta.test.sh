@@ -1,6 +1,6 @@
 #!/bin/bash
 # Test for tools/lib/delta.sh — the version-to-version manifest delta. Builds a throwaway git
-# repo with two commits whose manifests differ, points AXON_ROOT at it, and asserts
+# repo with two commits whose manifests differ, points SJEL_ROOT at it, and asserts
 # print_manifest_delta names each kind of change (capability add/remove, upstream add + verdict
 # change, toolchain add).
 #
@@ -11,7 +11,7 @@ _dir="$(cd "$(dirname "${BASH_SOURCE[0]:-$0}")" && pwd)"
 
 SCRATCH="$(mktemp -d)"
 trap 'rm -rf "$SCRATCH"' EXIT
-export AXON_ROOT="$SCRATCH"
+export SJEL_ROOT="$SCRATCH"
 
 git -C "$SCRATCH" init -q
 git -C "$SCRATCH" config user.email t@example.com

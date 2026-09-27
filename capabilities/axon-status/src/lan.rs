@@ -1,6 +1,6 @@
 //! The shell's local-network listener and its Bonjour advertisement (PRD Q119).
 //!
-//! Opt-in with `AXON_LAN_PORT` in `<overlay>/config/deployment.env`. The same router is served on
+//! Opt-in with `SJEL_LAN_PORT` in `<overlay>/config/deployment.env`. The same router is served on
 //! a second port with TLS on every interface, behind the devices-only gate
 //! (`libs/axon-server/src/lan.rs`). The certificate fingerprint is advertised in the Bonjour TXT
 //! record and served at `/api/axon-status/lan`, so the pairing screen can show it for the person
@@ -33,7 +33,7 @@ pub(crate) fn start(router: axum::Router, verifier: Arc<dyn DeviceVerifier>) {
         return;
     };
     let Some(dir) = axon_config::overlay_data_dir("lan") else {
-        eprintln!("[axon-status] AXON_LAN_PORT is set but no overlay is; the LAN listener needs one for its key");
+        eprintln!("[axon-status] SJEL_LAN_PORT is set but no overlay is; the LAN listener needs one for its key");
         return;
     };
     let host = local_host_name();

@@ -34,8 +34,8 @@ function fail(message: string): never {
 // script hides bun from that resolution. The first scheduled run through launchd died on
 // `exec: bun: not found`, exit 127 — the same defect the watchdog units carried from 2026-07-09
 // to 2026-07-25, arrived at from the other direction.
-const AXON_ROOT = axonRoot();
-const OVERLAY = overlayRoot(AXON_ROOT);
+const SJEL_ROOT = axonRoot();
+const OVERLAY = overlayRoot(SJEL_ROOT);
 if (!OVERLAY) fail("no 'overlay' in axon.local.toml or axon.toml — run tools/install.sh");
 
 /** comms' port, from the one file that declares it. Never a literal here — the manifest is the
@@ -48,7 +48,7 @@ if (!OVERLAY) fail("no 'overlay' in axon.local.toml or axon.toml — run tools/i
  *  only file data is the port"; true, and not enough on its own. `tools/sparpreis-watch.ts`
  *  carries the same check, and its test is where it is watched refusing. */
 function commsPort(): string {
-  const manifest = join(AXON_ROOT, "capabilities", "comms", "service.toml");
+  const manifest = join(SJEL_ROOT, "capabilities", "comms", "service.toml");
   if (!existsSync(manifest)) fail(`no ${manifest}`);
   const line = readFileSync(manifest, "utf8")
     .split("\n")
@@ -79,7 +79,7 @@ function bearerToken(): string {
   }
   let path = secretRef.trim();
   if (path.startsWith("~/")) path = join(process.env.HOME ?? "", path.slice(2));
-  else if (!isAbsolute(path)) path = join(AXON_ROOT, path);
+  else if (!isAbsolute(path)) path = join(SJEL_ROOT, path);
   let token: string;
   try {
     token = readFileSync(path, "utf8").trim();

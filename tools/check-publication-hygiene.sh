@@ -4,7 +4,7 @@
 # the public repository. It also rejects retired named-overlay and real-device markers.
 set -euo pipefail
 
-ROOT="${AXON_PUBLICATION_ROOT:-$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)}"
+ROOT="${SJEL_PUBLICATION_ROOT:-$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)}"
 cd "$ROOT"
 
 failed=0

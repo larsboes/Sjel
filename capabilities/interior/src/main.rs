@@ -1,6 +1,6 @@
 //! interior — Raumplanung.
 //!
-//! Welche Wohnung gemeint ist, entscheidet `AXON_INTERIOR_FLAT` oder `--flat`; liegt genau
+//! Welche Wohnung gemeint ist, entscheidet `SJEL_INTERIOR_FLAT` oder `--flat`; liegt genau
 //! eine unter `data/interior/flats/`, ist es die. Kein Name steht hier im Quelltext — er stand
 //! es bis 2026-08-30, und `tests/containment.rs` sorgt dafuer, dass er nicht zurueckkommt.
 //!
@@ -40,6 +40,9 @@ fn usage() -> ! {
 {t} — Raumplanung
 
   {model}                        gemessener Raum, und was daran noch geraten ist
+  {roomplan} [--capture D]       was in der RoomPlan-Aufnahme steht, gegen room.toml
+                                 [--write]  Entwurf als draft.json neben die Aufnahme
+                                 [--json]   dieselbe Auskunft als JSON
   {layouts}                      Layouts auf der Platte
   {check} <layout> [--json]      gegen rules.toml pruefen (Exit 1 bei hartem Verstoss)
   {toleranz} <layout> [--json]   bis zu welchem Messfehler das Verdikt haelt
@@ -59,6 +62,7 @@ fn usage() -> ! {
 "#,
         t = bold("interior"),
         model = bold("model"),
+        roomplan = bold("roomplan"),
         layouts = bold("layouts"),
         plan = bold("plan"),
         inventory = bold("inventory"),
@@ -188,6 +192,9 @@ async fn main() {
     };
 
     match cmd {
+        "roomplan" => {
+            std::process::exit(roomplan_show(&model, &argv));
+        }
         "model" => {
             println!("\n{}\n", bold(&model.room.flat.name));
             println!(
@@ -490,9 +497,9 @@ async fn main() {
 }
 
 async fn interior_serve() {
-    // Der Port kommt aus service.toml und wird als AXON_PORT gesetzt; 8092 ist der Wert, unter
+    // Der Port kommt aus service.toml und wird als SJEL_PORT gesetzt; 8092 ist der Wert, unter
     // dem die Vorgaengerfassung erreichbar war, damit vorhandene Lesezeichen weiter stimmen.
-    let port: u16 = std::env::var("AXON_PORT")
+    let port: u16 = axon_config::env_var("SJEL_PORT")
         .ok()
         .and_then(|v| v.parse().ok())
         .unwrap_or(8092);
@@ -1253,6 +1260,196 @@ fn cmd_kaufen(model: &Model, argv: &[String]) -> i32 {
             ))
         ),
         None => println!("\n  {}", dim("kein Monatssaldo verfuegbar (finance hat hier nichts geschrieben)")),
+    }
+    println!();
+    0
+}
+
+/// Was in einer RoomPlan-Aufnahme steht, und wie sie sich zu `room.toml` verhaelt.
+///
+/// Schreibt nichts, solange `--write` nicht dasteht. Ein Abgleich, der von selbst schreibt,
+/// waere der Scan als Messung — und die Regel dieses Projekts ist die andere.
+///
+/// Zwischen den Oeffnungen des Scans und denen aus `room.toml` wird **keine Identitaet
+/// behauptet**. Beide Listen stehen nebeneinander, und die Zuordnung ist eine Entscheidung.
+fn roomplan_show(model: &Model, argv: &[String]) -> i32 {
+    use interior::roomplan;
+    let flat = model.room.flat.id.clone();
+    let verzeichnis = match flag(argv, "capture") {
+        Some(datum) => match roomplan::captures_root(&flat) {
+            Ok(root) => root.join(datum),
+            Err(e) => {
+                eprintln!("{}", red(&e.to_string()));
+                return 2;
+            }
+        },
+        None => match roomplan::latest_capture(&flat) {
+            Ok(d) => d,
+            Err(e) => {
+                eprintln!("{}", red(&e.to_string()));
+                return 2;
+            }
+        },
+    };
+    let scan = match roomplan::read_usdz(&verzeichnis.join("captured-room.usdz")) {
+        Ok(s) => s,
+        Err(e) => {
+            eprintln!("{}", red(&e.to_string()));
+            return 2;
+        }
+    };
+    let d = roomplan::vergleiche(&scan, model);
+
+    if argv.iter().any(|a| a == "--json") {
+        let inhalt = serde_json::json!({
+            "capture": verzeichnis.display().to_string(),
+            "sha256": scan.sha256,
+            "byte_length": scan.byte_length,
+            "mesh_assets": scan.mesh_assets,
+            "room_groups": scan.room_groups,
+            "capture_finished_at": scan.capture_finished_at,
+            "kategorien": scan.kategorien(),
+            "scan_wandhoehe_cm": d.scan_wandhoehe_cm,
+            "scan_wandstaerke_cm": scan.wandstaerke_m().map(|m| m * 100.0),
+            "modell_hoehe_cm": d.modell_hoehe_cm,
+            "scan_wandlaenge_cm": d.scan_wandlaenge_cm,
+            "scan_oeffnungen": d.scan_oeffnungen.iter().map(|(id, cat, b, h)| serde_json::json!({
+                "id": id, "category": cat, "breite_cm": b, "hoehe_cm": h
+            })).collect::<Vec<_>>(),
+            "modell_oeffnungen": d.modell_oeffnungen.iter().map(|(id, b)| serde_json::json!({
+                "id": id, "breite_cm": b
+            })).collect::<Vec<_>>(),
+            "scan_grundflaeche_m2": d.scan_grundflaeche_m2,
+            "modell_grundflaeche_m2": d.modell_grundflaeche_m2,
+            "scan_objekte": d.scan_objekte.iter().map(|(n, m)| serde_json::json!({
+                "element": n, "cm": m
+            })).collect::<Vec<_>>(),
+        });
+        println!("{}", serde_json::to_string_pretty(&inhalt).unwrap_or_default());
+        return 0;
+    }
+
+    println!("\n{}\n", bold("RoomPlan-Aufnahme"));
+    println!("  Aufnahme   {}", verzeichnis.display());
+    println!(
+        "  USDZ       {} Bytes, sha256 {}",
+        scan.byte_length,
+        &scan.sha256[..16.min(scan.sha256.len())]
+    );
+    println!(
+        "  Inhalt     {} Maschen, {} Raumgruppen {}",
+        scan.mesh_assets,
+        scan.room_groups,
+        dim("(die Gruppen nennen Mittelpunkte und keine Mitgliedschaft)")
+    );
+    println!(
+        "  Aufnahme   {}",
+        match &scan.capture_finished_at {
+            Some(t) => format!("{t} {}", dim("(aus dem Archiv, ohne Zone)")),
+            None => dim("ohne Zeitstempel").to_string(),
+        }
+    );
+
+    println!("\n  {}", bold("Wandhoehe"));
+    match d.scan_wandhoehe_cm {
+        Some(cm) => {
+            println!("    {:.2} cm   {}", cm, dim("alle Waende einig"));
+            if d.modell_hoehe_cm == 0 {
+                println!(
+                    "    room.toml fuehrt 0 {} — {}",
+                    dim("= nicht gemessen"),
+                    green("diese offene Frage beantwortet der Scan")
+                );
+            } else {
+                println!(
+                    "    room.toml fuehrt {} cm   Abweichung {:+.2} cm",
+                    d.modell_hoehe_cm,
+                    cm - d.modell_hoehe_cm as f64
+                );
+            }
+        }
+        None => println!("    {}", red("die Waende widersprechen sich, also keine Zahl")),
+    }
+    match scan.wandstaerke_m() {
+        Some(m) => println!(
+            "  Wandstaerke {:.2} cm   {}",
+            m * 100.0,
+            dim("alle gleich, also eine Konstante und keine Messung — geht nicht in den Vergleich ein")
+        ),
+        None => println!(
+            "  Wandstaerke {}",
+            dim("die Waende unterscheiden sich, also gemessen")
+        ),
+    }
+    println!(
+        "  Waende      {}, Gesamtlaenge {:.1} cm",
+        scan.flaechen().filter(|e| e.category == "Wall").count(),
+        d.scan_wandlaenge_cm
+    );
+    println!(
+        "              {}",
+        dim("der Scan trennt Waende an ihren Oeffnungen, room.toml nicht")
+    );
+
+    println!("\n  {}", bold("Oeffnungen im Scan"));
+    for (id, cat, b, h) in &d.scan_oeffnungen {
+        println!("    {:<9} {:<24} {:>7.1} x{:>6.1} cm", id, cat, b, h);
+    }
+    println!("\n  {}", bold("Oeffnungen in room.toml"));
+    for (id, b) in &d.modell_oeffnungen {
+        println!("    {:<26} breit {:>5} cm", id, b);
+    }
+    println!("\n    {}", yellow("zwischen den Listen wird keine Identitaet behauptet:"));
+    println!(
+        "    {}",
+        dim("welcher Scan-Eintrag welche Oeffnung ist, ist eine Entscheidung und keine Rechnung")
+    );
+
+    println!("\n  {}", bold("Bodenflaeche"));
+    match d.scan_grundflaeche_m2 {
+        Some(m2) => {
+            let delta = m2 - d.modell_grundflaeche_m2;
+            let prozent = if d.modell_grundflaeche_m2 > 0.0 {
+                delta / d.modell_grundflaeche_m2 * 100.0
+            } else {
+                0.0
+            };
+            println!(
+                "    Scan        {:.2} m²  {}",
+                m2,
+                dim("obere Seite der Bodenplatte, aus ihren Dreiecken")
+            );
+            println!(
+                "    room.toml   {:.2} m²  {}",
+                d.modell_grundflaeche_m2,
+                dim("innen gemessen")
+            );
+            println!("    Abweichung  {:+.2} m²  ({:+.1} %)", delta, prozent);
+        }
+        None => println!("    {}", dim("der Scan traegt keine Bodenplatte")),
+    }
+
+    println!("\n  {}", bold("Moebel und Geraete im Scan"));
+    for (name, m) in &d.scan_objekte {
+        println!(
+            "    {:<34} {:>6.1} x{:>6.1} x{:>6.1} cm",
+            name, m[0], m[1], m[2]
+        );
+    }
+
+    if argv.iter().any(|a| a == "--write") {
+        match roomplan::write_draft(&scan, &flat, &verzeichnis, &civil_date::today()) {
+            Ok(pfad) => println!("\n  {} {}", green("Entwurf geschrieben:"), pfad.display()),
+            Err(e) => {
+                eprintln!("{}", red(&format!("Entwurf nicht geschrieben: {e}")));
+                return 1;
+            }
+        }
+    } else {
+        println!(
+            "\n  {}",
+            dim("nichts geschrieben. Mit --write entsteht der Entwurf als draft.json neben der Aufnahme.")
+        );
     }
     println!();
     0

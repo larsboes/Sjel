@@ -24,7 +24,7 @@ import { dirname, join } from "node:path";
 import { undeclaredPaths } from "./demo-check-paths.ts";
 import {
   absentPrefixes,
-  AXON_ROOT,
+  SJEL_ROOT,
   fixtureFile,
   loadManifest,
   resolvePath,
@@ -57,7 +57,7 @@ function countRows(body: unknown): number | null {
  *  B6) answers 401 without it — the Pages build hit exactly that on 2026-09-02. Same shape as
  *  tools/demo-seed.ts authHeaders. */
 function authHeaders(): Record<string, string> {
-  const token = process.env.AXON_DEMO_COMMS_TOKEN;
+  const token = process.env.SJEL_DEMO_COMMS_TOKEN;
   return token ? { "X-Axon-Token": token } : {};
 }
 
@@ -104,7 +104,7 @@ async function main(): Promise<void> {
   const check = args.includes("--check");
   const outIdx = args.indexOf("--out");
   const manifest = loadManifest();
-  const outDir = outIdx >= 0 ? args[outIdx + 1] : join(AXON_ROOT, manifest.fixturesDir);
+  const outDir = outIdx >= 0 ? args[outIdx + 1] : join(SJEL_ROOT, manifest.fixturesDir);
 
   // Before the first request, because the alternative is what happened to
   // `/api/axon-status/upstreams`: a path no capability serves resolves to a real port, hits

@@ -1,6 +1,6 @@
 #!/bin/bash
 # Source this from any Axon/capability script instead of hardcoding paths.
-# Exports AXON_ROOT and AXON_OVERLAY_ROOT, resolved dynamically so nothing
+# Exports SJEL_ROOT and SJEL_OVERLAY_ROOT, resolved dynamically so nothing
 # breaks if either repo gets moved/renamed — set the overlay once, everything
 # downstream picks it up automatically.
 #
@@ -16,12 +16,12 @@
 _lib="$(cd "$(dirname "${BASH_SOURCE[0]:-$0}")" && pwd)"
 # shellcheck source=env-compat.sh
 source "$_lib/env-compat.sh"
-AXON_ROOT="$(cd "$_lib/../.." && pwd)"
-export AXON_ROOT
+SJEL_ROOT="$(cd "$_lib/../.." && pwd)"
+export SJEL_ROOT
 source "$_lib/toml.sh"
 
 _overlay_raw=""
-# An already-exported AXON_OVERLAY_ROOT wins over both files. This is the only way to point a
+# An already-exported SJEL_OVERLAY_ROOT wins over both files. This is the only way to point a
 # single shell at a different deployment without editing something — axon.local.toml is the
 # machine's answer to "which overlay am I", and a tool that rewrote it to borrow another one
 # would leave the machine pointing somewhere else if it died halfway. tools/demo-up is the
@@ -30,25 +30,25 @@ _overlay_raw=""
 # configuration mechanism — it is a per-invocation override, and anything permanent belongs in
 # axon.local.toml where tools/doctor can see it.
 _overlay_overridden=""
-if [ -n "${AXON_OVERLAY_ROOT:-}" ]; then
-  _overlay_raw="$AXON_OVERLAY_ROOT"
+if [ -n "${SJEL_OVERLAY_ROOT:-}" ]; then
+  _overlay_raw="$SJEL_OVERLAY_ROOT"
   _overlay_overridden="yes"
 fi
-if [ -z "$_overlay_raw" ] && [ -f "$AXON_ROOT/axon.local.toml" ]; then
-  _overlay_raw="$(toml_get overlay "$AXON_ROOT/axon.local.toml")"
+if [ -z "$_overlay_raw" ] && [ -f "$SJEL_ROOT/axon.local.toml" ]; then
+  _overlay_raw="$(toml_get overlay "$SJEL_ROOT/axon.local.toml")"
 fi
 if [ -z "$_overlay_raw" ]; then
-  _overlay_raw="$(toml_get overlay "$AXON_ROOT/axon.toml")"
+  _overlay_raw="$(toml_get overlay "$SJEL_ROOT/axon.toml")"
 fi
 if [ -z "$_overlay_raw" ]; then
-  echo "paths.sh: no 'overlay' in $AXON_ROOT/axon.local.toml or $AXON_ROOT/axon.toml — run tools/install.sh" >&2
+  echo "paths.sh: no 'overlay' in $SJEL_ROOT/axon.local.toml or $SJEL_ROOT/axon.toml — run tools/install.sh" >&2
   return 1 2>/dev/null || exit 1
 fi
-# AXON_OVERLAY_ROOT is the canonical active deployment overlay. Keep the historical
-# AXON_PERSONAL_ROOT export as a compatibility alias for existing private scripts.
-AXON_OVERLAY_ROOT="${_overlay_raw/#\~/$HOME}"
-AXON_PERSONAL_ROOT="$AXON_OVERLAY_ROOT"
-export AXON_OVERLAY_ROOT AXON_PERSONAL_ROOT
+# SJEL_OVERLAY_ROOT is the canonical active deployment overlay. Keep the historical
+# SJEL_PERSONAL_ROOT export as a compatibility alias for existing private scripts.
+SJEL_OVERLAY_ROOT="${_overlay_raw/#\~/$HOME}"
+SJEL_PERSONAL_ROOT="$SJEL_OVERLAY_ROOT"
+export SJEL_OVERLAY_ROOT SJEL_PERSONAL_ROOT
 # This machine's own facts (os, container_runtime, capabilities, state mounts) live in
 # one file inside the overlay. An overlay describes a deployment, and a deployment may
 # own several machines, so the file is selected rather than assumed. Three ways in,
@@ -63,45 +63,45 @@ export AXON_OVERLAY_ROOT AXON_PERSONAL_ROOT
 #
 # Machine names are private facts: they live in the overlay and in a gitignored file, and
 # no generator that writes a tracked artifact reads them.
-AXON_MACHINES_DIR="$AXON_OVERLAY_ROOT/config/machines"
+SJEL_MACHINES_DIR="$SJEL_OVERLAY_ROOT/config/machines"
 _machine_name=""
 # Skipped when the overlay was overridden above: `machine` names a machine INSIDE the
 # overlay axon.local.toml points at, so carrying it across to a borrowed overlay asks for a
 # machines/<name>.toml that has no reason to exist there and fails the lookup outright.
-if [ -z "$_overlay_overridden" ] && [ -f "$AXON_ROOT/axon.local.toml" ]; then
-  _machine_name="$(toml_get machine "$AXON_ROOT/axon.local.toml")"
+if [ -z "$_overlay_overridden" ] && [ -f "$SJEL_ROOT/axon.local.toml" ]; then
+  _machine_name="$(toml_get machine "$SJEL_ROOT/axon.local.toml")"
 fi
 if [ -n "$_machine_name" ]; then
-  AXON_MACHINE_TOML="$AXON_MACHINES_DIR/$_machine_name.toml"
-  if [ ! -f "$AXON_MACHINE_TOML" ]; then
-    echo "paths.sh: axon.local.toml names machine '$_machine_name', but $AXON_MACHINE_TOML does not exist" >&2
+  SJEL_MACHINE_TOML="$SJEL_MACHINES_DIR/$_machine_name.toml"
+  if [ ! -f "$SJEL_MACHINE_TOML" ]; then
+    echo "paths.sh: axon.local.toml names machine '$_machine_name', but $SJEL_MACHINE_TOML does not exist" >&2
     return 1 2>/dev/null || exit 1
   fi
 else
   _host="$(hostname -s 2>/dev/null || hostname 2>/dev/null || echo "")"
-  if [ -n "$_host" ] && [ -f "$AXON_MACHINES_DIR/$_host.toml" ]; then
-    AXON_MACHINE_TOML="$AXON_MACHINES_DIR/$_host.toml"
+  if [ -n "$_host" ] && [ -f "$SJEL_MACHINES_DIR/$_host.toml" ]; then
+    SJEL_MACHINE_TOML="$SJEL_MACHINES_DIR/$_host.toml"
   else
-    AXON_MACHINE_TOML="$AXON_OVERLAY_ROOT/config/machine.toml"
+    SJEL_MACHINE_TOML="$SJEL_OVERLAY_ROOT/config/machine.toml"
   fi
 fi
-export AXON_MACHINE_TOML AXON_MACHINES_DIR
+export SJEL_MACHINE_TOML SJEL_MACHINES_DIR
 unset _machine_name _host
 
 # Capability manifests resolve from two roots. Public Axon holds reusable capabilities;
 # the active overlay holds deployment-specific ones, which is what keeps private services
 # out of a repository meant for publication. Overlay capabilities are runtime-visible
 # only: generators that write tracked artifacts (tools/self.ts, generate-architecture.sh)
-# deliberately scan AXON_CAPS_DIR alone, because a capability name is itself a fact about
+# deliberately scan SJEL_CAPS_DIR alone, because a capability name is itself a fact about
 # a private deployment.
-AXON_CAPS_DIR="$AXON_ROOT/capabilities"
-AXON_OVERLAY_CAPS_DIR="$AXON_OVERLAY_ROOT/capabilities"
-export AXON_CAPS_DIR AXON_OVERLAY_CAPS_DIR
+SJEL_CAPS_DIR="$SJEL_ROOT/capabilities"
+SJEL_OVERLAY_CAPS_DIR="$SJEL_OVERLAY_ROOT/capabilities"
+export SJEL_CAPS_DIR SJEL_OVERLAY_CAPS_DIR
 
 # The values computed above are this file's own, so they replace whatever either name held
 # before (env-compat.sh only fills a name that is unset, which would keep a stale inherited copy).
 for _v in ROOT OVERLAY_ROOT PERSONAL_ROOT MACHINE_TOML MACHINES_DIR CAPS_DIR OVERLAY_CAPS_DIR; do
-  eval "export SJEL_${_v}=\"\${AXON_${_v}}\""
+  eval "export AXON_${_v}=\"\${SJEL_${_v}}\""
 done
 unset _v
 
@@ -111,11 +111,11 @@ unset _v
 # stopping, because the two manifests are different services wearing one name.
 axon_manifest_for() {
   local name="$1" root_mf="" overlay_mf=""
-  if [ -f "$AXON_CAPS_DIR/$name/service.toml" ]; then
-    root_mf="$AXON_CAPS_DIR/$name/service.toml"
+  if [ -f "$SJEL_CAPS_DIR/$name/service.toml" ]; then
+    root_mf="$SJEL_CAPS_DIR/$name/service.toml"
   fi
-  if [ -f "$AXON_OVERLAY_CAPS_DIR/$name/service.toml" ]; then
-    overlay_mf="$AXON_OVERLAY_CAPS_DIR/$name/service.toml"
+  if [ -f "$SJEL_OVERLAY_CAPS_DIR/$name/service.toml" ]; then
+    overlay_mf="$SJEL_OVERLAY_CAPS_DIR/$name/service.toml"
   fi
   if [ -n "$root_mf" ] && [ -n "$overlay_mf" ]; then
     echo "paths.sh: capability '$name' is declared in both roots:" >&2
@@ -128,8 +128,8 @@ axon_manifest_for() {
   if [ -n "$overlay_mf" ]; then echo "$overlay_mf"; return 0; fi
   # A spine component carries its manifest at the repo root instead (today: dashboard/),
   # because it is not a capability and never appears in machine.toml's enabled set.
-  if [ -f "$AXON_ROOT/$name/service.toml" ]; then
-    echo "$AXON_ROOT/$name/service.toml"
+  if [ -f "$SJEL_ROOT/$name/service.toml" ]; then
+    echo "$SJEL_ROOT/$name/service.toml"
     return 0
   fi
   return 1
@@ -147,14 +147,14 @@ axon_manifest_for() {
 # two agree on one installation and silently disagree on the next.
 axon_state_mount_for() {
   local tool="$1" out=""
-  [ -f "$AXON_MACHINE_TOML" ] || {
-    echo "paths.sh: no machine manifest at $AXON_MACHINE_TOML" >&2
+  [ -f "$SJEL_MACHINE_TOML" ] || {
+    echo "paths.sh: no machine manifest at $SJEL_MACHINE_TOML" >&2
     return 1
   }
   # Inputs go through the environment, not argv: `bun -e` treats trailing arguments
   # as further scripts to run, so a positional path is opened as a file and fails.
-  out="$(_AXON_MOUNT_FILE="$AXON_MACHINE_TOML" _AXON_MOUNT_TOOL="$tool" bun -e '
-    const file = process.env._AXON_MOUNT_FILE, tool = process.env._AXON_MOUNT_TOOL;
+  out="$(_SJEL_MOUNT_FILE="$SJEL_MACHINE_TOML" _SJEL_MOUNT_TOOL="$tool" bun -e '
+    const file = process.env._SJEL_MOUNT_FILE, tool = process.env._SJEL_MOUNT_TOOL;
     const mounts = Bun.TOML.parse(await Bun.file(file).text()).state_mount ?? [];
     const hits = mounts.filter((m) => m?.tool === tool);
     if (hits.length > 1) process.exit(2);
@@ -163,10 +163,10 @@ axon_state_mount_for() {
   ' 2>/dev/null)" || {
     local rc=$?
     if [ "$rc" = "2" ]; then
-      echo "paths.sh: $AXON_MACHINE_TOML declares more than one [[state_mount]] for '$tool'" >&2
+      echo "paths.sh: $SJEL_MACHINE_TOML declares more than one [[state_mount]] for '$tool'" >&2
       return 2
     fi
-    echo "paths.sh: $AXON_MACHINE_TOML declares no [[state_mount]] for '$tool'" >&2
+    echo "paths.sh: $SJEL_MACHINE_TOML declares no [[state_mount]] for '$tool'" >&2
     return 1
   }
   echo "${out/#\~/$HOME}"

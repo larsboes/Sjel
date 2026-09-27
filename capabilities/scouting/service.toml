@@ -5,7 +5,7 @@ command     = ["target/release/scout-server"]
 build       = ["cargo", "build", "--locked", "--release", "--bin", "scout-server"]
 # 8084, not 8080: vaultwarden publishes 8080 on the host, and the runner bringing the
 # whole enabled set up is what turned that latent clash into a bind error. The process
-# reads this number back through AXON_PORT, so this line is the only place it lives.
+# reads this number back through SJEL_PORT, so this line is the only place it lives.
 port        = "8084"
 health_path = "/health"
 ready_path  = "/ready"   # availability is judged on this, not on liveness (#126)

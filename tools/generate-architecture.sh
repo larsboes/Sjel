@@ -14,11 +14,11 @@ source "$_toollib/paths.sh"
 # Override for tools/check-architecture-fresh.sh: a gate must never mutate what it
 # checks -- ARCHITECTURE_OUT lets it generate into a scratch file and diff, instead
 # of writing in place.
-OUT="${ARCHITECTURE_OUT:-$AXON_ROOT/ARCHITECTURE.md}"
+OUT="${ARCHITECTURE_OUT:-$SJEL_ROOT/ARCHITECTURE.md}"
 NOW="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
-UP="$AXON_ROOT/upstreams.toml"
-SYS="$AXON_ROOT/systems.toml"
-AX="$AXON_ROOT/axon.toml"
+UP="$SJEL_ROOT/upstreams.toml"
+SYS="$SJEL_ROOT/systems.toml"
+AX="$SJEL_ROOT/axon.toml"
 
 {
   echo "# Axon Architecture"
@@ -33,7 +33,7 @@ AX="$AXON_ROOT/axon.toml"
   echo
   echo "| Capability | What | Service | Port | Panel |"
   echo "|---|---|---|---|---|"
-  for dir in "$AXON_ROOT"/capabilities/*/; do
+  for dir in "$SJEL_ROOT"/capabilities/*/; do
     [ -d "$dir" ] || continue
     # No README.md means this is scaffolding, not a capability yet
     # (README.md#documentation-stays-owned-and-current). The row it produced was empty in the
@@ -79,7 +79,7 @@ AX="$AXON_ROOT/axon.toml"
   # service.toml one level below the repo root (capabilities/ sit two levels down and have
   # their own section above). Glob, not a hand-list, so a second spine app can never be
   # silently absent from this table -- same rationale as capability.sh's registry glob.
-  for st in "$AXON_ROOT"/*/service.toml; do
+  for st in "$SJEL_ROOT"/*/service.toml; do
     [ -f "$st" ] || continue          # empty glob -> literal path, skip it
     dir="$(dirname "$st")/"
     name="$(basename "$dir")"
@@ -103,7 +103,7 @@ AX="$AXON_ROOT/axon.toml"
   echo
   echo "| Lib | What |"
   echo "|---|---|"
-  for dir in "$AXON_ROOT"/libs/*/; do
+  for dir in "$SJEL_ROOT"/libs/*/; do
     [ -d "$dir" ] || continue
     name="$(basename "$dir")"
     desc=""
@@ -120,7 +120,7 @@ AX="$AXON_ROOT/axon.toml"
   echo
   echo "| Pack | Description | Skills | Drives |"
   echo "|---|---|---|---|"
-  for toml in "$AXON_ROOT"/Packs/*/pack.toml; do
+  for toml in "$SJEL_ROOT"/Packs/*/pack.toml; do
     [ -f "$toml" ] || continue
     pname="$(toml_get name "$toml")"
     pdesc="$(toml_get description "$toml")"
@@ -188,7 +188,7 @@ AX="$AXON_ROOT/axon.toml"
   echo
   echo '```mermaid'
   echo "flowchart LR"
-  for toml in "$AXON_ROOT"/Packs/*/pack.toml; do
+  for toml in "$SJEL_ROOT"/Packs/*/pack.toml; do
     [ -f "$toml" ] || continue
     pname="$(toml_get name "$toml")"
     pid="pack_${pname//[^A-Za-z0-9]/_}"
@@ -202,7 +202,7 @@ AX="$AXON_ROOT/axon.toml"
       echo "  $pid -.-> $lid((\"$link\"))"
     done
   done
-  for dir in "$AXON_ROOT"/capabilities/*/; do
+  for dir in "$SJEL_ROOT"/capabilities/*/; do
     [ -d "$dir" ] || continue
     name="$(basename "$dir")"
     if [ -f "$dir/service.toml" ]; then
@@ -226,7 +226,7 @@ AX="$AXON_ROOT/axon.toml"
   # dashboard requires axon-status over HTTP and shares no code with it at all.
   #
   # Both globs: capabilities sit two levels down, the spine's own manifests one level down.
-  for st in "$AXON_ROOT"/capabilities/*/service.toml "$AXON_ROOT"/*/service.toml; do
+  for st in "$SJEL_ROOT"/capabilities/*/service.toml "$SJEL_ROOT"/*/service.toml; do
     [ -f "$st" ] || continue
     name="$(basename "$(dirname "$st")")"
     cid="cap_${name//[^A-Za-z0-9]/_}"

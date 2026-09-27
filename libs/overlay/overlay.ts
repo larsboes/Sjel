@@ -2,7 +2,7 @@ import { existsSync, readFileSync } from "node:fs";
 import { hostname } from "node:os";
 import { dirname, resolve } from "node:path";
 
-export type OverlaySource = "AXON_OVERLAY_ROOT" | "AXON_PERSONAL_ROOT" | "axon.local.toml" | "axon.toml";
+export type OverlaySource = "SJEL_OVERLAY_ROOT" | "SJEL_PERSONAL_ROOT" | "axon.local.toml" | "axon.toml";
 export type OverlayResolution = { root: string; source: OverlaySource };
 
 export function axonRoot(): string {
@@ -30,7 +30,7 @@ function readOverlayKey(file: string): string | null {
 }
 
 export function resolveOverlayRoot(root: string = axonRoot()): OverlayResolution | null {
-  for (const name of ["AXON_OVERLAY_ROOT", "AXON_PERSONAL_ROOT"] as const) {
+  for (const name of ["SJEL_OVERLAY_ROOT", "SJEL_PERSONAL_ROOT"] as const) {
     const value = process.env[name]?.trim();
     if (value) return { root: expandHome(value), source: name };
   }

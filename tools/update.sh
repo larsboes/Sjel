@@ -12,7 +12,7 @@
 #   tools/update.sh            # fetch + ff-only pull + doctor
 #   tools/update.sh --check    # fetch + version summary + incoming preview, never pulls
 #   tools/update.sh --no-pull  # fetch + report only, don't pull
-#   tools/update.sh --yes      # answer the confirm up front (also: AXON_ASSUME_YES=1)
+#   tools/update.sh --yes      # answer the confirm up front (also: SJEL_ASSUME_YES=1)
 #   tools/update.sh -h         # this help
 #
 # Interactive: when stdin is a TTY, the pull path shows the incoming preview
@@ -26,10 +26,10 @@
 set -euo pipefail
 
 TOOLS_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-AXON_ROOT="$(cd "$TOOLS_DIR/.." && pwd)"
+SJEL_ROOT="$(cd "$TOOLS_DIR/.." && pwd)"
 
 # paths.sh (which sources toml.sh) — it resolves this machine's overlay and exports
-# AXON_MACHINE_TOML, where the enabled capability set moved on 2026-07-26. See
+# SJEL_MACHINE_TOML, where the enabled capability set moved on 2026-07-26. See
 # schemas/machine.toml.example.
 source "$TOOLS_DIR/lib/paths.sh"
 # The categorized version-to-version delta (capabilities/upstreams/toolchain/commits), shared
@@ -39,7 +39,7 @@ source "$TOOLS_DIR/lib/delta.sh"
 NO_PULL=0; CHECK=0
 # Env default so a wrapper can set it once for a whole automated run; the flag still wins.
 ASSUME_YES=0
-[ "${AXON_ASSUME_YES:-0}" = "1" ] && ASSUME_YES=1
+[ "${SJEL_ASSUME_YES:-0}" = "1" ] && ASSUME_YES=1
 # One loop over every argument, not three tests against $1: --check --yes together used to
 # depend on which flag was typed first, and an unrecognised flag was accepted in silence.
 for _a in "$@"; do
@@ -83,11 +83,11 @@ print_promotion_hint() {
 # state for a fresh checkout — not an error, but toml_array's grep says so on stderr. Report
 # the state the way tools/doctor already does for the same absence.
 enabled_capabilities() {
-  [ -f "$AXON_MACHINE_TOML" ] || return 0
-  toml_array capabilities "$AXON_MACHINE_TOML"
+  [ -f "$SJEL_MACHINE_TOML" ] || return 0
+  toml_array capabilities "$SJEL_MACHINE_TOML"
 }
 
-have_overlay() { [ -f "$AXON_MACHINE_TOML" ]; }
+have_overlay() { [ -f "$SJEL_MACHINE_TOML" ]; }
 
 print_incoming() {
   echo
@@ -122,10 +122,10 @@ EOF
   fi
 }
 
-echo "Axon update · $AXON_ROOT"
+echo "Axon update · $SJEL_ROOT"
 echo
 
-cd "$AXON_ROOT"
+cd "$SJEL_ROOT"
 
 # --check never pulls, so the dirty-tree guard (which only protects the
 # pull) would just block a read-only status question — skip it there.
@@ -202,7 +202,7 @@ fi
 if [ "$ASSUME_YES" -eq 1 ]; then
   print_incoming
   echo
-  echo "Confirmed up front (--yes / AXON_ASSUME_YES) — fast-forwarding."
+  echo "Confirmed up front (--yes / SJEL_ASSUME_YES) — fast-forwarding."
 elif [ -t 0 ]; then
   print_incoming
   echo

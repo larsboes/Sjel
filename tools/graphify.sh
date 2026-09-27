@@ -23,9 +23,9 @@ set -e
 _lib="$(cd "$(dirname "${BASH_SOURCE[0]:-$0}")/lib" && pwd)"
 source "$_lib/paths.sh"
 
-cd "$AXON_ROOT"
+cd "$SJEL_ROOT"
 
-_cfg="$AXON_PERSONAL_ROOT/config/graphify.env"
+_cfg="$SJEL_PERSONAL_ROOT/config/graphify.env"
 if [ -f "$_cfg" ]; then
   source "$_cfg"
 fi
@@ -50,7 +50,7 @@ GRAPHIFY_BACKENDS="${GRAPHIFY_BACKENDS:-${GRAPHIFY_BACKEND:-omlx}}"
 # Keys are read from the file the registry names and are NEVER echoed, interpolated into a URL, or
 # passed as an argv element. tools/materialize-inference-key is the only thing that writes those
 # files, straight from `bw get notes` at mode 0600 (README.md#secrets).
-_inference_json="$AXON_PERSONAL_ROOT/config/inference.json"
+_inference_json="$SJEL_PERSONAL_ROOT/config/inference.json"
 
 _registry_field() {  # _registry_field <backend-id> <field>
   [ -f "$_inference_json" ] || return 1
@@ -66,7 +66,7 @@ _registry_key() {  # _registry_key <backend-id>
   case "$rel" in
     "~"/*) expanded="$HOME/${rel#"~/"}" ;;
     /*)    expanded="$rel" ;;
-    *)     expanded="$AXON_PERSONAL_ROOT/config/$rel" ;;
+    *)     expanded="$SJEL_PERSONAL_ROOT/config/$rel" ;;
   esac
   [ -f "$expanded" ] || return 1
   # A materialized key file holds the secret and nothing else; oMLX's settings.json is JSON and
@@ -238,7 +238,7 @@ fi
 # this schema at all, so any check against it reports code-only forever; `community_name`
 # is populated on a pure AST run too (it is slugified from paths and symbols).
 report_outcome() {
-  local graph="$AXON_ROOT/graphify-out/graph.json" total=0 semantic=0 hyper=0
+  local graph="$SJEL_ROOT/graphify-out/graph.json" total=0 semantic=0 hyper=0
 
   if [ ! -f "$graph" ]; then
     echo "--- graphify: unavailable -- no graph.json was produced ---" >&2

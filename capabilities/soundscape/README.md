@@ -59,8 +59,8 @@ because that one is a real disagreement about what exists.
 
 ## Port and the UI bundle
 
-Default `8088`, resolved through `libs/axon-config` (`AXON_PORT`, then
-`AXON_SOUNDSCAPE_PORT`, then the default). Declared once in `service.toml`;
+Default `8088`, resolved through `libs/axon-config` (`SJEL_PORT`, then
+`SJEL_SOUNDSCAPE_PORT`, then the default). Declared once in `service.toml`;
 nothing else hardcodes it.
 
 `autostart = "false"`: nothing depends on this being up, and a soundscape that
@@ -69,7 +69,7 @@ dashboard brings it up when its surface is opened.
 
 The UI is served from this same process, so the panel arrives and leaves with the
 capability (README.md#three-architectural-nouns) instead of living in the spine shell. The bundle
-path comes from `AXON_SOUNDSCAPE_UI` and defaults to `capabilities/soundscape/ui/dist`,
+path comes from `SJEL_SOUNDSCAPE_UI` and defaults to `capabilities/soundscape/ui/dist`,
 the directory `bun run build` writes — a build output, never a checked-in one.
 
 ## Building the UI
@@ -99,11 +99,11 @@ line, and reproducibility of the bytes is the lockfile's job alone.
 One nondeterminism had to be fixed before any of that was worth anything: SvelteKit
 defaults its app version to `Date.now()`, which reaches the entry chunks and
 changes their content hashes, so two identical builds produced different bytes.
-It now reads `AXON_BUILD_VERSION`, defaulting to `dev`.
+It now reads `SJEL_BUILD_VERSION`, defaulting to `dev`.
 
 ## Persistence
 
-With `AXON_PERSONAL_ROOT` configured, the conductor stores the latest scape at
+With `SJEL_PERSONAL_ROOT` configured, the conductor stores the latest scape at
 `<overlay>/data/soundscape/scape.json`. Writes are atomic and coalesced across a
 two-second window so a dragged slider is one disk update rather than dozens. Without
 an overlay, state remains in memory.

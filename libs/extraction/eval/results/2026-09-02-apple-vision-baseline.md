@@ -17,7 +17,7 @@ is why it exists (PRD Q63 → B30).
 | Cost | 0.86 s wall for all six pages in one process, no model bytes on disk, no network |
 
 ```sh
-AXON_VISOCR_BIN=target/tools/visocr \
+SJEL_VISOCR_BIN=target/tools/visocr \
   cargo run -p axon-extraction --bin extraction-gate -- libs/extraction/eval/ocr-corpus.json
 ```
 

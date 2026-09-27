@@ -21,9 +21,9 @@ impl Config {
         Self {
             database_path: database_path(),
             port: resolve_port(None, None, 8097),
-            places_url: std::env::var("AXON_PLACES_URL")
+            places_url: axon_config::env_var("SJEL_PLACES_URL")
                 .unwrap_or_else(|_| "http://127.0.0.1:8093".to_string()),
-            model_url: std::env::var("AXON_LOCAL_MODEL_URL")
+            model_url: axon_config::env_var("SJEL_LOCAL_MODEL_URL")
                 .unwrap_or_else(|_| "http://127.0.0.1:8091".to_string()),
         }
     }

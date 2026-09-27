@@ -6,12 +6,12 @@
 # real host, path, port binding or secret. There is nothing in here to keep private, because
 # there is no machine on the other end of it.
 #
-# tools/demo-up points AXON_OVERLAY_ROOT here, and tools/demo-seed refuses to write unless it
+# tools/demo-up points SJEL_OVERLAY_ROOT here, and tools/demo-seed refuses to write unless it
 # resolves to exactly this directory — the guard that stops a seeding run from inventing rows
 # in somebody's real ledger.
 
 # The demo is recorded on a Linux CI runner. Nothing in the seeded set is platform-specific,
-# and container_runtime goes unused: tools/demo-up sets AXON_DB_PATH to a throwaway file under
+# and container_runtime goes unused: tools/demo-up sets SJEL_DB_PATH to a throwaway file under
 # demo/state, so the whole stack shares one database that outlives nothing. A demonstration
 # should not need a container runtime to build.
 os = "linux"

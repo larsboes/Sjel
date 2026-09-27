@@ -217,9 +217,9 @@ freshness_stale_hours  = "24"             # past this age nothing is arriving, a
 #                                           # a bare name on PATH always exists, and the declared
 #                                           # build silently never runs. Omit when command[0] IS the
 #                                           # built artifact (every Rust capability).
-# workdir     = "capabilities/example"      # optional, relative to AXON_ROOT; default the repo root
+# workdir     = "capabilities/example"      # optional, relative to SJEL_ROOT; default the repo root
 # port        = "8085"                      # the host port it listens on — one per process capability.
-#                                           # Exported to the process as AXON_PORT, so a capability that
+#                                           # Exported to the process as SJEL_PORT, so a capability that
 #                                           # honours it binds exactly what the registry advertises and
 #                                           # a machine-local override needs no second edit inside the
 #                                           # capability's own config.

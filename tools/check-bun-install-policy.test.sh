@@ -49,7 +49,7 @@ plant() { # plant <name> <ci-install> [<mode>]
 
 expect() { # expect <name> <status> <root>
   local out status
-  out="$(AXON_BUN_INSTALL_POLICY_ROOT="$3" "$CHECK" 2>&1)"; status=$?
+  out="$(SJEL_BUN_INSTALL_POLICY_ROOT="$3" "$CHECK" 2>&1)"; status=$?
   if [ "$status" -ne "$2" ]; then
     echo "FAIL: $1 expected exit $2, got $status:" >&2
     printf '%s\n' "$out" >&2

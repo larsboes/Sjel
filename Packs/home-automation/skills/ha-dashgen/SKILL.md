@@ -19,7 +19,7 @@ scripts/ha-dashgen ensure    # create any dashboard that does not exist yet
 scripts/ha-dashgen deploy    # build, back up each dashboard, then push
 ```
 
-Needs `AXON_HOME_ROOT` (or `AXON_OVERLAY_ROOT`) and, for anything touching the instance, an
+Needs `SJEL_HOME_ROOT` (or `SJEL_OVERLAY_ROOT`) and, for anything touching the instance, an
 unlocked `BW_SESSION` — it shells out to `ha-cli` and `ha-dashboard`, which own the credentials.
 
 ## What check actually checks

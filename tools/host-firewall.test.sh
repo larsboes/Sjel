@@ -35,7 +35,7 @@ C="$(conf full \
   'permitted_ports = ["22/tcp", "53/udp"]' \
   'public_ports = ["443/tcp"]' \
   'allow_ping = true')"
-OUT="$(AXON_HOST_FIREWALL_CONFIG="$C" "$FW" render)"
+OUT="$(SJEL_HOST_FIREWALL_CONFIG="$C" "$FW" render)"
 
 echo "posture"
 check "input policy is drop"   "1" "$(printf '%s' "$OUT" | grep -c 'hook input priority filter; policy drop')"
@@ -82,12 +82,12 @@ check "no address is hardcoded in the renderer" "0" \
 echo
 echo "the choices that must be visible"
 C2="$(conf noping 'wan_interface = "eth0"' 'permitted_ports = ["22/tcp"]' 'allow_ping = false')"
-OUT2="$(AXON_HOST_FIREWALL_CONFIG="$C2" "$FW" render)"
+OUT2="$(SJEL_HOST_FIREWALL_CONFIG="$C2" "$FW" render)"
 check "allow_ping=false drops echo-request"        "0" "$(printf '%s' "$OUT2" | grep -c 'type echo-request accept')"
 check "but keeps the required icmpv6 subset"       "1" "$(printf '%s' "$OUT2" | grep -c 'nd-neighbor-solicit')"
 check "an unscoped port says so in the ruleset"    "1" "$(printf '%s' "$OUT2" | grep -c 'any source — permitted_networks is empty')"
 
-out="$(AXON_HOST_FIREWALL_CONFIG="$C2" "$FW" check 2>&1)"
+out="$(SJEL_HOST_FIREWALL_CONFIG="$C2" "$FW" check 2>&1)"
 case "$out" in *"reachable from any source"*) echo "  ✓ and check warns about it out loud" ;;
   *) echo "  ✗ check is silent about a port open to any source"; fails=$((fails + 1)) ;; esac
 case "$out" in *"nft not installed"*|*"nft parses"*|*"check needs root"*) echo "  ✓ check states whether nft verified the syntax" ;;
@@ -95,13 +95,13 @@ case "$out" in *"nft not installed"*|*"nft parses"*|*"check needs root"*) echo "
 
 echo
 echo "refusals"
-AXON_HOST_FIREWALL_CONFIG="$SCRATCH/absent.toml" "$FW" render >/dev/null 2>&1
+SJEL_HOST_FIREWALL_CONFIG="$SCRATCH/absent.toml" "$FW" render >/dev/null 2>&1
 check "a missing config refuses rather than rendering a default" "2" "$?"
 C3="$(conf noiface 'permitted_ports = ["22/tcp"]')"
-AXON_HOST_FIREWALL_CONFIG="$C3" "$FW" render >/dev/null 2>&1
+SJEL_HOST_FIREWALL_CONFIG="$C3" "$FW" render >/dev/null 2>&1
 check "a config without wan_interface refuses" "2" "$?"
 C4="$(conf badport 'wan_interface = "eth0"' 'permitted_ports = ["22/sctp", "http/tcp"]')"
-AXON_HOST_FIREWALL_CONFIG="$C4" "$FW" check >/dev/null 2>&1
+SJEL_HOST_FIREWALL_CONFIG="$C4" "$FW" check >/dev/null 2>&1
 check "a malformed port entry fails check" "1" "$?"
 
 echo

@@ -11,7 +11,7 @@
  *   ha-dashgen deploy [--yes]   back up, then push. Never pushes without a backup.
  *   ha-dashgen diff             what deploy would change, against the live config
  *
- * Paths resolve from $AXON_HOME_ROOT / $AXON_OVERLAY_ROOT, as everything else here does.
+ * Paths resolve from $SJEL_HOME_ROOT / $SJEL_OVERLAY_ROOT, as everything else here does.
  */
 
 import { existsSync, mkdirSync, readdirSync, writeFileSync } from "node:fs";
@@ -31,8 +31,8 @@ const die = (msg: string): never => {
 
 const overlayRoot = (): string => {
   const raw =
-    process.env.AXON_HOME_ROOT || process.env.AXON_OVERLAY_ROOT || process.env.AXON_PERSONAL_ROOT;
-  if (!raw) die("overlay is unresolved; set AXON_HOME_ROOT");
+    process.env.SJEL_HOME_ROOT || process.env.SJEL_OVERLAY_ROOT || process.env.SJEL_PERSONAL_ROOT;
+  if (!raw) die("overlay is unresolved; set SJEL_HOME_ROOT");
   return raw!.replace(/^~/, process.env.HOME ?? "~");
 };
 

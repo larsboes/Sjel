@@ -53,7 +53,7 @@ capabilities = ["home-assistant", "vaultwarden"]
 
 # --- local model runtime (optional) --------------------------------------
 # Which inference backend this machine actually has. Read by tools/service-runner.sh, which
-# exports it as AXON_INFERENCE_BACKEND for every process it starts; libs/inference reads that
+# exports it as SJEL_INFERENCE_BACKEND for every process it starts; libs/inference reads that
 # and resolves roles against it.
 #
 # The value is a backend id from <overlay>/config/inference.json, never a URL — the address
@@ -77,7 +77,7 @@ capabilities = ["home-assistant", "vaultwarden"]
 # backups go — are stated here per machine, and only the machine that differs states them.
 # Absent section or absent key = the service.toml value stands.
 #   ports         = [...]   read by tools/service-runner.sh, replaces the manifest array (containers)
-#   port          = "n"     read by tools/service-runner.sh for kind=process, exported as AXON_PORT
+#   port          = "n"     read by tools/service-runner.sh for kind=process, exported as SJEL_PORT
 #   backup_target = "id"    read by tools/backup.sh, a systems.toml id
 #   env           = [...]   read by tools/service-runner.sh, injected into this capability's
 #                           boot-persistence unit (launchd plist / systemd unit) alongside PATH

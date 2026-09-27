@@ -82,7 +82,7 @@ row type in the backlog view.
 
 | Path | Purpose |
 |---|---|
-| `<overlay>/data/axon/axon.db` | the database. Resolved by `axon_config::database_path()`; `AXON_DB_PATH` overrides it, and is the one variable that moves a deployment |
+| `<overlay>/data/axon/axon.db` | the database. Resolved by `axon_config::database_path()`; `SJEL_DB_PATH` overrides it, and is the one variable that moves a deployment |
 | `<overlay>/data/axon/axon.db-wal`, `-shm` | SQLite's own sidecars. WAL mode is set on every connection open (`libs/axon-store`), not stored in this repo |
 | `<overlay>/data/axon/axon-local-*.lock` | cross-process admission locks, one file per inference backend (`capabilities/comms/src/local_gate.rs`). Not state, and deliberately not backed up |
 | `service.toml` | `kind = "data"`: the backup contract, and the only manifest that owns this file |
@@ -94,7 +94,7 @@ server.
 ## Commands
 
 ```bash
-sqlite3 "${AXON_DB_PATH:-$AXON_OVERLAY_ROOT/data/axon/axon.db}" '.tables'
+sqlite3 "${SJEL_DB_PATH:-$SJEL_OVERLAY_ROOT/data/axon/axon.db}" '.tables'
 tools/backup.sh store            # live `sqlite3 .backup`, no service held down
 tools/restore.sh store <archive> # integrity_check + table/row counts, into an isolated dir
 ```
@@ -110,7 +110,7 @@ capabilities that read it are the processes.
   here for the reason it was *wrong* for vaultwarden on 2026-07-25 (`tools/backup.sh`): SQLite's
   WAL coordinates readers and writers through shared memory and requires every connection on one
   host, and every reader of this file is a host process with no virtiofs mount in between.
-- **The backup contract names a path, and `AXON_DB_PATH` can move the file out from under it.**
+- **The backup contract names a path, and `SJEL_DB_PATH` can move the file out from under it.**
   A deployment that sets it must update `backup_sqlite_online` too. `tools/backup.sh` refuses to
   run on a missing source rather than shipping an archive of nothing, so the mistake is loud.
 - **Timestamps are TEXT in one canonical 29-character format** (`axon_store::NOW`). Two widths in

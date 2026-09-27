@@ -157,7 +157,7 @@ function runManaged(overlay: string, target: string, extra: string[] = []) {
       "/bin/sh",
       [
         "-c",
-        'exec "$@" >"$AXON_TEST_STDOUT" 2>"$AXON_TEST_STDERR"',
+        'exec "$@" >"$SJEL_TEST_STDOUT" 2>"$SJEL_TEST_STDERR"',
         "axon-managed-test",
         process.execPath,
         "run",
@@ -168,10 +168,10 @@ function runManaged(overlay: string, target: string, extra: string[] = []) {
       {
       env: {
         ...process.env,
-        AXON_OVERLAY_ROOT: overlay,
+        SJEL_OVERLAY_ROOT: overlay,
         MANAGED_SETTINGS_PATH: target,
-        AXON_TEST_STDOUT: stdoutPath,
-        AXON_TEST_STDERR: stderrPath,
+        SJEL_TEST_STDOUT: stdoutPath,
+        SJEL_TEST_STDERR: stderrPath,
       },
       },
     );

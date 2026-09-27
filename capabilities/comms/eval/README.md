@@ -78,7 +78,7 @@ An explicit first argument selects another schema-compatible corpus. Private rea
 and their results stay in the private overlay and are never copied into this directory:
 
 ```sh
-bun capabilities/comms/eval/run-relevance.ts "$AXON_PERSONAL_ROOT/config/private-corpus.json"
+bun capabilities/comms/eval/run-relevance.ts "$SJEL_PERSONAL_ROOT/config/private-corpus.json"
 ```
 
 A query may provide named `text_variants`. Setting
@@ -189,11 +189,11 @@ takes the corpus path as `argv[1]`; the in-repo default path deliberately does
 not exist.
 
 ```sh
-comms mail corpus --out "$AXON_PERSONAL_ROOT/config/comms-mail-stream-shadow.json"
+comms mail corpus --out "$SJEL_PERSONAL_ROOT/config/comms-mail-stream-shadow.json"
 #   one fixture per fallback row, `label` and `urgency_band` EMPTY. Fill both by hand,
 #   in one pass, BEFORE the next line runs. Refuses to overwrite without --force.
 comms mail classify --shadow          # fill the verdict table, ~2s per thread
-cargo run --bin comms-mail-model-eval -- "$AXON_PERSONAL_ROOT/config/comms-mail-stream-shadow.json"
+cargo run --bin comms-mail-model-eval -- "$SJEL_PERSONAL_ROOT/config/comms-mail-stream-shadow.json"
 ```
 
 `comms mail corpus` writes the skeleton and nothing else — no verdict is read while it runs,
@@ -244,10 +244,10 @@ unmeasured is an ordering nobody has checked.
 Built on the redaction shadow's shape, the third of these corpora to use it:
 
 ```sh
-comms digest corpus --out "$AXON_PERSONAL_ROOT/config/comms-digest-quality.json"
+comms digest corpus --out "$SJEL_PERSONAL_ROOT/config/comms-digest-quality.json"
 #   N generated digests per rung (default 20), `faithful` and `useful_band` null.
 #   Read the SOURCE for each row, then judge. Refuses to overwrite without --force.
-cargo run --bin comms-digest-eval -- "$AXON_PERSONAL_ROOT/config/comms-digest-quality.json"
+cargo run --bin comms-digest-eval -- "$SJEL_PERSONAL_ROOT/config/comms-digest-quality.json"
 ```
 
 **One metric decides: the unfaithful rate.** A digest asserting what its source does not

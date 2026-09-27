@@ -25,7 +25,7 @@ _here="$(cd "$(dirname "$0")" && pwd)"
 # shellcheck source=tools/lib/paths.sh
 . "$_here/lib/paths.sh"
 
-POLICY="${AXON_PROTECTION_ZONES:-$AXON_PERSONAL_ROOT/config/protection-zones.toml}"
+POLICY="${SJEL_PROTECTION_ZONES:-$SJEL_PERSONAL_ROOT/config/protection-zones.toml}"
 
 die()  { echo "protection-zones: $*" >&2; exit 2; }
 usage() { sed -n '2,21p' "$0"; }

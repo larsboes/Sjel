@@ -3,7 +3,7 @@ import type { IncomingHttpHeaders } from "node:http";
 import { isAbsolute, join, resolve } from "node:path";
 
 type RuntimeEnv = Partial<
-  Pick<NodeJS.ProcessEnv, "AXON_COMMS_CONFIG" | "AXON_PERSONAL_ROOT" | "HOME">
+  Pick<NodeJS.ProcessEnv, "SJEL_COMMS_CONFIG" | "SJEL_PERSONAL_ROOT" | "HOME">
 >;
 
 export interface CommsProxyCredential {
@@ -35,11 +35,11 @@ function fromAxonRoot(path: string, axonRoot: string): string {
 }
 
 function configPath(axonRoot: string, env: RuntimeEnv): string {
-  if (env.AXON_COMMS_CONFIG) {
-    return fromAxonRoot(expandTilde(env.AXON_COMMS_CONFIG, env.HOME), axonRoot);
+  if (env.SJEL_COMMS_CONFIG) {
+    return fromAxonRoot(expandTilde(env.SJEL_COMMS_CONFIG, env.HOME), axonRoot);
   }
-  if (env.AXON_PERSONAL_ROOT) {
-    return join(expandTilde(env.AXON_PERSONAL_ROOT, env.HOME), "config", "comms.json");
+  if (env.SJEL_PERSONAL_ROOT) {
+    return join(expandTilde(env.SJEL_PERSONAL_ROOT, env.HOME), "config", "comms.json");
   }
   return join(axonRoot, "capabilities", "comms", "comms.config.json");
 }

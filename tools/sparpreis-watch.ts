@@ -39,7 +39,7 @@ function fail(message: string): never {
   process.exit(1);
 }
 
-const AXON_ROOT = axonRoot();
+const SJEL_ROOT = axonRoot();
 
 /**
  * The port a service.toml declares. Throws with the reason when it declares none, or
@@ -68,7 +68,7 @@ export function portInManifest(body: string): string {
 
 /** A capability's port, from the one file that declares it. */
 function portOf(capability: string): string {
-  const manifest = join(AXON_ROOT, "capabilities", capability, "service.toml");
+  const manifest = join(SJEL_ROOT, "capabilities", capability, "service.toml");
   if (!existsSync(manifest)) fail(`no ${manifest}`);
   try {
     return portInManifest(readFileSync(manifest, "utf8"));

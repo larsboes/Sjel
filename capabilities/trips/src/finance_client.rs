@@ -17,7 +17,7 @@ use serde::{Deserialize, Serialize};
 /// strengthens the case for the spine mechanism that comment defers
 /// (service-runner exporting declared siblings' ports).
 pub fn finance_base_url() -> String {
-    std::env::var("AXON_FINANCE_URL").unwrap_or_else(|_| "http://127.0.0.1:8090".to_string())
+    axon_config::env_var("SJEL_FINANCE_URL").unwrap_or_else(|_| "http://127.0.0.1:8090".to_string())
 }
 
 /// Long enough for a loopback query, short enough that a stopped finance never

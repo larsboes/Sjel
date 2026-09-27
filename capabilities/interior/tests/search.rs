@@ -22,8 +22,9 @@ fn model() -> Model {
         let fixture = Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/fixtures/overlay");
         let db = std::env::temp_dir().join(format!("interior-search-{}.db", std::process::id()));
         let _ = std::fs::remove_file(&db);
-        std::env::set_var("AXON_PERSONAL_ROOT", &fixture);
-        std::env::set_var("AXON_DB_PATH", &db);
+        std::env::set_var("SJEL_PERSONAL_ROOT", &fixture);
+        std::env::set_var("SJEL_DB_PATH", &db);
+        std::env::remove_var("SJEL_INTERIOR_FLAT");
         std::env::remove_var("AXON_INTERIOR_FLAT");
         let store = interior::store::Store::open(&db).expect("die Testdatenbank oeffnet");
         interior::import::inventory(&store, &fixture.join("data/interior/inventory"))

@@ -48,7 +48,7 @@ done
 [ -n "$SRC_TOOLS" ] || { echo "service-runner: cannot find service-runner.sh next to $_dir" >&2; exit 1; }
 
 # Every case below writes a machine.toml into its own scratch overlay and asserts on what the
-# runner reads back. An operator's exported AXON_OVERLAY_ROOT / AXON_MACHINE_TOML wins over the
+# runner reads back. An operator's exported SJEL_OVERLAY_ROOT / SJEL_MACHINE_TOML wins over the
 # scratch axon.toml, so without this the runner reads the REAL machine and the fixture is inert
 # (tools/lib/test-support.sh#isolate_axon_env).
 source "$SRC_TOOLS/lib/test-support.sh"
@@ -175,7 +175,7 @@ fi  # HAVE_BUN
 # --- the machine's local model runtime reaches the process it starts --------
 # `[inference] backend` in machine.toml was documented in three places as the way a host
 # without oMLX names the runtime it does have, and libs/inference has read
-# AXON_INFERENCE_BACKEND since it existed — but nothing ever exported it. The documented
+# SJEL_INFERENCE_BACKEND since it existed — but nothing ever exported it. The documented
 # mechanism was fiction, so a host whose only runtime is Ollama had no way to say so, and
 # every role stayed pointed at a port with nothing behind it.
 #
@@ -184,7 +184,7 @@ fi  # HAVE_BUN
 #
 # Ambient value cleared first — an operator who exports one for debugging would otherwise
 # make the control below pass for the wrong reason.
-unset AXON_INFERENCE_BACKEND
+unset SJEL_INFERENCE_BACKEND AXON_INFERENCE_BACKEND
 
 INF_ROOT="$SCRATCH/inference"
 INF_OVERLAY="$SCRATCH/inference-overlay"
@@ -205,7 +205,7 @@ command = ["capabilities/inferhog/dump-backend"]
 TOML
 cat > "$INF_ROOT/capabilities/inferhog/dump-backend" <<SH
 #!/bin/bash
-printf '%s' "\${AXON_INFERENCE_BACKEND:-<unset>}" > "$ENV_DUMP"
+printf '%s' "\${SJEL_INFERENCE_BACKEND:-<unset>}" > "$ENV_DUMP"
 SH
 chmod +x "$INF_ROOT/capabilities/inferhog/dump-backend"
 

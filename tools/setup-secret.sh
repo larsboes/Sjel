@@ -51,22 +51,22 @@ fi
 if [ "$REF_RC" -ne 0 ]; then
   echo "setup-secret.sh: no Vaultwarden declared for this machine — it is the canonical" >&2
   echo "  secret store here, so there is nothing to write the item into." >&2
-  echo "  Either declare the vault this machine uses in $AXON_MACHINE_TOML:" >&2
+  echo "  Either declare the vault this machine uses in $SJEL_MACHINE_TOML:" >&2
   echo "    [capability.vaultwarden]" >&2
   echo "    provided_by = \"<id>\"      # an id with a url in config/systems.local.toml" >&2
   echo "  or set the capability up here (capabilities/vaultwarden/README.md)." >&2
   exit 1
 fi
 
-MANIFEST="$AXON_ROOT/capabilities/$CAP/service.toml"
+MANIFEST="$SJEL_ROOT/capabilities/$CAP/service.toml"
 if [ -f "$MANIFEST" ]; then
   ENV_FILE_REL="$(toml_get env_file "$MANIFEST")"
 else
   ENV_FILE_REL="config/$CAP.env"
   echo "setup-secret.sh: no $MANIFEST, defaulting env file to $ENV_FILE_REL" >&2
 fi
-ENV_FILE="$AXON_PERSONAL_ROOT/$ENV_FILE_REL"
-POINTER="$AXON_PERSONAL_ROOT/secrets/$SERVICE.md"
+ENV_FILE="$SJEL_PERSONAL_ROOT/$ENV_FILE_REL"
+POINTER="$SJEL_PERSONAL_ROOT/secrets/$SERVICE.md"
 
 echo "capability:  $CAP"
 echo "vault item:  \"$SERVICE\" (folder: Axon, on $DOMAIN)"

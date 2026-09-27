@@ -41,9 +41,9 @@ from pathlib import Path
 
 BW_ITEM = os.environ.get("PIHOLE_BW_ITEM", "home-assistant/pihole")
 def _home_overlay_root() -> Path:
-    raw = os.environ.get("AXON_HOME_ROOT") or os.environ.get("AXON_OVERLAY_ROOT") or os.environ.get("AXON_PERSONAL_ROOT")
+    raw = os.environ.get("SJEL_HOME_ROOT") or os.environ.get("SJEL_OVERLAY_ROOT") or os.environ.get("SJEL_PERSONAL_ROOT")
     if not raw:
-        raise SystemExit("home-automation overlay is unresolved; source tools/lib/paths.sh or set AXON_HOME_ROOT")
+        raise SystemExit("home-automation overlay is unresolved; source tools/lib/paths.sh or set SJEL_HOME_ROOT")
     return Path(raw).expanduser()
 
 

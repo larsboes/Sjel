@@ -173,9 +173,9 @@ assessment to the answer and the evidence.
 ## Activate
 
 ```bash
-"$AXON_ROOT/tools/harnesses" status presentations
-"$AXON_ROOT/tools/packs-claude" deploy presentations    # -> ~/.claude/skills/slide-deck
-"$AXON_ROOT/tools/packs-pi"     deploy presentations    # -> registered in pi's settings
+"$SJEL_ROOT/tools/harnesses" status presentations
+"$SJEL_ROOT/tools/packs-claude" deploy presentations    # -> ~/.claude/skills/slide-deck
+"$SJEL_ROOT/tools/packs-pi"     deploy presentations    # -> registered in pi's settings
 ```
 
 Requires `uv` on PATH and **LibreOffice** for `render` (`brew install --cask

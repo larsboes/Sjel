@@ -3,7 +3,7 @@
 #
 # Points a single shell at demo/overlay, gives every capability a throwaway database, starts
 # them through the ordinary service runner, then seeds and records. The operator's own overlay
-# and axon.local.toml are never touched — see the AXON_OVERLAY_ROOT override in tools/lib/paths.sh.
+# and axon.local.toml are never touched — see the SJEL_OVERLAY_ROOT override in tools/lib/paths.sh.
 #
 # THE COLLISION, and why this script refuses rather than coping. The demo capabilities listen on
 # the SAME ports as a real installation's. They have to: `tools/capability.sh registry` reads
@@ -26,18 +26,18 @@
 set -euo pipefail
 
 _here="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-AXON_ROOT="$(cd "$_here/.." && pwd)"
+SJEL_ROOT="$(cd "$_here/.." && pwd)"
 
 # Set before paths.sh is sourced — that is the whole override.
-export AXON_OVERLAY_ROOT="$AXON_ROOT/demo/overlay"
+export SJEL_OVERLAY_ROOT="$SJEL_ROOT/demo/overlay"
 source "$_here/lib/paths.sh"
 
 # The demo's own database file, inside the tree this script already clears per run. Nothing
 # else needs configuring: since PRD Q45 (2026-08-27) a capability's store is a path, so the
 # demo needs a path rather than a server, a user, a password and a database name. Overridable
-# for a caller that wants the file somewhere else, which is what AXON_DB_PATH already means.
-DEMO_STATE="$AXON_ROOT/demo/state"
-DEMO_DB_PATH="${AXON_DB_PATH:-$DEMO_STATE/axon.db}"
+# for a caller that wants the file somewhere else, which is what SJEL_DB_PATH already means.
+DEMO_STATE="$SJEL_ROOT/demo/state"
+DEMO_DB_PATH="${SJEL_DB_PATH:-$DEMO_STATE/axon.db}"
 
 # Which capabilities the demo runs, read from the overlay rather than written twice.
 #
@@ -45,16 +45,16 @@ DEMO_DB_PATH="${AXON_DB_PATH:-$DEMO_STATE/axon.db}"
 # untouched, so `capabilities = ["a", "b"]` came back with the key still on the front and the
 # word "capabilities" became the first thing this tried to start. Stripping brackets by hand
 # was the mistake; toml.sh already has the function for this.
-CAPABILITIES="$(toml_array capabilities "$AXON_MACHINE_TOML")"
-[ -n "$CAPABILITIES" ] || { echo "demo-up: no capabilities in $AXON_MACHINE_TOML" >&2; exit 1; }
+CAPABILITIES="$(toml_array capabilities "$SJEL_MACHINE_TOML")"
+[ -n "$CAPABILITIES" ] || { echo "demo-up: no capabilities in $SJEL_MACHINE_TOML" >&2; exit 1; }
 
 # One variable for the whole stack, not one per capability. Every capability resolves its
-# store through axon_config::database_path(), which reads AXON_DB_PATH first — so this moves
+# store through axon_config::database_path(), which reads SJEL_DB_PATH first — so this moves
 # all of them onto a throwaway database without any of them carrying a demo branch. It used
-# to be a loop exporting AXON_<NAME>_DATABASE_URL, which existed because each capability had
+# to be a loop exporting SJEL_<NAME>_DATABASE_URL, which existed because each capability had
 # its own connection string; they share one file now, and cross-capability joins in the
 # recorded corpus depend on that being true here too.
-export AXON_DB_PATH="$DEMO_DB_PATH"
+export SJEL_DB_PATH="$DEMO_DB_PATH"
 # Finance keeps four things outside its database, each behind its own env var, and every one
 # of them has to land inside the demo tree rather than in an overlay. Discovered the expensive
 # way: a missing journal path is not a startup error, it is a 409 on the first write that
@@ -65,16 +65,16 @@ export AXON_DB_PATH="$DEMO_DB_PATH"
 #   investment_snapshot  the reviewed holdings document
 #   balance_snapshot     manual balances, which no bank export can know
 #   obsidian root/dir    the vault tools/demo-seed writes fictional subscription notes into
-export AXON_FINANCE_JOURNAL="$DEMO_STATE/demo.journal"
-export AXON_FINANCE_INVESTMENT_SNAPSHOT="$DEMO_STATE/holdings.json"
-export AXON_FINANCE_BALANCE_SNAPSHOT="$DEMO_STATE/balances.json"
-export AXON_FINANCE_OBSIDIAN_ROOT="$AXON_ROOT/demo/vault"
-export AXON_FINANCE_OBSIDIAN_DIR="subscriptions"
+export SJEL_FINANCE_JOURNAL="$DEMO_STATE/demo.journal"
+export SJEL_FINANCE_INVESTMENT_SNAPSHOT="$DEMO_STATE/holdings.json"
+export SJEL_FINANCE_BALANCE_SNAPSHOT="$DEMO_STATE/balances.json"
+export SJEL_FINANCE_OBSIDIAN_ROOT="$SJEL_ROOT/demo/vault"
+export SJEL_FINANCE_OBSIDIAN_DIR="subscriptions"
 
 # The synthetic origin Comms, Scouting and Transit read from. Its address lives in demo.toml
 # and is read from there rather than repeated here, so the port stays a one-place fact.
 DEMO_ORIGIN="$(bun -e '
-  const { loadManifest } = await import(`${process.env.AXON_ROOT}/tools/lib/demo-endpoints.ts`);
+  const { loadManifest } = await import(`${process.env.SJEL_ROOT}/tools/lib/demo-endpoints.ts`);
   process.stdout.write(loadManifest().origin);
 ')"
 DEMO_ORIGIN_PID=""
@@ -82,9 +82,9 @@ DEMO_ORIGIN_PID=""
 # Transit reads these three instead of bahn.de. Exported before the capability starts, because
 # its HafasClient resolves them once at construction — set afterwards they would be ignored and
 # the demo would quietly record a live timetable, which is the one thing it must not publish.
-export AXON_TRANSIT_FAHRPLAN_URL="$DEMO_ORIGIN/fahrplan"
-export AXON_TRANSIT_DBNAV_FAHRPLAN_URL="$DEMO_ORIGIN/dbnav/fahrplan"
-export AXON_TRANSIT_ORTE_URL="$DEMO_ORIGIN/orte"
+export SJEL_TRANSIT_FAHRPLAN_URL="$DEMO_ORIGIN/fahrplan"
+export SJEL_TRANSIT_DBNAV_FAHRPLAN_URL="$DEMO_ORIGIN/dbnav/fahrplan"
+export SJEL_TRANSIT_ORTE_URL="$DEMO_ORIGIN/orte"
 
 # Scouting's source declaration is generated rather than tracked: it contains the origin's
 # address, and that address has an owner already (demo.toml). A tracked copy would be the
@@ -101,8 +101,8 @@ write_comms_config() {
   chmod 600 "$secret_file"
   # Exported for tools/demo-seed, which has to send it. One generator, one reader, no second
   # copy of the path for the two of them to disagree about.
-  AXON_DEMO_COMMS_TOKEN="$(cat "$secret_file")"
-  export AXON_DEMO_COMMS_TOKEN
+  SJEL_DEMO_COMMS_TOKEN="$(cat "$secret_file")"
+  export SJEL_DEMO_COMMS_TOKEN
   # Comms refuses to fetch a URL that resolves inside this machine — an ingested
   # link would otherwise drive any loopback-bound Axon API (Q74, see
   # capabilities/comms/src/media.rs check_destination). Every URL this demo seeds
@@ -110,7 +110,7 @@ write_comms_config() {
   # depends on no host anybody else owns. So the demo names its one origin here,
   # read from demo.toml rather than repeated, and the guard stays on for the
   # nine capability ports it does not name.
-  cat > "$AXON_ROOT/demo/overlay/config/comms.json" <<JSON
+  cat > "$SJEL_ROOT/demo/overlay/config/comms.json" <<JSON
 {
   "_note": "GENERATED by tools/demo-up. Do not edit; the token is regenerated on every run.",
   "api_secret_file": "$secret_file",
@@ -134,7 +134,7 @@ JSON
 # these. tools/demo-seed.test.ts asserts the two lists agree, because a silent rename here
 # would produce a portfolio with three unclassified positions and no drift at all.
 write_finance_targets() {
-  cat > "$AXON_ROOT/demo/overlay/config/finance.json" <<JSON
+  cat > "$SJEL_ROOT/demo/overlay/config/finance.json" <<JSON
 {
   "_note": "GENERATED by tools/demo-up. Do not edit; every value here is synthetic.",
   "instruments": [
@@ -174,7 +174,7 @@ JSON
 }
 
 write_scouting_source() {
-  cat > "$AXON_ROOT/demo/overlay/config/scouting.json" <<JSON
+  cat > "$SJEL_ROOT/demo/overlay/config/scouting.json" <<JSON
 {
   "_note": "GENERATED by tools/demo-up from demo/demo.toml. Do not edit; edit [demo] origin there.",
   "sources": [
@@ -245,7 +245,7 @@ occupied() {  # occupied <port> — something is already listening
 # run of the guard: the guard reported the right five and said nothing about the sixth.
 port_of() {  # port_of <capability>
   bun -e '
-    const { registry } = await import(`${process.env.AXON_ROOT}/tools/lib/demo-endpoints.ts`);
+    const { registry } = await import(`${process.env.SJEL_ROOT}/tools/lib/demo-endpoints.ts`);
     const hit = registry().find((s) => s.name === process.argv[1]);
     if (!hit) {
       console.error(`demo-up: no capability named ${process.argv[1]} in the registry`);
@@ -296,7 +296,7 @@ start_stack() {
   write_comms_config
   write_finance_targets
   start_origin
-  : > "$AXON_FINANCE_JOURNAL"
+  : > "$SJEL_FINANCE_JOURNAL"
   local cap
   for cap in $CAPABILITIES; do
     echo "demo-up: starting $cap"

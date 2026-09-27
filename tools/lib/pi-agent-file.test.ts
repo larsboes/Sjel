@@ -18,11 +18,11 @@ import { readFileSync, readdirSync, existsSync } from "node:fs";
 import { join, resolve } from "node:path";
 import { PI_BUILTIN_TOOL_NAMES, PI_TOOL_NAME, translateAgentForPi } from "./pi-agent-file.ts";
 
-const AXON_ROOT = resolve(import.meta.dir, "..", "..");
+const SJEL_ROOT = resolve(import.meta.dir, "..", "..");
 
 /** Every agent file the Packs carry, as [label, content]. */
 function packAgentFiles(): [string, string][] {
-  const packs = join(AXON_ROOT, "Packs");
+  const packs = join(SJEL_ROOT, "Packs");
   const found: [string, string][] = [];
   for (const pack of readdirSync(packs).sort()) {
     const dir = join(packs, pack, "agents");

@@ -19,7 +19,7 @@ entity ID, automation, device inventory, component pin, and secret reference.
 ## Activate
 
 ```sh
-"$AXON_ROOT/tools/packs-codex" deploy home-automation
+"$SJEL_ROOT/tools/packs-codex" deploy home-automation
 ```
 
 ## Deployment status

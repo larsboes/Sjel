@@ -40,9 +40,9 @@ already has, so running it twice writes nothing the second time. A note is
 `owned` unless its front matter says `state: wanted`.
 
 Environment:
-  AXON_INTENT_URL     chat-completions endpoint (default http://127.0.0.1:8091/v1/chat/completions)
-  AXON_INTENT_MODEL   model name (default apple-foundationmodel)
-  AXON_TRIPS_GEAR_DIR gear notes directory (default <overlay>/data/items/vault-notes)";
+  SJEL_INTENT_URL     chat-completions endpoint (default http://127.0.0.1:8091/v1/chat/completions)
+  SJEL_INTENT_MODEL   model name (default apple-foundationmodel)
+  SJEL_TRIPS_GEAR_DIR gear notes directory (default <overlay>/data/items/vault-notes)";
 
 fn main() {
     let args: Vec<String> = std::env::args().skip(1).collect();
@@ -139,7 +139,7 @@ fn export_vault(dry_run: bool) -> Result<(), String> {
 /// tell a tent from a sofa; B51 shipped the seven columns and the refusal is gone.
 fn gear_import(flag: Option<&str>) -> Result<(), String> {
     let directory = trips::config::Config::load().gear_items_dir.ok_or(
-        "no gear notes directory: set AXON_PERSONAL_ROOT, or gear.items_dir in \
+        "no gear notes directory: set SJEL_PERSONAL_ROOT, or gear.items_dir in \
          <overlay>/config/trips.json",
     )?;
     let report = trips::gear::scan(&directory)?;

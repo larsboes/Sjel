@@ -330,7 +330,7 @@ fn boom<E: std::fmt::Display>(e: E) -> (StatusCode, String) {
 
 /// Welche Wohnungen unter `flats/` liegen, und welche dieser Prozess bedient.
 ///
-/// Die uebrigen Endpunkte antworten fuer GENAU EINE Wohnung — die aus `AXON_INTERIOR_FLAT`
+/// Die uebrigen Endpunkte antworten fuer GENAU EINE Wohnung — die aus `SJEL_INTERIOR_FLAT`
 /// oder die einzige vorhandene. Das ist heute richtig und wird es nicht bleiben: PRD B28 will
 /// zwei Raeume nebeneinander, und dann traegt jeder Pfad die Wohnung. Bis dahin sagt dieser
 /// Endpunkt wenigstens, dass es eine Auswahl gibt, statt sie zu verschweigen.
@@ -343,7 +343,7 @@ async fn api_flats(
 }
 
 fn node_id() -> String {
-    std::env::var("AXON_NODE_ID").unwrap_or_else(|_| "node_mac".to_string())
+    axon_config::env_var("SJEL_NODE_ID").unwrap_or_else(|_| "node_mac".to_string())
 }
 
 async fn signed_sync_auth(
@@ -1532,7 +1532,7 @@ pub async fn serve(flat: &str, port: u16) {
 }
 
 /// Der Name dieser Capability, fuer die Umgebungsvariable der Origin-Sperre
-/// (`AXON_INTERIOR_ALLOWED_ORIGIN_HOSTS`).
+/// (`SJEL_INTERIOR_ALLOWED_ORIGIN_HOSTS`).
 const CAPABILITY: &str = "interior";
 
 /// Der verdrahtete Router, damit ein Test das echte Ding fahren kann statt einen Handler.

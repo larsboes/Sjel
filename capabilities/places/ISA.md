@@ -185,7 +185,7 @@ data, and every coordinate on it is traceable to a registry row with a source.
 - **Origin guard hardening.** The default browser-origin allowlist accepts any
   `.ts.net` host (mirroring the dashboard's own allowedHosts). Pinning to this
   tailnet's name is one overlay env away
-  (`AXON_PLACES_ALLOWED_ORIGIN_HOSTS`), unset by default.
+  (`SJEL_PLACES_ALLOWED_ORIGIN_HOSTS`), unset by default.
 
 ## Test Strategy
 

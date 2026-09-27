@@ -2,8 +2,8 @@
 //! station pair) lives here -- that comes from the private overlay at
 //! runtime, if set at all. Mirrors `capabilities/scouting/src/config.rs`'s
 //! `Config::load()` resolution exactly:
-//!   1. `$AXON_TRANSIT_CONFIG` (explicit override, full path to a JSON file)
-//!   2. `$AXON_PERSONAL_ROOT/config/transit.json` (the overlay; exported by
+//!   1. `$SJEL_TRANSIT_CONFIG` (explicit override, full path to a JSON file)
+//!   2. `$SJEL_PERSONAL_ROOT/config/transit.json` (the overlay; exported by
 //!      `tools/lib/paths.sh` / `~/.zshrc`)
 //!   3. `capabilities/transit/transit.config.json` next to this crate's
 //!      source (local, gitignored -- dev fallback)
@@ -44,7 +44,7 @@ pub struct Config {
     pub default_time: Option<String>,
     /// The one shared SQLite file `store::TransitStore` opens, under the table
     /// prefix `transit` (PRD Q45). Resolved by `axon_config::database_path`:
-    /// `AXON_DB_PATH`, else `<overlay>/data/axon/axon.db`. Not a per-capability
+    /// `SJEL_DB_PATH`, else `<overlay>/data/axon/axon.db`. Not a per-capability
     /// setting any more -- a file per capability would drop the cross-capability
     /// joins the shared instance existed for, so a `database_url` in
     /// `transit.json` is now ignored.
@@ -111,10 +111,10 @@ impl DocumentBackend {
 }
 
 fn config_path() -> PathBuf {
-    if let Ok(p) = std::env::var("AXON_TRANSIT_CONFIG") {
+    if let Ok(p) = axon_config::env_var("SJEL_TRANSIT_CONFIG") {
         return expand_tilde(&p);
     }
-    if let Ok(overlay) = std::env::var("AXON_PERSONAL_ROOT") {
+    if let Ok(overlay) = axon_config::env_var("SJEL_PERSONAL_ROOT") {
         return expand_tilde(&overlay).join("config").join("transit.json");
     }
     PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("transit.config.json")
@@ -157,29 +157,40 @@ mod tests {
     /// process, so `remove_var` here is not local to this test: unrestored, it
     /// left every later store test resolving a different database file from the
     /// one they had just written to.
-    struct EnvGuard(&'static str, Option<String>);
+    struct EnvGuard(Vec<(String, Option<String>)>);
 
     impl EnvGuard {
+        /// Clears the setting under its Sjel name and its pre-rename Axon name, so a value
+        /// the operator's shell still exports under the old name cannot stand in for it.
         fn take(key: &'static str) -> Self {
-            let previous = std::env::var(key).ok();
-            std::env::remove_var(key);
-            Self(key, previous)
+            let names = std::iter::once(key.to_string()).chain(axon_config::env::legacy_name(key));
+            Self(
+                names
+                    .map(|name| {
+                        let previous = std::env::var(&name).ok();
+                        std::env::remove_var(&name);
+                        (name, previous)
+                    })
+                    .collect(),
+            )
         }
     }
 
     impl Drop for EnvGuard {
         fn drop(&mut self) {
-            match self.1.take() {
-                Some(v) => std::env::set_var(self.0, v),
-                None => std::env::remove_var(self.0),
+            for (name, previous) in self.0.drain(..).rev() {
+                match previous {
+                    Some(value) => std::env::set_var(&name, value),
+                    None => std::env::remove_var(&name),
+                }
             }
         }
     }
 
     #[test]
     fn load_with_no_env_and_no_file_uses_defaults() {
-        let _config = EnvGuard::take("AXON_TRANSIT_CONFIG");
-        let _overlay = EnvGuard::take("AXON_PERSONAL_ROOT");
+        let _config = EnvGuard::take("SJEL_TRANSIT_CONFIG");
+        let _overlay = EnvGuard::take("SJEL_PERSONAL_ROOT");
         let cfg = Config::load();
         assert!(cfg.default_from_eva.is_none());
         assert!(cfg.default_to_eva.is_none());
@@ -209,8 +220,8 @@ mod tests {
     /// capability off the shared file on its own.
     #[test]
     fn the_store_path_comes_from_the_deployment_not_from_transit_json() {
-        let _config = EnvGuard::take("AXON_TRANSIT_CONFIG");
-        let _overlay = EnvGuard::take("AXON_PERSONAL_ROOT");
+        let _config = EnvGuard::take("SJEL_TRANSIT_CONFIG");
+        let _overlay = EnvGuard::take("SJEL_PERSONAL_ROOT");
         assert_eq!(Config::load().database_path, axon_config::database_path());
     }
 }

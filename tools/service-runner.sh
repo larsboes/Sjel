@@ -13,7 +13,7 @@
 set -euo pipefail
 
 TOOLS_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-AXON_ROOT="$(cd "$TOOLS_DIR/.." && pwd)"
+SJEL_ROOT="$(cd "$TOOLS_DIR/.." && pwd)"
 source "$TOOLS_DIR/lib/paths.sh"
 source "$TOOLS_DIR/lib/platform.sh"
 source "$TOOLS_DIR/lib/toml.sh"
@@ -44,7 +44,7 @@ CMD="${1:-}"; CAP="${2:-}"; FLAG="${3:-}"
 case "$FLAG" in ''|--no-hold) ;; *) echo "service-runner.sh: unknown flag '$FLAG'" >&2; usage ;; esac
 [ -n "$CMD" ] || usage
 
-# AXON_CONTAINER_RUNTIME is manifest vocabulary that happens to be the command name for
+# SJEL_CONTAINER_RUNTIME is manifest vocabulary that happens to be the command name for
 # both runtimes left. Resolve the binary lazily, on the first container operation, so a
 # machine running only process capabilities never needs a container runtime installed at
 # all -- and an unresolvable runtime still says so by name. It used to surface as bash's
@@ -55,16 +55,16 @@ case "$FLAG" in ''|--no-hold) ;; *) echo "service-runner.sh: unknown flag '$FLAG
 RUNTIME_BIN=""; RUNTIME_PATH=""
 resolve_runtime() {
   [ -z "$RUNTIME_PATH" ] || return 0
-  case "$AXON_CONTAINER_RUNTIME" in
-    docker|podman)   RUNTIME_BIN="$AXON_CONTAINER_RUNTIME" ;;
+  case "$SJEL_CONTAINER_RUNTIME" in
+    docker|podman)   RUNTIME_BIN="$SJEL_CONTAINER_RUNTIME" ;;
     *)
-      echo "service-runner.sh: unsupported container_runtime '$AXON_CONTAINER_RUNTIME' (axon-overlay/config/machine.toml)" >&2
+      echo "service-runner.sh: unsupported container_runtime '$SJEL_CONTAINER_RUNTIME' (axon-overlay/config/machine.toml)" >&2
       exit 1
       ;;
   esac
   RUNTIME_PATH="$(command -v "$RUNTIME_BIN" 2>/dev/null || true)"
   [ -n "$RUNTIME_PATH" ] || {
-    echo "service-runner.sh: container_runtime '$AXON_CONTAINER_RUNTIME' needs '$RUNTIME_BIN' on PATH, not found (PATH=$PATH)" >&2
+    echo "service-runner.sh: container_runtime '$SJEL_CONTAINER_RUNTIME' needs '$RUNTIME_BIN' on PATH, not found (PATH=$PATH)" >&2
     exit 1
   }
 }
@@ -195,7 +195,7 @@ if [ "$_mf_rc" -eq 2 ]; then
   exit 2   # axon_manifest_for already named both paths
 fi
 if [ -z "$MANIFEST" ]; then
-  echo "service-runner.sh: no service.toml for '$CAP' (looked in $AXON_CAPS_DIR/$CAP/, $AXON_OVERLAY_CAPS_DIR/$CAP/ and $AXON_ROOT/$CAP/)" >&2
+  echo "service-runner.sh: no service.toml for '$CAP' (looked in $SJEL_CAPS_DIR/$CAP/, $SJEL_OVERLAY_CAPS_DIR/$CAP/ and $SJEL_ROOT/$CAP/)" >&2
   exit 1
 fi
 unset _mf_rc
@@ -207,7 +207,7 @@ unset _mf_rc
 # manifest would be read, a local container or binary looked for, and its absence reported as a
 # broken capability rather than as someone else's, running fine.
 if [ -n "$(capability_provider "$CAP")" ]; then
-  echo "service-runner.sh: '$CAP' is provided by another deployment — [capability.$CAP] provided_by in $AXON_MACHINE_TOML." >&2
+  echo "service-runner.sh: '$CAP' is provided by another deployment — [capability.$CAP] provided_by in $SJEL_MACHINE_TOML." >&2
   echo "  This machine may read its health; its lifecycle belongs to whoever owns its host." >&2
   exit 1
 fi
@@ -215,10 +215,10 @@ fi
 # Relative paths in a manifest resolve against the root that manifest came from, so an
 # overlay capability's workdir and build output stay inside the overlay. A manifest that
 # genuinely needs an Axon path — an overlay capability driven by a shared tool, say —
-# writes ${AXON_ROOT} and gets it expanded below.
+# writes ${SJEL_ROOT} and gets it expanded below.
 case "$MANIFEST" in
-  "$AXON_OVERLAY_CAPS_DIR"/*) CAP_ROOT="$AXON_OVERLAY_ROOT" ;;
-  *)                          CAP_ROOT="$AXON_ROOT" ;;
+  "$SJEL_OVERLAY_CAPS_DIR"/*) CAP_ROOT="$SJEL_OVERLAY_ROOT" ;;
+  *)                          CAP_ROOT="$SJEL_ROOT" ;;
 esac
 
 NAME="$(toml_get name "$MANIFEST")"
@@ -237,7 +237,7 @@ SCHEDULE="$(toml_get schedule "$MANIFEST")"
 FULL_DISK_ACCESS="$(toml_get full_disk_access "$MANIFEST")"
 
 # The one local model runtime this machine has. `libs/inference` reads it as
-# AXON_INFERENCE_BACKEND and moves every role whose declared backend is loopback onto it,
+# SJEL_INFERENCE_BACKEND and moves every role whose declared backend is loopback onto it,
 # taking that role's `on_backend` model id with it — a backend id on its own would ask
 # Ollama for an MLX model name. An Intel or Pi host that has only Ollama says so once here
 # and no capability config changes.
@@ -249,14 +249,14 @@ FULL_DISK_ACCESS="$(toml_get full_disk_access "$MANIFEST")"
 # supervised and the scheduled branch; a capability that does no inference never sees it used.
 # Passed through unvalidated on purpose: whether the id names a declared backend is a question
 # about inference.json, and libs/inference already answers it by name.
-if [ -f "$AXON_MACHINE_TOML" ]; then
-  _inference_backend="$(toml_get_in inference backend "$AXON_MACHINE_TOML")"
-  if [ -n "$_inference_backend" ]; then export AXON_INFERENCE_BACKEND="$_inference_backend"; fi
+if [ -f "$SJEL_MACHINE_TOML" ]; then
+  _inference_backend="$(toml_get_in inference backend "$SJEL_MACHINE_TOML")"
+  if [ -n "$_inference_backend" ]; then export SJEL_INFERENCE_BACKEND="$_inference_backend"; fi
   unset _inference_backend
 fi
 
 # Which hosts this operator owns (PRD Q39, 2026-08-25). `libs/inference` reads it as
-# AXON_INFERENCE_TRUSTED_PEERS and trusts a backend whose `provided_by` names one of these
+# SJEL_INFERENCE_TRUSTED_PEERS and trusts a backend whose `provided_by` names one of these
 # exactly as it trusts loopback — no data class withheld, and NOT classified as a cloud
 # provider needing a reviewed policy.
 #
@@ -269,14 +269,14 @@ fi
 # that shipped before Q39: an unset variable declares no peers, and every backend that is
 # not loopback stays a cloud endpoint.
 _trusted_peers="$(trusted_peers_env)"
-if [ -n "$_trusted_peers" ]; then export AXON_INFERENCE_TRUSTED_PEERS="$_trusted_peers"; fi
+if [ -n "$_trusted_peers" ]; then export SJEL_INFERENCE_TRUSTED_PEERS="$_trusted_peers"; fi
 unset _trusted_peers
 
 container_init() {  # every container-only manifest field, read only when it applies
 IMAGE="$(toml_get image "$MANIFEST")"
 TAG="$(toml_get tag "$MANIFEST")"
 ENV_FILE_REL="$(toml_get env_file "$MANIFEST")"
-ENV_FILE="$AXON_PERSONAL_ROOT/$ENV_FILE_REL"
+ENV_FILE="$SJEL_PERSONAL_ROOT/$ENV_FILE_REL"
 NETWORK_MODE="$(toml_get network_mode "$MANIFEST")"
 
 PORTS=()
@@ -296,10 +296,10 @@ while IFS= read -r line; do [ -n "$line" ] && CAP_ADD+=("$line"); done < <(toml_
 # <overlay>/config/machine.toml (schemas/machine.toml.example).
 # Absent file, section or key leaves the manifest value standing, so a machine that
 # overrides nothing behaves exactly as before.
-if [ -f "$AXON_MACHINE_TOML" ]; then
+if [ -f "$SJEL_MACHINE_TOML" ]; then
   PORT_OVERRIDE=()
   while IFS= read -r line; do [ -n "$line" ] && PORT_OVERRIDE+=("$line"); done \
-    < <(toml_array_in "capability.$CAP" ports "$AXON_MACHINE_TOML")
+    < <(toml_array_in "capability.$CAP" ports "$SJEL_MACHINE_TOML")
   if [ ${#PORT_OVERRIDE[@]} -gt 0 ]; then
     PORTS=("${PORT_OVERRIDE[@]}")
   fi
@@ -346,7 +346,7 @@ for v in ${VOLUMES[@]+"${VOLUMES[@]}"}; do
     }
     CONTAINER_ARGS+=(-v "$host_path:$container_path")
   else
-    resolved="$AXON_PERSONAL_ROOT/$host_path"
+    resolved="$SJEL_PERSONAL_ROOT/$host_path"
     mkdir -p "$resolved"
     CONTAINER_ARGS+=(-v "$resolved:$container_path")
   fi
@@ -380,15 +380,15 @@ process_init() {
     exit 1
   }
 
-  # ${AXON_ROOT} and ${AXON_OVERLAY_ROOT} in any argument expand first. They exist so an
+  # ${SJEL_ROOT} and ${SJEL_OVERLAY_ROOT} in any argument expand first. They exist so an
   # overlay capability can name a shared Axon tool, and hand that tool a path back into
   # the overlay, without either side hardcoding one machine's checkout location.
-  # ${AXON_PORT} is the third and last interpolation, and it deliberately expands later —
+  # ${SJEL_PORT} is the third and last interpolation, and it deliberately expands later —
   # see below, after the machine.toml override has had its say.
   local _i
   for _i in "${!COMMAND[@]}"; do
-    COMMAND[$_i]="${COMMAND[$_i]//\$\{AXON_ROOT\}/$AXON_ROOT}"
-    COMMAND[$_i]="${COMMAND[$_i]//\$\{AXON_OVERLAY_ROOT\}/$AXON_OVERLAY_ROOT}"
+    COMMAND[$_i]="${COMMAND[$_i]//\$\{SJEL_ROOT\}/$SJEL_ROOT}"
+    COMMAND[$_i]="${COMMAND[$_i]//\$\{SJEL_OVERLAY_ROOT\}/$SJEL_OVERLAY_ROOT}"
   done
 
   # command[0] is resolved against the capability's own root, not against workdir: a
@@ -401,15 +401,15 @@ process_init() {
 
   # Same per-machine override seam the container `ports` field has: a port is a fact
   # about the host, and service.toml is tracked and shared.
-  if [ -f "$AXON_MACHINE_TOML" ]; then
+  if [ -f "$SJEL_MACHINE_TOML" ]; then
     local override
-    override="$(toml_get_in "capability.$CAP" port "$AXON_MACHINE_TOML")"
+    override="$(toml_get_in "capability.$CAP" port "$SJEL_MACHINE_TOML")"
     if [ -n "$override" ]; then PORT="$override"; fi
   fi
 
-  # ${AXON_PORT} expands HERE, after the override above, so a manifest that passes its
+  # ${SJEL_PORT} expands HERE, after the override above, so a manifest that passes its
   # port as an argument gets the same value the registry and the dev-server proxy read
-  # from `port`. An Axon-owned process reads the AXON_PORT env var this exports later; an
+  # from `port`. An Axon-owned process reads the SJEL_PORT env var this exports later; an
   # adopted binary takes its port on argv (macmon serve --port N) and cannot. Without this
   # the number would be written twice, and a machine.toml override would move one of them.
   for _i in "${!COMMAND[@]}"; do
@@ -584,7 +584,7 @@ start_process() {
         # `healthy` — the port being bound is not the same as the server answering. Without one
         # there is nothing to poll, so `running` is the strongest available answer and waiting for
         # `healthy` would burn the whole timeout on every start.
-        _dep_mf="$AXON_ROOT/capabilities/$dep/service.toml"
+        _dep_mf="$SJEL_ROOT/capabilities/$dep/service.toml"
         _dep_health="$(toml_get health_path "$_dep_mf" 2>/dev/null)"
         _want="running"
         [ -n "$_dep_health" ] && _want="healthy"
@@ -628,8 +628,8 @@ start_process() {
 
     (
       cd "$CAP_ROOT/${WORKDIR:-.}"
-      AXON_SHELL_PORT="$(toml_get port "$AXON_ROOT/dashboard/service.toml")"
-      export AXON_SHELL_PORT
+      SJEL_SHELL_PORT="$(toml_get port "$SJEL_ROOT/dashboard/service.toml")"
+      export SJEL_SHELL_PORT
       # No redirect and no pid file on purpose: stdout and stderr are inherited so the
       # supervisor's own capture is the one that gets them, and there is no long-lived process
       # for a pid file to describe.
@@ -657,16 +657,16 @@ start_process() {
     # One number, one declaration. The manifest's `port` (after any machine-local
     # override) is what the dashboard proxies to and what axon-status polls, so it has
     # to be what the process binds -- otherwise the registry describes a service that
-    # is listening somewhere else. A capability honours AXON_PORT above its own config;
+    # is listening somewhere else. A capability honours SJEL_PORT above its own config;
     # one that ignores it is free to, and simply has to keep its config in step.
-    if [ -n "$PORT" ]; then export AXON_PORT="$PORT"; fi
+    if [ -n "$PORT" ]; then export SJEL_PORT="$PORT"; fi
     # Where the shell lives, for a capability that serves its own page and needs a way
     # back to it. Read from dashboard/service.toml — the port keeps exactly one home,
     # and a panel never learns a number. Only the port: the HOST has to come from the
     # browser's own `location`, or the link breaks the moment the dashboard is opened
     # over Tailscale rather than as localhost (same reasoning as api.ts's panelUrl).
-    AXON_SHELL_PORT="$(toml_get port "$AXON_ROOT/dashboard/service.toml")"
-    export AXON_SHELL_PORT
+    SJEL_SHELL_PORT="$(toml_get port "$SJEL_ROOT/dashboard/service.toml")"
+    export SJEL_SHELL_PORT
     nohup "${COMMAND[@]}" >>"$PROC_LOG" 2>>"$PROC_ERR" &
     echo $! > "$PID_FILE"
   )
@@ -942,7 +942,7 @@ persistence_applicable() {
       # 2026-09-02 (Q75), because apple-container had no restart policy and was the
       # one case where a container did need a watchdog.
       if [ "$KIND" = container ]; then
-        echo "$AXON_CONTAINER_RUNTIME restarts it natively (--restart unless-stopped) — no watchdog needed"
+        echo "$SJEL_CONTAINER_RUNTIME restarts it natively (--restart unless-stopped) — no watchdog needed"
         return 1
       fi
       echo "autostart declared"
@@ -965,7 +965,7 @@ LEGACY_UNIT_LABEL_PREFIX="com.axon"
 
 persistence_unit_path() {
   local systemd_dir="${XDG_CONFIG_HOME:-$HOME/.config}/systemd/user"
-  case "$AXON_OS" in
+  case "$SJEL_OS" in
     macos) printf '%s\n' "$HOME/Library/LaunchAgents/$UNIT_LABEL_PREFIX.$CAP.plist" ;;
     linux)
       # For a scheduled job the TIMER is the primary unit: it holds the interval, it is what gets
@@ -982,7 +982,7 @@ persistence_unit_path() {
       return 1
       ;;
     *)
-      echo "unknown os '$AXON_OS' (machine.toml)"
+      echo "unknown os '$SJEL_OS' (machine.toml)"
       return 1
       ;;
   esac
@@ -997,7 +997,7 @@ persistence_unit_path() {
 # that `stale` can mean "either file drifted" — a hand-edited companion is exactly as broken as a
 # hand-edited timer, and a check that only looked at one would report green for it.
 persistence_companion_path() {
-  [ "$AXON_OS" = linux ] || return 1
+  [ "$SJEL_OS" = linux ] || return 1
   [ "$(persistence_mode 2>/dev/null)" = scheduled ] || return 1
   printf '%s\n' "${XDG_CONFIG_HOME:-$HOME/.config}/systemd/user/axon-$CAP.service"
 }
@@ -1053,7 +1053,7 @@ persistence_path_dirs() {
 # (README.md#secrets). Nothing here enforces that — it is a contract, stated where it is violated.
 persistence_env_block() {
   local line key val out=""
-  [ -f "$AXON_MACHINE_TOML" ] || return 0
+  [ -f "$SJEL_MACHINE_TOML" ] || return 0
   while IFS= read -r line; do
     [ -n "$line" ] || continue
     if [ "${line#*=}" = "$line" ]; then
@@ -1061,7 +1061,7 @@ persistence_env_block() {
       return 1
     fi
     key="${line%%=*}"; val="${line#*=}"
-    case "$AXON_OS" in
+    case "$SJEL_OS" in
       macos)
         # A plist value is XML text: an unescaped & or < makes the whole file unparseable, and
         # launchd's failure for that is silent.
@@ -1077,7 +1077,7 @@ persistence_env_block() {
 "
         ;;
     esac
-  done < <(toml_array_in "capability.$CAP" env "$AXON_MACHINE_TOML")
+  done < <(toml_array_in "capability.$CAP" env "$SJEL_MACHINE_TOML")
   # Trailing newline trimmed: the placeholder occupies its own line, and awk re-adds one.
   printf '%s' "${out%
 }"
@@ -1123,7 +1123,7 @@ render_persistence_unit() {
   else
     log_out="/tmp/axon-$CAP-watchdog.log"; log_err="/tmp/axon-$CAP-watchdog.err"
   fi
-  case "$AXON_OS:$mode" in
+  case "$SJEL_OS:$mode" in
     macos:watchdog)
       tmpl="$TOOLS_DIR/templates/launchd-watchdog.plist.tmpl"
       sed -e "s|__LABEL__|$UNIT_LABEL_PREFIX.$CAP|" \
@@ -1138,7 +1138,7 @@ render_persistence_unit() {
       tmpl="$TOOLS_DIR/templates/launchd-schedule.plist.tmpl"
       local launcher_line=""
       if [ "$FULL_DISK_ACCESS" = "true" ]; then
-        local launcher="$AXON_PERSONAL_ROOT/bin/axon-fda-launcher"
+        local launcher="$SJEL_PERSONAL_ROOT/bin/axon-fda-launcher"
         if [ ! -x "$launcher" ]; then
           echo "service-runner.sh: $CAP declares full_disk_access but $launcher is not installed." >&2
           echo "  Run tools/fda-launcher/install, grant it Full Disk Access, then install-persistence again." >&2
@@ -1230,7 +1230,7 @@ persistence_state() {
   tmp="$(mktemp)"
   if ! render_persistence_unit "$tmp"; then
     rm -f "$tmp"
-    printf 'unsupported\tcannot render a unit for os %s\n' "$AXON_OS"
+    printf 'unsupported\tcannot render a unit for os %s\n' "$SJEL_OS"
     return 0
   fi
   if ! cmp -s "$tmp" "$unit"; then
@@ -1250,7 +1250,7 @@ persistence_state() {
     tmp="$(mktemp)"
     if ! render_persistence_companion "$tmp"; then
       rm -f "$tmp"
-      printf 'unsupported\tcannot render the oneshot companion for os %s\n' "$AXON_OS"
+      printf 'unsupported\tcannot render the oneshot companion for os %s\n' "$SJEL_OS"
       return 0
     fi
     if ! cmp -s "$tmp" "$companion"; then
@@ -1269,7 +1269,7 @@ persistence_state() {
 # is never rendered as "yes".
 persistence_loaded() {
   local hits
-  case "$AXON_OS" in
+  case "$SJEL_OS" in
     macos)
       command -v launchctl >/dev/null 2>&1 || { echo unknown; return 0; }
       # `grep -c`, not `grep -q`, and the reason is this script's `set -o pipefail`: -q exits at
@@ -1348,7 +1348,7 @@ install_persistence() {
   # systemd --user is the per-user analogue of a LaunchAgent. It needs a running systemd (PID 1,
   # or WSL2 with `systemd=true` in /etc/wsl.conf) and the user bus; fail with the fix rather than
   # a cryptic systemctl error where it's absent.
-  if [ "$AXON_OS" = linux ] && { ! command -v systemctl >/dev/null 2>&1 || [ ! -d /run/systemd/system ]; }; then
+  if [ "$SJEL_OS" = linux ] && { ! command -v systemctl >/dev/null 2>&1 || [ ! -d /run/systemd/system ]; }; then
     echo "service-runner.sh: systemd not available (no systemctl, or systemd isn't PID 1)." >&2
     echo "  On WSL, add 'systemd=true' under [boot] in /etc/wsl.conf, then 'wsl --shutdown' and reopen." >&2
     echo "  Until then run '$TOOLS_DIR/watchdog.sh $CAP' manually (e.g. inside tmux/screen)." >&2
@@ -1363,7 +1363,7 @@ install_persistence() {
     render_persistence_companion "$companion"
     echo "installed $companion"
   fi
-  case "$AXON_OS" in
+  case "$SJEL_OS" in
     macos)
       # `enable` BEFORE load, and this is not belt-and-braces.
       #
@@ -1419,7 +1419,7 @@ remove_persistence() {
     echo "service-runner.sh: no persistence installed for '$CAP' ($unit)"
     return 0
   fi
-  case "$AXON_OS" in
+  case "$SJEL_OS" in
     macos)
       launchctl unload "$unit" 2>/dev/null || true
       remove_legacy_launchd_unit
@@ -1436,7 +1436,7 @@ remove_persistence() {
     rm -f "$companion"
     echo "removed $companion"
   fi
-  [ "$AXON_OS" = linux ] && { systemctl --user daemon-reload 2>/dev/null || true; }
+  [ "$SJEL_OS" = linux ] && { systemctl --user daemon-reload 2>/dev/null || true; }
   return 0
 }
 

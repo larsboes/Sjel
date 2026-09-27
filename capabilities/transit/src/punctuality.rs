@@ -21,13 +21,13 @@ use serde::{Deserialize, Serialize};
 /// The literal mirrors `capabilities/punctuality/service.toml`'s `port`, which is one
 /// duplication more than README.md#dynamic-paths-and-current-facts likes. It is here rather than hidden because the honest
 /// fix is a spine mechanism — service-runner.sh exporting a declared `requires =`
-/// sibling's port the way it already exports `AXON_PORT` for the capability itself — and
+/// sibling's port the way it already exports `SJEL_PORT` for the capability itself — and
 /// building that for a single consumer would be inventing a convention from one example.
 /// The second capability that needs a sibling's URL is when that gets built.
 const DEFAULT_BASE_URL: &str = "http://127.0.0.1:8085";
 
 pub fn base_url() -> String {
-    std::env::var("AXON_PUNCTUALITY_URL").unwrap_or_else(|_| DEFAULT_BASE_URL.to_string())
+    axon_config::env_var("SJEL_PUNCTUALITY_URL").unwrap_or_else(|_| DEFAULT_BASE_URL.to_string())
 }
 
 #[derive(Debug, Clone, Serialize)]

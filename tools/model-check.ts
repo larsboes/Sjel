@@ -63,8 +63,8 @@ function isLoopback(backend: Backend): boolean {
   }
 }
 
-const AXON_ROOT = axonRoot();
-const OVERLAY = overlayRoot(AXON_ROOT);
+const SJEL_ROOT = axonRoot();
+const OVERLAY = overlayRoot(SJEL_ROOT);
 if (!OVERLAY) {
   console.error("model-check: no overlay — run tools/install.sh");
   process.exit(2);

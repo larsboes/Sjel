@@ -94,9 +94,9 @@ pub(crate) fn is_operator(login: &str, operator: &str) -> bool {
     !login.is_empty() && !operator.is_empty() && login.eq_ignore_ascii_case(operator)
 }
 
-/// `AXON_TAILNET_OPERATOR` from `<overlay>/config/deployment.env`.
+/// `SJEL_TAILNET_OPERATOR` from `<overlay>/config/deployment.env`.
 ///
-/// A value rather than a file reference, unlike `AXON_INBOUND_TOKEN_FILE`: this
+/// A value rather than a file reference, unlike `SJEL_INBOUND_TOKEN_FILE`: this
 /// is a login, not a credential, and the split that file documents is exactly
 /// between the two. Absent yields `None`, which leaves every server behaving as
 /// it did before this module existed.

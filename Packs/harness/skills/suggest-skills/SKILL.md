@@ -35,7 +35,7 @@ bun scripts/collect-signals.ts --days 30 --json > /tmp/signals.json
 ```
 
 `--days N` sets the window. `--history PATH`, `--skills DIR` and `--packs DIR` override the
-sources; `AXON_ROOT` adds the Pack registry when it is set. Two runs over the same files return
+sources; `SJEL_ROOT` adds the Pack registry when it is set. Two runs over the same files return
 the same corpus, which is what makes a proposal arguable instead of a mood.
 
 Report every line in `warnings` to the user before using the output. A missing source is not a

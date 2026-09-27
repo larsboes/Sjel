@@ -26,7 +26,7 @@ if [ -z "$LIB_DIR" ]; then
 fi
 
 # This test's whole subject is which machine.toml paths.sh picks. An operator's exported
-# AXON_MACHINE_TOML/AXON_OVERLAY_ROOT answers that question before the scratch root gets to,
+# SJEL_MACHINE_TOML/SJEL_OVERLAY_ROOT answers that question before the scratch root gets to,
 # so the assertions measured the real machine (tools/lib/test-support.sh#isolate_axon_env).
 source "$LIB_DIR/test-support.sh"
 isolate_axon_env
@@ -50,7 +50,7 @@ fails=0
 # Each case runs paths.sh in its own shell: it exports and unsets, so re-sourcing it in
 # one process would carry state between cases and hide exactly what is being tested.
 resolved() {
-  bash -c "source '$ROOT/tools/lib/paths.sh' >/dev/null 2>&1 && printf '%s' \"\$AXON_MACHINE_TOML\"" 2>/dev/null
+  bash -c "source '$ROOT/tools/lib/paths.sh' >/dev/null 2>&1 && printf '%s' \"\$SJEL_MACHINE_TOML\"" 2>/dev/null
 }
 check() {  # check <description> <expected path>
   local desc="$1" want="$2" got

@@ -187,11 +187,11 @@ export function discoverUiPackages(root: string): UiPackage[] {
 
 function main(argv: string[]): number {
   const dirsOnly = argv.includes("--dirs");
-  // AXON_UI_DISCOVERY_ROOT is the test seam, mirroring AXON_PUBLICATION_ROOT in
+  // SJEL_UI_DISCOVERY_ROOT is the test seam, mirroring SJEL_PUBLICATION_ROOT in
   // check-publication-hygiene.sh: the walk is the behavior under test, so the test plants
   // a scratch tree and points the tool at it rather than at the real checkout.
   const root = resolve(
-    process.env.AXON_UI_DISCOVERY_ROOT ?? join(import.meta.dir, ".."),
+    process.env.SJEL_UI_DISCOVERY_ROOT ?? join(import.meta.dir, ".."),
   );
 
   const packages = discoverUiPackages(root);

@@ -6,9 +6,9 @@ sibling files, one per shell family:
 
 - **zsh** (macOS default): `~/.zshrc` sources `init.zsh`, then
   `axon-overlay/config/shell/*.zsh` for whatever's actually machine-specific.
-- **bash** (Linux/WSL nodes): `~/.bashrc` exports `AXON_ROOT` and sources
+- **bash** (Linux/WSL nodes): `~/.bashrc` exports `SJEL_ROOT` and sources
   `init.bash`, then `axon-overlay/config/shell/*.bash` for the machine-specific
-  bits. The `AXON_ROOT` line is the bash mirror of `~/.zshrc`'s first line —
+  bits. The `SJEL_ROOT` line is the bash mirror of `~/.zshrc`'s first line —
   README.md#dynamic-paths-and-current-facts's one sanctioned rc-file bootstrap exception. `install.sh` does not
   inject either line; wiring the login rc file stays a manual, per-machine step
   (same as zsh).

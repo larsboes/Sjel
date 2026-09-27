@@ -47,7 +47,7 @@ pub const ENGINE: &str = "apple-vision";
 
 /// Where to find the reader. Mirrors `capabilities/transit`'s `xberg_bin`: a
 /// bare name resolved on `PATH`, overridable for a build that is not installed.
-const BINARY_ENV: &str = "AXON_VISOCR_BIN";
+const BINARY_ENV: &str = "SJEL_VISOCR_BIN";
 const DEFAULT_BINARY: &str = "visocr";
 
 /// Record and field separators of the `visocr` batch protocol. See that tool's
@@ -403,7 +403,7 @@ mod tests {
     }
 
     /// One lock for every env-touching test in this module: cargo runs a
-    /// crate's tests as parallel threads of ONE process, and `AXON_VISOCR_BIN`
+    /// crate's tests as parallel threads of ONE process, and `SJEL_VISOCR_BIN`
     /// is process-global. Same shape as `libs/axon-config`'s.
     static ENV_LOCK: std::sync::Mutex<()> = std::sync::Mutex::new(());
 

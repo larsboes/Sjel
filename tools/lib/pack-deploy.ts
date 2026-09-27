@@ -218,7 +218,7 @@ const LOCK_STALE_MS = 30_000;
 /** How long to wait for another process to finish before refusing. Env-overridable
  *  so a test does not have to spend the real wait, and so an operator on a slow
  *  filesystem can raise it without a rebuild. */
-const LOCK_WAIT_MS = Number(process.env.AXON_PACK_LOCK_WAIT_MS ?? 4_000);
+const LOCK_WAIT_MS = Number(process.env.SJEL_PACK_LOCK_WAIT_MS ?? 4_000);
 
 function lockPathFor(config: DeployConfig): string {
   return `${config.stateFile}.lock`;

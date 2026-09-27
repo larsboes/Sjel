@@ -34,7 +34,7 @@
 # dependency cannot drift away from the config silently. This script checks the config line.
 set -eu
 
-ROOT="${AXON_BUN_INSTALL_POLICY_ROOT:-.}"
+ROOT="${SJEL_BUN_INSTALL_POLICY_ROOT:-.}"
 fail=0
 
 require() { # require <path> <literal>

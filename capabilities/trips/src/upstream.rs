@@ -59,7 +59,7 @@ const FARE_PAUSE: Duration = Duration::from_millis(250);
 const DEPARTURE_TIME: &str = "T09:00:00";
 
 fn base_url(variable: &str, port: u16) -> String {
-    std::env::var(variable).unwrap_or_else(|_| format!("http://127.0.0.1:{port}"))
+    axon_config::env_var(variable).unwrap_or_else(|_| format!("http://127.0.0.1:{port}"))
 }
 
 fn client(timeout: Duration) -> Result<reqwest::blocking::Client, String> {
@@ -159,7 +159,7 @@ impl HttpSources {
         }
         let url = format!(
             "{}/api/suggest?q={}",
-            base_url("AXON_TRANSIT_URL", 3000),
+            base_url("SJEL_TRANSIT_URL", 3000),
             urlencode(name)
         );
         let body = get_json(&url, SUGGEST_TIMEOUT)?;
@@ -214,7 +214,7 @@ impl Sources for HttpSources {
             .unwrap_or_else(|| to.to_string());
         let url = format!(
             "{}/api/windows?from={from}&to={ends_before}&min_days={min_days}",
-            base_url("AXON_CALENDAR_URL", 8087)
+            base_url("SJEL_CALENDAR_URL", 8087)
         );
         let body = get_json(&url, CALENDAR_TIMEOUT)?;
         serde_json::from_value(body["windows"].clone())
@@ -222,7 +222,7 @@ impl Sources for HttpSources {
     }
 
     fn cities(&self) -> Result<Vec<DestinationCandidate>, String> {
-        let url = format!("{}/api/places?kind=city", base_url("AXON_PLACES_URL", 8093));
+        let url = format!("{}/api/places?kind=city", base_url("SJEL_PLACES_URL", 8093));
         let body = get_json(&url, PLACES_TIMEOUT)?;
         let rows = body["places"]
             .as_array()
@@ -252,7 +252,7 @@ impl Sources for HttpSources {
         // No `/api` prefix: scouting serves this route at the root.
         let url = format!(
             "{}/opportunities?limit=500",
-            base_url("AXON_SCOUTING_URL", 8084)
+            base_url("SJEL_SCOUTING_URL", 8084)
         );
         let body = get_json(&url, SCOUTING_TIMEOUT)?;
         let rows = body["opportunities"]
@@ -302,7 +302,7 @@ impl Sources for HttpSources {
         for chunk in place_ids.chunks(CLIMATE_BATCH_KEYS) {
             let url = format!(
                 "{}/api/climate?place_ids={}",
-                base_url("AXON_PLACES_URL", 8093),
+                base_url("SJEL_PLACES_URL", 8093),
                 urlencode(&chunk.join(","))
             );
             let body = get_json(&url, CLIMATE_TIMEOUT)?;
@@ -339,7 +339,7 @@ impl Sources for HttpSources {
         std::thread::sleep(FARE_PAUSE);
         let url = format!(
             "{}/api/search?from={from_eva}&to={to_eva}&time={depart_iso}{DEPARTURE_TIME}",
-            base_url("AXON_TRANSIT_URL", 3000)
+            base_url("SJEL_TRANSIT_URL", 3000)
         );
         let body = get_json(&url, SEARCH_TIMEOUT)
             .map_err(|reason| format!("transit fare search {reason}"))?;
@@ -364,7 +364,7 @@ impl Sources for HttpSources {
     ) -> Result<(u32, u32), String> {
         let url = format!(
             "{}/api/people/presence?latitude={latitude}&longitude={longitude}&from={from}&to={to}",
-            base_url("AXON_PLACES_URL", 8093)
+            base_url("SJEL_PLACES_URL", 8093)
         );
         let body = get_json(&url, PRESENCE_TIMEOUT)?;
         Ok((

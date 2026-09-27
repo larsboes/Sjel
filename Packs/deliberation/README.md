@@ -136,10 +136,10 @@ anything. It is this Pack's own answer to a hole the upstream shape leaves open.
 ## Activate
 
 ```bash
-"$AXON_ROOT/tools/packs.sh" link deliberation      # → ~/.claude/skills/{crystallize,council,red-team,root-cause}
+"$SJEL_ROOT/tools/packs.sh" link deliberation      # → ~/.claude/skills/{crystallize,council,red-team,root-cause}
                                                    # → ~/.claude/agents/deliberation/ (the 8 subagents)
-"$AXON_ROOT/tools/packs-codex" deploy deliberation # → ~/.agents/skills/… (skills only; pack-level Claude agents are skipped)
-"$AXON_ROOT/tools/packs-pi" deploy deliberation    # → ~/.pi/agent/settings.json (skills)
+"$SJEL_ROOT/tools/packs-codex" deploy deliberation # → ~/.agents/skills/… (skills only; pack-level Claude agents are skipped)
+"$SJEL_ROOT/tools/packs-pi" deploy deliberation    # → ~/.pi/agent/settings.json (skills)
                                                    # → ~/.pi/agent/agents/ (the same 7, tool names translated)
 ```
 
@@ -152,7 +152,7 @@ says why that exception is made for the extension that carries these agents' typ
 `[pi-subagents]` row in `upstreams.toml`. A machine running this Pack needs its dependencies once:
 
 ```bash
-cd "$AXON_ROOT/Packs/harness/pi-packages/pi-subagents" && bun install
+cd "$SJEL_ROOT/Packs/harness/pi-packages/pi-subagents" && bun install
 ```
 
 `tools/doctor` reports the skills under "Packs (Claude Code materialized)".

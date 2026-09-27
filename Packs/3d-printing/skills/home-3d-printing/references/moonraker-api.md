@@ -2,7 +2,7 @@
 
 For ad-hoc calls beyond printctl. Base: `http://$HOST`. Export `HOST` from the overlay first (keeps the LAN IP out of Axon):
 ```bash
-HOST=$(uv run --python 3 python -c 'import json,os;c=json.load(open(os.path.expanduser(os.environ["AXON_PERSONAL_ROOT"])+"/config/printing.json"));print(f"{c[\"printer_host\"]}:{c[\"moonraker_port\"]}")')
+HOST=$(uv run --python 3 python -c 'import json,os;c=json.load(open(os.path.expanduser(os.environ["SJEL_PERSONAL_ROOT"])+"/config/printing.json"));print(f"{c[\"printer_host\"]}:{c[\"moonraker_port\"]}")')
 ```
 Fluidd uses the same API. All read endpoints are safe; POST endpoints that heat/move should go through printctl's arm gate, not raw curl.
 

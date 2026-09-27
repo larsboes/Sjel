@@ -16,7 +16,7 @@
 # the machine. See schemas/machine.toml.example.
 set -e
 
-# paths.sh sources toml.sh and exports AXON_ROOT.
+# paths.sh sources toml.sh and exports SJEL_ROOT.
 _lib="$(cd "$(dirname "${BASH_SOURCE[0]:-$0}")/lib" && pwd)"
 source "$_lib/paths.sh"
 
@@ -25,11 +25,11 @@ fail=0
 # Every service.toml `requires = [...]` entry → each must be a real capabilities/<name>/ dir.
 # Word-splitting on toml_array's newline-per-element output is safe: capability names carry
 # no whitespace (bash 3.2-safe, no mapfile).
-for svc in "$AXON_ROOT"/capabilities/*/service.toml "$AXON_ROOT"/*/service.toml; do
+for svc in "$SJEL_ROOT"/capabilities/*/service.toml "$SJEL_ROOT"/*/service.toml; do
   [ -f "$svc" ] || continue          # empty glob → literal path, skip it
   owner="$(basename "$(dirname "$svc")")"
   for dep in $(toml_array requires "$svc"); do
-    if [ ! -d "$AXON_ROOT/capabilities/$dep" ]; then
+    if [ ! -d "$SJEL_ROOT/capabilities/$dep" ]; then
       echo "FAIL [$owner]: requires '$dep' but capabilities/$dep/ does not exist" >&2
       fail=1
     fi

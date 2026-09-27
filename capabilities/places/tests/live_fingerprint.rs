@@ -11,7 +11,7 @@
 //! become unresolvable.
 //!
 //! The data is private. No path, account name, merchant or amount is written
-//! down here — the test reads `AXON_PERSONAL_ROOT` for the overlay and reports
+//! down here — the test reads `SJEL_PERSONAL_ROOT` for the overlay and reports
 //! why it did nothing when that is unset, which is what happens in CI and on
 //! any machine that does not hold the files. It opens the store with
 //! `mode=ro`, reads counts, and prints them.
@@ -25,14 +25,14 @@ use std::path::PathBuf;
 
 /// The three artifacts the proof needs, or `None` with a reason printed.
 fn overlay() -> Option<(AmexProfile, PathBuf, PathBuf)> {
-    let root = std::env::var_os("AXON_PERSONAL_ROOT")?;
+    let root = axon_config::env_var_os("SJEL_PERSONAL_ROOT")?;
     let root = PathBuf::from(root);
     let config = root.join("config/finance.json");
     let raw = root.join("data/finance/import/raw");
     let database = root.join("data/axon/axon.db");
     for path in [&config, &raw, &database] {
         if !path.exists() {
-            eprintln!("AXON_PERSONAL_ROOT is set but the overlay is incomplete; skipping");
+            eprintln!("SJEL_PERSONAL_ROOT is set but the overlay is incomplete; skipping");
             return None;
         }
     }
@@ -48,7 +48,7 @@ fn overlay() -> Option<(AmexProfile, PathBuf, PathBuf)> {
 #[test]
 fn the_shared_fingerprint_reproduces_every_live_link() {
     let Some((profile, raw, database)) = overlay() else {
-        eprintln!("set AXON_PERSONAL_ROOT to run the live fingerprint proof; skipping");
+        eprintln!("set SJEL_PERSONAL_ROOT to run the live fingerprint proof; skipping");
         return;
     };
 

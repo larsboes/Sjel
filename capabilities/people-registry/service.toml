@@ -4,7 +4,7 @@
 # reported by tools/doctor with advice that would have deleted a job doing real work.
 #
 # Declaring it fixes something the hand-written unit had to work around. That plist carried an
-# explicit `AXON_PERSONAL_ROOT` with a comment explaining that "launchd gives a job none of the
+# explicit `SJEL_PERSONAL_ROOT` with a comment explaining that "launchd gives a job none of the
 # shell's exports" — true, and unnecessary here: a scheduled capability runs through
 # tools/service-runner.sh, which sources tools/lib/paths.sh, which exports it (paths.sh:49). One
 # fewer machine-local value copied into a generated file.

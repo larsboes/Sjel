@@ -11,8 +11,8 @@
 // duplicate: the data.
 //
 // usage: bun capabilities/knowledge-graph/server.ts
-// env:   AXON_PORT   the port to bind (exported by tools/service-runner.sh from the manifest)
-//        AXON_ROOT   repo root (defaults to cwd)
+// env:   SJEL_PORT   the port to bind (exported by tools/service-runner.sh from the manifest)
+//        SJEL_ROOT   repo root (defaults to cwd)
 //
 // API endpoints:
 //   GET  /api/graph              — full graph (nodes + edges)
@@ -30,11 +30,11 @@
 import { existsSync, readFileSync, statSync } from "node:fs";
 import { join } from "node:path";
 
-const axonRoot = (): string => process.env.AXON_ROOT ?? process.cwd();
+const axonRoot = (): string => process.env.SJEL_ROOT ?? process.cwd();
 
 // ── Graph data ──────────────────────────────────────────────────────────────
 
-// Keyed on path as well as mtime: the path is derived from AXON_ROOT, so a cache keyed on
+// Keyed on path as well as mtime: the path is derived from SJEL_ROOT, so a cache keyed on
 // mtime alone can hand one root's graph to another whose file happens to share a timestamp.
 let graphCache: { path: string; data: any; mtime: number } | null = null;
 
@@ -280,9 +280,9 @@ function json404(msg: string): Response {
 // ── Server ──────────────────────────────────────────────────────────────────
 
 function main(): void {
-  const port = Number(process.env.AXON_PORT ?? 4244);
+  const port = Number(process.env.SJEL_PORT ?? 4244);
   if (!Number.isInteger(port) || port <= 0) {
-    console.error(`knowledge-graph: AXON_PORT must be a port number, got ${JSON.stringify(process.env.AXON_PORT)}`);
+    console.error(`knowledge-graph: SJEL_PORT must be a port number, got ${JSON.stringify(process.env.SJEL_PORT)}`);
     process.exit(1);
   }
 

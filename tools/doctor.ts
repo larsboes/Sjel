@@ -43,7 +43,7 @@ const HELP = `tools/doctor — health checks for an already-set-up Axon machine.
   tools/doctor -h         this help
 `;
 
-const AXON_ROOT = resolve(import.meta.dir, "..");
+const SJEL_ROOT = resolve(import.meta.dir, "..");
 const HOME = process.env.HOME ?? "";
 
 /// Discover Rust sources recursively so policy checks cover conventional
@@ -817,14 +817,14 @@ async function readToml(path: string): Promise<any> {
 // Trimmed stdout of a git command against this checkout, "" on failure —
 // enough for the read-only version/orientation readouts below.
 function gitOut(...args: string[]): string {
-  const proc = Bun.spawnSync({ cmd: ["git", "-C", AXON_ROOT, ...args], stdout: "pipe", stderr: "pipe" });
+  const proc = Bun.spawnSync({ cmd: ["git", "-C", SJEL_ROOT, ...args], stdout: "pipe", stderr: "pipe" });
   return proc.exitCode === 0 ? proc.stdout.toString().trim() : "";
 }
 
 // Which tags are release tags — axon.toml [release] tag_glob, the one home shared with
 // tools/lib/version.sh (README.md#the-release-line). Resolved once at load; a missing key is a
 // broken manifest and should stop the tool, not be papered over with a literal.
-const RELEASE_TAG_GLOB = releaseTagGlob(AXON_ROOT);
+const RELEASE_TAG_GLOB = releaseTagGlob(SJEL_ROOT);
 
 // Newest semver release tag (vX.Y.Z), or "" if none cut yet. Mirrors tools/lib/delta.sh's
 // latest_release_ref so doctor --version and update.sh agree on "the newest release" — the first
@@ -846,9 +846,9 @@ function latestReleaseTag(): string {
 // cached origin/main ref + FETCH_HEAD age, says so honestly); --online
 // fetches first, same split as the full report.
 function printVersion(online: boolean): void {
-  console.log(`Axon doctor --version · ${AXON_ROOT}`);
+  console.log(`Axon doctor --version · ${SJEL_ROOT}`);
   if (online) {
-    Bun.spawnSync({ cmd: ["git", "-C", AXON_ROOT, "fetch", "--quiet", "origin", "main"], stdout: "pipe", stderr: "pipe" });
+    Bun.spawnSync({ cmd: ["git", "-C", SJEL_ROOT, "fetch", "--quiet", "origin", "main"], stdout: "pipe", stderr: "pipe" });
   }
 
   const describe = gitOut("describe", "--tags", "--always", "--dirty", "--match", RELEASE_TAG_GLOB);
@@ -871,7 +871,7 @@ function printVersion(online: boolean): void {
   // the git dir properly (worktrees have a .git *file*), fall back gracefully.
   let fetchEpoch: number | null = null;
   try {
-    const gitDir = gitOut("rev-parse", "--absolute-git-dir") || join(AXON_ROOT, ".git");
+    const gitDir = gitOut("rev-parse", "--absolute-git-dir") || join(SJEL_ROOT, ".git");
     fetchEpoch = Math.floor(statSync(join(gitDir, "FETCH_HEAD")).mtimeMs / 1000);
   } catch {
     // no FETCH_HEAD — formatFetchAge(null, …) reports it
@@ -1669,16 +1669,16 @@ const CHECKS: Check[] = [
     // file, so "is it there and does it open" is a machine-level question with one answer,
     // which is what makes it a doctor check rather than nine readiness handlers.
     //
-    // Resolved exactly as `axon_config::database_path()` resolves it — AXON_DB_PATH first,
+    // Resolved exactly as `axon_config::database_path()` resolves it — SJEL_DB_PATH first,
     // then the overlay — because a doctor that checked a different file than the capabilities
     // open would report on nothing. Absent is a WARNING, not a failure: a machine that has
     // never run a capability legitimately has no database yet, and `axon_store::pool_for`
     // creates it on first open.
     name: "Shared store (SQLite)",
     run(ctx) {
-      const envPath = (process.env.AXON_DB_PATH ?? "").trim();
+      const envPath = (process.env.SJEL_DB_PATH ?? "").trim();
       const dbPath = envPath ? expandHome(envPath) : join(ctx.overlayPath, "data", "axon", "axon.db");
-      const from = envPath ? "AXON_DB_PATH" : "overlay default";
+      const from = envPath ? "SJEL_DB_PATH" : "overlay default";
       if (!ctx.overlayPath && !envPath) return ctx.warn("skipped — no overlay to resolve the database path from");
       if (!existsSync(dbPath)) {
         ctx.warn(`no database at ${dbPath} (${from}) — created on the first write by any capability`);
@@ -1911,9 +1911,9 @@ const CHECKS: Check[] = [
   },
 
   // Undeclared-connection sweep: every declared canonical path (state mounts +
-  // AXON_ROOT + overlay) vs. every hardcoded sibling-repo path actually
+  // SJEL_ROOT + overlay) vs. every hardcoded sibling-repo path actually
   // committed in this tree. tools/lib/paths.sh is the sanctioned indirection
-  // (AXON_ROOT / AXON_PERSONAL_ROOT); anything else hardcoding a path to a
+  // (SJEL_ROOT / SJEL_PERSONAL_ROOT); anything else hardcoding a path to a
   // declared system, or referencing a $HOME path to a system with NO
   // systems.toml entry at all, is exactly the kind of drift systems.toml can't
   // see by construction (it's hand-authored, so it only knows what someone
@@ -2007,7 +2007,7 @@ const CHECKS: Check[] = [
   },
 
   // Server bind policy. libs/axon-server exists so a capability server cannot
-  // bind the LAN or skip the AXON_PORT contract by accident, and its README said
+  // bind the LAN or skip the SJEL_PORT contract by accident, and its README said
   // so while two servers contradicted it: scout-server bound 0.0.0.0 with
   // permissive CORS behind a mutating POST, and comms-server hand-rolled its
   // startup. A README claiming a guarantee nothing enforces is worse than no
@@ -2065,7 +2065,7 @@ const CHECKS: Check[] = [
     },
   },
 
-  // Tailnet identity gate. `AXON_TAILNET_OPERATOR` says "admit this login from the
+  // Tailnet identity gate. `SJEL_TAILNET_OPERATOR` says "admit this login from the
   // tailnet", and the thing that makes that statement true is not in this repository:
   // it is the shape of `tailscale serve`. An HTTPS web handler authenticates the peer
   // and injects `Tailscale-User-Login`, overwriting whatever the client sent (measured
@@ -2078,7 +2078,7 @@ const CHECKS: Check[] = [
   // still green. That is the exact failure shape PRD §13 records four times over, so
   // the declaration gets a checker rather than a sentence.
   {
-    name: "Tailnet identity gate (AXON_TAILNET_OPERATOR)",
+    name: "Tailnet identity gate (SJEL_TAILNET_OPERATOR)",
     run(ctx) {
       if (!ctx.overlayPath || !existsSync(ctx.overlayPath)) return ctx.warn("no overlay — cannot read deployment.env");
       const envPath = join(ctx.overlayPath, "config", "deployment.env");
@@ -2086,8 +2086,8 @@ const CHECKS: Check[] = [
       const declared = readFileSync(envPath, "utf8")
         .split("\n")
         .map((l) => l.trim())
-        .find((l) => l.startsWith("AXON_TAILNET_OPERATOR="))
-        ?.slice("AXON_TAILNET_OPERATOR=".length)
+        .find((l) => l.startsWith("SJEL_TAILNET_OPERATOR="))
+        ?.slice("SJEL_TAILNET_OPERATOR=".length)
         .trim();
       if (!declared) {
         // Not a failure. The undeclared deployment is the one that predates this gate,
@@ -2160,7 +2160,7 @@ const CHECKS: Check[] = [
   {
     name: "Vault pointers (stored paths that must resolve)",
     run(ctx) {
-      const envPath = (process.env.AXON_DB_PATH ?? "").trim();
+      const envPath = (process.env.SJEL_DB_PATH ?? "").trim();
       const dbPath = envPath ? expandHome(envPath) : join(ctx.overlayPath, "data", "axon", "axon.db");
       if (!existsSync(dbPath)) return ctx.warn("no database — nothing to resolve");
 
@@ -2574,7 +2574,7 @@ const CHECKS: Check[] = [
         // prefix nothing could ever resolve under. Both are the same mistake: a hand-list
         // standing in for what `git ls-files` already says.
         const bases = whyBlockBases(tracked);
-        const overlay = process.env.AXON_PERSONAL_ROOT ?? "";
+        const overlay = process.env.SJEL_PERSONAL_ROOT ?? "";
         const rot = findDecisionPathRot(
           whyBlocks,
           (p) => existsSync(join(ctx.root, p)) || (overlay !== "" && existsSync(join(overlay, p))),
@@ -2954,7 +2954,7 @@ async function main() {
 
   let failed = 0;
   const ctx: CheckContext = {
-    root: AXON_ROOT,
+    root: SJEL_ROOT,
     overlayPath: "",
     machineToml: {},
     mounts: [],
@@ -2965,7 +2965,7 @@ async function main() {
     warn: (msg) => { console.log(`  ⚠ ${msg}`); },
   };
 
-  console.log(`Axon doctor · ${AXON_ROOT}`);
+  console.log(`Axon doctor · ${SJEL_ROOT}`);
   for (const check of CHECKS) {
     console.log(`\n${check.name}`);
     await check.run(ctx);

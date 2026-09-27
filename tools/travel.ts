@@ -33,7 +33,7 @@ import {
   type TravelCandidateAssessment,
 } from "../dashboard/src/lib/travel/travel-candidates.ts";
 
-const AXON_ROOT = join(dirname(fileURLToPath(import.meta.url)), "..");
+const SJEL_ROOT = join(dirname(fileURLToPath(import.meta.url)), "..");
 
 interface RegistryEntry {
   name: string;
@@ -43,7 +43,7 @@ interface RegistryEntry {
 /** Ports come from the manifest registry, never from a constant here. */
 function baseUrl(capability: string): string {
   const entries = JSON.parse(
-    execFileSync(join(AXON_ROOT, "tools/capability.sh"), ["registry"], { encoding: "utf8" }),
+    execFileSync(join(SJEL_ROOT, "tools/capability.sh"), ["registry"], { encoding: "utf8" }),
   ) as RegistryEntry[];
   const entry = entries.find((row) => row.name === capability && row.port);
   if (!entry) throw new Error(`capability '${capability}' has no registered HTTP surface`);

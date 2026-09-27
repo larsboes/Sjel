@@ -30,14 +30,14 @@ import {
   VOCABULARY,
 } from "./lib/demo-data.ts";
 import {
-  AXON_ROOT,
+  SJEL_ROOT,
   loadManifest,
   resolvePath,
   routes,
   type DemoManifest,
 } from "./lib/demo-endpoints.ts";
 
-const DEMO_OVERLAY = join(AXON_ROOT, "demo/overlay");
+const DEMO_OVERLAY = join(SJEL_ROOT, "demo/overlay");
 
 interface Ctx {
   rng: Rng;
@@ -55,7 +55,7 @@ interface Ctx {
  *  ignore an unknown header, and one conditional per seeder would be the thing somebody
  *  forgets. */
 function authHeaders(): Record<string, string> {
-  const token = process.env.AXON_DEMO_COMMS_TOKEN;
+  const token = process.env.SJEL_DEMO_COMMS_TOKEN;
   return token ? { "X-Axon-Token": token } : {};
 }
 
@@ -502,7 +502,7 @@ function investmentMapping() {
 /** The vault the finance capability imports subscriptions from. Written fresh each run into
  *  demo/vault, which is untracked — see the comment at the call site. */
 function writeSubscriptionVault(): void {
-  const dir = join(AXON_ROOT, "demo/vault/subscriptions");
+  const dir = join(SJEL_ROOT, "demo/vault/subscriptions");
   rmSync(dir, { recursive: true, force: true });
   mkdirSync(dir, { recursive: true });
   for (const sub of VOCABULARY.subscriptions) {
@@ -534,10 +534,10 @@ function writeSubscriptionVault(): void {
  *  `-c` string made a checkout directory containing `"` or `$(` a command -- the rule the
  *  Rust half already states (capabilities/comms/src/media.rs: argument arrays only, never
  *  a shell string). CodeQL js/shell-command-injection-from-environment reported it. */
-export function activeOverlay(pathsSh: string = join(AXON_ROOT, "tools/lib/paths.sh")): string {
+export function activeOverlay(pathsSh: string = join(SJEL_ROOT, "tools/lib/paths.sh")): string {
   const out = execFileSync(
     "bash",
-    ["-c", 'source "$1" && printf %s "$AXON_OVERLAY_ROOT"', "demo-seed", pathsSh],
+    ["-c", 'source "$1" && printf %s "$SJEL_OVERLAY_ROOT"', "demo-seed", pathsSh],
     { encoding: "utf8" },
   );
   return out.trim();

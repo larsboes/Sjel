@@ -1,7 +1,7 @@
 #!/bin/bash
 # tools/lib/delta.sh — the version-to-version delta, shared by tools/update.sh (the consumer's
 # "what would I get if I updated" preview) and tools/release (the notes for a new tag). One home
-# so the two never drift (README.md#documentation-stays-owned-and-current). Sourced AFTER tools/lib/paths.sh (which exports AXON_ROOT and
+# so the two never drift (README.md#documentation-stays-owned-and-current). Sourced AFTER tools/lib/paths.sh (which exports SJEL_ROOT and
 # sources toml.sh); it pulls in version.sh itself. bash 3.2-safe (README.md#portable-shell), no bash-4 syntax.
 #
 # The delta is computed live from git + the manifests — there is no committed CHANGELOG to rot
@@ -20,7 +20,7 @@ command -v toml_sections >/dev/null 2>&1 || . "$_delta_dir/toml.sh"   # defensiv
 latest_release_ref() {
   local t glob
   glob="$(release_tag_glob)" || return 1
-  for t in $(git -C "$AXON_ROOT" tag -l "$glob" --sort=-v:refname 2>/dev/null); do
+  for t in $(git -C "$SJEL_ROOT" tag -l "$glob" --sort=-v:refname 2>/dev/null); do
     if ver_numeric "$(norm_ver "$t")"; then printf '%s\n' "$t"; return 0; fi
   done
   return 0
@@ -28,7 +28,7 @@ latest_release_ref() {
 
 # caps_at_ref <ref> — capability directory names present at <ref> (one per line, empty if none).
 caps_at_ref() {
-  git -C "$AXON_ROOT" ls-tree -d --name-only "$1:capabilities" 2>/dev/null || true
+  git -C "$SJEL_ROOT" ls-tree -d --name-only "$1:capabilities" 2>/dev/null || true
 }
 
 # _sections_to_file <ref> <file> <sections_out> <toml_out> — dump <file> as it was at <ref> into
@@ -38,7 +38,7 @@ caps_at_ref() {
 _sections_to_file() {
   local ref="$1" file="$2" sec_out="$3" toml_out="$4"
   : > "$sec_out"; : > "$toml_out"
-  if git -C "$AXON_ROOT" show "$ref:$file" > "$toml_out" 2>/dev/null; then
+  if git -C "$SJEL_ROOT" show "$ref:$file" > "$toml_out" 2>/dev/null; then
     toml_sections "$toml_out" | sort > "$sec_out"
   fi
 }
@@ -48,7 +48,7 @@ _sections_to_file() {
 print_manifest_delta() {
   local from="$1" to="$2" r
   for r in "$from" "$to"; do
-    if ! git -C "$AXON_ROOT" rev-parse --verify --quiet "$r^{commit}" >/dev/null 2>&1; then
+    if ! git -C "$SJEL_ROOT" rev-parse --verify --quiet "$r^{commit}" >/dev/null 2>&1; then
       echo "  (delta unavailable — ref '$r' not found; fetch first?)"
       return 0
     fi
@@ -115,7 +115,7 @@ EOF
   # --- commits: capped, with an explicit remainder count (no silent truncation, README.md#documentation-stays-owned-and-current) ---
   echo "Commits ($from..$to):"
   local log n cap=15
-  log="$(git -C "$AXON_ROOT" log --oneline "$from..$to" 2>/dev/null || true)"
+  log="$(git -C "$SJEL_ROOT" log --oneline "$from..$to" 2>/dev/null || true)"
   if [ -n "$log" ]; then
     n="$(printf '%s\n' "$log" | wc -l | tr -d ' ')"
     printf '%s\n' "$log" | head -"$cap" | sed 's/^/  /'

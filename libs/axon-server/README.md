@@ -1,7 +1,7 @@
 # axon-server
 
 The one way a capability server comes up: `resolve_port` (re-exported from
-`axon-config`: `AXON_PORT` from the runner first, capability escape hatch second, config
+`axon-config`: `SJEL_PORT` from the runner first, capability escape hatch second, config
 third, shipped default last), a loopback-only bind, **the inbound authentication gate**,
 uniform startup logging, and a named single-line exit on bind failure instead of a panic
 backtrace.
@@ -37,7 +37,7 @@ phone loads the built SPA and issues relative fetches; giving that page the toke
 shipping the deployment's secret into a bundle and every cache that touches it. So the
 phone gets in on an identity instead.
 
-`<overlay>/config/deployment.env` declares `AXON_TAILNET_OPERATOR=<login>` — a **value**,
+`<overlay>/config/deployment.env` declares `SJEL_TAILNET_OPERATOR=<login>` — a **value**,
 not a file reference, because a login is not a credential. It appears in the tailnet admin
 console, in `tailscale status`, and in the header of every request that arrives.
 
@@ -68,7 +68,7 @@ exactly that shape, and on funnel being on at all (PRD N3).
 
 ### Token sourcing: one token for the deployment
 
-`<overlay>/config/deployment.env` declares `AXON_INBOUND_TOKEN_FILE=<path>` and the token
+`<overlay>/config/deployment.env` declares `SJEL_INBOUND_TOKEN_FILE=<path>` and the token
 is that private file's contents (`schemas/deployment.env.example`). A reference, not a
 value, following the pattern comms established for `api_secret_file` — a path is not a
 secret, which is why it may live in a tracked-shape file.
@@ -129,7 +129,7 @@ into trips), and a browser always sends one on a cross-origin request.
 | | |
 |---|---|
 | Allowed by default | `localhost`, `127.0.0.1`, `[::1]`, any `*.ts.net` host |
-| Env var | `AXON_<CAPABILITY>_ALLOWED_ORIGIN_HOSTS` — comma-separated exact hosts, which **replaces** the `.ts.net` suffix and closes the Tailscale Funnel gap |
+| Env var | `SJEL_<CAPABILITY>_ALLOWED_ORIGIN_HOSTS` — comma-separated exact hosts, which **replaces** the `.ts.net` suffix and closes the Tailscale Funnel gap |
 | Applied by | `places` (the companion register, README D4 / ISA PLC-7) and, since 2026-09-05, `trips` (the plan-search body carries the operator's feasible windows and a companion hint; its router had ended in `CorsLayer::permissive()`, which made every route above it readable cross-origin) |
 
 ```rust

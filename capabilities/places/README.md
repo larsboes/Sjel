@@ -30,8 +30,8 @@ with a table prefix per capability in one SQLite file
 (`libs/axon-store/README.md`). places reads `finance_*`, `trips_*` and `transit_*`
 read-only and owns writes only under its own `places` prefix.
 
-The five tables live in the shared file — `AXON_DB_PATH`, else
-`$AXON_PERSONAL_ROOT/data/axon/axon.db` — as `places_places`,
+The five tables live in the shared file — `SJEL_DB_PATH`, else
+`$SJEL_PERSONAL_ROOT/data/axon/axon.db` — as `places_places`,
 `places_geocode_cache`, `places_transaction_places`, `places_person_places` and
 `places_climate_normals`.
 

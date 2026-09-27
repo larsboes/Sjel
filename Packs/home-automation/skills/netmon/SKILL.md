@@ -14,7 +14,7 @@ Network visibility from wherever you run it — especially after isolating IoT o
 ## Configuration
 
 Non-secret config lives in the committed axon-overlay overlay (`config/home-assistant.vars`,
-resolved via `$AXON_HOME_ROOT`, falling back to the active deployment overlay). The one secret comes from
+resolved via `$SJEL_HOME_ROOT`, falling back to the active deployment overlay). The one secret comes from
 Bitwarden at runtime.
 
 | What | Source | Default |

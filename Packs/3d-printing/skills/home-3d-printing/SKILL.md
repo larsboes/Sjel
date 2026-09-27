@@ -8,12 +8,12 @@ allowed-tools: Read, Bash
 
 Drive the printer through **`$PC`** (printctl) — the source of truth; this skill is the runbook. Physical hardware that heats and moves: safety gates are not optional, and no step may route around them.
 
-**This setup is not hardcoded.** Printer host, model, nozzle, material and safety caps all live in `$AXON_PERSONAL_ROOT/config/printing.json` and are surfaced (and, when the printer is on, live-discovered) by `$PC doctor`. **Run `$PC doctor` first** and read the real values off it — never assume a printer model or temp from this document.
+**This setup is not hardcoded.** Printer host, model, nozzle, material and safety caps all live in `$SJEL_PERSONAL_ROOT/config/printing.json` and are surfaced (and, when the printer is on, live-discovered) by `$PC doctor`. **Run `$PC doctor` first** and read the real values off it — never assume a printer model or temp from this document.
 
 ## Variables
 | var | value | notes |
 |-----|-------|-------|
-| `$PC` | `scripts/printctl` | launcher → `$AXON_ROOT/capabilities/printing/printctl.py` (runs via uv) |
+| `$PC` | `scripts/printctl` | launcher → `$SJEL_ROOT/capabilities/printing/printctl.py` (runs via uv) |
 | `$HOST` `$MODEL` `$MATERIAL` `$NOZZLE_MAX` `$BED_MAX` | *(from config)* | host, printer model, loaded filament, hard temp caps — all read from the overlay config; `$PC doctor` prints them. Never inline them here. |
 | `$STL` | — | model to slice (`.stl`/`.3mf`) |
 | `$GCODE` | `${STL%.*}.gcode` | slice output, sits next to `$STL` |
@@ -49,11 +49,11 @@ Drive the printer through **`$PC`** (printctl) — the source of truth; this ski
 `$PC status` (json) · `$PC files` · `$PC pause` · `$PC resume $FN` · `$PC cancel` · `$PC estop`. Ad-hoc Moonraker beyond printctl → `references/moonraker-api.md`.
 
 ## Strength parts (mounts, brackets under load)
-Strength process preset, `$WALLS` walls, `$INFILL`, `$MATERIAL` (PETG/ASA, not PLA), orient so layer lines are **not** parallel to the pull force, brim on small parts. Worked example (personal): `$AXON_PERSONAL_ROOT/documents/vanmoof-s3-phone-mount-3d-print.md`.
+Strength process preset, `$WALLS` walls, `$INFILL`, `$MATERIAL` (PETG/ASA, not PLA), orient so layer lines are **not** parallel to the pull force, brim on small parts. Worked example (personal): `$SJEL_PERSONAL_ROOT/documents/vanmoof-s3-phone-mount-3d-print.md`.
 
 ## Provenance and maintenance
-Verified 2026-07-09: printer at `$HOST` (overlay config), OrcaSlicer 2.4.2, `$PC` → `$AXON_ROOT/capabilities/printing/printctl.py`. Re-verify on drift:
+Verified 2026-07-09: printer at `$HOST` (overlay config), OrcaSlicer 2.4.2, `$PC` → `$SJEL_ROOT/capabilities/printing/printctl.py`. Re-verify on drift:
 - reachable + config: `$PC doctor`
 - safety gates intact: `$PC selftest` (must end `ALL PASS ✓`)
-- printctl path: `test -f "$AXON_ROOT/capabilities/printing/printctl.py" && echo ok`
+- printctl path: `test -f "$SJEL_ROOT/capabilities/printing/printctl.py" && echo ok`
 - OrcaSlicer preset limitation is a standing constraint, not a bug → `references/setup.md` §3.

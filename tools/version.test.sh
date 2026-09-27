@@ -68,7 +68,7 @@ _g commit -m "after the release"
 # The kind of tag that caused this: a marker parked on the same line, not a release.
 _g tag archive/dev-pre-public
 
-AXON_ROOT="$_fixture"; export AXON_ROOT
+SJEL_ROOT="$_fixture"; export SJEL_ROOT
 
 # `check` runs a command, and `case` is a keyword — so the pattern tests get real predicates.
 starts_with() { case "$2" in "$1"*) return 0 ;; *) return 1 ;; esac; }

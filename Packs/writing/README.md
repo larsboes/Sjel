@@ -45,11 +45,11 @@ so nothing changed about what loads.
 
 ## Activate
 ```bash
-"$AXON_ROOT/tools/packs.sh" link writing
+"$SJEL_ROOT/tools/packs.sh" link writing
 # → ~/.claude/skills/{human-writing,academic-writing,unslop,skill-creator}
 # → ~/.claude/agents/writing/ (the 8 Claude-Code-native subagents)
-"$AXON_ROOT/tools/packs-codex" deploy writing  # → ~/.agents/skills/… (skills only; agents skipped)
-"$AXON_ROOT/tools/packs-pi" deploy writing     # → registered in ~/.pi/agent/settings.json
+"$SJEL_ROOT/tools/packs-codex" deploy writing  # → ~/.agents/skills/… (skills only; agents skipped)
+"$SJEL_ROOT/tools/packs-pi" deploy writing     # → registered in ~/.pi/agent/settings.json
 ```
 
 `retired_skills = ["writing-skills"]` in `pack.toml` is what removes the superseded copy an

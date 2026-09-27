@@ -42,13 +42,13 @@ the server already writes on every verdict. This is the copy you can take by
 hand when the server is down.
 
 Environment:
-  AXON_DB_PATH                   the shared SQLite file
-  AXON_PERSONAL_ROOT             the overlay, where config/finance.json lives
-  AXON_FINANCE_DECISIONS_ROOT    where the month files are written (default: the overlay)
-  AXON_FINANCE_OBSIDIAN_ROOT     the vault this capability projects into
+  SJEL_DB_PATH                   the shared SQLite file
+  SJEL_PERSONAL_ROOT             the overlay, where config/finance.json lives
+  SJEL_FINANCE_DECISIONS_ROOT    where the month files are written (default: the overlay)
+  SJEL_FINANCE_OBSIDIAN_ROOT     the vault this capability projects into
 
 A verification run should set the last two to a scratch directory. Neither is
-isolated by AXON_DB_PATH: the exports and the vault projection are files, and
+isolated by SJEL_DB_PATH: the exports and the vault projection are files, and
 they land wherever the configuration points.";
 
 fn main() {
@@ -94,7 +94,7 @@ fn store_and_config() -> Result<(FinanceStore, Config), String> {
     Ok((store, config))
 }
 
-/// Where the month files go. `AXON_FINANCE_DECISIONS_ROOT` if set, else the
+/// Where the month files go. `SJEL_FINANCE_DECISIONS_ROOT` if set, else the
 /// overlay. The override is what lets a verification run write its exports to a
 /// scratch directory while still reading the real configuration.
 fn overlay_root() -> Option<std::path::PathBuf> {
@@ -242,7 +242,7 @@ fn run_decisions(rest: &[&str]) -> Result<bool, String> {
 /// indistinguishable from "nothing was saved" once the terminal scrolls.
 fn export_decisions(rest: &[&str]) -> Result<bool, String> {
     let overlay = overlay_root()
-        .ok_or("no overlay configured: set AXON_PERSONAL_ROOT so the copy has somewhere to live")?;
+        .ok_or("no overlay configured: set SJEL_PERSONAL_ROOT so the copy has somewhere to live")?;
     let (store, _config) = store_and_config()?;
     let written = match option(rest, "--month") {
         Some(month) => vec![finance::decision::export_month(&store, &overlay, &month)?],

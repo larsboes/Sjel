@@ -79,7 +79,7 @@ EOF
 # first draft of this file failed that way, including the ones whose line was in the report.
 REPORT="$WORK/report.txt"
 report() {
-  ( cd "$_root" && HOME="$FAKE_HOME" AXON_OVERLAY_ROOT="$OVERLAY" tools/doctor > "$REPORT" 2>&1 )
+  ( cd "$_root" && HOME="$FAKE_HOME" SJEL_OVERLAY_ROOT="$OVERLAY" tools/doctor > "$REPORT" 2>&1 )
   return 0
 }
 says() { grep -qF "$1" "$REPORT"; }

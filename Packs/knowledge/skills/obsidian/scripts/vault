@@ -38,7 +38,7 @@ def die(msg: str) -> "None":
 
 
 def overlay_root() -> Path:
-    raw = os.environ.get("AXON_OVERLAY_ROOT") or os.environ.get("AXON_PERSONAL_ROOT")
+    raw = os.environ.get("SJEL_OVERLAY_ROOT") or os.environ.get("SJEL_PERSONAL_ROOT")
     if not raw:
         # The machine already declares its overlay in axon.local.toml; read it rather
         # than making every caller export something the shell init may not have run.
@@ -49,7 +49,7 @@ def overlay_root() -> Path:
                     raw = m.group(1)
                     break
     if not raw:
-        die("overlay unresolved — set AXON_OVERLAY_ROOT or `overlay` in axon.local.toml")
+        die("overlay unresolved — set SJEL_OVERLAY_ROOT or `overlay` in axon.local.toml")
     return Path(os.path.expanduser(raw))
 
 

@@ -26,7 +26,7 @@ _here="$(cd "$(dirname "$0")" && pwd)"
 # shellcheck source=tools/lib/paths.sh
 . "$_here/lib/paths.sh"
 
-TPL="${AXON_IGNORE_TEMPLATES:-$_here/templates/overlay-ignore}"
+TPL="${SJEL_IGNORE_TEMPLATES:-$_here/templates/overlay-ignore}"
 PREAMBLE="$TPL/preamble"
 HARD_BLOCKS="$TPL/hard-blocks"
 

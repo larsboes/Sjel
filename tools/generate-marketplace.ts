@@ -25,14 +25,14 @@ import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join, resolve } from "node:path";
 import { availablePacks, type DeployConfig } from "./lib/pack-deploy.ts";
 
-const AXON_ROOT = resolve(import.meta.dir, "..");
-const OUT_ROOT = resolve(process.env.MARKETPLACE_OUT_ROOT ?? AXON_ROOT);
+const SJEL_ROOT = resolve(import.meta.dir, "..");
+const OUT_ROOT = resolve(process.env.MARKETPLACE_OUT_ROOT ?? SJEL_ROOT);
 
 // destination/stateFile are unused: this script only reads manifests, it never
 // deploys, so it needs no install target or ownership ledger.
 const config: DeployConfig = {
-  axonRoot: AXON_ROOT,
-  packRoots: [join(AXON_ROOT, "Packs")],
+  axonRoot: SJEL_ROOT,
+  packRoots: [join(SJEL_ROOT, "Packs")],
   destination: "",
   stateFile: "",
   adapter: "marketplace",
@@ -46,7 +46,7 @@ const MARKETPLACE_OWNER = { name: "Lars Boes", url: "https://github.com/larsboes
 type PackManifest = { name: string; description: string; license?: string };
 
 function readManifest(pack: string): PackManifest {
-  const path = join(AXON_ROOT, "Packs", pack, "pack.toml");
+  const path = join(SJEL_ROOT, "Packs", pack, "pack.toml");
   const parsed = Bun.TOML.parse(readFileSync(path, "utf8")) as Record<string, unknown>;
   if (typeof parsed.description !== "string" || !parsed.description) {
     throw new Error(`${path}: description must be a non-empty string`);

@@ -18,27 +18,27 @@ mkdir -p "$FIXTURE/tools/lib" "$OVERLAY" "$MOCK_BIN"
 
 cp "$ROOT/tools/host-patch.sh" "$FIXTURE/tools/host-patch.sh"
 cat > "$FIXTURE/tools/lib/paths.sh" <<PATHS
-AXON_ROOT="$FIXTURE"
-AXON_PERSONAL_ROOT="$OVERLAY"
-export AXON_ROOT AXON_PERSONAL_ROOT
+SJEL_ROOT="$FIXTURE"
+SJEL_PERSONAL_ROOT="$OVERLAY"
+export SJEL_ROOT SJEL_PERSONAL_ROOT
 PATHS
 
 # The audit is a real invocation with a controlled exit code: host-patch must report the
 # scanner's verdict, never decide it.
 cat > "$FIXTURE/tools/audit" <<'AUDIT'
 #!/bin/sh
-printf 'audit\n' >> "$AXON_TEST_CALLS"
-exit "${AXON_TEST_AUDIT_RC:-0}"
+printf 'audit\n' >> "$SJEL_TEST_CALLS"
+exit "${SJEL_TEST_AUDIT_RC:-0}"
 AUDIT
 chmod +x "$FIXTURE/tools/audit" "$FIXTURE/tools/host-patch.sh"
 
 for tool in brew uv rustup; do
   cat > "$MOCK_BIN/$tool" <<MOCK
 #!/bin/sh
-printf '$tool %s\n' "\$*" >> "\$AXON_TEST_CALLS"
+printf '$tool %s\n' "\$*" >> "\$SJEL_TEST_CALLS"
 # uv's inventory: one installed tool, so the per-tool upgrade loop has something to upgrade.
 [ "$tool \$1 \$2" = "uv tool list" ] && echo "demo-tool v1.0.0"
-case "\$AXON_TEST_FAIL_STEP" in
+case "\$SJEL_TEST_FAIL_STEP" in
   "$tool \$1 \$2"|"$tool \$1") exit 3 ;;
 esac
 exit 0
@@ -48,10 +48,10 @@ done
 
 run_patch() {  # run_patch <PATH> — exit code left in $patch_rc, output in $SCRATCH/out
   rm -f "$RECEIPT" "$CALLS"
-  env PATH="$1" AXON_HOST_PATCH_KEEP_PATH=1 \
-    AXON_TEST_CALLS="$CALLS" \
-    AXON_TEST_FAIL_STEP="${AXON_TEST_FAIL_STEP:-}" \
-    AXON_TEST_AUDIT_RC="${AXON_TEST_AUDIT_RC:-0}" \
+  env PATH="$1" SJEL_HOST_PATCH_KEEP_PATH=1 \
+    SJEL_TEST_CALLS="$CALLS" \
+    SJEL_TEST_FAIL_STEP="${SJEL_TEST_FAIL_STEP:-}" \
+    SJEL_TEST_AUDIT_RC="${SJEL_TEST_AUDIT_RC:-0}" \
     "$FIXTURE/tools/host-patch.sh" >"$SCRATCH/out" 2>&1
   patch_rc=$?
 }
@@ -63,7 +63,7 @@ receipt_field() {  # receipt_field <key> — through a real JSON parser, so a br
 
 # 1. Nothing installed. Every step is skipped, none is failed, and the run is a success —
 #    a machine without rustup is not a failed patch run.
-AXON_TEST_FAIL_STEP="" AXON_TEST_AUDIT_RC=0 run_patch "/usr/bin:/bin"
+SJEL_TEST_FAIL_STEP="" SJEL_TEST_AUDIT_RC=0 run_patch "/usr/bin:/bin"
 [ "$patch_rc" -eq 0 ] || {
   cat "$SCRATCH/out"; echo "FAIL: no upgrader installed must exit 0, got $patch_rc" >&2; exit 1; }
 for label in "brew update" "uv tool upgrade" "rustup update"; do
@@ -82,7 +82,7 @@ esac
 
 # 2. A failing brew step. The steps after it still run — a job that stops on the first broken
 #    formula patches nothing after it — and the run exits 2.
-AXON_TEST_FAIL_STEP="brew upgrade --formula" AXON_TEST_AUDIT_RC=0 run_patch "$MOCK_BIN:/usr/bin:/bin"
+SJEL_TEST_FAIL_STEP="brew upgrade --formula" SJEL_TEST_AUDIT_RC=0 run_patch "$MOCK_BIN:/usr/bin:/bin"
 [ "$patch_rc" -eq 2 ] || {
   cat "$SCRATCH/out"; echo "FAIL: a failed step must exit 2, got $patch_rc" >&2; exit 1; }
 for later in "uv tool upgrade demo-tool" "rustup update" "audit"; do
@@ -101,7 +101,7 @@ grep -F 'brew upgrade --cask --greedy' "$CALLS" >/dev/null || {
 
 # 3. The audit's verdict is reported, not decided: a finding is exit 1 and is named in the
 #    receipt, which is the field tools/doctor reads.
-AXON_TEST_FAIL_STEP="" AXON_TEST_AUDIT_RC=1 run_patch "$MOCK_BIN:/usr/bin:/bin"
+SJEL_TEST_FAIL_STEP="" SJEL_TEST_AUDIT_RC=1 run_patch "$MOCK_BIN:/usr/bin:/bin"
 [ "$patch_rc" -eq 1 ] || {
   cat "$SCRATCH/out"; echo "FAIL: an audit finding must exit 1, got $patch_rc" >&2; exit 1; }
 [ "$(receipt_field audit)" = "finding" ] || {
@@ -111,11 +111,11 @@ AXON_TEST_FAIL_STEP="" AXON_TEST_AUDIT_RC=1 run_patch "$MOCK_BIN:/usr/bin:/bin"
 #    would otherwise report a job that ran as one that never has.
 rm -f "$RECEIPT"
 cat > "$FIXTURE/tools/lib/paths.sh" <<PATHS
-AXON_ROOT="$FIXTURE"
-AXON_PERSONAL_ROOT=""
-export AXON_ROOT AXON_PERSONAL_ROOT
+SJEL_ROOT="$FIXTURE"
+SJEL_PERSONAL_ROOT=""
+export SJEL_ROOT SJEL_PERSONAL_ROOT
 PATHS
-AXON_TEST_FAIL_STEP="" AXON_TEST_AUDIT_RC=0 run_patch "$MOCK_BIN:/usr/bin:/bin"
+SJEL_TEST_FAIL_STEP="" SJEL_TEST_AUDIT_RC=0 run_patch "$MOCK_BIN:/usr/bin:/bin"
 [ "$patch_rc" -eq 0 ] || {
   cat "$SCRATCH/out"; echo "FAIL: an unconfigured overlay must not fail the patch run" >&2; exit 1; }
 grep -F 'no overlay configured' "$SCRATCH/out" >/dev/null || {

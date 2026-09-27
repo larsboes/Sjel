@@ -61,8 +61,8 @@ const HELP = `tools/self — Axon's self-model: structure, coupling, provenance,
   --against <path>             check this tree against that artifact instead of self.json
 `;
 
-const AXON_ROOT = resolve(import.meta.dir, "..");
-const SELF_JSON = `${AXON_ROOT}/self.json`;
+const SJEL_ROOT = resolve(import.meta.dir, "..");
+const SELF_JSON = `${SJEL_ROOT}/self.json`;
 
 /** The artifact's shape. Bump `schema` when a consumer would need to care. */
 interface SelfModel {
@@ -136,7 +136,7 @@ function readDeclaredServices(trackedPaths: Set<string>): Map<string, DeclaredSe
     if (!name) continue;
     let parsed: Record<string, unknown>;
     try {
-      parsed = Bun.TOML.parse(readFileSync(`${AXON_ROOT}/${path}`, "utf8")) as Record<string, unknown>;
+      parsed = Bun.TOML.parse(readFileSync(`${SJEL_ROOT}/${path}`, "utf8")) as Record<string, unknown>;
     } catch {
       continue; // A manifest that does not parse is tools/doctor's finding, not a reason to abort.
     }
@@ -154,7 +154,7 @@ function readDeclaredServices(trackedPaths: Set<string>): Map<string, DeclaredSe
 }
 
 function readUpstreams(): SelfModel["upstreams"] {
-  const text = readText(`${AXON_ROOT}/upstreams.toml`);
+  const text = readText(`${SJEL_ROOT}/upstreams.toml`);
   if (!text) return [];
   const parsed = Bun.TOML.parse(text) as Record<string, { verdict?: string }>;
   return Object.entries(parsed)
@@ -171,13 +171,13 @@ function readUpstreams(): SelfModel["upstreams"] {
  */
 function readCoupling(): SourceCoupling[] {
   const proc = Bun.spawnSync({
-    cmd: ["git", "-C", AXON_ROOT, "ls-files", "*.rs", "Cargo.toml", "*/Cargo.toml"],
+    cmd: ["git", "-C", SJEL_ROOT, "ls-files", "*.rs", "Cargo.toml", "*/Cargo.toml"],
     stdout: "pipe",
   });
   const files = proc.stdout.toString().split("\n").filter(Boolean);
   const edges: SourceCoupling[] = [];
   for (const file of files) {
-    const text = readText(`${AXON_ROOT}/${file}`);
+    const text = readText(`${SJEL_ROOT}/${file}`);
     if (text === null) continue;
     if (file.endsWith(".rs")) edges.push(...couplingFromRustPath(file, text));
     if (file.endsWith("Cargo.toml")) edges.push(...couplingFromCargo(file, text));
@@ -188,7 +188,7 @@ function readCoupling(): SourceCoupling[] {
 /** Public-safe graph input boundary: only Git-tracked paths may become internal metadata. */
 function readTrackedPaths(): Set<string> {
   const proc = Bun.spawnSync({
-    cmd: ["git", "-C", AXON_ROOT, "ls-files", "-z"],
+    cmd: ["git", "-C", SJEL_ROOT, "ls-files", "-z"],
     stdout: "pipe",
   });
   if (proc.exitCode !== 0) return new Set();
@@ -196,15 +196,15 @@ function readTrackedPaths(): Set<string> {
 }
 
 function build(): SelfModel {
-  // AXON_SELF_GRAPH is a test seam, and it exists because the obvious way to test the
+  // SJEL_SELF_GRAPH is a test seam, and it exists because the obvious way to test the
   // stale-graph refusal is to plant a graph — and on this machine graphify-out/ holds a
   // real 13,747-node graph that took a run to build. A test that wrote there to prove a
   // refusal would destroy the thing it was protecting.
-  const graphText = readText(process.env.AXON_SELF_GRAPH || `${AXON_ROOT}/graphify-out/graph.json`);
+  const graphText = readText(process.env.SJEL_SELF_GRAPH || `${SJEL_ROOT}/graphify-out/graph.json`);
   const trackedPaths = readTrackedPaths();
   const declaredServices = readDeclaredServices(trackedPaths);
   const tracked = (p: string) => trackedPaths.has(p);
-  const exists = (p: string) => existsSync(`${AXON_ROOT}/${p}`);
+  const exists = (p: string) => existsSync(`${SJEL_ROOT}/${p}`);
 
   let rollupUnits: Array<{ name: string; kind: string; files: number; nodes: number }> = [];
   let graph: SelfModel["graph"] = { present: false, nodes: 0, external: 0, stale: [], unmatched: [] };
@@ -231,7 +231,7 @@ function build(): SelfModel {
   const kindByUnit = new Map<string, string>();
   const addDirs = (parent: string, kind: string) => {
     try {
-      for (const name of readdirSync(`${AXON_ROOT}/${parent}`, { withFileTypes: true })) {
+      for (const name of readdirSync(`${SJEL_ROOT}/${parent}`, { withFileTypes: true })) {
         if (name.isDirectory()) kindByUnit.set(name.name, kind);
       }
     } catch {
@@ -242,7 +242,7 @@ function build(): SelfModel {
   addDirs("libs", "lib");
   addDirs("Packs", "pack");
   for (const spine of ["dashboard", "tools", "schemas"]) {
-    if (existsSync(`${AXON_ROOT}/${spine}`)) kindByUnit.set(spine, "spine");
+    if (existsSync(`${SJEL_ROOT}/${spine}`)) kindByUnit.set(spine, "spine");
   }
 
   const codeByUnit = new Map(rollupUnits.map((u) => [u.name, u]));
@@ -307,13 +307,13 @@ type SelfUnitLike = Omit<SelfModel["units"][number], "code">;
 /** Open issues per unit, joined on the `<unit>:` title prefix the tracker already uses. */
 function openIssuesByUnit(): { counts: Map<string, number>; unmatched: number } | null {
   // No --repo: gh resolves it from this checkout's remote, the same way the
-  // `git -C AXON_ROOT` calls above resolve theirs. It was hardcoded to one
+  // `git -C SJEL_ROOT` calls above resolve theirs. It was hardcoded to one
   // owner/name, which is a deployment fact in public code and would have gone
   // on querying that name after a rename — answering from whatever repository
   // happened to hold it rather than from this one.
   const proc = Bun.spawnSync({
     cmd: ["gh", "issue", "list", "--state", "open", "--limit", "200", "--json", "title"],
-    cwd: AXON_ROOT,
+    cwd: SJEL_ROOT,
     stdout: "pipe",
     stderr: "pipe",
   });

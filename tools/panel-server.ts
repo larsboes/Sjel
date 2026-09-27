@@ -15,15 +15,15 @@
 // free by being served here. That is the whole reason the injection exists; without it
 // the reaper would kill a page mid-read.
 //
-// usage: bun tools/panel-server.ts <dist-dir>       # dir relative to AXON_ROOT, or absolute
-// env:   AXON_PORT   the port to bind (exported by tools/service-runner.sh from the manifest)
+// usage: bun tools/panel-server.ts <dist-dir>       # dir relative to SJEL_ROOT, or absolute
+// env:   SJEL_PORT   the port to bind (exported by tools/service-runner.sh from the manifest)
 
 import { existsSync, statSync } from "node:fs";
 import { isAbsolute, join, normalize, resolve, sep } from "node:path";
 
 const HEARTBEAT_INTERVAL_MS = 30_000;
 
-const axonRoot = process.env.AXON_ROOT ?? process.cwd();
+const axonRoot = process.env.SJEL_ROOT ?? process.cwd();
 const arg = process.argv[2];
 if (!arg) {
   console.error("panel-server.ts: needs the directory to serve — usage: bun tools/panel-server.ts <dist-dir>");
@@ -35,9 +35,9 @@ if (!existsSync(join(root, "index.html"))) {
   process.exit(1);
 }
 
-const port = Number(process.env.AXON_PORT ?? 0);
+const port = Number(process.env.SJEL_PORT ?? 0);
 if (!Number.isInteger(port) || port <= 0) {
-  console.error(`panel-server.ts: AXON_PORT must be a port number, got ${JSON.stringify(process.env.AXON_PORT)}`);
+  console.error(`panel-server.ts: SJEL_PORT must be a port number, got ${JSON.stringify(process.env.SJEL_PORT)}`);
   process.exit(1);
 }
 
@@ -102,7 +102,7 @@ const HEARTBEAT = `<script>
  * panelUrl documents from the other direction. No env var means no link rather than a
  * guessed one, so a panel started by hand is simply linkless.
  */
-const shellPort = process.env.AXON_SHELL_PORT ?? "";
+const shellPort = process.env.SJEL_SHELL_PORT ?? "";
 const BACKLINK = /^\d+$/.test(shellPort)
   ? `<a id="axon-back" href="#" title="Back to Axon">← Axon</a>
 <style>

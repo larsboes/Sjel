@@ -1,6 +1,6 @@
 //! Shared config resolution for Axon's Rust capabilities. Public crate, Axon
 //! doctrine: no personal value lives here — everything personal comes from the
-//! private overlay at runtime via `AXON_PERSONAL_ROOT`.
+//! private overlay at runtime via `SJEL_PERSONAL_ROOT`.
 //!
 //! Why a shared crate now: transit/config.rs once argued "duplicated rather than
 //! forcing a shared crate for ~15 lines across two standalone crates" — right at
@@ -27,11 +27,11 @@ pub fn expand_tilde(p: &str) -> PathBuf {
     PathBuf::from(p)
 }
 
-/// The private overlay's root (`AXON_PERSONAL_ROOT`, exported by
+/// The private overlay's root (`SJEL_PERSONAL_ROOT`, exported by
 /// `tools/lib/paths.sh` / the shell), tilde-expanded. `None` when unset —
 /// callers degrade to their dev fallback, never guess a location.
 pub fn overlay_root() -> Option<PathBuf> {
-    std::env::var("AXON_PERSONAL_ROOT")
+    crate::env_var("SJEL_PERSONAL_ROOT")
         .ok()
         .map(|p| expand_tilde(&p))
 }
@@ -48,7 +48,7 @@ pub fn overlay_data_dir(capability: &str) -> Option<PathBuf> {
 
 /// Where the one shared SQLite file lives (PRD Q45, 2026-08-27).
 ///
-/// `AXON_DB_PATH` > `<overlay>/data/axon/axon.db` > a scratch file. Resolved the
+/// `SJEL_DB_PATH` > `<overlay>/data/axon/axon.db` > a scratch file. Resolved the
 /// same way the Postgres DSN was — env first, then the overlay — so moving a
 /// deployment is still one variable.
 ///
@@ -65,7 +65,7 @@ pub fn overlay_data_dir(capability: &str) -> Option<PathBuf> {
 /// Nothing is created here; `axon_store::pool_for` makes the directory when a
 /// caller actually opens the file.
 pub fn database_path() -> PathBuf {
-    if let Some(explicit) = std::env::var("AXON_DB_PATH")
+    if let Some(explicit) = crate::env_var("SJEL_DB_PATH")
         .ok()
         .filter(|value| !value.trim().is_empty())
     {
@@ -117,7 +117,7 @@ pub fn resolve_home_timezone(
     }
 }
 
-/// The runner's port contract, one implementation: `AXON_PORT` (exported by
+/// The runner's port contract, one implementation: `SJEL_PORT` (exported by
 /// `tools/service-runner.sh` from the manifest plus any machine-local
 /// `[capability.<name>]` override) always wins; a capability-specific escape
 /// hatch (e.g. `TRANSIT_PORT`) applies when running outside the runner; then
@@ -126,7 +126,7 @@ pub fn resolve_home_timezone(
 /// poll target the override — the scouting/vaultwarden 8080 collision class.
 pub fn resolve_port(fallback_env: Option<&str>, file_port: Option<u16>, default: u16) -> u16 {
     let parse = |v: String| v.parse::<u16>().ok();
-    std::env::var("AXON_PORT")
+    crate::env_var("SJEL_PORT")
         .ok()
         .and_then(parse)
         .or_else(|| {
@@ -143,7 +143,7 @@ mod tests {
     use super::*;
 
     /// One lock for every env-touching test: cargo runs tests as parallel threads
-    /// of one process, and HOME / AXON_PERSONAL_ROOT / AXON_PORT are process-global.
+    /// of one process, and HOME / SJEL_PERSONAL_ROOT / SJEL_PORT are process-global.
     /// EnvGuard restores values, but only a lock stops two tests interleaving.
     static ENV_LOCK: std::sync::Mutex<()> = std::sync::Mutex::new(());
 
@@ -155,26 +155,37 @@ mod tests {
 
     /// Restores an env var on drop. Rust runs a crate's tests as threads of ONE
     /// process, so a bare `set_var`/`remove_var` leaks into sibling tests.
-    struct EnvGuard(&'static str, Option<String>);
+    struct EnvGuard(Vec<(String, Option<String>)>);
 
     impl EnvGuard {
         fn set(key: &'static str, value: &str) -> Self {
             let previous = std::env::var(key).ok();
             std::env::set_var(key, value);
-            Self(key, previous)
+            Self(vec![(key.to_string(), previous)])
         }
+        /// Clears the setting under its Sjel name and its pre-rename Axon name, so a value
+        /// the operator's shell still exports under the old name cannot stand in for it.
         fn take(key: &'static str) -> Self {
-            let previous = std::env::var(key).ok();
-            std::env::remove_var(key);
-            Self(key, previous)
+            let names = std::iter::once(key.to_string()).chain(crate::env::legacy_name(key));
+            Self(
+                names
+                    .map(|name| {
+                        let previous = std::env::var(&name).ok();
+                        std::env::remove_var(&name);
+                        (name, previous)
+                    })
+                    .collect(),
+            )
         }
     }
 
     impl Drop for EnvGuard {
         fn drop(&mut self) {
-            match self.1.take() {
-                Some(v) => std::env::set_var(self.0, v),
-                None => std::env::remove_var(self.0),
+            for (name, previous) in self.0.drain(..).rev() {
+                match previous {
+                    Some(value) => std::env::set_var(&name, value),
+                    None => std::env::remove_var(&name),
+                }
             }
         }
     }
@@ -191,7 +202,7 @@ mod tests {
     #[test]
     fn overlay_paths_derive_from_the_env_root() {
         let _env = env_lock();
-        let _o = EnvGuard::set("AXON_PERSONAL_ROOT", "/tmp/fake-overlay");
+        let _o = EnvGuard::set("SJEL_PERSONAL_ROOT", "/tmp/fake-overlay");
         assert_eq!(
             overlay_config("postgres.env").unwrap(),
             PathBuf::from("/tmp/fake-overlay/config/postgres.env")
@@ -208,17 +219,17 @@ mod tests {
     #[test]
     fn the_database_path_is_env_then_overlay_then_scratch() {
         let _env = env_lock();
-        let _explicit = EnvGuard::set("AXON_DB_PATH", "/tmp/somewhere/else.db");
+        let _explicit = EnvGuard::set("SJEL_DB_PATH", "/tmp/somewhere/else.db");
         assert_eq!(database_path(), PathBuf::from("/tmp/somewhere/else.db"));
 
-        let _blank = EnvGuard::set("AXON_DB_PATH", "  ");
-        let _o = EnvGuard::set("AXON_PERSONAL_ROOT", "/tmp/fake-overlay");
+        let _blank = EnvGuard::set("SJEL_DB_PATH", "  ");
+        let _o = EnvGuard::set("SJEL_PERSONAL_ROOT", "/tmp/fake-overlay");
         assert_eq!(
             database_path(),
             PathBuf::from("/tmp/fake-overlay/data/axon/axon.db")
         );
 
-        let _none = EnvGuard::take("AXON_PERSONAL_ROOT");
+        let _none = EnvGuard::take("SJEL_PERSONAL_ROOT");
         let scratch = database_path();
         assert!(
             scratch.starts_with(std::env::temp_dir()),
@@ -230,37 +241,37 @@ mod tests {
     #[test]
     fn overlay_absent_means_none_not_a_guess() {
         let _env = env_lock();
-        let _o = EnvGuard::take("AXON_PERSONAL_ROOT");
+        let _o = EnvGuard::take("SJEL_PERSONAL_ROOT");
         assert!(overlay_root().is_none());
     }
 
     #[test]
     fn port_resolution_order_is_axon_port_then_fallback_then_file_then_default() {
         let _env = env_lock();
-        let _a = EnvGuard::take("AXON_PORT");
-        let _f = EnvGuard::take("AXON_CONFIG_TEST_PORT");
+        let _a = EnvGuard::take("SJEL_PORT");
+        let _f = EnvGuard::take("SJEL_CONFIG_TEST_PORT");
         assert_eq!(
-            resolve_port(Some("AXON_CONFIG_TEST_PORT"), Some(9000), 8000),
+            resolve_port(Some("SJEL_CONFIG_TEST_PORT"), Some(9000), 8000),
             9000
         );
         assert_eq!(
-            resolve_port(Some("AXON_CONFIG_TEST_PORT"), None, 8000),
+            resolve_port(Some("SJEL_CONFIG_TEST_PORT"), None, 8000),
             8000
         );
-        let _f2 = EnvGuard::set("AXON_CONFIG_TEST_PORT", "9100");
+        let _f2 = EnvGuard::set("SJEL_CONFIG_TEST_PORT", "9100");
         assert_eq!(
-            resolve_port(Some("AXON_CONFIG_TEST_PORT"), Some(9000), 8000),
+            resolve_port(Some("SJEL_CONFIG_TEST_PORT"), Some(9000), 8000),
             9100
         );
-        let _a2 = EnvGuard::set("AXON_PORT", "9200");
+        let _a2 = EnvGuard::set("SJEL_PORT", "9200");
         assert_eq!(
-            resolve_port(Some("AXON_CONFIG_TEST_PORT"), Some(9000), 8000),
+            resolve_port(Some("SJEL_CONFIG_TEST_PORT"), Some(9000), 8000),
             9200
         );
     }
 
     /// Writes a deployment.env into a throwaway overlay and points
-    /// AXON_PERSONAL_ROOT at it. Returns the guard so the caller holds it.
+    /// SJEL_PERSONAL_ROOT at it. Returns the guard so the caller holds it.
     fn with_deployment_env(body: Option<&str>) -> (EnvGuard, std::path::PathBuf) {
         let root = std::env::temp_dir().join(format!(
             "axon-config-tz-{}-{:?}",
@@ -276,14 +287,14 @@ mod tests {
                 let _ = std::fs::remove_file(&file);
             }
         }
-        let guard = EnvGuard::set("AXON_PERSONAL_ROOT", root.to_str().unwrap());
+        let guard = EnvGuard::set("SJEL_PERSONAL_ROOT", root.to_str().unwrap());
         (guard, root)
     }
 
     #[test]
     fn the_deployment_declaration_is_used_when_a_capability_has_none() {
         let _l = env_lock();
-        let (_g, root) = with_deployment_env(Some("AXON_HOME_TIMEZONE=Europe/Berlin\n"));
+        let (_g, root) = with_deployment_env(Some("SJEL_HOME_TIMEZONE=Europe/Berlin\n"));
         assert_eq!(deployment_home_timezone().as_deref(), Some("Europe/Berlin"));
         assert_eq!(
             resolve_home_timezone(None, "calendar.json")
@@ -311,7 +322,7 @@ mod tests {
     #[test]
     fn two_different_values_are_an_error_naming_both_sources() {
         let _l = env_lock();
-        let (_g, root) = with_deployment_env(Some("AXON_HOME_TIMEZONE=Europe/Berlin\n"));
+        let (_g, root) = with_deployment_env(Some("SJEL_HOME_TIMEZONE=Europe/Berlin\n"));
         let error = resolve_home_timezone(Some("UTC"), "scouting.json").unwrap_err();
         assert!(error.contains("scouting.json"), "got: {error}");
         assert!(error.contains("deployment.env"), "got: {error}");

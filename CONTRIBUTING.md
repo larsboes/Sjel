@@ -86,16 +86,16 @@ tools/check-architecture-fresh.sh
 
 Do not describe a skipped or unavailable check as passing.
 
-**`AXON_DB_PATH` isolates the database and nothing else.** It does not isolate a vault
+**`SJEL_DB_PATH` isolates the database and nothing else.** It does not isolate a vault
 projection. `capabilities/trips`' `project_after_write` runs as a router layer after any
 successful non-GET request and takes its root from the overlay config, which that variable
 never touches — so a live check on 2026-09-05 that redirected only the database passed every
 assertion while re-exporting thirteen real plan notes into the operator's Obsidian vault and
 creating a fourteenth. `finance` and `comms` project too. Before running a server against a
-copy, export every projection root as well: `AXON_TRIPS_OBSIDIAN_ROOT`,
-`AXON_FINANCE_OBSIDIAN_ROOT`, `AXON_FINANCE_DECISIONS_ROOT`, and a scratch `AXON_COMMS_CONFIG`
+copy, export every projection root as well: `SJEL_TRIPS_OBSIDIAN_ROOT`,
+`SJEL_FINANCE_OBSIDIAN_ROOT`, `SJEL_FINANCE_DECISIONS_ROOT`, and a scratch `SJEL_COMMS_CONFIG`
 (comms resolves its config file from that variable, so a scratch file is what redirects it).
-Overriding `AXON_PERSONAL_ROOT` instead is not the fix: it redirects the config *read* too, so
+Overriding `SJEL_PERSONAL_ROOT` instead is not the fix: it redirects the config *read* too, so
 the run tests a configuration nobody is operating.
 
 **Do not `cargo build --release` in a worktree that shares the repository's `target/`.** That

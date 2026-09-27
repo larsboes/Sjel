@@ -122,23 +122,23 @@ finance-cli prices status                   # what is fresh and what is not
 
 ## Verifying it without writing into anything real
 
-`AXON_DB_PATH` isolates the database and **nothing else** — the repo-wide rule and its
+`SJEL_DB_PATH` isolates the database and **nothing else** — the repo-wide rule and its
 cost are in `CONTRIBUTING.md`. Two of this capability's outputs are files whose location
 comes from configuration, so they land in the real overlay and the real vault whatever
 the database path says:
 
 | what | where it goes | how to redirect it |
 | --- | --- | --- |
-| the decision ledger's month files | `<overlay>/data/finance/decisions/` | `AXON_FINANCE_DECISIONS_ROOT` |
-| the subscriptions projection | the configured vault | `AXON_FINANCE_OBSIDIAN_ROOT` |
+| the decision ledger's month files | `<overlay>/data/finance/decisions/` | `SJEL_FINANCE_DECISIONS_ROOT` |
+| the subscriptions projection | the configured vault | `SJEL_FINANCE_OBSIDIAN_ROOT` |
 
-`AXON_FINANCE_DECISIONS_ROOT` exists so the write can be redirected without
-redirecting the config read: pointing `AXON_PERSONAL_ROOT` at a scratch directory
+`SJEL_FINANCE_DECISIONS_ROOT` exists so the write can be redirected without
+redirecting the config read: pointing `SJEL_PERSONAL_ROOT` at a scratch directory
 does both, so a verification run either writes into the owner's overlay or runs
 against a configuration that is not theirs.
 
 ```
-export AXON_DB_PATH=/tmp/scratch.db
-export AXON_FINANCE_DECISIONS_ROOT=/tmp/scratch-exports
-export AXON_FINANCE_OBSIDIAN_ROOT=/tmp/scratch-vault
+export SJEL_DB_PATH=/tmp/scratch.db
+export SJEL_FINANCE_DECISIONS_ROOT=/tmp/scratch-exports
+export SJEL_FINANCE_OBSIDIAN_ROOT=/tmp/scratch-vault
 ```

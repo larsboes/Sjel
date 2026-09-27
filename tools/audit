@@ -23,7 +23,7 @@ set -u
 
 _here="$(cd "$(dirname "$0")" && pwd)"
 # shellcheck source=tools/lib/paths.sh
-. "$_here/lib/paths.sh"   # AXON_ROOT, AXON_PERSONAL_ROOT
+. "$_here/lib/paths.sh"   # SJEL_ROOT, SJEL_PERSONAL_ROOT
 
 case "${1:-}" in
   "")        ;;
@@ -65,8 +65,8 @@ else
       fail=1
     fi
   }
-  scan_git_history "Axon" "$AXON_ROOT"
-  scan_git_history "private overlay" "${AXON_PERSONAL_ROOT:-}"
+  scan_git_history "Axon" "$SJEL_ROOT"
+  scan_git_history "private overlay" "${SJEL_PERSONAL_ROOT:-}"
 fi
 
 # ---- osv-scanner: dependency CVEs over every lockfile in the repo ----
@@ -82,13 +82,13 @@ else
   # (README.md#scratch-is-not-documentation): pre-git scratch holding whole vendored projects,
   # not Axon's code. bazel-* stays listed after PRD Q44 retired Bazel — the symlinks it left
   # still point at multi-gigabyte trees on existing checkouts.
-  args="scan source -r --config $AXON_ROOT/osv-scanner.toml"
+  args="scan source -r --config $SJEL_ROOT/osv-scanner.toml"
   for d in target bazel-bin bazel-out bazel-testlogs node_modules to-integrate; do
     args="$args --experimental-exclude $d"
   done
   # osv-scanner enforces osv-scanner.toml's ignoreUntil dates itself and names a lapsed entry
   # under "unused ignores", which is why Axon carries no clock of its own any more.
-  osv-scanner $args "$AXON_ROOT"
+  osv-scanner $args "$SJEL_ROOT"
   rc=$?
   case "$rc" in
     0) echo "  ✓ clean" ;;

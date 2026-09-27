@@ -123,7 +123,7 @@ jobs:
       #
       # No exclusions. toolchain-scope.test.sh was excluded here from 2026-08-26 to 2026-09-07
       # as "only ever green inside the Bazel sandbox". It was not: the sandbox scrubbed the
-      # AXON_* environment, and the measurement that justified the exclusion was taken on a
+      # SJEL_* environment, and the measurement that justified the exclusion was taken on a
       # machine whose shell exports it, so the suite read the operator's overlay instead of its
       # own fixtures. It now calls isolate_axon_env like the other scratch-root suites and
       # passes in both places (PRD defect D7).

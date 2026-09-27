@@ -42,7 +42,7 @@ git clone --quiet "file://$REMOTE" "$WORK/dev" 2>/dev/null
 git clone --quiet --depth 1 --branch v0.0.1 "file://$REMOTE" "$WORK/usage" 2>/dev/null
 
 # No overlay anywhere: the state a fresh clone is in before tools/install.sh runs.
-export AXON_OVERLAY_ROOT="$WORK/absent-overlay"
+export SJEL_OVERLAY_ROOT="$WORK/absent-overlay"
 
 run_check() { # run_check <checkout> -> stdout+stderr, interleaved on purpose
   ( cd "$1" && ./tools/update.sh --check 2>&1 )

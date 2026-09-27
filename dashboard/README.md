@@ -213,7 +213,7 @@ manifests as JSON, and two consumers read it:
   `dashboard`. Direct clients and `axon-clip` authenticate themselves.
 
   The other capabilities are proxied unauthenticated, which is correct only while they
-  are loopback-only. A deployment that declares `AXON_INBOUND_TOKEN_FILE` gates them
+  are loopback-only. A deployment that declares `SJEL_INBOUND_TOKEN_FILE` gates them
   too, and this proxy does not yet inject that token — the wiring belongs with
   `tailscale serve`, which is what makes the token necessary in the first place.
 - `axon-status` serves the same registry plus live health at
@@ -295,7 +295,7 @@ every way to connect side by side, each with its pros and cons (`src/lib/MacConn
 
 | Option | How | State |
 |---|---|---|
-| Same Wi-Fi | The shell's TLS listener (`AXON_LAN_PORT`), found with Bonjour (`plugins/local-network`); the person compares a 16-character code, then the app pins the certificate | Built |
+| Same Wi-Fi | The shell's TLS listener (`SJEL_LAN_PORT`), found with Bonjour (`plugins/local-network`); the person compares a 16-character code, then the app pins the certificate | Built |
 | Tailscale | `https://<name>.ts.net`, as before | Built |
 | Your server or hosted | Any `https` address with a real certificate | Built on the phone; a hosted node is a deployment, not app code |
 | iCloud | Encrypted records in the private CloudKit database (PRD Q120) | Not built |
@@ -513,7 +513,7 @@ lives in Rust (`libs/pseudonymize`, PRD Q112), where a cloud call would be made.
 ### Installed as an app
 
 `static/manifest.webmanifest` makes the shell installable on iOS and Android. Its
-`start_url`, `scope` and icon paths are relative, so the demo build under `AXON_DEMO_BASE`
+`start_url`, `scope` and icon paths are relative, so the demo build under `SJEL_DEMO_BASE`
 installs from its subdirectory too. The 180, 192 and 512 px PNGs were rendered from
 `favicon.svg` with ImageMagick 7 (`magick -density 1536 favicon.svg -resize 192x192`); the
 180 px touch icon is flattened onto the tile colour because iOS fills transparency with black.

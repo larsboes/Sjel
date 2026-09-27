@@ -12,9 +12,9 @@
 # — which overlay, which capabilities, which harness — stays in the repository, where it is
 # reviewable and tested. This file is the part that cannot be, so it stays trivial.
 #
-#   AXON_REF=v1.2.3      clone that tag instead of the newest release
-#   AXON_DIR=~/src/Axon  clone here instead of ./Axon
-#   AXON_PROFILE=usage   answer the profile question up front (usage | development)
+#   SJEL_REF=v1.2.3      clone that tag instead of the newest release
+#   SJEL_DIR=~/src/Axon  clone here instead of ./Axon
+#   SJEL_PROFILE=usage   answer the profile question up front (usage | development)
 #
 # bash 3.2-safe.
 #
@@ -23,10 +23,10 @@
 # running one — the failure mode that makes piping a URL into a shell worth doing carefully.
 set -euo pipefail
 
-AXON_REPO="${AXON_REPO:-larsboes/Sjel}"
-# Split from AXON_REPO so the clone URL has one home. Overridable so bootstrap.test.sh can
+SJEL_REPO="${SJEL_REPO:-larsboes/Sjel}"
+# Split from SJEL_REPO so the clone URL has one home. Overridable so bootstrap.test.sh can
 # point both profiles at a scratch remote and exercise the real cloning rather than a mock.
-AXON_REMOTE="${AXON_REMOTE:-https://github.com/$AXON_REPO.git}"
+SJEL_REMOTE="${SJEL_REMOTE:-https://github.com/$SJEL_REPO.git}"
 
 say()  { printf '%s\n' "$*"; }
 die()  { printf 'bootstrap: %s\n' "$*" >&2; exit 1; }
@@ -40,9 +40,9 @@ require_git() {
 # The newest release tag, asked of the API rather than embedded here. Embedding it would make
 # this file a second home for the version and something to remember at every release.
 resolve_ref() {
-  if [ -n "${AXON_REF:-}" ]; then printf '%s' "$AXON_REF"; return 0; fi
-  command -v curl >/dev/null 2>&1 || die "curl is required to resolve the newest release (or set AXON_REF)."
-  curl -fsSL "https://api.github.com/repos/$AXON_REPO/releases/latest" 2>/dev/null \
+  if [ -n "${SJEL_REF:-}" ]; then printf '%s' "$SJEL_REF"; return 0; fi
+  command -v curl >/dev/null 2>&1 || die "curl is required to resolve the newest release (or set SJEL_REF)."
+  curl -fsSL "https://api.github.com/repos/$SJEL_REPO/releases/latest" 2>/dev/null \
     | sed -n 's/.*"tag_name"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p' \
     | head -1
 }
@@ -50,7 +50,7 @@ resolve_ref() {
 # usage = a pinned tag you run; development = the full history you change. The difference is
 # only the clone; both land in the same tools/install.sh.
 ask_profile() {
-  if [ -n "${AXON_PROFILE:-}" ]; then printf '%s' "$AXON_PROFILE"; return 0; fi
+  if [ -n "${SJEL_PROFILE:-}" ]; then printf '%s' "$SJEL_PROFILE"; return 0; fi
   # Piped into bash, stdin is the script itself — so the prompt reads the terminal directly.
   # Without a terminal there is nothing to ask, and usage is the safe default to assume.
   if [ ! -r /dev/tty ]; then printf 'usage'; return 0; fi
@@ -69,14 +69,14 @@ ask_profile() {
 
 clone_axon() { # clone_axon <profile> <ref> <dir>
   local profile="$1" ref="$2" dir="$3"
-  [ -e "$dir" ] && die "$dir already exists — remove it or set AXON_DIR to somewhere else."
+  [ -e "$dir" ] && die "$dir already exists — remove it or set SJEL_DIR to somewhere else."
   if [ "$profile" = "development" ]; then
-    say "Cloning $AXON_REPO (development: full history) into $dir"
-    git clone --quiet "$AXON_REMOTE" "$dir"
+    say "Cloning $SJEL_REPO (development: full history) into $dir"
+    git clone --quiet "$SJEL_REMOTE" "$dir"
     git -C "$dir" checkout --quiet "$ref"
   else
-    say "Cloning $AXON_REPO at $ref (usage: shallow) into $dir"
-    git clone --quiet --depth 1 --branch "$ref" "$AXON_REMOTE" "$dir"
+    say "Cloning $SJEL_REPO at $ref (usage: shallow) into $dir"
+    git clone --quiet --depth 1 --branch "$ref" "$SJEL_REMOTE" "$dir"
   fi
 }
 
@@ -85,8 +85,8 @@ main() {
 
   local ref profile dir
   ref="$(resolve_ref)"
-  [ -n "$ref" ] || die "could not resolve the newest release of $AXON_REPO — set AXON_REF to a tag."
-  dir="${AXON_DIR:-$PWD/Axon}"
+  [ -n "$ref" ] || die "could not resolve the newest release of $SJEL_REPO — set SJEL_REF to a tag."
+  dir="${SJEL_DIR:-$PWD/Axon}"
   profile="$(ask_profile)"
   case "$profile" in
     usage|development) ;;

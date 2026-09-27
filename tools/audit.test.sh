@@ -30,15 +30,15 @@ git -C "$PRIMARY" worktree add -q -b audit-linked "$LINKED"
 
 cp "$ROOT/tools/audit" "$AUDIT_FIXTURE/tools/audit"
 cat > "$AUDIT_FIXTURE/tools/lib/paths.sh" <<'PATHS'
-AXON_ROOT="$AXON_AUDIT_TEST_ROOT"
-AXON_PERSONAL_ROOT="${AXON_AUDIT_TEST_OVERLAY:-}"
-export AXON_ROOT AXON_PERSONAL_ROOT
+SJEL_ROOT="$SJEL_AUDIT_TEST_ROOT"
+SJEL_PERSONAL_ROOT="${SJEL_AUDIT_TEST_OVERLAY:-}"
+export SJEL_ROOT SJEL_PERSONAL_ROOT
 PATHS
 
 cat > "$MOCK_BIN/gitleaks" <<'MOCK'
 #!/bin/sh
-printf '%s\n' "$*" >> "$AXON_AUDIT_GITLEAKS_LOG"
-exit "${AXON_AUDIT_GITLEAKS_RC:-0}"
+printf '%s\n' "$*" >> "$SJEL_AUDIT_GITLEAKS_LOG"
+exit "${SJEL_AUDIT_GITLEAKS_RC:-0}"
 MOCK
 cat > "$MOCK_BIN/osv-scanner" <<'MOCK'
 #!/bin/sh
@@ -49,10 +49,10 @@ chmod +x "$MOCK_BIN/gitleaks" "$MOCK_BIN/osv-scanner" \
   "$GITLEAKS_ONLY_BIN/gitleaks" "$AUDIT_FIXTURE/tools/audit"
 
 run_gitleaks_audit() {
-  AXON_AUDIT_GITLEAKS_LOG="$GITLEAKS_LOG" \
-  AXON_AUDIT_TEST_ROOT="$PRIMARY" \
-  AXON_AUDIT_TEST_OVERLAY="$1" \
-  AXON_AUDIT_GITLEAKS_RC="${2:-0}" \
+  SJEL_AUDIT_GITLEAKS_LOG="$GITLEAKS_LOG" \
+  SJEL_AUDIT_TEST_ROOT="$PRIMARY" \
+  SJEL_AUDIT_TEST_OVERLAY="$1" \
+  SJEL_AUDIT_GITLEAKS_RC="${2:-0}" \
   PATH="$MOCK_BIN:$PATH" \
     "$AUDIT_FIXTURE/tools/audit"
 }
@@ -136,7 +136,7 @@ grep -F 'Axon — gitleaks errored (exit 2' "$SCRATCH/error.out" >/dev/null || {
 # fell into the finding branch, so this Mac reported fabricated security findings on every
 # run — a gate that cries wolf over an absent binary is worse than no gate.
 
-env PATH="/usr/bin:/bin" AXON_AUDIT_TEST_ROOT="$PRIMARY" \
+env PATH="/usr/bin:/bin" SJEL_AUDIT_TEST_ROOT="$PRIMARY" \
   "$AUDIT_FIXTURE/tools/audit" >"$SCRATCH/nobin.out" 2>&1
 nobin_rc=$?
 [ "$nobin_rc" -eq 2 ] || {
@@ -158,9 +158,9 @@ fi
 # Otherwise a leak would be reported under the exit code that means "nothing was scanned".
 : > "$GITLEAKS_LOG"
 env PATH="$GITLEAKS_ONLY_BIN:/usr/bin:/bin" \
-  AXON_AUDIT_GITLEAKS_LOG="$GITLEAKS_LOG" \
-  AXON_AUDIT_GITLEAKS_RC=1 \
-  AXON_AUDIT_TEST_ROOT="$PRIMARY" \
+  SJEL_AUDIT_GITLEAKS_LOG="$GITLEAKS_LOG" \
+  SJEL_AUDIT_GITLEAKS_RC=1 \
+  SJEL_AUDIT_TEST_ROOT="$PRIMARY" \
   "$AUDIT_FIXTURE/tools/audit" >"$SCRATCH/both.out" 2>&1
 both_rc=$?
 [ "$both_rc" -eq 1 ] || {

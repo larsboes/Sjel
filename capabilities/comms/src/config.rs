@@ -1,7 +1,7 @@
 //! Public config. No personal value lives here -- it comes from the private
 //! overlay at runtime. Resolution order mirrors scouting's config.rs:
-//!   1. `$AXON_COMMS_CONFIG` (explicit override, full path to a JSON file)
-//!   2. `$AXON_PERSONAL_ROOT/config/comms.json` (the overlay)
+//!   1. `$SJEL_COMMS_CONFIG` (explicit override, full path to a JSON file)
+//!   2. `$SJEL_PERSONAL_ROOT/config/comms.json` (the overlay)
 //!   3. `capabilities/comms/comms.config.json` next to this source
 //!      (local, gitignored -- dev fallback)
 //!
@@ -287,15 +287,15 @@ impl Default for MailModelConfig {
 #[derive(Debug, Clone)]
 pub struct Config {
     /// The one shared SQLite file, under the table prefix `comms` (PRD Q45).
-    /// Resolved by `axon_config::database_path`: `AXON_DB_PATH`, else
+    /// Resolved by `axon_config::database_path`: `SJEL_DB_PATH`, else
     /// `<overlay>/data/axon/axon.db`. A deployment fact, not a capability one:
     /// a file per capability would drop the cross-capability joins the shared
-    /// instance existed for, so `AXON_COMMS_DATABASE_URL` and a `database_url`
+    /// instance existed for, so `SJEL_COMMS_DATABASE_URL` and a `database_url`
     /// in `comms.json` are both gone.
     pub database_path: PathBuf,
     /// Path to the `KEY=value` env file holding GOOGLE_CLIENT_ID /
     /// GOOGLE_CLIENT_SECRET / GOOGLE_REFRESH_TOKEN. Default
-    /// `$AXON_PERSONAL_ROOT/config/comms.env`.
+    /// `$SJEL_PERSONAL_ROOT/config/comms.env`.
     pub google_env_path: PathBuf,
     /// HTTP port for `comms-server`.
     pub port: u16,
@@ -389,7 +389,7 @@ pub(crate) use axon_config::expand_tilde;
 ///
 /// The reader itself moved to `libs/axon-server` when the inbound gate did:
 /// both this file and `<overlay>/config/deployment.env`'s
-/// `AXON_INBOUND_TOKEN_FILE` name a file holding the same kind of value, and two
+/// `SJEL_INBOUND_TOKEN_FILE` name a file holding the same kind of value, and two
 /// readers of one shape is the drift the move removes.
 pub(crate) fn api_key_from_file(path: Option<&str>) -> Option<String> {
     axon_server::token_from_file(&expand_tilde(path?))
@@ -406,7 +406,7 @@ fn parse_quiet_hours(value: &str) -> Option<(u32, u32)> {
 }
 
 fn config_path() -> PathBuf {
-    if let Ok(p) = std::env::var("AXON_COMMS_CONFIG") {
+    if let Ok(p) = axon_config::env_var("SJEL_COMMS_CONFIG") {
         return expand_tilde(&p);
     }
     if let Some(p) = axon_config::overlay_config("comms.json") {
@@ -693,9 +693,9 @@ mod tests {
         // Cleared first: with the host's overlay vars in scope, the path both
         // sides resolve is the deployed axon.db. No test may name the live
         // store, even to compare a `PathBuf`.
-        let _config = EnvGuard::take("AXON_COMMS_CONFIG");
-        let _overlay = EnvGuard::take("AXON_PERSONAL_ROOT");
-        let _explicit = EnvGuard::take("AXON_DB_PATH");
+        let _config = EnvGuard::take("SJEL_COMMS_CONFIG");
+        let _overlay = EnvGuard::take("SJEL_PERSONAL_ROOT");
+        let _explicit = EnvGuard::take("SJEL_DB_PATH");
         assert_eq!(Config::load().database_path, axon_config::database_path());
     }
 
@@ -710,29 +710,40 @@ mod tests {
     /// left every later store test resolving the fallback connection string
     /// instead of the overlay's real one, and eight of them failed against a
     /// perfectly healthy Postgres.
-    struct EnvGuard(&'static str, Option<String>);
+    struct EnvGuard(Vec<(String, Option<String>)>);
 
     impl EnvGuard {
+        /// Clears the setting under its Sjel name and its pre-rename Axon name, so a value
+        /// the operator's shell still exports under the old name cannot stand in for it.
         fn take(key: &'static str) -> Self {
-            let previous = std::env::var(key).ok();
-            std::env::remove_var(key);
-            Self(key, previous)
+            let names = std::iter::once(key.to_string()).chain(axon_config::env::legacy_name(key));
+            Self(
+                names
+                    .map(|name| {
+                        let previous = std::env::var(&name).ok();
+                        std::env::remove_var(&name);
+                        (name, previous)
+                    })
+                    .collect(),
+            )
         }
     }
 
     impl Drop for EnvGuard {
         fn drop(&mut self) {
-            match self.1.take() {
-                Some(v) => std::env::set_var(self.0, v),
-                None => std::env::remove_var(self.0),
+            for (name, previous) in self.0.drain(..).rev() {
+                match previous {
+                    Some(value) => std::env::set_var(&name, value),
+                    None => std::env::remove_var(&name),
+                }
             }
         }
     }
 
     #[test]
     fn load_with_no_env_and_no_file_uses_defaults() {
-        let _config = EnvGuard::take("AXON_COMMS_CONFIG");
-        let _overlay = EnvGuard::take("AXON_PERSONAL_ROOT");
+        let _config = EnvGuard::take("SJEL_COMMS_CONFIG");
+        let _overlay = EnvGuard::take("SJEL_PERSONAL_ROOT");
         let cfg = Config::load();
         assert_eq!(cfg.port, 8083);
         assert!(cfg.rules.is_empty());

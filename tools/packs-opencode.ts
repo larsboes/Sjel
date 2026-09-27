@@ -17,7 +17,7 @@ import {
 import { existsSync, readFileSync } from "node:fs";
 import { join, resolve } from "node:path";
 
-const AXON_ROOT = resolve(import.meta.dir, "..");
+const SJEL_ROOT = resolve(import.meta.dir, "..");
 const home = process.env.HOME ?? "";
 
 function expandHome(path: string): string {
@@ -25,8 +25,8 @@ function expandHome(path: string): string {
 }
 
 function overlayRoot(): string | null {
-  if (process.env.AXON_OVERLAY_ROOT) return expandHome(process.env.AXON_OVERLAY_ROOT);
-  for (const file of [join(AXON_ROOT, "axon.local.toml"), join(AXON_ROOT, "axon.toml")]) {
+  if (process.env.SJEL_OVERLAY_ROOT) return expandHome(process.env.SJEL_OVERLAY_ROOT);
+  for (const file of [join(SJEL_ROOT, "axon.local.toml"), join(SJEL_ROOT, "axon.toml")]) {
     if (!existsSync(file)) continue;
     const overlay = (Bun.TOML.parse(readFileSync(file, "utf8")) as Record<string, unknown>).overlay;
     if (typeof overlay === "string" && overlay) return expandHome(overlay);
@@ -35,18 +35,18 @@ function overlayRoot(): string | null {
 }
 
 export function defaultOpencodeDeployConfig(): DeployConfig {
-  const roots = [join(AXON_ROOT, "Packs")];
+  const roots = [join(SJEL_ROOT, "Packs")];
   const overlay = overlayRoot();
   if (overlay && existsSync(join(overlay, "Packs"))) roots.push(join(overlay, "Packs"));
   const base = defaultCodexDeployConfig();
   const stateHome = process.env.XDG_STATE_HOME ?? join(home, ".local", "state");
   return {
     ...base,
-    axonRoot: AXON_ROOT,
+    axonRoot: SJEL_ROOT,
     packRoots: roots,
     destination: resolve(process.env.OPENCODE_SKILLS_DIR ?? join(home, ".config", "opencode", "skills")),
     stateFile: resolve(
-      process.env.AXON_OPENCODE_PACKS_STATE_FILE ?? join(stateHome, "axon", "pack-deployments", "opencode-packs.json"),
+      process.env.SJEL_OPENCODE_PACKS_STATE_FILE ?? join(stateHome, "axon", "pack-deployments", "opencode-packs.json"),
     ),
     adapter: "opencode",
   };

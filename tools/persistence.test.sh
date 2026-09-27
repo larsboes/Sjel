@@ -31,7 +31,7 @@ done
 [ -n "$SRC_TOOLS" ] || { echo "persistence: cannot find service-runner.sh next to $_dir" >&2; exit 1; }
 
 # Before the scratch root exists, and for the same reason the launchctl stubs above exist: an
-# operator's exported AXON_OVERLAY_ROOT outranks this sandbox's own axon.toml inside paths.sh, so
+# operator's exported SJEL_OVERLAY_ROOT outranks this sandbox's own axon.toml inside paths.sh, so
 # every `os = "linux"` case here read the author's real macOS machine.toml and every env-block
 # assertion read the author's real declarations. 14 checks failed locally and none in CI, which is
 # exactly the shape a test cannot warn you about (tools/lib/test-support.sh#isolate_axon_env).
@@ -62,11 +62,11 @@ mkdir -p "$STUB_BIN"; : > "$STUB_STATE"
 cat > "$STUB_BIN/launchctl" <<'STUB'
 #!/bin/bash
 case "${1:-}" in
-  list)   cat "$AXON_TEST_STUB_STATE" ;;
-  load)   printf '%s\t0\t%s\n' "$$" "$(basename "${2:-}" .plist)" >> "$AXON_TEST_STUB_STATE" ;;
+  list)   cat "$SJEL_TEST_STUB_STATE" ;;
+  load)   printf '%s\t0\t%s\n' "$$" "$(basename "${2:-}" .plist)" >> "$SJEL_TEST_STUB_STATE" ;;
   unload) label="$(basename "${2:-}" .plist)"
-          grep -v "$label\$" "$AXON_TEST_STUB_STATE" > "$AXON_TEST_STUB_STATE.new" || true
-          mv "$AXON_TEST_STUB_STATE.new" "$AXON_TEST_STUB_STATE" ;;
+          grep -v "$label\$" "$SJEL_TEST_STUB_STATE" > "$SJEL_TEST_STUB_STATE.new" || true
+          mv "$SJEL_TEST_STUB_STATE.new" "$SJEL_TEST_STUB_STATE" ;;
 esac
 exit 0
 STUB
@@ -74,17 +74,17 @@ cat > "$STUB_BIN/systemctl" <<'STUB'
 #!/bin/bash
 args="$*"
 case "$args" in
-  *is-active*)   unit="${args##* }"; grep -q "^${unit}$" "$AXON_TEST_STUB_STATE" && exit 0 || exit 1 ;;
-  *enable*)      unit="${args##* }"; echo "$unit" >> "$AXON_TEST_STUB_STATE" ;;
+  *is-active*)   unit="${args##* }"; grep -q "^${unit}$" "$SJEL_TEST_STUB_STATE" && exit 0 || exit 1 ;;
+  *enable*)      unit="${args##* }"; echo "$unit" >> "$SJEL_TEST_STUB_STATE" ;;
   *disable*)     unit="${args##* }"
-                 grep -v "^${unit}$" "$AXON_TEST_STUB_STATE" > "$AXON_TEST_STUB_STATE.new" || true
-                 mv "$AXON_TEST_STUB_STATE.new" "$AXON_TEST_STUB_STATE" ;;
+                 grep -v "^${unit}$" "$SJEL_TEST_STUB_STATE" > "$SJEL_TEST_STUB_STATE.new" || true
+                 mv "$SJEL_TEST_STUB_STATE.new" "$SJEL_TEST_STUB_STATE" ;;
 esac
 exit 0
 STUB
 printf '#!/bin/bash\necho "Linger=yes"\n' > "$STUB_BIN/loginctl"
 chmod +x "$STUB_BIN"/launchctl "$STUB_BIN"/systemctl "$STUB_BIN"/loginctl
-export AXON_TEST_STUB_STATE="$STUB_STATE"
+export SJEL_TEST_STUB_STATE="$STUB_STATE"
 PATH="$STUB_BIN:$PATH"; export PATH
 
 # Four capabilities, one per state the issue names. `always` is the interesting one; the rest fix

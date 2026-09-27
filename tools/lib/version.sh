@@ -48,7 +48,7 @@ command -v toml_get_in >/dev/null 2>&1 || . "$(cd "$(dirname "${BASH_SOURCE[0]:-
 # default would restore exactly the one-home problem this exists to remove.
 release_tag_glob() {
   local g
-  g="$(toml_get_in release tag_glob "${AXON_ROOT:?AXON_ROOT unset}/axon.toml")"
+  g="$(toml_get_in release tag_glob "${SJEL_ROOT:?SJEL_ROOT unset}/axon.toml")"
   [ -n "$g" ] || { echo "version.sh: axon.toml has no [release] tag_glob" >&2; return 1; }
   printf '%s' "$g"
 }
@@ -61,8 +61,8 @@ describe_release() {
   local rev="${1:-}" glob
   glob="$(release_tag_glob)" || return 1
   if [ -n "$rev" ]; then
-    git -C "$AXON_ROOT" describe --tags --always --match "$glob" "$rev" 2>/dev/null
+    git -C "$SJEL_ROOT" describe --tags --always --match "$glob" "$rev" 2>/dev/null
   else
-    git -C "$AXON_ROOT" describe --tags --always --dirty --match "$glob" 2>/dev/null
+    git -C "$SJEL_ROOT" describe --tags --always --dirty --match "$glob" 2>/dev/null
   fi
 }

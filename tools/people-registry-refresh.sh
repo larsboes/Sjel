@@ -20,13 +20,13 @@ source "$TOOLS_DIR/lib/paths.sh"
 
 # CARGO_TARGET_DIR is honoured because a relocated target dir is how build output is kept
 # out of the checkout; see tools/storage/storage, which has done this since it replaced the
-# TypeScript. A bare $AXON_ROOT/target silently looked in the wrong place once it was set.
-_TARGET_DIR="${CARGO_TARGET_DIR:-$AXON_ROOT/target}"
+# TypeScript. A bare $SJEL_ROOT/target silently looked in the wrong place once it was set.
+_TARGET_DIR="${CARGO_TARGET_DIR:-$SJEL_ROOT/target}"
 BIN="$_TARGET_DIR/debug/vault"
 [ -x "$BIN" ] || BIN="$_TARGET_DIR/release/vault"
 [ -x "$BIN" ] || { echo "vault binary not built: cargo build -p vault" >&2; exit 1; }
 
-OUT_DIR="$AXON_PERSONAL_ROOT/data/vault"
+OUT_DIR="$SJEL_PERSONAL_ROOT/data/vault"
 OUT="$OUT_DIR/people-registry.json"
 mkdir -p "$OUT_DIR"
 

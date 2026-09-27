@@ -22,8 +22,8 @@ import { existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, 
 import { join, resolve } from "node:path";
 import { tmpdir } from "node:os";
 
-const AXON_ROOT = resolve(import.meta.dir, "..");
-const CLI = join(AXON_ROOT, "tools", "packs-pi.ts");
+const SJEL_ROOT = resolve(import.meta.dir, "..");
+const CLI = join(SJEL_ROOT, "tools", "packs-pi.ts");
 
 let root: string;
 let env: Record<string, string>;
@@ -53,7 +53,7 @@ function pi(...args: string[]): { out: string; code: number } {
  * is added is testing the number, not the deployment.
  */
 function deliberationAgentCount(): number {
-  return readdirSync(join(AXON_ROOT, "Packs", "deliberation", "agents")).filter((f) => f.endsWith(".md")).length;
+  return readdirSync(join(SJEL_ROOT, "Packs", "deliberation", "agents")).filter((f) => f.endsWith(".md")).length;
 }
 
 /**
@@ -62,7 +62,7 @@ function deliberationAgentCount(): number {
  * lands is testing the number, not the deployment. The manifest is also what the deployer reads.
  */
 function deliberationSkillCount(): number {
-  const manifest = readFileSync(join(AXON_ROOT, "Packs", "deliberation", "pack.toml"), "utf8");
+  const manifest = readFileSync(join(SJEL_ROOT, "Packs", "deliberation", "pack.toml"), "utf8");
   const parsed = Bun.TOML.parse(manifest) as { skills?: string[] };
   return parsed.skills?.length ?? 0;
 }
@@ -71,13 +71,13 @@ beforeEach(() => {
   root = mkdtempSync(join(tmpdir(), "axon-packs-pi-test-"));
   const p = paths();
   env = {
-    // PI_SETTINGS_FILE, not AXON_PI_SETTINGS_FILE: that is what packs-pi.ts reads, and
+    // PI_SETTINGS_FILE, not SJEL_PI_SETTINGS_FILE: that is what packs-pi.ts reads, and
     // getting it wrong means every run edits the operator's real ~/.pi/agent/settings.json.
     // A first pass of this file did exactly that, which is why the name is called out here.
     PI_SETTINGS_FILE: p.settings,
-    AXON_PI_STATE_FILE: p.state,
-    AXON_PI_AGENTS_STATE_FILE: p.agentsState,
-    AXON_PI_AGENTS_DIR: p.agents,
+    SJEL_PI_STATE_FILE: p.state,
+    SJEL_PI_AGENTS_STATE_FILE: p.agentsState,
+    SJEL_PI_AGENTS_DIR: p.agents,
   };
   writeFileSync(p.settings, "{}\n");
 });
@@ -185,9 +185,9 @@ describe("the vendored pi package channel", () => {
    * list, not the wiring.
    */
   function vendoredPackages(): string[] {
-    return readdirSync(join(AXON_ROOT, "Packs", "harness", "pi-packages"), { withFileTypes: true })
+    return readdirSync(join(SJEL_ROOT, "Packs", "harness", "pi-packages"), { withFileTypes: true })
       .filter((entry) => entry.isDirectory())
-      .map((entry) => join(AXON_ROOT, "Packs", "harness", "pi-packages", entry.name))
+      .map((entry) => join(SJEL_ROOT, "Packs", "harness", "pi-packages", entry.name))
       .sort();
   }
 
@@ -249,7 +249,7 @@ describe("a registry entry pointing at nothing", () => {
   // moved between roots, left its path in settings.json forever. On 2026-09-11 three of
   // twenty-seven entries were dead. These cases pin the prune AND its boundary, because
   // "remove anything that does not exist" would also delete an operator's own skills.
-  const packRoot = join(AXON_ROOT, "Packs");
+  const packRoot = join(SJEL_ROOT, "Packs");
 
   test("a dead path under a Pack root is pruned, live ones survive", () => {
     pi("deploy", "deliberation");

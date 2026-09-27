@@ -57,7 +57,7 @@ tools/service-runner.sh start knowledge-graph   # :4244
 Directly, for development:
 
 ```bash
-bun capabilities/knowledge-graph/server.ts   # serve on AXON_PORT (default 4244)
+bun capabilities/knowledge-graph/server.ts   # serve on SJEL_PORT (default 4244)
 ```
 
 It starts on demand: opening a unit on the dashboard's self-model page asks

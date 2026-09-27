@@ -9,15 +9,15 @@ umask 077
 TOOLS_DIR="$(cd "$(dirname "${BASH_SOURCE[0]:-$0}")" && pwd)"
 source "$TOOLS_DIR/lib/paths.sh"
 source "$TOOLS_DIR/lib/external-ref.sh"
-PRIVATE_ROOT="${AXON_INFERENCE_KEY_OVERLAY:-$AXON_PERSONAL_ROOT}"
-if [ "$PRIVATE_ROOT" != "$AXON_OVERLAY_ROOT" ]; then
+PRIVATE_ROOT="${SJEL_INFERENCE_KEY_OVERLAY:-$SJEL_PERSONAL_ROOT}"
+if [ "$PRIVATE_ROOT" != "$SJEL_OVERLAY_ROOT" ]; then
   # An overlay override has to redirect EVERY overlay read, not only the ones this file makes
-  # by hand. external-ref.sh resolves the reference through AXON_OVERLAY_ROOT and
-  # AXON_MACHINE_TOML; leaving those pointed at the real overlay would answer with two
+  # by hand. external-ref.sh resolves the reference through SJEL_OVERLAY_ROOT and
+  # SJEL_MACHINE_TOML; leaving those pointed at the real overlay would answer with two
   # machines' facts mixed together — the scratch overlay's vaultwarden.env and the live
   # machine's provider declaration.
-  AXON_OVERLAY_ROOT="$PRIVATE_ROOT"
-  AXON_MACHINE_TOML="$PRIVATE_ROOT/config/machine.toml"
+  SJEL_OVERLAY_ROOT="$PRIVATE_ROOT"
+  SJEL_MACHINE_TOML="$PRIVATE_ROOT/config/machine.toml"
 fi
 
 usage() {
@@ -72,7 +72,7 @@ if [ "$REF_RC" -eq 2 ]; then
 fi
 if [ "$REF_RC" -ne 0 ]; then
   echo "materialize-inference-key: no Vaultwarden declared for this machine." >&2
-  echo "  Declare the vault your bw CLI uses in $AXON_MACHINE_TOML:" >&2
+  echo "  Declare the vault your bw CLI uses in $SJEL_MACHINE_TOML:" >&2
   echo "    [capability.vaultwarden]" >&2
   echo "    provided_by = \"<id>\"      # an id with a url in config/systems.local.toml" >&2
   echo "  or configure the vaultwarden capability if this machine hosts it." >&2

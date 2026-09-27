@@ -108,7 +108,7 @@ twenty-four:
 
 **Foreign origins are refused.** Since 2026-09-05 (PRD Q91) every route here answers 403 to a
 browser whose `Origin` is not one the dashboard is served from, using the shared predicate in
-`libs/axon-server/src/origin.rs` (set `AXON_TRIPS_ALLOWED_ORIGIN_HOSTS` to name the
+`libs/axon-server/src/origin.rs` (set `SJEL_TRIPS_ALLOWED_ORIGIN_HOSTS` to name the
 deployment's hosts). The reason is the plan-search body: it carries the operator's feasible
 calendar windows and a companion hint, and `CorsLayer::permissive()` made every route above
 it readable by any page open in the operator's browser. It also closes an older leak —
@@ -231,8 +231,8 @@ the defect — a traveler name is still in a response body this capability has n
 class column for. This contract declines to amplify it and does not pretend to
 have closed it.
 
-Rows live in the shared SQLite file — `AXON_DB_PATH`, else
-`$AXON_PERSONAL_ROOT/data/axon/axon.db` — under the table prefix `trips`, so the three
+Rows live in the shared SQLite file — `SJEL_DB_PATH`, else
+`$SJEL_PERSONAL_ROOT/data/axon/axon.db` — under the table prefix `trips`, so the three
 tables are `trips_plans`, `trips_plan_items` and `trips_retrospectives`
 (libs/axon-store/README.md). `trips_retrospectives` is one row per plan —
 `plan_id` is the PRIMARY KEY, so a second POST is a correction rather than a
@@ -251,7 +251,7 @@ are declared there rather than written past it. `revision` is declared optional:
 required would have retroactively invalidated the twelve `option_set` rows already in the live
 database and every row the 12-hourly fare watcher writes.
 
-Obsidian scanning is enabled by `$AXON_PERSONAL_ROOT/config/trips.json`, shaped like
+Obsidian scanning is enabled by `$SJEL_PERSONAL_ROOT/config/trips.json`, shaped like
 [`schemas/trips.json.example`](../../schemas/trips.json.example). The scanner stays inside
 that configured root and considers only Markdown notes with `category: trip`. Scanning is
 read-only. Import is explicit, idempotent by vault-relative path and requires a chosen

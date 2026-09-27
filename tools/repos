@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Thin launcher: version-identity logic lives in repos.ts. TypeScript runs through bun
-# (README.md#language-tooling). paths.sh is what supplies AXON_ROOT and the overlay location, so
+# (README.md#language-tooling). paths.sh is what supplies SJEL_ROOT and the overlay location, so
 # the TS side never learns to find either. Mirrors tools/self and tools/doctor.
 set -euo pipefail
 _here="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"

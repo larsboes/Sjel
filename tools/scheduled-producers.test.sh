@@ -105,7 +105,7 @@ chmod +x "$FAKE_BIN/launchctl"
 REPORT="$WORK/report.txt"
 # To a file, never down a pipe: `doctor | grep -q` returns 141 under `set -o pipefail`, because
 # grep exits at the first match and the SIGPIPE upstream becomes the pipeline's status.
-( cd "$_root" && HOME="$FAKE_HOME" AXON_OVERLAY_ROOT="$OVERLAY" PATH="$FAKE_BIN:$PATH" tools/doctor \
+( cd "$_root" && HOME="$FAKE_HOME" SJEL_OVERLAY_ROOT="$OVERLAY" PATH="$FAKE_BIN:$PATH" tools/doctor \
     > "$REPORT" 2>&1 )
 says() { grep -qF "$1" "$REPORT"; }
 
@@ -146,7 +146,7 @@ says "finance-prices — no unit installed" \
 # A Linux machine's timers are systemd's, which this does not read yet. Saying so is the point:
 # "nothing to check" must never render as "checked fine".
 sed -i.bak 's/^os = "macos"$/os = "linux"/' "$OVERLAY/config/machine.toml"
-( cd "$_root" && HOME="$FAKE_HOME" AXON_OVERLAY_ROOT="$OVERLAY" PATH="$FAKE_BIN:$PATH" tools/doctor \
+( cd "$_root" && HOME="$FAKE_HOME" SJEL_OVERLAY_ROOT="$OVERLAY" PATH="$FAKE_BIN:$PATH" tools/doctor \
     > "$REPORT" 2>&1 )
 says "systemd timers are not covered yet" \
   || fail "on a host this section does not cover it said nothing at all"

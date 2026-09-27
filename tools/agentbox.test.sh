@@ -27,7 +27,7 @@ trap 'rm -rf "$SCRATCH"' EXIT
 ROOT="$SCRATCH/axon"
 OVERLAY="$SCRATCH/overlay"
 
-# An operator's exported AXON_OVERLAY_ROOT / AXON_MACHINE_TOML wins over the scratch axon.toml,
+# An operator's exported SJEL_OVERLAY_ROOT / SJEL_MACHINE_TOML wins over the scratch axon.toml,
 # so without this the launcher reads the REAL machine and the fixture is inert
 # (tools/lib/test-support.sh#isolate_axon_env).
 source "$SRC_ROOT/tools/lib/test-support.sh"

@@ -36,7 +36,7 @@ const AMEX_COUNTRY_COLUMN: &str = "Land";
 /// Where transit's suggest surface answers (`capabilities/transit/service.toml`
 /// port 3000, `GET /api/suggest`). Overridable for tests and odd deployments.
 pub fn transit_url() -> String {
-    std::env::var("AXON_PLACES_TRANSIT_URL")
+    axon_config::env_var("SJEL_PLACES_TRANSIT_URL")
         .ok()
         .filter(|value| !value.trim().is_empty())
         .unwrap_or_else(|| "http://127.0.0.1:3000".to_string())
@@ -211,7 +211,7 @@ pub fn amex_profile_from(config: &Value) -> Fallible<AmexProfile> {
 
 fn load_amex_profile() -> Fallible<AmexProfile> {
     let path = axon_config::overlay_config("finance.json")
-        .ok_or("AXON_PERSONAL_ROOT is not set; the raw exports live in the private overlay")?;
+        .ok_or("SJEL_PERSONAL_ROOT is not set; the raw exports live in the private overlay")?;
     let body = std::fs::read_to_string(&path)
         .map_err(|error| format!("could not read {}: {error}", path.display()))?;
     amex_profile_from(&serde_json::from_str(&body)?)
@@ -219,7 +219,7 @@ fn load_amex_profile() -> Fallible<AmexProfile> {
 
 fn raw_import_dir() -> Fallible<PathBuf> {
     let dir = axon_config::overlay_root()
-        .ok_or("AXON_PERSONAL_ROOT is not set; the raw exports live in the private overlay")?
+        .ok_or("SJEL_PERSONAL_ROOT is not set; the raw exports live in the private overlay")?
         .join("data/finance/import/raw");
     if !dir.is_dir() {
         return Err(format!("raw import directory {} does not exist", dir.display()).into());
@@ -1221,27 +1221,27 @@ pub fn resolve_unnamed_place(
 }
 
 fn people_dir() -> Fallible<PathBuf> {
-    if let Ok(dir) = std::env::var("AXON_PLACES_PEOPLE_DIR") {
+    if let Ok(dir) = axon_config::env_var("SJEL_PLACES_PEOPLE_DIR") {
         return Ok(axon_config::expand_tilde(&dir));
     }
     // The vault root the finance capability already declares in the overlay
     // (finance.json `obsidian.root`) — one declaration of where the vault is.
     let path =
-        axon_config::overlay_config("finance.json").ok_or("AXON_PERSONAL_ROOT is not set")?;
+        axon_config::overlay_config("finance.json").ok_or("SJEL_PERSONAL_ROOT is not set")?;
     let body = std::fs::read_to_string(&path)?;
     let config: Value = serde_json::from_str(&body)?;
     let root = config
         .get("obsidian")
         .and_then(|obsidian| obsidian.get("root"))
         .and_then(Value::as_str)
-        .ok_or("finance.json declares no obsidian.root; set AXON_PLACES_PEOPLE_DIR instead")?;
+        .ok_or("finance.json declares no obsidian.root; set SJEL_PLACES_PEOPLE_DIR instead")?;
     Ok(axon_config::expand_tilde(root).join("Atlas/People"))
 }
 
 pub fn vault(store: &PlacesStore, today: &str) -> Fallible<()> {
     // Exported place notes in the overlay.
     let places_dir = axon_config::overlay_root()
-        .ok_or("AXON_PERSONAL_ROOT is not set")?
+        .ok_or("SJEL_PERSONAL_ROOT is not set")?
         .join("data/places/vault-notes");
     let mut place_notes = 0_usize;
     let mut imported = 0_usize;
@@ -1888,7 +1888,7 @@ pub fn takeout_from(store: &PlacesStore, dir: &Path, today: &str) -> Fallible<Ta
 
 pub fn takeout(store: &PlacesStore, today: &str) -> Fallible<()> {
     let root = axon_config::overlay_root()
-        .ok_or("AXON_PERSONAL_ROOT is not set; Takeout exports live in the private overlay")?
+        .ok_or("SJEL_PERSONAL_ROOT is not set; Takeout exports live in the private overlay")?
         .join("data/places/import/raw");
     let mut dirs: Vec<PathBuf> = std::fs::read_dir(&root)
         .map_err(|_| format!("raw import directory {} does not exist", root.display()))?

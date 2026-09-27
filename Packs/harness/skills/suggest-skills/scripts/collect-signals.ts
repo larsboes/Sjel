@@ -12,7 +12,7 @@
 //   bun collect-signals.ts [--days N] [--history PATH] [--skills DIR]... [--packs DIR]... [--json]
 //
 // Defaults: 30 days, $HOME/.claude/history.jsonl, $HOME/.claude/skills, and the
-// Axon Packs root when $AXON_ROOT is set.
+// Axon Packs root when $SJEL_ROOT is set.
 
 import { existsSync, readFileSync, readdirSync, statSync } from "node:fs";
 import { basename, join } from "node:path";
@@ -85,8 +85,8 @@ const historyPath = arg("history") ?? join(home, ".claude", "history.jsonl");
 const skillDirs = args("skills").length ? args("skills") : [join(home, ".claude", "skills")];
 const packRoots = args("packs").length
   ? args("packs")
-  : process.env.AXON_ROOT
-    ? [join(process.env.AXON_ROOT, "Packs")]
+  : process.env.SJEL_ROOT
+    ? [join(process.env.SJEL_ROOT, "Packs")]
     : [];
 
 function readPrompts(): Prompt[] {

@@ -1,17 +1,17 @@
 # Portable bash config — the bash sibling of init.zsh, for Linux/WSL nodes whose
 # login shell is bash. No secrets, no machine-specific paths beyond existence-guarded
-# tool detection. Sourced by ~/.bashrc after it exports AXON_ROOT; see README.md.
+# tool detection. Sourced by ~/.bashrc after it exports SJEL_ROOT; see README.md.
 #
 # Kept deliberately parallel to init.zsh: same tool detection, same Bitwarden/mkcert/
 # gh wiring, same capability-CLI PATH sweep. The two can't share a file (zsh vs bash
 # syntax), but they must not drift — a change to one usually wants the same change here.
 # bash 3.2-safe (README.md#portable-shell): no mapfile/readarray, no associative arrays.
 
-# AXON_ROOT is the one bootstrap fact ~/.bashrc must set before sourcing this (the bash
+# SJEL_ROOT is the one bootstrap fact ~/.bashrc must set before sourcing this (the bash
 # mirror of ~/.zshrc's first line — README.md#dynamic-paths-and-current-facts's single sanctioned rc exception). Without it
 # nothing below can resolve, so bail softly rather than guessing a hardcoded path.
-if [ -z "${AXON_ROOT:-}" ]; then
-  echo "init.bash: AXON_ROOT is unset — add it to ~/.bashrc (see capabilities/shell/README.md)" >&2
+if [ -z "${SJEL_ROOT:-}" ]; then
+  echo "init.bash: SJEL_ROOT is unset — add it to ~/.bashrc (see capabilities/shell/README.md)" >&2
   return 0 2>/dev/null || exit 0
 fi
 
@@ -30,7 +30,7 @@ export PATH="$BUN_INSTALL/bin:$PATH"
 # directory holding such a file on PATH, so a new capability CLI is callable from the next
 # shell with nothing to register by hand. Appended, never prepended — a capability CLI
 # must not shadow a system binary. (bash has no :t/%/ expansion, so basename + ${%/} do it.)
-for _cap in "$AXON_ROOT"/capabilities/*/; do
+for _cap in "$SJEL_ROOT"/capabilities/*/; do
   _name="$(basename "$_cap")"
   [ -x "$_cap$_name" ] && PATH="$PATH:${_cap%/}"
 done
@@ -47,7 +47,7 @@ export OPENCODE_DISABLE_MODELS_FETCH=true
 # --- Bitwarden SSH agent ---
 # Route ssh through the Bitwarden desktop app's agent — keys live in the vault, not on
 # disk. Socket resolution is shared with tools/backup.sh via the lib.
-[ -f "$AXON_ROOT/tools/lib/bw-agent.sh" ] && source "$AXON_ROOT/tools/lib/bw-agent.sh"
+[ -f "$SJEL_ROOT/tools/lib/bw-agent.sh" ] && source "$SJEL_ROOT/tools/lib/bw-agent.sh"
 
 # --- Bitwarden CLI session ---
 # Pick up a session cached by tools/bw-unlock so a new shell starts from the existing
@@ -59,7 +59,7 @@ fi
 # Re-unlock and adopt the key in THIS shell (a subprocess can't export into its parent).
 bwu() {
   local _s
-  _s="$("$AXON_ROOT/tools/bw-unlock")" || return 1
+  _s="$("$SJEL_ROOT/tools/bw-unlock")" || return 1
   export BW_SESSION="$_s"
 }
 
@@ -106,7 +106,7 @@ case $- in *i*)
   alias l='ls -CF'
   alias ..='cd ..'
   alias gs='git status'
-  alias dev='cd "${AXON_ROOT%/*}"'   # parent of Axon, derived — no hardcoded path
+  alias dev='cd "${SJEL_ROOT%/*}"'   # parent of Axon, derived — no hardcoded path
 
   # History.
   HISTSIZE=10000

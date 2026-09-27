@@ -36,7 +36,7 @@ fn fixture(names: &[&str]) -> std::path::PathBuf {
 #[test]
 fn a_bare_first_name_is_redacted_and_an_unknown_word_survives() {
     let p = fixture(&["Erika", "Mustermann"]);
-    std::env::set_var("AXON_PEOPLE_REGISTRY", &p);
+    std::env::set_var("SJEL_PEOPLE_REGISTRY", &p);
 
     let mut findings = Vec::new();
     let out = comms::cloud_derivative::redact_review_field(
@@ -77,6 +77,8 @@ fn a_bare_first_name_is_redacted_and_an_unknown_word_survives() {
         out.contains("deployment"),
         "an ordinary word was redacted: {out}"
     );
+
+    std::env::remove_var("SJEL_PEOPLE_REGISTRY");
 
     std::env::remove_var("AXON_PEOPLE_REGISTRY");
     let _ = std::fs::remove_file(&p);

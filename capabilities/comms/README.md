@@ -875,7 +875,7 @@ second scan does not spend another model pass.
 
 ## comms-server
 
-Axum HTTP API (dashboard-origin-only CORS), port from `AXON_PORT`
+Axum HTTP API (dashboard-origin-only CORS), port from `SJEL_PORT`
 (runner-exported) → config → default **8083**. JSON contract consumed by a
 dashboard panel.
 
@@ -1041,22 +1041,22 @@ where a request can go and not who may make one.
 
 Resolved in order (mirrors scouting):
 
-1. `$AXON_COMMS_CONFIG` (explicit path to a JSON file)
-2. `$AXON_PERSONAL_ROOT/config/comms.json` (the private overlay)
+1. `$SJEL_COMMS_CONFIG` (explicit path to a JSON file)
+2. `$SJEL_PERSONAL_ROOT/config/comms.json` (the private overlay)
 3. `capabilities/comms/comms.config.json` (gitignored dev fallback)
 
 Every field is optional; the tool runs zero-config against the shared local
 store with only the built-in classification heuristics.
 
-The nineteen tables live in the shared SQLite file — `AXON_DB_PATH`, else
-`$AXON_PERSONAL_ROOT/data/axon/axon.db` — under the table prefix `comms`, so
+The nineteen tables live in the shared SQLite file — `SJEL_DB_PATH`, else
+`$SJEL_PERSONAL_ROOT/data/axon/axon.db` — under the table prefix `comms`, so
 `comms.feed_items` is `comms_feed_items` (`libs/axon-store/README.md`). PRD Q45
 (2026-08-27) moved them there from a Postgres schema. The path is a deployment
 fact rather than a capability one, so there is no `database_url` field any more:
 `capabilities/places` joins mail against this data, and a file per capability
 would drop that join.
 
-Fields: `google_env_path` (default `$AXON_PERSONAL_ROOT/config/comms.env`), `port`,
+Fields: `google_env_path` (default `$SJEL_PERSONAL_ROOT/config/comms.env`), `port`,
 `gmail_maintenance_minutes` (default `15`; `0` disables the automatic pass),
 `relevance {profile_paths}`. Model roles come from the overlay's shared
 `inference.json`; see `libs/inference/inference.config.example.json`. The active producer revision
@@ -1079,7 +1079,7 @@ Every HTTP route except `/health` and `/ready` requires the shared token referen
 by `api_secret_file` — reads included, since a feed entry and a mail proposal are
 personal content and the loopback bind is no longer treated as the boundary. The check
 itself is `libs/axon-server`'s inbound gate, shared with every other capability;
-`api_secret_file` still wins over the deployment-wide `AXON_INBOUND_TOKEN_FILE`, and an
+`api_secret_file` still wins over the deployment-wide `SJEL_INBOUND_TOKEN_FILE`, and an
 unconfigured token closes those routes with `403` rather than opening them. The local
 dashboard never puts the token in its browser bundle: its Vite proxy resolves the same
 config at startup, rejects cross-origin mutations, and adds the bearer header on the
@@ -1198,7 +1198,7 @@ gone (README.md#documentation-stays-owned-and-current). The store tests need no 
 PRD Q45: each takes a temp file of its own, which is the isolation the per-pid
 schema used to buy, without a schema anyone can leak into a backup.
 
-The config test that clears `AXON_PERSONAL_ROOT` still restores it on drop, and
+The config test that clears `SJEL_PERSONAL_ROOT` still restores it on drop, and
 that is still load-bearing: Rust runs a crate's tests as threads of one process,
 and an unrestored `remove_var` leaves every later store test resolving a
 different file from the one it just wrote to. The same fix applies in `scouting`

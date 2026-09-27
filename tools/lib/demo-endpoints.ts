@@ -15,7 +15,7 @@ import { execFileSync } from "node:child_process";
 import { existsSync, readFileSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
 
-export const AXON_ROOT = resolve(dirname(new URL(import.meta.url).pathname), "../..");
+export const SJEL_ROOT = resolve(dirname(new URL(import.meta.url).pathname), "../..");
 
 export interface RegistryEntry {
   name: string;
@@ -56,7 +56,7 @@ export interface DemoManifest {
   absent: Record<string, string>;
 }
 
-export function loadManifest(path = join(AXON_ROOT, "demo/demo.toml")): DemoManifest {
+export function loadManifest(path = join(SJEL_ROOT, "demo/demo.toml")): DemoManifest {
   // Bun.TOML under the same documented exception tools/self.ts takes: tools/lib/toml.sh's
   // single-line grep contract cannot express arrays of tables, and this manifest is one.
   const raw = Bun.TOML.parse(readFileSync(path, "utf8")) as Record<string, any>;
@@ -122,15 +122,15 @@ export function loadManifest(path = join(AXON_ROOT, "demo/demo.toml")): DemoMani
  * about the repository and must not depend on which capabilities the runner happens to enable.
  */
 export function registry(overlayRoot?: string): RegistryEntry[] {
-  const out = execFileSync(join(AXON_ROOT, "tools/capability.sh"), ["registry"], {
+  const out = execFileSync(join(SJEL_ROOT, "tools/capability.sh"), ["registry"], {
     encoding: "utf8",
-    env: overlayRoot ? { ...process.env, AXON_OVERLAY_ROOT: overlayRoot } : process.env,
+    env: overlayRoot ? { ...process.env, SJEL_OVERLAY_ROOT: overlayRoot } : process.env,
   });
   return JSON.parse(out) as RegistryEntry[];
 }
 
 /** The overlay the published demonstration runs as. */
-export const DEMO_OVERLAY = join(AXON_ROOT, "demo/overlay");
+export const DEMO_OVERLAY = join(SJEL_ROOT, "demo/overlay");
 
 interface Route {
   /** The browser-side prefix, longest match wins. */
@@ -179,7 +179,7 @@ export function routes(entries = registry()): Route[] {
 export function absentPrefixes(names: string[]): Array<{ capability: string; prefix: string }> {
   const out: Array<{ capability: string; prefix: string }> = [];
   for (const name of names) {
-    const path = join(AXON_ROOT, "capabilities", name, "service.toml");
+    const path = join(SJEL_ROOT, "capabilities", name, "service.toml");
     if (!existsSync(path)) {
       throw new Error(`demo.toml: [absent.${name}] names no capability in this tree`);
     }

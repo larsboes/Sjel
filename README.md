@@ -8,8 +8,8 @@
 
 **Your life's data on your own devices, with one assistant that can act on it.**
 
-The command is `sjel`, and `axon` still works. Crates, `AXON_*` variables and service labels
-still use the name Axon. Open work is in [ISA.md](ISA.md).
+The command is `sjel`, and `axon` still works. Settings are named `SJEL_*`, and the earlier
+`AXON_*` names are still read. Crates still use the name Axon. Open work is in [ISA.md](ISA.md).
 The engineering doctrine starts at [Start here](#start-here).
 
 ## What it is
@@ -347,7 +347,7 @@ Configuration has one owner per concern:
 | `toolchain.toml` | Host executables Axon commands assume, with requiredness, scope and install hints |
 | `systems.toml` | Systems, services and projects that have a role in the setup |
 | `<overlay>/config/machine.toml` | OS, container runtime, enabled capabilities and state mounts for this machine. An overlay owning several machines uses `<overlay>/config/machines/<name>.toml` instead, selected by `axon.local.toml` or the hostname |
-| `<overlay>/config/deployment.env` | facts true of the whole deployment rather than one machine or one capability — the home timezone, and `AXON_INBOUND_TOKEN_FILE`, the reference to the shared secret every capability server authenticates inbound requests against (`libs/axon-server/README.md`). Declared once because several capabilities need it and independent copies drift silently (`schemas/deployment.env.example`) |
+| `<overlay>/config/deployment.env` | facts true of the whole deployment rather than one machine or one capability — the home timezone, and `SJEL_INBOUND_TOKEN_FILE`, the reference to the shared secret every capability server authenticates inbound requests against (`libs/axon-server/README.md`). Declared once because several capabilities need it and independent copies drift silently (`schemas/deployment.env.example`) |
 
 `tools/lib/toml.sh` is the parser for single-line scalar and array fields. More complex TOML goes
 through the shared Bun parser; no caller grows another partial parser or duplicates manifest data.
@@ -649,7 +649,7 @@ capability; implementation helpers stay off `PATH`.
 
 Resolve repository, overlay and platform facts through `tools/lib/paths.sh` and
 `tools/lib/platform.sh`. Do not duplicate absolute paths or personal directory names. The only
-unavoidable bootstrap is the initial `AXON_ROOT` shell setting before any shared resolver can be
+unavoidable bootstrap is the initial `SJEL_ROOT` shell setting before any shared resolver can be
 found.
 
 Ports, enabled capabilities, health, issue state, test counts, graph size and machine state come
@@ -711,7 +711,7 @@ new evidence.
 
 A shallow usage install is not a dead end: `git fetch --unshallow` promotes it to a development one
 without reinstalling. The tree exists either way, because it has to — every tool resolves
-`AXON_ROOT` from its own location, and no shape of Axon runs without a directory tree.
+`SJEL_ROOT` from its own location, and no shape of Axon runs without a directory tree.
 
 **A release tarball instead of a clone was rejected.** Measured at decision time, a `--depth 1`
 clone transferred 3.12 MiB and landed 11.4 MB in 586 files — most of that weight a lockfile the

@@ -43,7 +43,7 @@ use std::sync::OnceLock;
 const OVERLAY_REL: &str = "data/vault/people-registry.json";
 
 /// Environment override, for tests and for a deployment that keeps it elsewhere.
-const ENV_PATH: &str = "AXON_PEOPLE_REGISTRY";
+const ENV_PATH: &str = "SJEL_PEOPLE_REGISTRY";
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum State {

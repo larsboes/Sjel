@@ -63,20 +63,20 @@ import {
 } from "./lib/pack-deploy.ts";
 import { translateAgentForPi } from "./lib/pi-agent-file.ts";
 
-const AXON_ROOT = resolve(import.meta.dir, "..");
+const SJEL_ROOT = resolve(import.meta.dir, "..");
 const home = process.env.HOME ?? "";
 const settingsPath = resolve(process.env.PI_SETTINGS_FILE ?? join(home, ".pi", "agent", "settings.json"));
-const statePath = resolve(process.env.AXON_PI_STATE_FILE ?? join(process.env.XDG_STATE_HOME ?? join(home, ".local", "state"), "axon", "pack-deployments", "pi.json"));
+const statePath = resolve(process.env.SJEL_PI_STATE_FILE ?? join(process.env.XDG_STATE_HOME ?? join(home, ".local", "state"), "axon", "pack-deployments", "pi.json"));
 /**
  * The agent channel's ledger, kept apart from the settings ledger on purpose: the
  * two record different things (registered paths vs. materialized files), and merging
  * them would make one file speak two delivery models.
  */
-const agentsStatePath = resolve(process.env.AXON_PI_AGENTS_STATE_FILE ?? join(process.env.XDG_STATE_HOME ?? join(home, ".local", "state"), "axon", "pack-deployments", "pi-agents.json"));
+const agentsStatePath = resolve(process.env.SJEL_PI_AGENTS_STATE_FILE ?? join(process.env.XDG_STATE_HOME ?? join(home, ".local", "state"), "axon", "pack-deployments", "pi-agents.json"));
 
 /** Where pi-subagents looks for agent files: flat, no pack subdirectory, no recursion. */
 function piAgentsRoot(): string {
-  if (process.env.AXON_PI_AGENTS_DIR) return expandHome(process.env.AXON_PI_AGENTS_DIR);
+  if (process.env.SJEL_PI_AGENTS_DIR) return expandHome(process.env.SJEL_PI_AGENTS_DIR);
   const agentDir = process.env.PI_CODING_AGENT_DIR ? expandHome(process.env.PI_CODING_AGENT_DIR) : join(home, ".pi", "agent");
   return join(agentDir, "agents");
 }
@@ -84,8 +84,8 @@ function piAgentsRoot(): string {
 type State = { version: 1; settingsPath: string; packs: Record<string, string[]>; extensions: Record<string, string[]>; packages: Record<string, string[]> };
 
 function overlayRoot(): string | null {
-  if (process.env.AXON_OVERLAY_ROOT) return expandHome(process.env.AXON_OVERLAY_ROOT);
-  for (const file of [join(AXON_ROOT, "axon.local.toml"), join(AXON_ROOT, "axon.toml")]) {
+  if (process.env.SJEL_OVERLAY_ROOT) return expandHome(process.env.SJEL_OVERLAY_ROOT);
+  for (const file of [join(SJEL_ROOT, "axon.local.toml"), join(SJEL_ROOT, "axon.toml")]) {
     if (!existsSync(file)) continue;
     const overlay = (Bun.TOML.parse(readFileSync(file, "utf8")) as Record<string, unknown>).overlay;
     if (typeof overlay === "string" && overlay) return expandHome(overlay);
@@ -98,11 +98,11 @@ function expandHome(path: string): string {
 }
 
 export function defaultPiDeployConfig(): DeployConfig {
-  const roots = [join(AXON_ROOT, "Packs")];
+  const roots = [join(SJEL_ROOT, "Packs")];
   const overlay = overlayRoot();
   if (overlay && existsSync(join(overlay, "Packs"))) roots.push(join(overlay, "Packs"));
   // destination is unused by Pi, but getStatuses needs a valid configuration.
-  return { axonRoot: AXON_ROOT, packRoots: roots, destination: join(home, ".pi", "agent", "skills"), stateFile: statePath, adapter: "pi" };
+  return { axonRoot: SJEL_ROOT, packRoots: roots, destination: join(home, ".pi", "agent", "skills"), stateFile: statePath, adapter: "pi" };
 }
 
 /**
@@ -120,7 +120,7 @@ export function defaultPiAgentsDeployConfig(): DeployConfig {
     ...cfg,
     destination: piAgentsRoot(),
     stateFile: agentsStatePath,
-    stateEnvVar: "AXON_PI_AGENTS_STATE_FILE",
+    stateEnvVar: "SJEL_PI_AGENTS_STATE_FILE",
     skipManifestSkills: true,
     flatFileConvention: {
       sourceDir: "agents",

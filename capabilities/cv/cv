@@ -7,8 +7,8 @@ _dir="$(cd "$(dirname "${BASH_SOURCE[0]:-$0}")" && pwd)"
 # shellcheck source=../../tools/lib/paths.sh
 source "$_dir/../../tools/lib/paths.sh"
 
-MASTER="$AXON_PERSONAL_ROOT/data/cv/master_cv.yaml"
-DIST="$AXON_PERSONAL_ROOT/data/cv/dist"
+MASTER="$SJEL_PERSONAL_ROOT/data/cv/master_cv.yaml"
+DIST="$SJEL_PERSONAL_ROOT/data/cv/dist"
 TEMPLATE="$_dir/templates/cv.typ"
 
 usage() {

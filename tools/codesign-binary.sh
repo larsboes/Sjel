@@ -13,7 +13,7 @@ bin="${1:?usage: codesign-binary.sh <path> <identifier>}"
 id="${2:?usage: codesign-binary.sh <path> <identifier>}"
 [ "$(uname -s)" = Darwin ] || exit 0
 
-identity="${AXON_CODESIGN_IDENTITY:-}"
+identity="${SJEL_CODESIGN_IDENTITY:-}"
 if [ -z "$identity" ]; then
   identity="$(security find-identity -v -p codesigning | awk 'NR==1 && $2 ~ /^[0-9A-F]{40}$/ {print $2}')"
 fi

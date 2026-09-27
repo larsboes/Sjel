@@ -139,7 +139,7 @@ service's server binary had zero consumers in Axon at the time, the same "more m
 than needed" anti-pattern `capabilities/vaultwarden/README.md` flags for the old HashiCorp
 Vault setup. Reopened once `dashboard` landed as a real, named consumer — see
 `dashboard/README.md` for the full reasoning and why
-that reopening is recorded rather than silent. Port resolution is `AXON_PORT` (exported by
+that reopening is recorded rather than silent. Port resolution is `SJEL_PORT` (exported by
 `tools/service-runner.sh` from `service.toml`) → `config.rs`'s `port` field → `8084`. Built
 as the `scout-server` binary declared in `Cargo.toml`.
 
@@ -317,19 +317,19 @@ the try-before-you-declare path — the durable answer belongs in `sources[]`.
 Mirrors `capabilities/printing/printctl.py`'s `_cfg_path()`/`load_cfg()` exactly (see
 `src/config.rs`):
 
-1. `$AXON_SCOUTING_CONFIG` — explicit override, full path to a JSON file
-2. `$AXON_PERSONAL_ROOT/config/scouting.json` — the overlay (exported by `tools/lib/paths.sh`)
+1. `$SJEL_SCOUTING_CONFIG` — explicit override, full path to a JSON file
+2. `$SJEL_PERSONAL_ROOT/config/scouting.json` — the overlay (exported by `tools/lib/paths.sh`)
 3. `capabilities/scouting/scouting.config.json` — local, gitignored, dev fallback
 
-Copy `scouting.config.example.json` to `$AXON_PERSONAL_ROOT/config/scouting.json` and fill
+Copy `scouting.config.example.json` to `$SJEL_PERSONAL_ROOT/config/scouting.json` and fill
 in real values there; nothing personal is stored in Axon. Every field is optional — the tool
 runs against empty/local directories with zero config (interest-profile dir gets created if
 missing, events-dir cross-referencing is silently skipped if unset). CLI args
 (`--database-path`, `--limit`, `--opp-embeddings`, etc.) always override whatever the config
 file resolves.
 
-The four tables live in the shared SQLite file — `AXON_DB_PATH`, else
-`$AXON_PERSONAL_ROOT/data/axon/axon.db` — under the table prefix `scouting`, so they are
+The four tables live in the shared SQLite file — `SJEL_DB_PATH`, else
+`$SJEL_PERSONAL_ROOT/data/axon/axon.db` — under the table prefix `scouting`, so they are
 `scouting_opportunities`, `scouting_links`, `scouting_source_state` and
 `scouting_proposed_sources` (`libs/axon-store/README.md`). PRD Q45 (2026-08-27) moved them
 there from a Postgres schema. The path is a deployment fact rather than a capability one, so
@@ -342,7 +342,7 @@ cross-capability correlation with `transit` that Phase 2 exists for.
 | `events_dir` | hardcoded `{vault_root}/Atlas/Events` | any directory of markdown event notes; unset = vault-linking silently skipped |
 | `opp_embeddings_path` | `--opp-embeddings` CLI flag / `LIFEOS_ROOT`-relative default | CLI-arg-only still (hash-fallback embedding works with zero config, not worth a config knob) |
 | `sources[]` | hardcoded match arms in `main.rs` + `server.rs` | Config array of declared opportunity sources (adapter type, path/URL, glob patterns). Each entry resolves into a `SourceManifest` at startup; enabled sources run by default. `obsidian-markdown` accepts `opportunities_glob` + `opportunity_type`; `events_glob` remains compatible. See § Extending it above. |
-| `port` | `SCOUTING_PORT` env var | `AXON_PORT` (from `service.toml`, set by the runner) → `port` field → `8084` |
+| `port` | `SCOUTING_PORT` env var | `SJEL_PORT` (from `service.toml`, set by the runner) → `port` field → `8084` |
 | `calendar_base_url` | — (new) | `capabilities/calendar` for the promotion; loopback default `http://127.0.0.1:8087`, `--calendar-url` overrides |
 | `home_timezone` | — (new) | **No default.** Required by `--promote-calendar` (or `--timezone`); see § Calendar promotion |
 | `geo` | — (new) | Private event-routing policy: optional home coordinate plus explicit local radius, local country tokens, timezone prefixes, and a safe-default-off `allow_unknown` compatibility override. No public home/radius defaults; see § Event routing. |
@@ -402,7 +402,7 @@ turned into `0,0`, and city-string equality is never used. `allow_unknown = true
 legacy override that routes an otherwise unknown event locally; its safe default is `false`.
 
 The public example contains only null/empty placeholders. Real home coordinates, radius, and
-reach tokens belong in `$AXON_PERSONAL_ROOT/config/scouting.json`.
+reach tokens belong in `$SJEL_PERSONAL_ROOT/config/scouting.json`.
 
 ## Calendar promotion (calendar Phase A)
 
@@ -643,7 +643,7 @@ stops, so none of the three falls through now.
 - **`cargo test` needs no server at all since PRD Q45** — `store`'s tests each get their own temp file, which
   is the same isolation the per-pid schema bought and the same the original SQLite version
   had, with no shared `static Mutex` serializing tests against each other. The config test
-  that clears `AXON_PERSONAL_ROOT` restores it on drop: Rust runs a crate's tests as threads
+  that clears `SJEL_PERSONAL_ROOT` restores it on drop: Rust runs a crate's tests as threads
   of one process, and an unrestored `remove_var` leaves every later store test resolving a
   different file from the one it just wrote to.
 - `normalize.rs` is dead scaffold code (ported for parity, `#[allow(dead_code)]`) — every

@@ -10,7 +10,7 @@
 # Every step is a tool that also runs on its own; this is the order they go in and the one
 # place the base path is decided. It does NOT start capabilities or seed them — tools/demo-up
 # does that, because a build step that quietly writes to a database is a build step nobody can
-# read. Run demo-up first, or point AXON_DEMO_FIXTURES at a recording you already have.
+# read. Run demo-up first, or point SJEL_DEMO_FIXTURES at a recording you already have.
 #
 # The gate at the end is not optional and not a warning. Nothing here uploads, so the last
 # thing this script can do for a mistake is refuse to leave the bytes behind.
@@ -21,9 +21,9 @@
 set -euo pipefail
 
 _here="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-AXON_ROOT="$(cd "$_here/.." && pwd)"
+SJEL_ROOT="$(cd "$_here/.." && pwd)"
 
-OUT="$AXON_ROOT/site"
+OUT="$SJEL_ROOT/site"
 # Empty means the site is served from a domain root. A GitHub Pages PROJECT site is served
 # from /<repo>, and a static SPA has to be told: its asset URLs and router links are baked in.
 BASE=""
@@ -37,7 +37,7 @@ while [ $# -gt 0 ]; do
   esac
 done
 
-FIXTURES="${AXON_DEMO_FIXTURES:-$AXON_ROOT/demo/fixtures}"
+FIXTURES="${SJEL_DEMO_FIXTURES:-$SJEL_ROOT/demo/fixtures}"
 if [ ! -f "$FIXTURES/index.json" ]; then
   echo "demo-site: no recording at $FIXTURES/index.json — run tools/demo-up first." >&2
   exit 1
@@ -47,7 +47,7 @@ fi
 # is cheap. Past here it is bytes in site/, and past THAT it is a 501 on the published page
 # read by a visitor. Both halves — no path may name a route its capability does not serve, and
 # every declared path must be in the recording being copied, which is the half that catches a
-# fixture set older than the manifest beside it (AXON_DEMO_FIXTURES makes that reachable).
+# fixture set older than the manifest beside it (SJEL_DEMO_FIXTURES makes that reachable).
 echo "demo-site: demo.toml against $FIXTURES"
 "$_here/demo-check-paths" --fixtures "$FIXTURES"
 
@@ -60,12 +60,12 @@ mkdir -p "$OUT"
 # reference — self-model included — lives under /docs where a reader goes looking for it.
 echo "demo-site: dashboard bundle (base ${BASE:-/})"
 (
-  cd "$AXON_ROOT/dashboard"
-  # AXON_DEMO compiles the fetch shim in (vite.config.ts turns it into a literal, so a normal
-  # build drops it); AXON_DEMO_BASE is what svelte.config.js bakes into every URL.
-  AXON_DEMO=1 AXON_DEMO_BASE="$BASE" bun run build >/dev/null
+  cd "$SJEL_ROOT/dashboard"
+  # SJEL_DEMO compiles the fetch shim in (vite.config.ts turns it into a literal, so a normal
+  # build drops it); SJEL_DEMO_BASE is what svelte.config.js bakes into every URL.
+  SJEL_DEMO=1 SJEL_DEMO_BASE="$BASE" bun run build >/dev/null
 )
-cp -R "$AXON_ROOT/dashboard/dist/." "$OUT/"
+cp -R "$SJEL_ROOT/dashboard/dist/." "$OUT/"
 cp -R "$FIXTURES" "$OUT/fixtures"
 
 # GitHub Pages has no SPA fallback. It serves 404.html for any path it cannot match, and knows

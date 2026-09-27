@@ -30,14 +30,14 @@ set -u
 
 _here="$(cd "$(dirname "$0")" && pwd)"
 # shellcheck source=tools/lib/paths.sh
-. "$_here/lib/paths.sh"      # AXON_ROOT, AXON_PERSONAL_ROOT, AXON_MACHINE_TOML, axon_manifest_for
+. "$_here/lib/paths.sh"      # SJEL_ROOT, SJEL_PERSONAL_ROOT, SJEL_MACHINE_TOML, axon_manifest_for
 # shellcheck source=tools/lib/platform.sh
 # `|| exit 2`, because platform.sh signals a missing overlay or machine.toml with `return 1` when
-# sourced. Without that check the script would run on with AXON_CONTAINER_RUNTIME unset and, under
+# sourced. Without that check the script would run on with SJEL_CONTAINER_RUNTIME unset and, under
 # `set -u`, die on the first read of it with a message that names nothing useful. There is no
 # receipt on this path and there cannot be: the receipt lives in the overlay this machine has not
 # configured, and doctor's "has never written a receipt" is the report that covers it.
-. "$_here/lib/platform.sh" || exit 2   # AXON_CONTAINER_RUNTIME — this machine's declared runtime
+. "$_here/lib/platform.sh" || exit 2   # SJEL_CONTAINER_RUNTIME — this machine's declared runtime
 # shellcheck source=tools/lib/pipe.sh
 . "$_here/lib/pipe.sh"       # stream_matches — an exact-line test that does not SIGPIPE the producer
 
@@ -45,10 +45,10 @@ _here="$(cd "$(dirname "$0")" && pwd)"
 # PATH=/usr/bin:/bin:/usr/sbin:/sbin, and no container CLI lives there. On this deployment the
 # docker CLI is OrbStack's at ~/.orbstack/bin/docker, which a login shell has and a launchd
 # environment does not — the same miss that kept service-runner's persistence defect invisible
-# for two weeks (tools/service-runner.sh:50). AXON_CONTAINER_REFRESH_KEEP_PATH=1 leaves the
+# for two weeks (tools/service-runner.sh:50). SJEL_CONTAINER_REFRESH_KEEP_PATH=1 leaves the
 # caller's PATH alone, for a host with its own layout and for tools/container-refresh.test.sh,
 # which plants a PATH to prove what the script does with and without a runtime.
-if [ -z "${AXON_CONTAINER_REFRESH_KEEP_PATH:-}" ]; then
+if [ -z "${SJEL_CONTAINER_REFRESH_KEEP_PATH:-}" ]; then
   PATH="$HOME/.orbstack/bin:/opt/homebrew/bin:/opt/homebrew/sbin:/usr/local/bin:$HOME/.local/bin:$PATH"
   export PATH
 fi
@@ -62,12 +62,12 @@ write_receipt() {  # write_receipt <exit-code>
   # An UNSET overlay cannot reach here — platform.sh above refused to load without one. An
   # UNWRITABLE one can, and it must not turn into a silent success: doctor would then read a stale
   # receipt and report a run that never happened.
-  if mkdir -p "$AXON_PERSONAL_ROOT/data/container-refresh" 2>/dev/null; then
+  if mkdir -p "$SJEL_PERSONAL_ROOT/data/container-refresh" 2>/dev/null; then
     printf '{"at":"%s","ran":"%s","skipped":"%s","failed":"%s"}\n' \
       "$(date -u +%Y-%m-%dT%H:%M:%SZ)" "$(echo $RAN)" "$(echo $SKIPPED)" "$(echo $FAILED)" \
-      > "$AXON_PERSONAL_ROOT/data/container-refresh/last.json"
+      > "$SJEL_PERSONAL_ROOT/data/container-refresh/last.json"
   else
-    echo "container-refresh: cannot write $AXON_PERSONAL_ROOT/data/container-refresh/last.json — tools/doctor cannot report this run" >&2
+    echo "container-refresh: cannot write $SJEL_PERSONAL_ROOT/data/container-refresh/last.json — tools/doctor cannot report this run" >&2
   fi
   echo
   echo "── container-refresh: refreshed$RAN ──"
@@ -82,7 +82,7 @@ echo "Axon container-refresh · $(date -u +%Y-%m-%dT%H:%M:%SZ 2>/dev/null || dat
 # tools/lib/toml.sh: machine.toml owns the enabled set (tools/capability.sh is its only writer),
 # and each service.toml owns whether it declares an image at all.
 CONTAINER_CAPS=""
-for _cap in $(toml_array capabilities "$AXON_MACHINE_TOML" 2>/dev/null); do
+for _cap in $(toml_array capabilities "$SJEL_MACHINE_TOML" 2>/dev/null); do
   _mf="$(axon_manifest_for "$_cap" 2>/dev/null)" || continue
   [ -n "$_mf" ] || continue
   [ -n "$(toml_get image "$_mf")" ] || continue
@@ -97,13 +97,13 @@ if [ -z "$CONTAINER_CAPS" ]; then
   write_receipt 0
 fi
 
-case "$AXON_CONTAINER_RUNTIME" in
-  docker|podman) RUNTIME_BIN="$AXON_CONTAINER_RUNTIME" ;;
+case "$SJEL_CONTAINER_RUNTIME" in
+  docker|podman) RUNTIME_BIN="$SJEL_CONTAINER_RUNTIME" ;;
   *)
     # Same refusal as tools/service-runner.sh:58, and for the same reason: a runtime nobody
     # implemented is a machine.toml defect, not something to resolve by guessing.
-    echo "container-refresh: unsupported container_runtime '$AXON_CONTAINER_RUNTIME' ($AXON_MACHINE_TOML)" >&2
-    FAILED=" runtime:$AXON_CONTAINER_RUNTIME"
+    echo "container-refresh: unsupported container_runtime '$SJEL_CONTAINER_RUNTIME' ($SJEL_MACHINE_TOML)" >&2
+    FAILED=" runtime:$SJEL_CONTAINER_RUNTIME"
     write_receipt 2
     ;;
 esac
@@ -163,7 +163,7 @@ for cap in $CONTAINER_CAPS; do
     SKIPPED="$SKIPPED $cap:not-running"
     continue
   fi
-  if "$AXON_ROOT/tools/service-runner.sh" recreate "$cap"; then
+  if "$SJEL_ROOT/tools/service-runner.sh" recreate "$cap"; then
     RAN="$RAN $cap"
   else
     rc=$?

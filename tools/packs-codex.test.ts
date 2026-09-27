@@ -62,7 +62,7 @@ beforeEach(() => {
     destination: join(root, "home", ".agents", "skills"),
     stateFile: join(root, "state", "codex.json"),
     adapter: "codex",
-    stateEnvVar: "AXON_CODEX_STATE_FILE",
+    stateEnvVar: "SJEL_CODEX_STATE_FILE",
     validateAdapterFiles: validateCodexFiles,
   };
   makePack();

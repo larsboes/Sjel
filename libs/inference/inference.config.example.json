@@ -1,6 +1,6 @@
 {
   "_note": "Template. Copy to <overlay>/config/inference.json and edit. Machine-local backend choice belongs in machine.toml ([inference] backend), not here -- this file is shared across machines via the overlay repo.",
-  "_comment_backends": "Declared once, referenced by id. oMLX needs Metal and exists only on Apple Silicon; ollama runs anywhere. A machine that cannot run the configured backend names the one it has in machine.toml ([inference] backend = ...), which tools/service-runner.sh exports as AXON_INFERENCE_BACKEND. That override moves a role only when the role's declared backend is loopback -- a hosted provider answers from every machine -- and only when the role names a model for the target under on_backend.",
+  "_comment_backends": "Declared once, referenced by id. oMLX needs Metal and exists only on Apple Silicon; ollama runs anywhere. A machine that cannot run the configured backend names the one it has in machine.toml ([inference] backend = ...), which tools/service-runner.sh exports as SJEL_INFERENCE_BACKEND. That override moves a role only when the role's declared backend is loopback -- a hosted provider answers from every machine -- and only when the role names a model for the target under on_backend.",
   "backends": {
     "omlx": {
       "api": "openai",
@@ -16,7 +16,7 @@
       "base_url": "https://api.example.com/v1",
       "api_key_file": "~/path/to/provider-key"
     },
-    "_comment_peer-example": "A backend on hardware the operator owns, reached over the tailnet (PRD Q39). provided_by names the systems.local.toml id of the HOST, and trust is the intersection of that name with `owner = \"self\"` on the same entry -- naming a host is not trusting it, and [nvidia-nim] lives in the same file. tools/lib/external-ref.sh resolves the pair and service-runner.sh exports the result as AXON_INFERENCE_TRUSTED_PEERS. Without the declaration this backend is an https non-loopback endpoint, which is a cloud provider needing a reviewed policy -- which is exactly what Q39 says a `tailscale cert` peer would wrongly become.",
+    "_comment_peer-example": "A backend on hardware the operator owns, reached over the tailnet (PRD Q39). provided_by names the systems.local.toml id of the HOST, and trust is the intersection of that name with `owner = \"self\"` on the same entry -- naming a host is not trusting it, and [nvidia-nim] lives in the same file. tools/lib/external-ref.sh resolves the pair and service-runner.sh exports the result as SJEL_INFERENCE_TRUSTED_PEERS. Without the declaration this backend is an https non-loopback endpoint, which is a cloud provider needing a reviewed policy -- which is exactly what Q39 says a `tailscale cert` peer would wrongly become.",
     "peer-example": {
       "api": "ollama",
       "base_url": "https://host.example.ts.net:11434",

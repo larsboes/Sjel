@@ -325,7 +325,7 @@ pub fn write_all(
 /// `None` heisst: keine Bruecke, und das ist die richtige Antwort fuer einen Host ohne Vault —
 /// kein Vault, keine Schreibvorgaenge, und die Zeilen bleiben trotzdem der Bestand.
 pub fn vault_root() -> Option<PathBuf> {
-    if let Ok(p) = std::env::var("AXON_INTERIOR_OBSIDIAN_ROOT") {
+    if let Ok(p) = axon_config::env_var("SJEL_INTERIOR_OBSIDIAN_ROOT") {
         if !p.trim().is_empty() {
             return Some(axon_config::expand_tilde(&p));
         }

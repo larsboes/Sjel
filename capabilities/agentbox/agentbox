@@ -9,8 +9,8 @@ source "$_dir/../../tools/lib/paths.sh"
 # shellcheck source=../../tools/lib/platform.sh
 source "$_dir/../../tools/lib/platform.sh"
 
-CONFIG="$AXON_PERSONAL_ROOT/config/agentbox.toml"
-DATA="$AXON_PERSONAL_ROOT/data/agentbox"
+CONFIG="$SJEL_PERSONAL_ROOT/config/agentbox.toml"
+DATA="$SJEL_PERSONAL_ROOT/data/agentbox"
 
 usage() {
   cat <<'EOF'
@@ -113,8 +113,8 @@ resolve_release() {
 # ~/.orbstack/bin/docker, which a login shell has on PATH and a launchd or cron environment
 # does not.
 require_runtime() {
-  [ "$AXON_CONTAINER_RUNTIME" = "docker" ] \
-    || die "container_runtime is '$AXON_CONTAINER_RUNTIME'; agentbox needs docker (Q75 retired apple-container on 2026-09-02; podman's network semantics are unmeasured here)"
+  [ "$SJEL_CONTAINER_RUNTIME" = "docker" ] \
+    || die "container_runtime is '$SJEL_CONTAINER_RUNTIME'; agentbox needs docker (Q75 retired apple-container on 2026-09-02; podman's network semantics are unmeasured here)"
   command -v docker >/dev/null 2>&1 \
     || die "'docker' not found on PATH — OrbStack installs it at ~/.orbstack/bin/docker, which a non-login environment does not have (PATH=$PATH)"
   docker info >/dev/null 2>&1 || die "the docker daemon is not answering — start it ('open -a OrbStack' for OrbStack)"
@@ -127,7 +127,7 @@ read_api_key() {
   key_file="${key_file:-config/agentbox.env}"
   key_var="$(toml_get api_key_var "$CONFIG")"
   key_var="${key_var:-AGENTBOX_MODEL_API_KEY}"
-  key_path="$AXON_PERSONAL_ROOT/$key_file"
+  key_path="$SJEL_PERSONAL_ROOT/$key_file"
   if [ ! -f "$key_path" ]; then
     die "no $key_path — create it with '$key_var=<your model server key>' (chmod 600). Never generated here (README.md#secrets)"
   fi
@@ -420,7 +420,7 @@ upstream_repo() {
   local section url
   section="$(toml_get upstream "$PROFILE")"
   [ -n "$section" ] || return 1
-  url="$(toml_get_in "$section" url "$AXON_ROOT/upstreams.toml")"
+  url="$(toml_get_in "$section" url "$SJEL_ROOT/upstreams.toml")"
   [ -n "$url" ] || return 1
   printf '%s' "$url" | sed -E 's#.*github.com/([^/]+/[^/]+).*#\1#; s#\.git$##'
 }
@@ -544,8 +544,8 @@ cmd_doctor() {
   # was the old shape, and it sends a machine that declares the wrong runtime looking for a
   # missing binary.
   runtime_ok=0
-  if [ "$AXON_CONTAINER_RUNTIME" != "docker" ]; then
-    bad "runtime: machine.toml declares container_runtime = '$AXON_CONTAINER_RUNTIME'; agentbox needs docker (Q75; podman's network semantics are unmeasured here)"
+  if [ "$SJEL_CONTAINER_RUNTIME" != "docker" ]; then
+    bad "runtime: machine.toml declares container_runtime = '$SJEL_CONTAINER_RUNTIME'; agentbox needs docker (Q75; podman's network semantics are unmeasured here)"
   elif ! command -v docker >/dev/null 2>&1; then
     bad "runtime: 'docker' not on PATH — OrbStack installs it at ~/.orbstack/bin/docker, which a non-login environment does not have"
   elif ! docker info >/dev/null 2>&1; then
@@ -606,7 +606,7 @@ cmd_doctor() {
   fi
 
   key_file="$(toml_get api_key_file "$CONFIG")"; key_file="${key_file:-config/agentbox.env}"
-  if [ -f "$AXON_PERSONAL_ROOT/$key_file" ]; then
+  if [ -f "$SJEL_PERSONAL_ROOT/$key_file" ]; then
     ok "key: $key_file present"
   else
     bad "key: $key_file missing — see the README's Setup section"

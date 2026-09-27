@@ -31,11 +31,11 @@ cp "$ROOT/tools/lib/toml.sh" "$ROOT/tools/lib/platform.sh" "$ROOT/tools/lib/pipe
 # paths.sh is the one library this fixture replaces. The real one resolves an overlay from
 # axon.toml, axon.local.toml and the hostname; this test needs a known root instead.
 cat > "$FIXTURE/tools/lib/paths.sh" <<PATHS
-AXON_ROOT="$FIXTURE"
-AXON_PERSONAL_ROOT="$OVERLAY"
-AXON_OVERLAY_ROOT="$OVERLAY"
-AXON_MACHINE_TOML="$MACHINE"
-export AXON_ROOT AXON_PERSONAL_ROOT AXON_OVERLAY_ROOT AXON_MACHINE_TOML
+SJEL_ROOT="$FIXTURE"
+SJEL_PERSONAL_ROOT="$OVERLAY"
+SJEL_OVERLAY_ROOT="$OVERLAY"
+SJEL_MACHINE_TOML="$MACHINE"
+export SJEL_ROOT SJEL_PERSONAL_ROOT SJEL_OVERLAY_ROOT SJEL_MACHINE_TOML
 source "$FIXTURE/tools/lib/toml.sh"
 axon_manifest_for() {
   [ -f "$FIXTURE/capabilities/\$1/service.toml" ] || return 1
@@ -45,8 +45,8 @@ PATHS
 
 cat > "$FIXTURE/tools/service-runner.sh" <<'RUNNER'
 #!/bin/sh
-printf 'service-runner %s\n' "$*" >> "$AXON_TEST_CALLS"
-exit "${AXON_TEST_RECREATE_RC:-0}"
+printf 'service-runner %s\n' "$*" >> "$SJEL_TEST_CALLS"
+exit "${SJEL_TEST_RECREATE_RC:-0}"
 RUNNER
 chmod +x "$FIXTURE/tools/service-runner.sh" "$FIXTURE/tools/container-refresh.sh"
 
@@ -56,25 +56,25 @@ chmod +x "$FIXTURE/tools/service-runner.sh" "$FIXTURE/tools/container-refresh.sh
 # recreate — something the test states rather than something a registry decides.
 cat > "$MOCK_BIN/docker" <<'DOCKER'
 #!/bin/sh
-printf 'docker %s\n' "$*" >> "$AXON_TEST_CALLS"
+printf 'docker %s\n' "$*" >> "$SJEL_TEST_CALLS"
 _key() { echo "$1" | tr -c 'A-Za-z0-9' '_'; }
 case "$1" in
   image)   # image inspect <ref> --format <fmt>
-    f="$AXON_TEST_STATE/digest.$(_key "$3")"
+    f="$SJEL_TEST_STATE/digest.$(_key "$3")"
     [ -f "$f" ] || exit 1
     cat "$f"
     ;;
   pull)
-    if [ "${AXON_TEST_FAIL_PULL:-}" = "$2" ]; then
+    if [ "${SJEL_TEST_FAIL_PULL:-}" = "$2" ]; then
       echo "stub: refusing to pull $2" >&2
       exit 1
     fi
-    n="$AXON_TEST_STATE/next.$(_key "$2")"
-    [ -f "$n" ] && cp "$n" "$AXON_TEST_STATE/digest.$(_key "$2")"
+    n="$SJEL_TEST_STATE/next.$(_key "$2")"
+    [ -f "$n" ] && cp "$n" "$SJEL_TEST_STATE/digest.$(_key "$2")"
     echo "Status: pulled $2"
     ;;
   ps)
-    cat "$AXON_TEST_STATE/running" 2>/dev/null || true
+    cat "$SJEL_TEST_STATE/running" 2>/dev/null || true
     ;;
   *) exit 0 ;;
 esac
@@ -110,11 +110,11 @@ MACHINE
 
 run_refresh() {  # run_refresh <PATH> — exit code in $rc, output in $SCRATCH/out
   rm -f "$RECEIPT" "$CALLS" 2>/dev/null
-  env PATH="$1" AXON_CONTAINER_REFRESH_KEEP_PATH=1 \
-    AXON_TEST_CALLS="$CALLS" \
-    AXON_TEST_STATE="$STATE" \
-    AXON_TEST_FAIL_PULL="${AXON_TEST_FAIL_PULL:-}" \
-    AXON_TEST_RECREATE_RC="${AXON_TEST_RECREATE_RC:-0}" \
+  env PATH="$1" SJEL_CONTAINER_REFRESH_KEEP_PATH=1 \
+    SJEL_TEST_CALLS="$CALLS" \
+    SJEL_TEST_STATE="$STATE" \
+    SJEL_TEST_FAIL_PULL="${SJEL_TEST_FAIL_PULL:-}" \
+    SJEL_TEST_RECREATE_RC="${SJEL_TEST_RECREATE_RC:-0}" \
     "$FIXTURE/tools/container-refresh.sh" >"$SCRATCH/out" 2>&1
   rc=$?
 }
@@ -132,7 +132,7 @@ write_manifest refresh-beta  beta-container  example.org/beta  latest
 # 1. No enabled capability declares an image. This is the normal workstation case: a receipt that
 #    says so, and exit 0. Silence here would be indistinguishable from a job that stopped firing.
 write_machine docker
-AXON_TEST_FAIL_PULL="" run_refresh "$MOCK_BIN:/usr/bin:/bin"
+SJEL_TEST_FAIL_PULL="" run_refresh "$MOCK_BIN:/usr/bin:/bin"
 [ "$rc" -eq 0 ] || fail "a host with no container capability must exit 0, got $rc"
 [ -f "$RECEIPT" ] || fail "no receipt was written"
 case "$(receipt_field skipped)" in
@@ -156,7 +156,7 @@ for d in /usr/bin /bin; do
   done
 done
 write_machine docker refresh-alpha
-AXON_TEST_FAIL_PULL="" run_refresh "$NODOCKER_BIN"
+SJEL_TEST_FAIL_PULL="" run_refresh "$NODOCKER_BIN"
 [ "$rc" -eq 0 ] || fail "an absent runtime must exit 0, got $rc"
 case "$(receipt_field skipped)" in
   *docker-not-installed*) ;;
@@ -168,7 +168,7 @@ esac
 #    schedule: the tag moves rarely, the container is interrupted only when it does.
 set_digest example.org/alpha:stable "sha256:aaa" "sha256:aaa"
 printf 'alpha-container\n' > "$STATE/running"
-AXON_TEST_FAIL_PULL="" run_refresh "$MOCK_BIN:/usr/bin:/bin"
+SJEL_TEST_FAIL_PULL="" run_refresh "$MOCK_BIN:/usr/bin:/bin"
 [ "$rc" -eq 0 ] || fail "an unchanged digest must exit 0, got $rc"
 grep -F 'docker pull example.org/alpha:stable' "$CALLS" >/dev/null || fail "the image was never pulled"
 grep -F 'service-runner' "$CALLS" >/dev/null 2>&1 && fail "an unchanged digest must not recreate anything"
@@ -179,7 +179,7 @@ esac
 
 # 4. A moved digest recreates the running container, and the receipt names it.
 set_digest example.org/alpha:stable "sha256:aaa" "sha256:bbb"
-AXON_TEST_FAIL_PULL="" run_refresh "$MOCK_BIN:/usr/bin:/bin"
+SJEL_TEST_FAIL_PULL="" run_refresh "$MOCK_BIN:/usr/bin:/bin"
 [ "$rc" -eq 0 ] || fail "a successful recreate must exit 0, got $rc"
 grep -F 'service-runner recreate refresh-alpha' "$CALLS" >/dev/null || fail "a moved digest did not recreate the container"
 case "$(receipt_field ran)" in
@@ -191,7 +191,7 @@ esac
 #    overturns whoever stopped it.
 set_digest example.org/alpha:stable "sha256:aaa" "sha256:bbb"
 : > "$STATE/running"
-AXON_TEST_FAIL_PULL="" run_refresh "$MOCK_BIN:/usr/bin:/bin"
+SJEL_TEST_FAIL_PULL="" run_refresh "$MOCK_BIN:/usr/bin:/bin"
 [ "$rc" -eq 0 ] || fail "a stopped capability must not fail the run, got $rc"
 grep -F 'service-runner' "$CALLS" >/dev/null 2>&1 && fail "a stopped container must not be recreated"
 case "$(receipt_field skipped)" in
@@ -204,7 +204,7 @@ esac
 set_digest example.org/alpha:stable "sha256:aaa" "sha256:bbb"
 printf 'alpha-container\n' > "$STATE/running"
 : > /tmp/axon-refresh-alpha.maintenance
-AXON_TEST_FAIL_PULL="" run_refresh "$MOCK_BIN:/usr/bin:/bin"
+SJEL_TEST_FAIL_PULL="" run_refresh "$MOCK_BIN:/usr/bin:/bin"
 rm -f /tmp/axon-refresh-alpha.maintenance
 [ "$rc" -eq 0 ] || fail "a held capability must not fail the run, got $rc"
 grep -F 'service-runner' "$CALLS" >/dev/null 2>&1 && fail "a held capability must not be recreated"
@@ -218,7 +218,7 @@ write_machine docker refresh-alpha refresh-beta
 set_digest example.org/alpha:stable "sha256:aaa" "sha256:bbb"
 set_digest example.org/beta:latest  "sha256:ccc" "sha256:ddd"
 printf 'alpha-container\nbeta-container\n' > "$STATE/running"
-AXON_TEST_FAIL_PULL="example.org/alpha:stable" run_refresh "$MOCK_BIN:/usr/bin:/bin"
+SJEL_TEST_FAIL_PULL="example.org/alpha:stable" run_refresh "$MOCK_BIN:/usr/bin:/bin"
 [ "$rc" -eq 2 ] || fail "a failed pull must exit 2, got $rc"
 grep -F 'docker pull example.org/beta:latest' "$CALLS" >/dev/null || fail "the image after a failed pull was never pulled"
 grep -F 'service-runner recreate refresh-beta' "$CALLS" >/dev/null || fail "the capability after a failed pull was not recreated"
@@ -229,7 +229,7 @@ esac
 
 # 8. A container_runtime nobody implemented is a machine.toml defect, not something to guess at.
 write_machine containerd refresh-alpha
-AXON_TEST_FAIL_PULL="" run_refresh "$MOCK_BIN:/usr/bin:/bin"
+SJEL_TEST_FAIL_PULL="" run_refresh "$MOCK_BIN:/usr/bin:/bin"
 [ "$rc" -eq 2 ] || fail "an unsupported runtime must exit 2, got $rc"
 case "$(receipt_field failed)" in
   *runtime:containerd*) ;;
@@ -242,7 +242,7 @@ esac
 write_machine docker refresh-alpha
 set_digest example.org/alpha:stable "sha256:aaa" "sha256:aaa"
 rm -rf "$OVERLAY/data"; : > "$OVERLAY/data"    # a file where the directory goes: mkdir -p fails
-AXON_TEST_FAIL_PULL="" run_refresh "$MOCK_BIN:/usr/bin:/bin"
+SJEL_TEST_FAIL_PULL="" run_refresh "$MOCK_BIN:/usr/bin:/bin"
 [ "$rc" -eq 0 ] || fail "an unwritable overlay must not fail the refresh, got $rc"
 grep -F 'cannot write' "$SCRATCH/out" >/dev/null || fail "a run with no receipt did not say so"
 rm -f "$OVERLAY/data"
@@ -250,7 +250,7 @@ rm -f "$OVERLAY/data"
 # 10. No machine.toml at all. platform.sh refuses, and the script stops rather than running on
 #     with an unset runtime — the shape that would otherwise surface as a bare `set -u` error.
 mv "$MACHINE" "$MACHINE.away"
-AXON_TEST_FAIL_PULL="" run_refresh "$MOCK_BIN:/usr/bin:/bin"
+SJEL_TEST_FAIL_PULL="" run_refresh "$MOCK_BIN:/usr/bin:/bin"
 [ "$rc" -eq 2 ] || fail "an unresolvable machine.toml must exit 2, got $rc"
 mv "$MACHINE.away" "$MACHINE"
 

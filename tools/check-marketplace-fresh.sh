@@ -16,19 +16,19 @@ source "$_lib/paths.sh"
 scratch="$(mktemp -d)"
 trap 'rm -rf "$scratch"' EXIT
 
-MARKETPLACE_OUT_ROOT="$scratch" bun "$AXON_ROOT/tools/generate-marketplace.ts" >/dev/null
+MARKETPLACE_OUT_ROOT="$scratch" bun "$SJEL_ROOT/tools/generate-marketplace.ts" >/dev/null
 
 fail=0
 
 after_list="$(cd "$scratch" && find .claude-plugin Packs -type f 2>/dev/null | sort)"
-before_list="$(cd "$AXON_ROOT" && find .claude-plugin Packs -type f -path '*.claude-plugin*' 2>/dev/null | sort)"
+before_list="$(cd "$SJEL_ROOT" && find .claude-plugin Packs -type f -path '*.claude-plugin*' 2>/dev/null | sort)"
 
 while IFS= read -r rel; do
   [ -n "$rel" ] || continue
-  if [ ! -f "$AXON_ROOT/$rel" ]; then
+  if [ ! -f "$SJEL_ROOT/$rel" ]; then
     echo "missing: $rel is generated but not tracked" >&2
     fail=1
-  elif ! diff -q "$AXON_ROOT/$rel" "$scratch/$rel" >/dev/null 2>&1; then
+  elif ! diff -q "$SJEL_ROOT/$rel" "$scratch/$rel" >/dev/null 2>&1; then
     echo "stale: $rel" >&2
     fail=1
   fi

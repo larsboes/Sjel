@@ -44,7 +44,7 @@ impl Settings {
             format!(
                 "home_timezone is not configured. Google events carry a real UTC offset and this \
                  capability stores naive local wall time, so a sync cannot convert between them \
-                 without knowing the operator's zone. Declare AXON_HOME_TIMEZONE in the overlay's \
+                 without knowing the operator's zone. Declare SJEL_HOME_TIMEZONE in the overlay's \
                  config/deployment.env — scouting resolves the same value — or set \
                  \"home_timezone\" in {path:?} for this capability alone (README § Time model)."
             )

@@ -35,10 +35,10 @@ set -u
 
 _here="$(cd "$(dirname "$0")" && pwd)"
 # shellcheck source=tools/lib/paths.sh
-. "$_here/lib/paths.sh"       # AXON_ROOT, AXON_MACHINE_TOML, toml_*
+. "$_here/lib/paths.sh"       # SJEL_ROOT, SJEL_MACHINE_TOML, toml_*
 # shellcheck source=tools/lib/version.sh
 . "$_here/lib/version.sh"     # norm_ver, ver_numeric, ver_gt
-MANIFEST="$AXON_ROOT/toolchain.toml"
+MANIFEST="$SJEL_ROOT/toolchain.toml"
 
 OS=""; RUNTIME=""; JSON=0; WORKFLOW=""; _want=""
 for a in "$@"; do
@@ -66,8 +66,8 @@ if [ -z "$OS" ]; then
     *)      OS="" ;;
   esac
 fi
-if [ -z "$RUNTIME" ] && [ -f "$AXON_MACHINE_TOML" ]; then
-  RUNTIME="$(toml_get container_runtime "$AXON_MACHINE_TOML")"
+if [ -z "$RUNTIME" ] && [ -f "$SJEL_MACHINE_TOML" ]; then
+  RUNTIME="$(toml_get container_runtime "$SJEL_MACHINE_TOML")"
 fi
 
 # --- scope resolution -------------------------------------------------------------------
@@ -82,7 +82,7 @@ fi
 ACTIVE_FIELDS=" "
 resolve_active_fields() {
   local cap mf field
-  [ -f "$AXON_MACHINE_TOML" ] || return 0
+  [ -f "$SJEL_MACHINE_TOML" ] || return 0
   # Only fields some entry actually asks about. Reading every manifest key would make this
   # O(capabilities x keys) for an answer nobody consumes.
   local wanted=""
@@ -92,7 +92,7 @@ resolve_active_fields() {
     done
   done
   [ -n "$wanted" ] || return 0
-  for cap in $(toml_array capabilities "$AXON_MACHINE_TOML"); do
+  for cap in $(toml_array capabilities "$SJEL_MACHINE_TOML"); do
     mf="$(axon_manifest_for "$cap" 2>/dev/null)" || continue
     [ -n "$mf" ] && [ -f "$mf" ] || continue
     for field in $wanted; do
@@ -131,7 +131,7 @@ entry_scope() {
       # declared tool. AGENTS.md promises the requirement set moves with the enabled list; it only
       # moves with the part of it that something declared.
       capability:*)
-        case " $(toml_array capabilities "$AXON_MACHINE_TOML" | tr "\n" " ") " in
+        case " $(toml_array capabilities "$SJEL_MACHINE_TOML" | tr "\n" " ") " in
           *" ${s#capability:} "*) satisfied=0; break ;;
         esac
         ;;

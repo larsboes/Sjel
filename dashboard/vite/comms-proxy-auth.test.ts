@@ -25,7 +25,7 @@ describe("Comms proxy credential resolution", () => {
     }));
     writeFileSync(join(overlay, "secrets", "comms-api-token"), "test-token\n");
 
-    expect(loadCommsProxyCredential(root, { AXON_PERSONAL_ROOT: overlay })).toEqual({
+    expect(loadCommsProxyCredential(root, { SJEL_PERSONAL_ROOT: overlay })).toEqual({
       authorization: "Bearer test-token",
       reason: "configured",
     });
@@ -41,7 +41,7 @@ describe("Comms proxy credential resolution", () => {
       auth: { api_key: "json-token" },
     }));
 
-    expect(loadCommsProxyCredential(root, { AXON_PERSONAL_ROOT: overlay })).toEqual({
+    expect(loadCommsProxyCredential(root, { SJEL_PERSONAL_ROOT: overlay })).toEqual({
       authorization: "Bearer json-token",
       reason: "configured",
     });
@@ -51,11 +51,11 @@ describe("Comms proxy credential resolution", () => {
     const { root, overlay } = fixture();
     const config = join(overlay, "config", "comms.json");
     writeFileSync(config, "{}");
-    expect(loadCommsProxyCredential(root, { AXON_PERSONAL_ROOT: overlay }).reason)
+    expect(loadCommsProxyCredential(root, { SJEL_PERSONAL_ROOT: overlay }).reason)
       .toBe("secret-unconfigured");
 
     writeFileSync(config, JSON.stringify({ api_secret_file: "/missing/token" }));
-    expect(loadCommsProxyCredential(root, { AXON_PERSONAL_ROOT: overlay }).reason)
+    expect(loadCommsProxyCredential(root, { SJEL_PERSONAL_ROOT: overlay }).reason)
       .toBe("secret-unreadable");
   });
 
@@ -63,13 +63,13 @@ describe("Comms proxy credential resolution", () => {
     const { root, overlay } = fixture();
     const config = join(overlay, "config", "comms.json");
     writeFileSync(config, "not json");
-    expect(loadCommsProxyCredential(root, { AXON_PERSONAL_ROOT: overlay }).reason)
+    expect(loadCommsProxyCredential(root, { SJEL_PERSONAL_ROOT: overlay }).reason)
       .toBe("config-missing");
 
     const settings = join(overlay, "secrets", "settings.json");
     writeFileSync(config, JSON.stringify({ api_secret_file: settings }));
     writeFileSync(settings, JSON.stringify({ auth: {} }));
-    expect(loadCommsProxyCredential(root, { AXON_PERSONAL_ROOT: overlay }).reason)
+    expect(loadCommsProxyCredential(root, { SJEL_PERSONAL_ROOT: overlay }).reason)
       .toBe("secret-unreadable");
   });
 });

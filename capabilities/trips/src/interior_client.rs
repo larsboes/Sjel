@@ -17,7 +17,7 @@ use serde::Serialize;
 /// capability to hardcode a sibling's port, which is the same argument `finance_client`
 /// already records for the spine mechanism that would end it.
 pub fn interior_base_url() -> String {
-    std::env::var("AXON_INTERIOR_URL").unwrap_or_else(|_| "http://127.0.0.1:8092".to_string())
+    axon_config::env_var("SJEL_INTERIOR_URL").unwrap_or_else(|_| "http://127.0.0.1:8092".to_string())
 }
 
 /// Long enough for a loopback write, short enough that a stopped interior fails the import

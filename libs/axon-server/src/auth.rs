@@ -55,7 +55,7 @@
 //!
 //! The value is referenced, never inlined, following the pattern comms
 //! established for `api_secret_file`: `<overlay>/config/deployment.env`
-//! declares `AXON_INBOUND_TOKEN_FILE=<path>` and the token is the contents of
+//! declares `SJEL_INBOUND_TOKEN_FILE=<path>` and the token is the contents of
 //! that private file (`schemas/deployment.env.example`). A path is not a
 //! secret, which is why the reference may live in a tracked-shape file while
 //! the value may not.
@@ -183,7 +183,7 @@ impl std::fmt::Debug for InboundAuth {
 impl InboundAuth {
     /// The deployment-wide token, or none.
     ///
-    /// Reads `AXON_INBOUND_TOKEN_FILE` from `<overlay>/config/deployment.env`
+    /// Reads `SJEL_INBOUND_TOKEN_FILE` from `<overlay>/config/deployment.env`
     /// and then that file. Every step is allowed to be absent: an overlay that
     /// has not declared a token yields `None`, which is the loopback-only
     /// deployment that predates this gate.
@@ -357,7 +357,7 @@ impl InboundAuth {
                     (
                         StatusCode::FORBIDDEN,
                         Json(json!({
-                            "error": "no inbound token is configured — these routes are disabled. Declare AXON_INBOUND_TOKEN_FILE in <overlay>/config/deployment.env."
+                            "error": "no inbound token is configured — these routes are disabled. Declare SJEL_INBOUND_TOKEN_FILE in <overlay>/config/deployment.env."
                         })),
                     )
                         .into_response(),
@@ -507,7 +507,7 @@ fn constant_time_eq(a: &[u8], b: &[u8]) -> bool {
         == 0
 }
 
-/// `SJEL_INBOUND_TOKEN_FILE` (or `AXON_INBOUND_TOKEN_FILE`) from `<overlay>/config/deployment.env`, then that
+/// `SJEL_INBOUND_TOKEN_FILE` (or `SJEL_INBOUND_TOKEN_FILE`) from `<overlay>/config/deployment.env`, then that
 /// file's contents.
 fn deployment_token() -> Option<String> {
     let body = std::fs::read_to_string(axon_config::overlay_config("deployment.env")?).ok()?;

@@ -1,10 +1,10 @@
 #!/usr/bin/env bash
 # Thin launcher: delegates to the canonical printctl in the Axon `printing`
-# capability (single source of truth). AXON_ROOT is exported by ~/.zshrc; the
+# capability (single source of truth). SJEL_ROOT is exported by ~/.zshrc; the
 # fallback keeps this working if the skill is invoked outside a login shell, and
 # walks up from this file rather than naming a checkout location — Axon sits at
 # ~/Developer/Axon on one machine and ~/Axon on another. `cd -P` resolves the
 # symlink packs.sh plants in ~/.claude/skills, so the walk lands in the real repo.
 # Python runs through uv (Axon rule); printctl is stdlib-only so no deps resolve.
 _here="$(cd -P "$(dirname "$0")" && pwd)"
-exec uv run --python 3 "${AXON_ROOT:-$(cd "$_here/../../../../.." && pwd)}/capabilities/printing/printctl.py" "$@"
+exec uv run --python 3 "${SJEL_ROOT:-$(cd "$_here/../../../../.." && pwd)}/capabilities/printing/printctl.py" "$@"

@@ -1127,7 +1127,7 @@ struct FlightWhenParams {
 /// sibling's port, so the spine mechanism that comment deferred (service-runner
 /// exporting declared siblings' ports) is justified and tracked as follow-up.
 fn calendar_base_url() -> String {
-    std::env::var("AXON_CALENDAR_URL").unwrap_or_else(|_| "http://127.0.0.1:8087".to_string())
+    axon_config::env_var("SJEL_CALENDAR_URL").unwrap_or_else(|_| "http://127.0.0.1:8087".to_string())
 }
 
 /// Calendar's `GET /api/entries` for a day range, as `flight_when` asks for it.
@@ -1162,7 +1162,7 @@ struct DaySpan {
 /// digits and hyphens come out.
 ///
 /// CodeQL rust/request-forgery, alert 67 — and alert 40, the same line before the
-/// file grew, dismissed on the grounds that the base URL is `AXON_CALENDAR_URL`.
+/// file grew, dismissed on the grounds that the base URL is `SJEL_CALENDAR_URL`.
 /// The base is. The two dates beside it are request data.
 fn clipped_span(date_from: &str, date_to: &str) -> Result<DaySpan, &'static str> {
     let from_day = trips::windows::day_number(date_from).ok_or("date_from is not ISO")?;
@@ -1558,7 +1558,7 @@ struct PackQuery {
 /// Where interior serves its inventory. Same hardcoded-sibling-port shape, and
 /// the same caveat, as `calendar_base_url` above.
 fn interior_base_url() -> String {
-    std::env::var("AXON_INTERIOR_URL").unwrap_or_else(|_| "http://127.0.0.1:8092".to_string())
+    axon_config::env_var("SJEL_INTERIOR_URL").unwrap_or_else(|_| "http://127.0.0.1:8092".to_string())
 }
 
 /// `item_ref` -> the item, or `None` when interior could not be reached.
@@ -1756,7 +1756,7 @@ fn not_a_write(answer: ApiResponse) -> axum::response::Response {
 }
 
 /// This capability's name, for the origin guard's env var
-/// (`AXON_TRIPS_ALLOWED_ORIGIN_HOSTS`).
+/// (`SJEL_TRIPS_ALLOWED_ORIGIN_HOSTS`).
 const CAPABILITY: &str = "trips";
 
 /// The wired router, so a test can drive the real thing rather than a handler.

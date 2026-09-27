@@ -39,19 +39,19 @@
 # validator, or nothing to check). bash 3.2-safe, no git and no network: same contract as
 # the sibling gates.
 #
-# AXON_PACKS_ROOT overrides the tree that is walked, for the planted-tree regression
+# SJEL_PACKS_ROOT overrides the tree that is walked, for the planted-tree regression
 # tests in tools/check-skill-metadata.test.sh. The validator is still resolved from the
-# real AXON_ROOT, because that is the real dependency and faking it would only test the
+# real SJEL_ROOT, because that is the real dependency and faking it would only test the
 # fake.
 set -u
 
 _here="$(cd "$(dirname "$0")" && pwd)"
 # shellcheck source=tools/lib/paths.sh
-. "$_here/lib/paths.sh"   # AXON_ROOT
+. "$_here/lib/paths.sh"   # SJEL_ROOT
 
-PACKS_ROOT="${AXON_PACKS_ROOT:-$AXON_ROOT/Packs}"
+PACKS_ROOT="${SJEL_PACKS_ROOT:-$SJEL_ROOT/Packs}"
 
-VALIDATOR="$AXON_ROOT/Packs/writing/skills/skill-creator/scripts/validate_metadata.py"
+VALIDATOR="$SJEL_ROOT/Packs/writing/skills/skill-creator/scripts/validate_metadata.py"
 strict=0
 case "${1:-}" in
   "")        ;;
@@ -80,7 +80,7 @@ skipped=0
 
 while IFS= read -r f; do
   [ -n "$f" ] || continue
-  rel="${f#"$AXON_ROOT"/}"
+  rel="${f#"$SJEL_ROOT"/}"
 
   case "$rel" in
     */pi-packages/*|*/evals/*|*/node_modules/*)

@@ -911,7 +911,7 @@ fn cmd_mail_corpus(args: &[String], cfg: &Config) {
         eprintln!("error: usage: comms mail corpus --out <path> [--force]");
         eprintln!(
             "       the path belongs in the overlay, e.g. \
-                   \"$AXON_PERSONAL_ROOT/config/comms-mail-stream-shadow.json\""
+                   \"$SJEL_PERSONAL_ROOT/config/comms-mail-stream-shadow.json\""
         );
         std::process::exit(2);
     };

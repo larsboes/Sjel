@@ -49,7 +49,7 @@ import {
   type Profile,
 } from "./lib/pack-deploy.ts";
 
-const AXON_ROOT = resolve(import.meta.dir, "..");
+const SJEL_ROOT = resolve(import.meta.dir, "..");
 const HELP = `tools/packs-claude — materialize Axon Packs into Claude Code.
 
   tools/packs-claude status [<pack>|--all]  show source/install/drift state
@@ -62,7 +62,7 @@ const HELP = `tools/packs-claude — materialize Axon Packs into Claude Code.
 Environment:
   CLAUDE_SKILLS_DIR       skill destination (default: $HOME/.claude/skills)
   CLAUDE_AGENTS_DIR       agents destination (default: $HOME/.claude/agents)
-  AXON_CLAUDE_STATE_FILE  ownership ledger override (mainly for tests)
+  SJEL_CLAUDE_STATE_FILE  ownership ledger override (mainly for tests)
 `;
 
 function expandHome(path: string): string {
@@ -70,8 +70,8 @@ function expandHome(path: string): string {
 }
 
 function overlayRoot(): string | null {
-  if (process.env.AXON_OVERLAY_ROOT) return expandHome(process.env.AXON_OVERLAY_ROOT);
-  for (const file of [join(AXON_ROOT, "axon.local.toml"), join(AXON_ROOT, "axon.toml")]) {
+  if (process.env.SJEL_OVERLAY_ROOT) return expandHome(process.env.SJEL_OVERLAY_ROOT);
+  for (const file of [join(SJEL_ROOT, "axon.local.toml"), join(SJEL_ROOT, "axon.toml")]) {
     if (!existsSync(file)) continue;
     const overlay = (Bun.TOML.parse(readFileSync(file, "utf8")) as Record<string, unknown>).overlay;
     if (typeof overlay === "string" && overlay) return expandHome(overlay);
@@ -86,14 +86,14 @@ export function defaultClaudeDeployConfig(): DeployConfig {
   const overlay = overlayRoot();
   if (overlay && existsSync(join(overlay, "Packs"))) roots.push(join(overlay, "Packs"));
   return {
-    axonRoot: AXON_ROOT,
+    axonRoot: SJEL_ROOT,
     packRoots: roots,
     destination: resolve(process.env.CLAUDE_SKILLS_DIR ?? join(home, ".claude", "skills")),
     stateFile: resolve(
-      process.env.AXON_CLAUDE_STATE_FILE ?? join(stateHome, "axon", "pack-deployments", "claude.json"),
+      process.env.SJEL_CLAUDE_STATE_FILE ?? join(stateHome, "axon", "pack-deployments", "claude.json"),
     ),
     adapter: "claude",
-    stateEnvVar: "AXON_CLAUDE_STATE_FILE",
+    stateEnvVar: "SJEL_CLAUDE_STATE_FILE",
     treeConvention: {
       sourceDir: "agents",
       destinationRoot: resolve(process.env.CLAUDE_AGENTS_DIR ?? join(home, ".claude", "agents")),

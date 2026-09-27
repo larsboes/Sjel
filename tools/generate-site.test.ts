@@ -10,7 +10,7 @@ import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { renderSite } from "./generate-site.ts";
 
-const AXON_ROOT = join(import.meta.dir, "..");
+const SJEL_ROOT = join(import.meta.dir, "..");
 
 const MODEL = {
   schema: 1,
@@ -110,10 +110,10 @@ describe("renderSite", () => {
 // REAL self.json, because the property is about what the committed artifact contains — a fixture
 // would only prove the fixture is clean.
 describe("the real self.json", () => {
-  const model = JSON.parse(readFileSync(join(AXON_ROOT, "self.json"), "utf8"));
+  const model = JSON.parse(readFileSync(join(SJEL_ROOT, "self.json"), "utf8"));
 
   test("carries no overlay-owned capability", () => {
-    // tools/lib/paths.sh: generators that write tracked artifacts scan AXON_CAPS_DIR alone,
+    // tools/lib/paths.sh: generators that write tracked artifacts scan SJEL_CAPS_DIR alone,
     // because a capability name is itself a fact about a private deployment. This is the
     // downstream check on that rule.
     const overlayCaps = ["server"];

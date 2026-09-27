@@ -10,8 +10,8 @@ import {
   loadCommsProxyCredential,
 } from "./vite/comms-proxy-auth";
 
-const AXON_ROOT = resolve(fileURLToPath(new URL(".", import.meta.url)), "..");
-const port = Number(process.env.AXON_PORT ?? 47117);
+const SJEL_ROOT = resolve(fileURLToPath(new URL(".", import.meta.url)), "..");
+const port = Number(process.env.SJEL_PORT ?? 47117);
 // What every visitor downloads before interacting with anything.
 const APP_BUNDLE_LIMIT_BYTES = 500_000;
 // A chunk nobody can reach without a dynamic import is not application weight, but it is
@@ -189,7 +189,7 @@ function bundleGuard(): Plugin {
 // Read once at dev-server start: enabling a capability or moving a port means
 // restarting the dashboard, which is honest — the shell's shape follows the machine's.
 function registry(): RegistryEntry[] {
-  const out = execFileSync(resolve(AXON_ROOT, "tools/capability.sh"), ["registry"], {
+  const out = execFileSync(resolve(SJEL_ROOT, "tools/capability.sh"), ["registry"], {
     encoding: "utf8",
   });
   return JSON.parse(out) as RegistryEntry[];
@@ -197,7 +197,7 @@ function registry(): RegistryEntry[] {
 
 function buildProxy(): Record<string, ProxyOptions> {
   const proxy: Record<string, ProxyOptions> = {};
-  const commsCredential = loadCommsProxyCredential(AXON_ROOT);
+  const commsCredential = loadCommsProxyCredential(SJEL_ROOT);
 
   if (!commsCredential.authorization) {
     console.warn(
@@ -294,7 +294,7 @@ function guardCommsMutations(
 // A suffix rather than this machine's name, deliberately. The specific MagicDNS name is a
 // house fact and this repo is public; `.ts.net` is a Tailscale-wide fact that identifies
 // nobody. The leading dot is Vite's own "this domain and any subdomain" form. Anything that
-// is not a tailnet name comes from the overlay through AXON_DASHBOARD_ALLOWED_HOSTS,
+// is not a tailnet name comes from the overlay through SJEL_DASHBOARD_ALLOWED_HOSTS,
 // comma-separated, so a deployment fact stays in the deployment.
 //
 // What deliberately does not change: the listen address stays 127.0.0.1. Tailscale is what
@@ -302,7 +302,7 @@ function guardCommsMutations(
 // the same symptom would hand this surface to whatever network the laptop joins next.
 const allowedHosts = [
   ".ts.net",
-  ...(process.env.AXON_DASHBOARD_ALLOWED_HOSTS ?? "")
+  ...(process.env.SJEL_DASHBOARD_ALLOWED_HOSTS ?? "")
     .split(",")
     .map((host) => host.trim())
     .filter(Boolean),
@@ -315,7 +315,7 @@ export default defineConfig(({ command }) => ({
   // `import.meta.env` reads .env FILES — a shell variable would silently be undefined, which
   // fails in the safe direction (no demo) and is therefore the kind of bug that ships.
   define: {
-    "import.meta.env.VITE_AXON_DEMO": JSON.stringify(process.env.AXON_DEMO === "1" ? "1" : "0"),
+    "import.meta.env.VITE_SJEL_DEMO": JSON.stringify(process.env.SJEL_DEMO === "1" ? "1" : "0"),
   },
   plugins: [sveltekit(), bundleGuard(), {
     name: "top-processes",

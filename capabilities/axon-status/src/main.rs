@@ -71,9 +71,9 @@ async fn routes() -> axum::Json<serde_json::Value> {
 async fn main() {
     STARTED_AT.set(Instant::now()).ok();
 
-    // AXON_PORT first (the runner exports it from the manifest + machine override);
-    // AXON_STATUS_PORT stays as the manual escape hatch for running outside the runner.
-    let port = axon_server::resolve_port(Some("AXON_STATUS_PORT"), None, 8082);
+    // SJEL_PORT first (the runner exports it from the manifest + machine override);
+    // SJEL_STATUS_PORT stays as the manual escape hatch for running outside the runner.
+    let port = axon_server::resolve_port(Some("SJEL_STATUS_PORT"), None, 8082);
 
     // The other half of on-demand. This process is already the only thing allowed to
     // start a capability, so it is also the only sensible place to stop one — anything
@@ -92,7 +92,7 @@ async fn main() {
         Vec::new()
     });
     let ui_dir =
-        std::env::var("AXON_DASHBOARD_DIST").unwrap_or_else(|_| "dashboard/dist".to_string());
+        axon_config::env_var("SJEL_DASHBOARD_DIST").unwrap_or_else(|_| "dashboard/dist".to_string());
     // Said at startup rather than discovered as a blank page. The bundle is a build artifact
     // (`dashboard/service.toml` `build`), so a fresh checkout has none until it is built, and a
     // shell that 404s every page while every API route works is a confusing way to learn that.
@@ -143,7 +143,7 @@ async fn lan_handler() -> Json<Value> {
 }
 
 /// This capability's name, for the origin guard's env var
-/// (`AXON_AXON_STATUS_ALLOWED_ORIGIN_HOSTS` -- the doubling is what the derivation
+/// (`SJEL_AXON_STATUS_ALLOWED_ORIGIN_HOSTS` -- the doubling is what the derivation
 /// produces, and `libs/axon-server/src/origin.rs` asserts exactly this string).
 const CAPABILITY: &str = "axon-status";
 

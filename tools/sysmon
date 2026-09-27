@@ -24,7 +24,7 @@ set -u
 
 _here="$(cd "$(dirname "$0")" && pwd)"
 # shellcheck source=tools/lib/paths.sh
-. "$_here/lib/paths.sh"   # AXON_ROOT, AXON_PERSONAL_ROOT, toml_*
+. "$_here/lib/paths.sh"   # SJEL_ROOT, SJEL_PERSONAL_ROOT, toml_*
 
 HELP="tools/sysmon — system resource overview.
 

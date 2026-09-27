@@ -27,7 +27,7 @@ set -euo pipefail
 
 TOOLS_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 # shellcheck source=tools/lib/paths.sh
-source "$TOOLS_DIR/lib/paths.sh"     # AXON_ROOT, toml_*
+source "$TOOLS_DIR/lib/paths.sh"     # SJEL_ROOT, toml_*
 # shellcheck source=tools/lib/delta.sh
 source "$TOOLS_DIR/lib/delta.sh"     # latest_release_ref, print_manifest_delta, ver_gt, norm_ver
 
@@ -66,7 +66,7 @@ LATEST_TAG="$(latest_release_ref)"
 if [ -n "$LATEST_TAG" ]; then
   NOTES_FROM="$LATEST_TAG"; FIRST=0
 else
-  NOTES_FROM="$(git -C "$AXON_ROOT" rev-list --max-parents=0 HEAD | tail -1)"; FIRST=1
+  NOTES_FROM="$(git -C "$SJEL_ROOT" rev-list --max-parents=0 HEAD | tail -1)"; FIRST=1
 fi
 
 gen_notes() {  # gen_notes <version> > <file>
@@ -88,7 +88,7 @@ if [ -z "$VERSION" ]; then
 fi
 printf '%s' "$VERSION" | grep -Eq '^v[0-9]+\.[0-9]+\.[0-9]+$' \
   || { echo "release: '$VERSION' is not a vX.Y.Z version" >&2; exit 1; }
-if git -C "$AXON_ROOT" rev-parse --verify --quiet "refs/tags/$VERSION" >/dev/null 2>&1; then
+if git -C "$SJEL_ROOT" rev-parse --verify --quiet "refs/tags/$VERSION" >/dev/null 2>&1; then
   echo "release: tag $VERSION already exists" >&2; exit 1
 fi
 if [ -n "$LATEST_TAG" ] && ! ver_gt "$(norm_ver "$VERSION")" "$(norm_ver "$LATEST_TAG")"; then
@@ -98,15 +98,15 @@ fi
 # The gate — a tag is only trustworthy if the tree it points at is clean and green.
 gate() {
   local fail=0 br behind
-  if [ -n "$(git -C "$AXON_ROOT" status --porcelain)" ]; then
+  if [ -n "$(git -C "$SJEL_ROOT" status --porcelain)" ]; then
     echo "release: working tree not clean — commit or stash first." >&2; fail=1
   fi
-  br="$(git -C "$AXON_ROOT" branch --show-current)"
+  br="$(git -C "$SJEL_ROOT" branch --show-current)"
   if [ "$br" != "main" ]; then
     echo "release: on branch '$br', not 'main' — releases are cut from main." >&2; fail=1
   fi
-  git -C "$AXON_ROOT" fetch --quiet origin main 2>/dev/null || true
-  behind="$(git -C "$AXON_ROOT" rev-list --count HEAD..origin/main 2>/dev/null || echo 0)"
+  git -C "$SJEL_ROOT" fetch --quiet origin main 2>/dev/null || true
+  behind="$(git -C "$SJEL_ROOT" rev-list --count HEAD..origin/main 2>/dev/null || echo 0)"
   if [ "${behind:-0}" -gt 0 ]; then
     echo "release: $behind commit(s) behind origin/main — tools/update.sh first." >&2; fail=1
   fi
@@ -131,11 +131,11 @@ echo
 sed 's/^/  /' "$NOTES_FILE"
 echo
 
-git -C "$AXON_ROOT" tag -a "$VERSION" -F "$NOTES_FILE"
+git -C "$SJEL_ROOT" tag -a "$VERSION" -F "$NOTES_FILE"
 echo "release: created local annotated tag $VERSION"
 
 if [ "$PUSH" -eq 1 ]; then
-  git -C "$AXON_ROOT" push origin "$VERSION"
+  git -C "$SJEL_ROOT" push origin "$VERSION"
   echo "release: pushed $VERSION to origin"
 else
   echo "release: local only — push with: git push origin $VERSION   (or re-run with --push)"

@@ -23,7 +23,7 @@
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 
-import { AXON_ROOT, loadManifest } from "./lib/demo-endpoints.ts";
+import { SJEL_ROOT, loadManifest } from "./lib/demo-endpoints.ts";
 import { esc, page } from "./lib/site-style.ts";
 
 interface Unit {
@@ -246,12 +246,12 @@ function main(): void {
     return;
   }
   const outIdx = args.indexOf("--out");
-  const outDir = outIdx >= 0 ? args[outIdx + 1] : join(AXON_ROOT, "site/docs");
+  const outDir = outIdx >= 0 ? args[outIdx + 1] : join(SJEL_ROOT, "site/docs");
   const manifest = loadManifest();
   const fixIdx = args.indexOf("--fixtures");
-  const fixturesDir = fixIdx >= 0 ? args[fixIdx + 1] : join(AXON_ROOT, manifest.fixturesDir);
+  const fixturesDir = fixIdx >= 0 ? args[fixIdx + 1] : join(SJEL_ROOT, manifest.fixturesDir);
 
-  const model = JSON.parse(readFileSync(join(AXON_ROOT, "self.json"), "utf8")) as SelfModel;
+  const model = JSON.parse(readFileSync(join(SJEL_ROOT, "self.json"), "utf8")) as SelfModel;
   if (model.schema !== 1) {
     console.error(`generate-docs: self.json is schema ${model.schema}, this generator knows schema 1`);
     process.exit(1);

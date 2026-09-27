@@ -11,7 +11,7 @@
 //!   it has a registered key; it is protected by the one-time code instead
 //!   (`capabilities/devices`, ten minutes, 50 bits).
 //!
-//! Opt-in per deployment: `SJEL_LAN_PORT` (or its earlier name `AXON_LAN_PORT`) in
+//! Opt-in per deployment: `SJEL_LAN_PORT` (or its earlier name `SJEL_LAN_PORT`) in
 //! `<overlay>/config/deployment.env`.
 
 use std::path::Path;

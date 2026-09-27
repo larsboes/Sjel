@@ -59,7 +59,7 @@ beforeEach(() => {
     destination: join(root, "home", ".claude", "skills"),
     stateFile: join(root, "state", "claude.json"),
     adapter: "claude",
-    stateEnvVar: "AXON_CLAUDE_STATE_FILE",
+    stateEnvVar: "SJEL_CLAUDE_STATE_FILE",
     treeConvention: {
       sourceDir: "agents",
       destinationRoot: join(root, "home", ".claude", "agents"),
@@ -274,11 +274,11 @@ describe("the ledger lock", () => {
     // pid 1 is alive on every POSIX host and is not us; kill(1, 0) answers EPERM,
     // which the holder check reads as alive on purpose.
     writeFileSync(lockPath(), JSON.stringify({ pid: 1, at: new Date().toISOString() }));
-    process.env.AXON_PACK_LOCK_WAIT_MS = "10";
+    process.env.SJEL_PACK_LOCK_WAIT_MS = "10";
     try {
       expect(() => deployPack(config, "demo")).toThrow("ledger is locked by pid 1");
     } finally {
-      delete process.env.AXON_PACK_LOCK_WAIT_MS;
+      delete process.env.SJEL_PACK_LOCK_WAIT_MS;
       rmSync(lockPath(), { force: true });
     }
   });

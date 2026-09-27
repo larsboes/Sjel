@@ -3,7 +3,7 @@
 #
 # The gate's whole value is that it fails when the two role lists diverge, and a gate that
 # cannot fail looks exactly like one that finds nothing wrong. So every case here plants its
-# own pair of theme.py files (and its own themes directory) via the AXON_* overrides, and the
+# own pair of theme.py files (and its own themes directory) via the SJEL_* overrides, and the
 # last case runs the gate over the REAL pack so a fix that only satisfies the fixtures — or a
 # path that drifted after an edit — is caught too.
 set -uo pipefail
@@ -33,8 +33,8 @@ plant() { # plant <case> <deck-roles-csv> <diagram-roles-csv> -> echoes the case
 }
 
 run() { # run <case-root> -> output in $out, status in $status
-  out=$(AXON_DECK_THEME="$1/deck.py" AXON_DIAGRAM_THEME="$1/diagram.py" \
-        AXON_THEMES_DIR="$1/themes" "$CHECK" 2>&1)
+  out=$(SJEL_DECK_THEME="$1/deck.py" SJEL_DIAGRAM_THEME="$1/diagram.py" \
+        SJEL_THEMES_DIR="$1/themes" "$CHECK" 2>&1)
   status=$?
 }
 

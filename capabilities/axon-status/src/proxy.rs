@@ -197,7 +197,7 @@ fn comms_authorization() -> Option<HeaderValue> {
     // The same three candidates comms itself resolves, in the same order
     // (`capabilities/comms/src/config.rs`). Re-derived rather than imported because axon-status
     // does not depend on comms and must not start doing so to read one path.
-    let path = if let Ok(p) = std::env::var("AXON_COMMS_CONFIG") {
+    let path = if let Ok(p) = axon_config::env_var("SJEL_COMMS_CONFIG") {
         axon_config::expand_tilde(&p)
     } else if let Some(p) = axon_config::overlay_config("comms.json") {
         p

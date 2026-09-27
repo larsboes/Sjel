@@ -730,7 +730,7 @@ empty table is the default.
 
 Three keys — `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`, `GOOGLE_REFRESH_TOKEN`
 — in a plain `KEY=value` file in the private overlay, the same shape
-`capabilities/comms` uses. Default `$AXON_PERSONAL_ROOT/config/calendar.env`,
+`capabilities/comms` uses. Default `$SJEL_PERSONAL_ROOT/config/calendar.env`,
 overridable with `google.env_path`. Nothing is read from this repo, and no token
 value is ever logged — not in an error, not in a report, not in a failed‑refresh
 body (Google puts token material in some of those).
@@ -907,24 +907,24 @@ on its own. In order:
 
 ## Config
 
-The five tables live in the shared SQLite file — `AXON_DB_PATH`, else
-`$AXON_PERSONAL_ROOT/data/axon/axon.db` — under the table prefix `calendar`, so they are
+The five tables live in the shared SQLite file — `SJEL_DB_PATH`, else
+`$SJEL_PERSONAL_ROOT/data/axon/axon.db` — under the table prefix `calendar`, so they are
 `calendar_entries`, `calendar_rhythms`, `calendar_contexts`,
 `calendar_trip_materializations` and `calendar_google_exports`
 (libs/axon-store/README.md). PRD Q45 (2026-08-27) moved them there from a Postgres
 schema.
 
 Where the file lives is a deployment fact, not a capability one, so a `database_url` left
-in `calendar.json` is ignored and `AXON_CALENDAR_DATABASE_URL` is gone: a file per
+in `calendar.json` is ignored and `SJEL_CALENDAR_DATABASE_URL` is gone: a file per
 capability would drop the cross-capability joins the shared instance existed for.
 
-`AXON_CALENDAR_PORT` or `AXON_PORT` → 8087 (default)
+`SJEL_CALENDAR_PORT` or `SJEL_PORT` → 8087 (default)
 
 Phases A–D need nothing else: all personalization is the data in the calendar
 tables themselves. Phase E added the first config file, because a Google sync
 cannot work without two personal values and refuses to guess either.
 
-`$AXON_CALENDAR_CONFIG` → `$AXON_PERSONAL_ROOT/config/calendar.json` →
+`$SJEL_CALENDAR_CONFIG` → `$SJEL_PERSONAL_ROOT/config/calendar.json` →
 `capabilities/calendar/calendar.config.json` (local, gitignored). Template:
 `calendar.config.example.json`.
 

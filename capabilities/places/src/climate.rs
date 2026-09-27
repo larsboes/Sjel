@@ -75,12 +75,12 @@ const MIN_REQUEST_SPACING: Duration = Duration::from_secs(1);
 /// timeout is longer than `geocode.rs`'s twenty seconds rather than the same.
 const REQUEST_TIMEOUT: Duration = Duration::from_secs(60);
 
-/// `AXON_PLACES_OPEN_METEO_URL` overrides the endpoint for the CLI verb only.
+/// `SJEL_PLACES_OPEN_METEO_URL` overrides the endpoint for the CLI verb only.
 /// `fetch_normals` takes its URL as a parameter instead, so the tests inject a
 /// stub without touching process env — the reason `geocode.rs`'s own db_tests
 /// pass a URL explicitly under cargo's thread-parallel harness.
 pub fn archive_url() -> String {
-    std::env::var("AXON_PLACES_OPEN_METEO_URL")
+    axon_config::env_var("SJEL_PLACES_OPEN_METEO_URL")
         .ok()
         .filter(|value| !value.trim().is_empty())
         .unwrap_or_else(|| ARCHIVE_URL.to_string())

@@ -18,7 +18,7 @@ scripts/homectl materialize
 scripts/homectl components [--only NAME] [--dry-run]
 ```
 
-Defaults resolve from `AXON_OVERLAY_ROOT`, `AXON_HOME_ROOT`, or the overlay declared by
+Defaults resolve from `SJEL_OVERLAY_ROOT`, `SJEL_HOME_ROOT`, or the overlay declared by
 `axon.local.toml`:
 
 - capability input: `<overlay>/capabilities/home-assistant`

@@ -4,14 +4,14 @@
 //! runtime, never from this repo.
 //!
 //! Resolution for the store path:
-//!   `axon_config::database_path` -- `$AXON_DB_PATH`, else
-//!   `$AXON_PERSONAL_ROOT/data/axon/axon.db`. It is a deployment fact, not a
+//!   `axon_config::database_path` -- `$SJEL_DB_PATH`, else
+//!   `$SJEL_PERSONAL_ROOT/data/axon/axon.db`. It is a deployment fact, not a
 //!   capability one, so `calendar.json` cannot move this capability off the
 //!   shared file on its own.
 //!
 //! Resolution for everything else (a JSON file, mirroring comms/scouting):
-//!   1. `$AXON_CALENDAR_CONFIG` (explicit override, full path)
-//!   2. `$AXON_PERSONAL_ROOT/config/calendar.json` (the overlay)
+//!   1. `$SJEL_CALENDAR_CONFIG` (explicit override, full path)
+//!   2. `$SJEL_PERSONAL_ROOT/config/calendar.json` (the overlay)
 //!   3. `capabilities/calendar/calendar.config.json` (local, gitignored)
 //!
 //! There is no file at all in the common case: Phases A–D need none, and
@@ -29,7 +29,7 @@ use axon_config::{database_path, expand_tilde, overlay_config, resolve_port};
 #[serde(default)]
 pub struct GoogleConfig {
     /// `KEY=value` file holding GOOGLE_CLIENT_ID / GOOGLE_CLIENT_SECRET /
-    /// GOOGLE_REFRESH_TOKEN. Default `$AXON_PERSONAL_ROOT/config/calendar.env`.
+    /// GOOGLE_REFRESH_TOKEN. Default `$SJEL_PERSONAL_ROOT/config/calendar.env`.
     ///
     /// Pointing this at comms' `comms.env` is supported and is the cheap path:
     /// `capabilities/comms/auth/get-refresh-token.ts` already requests
@@ -133,7 +133,7 @@ impl Config {
 /// configured X" error can name the exact path the operator has to create,
 /// rather than describing one.
 pub fn config_path() -> PathBuf {
-    if let Ok(path) = std::env::var("AXON_CALENDAR_CONFIG") {
+    if let Ok(path) = axon_config::env_var("SJEL_CALENDAR_CONFIG") {
         return expand_tilde(&path);
     }
     if let Some(path) = overlay_config("calendar.json") {
@@ -147,7 +147,7 @@ pub fn config_path() -> PathBuf {
 /// typo in one is reported on stderr rather than by refusing to start.
 ///
 /// Takes the path rather than resolving it, so a test can name a file without
-/// writing `$AXON_CALENDAR_CONFIG`. See `Config::from_file`.
+/// writing `$SJEL_CALENDAR_CONFIG`. See `Config::from_file`.
 fn read_file_config(path: &std::path::Path) -> FileConfig {
     if !path.is_file() {
         return FileConfig::default();
@@ -169,7 +169,7 @@ impl Config {
     /// The resolution rules with the file already in hand.
     ///
     /// Split from `load` so a test can supply the file directly instead of
-    /// pointing `$AXON_CALENDAR_CONFIG` at one. The environment is process-wide
+    /// pointing `$SJEL_CALENDAR_CONFIG` at one. The environment is process-wide
     /// and Rust runs a crate's tests as threads of one process, so two tests
     /// that both resolved through that variable read each other's writes: one
     /// removed it while the other held it set, and whichever was inside
@@ -189,7 +189,7 @@ impl Config {
     fn from_file(file: FileConfig) -> Self {
         Self {
             database_path: database_path(),
-            port: resolve_port(Some("AXON_CALENDAR_PORT"), file.port, 8087),
+            port: resolve_port(Some("SJEL_CALENDAR_PORT"), file.port, 8087),
             // Deployment declaration first, capability override second — one
             // implementation in axon_config so calendar and scouting cannot drift.
             // A conflict resolves to None deliberately: the caller's own
@@ -244,7 +244,7 @@ mod tests {
     /// holding the lock has already been reported, and refusing the lock
     /// afterwards would turn one failure into every later one.
     struct EnvScope {
-        restore: Vec<(&'static str, Option<String>)>,
+        restore: Vec<(String, Option<String>)>,
         _lock: std::sync::MutexGuard<'static, ()>,
     }
 
@@ -257,14 +257,18 @@ mod tests {
         }
 
         fn set(mut self, key: &'static str, value: &str) -> Self {
-            self.restore.push((key, std::env::var(key).ok()));
+            self.restore.push((key.to_string(), std::env::var(key).ok()));
             std::env::set_var(key, value);
             self
         }
 
+        /// Clears the Sjel name and its pre-rename Axon name, so a value the operator's shell
+        /// still exports under the old name cannot stand in for the setting under test.
         fn unset(mut self, key: &'static str) -> Self {
-            self.restore.push((key, std::env::var(key).ok()));
-            std::env::remove_var(key);
+            for name in std::iter::once(key.to_string()).chain(axon_config::env::legacy_name(key)) {
+                self.restore.push((name.clone(), std::env::var(&name).ok()));
+                std::env::remove_var(&name);
+            }
             self
         }
     }
@@ -275,8 +279,8 @@ mod tests {
             // it held before the scope, not to what it held mid-scope.
             for (key, previous) in self.restore.drain(..).rev() {
                 match previous {
-                    Some(value) => std::env::set_var(key, value),
-                    None => std::env::remove_var(key),
+                    Some(value) => std::env::set_var(&key, value),
+                    None => std::env::remove_var(&key),
                 }
             }
         }
@@ -301,7 +305,7 @@ mod tests {
     }
 
     /// No file: `from_file` is the resolution `load` runs once the file is
-    /// read, so the question is asked without `$AXON_CALENDAR_CONFIG` and
+    /// read, so the question is asked without `$SJEL_CALENDAR_CONFIG` and
     /// therefore without the race that made this flaky.
     ///
     /// The overlay still has to be moved out of the way, and that is not
@@ -311,7 +315,7 @@ mod tests {
     /// taking the lock.
     #[test]
     fn the_home_timezone_has_no_default() {
-        let _env = EnvScope::new().unset("AXON_PERSONAL_ROOT");
+        let _env = EnvScope::new().unset("SJEL_PERSONAL_ROOT");
         let config = Config::from_file(FileConfig::default());
         assert!(
             config.home_timezone.is_none(),
@@ -335,13 +339,13 @@ mod tests {
         )
         .unwrap();
 
-        // Named, not exported. This used to point `$AXON_CALENDAR_CONFIG` at
+        // Named, not exported. This used to point `$SJEL_CALENDAR_CONFIG` at
         // the file, which is what `the_home_timezone_has_no_default` was
         // reading when it failed. The overlay is still moved aside: a
         // deployment that declares a different zone in `deployment.env` makes
         // the capability value a CONFLICT rather than a winner, and the file's
         // value would vanish for a reason that has nothing to do with parsing.
-        let _env = EnvScope::new().unset("AXON_PERSONAL_ROOT");
+        let _env = EnvScope::new().unset("SJEL_PERSONAL_ROOT");
         let config = Config::from_file(read_file_config(&path));
         let _ = std::fs::remove_dir_all(&dir);
 
@@ -362,15 +366,15 @@ mod tests {
     fn the_config_path_prefers_the_explicit_override_to_the_overlay() {
         let named = std::env::temp_dir().join("calendar-explicit.json");
         let scope = EnvScope::new()
-            .set("AXON_CALENDAR_CONFIG", &named.to_string_lossy())
-            .set("AXON_PERSONAL_ROOT", "/nonexistent/overlay");
+            .set("SJEL_CALENDAR_CONFIG", &named.to_string_lossy())
+            .set("SJEL_PERSONAL_ROOT", "/nonexistent/overlay");
         assert_eq!(
             config_path(),
             named,
             "an explicitly named file outranks the overlay"
         );
 
-        let scope = scope.unset("AXON_CALENDAR_CONFIG");
+        let scope = scope.unset("SJEL_CALENDAR_CONFIG");
         assert_eq!(
             config_path(),
             PathBuf::from("/nonexistent/overlay/config/calendar.json"),

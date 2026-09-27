@@ -2,8 +2,8 @@
 # Thin launcher: storage's logic lives in the axon-storage crate beside this file.
 #
 # It does two things the binary cannot do for itself. It sources tools/lib/paths.sh, which
-# is what resolves AXON_ROOT and the active overlay (axon.local.toml, then axon.toml) —
-# axon-storage reads AXON_PERSONAL_ROOT and never re-derives that order. And it builds the
+# is what resolves SJEL_ROOT and the active overlay (axon.local.toml, then axon.toml) —
+# axon-storage reads SJEL_PERSONAL_ROOT and never re-derives that order. And it builds the
 # release binary when it is missing or older than its sources, so `axon storage` works on a
 # fresh clone without a separate build step.
 #
@@ -13,9 +13,9 @@ set -u
 
 _here="$(cd "$(dirname "${BASH_SOURCE[0]:-$0}")" && pwd)"
 # shellcheck source=tools/lib/paths.sh
-. "$_here/../lib/paths.sh"   # AXON_ROOT, AXON_OVERLAY_ROOT, AXON_PERSONAL_ROOT
+. "$_here/../lib/paths.sh"   # SJEL_ROOT, SJEL_OVERLAY_ROOT, SJEL_PERSONAL_ROOT
 
-BIN="${CARGO_TARGET_DIR:-$AXON_ROOT/target}/release/axon-storage"
+BIN="${CARGO_TARGET_DIR:-$SJEL_ROOT/target}/release/axon-storage"
 
 # Rebuild when the binary is missing, or when any crate source is newer than it. `find
 # -newer` with -quit stops at the first hit, so this costs one stat walk over a small tree.
@@ -29,7 +29,7 @@ elif [ -n "$(find "$_here/src" "$_here/Cargo.toml" -newer "$BIN" -print -quit 2>
 fi
 if [ -n "$_stale" ]; then
   echo "storage: building axon-storage (release)..." >&2
-  cargo build --locked --release -p axon-storage --manifest-path "$AXON_ROOT/Cargo.toml" >&2 || exit 2
+  cargo build --locked --release -p axon-storage --manifest-path "$SJEL_ROOT/Cargo.toml" >&2 || exit 2
 fi
 
 exec "$BIN" "$@"

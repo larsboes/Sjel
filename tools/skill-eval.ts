@@ -48,7 +48,7 @@ import { cpSync, existsSync, mkdirSync, readFileSync, readdirSync, rmSync, write
 import { dirname, join, resolve } from "node:path";
 import { tmpdir } from "node:os";
 
-const AXON_ROOT = resolve(import.meta.dir, "..");
+const SJEL_ROOT = resolve(import.meta.dir, "..");
 const CANONICAL_TOP_KEYS = ["skill_name", "evals"] as const;
 const KNOWN_TOP_KEYS = [
   "skill_name",
@@ -84,8 +84,8 @@ export type Skill = { name: string; pack: string; dir: string; suitePath: string
 
 export function allSkills(): Skill[] {
   const out: Skill[] = [];
-  for (const pack of readdirSync(join(AXON_ROOT, "Packs"))) {
-    const skillsDir = join(AXON_ROOT, "Packs", pack, "skills");
+  for (const pack of readdirSync(join(SJEL_ROOT, "Packs"))) {
+    const skillsDir = join(SJEL_ROOT, "Packs", pack, "skills");
     if (!existsSync(skillsDir)) continue;
     for (const name of readdirSync(skillsDir)) {
       const dir = join(skillsDir, name);
@@ -353,7 +353,7 @@ function runEval(skillName: string, flags: { caseId?: string; model?: string | n
   const workspace = join(dirname(skill.dir), `${skill.name}-workspace`);
   const iteration = join(workspace, `iteration-${nextIteration(workspace)}`);
   mkdirSync(iteration, { recursive: true });
-  console.log(`skill-eval: ${skill.name} -> ${iteration.replace(AXON_ROOT + "/", "")}`);
+  console.log(`skill-eval: ${skill.name} -> ${iteration.replace(SJEL_ROOT + "/", "")}`);
 
   const arms: Arm[] = ["with_skill", "without_skill"];
   const benchmark: any[] = [];
@@ -442,7 +442,7 @@ function runEval(skillName: string, flags: { caseId?: string; model?: string | n
   const graded = benchmark.filter((r) => r.delta_pass !== undefined);
   const summary = {
     skill: skill.name,
-    iteration: iteration.replace(AXON_ROOT + "/", ""),
+    iteration: iteration.replace(SJEL_ROOT + "/", ""),
     record: "2026-09-17",
     model: flags.model ?? "(session default)",
     grade_model: flags.gradeModel ?? "(session default)",
@@ -459,7 +459,7 @@ function runEval(skillName: string, flags: { caseId?: string; model?: string | n
     cases: benchmark,
   };
   writeFileSync(join(iteration, "benchmark.json"), JSON.stringify(summary, null, 2) + "\n");
-  console.log(`skill-eval: wrote ${join(iteration, "benchmark.json").replace(AXON_ROOT + "/", "")}`);
+  console.log(`skill-eval: wrote ${join(iteration, "benchmark.json").replace(SJEL_ROOT + "/", "")}`);
   if (summary.totals) {
     const t = summary.totals;
     console.log(

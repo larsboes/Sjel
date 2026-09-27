@@ -27,8 +27,8 @@ note_fail() {
 }
 
 # shellcheck source=lib/tool-index.sh
-AXON_ROOT="$SCRATCH/fixture"
-mkdir -p "$AXON_ROOT/tools"
+SJEL_ROOT="$SCRATCH/fixture"
+mkdir -p "$SJEL_ROOT/tools"
 . "$LIB"
 
 find_in() { # find_in <query> -> $out, $status
@@ -40,35 +40,35 @@ says() { printf '%s' "$out" | grep -qF -- "$1"; }
 
 # --- the fixture checkout --------------------------------------------------
 
-cat > "$AXON_ROOT/tools/widget.sh" <<'SH'
+cat > "$SJEL_ROOT/tools/widget.sh" <<'SH'
 #!/bin/bash
 # tools/widget.sh — polishes a widget until it shines.
 SH
 
 # A launcher and the file it execs. One tool, and the launcher is what a reader should run.
-cat > "$AXON_ROOT/tools/gadget" <<'SH'
+cat > "$SJEL_ROOT/tools/gadget" <<'SH'
 #!/usr/bin/env bash
 # Thin launcher: gadget's logic lives in gadget.ts.
 SH
-cat > "$AXON_ROOT/tools/gadget.ts" <<'TS'
+cat > "$SJEL_ROOT/tools/gadget.ts" <<'TS'
 // tools/gadget.ts — counts every gadget on this machine and says which are unowned.
 TS
 
 # An older header that names no path. Its first line is the honest summary.
-cat > "$AXON_ROOT/tools/legacy.sh" <<'SH'
+cat > "$SJEL_ROOT/tools/legacy.sh" <<'SH'
 #!/bin/bash
 # Restore a thing, carefully, without writing into live state.
 SH
 
 # Not tools: a test, a fixture and a document. None is a thing to run for a task.
-cat > "$AXON_ROOT/tools/widget.test.sh" <<'SH'
+cat > "$SJEL_ROOT/tools/widget.test.sh" <<'SH'
 #!/bin/bash
 # tools/widget.test.sh — planted cases for the widget polisher.
 SH
-cat > "$AXON_ROOT/tools/widget.env.example" <<'SH'
+cat > "$SJEL_ROOT/tools/widget.env.example" <<'SH'
 # tools/widget.env.example — a widget's settings, with every value blank.
 SH
-cat > "$AXON_ROOT/tools/README.md" <<'MD'
+cat > "$SJEL_ROOT/tools/README.md" <<'MD'
 # tools/README.md — what lives here.
 MD
 
@@ -126,7 +126,7 @@ find_in nothing-in-this-tree-says-this
 # a floor on the count, not as a list of names — a list here would be the stale second copy
 # this index exists to avoid.
 
-AXON_ROOT="$REAL_ROOT"
+SJEL_ROOT="$REAL_ROOT"
 rows="$(search_tools "" | wc -l | tr -d ' ')"
 scripts="$(find "$REAL_ROOT/tools" -maxdepth 1 -type f \
   ! -name '*.test.sh' ! -name '*.test.ts' ! -name '*.example' ! -name '*.example.*' \

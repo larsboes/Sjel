@@ -7,10 +7,10 @@ use std::path::PathBuf;
 
 pub struct Config {
     /// The one shared SQLite file, under the table prefix `punctuality` (PRD Q45).
-    /// Resolved by `axon_config::database_path`: `AXON_DB_PATH`, else
+    /// Resolved by `axon_config::database_path`: `SJEL_DB_PATH`, else
     /// `<overlay>/data/axon/axon.db`. Not a per-capability setting any more — a file
     /// per capability would drop the cross-capability joins the shared instance
-    /// existed for, so `AXON_PUNCTUALITY_DATABASE_URL` is now ignored.
+    /// existed for, so `SJEL_PUNCTUALITY_DATABASE_URL` is now ignored.
     pub database_path: PathBuf,
     /// Where downloaded monthly parquet lands. A cache, not state: everything in it is
     /// re-downloadable, so it is deliberately outside the backup set.
@@ -19,7 +19,7 @@ pub struct Config {
 
 impl Config {
     pub fn load() -> Self {
-        let raw_dir = std::env::var("AXON_PUNCTUALITY_RAW_DIR")
+        let raw_dir = axon_config::env_var("SJEL_PUNCTUALITY_RAW_DIR")
             .ok()
             .map(|p| expand_tilde(&p))
             .or_else(|| overlay_data_dir("punctuality").map(|d| d.join("raw")))

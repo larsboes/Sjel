@@ -19,7 +19,7 @@ const FLAT: &str = "muster";
 /// von Sueden angelaufen.
 const FLAT_NORD: &str = "muster-nordkueche";
 
-/// Die Capability loest ihre Daten ueber `AXON_PERSONAL_ROOT` auf. Der Test setzt genau diese
+/// Die Capability loest ihre Daten ueber `SJEL_PERSONAL_ROOT` auf. Der Test setzt genau diese
 /// Variable, statt `src/` einen Testpfad unterzuschieben: ein Codeweg, den kein Deployment
 /// nimmt, beweist nichts ueber das Deployment.
 fn model() -> Model {
@@ -32,7 +32,7 @@ fn model_of(flat: &str) -> Model {
 }
 
 /// Genau einmal je Testbinary, weil `set_var` in einem laufenden Prozess sonst gegen die
-/// anderen Testfaeden liefe. `AXON_INTERIOR_FLAT` wird dabei GELOESCHT: dieses Binary prueft
+/// anderen Testfaeden liefe. `SJEL_INTERIOR_FLAT` wird dabei GELOESCHT: dieses Binary prueft
 /// auch, dass zwei Wohnungen ohne Wahl ein Fehler sind, und eine geerbte Umgebung waere die
 /// eine Bedingung, unter der dieser Test still bestaende, ohne etwas zu pruefen.
 ///
@@ -46,8 +46,9 @@ fn fixture_overlay() {
             std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/fixtures/overlay");
         let db = std::env::temp_dir().join(format!("interior-engine-{}.db", std::process::id()));
         let _ = std::fs::remove_file(&db);
-        std::env::set_var("AXON_PERSONAL_ROOT", &fixture);
-        std::env::set_var("AXON_DB_PATH", &db);
+        std::env::set_var("SJEL_PERSONAL_ROOT", &fixture);
+        std::env::set_var("SJEL_DB_PATH", &db);
+        std::env::remove_var("SJEL_INTERIOR_FLAT");
         std::env::remove_var("AXON_INTERIOR_FLAT");
 
         let store = interior::store::Store::open(&db).expect("die Testdatenbank oeffnet");
@@ -489,7 +490,7 @@ fn mehrere_wohnungen_ohne_wahl_sind_ein_fehler() {
     let text = err.to_string();
     assert!(text.contains(FLAT) && text.contains(FLAT_NORD), "{text}");
     assert!(
-        text.contains("AXON_INTERIOR_FLAT"),
+        text.contains("SJEL_INTERIOR_FLAT"),
         "nennt den Ausweg: {text}"
     );
 }

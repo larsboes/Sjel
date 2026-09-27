@@ -31,7 +31,7 @@ pub enum ModelError {
     },
     #[error("{path}: {detail}")]
     Config { path: PathBuf, detail: String },
-    #[error("AXON_PERSONAL_ROOT ist nicht gesetzt — ohne Overlay gibt es keine Wohnungsdaten")]
+    #[error("SJEL_PERSONAL_ROOT ist nicht gesetzt — ohne Overlay gibt es keine Wohnungsdaten")]
     NoOverlay,
     #[error("{0}")]
     Missing(String),
@@ -644,13 +644,13 @@ pub fn flats() -> Result<Vec<String>, ModelError> {
     Ok(out)
 }
 
-/// Die Wohnung, gegen die gerechnet wird: `AXON_INTERIOR_FLAT`, sonst die einzige vorhandene.
+/// Die Wohnung, gegen die gerechnet wird: `SJEL_INTERIOR_FLAT`, sonst die einzige vorhandene.
 ///
 /// Gibt es mehrere und keine ist gewaehlt, ist das ein Fehler und keine Vorauswahl. Sobald ein
 /// zweiter Raum zum Vergleich existiert (PRD B28), waere ein stiller Standard genau der Weg, auf
 /// dem ein Plan der falschen Wohnung als der richtige durchgeht.
 pub fn default_flat() -> Result<String, ModelError> {
-    if let Ok(v) = std::env::var("AXON_INTERIOR_FLAT") {
+    if let Ok(v) = axon_config::env_var("SJEL_INTERIOR_FLAT") {
         if !v.trim().is_empty() {
             return Ok(v);
         }
@@ -663,7 +663,7 @@ pub fn default_flat() -> Result<String, ModelError> {
         )),
         1 => Ok(all.into_iter().next().unwrap()),
         _ => Err(ModelError::Missing(format!(
-            "mehrere Wohnungen ({}) — waehle eine mit AXON_INTERIOR_FLAT oder --flat",
+            "mehrere Wohnungen ({}) — waehle eine mit SJEL_INTERIOR_FLAT oder --flat",
             all.join(", ")
         ))),
     }
@@ -677,7 +677,7 @@ impl Model {
         let rules: Rules = read_toml(&flat_dir.join("rules.toml"))?;
 
         // Der Katalog kommt aus der Datenbank, nicht mehr aus `inventory/*.toml` (B25). Der
-        // Pfad ist derselbe, den jede andere Capability nimmt: AXON_DB_PATH, sonst das
+        // Pfad ist derselbe, den jede andere Capability nimmt: SJEL_DB_PATH, sonst das
         // Overlay. Ein leerer Katalog ist kein Fehler beim Laden — er faellt dort auf, wo
         // ein Layout ein Stueck nennt, das es nicht gibt, und das ist die Stelle mit dem
         // besseren Fehlertext.

@@ -19,7 +19,7 @@ one house.
 1. **In Home Assistant:** create a long-lived access token (Profile → Security → *Long-lived
    access tokens*). That token is `HA_TOKEN`.
 2. **Non-secret config:** set `HA_URL` (e.g. `http://<host>:8123`) in the axon-overlay overlay's
-   `config/home-assistant.vars` (resolved via `$AXON_HOME_ROOT`). The WebSocket endpoint is
+   `config/home-assistant.vars` (resolved via `$SJEL_HOME_ROOT`). The WebSocket endpoint is
    derived from it (http→ws, https→wss, `/api/websocket`).
 3. **In Bitwarden:** item `home-assistant/ha` (override with `$HA_BW_ITEM`) holding **only** the
    secret custom field `HA_TOKEN` — the **same item the `ha-cli` skill uses**. Provision via Axon

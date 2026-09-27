@@ -119,14 +119,14 @@ function read(path: string, role: RepoStatus["role"], releaseGlob: string): Repo
   };
 }
 
-const axonRoot = process.env.AXON_ROOT;
+const axonRoot = process.env.SJEL_ROOT;
 if (!axonRoot) {
-  console.error("repos.ts: AXON_ROOT is not set — run through tools/repos, or export it");
+  console.error("repos.ts: SJEL_ROOT is not set — run through tools/repos, or export it");
   process.exit(1);
 }
 // The overlay is optional: a fresh public clone has none, and that is a valid machine,
 // not an error. It is also private, so only its basename is ever reported.
-const overlayRoot = process.env.AXON_PERSONAL_ROOT;
+const overlayRoot = process.env.SJEL_PERSONAL_ROOT;
 
 // One home for "which tags are release tags" — axon.toml [release] tag_glob, shared with
 // tools/lib/version.sh and tools/doctor.ts (README.md#the-release-line).

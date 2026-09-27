@@ -23,31 +23,31 @@
 set -euo pipefail
 
 TOOLS_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-AXON_ROOT="$(cd "$TOOLS_DIR/.." && pwd)"
+SJEL_ROOT="$(cd "$TOOLS_DIR/.." && pwd)"
 
 case "${1:-}" in
   -h|--help) sed -n '2,19p' "$0"; exit 0 ;;
 esac
 
 # paths.sh (not toml.sh directly) — it resolves this machine's overlay and exports
-# AXON_MACHINE_TOML, the file the enabled set lives in.
+# SJEL_MACHINE_TOML, the file the enabled set lives in.
 source "$TOOLS_DIR/lib/paths.sh"
 # The enabled set answers "what does this machine RUN". A capability it CONSUMES from another
 # overlay's deployment is a different claim in a different field; external-ref.sh reads it, and
 # the registry is how it reaches every consumer that is not shell.
 source "$TOOLS_DIR/lib/external-ref.sh"
 
-CAPS_DIR="$AXON_ROOT/capabilities"
+CAPS_DIR="$SJEL_ROOT/capabilities"
 
-if [ ! -f "$AXON_MACHINE_TOML" ]; then
-  echo "capability.sh: no machine.toml at $AXON_MACHINE_TOML — run tools/install.sh first." >&2
+if [ ! -f "$SJEL_MACHINE_TOML" ]; then
+  echo "capability.sh: no machine.toml at $SJEL_MACHINE_TOML — run tools/install.sh first." >&2
   exit 1
 fi
 
 # --- shared reads (all via toml.sh) --------------------------------------
 
 _enabled_names() {  # space-separated, in machine.toml order
-  toml_array capabilities "$AXON_MACHINE_TOML" | tr '\n' ' '
+  toml_array capabilities "$SJEL_MACHINE_TOML" | tr '\n' ' '
 }
 
 _cap_requires() {  # <name> -> space-separated direct requires (empty if none/no manifest)
@@ -88,8 +88,8 @@ _has_schedule() {  # <name> -> exit 0 when the manifest declares a periodic sche
 _cap_dir_for() {  # <name> -> its directory, empty if neither root has it
   if [ -d "$CAPS_DIR/$1" ]; then
     echo "$CAPS_DIR/$1"
-  elif [ -d "$AXON_OVERLAY_CAPS_DIR/$1" ]; then
-    echo "$AXON_OVERLAY_CAPS_DIR/$1"
+  elif [ -d "$SJEL_OVERLAY_CAPS_DIR/$1" ]; then
+    echo "$SJEL_OVERLAY_CAPS_DIR/$1"
   fi
 }
 
@@ -97,7 +97,7 @@ _cap_dir_for() {  # <name> -> its directory, empty if neither root has it
 # and reported exactly like a public one; only the tracked generators ignore it.
 _cap_dirs() {  # names of every <root>/capabilities/<name>/ directory, one per line
   local d root
-  for root in "$CAPS_DIR" "$AXON_OVERLAY_CAPS_DIR"; do
+  for root in "$CAPS_DIR" "$SJEL_OVERLAY_CAPS_DIR"; do
     [ -d "$root" ] || continue
     for d in "$root"/*/; do
       [ -d "$d" ] || continue
@@ -113,7 +113,7 @@ _cap_dirs() {  # names of every <root>/capabilities/<name>/ directory, one per l
 # machine by definition, which is exactly README.md#three-architectural-nouns's membership test.
 _spine_names() {  # names of every <root>/<name>/service.toml, one per line
   local f
-  for f in "$AXON_ROOT"/*/service.toml; do
+  for f in "$SJEL_ROOT"/*/service.toml; do
     [ -f "$f" ] || continue
     basename "$(dirname "$f")"
   done
@@ -135,11 +135,11 @@ _manifest_for() {  # <name> -> path of its service.toml, empty if it has none
 
 _write_capabilities() {  # <space-separated ordered names> -> rewrite the one line
   local count
-  count="$(grep -cE '^capabilities[[:space:]]*=' "$AXON_MACHINE_TOML" || true)"
+  count="$(grep -cE '^capabilities[[:space:]]*=' "$SJEL_MACHINE_TOML" || true)"
   # More than one line is a corrupted file: a best-effort write would rewrite both
   # and quietly lose whichever the reader was not using. Refuse.
   if [ "$count" -gt 1 ]; then
-    echo "capability.sh: found $count 'capabilities = [...]' lines in $AXON_MACHINE_TOML — fix that file by hand first." >&2
+    echo "capability.sh: found $count 'capabilities = [...]' lines in $SJEL_MACHINE_TOML — fix that file by hand first." >&2
     exit 1
   fi
   local names="$1" joined="" n
@@ -158,13 +158,13 @@ _write_capabilities() {  # <space-separated ordered names> -> rewrite the one li
       echo "# is legal, and tools/doctor re-checks that the set stays dependency-closed."
       echo "# Single-line array per tools/lib/toml.sh's contract."
       echo "$newline"
-    } >> "$AXON_MACHINE_TOML"
+    } >> "$SJEL_MACHINE_TOML"
     return 0
   fi
   # `-i.bak` + rm is the portable form that behaves identically under BSD sed
   # (macOS) and GNU sed (Linux); same idiom tools/lib/toml.sh:toml_set uses.
-  sed -i.bak -E "s|^capabilities[[:space:]]*=.*|$newline|" "$AXON_MACHINE_TOML"
-  rm -f "$AXON_MACHINE_TOML.bak"
+  sed -i.bak -E "s|^capabilities[[:space:]]*=.*|$newline|" "$SJEL_MACHINE_TOML"
+  rm -f "$SJEL_MACHINE_TOML.bak"
 }
 
 # --- transitive requires resolution (bash-3.2, cycle-safe) ---------------
@@ -408,7 +408,7 @@ cmd_registry() {  # [--lines]
     _has_service "$n" || continue
     _mf="$(_manifest_for "$n")"
     case "$_mf" in
-      "$AXON_OVERLAY_CAPS_DIR"/*) _scope="overlay-capability" ;;
+      "$SJEL_OVERLAY_CAPS_DIR"/*) _scope="overlay-capability" ;;
       *)                          _scope="capability" ;;
     esac
     _emit "$fmt" "$n" "$_mf" "$_scope"
@@ -445,7 +445,7 @@ EOF
   # after them means its first discovery call already sees the truth.
   while IFS= read -r n; do
     [ -n "$n" ] || continue
-    _emit "$fmt" "$n" "$AXON_ROOT/$n/service.toml" spine
+    _emit "$fmt" "$n" "$SJEL_ROOT/$n/service.toml" spine
   done <<EOF
 $(_spine_names)
 EOF

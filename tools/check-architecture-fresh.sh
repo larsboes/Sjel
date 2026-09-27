@@ -9,12 +9,12 @@ set -e
 _lib="$(cd "$(dirname "${BASH_SOURCE[0]:-$0}")/lib" && pwd)"
 source "$_lib/paths.sh"
 
-before="$AXON_ROOT/ARCHITECTURE.md"
+before="$SJEL_ROOT/ARCHITECTURE.md"
 after="$(mktemp)"
 trap 'rm -f "$after"' EXIT
 
 # ARCHITECTURE_OUT: generate into the scratch file rather than in place.
-ARCHITECTURE_OUT="$after" bash "$AXON_ROOT/tools/generate-architecture.sh" >/dev/null
+ARCHITECTURE_OUT="$after" bash "$SJEL_ROOT/tools/generate-architecture.sh" >/dev/null
 
 # The "Generated: <timestamp>" line always differs -- that's not staleness.
 if diff -q <(grep -v '^> Generated:' "$before") <(grep -v '^> Generated:' "$after") >/dev/null; then

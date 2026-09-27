@@ -81,7 +81,7 @@ pub fn bind_addr_for(reach: Reach, port: u16, auth: &InboundAuth) -> Result<Sock
         Reach::AllInterfaces if auth.is_configured() => Ok(SocketAddr::from(([0, 0, 0, 0], port))),
         Reach::AllInterfaces => Err(format!(
             "refusing to bind 0.0.0.0:{port} with no inbound token. Declare \
-             AXON_INBOUND_TOKEN_FILE in <overlay>/config/deployment.env, or keep this \
+             SJEL_INBOUND_TOKEN_FILE in <overlay>/config/deployment.env, or keep this \
              server on loopback."
         )),
     }
@@ -151,7 +151,7 @@ mod tests {
         let open = InboundAuth::with_token(None);
         let refusal = bind_addr_for(Reach::AllInterfaces, 8082, &open).unwrap_err();
         assert!(
-            refusal.contains("AXON_INBOUND_TOKEN_FILE"),
+            refusal.contains("SJEL_INBOUND_TOKEN_FILE"),
             "the refusal must name the fix, got: {refusal}"
         );
         assert!(

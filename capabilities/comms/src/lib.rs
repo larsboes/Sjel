@@ -1,6 +1,6 @@
 //! Axon doctrine: this crate is public. No personal value (sender names, email
 //! addresses, personal classification rules) lives here -- those come from the
-//! private overlay at runtime (`$AXON_PERSONAL_ROOT/config/comms.json` +
+//! private overlay at runtime (`$SJEL_PERSONAL_ROOT/config/comms.json` +
 //! `comms.env`). Mirrors `capabilities/scouting`'s split exactly.
 //!
 //! Gmail sweeps are read-only. The only Gmail writes are explicit authenticated

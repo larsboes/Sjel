@@ -723,7 +723,7 @@ fn spawn_persister(app: &App, path: std::path::PathBuf) {
 /// `panel_build`), never a checked-in directory; the runner overrides it when the
 /// capability is installed somewhere else.
 fn ui_dir() -> String {
-    std::env::var("AXON_SOUNDSCAPE_UI")
+    axon_config::env_var("SJEL_SOUNDSCAPE_UI")
         .unwrap_or_else(|_| "capabilities/soundscape/ui/dist".to_string())
 }
 
@@ -741,7 +741,7 @@ async fn main() {
     match state_path() {
         Some(path) => spawn_persister(&app, path),
         None => eprintln!(
-            "[soundscape] no AXON_PERSONAL_ROOT: state is in-memory and will not survive a restart"
+            "[soundscape] no SJEL_PERSONAL_ROOT: state is in-memory and will not survive a restart"
         ),
     }
 
@@ -767,7 +767,7 @@ async fn main() {
         // an unknown path is a route, not a 404.
         .fallback_service(ServeDir::new(&dir).fallback(ServeFile::new(&index)));
 
-    let port = axon_config::resolve_port(Some("AXON_SOUNDSCAPE_PORT"), None, 8088);
+    let port = axon_config::resolve_port(Some("SJEL_SOUNDSCAPE_PORT"), None, 8088);
     axon_server::serve_local("soundscape", port, router).await;
 }
 

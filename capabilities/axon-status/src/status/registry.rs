@@ -197,8 +197,8 @@ pub(crate) struct CapabilityView {
 /// `tools/lib/paths.sh` exports it, so anything started by `service-runner.sh`
 /// inherits it; a hand-started run has to say where it is.
 pub(crate) fn axon_root() -> Result<PathBuf, String> {
-    std::env::var("AXON_ROOT").map(PathBuf::from).map_err(|_| {
-        "AXON_ROOT is not set — start this through tools/service-runner.sh, or export it"
+    axon_config::env_var("SJEL_ROOT").map(PathBuf::from).map_err(|_| {
+        "SJEL_ROOT is not set — start this through tools/service-runner.sh, or export it"
             .to_string()
     })
 }
@@ -213,9 +213,9 @@ pub(crate) fn axon_root() -> Result<PathBuf, String> {
 // `std::path::Path` stays qualified: `axum::extract::Path` owns the bare name in this
 // file, same as in `reap_idle_panels` below.
 pub(crate) fn manifest_key(root: &std::path::Path) -> Option<Vec<(PathBuf, SystemTime)>> {
-    // Same env contract as AXON_ROOT above: tools/lib/paths.sh exports it, so anything
+    // Same env contract as SJEL_ROOT above: tools/lib/paths.sh exports it, so anything
     // started by service-runner.sh inherits it.
-    let machine_toml = std::env::var("AXON_MACHINE_TOML").ok()?;
+    let machine_toml = axon_config::env_var("SJEL_MACHINE_TOML").ok()?;
     let mut paths = vec![PathBuf::from(machine_toml)];
 
     // Spine services at the repo root, capabilities under capabilities/, and the same
@@ -227,10 +227,10 @@ pub(crate) fn manifest_key(root: &std::path::Path) -> Option<Vec<(PathBuf, Syste
     // The overlay directory belongs in the key even though the registry it guards is
     // rendered by capability.sh: this key is what notices a manifest appearing, and an
     // overlay capability that is added while the process runs would otherwise stay
-    // invisible until a restart. AXON_OVERLAY_CAPS_DIR comes from tools/lib/paths.sh,
+    // invisible until a restart. SJEL_OVERLAY_CAPS_DIR comes from tools/lib/paths.sh,
     // and its absence is normal — a deployment need not own any overlay capability.
     let mut dirs = vec![root.to_path_buf(), root.join("capabilities")];
-    if let Ok(overlay_caps) = std::env::var("AXON_OVERLAY_CAPS_DIR") {
+    if let Ok(overlay_caps) = axon_config::env_var("SJEL_OVERLAY_CAPS_DIR") {
         dirs.push(PathBuf::from(overlay_caps));
     }
     for dir in dirs {

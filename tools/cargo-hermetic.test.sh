@@ -114,37 +114,37 @@ expect_ends_with "a warm target dir is reused rather than replaced" CARGO_TARGET
 # --- the environment the run inherits --------------------------------------
 #
 # The third silent failure, in one case: a session exports the real vault as a projection
-# root — the overlay's own config/shell exports the AXON_* set — and a run that redirected
+# root — the overlay's own config/shell exports the SJEL_* set — and a run that redirected
 # only the database rewrote thirteen real notes. Every variable that can point at a vault is
 # poisoned here with a path that must not survive.
 
 POISON="/nowhere/axon-poison/Knowledge-Base"
-out=$(AXON_PERSONAL_ROOT="/nowhere/axon-poison/overlay" \
-      AXON_OVERLAY_ROOT="/nowhere/axon-poison/overlay" \
-      AXON_DB_PATH="/nowhere/axon-poison/overlay/data/axon/axon.db" \
-      AXON_COMMS_CONFIG="/nowhere/axon-poison/overlay/config/comms.json" \
-      AXON_TRIPS_OBSIDIAN_ROOT="$POISON" \
-      AXON_FINANCE_OBSIDIAN_ROOT="$POISON" \
-      AXON_FINANCE_DECISIONS_ROOT="$POISON" \
-      AXON_INTERIOR_OBSIDIAN_ROOT="$POISON" \
+out=$(SJEL_PERSONAL_ROOT="/nowhere/axon-poison/overlay" \
+      SJEL_OVERLAY_ROOT="/nowhere/axon-poison/overlay" \
+      SJEL_DB_PATH="/nowhere/axon-poison/overlay/data/axon/axon.db" \
+      SJEL_COMMS_CONFIG="/nowhere/axon-poison/overlay/config/comms.json" \
+      SJEL_TRIPS_OBSIDIAN_ROOT="$POISON" \
+      SJEL_FINANCE_OBSIDIAN_ROOT="$POISON" \
+      SJEL_FINANCE_DECISIONS_ROOT="$POISON" \
+      SJEL_INTERIOR_OBSIDIAN_ROOT="$POISON" \
       "$TOOL" --print-env 2>&1); status=$?
 expect_ok "--print-env answers under a poisoned environment"
-for var in AXON_PERSONAL_ROOT AXON_OVERLAY_ROOT AXON_DB_PATH AXON_COMMS_CONFIG \
-           AXON_TRIPS_OBSIDIAN_ROOT AXON_FINANCE_OBSIDIAN_ROOT \
-           AXON_FINANCE_DECISIONS_ROOT AXON_INTERIOR_OBSIDIAN_ROOT; do
+for var in SJEL_PERSONAL_ROOT SJEL_OVERLAY_ROOT SJEL_DB_PATH SJEL_COMMS_CONFIG \
+           SJEL_TRIPS_OBSIDIAN_ROOT SJEL_FINANCE_OBSIDIAN_ROOT \
+           SJEL_FINANCE_DECISIONS_ROOT SJEL_INTERIOR_OBSIDIAN_ROOT; do
   expect_not_under "an inherited $var does not survive" "$var" "/nowhere/axon-poison"
 done
-expect_ends_with "the comms config is a file, not a directory" AXON_COMMS_CONFIG ".json"
-expect_ends_with "the database sits under the sandbox overlay" AXON_DB_PATH "/overlay/data/axon/axon.db"
+expect_ends_with "the comms config is a file, not a directory" SJEL_COMMS_CONFIG ".json"
+expect_ends_with "the database sits under the sandbox overlay" SJEL_DB_PATH "/overlay/data/axon/axon.db"
 
-# The projection roots must not be the sandbox OVERLAY either. AXON_FINANCE_DECISIONS_ROOT
+# The projection roots must not be the sandbox OVERLAY either. SJEL_FINANCE_DECISIONS_ROOT
 # exists (PRD Q80) precisely because redirecting the overlay instead would redirect the
 # config read and test a configuration nobody is running.
 run --print-env
 expect_ok "--print-env with no cargo arguments"
-overlay="$(env_value AXON_PERSONAL_ROOT)"
-for var in AXON_TRIPS_OBSIDIAN_ROOT AXON_FINANCE_OBSIDIAN_ROOT AXON_FINANCE_DECISIONS_ROOT \
-           AXON_INTERIOR_OBSIDIAN_ROOT; do
+overlay="$(env_value SJEL_PERSONAL_ROOT)"
+for var in SJEL_TRIPS_OBSIDIAN_ROOT SJEL_FINANCE_OBSIDIAN_ROOT SJEL_FINANCE_DECISIONS_ROOT \
+           SJEL_INTERIOR_OBSIDIAN_ROOT; do
   if [ "$(env_value "$var")" = "$overlay" ]; then
     note_fail "$var points at the sandbox overlay rather than a projection root of its own"
   fi

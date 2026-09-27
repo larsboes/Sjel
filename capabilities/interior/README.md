@@ -27,7 +27,7 @@ die Drift, gegen die das hier existiert.
 ## Diese Capability kennt keine Wohnung
 
 Jede Zahl kommt zur Laufzeit aus dem privaten Overlay, aufgelöst über
-`axon_config::overlay_data_dir("interior")`. Ohne `AXON_PERSONAL_ROOT` bricht sie ab statt zu
+`axon_config::overlay_data_dir("interior")`. Ohne `SJEL_PERSONAL_ROOT` bricht sie ab statt zu
 raten: eine Planung gegen erfundene Maße wäre schlimmer als gar keine.
 
 Fotos und RoomPlan-Aufnahmen sind ebenfalls privat, aber keine Maschinenmodell-Daten. Ihr
@@ -37,7 +37,7 @@ fällt der Prozess für Fixtures und ältere Overlays auf `data/interior/` zurü
 existiert, aber nicht lesbar ist, kein JSON-Objekt ist oder `assets_root` nicht als Pfad führt,
 bricht ab (`model::assets_dir`).
 
-Welche Wohnung gemeint ist, entscheidet `AXON_INTERIOR_FLAT` oder `--flat`; liegt genau eine
+Welche Wohnung gemeint ist, entscheidet `SJEL_INTERIOR_FLAT` oder `--flat`; liegt genau eine
 unter `flats/`, ist es die. Liegen mehrere und ist keine gewählt, ist das ein **Fehler und keine
 Vorauswahl** — ein stiller Standard ist der Weg, auf dem ein Plan der falschen Wohnung als der
 richtige durchgeht.
@@ -97,8 +97,8 @@ falsch für diese, und nichts hätte es gemeldet. Nebenbei sind zwei Wohnungen d
 `default_flat()` sich weigern muss zu raten.
 
 ```bash
-AXON_PERSONAL_ROOT=capabilities/interior/tests/fixtures/overlay \
-AXON_INTERIOR_FLAT=muster target/debug/interior check a-frei
+SJEL_PERSONAL_ROOT=capabilities/interior/tests/fixtures/overlay \
+SJEL_INTERIOR_FLAT=muster target/debug/interior check a-frei
 ```
 
 ## Was die Maschine tut

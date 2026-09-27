@@ -11,7 +11,7 @@
 # tools half is testable on any checkout, and tools/tool-index.test.sh drives it against a
 # planted tools/ directory.
 #
-# Reads $AXON_ROOT. bash 3.2-safe (README.md#portable-shell).
+# Reads $SJEL_ROOT. bash 3.2-safe (README.md#portable-shell).
 
 # One line about one tool, read from the tool.
 #
@@ -32,8 +32,8 @@ tool_headers() {  # <path>
   local file="$1" base
   base="${file##*/}"; base="${base%.ts}"; base="${base%.sh}"
   sed -n '1,25p' "$file"
-  if [ -f "$AXON_ROOT/tools/$base.ts" ] && [ "$file" != "$AXON_ROOT/tools/$base.ts" ]; then
-    sed -n '1,25p' "$AXON_ROOT/tools/$base.ts"
+  if [ -f "$SJEL_ROOT/tools/$base.ts" ] && [ "$file" != "$SJEL_ROOT/tools/$base.ts" ]; then
+    sed -n '1,25p' "$SJEL_ROOT/tools/$base.ts"
   fi
 }
 
@@ -41,8 +41,8 @@ tool_summary() {  # <path> -> the description, or nothing
   local file="$1" base line
   base="${file##*/}"; base="${base%.ts}"; base="${base%.sh}"
   line="$(sed -n '1,25p' "$file" | sed -nE 's@^(#|//) tools/[A-Za-z0-9._-]+ (—|--|-) *@@p' | head -n 1)"
-  if [ -z "$line" ] && [ -f "$AXON_ROOT/tools/$base.ts" ] && [ "$file" != "$AXON_ROOT/tools/$base.ts" ]; then
-    line="$(sed -n '1,25p' "$AXON_ROOT/tools/$base.ts" | sed -nE 's@^// tools/[A-Za-z0-9._-]+ (—|--|-) *@@p' | head -n 1)"
+  if [ -z "$line" ] && [ -f "$SJEL_ROOT/tools/$base.ts" ] && [ "$file" != "$SJEL_ROOT/tools/$base.ts" ]; then
+    line="$(sed -n '1,25p' "$SJEL_ROOT/tools/$base.ts" | sed -nE 's@^// tools/[A-Za-z0-9._-]+ (—|--|-) *@@p' | head -n 1)"
   fi
   if [ -z "$line" ]; then
     line="$(sed -n '2,6p' "$file" | sed -nE 's@^(# |// )@@p' | head -n 1)"
@@ -67,7 +67,7 @@ tool_summary() {  # <path> -> the description, or nothing
 search_tools() {  # <query> -> exit 0 if anything matched
   local query="$1" hits=0 file name base needle haystack summary
   needle="$(printf '%s' "$query" | tr '[:upper:]' '[:lower:]')"
-  for file in "$AXON_ROOT"/tools/*; do
+  for file in "$SJEL_ROOT"/tools/*; do
     [ -f "$file" ] || continue
     name="${file##*/}"
     case "$name" in
@@ -76,7 +76,7 @@ search_tools() {  # <query> -> exit 0 if anything matched
     base="${name%.ts}"
     # A launcher and the .ts it execs are one tool, and the launcher is the thing to run.
     # Listing both would answer a question about `tools/doctor` with `tools/doctor.ts`.
-    if [ "$base" != "$name" ] && [ -f "$AXON_ROOT/tools/$base" ]; then continue; fi
+    if [ "$base" != "$name" ] && [ -f "$SJEL_ROOT/tools/$base" ]; then continue; fi
     haystack="$(printf '%s\n%s' "$name" "$(tool_headers "$file")" | tr '[:upper:]' '[:lower:]')"
     case "$haystack" in
       *"$needle"*)

@@ -133,9 +133,9 @@ const args = process.argv.slice(2);
 const DRY_RUN = args.includes("--dry-run") || args.includes("-n");
 const MANAGED = args.includes("--managed");
 
-const AXON_ROOT = resolve(import.meta.dir, "..");
+const SJEL_ROOT = resolve(import.meta.dir, "..");
 const HOME = process.env.HOME ?? "";
-const TEMPLATES = join(AXON_ROOT, "tools", "templates", "claude-code");
+const TEMPLATES = join(SJEL_ROOT, "tools", "templates", "claude-code");
 
 function expandHome(p: string): string {
   return p.startsWith("~") ? HOME + p.slice(1) : p;
@@ -305,7 +305,7 @@ export function mergeFragment(base: Json, fragment: Json, prefix: string, append
 // The base policy plus this machine's overlay fragment, if it has one.
 function renderManagedPolicy(templatePath: string): { policy: Json; fragmentPath: string | null; appended: string[] } {
   const base = readJson(templatePath, "managed template");
-  const overlay = overlayRoot(AXON_ROOT);
+  const overlay = overlayRoot(SJEL_ROOT);
   if (!overlay) return { policy: base, fragmentPath: null, appended: [] };
 
   if (!existsSync(overlay)) {

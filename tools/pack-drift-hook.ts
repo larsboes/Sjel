@@ -25,7 +25,7 @@ import { relative, resolve } from "node:path";
 import { HARNESSES, isInstalled } from "./lib/harness-registry.ts";
 import { getStatuses, packUnits, readState } from "./lib/pack-deploy.ts";
 
-const AXON_ROOT = resolve(import.meta.dir, "..");
+const SJEL_ROOT = resolve(import.meta.dir, "..");
 
 type HookInput = {
   hook_event_name?: string;
@@ -44,7 +44,7 @@ function sessionStart(): string[] {
     for (const row of getStatuses(config)) {
       if (row.status !== "drifted") continue;
       const unit = packUnits(config, row.pack).find((u) => u.key === row.skill);
-      const source = unit ? relative(AXON_ROOT, unit.sourceRoot) : `${row.pack}/${row.skill}`;
+      const source = unit ? relative(SJEL_ROOT, unit.sourceRoot) : `${row.pack}/${row.skill}`;
       lines.push(`  ${harness.id}: ${row.pack}/${row.skill} — the installed copy differs from ${source}`);
     }
   }
@@ -72,7 +72,7 @@ function fileChanged(paths: string[]): string[] {
       if (!unit || !existsSync(unit.sourceRoot)) continue;
       lines.push(
         `${path} is a DEPLOYED COPY, not the source.`,
-        `  Source:        ${relative(AXON_ROOT, unit.sourceRoot)} (Pack '${owner[0]}', harness ${harness.id})`,
+        `  Source:        ${relative(SJEL_ROOT, unit.sourceRoot)} (Pack '${owner[0]}', harness ${harness.id})`,
         `  Keep this edit: tools/harnesses accept ${owner[0]} ${skill} --from ${harness.id}`,
         `  Next sync of Pack '${owner[0]}' refuses to run until one of those happens.`,
       );

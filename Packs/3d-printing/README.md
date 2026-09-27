@@ -4,14 +4,14 @@ Slice + drive a home Klipper/Moonraker 3D printer safely from the terminal.
 
 - **`home-3d-printing`** — runbook over the `printing` capability (`capabilities/printing/printctl.py`): doctor → slice (OrcaSlicer) → upload → arm → start → monitor, with hard temp caps and an arm-before-heat gate.
 
-Works with **any** Klipper/Moonraker printer. Printer host, model, nozzle, material and safety caps live in the overlay (`$AXON_PERSONAL_ROOT/config/printing.json`, shape: `capabilities/printing/printctl.config.example.json`) — `printctl doctor` surfaces them and live-discovers the printer when it's on. Nothing printer-specific is baked into the skill.
+Works with **any** Klipper/Moonraker printer. Printer host, model, nozzle, material and safety caps live in the overlay (`$SJEL_PERSONAL_ROOT/config/printing.json`, shape: `capabilities/printing/printctl.config.example.json`) — `printctl doctor` surfaces them and live-discovers the printer when it's on. Nothing printer-specific is baked into the skill.
 
 ## Activate
 ```bash
-"$AXON_ROOT/tools/packs.sh" link 3d-printing   # → ~/.claude/skills/home-3d-printing
-"$AXON_ROOT/tools/packs-codex" deploy 3d-printing  # → ~/.agents/skills/home-3d-printing
-cp "$AXON_ROOT/capabilities/printing/printctl.config.example.json" \
-   "$AXON_PERSONAL_ROOT/config/printing.json"   # then fill in your printer
+"$SJEL_ROOT/tools/packs.sh" link 3d-printing   # → ~/.claude/skills/home-3d-printing
+"$SJEL_ROOT/tools/packs-codex" deploy 3d-printing  # → ~/.agents/skills/home-3d-printing
+cp "$SJEL_ROOT/capabilities/printing/printctl.config.example.json" \
+   "$SJEL_PERSONAL_ROOT/config/printing.json"   # then fill in your printer
 ```
 
 ## Attribution

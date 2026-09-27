@@ -2083,12 +2083,12 @@ const CHECKS: Check[] = [
       if (!ctx.overlayPath || !existsSync(ctx.overlayPath)) return ctx.warn("no overlay — cannot read deployment.env");
       const envPath = join(ctx.overlayPath, "config", "deployment.env");
       if (!existsSync(envPath)) return ctx.ok("no deployment.env — no tailnet gate declared");
-      const declared = readFileSync(envPath, "utf8")
-        .split("\n")
-        .map((l) => l.trim())
-        .find((l) => l.startsWith("SJEL_TAILNET_OPERATOR="))
-        ?.slice("SJEL_TAILNET_OPERATOR=".length)
-        .trim();
+      // Either key: AXON_TAILNET_OPERATOR is its name before the 2026-09-26 rename, and
+      // libs/axon-config's deployment_value reads both the same way.
+      const lines = readFileSync(envPath, "utf8").split("\n").map((l) => l.trim());
+      const valueOf = (key: string) =>
+        lines.find((l) => l.startsWith(`${key}=`))?.slice(key.length + 1).trim() || undefined;
+      const declared = valueOf("SJEL_TAILNET_OPERATOR") ?? valueOf("AXON_TAILNET_OPERATOR");
       if (!declared) {
         // Not a failure. The undeclared deployment is the one that predates this gate,
         // and libs/axon-server ignores the identity header entirely in that state.

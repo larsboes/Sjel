@@ -402,7 +402,7 @@
       <p class="date">{todayLabel}</p>
       <h1>
         {#if loading && commitments.length === 0}
-          Axon is organising the day.
+          Sjel is organising the day.
         {:else if commitments.length === 0}
           Nothing to decide.
         {:else}

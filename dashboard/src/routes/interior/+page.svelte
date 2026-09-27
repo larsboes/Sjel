@@ -1080,7 +1080,7 @@
 
 {#if phoneOnly}
   <div class="card offer">
-    <p class="lead">Room capture is available offline on this iPhone. Set the Axon connection (page footer) to load layouts and inventory from the canonical node.</p>
+    <p class="lead">Room capture is available offline on this iPhone. Set the Sjel connection (page footer) to load layouts and inventory from the canonical node.</p>
   </div>
 {:else if error}
   <div class="card offer">

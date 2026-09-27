@@ -79,7 +79,7 @@ export async function executeCalendarAccept(card: CalendarSlotCardData): Promise
       ends_at: card.endsAt,
       // An accepted suggestion is a plan, not a promise (operator ruling 2026-09-24).
       commitment: 'planned',
-      notes: 'Created from the Axon assistant drawer',
+      notes: 'Created from the Sjel assistant drawer',
     });
     triggerHaptic('success');
     return { ok: true, message: `Created "${card.title}" in the calendar.` };

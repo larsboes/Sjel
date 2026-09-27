@@ -236,7 +236,7 @@
 <RelatedTools
   context="rail-search"
   title="Other rail tools"
-  description="Specialised companions and the projects behind Axon's split-ticket ideas."
+  description="Specialised companions and the projects behind Sjel's split-ticket ideas."
 />
 
 {#if error}

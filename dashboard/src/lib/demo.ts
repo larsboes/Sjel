@@ -72,7 +72,7 @@ function owner(path: string, prefixes: DemoIndex["prefixes"]): string | null {
  * page load — so no component can reach the network ahead of it.
  *
  * `base` is SvelteKit's configured base path: on Pages the demo is served from a subdirectory,
- * so `/finance/api/dashboard` arrives as `/Axon/demo/finance/api/dashboard` and has to be
+ * so `/finance/api/dashboard` arrives as `/Sjel/demo/finance/api/dashboard` and has to be
  * stripped back before it can be looked up. Passed in rather than imported, because $app/paths
  * is the layout's dependency and this file stays a plain module.
  */

@@ -819,7 +819,7 @@ pub fn transport<R: Runtime>(app: &AppHandle<R>) -> Result<ReqwestTransport, Str
     let local = settings.local.as_ref();
     if base.is_none() && local.is_none() {
         return Err(format!(
-            "{NOT_CONFIGURED}: choose how to reach Axon in Settings, Axon connection"
+            "{NOT_CONFIGURED}: choose how to reach Sjel in Settings, Sjel connection"
         ));
     }
     #[cfg(mobile)]

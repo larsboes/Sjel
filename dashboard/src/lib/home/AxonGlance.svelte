@@ -81,12 +81,12 @@
   );
 </script>
 
-<aside class="axon-glance card" aria-label="Axon Integrated Life Cockpit">
+<aside class="axon-glance card" aria-label="Sjel Integrated Life Cockpit">
   <div class="glance-top">
     <div class="glance-title">
       <span class="live-dot"></span>
       <Icon name="sparkles" size={14} />
-      <strong>Axon Life Cockpit</strong>
+      <strong>Sjel Life Cockpit</strong>
       <span class="sep">·</span>
       <span class="date-context">
         {now.toLocaleDateString("en-GB", { weekday: "short", day: "numeric", month: "short" })}
@@ -107,7 +107,7 @@
         type="button"
         class="ask-chip"
         onclick={() => assistantStore.openDrawer()}
-        title="Open Axon Assistant"
+        title="Open Sjel Assistant"
       >
         <Icon name="sparkles" size={12} />
         <span>Ask</span>

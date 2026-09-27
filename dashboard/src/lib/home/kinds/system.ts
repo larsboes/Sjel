@@ -3,7 +3,7 @@ import { link } from "../../nav";
 import type { DecisionKind } from "../decisions";
 
 /**
- * Band 10000 — PRD §8.1, System health. Nothing outranks "Axon is not running".
+ * Band 10000 — PRD §8.1, System health. Nothing outranks "Sjel is not running".
  *
  * One row or none, and its urgency is zero: there is nothing above it for urgency to
  * break a tie against.

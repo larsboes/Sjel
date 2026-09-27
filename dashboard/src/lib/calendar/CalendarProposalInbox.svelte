@@ -118,7 +118,7 @@
   }
 
   async function remove(entry: CalendarEntry) {
-    if (!window.confirm(`Remove “${entry.title}” from Axon only? The source remains unchanged.`)) return;
+    if (!window.confirm(`Remove “${entry.title}” from Sjel only? The source remains unchanged.`)) return;
     actingId = entry.id;
     error = "";
     try {

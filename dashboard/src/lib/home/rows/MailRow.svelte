@@ -54,7 +54,7 @@
     <a class="btn" {href}>Open</a>
     <!-- Local only. Dismissing drops the proposal from this list and changes nothing in
          Gmail: the archive and trash actions live on the entry page, behind their own
-         confirmation, because they leave Axon. -->
+         confirmation, because they leave Sjel. -->
     <button
       class="btn"
       type="button"

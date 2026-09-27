@@ -6,7 +6,7 @@ import { RESCALE, type DecisionKind } from "../decisions";
  * Band 900 — PRD §9, a resource rule broken on this machine.
  *
  * Above a trip and below the capability-health card, because a runaway process is worse
- * than a plan that can wait and less urgent than "Axon is not running". The longer a
+ * than a plan that can wait and less urgent than "Sjel is not running". The longer a
  * condition has persisted the higher it sits: a process that has been pinning a core
  * since Tuesday is the one to look at.
  *

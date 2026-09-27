@@ -74,9 +74,9 @@ export const PRIMARY_NAV: NavItem[] = [
   { href: "/map", label: "Map", icon: "globe", capability: "places", warmsMap: true },
   { href: "/finance", label: "Finance", icon: "database", capability: "finance" },
   // Ein Ziel in der Shell und nicht nur ein Panel: das ist der Unterschied, den PRD Q59
-  // ausdruecklich nennt, und der Grund, aus dem die Capability nach core Axon gezogen ist.
+  // ausdruecklich nennt, und der Grund, aus dem die Capability nach core Sjel gezogen ist.
   { href: "/interior", label: "Interior", icon: "layout", capability: "interior" },
-  // PRD Q117: Axon is the system of record for people; the page edits capabilities/entities.
+  // PRD Q117: Sjel is the system of record for people; the page edits capabilities/entities.
   { href: "/people", label: "People", icon: "users", capability: "entities" },
 ];
 

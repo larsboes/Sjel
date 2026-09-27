@@ -88,7 +88,7 @@ export class AssistantEngine {
         return this.people();
       default:
         return Promise.resolve({
-          content: 'Axon Assistant can interact with live capabilities across travel, calendar, systems, feed, and room interior.',
+          content: 'Sjel Assistant can interact with live capabilities across travel, calendar, systems, feed, and room interior.',
           cards: [{
             type: 'action_choice',
             data: {

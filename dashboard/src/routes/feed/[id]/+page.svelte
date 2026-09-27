@@ -402,13 +402,13 @@
     }
   }
 
-  /// Deleting removes Axon's copy only. Any Google event this entry already
+  /// Deleting removes Sjel's copy only. Any Google event this entry already
   /// created is deliberately left alone — the capability's own opt-out route
   /// makes the same call, and removing someone's calendar event as a side
   /// effect of a delete here is not a decision this page makes.
   async function deleteEntry(): Promise<void> {
     if (!entry?.calendar) return;
-    if (!window.confirm(`Delete “${entry.title}” from Axon? Any Google event it created stays.`)) {
+    if (!window.confirm(`Delete “${entry.title}” from Sjel? Any Google event it created stays.`)) {
       return;
     }
     savingField = true;
@@ -599,7 +599,7 @@
         return;
       }
       entry.mail.category = category;
-      entry.mail.rationale = "Category set manually in Axon.";
+      entry.mail.rationale = "Category set manually in Sjel.";
       entry.mail.classification_method = "human";
       entry.mail.classification_version = "manual-v1";
     } catch (cause) {
@@ -656,7 +656,7 @@
       try {
         entry = normalizeContentItemDetail(await comms.content("mail", id));
       } catch {
-        error = `${error} Axon could not refresh the queued recovery state.`;
+        error = `${error} Sjel could not refresh the queued recovery state.`;
       }
     } finally {
       busy = false;
@@ -677,7 +677,7 @@
         entry = normalizeContentItemDetail(await comms.content("mail", id));
         mailCategory = entry.mail?.category ?? mailCategory;
       } catch {
-        error = error ? `${error} Axon could not refresh the recovery state.` : "Axon could not refresh the recovery state.";
+        error = error ? `${error} Sjel could not refresh the recovery state.` : "Sjel could not refresh the recovery state.";
       }
       busy = false;
     }
@@ -815,7 +815,7 @@
       try {
         entry = normalizeContentItemDetail(await comms.content(source, itemId));
       } catch {
-        cloudPreviewError = `${cloudPreviewError} Axon could not refresh the job state.`;
+        cloudPreviewError = `${cloudPreviewError} Sjel could not refresh the job state.`;
       }
     } finally {
       runningCloudJob = false;
@@ -838,7 +838,7 @@
 </script>
 
 <svelte:head>
-  <title>{title} · Axon Feed</title>
+  <title>{title} · Sjel Feed</title>
 </svelte:head>
 
 <a class="back" href={backHref}>← {backLabel}</a>
@@ -1042,7 +1042,7 @@
               }
             }}
           >
-            <Icon name="sparkles" size={13} /> Ask Axon
+            <Icon name="sparkles" size={13} /> Ask Sjel
           </button>
         {:else if entry.mail}
           <!-- "Make a task" was here until PRD Q48 (2026-08-27). The Action kind
@@ -1071,16 +1071,16 @@
           {#if entry.status === "dismissed"}
             <button class="btn" disabled={busy} onclick={() => setMailStatus("proposed")}>Return to queue</button>
           {:else if entry.status === "missing"}
-            <span class="lifecycle-state mono">Missing in Gmail · retained in Axon</span>
-            <button class="btn" disabled={busy} onclick={() => setMailStatus("dismissed")}>Dismiss from Axon</button>
+            <span class="lifecycle-state mono">Missing in Gmail · retained in Sjel</span>
+            <button class="btn" disabled={busy} onclick={() => setMailStatus("dismissed")}>Dismiss from Sjel</button>
           {:else if entry.status === "archived" || entry.status === "trashed"}
             <span class="lifecycle-state mono">
-              {entry.status === "archived" ? "Archived in Axon + Gmail" : "In Axon + Gmail Trash"}
+              {entry.status === "archived" ? "Archived in Sjel + Gmail" : "In Sjel + Gmail Trash"}
             </span>
             <button class="btn" disabled={busy || gmailActionBlocked} onclick={() => applyGmailAction("restore")}>Restore to Inbox</button>
           {:else if entry.status !== "executed"}
-            <button class="btn" disabled={busy} onclick={() => setMailStatus("dismissed")}>Dismiss from Axon</button>
-            <button class="btn" disabled={busy || gmailActionBlocked} onclick={() => (confirmingGmailAction = "archive")}>Archive in Axon + Gmail</button>
+            <button class="btn" disabled={busy} onclick={() => setMailStatus("dismissed")}>Dismiss from Sjel</button>
+            <button class="btn" disabled={busy || gmailActionBlocked} onclick={() => (confirmingGmailAction = "archive")}>Archive in Sjel + Gmail</button>
             <button class="btn danger" disabled={busy || gmailActionBlocked} onclick={() => (confirmingGmailAction = "trash")}>Move to Trash</button>
           {/if}
         {/if}
@@ -1110,8 +1110,8 @@
         <div class="gmail-confirm" role="alert">
           <p>
             {confirmingGmailAction === "trash"
-              ? "Move this thread to Trash in Axon and Gmail? Axon retains its copy for 30 days."
-              : "Archive this thread in Axon and remove it from the Gmail Inbox?"}
+              ? "Move this thread to Trash in Sjel and Gmail? Sjel retains its copy for 30 days."
+              : "Archive this thread in Sjel and remove it from the Gmail Inbox?"}
           </p>
           <button class="btn" disabled={busy} onclick={() => (confirmingGmailAction = null)}>Cancel</button>
           <button
@@ -1128,7 +1128,7 @@
         <div class="gmail-confirm" role="status">
           <p>
             The {entry.mail.gmail_sync_action ?? "Gmail"} action stopped after five failed attempts.
-            Retry opens a fresh bounded attempt window; Cancel keeps the current Gmail and Axon state.
+            Retry opens a fresh bounded attempt window; Cancel keeps the current Gmail and Sjel state.
           </p>
           <button class="btn" disabled={busy} onclick={() => decideGmailJob("cancel")}>Cancel action</button>
           <button class="btn btn-primary" disabled={busy} onclick={() => decideGmailJob("retry")}>Retry action</button>
@@ -1616,7 +1616,7 @@
               <div><dt>Method</dt><dd>{entry.mail.classification_method}</dd></div>
               <div><dt>Revision</dt><dd class="mono">{entry.mail.classification_version}</dd></div>
               {#if entry.mail.gmail_action_at}
-                <div><dt>Last Axon action</dt><dd>{entry.mail.gmail_action}</dd></div>
+                <div><dt>Last Sjel action</dt><dd>{entry.mail.gmail_action}</dd></div>
                 <div><dt>Changed</dt><dd>{lifecycleDate(entry.mail.gmail_action_at)}</dd></div>
               {/if}
               {#if entry.mail.gmail_location}
@@ -1632,7 +1632,7 @@
                 <div><dt>Pending action</dt><dd>{entry.mail.gmail_sync_action}</dd></div>
               {/if}
               {#if entry.mail.purge_after}
-                <div><dt>Axon cleanup</dt><dd>{lifecycleDate(entry.mail.purge_after)}</dd></div>
+                <div><dt>Sjel cleanup</dt><dd>{lifecycleDate(entry.mail.purge_after)}</dd></div>
               {/if}
             </dl>
             <p class="classification-rationale">{entry.mail.rationale}</p>

@@ -13,7 +13,7 @@
   import UnitMap, { type MapNode, type MapEdge } from "$lib/UnitMap.svelte";
 
   // Two altitudes, one page. The self-model is ~31 units and 16 couplings --
-  // small enough to be a picture, which is the altitude at which Axon can
+  // small enough to be a picture, which is the altitude at which Sjel can
   // actually be explained. graphify's 6.6k-node graph is the drill-down under
   // it, fetched one unit at a time and capped, never rendered whole. The
   // knowledge-graph panel that used to live on :4244 did render it whole, which
@@ -178,7 +178,7 @@
 
 <PageHeader
   badge="Self-model"
-  title="Axon about Axon"
+  title="Sjel about Sjel"
   desc="What is here, how the units connect, and how large each one is. Generated from tracked files and supplemented with live state."
 />
 

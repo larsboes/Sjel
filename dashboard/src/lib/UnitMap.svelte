@@ -380,7 +380,7 @@
     bind:this={svg}
     viewBox="0 0 {WIDTH} {HEIGHT}"
     role="application"
-    aria-label="Map of Axon units and how they connect"
+    aria-label="Map of Sjel units and how they connect"
     onpointerdown={(e) => onPointerDown(e, null)}
     onpointermove={onPointerMove}
     onpointerup={onPointerUp}

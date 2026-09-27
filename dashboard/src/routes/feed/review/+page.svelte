@@ -98,7 +98,7 @@
   }
 </script>
 
-<svelte:head><title>Feed review · Axon</title></svelte:head>
+<svelte:head><title>Feed review · Sjel</title></svelte:head>
 
 <PageHeader
   badge="Feed"

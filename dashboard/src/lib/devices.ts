@@ -47,7 +47,7 @@ export function canClaimOnThisDevice(): boolean {
 
 export async function getDeviceIdentity(): Promise<DeviceIdentity> {
   if (!canClaimOnThisDevice()) {
-    throw new Error('Device identity is available only inside the Axon iOS app.');
+    throw new Error('Device identity is available only inside the Sjel iOS app.');
   }
   try {
     return await invoke<DeviceIdentity>('device_identity_get');
@@ -58,7 +58,7 @@ export async function getDeviceIdentity(): Promise<DeviceIdentity> {
 
 export async function resetDeviceIdentity(): Promise<DeviceIdentity> {
   if (!canClaimOnThisDevice()) {
-    throw new Error('Device identity is available only inside the Axon iOS app.');
+    throw new Error('Device identity is available only inside the Sjel iOS app.');
   }
   try {
     return await invoke<DeviceIdentity>('device_identity_reset');

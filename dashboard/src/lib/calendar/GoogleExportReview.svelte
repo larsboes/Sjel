@@ -74,7 +74,7 @@
     <div>
       <p class="eyebrow">Google Calendar</p>
       <h2 id="google-export-title">Review export</h2>
-      <p>Only individually approved Axon entries are included. The preview does not change Google.</p>
+      <p>Only individually approved Sjel entries are included. The preview does not change Google.</p>
     </div>
     <button class="btn" onclick={onClose} disabled={loading || pushing}>Close</button>
   </div>
@@ -97,7 +97,7 @@
   </div>
 
   {#if !loading && optIns.length === 0}
-    <p class="empty">No entry is approved for Google yet. Open an Axon entry and enable export there.</p>
+    <p class="empty">No entry is approved for Google yet. Open an Sjel entry and enable export there.</p>
   {/if}
 
   {#if preview}

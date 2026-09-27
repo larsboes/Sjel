@@ -90,7 +90,7 @@
         domain: "action",
         domainLabel: "AI Assistant",
         icon: "sparkles",
-        title: `Ask Axon: "${query.trim()}"`,
+        title: `Ask Sjel: "${query.trim()}"`,
         subtitle: "Query the on-device assistant across live capabilities",
         action: () => {
           omniStore.close();
@@ -279,7 +279,7 @@
           bind:value={query}
           onkeydown={handleKeydown}
           placeholder="Search people, schedule, travel, finances, feed, actions..."
-          aria-label="Search across Axon"
+          aria-label="Search across Sjel"
           autocomplete="off"
           spellcheck="false"
         />
@@ -299,7 +299,7 @@
                 void assistantStore.send(query.trim(), page.url.pathname);
               }}
             >
-              <Icon name="sparkles" size={14} /> Ask Axon Assistant instead
+              <Icon name="sparkles" size={14} /> Ask Sjel Assistant instead
             </button>
           </div>
         {:else}
@@ -340,7 +340,7 @@
         </div>
         <div class="omni-brand">
           <Icon name="sparkles" size={12} />
-          <span>Axon Omni-Search</span>
+          <span>Sjel Omni-Search</span>
         </div>
       </div>
     </div>

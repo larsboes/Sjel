@@ -10,7 +10,7 @@
  *
  * State lives in `localStorage`, not in a table. It is a per-device reading
  * preference, it must survive a reload without a round trip, and nothing else in
- * Axon should have to know about it. Same reasoning the rail's `<details>`
+ * Sjel should have to know about it. Same reasoning the rail's `<details>`
  * sections already carry, made explicit here because this one persists.
  *
  * A band absent from the stored record is CLOSED, not defaulted-open. A record

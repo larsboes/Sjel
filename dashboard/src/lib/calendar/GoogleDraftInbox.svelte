@@ -91,7 +91,7 @@
   }
 
   async function remove(entry: CalendarEntry) {
-    if (!window.confirm(`Remove “${entry.title}” from Axon only? Google remains unchanged.`)) return;
+    if (!window.confirm(`Remove “${entry.title}” from Sjel only? Google remains unchanged.`)) return;
     actingId = entry.id;
     error = "";
     try {
@@ -105,7 +105,7 @@
   }
 </script>
 
-<p class="hint">Adding an entry protects it from later Google updates. Removing it deletes only Axon's copy.</p>
+<p class="hint">Adding an entry protects it from later Google updates. Removing it deletes only Sjel's copy.</p>
 
 {#if error}<p class="message error" role="alert">{error}</p>{/if}
 

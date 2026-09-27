@@ -418,7 +418,7 @@
       const p = w.projected;
       const projected =
         p && p.created + p.updated > 0
-          ? ` ${p.created + p.updated} subscription(s) with no note projected to Resources/Axon/.`
+          ? ` ${p.created + p.updated} subscription(s) with no note projected to Resources/Sjel/.`
           : "";
       if (w.conflicts.length > 0) {
         return `${w.written} written, ${w.unchanged} unchanged.${projected} Left alone because you edited inside the block: ${w.conflicts.join(", ")}`;

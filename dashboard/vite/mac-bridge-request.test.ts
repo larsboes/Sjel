@@ -68,14 +68,14 @@ describe('request()', () => {
     expect(error.message).toBe('interior: no such item');
   });
 
-  test('names the setting when no Axon node address is set', async () => {
+  test('names the setting when no Sjel node address is set', async () => {
     enterTauri(async () => {
-      throw `${NOT_CONFIGURED}: set the Axon node address in Settings, Axon connection`;
+      throw `${NOT_CONFIGURED}: set the Sjel node address in Settings, Sjel connection`;
     });
     const error = await request('/interior/api/items').catch((e) => e);
     expect(error).toBeInstanceOf(ApiError);
-    expect(error.message).toContain('Axon node address is not set');
-    expect(error.message).toContain('Axon connection');
+    expect(error.message).toContain('Sjel node address is not set');
+    expect(error.message).toContain('Sjel connection');
   });
 
   test('an absolute URL stays a plain fetch inside Tauri', async () => {

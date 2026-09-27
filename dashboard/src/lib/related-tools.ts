@@ -22,7 +22,7 @@ export const RELATED_TOOLS: RelatedTool[] = [
     contexts: ["travel-planning"],
     goodAt: "Planning together in real time, sharing invitations, and managing budgets and packing lists.",
     boundary:
-      "A polished group interface. Axon instead connects the plan to your own events, sources, and notes.",
+      "A polished group interface. Sjel instead connects the plan to your own events, sources, and notes.",
     action: "Open demo",
   },
   {
@@ -46,7 +46,7 @@ export const RELATED_TOOLS: RelatedTool[] = [
     contexts: ["rail-search"],
     goodAt: "Live journey guidance, connection forecasts, and split tickets on a phone.",
     boundary:
-      "More specialised for a journey in progress; Axon keeps the connection within the wider travel plan.",
+      "More specialised for a journey in progress; Sjel keeps the connection within the wider travel plan.",
     action: "View project",
   },
   {

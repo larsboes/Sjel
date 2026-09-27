@@ -1,5 +1,5 @@
 <script lang="ts">
-  // What Axon has put into each agent harness on this machine.
+  // What Sjel has put into each agent harness on this machine.
   //
   // The whole page is one GET. axon-status shells `tools/harnesses status --json`, which
   // is the same code path the CLI and the session hook read, so this view and the terminal

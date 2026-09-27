@@ -81,7 +81,7 @@ export function extractRouteContext(pathname: string): RouteContext {
   return {
     pathname,
     domain: 'general',
-    label: 'Axon',
+    label: 'Sjel',
     contextSummary: 'No capability bias on this page.',
     quickPrompts: ['Find a 2-hour focus block tomorrow', 'Train from Frankfurt to Berlin tomorrow', 'System health'],
   };

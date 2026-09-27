@@ -1,5 +1,5 @@
 <script lang="ts">
-  // How this app reaches its Axon node. Rendered only inside the Tauri app: the web shell
+  // How this app reaches its Sjel node. Rendered only inside the Tauri app: the web shell
   // reaches the node through its own proxy and has nothing to set.
   //
   // PRD Q119: every way to connect is listed with its pros and cons, and more than one can be
@@ -78,7 +78,7 @@
         throw new Error("Local network access is off for this app. Turn it on in Settings, Privacy & Security, Local Network.");
       }
       found = answer.nodes;
-      return answer.nodes.length ? "Pick your Mac." : "No Mac found on this Wi-Fi. Is Axon's Same Wi-Fi option on at the Mac?";
+      return answer.nodes.length ? "Pick your Mac." : "No Mac found on this Wi-Fi. Is Sjel's Same Wi-Fi option on at the Mac?";
     });
 
   const confirmMac = (node: FoundNode) =>
@@ -99,16 +99,16 @@
     run(async () => {
       const answer = await macRequest(HEALTH_PATH);
       if (answer.status < 200 || answer.status >= 300) throw new Error(`HTTP ${answer.status}: ${answer.body.slice(0, 200)}`);
-      return answer.stale ? "Not reached: showing this device's copy." : "Axon answered.";
+      return answer.stale ? "Not reached: showing this device's copy." : "Sjel answered.";
     });
 </script>
 
 {#if shown}
   <button class="link" type="button" onclick={() => (open = true)}>
-    Axon connection{configured ? "" : " (not set)"}
+    Sjel connection{configured ? "" : " (not set)"}
   </button>
   {#if open}
-    <Overlay title="Axon connection" onClose={() => (open = false)} {busy}>
+    <Overlay title="Sjel connection" onClose={() => (open = false)} {busy}>
       <p class="hint">
         Pick one or more. Whichever you choose, only this paired device can get in: it signs every request with a key that never leaves it.
       </p>

@@ -175,15 +175,15 @@
     <div class="bar">
       <div class="brand-group">
         <a class="brand" href={link("/")}>
-          <span class="mark">A</span>
-          <span class="name">Axon</span>
+          <span class="mark">S</span>
+          <span class="name">Sjel</span>
         </a>
 
         <button
           type="button"
           class="omni-trigger"
           onclick={() => omniStore.open()}
-          aria-label="Search across Axon"
+          aria-label="Search across Sjel"
         >
           <Icon name="search" size={13} />
           <span class="omni-trigger-text">Search life...</span>
@@ -196,8 +196,8 @@
           type="button"
           class="btn ask-btn"
           onclick={() => { assistantStore.restoreFloating(); assistantStore.toggle(); }}
-          aria-label="Ask Axon Assistant"
-          title="Ask Axon Assistant"
+          aria-label="Ask Sjel Assistant"
+          title="Ask Sjel Assistant"
         >
           <Icon name="sparkles" size={14} />
           <span class="ask-btn-text">Ask</span>
@@ -325,7 +325,7 @@
 
   <footer>
     <div class="inner">
-      <span>Axon</span>
+      <span>Sjel</span>
       <span class="mono">{capabilities.items.length} capabilities</span>
       <MacConnection />
       {#if capabilities.byName("devices")}
@@ -357,7 +357,7 @@
       type="button"
       class="tab-link tab-action"
       onclick={() => { assistantStore.restoreFloating(); assistantStore.toggle(); }}
-      aria-label="Ask Axon Assistant"
+      aria-label="Ask Sjel Assistant"
     >
       <span class="tab-action-icon">
         <Icon name="sparkles" size={18} />

@@ -146,7 +146,7 @@
     view === "discover"
       ? "Scan active sources and review relevant opportunities. Scouting evaluates and stores them separately while keeping them in the same Feed workspace."
       : view === "mail"
-        ? "Review and classify mail. Archive, Trash, and Restore update Axon and Gmail together."
+        ? "Review and classify mail. Archive, Trash, and Restore update Sjel and Gmail together."
         : "Only new, unreviewed articles, media, repositories, security reports, and system updates. Processed entries remain available in the library.",
   );
 
@@ -739,7 +739,7 @@
     try {
       const result = await comms.reconcileGmail();
       triage = await comms.triage();
-      reconcileNotice = `${result.reconciled} locations checked · ${result.changed} Axon states updated · ${result.recovered} queued actions recovered${result.missing > 0 ? ` · ${result.missing} missing in Gmail` : ""}${result.read_failures > 0 ? ` · ${result.read_failures} unavailable` : ""}. Metadata only; no message content fetched.`;
+      reconcileNotice = `${result.reconciled} locations checked · ${result.changed} Sjel states updated · ${result.recovered} queued actions recovered${result.missing > 0 ? ` · ${result.missing} missing in Gmail` : ""}${result.read_failures > 0 ? ` · ${result.read_failures} unavailable` : ""}. Metadata only; no message content fetched.`;
     } catch (cause) {
       mailActionError = cause instanceof Error ? cause.message : "Gmail reconciliation failed.";
     } finally {
@@ -964,14 +964,14 @@
           </select>
           <button class="btn" disabled={mailBusy === "bulk"} onclick={() => applyBulkMailAction("set-data-class")}>Apply data class</button>
         </div>
-        <button class="btn" disabled={mailBusy === "bulk"} onclick={() => applyBulkMailAction("dismiss")}>Dismiss from Axon</button>
+        <button class="btn" disabled={mailBusy === "bulk"} onclick={() => applyBulkMailAction("dismiss")}>Dismiss from Sjel</button>
         <!-- No confirm step, unlike Archive and Trash: this adds one Gmail label
              and removing it is the button beside it. The confirm exists for the
              two actions that take a thread out of the inbox, and putting one on
              a reversible label would teach the habit of clicking through it. -->
         <button class="btn" disabled={mailBusy === "bulk"} onclick={() => applyBulkMailAction("waiting")}>Mark Waiting in Gmail</button>
         <button class="btn" disabled={mailBusy === "bulk"} onclick={() => applyBulkMailAction("clear-waiting")}>Clear Waiting</button>
-        <button class="btn" disabled={mailBusy === "bulk"} onclick={() => (confirmingBulkAction = "archive")}>Archive in Axon + Gmail</button>
+        <button class="btn" disabled={mailBusy === "bulk"} onclick={() => (confirmingBulkAction = "archive")}>Archive in Sjel + Gmail</button>
         <button class="btn danger" disabled={mailBusy === "bulk"} onclick={() => (confirmingBulkAction = "trash")}>Move to Trash</button>
         <button class="btn" disabled={mailBusy === "bulk"} onclick={clearMailSelection}>Clear</button>
         {#if confirmingBulkAction}
@@ -984,7 +984,7 @@
               {:else if confirmingBulkAction === "trash"}
                 Move {selectedMail.size} selected threads to Gmail Trash?
               {:else}
-                Archive {selectedMail.size} selected threads in Axon and Gmail?
+                Archive {selectedMail.size} selected threads in Sjel and Gmail?
               {/if}
             </span>
             <button class="btn" onclick={() => (confirmingBulkAction = null)}>Cancel</button>
@@ -1068,10 +1068,10 @@
                           </span>
                         {/if}
                         {#if proposal.status === "trashed" && purgeDateLabel(proposal.purge_after)}
-                          <span class="mail-purge mono">Axon copy retained until {purgeDateLabel(proposal.purge_after)}</span>
+                          <span class="mail-purge mono">Sjel copy retained until {purgeDateLabel(proposal.purge_after)}</span>
                         {/if}
                         {#if proposal.status === "missing"}
-                          <span class="mail-missing">No longer available in Gmail. Axon retained its local record.</span>
+                          <span class="mail-missing">No longer available in Gmail. Sjel retained its local record.</span>
                         {/if}
                         {#if proposal.gmail_sync_status && proposal.gmail_sync_status !== "synced"}
                           <span class="mail-sync mono" data-status={proposal.gmail_sync_status}>
@@ -1245,7 +1245,7 @@
       </button>
     </div>
     <p class="vault-copy">
-      Axon reads only configured notes or headings. A link is fetched and imported only after you
+      Sjel reads only configured notes or headings. A link is fetched and imported only after you
       select it.
     </p>
     {#if vaultBusy}

@@ -9,7 +9,7 @@
   const copy: Record<string, { title: string; description: string; kind: string; icon: "graduation" | "server" }> = {
     server: {
       title: "Home-Server & Local AI",
-      description: "Procurement, privacy, Obsidian sync, and Axon's path to a private production system.",
+      description: "Procurement, privacy, Obsidian sync, and Sjel's path to a private production system.",
       kind: "Infrastructure plan",
       icon: "server",
     },
@@ -24,7 +24,7 @@
     return (
       copy[project.name] ?? {
         title: titleCase(project.name),
-        description: "Standalone Axon interface.",
+        description: "Standalone Sjel interface.",
         kind: "Project",
         icon: "graduation" as const,
       }

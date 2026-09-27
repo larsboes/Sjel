@@ -1,4 +1,4 @@
-/* Axon — design tokens and the primitives every surface reuses.
+/* Sjel — design tokens and the primitives every surface reuses.
  *
  * Plain CSS on purpose. Svelte scopes a component's own <style> at compile time, which
  * removes the collision problem utility frameworks exist to solve; what is left worth

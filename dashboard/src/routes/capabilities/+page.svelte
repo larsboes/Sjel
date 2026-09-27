@@ -273,7 +273,7 @@
 
   /* Four states share one badge. `ok` and `unknown` stay tertiary — a backup that is
      fine is not news, and a capability that never declared a cadence must not be
-     coloured as though Axon had an opinion about it. */
+     coloured as though Sjel had an opinion about it. */
   .backup {
     font-size: 0.625rem;
     color: var(--text-tertiary);

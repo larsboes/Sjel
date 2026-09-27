@@ -212,7 +212,7 @@
 
   function verdictExplanation(verdict: CalendarCandidateVerdict): string {
     if (verdict.already_in_calendar) {
-      return "This opportunity already has its own Axon calendar entry.";
+      return "This opportunity already has its own Sjel calendar entry.";
     }
     const strongest = verdict.evidence.find((entry) => entry.impact === verdict.verdict);
     if (!strongest) return verdict.verdict === "free" ? "No blocking overlap." : "Check the calendar.";

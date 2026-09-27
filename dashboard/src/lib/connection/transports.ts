@@ -1,5 +1,5 @@
 /**
- * The ways a device can reach its Axon node, in plain words, for the connection screen.
+ * The ways a device can reach its Sjel node, in plain words, for the connection screen.
  *
  * PRD Q119 (2026-09-25): several transports side by side, and the person choosing sees each
  * one's pros and cons. None of them is the trust root: the device's paired key is, so every
@@ -38,8 +38,8 @@ export const TRANSPORTS: readonly TransportOption[] = [
   },
   {
     id: 'server',
-    title: 'Your server or a hosted Axon',
-    summary: 'Axon runs on a machine that is always on and reachable.',
+    title: 'Your server or a hosted Sjel',
+    summary: 'Sjel runs on a machine that is always on and reachable.',
     pros: ['Works from anywhere', 'The Mac can sleep or be away'],
     cons: ['Someone has to run the server', 'Your data lives on that server'],
     availability: 'ready',

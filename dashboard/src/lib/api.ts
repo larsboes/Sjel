@@ -74,7 +74,7 @@ export async function send(path: string, init?: RequestInit): Promise<Answer> {
     } catch (error) {
       const message = bridgeErrorText(error);
       if (message.startsWith(NOT_CONFIGURED)) {
-        throw new ApiError(0, 'The Axon node address is not set. Set it in Axon connection (footer).');
+        throw new ApiError(0, 'The Sjel node address is not set. Set it in Sjel connection (footer).');
       }
       throw new ApiError(0, message);
     }
@@ -1565,7 +1565,7 @@ export interface SelfModelResponse {
 /**
  * Version identity for one of the two repos this installation is made of.
  *
- * Read-only by design: the shell shows which Axon is running and links to it, and
+ * Read-only by design: the shell shows which Sjel is running and links to it, and
  * deliberately cannot tag, commit or push — a browser button that writes to git needs a
  * gate in front of it, and there is no versioning scheme to write against yet.
  *
@@ -1615,7 +1615,7 @@ export type BackupState =
   /** Past `stale_days`: you have a problem. */
   | 'overdue'
   /** The capability declares neither threshold, so nothing knows what timely means for
-   *  its data — and Axon will not invent a cadence to fill the gap. */
+   *  its data — and Sjel will not invent a cadence to fill the gap. */
   | 'unknown';
 
 /** An in-flight or finished run, as the server remembers it. Null when axon-status has
@@ -1800,7 +1800,7 @@ export interface MacmonSample {
   timestamp: string;
 }
 
-// macmon — sudoless Apple Silicon performance monitor. Not an Axon capability.
+// macmon — sudoless Apple Silicon performance monitor. Not an Sjel capability.
 // Proxied at /macmon → http://localhost:9911 (see vite.config.ts).
 export const macmon = {
   json: () => request<MacmonSample>('/macmon/json'),
@@ -2160,7 +2160,7 @@ export interface MailContentExtension {
   gmail_sync_action: 'archive' | 'trash' | 'restore' | null;
   gmail_sync_error: string | null;
   /** The doctrine's one state label, mirrored from Gmail. Separate from `status`
-   *  on purpose: status is what Axon decided about a proposal, waiting is what you
+   *  on purpose: status is what Sjel decided about a proposal, waiting is what you
    *  decided about the conversation. */
   waiting: boolean;
   waiting_since: string | null;
@@ -2391,7 +2391,7 @@ export interface TriageItem {
   gmail_sync_action: 'archive' | 'trash' | 'restore' | null;
   gmail_sync_error: string | null;
   /** The doctrine's one state label, mirrored from Gmail. Separate from `status`
-   *  on purpose: status is what Axon decided about a proposal, waiting is what you
+   *  on purpose: status is what Sjel decided about a proposal, waiting is what you
    *  decided about the conversation. */
   waiting: boolean;
   waiting_since: string | null;
@@ -2717,7 +2717,7 @@ export interface CalendarGoogleImportReport {
   skipped: Array<{ google_event_id: string; reason: string }>;
 }
 
-/** A deliberate per-entry permission to publish an Axon entry to Google.
+/** A deliberate per-entry permission to publish an Sjel entry to Google.
  * Its presence is the opt-in; it does not itself contact Google. */
 export interface CalendarGoogleExportOptIn {
   entry_id: string;
@@ -3135,7 +3135,7 @@ export type TaskStatus = 'open' | 'done';
  *
  *  There is no create and no patch because the vault server has no write
  *  route: a task is written, edited and marked done in Obsidian, in a note a
- *  human owns. Axon reads the vault and does not write to it (PRD §5.5). */
+ *  human owns. Sjel reads the vault and does not write to it (PRD §5.5). */
 export const vault = {
   tasks: (status?: TaskStatus, signal?: AbortSignal) =>
     request<{ tasks: Task[] }>(
@@ -3351,7 +3351,7 @@ export interface WritebackResult {
   conflicts: string[];
   not_imported: string[];
   /** Subscriptions with no note in the vault, written as whole generated files
-   *  under Resources/Axon/ instead (PRD Q31). Since the 2026-08-23 vault
+   *  under Resources/Sjel/ instead (PRD Q31). Since the 2026-08-23 vault
    *  reorganisation moved every finance note to the overlay, this is where the
    *  price and state series actually land. */
   projected: {

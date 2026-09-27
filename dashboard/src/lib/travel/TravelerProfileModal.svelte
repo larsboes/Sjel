@@ -553,7 +553,7 @@
         <header class="panel-header">
           <div>
             <h3>Derived historical baseline</h3>
-            <p>Pattern arithmetic computed from your recorded trips in Axon.</p>
+            <p>Pattern arithmetic computed from your recorded trips in Sjel.</p>
           </div>
         </header>
 

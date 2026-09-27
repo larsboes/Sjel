@@ -22,7 +22,7 @@
    * is the true statement, it is what says where the row may be processed, and it stays
    * inert on rank either way.
    *
-   * The four WORDS are not this file's to choose. `PRD Axon.md` §6.1's class table names
+   * The four WORDS are not this file's to choose. `PRD Sjel.md` §6.1's class table names
    * them — C0 Public, C1 Mine, C2 Others, C3 Secret — under a ruling whose own sentence is
    * "two vocabularies standing side by side is the one outcome not allowed", and
    * `libs/content-item/src/lib.rs` (`DataClass::new`) is the implementation the PRD names.

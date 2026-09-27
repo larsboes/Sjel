@@ -1096,7 +1096,7 @@
       await trips.delete(deleted.id);
       plans = plans.filter((plan) => plan.id !== deleted.id);
       resetPlan();
-      planNotice = `“${deleted.title}” was deleted from Axon.`;
+      planNotice = `“${deleted.title}” was deleted from Sjel.`;
       void comms.refreshRelevance(365).catch(() => undefined);
     } catch (caught) {
       error = caught instanceof Error ? caught.message : String(caught);
@@ -2475,7 +2475,7 @@
         </ol>
       {/if}
       <p class="persistence-note">
-        The plan lives in Axon. External search results are saved as a data copy.
+        The plan lives in Sjel. External search results are saved as a data copy.
       </p>
     </aside>
   </div>

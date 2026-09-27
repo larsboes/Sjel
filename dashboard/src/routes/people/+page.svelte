@@ -2,7 +2,7 @@
   /**
    * People: the entity core's person kind (capabilities/entities, PRD Q117).
    *
-   * Axon is the system of record; a person's note in Obsidian holds the prose and is
+   * Sjel is the system of record; a person's note in Obsidian holds the prose and is
    * linked, not copied. Fields render from the registry, so a field declared here needs no
    * code change to appear. Every value and fact is C2 and stays on this machine.
    */
@@ -333,7 +333,7 @@
   const label = (key: string) => fields.find((f) => f.key === key)?.label ?? key;
   const show = (v: unknown) => (Array.isArray(v) ? v.join(", ") : v == null ? "–" : String(v));
 
-  /** Source values that differ from what Axon holds, one row per system and key. */
+  /** Source values that differ from what Sjel holds, one row per system and key. */
   const differences = $derived.by(() => {
     const person = selected;
     if (!person || !sources) return [];
@@ -400,7 +400,7 @@
   }
 </script>
 
-<PageHeader badge="People" title="People you know" desc="Where they live, where they are, and where you could stay. Stored in Axon; notes stay in Obsidian." />
+<PageHeader badge="People" title="People you know" desc="Where they live, where they are, and where you could stay. Stored in Sjel; notes stay in Obsidian." />
 
 <p class="toolbar">
   <button
@@ -581,14 +581,14 @@
             <p class="meta">{failed.system}: {failed.error}</p>
           {/each}
           {#if differences.length === 0}
-            <p class="meta">Google and the note agree with what Axon has.</p>
+            <p class="meta">Google and the note agree with what Sjel has.</p>
           {:else}
             <p class="meta">Where a source says something else:</p>
             <ol>
               {#each differences as row (row.system + row.key)}
                 <li>
                   <span class="field">{label(row.key)}</span>
-                  <span>Axon: {show(selected.values[row.key]?.value)}</span>
+                  <span>Sjel: {show(selected.values[row.key]?.value)}</span>
                   <span>{row.system === "google" ? "Google" : "Note"}: {show(row.value)}</span>
                   <button class="btn btn-soft btn-sm" type="button" disabled={busy} onclick={() => useSource(row.system, row.key, row.value)}>
                     Use this

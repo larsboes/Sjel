@@ -250,7 +250,7 @@
             disabled={deleting}
             onclick={() => void onDelete()}
           >
-            {deleting ? "Deleting…" : "Delete permanently from Axon"}
+            {deleting ? "Deleting…" : "Delete permanently from Sjel"}
           </button>
           <button type="button" onclick={() => (deleteArmed = false)}>Cancel deletion</button>
         {:else}

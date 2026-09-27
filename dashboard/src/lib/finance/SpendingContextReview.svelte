@@ -285,7 +285,7 @@
 
     <form class="allocation-editor" onsubmit={(event) => { event.preventDefault(); void saveAllocation(); }}>
       <div class="editor-heading">
-        <div><h3>{selectedReview ? "Review selected expense" : "Select an expense"}</h3><p>Saving rewrites only this Axon-owned journal entry.</p></div>
+        <div><h3>{selectedReview ? "Review selected expense" : "Select an expense"}</h3><p>Saving rewrites only this Sjel-owned journal entry.</p></div>
         {#if selectedReview}<strong>{money(selectedReview.totalCents, selectedReview.candidate.currency)}</strong>{/if}
       </div>
       {#if selectedReview}

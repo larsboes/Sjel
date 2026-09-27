@@ -172,8 +172,8 @@
     <button
       class="assistant-edge-open"
       onclick={() => assistantStore.openDrawer()}
-      aria-label="Open Axon Assistant (Cmd+K)"
-      title="Axon Assistant (Cmd+K)"
+      aria-label="Open Sjel Assistant (Cmd+K)"
+      title="Sjel Assistant (Cmd+K)"
     >
       <Icon name="sparkles" size={14} />
       <span>Ask</span>
@@ -201,7 +201,7 @@
     class="assistant-drawer"
     class:minimized={assistantStore.isMinimized}
     style={touchDeltaY > 0 ? `transform: translateY(${touchDeltaY}px); transition: none;` : ''}
-    aria-label="Axon Assistant"
+    aria-label="Sjel Assistant"
   >
     <!-- Mobile Drag Handle Bar -->
     <!-- svelte-ignore a11y_no_static_element_interactions -->
@@ -219,7 +219,7 @@
       <div class="header-left">
         <div class="assistant-title">
           <Icon name="sparkles" size={16} />
-          <span>Axon Assistant</span>
+          <span>Sjel Assistant</span>
         </div>
         <div class="context-pill" title={currentContext.contextSummary}>
           <span class="context-dot"></span>
@@ -343,9 +343,9 @@
             bind:this={inputEl}
             bind:value={inputPrompt}
             onkeydown={handleInputKeyDown}
-            placeholder={`Ask Axon Assistant or type / for commands... (Enter to send)`}
+            placeholder={`Ask Sjel Assistant or type / for commands... (Enter to send)`}
             rows={1}
-            aria-label="Message Axon Assistant"
+            aria-label="Message Sjel Assistant"
           ></textarea>
 
           <button

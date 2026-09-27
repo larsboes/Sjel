@@ -62,7 +62,7 @@
     return {
       importable: "Importable",
       "likely-duplicate": "Possible duplicate",
-      "already-in-axon": "Already in Axon",
+      "already-in-axon": "Already in Sjel",
       cancelled: "Cancelled in Google",
       invalid: "Not importable",
     }[status];
@@ -145,7 +145,7 @@
       notice = `${report.created} imported as drafts.`;
       selected = new Set();
       await onImported();
-      // Reload rather than locally guessing which candidates are now in Axon.
+      // Reload rather than locally guessing which candidates are now in Sjel.
       preview = await calendar.google.previewImport(from, to);
     } catch (cause) {
       error = String(cause);
@@ -160,7 +160,7 @@
     <div>
       <p class="eyebrow">Google Calendar</p>
       <h2 id="google-import-title">Review import</h2>
-      <p>Google remains unchanged. Only selected, unchanged events become non-blocking Axon drafts.</p>
+      <p>Google remains unchanged. Only selected, unchanged events become non-blocking Sjel drafts.</p>
     </div>
     <button class="btn" onclick={onClose} disabled={loading || importing}>Close</button>
   </div>

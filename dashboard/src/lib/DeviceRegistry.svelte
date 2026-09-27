@@ -78,7 +78,7 @@
       typeof (parsed as Record<string, unknown>).challenge_id !== 'string' ||
       typeof (parsed as Record<string, unknown>).code !== 'string'
     ) {
-      throw new Error('The pairing payload is not an Axon pairing challenge.');
+      throw new Error('The pairing payload is not an Sjel pairing challenge.');
     }
     const valueObject = parsed as Record<string, string>;
     return { challenge_id: valueObject.challenge_id, code: valueObject.code };
@@ -168,7 +168,7 @@
 <button class="link" type="button" onclick={() => void openPanel()}>Devices</button>
 
 {#if open}
-  <Overlay title="Connected devices" eyebrow="Axon setup" onClose={() => (open = false)} {busy} width="620px">
+  <Overlay title="Connected devices" eyebrow="Sjel setup" onClose={() => (open = false)} {busy} width="620px">
     <p class="intro">
       Pairing registers a device's public key with this canonical node. The private key must be
       created and kept by the device's platform key store; it is never entered here.

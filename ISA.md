@@ -272,6 +272,13 @@ the phone. Each item below is built and unverified, or ruled and unbuilt.
 - **`self.json` cannot regenerate.** graphify's semantic step calls
   `deepseek-ai/deepseek-v4-flash`, retired on 2026-08-07, so `tools/self generate` refuses. Commit
   `2f0feb6` says it regenerated `self.json`; only `ARCHITECTURE.md` changed.
+- **The demo site has aged and shows a raw error.** Measured 2026-09-27 on
+  `larsboes.github.io/Sjel/`: its data is dated around 2026-03-16, so Travel shows 0 upcoming
+  trips; People prints GitHub's 404 page as its error text, because the demo does not seed the
+  entities service and the page's error path does not recognise an HTML answer; Home lists
+  Calendar, Tasks, Scouting, Mail and Feed as unavailable. The landing README's screenshots need
+  a demo that shows the product. Two fixes: seed entities (and date the demo relative to the
+  build), and make the People page's error say that entities is not in this demo.
 - **The names ISC-13 kept.** `axon-status` (a service rename changes the phone app's allowed
   paths), `axon-fda-launcher` (a new binary name needs a new Full Disk Access grant), Linux
   `axon-<cap>` systemd units, the `X-Axon-*` signed-request headers (a protocol change for paired

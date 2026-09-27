@@ -1,5 +1,5 @@
 /**
- * The app's way to the canonical Axon node. Inside the Tauri bundle a relative `fetch` resolves
+ * The app's way to the canonical Sjel node. Inside the Tauri bundle a relative `fetch` resolves
  * against the app's own origin and reaches nothing, so `request()` in `./api.ts`
  * hands node paths to the native `mac_request` command instead
  * (`src-tauri/src/mac_bridge.rs`, which states why the call leaves from Rust).
@@ -40,7 +40,7 @@ export interface ConnectionSettings {
   local?: { base_url: string; pin_sha256: string } | null;
 }
 
-/** An Axon node found with Bonjour (plugins/local-network). Unverified until compared. */
+/** An Sjel node found with Bonjour (plugins/local-network). Unverified until compared. */
 export interface FoundNode {
   name: string;
   host: string;
@@ -178,7 +178,7 @@ export function setLocalEndpoint(baseUrl: string, pinSha256: string): Promise<Co
   return invoke<ConnectionSettings>('connection_local_set', { baseUrl, pinSha256 });
 }
 
-/** Browses the local network for Axon nodes for a few seconds. iOS app only. */
+/** Browses the local network for Sjel nodes for a few seconds. iOS app only. */
 export function browseLocalNetwork(timeoutMs = 3000): Promise<{ nodes: FoundNode[]; denied: boolean }> {
   return invoke('plugin:local-network|browse', { timeoutMs });
 }

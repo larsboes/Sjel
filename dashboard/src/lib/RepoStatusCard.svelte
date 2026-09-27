@@ -1,6 +1,6 @@
 <script lang="ts">
   /**
-   * Which Axon is this, and where does it live.
+   * Which Sjel is this, and where does it live.
    *
    * One component, two densities, because the answer is the same fact in both places:
    * the home page wants the link and a word of state at a glance, /self wants the full

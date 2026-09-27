@@ -266,6 +266,12 @@ the phone. Each item below is built and unverified, or ruled and unbuilt.
 - **`self.json` cannot regenerate.** graphify's semantic step calls
   `deepseek-ai/deepseek-v4-flash`, retired on 2026-08-07, so `tools/self generate` refuses. Commit
   `2f0feb6` says it regenerated `self.json`; only `ARCHITECTURE.md` changed.
+- **A scheduled job cannot build a capability it requires.** A launchd unit's PATH holds the
+  directories of its own command and build tool only. feed-sweep requires comms and starts it
+  when it is down; after the 2026-09-26 checkout move comms needed a rebuild, and feed-sweep's
+  run failed with "cargo: command not found" while comms' own watchdog, whose PATH has cargo,
+  rebuilt it. Transient, and only after a clean or a move. The fix is to add the build tools of
+  `requires` to persistence_path_dirs in tools/service-runner.sh.
 - **Stale workflow worktrees under `.claude/worktrees/` fail `tools/doctor`** with "package.json
   is not in the index". Local leftovers, not a repository defect.
 

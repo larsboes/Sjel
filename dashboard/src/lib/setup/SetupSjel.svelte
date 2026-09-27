@@ -91,6 +91,11 @@
     step = "working";
     working = "Point the camera at the code on your Mac.";
     try {
+      // The plugin does not ask for the camera itself on iOS 14 and later; it refuses instead.
+      const permission = await invoke<{ camera: string }>("plugin:barcode-scanner|request_permissions");
+      if (permission.camera !== "granted") {
+        return fail("Sjel may not use the camera. Turn it on in Settings, Sjel, Camera, or use Find my Mac below.");
+      }
       const result = await invoke<{ content: string }>("plugin:barcode-scanner|scan", {
         formats: ["QR_CODE"],
         windowed: false,
@@ -102,7 +107,7 @@
       macName = qr.host;
       step = "done";
     } catch (e) {
-      fail(e instanceof Error ? e.message : bridgeErrorText(e));
+      fail(bridgeErrorText(e));
     }
   }
 
@@ -145,7 +150,7 @@
       poll = setInterval(() => void check(join.id), 2000);
     } catch (e) {
       await setLocalEndpoint("", "").catch(() => {});
-      fail(e instanceof Error ? e.message : bridgeErrorText(e));
+      fail(bridgeErrorText(e));
     }
   }
 

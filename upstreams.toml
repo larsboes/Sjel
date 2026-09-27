@@ -710,7 +710,7 @@ why = "Declared directly on 2026-09-25 for the local-network transport (PRD Q119
 url = "https://github.com/tauri-apps/plugins-workspace/tree/v2/plugins/barcode-scanner"
 verdict = "adopt"
 license = "MIT OR Apache-2.0"
-why = "The phone scans the Mac's pairing QR code (dashboard/src/lib/setup/SetupSjel.svelte), which carries the node's address, certificate fingerprint and a one-time code. The official Tauri plugin, so adopt rather than a hand-written AVCaptureMetadataOutput bridge. Mobile only; the app calls it through invoke('plugin:barcode-scanner|scan') and does not take the npm wrapper. Added 2026-09-27 at 2.4.6 (2026-08-31): 2.5.0 was under a day old. Read: ios/Sources/BarcodeScannerPlugin.swift asks for camera access itself and returns the decoded string only."
+why = "The phone scans the Mac's pairing QR code (dashboard/src/lib/setup/SetupSjel.svelte), which carries the node's address, certificate fingerprint and a one-time code. The official Tauri plugin, so adopt rather than a hand-written AVCaptureMetadataOutput bridge. Mobile only; the app calls it through invoke('plugin:barcode-scanner|scan') and does not take the npm wrapper. Added 2026-09-27 at 2.4.6 (2026-08-31): 2.5.0 was under a day old. Read: ios/Sources/BarcodeScannerPlugin.swift returns the decoded string only. On iOS 14 and later `scan` does not ask for camera access; it rejects until `request_permissions` has been called, so the app calls that first (found on the phone 2026-09-27)."
 
 [uqr]
 url = "https://github.com/unjs/uqr"

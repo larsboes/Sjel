@@ -186,5 +186,15 @@ export function browseLocalNetwork(timeoutMs = 3000): Promise<{ nodes: FoundNode
 export function bridgeErrorText(error: unknown): string {
   if (typeof error === 'string') return error;
   if (error instanceof Error) return error.message;
+  // A native plugin may reject with an object; `String()` of that reads "[object Object]".
+  if (error && typeof error === 'object') {
+    const message = (error as { message?: unknown }).message;
+    if (typeof message === 'string' && message) return message;
+    try {
+      return JSON.stringify(error);
+    } catch {
+      /* fall through */
+    }
+  }
   return String(error);
 }

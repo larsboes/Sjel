@@ -501,11 +501,19 @@ mod tests {
     /// are policy-complete but not dispatchable, and every enqueue would be
     /// refused for the wrong reason — which would make the refusal tests below
     /// pass while proving nothing.
+    /// Written once per process. Tests run in parallel and share this path, and `fs::write`
+    /// truncates before it writes: a test that read the file in that gap saw an empty key, found
+    /// no ready provider and failed at random (a_c0_item_does_get_a_cloud_digest_job in CI,
+    /// 2026-09-27).
     fn probe_key_file() -> String {
-        let path =
-            std::env::temp_dir().join(format!("axon-cloud-run-probe-key-{}", std::process::id()));
-        std::fs::write(&path, "probe-key\n").expect("the probe key file is writable");
-        path.to_string_lossy().into_owned()
+        static PATH: std::sync::OnceLock<String> = std::sync::OnceLock::new();
+        PATH.get_or_init(|| {
+            let path = std::env::temp_dir()
+                .join(format!("axon-cloud-run-probe-key-{}", std::process::id()));
+            std::fs::write(&path, "probe-key\n").expect("the probe key file is writable");
+            path.to_string_lossy().into_owned()
+        })
+        .clone()
     }
 
     /// A job whose source row still carries the class it was staged under —

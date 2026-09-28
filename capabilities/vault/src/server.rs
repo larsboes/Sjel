@@ -7,9 +7,9 @@
 //! the dashboard's decision ladder with a band and no source. This is that
 //! source.
 //!
-//! **What the Journal knows about each person.** D2's three fields have no
-//! producer and cannot get one until D3 rules on machine-owned frontmatter. A
-//! computed read needs neither: see `list_people`.
+//! **What the Journal knows about each person.** D2's three fields, computed
+//! on every request: see `list_people`. The CLI's `vault fields --apply` writes
+//! two of them into the notes; this server stays a read.
 //!
 //! **Which of the Journal's six health keys can be produced at all.** Q106
 //! (2026-09-09) asked for a producer. One of the six has a source and five do
@@ -211,18 +211,14 @@ async fn list_tasks(State(state): State<AppState>, Query(query): Query<ListQuery
     }
 }
 
-/// D2, served rather than written.
+/// D2, served as a computed read.
 ///
-/// `last_contact`, `met_at` and `mention_count` sit on 70 of the 89 `Atlas/People` notes with
-/// no producer. All three come out of `Journal/` backlinks and `vault people` has computed
-/// them since 2026-09-07 — and refused to write them, because D3 is unresolved: machine-owned
-/// frontmatter has no protection mechanism, so a producer could not tell its own value from a
-/// human's correction and would overwrite the correction on its next run.
-///
-/// **A computed read has that problem and does not need D3 ruled first.** Nothing is stored,
-/// so nothing can be overwritten; the answer is recomputed off the notes on every request and
-/// is stale for exactly as long as the request takes. The three fields become available to a
-/// reader without Axon becoming a second writer of files a human edits (§5.5).
+/// `last_contact`, `met_at` and `mention_count` come out of `Journal/` backlinks. Nothing is
+/// stored by this route, so nothing can be overwritten; the answer is recomputed off the notes
+/// on every request and is stale for exactly as long as the request takes. The writer for two
+/// of the three keys is the CLI's `vault fields --apply` (`fields.rs`), which writes only in
+/// one declared direction per key and records a conflict instead of overwriting a later
+/// hand-typed date.
 ///
 /// It serves the drift too — `stored` and `disagrees` per person, the 4 notes whose written
 /// value contradicts the Journal — because the disagreement is the row that tells a reader
@@ -462,8 +458,7 @@ mod people_tests {
     }
 
     /// D2, end to end through the handler. The three fields are answered off the notes and the
-    /// note on disk is not touched — which is the whole argument for a route instead of a
-    /// producer, since D3 has no ruling yet.
+    /// note on disk is not touched: the route is a read, whatever `vault fields` writes.
     #[tokio::test]
     async fn the_three_computed_fields_are_served_and_the_note_is_not_rewritten() {
         let root = fixture("serves");

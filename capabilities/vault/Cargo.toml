@@ -24,10 +24,21 @@ path = "src/server.rs"
 [dependencies]
 sjel-config = { path = "../../libs/sjel-config" }
 sjel-server = { path = "../../libs/sjel-server" }
+sjel-http = { path = "../../libs/sjel-http" }
+# `today()` and `unix_day_of_iso`, so `vault fields` can count the `lost_touch`
+# view People.base draws without a date dependency. Zero deps itself, which is
+# why it exists (libs/civil-date/Cargo.toml).
+civil-date = { path = "../../libs/civil-date" }
 # The C0-C3 vocabulary and the Q9a folder rule. Declared, never re-implemented:
 # a second definition of what `c2` means is what PRD §6.1 forbids by name.
 content-item = { path = "../../libs/content-item" }
 markdown-root = { path = "../../libs/markdown-root" }
+# `vault fields --apply` writes through the Obsidian Local REST API and has no
+# file-write fallback (src/obsidian.rs). The client comes from sjel-http, the
+# workspace's one outbound HTTP factory; reqwest is named for its types. Blocking,
+# because the CLI is not async and one GET/PUT pair per note is no reason to start
+# a runtime.
+reqwest = { workspace = true, features = ["blocking"] }
 route-manifest = { path = "../../libs/route-manifest" }
 serde = { workspace = true, features = ["derive"] }
 serde_json.workspace = true
@@ -41,7 +52,7 @@ tower-http = { workspace = true, features = ["cors"] }
 
 [dev-dependencies]
 # `ServiceExt::oneshot`, so the origin test drives the wired Router with no
-# listener, no port and no HTTP client. This crate has neither reqwest nor
-# tokio's `net`, and pulling a TLS stack in so a test can talk to itself would
-# cost more than the thing it proves.
+# listener, no port and no HTTP client. The server half has no reqwest and no
+# tokio `net`; only the CLI's Obsidian writer reaches out, and its tests use a
+# std-only loopback mock (src/obsidian.rs, `mock`).
 tower = { workspace = true, features = ["util"] }

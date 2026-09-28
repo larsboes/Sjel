@@ -90,6 +90,12 @@ kind  = "project"
 local = "yes"
 why   = "Private knowledge store with its own sync lifecycle, connected through explicit capability contracts rather than treated as an Axon-wide database."
 
+[obsidian-local-rest-api]
+url   = "https://github.com/coddingtonbear/obsidian-local-rest-api"
+kind  = "service"
+local = "yes"
+why   = "Obsidian plugin (MIT) serving the open vault over loopback HTTP. The only route by which capabilities/vault writes into the vault: `vault fields --apply` reads a People note with GET and stores it with a raw-bytes PUT, never the frontmatter PATCH, which re-serialises the whole block. URL and key file come from the overlay's config/knowledge.toml."
+
 [mach-mono]
 url   = "https://github.com/larsboes/mach-mono"
 kind  = "project"

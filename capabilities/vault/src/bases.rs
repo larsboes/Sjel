@@ -14,8 +14,9 @@
 //!
 //! ## Why a candidate is offered and never applied
 //!
-//! A `.base` file lives in the vault. §5.5 is one-way — Axon reads the vault and does not write
-//! to it — so this verb names the folder that a moved one most likely became and stops there.
+//! A `.base` file lives in the vault and a human edits it. This verb reads it and never writes
+//! (the only writer in this crate is `vault fields --apply`, for two People keys), so it names
+//! the folder that a moved one most likely became and stops there.
 //! The rule for "most likely" is deliberately narrow: a folder somewhere in the vault whose last
 //! path segment is the same, and which holds at least one note.
 //!

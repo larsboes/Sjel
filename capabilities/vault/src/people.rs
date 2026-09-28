@@ -1,15 +1,13 @@
 //! What the Journal already knows about each person, computed rather than typed.
 //!
-//! PRD D2: `last_contact`, `met_at` and `mention_count` sit on 70 of the 89 `Atlas/People`
-//! notes and **have no producer**. The defect's own note says all three are computable from
-//! `Journal/` backlinks, and this file is the proof of that claim — it computes them and
-//! reports the drift against what the notes carry.
+//! PRD D2: `last_contact`, `met_at` and `mention_count` sit on `Atlas/People` notes. All three
+//! are computable from `Journal/` backlinks, and this file computes them and reports the drift
+//! against what the notes carry.
 //!
-//! **It reads and never writes, and the reason is D3, not caution.** Machine-owned frontmatter
-//! has no protection mechanism: marked regions are body-only, so a producer writing these keys
-//! could not tell its own value from one a human corrected, and would overwrite the correction
-//! on the next run. That ruling is owed before a writer exists. Until it lands, the honest
-//! deliverable is the number and the disagreement.
+//! **It reads and never writes.** A note-borne hash is impossible on a frontmatter key, so a
+//! writer here could not tell its own value from one a human corrected. `fields.rs` is the
+//! writer, for `last_contact` and `met_at` only, and it gets around that by moving each key in
+//! one declared direction and recording a conflict when the note is ahead of the Journal.
 //!
 //! **`contact_frequency` is not here** (D1), and that is a different kind of absence: how often
 //! you want to see someone is a judgement nobody can derive from a backlink count. §8.1's band
@@ -40,7 +38,7 @@ pub struct PersonFacts {
     /// The newest journal date that links them, `YYYY-MM-DD`.
     pub last_contact: Option<String>,
     /// The oldest journal date that links them. Read as "first appears in the record" and not
-    /// as "the day we met", which is why the field it feeds is compared and never written.
+    /// as "the day we met". `fields.rs` writes it only earlier, never later.
     pub met_at: Option<String>,
     /// What the note itself carries today, for each of the three keys, where it carries it.
     pub stored: BTreeMap<String, String>,

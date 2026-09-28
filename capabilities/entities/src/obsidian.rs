@@ -4,6 +4,9 @@
 //! Only structured keys cross: the ones vault's `PROFILE_SCALARS` and `PROFILE_LISTS` name,
 //! `home`/`host`/`host_note`, and the `last_contact` vault computes from Journal backlinks.
 //! Prose stays in the note (PRD Q117); the entity links to it through `note_ref`.
+//!
+//! `last_contact` here is vault's computed value, never the key stored on the note, so the key
+//! `vault fields --apply` writes does not flow back through this import.
 
 use std::collections::BTreeMap;
 use std::time::Duration;

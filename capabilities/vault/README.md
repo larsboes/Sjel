@@ -1,7 +1,8 @@
 # vault
 
-Reads an Obsidian vault as data. Seven CLI verbs and one HTTP surface, all
-read-only.
+Reads an Obsidian vault as data. Eight CLI verbs and one HTTP surface. The
+server and seven of the verbs are read-only. `fields --apply` writes two
+People keys into the vault, through Obsidian.
 
 ```
 vault links  [--root PATH] [--json] [--dead] [--inbound FOLDER]
@@ -11,6 +12,7 @@ vault class  [--root PATH] [--json] [--only c2] [--list]
 vault people [--root PATH] [--json]
 vault journal [--root PATH] [--json]
 vault bases  [--root PATH] [--json] [--strict]
+vault fields [--root PATH] [--json] [--today YYYY-MM-DD] [--apply]
 ```
 
 The root is a personal fact and never lives in this repo. It comes from the
@@ -158,11 +160,11 @@ does not silently drop an action. For example, `Projects/Garden/Tasks/Order
 seeds.md` is served on its folder alone, and `Projects/Tasks/Order seeds.md` only
 if it says `type: task`.
 
-**There is no write route, and that is the ruling rather than an omission.** A
-task is created, edited and marked done in Obsidian, in a note a human owns.
-Adding a `PATCH` would make Axon a second writer of files a human is editing —
-the conflict §5.5 states as "Axon reads the vault and does not write to it". The
-ladder links to the note; it does not close it.
+**The server has no write route, by design.** A task is created, edited and
+marked done in Obsidian, in a note a human owns. A `PATCH` here would make the
+server a second writer of files a human is editing. The ladder links to the
+note; it does not close it. The one writer in this crate is the CLI's
+`vault fields --apply`, for two People keys, described below.
 
 **Which frontmatter keys are served, and why not all of them.** A task note
 carries eleven keys; five are served, because the ladder reads them: `summary`
@@ -172,19 +174,18 @@ decision at all. The other six — `scheduled`, `context`, `energy`, `focus`,
 `events` and `blocked_by` — have no reader, and a served field with no reader
 is a contract nothing checks.
 
-### `/api/people` — D2, served instead of written
+### `/api/people` — D2, served computed
 
-`last_contact`, `met_at` and `mention_count` sit on 70 of the 89 `Atlas/People`
-notes and have no producer. All three come out of `Journal/` backlinks and
-`vault people` has computed them since 2026-09-07 — and refused to write them,
-because **D3** is unresolved: machine-owned frontmatter has no protection
-mechanism, so a producer could not tell its own value from a human's correction
-and would overwrite the correction on its next run.
+`last_contact`, `met_at` and `mention_count` sit on `Atlas/People` notes. All
+three come out of `Journal/` backlinks, and `vault people` and this route
+compute them. The route stores nothing, so it can overwrite nothing; the answer
+is recomputed off the notes on every request and is stale for exactly as long
+as the request takes.
 
-**A computed read does not need D3 ruled first.** Nothing is stored, so nothing
-can be overwritten; the answer is recomputed off the notes on every request and
-is stale for exactly as long as the request takes. The three fields reach a
-reader without Axon becoming a second writer of files a human edits.
+A Base cannot call HTTP, so for the two keys `People.base` reads, the computed
+value also has to reach the note. `vault fields --apply` writes it there; see
+[`fields`](#fields--the-two-people-keys-sjel-writes) below. `mention_count` stays
+served and is never written.
 
 The drift is served beside the value — `stored` and `disagrees` per person, the
 4 notes whose written value contradicts the Journal — because a computed number
@@ -349,10 +350,9 @@ anything writes back.
 
 ### What it would take to write `social`
 
-Nothing here writes. Q102 opened the vault for two `Atlas/People` keys under
-their existing names and did not open the Journal, and the write path it
-authorised belongs to another stream. Writing `social` later needs four things,
-in this order:
+Nothing here writes the Journal. `vault fields` writes two `Atlas/People` keys
+and nothing under `Journal/`. Writing `social` later needs four things, in this
+order:
 
 1. **A ruling that extends Q102 to `Journal/01. Daily Notes/`.** Q102's own test
    is satisfied already — `Resources/Bases/Habits.base` and
@@ -363,9 +363,11 @@ in this order:
    would write nothing, because no daily note has a blank `social`. A writer that
    overwrites `false` would overwrite every untouched day and could not tell them
    from a deliberate "no".
-3. **D3, machine-owned frontmatter.** Same unresolved ruling that keeps
-   `/api/people` a read: with no way to mark a value as Sjel's, the next run
-   overwrites the correction a human made to the last one.
+3. **A conflict rule for a boolean.** `fields` makes its People writes safe by
+   moving each date in one direction only. `social` is `true` or `false` and has
+   no direction, so that rule does not carry over: with no way to mark a value
+   as Sjel's, the next run overwrites the correction a human made to the last
+   one.
 4. **The contradictions resolved by hand first.** Those are the days where a
    human wrote `true` and the Journal names nobody, and a producer would silently
    erase them.
@@ -376,6 +378,70 @@ archived folders, minus notes with no `done` key. Each divergence is measured
 against the live vault and named there. Tracking the operator's own Base rather
 than inventing a second definition is the point — two surfaces disagreeing about
 one folder is exactly what §5.1b's no-doubling law forbids.
+
+## `fields` — the two People keys Sjel writes
+
+```
+vault fields [--root PATH] [--json] [--today YYYY-MM-DD]           # dry run
+vault fields [--root PATH] [--json] [--today YYYY-MM-DD] --apply   # write
+```
+
+Prose stays in Obsidian; Sjel stores the structured facts and links to the
+notes (top-level `README.md`). `Resources/Bases/People.base` computes
+`days_since_contact` from `last_contact` and `lost_touch` from that, and a
+`.base` cannot call HTTP. So for the Base to see the Journal's value, the key has
+to be on the note.
+
+**What it writes.** `last_contact` and `met_at` on `Atlas/People/**`, under
+those existing names, and nothing else anywhere. The table is `OWNED` in
+`src/fields.rs`. `last_contact` is the newest dated `Journal/` note that links
+the person; `met_at` is the oldest. `mention_count` is not written, because no
+`.base` reads it.
+
+**The monotone rule.** A frontmatter key cannot carry a hash of what the machine
+last wrote, so the writer cannot tell its own value from a human's. Instead each
+key moves in one direction only: `last_contact` only later, `met_at` only
+earlier. A Journal entry is a lower bound on the last contact (contact off the
+Journal can still be later), so moving the date forward adds information and
+destroys none. Tested property: a write never moves a note into the
+`lost_touch` view, only out of it.
+
+**Conflicts.** When the note is already ahead of the Journal (a later
+`last_contact`, an earlier `met_at`), the plan records a `CONFLICT` line and
+never writes that key. There is no `--force`; to take the Journal's value,
+delete the key by hand and run again. A key in a shape the writer cannot rewrite
+exactly (a list, a trailing comment, a duplicate, a non-date, no frontmatter
+block) is `REFUSED` with the reason.
+
+**Dry run by default.** Without `--apply` the verb prints every create, advance,
+conflict and refusal, the `lost_touch` count before and after, and writes
+nothing. `--json` prints the same plan as data. `--today` pins the date the
+`lost_touch` count is taken against.
+
+**`--apply`** writes through the Obsidian Local REST API, with no file fallback.
+It needs Obsidian running with the plugin enabled, and the plugin's API key:
+`OBSIDIAN_API_KEY`, or `obsidian_api_key_file` in the overlay's
+`config/knowledge.toml` (a path under `config/`, or absolute). The URL is
+`OBSIDIAN_API_URL`, `obsidian_api_url`, or `http://127.0.0.1:27123`. With nothing
+to write, it does not contact Obsidian. A wrong key or a stopped Obsidian is
+refused before any write. Any refused or diverged note makes the run exit 1.
+
+**Only the key's line changes.** The plugin's frontmatter `PATCH` re-serialises
+the whole block: measured on a live vault when this writer was first built, it
+dropped the quotes from `met_at`, a key the call never named. So the writer does
+not use it. Per note it reads the bytes with `GET`, requires them to equal the
+bytes the plan read, splices the new scalars with `markdown_root::set_field`
+(every other byte copied), stores the result with a raw-bytes `PUT`, and reads
+the note back to require exactly the bytes it sent. The tests in `src/fields.rs`
+run this against a loopback mock of the API. The plugin's `PUT` takes no
+precondition, so an edit that lands on the same note between that `GET` and the
+`PUT` is not detected.
+
+**`capabilities/entities`** imports `last_contact` from `/api/people`, which is
+the value computed from Journal links and never the key on the note, so the
+written key cannot loop back into the import. On a recorded conflict the note
+keeps the later hand-typed date and entities holds the Journal's; `/api/people`
+shows both in `stored` and `disagrees`.
 
 ## Why a binary
 
@@ -474,7 +540,10 @@ carries a hand-written compatibility shim.
 ## Related
 
 - `libs/markdown-root` — containment-checked vault access, recursive walk, and
-  the byte-addressable frontmatter this crate reads. The offsets exist so a
-  future writer can re-serialise frontmatter and concatenate the original body
-  bytes rather than round-tripping prose through a parser that would reformat
-  Bases embeds and Mermaid fences.
+  the byte-addressable frontmatter this crate reads. `fields::set_field` uses
+  those offsets to rewrite one scalar and copy every other byte, rather than
+  round-tripping the note through a parser that would reformat Bases embeds and
+  Mermaid fences.
+- [obsidian-local-rest-api](https://github.com/coddingtonbear/obsidian-local-rest-api)
+  (MIT) — the Obsidian plugin `vault fields --apply` writes through. Contract
+  read from its `docs/openapi.yaml`, 5.3.1.

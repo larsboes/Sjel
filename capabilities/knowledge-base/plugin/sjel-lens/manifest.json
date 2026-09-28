@@ -1,0 +1,9 @@
+{
+  "id": "sjel-lens",
+  "name": "Sjel Lens",
+  "version": "1.0.0",
+  "minAppVersion": "1.5.0",
+  "description": "A right-sidebar pane showing what Sjel knows about the open note: computed people facts beside the stored ones, and whether a trip projection is still current. Read-only. Own code, no upstream, no dependencies.",
+  "author": "Lars Boes",
+  "isDesktopOnly": false
+}

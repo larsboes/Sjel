@@ -92,3 +92,27 @@ macOS, which is normalisation-insensitive; worth knowing before restoring onto L
 eleven names would differ byte-wise and Obsidian's wikilinks to them would not resolve. The
 2026-09-23 comparison normalises both sides to NFC and found no such difference, which is the
 confirmation that the earlier eleven were cosmetic.
+
+## `plugin/` — the Obsidian plugin for the directory this capability owns
+
+`plugin/sjel-lens/` is an Obsidian plugin: a right-sidebar pane showing what Sjel knows about the
+open note, read-only, with its own README. It is not built and not installed by anything here —
+the three files are what Obsidian wants, and the operator copies them into
+`<vault>/.obsidian/plugins/sjel-lens/` (`plugin/sjel-lens/README.md`, "Install it").
+
+**Why here and not under `vault/`.** The placement question is which capability's removal makes
+the plugin meaningless. Remove the `vault` capability and the People pane degrades to one line
+saying so — which is a first-class behaviour, not a failure — while the trip badge still works.
+Remove *this* capability and there is no vault, no Obsidian, and nowhere for a plugin to be
+installed. The plugin's lifecycle is bound to the directory, so it belongs to the capability that
+owns the directory. `capabilities/soundscape/ui/` is the other shape and a different one: that is
+a bundle its own server serves, and this is an artifact copied into a file tree.
+
+It reads three capabilities over HTTP — `sjel-status` for discovery, `vault` and `trips` for the
+two adapters — which is the ordinary cross-capability contract (CONTRIBUTING.md#schemas-and-dependency-direction),
+not a claim on any of them.
+
+`tools/check-obsidian-plugins.sh` gates it, and gates any other Obsidian plugin added anywhere in
+the repository: no browser-context HTTP (sjel-status sends no CORS header, so the renderer
+withholds its reply; `requestUrl` sends no `Origin` and needs none), no writes, no node require
+under `isDesktopOnly: false`, and no address that is not discovered.

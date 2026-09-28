@@ -154,7 +154,7 @@ mod tests {
             Some("http://localhost.evil.example"),
             None
         ));
-        // Obsidian's renderer, admitted 2026-09-09 so axon-lens can read at all.
+        // Obsidian's renderer, admitted 2026-09-09 so sjel-lens can read at all.
         // Measured before the change: every capability answered 403 to this
         // exact header, which is what a plugin sends on every request.
         assert!(origin_allowed_by(Some("app://obsidian.md"), None));

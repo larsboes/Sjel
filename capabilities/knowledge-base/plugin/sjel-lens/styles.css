@@ -1,0 +1,92 @@
+/* Sjel Lens. Obsidian's own variables throughout, so the pane follows the active theme
+   rather than carrying a second one. */
+
+.sjel-lens-path {
+  font-family: var(--font-monospace);
+  font-size: var(--font-ui-smaller);
+  color: var(--text-muted);
+  margin-bottom: 1em;
+  word-break: break-all;
+}
+
+.sjel-lens-section h4 {
+  margin: 0 0 0.5em;
+}
+
+.sjel-lens-quiet {
+  color: var(--text-muted);
+  font-size: var(--font-ui-smaller);
+}
+
+/* A capability that is down gets one line. It is a fact about Sjel, not an error in the
+   note, so it is muted rather than red. */
+.sjel-lens-down {
+  color: var(--text-muted);
+  font-size: var(--font-ui-smaller);
+  border-left: 2px solid var(--background-modifier-border);
+  padding-left: 0.6em;
+}
+
+.sjel-lens-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: var(--font-ui-smaller);
+}
+
+.sjel-lens-table th {
+  text-align: left;
+  color: var(--text-muted);
+  font-weight: normal;
+}
+
+.sjel-lens-table td,
+.sjel-lens-table th {
+  padding: 0.2em 0.4em 0.2em 0;
+  vertical-align: top;
+}
+
+.sjel-lens-table tr.sjel-lens-disagrees td {
+  color: var(--text-warning);
+}
+
+.sjel-lens-mark {
+  display: inline-flex;
+  vertical-align: text-bottom;
+  margin-left: 0.35em;
+}
+
+.sjel-lens-mark svg {
+  width: 0.9em;
+  height: 0.9em;
+}
+
+/* The badge is the one thing in this pane meant to be read from across the room. */
+.sjel-lens-badge {
+  display: inline-block;
+  padding: 0.15em 0.6em;
+  border-radius: var(--radius-s);
+  font-size: var(--font-ui-smaller);
+  font-weight: var(--font-semibold);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  margin-bottom: 0.6em;
+  background-color: var(--background-modifier-border);
+  color: var(--text-normal);
+}
+
+.sjel-lens-badge.sjel-lens-current {
+  background-color: var(--color-green);
+  color: var(--text-on-accent);
+}
+
+.sjel-lens-badge.sjel-lens-stale {
+  background-color: var(--color-orange);
+  color: var(--text-on-accent);
+}
+
+.sjel-lens-badge.sjel-lens-ahead,
+.sjel-lens-badge.sjel-lens-orphaned,
+.sjel-lens-badge.sjel-lens-unreadable {
+  background-color: var(--color-red);
+  color: var(--text-on-accent);
+}

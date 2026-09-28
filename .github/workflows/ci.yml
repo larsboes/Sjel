@@ -291,6 +291,8 @@ jobs:
         run: tools/check-bun-install-policy.sh
       - name: No capability begins a deferred transaction
         run: tools/check-store-transactions.sh
+      - name: Obsidian plugins are read-only, discovered and mobile-safe
+        run: tools/check-obsidian-plugins.sh
       - name: self.json is current
         run: tools/self check
       # Runs here rather than as an sh_test: it drives the whole tools/doctor, and a Bazel

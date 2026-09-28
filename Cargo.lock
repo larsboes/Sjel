@@ -868,7 +868,7 @@ dependencies = [
 name = "candidate-fingerprint"
 version = "0.1.0"
 dependencies = [
- "sha2 0.10.9",
+ "sha2 0.11.0",
 ]
 
 [[package]]
@@ -1060,7 +1060,7 @@ dependencies = [
  "rusqlite",
  "serde",
  "serde_json",
- "sha2 0.10.9",
+ "sha2 0.11.0",
  "sjel-config",
  "sjel-extraction",
  "sjel-http",
@@ -1391,7 +1391,7 @@ dependencies = [
  "schemars",
  "serde",
  "serde_json",
- "sha2 0.10.9",
+ "sha2 0.11.0",
  "sjel-config",
  "sjel-server",
  "sjel-store",
@@ -1696,7 +1696,7 @@ dependencies = [
  "rusqlite",
  "serde",
  "serde_json",
- "sha2 0.10.9",
+ "sha2 0.11.0",
  "sjel-config",
  "sjel-http",
  "sjel-server",
@@ -2508,7 +2508,7 @@ dependencies = [
  "rusqlite",
  "serde",
  "serde_json",
- "sha2 0.10.9",
+ "sha2 0.11.0",
  "sjel-config",
  "sjel-server",
  "sjel-store",
@@ -3606,7 +3606,7 @@ dependencies = [
  "rusqlite",
  "serde",
  "serde_json",
- "sha2 0.10.9",
+ "sha2 0.11.0",
  "sjel-config",
  "sjel-http",
  "sjel-server",
@@ -4823,7 +4823,7 @@ dependencies = [
  "aho-corasick",
  "serde",
  "serde_json",
- "sha2 0.10.9",
+ "sha2 0.11.0",
  "sjel-extraction",
 ]
 
@@ -4837,7 +4837,7 @@ dependencies = [
  "reqwest",
  "rustls",
  "serde_json",
- "sha2 0.10.9",
+ "sha2 0.11.0",
  "sjel-config",
  "tokio",
  "tokio-rustls",

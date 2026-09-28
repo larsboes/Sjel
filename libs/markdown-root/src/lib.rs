@@ -38,9 +38,11 @@
 //! Not tilde expansion: `sjel_config::expand_tilde` owns that, and the caller
 //! applies it before declaring a root.
 
+pub mod fields;
 pub mod projection;
 pub mod region;
 
+pub use fields::{find_field, set_field, FieldError, FieldWrite, FoundField};
 pub use projection::ProjectionOutcome;
 pub use region::{apply, find, FoundRegion, RegionError, RegionOutcome, RegionSpec};
 

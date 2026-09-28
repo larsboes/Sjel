@@ -77,7 +77,7 @@ git -C "$SCRATCH" add instance.txt
 expect_pass "a compound identifier beginning with a marker"
 
 # ...but the marker itself, in a path or on its own, still fails.
-printf '%s\n' 'see ~/Developer/axon-personal/config' > "$SCRATCH/instance.txt"
+printf '%s\n' 'see ~/Developer/sjel-personal/config' > "$SCRATCH/instance.txt"
 git -C "$SCRATCH" add instance.txt
 expect_fail_with "a marker used as a real path" "instance.txt"
 

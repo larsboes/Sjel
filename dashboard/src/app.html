@@ -12,6 +12,21 @@
     <link rel="icon" href="%sveltekit.assets%/favicon.svg" />
     <link rel="apple-touch-icon" sizes="180x180" href="%sveltekit.assets%/apple-touch-icon.png" />
     <!--
+      Link previews. Crawlers need an absolute og:image URL, so it names the public demo,
+      the only address a crawler can reach; a local or tailnet shell is never crawled.
+      static/social-card.png is rendered from brand/sjel-hedgehog.svg (dashboard/README.md).
+    -->
+    <meta name="description" content="One household's people, places, trips, money, home and calendar, on devices the household owns, with one assistant that works on that data." />
+    <meta property="og:type" content="website" />
+    <meta property="og:site_name" content="Sjel" />
+    <meta property="og:title" content="Sjel" />
+    <meta property="og:description" content="One household's people, places, trips, money, home and calendar, on devices the household owns, with one assistant that works on that data." />
+    <meta property="og:image" content="https://larsboes.github.io/Sjel/social-card.png" />
+    <meta property="og:image:width" content="1280" />
+    <meta property="og:image:height" content="640" />
+    <meta property="og:image:alt" content="Sjel's hedgehog mark beside the name and the one-line description" />
+    <meta name="twitter:card" content="summary_large_image" />
+    <!--
       The style, sprite and Latin glyphs are vendored under static/basemap and served from
       here. The vector tiles and the Natural Earth raster are not, and cannot be: they are the
       large half, and the decision to self-host them is open (capabilities/places/ISA.md).

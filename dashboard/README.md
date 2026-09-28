@@ -519,7 +519,26 @@ the head so it still reads at 32 px. The 180, 192 and 512 px PNGs are rendered f
 from `brand/sjel-icon.svg`, with ImageMagick 7
 (`magick -density 1536 brand/sjel-icon.svg -resize 192x192`). They carry no transparency, so
 the touch icon needs no flattening: iOS fills transparent pixels with black, and a full-bleed
-square cannot hit that.
+square cannot hit that. `icon-maskable-512.png` is rendered the same way from
+`brand/sjel-icon-maskable.svg`, which scales the mark to 70% so Android's mask (safe zone: the
+centre 80% circle) crops only the field.
+
+`static/social-card.png` is the 1280 × 640 link preview that `app.html` names in `og:image`.
+It is the mark from `brand/sjel-hedgehog.svg` beside the name and the README's one-line
+description, set in the vendored IBM Plex Sans. ImageMagick cannot read WOFF2, so convert the
+two weights to TTF first (`fontTools`, `flavor = None`), then:
+
+```sh
+magick -density 1536 brand/sjel-hedgehog.svg -resize x420 mark.png
+magick -size 1280x640 xc:'#16748D' mark.png -geometry +40+110 -composite \
+  -font plex-600.ttf -fill '#F7F7F3' -pointsize 150 -annotate +700+310 'Sjel' \
+  \( -size 540x -background none -font plex-400.ttf -fill '#F7F7F3' -pointsize 29 \
+     -interline-spacing 6 caption:"<the README's one-line description>" \) \
+  -geometry +704+350 -composite -depth 8 -strip static/social-card.png
+```
+
+GitHub's own link preview for the repository does not read `og:image`: upload the same file
+under Settings → General → Social preview.
 
 `ItineraryTimeline` shows an item picture only when `image_url` is a same-origin path. A
 remote URL, such as the Wikimedia image a saved place carries, is not loaded: each load would

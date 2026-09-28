@@ -514,9 +514,12 @@ lives in Rust (`libs/pseudonymize`, PRD Q112), where a cloud call would be made.
 
 `static/manifest.webmanifest` makes the shell installable on iOS and Android. Its
 `start_url`, `scope` and icon paths are relative, so the demo build under `SJEL_DEMO_BASE`
-installs from its subdirectory too. The 180, 192 and 512 px PNGs were rendered from
-`favicon.svg` with ImageMagick 7 (`magick -density 1536 favicon.svg -resize 192x192`); the
-180 px touch icon is flattened onto the tile colour because iOS fills transparency with black.
+installs from its subdirectory too. `favicon.svg` is the mark on a rounded tile, zoomed onto
+the head so it still reads at 32 px. The 180, 192 and 512 px PNGs are rendered full-bleed
+from `brand/sjel-icon.svg`, with ImageMagick 7
+(`magick -density 1536 brand/sjel-icon.svg -resize 192x192`). They carry no transparency, so
+the touch icon needs no flattening: iOS fills transparent pixels with black, and a full-bleed
+square cannot hit that.
 
 `ItineraryTimeline` shows an item picture only when `image_url` is a same-origin path. A
 remote URL, such as the Wikimedia image a saved place carries, is not loaded: each load would

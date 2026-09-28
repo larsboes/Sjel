@@ -179,7 +179,9 @@
     <div class="bar">
       <div class="brand-group">
         <a class="brand" href={link("/")}>
-          <span class="mark">S</span>
+          <!-- The mark carries the tile colour itself, so it keeps its contrast when the
+               theme flips --primary to cyan. Same asset as the browser tab icon. -->
+          <img class="mark" src="{base}/favicon.svg" alt="" width="28" height="28" />
           <span class="name">Sjel</span>
         </a>
 
@@ -535,15 +537,10 @@
   }
 
   .mark {
-    display: grid;
-    place-items: center;
+    display: block;
     height: 1.75rem;
     width: 1.75rem;
-    border-radius: var(--radius-md);
-    background-color: var(--primary);
-    color: var(--text-inverse);
-    font-size: 0.65rem;
-    font-weight: 700;
+    flex-shrink: 0;
   }
 
   .meta {

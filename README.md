@@ -4,6 +4,8 @@
      four-item lists the check reads as three. Shortening them would delete information to move
      a score, so the category is muted here deliberately. Every other check stays live. -->
 
+<p align="center"><img alt="Sjel" src=".github/assets/sjel-hedgehog.png" width="340"></p>
+
 <h1 align="center">Sjel</h1>
 
 <p align="center"><b>One household's people, places, trips, money, home and calendar, on devices the household owns, with one assistant that works on that data.</b></p>

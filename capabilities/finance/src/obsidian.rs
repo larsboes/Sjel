@@ -30,7 +30,10 @@ use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 
 use markdown_root::{frontmatter, region, MarkdownRoot, RegionOutcome, RegionSpec};
+use serde::Serialize;
 
+use crate::money::{self, EurAmount};
+use crate::price::FxObservation;
 use crate::subscription::{
     cents_to_decimal, decimal_to_cents, BillingCycle, PricePoint, State, StateChange, Subscription,
 };
@@ -45,7 +48,15 @@ pub const REGION_OWNER: &str = "finance";
 /// 2 (2026-08-28): the price and state series joined the current-state callout, per
 /// PRD Q47. The bump does not force a rewrite by itself — the region's hash does that,
 /// because every v1 body differs from its v2 replacement.
-pub const REGION_VERSION: u32 = 2;
+///
+/// 3 (2026-09-09): a non-EUR price states its EUR figure, or states that it has no rate
+/// to state one with, per PRD Q103. Every note whose price is not EUR gains a line.
+/// Unlike the v2 bump, this one does not reach every note: `region::apply` returns
+/// `Unchanged` when the body matches, so only a note whose price is not EUR renders a
+/// different body, and a EUR-only note keeps its `v=2` marker until something else
+/// changes it. A marker version therefore dates the last *body* change, not the last
+/// renderer.
+pub const REGION_VERSION: u32 = 3;
 
 /// A note found by the scanner, before anything is persisted.
 #[derive(Debug, Clone, PartialEq)]
@@ -118,29 +129,213 @@ pub fn scan(root: &MarkdownRoot, dir: &Path) -> Result<Vec<ScannedNote>, ScanErr
     Ok(out)
 }
 
+/// A frontmatter key that states what a subscription costs.
+///
+/// Four spellings of one fact occur in subscription notes. Renaming them in the notes
+/// is a vault edit this capability does not own, so the reader learns the vocabulary
+/// instead. The
+/// declaration order below **is** the precedence: the first key present wins, and the
+/// rest are recorded as shadowed rather than merged.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "snake_case")]
+pub enum PriceKey {
+    /// Canonical. The amount, with `currency:` naming the unit and `billing_cycle:`
+    /// naming the period. The only spelling a new note should use.
+    Cost,
+    /// Deprecated. EUR is in the key name, so `currency:` may not contradict it.
+    CostEur,
+    /// Deprecated. Used on purchase-decision notes, such as a card or a travel pass,
+    /// which carry an annual fee and often no `billing_cycle:` at all.
+    PriceEur,
+    /// Deprecated. EUR and a yearly period are both in the key name.
+    YearlyCostEur,
+}
+
+/// Precedence order, highest first. The canonical key wins over every alias.
+pub const PRICE_KEY_PRECEDENCE: [PriceKey; 4] = [
+    PriceKey::Cost,
+    PriceKey::CostEur,
+    PriceKey::PriceEur,
+    PriceKey::YearlyCostEur,
+];
+
+impl PriceKey {
+    pub fn as_str(self) -> &'static str {
+        match self {
+            PriceKey::Cost => "cost",
+            PriceKey::CostEur => "cost_eur",
+            PriceKey::PriceEur => "price_eur",
+            PriceKey::YearlyCostEur => "yearly_cost_eur",
+        }
+    }
+
+    /// Whether the key name itself declares the currency. When it does, a `currency:`
+    /// field saying otherwise is a contradiction rather than an override.
+    pub fn declares_eur(self) -> bool {
+        !matches!(self, PriceKey::Cost)
+    }
+
+    pub fn is_deprecated(self) -> bool {
+        !matches!(self, PriceKey::Cost)
+    }
+}
+
+/// What the frontmatter says one subscription costs, once the precedence has settled.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+pub struct PriceReading {
+    pub key: PriceKey,
+    pub amount_cents: i64,
+    pub currency: String,
+    pub cycle: BillingCycle,
+    /// Lower-precedence keys that were also present and were not read. Kept so a note
+    /// carrying two disagreeing figures can be reported instead of half-read.
+    pub shadowed: Vec<PriceKey>,
+}
+
+/// Why a note's price was not read. Every variant leaves the subscription with no
+/// price point, which reads downstream as "unknown", never as zero.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+#[serde(tag = "reason", rename_all = "snake_case")]
+pub enum PriceRefusal {
+    /// None of the four keys is present, or the one present is empty.
+    NotStated,
+    /// A key is present and its value is not a number.
+    Unparsable { key: PriceKey, value: String },
+    /// The key name says EUR and `currency:` says something else. Guessing which the
+    /// human meant is how a wrong figure gets written confidently.
+    CurrencyContradiction { key: PriceKey, declared: String },
+    /// `price_eur` with no `billing_cycle:`. Defaulting to monthly would turn a 240 EUR
+    /// annual fee into 240 EUR a month, a 2,880 EUR a year error that looks like a real
+    /// figure.
+    CycleNotDeclared { key: PriceKey },
+    /// `yearly_cost_eur` beside a `billing_cycle:` that is not yearly. The key name
+    /// and the field state different periods for the same money.
+    CycleContradiction { key: PriceKey, declared: String },
+}
+
+impl std::fmt::Display for PriceRefusal {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            PriceRefusal::NotStated => write!(f, "no price key is present"),
+            PriceRefusal::Unparsable { key, value } => {
+                write!(f, "`{}: {value}` is not a number", key.as_str())
+            }
+            PriceRefusal::CurrencyContradiction { key, declared } => write!(
+                f,
+                "`{}` states EUR and `currency: {declared}` states otherwise",
+                key.as_str()
+            ),
+            PriceRefusal::CycleNotDeclared { key } => write!(
+                f,
+                "`{}` needs a `billing_cycle:`; the period cannot be guessed",
+                key.as_str()
+            ),
+            PriceRefusal::CycleContradiction { key, declared } => write!(
+                f,
+                "`{}` states a year and `billing_cycle: {declared}` states otherwise",
+                key.as_str()
+            ),
+        }
+    }
+}
+
+/// Read `billing_cycle:`, if it is present and non-empty.
+fn declared_cycle(fields: &HashMap<String, String>) -> Option<(BillingCycle, String)> {
+    let raw = fields.get("billing_cycle")?.trim();
+    if raw.is_empty() {
+        return None;
+    }
+    let cycle = match raw.to_ascii_lowercase().as_str() {
+        "weekly" => BillingCycle::Weekly,
+        "quarterly" => BillingCycle::Quarterly,
+        "yearly" | "annual" | "annually" => BillingCycle::Yearly,
+        "once" | "one_off" | "one-off" => BillingCycle::OneOff,
+        _ => BillingCycle::Monthly,
+    };
+    Some((cycle, raw.to_string()))
+}
+
+/// Read `currency:` as an ISO code, if it is present and three letters.
+fn declared_currency(fields: &HashMap<String, String>) -> Option<String> {
+    fields
+        .get("currency")
+        .map(|value| value.trim().to_ascii_uppercase())
+        .filter(|value| value.len() == 3)
+}
+
+/// Settle the four spellings into one figure, or refuse and say which key failed.
+///
+/// This is the Q103 reader. It never converts — [`crate::money::to_eur`] owns that —
+/// and it never invents a missing period or a missing unit.
+pub fn read_price(fields: &HashMap<String, String>) -> Result<PriceReading, PriceRefusal> {
+    let present: Vec<PriceKey> = PRICE_KEY_PRECEDENCE
+        .into_iter()
+        .filter(|key| {
+            fields
+                .get(key.as_str())
+                .is_some_and(|value| !value.trim().is_empty())
+        })
+        .collect();
+    let Some((&key, shadowed)) = present.split_first() else {
+        return Err(PriceRefusal::NotStated);
+    };
+
+    let raw = fields[key.as_str()].clone();
+    let Some(amount_cents) = decimal_to_cents(&raw) else {
+        return Err(PriceRefusal::Unparsable {
+            key,
+            value: raw.trim().to_string(),
+        });
+    };
+
+    let declared = declared_currency(fields);
+    let currency = if key.declares_eur() {
+        if let Some(declared) = declared.filter(|code| !crate::money::is_declared(code)) {
+            return Err(PriceRefusal::CurrencyContradiction { key, declared });
+        }
+        crate::money::DECLARED_CURRENCY.to_string()
+    } else {
+        declared.unwrap_or_else(|| crate::money::DECLARED_CURRENCY.to_string())
+    };
+
+    let cycle = match key {
+        PriceKey::YearlyCostEur => match declared_cycle(fields) {
+            Some((BillingCycle::Yearly, _)) | None => BillingCycle::Yearly,
+            Some((_, declared)) => return Err(PriceRefusal::CycleContradiction { key, declared }),
+        },
+        PriceKey::PriceEur => match declared_cycle(fields) {
+            Some((cycle, _)) => cycle,
+            None => return Err(PriceRefusal::CycleNotDeclared { key }),
+        },
+        // `cost` and `cost_eur` are recurring-subscription vocabulary, and the whole
+        // directory bills monthly. An absent `billing_cycle:` reads as monthly, which
+        // is what every note using these keys already means.
+        PriceKey::Cost | PriceKey::CostEur => declared_cycle(fields)
+            .map(|(cycle, _)| cycle)
+            .unwrap_or(BillingCycle::Monthly),
+    };
+
+    Ok(PriceReading {
+        key,
+        amount_cents,
+        currency,
+        cycle,
+        shadowed: shadowed.to_vec(),
+    })
+}
+
 /// Map a note's frontmatter onto the shape of a subscription.
 ///
 /// Only ever used to *seed*. Re-running it against a note whose series has since
 /// moved on would throw that series away, so the store imports by path and leaves
 /// an existing subscription's history alone.
 ///
-/// The vault's own vocabulary is honoured rather than replaced. New notes can use
-/// `cost` plus an ISO currency code; `cost_eur` remains a compatible shorthand for
-/// the existing notes. A `start_date` seeds the first price point's date; without
-/// one the caller's `today` is used, which is wrong-but-visible rather than invented.
+/// The vault's own vocabulary is honoured rather than replaced: [`read_price`] states
+/// the precedence over the four cost spellings and refuses where a figure would have to
+/// be guessed. A `start_date` seeds the first price point's date; without one the
+/// caller's `today` is used, which is wrong-but-visible rather than invented.
 pub fn seed_from_note(note: &ScannedNote, today: &str) -> Subscription {
     let f = &note.fields;
-
-    let cycle = f
-        .get("billing_cycle")
-        .map(|c| match c.trim().to_ascii_lowercase().as_str() {
-            "weekly" => BillingCycle::Weekly,
-            "quarterly" => BillingCycle::Quarterly,
-            "yearly" | "annual" | "annually" => BillingCycle::Yearly,
-            "once" | "one_off" | "one-off" => BillingCycle::OneOff,
-            _ => BillingCycle::Monthly,
-        })
-        .unwrap_or(BillingCycle::Monthly);
 
     let start = f
         .get("start_date")
@@ -149,26 +344,18 @@ pub fn seed_from_note(note: &ScannedNote, today: &str) -> Subscription {
         .unwrap_or(today)
         .to_string();
 
-    let currency = f
-        .get("currency")
-        .map(|value| value.trim().to_ascii_uppercase())
-        .filter(|value| value.len() == 3)
-        .unwrap_or_else(|| "EUR".into());
-    let prices = f
-        .get("cost")
-        .or_else(|| f.get("cost_eur"))
-        .and_then(|raw| decimal_to_cents(raw))
-        .map(|amount_cents| {
+    let prices = read_price(f)
+        .map(|reading| {
             vec![PricePoint {
                 valid_from: start.clone(),
-                amount_cents,
-                currency,
-                cycle,
+                amount_cents: reading.amount_cents,
+                currency: reading.currency,
+                cycle: reading.cycle,
                 plan: f
                     .get("plan")
                     .map(|p| p.trim().to_string())
                     .filter(|p| !p.is_empty()),
-                reason: "seeded from the vault note".into(),
+                reason: format!("seeded from the vault note (`{}`)", reading.key.as_str()),
             }]
         })
         .unwrap_or_default();
@@ -213,7 +400,12 @@ pub fn seed_from_note(note: &ScannedNote, today: &str) -> Subscription {
 /// series cannot be recomputed from anything. A current-state summary is not a copy of
 /// them. This region is the one existing machine→vault writer, so the safety copy goes
 /// where the writer already is rather than into a second file.
-pub fn render_block(sub: &Subscription, today: &str) -> String {
+///
+/// `rates` carries the published FX observations, and PRD Q103 (2026-09-09) is why the
+/// argument exists: EUR is the declared currency, so the block states the EUR figure
+/// beside a foreign price, or states that it cannot. Pass an empty slice and every
+/// non-EUR price renders its refusal, which is the state of a store with no FX rows.
+pub fn render_block(sub: &Subscription, today: &str, rates: &[FxObservation]) -> String {
     let mut out = String::new();
     out.push_str("> [!info] Derived by Axon — do not edit inside this block\n");
 
@@ -225,11 +417,32 @@ pub fn render_block(sub: &Subscription, today: &str) -> String {
                 p.currency,
                 cycle_word(p.cycle)
             ));
+            let monthly = p.cycle.monthly_cents(p.amount_cents);
             out.push_str(&format!(
                 "> **Monthly equivalent:** {} {}\n",
-                cents_to_decimal(p.cycle.monthly_cents(p.amount_cents)),
+                cents_to_decimal(monthly),
                 p.currency
             ));
+            // Q103: the monthly figure above is in the price's own currency and says
+            // so. This line is the EUR one, and it refuses rather than relabels.
+            match money::to_eur(monthly, &p.currency, rates) {
+                Ok(EurAmount::Declared { .. }) => {}
+                Ok(EurAmount::Converted { cents, rate, .. }) => out.push_str(&format!(
+                    "> **Monthly in {}:** {} {} (at the {}/{} rate of {}, {})\n",
+                    money::DECLARED_CURRENCY,
+                    cents_to_decimal(cents),
+                    money::DECLARED_CURRENCY,
+                    rate.base,
+                    rate.quote,
+                    rate.observed_on,
+                    rate.source,
+                )),
+                Err(refusal) => out.push_str(&format!(
+                    "> **Monthly in {}:** not stated — {}\n",
+                    money::DECLARED_CURRENCY,
+                    refusal.detail
+                )),
+            }
             if let Some(plan) = &p.plan {
                 out.push_str(&format!("> **Plan:** {plan}\n"));
             }
@@ -260,13 +473,9 @@ pub fn render_block(sub: &Subscription, today: &str) -> String {
 
     // A price point dated ahead of today is the increase you want warning about
     // before it bills, which is the whole reason the series is dated rather than
-    // overwritten.
-    if let Some(next) = sub
-        .prices
-        .iter()
-        .filter(|p| p.valid_from.as_str() > today)
-        .min_by(|a, b| a.valid_from.cmp(&b.valid_from))
-    {
+    // overwritten. `scheduled_price_after` rather than a local `min_by`, so the row
+    // announced here is the row that will actually be in force on its own date.
+    if let Some(next) = sub.scheduled_price_after(today) {
         out.push_str(&format!(
             "> **Scheduled:** {}{} {} / {} from {}\n",
             next.plan
@@ -369,7 +578,7 @@ pub const PROJECTION_DIR: &str = "Resources/Axon/Subscriptions";
 ///
 /// The body is `render_block`'s, so the two paths cannot drift into two shapes of the
 /// same figures.
-pub fn render_projection(sub: &Subscription, today: &str) -> String {
+pub fn render_projection(sub: &Subscription, today: &str, rates: &[FxObservation]) -> String {
     let mut out = String::from("---\n");
     let field = |out: &mut String, key: &str, value: &str| {
         let escaped = value.replace('\\', "\\\\").replace('"', "\\\"");
@@ -388,7 +597,7 @@ pub fn render_projection(sub: &Subscription, today: &str) -> String {
     }
     out.push_str("---\n\n");
     out.push_str(&format!("# {}\n\n", sub.name));
-    out.push_str(&render_block(sub, today));
+    out.push_str(&render_block(sub, today, rates));
     out
 }
 
@@ -402,6 +611,7 @@ pub fn export_projections(
     subs: &[Subscription],
     owned: &[String],
     today: &str,
+    rates: &[FxObservation],
 ) -> Result<ProjectionReport, markdown_root::RootError> {
     let spec = RegionSpec::new(REGION_OWNER, REGION_VERSION);
     let mut report = ProjectionReport::default();
@@ -413,7 +623,7 @@ pub fn export_projections(
         }
         let stem = markdown_root::projection::file_stem(&sub.name, &sub.id);
         let path = format!("{PROJECTION_DIR}/{stem}.md");
-        match root.write_projection(&path, &spec, &render_projection(sub, today))? {
+        match root.write_projection(&path, &spec, &render_projection(sub, today, rates))? {
             markdown_root::ProjectionOutcome::Created => report.created += 1,
             markdown_root::ProjectionOutcome::Updated => report.updated += 1,
             markdown_root::ProjectionOutcome::Unchanged => report.unchanged += 1,
@@ -478,10 +688,11 @@ pub fn write_block(
     path: &Path,
     sub: &Subscription,
     today: &str,
+    rates: &[FxObservation],
 ) -> Result<WriteBack, Box<dyn std::error::Error>> {
     let original = std::fs::read_to_string(path)?;
     let spec = RegionSpec::new(REGION_OWNER, REGION_VERSION);
-    let (updated, outcome) = region::apply(&original, &spec, &render_block(sub, today))?;
+    let (updated, outcome) = region::apply(&original, &spec, &render_block(sub, today, rates))?;
 
     match outcome {
         RegionOutcome::Created => {
@@ -495,6 +706,77 @@ pub fn write_block(
         RegionOutcome::Unchanged => Ok(WriteBack::Unchanged),
         RegionOutcome::Conflict { theirs, ours } => Ok(WriteBack::Conflict { theirs, ours }),
     }
+}
+
+/// A note and its series disagree about what the money is.
+///
+/// Reported, never resolved, in the same spirit as the writeback's region conflicts.
+/// Both sides are shown because either can be the wrong one: the human may have
+/// corrected the frontmatter, or the series may hold the correction and the frontmatter
+/// the stale figure.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+pub struct CurrencyMismatch {
+    pub source_path: String,
+    pub subscription_id: String,
+    /// The key the note states its price under, and the currency that implies.
+    pub note_key: PriceKey,
+    pub note_currency: String,
+    /// The currency of the price point in force, and the date it took effect.
+    pub series_currency: String,
+    pub series_valid_from: String,
+    pub detail: String,
+}
+
+/// Every note whose declared currency differs from the currency of its price in force.
+///
+/// The guard PRD Q103 asks for, and the shape of the case that produced the ruling: a
+/// note declares `currency: USD` while the price point in force, a stale seed written
+/// before the importer read `currency:`, is EUR, so the block Sjel wrote into that note
+/// reads `EUR / month`. The store never re-seeds, by design, so a corrected
+/// `currency:` cannot reach the series on its own. Detecting the divergence
+/// is what turns a silent wrong figure into a visible one.
+///
+/// A note with no price key, and a subscription with no price in force, are both
+/// silent here: there is nothing to disagree about. A note whose price key is refused
+/// (`price_eur` with no cycle, a contradiction) is likewise not a currency mismatch —
+/// [`read_price`] already reports that.
+pub fn currency_mismatches(
+    notes: &[ScannedNote],
+    subs: &[Subscription],
+    today: &str,
+) -> Vec<CurrencyMismatch> {
+    let mut out = Vec::new();
+    for note in notes {
+        let Some(sub) = subs.iter().find(|s| s.source_path == note.source_path) else {
+            continue;
+        };
+        let Some(price) = sub.price_at(today) else {
+            continue;
+        };
+        let Ok(reading) = read_price(&note.fields) else {
+            continue;
+        };
+        if reading.currency.eq_ignore_ascii_case(&price.currency) {
+            continue;
+        }
+        out.push(CurrencyMismatch {
+            source_path: note.source_path.clone(),
+            subscription_id: sub.id.clone(),
+            note_key: reading.key,
+            note_currency: reading.currency.clone(),
+            series_currency: price.currency.clone(),
+            series_valid_from: price.valid_from.clone(),
+            detail: format!(
+                "the note states {} under `{}` and the price point of {} is in {}; the derived block will say {}",
+                reading.currency,
+                reading.key.as_str(),
+                price.valid_from,
+                price.currency,
+                price.currency,
+            ),
+        });
+    }
+    out
 }
 
 #[cfg(test)]
@@ -615,7 +897,7 @@ mod tests {
             }],
         };
 
-        let block = render_block(&sub, "2026-08-08");
+        let block = render_block(&sub, "2026-08-08", &[]);
         assert!(block.contains("**Current price:** 25.00 EUR / month"));
         assert!(block.contains("**Monthly equivalent:** 25.00 EUR"));
         assert!(block.contains("**State:** active"));
@@ -656,7 +938,7 @@ mod tests {
                 })
                 .collect(),
         };
-        let block = render_block(&sub, "2026-08-08");
+        let block = render_block(&sub, "2026-08-08", &[]);
         for i in 0..5 {
             assert!(block.contains(&format!("step {i}")), "price point {i} lost");
             assert!(block.contains(&format!("tier-{i}")), "plan {i} lost");
@@ -718,7 +1000,7 @@ mod tests {
             "Atlas/Finance/Subscriptions/Claude Max.md",
         )];
 
-        let first = export_projections(&root, &subs, &[], "2026-08-28").unwrap();
+        let first = export_projections(&root, &subs, &[], "2026-08-28", &[]).unwrap();
         assert_eq!((first.created, first.unchanged), (1, 0));
         let file = dir.join("Resources/Axon/Subscriptions/Claude Max.md");
         let body = std::fs::read_to_string(&file).unwrap();
@@ -727,11 +1009,11 @@ mod tests {
             "{body}"
         );
 
-        let second = export_projections(&root, &subs, &[], "2026-08-28").unwrap();
+        let second = export_projections(&root, &subs, &[], "2026-08-28", &[]).unwrap();
         assert_eq!((second.created, second.unchanged), (0, 1));
 
         let owned = vec!["Atlas/Finance/Subscriptions/Claude Max.md".to_string()];
-        let third = export_projections(&root, &subs, &owned, "2026-08-28").unwrap();
+        let third = export_projections(&root, &subs, &owned, "2026-08-28", &[]).unwrap();
         assert_eq!(
             third.removed,
             vec!["Resources/Axon/Subscriptions/Claude Max.md"]
@@ -761,7 +1043,7 @@ mod tests {
             }],
             states: vec![],
         };
-        let block = render_block(&sub, "2026-08-08");
+        let block = render_block(&sub, "2026-08-08", &[]);
         assert!(block.contains("moved Pro \\| Max after the mail"));
         let row = block
             .lines()
@@ -785,7 +1067,7 @@ mod tests {
             prices: vec![],
             states: vec![],
         };
-        let block = render_block(&sub, "2026-08-08");
+        let block = render_block(&sub, "2026-08-08", &[]);
         assert!(block.contains("not recorded yet"));
         assert!(!block.contains("0.00"));
     }
@@ -826,14 +1108,14 @@ mod tests {
             }],
         };
 
-        let block = render_block(&sub, "2026-08-08");
+        let block = render_block(&sub, "2026-08-08", &[]);
         assert!(!block.contains("drift"), "nothing has drifted yet");
         // The plan rides along, so the line answers "to what" as well as "to how much".
         assert!(block.contains("**Scheduled:** Max, 100.00 EUR / month from 2026-10-01"));
         assert!(block.contains("**Current price:** 20.00 EUR / month"));
 
         // Once it lands, it is drift and there is nothing left to schedule.
-        let after = render_block(&sub, "2026-10-02");
+        let after = render_block(&sub, "2026-10-02", &[]);
         assert!(after.contains("**Price drift since 2026-08-08:** up 80.00 EUR"));
         assert!(!after.contains("Scheduled"));
     }
@@ -851,10 +1133,365 @@ mod tests {
             ),
             "2026-08-08",
         );
-        let block = render_block(&sub, "2026-08-08");
+        let block = render_block(&sub, "2026-08-08", &[]);
         assert!(
             !block.contains("drift"),
             "no drift to report from one point"
         );
+    }
+
+    // -- Q103: the four cost spellings, one fixture per note shape ------------------
+    //
+    // The fixtures below are synthetic: invented names and amounts, one per frontmatter
+    // shape the reader has to settle. They are written here rather than read from a
+    // vault, because a test that reads a live vault passes or fails for reasons that
+    // have nothing to do with this code.
+
+    #[test]
+    fn a_card_fee_under_price_eur_without_a_cycle_is_refused_not_read_as_monthly() {
+        // `price_eur: 240` is an annual card fee. Before Q103 the key was not read at
+        // all, so the note seeded no price; the trap is in adding it to the alias
+        // chain without the cycle rule, because `billing_cycle:` is absent and the
+        // default for the other three keys is monthly. That reading would state
+        // 240.00 EUR *a month*.
+        let fields = note(
+            &[
+                ("category", "other"),
+                ("price_eur", "240"),
+                ("status", "decided-yes"),
+            ],
+            "Meridian Card",
+        );
+        assert_eq!(
+            read_price(&fields.fields),
+            Err(PriceRefusal::CycleNotDeclared {
+                key: PriceKey::PriceEur
+            })
+        );
+        let sub = seed_from_note(&fields, "2026-09-09");
+        assert!(sub.prices.is_empty(), "a refusal seeds no price");
+
+        // One line of frontmatter settles it, and then the figure is annual.
+        let fixed = note(
+            &[
+                ("price_eur", "240"),
+                ("billing_cycle", "yearly"),
+                ("status", "decided-yes"),
+            ],
+            "Meridian Card",
+        );
+        let reading = read_price(&fixed.fields).unwrap();
+        assert_eq!(reading.key, PriceKey::PriceEur);
+        assert_eq!(reading.amount_cents, 24_000);
+        assert_eq!(reading.currency, "EUR");
+        assert_eq!(reading.cycle, BillingCycle::Yearly);
+    }
+
+    #[test]
+    fn a_travel_pass_has_the_same_shape_as_the_card_and_the_same_answer() {
+        let fields = note(
+            &[
+                ("category", "transport"),
+                ("price_eur", "1490"),
+                ("status", "decided-yes"),
+            ],
+            "Rail Pass",
+        );
+        assert!(read_price(&fields.fields).is_err());
+        assert!(seed_from_note(&fields, "2026-09-09").prices.is_empty());
+    }
+
+    #[test]
+    fn cost_with_an_explicit_eur_currency_is_read_as_eur() {
+        let fields = note(
+            &[
+                ("cost", "35"),
+                ("currency", "EUR"),
+                ("plan", "Pro"),
+                ("billing_cycle", "monthly"),
+                ("start_date", "2026-05-15"),
+                ("status", "cancelled"),
+            ],
+            "Harbor Cloud",
+        );
+        let reading = read_price(&fields.fields).unwrap();
+        assert_eq!(reading.key, PriceKey::Cost);
+        assert_eq!(reading.amount_cents, 3_500);
+        assert_eq!(reading.currency, "EUR");
+        assert!(reading.shadowed.is_empty());
+    }
+
+    #[test]
+    fn usd_cost_is_read_and_shadows_the_yearly_eur_twin() {
+        // The collision Q103 is about. `cost: 45 / currency: USD` and
+        // `yearly_cost_eur: 540` are two different claims about one price: 45 USD a
+        // month is 540 *USD* a year, not 540 EUR. `cost` wins and the other is
+        // recorded as shadowed rather than averaged in or silently dropped.
+        let fields = note(
+            &[
+                ("cost", "45"),
+                ("currency", "USD"),
+                ("billing_cycle", "monthly"),
+                ("yearly_cost_eur", "540"),
+                ("start_date", "2026-07-01"),
+                ("status", "cancelled"),
+            ],
+            "Studio Max",
+        );
+        let reading = read_price(&fields.fields).unwrap();
+        assert_eq!(reading.key, PriceKey::Cost);
+        assert_eq!(
+            reading.currency, "USD",
+            "the note says USD, so the seed does"
+        );
+        assert_eq!(reading.shadowed, vec![PriceKey::YearlyCostEur]);
+
+        // And the seeded point carries USD, so the region cannot render it as EUR.
+        let sub = seed_from_note(&fields, "2026-09-09");
+        assert_eq!(sub.prices[0].currency, "USD");
+        let block = render_block(&sub, "2026-09-09", &[]);
+        assert!(block.contains("**Current price:** 45.00 USD / month"));
+        assert!(
+            block.contains("**Monthly in EUR:** not stated — no published EUR/USD rate"),
+            "a USD price with no rate must refuse, not relabel:\n{block}"
+        );
+        assert!(!block.contains("45.00 EUR"));
+    }
+
+    #[test]
+    fn usd_cost_with_an_empty_yearly_twin_does_not_shadow_anything() {
+        // `yearly_cost_eur:` is present but empty in the note. An empty value is not a
+        // figure, so it is neither read nor counted as a competing claim.
+        let fields = note(
+            &[
+                ("cost", "15"),
+                ("currency", "USD"),
+                ("yearly_cost_eur", ""),
+                ("billing_cycle", "monthly"),
+                ("status", "active"),
+                ("start_date", "2026-08-01"),
+            ],
+            "Studio Lite",
+        );
+        let reading = read_price(&fields.fields).unwrap();
+        assert_eq!(reading.amount_cents, 1500);
+        assert_eq!(reading.currency, "USD");
+        assert!(reading.shadowed.is_empty());
+    }
+
+    #[test]
+    fn the_cost_eur_alias_is_read_and_needs_no_currency_field() {
+        let fields = note(
+            &[
+                ("cost_eur", "12"),
+                ("yearly_cost_eur", ""),
+                ("billing_cycle", "monthly"),
+                ("status", "covered"),
+            ],
+            "Vault Storage",
+        );
+        let reading = read_price(&fields.fields).unwrap();
+        assert_eq!(reading.key, PriceKey::CostEur);
+        assert!(reading.key.is_deprecated());
+        assert_eq!(reading.currency, "EUR");
+        assert_eq!(reading.amount_cents, 1200);
+    }
+
+    #[test]
+    fn a_second_usd_note_reads_usd_from_cost() {
+        let fields = note(
+            &[
+                ("cost", "8"),
+                ("currency", "USD"),
+                ("billing_cycle", "monthly"),
+                ("start_date", "2026-08-01"),
+                ("status", "active"),
+            ],
+            "Pixel Relay",
+        );
+        let reading = read_price(&fields.fields).unwrap();
+        assert_eq!(reading.amount_cents, 800);
+        assert_eq!(reading.currency, "USD");
+    }
+
+    #[test]
+    fn a_eur_key_beside_a_foreign_currency_field_is_a_contradiction_not_an_override() {
+        let fields = note(&[("cost_eur", "20"), ("currency", "USD")], "Planted");
+        assert_eq!(
+            read_price(&fields.fields),
+            Err(PriceRefusal::CurrencyContradiction {
+                key: PriceKey::CostEur,
+                declared: "USD".into()
+            })
+        );
+    }
+
+    #[test]
+    fn a_yearly_key_beside_a_monthly_cycle_is_a_contradiction() {
+        let fields = note(
+            &[("yearly_cost_eur", "1200"), ("billing_cycle", "monthly")],
+            "Planted",
+        );
+        assert_eq!(
+            read_price(&fields.fields),
+            Err(PriceRefusal::CycleContradiction {
+                key: PriceKey::YearlyCostEur,
+                declared: "monthly".into()
+            })
+        );
+    }
+
+    #[test]
+    fn an_unparsable_cost_names_the_key_rather_than_seeding_nothing_quietly() {
+        let fields = note(&[("cost", "free")], "Planted");
+        assert_eq!(
+            read_price(&fields.fields),
+            Err(PriceRefusal::Unparsable {
+                key: PriceKey::Cost,
+                value: "free".into()
+            })
+        );
+    }
+
+    #[test]
+    fn a_converted_price_states_the_rate_it_used() {
+        let sub = seed_from_note(
+            &note(
+                &[
+                    ("cost", "20"),
+                    ("currency", "USD"),
+                    ("status", "active"),
+                    ("start_date", "2026-08-01"),
+                ],
+                "Pixel Relay",
+            ),
+            "2026-09-09",
+        );
+        let rates = vec![FxObservation {
+            base: "EUR".into(),
+            quote: "USD".into(),
+            observed_on: "2026-09-08".into(),
+            rate: crate::investment::Quantity {
+                mantissa: 10_850,
+                scale: 4,
+            },
+            source: "ecb".into(),
+            fetched_at: "2026-09-08T16:00:00Z".into(),
+        }];
+        let block = render_block(&sub, "2026-09-09", &rates);
+        assert!(block.contains("**Current price:** 20.00 USD / month"));
+        assert!(
+            block
+                .contains("**Monthly in EUR:** 18.43 EUR (at the EUR/USD rate of 2026-09-08, ecb)"),
+            "a converted figure must carry its source:\n{block}"
+        );
+    }
+
+    #[test]
+    fn a_eur_price_gains_no_conversion_line_because_there_is_nothing_to_convert() {
+        let sub = seed_from_note(
+            &note(&[("cost_eur", "20"), ("status", "active")], "Vault Storage"),
+            "2026-09-09",
+        );
+        let block = render_block(&sub, "2026-09-09", &[]);
+        assert!(block.contains("**Monthly equivalent:** 20.00 EUR"));
+        assert!(!block.contains("**Monthly in EUR:**"));
+    }
+
+    // -- Q103: the guard --------------------------------------------------------------
+
+    fn imported(name: &str, prices: Vec<PricePoint>) -> Subscription {
+        Subscription {
+            id: format!("sub_{name}"),
+            name: name.into(),
+            source_path: format!("Atlas/Finance/Subscriptions/{name}.md"),
+            category: None,
+            value_rating: None,
+            prices,
+            states: vec![StateChange {
+                effective: "2026-07-01".into(),
+                state: State::Active,
+                note: String::new(),
+            }],
+        }
+    }
+
+    fn point(from: &str, cents: i64, currency: &str, reason: &str) -> PricePoint {
+        PricePoint {
+            valid_from: from.into(),
+            amount_cents: cents,
+            currency: currency.into(),
+            cycle: BillingCycle::Monthly,
+            plan: None,
+            reason: reason.into(),
+        }
+    }
+
+    #[test]
+    fn the_guard_stays_silent_when_the_note_and_the_series_agree() {
+        let notes = vec![note(
+            &[
+                ("cost", "8"),
+                ("currency", "USD"),
+                ("billing_cycle", "monthly"),
+                ("status", "active"),
+            ],
+            "Pixel Relay",
+        )];
+        let subs = vec![imported(
+            "Pixel Relay",
+            vec![point("2026-08-01", 800, "USD", "seeded")],
+        )];
+        assert_eq!(currency_mismatches(&notes, &subs, "2026-09-09"), Vec::new());
+    }
+
+    #[test]
+    fn the_guard_refuses_a_stale_eur_seed_under_a_usd_note() {
+        // The planted bad input: the note declares USD and the price point in force, a
+        // stale seed dated after the corrected point, is EUR.
+        let notes = vec![note(
+            &[
+                ("cost", "45"),
+                ("currency", "USD"),
+                ("billing_cycle", "monthly"),
+                ("status", "cancelled"),
+            ],
+            "Studio Max",
+        )];
+        let subs = vec![imported(
+            "Studio Max",
+            vec![
+                point("2026-07-01", 4_500, "USD", "reviewed plan history"),
+                point("2026-08-08", 4_500, "EUR", "seeded from the vault note"),
+            ],
+        )];
+
+        let found = currency_mismatches(&notes, &subs, "2026-09-09");
+        assert_eq!(found.len(), 1, "the mismatch must be reported: {found:?}");
+        assert_eq!(found[0].note_currency, "USD");
+        assert_eq!(found[0].series_currency, "EUR");
+        assert_eq!(found[0].series_valid_from, "2026-08-08");
+        assert_eq!(found[0].note_key, PriceKey::Cost);
+        assert!(found[0].detail.contains("2026-08-08"));
+
+        // Appending the correction the note already implies clears it, and nothing
+        // else has to change.
+        let mut corrected = subs;
+        corrected[0]
+            .prices
+            .push(point("2026-09-09", 4_500, "USD", "currency correction"));
+        assert_eq!(
+            currency_mismatches(&notes, &corrected, "2026-09-09"),
+            Vec::new()
+        );
+    }
+
+    #[test]
+    fn the_guard_is_silent_where_there_is_nothing_to_compare() {
+        // A note whose price key is refused, and a subscription with no price in
+        // force, are both absences rather than disagreements.
+        let notes = vec![note(&[("price_eur", "240")], "Meridian Card")];
+        let subs = vec![imported("Meridian Card", Vec::new())];
+        assert_eq!(currency_mismatches(&notes, &subs, "2026-09-09"), Vec::new());
     }
 }

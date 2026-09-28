@@ -151,6 +151,38 @@ Frontmatter seeds a subscription and is then not re-read for those fields. A
 re-import would otherwise throw away every price change recorded since, because the
 single cost figure in the note was only ever a starting point.
 
+## EUR is declared, and a price that is not EUR is refused rather than relabelled
+
+PRD Q103 (2026-09-09) makes EUR the currency every single total is stated in. The ruling
+had to be written because subscription notes carried four spellings of one fact, and a
+note that declared `currency: USD` could carry a block Sjel had written as `EUR / month`.
+
+`obsidian::read_price` settles the spellings. The first key present wins and the rest are
+recorded as shadowed, never merged:
+
+| Key | Currency | Cycle |
+|---|---|---|
+| `cost` | `currency:`, else EUR | `billing_cycle:`, else monthly |
+| `cost_eur` *(deprecated)* | EUR; a differing `currency:` is a contradiction | `billing_cycle:`, else monthly |
+| `price_eur` *(deprecated)* | EUR; a differing `currency:` is a contradiction | `billing_cycle:` is **required** |
+| `yearly_cost_eur` *(deprecated)* | EUR | yearly; a differing `billing_cycle:` is a contradiction |
+
+`price_eur` is the one that must not default. It appears on purchase-decision notes,
+which carry an annual fee and often no `billing_cycle:` at all, so a monthly default
+turns a 240 EUR annual card fee into 240 EUR a month.
+
+`money::to_eur` does the conversion and refuses when no published rate covers the pair.
+Nothing is assumed: `finance_fx_rates` was empty when the ruling was made, because
+`price::fetch_all` derives its FX targets from the holdings snapshot and every reviewed
+holding is already EUR, so the `ecb` provider had never been handed a target. The burn
+`GET /api/subscriptions/burn` returns under `eur` therefore contains only amounts that
+are EUR or were converted with a dated, sourced rate; anything else is itemised in
+`eur.not_convertible` so a short total is never a silent one.
+
+`finance-cli subscriptions audit` is the read-only view of all three checks — unreadable
+price keys, a note whose currency differs from the price point in force, and a burn that
+cannot be completed. It exits 1 on any finding.
+
 ## HTTP surface
 
 On the manifest-declared port. `GET /routes` serves the full manifest.

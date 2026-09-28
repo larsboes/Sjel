@@ -483,16 +483,32 @@ fn review_proposals(
     let Some(month) = clock::month_of(inputs.as_of) else {
         return Vec::new();
     };
-    let renewals: Vec<(&str, i64)> = inputs
-        .subscriptions
-        .iter()
-        .filter(|subscription| subscription.state_at(inputs.as_of).is_billing())
-        .filter_map(|subscription| {
-            let price = subscription.price_at(inputs.as_of)?;
-            lump_renewal_lands_in(price, &month)
-                .then_some((subscription.name.as_str(), price.amount_cents))
-        })
-        .collect();
+    // PRD Q103: `committed` below is a sum, and a sum needs one currency. Before this
+    // ruling every `amount_cents` was added regardless of `price.currency` and the
+    // total was labelled `inputs.currency`, which turns 45.00 USD into 45.00 EUR in a
+    // proposal a person acts on. A renewal in another currency is named in a caveat
+    // instead, because leaving it out silently is the same defect facing the other way.
+    let mut renewals: Vec<(&str, i64)> = Vec::new();
+    let mut foreign: Vec<String> = Vec::new();
+    for subscription in inputs.subscriptions {
+        if !subscription.state_at(inputs.as_of).is_billing() {
+            continue;
+        }
+        let Some(price) = subscription.price_at(inputs.as_of) else {
+            continue;
+        };
+        if !lump_renewal_lands_in(price, &month) {
+            continue;
+        }
+        if price.currency.eq_ignore_ascii_case(inputs.currency) {
+            renewals.push((subscription.name.as_str(), price.amount_cents));
+        } else {
+            foreign.push(format!(
+                "{} renews in {month} and is priced in {}, which is not {}; it is not in the total",
+                subscription.name, price.currency, inputs.currency
+            ));
+        }
+    }
     if renewals.is_empty() {
         return Vec::new();
     }
@@ -526,7 +542,7 @@ fn review_proposals(
             ),
         ]),
         feed_items: Vec::new(),
-        caveats: Vec::new(),
+        caveats: foreign,
         risk: None,
     };
     vec![mint(

@@ -30,6 +30,13 @@ Usage:
   finance-cli decisions run --dry-run          print the proposals, write nothing
   finance-cli decisions export                 re-render every month file from the ledger
   finance-cli decisions export --month 2026-09 re-render one month
+  finance-cli subscriptions audit              read-only Q103 currency audit; exit 1 on a finding
+
+subscriptions audit opens no file for writing. It reports three things a wrong
+figure hides behind: a vault note whose price key cannot be read, a note whose
+declared currency differs from the currency of its price in force, and a billing
+subscription whose price cannot be stated in EUR because no rate covers the pair.
+Exit status is 1 when it finds any of the three, so a scheduled run notices.
 
 prices fetch writes one finance_prices row per new observation and one
 finance_price_fetches row per attempt, successful or not. A per-instrument
@@ -62,6 +69,7 @@ fn main() {
         (Some("prices"), Some("status")) => print_status(&rest),
         (Some("decisions"), Some("run")) => run_decisions(&rest),
         (Some("decisions"), Some("export")) => export_decisions(&rest),
+        (Some("subscriptions"), Some("audit")) => audit_subscriptions(&rest),
         _ => {
             eprintln!("{USAGE}");
             std::process::exit(2);
@@ -257,4 +265,141 @@ fn export_decisions(rest: &[&str]) -> Result<bool, String> {
     }
     println!("{} month file(s) written", written.len());
     Ok(true)
+}
+
+/// PRD Q103's audit: every place a subscription figure can carry the wrong currency.
+///
+/// Read-only by construction — it opens the store, scans the vault, and prints. It does
+/// not import, does not write a region, and does not fetch. That matters because the
+/// answer it gives is most wanted while a service is running, and a reporting command
+/// that mutates is a command nobody runs at that moment.
+///
+/// Exit 1 on any finding. A silent pass and a pass with a wrong figure in it have to
+/// look different from a scheduler, or the audit is decoration.
+fn audit_subscriptions(_rest: &[&str]) -> Result<bool, String> {
+    let (store, config) = store_and_config()?;
+    let as_of = finance::clock::today();
+    let subs = store.list().map_err(|error| error.to_string())?;
+    let rates = store.latest_fx_rates().map_err(|error| error.to_string())?;
+    println!(
+        "as of {as_of}: {} subscription(s), {} FX rate(s) recorded",
+        subs.len(),
+        rates.len()
+    );
+
+    let notes = match &config.obsidian {
+        Some(vault) => {
+            let root = markdown_root::MarkdownRoot::declare(vault.root.clone())
+                .map_err(|error| error.to_string())?;
+            match finance::obsidian::scan(&root, &vault.subscriptions_dir) {
+                Ok(notes) => notes,
+                // A vault that is not there is a fact worth printing, not a crash: the
+                // store half of this audit is still worth running without it.
+                Err(error) => {
+                    println!("vault not scanned: {error}");
+                    Vec::new()
+                }
+            }
+        }
+        None => {
+            println!("no vault configured, so no note was read");
+            Vec::new()
+        }
+    };
+
+    let mut findings = 0usize;
+
+    let mut deprecated: Vec<String> = Vec::new();
+    let mut unreadable: Vec<String> = Vec::new();
+    for note in &notes {
+        match finance::obsidian::read_price(&note.fields) {
+            Ok(reading) => {
+                if reading.key.is_deprecated() || !reading.shadowed.is_empty() {
+                    let shadowed: Vec<&str> =
+                        reading.shadowed.iter().map(|key| key.as_str()).collect();
+                    deprecated.push(format!(
+                        "  {:<34} reads `{}` ({} {}), shadowing [{}]",
+                        note.name,
+                        reading.key.as_str(),
+                        finance::subscription::cents_to_decimal(reading.amount_cents),
+                        reading.currency,
+                        shadowed.join(", ")
+                    ));
+                }
+            }
+            Err(refusal) => unreadable.push(format!("  {:<34} {refusal}", note.name)),
+        }
+    }
+
+    // A deprecated spelling is read, so it is not a finding. It is printed because the
+    // set only ever shrinks by editing a note, and an unlisted alias is one nobody
+    // remembers to retire.
+    println!("\n-- notes read through a deprecated key --");
+    print_or_none(&deprecated);
+
+    println!("\n-- notes whose price key cannot be read --");
+    print_or_none(&unreadable);
+    findings += unreadable.len();
+
+    println!("\n-- notes whose currency differs from the price in force --");
+    let mismatches = finance::obsidian::currency_mismatches(&notes, &subs, &as_of);
+    print_or_none(
+        &mismatches
+            .iter()
+            .map(|mismatch| format!("  {} — {}", mismatch.source_path, mismatch.detail))
+            .collect::<Vec<_>>(),
+    );
+    findings += mismatches.len();
+
+    println!("\n-- burn in {} --", finance::money::DECLARED_CURRENCY);
+    let burn = finance::money::burn_in_eur(&subs, &as_of, &rates);
+    println!(
+        "  {} {} / month ({} {} / year) from {} billing, {} converted, {} covered, {} without a price",
+        finance::subscription::cents_to_decimal(burn.monthly_cents),
+        burn.currency,
+        finance::subscription::cents_to_decimal(burn.annual_cents),
+        burn.currency,
+        burn.billing_count,
+        burn.converted_count,
+        burn.covered_count,
+        burn.unknown_price_count,
+    );
+    for left_out in &burn.not_convertible {
+        println!(
+            "  NOT IN THE TOTAL: {:<24} {} {} / month — {}",
+            left_out.subscription_name,
+            finance::subscription::cents_to_decimal(left_out.monthly_cents),
+            left_out.currency,
+            left_out.detail
+        );
+    }
+    findings += burn.not_convertible.len();
+    // A billing subscription with no price point shortens the total by an unknown
+    // amount, which is the failure Q103 names, and `EurBurn::is_complete` already
+    // calls it incomplete. Counting only `not_convertible` let that case print
+    // "0 finding(s)" and exit 0 — an audit that answers the same for a good store and
+    // a short one. Watched: planting an `active` state on a subscription with no price
+    // moved a fully-corrected copy from `0 finding(s)` exit 0 to `1 finding(s)` exit 1.
+    findings += burn.unknown_price_count;
+    if burn.unknown_price_count > 0 {
+        println!(
+            "  NOT IN THE TOTAL: {} billing subscription(s) have no price point at all",
+            burn.unknown_price_count
+        );
+    }
+
+    println!("\n{findings} finding(s)");
+    Ok(findings == 0)
+}
+
+/// An empty section says so. A heading with nothing under it reads as output that was
+/// cut off, which is the one thing an audit must never look like.
+fn print_or_none(lines: &[String]) {
+    if lines.is_empty() {
+        println!("  none");
+        return;
+    }
+    for line in lines {
+        println!("{line}");
+    }
 }

@@ -181,11 +181,44 @@ impl Subscription {
     /// `None` before the first price point rather than a zero: a subscription whose
     /// history has not started costs an unknown amount, and reporting nothing is
     /// honest where reporting zero is a figure someone might trust.
+    ///
+    /// ## Two points on one date: the later row wins
+    ///
+    /// The series is append-only, so a correction lands as a *second* point carrying
+    /// the same `valid_from` as the one it corrects. Both are in the record; only one
+    /// can be in force. The rule is that the later row wins, because the store loads
+    /// `ORDER BY valid_from, id` and a higher id is a later observation.
+    ///
+    /// `max_by` returns the last of several equal maxima, so this holds without an
+    /// extra comparison — but it is written down here because it is not obvious, and
+    /// because [`Self::scheduled_price_after`] exists to keep the *future* half of the
+    /// same question answering identically. Example: a series carries two points dated
+    /// 2026-10-01, a speculative `45.00 EUR` upgrade (lower id) and
+    /// `15.00 USD, supersede speculative future upgrade` (higher id).
     pub fn price_at(&self, date: &str) -> Option<&PricePoint> {
         self.prices
             .iter()
             .filter(|p| p.valid_from.as_str() <= date)
             .max_by(|a, b| a.valid_from.cmp(&b.valid_from))
+    }
+
+    /// The next price point after `date`: the earliest future date, and within it the
+    /// same later-row-wins rule [`Self::price_at`] uses.
+    ///
+    /// `prices.iter().min_by(valid_from)` is the obvious spelling and it is wrong.
+    /// `min_by` returns the *first* of several equal minima while `max_by` returns the
+    /// last, so the two disagree the moment a future date carries a correction. That
+    /// is not hypothetical: it is how a rendered block came to announce
+    /// `Scheduled: 45.00 EUR / month from 2026-10-01` while the store would put
+    /// `15.00 USD` in force on that very date.
+    pub fn scheduled_price_after(&self, date: &str) -> Option<&PricePoint> {
+        let next = self
+            .prices
+            .iter()
+            .filter(|p| p.valid_from.as_str() > date)
+            .map(|p| p.valid_from.as_str())
+            .min()?;
+        self.prices.iter().rfind(|p| p.valid_from == next)
     }
 
     /// Which tier was in force on `date`, if the series records one.
@@ -217,9 +250,19 @@ impl Subscription {
 
     /// How far the monthly price moved between two dates, in cents. Positive is an
     /// increase. This is the drift signal a single mutable number cannot produce.
+    ///
+    /// `None` when the two points are in different currencies, per PRD Q103. The
+    /// subtraction is arithmetic on two different units, and the one caller
+    /// ([`crate::obsidian::render_block`]) labels the result with the *earlier*
+    /// point's currency — so a USD price following a EUR one would have rendered a
+    /// EUR-labelled figure that is neither. Refusing is the same answer this
+    /// capability gives everywhere else it cannot state a currency.
     pub fn price_drift_cents(&self, from: &str, to: &str) -> Option<i64> {
         let before = self.price_at(from)?;
         let after = self.price_at(to)?;
+        if !before.currency.eq_ignore_ascii_case(&after.currency) {
+            return None;
+        }
         Some(
             after.cycle.monthly_cents(after.amount_cents)
                 - before.cycle.monthly_cents(before.amount_cents),
@@ -411,6 +454,27 @@ mod tests {
     }
 
     #[test]
+    fn drift_across_a_currency_change_is_refused_rather_than_labelled_with_one_of_them() {
+        // A EUR seed on 2026-08-08 superseded by a USD correction on 2026-08-09. Subtracting the two is arithmetic on two units,
+        // and `render_block` labels the answer with the *earlier* point's currency, so
+        // a non-zero result would print as a EUR figure that was never in EUR.
+        let mut sub = two_price_points();
+        sub.prices = vec![
+            price("2026-08-08", 2000, BillingCycle::Monthly),
+            price("2026-08-09", 3000, BillingCycle::Monthly),
+        ];
+        sub.prices[1].currency = "USD".into();
+        assert_eq!(sub.price_drift_cents("2026-08-08", "2026-09-09"), None);
+
+        // Same amounts, one currency: the figure is stateable, so it is stated.
+        sub.prices[1].currency = "EUR".into();
+        assert_eq!(
+            sub.price_drift_cents("2026-08-08", "2026-09-09"),
+            Some(1000)
+        );
+    }
+
+    #[test]
     fn a_tier_change_is_a_price_point_that_also_remembers_what_you_switched_to() {
         // Claude Pro at 20 and Max at 100 are the same subscription on two plans.
         // The money is in amount_cents, the identity is in plan, and neither is
@@ -430,6 +494,71 @@ mod tests {
     #[test]
     fn a_subscription_with_one_tier_records_no_plan_rather_than_a_placeholder() {
         assert_eq!(two_price_points().plan_at("2026-08-08"), None);
+    }
+
+    #[test]
+    fn a_correction_dated_the_same_day_supersedes_the_row_it_corrects() {
+        // Two points on 2026-10-01: a speculative 45.00 EUR upgrade (lower id) and the
+        // row that supersedes it (higher id).
+        // The store loads them `ORDER BY valid_from, id`, so the second is the later
+        // observation and wins.
+        let mut sub = two_price_points();
+        sub.prices = vec![
+            price("2026-08-09", 1500, BillingCycle::Monthly),
+            price("2026-10-01", 4_500, BillingCycle::Monthly),
+            price("2026-10-01", 1500, BillingCycle::Monthly),
+        ];
+        sub.prices[2].reason = "supersede speculative future upgrade".into();
+
+        assert_eq!(sub.price_at("2026-10-01").unwrap().amount_cents, 1500);
+        assert_eq!(
+            sub.price_at("2026-10-01").unwrap().reason,
+            "supersede speculative future upgrade"
+        );
+    }
+
+    #[test]
+    fn the_scheduled_price_is_the_row_that_will_actually_be_in_force() {
+        // The bug this method exists for: `min_by` returns the *first* of equal minima
+        // and `max_by` the last, so announcing the future with one and applying it with
+        // the other makes the block contradict the store on the announced date.
+        let mut sub = two_price_points();
+        sub.prices = vec![
+            price("2026-08-09", 1500, BillingCycle::Monthly),
+            price("2026-10-01", 4_500, BillingCycle::Monthly),
+            price("2026-10-01", 1500, BillingCycle::Monthly),
+        ];
+
+        let scheduled = sub.scheduled_price_after("2026-09-09").unwrap();
+        let in_force = sub.price_at("2026-10-01").unwrap();
+        assert_eq!(
+            scheduled.amount_cents, in_force.amount_cents,
+            "what is announced must be what lands"
+        );
+        assert_eq!(scheduled.amount_cents, 1500);
+
+        // The naive spelling picks the other row, the one the old renderer announced.
+        let naive = sub
+            .prices
+            .iter()
+            .filter(|p| p.valid_from.as_str() > "2026-09-09")
+            .min_by(|a, b| a.valid_from.cmp(&b.valid_from))
+            .unwrap();
+        assert_eq!(naive.amount_cents, 4_500);
+    }
+
+    #[test]
+    fn nothing_is_scheduled_when_every_point_is_in_the_past() {
+        assert!(two_price_points()
+            .scheduled_price_after("2026-12-31")
+            .is_none());
+        assert_eq!(
+            two_price_points()
+                .scheduled_price_after("2026-08-08")
+                .unwrap()
+                .amount_cents,
+            10_000
+        );
     }
 
     #[test]

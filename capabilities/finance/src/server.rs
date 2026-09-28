@@ -1574,17 +1574,23 @@ async fn burn(State(state): State<AppState>, Query(query): Query<AtQuery>) -> Ap
     let at_for_body = at.clone();
     match tokio::task::spawn_blocking(move || {
         FinanceStore::open(&database_path)
-            .and_then(|store| store.list())
+            .and_then(|store| Ok((store.list()?, store.latest_fx_rates()?)))
             .map_err(|e| e.to_string())
     })
     .await
     {
-        Ok(Ok(subs)) => {
+        Ok(Ok((subs, rates))) => {
             let burn = burn_by_currency(&subs, &at);
+            // PRD Q103 declares EUR, so the one figure to act on is `eur`. It contains
+            // only amounts that are EUR or were converted with a published rate;
+            // `eur.not_convertible` names what is missing from it, so a short total is
+            // never a silent one. `currencies` stays as the unconverted breakdown.
+            let eur = finance::money::burn_in_eur(&subs, &at, &rates);
             response(
                 StatusCode::OK,
                 json!({
                     "at": at_for_body,
+                    "eur": eur,
                     "currencies": burn.currencies,
                     "billing_count": burn.billing_count,
                     "covered_count": burn.covered_count,
@@ -1707,7 +1713,18 @@ async fn import_vault(State(state): State<AppState>) -> ApiResponse {
                 existing += 1;
             }
         }
-        Ok(json!({ "ok": true, "created": created, "already_present": existing }))
+        // PRD Q103: an already-imported note is never re-seeded, so a currency
+        // corrected in the frontmatter cannot reach the series by itself. Report the
+        // divergence rather than resolve it — a price point is appended by a person
+        // who knows which side is right.
+        let subs = store.list().map_err(|e| e.to_string())?;
+        let mismatches = obsidian::currency_mismatches(&notes, &subs, &now);
+        Ok(json!({
+            "ok": mismatches.is_empty(),
+            "created": created,
+            "already_present": existing,
+            "currency_mismatches": mismatches,
+        }))
     })
     .await
     {
@@ -1740,6 +1757,10 @@ async fn writeback(State(state): State<AppState>) -> ApiResponse {
         let notes = scan_notes_or_empty(&vault)?;
         let store = FinanceStore::open(&database_path).map_err(|e| e.to_string())?;
         let subs = store.list().map_err(|e| e.to_string())?;
+        // PRD Q103: the block states a foreign price in EUR when a published rate
+        // covers the pair, and says it cannot when none does. An empty table is the
+        // second case, not a reason to skip the line.
+        let rates = store.latest_fx_rates().map_err(|e| e.to_string())?;
 
         let (mut written, mut unchanged) = (0usize, 0usize);
         let mut conflicts: Vec<String> = Vec::new();
@@ -1750,7 +1771,9 @@ async fn writeback(State(state): State<AppState>) -> ApiResponse {
                 unimported.push(note.source_path.clone());
                 continue;
             };
-            match obsidian::write_block(&note.absolute, sub, &now).map_err(|e| e.to_string())? {
+            match obsidian::write_block(&note.absolute, sub, &now, &rates)
+                .map_err(|e| e.to_string())?
+            {
                 WriteBack::Created | WriteBack::Updated => written += 1,
                 WriteBack::Unchanged => unchanged += 1,
                 WriteBack::Conflict { .. } => conflicts.push(note.source_path.clone()),
@@ -1760,16 +1783,18 @@ async fn writeback(State(state): State<AppState>) -> ApiResponse {
         let root =
             markdown_root::MarkdownRoot::declare(vault.root.clone()).map_err(|e| e.to_string())?;
         let owned: Vec<String> = notes.iter().map(|n| n.source_path.clone()).collect();
-        let projected =
-            obsidian::export_projections(&root, &subs, &owned, &now).map_err(|e| e.to_string())?;
+        let projected = obsidian::export_projections(&root, &subs, &owned, &now, &rates)
+            .map_err(|e| e.to_string())?;
+        let mismatches = obsidian::currency_mismatches(&notes, &subs, &now);
 
         Ok(json!({
-            "ok": conflicts.is_empty() && projected.refused.is_empty(),
+            "ok": conflicts.is_empty() && projected.refused.is_empty() && mismatches.is_empty(),
             "written": written,
             "unchanged": unchanged,
             "conflicts": conflicts,
             "not_imported": unimported,
             "projected": projected,
+            "currency_mismatches": mismatches,
         }))
     })
     .await

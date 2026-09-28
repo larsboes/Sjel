@@ -872,16 +872,61 @@ fn subscription_portfolio(
                 detail: "Personally billing with a low value rating.".into(),
             });
         }
+        // PRD Q103. `monthly_cents` above takes the bucket for `currency` and nothing
+        // else, so a subscription billing in another currency contributes zero to the
+        // burn with no trace. That is the same wrong figure as relabelling it, only
+        // quieter: the total is short and nothing says by how much.
+        if let (true, Some(price)) = (state.is_billing(), subscription.price_at(as_of)) {
+            if !price.currency.eq_ignore_ascii_case(currency) {
+                anomalies.push(SubscriptionAnomaly {
+                    subscription_id: subscription.id.clone(),
+                    subscription_name: subscription.name.clone(),
+                    kind: "currency_outside_total".into(),
+                    detail: format!(
+                        "Priced in {} and the total is in {currency}, so it is not in the monthly figure.",
+                        price.currency
+                    ),
+                });
+            }
+        }
+        // A currency that changes inside one series is either a provider redenomination
+        // or a bad seed, such as a USD point followed by a EUR point that the importer
+        // wrote before it read `currency:`. Either way the series says two different
+        // things about one price.
+        if let Some(first) = subscription.prices.first() {
+            if let Some(changed) = subscription
+                .prices
+                .iter()
+                .find(|price| !price.currency.eq_ignore_ascii_case(&first.currency))
+            {
+                anomalies.push(SubscriptionAnomaly {
+                    subscription_id: subscription.id.clone(),
+                    subscription_name: subscription.name.clone(),
+                    kind: "currency_change".into(),
+                    detail: format!(
+                        "The price series starts in {} on {} and switches to {} on {}.",
+                        first.currency, first.valid_from, changed.currency, changed.valid_from
+                    ),
+                });
+            }
+        }
         let current = subscription.price_at(as_of);
-        let next = subscription
-            .prices
-            .iter()
-            .filter(|price| price.valid_from.as_str() > as_of)
-            .min_by(|left, right| left.valid_from.cmp(&right.valid_from));
+        // The row that will actually be in force on its own date, which a `min_by` over
+        // `valid_from` is not when two points share that date.
+        let next = subscription.scheduled_price_after(as_of);
         if let (Some(current), Some(next)) = (current, next) {
             let current_monthly = current.cycle.monthly_cents(current.amount_cents);
             let next_monthly = next.cycle.monthly_cents(next.amount_cents);
-            if current_monthly > 0 && next_monthly >= current_monthly.saturating_mul(5) / 4 {
+            // PRD Q103: `next_monthly >= current_monthly * 5 / 4` is a comparison, and
+            // a comparison needs one currency as much as a sum does. 15.00 USD
+            // followed by 15.00 EUR is not a 0% rise, and 45.00 EUR following 15.00
+            // USD is not a 200% one. The `currency_change` anomaly above already names
+            // that series, so there is nothing left for a made-up ratio to add.
+            let comparable = current.currency.eq_ignore_ascii_case(&next.currency);
+            if comparable
+                && current_monthly > 0
+                && next_monthly >= current_monthly.saturating_mul(5) / 4
+            {
                 anomalies.push(SubscriptionAnomaly {
                     subscription_id: subscription.id.clone(),
                     subscription_name: subscription.name.clone(),
@@ -1408,6 +1453,32 @@ mod tests {
             .anomalies
             .iter()
             .any(|item| item.kind == "price_jump"));
+    }
+
+    #[test]
+    fn a_scheduled_price_in_another_currency_is_a_currency_change_not_a_price_jump() {
+        // PRD Q103: 10.00 EUR followed by 20.00 USD is not a 100% rise, because the
+        // two numbers are not in the same unit. The series is reported for what it is
+        // and no ratio is invented from it.
+        let mut sub = subscription();
+        sub.prices[1].currency = "USD".into();
+        let result = subscription_portfolio(&[sub], "2026-08-11", "EUR");
+        assert!(
+            result
+                .anomalies
+                .iter()
+                .any(|item| item.kind == "currency_change"),
+            "the series changes currency and must say so: {:?}",
+            result.anomalies
+        );
+        assert!(
+            !result
+                .anomalies
+                .iter()
+                .any(|item| item.kind == "price_jump"),
+            "a cross-currency ratio is not a price jump: {:?}",
+            result.anomalies
+        );
     }
 
     #[test]

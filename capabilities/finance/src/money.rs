@@ -11,9 +11,9 @@
 //! A conversion needs a rate, and a rate needs a source. When the ruling was made,
 //! `finance_fx_rates` held no rows and `finance_price_fetches` recorded no attempt by
 //! the `ecb` provider at all. The reason was structural rather than a missed schedule:
-//! [`crate::price::run_named`] derives its FX targets from the holdings snapshot alone,
-//! so a store whose holdings are all EUR hands the provider an empty target list, and
-//! subscription currencies are never an FX target.
+//! [`crate::price::run_named`] took its FX targets from the holdings snapshot alone,
+//! so a store whose holdings were all EUR handed the provider an empty target list.
+//! [`crate::price::fx_targets`] now adds every currency a subscription is priced in.
 //!
 //! So [`to_eur`] takes the rates it is given and returns [`NoRate`] when none covers
 //! the pair. There is no default, no hard-coded 1.08, and no silent pass-through of a

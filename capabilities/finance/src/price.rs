@@ -158,7 +158,8 @@ pub struct FetchContext<'a> {
     /// The reviewed broker prices, by instrument. The `broker` provider's whole
     /// input; the networked providers ignore it.
     pub broker_prices: &'a BTreeMap<String, (Quantity, String, String)>,
-    /// The currencies held that are not [`FX_BASE`]. The FX provider's targets.
+    /// The currencies held or priced that are not [`FX_BASE`]. The FX provider's
+    /// targets; [`fx_targets`] builds the list.
     pub quote_currencies: &'a [String],
     pub as_of: &'a str,
     pub fetched_at: &'a str,
@@ -868,14 +869,14 @@ pub fn run_named(
         .map_err(|error| error.to_string())?
         .ok_or("no reviewed holdings snapshot is in the projection; import one first")?;
     let broker_prices = broker_prices_from_snapshot(&snapshot);
-    let quote_currencies: Vec<String> = snapshot
-        .holdings
-        .iter()
-        .map(|holding| holding.currency.clone())
-        .filter(|currency| currency != FX_BASE)
-        .collect::<std::collections::BTreeSet<_>>()
-        .into_iter()
-        .collect();
+    let subscriptions = store.list().map_err(|error| error.to_string())?;
+    let quote_currencies = fx_targets(
+        snapshot
+            .holdings
+            .iter()
+            .map(|holding| holding.currency.as_str()),
+        &subscriptions,
+    );
     let context = FetchContext {
         instruments: &config.instruments,
         broker_prices: &broker_prices,
@@ -907,6 +908,33 @@ pub fn run_named(
         runs.push(run_provider(store, provider.as_ref(), &context, dry_run)?);
     }
     Ok(runs)
+}
+
+/// The currencies the FX provider fetches against [`FX_BASE`]: every currency a
+/// holding is in, and every currency a subscription is priced in.
+///
+/// Holdings alone are not enough. `money::to_eur` needs a rate for each subscription
+/// currency (PRD Q103), and a store whose holdings are all EUR used to hand the `ecb`
+/// provider an empty list, so a USD subscription stayed `not_convertible` and
+/// `finance-cli subscriptions audit` could never pass. Every point in a price series
+/// counts, not only the one in force, because a scheduled price is rendered too.
+/// Codes are trimmed and upper-cased, as `money::to_eur` reads them.
+pub fn fx_targets<'a>(
+    holding_currencies: impl IntoIterator<Item = &'a str>,
+    subscriptions: &'a [crate::subscription::Subscription],
+) -> Vec<String> {
+    let subscription_currencies = subscriptions
+        .iter()
+        .flat_map(|subscription| subscription.prices.iter())
+        .map(|price| price.currency.as_str());
+    holding_currencies
+        .into_iter()
+        .chain(subscription_currencies)
+        .map(|currency| currency.trim().to_ascii_uppercase())
+        .filter(|currency| !currency.is_empty() && currency != FX_BASE)
+        .collect::<std::collections::BTreeSet<_>>()
+        .into_iter()
+        .collect()
 }
 
 /// A reason a human reads, bounded so no provider can grow this column.
@@ -983,6 +1011,49 @@ mod tests {
         "<noscript>Please enable JavaScript to continue.</noscript>\n",
         "</body></html>\n"
     );
+
+    fn priced(name: &str, currencies: &[&str]) -> crate::subscription::Subscription {
+        use crate::subscription::{BillingCycle, PricePoint, Subscription};
+        Subscription {
+            id: format!("sub_{name}"),
+            name: name.into(),
+            source_path: format!("Subscriptions/{name}.md"),
+            category: None,
+            value_rating: None,
+            prices: currencies
+                .iter()
+                .enumerate()
+                .map(|(i, currency)| PricePoint {
+                    valid_from: format!("2026-0{}-01", i + 1),
+                    amount_cents: 1500,
+                    currency: (*currency).into(),
+                    cycle: BillingCycle::Monthly,
+                    plan: None,
+                    reason: "fixture".into(),
+                })
+                .collect(),
+            states: Vec::new(),
+        }
+    }
+
+    #[test]
+    fn a_subscription_currency_is_an_fx_target_when_every_holding_is_eur() {
+        // PRD Q103: with EUR-only holdings the targets used to be empty, so no EUR/USD
+        // rate was ever fetched and a USD subscription could never be stated in EUR.
+        let subs = vec![
+            priced("Studio Lite", &["USD"]),
+            priced("Vault Storage", &["EUR"]),
+            priced("Transit Card", &["EUR", " chf "]),
+        ];
+        assert_eq!(fx_targets(["EUR", "EUR"], &subs), vec!["CHF", "USD"]);
+    }
+
+    #[test]
+    fn fx_targets_merge_holdings_and_subscriptions_without_duplicates() {
+        let subs = vec![priced("Studio Lite", &["USD"])];
+        assert_eq!(fx_targets(["USD", "GBP", "EUR"], &subs), vec!["GBP", "USD"]);
+        assert!(fx_targets(["EUR"], &[]).is_empty());
+    }
 
     #[test]
     fn a_proof_of_work_gate_is_not_a_csv() {

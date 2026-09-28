@@ -173,8 +173,10 @@ turns a 240 EUR annual card fee into 240 EUR a month.
 
 `money::to_eur` does the conversion and refuses when no published rate covers the pair.
 Nothing is assumed: `finance_fx_rates` was empty when the ruling was made, because
-`price::fetch_all` derives its FX targets from the holdings snapshot and every reviewed
-holding is already EUR, so the `ecb` provider had never been handed a target. The burn
+`price::run_named` took its FX targets from the holdings snapshot alone and every reviewed
+holding was already EUR, so the `ecb` provider had never been handed a target.
+`price::fx_targets` now adds every currency a subscription is priced in, so
+`finance-cli prices fetch` records the rate a USD subscription needs. The burn
 `GET /api/subscriptions/burn` returns under `eur` therefore contains only amounts that
 are EUR or were converted with a dated, sourced rate; anything else is itemised in
 `eur.not_convertible` so a short total is never a silent one.

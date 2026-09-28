@@ -160,7 +160,7 @@ pub struct PeopleReport {
 ///
 /// From the id and never from a frontmatter field: the filename is what the operator controls
 /// and what survives a plugin, and a journal note whose name is not a date is not a day.
-fn journal_date(id: &str) -> Option<String> {
+pub(crate) fn journal_date(id: &str) -> Option<String> {
     let base = id.rsplit('/').next()?;
     let candidate: String = base.chars().take(10).collect();
     let bytes = candidate.as_bytes();
@@ -175,7 +175,7 @@ fn journal_date(id: &str) -> Option<String> {
 }
 
 /// Every `[[target]]` in a note, basename-folded, so a path-form link and a bare one count once.
-fn linked_basenames(note: &Note) -> Vec<String> {
+pub(crate) fn linked_basenames(note: &Note) -> Vec<String> {
     crate::graph::targets_for_test(&note.text, note.body_start)
         .into_iter()
         .map(|target| {

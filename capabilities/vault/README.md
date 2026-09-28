@@ -1,6 +1,6 @@
 # vault
 
-Reads an Obsidian vault as data. Six CLI verbs and one HTTP surface, all
+Reads an Obsidian vault as data. Seven CLI verbs and one HTTP surface, all
 read-only.
 
 ```
@@ -9,6 +9,7 @@ vault lint   [--root PATH] [--json] [--carrying KEY]
 vault names  [--root PATH] [--json] [--folder Atlas/People]
 vault class  [--root PATH] [--json] [--only c2] [--list]
 vault people [--root PATH] [--json]
+vault journal [--root PATH] [--json]
 vault bases  [--root PATH] [--json] [--strict]
 ```
 
@@ -129,7 +130,7 @@ for one where none is, which is an instrument that cannot be wrong.
 
 ## The server
 
-`vault-server` on `8094`, loopback. Five routes:
+`vault-server` on `8094`, loopback. Six routes:
 
 | Route | Answers |
 |---|---|
@@ -138,6 +139,7 @@ for one where none is, which is an instrument that cannot be wrong.
 | `GET /routes` | This manifest, as data. |
 | `GET /api/tasks?status=open\|done` | Every action note under `Projects/`, read live. |
 | `GET /api/people` | `last_contact`, `met_at` and `mention_count` per person, computed from `Journal/` backlinks. |
+| `GET /api/journal-health` | The six Journal health keys, counted; which of the six can be produced; `social` computed from `Journal/` person links. |
 
 One task is `{id, title, done, due, priority, summary, projects, uri}`. `id` is
 the vault-relative path; `uri` is the `obsidian://open` address of the note.
@@ -197,6 +199,176 @@ measurement and a missing producer is not.
 
 `contact_frequency` is not served, and that is **D1**: how often you want to see
 someone is a judgement, not a backlink count.
+
+## `journal` — Q106, and the five keys that answer "no producer"
+
+PRD **Q106** (2026-09-09) asked for a producer for the six keys every daily note
+carries. **One of the six has a source. Five do not, and saying which is the
+deliverable.**
+
+| Key | Producer | Why |
+|---|---|---|
+| `social` | `Journal/` person links | a day that links an `Atlas/People` note names who was in it |
+| `learning_hours` | none | nothing on the host measures hours |
+| `exercise` | none | Apple Health is unreadable on a Mac |
+| `sleep_quality` | none | same |
+| `energy` | none | a self-report |
+| `mood` | none | a self-report |
+
+The consequence is visible in Obsidian without any of this. `Habits.base` is a
+Base over the same folder that charts these keys, and a chart over keys that are
+almost never filled in plots a handful of points. That is what a producer was
+asked for, and five sixths of it cannot be supplied.
+
+**Apple Health is not a source on a Mac, and that is measured.**
+`HealthKit.framework` ships in `/System/Library/Frameworks` and its headers say
+`API_AVAILABLE(… macos(13.0))`, so the API compiles and stopping there would be
+reasonable. A Swift probe on a current macOS host answers
+`HKHealthStore.isHealthDataAvailable() == false`, and `~/Library/Health` does not
+exist. The framework is present and the store is not. The template describes
+`sleep_quality` as "0-100 (SleepCycle / Apple Health native scale)", and neither
+half of that is reachable without a phone-side export, which is a human act
+rather than a producer.
+
+**`energy` and `mood` are self-reports and this capability will not invent a
+proxy for them.** Sleep would predict mood; a Mac's keystroke rate would predict
+energy. Both would be a number Sjel made up, rendered in a chart the operator
+reads as their own. The honest options are the human or the delete key. The
+recommendation is to **keep both and cut the other four from the template**: the
+two that only a human can fill in are the two worth prompting for, and a template
+that asks six questions and gets one answer trains the person to skip the block.
+Deleting `energy` and `mood` instead would cost `Resources/Bases/Habits.base` its
+`wellbeing` formula and the charts built on it, which is the reason that Base
+exists.
+
+**`social` is produced, and it is served as evidence rather than as a verdict.**
+The rule is the one **Q102** already ratified for `last_contact`: a `Journal/`
+note that links a person is the record of contact with them. `people.rs` reads
+those links per person; `journal.rs` reads the same links per day. The people are
+served beside the boolean, because a derived `true` with no evidence is an
+assertion.
+
+The calendar was the other candidate and it does not work. `calendar_entries`
+covers a far shorter span than the Journal and has no attendee column, so the
+only person-shaped data in it is a name inside an event title. Joining that to
+`Atlas/People` would be a string match on a few overlapping days. It is not an
+honest producer and it is not built.
+
+### Several numbers instead of one accuracy figure
+
+```
+social, produced from Journal person links
+  days naming a person <n>
+  distinct people      <n>
+  stored social: true  <n>
+    links agree        <n>
+    links differ       <n>
+  template false, links name somebody <n>
+```
+
+`social: false` on an untouched note and `social: false` typed by somebody who
+spent the day alone are the same bytes. An instrument that called both a
+disagreement would report every untouched day that names somebody as a
+contradiction, and bury the few days where a human's answer and the links really
+disagree. The split is the finding.
+
+**The only labelled sample is the days a human set `social: true`.** The link
+rule's agreement with those days is the producer's measured recall, and it is not
+perfect: a day can describe meeting several people in prose and link none of
+them. So "`social` has a producer" means a rule with partial recall against the
+only ground truth that exists. That is why it is served as evidence with the
+people beside it, and why nothing writes it.
+
+### A trailing comment is not a value
+
+`mood:                   # 1-5` is the template's own scaffolding, and
+`markdown_root::parse_fields` reads it as the value `# 1-5`. That is correct for
+a parser that also feeds a mail adapter, where `#general` is a value, and wrong
+here. The census reads `Note::raw_frontmatter` with YAML's comment rule instead,
+the same move `lint` makes and for the same reason.
+
+The gap is not cosmetic. The template puts a trailing comment after
+`sleep_quality`, `energy`, `mood` and `learning_hours`, so every unfilled note
+stamped from it carries four keys that a comment-blind reader counts as filled.
+No key in `lint::TRACKED` carries a trailing comment today, so `lint`'s published
+coverage numbers are unaffected; this is a trap set for the next reader of these
+six.
+
+### A template that never ran
+
+A daily note created outside Templater keeps the raw expression:
+
+```
+1 frontmatter values are still template expressions:
+  Journal/01. Daily Notes/2031-03-15.md  week: "[[<% tp.date.now('yyyy-[W]ww', 0, tp.file.title, 'YYYY-MM-DD') %>]]"
+```
+
+It is reported and not repaired, because §5.5 is one-way and this capability has
+no write path. The correct value is the ISO week of the note's date, the form the
+neighbouring notes carry (`week: "[[2031-W11]]"` here).
+
+The detector is for the class: any frontmatter value holding `<%` is a template
+that never ran. The files in `Resources/Templates/` that legitimately hold one
+are outside the daily folder and outside the scan.
+
+It is also narrower than the defect. A `week:` link can be wrong without holding
+a template expression — the wrong ISO week, or an empty `[[]]` — and a `<%` scan
+sees neither. Neither is repaired here.
+
+### Checked by a second implementation, as this crate's rule requires
+
+`acceptance/journal-health.py` is to `vault journal` what `acceptance/link-counts.py`
+is to `vault links`: its own walk, its own `[[...]]` regex, its own
+comment-stripping loop, sharing no code with the crate.
+
+```
+python3 capabilities/vault/acceptance/journal-health.py <vault-root>
+vault journal --root <vault-root>
+```
+
+Diff the two outputs. Every measured number must be identical: the note count,
+the people register, the six `present`/`asserted`/`comment-only` triples, the
+`social` split, and the unrendered notes. The only lines that differ are the
+crate's extra `producer` column and the raw value it prints beside each
+unrendered key. The probe deliberately carries neither: which key can be produced
+is a decision, and a second implementation of a decision is not a check.
+
+One blind spot they share, named so nobody reads their agreement as wider than
+it is: both open a quoted scalar on `'` as well as `"`, so a plain value holding
+an apostrophe — `mood: it's 5 # felt good` — keeps its comment in both.
+
+### More notes than dates
+
+`days` counts notes whose filename starts with a date, and one date can have two
+of them: iCloud writes a conflict copy such as `2031-03-14 2.md` beside
+`2031-03-14.md`. Both resolve to the same date, so `not_a_day` stays 0 and
+`entries` carries two rows with the same `date`. The copy adds 1 to every
+`present` count. **`date` is therefore not a key.** A writer that maps date to
+entry drops one of the two silently, which is a thing to fix before, not after,
+anything writes back.
+
+### What it would take to write `social`
+
+Nothing here writes. Q102 opened the vault for two `Atlas/People` keys under
+their existing names and did not open the Journal, and the write path it
+authorised belongs to another stream. Writing `social` later needs four things,
+in this order:
+
+1. **A ruling that extends Q102 to `Journal/01. Daily Notes/`.** Q102's own test
+   is satisfied already — `Resources/Bases/Habits.base` and
+   `Resources/Bases/Journal.base` both read all six keys, so `social` is not a
+   key invented for a producer. `mention_count` failed that test and `social`
+   passes it.
+2. **A decision about the template defaults.** A writer that only fills blanks
+   would write nothing, because no daily note has a blank `social`. A writer that
+   overwrites `false` would overwrite every untouched day and could not tell them
+   from a deliberate "no".
+3. **D3, machine-owned frontmatter.** Same unresolved ruling that keeps
+   `/api/people` a read: with no way to mark a value as Sjel's, the next run
+   overwrites the correction a human made to the last one.
+4. **The contradictions resolved by hand first.** Those are the days where a
+   human wrote `true` and the Journal names nobody, and a producer would silently
+   erase them.
 
 **What counts as a task** is `capabilities/vault/src/tasks.rs`'s module doc: the
 vault's own `Resources/Bases/Tasks.base` filter, scoped to `Projects/`, minus
@@ -277,8 +449,8 @@ regex can re-anchor inside the triple bracket and the crate's left-to-right scan
 cannot. **Where the two disagree the reason gets written down and the loser gets
 named. A number quietly adjusted to match is not a check.**
 
-The falsifiable half of this crate is its 43 tests, not this table — 38 in the
-library and 5 over the server's handlers. Each one plants an input the code must
+The falsifiable half of this crate is its 70 tests, not this table — 60 in the
+library and 10 over the server's handlers. Each one plants an input the code must
 reject and watches it get rejected.
 
 ## What the counts found that a note count could not

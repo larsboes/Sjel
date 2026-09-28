@@ -73,7 +73,7 @@ pub struct LintReport {
 ///
 /// Line-anchored on purpose: a `sources:` line naming a URL that contains
 /// `type:` would otherwise be read as a `type` declaration.
-fn raw_value<'a>(block: &'a str, k: &str) -> Option<&'a str> {
+pub(crate) fn raw_value<'a>(block: &'a str, k: &str) -> Option<&'a str> {
     block.lines().find_map(|line| {
         let rest = line.strip_prefix(k)?.strip_prefix(':')?;
         // `knowledge:` must not match a line beginning `knowledge_base:`.

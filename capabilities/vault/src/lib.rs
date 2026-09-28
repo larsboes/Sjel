@@ -15,6 +15,7 @@
 pub mod bases;
 pub mod class;
 pub mod graph;
+pub mod journal;
 pub mod lint;
 pub mod names;
 pub mod note;

@@ -7,6 +7,7 @@
 //! vault lint  [--root PATH] [--json] [--carrying KEY]
 //! vault class [--root PATH] [--json] [--only c2] [--list]
 //! vault people [--root PATH] [--json]
+//! vault journal [--root PATH] [--json]
 //! ```
 //!
 //! ## Why this exists as a binary rather than a skill
@@ -35,7 +36,7 @@
 
 // The modules live in the library beside this binary, so `vault-server` reads
 // notes through the same loader rather than a second copy of it.
-use vault::{bases, class, graph, lint, names, note, people};
+use vault::{bases, class, graph, journal, lint, names, note, people};
 
 fn flag(args: &[String], name: &str) -> Option<String> {
     let i = args.iter().position(|a| a == name)?;
@@ -66,6 +67,7 @@ fn main() {
                vault names [--root PATH] [--json] [--folder Atlas/People]\n  \
                vault class [--root PATH] [--json] [--only c2] [--list]\n  \
                vault people [--root PATH] [--json]\n  \
+               vault journal [--root PATH] [--json]\n  \
                vault bases [--root PATH] [--json] [--strict]\n\
              \n\
              The root comes from the overlay's config/knowledge.toml unless --root says otherwise."
@@ -235,6 +237,61 @@ fn main() {
                             format!("   [stored differs: {}]", facts.disagrees.join(", "))
                         }
                     );
+                }
+            }
+        }
+
+        // Q106: which of the Journal's six health keys can have a producer, and the one that
+        // does. The verdict per key is `journal::producer_for`, not this printer, so the CLI,
+        // the server and the README cannot end up holding three opinions about it.
+        "journal" => {
+            let rep = journal::report(&notes);
+            if json {
+                println!("{}", serde_json::to_string_pretty(&rep).unwrap_or_default());
+            } else {
+                println!("daily notes            {}", rep.days);
+                println!("  not a date           {}", rep.not_a_day);
+                println!("people register        {}", rep.people_notes);
+                println!();
+                println!("key             present  asserted  comment-only  producer");
+                for key in &rep.keys {
+                    println!(
+                        "{:<14}  {:>7}  {:>8}  {:>12}  {}",
+                        key.key,
+                        key.present,
+                        key.asserted,
+                        key.comment_only,
+                        match key.producer {
+                            journal::Producer::JournalLinks => "journal links",
+                            journal::Producer::SelfReport => "none: self-report",
+                            journal::Producer::HealthStoreUnreachable => "none: no health store",
+                            journal::Producer::Unmeasured => "none: unmeasured",
+                        }
+                    );
+                }
+                println!();
+                println!("social, produced from Journal person links");
+                println!(
+                    "  days naming a person {}",
+                    rep.social.days_with_person_link
+                );
+                println!("  distinct people      {}", rep.social.people_named);
+                println!("  stored social: true  {}", rep.social.stated_true);
+                println!("    links agree        {}", rep.social.agrees);
+                println!("    links differ       {}", rep.social.disagrees);
+                println!(
+                    "  template false, links name somebody {}",
+                    rep.social.unfilled_with_evidence
+                );
+                if !rep.unrendered.is_empty() {
+                    println!();
+                    println!(
+                        "{} frontmatter values are still template expressions:",
+                        rep.unrendered.len()
+                    );
+                    for item in &rep.unrendered {
+                        println!("  {}  {}: {}", item.id, item.key, item.value);
+                    }
                 }
             }
         }

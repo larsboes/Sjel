@@ -259,7 +259,11 @@ fn main() {
                     Err(e) => die(format!("{id}: unreadable: {e}")),
                 }
             }
-            let rep = bases::report(&notes, &found);
+            // The disk, not the note index: a folder that is there and holds no note is a
+            // different repair from one that is not there at all, and only this tells them
+            // apart.
+            let dirs = bases::folders_on_disk(root.path()).unwrap_or_else(|e| die(e));
+            let rep = bases::report(&notes, &found, &dirs);
             if json {
                 println!("{}", serde_json::to_string_pretty(&rep).unwrap_or_default());
             } else {
@@ -283,6 +287,11 @@ fn main() {
                             "MISSING "
                         };
                         println!("  {mark} {:<34} {:>5}", f.folder, f.notes);
+                        // The verdict first, then the evidence it was read from. A reader who
+                        // stops at the first line still knows which of the six repairs this is.
+                        if let Some(missing) = &f.missing {
+                            println!("           {}", missing.explain());
+                        }
                         for c in &f.candidates {
                             println!(
                                 "           candidate: {} ({} notes, {}/{} columns)",

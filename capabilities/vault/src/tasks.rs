@@ -15,22 +15,38 @@
 //! — two surfaces that disagree about the same folder is the failure the
 //! no-doubling law exists to prevent.
 //!
-//! Measured against the live vault on 2026-08-28, the rule below is that filter
-//! with three stated divergences:
+//! ## Where a task folder sits (Q104)
+//!
+//! The Base's middle clause selects nothing. `Projects/Tasks/` holds no note in
+//! the vault, and **Q104 (2026-09-09) rules that it is never created: a task
+//! lives under the project that owns it.** The folder half of the rule below is
+//! therefore `Projects/<project>/**/Tasks/` — a `Tasks` folder always has a
+//! project above it, so the segment is never the first one under `Projects/`.
+//! A note filed directly in `Projects/Tasks/` is not in that shape and this
+//! reader does not put it back into one.
+//!
+//! Every `Tasks` folder that follows the ruling sits under a project, so the
+//! clause the Base still carries reaches none of them. That is what `vault
+//! bases` reports and proposes a replacement for. Changing the `.base` itself
+//! is the operator's move — §5.5 is one-way.
+//!
+//! The rule below is that filter with three stated divergences:
 //!
 //! 1. **Scoped to `Projects/`.** §5.1b puts the Action kind there and nowhere
-//!    else. Excludes nothing today (all 21 `type: task` notes are already under
-//!    `Projects/`); it is the contract, not a filter.
+//!    else. The template every task note is stamped from, for example
+//!    `Resources/Templates/Task-Template.md`, falls outside it, and the Base
+//!    excludes that template by name as well.
 //! 2. **No `archive`/`Archive` segment.** A wound-down project's leftovers are
 //!    not on today's decision list. This is also why the Base's `hasTag("🔲")`
-//!    clause is not implemented: every one of the 14 notes carrying that tag
-//!    sits under `Projects/Soma/archive/`, a Vault-OS-era convention that no
-//!    live note uses.
-//! 3. **A `done:` key is required.** The Base's folder clause also catches
-//!    `Projects/Tasks - to sort in…/Tasks.md`, which is `type: moc` — a hub,
-//!    not an action. A row with no state cannot be ranked, so it is not served.
-//!
-//! Result on the live vault: 23 notes, 17 of them open.
+//!    clause is not implemented: the tag is an older convention that survives
+//!    only under archived folders such as
+//!    `Projects/Archive/Old-Project/archive/Tasks/`, and no live note uses it.
+//!    Such a folder can also hold a note that carries neither the tag nor a
+//!    `type:` key, which `Tasks.base` selects by no clause at all.
+//! 3. **A `done:` key is required.** A `Tasks/` folder can hold an index or a
+//!    stub, and a row with no state cannot be ranked. A live task note written
+//!    from the template always carries `done:`, so this excludes only notes
+//!    that are not actions.
 //!
 //! ## Why a key is served only when the ladder reads it
 //!
@@ -54,6 +70,11 @@ use crate::class::CLASS_KEY;
 
 /// The folder the Action kind lives under (vault contract §5.1b).
 pub const PROJECTS: &str = "Projects";
+
+/// The folder a project keeps its actions in. Matched as a whole path segment,
+/// never as a prefix: `Tasks - to sort in` is a different folder from `Tasks`,
+/// and a prefix match would claim both.
+const TASKS: &str = "Tasks";
 
 /// The template's default when a note leaves `priority:` blank, and the same
 /// fallback `Tasks.base` applies in `priority || 2`.
@@ -209,10 +230,11 @@ fn is_task(relative: &str, fields: &HashMap<String, String>) -> bool {
     {
         return false;
     }
-    // `starts_with`, not equality: the project-less folder is really named
-    // `Tasks - to sort in, each task needs a project`, and `Tasks.base` reaches
-    // it with the prefix match `file.inFolder("Projects/Tasks")`.
-    folders.iter().any(|segment| segment.starts_with("Tasks"))
+    // Q104: a task folder belongs to a project, so `Tasks` is never the first
+    // segment under `Projects/`. `skip(1)` is the whole of that rule — it
+    // steps over the project's own folder, so `Projects/Tasks/` matches
+    // nothing and `Projects/<project>/**/Tasks/` matches.
+    folders.iter().skip(1).any(|segment| *segment == TASKS)
         || fields.get("type").map(String::as_str) == Some("task")
 }
 
@@ -337,30 +359,28 @@ mod tests {
         }
     }
 
-    /// The three ways a note is claimed, and the two ways it is refused. Each
-    /// row here is a shape measured in the live vault on 2026-08-28.
+    /// The three ways a note is claimed, and the three ways it is refused.
+    /// Each row is a synthetic note with the shape of one the rule must decide.
     #[test]
     fn the_selection_rule_matches_the_vault_it_was_measured_against() {
         let fixture = Fixture::new("selection");
         fixture
             // Claimed: a `Tasks/` folder under a project.
             .note("Home-Lab/Tasks/Buy a drive.md", "type: task\ndone: false")
-            // Claimed: the project-less folder, whose name is a prefix rather
-            // than `Tasks` — the case a folder-equality rule would drop.
-            .note(
-                "Tasks - to sort in, each task needs a project/Verlustvortrag.md",
-                "done: false\npriority: 3",
-            )
+            // Claimed: a `Tasks/` folder under a project inside a project, on
+            // the folder clause alone — a sub-project keeps its own `Tasks/`.
+            .note("Garden/Greenhouse/Tasks/Fix the vent.md", "done: false")
             // Claimed: `type: task` outside any Tasks folder.
-            .note("Soma/Loose action.md", "type: task\ndone: false")
-            // Refused: the hub note that shares the project-less folder.
+            .note("Garden/Loose action.md", "type: task\ndone: false")
+            // Refused: a folder whose name only starts with `Tasks`. A segment
+            // is matched whole, so this is a different folder.
             .note(
-                "Tasks - to sort in, each task needs a project/Tasks.md",
-                "type: moc\nsummary: \"Hub for all tasks\"",
+                "Home-Lab/Tasks - to sort in/Label the cables.md",
+                "done: false\npriority: 3",
             )
             // Refused: a wound-down project's leftovers.
             .note(
-                "Soma/archive/Vault-OS/Tasks/Retire BRAT.md",
+                "Garden/archive/Old-Plan/Tasks/Retire the planner.md",
                 "type: task\ndone: false",
             )
             // Refused: a project document that is not an action.
@@ -369,9 +389,45 @@ mod tests {
         let titles: Vec<String> = fixture.read().into_iter().map(|t| t.title).collect();
         assert_eq!(
             titles,
-            vec!["Buy a drive", "Loose action", "Verlustvortrag"],
+            vec!["Buy a drive", "Fix the vent", "Loose action"],
             "the selection rule drifted from the vault it was measured against"
         );
+    }
+
+    /// Q104: `Projects/Tasks/` is never created, so no folder rule may make it
+    /// work. The planted note is exactly that shape and the reader refuses it;
+    /// the same note one level down, under a project, is claimed.
+    ///
+    /// The pair is the point. A rule that answered the same for both would be
+    /// measuring "is there a `Tasks` segment anywhere", which is the rule Q104
+    /// replaced.
+    #[test]
+    fn a_tasks_folder_with_no_project_above_it_is_refused() {
+        let fixture = Fixture::new("q104");
+        fixture
+            .note("Tasks/Orphan.md", "done: false")
+            .note("Home-Lab/Tasks/Owned.md", "done: false");
+
+        let titles: Vec<String> = fixture.read().into_iter().map(|t| t.title).collect();
+        assert_eq!(
+            titles,
+            vec!["Owned"],
+            "the folder rule reached `Projects/Tasks/`, which Q104 rules is never created"
+        );
+    }
+
+    /// The other half of that gate: the folder is what Q104 constrains, not
+    /// the note. A note that declares `type: task` is served wherever it sits,
+    /// so the ruling never silently drops an action — it only refuses to read
+    /// a folder name as a declaration.
+    #[test]
+    fn a_note_that_declares_itself_a_task_is_served_wherever_it_sits() {
+        let fixture = Fixture::new("q104-declared");
+        fixture.note("Tasks/Orphan.md", "type: task\ndone: false");
+
+        let tasks = fixture.read();
+        assert_eq!(tasks.len(), 1);
+        assert_eq!(tasks[0].id, "Projects/Tasks/Orphan.md");
     }
 
     /// Open before decided, then by deadline. An undated task must not outrank
@@ -435,9 +491,9 @@ mod tests {
         assert_eq!(
             obsidian_uri(
                 "Knowledge-Base",
-                "Projects/Tasks - to sort in/Verlustvortrag prüfen.md"
+                "Projects/Garden/Tasks/Bewässerung prüfen.md"
             ),
-            "obsidian://open?vault=Knowledge-Base&file=Projects/Tasks%20-%20to%20sort%20in/Verlustvortrag%20pr%C3%BCfen"
+            "obsidian://open?vault=Knowledge-Base&file=Projects/Garden/Tasks/Bew%C3%A4sserung%20pr%C3%BCfen"
         );
     }
 

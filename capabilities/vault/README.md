@@ -92,11 +92,36 @@ a destination:
 
 Four references have exactly one candidate and only three of them survive the
 column check. The fourth is an archived Notability import that shares a word.
-`Projects/Tasks` is the opposite shape: Q48 spread it across `Projects/**/Tasks/`
-on purpose, so nine candidates is the correct answer and none of them is a
-proposal. The remaining five — `Atlas/Places`, `Atlas/Identity`,
-`Resources/Spots`, `Atlas/Finance/Income`, `Atlas/Finance/Purchases` — have no
-candidate at all, which means the folder was never created rather than moved.
+`Projects/Tasks` is the opposite shape: every `Tasks/` folder now sits under a
+project, so nine candidates is the correct answer and none of them is a
+proposal.
+
+### Every unresolved folder carries a verdict
+
+"MISSING" is one word for six different repairs, so each unresolved reference is
+diagnosed and the verdict is printed above its candidates:
+
+| Verdict | Means |
+|---|---|
+| `moved` | one namesake carries this Base's columns |
+| `spread` | every namesake sits somewhere under the folder's own parent |
+| `never created` | not on disk, and the parent holds notes |
+| `empty` | on disk and holds no note |
+| `moved, destination unclear` | several namesakes carry the columns |
+| `gone with its parent` | no ancestor holds a note either |
+
+`spread` is `Projects/Tasks`, in `Tasks.base` and `Calendar.base`. **Q104
+(2026-09-09) rules that `Projects/Tasks/` is never created and a task lives under
+the project that owns it**, so the repair is a filter matching the shape rather
+than a path naming the folder. The verdict is structural, not a special case:
+any missing folder whose namesakes all sit under its own parent reads the same
+way.
+
+`never created` is a claim about the disk and about the note index, never about
+history — this verb does not read the vault's git repository. The one it needs a
+directory listing for is `empty`, which is why the walk happens: a folder that is
+there and holds no note is a different job from a folder that is not there, and
+the note index alone cannot tell them apart.
 
 `--strict` exits non-zero when a positive folder reference resolves to nothing.
 Without it the verb answers `0` for a vault where every Base is broken and `0`
@@ -122,6 +147,14 @@ returned the Action kind to `Projects/**/Tasks/`, where the vault contract
 §5.1b had assigned it all along. The dashboard's decision ladder needed an HTTP
 source for band 620 and the data had moved here, so the reader that already
 existed grew a second front end.
+
+**Q104** (2026-09-09) closed the other half of that shape: `Projects/Tasks/` is
+never created, so the folder rule reads a `Tasks/` folder only when a project
+sits above it. A note filed directly under `Projects/Tasks/` is still served if
+it declares `type: task` — the ruling is about what a folder name means, and it
+does not silently drop an action. For example, `Projects/Garden/Tasks/Order
+seeds.md` is served on its folder alone, and `Projects/Tasks/Order seeds.md` only
+if it says `type: task`.
 
 **There is no write route, and that is the ruling rather than an omission.** A
 task is created, edited and marked done in Obsidian, in a note a human owns.

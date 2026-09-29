@@ -116,6 +116,20 @@ why = "cold SQLite backup, the shared store's live `.backup` copy, and isolated 
 install_macos = "preinstalled — or: brew install sqlite"
 install_linux = "apt-get install -y sqlite3"
 
+[swift]
+required = "optional"
+os = "macos"
+needed_by = ["workflow:backup"]
+why = "Foundation checks whether the store's iCloud Drive archive finished uploading and downloads an offloaded predecessor before retention; only used for that target"
+install_macos = "install Xcode Command Line Tools: xcode-select --install"
+
+[python3]
+required = "optional"
+needed_by = ["workflow:backup"]
+why = "store-only iCloud retention verifies per-archive hashes and invokes an isolated restore; other backup targets do not use it"
+install_macos = "preinstalled with Xcode Command Line Tools — or: brew install python"
+install_linux = "apt-get install -y python3"
+
 # [hledger] stood here until 2026-08-28, when PRD Q50 retired it. capabilities/finance
 # reads the journal itself now (capabilities/finance/src/journal.rs), so no machine needs
 # the executable to run Finance. The FILE FORMAT is unchanged and still hledger-compatible

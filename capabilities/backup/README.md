@@ -46,8 +46,18 @@ So the run and the check are separate, and the check reads the artifact:
   forms a provider writes them — the legacy `.icloud` placeholder and the modern `SF_DATALESS`
   flag on the file's own name.
 
+For `store` on this machine's iCloud Drive target, `backup.sh` now has a separate gate. It waits
+for the new item's uploaded status, then, when retention is due, restores the preceding archive
+from its immutable receipt before removing older uploaded items. A cloud-only item is downloaded
+for that check and may be offloaded again later. This costs roughly one store-archive download
+per daily pruning run after the 14-archive limit is reached. The upload flag alone is not a
+recovery test; doctor remains offline and reports an offloaded latest archive as requiring a
+network restore rather than telling the operator to pin the directory. Other capabilities keep
+their existing local and SSH contracts; a 4 GB archive is not downloaded by implication.
+
 **The named limit.** An archive on an `ssh` target is not verified. Reaching it costs a round trip
 and an unlocked vault agent, and doctor is offline by contract — so that row says it was not
 checked, and why, rather than passing over it. The prevention half has a limit too: macOS records
 Finder's "Keep Downloaded" as an extended attribute a tool can read and no CLI can set, so `pin the
-destination` stays an operator action that this capability can only report the absence of.
+destination` stays an operator action for other iCloud-backed capabilities. For the store-only
+cloud gate, the operator may remove that pin in Finder; the code does not evict files itself.

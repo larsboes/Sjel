@@ -102,6 +102,21 @@ tools/restore.sh store <archive> # integrity_check + table/row counts, into an i
 `tools/service-runner.sh start store` refuses by name: `kind = "data"` declares a file, and the
 capabilities that read it are the processes.
 
+On this machine, `store` ships to a local iCloud Drive directory. The backup job first checks
+its new archive's local SHA-256 and asks macOS whether that specific item finished uploading.
+Before retention removes anything, it downloads the preceding archive if needed, verifies its
+original receipt and runs `restore.sh` in isolation. Only then does it remove archives past the
+14-archive limit. Removing an offloaded item deletes it from iCloud too; it is not a way to free
+local space. `--no-prune` skips the older-archive check and deletion, but still requires the new
+upload. A failed check leaves the archives in place and makes the backup run fail. Immutable
+per-archive receipts under `<overlay>/backup/receipts/history/store/` survive newer runs replacing
+the latest receipt.
+
+The iCloud upload flag is the operating system's acknowledgement, not a cloud-side restore test.
+When the folder is not pinned with Finder's “Keep Downloaded”, macOS may offload old archives.
+The backup job will download the preceding one on demand; offline recovery from an offloaded
+archive is impossible. The removable Extreme copy is manual and outside this scheduled contract.
+
 ## Gotchas
 
 - **Backup is a live `.backup`, never a raw file copy and never a cold one.** Raw-copying a

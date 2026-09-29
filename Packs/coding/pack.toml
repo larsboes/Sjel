@@ -1,0 +1,4 @@
+name        = "coding"
+description = "Engineering craftsmanship across backend and frontend: systems-grade Rust, official Svelte 5 and TypeScript."
+skills      = ["effective-rust", "svelte-core-bestpractices", "svelte-code-writer"]
+license     = "MIT"

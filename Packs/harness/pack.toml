@@ -10,7 +10,8 @@
 # subject: the agent system looking at itself. Authoring the content of a skill stays
 # Packs/writing (skill-creator) — see README.md#the-boundary.
 #
-# The vendored pi packages under pi-packages/ and their licences are unrelated to the merge.
+# The vendored pi packages under pi-packages/ and the opt-in Pi classifier under extensions/
+# are Pi adapter conventions, not manifest-declared skills.
 name        = "harness"
 description = "Keep the agent system and its repository in shape: operate and change Axon, propose the skills the recorded work actually needs, shrink what loads into every session, and keep every harness in step with the Packs that feed it."
 skills      = ["sjel", "suggest-skills", "trim", "harness-sync"]

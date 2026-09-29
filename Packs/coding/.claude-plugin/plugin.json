@@ -1,0 +1,9 @@
+{
+  "name": "coding",
+  "description": "Engineering craftsmanship across backend and frontend: systems-grade Rust, official Svelte 5 and TypeScript.",
+  "author": {
+    "name": "Lars Boes",
+    "url": "https://github.com/larsboes/Sjel"
+  },
+  "license": "MIT"
+}

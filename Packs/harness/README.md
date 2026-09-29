@@ -166,8 +166,9 @@ manager and the web access every session uses.
 |---|---|
 | Vendored | `pi-packages/pi-subagents/` — `src/`, `package.json`, `tsconfig.json`, `LICENSE` |
 | Not copied | `test/`, `docs/`, `examples/`, `.github/`, `media/`, and the upstream README and CHANGELOG |
-| Not committed | `node_modules/` (installed in place), and upstream's own lockfile |
-| Local deltas | TWO. (1) One doc comment in `src/output-file.ts`: its POSIX path example became a placeholder so it stops reading as a workstation path to `tools/check-publication-hygiene.sh`. No behavioural change. `tsconfig.json` is upstream's, added to the vendored set so a customization can be typechecked before a restart. (2) `"overrides": { "undici": "^8.10.2" }` in `package.json`, added 2026-09-29 for GHSA-3wwx-pv8p-q78v / CVE-2026-85024: undici's WebSocket client kills the whole process on a malformed permessage-deflate block, fixed in 8.10.2. An update cannot reach it, because `@earendil-works/pi-coding-agent` pins `"undici": "8.9.0"` **exactly** — including at its newest 0.85.1 — so the resolution sat one patch below the fix and `bun update` had nothing to move. `bun install` resolved the lockfile to 8.11.2 and `osv-scanner` reports no issues |
+| Not committed | `node_modules/` (installed in place), and upstream's own lockfile (the local `bun.lock` is committed) |
+| Local deltas | THREE. (1) One doc comment in `src/output-file.ts`: its POSIX path example became a placeholder so it stops reading as a workstation path to `tools/check-publication-hygiene.sh`. No behavioural change. `tsconfig.json` is upstream's, added to the vendored set so a customization can be typechecked before a restart. (2) `"overrides": { "undici": "^8.10.2" }` in `package.json`, added 2026-09-29 for GHSA-3wwx-pv8p-q78v / CVE-2026-85024: undici's WebSocket client kills the whole process on a malformed permessage-deflate block, fixed in 8.10.2. An update cannot reach it, because the vendored dev version of `@earendil-works/pi-coding-agent` pins `"undici": "8.9.0"` **exactly** — so the resolution sat one patch below the fix. `bun install` resolved the lockfile to 8.11.2 and `osv-scanner` reports no issues. (3) Host-provided `@sinclair/typebox` and `typebox` moved from runtime dependencies to `"*"` peers; the three pi peers also use `"*"`. This follows Pi 0.99's extension-loader contract and removes duplicate-module warnings. |
+
 | Owner | Axon. Upstream is a source to re-read, not a dependency that updates itself — `pi update` does not touch a local-path package |
 
 This reverses, for these three packages, the convention every other Pack README states: that a
@@ -176,6 +177,19 @@ third-party tool is "driven through its own install/update tooling, never vendor
 wrong for the extension that carries our agent types, because the alternative is a package that
 updates under the deliberation Pack without either of them knowing — and because the ability to
 change a subagent's behaviour is the reason this Pack exists at all.
+
+### Local CLM classifier (experimental Pi extension)
+
+`extensions/clm-classifier.ts` is an opt-in adapter for the real CLM System One API, not a substitute for its encoder or projection heads. It never connects to anything unless `SJEL_CLM_ENABLE=1`; even then its endpoint is fixed to `127.0.0.1:8700`, so a model override cannot send a prompt off-machine. Try it without deploying the Pack:
+
+```bash
+SJEL_CLM_ENABLE=1 pi -e ./Packs/harness/extensions/clm-classifier.ts
+# In pi: /clm-probe
+```
+
+`/clm-probe` checks that `/health` reports a working encoder, the `clm-latest` head and no mock mode, then asks one synthetic question. Only **after** a real service passes that probe can Pi scripts call `models.getModelOfType("classifier", "sjel-clm", "clm-latest")` and `models.classify(...)` (enable codemode with `--tools read,bash,edit,write,codemode` for a one-off session). A passing synthetic probe checks the wire contract, **not** decision quality: compare labeled Sjel routes against the current keyword baseline before activating any product route. `tools/pi-clm-classifier.test.ts` checks the adapter against synthetic responses without claiming a model was run.
+
+The CLM v0.1 release is Apache-2.0 (checkpoint and code, <https://huggingface.co/Contrastive-LM/CLM-v0.1-8B>); it needs the matching Qwen3-8B last-token pooling encoder plus its trained heads. An Ollama `/api/embed` cosine of Qwen3-8B vectors is **not CLM**. The reference `contrastive-lm` package currently installs vLLM, and its documented serving recipe targets an NVIDIA GPU. vllm-metal documents experimental LAST pooling on macOS, but that is not yet an end-to-end validation of this checkpoint. On this Mac the service and Qwen3-8B are not installed; with 35 GiB free, no model download or background service was started. Keep this extension off until an exact encoder/head match and labeled accuracy are measured. Hosted Jev through Pi's built-in `typesafe/jev-latest` is the next, separate step after local validation; it needs credentials and Sjel's egress approval before personal data is sent.
 
 ### Accordion (vendored, detached)
 
@@ -291,8 +305,8 @@ patch when a provider changed shape.
 |---|---|
 | Vendored | `pi-packages/pi-web-access/` — the root `*.ts` sources, `package.json`, `tsconfig.json`, `LICENSE` |
 | Not copied | `test/` (1.0M, 82 files), `pi-web-fetch-demo.mp4`, `banner.png`, `CHANGELOG.md`, `README.md`, `SECURITY.md`, and the upstream lockfile |
-| Not committed | `node_modules/` (nine runtime dependencies, installed in place) |
-| Local deltas | one, in `package.json`: `"overrides": { "undici": "^8.10.2" }`, added 2026-09-29 for GHSA-3wwx-pv8p-q78v / CVE-2026-85024: undici's WebSocket client kills the whole process on a malformed permessage-deflate block, fixed in 8.10.2. This tree's own `undici` range had already resolved to 8.10.2, but the nested `@earendil-works/pi-coding-agent/undici` sat at 8.9.0 — that package pins `"undici": "8.9.0"` exactly, including at its newest 0.85.1, so no update reaches it. `bun install` dropped the nested entry and `osv-scanner` reports no issues. Upstream's manifest already points pi at `./index.ts`, so it still loads with no build |
+| Not committed | `node_modules/` (installed in place); the local `bun.lock` is committed |
+| Local deltas | two, in `package.json`: (1) `"overrides": { "undici": "^8.10.2" }`, added 2026-09-29 for GHSA-3wwx-pv8p-q78v / CVE-2026-85024: undici's WebSocket client kills the whole process on a malformed permessage-deflate block, fixed in 8.10.2. This tree's own `undici` range had already resolved to 8.10.2, but the nested dev copy of `@earendil-works/pi-coding-agent/undici` sat at 8.9.0. `bun install` dropped the nested entry and `osv-scanner` reports no issues. (2) Host-provided `typebox` moved from runtime dependencies to a `"*"` peer to follow Pi 0.99's extension-loader contract. Upstream's manifest already points pi at `./index.ts`, so it still loads with no build |
 | Owner | Axon, **detached**: no `.git`, no remote. The npm package was removed from `settings.json` when this landed, so exactly one web-access extension loads |
 
 ## Why this shape: the flip conditions

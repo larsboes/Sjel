@@ -116,6 +116,16 @@ const ROUTES: &[route_manifest::Route] = &[
     ),
     r(
         "POST",
+        "/api/placements/preview",
+        "Der Ist-Zustand als Plan und Verdikt, ohne Layoutdatei. Body: {items}.",
+    ),
+    r(
+        "POST",
+        "/api/placements/allowed",
+        "Erlaubte Positionen eines Stuecks im Ist-Zustand. Body: {items, ref, rot}.",
+    ),
+    r(
+        "POST",
         "/api/items",
         "Einen Eintrag anlegen. Zustand ist Pflicht, sonst taucht er in keiner Liste auf.",
     ),
@@ -1357,6 +1367,60 @@ struct AllowedQuery {
     rot: i32,
 }
 
+/// Der Ist-Zustand als Aufstellung — die Vorlage kommt im Rumpf und nicht aus einer Datei.
+///
+/// Der Name ist die einzige Stelle, an der sich das vom Layout unterscheidet, und deshalb wird
+/// hier nichts zusammengelegt: `/api/layouts/{name}/preview` **liest** eine Entscheidung, samt
+/// dem Kopf der Datei, in dem steht, warum ein Stueck so steht (PRD Q60). Eine Platzierung hat
+/// keinen Kopf — sie ist der Zustand und eine Zeile, nicht der Vorschlag und eine Datei. Zwei
+/// Endpunkte, weil zwei Dinge hereinkommen, und nicht weil zwei Dinge herauskommen: Plan und
+/// Verdikt sind dieselben und werden von derselben Funktion gerechnet.
+fn ist_zustand(items: Vec<crate::model::PlacedItem>) -> crate::model::Layout {
+    crate::model::Layout {
+        name: "ist-zustand".to_string(),
+        id: "ist-zustand".to_string(),
+        items,
+    }
+}
+
+async fn api_preview_placements(
+    State(s): State<Arc<AppState>>,
+    Json(body): Json<LayoutBody>,
+) -> Result<impl IntoResponse, (StatusCode, String)> {
+    let model = load(&s)?;
+    let l = ist_zustand(body.items);
+    let r = check_layout(&model, &l).map_err(|e| (StatusCode::BAD_REQUEST, e.to_string()))?;
+    let svg = plan::svg(&model, &l).map_err(boom)?;
+    Ok(Json(
+        serde_json::json!({ "layout": l, "check": r, "svg": svg }),
+    ))
+}
+
+/// Erlaubte Positionen eines Stuecks im Ist-Zustand.
+///
+/// Die Aufstellung kommt im Rumpf, weil sie nirgends sonst steht: die Platzierungen sind Zeilen
+/// in der Datenbank und keine Datei, die man nachladen koennte. `allowed_positions` braucht sie
+/// als Grundlage, weil ein Stueck nicht dort stehen darf, wo ein anderes schon steht.
+async fn api_placements_allowed(
+    State(s): State<Arc<AppState>>,
+    Json(body): Json<PlacementsAllowedBody>,
+) -> Result<impl IntoResponse, (StatusCode, String)> {
+    let model = load(&s)?;
+    let base = ist_zustand(body.items);
+    let a = crate::search::allowed_positions(&model, &base, &body.reference, body.rot)
+        .map_err(|e| (StatusCode::BAD_REQUEST, e.to_string()))?;
+    Ok(Json(a))
+}
+
+#[derive(serde::Deserialize)]
+struct PlacementsAllowedBody {
+    items: Vec<crate::model::PlacedItem>,
+    #[serde(rename = "ref")]
+    reference: String,
+    #[serde(default)]
+    rot: i32,
+}
+
 /// Wie ein Layout AUSSAEHE und ausfiele, ohne es zu schreiben.
 ///
 /// Verschieben kann die Oberflaeche selbst zeichnen: eine Verschiebung ist eine Translation und
@@ -1573,6 +1637,8 @@ fn build_router(state: Arc<AppState>) -> Router {
         .route("/api/layouts/{name}/preview", post(api_preview_layout))
         .route("/api/layouts/{name}/allowed", get(api_allowed))
         .route("/api/placements", put(api_put_placements))
+        .route("/api/placements/preview", post(api_preview_placements))
+        .route("/api/placements/allowed", post(api_placements_allowed))
         .route("/api/flats", get(api_flats))
         .route("/api/inventory", get(api_inventory))
         .merge(signed_sync)

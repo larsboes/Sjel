@@ -196,10 +196,18 @@ describe("declaredRoutes", () => {
     // One line per entry (sjel-status), four lines per entry (finance), and the long struct
     // form (trips) — the three shapes in this tree, asserted so a reformat cannot quietly
     // empty the parse and turn every check above green.
-    expect(declaredRoutes("sjel-status")).toContain("/api/sjel-status/capabilities/:name/start");
-    expect(declaredRoutes("sjel-status")).not.toContain("/api/sjel-status/upstreams");
+    const sjelRoutes = declaredRoutes("sjel-status");
+    expect(
+      sjelRoutes.includes("/api/sjel-status/capabilities/{name}/start") ||
+        sjelRoutes.includes("/api/sjel-status/capabilities/:name/start"),
+    ).toBe(true);
+    expect(sjelRoutes).not.toContain("/api/sjel-status/upstreams");
     expect(declaredRoutes("finance")).toContain("/__axon/freshness");
-    expect(declaredRoutes("trips")).toContain("/api/plans/:id/cost");
+    const tripsRoutes = declaredRoutes("trips");
+    expect(
+      tripsRoutes.includes("/api/plans/{id}/cost") ||
+        tripsRoutes.includes("/api/plans/:id/cost"),
+    ).toBe(true);
     for (const capability of ["sjel-status", "calendar", "comms", "finance", "scouting", "transit", "trips"]) {
       expect(declaredRoutes(capability).length).toBeGreaterThan(3);
     }
@@ -224,10 +232,11 @@ describe("declaredRoutes", () => {
 });
 
 describe("servedBy", () => {
-  test("matches a :param segment and refuses a longer or shorter path", () => {
-    const declared = ["/api/plans", "/api/plans/:id/cost", "/health"];
+  test("matches a :param or {param} segment and refuses a longer or shorter path", () => {
+    const declared = ["/api/plans", "/api/plans/:id/cost", "/api/trips/{id}/pack", "/health"];
     expect(servedBy("/api/plans", declared)).toBe(true);
     expect(servedBy("/api/plans/an-id/cost", declared)).toBe(true);
+    expect(servedBy("/api/trips/an-id/pack", declared)).toBe(true);
     expect(servedBy("/api/plans/an-id", declared)).toBe(false);
     expect(servedBy("/api/plans/an-id/cost/extra", declared)).toBe(false);
     expect(servedBy("/api/plan", declared)).toBe(false);

@@ -71,16 +71,25 @@ backup_exclude = [".obsidian/plugin-backups", "Projects/Bachelor-Thesis/Kolloqui
 
 backup_target = "backup-target"
 
-# 7, not store's 14. One archive is ~794 MB (measured 2026-08-29: 596 MB of it is Atlas
-# attachments; the irreplaceable markdown is 14.2 MB across 2,168 notes), and the target is a
-# 58 GB disk with 23 GB free. Fourteen generations would be ~10 GB on that disk beside an 8.9 GB
-# stale restic repo. Seven is a week of daily recovery points for ~5 GB.
+# 2, revised 2026-09-29. The original reasoning is kept below because it is what the number was
+# chosen against; the measurement has since moved and the number had to move with it.
 #
-# The retention can be lower here than anywhere else for a reason peculiar to this capability:
-# `.git` is inside the archive. Every generation therefore carries the vault's complete history,
-# not just its current state, so "how far back can I go" is not answered by how many tarballs
-# survive. That is also why the archive is the whole directory rather than the markdown alone.
-backup_retain = "7"
+# What changed: the note below priced an archive at 794 MB (measured 2026-08-29). Measured
+# 2026-09-29 with `ls -l` and `du`, an archive is 4,913,142,208 bytes = 4.8 GB, because the vault
+# it tars is now 5.0 GB rather than ~800 MB. Seven generations is therefore 33.9 GB, not the
+# ~5 GB this comment budgeted, and the target is iCloud Drive on a volume reporting 11 GB free
+# (98% full). That is the same disk-pressure failure the original note was written to avoid,
+# reached from the other direction — the reasoning held, the input moved.
+#
+# Why the lower retention costs least here: `.git` is inside the archive, so every generation
+# carries the vault's complete history and not just its current state. "How far back can I go"
+# is not answered by how many tarballs survive. Two generations, each with full git history, is
+# the intended shape; seven was buying very little for 33.9 GB.
+#
+# Original note, kept for the parts that still hold — one archive is ~794 MB (measured
+# 2026-08-29: 596 MB of it is Atlas attachments; the irreplaceable markdown is 14.2 MB across
+# 2,168 notes), and fourteen generations would be ~10 GB on that disk.
+backup_retain = "2"
 
 # Daily, matching store. A note written and lost the same day is not re-derivable from anything;
 # unlike a feed item there is no source to re-fetch it from. Same reasoning that set store's

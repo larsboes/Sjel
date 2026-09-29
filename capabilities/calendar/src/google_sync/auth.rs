@@ -152,7 +152,7 @@ pub(super) fn default_expires_in() -> u64 {
 /// bodies can echo token material.
 pub fn access_token(env_path: &Path) -> SyncResult<String> {
     let cache = TOKEN_CACHE.get_or_init(|| Mutex::new(None));
-    if let Some(cached) = cache.lock().unwrap().as_ref() {
+    if let Some(cached) = cache.lock().unwrap_or_else(|p| p.into_inner()).as_ref() {
         if cached.source == env_path && cached.expires_at > now_secs() + 60 {
             return Ok(cached.token.clone());
         }
@@ -185,7 +185,7 @@ pub fn access_token(env_path: &Path) -> SyncResult<String> {
     let token: TokenResponse = response
         .json()
         .map_err(|error| format!("token refresh returned an unreadable body: {error}"))?;
-    *cache.lock().unwrap() = Some(CachedToken {
+    *cache.lock().unwrap_or_else(|p| p.into_inner()) = Some(CachedToken {
         source: env_path.to_path_buf(),
         token: token.access_token.clone(),
         expires_at: now_secs() + token.expires_in,

@@ -10,6 +10,7 @@ use axum::{
 };
 use serde::Serialize;
 use serde_json::{json, Value};
+use sjel_server::blocking;
 use tower_http::cors::CorsLayer;
 
 use trips::config::{Config, ObsidianConfig};
@@ -387,60 +388,48 @@ async fn health() -> Json<Value> {
 /// judged here instead.
 async fn ready(State(state): State<AppState>) -> ApiResponse {
     let database_path = state.database_path.clone();
-    match tokio::task::spawn_blocking(move || {
+    match blocking(move || {
         TripsStore::open(&database_path)
             .and_then(|store| store.ping())
             .map_err(|error| error.to_string())
     })
     .await
     {
-        Ok(Ok(())) => response(StatusCode::OK, json!({ "ok": true, "capability": "trips" })),
+        Ok(()) => response(StatusCode::OK, json!({ "ok": true, "capability": "trips" })),
         // 503, not 500: the request was fine, the dependency is not, and a caller that retries
         // should be told to come back rather than to fix its input.
-        Ok(Err(error)) => response(
+        Err(error) => response(
             StatusCode::SERVICE_UNAVAILABLE,
             json!({ "ok": false, "capability": "trips", "error": error }),
-        ),
-        Err(_) => response(
-            StatusCode::SERVICE_UNAVAILABLE,
-            json!({ "ok": false, "capability": "trips", "error": "readiness check failed" }),
         ),
     }
 }
 
 async fn list_plans(State(state): State<AppState>) -> ApiResponse {
     let database_path = state.database_path.clone();
-    match tokio::task::spawn_blocking(move || {
+    match blocking(move || {
         TripsStore::open(&database_path)
             .and_then(|store| store.list_plans())
             .map_err(|error| error.to_string())
     })
     .await
     {
-        Ok(Ok(plans)) => response(StatusCode::OK, plans),
-        Ok(Err(error)) => response(StatusCode::INTERNAL_SERVER_ERROR, json!({ "error": error })),
-        Err(error) => response(
-            StatusCode::INTERNAL_SERVER_ERROR,
-            json!({ "error": error.to_string() }),
-        ),
+        Ok(plans) => response(StatusCode::OK, plans),
+        Err(error) => response(StatusCode::INTERNAL_SERVER_ERROR, json!({ "error": error })),
     }
 }
 
 async fn create_plan(State(state): State<AppState>, Json(input): Json<CreatePlan>) -> ApiResponse {
     let database_path = state.database_path.clone();
-    match tokio::task::spawn_blocking(move || {
+    match blocking(move || {
         TripsStore::open(&database_path)
             .and_then(|store| store.create_plan(&input))
             .map_err(|error| error.to_string())
     })
     .await
     {
-        Ok(Ok(plan)) => response(StatusCode::CREATED, plan),
-        Ok(Err(error)) => response(StatusCode::BAD_REQUEST, json!({ "error": error })),
-        Err(error) => response(
-            StatusCode::INTERNAL_SERVER_ERROR,
-            json!({ "error": error.to_string() }),
-        ),
+        Ok(plan) => response(StatusCode::CREATED, plan),
+        Err(error) => response(StatusCode::BAD_REQUEST, json!({ "error": error })),
     }
 }
 
@@ -450,23 +439,19 @@ async fn update_plan(
     Json(input): Json<UpdatePlan>,
 ) -> ApiResponse {
     let database_path = state.database_path.clone();
-    match tokio::task::spawn_blocking(move || {
+    match blocking(move || {
         TripsStore::open(&database_path)
             .and_then(|store| store.update_plan(&id, &input))
             .map_err(|error| error.to_string())
     })
     .await
     {
-        Ok(Ok(Some(plan))) => response(StatusCode::OK, plan),
-        Ok(Ok(None)) => response(
+        Ok(Some(plan)) => response(StatusCode::OK, plan),
+        Ok(None) => response(
             StatusCode::NOT_FOUND,
             json!({ "error": "trip plan not found" }),
         ),
-        Ok(Err(error)) => write_conflict_or_bad_request(error),
-        Err(error) => response(
-            StatusCode::INTERNAL_SERVER_ERROR,
-            json!({ "error": error.to_string() }),
-        ),
+        Err(error) => write_conflict_or_bad_request(error),
     }
 }
 
@@ -496,20 +481,16 @@ async fn set_item_day(
     Json(input): Json<SetDay>,
 ) -> ApiResponse {
     let database_path = state.database_path.clone();
-    match tokio::task::spawn_blocking(move || {
+    match blocking(move || {
         TripsStore::open(&database_path)
             .and_then(|store| store.set_item_day(&plan_id, &item_id, input.day.as_deref()))
             .map_err(|error| error.to_string())
     })
     .await
     {
-        Ok(Ok(Some(item))) => response(StatusCode::OK, item),
-        Ok(Ok(None)) => response(StatusCode::NOT_FOUND, json!({ "error": "item not found" })),
-        Ok(Err(error)) => response(StatusCode::BAD_REQUEST, json!({ "error": error })),
-        Err(error) => response(
-            StatusCode::INTERNAL_SERVER_ERROR,
-            json!({ "error": error.to_string() }),
-        ),
+        Ok(Some(item)) => response(StatusCode::OK, item),
+        Ok(None) => response(StatusCode::NOT_FOUND, json!({ "error": "item not found" })),
+        Err(error) => response(StatusCode::BAD_REQUEST, json!({ "error": error })),
     }
 }
 
@@ -530,7 +511,7 @@ async fn record_outcome(
     Json(body): Json<OutcomeBody>,
 ) -> ApiResponse {
     let database_path = state.database_path.clone();
-    match tokio::task::spawn_blocking(move || {
+    match blocking(move || {
         TripsStore::open(&database_path)
             .and_then(|store| {
                 store.record_outcome(&plan_id, &body.stage_id, &Value::Object(body.outcome))
@@ -539,12 +520,8 @@ async fn record_outcome(
     })
     .await
     {
-        Ok(Ok(item)) => response(StatusCode::CREATED, item),
-        Ok(Err(error)) => response(StatusCode::BAD_REQUEST, json!({ "error": error })),
-        Err(error) => response(
-            StatusCode::INTERNAL_SERVER_ERROR,
-            json!({ "error": error.to_string() }),
-        ),
+        Ok(item) => response(StatusCode::CREATED, item),
+        Err(error) => response(StatusCode::BAD_REQUEST, json!({ "error": error })),
     }
 }
 
@@ -569,7 +546,7 @@ async fn record_retrospective(
     Json(body): Json<RetrospectiveBody>,
 ) -> ApiResponse {
     let database_path = state.database_path.clone();
-    match tokio::task::spawn_blocking(move || {
+    match blocking(move || {
         TripsStore::open(&database_path)
             .and_then(|store| {
                 store.put_retrospective(
@@ -584,7 +561,7 @@ async fn record_retrospective(
     .await
     {
         // A second write corrects the first, so it is 200 rather than 201.
-        Ok(Ok(Some((row, created)))) => response(
+        Ok(Some((row, created))) => response(
             if created {
                 StatusCode::CREATED
             } else {
@@ -592,15 +569,11 @@ async fn record_retrospective(
             },
             row,
         ),
-        Ok(Ok(None)) => response(
+        Ok(None) => response(
             StatusCode::NOT_FOUND,
             json!({ "error": "trip plan not found" }),
         ),
-        Ok(Err(error)) => response(StatusCode::BAD_REQUEST, json!({ "error": error })),
-        Err(error) => response(
-            StatusCode::INTERNAL_SERVER_ERROR,
-            json!({ "error": error.to_string() }),
-        ),
+        Err(error) => response(StatusCode::BAD_REQUEST, json!({ "error": error })),
     }
 }
 
@@ -613,7 +586,7 @@ async fn record_retrospective(
 /// `unwrap_or_default()` it into zeroes.
 async fn plan_cost(State(state): State<AppState>, Path(plan_id): Path<String>) -> ApiResponse {
     let database_path = state.database_path.clone();
-    match tokio::task::spawn_blocking(move || -> Result<Option<trips::cost::CostRollup>, String> {
+    match blocking(move || -> Result<Option<trips::cost::CostRollup>, String> {
         let store = TripsStore::open(&database_path).map_err(|e| e.to_string())?;
         let Some(details) = store.get_plan(&plan_id).map_err(|e| e.to_string())? else {
             return Ok(None);
@@ -623,16 +596,12 @@ async fn plan_cost(State(state): State<AppState>, Path(plan_id): Path<String>) -
     })
     .await
     {
-        Ok(Ok(Some(rollup))) => response(StatusCode::OK, rollup),
-        Ok(Ok(None)) => response(
+        Ok(Some(rollup)) => response(StatusCode::OK, rollup),
+        Ok(None) => response(
             StatusCode::NOT_FOUND,
             json!({ "error": "trip plan not found" }),
         ),
-        Ok(Err(error)) => response(StatusCode::INTERNAL_SERVER_ERROR, json!({ "error": error })),
-        Err(error) => response(
-            StatusCode::INTERNAL_SERVER_ERROR,
-            json!({ "error": error.to_string() }),
-        ),
+        Err(error) => response(StatusCode::INTERNAL_SERVER_ERROR, json!({ "error": error })),
     }
 }
 
@@ -642,31 +611,27 @@ async fn pending_retrospectives(State(state): State<AppState>) -> ApiResponse {
     // proleptic year 0, so a raw Unix day count reads as a date in the first
     // century and the window silently matches nothing.
     let today = trips::windows::today();
-    match tokio::task::spawn_blocking(move || {
+    match blocking(move || {
         TripsStore::open(&database_path)
             .and_then(|store| store.pending_retrospectives(&today))
             .map_err(|error| error.to_string())
     })
     .await
     {
-        Ok(Ok(pending)) => response(
+        Ok(pending) => response(
             StatusCode::OK,
             json!({
                 "pending": pending,
                 "window_days": trips::store::RETROSPECTIVE_WINDOW_DAYS,
             }),
         ),
-        Ok(Err(error)) => response(StatusCode::INTERNAL_SERVER_ERROR, json!({ "error": error })),
-        Err(error) => response(
-            StatusCode::INTERNAL_SERVER_ERROR,
-            json!({ "error": error.to_string() }),
-        ),
+        Err(error) => response(StatusCode::INTERNAL_SERVER_ERROR, json!({ "error": error })),
     }
 }
 
 async fn retrospective_summary(State(state): State<AppState>) -> ApiResponse {
     let database_path = state.database_path.clone();
-    match tokio::task::spawn_blocking(move || {
+    match blocking(move || {
         let store = TripsStore::open(&database_path).map_err(|e| e.to_string())?;
         // Every plan, archived ones included: a finished trip is exactly the one
         // a retrospective is written about.
@@ -681,52 +646,40 @@ async fn retrospective_summary(State(state): State<AppState>) -> ApiResponse {
     })
     .await
     {
-        Ok(Ok(summary)) => response(StatusCode::OK, summary),
-        Ok(Err(error)) => response(StatusCode::INTERNAL_SERVER_ERROR, json!({ "error": error })),
-        Err(error) => response(
-            StatusCode::INTERNAL_SERVER_ERROR,
-            json!({ "error": error.to_string() }),
-        ),
+        Ok(summary) => response(StatusCode::OK, summary),
+        Err(error) => response(StatusCode::INTERNAL_SERVER_ERROR, json!({ "error": error })),
     }
 }
 
 async fn list_places(State(state): State<AppState>) -> ApiResponse {
     let database_path = state.database_path.clone();
-    match tokio::task::spawn_blocking(move || {
+    match blocking(move || {
         TripsStore::open(&database_path)
             .and_then(|store| store.list_places())
             .map_err(|error| error.to_string())
     })
     .await
     {
-        Ok(Ok(places)) => response(StatusCode::OK, places),
-        Ok(Err(error)) => response(StatusCode::INTERNAL_SERVER_ERROR, json!({ "error": error })),
-        Err(error) => response(
-            StatusCode::INTERNAL_SERVER_ERROR,
-            json!({ "error": error.to_string() }),
-        ),
+        Ok(places) => response(StatusCode::OK, places),
+        Err(error) => response(StatusCode::INTERNAL_SERVER_ERROR, json!({ "error": error })),
     }
 }
 
 async fn get_plan(State(state): State<AppState>, Path(id): Path<String>) -> ApiResponse {
     let database_path = state.database_path.clone();
-    match tokio::task::spawn_blocking(move || {
+    match blocking(move || {
         TripsStore::open(&database_path)
             .and_then(|store| store.get_plan(&id))
             .map_err(|error| error.to_string())
     })
     .await
     {
-        Ok(Ok(Some(plan))) => response(StatusCode::OK, plan),
-        Ok(Ok(None)) => response(
+        Ok(Some(plan)) => response(StatusCode::OK, plan),
+        Ok(None) => response(
             StatusCode::NOT_FOUND,
             json!({ "error": "trip plan not found" }),
         ),
-        Ok(Err(error)) => response(StatusCode::INTERNAL_SERVER_ERROR, json!({ "error": error })),
-        Err(error) => response(
-            StatusCode::INTERNAL_SERVER_ERROR,
-            json!({ "error": error.to_string() }),
-        ),
+        Err(error) => response(StatusCode::INTERNAL_SERVER_ERROR, json!({ "error": error })),
     }
 }
 
@@ -968,7 +921,7 @@ async fn import_obsidian(
         );
     };
     let database_path = state.database_path.clone();
-    match tokio::task::spawn_blocking(move || {
+    match blocking(move || {
         let store = TripsStore::open(&database_path).map_err(|error| error.to_string())?;
         let candidate =
             read_trip_note(&obsidian.root, &input.reference).map_err(|error| error.to_string())?;
@@ -976,12 +929,8 @@ async fn import_obsidian(
     })
     .await
     {
-        Ok(Ok(plan)) => response(StatusCode::CREATED, plan),
-        Ok(Err(error)) => response(StatusCode::BAD_REQUEST, json!({ "error": error })),
-        Err(error) => response(
-            StatusCode::INTERNAL_SERVER_ERROR,
-            json!({ "error": error.to_string() }),
-        ),
+        Ok(plan) => response(StatusCode::CREATED, plan),
+        Err(error) => response(StatusCode::BAD_REQUEST, json!({ "error": error })),
     }
 }
 
@@ -1621,7 +1570,7 @@ async fn list_pack(
     Query(query): Query<PackQuery>,
 ) -> ApiResponse {
     let database_path = state.database_path.clone();
-    match tokio::task::spawn_blocking(move || -> Result<Value, String> {
+    match blocking(move || -> Result<Value, String> {
         let store = TripsStore::open(&database_path).map_err(|error| error.to_string())?;
         let plan = store
             .get_plan(&id)
@@ -1638,12 +1587,8 @@ async fn list_pack(
     })
     .await
     {
-        Ok(Ok(body)) => response(StatusCode::OK, body),
-        Ok(Err(error)) => response(StatusCode::NOT_FOUND, json!({ "error": error })),
-        Err(error) => response(
-            StatusCode::INTERNAL_SERVER_ERROR,
-            json!({ "error": error.to_string() }),
-        ),
+        Ok(body) => response(StatusCode::OK, body),
+        Err(error) => response(StatusCode::NOT_FOUND, json!({ "error": error })),
     }
 }
 
@@ -1653,14 +1598,14 @@ async fn create_pack_list(
     Json(input): Json<trips::pack::CreatePackList>,
 ) -> ApiResponse {
     let database_path = state.database_path.clone();
-    match tokio::task::spawn_blocking(move || {
+    match blocking(move || {
         TripsStore::open(&database_path)
             .and_then(|store| trips::pack::create_list(&store, &id, &input))
             .map_err(|error| error.to_string())
     })
     .await
     {
-        Ok(Ok(list)) => response(
+        Ok(list) => response(
             StatusCode::CREATED,
             json!({
                 "id": list.id,
@@ -1670,11 +1615,7 @@ async fn create_pack_list(
                 "template_key": list.template_key,
             }),
         ),
-        Ok(Err(error)) => response(StatusCode::BAD_REQUEST, json!({ "error": error })),
-        Err(error) => response(
-            StatusCode::INTERNAL_SERVER_ERROR,
-            json!({ "error": error.to_string() }),
-        ),
+        Err(error) => response(StatusCode::BAD_REQUEST, json!({ "error": error })),
     }
 }
 
@@ -1683,23 +1624,19 @@ async fn delete_pack_list(
     Path((id, list_id)): Path<(String, String)>,
 ) -> ApiResponse {
     let database_path = state.database_path.clone();
-    match tokio::task::spawn_blocking(move || {
+    match blocking(move || {
         TripsStore::open(&database_path)
             .and_then(|store| trips::pack::delete_list(&store, &id, &list_id))
             .map_err(|error| error.to_string())
     })
     .await
     {
-        Ok(Ok(true)) => response(StatusCode::OK, json!({ "ok": true })),
-        Ok(Ok(false)) => response(
+        Ok(true) => response(StatusCode::OK, json!({ "ok": true })),
+        Ok(false) => response(
             StatusCode::NOT_FOUND,
             json!({ "error": "no pack list with that id on this plan" }),
         ),
-        Ok(Err(error)) => response(StatusCode::INTERNAL_SERVER_ERROR, json!({ "error": error })),
-        Err(error) => response(
-            StatusCode::INTERNAL_SERVER_ERROR,
-            json!({ "error": error.to_string() }),
-        ),
+        Err(error) => response(StatusCode::INTERNAL_SERVER_ERROR, json!({ "error": error })),
     }
 }
 
@@ -1710,23 +1647,19 @@ async fn put_pack_items(
 ) -> ApiResponse {
     let database_path = state.database_path.clone();
     let count = input.items.len();
-    match tokio::task::spawn_blocking(move || {
+    match blocking(move || {
         TripsStore::open(&database_path)
             .and_then(|store| trips::pack::replace_items(&store, &id, &list_id, &input.items))
             .map_err(|error| error.to_string())
     })
     .await
     {
-        Ok(Ok(true)) => response(StatusCode::OK, json!({ "ok": true, "count": count })),
-        Ok(Ok(false)) => response(
+        Ok(true) => response(StatusCode::OK, json!({ "ok": true, "count": count })),
+        Ok(false) => response(
             StatusCode::NOT_FOUND,
             json!({ "error": "no pack list with that id on this plan" }),
         ),
-        Ok(Err(error)) => response(StatusCode::BAD_REQUEST, json!({ "error": error })),
-        Err(error) => response(
-            StatusCode::INTERNAL_SERVER_ERROR,
-            json!({ "error": error.to_string() }),
-        ),
+        Err(error) => response(StatusCode::BAD_REQUEST, json!({ "error": error })),
     }
 }
 
@@ -1735,17 +1668,10 @@ async fn draft_intent(
     Json(body): Json<trips::intent::IntentDraftRequest>,
 ) -> axum::response::Response {
     let sentence = body.sentence.clone();
-    let answer = match tokio::task::spawn_blocking(move || {
-        trips::intent::resolve_draft_or_heuristic(&sentence)
-    })
-    .await
+    let answer = match blocking(move || trips::intent::resolve_draft_or_heuristic(&sentence)).await
     {
-        Ok(Ok(draft)) => response(StatusCode::OK, draft),
-        Ok(Err(error)) => response(StatusCode::BAD_REQUEST, json!({ "error": error })),
-        Err(error) => response(
-            StatusCode::INTERNAL_SERVER_ERROR,
-            json!({ "error": error.to_string() }),
-        ),
+        Ok(draft) => response(StatusCode::OK, draft),
+        Err(error) => response(StatusCode::BAD_REQUEST, json!({ "error": error })),
     };
     not_a_write(answer)
 }

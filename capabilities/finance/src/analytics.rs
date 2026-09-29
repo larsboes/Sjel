@@ -188,7 +188,7 @@ pub struct DashboardProjection {
 }
 
 pub fn project(transactions: &[JournalTransaction], currency: &str) -> Vec<TransactionRow> {
-    let mut rows = Vec::new();
+    let mut rows = Vec::with_capacity(transactions.len());
     for transaction in transactions {
         let balance_accounts: Vec<_> = transaction
             .postings

@@ -96,7 +96,12 @@ export function servedBy(requestPath: string, declared: string[]): boolean {
   return declared.some((route) => {
     const parts = route.split("/").filter((s) => s !== "");
     if (parts.length !== asked.length) return false;
-    return parts.every((part, index) => part.startsWith(":") || part === asked[index]);
+    return parts.every(
+      (part, index) =>
+        part.startsWith(":") ||
+        (part.startsWith("{") && part.endsWith("}")) ||
+        part === asked[index],
+    );
   });
 }
 

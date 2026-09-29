@@ -336,6 +336,15 @@ rest is below or under Not yet specified; nothing new goes into the PRD.
   `tools/self generate` needs no graph at all. What it still blocks is the graph's own freshness —
   `status` shows counts rolled up from whatever graph exists, and this machine's is behind the
   tree. Commit `2f0feb6` says it regenerated `self.json`; only `ARCHITECTURE.md` changed.
+- **A comms test is about this machine, and its own comment says it is not.**
+  `triage::tests::the_shadow_route_writes_verdicts_and_changes_no_category` takes
+  `..Config::load()` for everything but the database path, so on a machine where
+  `foundation-models` is running the shadow pass reaches a real model, takes the escalation
+  branch in `settle`, and asserts `"shadow"` against `"held"`. Measured 2026-09-29: it fails the
+  same way at `eae349a6` with nothing applied, passes again when the model is down, and CI —
+  hermetic, no overlay — never sees it. The sentence it contradicts is its own: "a test that took
+  that route would be a test about this machine." The fix is to build that `Config` from a
+  fixture instead of from the operator's overlay.
 - **The demo site shows two areas less than it could.** Fixed 2026-09-27 (22793de3): the page
   clock runs on the recording's anchor date, so Travel shows 2 upcoming trips, and seven services
   missing from demo.toml now say why instead of showing a host's 404 page. People followed

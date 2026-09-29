@@ -377,6 +377,10 @@
 
 html {
   font-size: var(--font-size-root);
+  overflow-x: hidden;
+  overscroll-behavior-y: none;
+  -webkit-text-size-adjust: 100%;
+  text-size-adjust: 100%;
 }
 
 /* The backdrop is three layers: a flat colour, a wash that varies across the viewport,
@@ -419,6 +423,42 @@ body {
   line-height: 1.5;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
+
+  /* Native touch physics: prevent side-to-side wobble and enable silky momentum */
+  overflow-x: hidden;
+  min-height: 100vh;
+  min-height: 100dvh;
+  -webkit-overflow-scrolling: touch;
+  touch-action: pan-y;
+}
+
+/* Native tap responsiveness & clean interaction feel: no 300ms tap delay, no grey flash */
+button,
+a,
+input,
+select,
+textarea,
+[role="button"],
+[role="tab"] {
+  touch-action: manipulation;
+  -webkit-tap-highlight-color: transparent;
+}
+
+/* Mobile input auto-zoom prevention: iOS Safari/WKWebView forcefully zooms the viewport if font-size < 16px */
+@media (max-width: 48rem) {
+  input:not([type="checkbox"]):not([type="radio"]),
+  select,
+  textarea,
+  .input {
+    font-size: 16px !important;
+  }
+}
+
+/* Silky momentum scrolling and containment on horizontally scrollable containers */
+:where([class*="table-wrap"], [class*="scroll"], pre) {
+  -webkit-overflow-scrolling: touch;
+  touch-action: pan-x pan-y;
+  overscroll-behavior-x: contain;
 }
 
 ::selection {
@@ -604,7 +644,8 @@ a.row-title:hover {
   cursor: pointer;
   transition:
     background-color 0.15s ease,
-    color 0.15s ease;
+    color 0.15s ease,
+    transform 0.12s cubic-bezier(0.2, 0.8, 0.2, 1);
 }
 
 .btn:hover {
@@ -613,7 +654,7 @@ a.row-title:hover {
 }
 
 .btn:active {
-  transform: scale(0.98);
+  transform: scale(0.975);
 }
 
 .btn:disabled {

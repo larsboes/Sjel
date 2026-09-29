@@ -139,6 +139,15 @@
 
   let dragging = $state(false);
   let dirty = $state(false);
+
+  /**
+   * The as-is layer has no layout file, so the selector needs a name for it — and a name no real
+   * id can collide with. The leading underscores make it an illegal file name, which is the point:
+   * `layouts/__ist-zustand__.toml` cannot exist, so this entry can never shadow a real plan.
+   */
+  const ASIS = "__ist-zustand__";
+  let asisItems = $state<InteriorPlacedItem[]>([]);
+  const inAsis = $derived(selected === ASIS);
   let planError = $state<string | null>(null);
   let savingPlan = $state(false);
   let saveAs = $state("");
@@ -258,9 +267,13 @@
       allowed = null;
       if (picked && selected) {
         // Fetched, not computed. Until it arrives the drag is free and the drop still snaps,
-        // because the answer is applied on release rather than per frame.
-        void interior
-          .allowedPositions(selected, picked, Number(g.dataset.rot ?? 0))
+        // because the answer is applied on release rather than per frame. Which base it must fit
+        // around is the only difference between the two: a file in one case, the posted rows in
+        // the other.
+        void (inAsis
+          ? interior.allowedPositionsFor(asisItems, picked, Number(g.dataset.rot ?? 0))
+          : interior.allowedPositions(selected, picked, Number(g.dataset.rot ?? 0))
+        )
           .then((a) => (allowed = a))
           .catch(() => (allowed = null));
       }
@@ -405,7 +418,9 @@
     savingPlan = true;
     planError = null;
     try {
-      detail = await interior.previewLayout(selected, items);
+      detail = inAsis
+        ? await interior.previewPlacements(items)
+        : await interior.previewLayout(selected!, items);
       dirty = true;
     } catch (caught) {
       planError = caught instanceof Error ? caught.message : String(caught);
@@ -418,10 +433,21 @@
     if (!planRoot || selected === null) return;
     savingPlan = true;
     planError = null;
+    const items = itemsFromPlan(planRoot);
     try {
-      detail = await interior.saveLayout(selected, itemsFromPlan(planRoot));
-      dirty = false;
-      layouts = await interior.layouts();
+      if (inAsis) {
+        // Two calls and not one: a layout's `PUT` answers with the verdict and the new plan,
+        // while a placement is a row and answers with a count. Saving where the pieces stand
+        // should leave the verdict on screen, so the preview is asked for separately.
+        await interior.savePlacements(items);
+        asisItems = items;
+        detail = await interior.previewPlacements(items);
+        dirty = false;
+      } else {
+        detail = await interior.saveLayout(selected, items);
+        dirty = false;
+        layouts = await interior.layouts();
+      }
     } catch (caught) {
       planError = caught instanceof Error ? caught.message : String(caught);
     } finally {
@@ -855,11 +881,41 @@
       inventory = inv;
       wishlist = wish;
       room = m;
+      asisItems = (await interior.placements(m.flat.id)).map((p) => ({
+        ref: p.item_id,
+        x: p.x,
+        y: p.y,
+        rot: p.rot,
+      }));
       if (selected === null && l.length > 0) await select(l[0].id);
     } catch (caught) {
       error = caught instanceof Error ? caught.message : String(caught);
     } finally {
       loading = false;
+    }
+  }
+
+  /**
+   * The as-is arrangement: the store's rows, drawn by the capability like any other plan.
+   *
+   * No `toleranz`, `einbringung` or `sonne` beside it: all three take a layout file, and there is
+   * none here. The verdict is not missing though — it comes back with the preview, because
+   * "does what is standing there now break my own rules" is a real question and the same one.
+   */
+  async function selectAsis(): Promise<void> {
+    selected = ASIS;
+    detail = null;
+    detailError = null;
+    picked = null;
+    focusRef = null;
+    dirty = false;
+    robust = null;
+    sun = null;
+    moveIn = [];
+    try {
+      detail = await interior.previewPlacements(asisItems);
+    } catch (caught) {
+      detailError = caught instanceof Error ? caught.message : String(caught);
     }
   }
 
@@ -1130,6 +1186,15 @@
       <!-- One grid column: the list of plans, and the way to add one. -->
       <div class="side">
         <ul class="variants">
+          <li>
+            <button class:active={inAsis} onclick={() => void selectAsis()}>
+              <span class="verdict">as-is</span>
+              <span class="name">Where the pieces stand</span>
+              <span class="tally mono">
+                {asisItems.length} placed · not a proposal
+              </span>
+            </button>
+          </li>
           {#each layouts as l (l.id)}
             <li>
               <button class:active={selected === l.id} onclick={() => select(l.id)}>

@@ -14,6 +14,7 @@
   import { assistantStore } from "$lib/assistant/assistant.svelte";
   import MacConnection from "$lib/MacConnection.svelte";
   import DeviceRegistry from "$lib/DeviceRegistry.svelte";
+  import DecisionEngineModal from "$lib/DecisionEngineModal.svelte";
   import { canClaimOnThisDevice } from "$lib/devices";
   import SetupSjel from "$lib/setup/SetupSjel.svelte";
   import JoinPrompt from "$lib/setup/JoinPrompt.svelte";
@@ -21,6 +22,7 @@
   import SyncStatus from "$lib/SyncStatus.svelte";
   import OmniSearch from "$lib/omni/OmniSearch.svelte";
   import { omniStore } from "$lib/omni/omni.svelte";
+  import EntityInspector from "$lib/inspector/EntityInspector.svelte";
 
   let { children, data } = $props();
 
@@ -200,6 +202,15 @@
       <div class="meta">
         <button
           type="button"
+          class="btn omni-mobile-btn"
+          onclick={() => omniStore.toggle()}
+          aria-label="Search capabilities and views"
+          title="Search (⌘K)"
+        >
+          <Icon name="search" size={14} />
+        </button>
+        <button
+          type="button"
           class="btn ask-btn"
           onclick={() => { assistantStore.restoreFloating(); assistantStore.toggle(); }}
           aria-label="Ask Sjel Assistant"
@@ -320,6 +331,14 @@
           {item.label}
         </a>
       {/each}
+      <span class="nav-section second">System and node</span>
+      <div class="mobile-drawer-system">
+        <MacConnection />
+        {#if capabilities.byName("devices") || canClaimOnThisDevice()}
+          <DeviceRegistry />
+        {/if}
+        <DecisionEngineModal />
+      </div>
     </nav>
   {/if}
 
@@ -345,6 +364,7 @@
       {#if capabilities.byName("devices") || canClaimOnThisDevice()}
         <DeviceRegistry />
       {/if}
+      <DecisionEngineModal />
     </div>
   </footer>
 
@@ -403,11 +423,13 @@
   <SoundscapeDock />
   <AssistantDrawer />
   <OmniSearch />
+  <EntityInspector />
 </div>
 
 <style>
   .shell {
     min-height: 100vh;
+    min-height: 100dvh;
     display: flex;
     flex-direction: column;
     /* Set by SoundscapeDock while it is mounted, absent otherwise. */
@@ -427,6 +449,8 @@
     -webkit-backdrop-filter: var(--glass-blur);
     backdrop-filter: var(--glass-blur);
     border-bottom: 1px solid var(--header-border);
+    transform: translateZ(0);
+    -webkit-transform: translateZ(0);
   }
 
   /* Translucent only while there is something behind it to see. At the top of the page
@@ -466,6 +490,9 @@
     gap: 0.6rem;
     font-weight: 600;
     letter-spacing: -0.01em;
+    flex-shrink: 0;
+    -webkit-user-select: none;
+    user-select: none;
   }
 
   .brand-group {
@@ -473,6 +500,7 @@
     align-items: center;
     gap: var(--space-4);
     flex: 1;
+    min-width: 0;
     max-width: 32rem;
   }
 
@@ -516,6 +544,10 @@
     color: var(--text-tertiary);
   }
 
+  .omni-mobile-btn {
+    display: none;
+  }
+
   .ask-btn {
     display: inline-flex;
     align-items: center;
@@ -524,6 +556,8 @@
     color: var(--primary);
     background-color: var(--primary-soft);
     border-color: transparent;
+    flex-shrink: 0;
+    white-space: nowrap;
   }
 
   .ask-btn:hover {
@@ -549,6 +583,11 @@
     gap: 0.5rem;
     color: var(--text-tertiary);
     font-size: var(--text-xs);
+    flex-shrink: 0;
+  }
+
+  .meta .btn {
+    flex-shrink: 0;
   }
 
   .clock {
@@ -567,21 +606,34 @@
 
   nav.desktop {
     display: flex;
-    gap: 0.125rem;
+    gap: 0.2rem;
+    padding: 0.2rem;
+    background: var(--surface);
+    border-radius: var(--radius-full);
+    border: 1px solid var(--card-border);
+    overflow-x: auto;
+    scrollbar-width: none;
+    -webkit-overflow-scrolling: touch;
+  }
+
+  nav.desktop::-webkit-scrollbar {
+    display: none;
   }
 
   .nav-link {
     display: flex;
     align-items: center;
     gap: 0.4rem;
-    padding: 0.5rem 0.75rem;
+    padding: 0.35rem 0.75rem;
     font-size: var(--text-xs);
     font-weight: 500;
-    border-radius: var(--radius-md);
+    border-radius: var(--radius-full);
     color: var(--nav-inactive);
     transition:
       color 0.15s ease,
-      background-color 0.15s ease;
+      background-color 0.15s ease,
+      transform 0.12s cubic-bezier(0.16, 1, 0.3, 1),
+      box-shadow 0.15s ease;
   }
 
   .nav-link:hover {
@@ -589,9 +641,14 @@
     background-color: var(--primary-soft);
   }
 
+  .nav-link:active {
+    transform: scale(0.96);
+  }
+
   .nav-link.active {
     color: var(--primary);
-    background-color: var(--primary-soft);
+    background-color: var(--card-bg);
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.08);
   }
 
   .more {
@@ -657,23 +714,66 @@
 
   .scrim {
     position: fixed;
-    inset: var(--header-h) 0 0;
+    inset: calc(var(--header-h) + env(safe-area-inset-top, 0px)) 0 0;
     z-index: 40;
     background-color: rgb(0 0 0 / 40%);
+    animation: fade-in 0.15s ease-out;
   }
 
   nav.mobile {
     position: fixed;
-    inset: var(--header-h) 0 auto auto;
+    top: calc(var(--header-h) + env(safe-area-inset-top, 0px));
+    right: 0;
+    bottom: 0;
     z-index: 41;
-    height: calc(100vh - var(--header-h));
-    width: 16rem;
+    height: calc(100dvh - var(--header-h) - env(safe-area-inset-top, 0px));
+    width: min(19rem, 85vw);
     padding: 1rem;
+    padding-bottom: calc(5.5rem + env(safe-area-inset-bottom, 16px));
     display: flex;
     flex-direction: column;
     gap: 0.25rem;
     background-color: var(--page-bg);
     border-left: 1px solid var(--header-border);
+    box-shadow: -6px 0 28px rgb(0 0 0 / 22%);
+    overflow-y: auto;
+    -webkit-overflow-scrolling: touch;
+    overscroll-behavior: contain;
+    animation: drawer-slide 0.22s cubic-bezier(0.16, 1, 0.3, 1);
+  }
+
+  @keyframes drawer-slide {
+    from {
+      transform: translateX(100%);
+    }
+    to {
+      transform: translateX(0);
+    }
+  }
+
+  .mobile-drawer-system {
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+    padding: var(--space-2) var(--space-4);
+  }
+
+  .mobile-drawer-system :global(button.link),
+  .mobile-drawer-system :global(.decision-modal-trigger) {
+    font-size: var(--text-xs);
+    color: var(--text-secondary);
+    text-align: left;
+    padding: 0.45rem 0.2rem;
+    background: transparent;
+    border: none;
+    cursor: pointer;
+    border-radius: var(--radius-sm);
+    transition: color 0.15s ease;
+  }
+
+  .mobile-drawer-system :global(button.link:hover),
+  .mobile-drawer-system :global(.decision-modal-trigger:hover) {
+    color: var(--primary);
   }
 
   nav.mobile .nav-link {
@@ -730,7 +830,10 @@
 
   footer .inner {
     display: flex;
+    flex-wrap: wrap;
+    align-items: center;
     justify-content: space-between;
+    gap: 0.75rem 1.25rem;
   }
 
   @media (width >= 48rem) {
@@ -770,6 +873,8 @@
       border-top: 1px solid var(--header-border);
       justify-content: space-around;
       align-items: center;
+      transform: translateZ(0);
+      -webkit-transform: translateZ(0);
     }
 
     @supports not ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))) {
@@ -795,12 +900,19 @@
       text-decoration: none;
       cursor: pointer;
       -webkit-tap-highlight-color: transparent;
-      transition: color 0.15s ease;
+      -webkit-user-select: none;
+      user-select: none;
+      -webkit-touch-callout: none;
+      transition: color 0.15s ease, transform 0.12s cubic-bezier(0.2, 0.8, 0.2, 1);
     }
 
     .tab-link:hover,
     .tab-link.active {
       color: var(--primary);
+    }
+
+    .tab-link:active {
+      transform: scale(0.93);
     }
 
     .tab-action .tab-action-icon {
@@ -830,6 +942,12 @@
 
     .omni-trigger {
       display: none;
+    }
+
+    .omni-mobile-btn {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
     }
 
     .ask-btn-text {

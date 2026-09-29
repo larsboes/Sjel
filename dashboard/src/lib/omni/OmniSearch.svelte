@@ -360,12 +360,14 @@
     background-color: rgb(0 0 0 / 55%);
     -webkit-backdrop-filter: blur(4px);
     backdrop-filter: blur(4px);
+    overscroll-behavior: contain;
   }
 
   .omni-dialog {
     width: 100%;
     max-width: 44rem;
     max-height: 80vh;
+    max-height: 80dvh;
     display: flex;
     flex-direction: column;
     background-color: var(--card-bg);
@@ -425,6 +427,8 @@
   .omni-results {
     flex: 1;
     overflow-y: auto;
+    -webkit-overflow-scrolling: touch;
+    overscroll-behavior: contain;
     padding: var(--space-2);
     display: flex;
     flex-direction: column;
@@ -557,5 +561,17 @@
     align-items: center;
     gap: var(--space-1);
     color: var(--primary);
+  }
+
+  @media (max-width: 48rem) {
+    .omni-scrim {
+      padding-top: max(1rem, env(safe-area-inset-top, 1rem));
+      padding-inline: 0.75rem;
+      padding-bottom: max(1rem, env(safe-area-inset-bottom, 1rem));
+    }
+
+    .omni-dialog {
+      max-height: 85dvh;
+    }
   }
 </style>

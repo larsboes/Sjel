@@ -10,6 +10,7 @@
   import Icon from "$lib/Icon.svelte";
   import { entities, type Entity, type LocatedPerson, type PlanItem, type TripStage } from "$lib/api";
   import { AROUND_RADIUS_KM, aroundFromLocated, meetupsOf, staysOf } from "$lib/travel/who-is-around";
+  import { inspectorStore } from "$lib/inspector/inspector.svelte";
 
   let {
     stages,
@@ -48,6 +49,27 @@
 
   const personFor = (name: string): Entity | undefined =>
     people.find((p) => p.name.toLowerCase() === name.toLowerCase());
+
+  function inspectPersonByName(name: string) {
+    const p = personFor(name);
+    if (p) {
+      const home = p.facts?.find((f) => f.predicate === "home_base")?.place;
+      const away = p.facts?.find((f) => f.predicate === "away")?.place;
+      const loc = away ? `${away} (away)` : home;
+      inspectorStore.inspectPerson({
+        id: p.id,
+        name: p.name,
+        location: loc,
+        relationship: (p.values?.relationship?.value as string) ?? undefined,
+        notes: p.note_ref ?? undefined,
+      });
+    } else {
+      inspectorStore.inspectPerson({
+        id: name,
+        name,
+      });
+    }
+  }
 
   // "Where is someone": an away period (with dates) or a home base (without), written to
   // entities. A name not yet known creates the person.
@@ -107,11 +129,14 @@
           <strong>
             {#each meetup.people as p, i (p)}
               {#if i > 0}, {/if}
-              {#if personFor(p)}
-                <a class="person-chip-link" href={link(`/people?id=${encodeURIComponent(personFor(p)!.id)}`)}>{p}</a>
-              {:else}
-                <span>{p}</span>
-              {/if}
+              <button
+                type="button"
+                class="person-chip-btn"
+                onclick={() => inspectPersonByName(p)}
+                title={`Inspect ${p}`}
+              >
+                {p}
+              </button>
             {/each}
           </strong>
           <span>{meetup.title}</span>
@@ -141,13 +166,14 @@
         <p class="when">
           {#each leg.around as p, i (p.person)}
             {#if i > 0}, {/if}
-            {#if personFor(p.person)}
-              <a class="person-chip-link" href={link(`/people?id=${encodeURIComponent(personFor(p.person)!.id)}`)}>
-                {p.person}
-              </a>
-            {:else}
-              <span>{p.person}</span>
-            {/if}
+            <button
+              type="button"
+              class="person-chip-btn"
+              onclick={() => inspectPersonByName(p.person)}
+              title={`Inspect ${p.person}`}
+            >
+              {p.person}
+            </button>
             <span class="meta">({p.distanceKm.toFixed(0)} km)</span>
             {#if leg.stage.date}
               <a
@@ -168,13 +194,14 @@
           <Icon name="home" size={12} /> Could stay with:
           {#each leg.hosts as h, i (h.person)}
             {#if i > 0}, {/if}
-            {#if personFor(h.person)}
-              <a class="person-chip-link" href={link(`/people?id=${encodeURIComponent(personFor(h.person)!.id)}`)}>
-                {h.person}
-              </a>
-            {:else}
-              <span>{h.person}</span>
-            {/if}
+            <button
+              type="button"
+              class="person-chip-btn"
+              onclick={() => inspectPersonByName(h.person)}
+              title={`Inspect host ${h.person}`}
+            >
+              {h.person}
+            </button>
             {#if h.note}<span class="meta">({h.note})</span>{/if}
           {/each}
         </p>
@@ -327,13 +354,20 @@
     text-decoration: none;
   }
 
-  .person-chip-link {
+  .person-chip-btn {
+    display: inline;
+    padding: 0;
+    margin: 0;
+    border: none;
+    background: none;
     color: var(--primary);
-    text-decoration: none;
+    font: inherit;
     font-weight: 500;
+    cursor: pointer;
+    text-decoration: none;
   }
 
-  .person-chip-link:hover {
+  .person-chip-btn:hover {
     text-decoration: underline;
   }
 

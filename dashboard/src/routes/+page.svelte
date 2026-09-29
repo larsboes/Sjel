@@ -20,6 +20,7 @@
   } from "$lib/api";
   import { capabilities } from "$lib/capabilities.svelte";
   import { createListCursor } from "$lib/list-cursor.svelte";
+  import { inspectorStore } from "$lib/inspector/inspector.svelte";
   import RailSection from "$lib/rail/RailSection.svelte";
   import PinnedLinks from "$lib/PinnedLinks.svelte";
   import RepoStatusCard from "$lib/RepoStatusCard.svelte";
@@ -222,6 +223,61 @@
 
   const kindOf = (key: string) => KINDS.find((kind) => kind.key === key);
 
+  function inspectDecision(decision: Decision | undefined): void {
+    if (!decision) return;
+    const row = decision.row as Record<string, unknown>;
+    const kindKey = decision.kind.key;
+    const title = (decision.kind as { title?: (r: unknown) => string }).title?.(decision.row)
+      ?? (row?.title as string)
+      ?? (row?.subject as string)
+      ?? (row?.name as string)
+      ?? decision.kind.label;
+    const why = decision.kind.whyHere(decision.row, scoreContext);
+
+    if (kindKey === "calendar" || (row && row.starts_at)) {
+      inspectorStore.inspectEvent({
+        id: decision.kind.id(decision.row),
+        title,
+        startsAt: (row.starts_at as string) ?? (row.date as string) ?? todayKey,
+        endsAt: (row.ends_at as string) ?? undefined,
+        allDay: Boolean(row.all_day),
+        location: (row.location as string) ?? undefined,
+        commitment: (row.commitment as string) ?? undefined,
+        notes: (row.notes as string) ?? why,
+        onEdit: () => openDecision(decision),
+      });
+    } else if (kindKey === "trip" || (row && row.destinations)) {
+      const dests = row.destinations as Array<{ name: string }> | undefined;
+      inspectorStore.inspectTrip({
+        id: decision.kind.id(decision.row),
+        title,
+        destination: dests?.[0]?.name ?? title,
+        dates: row.date_start ? `${row.date_start} – ${(row.date_end as string) ?? ""}` : "Upcoming",
+      });
+    } else if (kindKey === "finance" || (row && row.amount_cents !== undefined)) {
+      const cents = Number(row.amount_cents ?? 0);
+      const curr = (row.currency as string) ?? "EUR";
+      const amtStr = new Intl.NumberFormat("de-DE", { style: "currency", currency: curr }).format(cents / 100);
+      inspectorStore.inspectTransaction({
+        id: decision.kind.id(decision.row),
+        merchant: title,
+        amount: `${row.kind === "expense" ? "−" : row.kind === "income" ? "+" : ""}${amtStr}`,
+        date: (row.date as string) ?? todayKey,
+        category: (row.category as string) ?? "General",
+        notes: why,
+      });
+    } else {
+      inspectorStore.inspectEvent({
+        id: decision.kind.id(decision.row),
+        title,
+        startsAt: decision.startOrDueAt ?? todayKey,
+        notes: why,
+        commitment: decision.kind.label,
+        onEdit: () => openDecision(decision),
+      });
+    }
+  }
+
   const cursor = createListCursor({
     count: () => visibleDecisions.length,
     elFor: (index) => {
@@ -229,6 +285,10 @@
       return decision ? document.getElementById(rowId(decision)) : null;
     },
     onOpen: (index) => openDecision(visibleDecisions[index]),
+    bindings: {
+      " ": (index) => inspectDecision(visibleDecisions[index]),
+      i: (index) => inspectDecision(visibleDecisions[index]),
+    },
   });
 
   onMount(() => {
@@ -513,7 +573,7 @@
         {/if}
 
         {#if visibleDecisions.length > 1}
-          <p class="key-hint"><kbd>J</kbd><kbd>K</kbd> select<span></span><kbd>Enter</kbd> open</p>
+          <p class="key-hint"><kbd>J</kbd><kbd>K</kbd> select<span></span><kbd>Space</kbd> inspect<span></span><kbd>Enter</kbd> open</p>
         {/if}
 
       <!-- role="list" and rows as listitems, not a listbox. An option must not contain
@@ -889,26 +949,32 @@
      implied the page had three top-level states. */
   .home-views {
     display: inline-flex;
-    gap: 0.85rem;
+    gap: 0.2rem;
+    padding: 0.2rem;
+    background: var(--surface);
+    border: 1px solid var(--card-border);
+    border-radius: var(--radius-full);
   }
 
   .home-views button {
-    padding: 0 0 0.2rem;
+    padding: 0.25rem 0.75rem;
     border: 0;
-    border-bottom: 1.5px solid transparent;
+    border-radius: var(--radius-full);
     background: transparent;
     color: var(--text-tertiary);
-    font: 600 0.7rem var(--font-sans);
+    font: 600 var(--text-2xs) var(--font-sans);
     cursor: pointer;
+    transition: all 0.15s cubic-bezier(0.16, 1, 0.3, 1);
   }
 
   .home-views button:hover {
-    color: var(--text-secondary);
+    color: var(--text-primary);
   }
 
   .home-views button.active {
-    border-bottom-color: var(--primary);
-    color: var(--text-primary);
+    background: var(--card-bg);
+    color: var(--primary);
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.08);
   }
 
   .workspace {

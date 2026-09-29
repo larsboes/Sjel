@@ -8,9 +8,12 @@
     type CalendarEntry,
     type Commitment,
   } from "./types";
+  import type { TripPlan } from "$lib/api";
+  import { inspectorStore } from "$lib/inspector/inspector.svelte";
 
   let {
     days,
+    trips = [],
     onSelectDay,
     onSelectEntry,
     onSelectRange,
@@ -19,6 +22,7 @@
     freeDays = new Set<string>(),
   }: {
     days: CalendarDay[];
+    trips?: TripPlan[];
     onSelectDay?: (day: CalendarDay) => void;
     onSelectEntry?: (entry: CalendarEntry, day: CalendarDay) => void;
     onSelectRange?: (startDate: string, endDate: string) => void;
@@ -28,6 +32,12 @@
      * derived here: the verdict is the capability's, not the grid's. */
     freeDays?: ReadonlySet<string>;
   } = $props();
+
+  function tripFor(date: string): TripPlan | undefined {
+    return trips.find(
+      (t) => t.date_start && t.date_end && date >= t.date_start && date <= t.date_end,
+    );
+  }
 
   const DAY_HEADERS = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
 
@@ -108,6 +118,28 @@
         {day.day}
       </button>
 
+      {#if tripFor(day.date)}
+        {@const trip = tripFor(day.date)!}
+        <button
+          type="button"
+          class="trip-ribbon"
+          onclick={(e) => {
+            e.stopPropagation();
+            inspectorStore.inspectTrip({
+              id: trip.id,
+              title: trip.title,
+              destination: trip.destinations?.[0]?.name ?? trip.title,
+              dates: `${trip.date_start} – ${trip.date_end}`,
+            });
+          }}
+          title={`Trip: ${trip.title} (${trip.destinations?.[0]?.name ?? ""})`}
+          onpointerdown={(event) => event.stopPropagation()}
+        >
+          <span class="trip-ribbon-dot"></span>
+          <span class="trip-ribbon-text">{trip.destinations?.[0]?.name ?? trip.title}</span>
+        </button>
+      {/if}
+
       <div class="entries">
         {#each day.entries.slice(0, 2) as entry (entry.id)}
           <!-- Two buttons, not one: the dot changes how binding the entry is,
@@ -125,7 +157,7 @@
               class="entry"
               class:proposal={entry.commitment === "possible"}
               title={entry.title}
-              aria-label={`Edit ${entry.title}`}
+              aria-label={`Inspect ${entry.title}`}
               onclick={() => onSelectEntry?.(entry, day)}
               onpointerdown={(event) => event.stopPropagation()}
             >
@@ -233,6 +265,45 @@
   .today .date {
     background: var(--primary);
     color: #fff;
+  }
+
+  .trip-ribbon {
+    display: flex;
+    align-items: center;
+    gap: 0.35rem;
+    padding: 0.2rem 0.45rem;
+    margin-bottom: 0.25rem;
+    border-radius: var(--radius-sm);
+    background: var(--primary-soft);
+    color: var(--primary);
+    border: 1px solid transparent;
+    font: inherit;
+    font-size: var(--text-2xs);
+    font-weight: 600;
+    cursor: pointer;
+    text-align: left;
+    width: 100%;
+    overflow: hidden;
+    white-space: nowrap;
+    transition: all 0.15s ease;
+  }
+
+  .trip-ribbon:hover {
+    background: var(--primary);
+    color: var(--text-inverse);
+  }
+
+  .trip-ribbon-dot {
+    width: 5px;
+    height: 5px;
+    border-radius: var(--radius-full);
+    background-color: currentColor;
+    flex-shrink: 0;
+  }
+
+  .trip-ribbon-text {
+    overflow: hidden;
+    text-overflow: ellipsis;
   }
 
   .entries {

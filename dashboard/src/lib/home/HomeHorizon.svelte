@@ -4,6 +4,7 @@
   import Icon from "$lib/Icon.svelte";
   import { contextLink, entryReaderLink, kindConfig } from "$lib/calendar/types";
   import type { CalendarContext, CalendarEntry } from "$lib/api";
+  import { inspectorStore } from "$lib/inspector/inspector.svelte";
 
   let {
     contexts,
@@ -74,9 +75,20 @@
         {#each entries.slice(0, ENTRY_LIMIT) as entry (entry.id)}
           {@const proximity = getProximity(entry)}
           <li>
-            <!-- Reader, not the edit form: from Home you want to know what this
-                 is and what it links to, not to move it. -->
-            <a href={entryReaderLink(entry)}>
+            <button
+              type="button"
+              class="entry-row-action"
+              onclick={() => inspectorStore.inspectEvent({
+                id: entry.id,
+                title: entry.title,
+                startsAt: entry.starts_at,
+                endsAt: entry.ends_at,
+                allDay: entry.all_day,
+                location: entry.location ?? undefined,
+                commitment: entry.commitment,
+              })}
+              title="Inspect event details"
+            >
               <time>{shortDate(entry.starts_at)}</time>
               <i
                 style={`--entry-color: ${kindConfig(entry.kind).color}`}
@@ -95,7 +107,7 @@
                 <span class="when">{entryTime(entry)}</span>
                 {#if entry.location}<span class="where">{entry.location}</span>{/if}
               </small>
-            </a>
+            </button>
           </li>
         {/each}
       </ol>
@@ -132,15 +144,26 @@
     border-top: 1px solid var(--card-border);
   }
 
-  .entries a {
+  .entries .entry-row-action {
     display: grid;
     grid-template-columns: 3.5rem auto minmax(0, 1fr) auto;
     align-items: baseline;
     gap: 0.6rem;
-    padding: 0.4rem 0.1rem;
+    padding: 0.45rem 0.25rem;
+    width: 100%;
+    border: none;
+    background: transparent;
+    text-align: left;
+    cursor: pointer;
+    border-radius: var(--radius-sm);
+    transition: background 0.15s ease;
   }
 
-  .entries a:hover strong {
+  .entries .entry-row-action:hover {
+    background: var(--surface);
+  }
+
+  .entries .entry-row-action:hover strong {
     color: var(--primary);
   }
 
@@ -282,7 +305,7 @@
   }
 
   @media (width < 38rem) {
-    .entries a {
+    .entries .entry-row-action {
       grid-template-columns: 3.25rem auto minmax(0, 1fr);
       row-gap: 0.1rem;
       min-height: 3rem;

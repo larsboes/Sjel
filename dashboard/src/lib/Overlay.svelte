@@ -20,6 +20,31 @@
     children: Snippet;
   } = $props();
 
+  let touchStartY = 0;
+  let touchDeltaY = $state(0);
+
+  function handleTouchStart(e: TouchEvent) {
+    if (e.touches.length === 1) {
+      touchStartY = e.touches[0].clientY;
+    }
+  }
+
+  function handleTouchMove(e: TouchEvent) {
+    if (e.touches.length === 1) {
+      const delta = e.touches[0].clientY - touchStartY;
+      if (delta > 0) {
+        touchDeltaY = delta;
+      }
+    }
+  }
+
+  function handleTouchEnd() {
+    if (touchDeltaY > 90 && !busy) {
+      onClose();
+    }
+    touchDeltaY = 0;
+  }
+
   const titleId = `overlay-title-${Math.random().toString(36).slice(2, 9)}`;
 </script>
 
@@ -30,13 +55,24 @@
        particular is the same code, moved rather than rewritten. -->
   <div
     class="sheet"
-    style={`--overlay-width: ${width}`}
+    style={`--overlay-width: ${width}; ${touchDeltaY > 0 ? `transform: translateY(${touchDeltaY}px); transition: none;` : ''}`}
     use:modal={{ onClose, canClose: () => !busy }}
     role="dialog"
     aria-modal="true"
     aria-labelledby={titleId}
     tabindex="-1"
   >
+    <!-- svelte-ignore a11y_no_static_element_interactions -->
+    <div
+      class="mobile-drag-pill-wrap"
+      ontouchstart={handleTouchStart}
+      ontouchmove={handleTouchMove}
+      ontouchend={handleTouchEnd}
+      aria-hidden="true"
+    >
+      <div class="mobile-drag-pill"></div>
+    </div>
+
     <div class="heading">
       <div>
         {#if eyebrow}<p class="eyebrow">{eyebrow}</p>{/if}
@@ -58,6 +94,7 @@
     align-items: center;
     justify-content: center;
     padding: 20px;
+    overscroll-behavior: contain;
   }
 
   .backdrop {
@@ -75,12 +112,33 @@
     position: relative;
     width: min(var(--overlay-width), 100%);
     max-height: 90vh;
+    max-height: 90dvh;
     overflow-y: auto;
+    -webkit-overflow-scrolling: touch;
+    overscroll-behavior: contain;
     padding: 24px;
     border: 1px solid var(--card-border);
     border-radius: 14px;
     background: var(--card-bg);
     box-shadow: 0 16px 48px rgba(0, 0, 0, 0.35);
+    transition: transform 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+  }
+
+  .mobile-drag-pill-wrap {
+    display: none;
+    width: 100%;
+    padding: 0 0 12px;
+    cursor: grab;
+    touch-action: pan-y;
+    justify-content: center;
+    align-items: center;
+  }
+
+  .mobile-drag-pill {
+    width: 36px;
+    height: 4px;
+    border-radius: 9999px;
+    background: var(--card-border);
   }
 
   .sheet:focus {
@@ -127,8 +185,21 @@
   }
 
   @media (max-width: 560px) {
+    .overlay {
+      padding: 0;
+      align-items: flex-end;
+    }
+
+    .mobile-drag-pill-wrap {
+      display: flex;
+    }
+
     .sheet {
-      padding: 20px;
+      padding: 14px 20px 20px;
+      padding-bottom: max(20px, env(safe-area-inset-bottom, 20px));
+      border-radius: 18px 18px 0 0;
+      max-height: 85dvh;
+      border-bottom: none;
     }
   }
 </style>

@@ -22,6 +22,7 @@
   import {
     axonStatus,
     calendar,
+    trips,
     type CalendarCommitment,
     type CalendarContext,
     type CalendarEntry,
@@ -32,7 +33,9 @@
     type CalendarRhythm,
     type CalendarUpdateContext,
     type CalendarUpdateEntry,
+    type TripPlan,
   } from "$lib/api";
+  import { inspectorStore } from "$lib/inspector/inspector.svelte";
 
   const MONTH_YEAR = new Intl.DateTimeFormat("en-GB", { month: "long", year: "numeric" });
   const DAY_MONTH = new Intl.DateTimeFormat("en-GB", { day: "numeric", month: "long" });
@@ -51,6 +54,7 @@
   let entries = $state<CalendarEntry[]>([]);
   let contexts = $state<CalendarContext[]>([]);
   let rhythms = $state<CalendarRhythm[]>([]);
+  let tripPlans = $state<TripPlan[]>([]);
   // The capability's own feasibility verdict for the visible range. Fetched
   // rather than recomputed here: which days are genuinely free is calendar's
   // domain, and a second implementation in the UI would drift from it.
@@ -155,7 +159,7 @@
       // over. A failure here is not fatal on its own: the requests below produce
       // the real, specific error.
       await axonStatus.start("calendar").catch(() => undefined);
-      const [nextEntries, nextContexts, nextRhythms, nextWindows, nextGoogleExports] = await Promise.all([
+      const [nextEntries, nextContexts, nextRhythms, nextWindows, nextGoogleExports, nextTrips] = await Promise.all([
         calendar.entries.list(from, to),
         calendar.contexts.list(from, to),
         calendar.rhythms.list(),
@@ -165,6 +169,7 @@
         // Export availability is useful in the editor, never required to
         // render the calendar itself.
         calendar.google.exports().catch(() => []),
+        trips.list().catch(() => []),
       ]);
       if (token !== loadToken) return;
       entries = nextEntries;
@@ -172,6 +177,7 @@
       rhythms = nextRhythms;
       freeDays = nextWindows ? freeDaysOf(nextWindows.windows) : new Set();
       googleExports = new Map(nextGoogleExports.map((optIn) => [optIn.entry_id, optIn]));
+      tripPlans = nextTrips;
     } catch (cause) {
       if (token === loadToken) error = String(cause);
     } finally {
@@ -279,8 +285,17 @@
   /// a ticket link you could not click. The shared reader already renders every
   /// other kind of item, so a calendar entry goes there too and keeps `Edit`
   /// one click away (`?entry=` still opens this form, which is how it gets back).
-  function onSelectEntry(entry: CalendarEntry, _day: CalendarDay) {
-    void goto(entryReaderLink(entry));
+  function onSelectEntry(entry: CalendarEntry, day: CalendarDay) {
+    inspectorStore.inspectEvent({
+      id: entry.id,
+      title: entry.title,
+      startsAt: entry.starts_at,
+      endsAt: entry.ends_at,
+      allDay: entry.all_day,
+      location: entry.location ?? undefined,
+      commitment: entry.commitment,
+      onEdit: () => openForm(day, { entry }),
+    });
   }
 
   function onSelectRange(startDate: string, endDate: string) {
@@ -397,6 +412,7 @@
     {:else if view === "month"}
       <MonthGrid
         {days}
+        trips={tripPlans}
         {onSelectDay}
         {onSelectEntry}
         {onSelectRange}

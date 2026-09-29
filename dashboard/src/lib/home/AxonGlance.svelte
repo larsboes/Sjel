@@ -18,6 +18,7 @@
   } from '$lib/api';
   import { assistantStore } from '$lib/assistant/assistant.svelte';
   import { omniStore } from '$lib/omni/omni.svelte';
+  import { inspectorStore } from '$lib/inspector/inspector.svelte';
 
   let {
     entries = [],
@@ -31,6 +32,15 @@
 
   const now = new Date();
   const todayStr = now.toISOString().slice(0, 10);
+  const currentHour = now.getHours();
+
+  const greeting = $derived(
+    currentHour < 12
+      ? "Good morning"
+      : currentHour < 18
+        ? "Good afternoon"
+        : "Good evening"
+  );
 
   // Background life signals loaded gracefully on mount
   let people = $state<Entity[]>([]);
@@ -62,15 +72,18 @@
       .sort((a, b) => a.starts_at.localeCompare(b.starts_at))
   );
 
+  const nextEntry = $derived(todayEntries[0] ?? null);
+  const upcomingTrip = $derived(plans[0] ?? null);
+  const tripDestination = $derived(
+    upcomingTrip?.destinations?.[0]?.name ?? upcomingTrip?.title ?? "Travel"
+  );
+  const tripDates = $derived(
+    upcomingTrip ? `${upcomingTrip.date_start} – ${upcomingTrip.date_end}` : "Upcoming"
+  );
 
-  // System stats
+  // System stats (discrete footnote)
   const cpuTemp = $derived(
     macmon?.temp?.cpu_temp_avg != null ? `${macmon.temp.cpu_temp_avg.toFixed(0)}°C` : null
-  );
-  const ramUsage = $derived(
-    macmon?.memory?.ram_usage != null && macmon.memory.ram_total != null
-      ? `${(macmon.memory.ram_usage / 1073741824).toFixed(1)} / ${(macmon.memory.ram_total / 1073741824).toFixed(0)} GB`
-      : null
   );
 
   const passingLayout = $derived(layouts.find((l) => l.pass) ?? layouts[0] ?? null);
@@ -79,241 +92,448 @@
       ? `${(burn.currencies[0].monthly_cents / 100).toFixed(0)} ${burn.currencies[0].currency}/mo`
       : null
   );
+
+  function handleInspectNextEvent() {
+    if (!nextEntry) return;
+    inspectorStore.inspectEvent({
+      id: nextEntry.id,
+      title: nextEntry.title,
+      startsAt: nextEntry.starts_at,
+      endsAt: nextEntry.ends_at,
+      allDay: nextEntry.all_day,
+      commitment: nextEntry.commitment,
+    });
+  }
+
+  function handleInspectTrip() {
+    if (!upcomingTrip) return;
+    inspectorStore.inspectTrip({
+      id: upcomingTrip.id,
+      title: upcomingTrip.title,
+      destination: tripDestination,
+      dates: tripDates,
+    });
+  }
 </script>
 
-<aside class="axon-glance card" aria-label="Sjel Integrated Life Cockpit">
-  <div class="glance-top">
-    <div class="glance-title">
-      <span class="live-dot"></span>
-      <Icon name="sparkles" size={14} />
-      <strong>Sjel Life Cockpit</strong>
-      <span class="sep">·</span>
-      <span class="date-context">
-        {now.toLocaleDateString("en-GB", { weekday: "short", day: "numeric", month: "short" })}
-      </span>
+<aside class="life-pulse card" aria-label="Sjel Life Pulse">
+  <!-- Pulse Header & Ambient Greeting -->
+  <div class="pulse-top">
+    <div class="greeting-wrap">
+      <div class="pulse-dot-wrap">
+        <span class="live-dot"></span>
+      </div>
+      <div>
+        <h3 class="greeting-text">{greeting}</h3>
+        <p class="pulse-status">
+          {#if nextEntry}
+            <span>Next: <strong>{nextEntry.title}</strong> at {nextEntry.starts_at.slice(11, 16) || "today"}</span>
+          {:else if upcomingTrip}
+            <span>Upcoming: <strong>{upcomingTrip.title}</strong> to {tripDestination}</span>
+          {:else}
+            <span>Household rhythm calm · All signals steady</span>
+          {/if}
+        </p>
+      </div>
     </div>
 
-    <div class="glance-actions">
-      {#if cpuTemp || ramUsage}
-        <a class="hw-chip mono" href={link('/systems')} title="View live system monitor">
-          <Icon name="activity" size={12} />
-          {#if cpuTemp}<span>{cpuTemp}</span>{/if}
-          {#if cpuTemp && ramUsage}<span class="sep">·</span>{/if}
-          {#if ramUsage}<span>{ramUsage}</span>{/if}
-        </a>
-      {/if}
-
+    <div class="pulse-actions">
       <button
         type="button"
         class="ask-chip"
         onclick={() => assistantStore.openDrawer()}
-        title="Open Sjel Assistant"
+        title="Ask Sjel Assistant"
       >
-        <Icon name="sparkles" size={12} />
-        <span>Ask</span>
+        <Icon name="sparkles" size={13} />
+        <span>Ask Sjel</span>
+      </button>
+
+      <button
+        type="button"
+        class="search-chip"
+        onclick={() => omniStore.open()}
+        title="Search across Sjel (⌘K)"
+      >
+        <Icon name="search" size={13} />
+        <kbd class="kbd-hint">⌘K</kbd>
       </button>
     </div>
   </div>
 
-  <!-- Connected Life Domains Mesh (Pillars Ribbon) -->
-  <nav class="cockpit-ribbon" aria-label="Life pillars navigation">
-    <a class="pillar-pill" href={link('/calendar')}>
-      <Icon name="calendar" size={13} />
-      <span class="pillar-label">Schedule</span>
-      <span class="pillar-count mono">{todayEntries.length} today</span>
-    </a>
-
-    <a class="pillar-pill" href={link('/people')}>
-      <Icon name="users" size={13} />
-      <span class="pillar-label">People</span>
-      <span class="pillar-count mono">{people.length || '–'}</span>
-    </a>
-
-    <a class="pillar-pill" href={link('/travel')}>
-      <Icon name="train" size={13} />
-      <span class="pillar-label">Travel</span>
-      <span class="pillar-count mono">{plans.length} plans</span>
-    </a>
-
-    <a class="pillar-pill" href={link('/finance')}>
-      <Icon name="wallet" size={13} />
-      <span class="pillar-label">Finance</span>
-      <span class="pillar-count mono">{burnMonthly ?? '–'}</span>
-    </a>
-
-    <a class="pillar-pill" href={link('/interior')}>
-      <Icon name="layout" size={13} />
-      <span class="pillar-label">Interior</span>
-      <span class="pillar-count mono">{passingLayout?.pass ? 'Passes' : 'Plans'}</span>
-    </a>
-
-    <a class="pillar-pill" href={link('/feed')}>
-      <Icon name="feed" size={13} />
-      <span class="pillar-label">Feed</span>
-      <span class="pillar-count mono">{feedItems.length} items</span>
-    </a>
-
+  <!-- Connected Life Synapses Mesh -->
+  <div class="synapses-grid">
+    <!-- Schedule Synapse -->
     <button
       type="button"
-      class="pillar-pill search-pill"
-      onclick={() => omniStore.open()}
-      aria-label="Open Omni-Search"
+      class="synapse-card"
+      onclick={nextEntry ? handleInspectNextEvent : undefined}
     >
-      <Icon name="search" size={13} />
-      <span class="pillar-label">Search</span>
-      <kbd class="pillar-kbd">⌘K</kbd>
+      <div class="synapse-head">
+        <span class="synapse-icon"><Icon name="calendar" size={14} /></span>
+        <span class="synapse-tag">Schedule</span>
+      </div>
+      <div class="synapse-body">
+        <strong class="synapse-title">
+          {todayEntries.length > 0 ? `${todayEntries.length} event${todayEntries.length > 1 ? "s" : ""} today` : "Open agenda"}
+        </strong>
+        <span class="synapse-meta">
+          {nextEntry ? nextEntry.title : "No scheduled conflicts"}
+        </span>
+      </div>
     </button>
-  </nav>
+
+    <!-- Travel & Horizons Synapse -->
+    <button
+      type="button"
+      class="synapse-card"
+      onclick={upcomingTrip ? handleInspectTrip : undefined}
+    >
+      <div class="synapse-head">
+        <span class="synapse-icon"><Icon name="train" size={14} /></span>
+        <span class="synapse-tag">Travel</span>
+      </div>
+      <div class="synapse-body">
+        <strong class="synapse-title">
+          {upcomingTrip ? tripDestination : "No active trip"}
+        </strong>
+        <span class="synapse-meta">
+          {plans.length > 0 ? `${plans.length} plan${plans.length > 1 ? "s" : ""} in motion` : "Ready to plan"}
+        </span>
+      </div>
+    </button>
+
+    <!-- People & Presence Synapse -->
+    <a class="synapse-card" href={link("/people")}>
+      <div class="synapse-head">
+        <span class="synapse-icon"><Icon name="users" size={14} /></span>
+        <span class="synapse-tag">People</span>
+      </div>
+      <div class="synapse-body">
+        <strong class="synapse-title">
+          {located.length > 0 ? `${located.length} nearby` : "Household ring"}
+        </strong>
+        <span class="synapse-meta">
+          {people.length > 0 ? `${people.length} entities connected` : "Address book"}
+        </span>
+      </div>
+    </a>
+
+    <!-- Finance & Calm Synapse -->
+    <a class="synapse-card" href={link("/finance")}>
+      <div class="synapse-head">
+        <span class="synapse-icon"><Icon name="wallet" size={14} /></span>
+        <span class="synapse-tag">Finance</span>
+      </div>
+      <div class="synapse-body">
+        <strong class="synapse-title">
+          {burnMonthly ?? "Ledger active"}
+        </strong>
+        <span class="synapse-meta">Burn rate balanced</span>
+      </div>
+    </a>
+  </div>
+
+  <!-- Ambient Footer: Discreet Node & Health Indicator -->
+  <div class="pulse-footer">
+    <div class="footer-left">
+      <span class="ambient-pill">
+        <span class="ambient-indicator"></span>
+        <span>Local node active</span>
+      </span>
+      {#if cpuTemp}
+        <a class="system-link" href={link("/systems")}>
+          <Icon name="activity" size={11} />
+          <span>{cpuTemp}</span>
+        </a>
+      {/if}
+    </div>
+
+    <div class="footer-right">
+      {#if passingLayout}
+        <a class="context-link" href={link("/interior")}>
+          <Icon name="layout" size={12} />
+          <span>Interior: {passingLayout.name}</span>
+        </a>
+      {/if}
+      {#if feedItems.length > 0}
+        <a class="context-link" href={link("/feed")}>
+          <Icon name="feed" size={12} />
+          <span>{feedItems.length} unread</span>
+        </a>
+      {/if}
+    </div>
+  </div>
 </aside>
 
 <style>
-  .axon-glance {
+  .life-pulse {
     position: relative;
     overflow: hidden;
     padding: var(--space-4) var(--space-5);
     margin-bottom: var(--space-4);
     background:
-      radial-gradient(120% 90% at 100% 0%, var(--primary-soft) 0%, transparent 60%),
+      radial-gradient(130% 100% at 100% 0%, var(--primary-soft) 0%, transparent 65%),
+      radial-gradient(90% 80% at 0% 100%, var(--surface) 0%, transparent 60%),
       var(--card-bg);
     border: 1px solid var(--card-border);
     border-radius: var(--radius-lg);
     box-shadow: var(--card-shadow);
     display: flex;
     flex-direction: column;
-    gap: var(--space-3);
+    gap: var(--space-4);
   }
 
-  .glance-top {
+  .pulse-top {
     display: flex;
     justify-content: space-between;
     align-items: center;
+    gap: var(--space-4);
   }
 
-  .glance-title {
+  .greeting-wrap {
     display: flex;
     align-items: center;
-    gap: var(--space-2);
-    font-size: var(--text-xs);
-    color: var(--primary);
+    gap: var(--space-3);
   }
 
-  .date-context {
-    color: var(--text-tertiary);
-    font-size: var(--text-2xs);
+  .pulse-dot-wrap {
+    display: grid;
+    place-items: center;
   }
 
   .live-dot {
-    width: 6px;
-    height: 6px;
-    border-radius: 50%;
+    width: 8px;
+    height: 8px;
+    border-radius: var(--radius-full);
     background-color: var(--primary);
-    box-shadow: 0 0 6px var(--primary);
+    box-shadow: 0 0 10px var(--primary);
+    animation: gentle-pulse 3s infinite ease-in-out;
   }
 
-  .glance-actions {
+  @keyframes gentle-pulse {
+    0%, 100% { opacity: 1; transform: scale(1); }
+    50% { opacity: 0.6; transform: scale(0.92); }
+  }
+
+  .greeting-text {
+    margin: 0;
+    font-size: var(--text-md);
+    font-weight: 600;
+    letter-spacing: -0.01em;
+    color: var(--text-primary);
+  }
+
+  .pulse-status {
+    margin: 0.1rem 0 0;
+    font-size: var(--text-xs);
+    color: var(--text-secondary);
+  }
+
+  .pulse-status strong {
+    color: var(--text-primary);
+    font-weight: 600;
+  }
+
+  .pulse-actions {
     display: flex;
     align-items: center;
     gap: var(--space-2);
-  }
-
-  .hw-chip {
-    display: inline-flex;
-    align-items: center;
-    gap: 0.3rem;
-    font-size: var(--text-2xs);
-    color: var(--text-tertiary);
-    background-color: var(--surface);
-    padding: 0.15rem 0.5rem;
-    border-radius: var(--radius-sm);
-    text-decoration: none;
-    border: 1px solid transparent;
-    transition: border-color 0.15s ease, color 0.15s ease;
-  }
-
-  .hw-chip:hover {
-    border-color: var(--card-border);
-    color: var(--text-secondary);
   }
 
   .ask-chip {
     display: inline-flex;
     align-items: center;
-    gap: 0.3rem;
-    font-size: var(--text-2xs);
+    gap: var(--space-2);
+    font-size: var(--text-xs);
     font-weight: 600;
     color: var(--primary);
     background-color: var(--primary-soft);
-    padding: 0.15rem 0.5rem;
-    border-radius: var(--radius-sm);
+    padding: 0.35rem 0.75rem;
+    border-radius: var(--radius-full);
     border: 1px solid transparent;
     cursor: pointer;
-    transition: background-color 0.15s ease, color 0.15s ease;
+    transition: all 0.15s cubic-bezier(0.16, 1, 0.3, 1);
   }
 
   .ask-chip:hover {
     background-color: var(--primary);
     color: var(--text-inverse);
+    transform: translateY(-1px);
   }
 
-  .sep {
-    opacity: 0.5;
+  .ask-chip:active {
+    transform: scale(0.96);
   }
 
-  .cockpit-ribbon {
-    display: flex;
-    align-items: center;
-    gap: var(--space-2);
-    overflow-x: auto;
-    padding-top: var(--space-2);
-    border-top: 1px solid var(--card-border);
-    scrollbar-width: none;
-  }
-
-  .cockpit-ribbon::-webkit-scrollbar {
-    display: none;
-  }
-
-  .pillar-pill {
+  .search-chip {
     display: inline-flex;
     align-items: center;
-    gap: 0.4rem;
-    padding: 0.25rem 0.55rem;
-    border-radius: var(--radius-sm);
-    background-color: var(--surface);
+    gap: var(--space-2);
+    font-size: var(--text-xs);
     color: var(--text-secondary);
-    font-size: var(--text-2xs);
-    font-weight: 500;
-    text-decoration: none;
-    white-space: nowrap;
-    border: 1px solid transparent;
-    cursor: pointer;
-    transition: background-color 0.12s ease, border-color 0.12s ease, color 0.12s ease;
-  }
-
-  .pillar-pill:hover {
-    background-color: var(--card-bg);
-    border-color: var(--card-border);
-    color: var(--primary);
-  }
-
-  .pillar-count {
-    color: var(--text-tertiary);
-    font-size: var(--text-2xs);
-  }
-
-  .search-pill {
-    margin-left: auto;
-    background-color: var(--primary-soft);
-    color: var(--primary);
-  }
-
-  .pillar-kbd {
-    font-size: 0.6rem;
-    font-family: inherit;
-    padding: 0.05rem 0.25rem;
-    border-radius: var(--radius-sm);
-    background-color: var(--card-bg);
+    background-color: var(--surface);
+    padding: 0.35rem 0.6rem;
+    border-radius: var(--radius-full);
     border: 1px solid var(--card-border);
+    cursor: pointer;
+    transition: all 0.15s ease;
+  }
+
+  .search-chip:hover {
+    border-color: var(--card-border-hover);
+    color: var(--text-primary);
+  }
+
+  .kbd-hint {
+    font-size: var(--text-2xs);
+    font-family: inherit;
+    color: var(--text-tertiary);
+  }
+
+  /* Connected Synapses Grid */
+  .synapses-grid {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: var(--space-3);
+  }
+
+  .synapse-card {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-2);
+    padding: var(--space-3) var(--space-4);
+    border-radius: var(--radius-md);
+    background: var(--surface);
+    border: 1px solid var(--card-border);
+    text-decoration: none;
+    text-align: left;
+    cursor: pointer;
+    transition: all 0.18s cubic-bezier(0.16, 1, 0.3, 1);
+  }
+
+  .synapse-card:hover {
+    background: var(--card-bg);
+    border-color: var(--card-border-hover);
+    transform: translateY(-2px);
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.05);
+  }
+
+  .synapse-card:active {
+    transform: scale(0.98);
+  }
+
+  .synapse-head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+  }
+
+  .synapse-icon {
     color: var(--primary);
+    display: grid;
+    place-items: center;
+  }
+
+  .synapse-tag {
+    font-size: var(--text-2xs);
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    color: var(--text-tertiary);
+  }
+
+  .synapse-body {
+    display: flex;
+    flex-direction: column;
+    gap: 0.15rem;
+  }
+
+  .synapse-title {
+    font-size: var(--text-sm);
+    font-weight: 600;
+    color: var(--text-primary);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  .synapse-meta {
+    font-size: var(--text-2xs);
+    color: var(--text-secondary);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  /* Pulse Footer */
+  .pulse-footer {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding-top: var(--space-2);
+    border-top: 1px solid var(--card-border);
+    font-size: var(--text-2xs);
+    color: var(--text-tertiary);
+  }
+
+  .footer-left, .footer-right {
+    display: flex;
+    align-items: center;
+    gap: var(--space-3);
+  }
+
+  .ambient-pill {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.35rem;
+    color: var(--text-secondary);
+  }
+
+  .ambient-indicator {
+    width: 5px;
+    height: 5px;
+    border-radius: var(--radius-full);
+    background-color: var(--success);
+  }
+
+  .system-link, .context-link {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.3rem;
+    color: var(--text-tertiary);
+    text-decoration: none;
+    transition: color 0.15s ease;
+  }
+
+  .system-link:hover, .context-link:hover {
+    color: var(--primary);
+  }
+
+  @media (max-width: 768px) {
+    .synapses-grid {
+      grid-template-columns: repeat(2, 1fr);
+    }
+  }
+
+  @media (max-width: 480px) {
+    .pulse-top {
+      flex-direction: column;
+      align-items: flex-start;
+    }
+
+    .pulse-actions {
+      width: 100%;
+      justify-content: flex-end;
+    }
+
+    .synapses-grid {
+      grid-template-columns: 1fr;
+    }
+
+    .pulse-footer {
+      flex-direction: column;
+      align-items: flex-start;
+      gap: var(--space-2);
+    }
   }
 </style>

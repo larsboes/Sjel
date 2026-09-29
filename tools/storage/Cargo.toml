@@ -34,3 +34,6 @@ toml.workspace = true
 #
 # No clap, for the reason capabilities/host-net/Cargo.toml already states: four verbs and
 # six flags is a match statement, and the workspace has no clap today.
+
+[lints]
+workspace = true

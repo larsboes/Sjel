@@ -30,3 +30,6 @@ toml.workspace = true
 # No clap. Four verbs and one flag is a match statement; the workspace has no clap today and
 # a CLI parser is not worth being the crate that introduces one
 # (CONTRIBUTING.md#cargo-and-bun-are-the-build-path, "name what it buys").
+
+[lints]
+workspace = true

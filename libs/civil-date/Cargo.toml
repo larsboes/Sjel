@@ -15,3 +15,6 @@ path = "src/lib.rs"
 # rather than take chrono, and every one of them said so in a comment. A shared
 # home that arrived with a date dependency would undo the thing they were buying.
 [dependencies]
+
+[lints]
+workspace = true

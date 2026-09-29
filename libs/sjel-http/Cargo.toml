@@ -17,3 +17,6 @@ path = "src/lib.rs"
 # `reqwest::Client` sites in the workspace are all tests plus sjel-status' proxy,
 # and none of them build a client with options worth centralising.
 reqwest = { workspace = true, features = ["blocking"] }
+
+[lints]
+workspace = true

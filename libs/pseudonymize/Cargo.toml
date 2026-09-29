@@ -20,3 +20,6 @@ sjel-extraction = { path = "../extraction", default-features = false }
 serde = { workspace = true, features = ["derive"] }
 serde_json.workspace = true
 sha2.workspace = true
+
+[lints]
+workspace = true

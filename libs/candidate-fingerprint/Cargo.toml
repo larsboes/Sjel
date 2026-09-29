@@ -15,3 +15,6 @@ path = "src/lib.rs"
 # The hash itself. Named here rather than by each caller so the two consumers
 # cannot end up on different versions of the digest that keys their live links.
 sha2.workspace = true
+
+[lints]
+workspace = true

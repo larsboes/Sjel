@@ -57,3 +57,6 @@ thiserror.workspace = true
 [[bin]]
 name = "trips"
 path = "src/bin/trips-cli.rs"
+
+[lints]
+workspace = true

@@ -58,3 +58,6 @@ rayon = "1"
 # `ServiceExt::oneshot`, damit der Origin-Test den verdrahteten Router ohne Listener und
 # ohne Port fahren kann. Dasselbe Muster nutzt capabilities/sjel-status bereits.
 tower = { workspace = true, features = ["util"] }
+
+[lints]
+workspace = true

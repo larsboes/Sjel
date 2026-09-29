@@ -14,3 +14,6 @@ path = "src/lib.rs"
 # Deliberately zero dependencies: everything here is std-only, so consuming this
 # crate never changes any capability's dependency resolution.
 [dependencies]
+
+[lints]
+workspace = true

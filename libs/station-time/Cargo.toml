@@ -22,3 +22,6 @@ path = "src/lib.rs"
 # needs real zone rules, not offset guesses.
 chrono.workspace = true
 chrono-tz = "0.10"
+
+[lints]
+workspace = true

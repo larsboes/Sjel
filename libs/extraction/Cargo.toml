@@ -55,3 +55,6 @@ xberg = { version = "=1.0.14", features = ["html", "pdf"], optional = true }
 # drivers are compiled in, so trimming the feature set here would silently give
 # xberg a runtime with fewer drivers than the one it was measured on.
 tokio = { workspace = true, features = ["full"], optional = true }
+
+[lints]
+workspace = true

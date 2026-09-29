@@ -12,3 +12,6 @@ name = "axon-fda-launcher"
 path = "src/main.rs"
 
 # No dependencies. std::process is the whole job.
+
+[lints]
+workspace = true

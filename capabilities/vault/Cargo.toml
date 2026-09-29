@@ -56,3 +56,6 @@ tower-http = { workspace = true, features = ["cors"] }
 # tokio `net`; only the CLI's Obsidian writer reaches out, and its tests use a
 # std-only loopback mock (src/obsidian.rs, `mock`).
 tower = { workspace = true, features = ["util"] }
+
+[lints]
+workspace = true

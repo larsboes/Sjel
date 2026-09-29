@@ -47,3 +47,6 @@ schemars = "1.2.2"
 # The HTTP tests drive the wired router over a real socket, because the origin
 # guard is a layer and a handler called directly would skip it.
 reqwest = { workspace = true, features = ["json"] }
+
+[lints]
+workspace = true

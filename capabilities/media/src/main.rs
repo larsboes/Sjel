@@ -6,7 +6,7 @@ use media::{audit, index, verify_mirror, volume_uuid};
 
 fn usage() {
     eprintln!("media — exact-byte index, ingest gate and mirror verification\n\
-        usage:\n  media index --root PATH [--db PATH]\n  media audit --root PATH --sample N [--db PATH]\n  media ingest --staging PATH --library PATH [--apply] [--prune] [--db PATH]\n  media classify (--digest SHA256 | --digests-file PATH) [--db PATH]\n  media verify-mirror --left-root PATH --left-uuid UUID --right-root PATH --right-uuid UUID [--db PATH]\n  media status [--db PATH]\n\n\
+        usage:\n  media volume-id --root PATH\n  media index --root PATH --uuid UUID [--db PATH]\n  media audit --root PATH --uuid UUID --sample N [--db PATH]\n  media ingest --staging PATH --library PATH --uuid UUID [--apply] [--prune] [--db PATH]\n  media classify (--digest SHA256 | --digests-file PATH) [--db PATH]\n  media verify-mirror --left-root PATH --left-uuid UUID --right-root PATH --right-uuid UUID [--db PATH]\n  media status [--db PATH]\n\n\
         ingest is a dry run unless --apply is set. --prune additionally removes staging/originals\n\
         only after every new import verifies; neither verb deletes library content.");
 }
@@ -54,10 +54,14 @@ fn allowed(args: &[String], keys: &[&str], flags: &[&str]) -> Result<()> {
 fn rooted(args: &[String], key: &str) -> Result<PathBuf> {
     Ok(PathBuf::from(required(args, key)?))
 }
-fn mounted(root: &Path, expected: Option<&str>) -> Result<String> {
+fn mounted(root: &Path, expected: &str) -> Result<String> {
     let actual = volume_uuid(root)?;
-    if expected.is_some_and(|id| id != actual) {
-        return Err(format!("{} is not the registered volume ({actual})", root.display()).into());
+    if expected.to_ascii_uppercase() != actual {
+        return Err(format!(
+            "{} has volume UUID {actual}, expected {expected}; refusing to use this mount",
+            root.display()
+        )
+        .into());
     }
     Ok(actual)
 }
@@ -71,9 +75,13 @@ fn run(args: &[String]) -> Result<i32> {
         return Ok(0);
     }
     let (keys, flags): (&[&str], &[&str]) = match verb.as_str() {
-        "index" => (&["--root", "--db"], &[]),
-        "audit" => (&["--root", "--sample", "--db"], &[]),
-        "ingest" => (&["--staging", "--library", "--db"], &["--apply", "--prune"]),
+        "volume-id" => (&["--root"], &[]),
+        "index" => (&["--root", "--uuid", "--db"], &[]),
+        "audit" => (&["--root", "--uuid", "--sample", "--db"], &[]),
+        "ingest" => (
+            &["--staging", "--library", "--uuid", "--db"],
+            &["--apply", "--prune"],
+        ),
         "classify" => (&["--digest", "--digests-file", "--db"], &[]),
         "verify-mirror" => (
             &[
@@ -92,6 +100,24 @@ fn run(args: &[String]) -> Result<i32> {
         }
     };
     allowed(opts, keys, flags)?;
+    if verb == "volume-id" {
+        let root = rooted(opts, "--root")?;
+        println!("{}", serde_json::json!({"uuid": volume_uuid(&root)?}));
+        return Ok(0);
+    }
+    // Mount identity and required arguments are checked before open_pool can migrate
+    // the shared database. A removed drive must not be registered as the host volume.
+    let mounted_uuid = match verb.as_str() {
+        "index" | "audit" => Some(mounted(
+            &rooted(opts, "--root")?,
+            &required(opts, "--uuid")?,
+        )?),
+        "ingest" => Some(mounted(
+            &rooted(opts, "--library")?,
+            &required(opts, "--uuid")?,
+        )?),
+        _ => None,
+    };
     let db = option(opts, "--db")?
         .map(PathBuf::from)
         .unwrap_or_else(sjel_config::database_path);
@@ -99,13 +125,15 @@ fn run(args: &[String]) -> Result<i32> {
     match verb.as_str() {
         "index" => {
             let root = rooted(opts, "--root")?;
-            let uuid = mounted(&root, None)?;
+            let uuid = mounted_uuid
+                .as_deref()
+                .ok_or("index needs a mounted volume")?;
             let label = root
                 .file_name()
                 .and_then(|s| s.to_str())
                 .unwrap_or("library");
-            let hashed = index(&ledger, &root, &uuid, label)?;
-            let report = audit(&ledger, &root, &uuid, 0)?;
+            let hashed = index(&ledger, &root, uuid, label)?;
+            let report = audit(&ledger, &root, uuid, 0)?;
             println!(
                 "{}",
                 serde_json::json!({"uuid":uuid,"hashed":hashed,"disk_files":report.disk_files,"indexed_locations":report.indexed_locations,"discrepancies":report.disagreements})
@@ -114,9 +142,11 @@ fn run(args: &[String]) -> Result<i32> {
         }
         "audit" => {
             let root = rooted(opts, "--root")?;
-            let uuid = mounted(&root, None)?;
+            let uuid = mounted_uuid
+                .as_deref()
+                .ok_or("audit needs a mounted volume")?;
             let sample = required(opts, "--sample")?.parse()?;
-            let report = audit(&ledger, &root, &uuid, sample)?;
+            let report = audit(&ledger, &root, uuid, sample)?;
             let fail = !report.disagreements.is_empty();
             println!("{}", serde_json::to_string(&report)?);
             Ok(i32::from(fail))
@@ -127,10 +157,12 @@ fn run(args: &[String]) -> Result<i32> {
                 return Err("--prune requires --apply".into());
             }
             let library = rooted(opts, "--library")?;
-            let uuid = mounted(&library, None)?;
+            let uuid = mounted_uuid
+                .as_deref()
+                .ok_or("ingest needs a mounted volume")?;
             let staging = rooted(opts, "--staging")?;
             let pending = ledger.pending_paths(&staging.canonicalize()?.to_string_lossy())?;
-            let inventory = audit(&ledger, &library, &uuid, 0)?;
+            let inventory = audit(&ledger, &library, uuid, 0)?;
             let unexpected = inventory
                 .disagreements
                 .iter()
@@ -144,7 +176,7 @@ fn run(args: &[String]) -> Result<i32> {
             }
             if apply {
                 ledger.register(
-                    &uuid,
+                    uuid,
                     library
                         .file_name()
                         .and_then(|s| s.to_str())
@@ -156,7 +188,7 @@ fn run(args: &[String]) -> Result<i32> {
                 &IngestOptions {
                     staging: &staging,
                     library: &library,
-                    uuid: &uuid,
+                    uuid,
                     apply,
                     prune: opts.iter().any(|s| s == "--prune"),
                     fail_before_verify: false,

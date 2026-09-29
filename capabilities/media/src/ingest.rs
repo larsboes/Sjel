@@ -178,31 +178,55 @@ fn staged_hashes(
     paths: &[(String, PathBuf)],
     output: &Path,
 ) -> Result<Vec<(String, PathBuf, String, i64)>> {
-    let mut rows = Vec::new();
-    let mut tsv = OpenOptions::new()
-        .create(true)
-        .truncate(true)
-        .write(true)
-        .open(output)?;
-    writeln!(tsv, "sha256\tsize\tmtime_ns\trelpath_json")?;
-    for (rel, path) in paths {
-        let (size, mtime) = stamp(path)?;
-        let digest = hash(path)?;
-        if stamp(path)? != (size, mtime) {
-            return Err(format!("changed while hashing: {rel}").into());
+    match fs::symlink_metadata(output) {
+        Ok(meta) if !meta.file_type().is_file() => {
+            return Err("staging-hashes.tsv must be a regular file, not a symlink".into())
         }
-        writeln!(
-            tsv,
-            "{digest}\t{size}\t{mtime}\t{}",
-            serde_json::to_string(rel)?
-        )?;
-        rows.push((rel.clone(), path.clone(), digest, size));
+        Ok(_) => (),
+        Err(e) if e.kind() == std::io::ErrorKind::NotFound => (),
+        Err(e) => return Err(e.into()),
     }
-    tsv.sync_all()?;
-    if !originals.is_dir() {
-        return Err("originals disappeared".into());
+    let parent = output.parent().ok_or("hash report has no parent")?;
+    let (temp, mut tsv) = (0..10000)
+        .find_map(|n| {
+            let path = parent.join(format!(".staging-hashes-{}-{n}.tmp", std::process::id()));
+            match OpenOptions::new().write(true).create_new(true).open(&path) {
+                Ok(file) => Some(Ok((path, file))),
+                Err(e) if e.kind() == std::io::ErrorKind::AlreadyExists => None,
+                Err(e) => Some(Err(e)),
+            }
+        })
+        .ok_or("no collision-free temporary hash report")??;
+    let result = (|| -> Result<Vec<(String, PathBuf, String, i64)>> {
+        let mut rows = Vec::new();
+        writeln!(tsv, "sha256\tsize\tmtime_ns\trelpath_json")?;
+        for (rel, path) in paths {
+            let (size, mtime) = stamp(path)?;
+            let digest = hash(path)?;
+            if stamp(path)? != (size, mtime) {
+                return Err(format!("changed while hashing: {rel}").into());
+            }
+            writeln!(
+                tsv,
+                "{digest}\t{size}\t{mtime}\t{}",
+                serde_json::to_string(rel)?
+            )?;
+            rows.push((rel.clone(), path.clone(), digest, size));
+        }
+        tsv.sync_all()?;
+        if !originals.is_dir() {
+            return Err("originals disappeared".into());
+        }
+        Ok(rows)
+    })();
+    drop(tsv);
+    if result.is_err() {
+        fs::remove_file(&temp)?;
+        return result;
     }
-    Ok(rows)
+    fs::rename(&temp, output)?;
+    fs::File::open(parent)?.sync_all()?;
+    result
 }
 
 fn copy_checked(source: &Path, temp: &Path, expected: &str) -> Result<()> {
@@ -244,7 +268,17 @@ pub fn ingest(ledger: &Ledger, opts: &IngestOptions<'_>) -> Result<IngestReport>
         return Err("staging and library must not contain one another".into());
     }
     let originals = staging.join("originals");
-    let manifest = fs::read_to_string(staging.join("export-manifest.json"))?;
+    if fs::symlink_metadata(&originals)?.file_type().is_symlink() {
+        return Err("originals must be a directory, not a symlink".into());
+    }
+    let manifest_path = staging.join("export-manifest.json");
+    if fs::symlink_metadata(&manifest_path)?
+        .file_type()
+        .is_symlink()
+    {
+        return Err("export manifest must not be a symlink".into());
+    }
+    let manifest = fs::read_to_string(manifest_path)?;
     let manifest_json: serde_json::Value = serde_json::from_str(&manifest)?;
     let source = manifest_json
         .get("source")
@@ -333,6 +367,7 @@ pub fn ingest(ledger: &Ledger, opts: &IngestOptions<'_>) -> Result<IngestReport>
         if let Some(pending) = ledger.prior_unverified(&staging.to_string_lossy(), &rel, &digest)? {
             let dest = library.join(&pending);
             if dest.is_file() && hash(&dest)? == digest {
+                fs::File::open(dest.parent().ok_or("import has no parent")?)?.sync_all()?;
                 let (size_now, mtime_ns) = stamp(&dest)?;
                 if let Some(id) = id {
                     ledger.record(&Location {
@@ -434,7 +469,11 @@ pub fn ingest(ledger: &Ledger, opts: &IngestOptions<'_>) -> Result<IngestReport>
                     fs::create_dir_all(dest.parent().ok_or("import has no parent")?)?;
                     ledger.reserve_path(id, &rel, &dest_rel)?;
                     match fs::hard_link(&temp, &dest) {
-                        Ok(()) => return Ok((dest_rel, dest)),
+                        Ok(()) => {
+                            fs::File::open(dest.parent().ok_or("import has no parent")?)?
+                                .sync_all()?;
+                            return Ok((dest_rel, dest));
+                        }
                         Err(e) if e.kind() == std::io::ErrorKind::AlreadyExists => continue,
                         Err(e) => return Err(e.into()),
                     }

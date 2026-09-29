@@ -54,9 +54,10 @@ authoritative answer to whether these bytes already exist.
    verification intentionally re-hash to detect damage.
 3. **An absent volume is not a volume whose files are gone.** Availability is not liveness — the
    same distinction `capabilities/vault` draws between `/health` and `/ready`.
-4. **Identity comes from the volume UUID, never the device node.** Measured 2026-09-29: erasing
-   INTENSO renumbered it `/dev/disk10` → `/dev/disk11` in the same boot. A device path is not an
-   identity.
+4. **Identity comes from an expected volume UUID, never the device node or the path alone.**
+   Measured 2026-09-29: erasing INTENSO renumbered it `/dev/disk10` → `/dev/disk11` in the same
+   boot. An unmounted path can exist on the host filesystem, so index, audit and ingest require a
+   previously recorded `--uuid` and reject a mismatch before opening the store.
 5. **A digest is not a location.** A mirror means one digest legitimately has two paths. Keying
    files by digest alone would collapse the mirror into a single row and make verification
    impossible.
@@ -97,7 +98,7 @@ Each is a claim, and names the probe that would falsify it.
 with equal SHA-256 share a file row. The location count, **not the distinct digest count**, equals
 what `find` reports for that path. Symlinks and special files refuse the walk.
 
-> *Probe:* `media audit --root PATH --sample N` re-hashes N stride-selected files and reports
+> *Probe:* `media audit --root PATH --uuid UUID --sample N` re-hashes N stride-selected files and reports
 > discrepancies; `acceptance/scratch.py` independently counts disk files with `os.walk`.
 > Falsified by a location-count difference or sampled digest disagreement. An unsampled byte
 > change with forged size and mtime is not detected until a full audit or mirror verify.
@@ -191,8 +192,10 @@ before an applied run exists; full per-file failure capture remains unproven.
   verified and resumed by staging path and digest. A crash between path reservation and link,
   or an orphan in `.media-incoming`, still needs manual inspection. Probe: kill the process at
   each filesystem/SQLite boundary and inspect for an unverified final file before claiming full
-  crash safety. The destination path is reserved in SQLite before linking, but a temporary copy
-  left behind by an interrupted run still needs explicit cleanup.
+  crash safety. The destination path is reserved in SQLite before linking, the copied bytes and
+  destination directory are synced before verification is recorded, but a temporary copy left
+  behind by an interrupted run still needs explicit cleanup. Sudden-power-loss durability was
+  not measured by a scratch test.
 
 ## Test Strategy
 
@@ -223,11 +226,12 @@ implementation at the same moment rather than against a stored number.
 - **F0 scratch passes:** `cargo test -p media --locked` checks one digest on two indexed
   volumes, same-tree re-index adding zero rows, and refusal to rewrite a changed indexed digest.
   `acceptance/scratch.py` compares disk paths to media's row count through an independent
-  `os.walk` and catches a corrupted sampled file. **Full live F0 untested:** no migration or
+  `os.walk`, catches a corrupted sampled file, and rejects the wrong mount UUID before a DB opens. **Full live F0 untested:** no migration or
   index run on the operator's shared store; the backup prerequisite has not been rehearsed here.
 - **F1 scratch passes for classified regular files:** the scratch acceptance reports a new
   digest imported, a same-name/same-size different digest retained, two duplicate dispositions
-  on a fresh staging identity, a refusal with evidence, and no prune with a refusal or duplicates.
+  on a fresh staging identity, a refusal with evidence, no prune with a refusal or duplicates,
+  and no library mutation through a symlinked or hardlinked staging hash report.
   The unit failure injection verifies staging intact and an unverified failed row, then resumes it.
   `acceptance/labelled.py` classified 4,943 historical recovered rows as absent against a
   synthetic pre-merge cohort and all four known nonmatches as absent. **Live iCloud ingest,

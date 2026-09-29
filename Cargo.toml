@@ -8,6 +8,7 @@ members = [
     "capabilities/finance",
     "capabilities/host-net",
     "capabilities/interior",
+    "capabilities/media",
     "capabilities/places",
     "capabilities/punctuality",
     "capabilities/scouting",

@@ -148,6 +148,15 @@ min_version = "0.7.0"
 why = "capabilities/macmon execs it as `macmon serve` for the dashboard's Systems page; tools/sysmon power execs the same binary as a TUI. Absent for weeks while the capability was enabled, because a capability's own command was not a declared tool here and nothing else looked."
 install_macos = "cargo install macmon --locked"   # latest; min_version above is a floor, not a target (Q77)
 
+[exiftool]
+required = "optional"
+upstream = "exiftool"
+version_cmd = "exiftool -ver"
+min_version = "13.55"
+why = "media ingest calls ExifTool once per staged tree for DateTimeOriginal CSV; without it an ingest refuses before writing library bytes. The CLI has no service.toml or scheduled job, so a capability-field scope would never be checked."
+install_macos = "brew install exiftool"
+install_linux = "apt-get install -y libimage-exiftool-perl"
+
 [yt-dlp]
 required = "optional"
 needed_by = ["capability:comms"]

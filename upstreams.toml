@@ -232,6 +232,18 @@ verdict = "reject"
 license = "MIT"
 why = "RETIRED 2026-08-27 by PRD Q45 -- [r2d2_sqlite] is the manager now and neither this crate nor the postgres client appears in Cargo.lock any more. It was the r2d2 manager for the postgres client: connect, is-valid, has-broken, and nothing else. Preferred at the time over hand-rolling a pool behind libs/sjel-store, and that judgement is the half that survived -- the pool stayed through the database change, because the reason for it (checkout, return, health-check, sizing, timeout, and the intermittent failures of getting them wrong) had nothing to do with which database was on the other end"
 
+[sha2]
+url = "https://github.com/RustCrypto/hashes"
+verdict = "adopt"
+license = "MIT OR Apache-2.0"
+why = "SHA-256 for the media ingest gate and index, already a workspace dependency. Exact bytes, not filenames or perceptual similarity, decide duplicate admission; the digest is stored once and verified on import. Adopts the hashing implementation, not a content upload service."
+
+[exiftool]
+url = "https://exiftool.org/"
+verdict = "adopt"
+license = "Artistic License 1.0 OR GPL-1.0-or-later"
+why = "The media ingest gate calls the host ExifTool in one CSV batch for DateTimeOriginal. A prior hand-written JPEG parser agreed on only a small sample; adopting the maintained metadata reader avoids creating a second EXIF standard implementation. Metadata is only a date hint, never a duplicate verdict."
+
 [rusqlite]
 url = "https://github.com/rusqlite/rusqlite"
 verdict = "adopt"

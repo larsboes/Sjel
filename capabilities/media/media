@@ -1,0 +1,12 @@
+#!/bin/bash
+# CLI-only capability; build just its binary on first use, never a server artifact.
+set -euo pipefail
+_dir="$(cd "$(dirname "${BASH_SOURCE[0]:-$0}")" && pwd)"
+# shellcheck source=../../tools/lib/paths.sh
+source "$_dir/../../tools/lib/paths.sh"
+BIN="${CARGO_TARGET_DIR:-$SJEL_ROOT/target}/release/media"
+if [ ! -x "$BIN" ]; then
+  echo "media: building (first run)…" >&2
+  (cd "$SJEL_ROOT" && cargo build --locked --release --bin media) >&2
+fi
+exec "$BIN" "$@"

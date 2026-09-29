@@ -29,6 +29,7 @@ See the [engineering doctrine](CONTRIBUTING.md#engineering-doctrine) this genera
 | `knowledge-base` | The vault, as a thing that gets backed up. | — | — | — |
 | `knowledge-graph` | REST API over the Axon code-dependency graph built by [graphify](https://github.com/safishamsi/graphify). | — | `4244` | — |
 | `macmon` | What this machine's silicon is actually doing — temperature, power draw, CPU and GPU utilisation, memory — read without sudo. | — | `9911` | — |
+| `media` | An exact-byte ingest gate and integrity ledger for a library on mounted volumes. | — | — | — |
 | `packs` | What Axon has deployed into each agent harness on this machine, and the proof that it did. | — | — | — |
 | `people-registry` | Rung 0's known-person registry, refreshed from the vault every six hours. | — | — | — |
 | `pihole` | Reusable Pi-hole runtime contract for a private network. | pihole/pihole:latest | — | — |
@@ -110,7 +111,7 @@ schemas/machine.toml.example.
 
 ## Upstreams by verdict
 
-- **adopt**: ibm-plex, mcp-audit, gitleaks, osv-scanner, grype, vaultwarden, bitwarden-cli, r2d2, rusqlite, r2d2_sqlite, bun, bun-security-scanner, maplibre-gl-js, mermaid, vega, vega-lite, vega-embed, openfreemap, wikimedia-api, nominatim-api, open-meteo-api, graphify, interceptor, bottom, apfel, macmon, typst, yq, vibecoded-design-tells, human-voice, home-assistant, pihole, stevenblack-hosts, tailscale, svelte-ai-tools, sveltejs-mcp, svelte-language-server, pi-coding-agent, debian, deutsche-bahn-data, arrow-rs, xberg, ar5iv, multilingual-e5-base-mlx, bge-reranker-v2-m3-mlx, yahoo-finance-chart, ecb-data-portal, frankfurter-api, pi-subagents, accordion, pi-web-access, defuddle, tauri-plugin-notification, rcgen, rustls, tauri-plugin-barcode-scanner, uqr
+- **adopt**: ibm-plex, mcp-audit, gitleaks, osv-scanner, grype, vaultwarden, bitwarden-cli, r2d2, sha2, exiftool, rusqlite, r2d2_sqlite, bun, bun-security-scanner, maplibre-gl-js, mermaid, vega, vega-lite, vega-embed, openfreemap, wikimedia-api, nominatim-api, open-meteo-api, graphify, interceptor, bottom, apfel, macmon, typst, yq, vibecoded-design-tells, human-voice, home-assistant, pihole, stevenblack-hosts, tailscale, svelte-ai-tools, sveltejs-mcp, svelte-language-server, pi-coding-agent, debian, deutsche-bahn-data, arrow-rs, xberg, ar5iv, multilingual-e5-base-mlx, bge-reranker-v2-m3-mlx, yahoo-finance-chart, ecb-data-portal, frankfurter-api, pi-subagents, accordion, pi-web-access, defuddle, tauri-plugin-notification, rcgen, rustls, tauri-plugin-barcode-scanner, uqr
 - **overlay**: academic-researcher
 - **inspiration**: lifeos, iai-personal-memory-engine, local-llm, paperless-ngx, dolphin, ocrs, awesome-selfhosted, colibri, exo, mlx, llama-cpp-rpc, mcpserver-audit, telekom-mcp-security, scout, trek-travel, tripit, betterbahn, besser-bahn, plan-bahn, asd-ste100-skill, nvidia-skills, slm-finetuning-talk, pascal-editor, yfinance
 - **quarry**: oberskills, academic-writing-agents, research-paper-writing-skills, pengsida-research-notes, lucide, event-horizon

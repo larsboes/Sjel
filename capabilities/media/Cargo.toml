@@ -1,0 +1,28 @@
+[package]
+name = "media"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+description = "Exact-byte media ingest gate and volume integrity ledger"
+publish = false
+
+[lib]
+name = "media"
+path = "src/lib.rs"
+
+[[bin]]
+name = "media"
+path = "src/main.rs"
+
+[dependencies]
+sjel-config = { path = "../../libs/sjel-config" }
+sjel-store = { path = "../../libs/sjel-store" }
+civil-date = { path = "../../libs/civil-date" }
+rusqlite.workspace = true
+serde = { workspace = true, features = ["derive"] }
+serde_json.workspace = true
+sha2.workspace = true
+
+[lints]
+workspace = true

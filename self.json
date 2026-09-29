@@ -249,6 +249,10 @@
       "kind": "lib"
     },
     {
+      "name": "media",
+      "kind": "capability"
+    },
+    {
       "name": "overlay",
       "kind": "lib"
     },
@@ -944,6 +948,36 @@
       ],
       "evidence": [
         "capabilities/interior/Cargo.toml"
+      ]
+    },
+    {
+      "from": "media",
+      "to": "civil-date",
+      "kinds": [
+        "cargo-dep"
+      ],
+      "evidence": [
+        "capabilities/media/Cargo.toml"
+      ]
+    },
+    {
+      "from": "media",
+      "to": "sjel-config",
+      "kinds": [
+        "cargo-dep"
+      ],
+      "evidence": [
+        "capabilities/media/Cargo.toml"
+      ]
+    },
+    {
+      "from": "media",
+      "to": "sjel-store",
+      "kinds": [
+        "cargo-dep"
+      ],
+      "evidence": [
+        "capabilities/media/Cargo.toml"
       ]
     },
     {
@@ -1663,6 +1697,10 @@
       "verdict": "quarry"
     },
     {
+      "name": "exiftool",
+      "verdict": "adopt"
+    },
+    {
       "name": "exo",
       "verdict": "inspiration"
     },
@@ -1881,6 +1919,10 @@
     {
       "name": "semgrep",
       "verdict": "reject"
+    },
+    {
+      "name": "sha2",
+      "verdict": "adopt"
     },
     {
       "name": "skills-best-practices",

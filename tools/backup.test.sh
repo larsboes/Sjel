@@ -738,6 +738,51 @@ capabilities = ["store"]
 backup_target = "icloud-target"
 MACHINE
 
+# --- --target: the per-run choice the backup surface drives ---------------------------
+# A second local destination, and a run that names it, must land there rather than at the
+# manifest's target. This is the seam that makes the target a per-run decision instead of
+# one overlay role for the whole machine.
+mkdir -p "$SCRATCH/override-dest"
+cat >> "$OVERLAY/config/systems.local.toml" <<SYSTEMS
+
+[override-target]
+kind = "local"
+path = "$SCRATCH/override-dest"
+SYSTEMS
+reset_run
+export MOCK_TIMESTAMP=20260108T000000Z
+HOME="$CLOUD_HOME" expect_pass "an explicit target wins over the manifest" "$BACKUP" --target override-target ledger
+[ -f "$SCRATCH/override-dest/ledger/ledger-20260108T000000Z.tar.gz" ] \
+  || fail "--target did not send the archive to the named target"
+[ ! -f "$LOCAL_DEST/ledger/ledger-20260108T000000Z.tar.gz" ] \
+  || fail "--target fell back to the manifest target"
+
+# An immutable receipt per archive. The surface reads these to record what landed, and
+# retention reads them so an archive is always checked against the digest recorded when it
+# was produced rather than one recomputed from bytes that may have changed since.
+hist="$OVERLAY/backup/receipts/history/ledger/ledger-20260108T000000Z.tar.gz.json"
+[ -f "$hist" ] || fail "no immutable receipt was written for a non-store capability"
+grep -q "\"sha256\": \"$(file_sha256 "$SCRATCH/override-dest/ledger/ledger-20260108T000000Z.tar.gz")\"" "$hist" \
+  || fail "the immutable receipt does not record the archive's own digest"
+
+# An identical pre-existing receipt is what the store iCloud gate already writes for its own
+# target, so it is accepted. A DIFFERENT one is a collision and must be fatal rather than
+# silently replaced: it would be a receipt for bytes this archive does not have.
+conflict="$OVERLAY/backup/receipts/history/ledger/ledger-20260109T000000Z.tar.gz.json"
+mkdir -p "$(dirname "$conflict")"
+printf '{"sha256": "0000000000000000000000000000000000000000000000000000000000000000"}\n' > "$conflict"
+reset_run
+export MOCK_TIMESTAMP=20260109T000000Z
+HOME="$CLOUD_HOME" expect_fail_with "conflicting immutable receipt" "already describes a different archive" \
+  "$BACKUP" --target override-target ledger
+
+# Stream mode has no destination and no retention, so the two flags that configure those are
+# caller mistakes rather than no-ops.
+reset_run
+export MOCK_TIMESTAMP=20260110T000000Z
+expect_fail_with "--stream with --target is refused" "usage: backup.sh" "$BACKUP" --stream --target override-target ledger
+expect_fail_with "--stream with --no-prune is refused" "usage: backup.sh" "$BACKUP" --no-prune --stream ledger
+
 if [ "$fails" -gt 0 ]; then
   echo "backup tests: $fails failure(s)"
   exit 1

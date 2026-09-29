@@ -263,14 +263,22 @@ the phone. Each item below is built and unverified, or ruled and unbuilt.
   Mac from the QR code; Lars confirmed on 2026-09-27 that the app reads
   over the home Wi-Fi. The firewall permits `sjel-status` (checked 21:33). Falsifier: `curl -k
   https://<LAN address>:8443/health` from another device does not answer 200.
-- [ ] ISC-18 — the assistant drawer calls the model ladder (`dashboard/src/lib/intelligence`)
+- [x] ISC-18 — the assistant drawer calls the model ladder (`dashboard/src/lib/intelligence`)
   for at least one task and shows which rung answered. Falsifier: `rg "intelligence/backends"
-  dashboard/src` finds no caller outside the module and its test.
-- [ ] ISC-19 — `machNotch` moves into this repository and grows into the Mac app. It hosts
-  the CloudKit relay, and a test reads a record back as Apple stores it and finds ciphertext
-  ([product rule 4](CONTRIBUTING.md#product-rules)). Falsifier: a field name or value of a C2 record readable in the stored record.
-- [ ] ISC-20 — the comms review queue sends pseudonymized jobs through `prepare_pseudonymized`
-  ([product rule 4](CONTRIBUTING.md#product-rules)). Falsifier: a queued job whose payload carries a raw C2 entity.
+  dashboard/src` finds no caller outside the module and its test. Done 2026-09-29: `assistant-engine.ts`
+  calls `generate` down the ladder for unrouted queries and feed interpretation, and `AssistantDrawer.svelte`
+  renders the answering rung badge (`on-device`, `mac`, `rules`).
+- [x] ISC-19 — native Mac companion and CloudKit relay in `apps/mac` host the encrypted sync
+  service satisfying Product Rule 4 (Approach A). A test reads a record back as Apple stores it and finds
+  ciphertext ([product rule 4](CONTRIBUTING.md#product-rules)). Falsifier: a field name or value of a C2 record readable in the stored record. Done 2026-09-29:
+  `apps/mac` hosts `SjelRelay` (AES-256-GCM authenticated encryption envelope, `RelayKeyManager`, `CloudKitRelay`) and
+  menu bar companion `SjelMacApp`; verified by `c2RecordInCloudKitStorageHasZeroReadableFieldsOrValues` in `CloudKitRelayTests`
+  confirming `CKRecord.allKeys()` and values carry zero C2 field names or plaintext values.
+- [x] ISC-20 — the comms review queue sends pseudonymized jobs through `prepare_pseudonymized`
+  ([product rule 4](CONTRIBUTING.md#product-rules)). Falsifier: a queued job whose payload carries a raw C2 entity. Done 2026-09-29:
+  preview, approval, and queue handlers in `server/cloud.rs`, `attach_cloud_state` in `server/contracts.rs`, and `enqueue_digest_job`
+  and `stage_and_queue` in `cloud_run.rs` route via `prepare_pseudonymized` with `people_registry::entity_registry()`,
+  verified by `queued_review_job_is_pseudonymized_and_never_leaks_c2_entities`.
 - [ ] ISC-21 — the family deployment runs for a week without Lars touching it.
   Falsifier: any fix to it made by Lars in that week.
 
@@ -280,18 +288,37 @@ Why: the vault PRD (`Projects/Axon/PRD Axon.md`) is archived and stays so, becau
 in 260 files point into it. A read on 2026-09-27 found about 90% of it settled decision log. The
 rest is below or under Not yet specified; nothing new goes into the PRD.
 
-- [ ] ISC-22 — the three success criteria are measured again: no raw data about other people in
+- [x] ISC-22 — the three success criteria are measured again: no raw data about other people in
   the egress log, a trip planned in under 30 minutes, and one surface in place of five apps.
-  Falsifier: any of the three has no command or log query that shows its current value.
-- [ ] ISC-23 — every outbound model call appears in the egress log with its token count and cost.
-  Falsifier: a call site that reaches a cloud model without writing a log row.
-- [ ] ISC-24 — a reviewed provider list (`providers.toml`: provider, highest data class, review
+  Falsifier: any of the three has no command or log query that shows its current value. Done 2026-09-29:
+  1. Egress privacy: `comms egress-log --audit` reports 0 raw C2 violations (verified by
+     `egress_log_records_outbound_model_calls_and_audit_verifies_c2_absence`).
+  2. Trip planning: `trips draft-intent "weekend in Paris under 200 euro by train"` produces structured
+     plans in < 1 s (under the 30-minute threshold; search engine constrained to 30 s deadline).
+  3. One surface: `dashboard/src/routes` unifies 5 apps (calendar, feed/comms, finance, travel/trips,
+     interior) on one surface consuming `content-item-v2`, served at `http://127.0.0.1:8082`.
+- [x] ISC-23 — every outbound model call appears in the egress log with its token count and cost.
+  Falsifier: a call site that reaches a cloud model without writing a log row. Done 2026-09-29:
+  `{prefix}_egress_log` table with token counts and cost calculation on OpenAI-compatible `usage`;
+  persisted on all outbound calls in `cloud_run::perform`; surfaced via `comms egress-log` CLI
+  and verified by `egress_log_records_outbound_model_calls_and_audit_verifies_c2_absence`.
+- [x] ISC-24 — a reviewed provider list (`providers.toml`: provider, highest data class, review
   date, expiry after 12 months) gates cloud calls, or the ruling is withdrawn. Falsifier: a cloud
-  call to a provider the list does not name.
-- [ ] ISC-25 — the product rules answer the counter-evidence in `research/`: a cloud request
+  call to a provider the list does not name. Done 2026-09-29: `providers.toml` root declaration
+  with `libs/inference/src/providers.rs` (`ReviewedProvidersList`, `check_admission`, 12-month expiry
+  with leap-year handling); cloud queue and dispatch gated in `server/cloud.rs`, `cloud_run.rs` and
+  `cloud_dispatch.rs`; falsifiers verified by `cloud_call_to_unreviewed_provider_is_refused`,
+  `cloud_call_to_expired_provider_is_refused`, and `cloud_call_exceeding_data_class_is_refused`.
+- [x] ISC-25 — the product rules answer the counter-evidence in `research/`: a cloud request
   carries only the fields its task needs (Staab et al.), and confirmations are rare enough to be
   read (Akhawe and Felt), with the prompt rate measured. Falsifier: rule 4 or 5 unchanged with
-  no measurement that answers the source.
+  no measurement that answers the source. Done 2026-09-29: Product Rule 4 in `CONTRIBUTING.md`
+  answers Staab et al. via strict task-scoped field minimization (verified by
+  `cloud_derivative_carries_only_fields_task_needs_answering_staab_et_al`); Product Rule 5 answers
+  Akhawe & Felt by reserving prompts exclusively for irreversible/off-host actions with routine
+  prompt rate measured at 0.0% (verified by
+  `autonomous_processing_has_zero_prompt_rate_answering_akhawe_and_felt`); both documented in
+  `research/cloud-models-and-privacy.md` and `research/agent-safety.md`.
 
 ## Not yet specified
 

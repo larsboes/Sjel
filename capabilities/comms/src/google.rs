@@ -94,7 +94,7 @@ fn default_expires_in() -> u64 {
 pub fn access_token(env_path: &Path) -> Result<String> {
     let cache = TOKEN_CACHE.get_or_init(|| Mutex::new(None));
     {
-        let guard = cache.lock().unwrap();
+        let guard = cache.lock().unwrap_or_else(|p| p.into_inner());
         if let Some(c) = guard.as_ref() {
             if c.expires_at > now_secs() + 60 {
                 return Ok(c.token.clone());
@@ -126,7 +126,7 @@ pub fn access_token(env_path: &Path) -> Result<String> {
     }
 
     let tok: TokenResponse = resp.json()?;
-    let mut guard = cache.lock().unwrap();
+    let mut guard = cache.lock().unwrap_or_else(|p| p.into_inner());
     *guard = Some(CachedToken {
         token: tok.access_token.clone(),
         expires_at: now_secs() + tok.expires_in,

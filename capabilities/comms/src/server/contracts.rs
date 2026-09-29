@@ -630,9 +630,12 @@ impl ContentItemOut {
         // reader sees what it saw before; what changed is that the document is
         // no longer assembled and hashed on the way to discovering that nobody
         // may use it.
-        let Ok(preview) = cloud_derivative::prepare(&self.cloud_input()) else {
+        let registry = crate::people_registry::entity_registry();
+        let Ok(prepared) = cloud_derivative::prepare_pseudonymized(&self.cloud_input(), registry)
+        else {
             return Ok(self);
         };
+        let preview = prepared.preview;
         self.cloud_processing = store.cloud_derivative_state(
             self.source,
             &self.id,

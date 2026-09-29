@@ -1,4 +1,5 @@
 import type { DuplicateCandidate, Journey } from '$lib/api';
+import type { Rung, Skip } from '$lib/intelligence/ladder';
 
 export type IntentDomain = 'travel' | 'interior' | 'calendar' | 'finance' | 'system' | 'feed' | 'people' | 'general';
 
@@ -133,6 +134,8 @@ export interface AssistantMessage {
   timestamp: string;
   routing?: KeywordRouting;
   cards?: ActionCard[];
+  rung?: Rung;
+  skippedRungs?: Skip[];
 }
 
 export interface ActionResult {

@@ -19,6 +19,8 @@ sjel-http = { path = "../sjel-http" }
 serde = { workspace = true, features = ["derive"] }
 serde_json.workspace = true
 reqwest = { workspace = true, features = ["json", "blocking"] }
+toml.workspace = true
+thiserror.workspace = true
 
 [lints]
 workspace = true

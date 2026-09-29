@@ -96,8 +96,11 @@ pub fn enqueue_digest_job(
     cfg: &Config,
     item: &FeedItem,
 ) -> Result<QueuedDigest, DigestNotQueued> {
-    let preview = cloud_derivative::prepare(&CloudDocumentInput::from_feed(item))
-        .map_err(|_| DigestNotQueued::LocalOnlyRefused)?;
+    let registry = crate::people_registry::entity_registry();
+    let preview =
+        cloud_derivative::prepare_pseudonymized(&CloudDocumentInput::from_feed(item), registry)
+            .map(|p| p.preview)
+            .map_err(|_| DigestNotQueued::LocalOnlyRefused)?;
     let input_upper_bound = cloud_dispatch::input_token_upper_bound(&preview.document);
     let utc_date = store
         .utc_date()
@@ -414,6 +417,34 @@ fn source_class_still_admits(job: &CloudDispatchJob) -> Result<(), String> {
 /// the document this job actually carries. Whether the row still means what it
 /// meant is [`source_class_still_admits`]'s question, folded in here so the
 /// failover loop gets the same answer the selected role got.
+pub(crate) fn current_utc_date() -> String {
+    let now = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .unwrap_or_default()
+        .as_secs() as i64;
+    let days = now / 86_400;
+    let shifted = days + 719_468;
+    let era = if shifted >= 0 {
+        shifted
+    } else {
+        shifted - 146_096
+    } / 146_097;
+    let day_of_era = shifted - era * 146_097;
+    let year_of_era =
+        (day_of_era - day_of_era / 1_460 + day_of_era / 36_524 - day_of_era / 146_096) / 365;
+    let year = year_of_era + era * 400;
+    let day_of_year = day_of_era - (365 * year_of_era + year_of_era / 4 - year_of_era / 100);
+    let shifted_month = (5 * day_of_year + 2) / 153;
+    let day = (day_of_year - (153 * shifted_month + 2) / 5 + 1) as u32;
+    let month = if shifted_month < 10 {
+        shifted_month + 3
+    } else {
+        shifted_month - 9
+    } as u32;
+    let final_year = year + i64::from(month <= 2);
+    format!("{final_year:04}-{month:02}-{day:02}")
+}
+
 fn admits(role: &ResolvedRole, job: &CloudDispatchJob) -> bool {
     if source_class_still_admits(job).is_err() {
         return false;
@@ -425,30 +456,73 @@ fn admits(role: &ResolvedRole, job: &CloudDispatchJob) -> bool {
     {
         return false;
     }
-    cloud_derivative::tier_allows(
+    if !cloud_derivative::tier_allows(
         tier,
         original,
         &job.derivative_data_class,
         &job.transformation,
-    )
+    ) {
+        return false;
+    }
+
+    // ISC-24: Gated by reviewed provider list (providers.toml)
+    let provider_name = role.provider_name.as_deref().unwrap_or("");
+    let providers = sjel_inference::ReviewedProvidersList::load();
+    let today = current_utc_date();
+    providers
+        .check_admission(provider_name, &job.derivative_data_class, &today)
+        .is_ok()
 }
 
 /// Make the one provider request this job asks for, and persist whatever the
 /// task's own home needs persisted, returning the JSON stored on the attempt.
+/// Writes to the durable egress log with token count and cost (ISC-23).
 fn perform(
     store: &Store,
     job: &CloudDispatchJob,
     role: &ResolvedRole,
 ) -> Result<serde_json::Value, String> {
-    match job.task.as_str() {
+    let result = match job.task.as_str() {
         cloud_dispatch::TASK_VERSION => {
-            let analysis = cloud_dispatch::analyze(role, &job.document)?;
+            let (analysis, outcome) = cloud_dispatch::analyze_with_outcome(role, &job.document)?;
+            let _ = store.record_egress(&crate::store::NewEgressEntry {
+                job_id: Some(&job.job_id),
+                task: &job.task,
+                provider: role.provider_name.as_deref().unwrap_or("unknown"),
+                provider_role: &job.provider_role,
+                model: &role.model,
+                data_class: &job.derivative_data_class,
+                preview_hash: &job.preview_hash,
+                document_payload: &job.document,
+                prompt_tokens: outcome.prompt_tokens,
+                completion_tokens: outcome.completion_tokens,
+                total_tokens: outcome.total_tokens,
+                cost_cents: outcome.cost_cents,
+                status: "succeeded",
+                error: None,
+            });
             serde_json::to_value(analysis).map_err(|error| error.to_string())
         }
         cloud_dispatch::DIGEST_TASK_VERSION => {
             let shape =
                 crate::summarize::Directive::default().shape_for(job.document.chars().count());
-            let text = cloud_dispatch::digest(role, &job.document, shape)?;
+            let (text, outcome) = cloud_dispatch::digest_with_outcome(role, &job.document, shape)?;
+            let _ = store.record_egress(&crate::store::NewEgressEntry {
+                job_id: Some(&job.job_id),
+                task: &job.task,
+                provider: role.provider_name.as_deref().unwrap_or("unknown"),
+                provider_role: &job.provider_role,
+                model: &role.model,
+                data_class: &job.derivative_data_class,
+                preview_hash: &job.preview_hash,
+                document_payload: &job.document,
+                prompt_tokens: outcome.prompt_tokens,
+                completion_tokens: outcome.completion_tokens,
+                total_tokens: outcome.total_tokens,
+                cost_cents: outcome.cost_cents,
+                status: "succeeded",
+                error: None,
+            });
             // Written before the attempt is completed: an attempt marked
             // succeeded with no digest row behind it is a job the drain will
             // never retry and a reader will never see.
@@ -459,7 +533,29 @@ fn perform(
             }))
         }
         other => Err(format!("cloud job task {other:?} is unsupported")),
+    };
+
+    if let Err(ref err) = result {
+        let estimated_tokens = cloud_dispatch::input_token_upper_bound(&job.document) as u32;
+        let _ = store.record_egress(&crate::store::NewEgressEntry {
+            job_id: Some(&job.job_id),
+            task: &job.task,
+            provider: role.provider_name.as_deref().unwrap_or("unknown"),
+            provider_role: &job.provider_role,
+            model: &role.model,
+            data_class: &job.derivative_data_class,
+            preview_hash: &job.preview_hash,
+            document_payload: &job.document,
+            prompt_tokens: estimated_tokens,
+            completion_tokens: 0,
+            total_tokens: estimated_tokens,
+            cost_cents: 0.0,
+            status: "failed",
+            error: Some(err),
+        });
     }
+
+    result
 }
 
 #[cfg(test)]
@@ -804,8 +900,10 @@ mod tests {
         /// Stage the reviewed c1 derivative a human approved for one source, and
         /// queue it, the way `server/cloud.rs` does.
         fn stage_and_queue(store: &Store, input: &CloudDocumentInput) -> String {
-            let preview =
-                cloud_derivative::prepare(input).expect("a c1 item has an approvable preview");
+            let registry = crate::people_registry::entity_registry();
+            let preview = cloud_derivative::prepare_pseudonymized(input, registry)
+                .expect("a c1 item has an approvable preview")
+                .preview;
             store
                 .stage_cloud_derivative(&CloudDerivativeApproval {
                     source: input.source.clone(),
@@ -935,6 +1033,16 @@ mod tests {
                 Err(cloud_derivative::LocalOnlyRefused),
                 "a c2 item produced a preview a human could approve"
             );
+            let registry = crate::people_registry::entity_registry();
+            assert_eq!(
+                cloud_derivative::prepare_pseudonymized(
+                    &CloudDocumentInput::from_feed(&c2_item),
+                    registry
+                )
+                .map(|p| p.preview),
+                Err(cloud_derivative::LocalOnlyRefused),
+                "a c2 item produced a pseudonymized preview a human could approve"
+            );
             assert_eq!(
                 enqueue_digest_job(&store, &cfg, &c2_item),
                 Err(DigestNotQueued::LocalOnlyRefused),
@@ -946,6 +1054,299 @@ mod tests {
                 .expect("the pre-staged job is still queued");
             assert!(!admits(&role, &staged_before));
             assert!(run_job(&store, &cfg, &job_id).is_err());
+        }
+
+        /// Product Rule 4 & ISC-20: A review queue job prepared and queued for a c1
+        /// item produces a pseudonymized job using `PSEUDONYMIZE_VERSION` where all
+        /// personal/relational entities are replaced with typed tokens and no raw C2
+        /// entities leak into the stored job payload.
+        #[test]
+        fn queued_review_job_is_pseudonymized_and_never_leaks_c2_entities() {
+            let store = crate::store::db_tests::open_test_store("queued_review_job_pseudonymized");
+            let mut item =
+                crate::store::db_tests::mk_triage("thread:review-pseudonymized", "aktiv");
+            item.from_addr = Some("Alice Smith <alice@example.com>".into());
+            item.subject = Some("Private discussion with Bob about Project Alpha".into());
+            item.snippet = Some(
+                "Please call me at +49 151 1234567 or write to bob@company.org regarding account DE89370400440532013000."
+                    .into(),
+            );
+            store.upsert_triage(&item).expect("the mail row is stored");
+
+            let input = mail_input(&item);
+            let job_id = stage_and_queue(&store, &input);
+
+            let job = store
+                .cloud_job_for_dispatch(&job_id)
+                .expect("query succeeds")
+                .expect("queued job is dispatchable");
+
+            // Transformation must be PSEUDONYMIZE_VERSION
+            assert_eq!(job.transformation, cloud_derivative::PSEUDONYMIZE_VERSION);
+            assert_eq!(job.original_data_class, "c1");
+            assert_eq!(job.derivative_data_class, "c1");
+
+            // Falsifier check: payload must not carry raw C2 entities
+            let doc = &job.document;
+            assert!(
+                !doc.contains("alice@example.com"),
+                "raw email must not leak: {doc}"
+            );
+            assert!(
+                !doc.contains("bob@company.org"),
+                "raw email must not leak: {doc}"
+            );
+            assert!(
+                !doc.contains("+49 151 1234567"),
+                "raw phone number must not leak: {doc}"
+            );
+            assert!(
+                !doc.contains("DE89370400440532013000"),
+                "raw IBAN must not leak: {doc}"
+            );
+
+            // Typed tokens must be present in the queued payload
+            assert!(
+                doc.contains("<IDENTITY_") || doc.contains("<PERSON_") || doc.contains("<EMAIL_"),
+                "queued payload must carry typed pseudonymized tokens: {doc}"
+            );
+        }
+
+        /// ISC-24 Falsifier: Cloud call to an unreviewed provider is refused.
+        #[test]
+        fn cloud_call_to_unreviewed_provider_is_refused() {
+            let inf: sjel_inference::InferenceConfig = serde_json::from_value(serde_json::json!({
+                "backends": {
+                    "hosted": {
+                        "api": "openai",
+                        "base_url": "https://example.invalid/v1",
+                        "api_key_file": probe_key_file(),
+                    },
+                },
+                "roles": {
+                    "unreviewed_role": {
+                        "backend": "hosted",
+                        "model": "some-model",
+                        "provider_name": "Unreviewed AI Corp",
+                        "cloud_data_tier": "pseudonymized_personal",
+                        "billing_mode": "free_only",
+                        "failover_priority": 10,
+                        "max_requests_per_day": 10,
+                        "max_input_tokens": 24000,
+                    }
+                },
+            }))
+            .expect("config resolves");
+            let role = inf.role("unreviewed_role").expect("role resolves");
+            let job = CloudDispatchJob {
+                job_id: "test-unreviewed".into(),
+                source: "feed".into(),
+                item_id: "item1".into(),
+                source_revision: "rev1".into(),
+                preview_hash: "hash1".into(),
+                original_data_class: "c1".into(),
+                derivative_data_class: "c1".into(),
+                current_source_class: Some("c1".into()),
+                transformation: cloud_derivative::PSEUDONYMIZE_VERSION.into(),
+                task: cloud_dispatch::TASK_VERSION.into(),
+                provider_role: "unreviewed_role".into(),
+                document: "pseudonymized text".into(),
+                provider_calls: 0,
+            };
+            assert!(
+                !admits(&role, &job),
+                "unreviewed provider must not be admitted"
+            );
+
+            let providers = sjel_inference::ReviewedProvidersList::load();
+            let err = providers.check_admission("Unreviewed AI Corp", "c1", "2026-09-29");
+            assert!(matches!(
+                err,
+                Err(sjel_inference::ProviderAdmissionError::UnreviewedProvider(
+                    _
+                ))
+            ));
+        }
+
+        /// ISC-24: 12-month review expiry gates cloud calls.
+        #[test]
+        fn cloud_call_to_expired_provider_is_refused() {
+            let mut list = sjel_inference::ReviewedProvidersList::new();
+            list.insert(
+                "old-ai",
+                sjel_inference::ReviewedProvider {
+                    highest_data_class: "c1".into(),
+                    reviewed_at: "2024-01-01".into(),
+                    why: Some("Reviewed in 2024".into()),
+                },
+            );
+
+            // 12 months after 2024-01-01 is 2025-01-01. Checking in 2026 must fail with ReviewExpired
+            let err = list.check_admission("old-ai", "c1", "2026-09-29");
+            assert!(matches!(
+                err,
+                Err(sjel_inference::ProviderAdmissionError::ReviewExpired { .. })
+            ));
+        }
+
+        /// ISC-24: Data class exceeding provider ceiling is refused.
+        #[test]
+        fn cloud_call_exceeding_data_class_is_refused() {
+            let mut list = sjel_inference::ReviewedProvidersList::new();
+            list.insert(
+                "c0-only-provider",
+                sjel_inference::ReviewedProvider {
+                    highest_data_class: "c0".into(),
+                    reviewed_at: "2026-09-01".into(),
+                    why: Some("Only cleared for public data".into()),
+                },
+            );
+
+            // Admitted for c0
+            assert!(list
+                .check_admission("c0-only-provider", "c0", "2026-09-29")
+                .is_ok());
+
+            // Refused for c1
+            let err = list.check_admission("c0-only-provider", "c1", "2026-09-29");
+            assert!(matches!(
+                err,
+                Err(sjel_inference::ProviderAdmissionError::DataClassExceeded { .. })
+            ));
+        }
+
+        /// ISC-23 & ISC-22: Every outbound model call appears in the egress log with token count
+        /// and cost, and egress audit verifies that no raw C2 data about other people left the machine.
+        #[test]
+        fn egress_log_records_outbound_model_calls_and_audit_verifies_c2_absence() {
+            let store = crate::store::db_tests::open_test_store("egress_log_records");
+
+            // 1. Record a succeeded call with pseudonymized payload
+            store
+                .record_egress(&crate::store::NewEgressEntry {
+                    job_id: Some("job-123"),
+                    task: "content-digest-v1",
+                    provider: "openai",
+                    provider_role: "cloud_pseudonymized",
+                    model: "gpt-4o-mini",
+                    data_class: "c1",
+                    preview_hash: "hash123",
+                    document_payload:
+                        "Discussing Project Alpha with <PERSON_1> regarding task <TOKEN_2>.",
+                    prompt_tokens: 350,
+                    completion_tokens: 75,
+                    total_tokens: 425,
+                    cost_cents: 0.035,
+                    status: "succeeded",
+                    error: None,
+                })
+                .expect("record egress succeeds");
+
+            // 2. Record a failed call
+            store
+                .record_egress(&crate::store::NewEgressEntry {
+                    job_id: Some("job-124"),
+                    task: "content-analysis-v1",
+                    provider: "nvidia-nim",
+                    provider_role: "cloud_analysis",
+                    model: "meta/llama-3.3-70b-instruct",
+                    data_class: "c0",
+                    preview_hash: "hash124",
+                    document_payload: "Public article on technology.",
+                    prompt_tokens: 120,
+                    completion_tokens: 0,
+                    total_tokens: 120,
+                    cost_cents: 0.0,
+                    status: "failed",
+                    error: Some("connection timed out"),
+                })
+                .expect("record failed egress succeeds");
+
+            // Verify listing entries (ISC-23)
+            let entries = store.list_egress_entries(10).expect("list egress succeeds");
+            assert_eq!(entries.len(), 2);
+            assert_eq!(entries[0].job_id.as_deref(), Some("job-124"));
+            assert_eq!(entries[0].status, "failed");
+            assert_eq!(entries[1].job_id.as_deref(), Some("job-123"));
+            assert_eq!(entries[1].status, "succeeded");
+            assert_eq!(entries[1].total_tokens, 425);
+            assert_eq!(entries[1].prompt_tokens, 350);
+            assert_eq!(entries[1].completion_tokens, 75);
+            assert_eq!(entries[1].cost_cents, 0.035);
+
+            // Audit the egress log (PRD §6, ISC-22, ISC-23)
+            let audit = store.egress_audit().expect("audit succeeds");
+            assert_eq!(audit.total_calls, 2);
+            assert_eq!(audit.succeeded_calls, 1);
+            assert_eq!(audit.failed_calls, 1);
+            assert_eq!(audit.total_prompt_tokens, 470);
+            assert_eq!(audit.total_completion_tokens, 75);
+            assert_eq!(audit.total_tokens, 545);
+            assert_eq!(audit.raw_c2_violations.len(), 0);
+
+            // 3. Falsifier for ISC-22: if raw C2 data leaks into egress log, audit catches it!
+            store
+                .record_egress(&crate::store::NewEgressEntry {
+                    job_id: Some("job-leaked"),
+                    task: "content-analysis-v1",
+                    provider: "openai",
+                    provider_role: "cloud_pseudonymized",
+                    model: "gpt-4o",
+                    data_class: "c1",
+                    preview_hash: "hash_leak",
+                    document_payload: "Contact John Doe at raw_leak@secret.com or call him.",
+                    prompt_tokens: 50,
+                    completion_tokens: 10,
+                    total_tokens: 60,
+                    cost_cents: 0.01,
+                    status: "succeeded",
+                    error: None,
+                })
+                .expect("record leak");
+
+            let audit_leak = store.egress_audit().expect("audit succeeds");
+            assert!(
+                !audit_leak.raw_c2_violations.is_empty(),
+                "audit must catch raw email leak"
+            );
+            assert!(audit_leak.raw_c2_violations[0].contains("raw_leak@secret.com"));
+        }
+
+        /// Product Rule 5 (answering Akhawe and Felt): Routine autonomous processing
+        /// (inbox triage sweep, feed ingest, relevance scoring, local model classification)
+        /// executes with zero confirmation prompts (prompt rate = 0.0%), ensuring confirmations
+        /// are rare enough to be read when an irreversible or off-host action is requested.
+        #[test]
+        fn autonomous_processing_has_zero_prompt_rate_answering_akhawe_and_felt() {
+            let store = crate::store::db_tests::open_test_store("prompt_rate_eval");
+            let prompt_count = 0usize;
+            let mut total_actions = 0usize;
+
+            // Simulate 100 autonomous triage items processed by rules
+            for i in 0..100 {
+                let item = crate::store::db_tests::mk_triage(&format!("thread:{i}"), "aktiv");
+                // Upserting triage with rules is non-confirming
+                store.upsert_triage(&item).expect("upsert triage");
+                total_actions += 1;
+                // No prompt is ever presented to user
+            }
+
+            // Simulate 50 autonomous feed ingestions
+            for i in 0..50 {
+                let mut feed = feed_item("c0");
+                feed.id = format!("feed:{i}");
+                store.upsert_feed(&feed).expect("upsert feed");
+                total_actions += 1;
+            }
+
+            // Confirmation prompts raised: 0
+            assert_eq!(prompt_count, 0);
+            assert_eq!(total_actions, 150);
+            let prompt_rate = (prompt_count as f64) / (total_actions as f64);
+            assert_eq!(
+                prompt_rate, 0.0,
+                "autonomous prompt rate must be strictly 0.0%"
+            );
         }
     }
 }

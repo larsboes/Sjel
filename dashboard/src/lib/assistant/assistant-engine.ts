@@ -1,6 +1,9 @@
 import { axonStatus, calendar, comms, entities, interior, macmon, transit, trips, type IntentDraft, type Journey } from '$lib/api';
 import { addDays, findFreeSlots, localDate, unreadableEntries } from './calendar-slots';
 import { matchedCues, routeByKeywords } from './keyword-router';
+import { decisionEngine } from '$lib/models/decision-engine.svelte';
+import { generate } from '$lib/intelligence/backends';
+import type { Rung, Skip } from '$lib/intelligence/ladder';
 import type { ActionCard, AssistantMessage, IntentDomain, RouteContext, SpatialRoomItem, TelemetryMetricItem } from './types';
 
 /**
@@ -19,6 +22,8 @@ import type { ActionCard, AssistantMessage, IntentDomain, RouteContext, SpatialR
 interface Reply {
   content: string;
   cards?: ActionCard[];
+  rung?: Rung;
+  skippedRungs?: Skip[];
 }
 
 /** Departure time sent to transit when the sentence names none. Stated in the reply. */
@@ -43,15 +48,51 @@ export class AssistantEngine {
     context: RouteContext,
     now: Date = new Date(),
   ): Promise<AssistantMessage> {
-    const routing = routeByKeywords(prompt, context);
-    const { content, cards } = await this.answer(prompt, routing.domain, now);
+    let routing = routeByKeywords(prompt, context);
+
+    // Dual mechanism: when no keyword cues match and Mechanism 2 (CLM) is active,
+    // evaluate candidate domains via the local System-1 decision model.
+    if (routing.matched.length === 0 && decisionEngine.isMechanism2Active) {
+      const candidates: Array<{ domain: IntentDomain; desc: string }> = [
+        { domain: 'travel', desc: 'train connections, flights, trips, and transit itineraries' },
+        { domain: 'calendar', desc: 'calendar events, appointments, free time slots, and schedule conflicts' },
+        { domain: 'interior', desc: 'furniture layouts, room dimensions, apartment floor plans, and clearances' },
+        { domain: 'finance', desc: 'spending, expenses, money transactions, balances, and budgets' },
+        { domain: 'system', desc: 'system health, CPU, memory, hardware temperatures, and telemetry' },
+      ];
+
+      try {
+        let bestScore = -Infinity;
+        let bestDomain: IntentDomain | null = null;
+        for (const cand of candidates) {
+          const score = await decisionEngine.scoreCandidate(prompt, cand.desc);
+          if (score !== null && score > bestScore) {
+            bestScore = score;
+            bestDomain = cand.domain;
+          }
+        }
+        if (bestDomain && bestScore > 0.3) {
+          routing = {
+            domain: bestDomain,
+            matched: ['clm-intent'],
+            reason: `Routed via Mechanism 2 (Contrastive Decision Engine: ${bestDomain}).`,
+          };
+        }
+      } catch {
+        // Transparent fallback to Mechanism 1
+      }
+    }
+
+    const reply = await this.answer(prompt, routing.domain, now);
     return {
       id: `msg-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
       role: 'assistant',
-      content,
+      content: reply.content,
       timestamp: new Date().toISOString(),
       routing,
-      cards,
+      cards: reply.cards,
+      rung: reply.rung ?? 'rules',
+      skippedRungs: reply.skippedRungs,
     };
   }
 
@@ -86,47 +127,86 @@ export class AssistantEngine {
         return this.feed(prompt);
       case 'people':
         return this.people();
+      case 'general':
       default:
-        return Promise.resolve({
-          content: 'Sjel Assistant can interact with live capabilities across travel, calendar, systems, feed, and room interior.',
-          cards: [{
-            type: 'action_choice',
-            data: {
-              title: 'Suggested Quick Actions',
-              description: 'Tap a prompt or ask your own question:',
-              choices: [
-                {
-                  id: 'c1',
-                  label: 'Check System Telemetry',
-                  prompt: 'System health',
-                  description: 'Live CPU, RAM, power, and capability health check',
-                  icon: 'cpu',
-                },
-                {
-                  id: 'c2',
-                  label: 'Find Calendar Focus Slot',
-                  prompt: 'Find a 2-hour focus block tomorrow',
-                  description: 'Search free calendar blocks without overlapping commitments',
-                  icon: 'calendar',
-                },
-                {
-                  id: 'c3',
-                  label: 'Explore Reading Feed',
-                  prompt: 'Recent reading feed',
-                  description: 'Recent articles ingested into comms',
-                  icon: 'feed',
-                },
-                {
-                  id: 'c4',
-                  label: 'Inspect 3D Interior',
-                  prompt: 'Show interior layout',
-                  description: 'RoomPlan spatial rooms and furniture inventory',
-                  icon: 'layout',
-                },
-              ],
-            },
-          }],
-        });
+        return this.general(prompt);
+    }
+  }
+
+  /**
+   * General / unrouted queries execute down the intelligence model ladder:
+   * 1. On-device Foundation Models (if iOS / Apple Intelligence available)
+   * 2. Mac Foundation Models (if Mac reachable via local network)
+   * 3. Deterministic rules with quick capability suggestions
+   *
+   * Shows which rung answered (ISC-18).
+   */
+  private async general(prompt: string): Promise<Reply> {
+    try {
+      const result = await generate({
+        kind: 'interpret',
+        prompt,
+        instructions:
+          'You are Sjel Assistant, an operational AI assistant in a local-first personal OS. ' +
+          'Provide concise, factual answers about operations, schedules, tasks, or queries.',
+      });
+
+      if (result.text && result.text.trim().length > 0) {
+        return {
+          content: result.text.trim(),
+          rung: result.source,
+          skippedRungs: result.skipped,
+        };
+      }
+
+      return {
+        content:
+          'Sjel Assistant can interact with live capabilities across travel, calendar, systems, feed, and room interior.',
+        rung: result.source,
+        skippedRungs: result.skipped,
+        cards: [{
+          type: 'action_choice',
+          data: {
+            title: 'Suggested Quick Actions',
+            description: 'Tap a prompt or ask your own question:',
+            choices: [
+              {
+                id: 'c1',
+                label: 'Check System Telemetry',
+                prompt: 'System health',
+                description: 'Live CPU, RAM, power, and capability health check',
+                icon: 'cpu',
+              },
+              {
+                id: 'c2',
+                label: 'Find Calendar Focus Slot',
+                prompt: 'Find a 2-hour focus block tomorrow',
+                description: 'Search free calendar blocks without overlapping commitments',
+                icon: 'calendar',
+              },
+              {
+                id: 'c3',
+                label: 'Explore Reading Feed',
+                prompt: 'Recent reading feed',
+                description: 'Recent articles ingested into comms',
+                icon: 'feed',
+              },
+              {
+                id: 'c4',
+                label: 'Inspect 3D Interior',
+                prompt: 'Show interior layout',
+                description: 'RoomPlan spatial rooms and furniture inventory',
+                icon: 'layout',
+              },
+            ],
+          },
+        }],
+      };
+    } catch (err) {
+      return {
+        content: `Could not reach ladder: ${reason(err)}. Sjel Assistant can interact with live capabilities across travel, calendar, systems, feed, and room interior.`,
+        rung: 'rules',
+      };
     }
   }
 

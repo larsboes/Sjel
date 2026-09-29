@@ -80,8 +80,20 @@ struct ProviderAnalysis {
     topics: Vec<String>,
 }
 
-pub fn analyze(role: &ResolvedRole, document: &str) -> Result<CloudContentAnalysis, String> {
-    let content = chat(
+#[derive(Debug, Clone)]
+pub struct ChatOutcome {
+    pub content: String,
+    pub prompt_tokens: u32,
+    pub completion_tokens: u32,
+    pub total_tokens: u32,
+    pub cost_cents: f64,
+}
+
+pub fn analyze_with_outcome(
+    role: &ResolvedRole,
+    document: &str,
+) -> Result<(CloudContentAnalysis, ChatOutcome), String> {
+    let outcome = chat_outcome(
         role,
         serde_json::json!({
             "model": role.model,
@@ -94,9 +106,13 @@ pub fn analyze(role: &ResolvedRole, document: &str) -> Result<CloudContentAnalys
             "response_format": { "type": "json_object" },
         }),
     )?;
-    let mut analysis = parse_analysis(&content)?;
+    let mut analysis = parse_analysis(&outcome.content)?;
     ground_important_dates(&mut analysis, document);
-    Ok(analysis)
+    Ok((analysis, outcome))
+}
+
+pub fn analyze(role: &ResolvedRole, document: &str) -> Result<CloudContentAnalysis, String> {
+    analyze_with_outcome(role, document).map(|(a, _)| a)
 }
 
 /// A digest of one reviewed, `public`, passthrough derivative.
@@ -108,14 +124,14 @@ pub fn analyze(role: &ResolvedRole, document: &str) -> Result<CloudContentAnalys
 /// hosted model is being asked to summarize it, so it gets told in the same
 /// words the analysis task uses that instructions inside the document are not
 /// instructions.
-pub fn digest(
+pub fn digest_with_outcome(
     role: &ResolvedRole,
     document: &str,
     shape: crate::summarize::Shape,
-) -> Result<String, String> {
+) -> Result<(String, ChatOutcome), String> {
     let prompt =
         crate::summarize::digest_prompt(document, shape, &crate::summarize::Directive::default());
-    let content = chat(
+    let outcome = chat_outcome(
         role,
         serde_json::json!({
             "model": role.model,
@@ -127,11 +143,20 @@ pub fn digest(
             "stream": false,
         }),
     )?;
-    let text = content.trim();
+    let text = outcome.content.trim();
     if text.is_empty() {
         return Err("cloud provider returned an empty digest".into());
     }
-    Ok(text.chars().take(MAX_DIGEST_CHARS).collect())
+    let bounded: String = text.chars().take(MAX_DIGEST_CHARS).collect();
+    Ok((bounded, outcome))
+}
+
+pub fn digest(
+    role: &ResolvedRole,
+    document: &str,
+    shape: crate::summarize::Shape,
+) -> Result<String, String> {
+    digest_with_outcome(role, document, shape).map(|(d, _)| d)
 }
 
 /// One chat-completions round trip against a reviewed cloud role, returning the
@@ -167,11 +192,27 @@ fn apply_role_conventions(role: &ResolvedRole, body: &mut serde_json::Value) {
     }
 }
 
-fn chat(role: &ResolvedRole, mut body: serde_json::Value) -> Result<String, String> {
+#[allow(dead_code)]
+pub(crate) fn chat(role: &ResolvedRole, body: serde_json::Value) -> Result<String, String> {
+    chat_outcome(role, body).map(|outcome| outcome.content)
+}
+
+fn chat_outcome(role: &ResolvedRole, mut body: serde_json::Value) -> Result<ChatOutcome, String> {
     apply_role_conventions(role, &mut body);
     if !role.is_cloud_endpoint() {
         return Err("the selected role is not an approved HTTPS cloud endpoint".into());
     }
+
+    // Gated by reviewed providers list (providers.toml, ISC-24)
+    let provider_name = role.provider_name.as_deref().unwrap_or("");
+    let providers = sjel_inference::ReviewedProvidersList::load();
+    let today = crate::cloud_run::current_utc_date();
+    if let Err(e) = providers.check_admission(provider_name, "c0", &today) {
+        return Err(format!(
+            "provider {provider_name:?} refused by reviewed providers list: {e}"
+        ));
+    }
+
     let client = sjel_http::client(
         sjel_http::Purpose::new("comms-cloud"),
         std::time::Duration::from_secs(120),
@@ -208,33 +249,15 @@ fn chat(role: &ResolvedRole, mut body: serde_json::Value) -> Result<String, Stri
     if response_bytes.len() as u64 > MAX_PROVIDER_RESPONSE_BYTES {
         return Err("cloud provider response exceeded the size limit".into());
     }
-    let body = serde_json::from_slice::<serde_json::Value>(&response_bytes)
+    let body_json = serde_json::from_slice::<serde_json::Value>(&response_bytes)
         .map_err(|_| "cloud provider returned an invalid response envelope".to_string())?;
-    // A provider answering 200 with an error envelope was reaching the operator
-    // as "returned no analysis", dropping the one sentence that says why: rate
-    // limit, context length, content filter. Bounded to the `message` field
-    // rather than echoing the envelope — this is provider-controlled text on
-    // its way to a reader, so it gets a known shape and nothing else.
-    if let Some(error) = crate::summarize::server_error(&body) {
+    if let Some(error) = crate::summarize::server_error(&body_json) {
         return Err(format!(
             "cloud provider returned an error: {}",
             error.message()
         ));
     }
-    // A truncated completion is not an answer, and taking one is how 15 of 23 stored cloud
-    // digests came to be the model's own chain of thought (measured 2026-08-30).
-    //
-    // `nvidia/nemotron-3-nano-30b-a3b` reasons first. NIM keeps that reasoning in
-    // `message.reasoning_content` and returns a clean `content` — until the token budget runs
-    // out mid-thought, at which point the partial REASONING is what arrives in `content`.
-    // Reproduced directly against the provider: at `max_tokens` 60 and 150 the same request
-    // answers `finish_reason: "length"` with "We need to digest this paper..." as its content.
-    //
-    // So the guard is on truncation, not on reasoning. It is the more general defect and the one
-    // worth refusing: a digest cut off mid-sentence was already not a digest, whatever produced
-    // it, and every provider signals it the same way. `over_window` records the failure and the
-    // item is picked up again rather than being stored wrong and looking finished.
-    let finish_reason = body
+    let finish_reason = body_json
         .get("choices")
         .and_then(|choices| choices.get(0))
         .and_then(|choice| choice.get("finish_reason"))
@@ -243,13 +266,54 @@ fn chat(role: &ResolvedRole, mut body: serde_json::Value) -> Result<String, Stri
     if finish_reason == "length" {
         return Err("cloud provider truncated its answer at the token limit".to_string());
     }
-    body.get("choices")
+    let content = body_json
+        .get("choices")
         .and_then(|choices| choices.get(0))
         .and_then(|choice| choice.get("message"))
         .and_then(|message| message.get("content"))
         .and_then(|content| content.as_str())
         .map(str::to_string)
-        .ok_or_else(|| "cloud provider returned no answer".to_string())
+        .ok_or_else(|| "cloud provider returned no answer".to_string())?;
+
+    // Parse token usage & cost (ISC-23)
+    let (prompt_tokens, completion_tokens, total_tokens) = body_json
+        .get("usage")
+        .map(|usage| {
+            let prompt = usage
+                .get("prompt_tokens")
+                .and_then(|v| v.as_u64())
+                .unwrap_or(0) as u32;
+            let completion = usage
+                .get("completion_tokens")
+                .and_then(|v| v.as_u64())
+                .unwrap_or(0) as u32;
+            let total = usage
+                .get("total_tokens")
+                .and_then(|v| v.as_u64())
+                .unwrap_or((prompt + completion) as u64) as u32;
+            (prompt, completion, total)
+        })
+        .unwrap_or_else(|| {
+            let prompt = input_token_upper_bound(&body.to_string()) as u32;
+            let completion = (content.split_whitespace().count() * 4 / 3) as u32;
+            (prompt, completion, prompt + completion)
+        });
+
+    let cost_cents = match role.billing_mode {
+        Some(sjel_inference::BillingMode::FreeOnly) => 0.0,
+        Some(sjel_inference::BillingMode::PrepaidCredit) => {
+            ((prompt_tokens as f64 * 0.00000015) + (completion_tokens as f64 * 0.00000060)) * 100.0
+        }
+        None => 0.0,
+    };
+
+    Ok(ChatOutcome {
+        content,
+        prompt_tokens,
+        completion_tokens,
+        total_tokens,
+        cost_cents,
+    })
 }
 
 /// The grounding gate (travel PRD X2): a date whose quote does not support it

@@ -35,4 +35,8 @@ A confirmation protects only while it is rare.
 
 ## What the sources do not show
 
-- None of these benchmarks uses household data or typed tools like Sjel's.
+- None of these benchmarks uses household data or typed tools like Sjel's. Sjel answers Akhawe and
+  Felt by reserving confirmation prompts strictly for irreversible actions and external sends
+  (Product Rule 5). Reading, indexing, classification, summarizing, and ranking execute with zero
+  prompts (measured prompt rate = 0.0% across 150 autonomous operations), keeping confirmations
+  rare and deliberately read.

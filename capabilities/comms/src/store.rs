@@ -448,6 +448,56 @@ pub struct CloudDispatchJob {
     pub current_source_class: Option<String>,
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct EgressEntry {
+    pub id: i64,
+    pub timestamp: String,
+    pub job_id: Option<String>,
+    pub task: String,
+    pub provider: String,
+    pub provider_role: String,
+    pub model: String,
+    pub data_class: String,
+    pub preview_hash: String,
+    pub document_payload: String,
+    pub prompt_tokens: u32,
+    pub completion_tokens: u32,
+    pub total_tokens: u32,
+    pub cost_cents: f64,
+    pub status: String,
+    pub error: Option<String>,
+}
+
+#[derive(Debug, Clone)]
+pub struct NewEgressEntry<'a> {
+    pub job_id: Option<&'a str>,
+    pub task: &'a str,
+    pub provider: &'a str,
+    pub provider_role: &'a str,
+    pub model: &'a str,
+    pub data_class: &'a str,
+    pub preview_hash: &'a str,
+    pub document_payload: &'a str,
+    pub prompt_tokens: u32,
+    pub completion_tokens: u32,
+    pub total_tokens: u32,
+    pub cost_cents: f64,
+    pub status: &'a str,
+    pub error: Option<&'a str>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct EgressAuditReport {
+    pub total_calls: usize,
+    pub succeeded_calls: usize,
+    pub failed_calls: usize,
+    pub total_prompt_tokens: u64,
+    pub total_completion_tokens: u64,
+    pub total_tokens: u64,
+    pub total_cost_cents: f64,
+    pub raw_c2_violations: Vec<String>,
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum CloudAttemptClaim {
     Started(i64),

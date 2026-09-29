@@ -851,4 +851,155 @@ impl Store {
             Ok(false)
         }
     }
+
+    pub fn record_egress(&self, entry: &NewEgressEntry) -> Result<i64, Box<dyn std::error::Error>> {
+        let conn = self.conn()?;
+        let id = conn.query_row(
+            &format!(
+                "INSERT INTO {prefix}_egress_log
+                    (job_id, task, provider, provider_role, model, data_class, preview_hash,
+                     document_payload, prompt_tokens, completion_tokens, total_tokens,
+                     cost_cents, status, error)
+                 VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14)
+                 RETURNING id",
+                prefix = self.prefix
+            ),
+            params![
+                entry.job_id,
+                entry.task,
+                entry.provider,
+                entry.provider_role,
+                entry.model,
+                entry.data_class,
+                entry.preview_hash,
+                entry.document_payload,
+                entry.prompt_tokens,
+                entry.completion_tokens,
+                entry.total_tokens,
+                entry.cost_cents,
+                entry.status,
+                entry.error,
+            ],
+            |row| row.get(0),
+        )?;
+        Ok(id)
+    }
+
+    pub fn list_egress_entries(
+        &self,
+        limit: usize,
+    ) -> Result<Vec<EgressEntry>, Box<dyn std::error::Error>> {
+        let conn = self.conn()?;
+        let mut stmt = conn.prepare(&format!(
+            "SELECT id, timestamp, job_id, task, provider, provider_role, model,
+                        data_class, preview_hash, document_payload, prompt_tokens,
+                        completion_tokens, total_tokens, cost_cents, status, error
+                 FROM {prefix}_egress_log
+                 ORDER BY id DESC
+                 LIMIT ?1",
+            prefix = self.prefix
+        ))?;
+        let rows = stmt.query_map(params![limit as i64], |row| {
+            Ok(EgressEntry {
+                id: row.get(0)?,
+                timestamp: row.get(1)?,
+                job_id: row.get(2)?,
+                task: row.get(3)?,
+                provider: row.get(4)?,
+                provider_role: row.get(5)?,
+                model: row.get(6)?,
+                data_class: row.get(7)?,
+                preview_hash: row.get(8)?,
+                document_payload: row.get(9)?,
+                prompt_tokens: row.get(10)?,
+                completion_tokens: row.get(11)?,
+                total_tokens: row.get(12)?,
+                cost_cents: row.get(13)?,
+                status: row.get(14)?,
+                error: row.get(15)?,
+            })
+        })?;
+        let mut result = Vec::new();
+        for row in rows {
+            result.push(row?);
+        }
+        Ok(result)
+    }
+
+    pub fn egress_audit(&self) -> Result<EgressAuditReport, Box<dyn std::error::Error>> {
+        let conn = self.conn()?;
+        let mut stmt = conn.prepare(&format!(
+            "SELECT id, prompt_tokens, completion_tokens, total_tokens, cost_cents,
+                        status, data_class, document_payload
+                 FROM {prefix}_egress_log
+                 ORDER BY id ASC",
+            prefix = self.prefix
+        ))?;
+        let rows = stmt.query_map([], |row| {
+            Ok((
+                row.get::<_, i64>(0)?,
+                row.get::<_, u32>(1)?,
+                row.get::<_, u32>(2)?,
+                row.get::<_, u32>(3)?,
+                row.get::<_, f64>(4)?,
+                row.get::<_, String>(5)?,
+                row.get::<_, String>(6)?,
+                row.get::<_, String>(7)?,
+            ))
+        })?;
+
+        let registry = crate::people_registry::entity_registry();
+        let mut report = EgressAuditReport {
+            total_calls: 0,
+            succeeded_calls: 0,
+            failed_calls: 0,
+            total_prompt_tokens: 0,
+            total_completion_tokens: 0,
+            total_tokens: 0,
+            total_cost_cents: 0.0,
+            raw_c2_violations: Vec::new(),
+        };
+
+        for row in rows {
+            let (id, p_tok, c_tok, tot_tok, cost, status, data_class, doc) = row?;
+            report.total_calls += 1;
+            if status == "succeeded" {
+                report.succeeded_calls += 1;
+            } else {
+                report.failed_calls += 1;
+            }
+            report.total_prompt_tokens += p_tok as u64;
+            report.total_completion_tokens += c_tok as u64;
+            report.total_tokens += tot_tok as u64;
+            report.total_cost_cents += cost;
+
+            // Audit for C2 raw entity leakage (PRD §6, Product Rule 4, ISC-22):
+            // 1. Check against known people in operator's registry
+            let person_matches = registry.find_matches(&doc);
+            for m in person_matches {
+                report.raw_c2_violations.push(format!(
+                    "row {id}: payload leaked raw person name {:?} at offset {}-{} (data class {data_class})",
+                    m.original_matched, m.start, m.end
+                ));
+            }
+            // 2. Check for raw unpseudonymized email or IBAN if personal (c1)
+            if data_class == "c1" {
+                for word in doc.split_whitespace() {
+                    if sjel_pseudonymize::pattern::looks_like_email(word) && !word.starts_with('<')
+                    {
+                        report.raw_c2_violations.push(format!(
+                            "row {id}: payload leaked raw email address {word:?} in c1 derivative"
+                        ));
+                    }
+                    if sjel_pseudonymize::pattern::looks_like_iban(word) {
+                        report.raw_c2_violations.push(format!(
+                            "row {id}: payload leaked raw IBAN {word:?} in c1 derivative"
+                        ));
+                    }
+                }
+            }
+        }
+
+        Ok(report)
+    }
 }

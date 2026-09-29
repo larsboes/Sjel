@@ -285,6 +285,29 @@ impl Store {
                 UNIQUE (job_id, sequence)
             );
 
+            -- Egress audit log for outbound cloud model calls (PRD §6, ISC-23, ISC-22).
+            -- Every outbound model call appears here with its token count and cost.
+            -- The exact document_payload is preserved so an audit query can verify
+            -- that no raw C2 data about other people was sent off-host.
+            CREATE TABLE IF NOT EXISTS {prefix}_egress_log (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                timestamp TEXT NOT NULL DEFAULT ({now}),
+                job_id TEXT,
+                task TEXT NOT NULL,
+                provider TEXT NOT NULL,
+                provider_role TEXT NOT NULL,
+                model TEXT NOT NULL,
+                data_class TEXT NOT NULL,
+                preview_hash TEXT NOT NULL,
+                document_payload TEXT NOT NULL,
+                prompt_tokens INTEGER NOT NULL DEFAULT 0,
+                completion_tokens INTEGER NOT NULL DEFAULT 0,
+                total_tokens INTEGER NOT NULL DEFAULT 0,
+                cost_cents REAL NOT NULL DEFAULT 0.0,
+                status TEXT NOT NULL CHECK (status IN ('succeeded','failed')),
+                error TEXT
+            );
+
             -- Durable intent for Gmail mutations. The thread id is already the
             -- triage primary key; no message content is copied into this ledger.
             CREATE TABLE IF NOT EXISTS {prefix}_gmail_action_jobs (
@@ -333,6 +356,10 @@ impl Store {
                 ON {prefix}_content_cloud_derivatives(approved_at DESC);
             CREATE INDEX IF NOT EXISTS idx_{prefix}_content_cloud_jobs_queued
                 ON {prefix}_content_cloud_jobs(queued_at ASC) WHERE status = 'queued';
+            CREATE INDEX IF NOT EXISTS idx_{prefix}_egress_log_timestamp
+                ON {prefix}_egress_log(timestamp DESC);
+            CREATE INDEX IF NOT EXISTS idx_{prefix}_egress_log_provider
+                ON {prefix}_egress_log(provider);
 
             -- mail-llm-rung 2026-09-03 ---------------------------------------
             -- Appended as one delimited block at the END of the batch: the feed

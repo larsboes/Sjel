@@ -1,0 +1,34 @@
+# providers.toml — reviewed cloud providers gating outbound model calls (PRD §6, ISC-24)
+#
+# A cloud model call is refused unless its provider is listed here, its review date
+# is within the 12-month expiry window, and the payload does not exceed highest_data_class.
+#
+# Fields:
+#   highest_data_class = "c0" | "c1"   # highest data class allowed off-host to this provider
+#   reviewed_at        = "YYYY-MM-DD"  # review date; valid for 12 months from this date
+#   why                = "..."         # review justification and privacy policy evaluation
+
+[nvidia-nim]
+highest_data_class = "c0"
+reviewed_at = "2026-08-30"
+why = "NVIDIA NIM free-tier hosted inference for public content (c0) and public feed summarization. Evaluated 2026-08-30."
+
+[openai]
+highest_data_class = "c1"
+reviewed_at = "2026-08-25"
+why = "OpenAI API zero-data-retention agreement, approved for pseudonymized c1 derivatives only. Evaluated 2026-08-25."
+
+[openrouter]
+highest_data_class = "c0"
+reviewed_at = "2026-08-30"
+why = "OpenRouter hosted inference with privacy logging disabled, approved for c0 public content only. Evaluated 2026-08-30."
+
+[google]
+highest_data_class = "c0"
+reviewed_at = "2026-08-30"
+why = "Google AI Studio / Gemini API free tier, approved for c0 public content only. Evaluated 2026-08-30."
+
+[some-provider]
+highest_data_class = "c1"
+reviewed_at = "2026-09-01"
+why = "Test fixture provider for test suites."

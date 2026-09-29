@@ -356,11 +356,11 @@ pub fn evaluate(
         .collect::<Vec<_>>();
     let strongest = counted
         .iter()
-        .max_by(|left, right| left.score.partial_cmp(&right.score).unwrap())
+        .max_by(|left, right| left.score.total_cmp(&right.score))
         .expect("the evaluator always has at least one weighted factor");
     let weakest = counted
         .iter()
-        .min_by(|left, right| left.score.partial_cmp(&right.score).unwrap())
+        .min_by(|left, right| left.score.total_cmp(&right.score))
         .expect("the evaluator always has at least one weighted factor");
     let explanation = format!(
         "Strongest signal: {} ({:.0}%). Largest deduction: {} ({:.0}%).",

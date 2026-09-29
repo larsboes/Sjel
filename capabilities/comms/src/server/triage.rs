@@ -1738,6 +1738,7 @@ mod tests {
             database_path: std::env::temp_dir()
                 .join(format!("comms-server-test-{}", std::process::id()))
                 .join("classify_shadow.db"),
+            inference: sjel_inference::InferenceConfig::default(),
             ..Config::load()
         };
         let receipt = mail_model::run_pass(&cfg, &store, Mode::Shadow, 200, 0)

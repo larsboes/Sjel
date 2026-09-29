@@ -85,7 +85,9 @@ pub(super) async fn cloud_preview_handler(
             let Some(item) = load_content_item(&store, &source, &id)? else {
                 return Ok(None);
             };
-            cloud_derivative::prepare(&item.cloud_input())
+            let registry = crate::people_registry::entity_registry();
+            cloud_derivative::prepare_pseudonymized(&item.cloud_input(), registry)
+                .map(|p| p.preview)
                 .map(Some)
                 .map_err(|refusal| refusal.to_string())
         })
@@ -127,7 +129,9 @@ pub(super) async fn cloud_approval_handler(
             // is no preview to compare a hash against in the first place, so
             // the refusal happens one step earlier and cannot be reached with a
             // stale hash instead.
-            let preview = cloud_derivative::prepare(&item.cloud_input())
+            let registry = crate::people_registry::entity_registry();
+            let preview = cloud_derivative::prepare_pseudonymized(&item.cloud_input(), registry)
+                .map(|p| p.preview)
                 .map_err(|refusal| refusal.to_string())?;
             if preview.preview_hash != body.preview_hash {
                 return Err(
@@ -200,7 +204,9 @@ pub(super) async fn cloud_queue_handler(
             let Some(item) = load_content_item(&store, &source, &id)? else {
                 return Ok(None);
             };
-            let preview = cloud_derivative::prepare(&item.cloud_input())
+            let registry = crate::people_registry::entity_registry();
+            let preview = cloud_derivative::prepare_pseudonymized(&item.cloud_input(), registry)
+                .map(|p| p.preview)
                 .map_err(|refusal| refusal.to_string())?;
             if preview.preview_hash != body.preview_hash {
                 return Err("approved derivative is stale; prepare and review it again".into());
@@ -214,6 +220,11 @@ pub(super) async fn cloud_queue_handler(
                 return Err("provider role does not allow this reviewed derivative".into());
             }
             let utc_date = store.utc_date().map_err(|error| error.to_string())?;
+            let provider_name = role.provider_name.as_deref().unwrap_or("");
+            let providers = sjel_inference::ReviewedProvidersList::load();
+            providers
+                .check_admission(provider_name, &preview.derivative_data_class, &utc_date)
+                .map_err(|e| format!("provider review policy: {e}"))?;
             if !role.billing_active_on(&utc_date) {
                 return Err("provider billing policy is expired or inactive".into());
             }

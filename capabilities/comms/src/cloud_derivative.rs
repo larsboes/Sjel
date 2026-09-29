@@ -1289,4 +1289,61 @@ mod tests {
             );
         }
     }
+
+    /// Product Rule 4 (answering Staab et al.): A cloud derivative carries only the bounded
+    /// content fields required by the task (Title / Summary / Content). All ambient metadata,
+    /// headers (Message-ID, Date, Sender email, IP, routing info) are completely excluded from
+    /// the prepared cloud derivative.
+    #[test]
+    fn cloud_derivative_carries_only_fields_task_needs_answering_staab_et_al() {
+        let mut triage = crate::store::db_tests::mk_triage("thread:msg-abc-123", "aktiv");
+        triage.from_addr = Some("secret.boss@enterprise.com".into());
+        triage.subject = Some("Quarterly review discussion".into());
+        triage.snippet = Some("Drafting the report for next week.".into());
+
+        let input = CloudDocumentInput {
+            source: "triage".into(),
+            id: triage.id.clone(),
+            title: triage.subject.clone(),
+            author: triage.from_addr.clone(),
+            summary: triage.snippet.clone(),
+            content: None,
+            data_class: "c1".into(),
+        };
+
+        let prepared = prepare_pseudonymized(&input, &alice_registry())
+            .unwrap()
+            .preview;
+        let doc = &prepared.document;
+
+        // 1. Task-relevant fields exist
+        assert!(doc.contains("Title\nQuarterly review discussion"));
+        assert!(doc.contains("Summary\nDrafting the report for next week."));
+
+        // 2. Ambient headers and metadata are completely omitted
+        assert!(
+            !doc.contains("secret.boss@enterprise.com"),
+            "raw sender must not appear: {doc}"
+        );
+        assert!(
+            !doc.contains("thread:msg-abc-123"),
+            "thread ID must not appear in document: {doc}"
+        );
+        assert!(
+            !doc.contains("Message-ID"),
+            "protocol headers must not appear: {doc}"
+        );
+        assert!(
+            !doc.contains("Received:"),
+            "routing headers must not appear: {doc}"
+        );
+        assert!(
+            !doc.contains("User-Agent:"),
+            "client headers must not appear: {doc}"
+        );
+        assert!(
+            !doc.contains("Date:"),
+            "transport date header must not appear: {doc}"
+        );
+    }
 }

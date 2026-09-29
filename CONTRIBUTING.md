@@ -160,10 +160,14 @@ Every change keeps to these. Rules 1, 4 and 5 describe the target behaviour; the
 3. Sjel detects what the devices can do and chooses the defaults. Other options are under
    Advanced.
 4. C2 data leaves the owner's devices only end-to-end encrypted, with keys on those devices, or
-   pseudonymized. A test proves each path. A failing test closes the path.
-5. Summaries and labels appear without a confirmation. A reversible change applies by itself
-   only after a frozen test set shows it is reliable. A change that leaves Sjel, or cannot be
-   undone, always asks.
+   pseudonymized. A cloud request carries only the fields its task needs (Staab et al.); ambient
+   metadata, protocol headers, and extraneous history are stripped. A test proves each path. A
+   failing test closes the path.
+5. Summaries and labels appear without a confirmation. Confirmations protect only while they are
+   rare enough to be read (Akhawe and Felt); frequent prompts cause habituation and click-through.
+   A reversible change applies by itself only after a frozen test set shows it is reliable. A change
+   that leaves Sjel, or cannot be undone, asks. The prompt rate on routine flows is measured and
+   kept at zero.
 6. Screens and assistant tools come from the typed data.
 7. A statement about the system cites the file, command or measurement that proves it.
 

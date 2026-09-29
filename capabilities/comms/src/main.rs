@@ -87,6 +87,8 @@ fn print_help() {
     println!("                                  the corpus complete. Needs comms-server up: it");
     println!("                                  is an HTTP client, not a second opener of the");
     println!("                                  database.");
+    println!("  egress-log [--limit N=25]       show outbound cloud model calls with token counts");
+    println!("       [--audit]                  and costs, or audit egress payloads for C2 leaks");
     println!("  --help, -h                      show this help");
     println!("\nThis CLI's Gmail sweep is READ-ONLY. Archive, Trash and the Waiting label require an explicit authenticated dashboard action.");
 }
@@ -114,6 +116,7 @@ fn main() {
         "mail" => cmd_mail(&args, &cfg),
         "digest" => cmd_digest(&args, &cfg),
         "relevance" => cmd_relevance(&args, &cfg),
+        "egress-log" => cmd_egress_log(&args, &cfg),
         other => {
             eprintln!("error: unknown command '{other}'\n");
             print_help();
@@ -1325,4 +1328,88 @@ fn cmd_relevance(args: &[String], cfg: &Config) {
     println!(
         "backfill finished: {considered} considered, {rescored} re-scored, {reused} re-evaluated from stored matches, {refused} refused by class; last mode {last_mode}"
     );
+}
+
+// -- egress-log ----------------------------------------------------------
+
+fn cmd_egress_log(args: &[String], cfg: &Config) {
+    let limit: usize = arg_after(args, "--limit")
+        .and_then(|v| v.parse().ok())
+        .unwrap_or(25);
+    let audit = args.iter().any(|a| a == "--audit");
+    let store = open_store(cfg);
+
+    if audit {
+        let report = match store.egress_audit() {
+            Ok(r) => r,
+            Err(e) => {
+                eprintln!("error: could not run egress audit: {e}");
+                std::process::exit(1);
+            }
+        };
+        println!("comms egress audit (PRD §6, ISC-22, ISC-23)");
+        println!("───────────────────────────────────────────");
+        println!("  total model calls:     {}", report.total_calls);
+        println!("  succeeded:             {}", report.succeeded_calls);
+        println!("  failed:                {}", report.failed_calls);
+        println!("  prompt tokens:         {}", report.total_prompt_tokens);
+        println!(
+            "  completion tokens:     {}",
+            report.total_completion_tokens
+        );
+        println!("  total tokens:          {}", report.total_tokens);
+        println!(
+            "  total cost:            ${:.4} ({:.2} cents)",
+            report.total_cost_cents / 100.0,
+            report.total_cost_cents
+        );
+        println!(
+            "  raw C2 violations:     {}",
+            report.raw_c2_violations.len()
+        );
+        if !report.raw_c2_violations.is_empty() {
+            println!("\nVIOLATIONS FOUND:");
+            for v in &report.raw_c2_violations {
+                println!("  [!] {v}");
+            }
+            std::process::exit(1);
+        } else {
+            println!("  [✓] no raw data about other people found in egress log.");
+        }
+    } else {
+        let entries = match store.list_egress_entries(limit) {
+            Ok(e) => e,
+            Err(e) => {
+                eprintln!("error: could not read egress log: {e}");
+                std::process::exit(1);
+            }
+        };
+        println!(
+            "comms egress log — {} recent outbound cloud call(s)\n",
+            entries.len()
+        );
+        for entry in entries {
+            let status_badge = if entry.status == "succeeded" {
+                "✓"
+            } else {
+                "✗"
+            };
+            println!(
+                "[{}] #{} {} | {}/{} ({}) | tokens: {} (p:{} c:{}) | ${:.4}",
+                status_badge,
+                entry.id,
+                entry.timestamp,
+                entry.provider,
+                entry.model,
+                entry.task,
+                entry.total_tokens,
+                entry.prompt_tokens,
+                entry.completion_tokens,
+                entry.cost_cents / 100.0,
+            );
+            if let Some(err) = &entry.error {
+                println!("    error: {err}");
+            }
+        }
+    }
 }

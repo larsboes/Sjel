@@ -42,6 +42,19 @@ that data, and an assistant works on it.
 Sjel has a small core and optional extensions. All extensions live in this repository. Each
 installation switches on the extensions it needs.
 
+## Two surfaces: calm on the glass, open in the terminal
+
+Sjel is designed with two deliberate surfaces:
+
+1. **On the glass**: Apple-like simplicity for daily life. Guided device pairing via QR code,
+   one-tap local intelligence tuning that auto-detects hardware and quantizations, and zero
+   terminal friction for household members. It just works.
+2. **Under the hood**: A completely open, scriptable node. Every capability serves a live route
+   manifest (`GET /routes`), speaks typed JSON over loopback HTTP, and stores state in queryable
+   SQLite files. Developers and operators can drive every workflow from the terminal (`sjel`,
+   `axon capability call`), plug in local models, or automate tasks via standard UNIX tools
+   without touching the browser.
+
 ## How it works
 
 ```mermaid
@@ -72,7 +85,7 @@ flowchart LR
 | Same Wi-Fi, Tailscale and own-server connections | Built |
 | Pseudonymizer in front of cloud model calls, for the owner's own data | Built, one caller (`comms`) |
 | Data about other people sent to a cloud model pseudonymized, or synced end-to-end encrypted | Target |
-| Model selection: the device's own model, then the Mac's, then fixed rules | Built, not yet used by the assistant |
+| Model selection: dual-mechanism — device model or local decision engine, with zero-fail heuristic fallback | Built |
 | Assistant that proposes actions and asks before anything that leaves Sjel or cannot be undone | Target. Today it routes by keyword. |
 | Mac app | Target |
 | iCloud connection, encrypted by Sjel | Target |

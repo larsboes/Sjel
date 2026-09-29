@@ -133,9 +133,35 @@ pub async fn serve(name: &str, reach: Reach, port: u16, router: axum::Router, au
     }
 }
 
+/// Runs a blocking operation (SQLite queries, disk I/O, CPU-heavy work) on Tokio's
+/// dedicated blocking pool, flattening the inner Result and JoinError into a unified `Result<T, String>`.
+///
+/// Keeps blocking calls off cooperative async threads without requiring callers to write
+/// verbose nested `match spawn_blocking(...).await { Ok(Ok(v)) => ..., Ok(Err(e)) => ..., Err(e) => ... }`.
+pub async fn blocking<F, T, E>(f: F) -> Result<T, String>
+where
+    F: FnOnce() -> Result<T, E> + Send + 'static,
+    T: Send + 'static,
+    E: std::fmt::Display + Send + 'static,
+{
+    tokio::task::spawn_blocking(f)
+        .await
+        .map_err(|e| format!("blocking task panicked or cancelled: {e}"))?
+        .map_err(|e| e.to_string())
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[tokio::test]
+    async fn blocking_flattens_success_and_error() {
+        let ok = blocking(|| Ok::<_, String>("computed")).await;
+        assert_eq!(ok, Ok("computed"));
+
+        let err = blocking(|| Err::<(), _>("disk error")).await;
+        assert_eq!(err, Err("disk error".to_string()));
+    }
 
     #[test]
     fn bind_addr_is_loopback_only() {

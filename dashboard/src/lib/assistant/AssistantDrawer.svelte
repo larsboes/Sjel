@@ -8,6 +8,7 @@
   import { assistantStore } from './assistant.svelte';
   import { extractRouteContext } from './context';
   import GenerativeWidgetRenderer from './cards/GenerativeWidgetRenderer.svelte';
+  import { RUNG_LABEL } from '$lib/intelligence/ladder';
 
   interface CommandItem {
     id: string;
@@ -260,9 +261,24 @@
       <div class="drawer-body" bind:this={chatBodyEl}>
         {#each assistantStore.messages as msg (msg.id)}
           <div class="message-row" class:user={msg.role === 'user'} class:system={msg.role === 'system'}>
-            {#if msg.role === 'assistant' && msg.routing}
+            {#if msg.role === 'assistant'}
               <div class="msg-meta-bar">
-                <span class="route-tag" title={msg.routing.reason}>{msg.routing.domain}</span>
+                {#if msg.routing}
+                  <span class="route-tag" title={msg.routing.reason}>{msg.routing.domain}</span>
+                {/if}
+                {#if msg.rung}
+                  <span
+                    class="rung-tag mono"
+                    class:rung-device={msg.rung === 'on-device'}
+                    class:rung-mac={msg.rung === 'mac'}
+                    class:rung-rules={msg.rung === 'rules'}
+                    title={msg.skippedRungs && msg.skippedRungs.length > 0
+                      ? `Rung: ${RUNG_LABEL[msg.rung]} (skipped: ${msg.skippedRungs.map((s) => `${s.rung}: ${s.reason}`).join(', ')})`
+                      : `Rung: ${RUNG_LABEL[msg.rung]}`}
+                  >
+                    {RUNG_LABEL[msg.rung]}
+                  </span>
+                {/if}
               </div>
             {/if}
 
@@ -575,6 +591,32 @@
     font-weight: 500;
   }
 
+  .rung-tag {
+    padding: 0.05rem 0.35rem;
+    border-radius: var(--radius-sm);
+    font-size: 10px;
+    letter-spacing: 0.02em;
+    border: 1px solid transparent;
+  }
+
+  .rung-tag.rung-device {
+    background: color-mix(in srgb, var(--success) 12%, transparent);
+    color: var(--success);
+    border-color: color-mix(in srgb, var(--success) 30%, transparent);
+  }
+
+  .rung-tag.rung-mac {
+    background: color-mix(in srgb, var(--primary) 12%, transparent);
+    color: var(--primary);
+    border-color: color-mix(in srgb, var(--primary) 30%, transparent);
+  }
+
+  .rung-tag.rung-rules {
+    background: var(--surface);
+    color: var(--text-tertiary);
+    border-color: var(--card-border);
+  }
+
   .bubble {
     background: var(--card-bg);
     border: 1px solid var(--card-border);
@@ -871,5 +913,13 @@
       padding-bottom: max(0.85rem, env(safe-area-inset-bottom, 16px));
     }
 
+    textarea {
+      font-size: 16px;
+    }
+
+    .drawer-body {
+      -webkit-overflow-scrolling: touch;
+      overscroll-behavior: contain;
+    }
   }
 </style>

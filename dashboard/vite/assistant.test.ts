@@ -460,3 +460,37 @@ describe('generative UI widgets', () => {
     expect(reply.cards?.[0]?.type).toBe('feed_digest');
   });
 });
+
+describe('assistant model ladder (ISC-18)', () => {
+  const general = extractRouteContext('/');
+
+  it('falls back to rules rung when backends are unreachable', async () => {
+    mockFetch(() => {
+      throw new Error('Connection refused');
+    });
+
+    const reply = await assistantEngine.processQuery('what is Sjel', general);
+    expect(reply.rung).toBe('rules');
+    expect(reply.content).toContain('Sjel Assistant');
+  });
+
+  it('uses mac rung when mac foundation model answers', async () => {
+    mockFetch((url) => {
+      if (url.includes('/foundation-models/health')) {
+        return json({ model_available: true, context_window: 4096 });
+      }
+      if (url.includes('/foundation-models/v1/chat/completions')) {
+        return json({
+          choices: [
+            { message: { content: 'Sjel is a local-first personal OS running capabilities on loopback.' } },
+          ],
+        });
+      }
+      return json({});
+    });
+
+    const reply = await assistantEngine.processQuery('what is Sjel', general);
+    expect(reply.rung).toBe('mac');
+    expect(reply.content).toBe('Sjel is a local-first personal OS running capabilities on loopback.');
+  });
+});

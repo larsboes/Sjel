@@ -53,6 +53,12 @@ use std::str::FromStr;
 
 use serde::{Deserialize, Serialize};
 
+pub mod providers;
+pub use providers::{
+    class_admits, compute_expiry_date, normalize_provider_name, ProviderAdmissionError,
+    ReviewedProvider, ReviewedProvidersList,
+};
+
 /// The wire shape a backend speaks. Both are embedding-capable; the request
 /// and response bodies differ, nothing else does.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]

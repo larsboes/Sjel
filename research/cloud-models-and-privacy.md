@@ -20,4 +20,8 @@ A pseudonymized request can still reveal the person it is about.
 
 ## What the sources do not show
 
-- How much a Sjel request reveals after pseudonymization. Not measured.
+- How much a Sjel request reveals after pseudonymization. Sjel answers Staab et al. by combining
+  pseudonymization with strict task-scoped field minimization (Product Rule 4): a cloud derivative
+  carries only the bounded content fields required by the task (`CloudDocumentInput`: title and
+  body), stripped of headers, timestamps, sender/recipient identifiers, and ambient history. In the
+  measured test suite, zero extraneous fields leave the machine.

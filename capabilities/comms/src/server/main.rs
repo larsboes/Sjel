@@ -453,7 +453,7 @@ async fn project_library_after_write(
     };
     // Mark the library dirty BEFORE queuing, so a writer can never be the one
     // whose change is missed: whoever holds the lock next sees the flag.
-    EXPORT_DIRTY.store(true, Ordering::SeqCst);
+    EXPORT_DIRTY.store(true, Ordering::Release);
     tokio::spawn(async move {
         let _held = EXPORT_LOCK.get_or_init(Default::default).lock().await;
         // Coalescing, not throttling. Keyboard triage turns one glance into a
@@ -464,7 +464,7 @@ async fn project_library_after_write(
         // pass, which is why this drops a redundant export and never the last
         // one. A task that finds the flag already clear exits having done
         // nothing, because someone else has just exported the state it wanted.
-        while EXPORT_DIRTY.swap(false, Ordering::SeqCst) {
+        while EXPORT_DIRTY.swap(false, Ordering::AcqRel) {
             let root = root.clone();
             let outcome = tokio::task::spawn_blocking(move || -> Result<_, String> {
                 let root = markdown_root::MarkdownRoot::declare(root).map_err(|e| e.to_string())?;

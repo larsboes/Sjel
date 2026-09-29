@@ -536,7 +536,7 @@ fn perform(
     };
 
     if let Err(ref err) = result {
-        let estimated_tokens = cloud_dispatch::input_token_upper_bound(&job.document) as u32;
+        let estimated_tokens = cloud_dispatch::input_token_upper_bound(&job.document);
         let _ = store.record_egress(&crate::store::NewEgressEntry {
             job_id: Some(&job.job_id),
             task: &job.task,

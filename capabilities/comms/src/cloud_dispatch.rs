@@ -294,7 +294,7 @@ fn chat_outcome(role: &ResolvedRole, mut body: serde_json::Value) -> Result<Chat
             (prompt, completion, total)
         })
         .unwrap_or_else(|| {
-            let prompt = input_token_upper_bound(&body.to_string()) as u32;
+            let prompt = input_token_upper_bound(&body.to_string());
             let completion = (content.split_whitespace().count() * 4 / 3) as u32;
             (prompt, completion, prompt + completion)
         });

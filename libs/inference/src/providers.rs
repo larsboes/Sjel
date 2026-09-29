@@ -58,7 +58,8 @@ pub fn compute_expiry_date(reviewed_at: &str) -> Option<String> {
     let day: u32 = reviewed_at[8..10].parse().ok()?;
 
     let next_year = year + 1;
-    let leap = next_year % 4 == 0 && (next_year % 100 != 0 || next_year % 400 == 0);
+    let leap = next_year.is_multiple_of(4)
+        && (!next_year.is_multiple_of(100) || next_year.is_multiple_of(400));
     let max_days = match month {
         1 | 3 | 5 | 7 | 8 | 10 | 12 => 31,
         4 | 6 | 9 | 11 => 30,

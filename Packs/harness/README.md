@@ -167,7 +167,7 @@ manager and the web access every session uses.
 | Vendored | `pi-packages/pi-subagents/` — `src/`, `package.json`, `tsconfig.json`, `LICENSE` |
 | Not copied | `test/`, `docs/`, `examples/`, `.github/`, `media/`, and the upstream README and CHANGELOG |
 | Not committed | `node_modules/` (installed in place), and upstream's own lockfile |
-| Local deltas | one doc comment in `src/output-file.ts`: its POSIX path example became a placeholder so it stops reading as a workstation path to `tools/check-publication-hygiene.sh`. No behavioural change. `tsconfig.json` is upstream's, added to the vendored set so a customization can be typechecked before a restart |
+| Local deltas | TWO. (1) One doc comment in `src/output-file.ts`: its POSIX path example became a placeholder so it stops reading as a workstation path to `tools/check-publication-hygiene.sh`. No behavioural change. `tsconfig.json` is upstream's, added to the vendored set so a customization can be typechecked before a restart. (2) `"overrides": { "undici": "^8.10.2" }` in `package.json`, added 2026-09-29 for GHSA-3wwx-pv8p-q78v / CVE-2026-85024: undici's WebSocket client kills the whole process on a malformed permessage-deflate block, fixed in 8.10.2. An update cannot reach it, because `@earendil-works/pi-coding-agent` pins `"undici": "8.9.0"` **exactly** — including at its newest 0.85.1 — so the resolution sat one patch below the fix and `bun update` had nothing to move. `bun install` resolved the lockfile to 8.11.2 and `osv-scanner` reports no issues |
 | Owner | Axon. Upstream is a source to re-read, not a dependency that updates itself — `pi update` does not touch a local-path package |
 
 This reverses, for these three packages, the convention every other Pack README states: that a
@@ -292,7 +292,7 @@ patch when a provider changed shape.
 | Vendored | `pi-packages/pi-web-access/` — the root `*.ts` sources, `package.json`, `tsconfig.json`, `LICENSE` |
 | Not copied | `test/` (1.0M, 82 files), `pi-web-fetch-demo.mp4`, `banner.png`, `CHANGELOG.md`, `README.md`, `SECURITY.md`, and the upstream lockfile |
 | Not committed | `node_modules/` (nine runtime dependencies, installed in place) |
-| Local deltas | none. Upstream's manifest already points pi at `./index.ts`, so it loads with no build |
+| Local deltas | one, in `package.json`: `"overrides": { "undici": "^8.10.2" }`, added 2026-09-29 for GHSA-3wwx-pv8p-q78v / CVE-2026-85024: undici's WebSocket client kills the whole process on a malformed permessage-deflate block, fixed in 8.10.2. This tree's own `undici` range had already resolved to 8.10.2, but the nested `@earendil-works/pi-coding-agent/undici` sat at 8.9.0 — that package pins `"undici": "8.9.0"` exactly, including at its newest 0.85.1, so no update reaches it. `bun install` dropped the nested entry and `osv-scanner` reports no issues. Upstream's manifest already points pi at `./index.ts`, so it still loads with no build |
 | Owner | Axon, **detached**: no `.git`, no remote. The npm package was removed from `settings.json` when this landed, so exactly one web-access extension loads |
 
 ## Why this shape: the flip conditions

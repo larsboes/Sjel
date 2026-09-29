@@ -151,7 +151,21 @@ run Socket's scanner, and Cargo/actions keep the zero-day path.
   two Bun blocks carry `default-days: 1`, while Cargo and github-actions remain at 0; each
   resolving UI tree carries `minimumReleaseAge = 86400` and
   `@socketsecurity/bun-security-scanner`, and CI runs `bun pm scan`. The scanner is free-mode
-  network-backed and therefore an operational dependency, not a replacement for the hold.)
+  network-backed and therefore an operational dependency, not a replacement for the hold.
+  2026-09-29, measured with `gh` and the workflow logs: ELEVEN open Dependabot pull requests,
+  every one with `autoMergeRequest` armed, ten of them older than a week — so the falsifier fires,
+  and not one of them is a judgment somebody withheld. They were queued behind a red `main`,
+  which failed four checks for two independent causes: the committed `self.json` carried per-unit
+  code counts no fresh clone could reproduce (CI's `bun test`, `repo gates` and Pages'
+  `build the page`; repaired by ISC-26, e14dabb8), and `undici 8.9.0` in
+  `Packs/harness/pi-packages/pi-subagents` and `pi-web-access` — GHSA-3wwx-pv8p-q78v, fixed in
+  8.10.2, and unreachable by any pull request because `.github/dependabot.yml` watches `/`,
+  `/dashboard` and `capabilities/soundscape/ui` but neither tree; `osv-scanner` reports no issues
+  after the override. What remains for this claim is the push that lets the armed pull requests
+  land, and a dismissal of the one open Dependabot *alert* — `glib 0.18.5` in
+  `dashboard/src-tauri/Cargo.lock`, which the `cargo` block cannot reach either. Its reason is
+  already written in `osv-scanner.toml` (Linux-only via `gtk 0.18 <- muda/tao <- tauri`; the app
+  ships macOS and iOS), so it needs dismissing with that reason rather than a bump.)
 - [x] ISC-9 — the postgres 17.9 → 17.10 image decision is made on its own, not ridden
   along with another change. Falsifier: the bump appears in a commit about something else.
   Closed 2026-08-27 by PRD Q45, which retired the image rather than bumping it: the running

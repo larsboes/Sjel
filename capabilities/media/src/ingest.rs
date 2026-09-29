@@ -79,7 +79,7 @@ fn csv_records(input: &str) -> Result<Vec<Vec<String>>> {
 }
 
 fn exif_dates(root: &Path) -> Result<BTreeMap<PathBuf, String>> {
-    let output = Command::new("exiftool")
+    let output = match Command::new("exiftool")
         .args([
             "-csv",
             "-r",
@@ -89,7 +89,28 @@ fn exif_dates(root: &Path) -> Result<BTreeMap<PathBuf, String>> {
             "%Y-%m-%dT%H:%M:%S",
         ])
         .arg(root)
-        .output()?;
+        .output()
+    {
+        Ok(output) => output,
+        // exiftool is the first rung of the ladder, not a precondition for ingest. A machine
+        // without it dates by filename and mtime exactly as a file with no EXIF would, so an
+        // empty map is the honest answer and the ladder already handles it.
+        //
+        // It is also a host tool, and CI (ubuntu-latest) does not install it: requiring it here
+        // made a test that calls itself hermetic depend on the machine it ran on. It passed
+        // locally and failed in CI, which is the whole tell.
+        //
+        // Recorded rather than silent, because the fallback changes the date of every file it
+        // touches. Correct the date on ingest, not in a migration afterwards.
+        Err(e) if e.kind() == std::io::ErrorKind::NotFound => {
+            eprintln!(
+                "media: exiftool is not on PATH; dating this batch by filename and mtime. \
+                 Install exiftool for EXIF dates."
+            );
+            return Ok(BTreeMap::new());
+        }
+        Err(e) => return Err(e.into()),
+    };
     if !output.status.success() {
         return Err(format!(
             "exiftool failed: {}",

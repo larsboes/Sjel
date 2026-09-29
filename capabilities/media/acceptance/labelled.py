@@ -20,6 +20,27 @@ def rows(path):
         return list(csv.DictReader(handle, delimiter="\t"))
 
 
+def relocations(trail):
+    """Recorded renames: old relative path -> current relative path.
+
+    A fixture that stores a path is stale by construction, and this one proved it: the
+    2026-09-29 relayout renamed `by-date/2019-07/IMG_5791 (1).MP4` to `IMG_5791.MP4`,
+    and the live comparison silently degraded to 3 of 4 the moment it did. That is the
+    same failure the capability exists to prevent -- a pathname is not an identity.
+
+    relayout-library.py recorded all 5,723 moves in the audit trail this script already
+    reads, so the fixture follows the record instead of being hand-edited every time a
+    path changes. The durable fix is to resolve by digest once F0's live index exists;
+    until then this keeps the four live comparisons real rather than quietly fewer.
+    """
+    moves = {}
+    path = trail / "relayout-report.tsv"
+    if path.is_file():
+        for row in rows(path):
+            moves[row["old"]] = row["new"]
+    return moves
+
+
 def main(binary, trail, library=None):
     redundant = rows(trail / "verify-redundant.tsv")
     recovered = rows(trail / "recover-dedup.tsv")
@@ -63,18 +84,22 @@ def main(binary, trail, library=None):
         assert not any(r["present"] for r in got[len(recovered):len(recovered)+4]), "corrupt pair classified as duplicate"
         assert all(r["present"] for r in got[-10:]), "known duplicates not classified as present"
     if library is not None:
+        moves = relocations(trail)
         checked = 0
         for row in exceptions:
-            canonical = library / row["canonical_target"]
+            # Resolve through the recorded renames; `targets` stays keyed by the name
+            # the fixture recorded, so the digest assertion is unchanged.
+            target = moves.get(row["canonical_target"], row["canonical_target"])
+            canonical = library / target
             if not canonical.is_file():
-                print(f"live comparison unavailable: {row['canonical_target']}")
+                print(f"live comparison unavailable: {target}")
                 continue
             digest = hashlib.sha256()
             with canonical.open("rb") as source:
                 for chunk in iter(lambda: source.read(1024 * 1024), b""):
                     digest.update(chunk)
-            assert digest.hexdigest() != row["sha256"], row["canonical_target"]
-            assert digest.hexdigest() in targets[row["canonical_target"]], row["canonical_target"]
+            assert digest.hexdigest() != row["sha256"], target
+            assert digest.hexdigest() in targets[row["canonical_target"]], target
             checked += 1
         print(f"live canonical comparison: {checked}/4 accessible (missing paths are NOT passes)")
     print(f"labelled PASS: {len(recovered)} recovered rows new vs historical cohort; 4 corrupt pairs distinct by recorded SHA-256; 10 positive controls; 4 ffprobe and 29 asset decisions accounted for")

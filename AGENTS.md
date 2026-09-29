@@ -8,6 +8,14 @@ Before editing, run `git status --short --branch` and `tools/doctor`. Preserve u
 changes. Derive capabilities, ports, health, open claims and architecture from Axon tools, the owning
 `ISA.md` and live metadata rather than remembered prose.
 
+## Branch discipline and multi-session concurrency
+
+- **Current branch only**: Work strictly in the currently checked-out branch.
+- **Direct to `main` until official release**: For a long time until the application is officially released, work directly on the `main` branch. Do not create separate branches or switch branches unless explicitly requested.
+- **Post-release branching**: Only after the app is officially released will the repository transition to feature branches and a dev version (`dev`).
+- **Parallel agent sessions**: Be aware that other agent sessions frequently work in parallel in this repository. Always inspect `git status --short --branch` before editing, never stash, revert, or overwrite changes made by concurrent sessions, and touch only the files belonging to your task.
+
+
 Host requirements are scoped to what a machine actually does. After changing a machine's enabled
 capabilities, re-run `tools/toolchain-check` — the requirement set is derived from that list, so it
 moves with it. Before invoking a backup, restore, audit or build, run

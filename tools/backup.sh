@@ -241,6 +241,10 @@ if [ "$STREAM" -eq 0 ]; then
         echo "backup.sh: target '$TARGET_ID' path does not exist: $REMOTE_ROOT" >&2
         echo "  Create it, or attach the volume it lives on. backup.sh will not create a destination." >&2
         exit 1; }
+      # Resolve to the physical directory before anything decides by SPELLING. A
+      # destination that is (or passes through) a symlink to iCloud Drive would otherwise
+      # miss the store-only upload gate below and prune on the generic local path.
+      REMOTE_ROOT="$(cd "$REMOTE_ROOT" && pwd -P)"
       ;;
     *)
       echo "backup.sh: target '$TARGET_ID' has unknown kind '$TARGET_KIND' (expected ssh or local)" >&2; exit 1 ;;
@@ -278,10 +282,35 @@ fi
 if [ -n "$SQLITE_ONLINE_REL" ]; then
   require_command head
 fi
+CLOUD_STORE=0
+# Both sides of the match are resolved: the destination above, and the home directory here.
+# On macOS `/tmp` and `/Users` can themselves be symlinks, so comparing a resolved
+# destination against an unresolved `$HOME` would silently drop the gate on a real target.
+HOME_REAL="$HOME"
+if [ -d "$HOME" ]; then HOME_REAL="$(cd "$HOME" && pwd -P)"; fi
+if [ "$STREAM" -eq 0 ] && [ "$CAP" = "store" ] && [ "$TARGET_KIND" = "local" ]; then
+  case "$REMOTE_ROOT" in
+    "$HOME_REAL/Library/Mobile Documents/"*)
+      CLOUD_STORE=1
+      require_command python3
+      require_command swift
+      [ -f "$TOOLS_DIR/icloud-item.swift" ] && [ -f "$TOOLS_DIR/icloud-store-backup.py" ] \
+        && [ -x "$TOOLS_DIR/restore.sh" ] || {
+        echo "backup.sh: store iCloud verification tools are missing" >&2; exit 1; }
+      ;;
+  esac
+fi
 
 TS="$(date -u +%Y%m%dT%H%M%SZ)"
-STAGE="$SJEL_PERSONAL_ROOT/backup/staging/$CAP"
-TARBALL="$SJEL_PERSONAL_ROOT/backup/staging/$CAP-$TS.tar.gz"
+# A run directory unique to this process. Two overlapping runs must not delete each other's
+# staged bytes, and a directory left by a killed run must not block the next one — a
+# persistent directory lock does exactly that, and a scheduled backup nobody can re-arm is
+# worse than the overlap it prevented. The tarball is a SIBLING of the directory it archives
+# (never inside it), and its name stays the capability and timestamp, so the destination
+# overwrite check below is what a same-second collision hits.
+RUN_DIR="$SJEL_PERSONAL_ROOT/backup/staging/$CAP.$$"
+STAGE="$RUN_DIR/payload"
+TARBALL="$RUN_DIR/$CAP-$TS.tar.gz"
 REMOTE_DIR=""
 if [ "$STREAM" -eq 0 ]; then REMOTE_DIR="$REMOTE_ROOT/$CAP"; fi
 CAPABILITY_HELD=0
@@ -296,7 +325,7 @@ resume_capability() {
   return 1
 }
 
-cleanup() { rm -rf "$STAGE" "$TARBALL"; }
+cleanup() { rm -rf "$RUN_DIR" "$STAGE" "$TARBALL"; }
 on_exit() {
   status=$?
   trap - EXIT HUP INT TERM
@@ -321,7 +350,7 @@ trap 'interrupted HUP' HUP
 trap 'interrupted INT' INT
 trap 'interrupted TERM' TERM
 
-rm -rf "$STAGE"; mkdir -p "$STAGE"
+rm -rf "$RUN_DIR"; mkdir -p "$STAGE"
 
 stage_host_paths() {
   # Guard the expansion: under `set -u`, bash 3.2 treats "${EMPTY[@]}" as unbound.
@@ -653,16 +682,19 @@ if [ "$STREAM" -eq 1 ]; then
   exit 0
 fi
 
-# A local destination: same contract as the remote one, minus the network. Written to a .part
-# name, byte-count verified, renamed only then, pruned to the same retention. The verification is
-# not ceremony here either -- a full disk, a volume that unmounted mid-write and a directory that
-# is really a sync placeholder all produce a short file and no error.
+# A local destination: same contract as the remote one, minus transport. Written to a .part
+# name, byte-count verified, renamed only then. Store on iCloud has an extra upload and
+# previous-restore gate before retention; other local targets keep the ordinary retention path.
+# A full disk, an unmounted volume or a sync placeholder can otherwise produce a short file.
 if [ "$TARGET_KIND" = "local" ]; then
   LOCAL_DIR="$REMOTE_ROOT/$CAP"
   echo "→ ship → $LOCAL_DIR/"
   mkdir -p "$LOCAL_DIR"
   DEST_NAME="$(basename "$TARBALL")"
   DEST_PART="$LOCAL_DIR/.$DEST_NAME.part"
+  [ ! -e "$LOCAL_DIR/$DEST_NAME" ] && [ ! -L "$LOCAL_DIR/$DEST_NAME" ] \
+    && [ ! -e "$DEST_PART" ] && [ ! -L "$DEST_PART" ] || {
+    echo "backup.sh: archive or partial path already exists at the destination; refusing overwrite" >&2; exit 1; }
   cp "$TARBALL" "$DEST_PART"
   LOCAL_BYTES="$(wc -c < "$TARBALL" | tr -d ' ')"
   DEST_BYTES="$(wc -c < "$DEST_PART" | tr -d ' ')"
@@ -675,7 +707,14 @@ if [ "$TARGET_KIND" = "local" ]; then
   echo "  wrote $LOCAL_BYTES bytes, size verified at the destination"
 
   RETENTION_APPLIED=true
-  if [ "$NO_PRUNE" -eq 1 ]; then
+  if [ "$CLOUD_STORE" -eq 1 ]; then
+    # The helper writes an immutable receipt after upload, restores the preceding archive
+    # when pruning is due, and emits only the retention boolean on stdout.
+    RETENTION_APPLIED="$(python3 "$TOOLS_DIR/icloud-store-backup.py" \
+      "$LOCAL_DIR" "$DEST_NAME" "$RETAIN" "$NO_PRUNE" "$TARGET_ID" \
+      "$SJEL_PERSONAL_ROOT" "$TOOLS_DIR" "$LOCAL_SHA256" "$LOCAL_BYTES" 600)" || exit 1
+    case "$RETENTION_APPLIED" in true|false) ;; *) echo "backup.sh: invalid cloud retention verdict" >&2; exit 1 ;; esac
+  elif [ "$NO_PRUNE" -eq 1 ]; then
     RETENTION_APPLIED=false
     echo "→ retain every prior archive (--no-prune)"
   else
@@ -696,11 +735,9 @@ if [ "$TARGET_KIND" = "local" ]; then
   # still listed, still named, and no longer here. Restoring it would need the network and a full
   # download, at exactly the moment that is least affordable.
   #
-  # macOS offers no CLI to pin a folder — `brctl` on macOS 26 exposes log/status/quota/monitor and
-  # nothing that downloads or holds. "Keep Downloaded" is a Finder action. So the pin cannot be
-  # asserted here; only its absence can be detected, which is the more useful half anyway. This is
-  # the same lesson the vault taught: a declaration nobody verifies is how three separate backups
-  # were dead for weeks without anyone noticing.
+  # Finder owns the "Keep Downloaded" setting. Other local iCloud targets still warn when
+  # the directory is unpinned; store allows offloading because its preceding archive is
+  # downloaded and restored before retention deletes anything.
   # Prevention first, where it can be checked. macOS records Finder's "Keep Downloaded" as an
   # extended attribute on the directory — `com.apple.fileprovider.pinned#PX`, where the `#PX` is
   # part of the name and not a display artifact. There is no CLI to SET it (brctl on macOS 26
@@ -711,8 +748,8 @@ if [ "$TARGET_KIND" = "local" ]; then
   # Only meaningful for a directory a file provider actually manages, so its absence is a warning
   # rather than a failure: a plain external volume has no such attribute and needs none.
   case "$REMOTE_ROOT" in
-    "$HOME/Library/Mobile Documents/"*)
-      if ! xattr "$REMOTE_ROOT" 2>/dev/null | grep -q "^com\.apple\.fileprovider\.pinned"; then
+    "$HOME_REAL/Library/Mobile Documents/"*)
+      if [ "$CLOUD_STORE" -eq 0 ] && ! xattr "$REMOTE_ROOT" 2>/dev/null | grep -q "^com\.apple\.fileprovider\.pinned"; then
         echo "  WARNING: $REMOTE_ROOT is not pinned — macOS may evict these archives." >&2
         echo "  In Finder, right-click it and choose \"Keep Downloaded\"." >&2
       fi
@@ -746,9 +783,13 @@ if [ "$TARGET_KIND" = "local" ]; then
     fi
   fi
   if [ "$EVICTED" != "0" ]; then
-    echo "  WARNING: $EVICTED archive(s) at this destination are evicted placeholders, not files." >&2
-    echo "  A restore from them needs network and a full download. In Finder, right-click" >&2
-    echo "  $REMOTE_ROOT and choose \"Keep Downloaded\"." >&2
+    if [ "$CLOUD_STORE" -eq 1 ]; then
+      echo "  $EVICTED store archive(s) are offloaded; an online restore downloads them on demand." >&2
+    else
+      echo "  WARNING: $EVICTED archive(s) at this destination are evicted placeholders, not files." >&2
+      echo "  A restore from them needs network and a full download. In Finder, right-click" >&2
+      echo "  $REMOTE_ROOT and choose \"Keep Downloaded\"." >&2
+    fi
   fi
 
   REMOTE_DIR="$LOCAL_DIR"

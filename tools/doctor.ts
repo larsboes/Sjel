@@ -538,18 +538,21 @@ export function classifyArchiveAtTarget(input: {
   if (!input.exists) {
     return { level: "bad", detail: "the archive the receipt names is not at the destination" };
   }
+  if (input.flags.split(",").includes("dataless")) {
+    const sizeNote = input.sizeBytes === input.receiptBytes
+      ? "its name and size remain local"
+      : "even its reported size differs from the receipt";
+    return {
+      level: "warn",
+      detail:
+        `the archive is offloaded: ${sizeNote}, but recovery requires an online ` +
+        "download and verification; this offline check cannot prove the cloud copy is recoverable",
+    };
+  }
   if (input.sizeBytes !== input.receiptBytes) {
     return {
       level: "bad",
       detail: `the archive holds ${input.sizeBytes} bytes, the receipt recorded ${input.receiptBytes}`,
-    };
-  }
-  if (input.flags.split(",").includes("dataless")) {
-    return {
-      level: "warn",
-      detail:
-        "the archive is a cloud placeholder, not a file — a restore needs the network and a full download first " +
-        '(in Finder, right-click the destination and choose "Keep Downloaded")',
     };
   }
   return { level: "ok", detail: `${input.receiptBytes} bytes, present at the destination` };

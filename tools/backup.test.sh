@@ -16,6 +16,7 @@ mkdir -p "$FIXTURE/tools/lib" "$FIXTURE/capabilities/vaultwarden" \
   "$MOCK_BIN" "$SCRATCH/remote/vaultwarden"
 
 cp "$ROOT/tools/backup.sh" "$FIXTURE/tools/backup.sh"
+cp "$ROOT/tools/icloud-store-backup.py" "$ROOT/tools/icloud-item.swift" "$FIXTURE/tools/"
 cp "$ROOT/tools/lib/toml.sh" "$FIXTURE/tools/lib/toml.sh"
 # The real resolver, not a stub. backup.sh refuses a capability another deployment provides
 # (retired-tracker#169), and every case below depends on that refusal NOT firing — a stub that
@@ -610,6 +611,132 @@ PATH="$BLIND_BIN:$PATH" "$BACKUP" ledger > "$local_log" 2>&1 \
   || fail "a local destination should accept a backup"
 grep -q 'does not understand -flags' "$local_log" \
   || fail "a find that cannot see dataless files reported nothing instead of saying so"
+
+# Store's iCloud path is different from the generic local target: an uploaded new archive
+# and a preceding restored archive gate deletion. Both cloud verbs are mocked here; the
+# Swift status helper itself is exercised against a real iCloud item on macOS.
+CLOUD_HOME="$SCRATCH/icloud-home"
+CLOUD_DEST="$CLOUD_HOME/Library/Mobile Documents/Backup"
+mkdir -p "$CLOUD_DEST" "$MOCK_BIN"
+cat >> "$OVERLAY/config/systems.local.toml" <<SYSTEMS
+
+[icloud-target]
+kind = "local"
+path = "$CLOUD_DEST"
+SYSTEMS
+cat > "$OVERLAY/config/machine.toml" <<'MACHINE'
+os = "linux"
+container_runtime = "docker"
+capabilities = ["store"]
+[capability.store]
+backup_target = "icloud-target"
+MACHINE
+cat > "$FIXTURE/capabilities/store/service.toml" <<'MANIFEST'
+kind = "data"
+name = "store"
+backup_sqlite_online = "data/axon/axon.db"
+backup_target = "synthetic-target"
+backup_retain = "2"
+MANIFEST
+cat > "$MOCK_BIN/swift" <<'SWIFT'
+#!/bin/bash
+printf 'cloud:%s:%s\n' "$2" "${3##*/}" >> "$MOCK_LOG"
+[ "${MOCK_CLOUD_FAIL:-}" != "$2:${3##*/}" ]
+SWIFT
+cat > "$FIXTURE/tools/restore.sh" <<'RESTORE'
+#!/bin/bash
+printf 'restore:%s\n' "${2##*/}" >> "$MOCK_LOG"
+[ "${MOCK_RESTORE_FAIL:-0}" -eq 0 ]
+RESTORE
+chmod +x "$MOCK_BIN/swift" "$FIXTURE/tools/restore.sh"
+
+reset_run
+export MOCK_TIMESTAMP=20260101T000000Z
+printf 'untouched\n' > "$SCRATCH/victim"
+mkdir -p "$CLOUD_DEST/store"
+# A DANGLING symlink is the case `-e` alone misses: it is neither existing nor a file, and
+# `cp` would follow it and write the backup outside the configured destination.
+ln -s "$SCRATCH/never-created" "$CLOUD_DEST/store/.store-$MOCK_TIMESTAMP.tar.gz.part"
+HOME="$CLOUD_HOME" expect_fail_with "dangling cloud partial symlink" "partial path already exists" "$BACKUP" store
+[ ! -e "$SCRATCH/never-created" ] || fail "a dangling partial symlink created its target"
+ln -sfn "$SCRATCH/victim" "$CLOUD_DEST/store/.store-$MOCK_TIMESTAMP.tar.gz.part"
+HOME="$CLOUD_HOME" expect_fail_with "symlinked cloud partial" "partial path already exists" "$BACKUP" store
+[ "$(< "$SCRATCH/victim")" = untouched ] || fail "a symlinked partial overwrote another file"
+rm "$CLOUD_DEST/store/.store-$MOCK_TIMESTAMP.tar.gz.part"
+HOME="$CLOUD_HOME" expect_pass "first iCloud store archive" "$BACKUP" store
+[ -f "$CLOUD_DEST/store/store-$MOCK_TIMESTAMP.tar.gz" ] \
+  || fail "the first iCloud store archive was not shipped"
+[ -f "$OVERLAY/backup/receipts/history/store/store-$MOCK_TIMESTAMP.tar.gz.json" ] \
+  || fail "the immutable store receipt was not recorded"
+reset_run
+export MOCK_TIMESTAMP=20260102T000000Z
+HOME="$CLOUD_HOME" expect_pass "second iCloud store archive" "$BACKUP" store
+reset_run
+export MOCK_TIMESTAMP=20260103T000000Z MOCK_RESTORE_FAIL=1
+HOME="$CLOUD_HOME" expect_fail_with "failed prior restore blocks pruning" "returned non-zero" "$BACKUP" store
+[ "$(find "$CLOUD_DEST/store" -type f -name 'store-*.tar.gz' | wc -l | tr -d ' ')" -eq 3 ] \
+  || fail "a failed prior restore removed an older archive"
+unset MOCK_RESTORE_FAIL
+reset_run
+export MOCK_TIMESTAMP=20260104T000000Z
+HOME="$CLOUD_HOME" expect_pass "retry restores previous and prunes" "$BACKUP" store
+[ "$(find "$CLOUD_DEST/store" -type f -name 'store-*.tar.gz' | wc -l | tr -d ' ')" -eq 2 ] \
+  || fail "a verified store backup did not apply retention"
+assert_order 'cloud:wait-upload:store-20260104' 'cloud:wait-download:store-20260103'
+assert_order 'cloud:wait-download:store-20260103' 'restore:store-20260103'
+
+reset_run
+export MOCK_TIMESTAMP=20260105T000000Z
+HOME="$CLOUD_HOME" expect_pass "no-prune cloud store rehearsal" "$BACKUP" --no-prune store
+[ "$(find "$CLOUD_DEST/store" -type f -name 'store-*.tar.gz' | wc -l | tr -d ' ')" -eq 3 ] \
+  || fail "a no-prune store run removed an older archive"
+grep -q '"retention_applied": false' "$OVERLAY/backup/receipts/store.json" \
+  || fail "a no-prune receipt claimed retention ran"
+grep -q '^restore:' "$MOCK_LOG" && fail "a no-prune run downloaded an older archive"
+
+# The staging directory is unique per run, so state a previous run left behind — a foreign
+# file, or a lock directory from the older implementation — can neither be deleted nor block
+# a scheduled backup. A persistent lock with no stale recovery did exactly that after a kill.
+mkdir -p "$OVERLAY/backup/staging/store" "$OVERLAY/backup/locks/store.lock"
+printf 'active copy\n' > "$OVERLAY/backup/staging/store/do-not-delete"
+reset_run
+export MOCK_TIMESTAMP=20260106T000000Z
+HOME="$CLOUD_HOME" expect_pass "stale state does not block a store backup" "$BACKUP" store
+[ -f "$OVERLAY/backup/staging/store/do-not-delete" ] \
+  || fail "a store run deleted a foreign file from the shared staging path"
+[ -d "$OVERLAY/backup/locks/store.lock" ] \
+  || fail "a store run removed a foreign lock directory"
+rm -rf "$OVERLAY/backup/staging/store" "$OVERLAY/backup/locks"
+
+# A destination reached through a symlink must still take the cloud gate. Selected by the
+# configured path's spelling, a symlinked iCloud target silently dropped to generic pruning.
+CLOUD_LINK="$SCRATCH/icloud-link"
+ln -s "$CLOUD_DEST" "$CLOUD_LINK"
+cat >> "$OVERLAY/config/systems.local.toml" <<SYSTEMS
+
+[linked-target]
+kind = "local"
+path = "$CLOUD_LINK"
+SYSTEMS
+cat > "$OVERLAY/config/machine.toml" <<'MACHINE'
+os = "linux"
+container_runtime = "docker"
+capabilities = ["store"]
+[capability.store]
+backup_target = "linked-target"
+MACHINE
+reset_run
+export MOCK_TIMESTAMP=20260107T000000Z
+HOME="$CLOUD_HOME" expect_pass "symlinked iCloud target" "$BACKUP" store
+grep -q '^cloud:wait-upload:store-20260107' "$MOCK_LOG" \
+  || fail "a symlinked iCloud destination skipped the upload gate"
+cat > "$OVERLAY/config/machine.toml" <<'MACHINE'
+os = "linux"
+container_runtime = "docker"
+capabilities = ["store"]
+[capability.store]
+backup_target = "icloud-target"
+MACHINE
 
 if [ "$fails" -gt 0 ]; then
   echo "backup tests: $fails failure(s)"

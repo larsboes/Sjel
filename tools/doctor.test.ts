@@ -663,7 +663,13 @@ describe("backup receipts", () => {
       receiptBytes: 39_973_563,
     });
     expect(verdict.level).toBe("warn");
-    expect(verdict.detail).toContain("cloud placeholder");
+    expect(verdict.detail).toContain("offloaded");
+    expect(verdict.detail).toContain("cannot prove the cloud copy");
+    const misleadingSize = classifyArchiveAtTarget({
+      exists: true, sizeBytes: 0, flags: "dataless", receiptBytes: 39_973_563,
+    });
+    expect(misleadingSize.level).toBe("warn");
+    expect(misleadingSize.detail).toContain("size differs");
     // `compressed` on its own is ordinary APFS compression and says nothing about eviction.
     expect(classifyArchiveAtTarget({ exists: true, sizeBytes: 10, flags: "compressed", receiptBytes: 10 }).level)
       .toBe("ok");

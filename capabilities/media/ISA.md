@@ -169,7 +169,7 @@ before an applied run exists; full per-file failure capture remains unproven.
 **Claim.** A panel exists whose numbers are read from the capability's own HTTP surface.
 
 > *Probe:* `tools/capability.sh` registry entry plus `panel_port`/`panel_path`; the dashboard mounts
-> it and the displayed totals equal `media status --json`.
+> it and the displayed totals equal `media status` (already JSON by default).
 
 ### F4 · Perceptual layer — advisory *(not started)*
 

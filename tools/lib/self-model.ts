@@ -369,48 +369,8 @@ export function mergeCoupling(edges: SourceCoupling[]): Array<{
     .sort((a, b) => (a.from === b.from ? a.to.localeCompare(b.to) : a.from.localeCompare(b.from)));
 }
 
-/**
- * Whether `tools/self generate` must refuse to write.
- *
- * The `code` layer is derived from `graphify-out/graph.json`, which is git-ignored and
- * machine-local. On a fresh clone, or any machine that has never built the graph, every unit's
- * counts are absent — and writing that out silently removed 181 lines from the committed artifact.
- * Nothing downstream objected: `tools/self check` narrows its own claim when no graph is present,
- * so it passed on the gutted file for the same reason (#35).
- *
- * Carrying the committed numbers forward instead was rejected. They would describe a tree that no
- * longer exists, which is a different lie rather than a fix.
- *
- * Only refuses when there is something to lose: a committed artifact that has no code layer either
- * regenerates freely, which is what a first generate on a graphless machine needs.
- */
-export function generateWouldDropCode(
-  graphPresent: boolean,
-  committedUnits: Array<{ code?: unknown }> | null,
-): boolean {
-  if (graphPresent) return false;
-  return (committedUnits ?? []).some((u) => u.code !== undefined);
-}
-
-/**
- * Whether `tools/self generate` would bake a stale code graph into the artifact.
- *
- * A `stale` entry is a path the graph still holds a node for and the tree no longer has
- * (classifyPath, "stale"). Every per-unit `code` count in the same run was rolled up from
- * that graph, so the counts describe a tree that is one edit behind — and `generate` used to
- * write the staleness down as a field and report success.
- *
- * That is not a cosmetic field. On 2026-09-07 a session ran `generate` to clear doctor's
- * self-model check, got `graph.stale: ["dashboard/src/lib/feed/list-cursor.ts"]` back for a
- * module that had been deleted, and read the unchanged verdict as a different fault; the fix
- * was `graphify update .` first, and regenerating then moved every per-unit count with it
- * (commit 55c71a0). Recording a known-wrong measurement and exiting 0 is the shape of the
- * sixth silent failure: an instrument answering confidently about the wrong tree.
- *
- * So the default is refusal, not a warning line nobody reads. `--allow-stale` exists for the
- * case a rebuild cannot clear — a node for a path that genuinely will not come back — and it
- * says so on the way past.
- */
-export function generateWouldBakeStaleGraph(stale: string[] | undefined): boolean {
-  return (stale ?? []).length > 0;
-}
+// generateWouldDropCode and generateWouldBakeStaleGraph lived here until 2026-09-29. Both guarded
+// `tools/self generate` against writing an artifact whose `code` layer had been dropped on a
+// graphless machine or rolled up from a stale graph, and both existed only because that layer was
+// committed. It is fused on read now (tools/self.ts, "committed vs fused"), so what is left is
+// derived from tracked files alone and there is nothing left to guard.

@@ -1,22 +1,14 @@
 {
-  "schema": 1,
+  "schema": 2,
   "generator": "tools/self.ts",
   "units": [
     {
       "name": "3d-printing",
-      "kind": "pack",
-      "code": {
-        "files": 5,
-        "nodes": 30
-      }
+      "kind": "pack"
     },
     {
       "name": "agentbox",
-      "kind": "capability",
-      "code": {
-        "files": 3,
-        "nodes": 40
-      }
+      "kind": "capability"
     },
     {
       "name": "backup",
@@ -24,10 +16,6 @@
       "service": {
         "kind": "process",
         "requires": []
-      },
-      "code": {
-        "files": 1,
-        "nodes": 4
       }
     },
     {
@@ -37,35 +25,19 @@
         "kind": "process",
         "requires": [],
         "port": "8087"
-      },
-      "code": {
-        "files": 25,
-        "nodes": 614
       }
     },
     {
       "name": "candidate-fingerprint",
-      "kind": "lib",
-      "code": {
-        "files": 2,
-        "nodes": 14
-      }
+      "kind": "lib"
     },
     {
       "name": "civil-date",
-      "kind": "lib",
-      "code": {
-        "files": 3,
-        "nodes": 25
-      }
+      "kind": "lib"
     },
     {
       "name": "cognitive-load",
-      "kind": "pack",
-      "code": {
-        "files": 9,
-        "nodes": 71
-      }
+      "kind": "pack"
     },
     {
       "name": "comms",
@@ -74,10 +46,6 @@
         "kind": "process",
         "requires": [],
         "port": "8083"
-      },
-      "code": {
-        "files": 90,
-        "nodes": 1724
       }
     },
     {
@@ -86,27 +54,15 @@
       "service": {
         "kind": "process",
         "requires": []
-      },
-      "code": {
-        "files": 1,
-        "nodes": 7
       }
     },
     {
       "name": "content-item",
-      "kind": "lib",
-      "code": {
-        "files": 3,
-        "nodes": 96
-      }
+      "kind": "lib"
     },
     {
       "name": "cv",
-      "kind": "pack",
-      "code": {
-        "files": 4,
-        "nodes": 27
-      }
+      "kind": "pack"
     },
     {
       "name": "dashboard",
@@ -117,19 +73,11 @@
           "sjel-status"
         ],
         "port": "47117"
-      },
-      "code": {
-        "files": 226,
-        "nodes": 1706
       }
     },
     {
       "name": "deliberation",
-      "kind": "pack",
-      "code": {
-        "files": 33,
-        "nodes": 214
-      }
+      "kind": "pack"
     },
     {
       "name": "devices",
@@ -138,10 +86,6 @@
         "kind": "process",
         "requires": [],
         "port": "8098"
-      },
-      "code": {
-        "files": 6,
-        "nodes": 96
       }
     },
     {
@@ -151,10 +95,6 @@
         "kind": "process",
         "requires": [],
         "port": "8097"
-      },
-      "code": {
-        "files": 12,
-        "nodes": 194
       }
     },
     {
@@ -180,11 +120,7 @@
     },
     {
       "name": "extraction",
-      "kind": "lib",
-      "code": {
-        "files": 14,
-        "nodes": 218
-      }
+      "kind": "lib"
     },
     {
       "name": "feed-sweep",
@@ -203,10 +139,6 @@
         "kind": "process",
         "requires": [],
         "port": "8090"
-      },
-      "code": {
-        "files": 24,
-        "nodes": 876
       }
     },
     {
@@ -217,10 +149,6 @@
         "requires": [
           "finance"
         ]
-      },
-      "code": {
-        "files": 1,
-        "nodes": 10
       }
     },
     {
@@ -230,19 +158,11 @@
         "kind": "process",
         "requires": [],
         "port": "8091"
-      },
-      "code": {
-        "files": 1,
-        "nodes": 9
       }
     },
     {
       "name": "harness",
-      "kind": "pack",
-      "code": {
-        "files": 245,
-        "nodes": 4893
-      }
+      "kind": "pack"
     },
     {
       "name": "home-assistant",
@@ -251,35 +171,19 @@
         "kind": "container",
         "requires": [],
         "image": "ghcr.io/home-assistant/home-assistant"
-      },
-      "code": {
-        "files": 1,
-        "nodes": 6
       }
     },
     {
       "name": "home-automation",
-      "kind": "pack",
-      "code": {
-        "files": 26,
-        "nodes": 345
-      }
+      "kind": "pack"
     },
     {
       "name": "host-firewall",
-      "kind": "capability",
-      "code": {
-        "files": 2,
-        "nodes": 19
-      }
+      "kind": "capability"
     },
     {
       "name": "host-net",
-      "kind": "capability",
-      "code": {
-        "files": 10,
-        "nodes": 125
-      }
+      "kind": "capability"
     },
     {
       "name": "host-patch",
@@ -287,10 +191,6 @@
       "service": {
         "kind": "process",
         "requires": []
-      },
-      "code": {
-        "files": 1,
-        "nodes": 9
       }
     },
     {
@@ -299,19 +199,11 @@
       "service": {
         "kind": "process",
         "requires": []
-      },
-      "code": {
-        "files": 1,
-        "nodes": 9
       }
     },
     {
       "name": "inference",
-      "kind": "lib",
-      "code": {
-        "files": 3,
-        "nodes": 105
-      }
+      "kind": "lib"
     },
     {
       "name": "interior",
@@ -320,19 +212,11 @@
         "kind": "process",
         "requires": [],
         "port": "8092"
-      },
-      "code": {
-        "files": 36,
-        "nodes": 739
       }
     },
     {
       "name": "knowledge",
-      "kind": "pack",
-      "code": {
-        "files": 11,
-        "nodes": 217
-      }
+      "kind": "pack"
     },
     {
       "name": "knowledge-base",
@@ -340,10 +224,6 @@
       "service": {
         "kind": "data",
         "requires": []
-      },
-      "code": {
-        "files": 1,
-        "nodes": 6
       }
     },
     {
@@ -353,10 +233,6 @@
         "kind": "process",
         "requires": [],
         "port": "4244"
-      },
-      "code": {
-        "files": 3,
-        "nodes": 25
       }
     },
     {
@@ -366,27 +242,15 @@
         "kind": "process",
         "requires": [],
         "port": "9911"
-      },
-      "code": {
-        "files": 1,
-        "nodes": 4
       }
     },
     {
       "name": "markdown-root",
-      "kind": "lib",
-      "code": {
-        "files": 5,
-        "nodes": 111
-      }
+      "kind": "lib"
     },
     {
       "name": "overlay",
-      "kind": "lib",
-      "code": {
-        "files": 3,
-        "nodes": 17
-      }
+      "kind": "lib"
     },
     {
       "name": "packs",
@@ -394,10 +258,6 @@
       "service": {
         "kind": "data",
         "requires": []
-      },
-      "code": {
-        "files": 1,
-        "nodes": 7
       }
     },
     {
@@ -406,10 +266,6 @@
       "service": {
         "kind": "process",
         "requires": []
-      },
-      "code": {
-        "files": 1,
-        "nodes": 3
       }
     },
     {
@@ -419,10 +275,6 @@
         "kind": "container",
         "requires": [],
         "image": "pihole/pihole"
-      },
-      "code": {
-        "files": 1,
-        "nodes": 5
       }
     },
     {
@@ -432,35 +284,19 @@
         "kind": "process",
         "requires": [],
         "port": "8093"
-      },
-      "code": {
-        "files": 13,
-        "nodes": 336
       }
     },
     {
       "name": "presentations",
-      "kind": "pack",
-      "code": {
-        "files": 41,
-        "nodes": 444
-      }
+      "kind": "pack"
     },
     {
       "name": "printing",
-      "kind": "capability",
-      "code": {
-        "files": 3,
-        "nodes": 61
-      }
+      "kind": "capability"
     },
     {
       "name": "pseudonymize",
-      "kind": "lib",
-      "code": {
-        "files": 7,
-        "nodes": 117
-      }
+      "kind": "lib"
     },
     {
       "name": "punctuality",
@@ -469,10 +305,6 @@
         "kind": "process",
         "requires": [],
         "port": "8085"
-      },
-      "code": {
-        "files": 12,
-        "nodes": 181
       }
     },
     {
@@ -483,35 +315,19 @@
         "requires": [
           "punctuality"
         ]
-      },
-      "code": {
-        "files": 1,
-        "nodes": 2
       }
     },
     {
       "name": "roomplan-contract",
-      "kind": "lib",
-      "code": {
-        "files": 2,
-        "nodes": 26
-      }
+      "kind": "lib"
     },
     {
       "name": "route-manifest",
-      "kind": "lib",
-      "code": {
-        "files": 3,
-        "nodes": 25
-      }
+      "kind": "lib"
     },
     {
       "name": "schemas",
-      "kind": "spine",
-      "code": {
-        "files": 11,
-        "nodes": 1165
-      }
+      "kind": "spine"
     },
     {
       "name": "scouting",
@@ -520,51 +336,27 @@
         "kind": "process",
         "requires": [],
         "port": "8084"
-      },
-      "code": {
-        "files": 30,
-        "nodes": 564
       }
     },
     {
       "name": "security",
-      "kind": "pack",
-      "code": {
-        "files": 3,
-        "nodes": 33
-      }
+      "kind": "pack"
     },
     {
       "name": "shell",
-      "kind": "capability",
-      "code": {
-        "files": 2,
-        "nodes": 13
-      }
+      "kind": "capability"
     },
     {
       "name": "sjel-config",
-      "kind": "lib",
-      "code": {
-        "files": 4,
-        "nodes": 39
-      }
+      "kind": "lib"
     },
     {
       "name": "sjel-http",
-      "kind": "lib",
-      "code": {
-        "files": 4,
-        "nodes": 61
-      }
+      "kind": "lib"
     },
     {
       "name": "sjel-server",
-      "kind": "lib",
-      "code": {
-        "files": 7,
-        "nodes": 122
-      }
+      "kind": "lib"
     },
     {
       "name": "sjel-status",
@@ -573,19 +365,11 @@
         "kind": "process",
         "requires": [],
         "port": "8082"
-      },
-      "code": {
-        "files": 15,
-        "nodes": 164
       }
     },
     {
       "name": "sjel-store",
-      "kind": "lib",
-      "code": {
-        "files": 3,
-        "nodes": 50
-      }
+      "kind": "lib"
     },
     {
       "name": "soundscape",
@@ -594,10 +378,6 @@
         "kind": "process",
         "requires": [],
         "port": "8088"
-      },
-      "code": {
-        "files": 19,
-        "nodes": 290
       }
     },
     {
@@ -613,11 +393,7 @@
     },
     {
       "name": "station-time",
-      "kind": "lib",
-      "code": {
-        "files": 3,
-        "nodes": 19
-      }
+      "kind": "lib"
     },
     {
       "name": "store",
@@ -625,27 +401,15 @@
       "service": {
         "kind": "data",
         "requires": []
-      },
-      "code": {
-        "files": 1,
-        "nodes": 8
       }
     },
     {
       "name": "summarize",
-      "kind": "lib",
-      "code": {
-        "files": 4,
-        "nodes": 127
-      }
+      "kind": "lib"
     },
     {
       "name": "tools",
-      "kind": "spine",
-      "code": {
-        "files": 216,
-        "nodes": 1660
-      }
+      "kind": "spine"
     },
     {
       "name": "transit",
@@ -654,19 +418,11 @@
         "kind": "process",
         "requires": [],
         "port": "3000"
-      },
-      "code": {
-        "files": 13,
-        "nodes": 392
       }
     },
     {
       "name": "travel",
-      "kind": "pack",
-      "code": {
-        "files": 4,
-        "nodes": 41
-      }
+      "kind": "pack"
     },
     {
       "name": "traveler",
@@ -675,10 +431,6 @@
         "kind": "process",
         "requires": [],
         "port": "8096"
-      },
-      "code": {
-        "files": 9,
-        "nodes": 171
       }
     },
     {
@@ -688,10 +440,6 @@
         "kind": "process",
         "requires": [],
         "port": "8086"
-      },
-      "code": {
-        "files": 24,
-        "nodes": 702
       }
     },
     {
@@ -701,10 +449,6 @@
         "kind": "process",
         "requires": [],
         "port": "8094"
-      },
-      "code": {
-        "files": 14,
-        "nodes": 191
       }
     },
     {
@@ -714,19 +458,11 @@
         "kind": "container",
         "requires": [],
         "image": "vaultwarden/server"
-      },
-      "code": {
-        "files": 1,
-        "nodes": 6
       }
     },
     {
       "name": "writing",
-      "kind": "pack",
-      "code": {
-        "files": 72,
-        "nodes": 617
-      }
+      "kind": "pack"
     }
   ],
   "coupling": [
@@ -1752,6 +1488,16 @@
     },
     {
       "from": "vault",
+      "to": "civil-date",
+      "kinds": [
+        "cargo-dep"
+      ],
+      "evidence": [
+        "capabilities/vault/Cargo.toml"
+      ]
+    },
+    {
+      "from": "vault",
       "to": "content-item",
       "kinds": [
         "cargo-dep"
@@ -1783,6 +1529,16 @@
     {
       "from": "vault",
       "to": "sjel-config",
+      "kinds": [
+        "cargo-dep"
+      ],
+      "evidence": [
+        "capabilities/vault/Cargo.toml"
+      ]
+    },
+    {
+      "from": "vault",
+      "to": "sjel-http",
       "kinds": [
         "cargo-dep"
       ],
@@ -2238,76 +1994,5 @@
       "name": "yq",
       "verdict": "adopt"
     }
-  ],
-  "graph": {
-    "present": true,
-    "nodes": 23353,
-    "external": 36,
-    "stale": [],
-    "unmatched": [
-      ".github/ISSUE_TEMPLATE/bug_report.md",
-      ".github/ISSUE_TEMPLATE/feature_request.md",
-      ".github/pull_request_template.md",
-      "AGENTS.md",
-      "ARCHITECTURE.md",
-      "CLAUDE.md",
-      "CODE_OF_CONDUCT.md",
-      "CONTRIBUTING.md",
-      "ISA.md",
-      "README.md",
-      "SECURITY.md",
-      "axon",
-      "bootstrap.sh",
-      "demo/README.md",
-      "plugins/device-identity/Cargo.toml",
-      "plugins/device-identity/README.md",
-      "plugins/device-identity/build.rs",
-      "plugins/device-identity/ios/Package.swift",
-      "plugins/device-identity/ios/Sources/DeviceIdentityPlugin/DeviceIdentityPlugin.swift",
-      "plugins/device-identity/permissions/autogenerated/reference.md",
-      "plugins/device-identity/permissions/schemas/schema.json",
-      "plugins/device-identity/src/lib.rs",
-      "plugins/foundation-models/Cargo.toml",
-      "plugins/foundation-models/README.md",
-      "plugins/foundation-models/build.rs",
-      "plugins/foundation-models/ios/Package.swift",
-      "plugins/foundation-models/ios/Sources/FoundationModelsPlugin/FoundationModelsPlugin.swift",
-      "plugins/foundation-models/permissions/autogenerated/reference.md",
-      "plugins/foundation-models/permissions/schemas/schema.json",
-      "plugins/foundation-models/src/lib.rs",
-      "plugins/local-network/Cargo.toml",
-      "plugins/local-network/README.md",
-      "plugins/local-network/build.rs",
-      "plugins/local-network/ios/Package.swift",
-      "plugins/local-network/ios/Sources/LocalNetworkPlugin/LocalNetworkPlugin.swift",
-      "plugins/local-network/permissions/autogenerated/reference.md",
-      "plugins/local-network/permissions/schemas/schema.json",
-      "plugins/local-network/src/lib.rs",
-      "plugins/roomplan/.tauri/tauri-api/Package.swift",
-      "plugins/roomplan/.tauri/tauri-api/README.md",
-      "plugins/roomplan/.tauri/tauri-api/Sources/Tauri/Channel.swift",
-      "plugins/roomplan/.tauri/tauri-api/Sources/Tauri/Invoke.swift",
-      "plugins/roomplan/.tauri/tauri-api/Sources/Tauri/JSTypes.swift",
-      "plugins/roomplan/.tauri/tauri-api/Sources/Tauri/JsonValue.swift",
-      "plugins/roomplan/.tauri/tauri-api/Sources/Tauri/Logger.swift",
-      "plugins/roomplan/.tauri/tauri-api/Sources/Tauri/Plugin/Plugin.swift",
-      "plugins/roomplan/.tauri/tauri-api/Sources/Tauri/Tauri.swift",
-      "plugins/roomplan/.tauri/tauri-api/Sources/Tauri/UiUtils.swift",
-      "plugins/roomplan/Cargo.toml",
-      "plugins/roomplan/build.rs",
-      "plugins/roomplan/ios/Package.swift",
-      "plugins/roomplan/ios/Sources/RoomPlanPlugin/RoomPlanPlugin.swift",
-      "plugins/roomplan/permissions/autogenerated/reference.md",
-      "plugins/roomplan/permissions/schemas/schema.json",
-      "plugins/roomplan/src/lib.rs",
-      "research/README.md",
-      "research/agent-safety.md",
-      "research/assistant-harness.md",
-      "research/cloud-models-and-privacy.md",
-      "research/on-device-models.md",
-      "research/simplicity-and-adoption.md",
-      "research/why-sjel.md",
-      "sjel"
-    ]
-  }
+  ]
 }

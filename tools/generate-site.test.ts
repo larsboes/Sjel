@@ -13,7 +13,7 @@ import { renderSite } from "./generate-site.ts";
 const SJEL_ROOT = join(import.meta.dir, "..");
 
 const MODEL = {
-  schema: 1,
+  schema: 2,
   generator: "tools/self.ts",
   units: [
     { name: "sjel-status", kind: "capability" as const, service: { kind: "process", requires: ["store"], port: "8082" } },

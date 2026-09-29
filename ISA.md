@@ -51,9 +51,13 @@ tracker holds nothing, and no automation creates entries in it.
   `ARCHITECTURE.md`. Was `bazel test //...` until PRD Q44 retired Bazel (2026-08-25), then
   carried `-- --skip postgres_tests::` until PRD Q45 retired the server (2026-08-27) — the
   suites run on temp files and need no skip.
-- **C2** — `tools/self check` fails locally and that is pre-existing: it compares per-unit
-  code counts only when a code graph is present, and this machine's graph is behind main.
-  Verify in a `git worktree` of origin/main, not in place.
+- **C2** — `tools/self check` compares only what tracked files produce, so it passes in a fresh
+  clone and gates in CI's repo-gates job. Per-unit code counts are fused on read from
+  `graphify-out/` and are not committed (2026-09-29): while they were committed, a machine without
+  a graph could see the drift and not repair it, which is what held `main` red behind ten armed
+  Dependabot pull requests. A graphless verdict is therefore trustworthy — but this machine's
+  graph may still be behind the tree, so `status` can show counts rolled up from a stale one.
+  Verify a claim about the gate in a `git worktree` of origin/main, not in place.
 - **C3** — sweeps run `rg --no-ignore --hidden --follow`; plain `rg` honours `.gitignore`
   and hides most of the private overlay's `config/`.
 - **C4** — `service-runner.sh status` prints the DECLARED image reference, and since
@@ -155,6 +159,20 @@ run Socket's scanner, and Cargo/actions keep the zero-day path.
   decision has no subject. The constraint held either way — the retirement is its own
   commit, and the version that ran is in `upstreams.toml`'s git history at that date (Q77
   deleted the field on 2026-09-02).
+- [x] ISC-26 — `tools/self check` passes in a fresh clone and `tools/self generate` succeeds on a
+  machine with no code graph, so the gate CI runs is a gate CI can repair. Falsifier: a
+  `git worktree` of origin/main exits 1 from `tools/self check`, or
+  `SJEL_SELF_GRAPH=<a path that does not exist> tools/self generate` exits 1. Done 2026-09-29:
+  the per-unit `code` counts and the `graph` block were committed but rolled up from git-ignored
+  `graphify-out/`, so on a graphless machine `check` narrowed its comparison to the tracked-file
+  layers while `generate` refused to write — the drift it reported was the one drift nobody there
+  could fix, and `main` was red on CI's `bun test`, `repo gates` and Pages' `build the page`
+  behind it while ten armed Dependabot pull requests older than a week queued (ISC-8). Both
+  layers are fused on read now: `self.json` schema 2, `status` and `explain` still show the counts
+  where a graph exists, and `tools/generate-site.ts` already refused to publish them. Evidence:
+  in a worktree of origin/main, `tools/self check` exits 0 and `tools/self.test.sh` passes every
+  case; with `SJEL_SELF_GRAPH` pointing at nothing, `generate` writes schema 2 carrying no `code`
+  and no `graph` key.
 
 Order, agreed 2026-09-26: F3, then F4 in the order of its claims, then F5.
 
@@ -298,9 +316,12 @@ rest is below or under Not yet specified; nothing new goes into the PRD.
 - **Generative interface from the typed core** ([product rule 6](CONTRIBUTING.md#product-rules)). No design yet.
 - **The on-device model path is untested on an eligible device.** The iPhone 14 Pro reports
   `deviceNotEligible`; a 15 Pro or later, or a Simulator, is needed.
-- **`self.json` cannot regenerate.** graphify's semantic step calls
-  `deepseek-ai/deepseek-v4-flash`, retired on 2026-08-07, so `tools/self generate` refuses. Commit
-  `2f0feb6` says it regenerated `self.json`; only `ARCHITECTURE.md` changed.
+- **The code graph cannot be rebuilt here.** graphify's semantic step calls
+  `deepseek-ai/deepseek-v4-flash`, retired on 2026-08-07. This stopped blocking `self.json` on
+  2026-09-29 (ISC-26): the per-unit counts are fused on read from `graphify-out/`, so
+  `tools/self generate` needs no graph at all. What it still blocks is the graph's own freshness —
+  `status` shows counts rolled up from whatever graph exists, and this machine's is behind the
+  tree. Commit `2f0feb6` says it regenerated `self.json`; only `ARCHITECTURE.md` changed.
 - **The demo site shows two areas less than it could.** Fixed 2026-09-27 (22793de3): the page
   clock runs on the recording's anchor date, so Travel shows 2 upcoming trips, and seven services
   missing from demo.toml now say why instead of showing a host's 404 page. People followed

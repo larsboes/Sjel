@@ -194,8 +194,13 @@ function main(): void {
   const model = JSON.parse(readFileSync(selfPath, "utf8")) as SelfModel;
   // A schema bump means the shape this renderer reads may have moved under it. Fail rather than
   // publish a page built from assumptions about fields that no longer mean what they did.
-  if (model.schema !== 1) {
-    console.error(`generate-site: self.json is schema ${model.schema}, this renderer knows schema 1`);
+  //
+  // Schema 2 (2026-09-29) dropped the per-unit `code` counts and the `graph` block. This renderer
+  // never read either — it refused to publish them, for the reason written above — so the artifact
+  // has caught up with the page rather than the other way round, and every field read below is
+  // unchanged. Only the accepted version moves.
+  if (model.schema !== 2) {
+    console.error(`generate-site: self.json is schema ${model.schema}, this renderer knows schema 2`);
     process.exit(1);
   }
   // Which capabilities the demo actually runs, read from demo.toml rather than inferred from

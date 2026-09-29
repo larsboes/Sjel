@@ -9,13 +9,24 @@
 //
 // What is committed vs fused on read is the load-bearing distinction:
 //
-//   committed   structure, provenance, code rollup, coupling map — all derived from
-//               tracked files, so two runs on an unchanged tree are byte-identical and
-//               the artifact survives a fresh clone.
-//   fused       live process health (sjel-status owns it) and open issue counts (the
-//               tracker owns them). Copying either into a committed file would give one
-//               fact two homes and make the file lie the moment a process stops or an
-//               issue is triaged.
+//   committed   structure, provenance and coupling — all derived from tracked files, so two
+//               runs on an unchanged tree are byte-identical and the artifact survives a
+//               fresh clone.
+//   fused       per-unit code counts and the graph accounting (both rolled up from
+//               graphify-out/, which is git-ignored and machine-local), live process health
+//               (sjel-status owns it) and open issue counts (the tracker owns them). Copying
+//               any of them into a committed file gives one fact two homes and makes the file
+//               lie the moment a process stops, an issue is triaged, or a graph goes stale.
+//
+// The code rollup sat in the wrong column until 2026-09-29, and that is why this distinction is
+// load-bearing rather than decorative. It fails the committed column's own test — a fresh clone
+// cannot reproduce it — and tools/generate-site.ts already refused to publish it for exactly that
+// reason. Committing it anyway made the artifact checkable-but-unfixable off a graphful machine:
+// `check` narrowed its comparison to the tracked-file layers and reported the drift, while
+// `generate` refused to write because writing would drop the counts (#35). CI is that machine, so
+// the one drift CI reported was the one drift nobody could repair, and main sat red while eleven
+// armed Dependabot pull requests queued behind it. The counts are fused on read now: `status` and
+// `explain` still show them where a graph exists, and no downstream has to reproduce them.
 //
 // TypeScript rather than bash under the tools-doctor-typescript-not-bash precedent: this
 // parses upstreams.toml via Bun.TOML and does set arithmetic over a 3,965-node graph,
@@ -30,8 +41,7 @@
 //   tools/self check             # is the committed self.json still current?
 //   tools/self -h                # this help
 //
-// Exit 0 = fine, 1 = stale (check), a stale code graph (generate), or an unknown unit
-// (explain).
+// Exit 0 = fine, 1 = stale (check) or an unknown unit (explain).
 
 import { existsSync, readFileSync, readdirSync } from "node:fs";
 import { resolve } from "node:path";
@@ -40,8 +50,6 @@ import { tmpdir } from "node:os";
 import {
   couplingFromCargo,
   couplingFromRustPath,
-  generateWouldBakeStaleGraph,
-  generateWouldDropCode,
   mergeCoupling,
   rollUp,
   type SourceCoupling,
@@ -56,9 +64,11 @@ const HELP = `tools/self — Axon's self-model: structure, coupling, provenance,
   tools/self check             is the committed self.json still current? (exit 1 if not)
 
   --json                       machine-readable output for status/explain/coupling
-  --allow-stale                generate anyway when the code graph holds paths this tree
-                               does not have. Prefer 'graphify update .' first.
+  --out <path>                 generate writes there instead of self.json
   --against <path>             check this tree against that artifact instead of self.json
+
+Code size is fused on read from graphify-out/, which is git-ignored: status and explain show it
+where a graph exists, and self.json never carries it. Run tools/graphify.sh to build one.
 `;
 
 const SJEL_ROOT = resolve(import.meta.dir, "..");
@@ -66,7 +76,7 @@ const SELF_JSON = `${SJEL_ROOT}/self.json`;
 
 /** The artifact's shape. Bump `schema` when a consumer would need to care. */
 interface SelfModel {
-  schema: 1;
+  schema: 2;
   /** Deliberately NOT a timestamp: a generated-at field would make every run differ. */
   generator: string;
   units: Array<{
@@ -74,14 +84,24 @@ interface SelfModel {
     kind: string;
     /** Present for anything with a service.toml. */
     service?: { kind: string; port?: string; requires: string[]; image?: string };
-    code?: { files: number; nodes: number };
   }>;
   /** Compile-time coupling: what is pulled into what. Distinct from service `requires`. */
   coupling: Array<{ from: string; to: string; kinds: string[]; evidence: string[] }>;
   /** url/verdict/license/why is the whole register; `pin` was deleted 2026-09-02 (Q77). */
   upstreams: Array<{ name: string; verdict: string }>;
-  /** Honest accounting of what the code graph could not attribute. */
-  graph: { present: boolean; nodes: number; external: number; stale: string[]; unmatched: string[] };
+}
+
+/**
+ * Per-unit code counts and the graph accounting. Fused on read, never committed — see the
+ * header. Absent whenever this machine has not built graphify-out/graph.json.
+ */
+interface CodeLayer {
+  byUnit: Map<string, { files: number; nodes: number }>;
+  nodes: number;
+  external: number;
+  /** Paths the graph still holds a node for and the tree no longer has. */
+  stale: string[];
+  unmatched: string[];
 }
 
 function readText(path: string): string | null {
@@ -195,31 +215,34 @@ function readTrackedPaths(): Set<string> {
   return new Set(proc.stdout.toString().split("\0").filter(Boolean));
 }
 
-function build(): SelfModel {
-  // SJEL_SELF_GRAPH is a test seam, and it exists because the obvious way to test the
-  // stale-graph refusal is to plant a graph — and on this machine graphify-out/ holds a
-  // real 13,747-node graph that took a run to build. A test that wrote there to prove a
-  // refusal would destroy the thing it was protecting.
+/**
+ * The per-unit code counts and the graph accounting, read from graphify-out/graph.json.
+ *
+ * SJEL_SELF_GRAPH is a test seam: the obvious way to probe this rollup is to plant a graph, and on
+ * this machine graphify-out/ holds a real one that took a run to build, so a test that wrote there
+ * to prove something would destroy the thing it was protecting.
+ */
+function readCodeLayer(trackedPaths: Set<string>): CodeLayer | null {
   const graphText = readText(process.env.SJEL_SELF_GRAPH || `${SJEL_ROOT}/graphify-out/graph.json`);
+  if (!graphText) return null;
+  const parsed = JSON.parse(graphText);
+  const r = rollUp(
+    parsed.nodes ?? [],
+    (p) => trackedPaths.has(p),
+    (p) => existsSync(`${SJEL_ROOT}/${p}`),
+  );
+  return {
+    byUnit: new Map(r.units.map((u) => [u.name, { files: u.files, nodes: u.nodes }])),
+    nodes: r.admittedNodes,
+    external: r.buckets.external,
+    stale: r.buckets.stale,
+    unmatched: r.buckets.unmatched,
+  };
+}
+
+function build(): SelfModel {
   const trackedPaths = readTrackedPaths();
   const declaredServices = readDeclaredServices(trackedPaths);
-  const tracked = (p: string) => trackedPaths.has(p);
-  const exists = (p: string) => existsSync(`${SJEL_ROOT}/${p}`);
-
-  let rollupUnits: Array<{ name: string; kind: string; files: number; nodes: number }> = [];
-  let graph: SelfModel["graph"] = { present: false, nodes: 0, external: 0, stale: [], unmatched: [] };
-  if (graphText) {
-    const parsed = JSON.parse(graphText);
-    const r = rollUp(parsed.nodes ?? [], tracked, exists);
-    rollupUnits = r.units;
-    graph = {
-      present: true,
-      nodes: r.admittedNodes,
-      external: r.buckets.external,
-      stale: r.buckets.stale,
-      unmatched: r.buckets.unmatched,
-    };
-  }
 
   // The unit inventory comes from the tracked tree, never from the code graph.
   //
@@ -245,13 +268,11 @@ function build(): SelfModel {
     if (existsSync(`${SJEL_ROOT}/${spine}`)) kindByUnit.set(spine, "spine");
   }
 
-  const codeByUnit = new Map(rollupUnits.map((u) => [u.name, u]));
   const names = new Set<string>(kindByUnit.keys());
   for (const name of declaredServices.keys()) names.add(name);
 
   const units: SelfModel["units"] = [...names].sort().map((name) => {
     const declared = declaredServices.get(name);
-    const code = codeByUnit.get(name);
     const kind = kindByUnit.get(name) ?? (declared ? "capability" : "unknown");
     const out: SelfModel["units"][number] = { name, kind };
     if (declared) {
@@ -259,17 +280,15 @@ function build(): SelfModel {
       if (declared.port) out.service.port = declared.port;
       if (declared.image) out.service.image = declared.image;
     }
-    if (code) out.code = { files: code.files, nodes: code.nodes };
     return out;
   });
 
   return {
-    schema: 1,
+    schema: 2,
     generator: "tools/self.ts",
     units,
     coupling: mergeCoupling(readCoupling()),
     upstreams: readUpstreams(),
-    graph,
   };
 }
 
@@ -282,27 +301,6 @@ function loadCommitted(): SelfModel | null {
   const text = readText(SELF_JSON);
   return text ? (JSON.parse(text) as SelfModel) : null;
 }
-
-/**
- * Drop the layers that only a machine with a built code graph can reproduce.
- *
- * `self.json` is committed, but its per-unit `code` counts and its `graph` block are
- * derived from `graphify-out/`, which is git-ignored because graphify slugifies node ids
- * from the absolute scan path. A fresh clone — CI, or another machine before it runs
- * `tools/graphify.sh` — therefore cannot regenerate those two layers, and a naive
- * full-text comparison reports the file stale when nothing is actually wrong.
- *
- * That is the same defect class this run gated against elsewhere: a committed artifact
- * depending on an input others cannot see. The honest resolution is not to hide the
- * mismatch but to narrow the claim — compare everything reproducible here, and say which
- * scope was checked. Structure, coupling and provenance all come from tracked files, so
- * they are gateable anywhere; the code layer is gated wherever a graph exists.
- */
-function stripLocalLayers(model: SelfModel): Omit<SelfModel, "graph"> & { units: SelfUnitLike[] } {
-  const { graph: _graph, ...rest } = model;
-  return { ...rest, units: model.units.map(({ code: _code, ...u }) => u) };
-}
-type SelfUnitLike = Omit<SelfModel["units"][number], "code">;
 
 /** Open issues per unit, joined on the `<unit>:` title prefix the tracker already uses. */
 function openIssuesByUnit(): { counts: Map<string, number>; unmatched: number } | null {
@@ -345,48 +343,21 @@ if (args.includes("-h") || args.includes("--help")) {
 }
 
 if (cmd === "generate") {
-  const fresh = build();
-  // Refuse rather than write a gutted artifact. The `code` layer is derived from
-  // graphify-out/graph.json, which is git-ignored and machine-local; on a fresh clone or any
-  // machine that has not run the graph, every unit's counts are simply absent. Writing that out
-  // silently removed 181 lines from the committed file, and `tools/self check` would then pass on
-  // the result for exactly the same reason it narrows its claim -- so nothing downstream objects
-  // (#35). Carrying the committed numbers forward instead is not an option: they would describe a
-  // tree that no longer exists, which is a different lie.
-  const committed = loadCommitted();
-  if (generateWouldDropCode(fresh.graph.present, committed?.units ?? null)) {
-    console.error(
-      "self.json carries per-unit code counts, and there is no code graph here to reproduce them.",
-    );
-    console.error("Writing now would drop that layer for everyone. Build the graph first:");
-    console.error("  tools/graphify.sh");
+  // No refusal path any more. Both of them guarded the `code` layer — one against dropping it on a
+  // graphless machine, one against writing counts rolled up from a stale graph — and that layer is
+  // fused on read now (see the header). What is left is derived from tracked files, so it is the
+  // same on every machine and there is nothing to lose by writing it.
+  //
+  // --out exists so a test can watch a successful generate without writing the tracked artifact.
+  const outAt = args.indexOf("--out");
+  const target = outAt === -1 ? SELF_JSON : args[outAt + 1];
+  if (!target) {
+    console.error("tools/self generate --out needs a path");
     process.exit(1);
   }
-  // Refuse to write a measurement of a tree that no longer exists. `graph.stale` is not a
-  // field to record, it is a reason not to write: every per-unit `code` count in this run was
-  // rolled up from the same graph. See generateWouldBakeStaleGraph.
-  if (generateWouldBakeStaleGraph(fresh.graph.stale) && !args.includes("--allow-stale")) {
-    console.error(
-      `the code graph still holds ${fresh.graph.stale.length} path(s) this tree does not have:`,
-    );
-    for (const path of fresh.graph.stale.slice(0, 10)) console.error(`  ${path}`);
-    if (fresh.graph.stale.length > 10) {
-      console.error(`  ... and ${fresh.graph.stale.length - 10} more`);
-    }
-    console.error("Every per-unit code count here was rolled up from that graph, so writing now");
-    console.error("records the staleness instead of fixing it. Rebuild the graph first:");
-    console.error("  graphify update .        # AST-only, no API cost");
-    console.error("Then run generate again. --allow-stale writes it anyway.");
-    process.exit(1);
-  }
-  if (generateWouldBakeStaleGraph(fresh.graph.stale)) {
-    console.error(
-      `WARNING: --allow-stale — baking ${fresh.graph.stale.length} stale graph path(s) into self.json.`,
-    );
-  }
-  const out = serialize(fresh);
-  await Bun.write(SELF_JSON, out);
-  console.log(`wrote ${SELF_JSON} (${out.length} bytes)`);
+  const out = serialize(build());
+  await Bun.write(target, out);
+  console.log(`wrote ${target} (${out.length} bytes)`);
   process.exit(0);
 }
 
@@ -449,29 +420,28 @@ if (cmd === "check") {
     process.exit(1);
   }
   const fresh = build();
-  // Full comparison only where a code graph exists to reproduce those layers; elsewhere
-  // (a fresh clone, CI) narrow the claim to the tracked-file layers rather than reporting
-  // a mismatch nobody can fix without running graphify. See stripLocalLayers.
-  const scope = fresh.graph.present ? "full" : "structure, coupling and provenance";
-  const left = fresh.graph.present ? serialize(fresh) : JSON.stringify(stripLocalLayers(fresh), null, 2);
-  const right = fresh.graph.present
-    ? committedText
-    : JSON.stringify(stripLocalLayers(JSON.parse(committedText) as SelfModel), null, 2);
+  // One comparison, the same on every machine. It used to narrow its claim to the tracked-file
+  // layers wherever no graph was present, and that is what made the drift CI reported the one
+  // drift nobody could repair: the comparison said stale while `generate` refused to write.
+  // Nothing compared here comes from graphify-out/ any more, so the narrowing has no reason to
+  // exist — and a `check` that passes on a graphless machine is now a check that machine can act
+  // on.
+  const left = serialize(fresh);
+  const right = committedText;
 
   if (left === right) {
-    console.log(
-      fresh.graph.present
-        ? "self.json is current."
-        : `self.json is current (${scope}; no code graph here, so per-unit code counts were not compared).`,
-    );
+    console.log("self.json is current.");
     process.exit(0);
   }
-  console.error(`self.json is stale (${scope} differ). Run: tools/self generate`);
+  console.error("self.json is stale. Run: tools/self generate");
   printDrift(right, left);
   process.exit(1);
 }
 
 const model = loadCommitted() ?? build();
+// Fused on read: absent on any machine that has not built graphify-out/. Status and explain
+// degrade to a dash rather than to a number nobody can check.
+const code = readCodeLayer(readTrackedPaths());
 
 if (cmd === "coupling") {
   if (wantJson) {
@@ -493,12 +463,13 @@ if (cmd === "explain") {
     console.error(`unknown unit '${name}'. Known: ${model.units.map((u) => u.name).join(", ")}`);
     process.exit(1);
   }
+  const counts = code?.byUnit.get(unit.name);
   if (wantJson) {
-    console.log(JSON.stringify(unit, null, 2));
+    console.log(JSON.stringify(counts ? { ...unit, code: counts } : unit, null, 2));
     process.exit(0);
   }
   console.log(`${unit.name} (${unit.kind})`);
-  if (unit.code) console.log(`  code       ${unit.code.files} files, ${unit.code.nodes} graph nodes`);
+  if (counts) console.log(`  code       ${counts.files} files, ${counts.nodes} graph nodes`);
   if (unit.service) {
     console.log(`  service    kind=${unit.service.kind}${unit.service.port ? ` port=${unit.service.port}` : ""}`);
     console.log(`  requires   ${unit.service.requires.length ? unit.service.requires.join(", ") : "—"} (must be running)`);
@@ -513,26 +484,36 @@ if (cmd === "explain") {
 // Default: status
 const work = online ? openIssuesByUnit() : null;
 if (wantJson) {
-  console.log(JSON.stringify({ ...model, work: work ? Object.fromEntries(work.counts) : null }, null, 2));
+  console.log(
+    JSON.stringify(
+      {
+        ...model,
+        code: code ? Object.fromEntries(code.byUnit) : null,
+        work: work ? Object.fromEntries(work.counts) : null,
+      },
+      null,
+      2,
+    ),
+  );
   process.exit(0);
 }
 console.log(`Axon self-model — ${model.units.length} units, ${model.coupling.length} coupling pairs`);
 console.log(
-  model.graph.present
-    ? `Code graph: ${model.graph.nodes} nodes, ${model.graph.external} external, ${model.graph.stale.length} stale\n`
+  code
+    ? `Code graph: ${code.nodes} nodes, ${code.external} external, ${code.stale.length} stale\n`
     : "Code graph: absent (run tools/graphify.sh)\n",
 );
 const header = `  ${"unit".padEnd(18)}${"kind".padEnd(12)}${"files".padStart(6)}${"port".padStart(7)}${"requires".padStart(12)}`;
 console.log(header + (work ? "   open" : ""));
 for (const u of model.units) {
   let row = `  ${u.name.padEnd(18)}${u.kind.padEnd(12)}`;
-  row += String(u.code?.files ?? "—").padStart(6);
+  row += String(code?.byUnit.get(u.name)?.files ?? "—").padStart(6);
   row += String(u.service?.port ?? "—").padStart(7);
   row += String(u.service?.requires.length ? u.service.requires.join(",") : "—").padStart(12);
   if (work) row += String(work.counts.get(u.name) ?? 0).padStart(7);
   console.log(row);
 }
 if (work) console.log(`\n  ${work.unmatched} open issues match no unit prefix.`);
-if (model.graph.stale.length) {
-  console.log(`\n  ⚠ ${model.graph.stale.length} graph paths no longer exist — run tools/graphify.sh`);
+if (code?.stale.length) {
+  console.log(`\n  ⚠ ${code.stale.length} graph paths no longer exist — run tools/graphify.sh`);
 }

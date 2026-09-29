@@ -52,7 +52,7 @@ const ROUTES: &[route_manifest::Route] = &[
     ),
     r(
         "POST",
-        "/opportunities/:id/status",
+        "/opportunities/{id}/status",
         "Set an opportunity's status (saved, dismissed).",
     ),
     r(
@@ -62,7 +62,7 @@ const ROUTES: &[route_manifest::Route] = &[
     ),
     r(
         "POST",
-        "/sources/proposed/:id/dismiss",
+        "/sources/proposed/{id}/dismiss",
         "Take a candidate source out of the inbox.",
     ),
 ];
@@ -581,7 +581,7 @@ async fn main() {
     // discover_handler's Store::open, which stays inside spawn_blocking).
     let cfg = Config::load();
 
-    // Was 0.0.0.0, which put an unauthenticated POST /opportunities/:id/status on
+    // Was 0.0.0.0, which put an unauthenticated POST /opportunities/{id}/status on
     // the LAN. Nothing documented that bind as a decision; it was the last of the
     // three divergences libs/sjel-server exists to end.
     sjel_server::serve_local("scout-server", cfg.port, build_router()).await;
@@ -602,7 +602,7 @@ const CAPABILITY: &str = "scouting";
 /// once the operator opens it, so loopback bounds who can route a packet here
 /// and not who can make the operator's browser send one. `GET /opportunities`
 /// carries the operator's own accept/dismiss decisions and the rationale that
-/// scored them, and `POST /opportunities/:id/status` writes one.
+/// scored them, and `POST /opportunities/{id}/status` writes one.
 ///
 /// The origin guard sits below every route on purpose: axum wraps only the
 /// routes registered BEFORE a `.layer()` call (axum 0.7
@@ -616,10 +616,10 @@ fn build_router() -> Router {
         .route("/discover", get(discover_handler))
         .route("/sources", get(sources_handler))
         .route("/opportunities", get(opportunities_handler))
-        .route("/opportunities/:id/status", post(set_status_handler))
+        .route("/opportunities/{id}/status", post(set_status_handler))
         .route("/sources/proposed", post(propose_source_handler))
         .route(
-            "/sources/proposed/:id/dismiss",
+            "/sources/proposed/{id}/dismiss",
             post(dismiss_proposal_handler),
         )
         // ADD NEW ROUTES ABOVE THIS LINE. Below it they lose the origin guard.

@@ -348,7 +348,14 @@ impl FeedbackModel {
         let payload = serde_json::to_string(self).unwrap_or_default();
         let mut hasher = Sha256::new();
         hasher.update(payload.as_bytes());
-        format!("feedback-{:.16}", format!("{:x}", hasher.finalize()))
+        format!(
+            "feedback-{:.16}",
+            hasher
+                .finalize()
+                .iter()
+                .map(|byte| format!("{byte:02x}"))
+                .collect::<String>()
+        )
     }
 
     /// The probability this item would be kept, in 0..=1.

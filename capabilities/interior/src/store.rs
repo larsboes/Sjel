@@ -184,7 +184,7 @@ pub struct Item {
     /// und beschreiben ein Moebel, nicht diese Maschine. Wo `media/` liegt, erklaert die
     /// private Interior-Konfiguration.
     ///
-    /// Ausgeliefert wird es ueber `GET /api/media/*pfad` und nur auf Anfrage — service.toml
+    /// Ausgeliefert wird es ueber `GET /api/media/{*pfad}` und nur auf Anfrage — service.toml
     /// nennt genau das als Grund, warum diese Capability oeffentlich stehen darf: im Bundle
     /// steckt kein Foto.
     pub bild: Option<String>,

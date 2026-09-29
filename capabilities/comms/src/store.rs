@@ -695,7 +695,11 @@ pub fn canonical_url(url: &str) -> String {
 pub fn feed_id(url: &str) -> String {
     let mut hasher = Sha256::new();
     hasher.update(canonical_url(url).as_bytes());
-    format!("{:x}", hasher.finalize())
+    hasher
+        .finalize()
+        .iter()
+        .map(|byte| format!("{byte:02x}"))
+        .collect::<String>()
 }
 
 /// The classification a human's reclassification request should write, or the
@@ -743,7 +747,14 @@ fn cloud_job_id(request: &CloudQueueRequest) -> String {
         hasher.update((part.len() as u64).to_be_bytes());
         hasher.update(part.as_bytes());
     }
-    format!("cloud-job-{:x}", hasher.finalize())
+    format!(
+        "cloud-job-{}",
+        hasher
+            .finalize()
+            .iter()
+            .map(|byte| format!("{byte:02x}"))
+            .collect::<String>()
+    )
 }
 
 mod cloud;

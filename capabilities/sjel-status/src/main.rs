@@ -44,14 +44,14 @@ const ROUTES: &[route_manifest::Route] = &[
     r("GET", "/api/sjel-status/backups", "Every capability with a backup contract: last success, age, and whether it is overdue."),
     r("GET", "/api/sjel-status/host-watch", "Open findings from the hourly host watch: a runaway process or a filling disk."),
     r("GET", "/api/sjel-status/packs", "Every Pack skill against every agent harness: deployed, drifted, or unowned at the destination."),
-    r("POST", "/api/sjel-status/capabilities/:name/backup", "Request a backup of one capability. Accepts the run and returns; poll /backups for the outcome."),
+    r("POST", "/api/sjel-status/capabilities/{name}/backup", "Request a backup of one capability. Accepts the run and returns; poll /backups for the outcome."),
     // Undeclared until 2026-08-31, and served the whole time. The dashboard's panel page
     // calls both; `/routes` denied they existed. The coverage test below did not catch it:
     // its detector required the path literal to sit immediately after the opening paren,
     // and these two are the only mounts in this file long enough for rustfmt to wrap. It
     // skips the whitespace now (PRD D19) — this pair is why.
-    r("POST", "/api/sjel-status/capabilities/:name/start", "Start one capability and wait for it to answer. Idempotent: an already-running capability returns up=true."),
-    r("POST", "/api/sjel-status/capabilities/:name/stop", "Stop one capability. Refuses to report success while its port still answers, because something outside the pid file holding it is the case worth seeing."),
+    r("POST", "/api/sjel-status/capabilities/{name}/start", "Start one capability and wait for it to answer. Idempotent: an already-running capability returns up=true."),
+    r("POST", "/api/sjel-status/capabilities/{name}/stop", "Stop one capability. Refuses to report success while its port still answers, because something outside the pid file holding it is the case worth seeing."),
 ];
 
 /// Shorthand so the table above reads as a table.
@@ -189,18 +189,18 @@ fn build_router(shell: proxy::Proxy) -> Router {
         .route("/api/sjel-status/links", get(links_handler))
         .route("/api/sjel-status/repos", get(repos_handler))
         .route(
-            "/api/sjel-status/capabilities/:name/start",
+            "/api/sjel-status/capabilities/{name}/start",
             post(start_handler),
         )
         .route(
-            "/api/sjel-status/capabilities/:name/stop",
+            "/api/sjel-status/capabilities/{name}/stop",
             post(stop_handler),
         )
         .route("/api/sjel-status/backups", get(backups_handler))
         .route("/api/sjel-status/host-watch", get(host_watch_handler))
         .route("/api/sjel-status/packs", get(packs_handler))
         .route(
-            "/api/sjel-status/capabilities/:name/backup",
+            "/api/sjel-status/capabilities/{name}/backup",
             post(backup_handler),
         )
         // Everything the routes above did not claim: a capability prefix, or a page of the

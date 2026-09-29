@@ -79,7 +79,10 @@ impl Store {
     ) -> Result<bool, Box<dyn std::error::Error>> {
         if DECISIVE_EVENTS.contains(&event) {
             return Err(format!(
-                "'{event}' is written by POST /feed/:id/status, not by this route"
+                // `{{id}}` and not `{id}`: this is a format string, and the route pattern is
+                // literal text in it since axum 0.8 renamed the pattern syntax (see the test
+                // below, which matches on the rendered message).
+                "'{event}' is written by POST /feed/{{id}}/status, not by this route"
             )
             .into());
         }
@@ -365,7 +368,7 @@ mod db_tests {
                 .record_interaction(&id, event, "inbox")
                 .expect_err("a decisive verb has one writer");
             assert!(
-                error.to_string().contains("POST /feed/:id/status"),
+                error.to_string().contains("POST /feed/{id}/status"),
                 "the refusal must name the owner: {error}"
             );
         }

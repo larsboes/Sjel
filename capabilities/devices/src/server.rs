@@ -50,18 +50,18 @@ const ROUTES: &[route_manifest::Route] = &[
     ),
     route_manifest::get(
         "GET",
-        "/api/pairing/requests/:id",
+        "/api/pairing/requests/{id}",
         "One request's state; the device polls it until it is approved, denied or expired.",
     ),
     route_manifest::Route {
         method: "POST",
-        path: "/api/pairing/requests/:id/approve",
+        path: "/api/pairing/requests/{id}/approve",
         summary: "Allow one waiting device: register the key it asked with.",
         request_schema: None,
     },
     route_manifest::Route {
         method: "POST",
-        path: "/api/pairing/requests/:id/deny",
+        path: "/api/pairing/requests/{id}/deny",
         summary: "Deny one waiting device.",
         request_schema: None,
     },
@@ -72,7 +72,7 @@ const ROUTES: &[route_manifest::Route] = &[
     ),
     route_manifest::Route {
         method: "POST",
-        path: "/api/devices/:id/revoke",
+        path: "/api/devices/{id}/revoke",
         summary: "Revoke one active device. Revocation is idempotence-protected and visible.",
         request_schema: None,
     },
@@ -307,11 +307,11 @@ fn router(state: Arc<AppState>) -> Router {
             "/api/pairing/requests",
             post(request_join).get(pending_requests),
         )
-        .route("/api/pairing/requests/:id", get(join_status))
-        .route("/api/pairing/requests/:id/approve", post(approve_join))
-        .route("/api/pairing/requests/:id/deny", post(deny_join))
+        .route("/api/pairing/requests/{id}", get(join_status))
+        .route("/api/pairing/requests/{id}/approve", post(approve_join))
+        .route("/api/pairing/requests/{id}/deny", post(deny_join))
         .route("/api/devices", get(list_devices))
-        .route("/api/devices/:id/revoke", post(revoke))
+        .route("/api/devices/{id}/revoke", post(revoke))
         .merge(signed)
         .layer(middleware::from_fn_with_state(
             "devices",
@@ -345,6 +345,6 @@ mod tests {
             .any(|route| route.path == "/api/pairing/claims"));
         assert!(ROUTES
             .iter()
-            .any(|route| route.path == "/api/devices/:id/revoke"));
+            .any(|route| route.path == "/api/devices/{id}/revoke"));
     }
 }

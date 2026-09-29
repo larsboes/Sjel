@@ -61,7 +61,7 @@ const ROUTES: &[route_manifest::Route] = &[
     r("GET", "/health", "Liveness."),
     r(
         "GET",
-        "/api/media/*pfad",
+        "/api/media/{*pfad}",
         "Ein Bild aus dem privaten Asset-Verzeichnis. Nur von dort, und nur auf Anfrage.",
     ),
     r(
@@ -81,17 +81,17 @@ const ROUTES: &[route_manifest::Route] = &[
     ),
     r(
         "POST",
-        "/api/roomplan/revisions/:revision_id/review",
+        "/api/roomplan/revisions/{revision_id}/review",
         "Eine RoomPlan-Revision annehmen oder ablehnen, ohne room.toml zu aendern.",
     ),
     r(
         "GET",
-        "/api/layouts/:name/allowed",
+        "/api/layouts/{name}/allowed",
         "Erlaubte Positionen eines Stuecks als Lauflaengen. Harte Kanten fuers Ziehen. ?ref=&rot=",
     ),
     r(
         "POST",
-        "/api/layouts/:name/preview",
+        "/api/layouts/{name}/preview",
         "Verdikt und Plan zu einer Aufstellung, ohne sie zu schreiben. Fuers Drehen noetig.",
     ),
     r(
@@ -101,12 +101,12 @@ const ROUTES: &[route_manifest::Route] = &[
     ),
     r(
         "DELETE",
-        "/api/layouts/:name",
+        "/api/layouts/{name}",
         "Ein Layout aus der Liste nehmen. Es wandert nach layouts/archiv/ und wird nie geloescht.",
     ),
     r(
         "PUT",
-        "/api/layouts/:name",
+        "/api/layouts/{name}",
         "Die Positionen eines Layouts ersetzen und sofort neu pruefen. Der Kopf der Datei bleibt.",
     ),
     r(
@@ -121,38 +121,38 @@ const ROUTES: &[route_manifest::Route] = &[
     ),
     r(
         "PATCH",
-        "/api/items/:id",
+        "/api/items/{id}",
         "Genannte Felder aendern, ungenannte stehen lassen. Ausdrueckliches null loescht eines.",
     ),
     r(
         "GET",
-        "/api/items/:id/state",
+        "/api/items/{id}/state",
         "Die Zustandsgeschichte eines Eintrags, aelteste zuerst.",
     ),
     r(
         "POST",
-        "/api/items/:id/state",
+        "/api/items/{id}/state",
         "Einen Zustandswechsel anhaengen: owned, wanted oder gone. Haengt an, setzt nicht.",
     ),
     r(
         "POST",
-        "/api/items/:id/impact",
+        "/api/items/{id}/impact",
         "Was ein Feld mit den Verdikten machen wuerde, ohne es zu schreiben.",
     ),
     r("GET", "/routes", "Dieser Katalog."),
     r(
         "GET",
-        "/api/layouts/:name/toleranz",
+        "/api/layouts/{name}/toleranz",
         "Bis zu welchem Messfehler das Verdikt haelt, und woran es dann kippt.",
     ),
     r(
         "GET",
-        "/api/layouts/:name/sonne",
+        "/api/layouts/{name}/sonne",
         "Wann im Jahr welches Stueck in direkter Sonne steht. Braucht [lage] in room.toml.",
     ),
     r(
         "GET",
-        "/api/layouts/:name/einbringung",
+        "/api/layouts/{name}/einbringung",
         "Kommt jedes Stueck durch die Tuer und bis an seinen Platz.",
     ),
     r(
@@ -182,7 +182,7 @@ const ROUTES: &[route_manifest::Route] = &[
     ),
     r(
         "GET",
-        "/api/auftraege/:id",
+        "/api/auftraege/{id}",
         "Was aus einem Auftrag geworden ist: laeuft, fertig mit Ergebnis, oder gescheitert.",
     ),
     r(
@@ -197,7 +197,7 @@ const ROUTES: &[route_manifest::Route] = &[
     ),
     r(
         "GET",
-        "/api/layouts/:name",
+        "/api/layouts/{name}",
         "Ein Layout: die volle Pruefung und der fertige Plan als SVG.",
     ),
     r(
@@ -222,12 +222,12 @@ const ROUTES: &[route_manifest::Route] = &[
     ),
     r(
         "GET",
-        "/api/placements/:flat",
+        "/api/placements/{flat}",
         "Wo die Stuecke in dieser Wohnung tatsaechlich stehen.",
     ),
     r(
         "PUT",
-        "/api/items/:id",
+        "/api/items/{id}",
         "Ein Stueck aendern. Nimmt die Item-Form, die /api/inventory liefert.",
     ),
     r(
@@ -237,7 +237,7 @@ const ROUTES: &[route_manifest::Route] = &[
     ),
     r(
         "PUT",
-        "/api/placements/:flat/:item",
+        "/api/placements/{flat}/{item}",
         "Ein Stueck in dieser Wohnung platzieren. Body: {x, y, rot}.",
     ),
 ];
@@ -1126,7 +1126,10 @@ async fn api_roomplan_reference(
         None
     };
     let bytes = tokio::fs::read(&asset).await.map_err(boom)?;
-    let sha256 = format!("{:x}", Sha256::digest(&bytes));
+    let sha256 = Sha256::digest(&bytes)
+        .iter()
+        .map(|byte| format!("{byte:02x}"))
+        .collect::<String>();
     Ok(Json(serde_json::json!({
         "flat": s.flat,
         "status": "raw-only",
@@ -1562,45 +1565,45 @@ fn build_router(state: Arc<AppState>) -> Router {
         .route("/api/model", get(api_model))
         .route("/api/layouts", get(api_layouts).post(api_post_layout))
         .route(
-            "/api/layouts/:name",
+            "/api/layouts/{name}",
             get(api_layout)
                 .put(api_put_layout)
                 .delete(api_delete_layout),
         )
-        .route("/api/layouts/:name/preview", post(api_preview_layout))
-        .route("/api/layouts/:name/allowed", get(api_allowed))
+        .route("/api/layouts/{name}/preview", post(api_preview_layout))
+        .route("/api/layouts/{name}/allowed", get(api_allowed))
         .route("/api/placements", put(api_put_placements))
         .route("/api/flats", get(api_flats))
         .route("/api/inventory", get(api_inventory))
         .merge(signed_sync)
-        .route("/api/media/*pfad", get(api_media))
+        .route("/api/media/{*pfad}", get(api_media))
         .route("/api/roomplan/reference", get(api_roomplan_reference))
         .route("/api/roomplan/asset", get(api_roomplan_asset))
         .route("/api/roomplan/revisions", get(api_roomplan_revisions))
         .route(
-            "/api/roomplan/revisions/:revision_id/review",
+            "/api/roomplan/revisions/{revision_id}/review",
             post(api_roomplan_review),
         )
         .route("/api/wishlist", get(api_wishlist))
-        .route("/api/placements/:flat", get(api_placements))
+        .route("/api/placements/{flat}", get(api_placements))
         .route("/api/items", post(api_post_item))
         .route("/api/vault/writeback", post(api_vault_writeback))
-        .route("/api/items/:id", put(api_put_item).patch(api_patch_item))
+        .route("/api/items/{id}", put(api_put_item).patch(api_patch_item))
         .route(
-            "/api/items/:id/state",
+            "/api/items/{id}/state",
             get(api_state_history).post(api_post_state),
         )
-        .route("/api/items/:id/impact", post(api_item_impact))
-        .route("/api/placements/:flat/:item", put(api_put_placement))
-        .route("/api/layouts/:name/toleranz", get(api_toleranz))
-        .route("/api/layouts/:name/sonne", get(api_sonne))
-        .route("/api/layouts/:name/einbringung", get(api_einbringung))
+        .route("/api/items/{id}/impact", post(api_item_impact))
+        .route("/api/placements/{flat}/{item}", put(api_put_placement))
+        .route("/api/layouts/{name}/toleranz", get(api_toleranz))
+        .route("/api/layouts/{name}/sonne", get(api_sonne))
+        .route("/api/layouts/{name}/einbringung", get(api_einbringung))
         .route("/api/passt", get(api_passt))
         .route("/api/deklaration", get(api_deklaration))
         .route("/api/kaufen", get(api_kaufen))
         .route("/api/search", post(api_search))
         .route("/api/compose", post(api_compose))
-        .route("/api/auftraege/:id", get(api_auftrag))
+        .route("/api/auftraege/{id}", get(api_auftrag))
         // NEUE ROUTEN UEBER DIESE ZEILE. Darunter verlieren sie die Origin-Sperre.
         .layer(axum::middleware::from_fn_with_state(
             CAPABILITY,
@@ -1925,7 +1928,7 @@ impl Auftraege {
 ///
 /// Die Kosten der Gegenrichtung sind das Argument. Ein `expect` auf ein vergiftetes Schloss
 /// ist eine zweite Panik, also wuerden `POST /api/search`, `POST /api/compose` und
-/// `GET /api/auftraege/:id` fuer die Lebensdauer des Prozesses umfallen, weil irgendwann
+/// `GET /api/auftraege/{id}` fuer die Lebensdauer des Prozesses umfallen, weil irgendwann
 /// einmal jemand mit der Sperre gestuerzt ist — und das Ergebnis einer Suche, die Minuten
 /// gelaufen ist, waere unerreichbar. Dieselbe Wahl trifft
 /// `capabilities/scouting/src/config.rs`' `env_lock` mit derselben Begruendung.

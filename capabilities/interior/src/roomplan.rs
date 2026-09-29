@@ -502,7 +502,10 @@ pub fn read_usdz(path: &Path) -> Result<Scan, ScanError> {
     })?;
     let sha256 = {
         use sha2::{Digest, Sha256};
-        format!("{:x}", Sha256::digest(&bytes))
+        Sha256::digest(&bytes)
+            .iter()
+            .map(|byte| format!("{byte:02x}"))
+            .collect::<String>()
     };
     let eintraege = zip_eintraege(&bytes, path)?;
 

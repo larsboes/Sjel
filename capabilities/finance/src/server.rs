@@ -52,12 +52,12 @@ const ROUTES: &[route_manifest::Route] = &[
     ),
     r(
         "POST",
-        "/api/subscriptions/:id/price",
+        "/api/subscriptions/{id}/price",
         "Idempotently append a price point. Body: valid_from, amount_cents, currency, cycle, optional plan, required reason. Response: created.",
     ),
     r(
         "POST",
-        "/api/subscriptions/:id/state",
+        "/api/subscriptions/{id}/state",
         "Idempotently append a state change. Body: effective, state, note. Response: created.",
     ),
     r(
@@ -112,7 +112,7 @@ const ROUTES: &[route_manifest::Route] = &[
     ),
     r(
         "POST",
-        "/api/import/candidates/:id/review",
+        "/api/import/candidates/{id}/review",
         "Confirm or reject one candidate. Reconfirming with another valid account atomically reclassifies its existing journal posting.",
     ),
     r(
@@ -122,17 +122,17 @@ const ROUTES: &[route_manifest::Route] = &[
     ),
     r(
         "POST",
-        "/api/import/candidates/:id/reconcile-transfer",
+        "/api/import/candidates/{id}/reconcile-transfer",
         "Confirm one side of a reciprocal transfer and mark the counterpart as duplicate source evidence.",
     ),
     r(
         "POST",
-        "/api/import/candidates/:id/allocation",
+        "/api/import/candidates/{id}/allocation",
         "Apply reviewed purpose, optional Trips plan, and personal/shared split to a confirmed expense.",
     ),
     r(
         "POST",
-        "/api/import/candidates/:id/reimbursement",
+        "/api/import/candidates/{id}/reimbursement",
         "Link a confirmed inflow to an outstanding shared expense as receivable settlement, never income.",
     ),
     r(
@@ -187,12 +187,12 @@ const ROUTES: &[route_manifest::Route] = &[
     ),
     r(
         "POST",
-        "/api/decisions/:id/verdict",
+        "/api/decisions/{id}/verdict",
         "Record a human verdict. Body: expected_proposal_id, verdict (accepted|rejected), note (required on rejected). 409 when a recompute no longer mints this id. Records a decision and moves no money.",
     ),
     r(
         "GET",
-        "/api/trips/:id/spending",
+        "/api/trips/{id}/spending",
         "One trip's actuals: personal spending, gross cash outflow, reimbursed, outstanding and the posting count. No parameters.",
     ),
 ];
@@ -2364,7 +2364,7 @@ async fn run_decisions(
 /// classifies at or below `c1`. Four fields is a bound on VOLUME; the bound the
 /// doctrine asks for is on CLASS, and it is not this call site's to choose:
 /// `comms_feed_items.data_class` admits all four classes and comms serves
-/// `POST /feed/:id/data-class` so a human can raise one (capabilities/comms/src/
+/// `POST /feed/{id}/data-class` so a human can raise one (capabilities/comms/src/
 /// server/main.rs:324). A title raised to c2 because it names a person, copied
 /// into a `c1` decision row, is a de-escalation no human asked for --
 /// `content_item::admit_reclassification` (libs/content-item/src/lib.rs:393)
@@ -2534,8 +2534,8 @@ fn build_router(state: AppState) -> Router {
         .route("/ready", get(ready))
         .route("/api/subscriptions", get(list_subscriptions))
         .route("/api/subscriptions/burn", get(burn))
-        .route("/api/subscriptions/:id/price", post(append_price))
-        .route("/api/subscriptions/:id/state", post(append_state))
+        .route("/api/subscriptions/{id}/price", post(append_price))
+        .route("/api/subscriptions/{id}/state", post(append_state))
         .route("/api/import/obsidian/scan", get(scan_vault))
         .route("/api/import/obsidian", post(import_vault))
         .route("/api/writeback", post(writeback))
@@ -2557,17 +2557,17 @@ fn build_router(state: AppState) -> Router {
             "/api/import/candidates/reclassify-batch",
             post(reclassify_candidates_batch),
         )
-        .route("/api/import/candidates/:id/review", post(review_candidate))
+        .route("/api/import/candidates/{id}/review", post(review_candidate))
         .route(
-            "/api/import/candidates/:id/reconcile-transfer",
+            "/api/import/candidates/{id}/reconcile-transfer",
             post(reconcile_transfer),
         )
         .route(
-            "/api/import/candidates/:id/allocation",
+            "/api/import/candidates/{id}/allocation",
             post(allocate_expense),
         )
         .route(
-            "/api/import/candidates/:id/reimbursement",
+            "/api/import/candidates/{id}/reimbursement",
             post(link_reimbursement),
         )
         .route("/api/balance-snapshot", post(update_balance_snapshot))
@@ -2579,8 +2579,8 @@ fn build_router(state: AppState) -> Router {
         .route("/__axon/freshness", get(freshness))
         .route("/api/decisions", get(list_decisions))
         .route("/api/decisions/run", post(run_decisions))
-        .route("/api/decisions/:id/verdict", post(record_verdict))
-        .route("/api/trips/:id/spending", get(trip_spending))
+        .route("/api/decisions/{id}/verdict", post(record_verdict))
+        .route("/api/trips/{id}/spending", get(trip_spending))
         // ADD NEW ROUTES ABOVE THIS LINE. Below it they lose the origin guard.
         .layer(axum::middleware::from_fn_with_state(
             CAPABILITY,

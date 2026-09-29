@@ -59,13 +59,13 @@ const ROUTES: &[route_manifest::Route] = &[
         "Entries overlapping a day window. Requires from, to; optional kind (CSV).",
     ),
     r("POST", "/api/entries", "Create an entry."),
-    r("GET", "/api/entries/:id", "One entry."),
+    r("GET", "/api/entries/{id}", "One entry."),
     r(
         "PATCH",
-        "/api/entries/:id",
+        "/api/entries/{id}",
         "Patch an entry. Any patch detaches it from its rhythm.",
     ),
-    r("DELETE", "/api/entries/:id", "Delete an entry."),
+    r("DELETE", "/api/entries/{id}", "Delete an entry."),
     r(
         "PUT",
         "/api/entries/external",
@@ -73,7 +73,7 @@ const ROUTES: &[route_manifest::Route] = &[
     ),
     r(
         "GET",
-        "/api/content/:source/:id",
+        "/api/content/{source}/{id}",
         "The entry as content-item-v2. :source is always 'calendar'.",
     ),
     r(
@@ -92,20 +92,20 @@ const ROUTES: &[route_manifest::Route] = &[
         "Planning contexts overlapping a window. Requires from, to.",
     ),
     r("POST", "/api/contexts", "Create a planning context."),
-    r("PATCH", "/api/contexts/:id", "Patch a planning context."),
-    r("DELETE", "/api/contexts/:id", "Delete a planning context."),
+    r("PATCH", "/api/contexts/{id}", "Patch a planning context."),
+    r("DELETE", "/api/contexts/{id}", "Delete a planning context."),
     r("GET", "/api/rhythms", "Every rhythm."),
     r(
         "POST",
         "/api/rhythms",
         "Create a rhythm and materialize its future instances.",
     ),
-    r("GET", "/api/rhythms/:id", "One rhythm."),
-    r("PATCH", "/api/rhythms/:id", "Patch a rhythm."),
-    r("DELETE", "/api/rhythms/:id", "Delete a rhythm."),
+    r("GET", "/api/rhythms/{id}", "One rhythm."),
+    r("PATCH", "/api/rhythms/{id}", "Patch a rhythm."),
+    r("DELETE", "/api/rhythms/{id}", "Delete a rhythm."),
     r(
         "POST",
-        "/api/rhythms/:id/materialize",
+        "/api/rhythms/{id}/materialize",
         "Re-materialize a rhythm's future instances.",
     ),
     r(
@@ -125,7 +125,7 @@ const ROUTES: &[route_manifest::Route] = &[
     ),
     r(
         "POST",
-        "/api/trip-plans/:plan_id/sync",
+        "/api/trip-plans/{plan_id}/sync",
         "Write a plan's stages back as away entries (booked committed, option_selected planned, \
          planning and open possible), and any \
          booking's free-cancellation date as a deadline entry. Idempotent by external_id; \
@@ -159,12 +159,12 @@ const ROUTES: &[route_manifest::Route] = &[
     r("GET", "/api/google/exports", "The export opt-in ledger."),
     r(
         "PUT",
-        "/api/entries/:id/google-export",
+        "/api/entries/{id}/google-export",
         "Opt an entry in to export.",
     ),
     r(
         "DELETE",
-        "/api/entries/:id/google-export",
+        "/api/entries/{id}/google-export",
         "Opt an entry out. The Google event is left alone.",
     ),
     r(
@@ -263,7 +263,7 @@ struct ProposalsQuery {
 /// `content.rs` has declared a class for this whole source since it was written
 /// — `classification()`, "where the operator is and when is personal, whatever
 /// the event itself is" — and it reached exactly one surface: the per-entry
-/// content projection at `GET /content/calendar/:id`. Nothing that reads a
+/// content projection at `GET /content/calendar/{id}`. Nothing that reads a
 /// LIST ever saw it, so the dashboard's ladder answered `null` for a calendar
 /// row while the capability had an answer the whole time (B50, PRD §13.1).
 ///
@@ -274,7 +274,7 @@ struct ProposalsQuery {
 /// The VALUE only, matching comms' feed list
 /// (`capabilities/comms/src/server/contracts.rs:174`). The rationale and the
 /// method are not repeated on every row of a window that routinely holds
-/// hundreds; they are one fetch away on `GET /content/calendar/:id`, which
+/// hundreds; they are one fetch away on `GET /content/calendar/{id}`, which
 /// serves the whole `DataClass`.
 #[derive(serde::Serialize)]
 struct EntryListItem {
@@ -413,7 +413,7 @@ async fn upsert_external_entry(
 /// renders feed articles and mail. A projection, not a second copy: the store
 /// is not touched and nothing is written.
 ///
-/// Path shape mirrors comms' `/content/:source/:id` deliberately. One contract
+/// Path shape mirrors comms' `/content/{source}/{id}` deliberately. One contract
 /// served under two different URL shapes is the same duplication the contract
 /// exists to remove, one layer down — so the reader can build the URL from the
 /// source alone rather than carrying a per-capability special case.
@@ -1594,7 +1594,7 @@ const CAPABILITY: &str = "calendar";
 /// `CorsLayer::permissive()` with nothing above it: `GET /api/entries` returns
 /// the operator's calendar — titles, times, locations and the context each
 /// entry belongs to — to any page open in their browser. `POST
-/// /api/rhythms/:id/materialize` and `POST /api/trip-plans/:plan_id/sync` take
+/// /api/rhythms/{id}/materialize` and `POST /api/trip-plans/{plan_id}/sync` take
 /// no request body at all, so a cross-site *simple* POST reaches them with no
 /// preflight for CORS to refuse; refusing the request, which is what this guard
 /// does, is what closes that.
@@ -1613,33 +1613,33 @@ fn build_router(state: AppState) -> Router {
         .route("/api/proposals", get(list_external_proposals))
         .route("/api/entries/external", put(upsert_external_entry))
         .route(
-            "/api/entries/:id",
+            "/api/entries/{id}",
             get(get_entry).patch(update_entry).delete(delete_entry),
         )
-        .route("/api/content/:source/:id", get(get_content_item))
+        .route("/api/content/{source}/{id}", get(get_content_item))
         .route("/api/contexts", get(list_contexts).post(create_context))
         .route(
-            "/api/contexts/:id",
+            "/api/contexts/{id}",
             axum::routing::patch(update_context).delete(delete_context),
         )
         .route("/api/rhythms", get(list_rhythms).post(create_rhythm))
         .route(
-            "/api/rhythms/:id",
+            "/api/rhythms/{id}",
             get(get_rhythm).patch(update_rhythm).delete(delete_rhythm),
         )
-        .route("/api/rhythms/:id/materialize", post(materialize_rhythm))
+        .route("/api/rhythms/{id}/materialize", post(materialize_rhythm))
         .route("/api/verdicts", post(candidate_verdicts))
         .route("/api/windows", get(windows))
         .route("/api/trip-drafts", get(trip_drafts))
         .route("/api/trip-drafts/materialize", post(materialize_trip))
-        .route("/api/trip-plans/:plan_id/sync", post(sync_trip_plan))
+        .route("/api/trip-plans/{plan_id}/sync", post(sync_trip_plan))
         .route("/api/google/import", post(google_import))
         .route("/api/google/import-preview", post(google_import_preview))
         .route("/api/google/import-selected", post(google_import_selected))
         .route("/api/google/export", post(google_export))
         .route("/api/google/exports", get(list_export_optins))
         .route(
-            "/api/entries/:id/google-export",
+            "/api/entries/{id}/google-export",
             put(opt_in_export).delete(opt_out_export),
         )
         .route("/api/markdown/sources", get(list_markdown_sources))

@@ -58,12 +58,12 @@ const ROUTES: &[route_manifest::Route] = &[
     },
     route_manifest::get(
         "GET",
-        "/api/entities/:id",
+        "/api/entities/{id}",
         "One entity with its values and facts.",
     ),
     route_manifest::Route {
         method: "PATCH",
-        path: "/api/entities/:id",
+        path: "/api/entities/{id}",
         summary: "Change an entity: { name?, note_ref?, values?, source?, expected_revision? }. \
                   A value of null clears the field. With expected_revision, a concurrent write \
                   is refused with 409 and the current revision.",
@@ -71,13 +71,13 @@ const ROUTES: &[route_manifest::Route] = &[
     },
     route_manifest::get(
         "DELETE",
-        "/api/entities/:id",
+        "/api/entities/{id}",
         "Delete an entity with its values and facts. Its Google and Obsidian ids are remembered, \
          so a sync does not recreate it.",
     ),
     route_manifest::Route {
         method: "POST",
-        path: "/api/entities/:id/facts",
+        path: "/api/entities/{id}/facts",
         summary: "Add a dated place fact: { predicate: home_base|away, place, valid_from?, \
                   valid_to?, note?, source? }. An away period needs both dates. The place text \
                   (never the name) goes to places for a coordinate; the fact is stored even when \
@@ -86,12 +86,12 @@ const ROUTES: &[route_manifest::Route] = &[
     },
     route_manifest::get(
         "DELETE",
-        "/api/entities/:id/facts/:fact_id",
+        "/api/entities/{id}/facts/{fact_id}",
         "Delete one dated fact.",
     ),
     route_manifest::get(
         "GET",
-        "/api/entities/:id/sources",
+        "/api/entities/{id}/sources",
         "What each linked system says about this entity right now: the Google contact (read \
          live) and the Obsidian note (through vault), as values in the entity's field keys. \
          For comparing and taking a value back; nothing is written.",
@@ -112,7 +112,7 @@ const ROUTES: &[route_manifest::Route] = &[
     },
     route_manifest::Route {
         method: "POST",
-        path: "/api/entities/:id/merge",
+        path: "/api/entities/{id}/merge",
         summary: "Merge { other, name? } into this entity. Values it lacks come from other; \
                   facts and Google/Obsidian links move; other is deleted. Returns the kept entity.",
         request_schema: Some(route_manifest::schema_of::<MergeRequest>),
@@ -461,7 +461,7 @@ async fn duplicates(State(state): State<Arc<AppState>>, Query(q): Query<Duplicat
     Ok(Json(body))
 }
 
-/// `GET /api/entities/:id/sources`. Each linked system is asked separately; one that fails
+/// `GET /api/entities/{id}/sources`. Each linked system is asked separately; one that fails
 /// is reported with its error and the others still answer.
 async fn entity_sources(State(state): State<Arc<AppState>>, Path(id): Path<String>) -> Reply {
     let body = blocking(&state, move |s| {
@@ -572,16 +572,16 @@ fn router(state: Arc<AppState>) -> Router {
         .route("/api/fields", get(list_fields).post(declare_field))
         .route("/api/entities", get(list_entities).post(create_entity))
         .route(
-            "/api/entities/:id",
+            "/api/entities/{id}",
             get(get_entity).patch(patch_entity).delete(delete_entity),
         )
-        .route("/api/entities/:id/facts", post(add_fact))
-        .route("/api/entities/:id/facts/:fact_id", delete(delete_fact))
+        .route("/api/entities/{id}/facts", post(add_fact))
+        .route("/api/entities/{id}/facts/{fact_id}", delete(delete_fact))
         .route("/api/located", get(located))
-        .route("/api/entities/:id/sources", get(entity_sources))
+        .route("/api/entities/{id}/sources", get(entity_sources))
         .route("/api/duplicates", get(duplicates))
         .route("/api/duplicates/distinct", post(mark_distinct))
-        .route("/api/entities/:id/merge", post(merge_entity))
+        .route("/api/entities/{id}/merge", post(merge_entity))
         // Below every route: `layer` wraps only what is registered before it
         // (libs/sjel-server/src/origin.rs).
         .layer(middleware::from_fn_with_state(

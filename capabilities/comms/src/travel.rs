@@ -176,7 +176,11 @@ pub fn revision(contexts: &[TravelContext]) -> String {
         hasher.update((row.len() as u64).to_be_bytes());
         hasher.update(row.as_bytes());
     }
-    format!("{:x}", hasher.finalize())
+    hasher
+        .finalize()
+        .iter()
+        .map(|byte| format!("{byte:02x}"))
+        .collect::<String>()
 }
 
 pub fn score_item(item: &FeedItem, contexts: &[TravelContext]) -> TravelSignal {

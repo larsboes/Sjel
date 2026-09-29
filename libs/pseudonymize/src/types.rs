@@ -167,5 +167,12 @@ pub fn compute_digest(findings: &[RedactionFinding]) -> String {
     hasher.update(PSEUDONYMIZE_VERSION.as_bytes());
     hasher.update(b"\0");
     hasher.update(joined.as_bytes());
-    format!("{:x}", hasher.finalize())
+    // sha2 0.11's `finalize()` returns `Array<u8, U32>`, which no longer implements `LowerHex`
+    // the way 0.10's `GenericArray` did. The workspace's own idiom (devices::store, finance,
+    // places) is a byte-wise `02x` write, so this matches it rather than pulling in a hex crate.
+    hasher
+        .finalize()
+        .iter()
+        .map(|byte| format!("{byte:02x}"))
+        .collect()
 }

@@ -102,7 +102,7 @@ pub fn schema_of<T: schemars::JsonSchema>() -> Value {
 
 /// Routes that take a body but declare no schema for it.
 ///
-/// An agent discovering that `POST /api/plans/:id/items` exists still cannot
+/// An agent discovering that `POST /api/plans/{id}/items` exists still cannot
 /// send one without knowing the shape, and a one-line English summary cannot
 /// carry it. This is the same drift guard as `undeclared_routes`, one level up:
 /// the check fails rather than the manifest staying silent.
@@ -150,7 +150,7 @@ pub fn undeclared_routes(source: &str, routes: &[Route]) -> Vec<String> {
 ///
 /// ```text
 /// .route(
-///     "/api/sjel-status/capabilities/:name/start",
+///     "/api/sjel-status/capabilities/{name}/start",
 ///     post(start_handler),
 /// )
 /// ```
@@ -266,7 +266,7 @@ mod tests {
         assert!(bodies_without_schemas(DECLARED).is_empty());
 
         // A GET is not a body route, so it is never asked for one.
-        const READS: &[Route] = &[get("DELETE", "/api/things/:id", "Remove a thing.")];
+        const READS: &[Route] = &[get("DELETE", "/api/things/{id}", "Remove a thing.")];
         assert!(bodies_without_schemas(READS).is_empty());
     }
 
@@ -302,9 +302,9 @@ mod tests {
             Router::new()
                 .route("/health", get(health))
                 .route("/api/things", get(list))
-                .route("/api/things/:id", get(one))
+                .route("/api/things/{id}", get(one))
         "#;
-        assert_eq!(undeclared_routes(source, ROUTES), vec!["/api/things/:id"]);
+        assert_eq!(undeclared_routes(source, ROUTES), vec!["/api/things/{id}"]);
     }
 
     #[test]

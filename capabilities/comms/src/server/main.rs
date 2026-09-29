@@ -79,22 +79,22 @@ const ROUTES: &[route_manifest::Route] = &[
     r("GET", "/routes", "This manifest."),
     r(
         "GET",
-        "/content/:source/:id",
+        "/content/{source}/{id}",
         "An item as content-item-v2. :source is feed or mail.",
     ),
     r(
         "POST",
-        "/content/:source/:id/digest",
+        "/content/{source}/{id}/digest",
         "Generate or refine this item's local digest. Optional depth and focus[].",
     ),
     r(
         "POST",
-        "/content/:source/:id/diagram",
+        "/content/{source}/{id}/diagram",
         "Draw this item as a validated Mermaid diagram.",
     ),
     r(
         "POST",
-        "/content/:source/:id/chart",
+        "/content/{source}/{id}/chart",
         "Extract a chartable table, every value verified against the source.",
     ),
     r(
@@ -104,22 +104,22 @@ const ROUTES: &[route_manifest::Route] = &[
     ),
     r(
         "POST",
-        "/content/:source/:id/cloud-preview",
+        "/content/{source}/{id}/cloud-preview",
         "Build a bounded, reviewable copy for cloud use.",
     ),
     r(
         "POST",
-        "/content/:source/:id/cloud-approval",
+        "/content/{source}/{id}/cloud-approval",
         "Approve the exact previewed copy.",
     ),
     r(
         "POST",
-        "/content/:source/:id/cloud-queue",
+        "/content/{source}/{id}/cloud-queue",
         "Queue an approved copy for a provider role.",
     ),
     r(
         "POST",
-        "/content/cloud-jobs/:job_id/run",
+        "/content/cloud-jobs/{job_id}/run",
         "Run a queued cloud job.",
     ),
     r(
@@ -129,10 +129,10 @@ const ROUTES: &[route_manifest::Route] = &[
     ),
     r("GET", "/feed", "Feed entries. Optional status filter."),
     r("POST", "/ingest", "Ingest one URL into the feed."),
-    r("GET", "/feed/:id", "One feed entry."),
+    r("GET", "/feed/{id}", "One feed entry."),
     r(
         "POST",
-        "/feed/:id/status",
+        "/feed/{id}/status",
         "Set a feed entry's status (keeper, dismissed).",
     ),
     r("GET", "/feed/runs", "Recent collector runs. Optional days."),
@@ -171,32 +171,32 @@ const ROUTES: &[route_manifest::Route] = &[
     r("GET", "/triage", "Mail proposals. Optional status filter."),
     r(
         "POST",
-        "/triage/:id/status",
+        "/triage/{id}/status",
         "Set a mail proposal's status.",
     ),
     r(
         "POST",
-        "/triage/:id/stream",
+        "/triage/{id}/stream",
         "Reclassify a mail into a category.",
     ),
     r(
         "POST",
-        "/triage/:id/data-class",
+        "/triage/{id}/data-class",
         "Set a mail's data classification by hand.",
     ),
     r(
         "POST",
-        "/feed/:id/data-class",
+        "/feed/{id}/data-class",
         "Set a feed item's data classification by hand. Lowering one needs a rationale.",
     ),
     r(
         "POST",
-        "/triage/:id/gmail",
+        "/triage/{id}/gmail",
         "Apply a Gmail action (archive, trash, restore).",
     ),
     r(
         "POST",
-        "/triage/:id/gmail-job",
+        "/triage/{id}/gmail-job",
         "Queue a Gmail action for retry.",
     ),
     r(
@@ -265,9 +265,9 @@ const ROUTES: &[route_manifest::Route] = &[
     // region is one conflict.
     r(
         "POST",
-        "/feed/:id/interactions",
+        "/feed/{id}/interactions",
         "Record that a feed entry was opened or reopened. Body: {event: opened|reopened, surface}. \
-         The decisive verbs (kept, dismissed, unkept) are written by /feed/:id/status and refused here.",
+         The decisive verbs (kept, dismissed, unkept) are written by /feed/{id}/status and refused here.",
     ),
     r(
         "POST",
@@ -324,9 +324,9 @@ fn build_router(dashboard_origin: &str) -> Router {
         .route("/feed/runs", get(feed_runs_handler))
         .route("/feed/evaluation/status", get(evaluation_status_handler))
         .route("/feed/quality", get(quality_queue_handler))
-        .route("/feed/:id", get(feed_item_handler))
+        .route("/feed/{id}", get(feed_item_handler))
         .route("/content/cloud-providers", get(cloud_providers_handler))
-        .route("/content/:source/:id", get(content_item_handler))
+        .route("/content/{source}/{id}", get(content_item_handler))
         .route("/sources", get(sources_handler))
         .route("/__axon/freshness", get(freshness_handler))
         .route("/triage", get(triage_handler))
@@ -340,27 +340,27 @@ fn build_router(dashboard_origin: &str) -> Router {
     // sets differ in what they cost when they run, not because they differ in
     // what admits a caller — one gate covers both.
     let write_routes = Router::new()
-        .route("/content/:source/:id/digest", post(digest_handler))
-        .route("/content/:source/:id/diagram", post(diagram_handler))
-        .route("/content/:source/:id/chart", post(chart_handler))
+        .route("/content/{source}/{id}/digest", post(digest_handler))
+        .route("/content/{source}/{id}/diagram", post(diagram_handler))
+        .route("/content/{source}/{id}/chart", post(chart_handler))
         .route("/content/digests/refresh", post(digest_refresh_handler))
         .route(
-            "/content/:source/:id/cloud-preview",
+            "/content/{source}/{id}/cloud-preview",
             post(cloud_preview_handler),
         )
         .route(
-            "/content/:source/:id/cloud-approval",
+            "/content/{source}/{id}/cloud-approval",
             post(cloud_approval_handler),
         )
         .route(
-            "/content/:source/:id/cloud-queue",
+            "/content/{source}/{id}/cloud-queue",
             post(cloud_queue_handler),
         )
-        .route("/content/cloud-jobs/:job_id/run", post(cloud_run_handler))
+        .route("/content/cloud-jobs/{job_id}/run", post(cloud_run_handler))
         .route("/feed/relevance/refresh", post(relevance_refresh_handler))
         .route("/feed/quality/refresh", post(quality_refresh_handler))
-        .route("/feed/:id/status", post(feed_status_handler))
-        .route("/feed/:id/data-class", post(feed_data_class_handler))
+        .route("/feed/{id}/status", post(feed_status_handler))
+        .route("/feed/{id}/data-class", post(feed_data_class_handler))
         .route("/triage/sweep", post(triage_sweep_handler))
         .route("/triage/relevance/refresh", post(triage_relevance_handler))
         .route("/triage/redact", post(triage_redact_handler))
@@ -369,11 +369,11 @@ fn build_router(dashboard_origin: &str) -> Router {
             post(triage_data_class_refresh_handler),
         )
         .route("/triage/bulk", post(triage_bulk_handler))
-        .route("/triage/:id/status", post(triage_status_handler))
-        .route("/triage/:id/stream", post(triage_stream_handler))
-        .route("/triage/:id/data-class", post(triage_data_class_handler))
-        .route("/triage/:id/gmail", post(triage_gmail_handler))
-        .route("/triage/:id/gmail-job", post(triage_gmail_job_handler))
+        .route("/triage/{id}/status", post(triage_status_handler))
+        .route("/triage/{id}/stream", post(triage_stream_handler))
+        .route("/triage/{id}/data-class", post(triage_data_class_handler))
+        .route("/triage/{id}/gmail", post(triage_gmail_handler))
+        .route("/triage/{id}/gmail-job", post(triage_gmail_job_handler))
         .route("/triage/reconcile", post(triage_reconcile_handler))
         .route("/ingest", post(ingest_handler))
         .route("/vault-links/scan", post(vault_scan_handler))
@@ -393,7 +393,7 @@ fn build_router(dashboard_origin: &str) -> Router {
         // than a third router: the projection layer below sits on this block
         // and nowhere else, so a route added here is covered by the same
         // sentence that covers every other mutation.
-        .route("/feed/:id/interactions", post(feed_interactions_handler))
+        .route("/feed/{id}/interactions", post(feed_interactions_handler))
         .route("/feed/model/train", post(model_train_handler));
 
     Router::new()
@@ -703,7 +703,7 @@ mod tests {
     /// Both scoring paths, not just mail.
     ///
     /// The feed's own gate is `content_item::local_prompt_allowed`, which
-    /// admits c2 -- and `POST /feed/:id/data-class` accepts any class in the
+    /// admits c2 -- and `POST /feed/{id}/data-class` accepts any class in the
     /// vocabulary, so a c2 feed item is reachable. PRD §6.2b: C2 may only reach
     /// a cloud model after a ladder pass has reduced it to C1, and an embedding
     /// of `item_document` is the stored title, author and content verbatim. So

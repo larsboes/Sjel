@@ -93,12 +93,12 @@ const ROUTES: &[route_manifest::Route] = &[
     ),
     r(
         "POST",
-        "/api/people/proposals/:id/confirm",
+        "/api/people/proposals/{id}/confirm",
         "Confirm one register proposal. The only path that produces state=confirmed.",
     ),
     r(
         "POST",
-        "/api/people/proposals/:id/dismiss",
+        "/api/people/proposals/{id}/dismiss",
         "Dismiss one register proposal.",
     ),
     r(
@@ -111,7 +111,7 @@ const ROUTES: &[route_manifest::Route] = &[
     ),
     r(
         "GET",
-        "/api/places/:id/climate",
+        "/api/places/{id}/climate",
         "Twelve months of climate normals for one registered place, folded from ten complete calendar years. Optional ?from=YYYY-MM-DD&to=YYYY-MM-DD marks the months a plan window covers. Empty months with fetched_at null means the place has none yet — run `places-server climate fetch`.",
     ),
     r(
@@ -929,10 +929,10 @@ fn build_router(state: AppState) -> Router {
         .route("/api/unplaced/assign", post(assign_unplaced))
         .route("/api/people/proposals", get(list_proposals))
         .route("/api/people/places", post(state_person_place))
-        .route("/api/people/proposals/:id/confirm", post(confirm_proposal))
-        .route("/api/people/proposals/:id/dismiss", post(dismiss_proposal))
+        .route("/api/people/proposals/{id}/confirm", post(confirm_proposal))
+        .route("/api/people/proposals/{id}/dismiss", post(dismiss_proposal))
         .route("/api/people/presence", get(people_presence))
-        .route("/api/places/:id/climate", get(place_climate))
+        .route("/api/places/{id}/climate", get(place_climate))
         .route("/api/climate", get(climate))
         // ADD NEW ROUTES ABOVE THIS LINE. Below it they lose the C2 guard.
         .layer(middleware::from_fn_with_state(

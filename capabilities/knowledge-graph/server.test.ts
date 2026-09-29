@@ -108,7 +108,7 @@ describe("GET /api/graph/search", () => {
   });
 });
 
-describe("GET /api/graph/community/:id", () => {
+describe("GET /api/graph/community/{id}", () => {
   test("returns that community's members and its internal edges only", async () => {
     const { status, body } = await call("/api/graph/community/0");
     expect(status).toBe(200);
@@ -123,7 +123,7 @@ describe("GET /api/graph/community/:id", () => {
   });
 });
 
-describe("GET /api/graph/node/:id", () => {
+describe("GET /api/graph/node/{id}", () => {
   test("returns the node with its connections in both directions", async () => {
     const { status, body } = await call("/api/graph/node/b.ts");
     expect(status).toBe(200);
@@ -139,7 +139,7 @@ describe("GET /api/graph/node/:id", () => {
   });
 });
 
-describe("GET /api/graph/unit/:name", () => {
+describe("GET /api/graph/unit/{name}", () => {
   /** A unit-shaped graph: three nodes under one capability, one outside it. */
   const UNITS = {
     nodes: [

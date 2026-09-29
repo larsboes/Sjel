@@ -40,25 +40,25 @@ const ROUTES: &[route_manifest::Route] = &[
     },
     r(
         "GET",
-        "/api/plans/:id",
+        "/api/plans/{id}",
         "One trip plan with its stages and items.",
     ),
     r(
         "PATCH",
-        "/api/plans/:id",
+        "/api/plans/{id}",
         "Patch a trip plan. Optional expected_updated_at (body) makes the write conditional: \
          a mismatch is 409 with code stale_plan instead of overwriting another writer. \
          budget_cents + currency record what the trip is meant to cost.",
     ),
     r(
         "DELETE",
-        "/api/plans/:id",
+        "/api/plans/{id}",
         "Delete a trip plan. Optional expected_updated_at (query) makes it conditional, \
          409 with code stale_plan on a mismatch.",
     ),
     route_manifest::Route {
         method: "POST",
-        path: "/api/plans/:id/items",
+        path: "/api/plans/{id}/items",
         summary: "Add an item to a plan. Four item_types (transport, option_set, booking, \
                   stay) promise a payload shape and are validated on write: see \
                   schemas/trip-plan.schema.json.",
@@ -66,12 +66,12 @@ const ROUTES: &[route_manifest::Route] = &[
     },
     r(
         "PATCH",
-        "/api/plans/:plan_id/items/:item_id",
+        "/api/plans/{plan_id}/items/{item_id}",
         "Move an item to a day. Body is {day: \"YYYY-MM-DD\"} or {day: null} to unset.",
     ),
     r(
         "POST",
-        "/api/plans/:id/outcome",
+        "/api/plans/{id}/outcome",
         "Record how a stage actually went. Requires stage_id; every other field is kept as \
          observed. Refused when the stage has no selected_option_id, because there is then \
          nothing to compare an actual against.",
@@ -98,7 +98,7 @@ const ROUTES: &[route_manifest::Route] = &[
     ),
     r(
         "DELETE",
-        "/api/plans/:plan_id/items/:item_id",
+        "/api/plans/{plan_id}/items/{item_id}",
         "Remove an item from a plan.",
     ),
     r(
@@ -156,11 +156,11 @@ const ROUTES: &[route_manifest::Route] = &[
     ),
     route_manifest::Route {
         method: "POST",
-        path: "/api/plans/:id/retrospective",
+        path: "/api/plans/{id}/retrospective",
         summary: "Record or correct one plan's retrospective: exactly the three fields PRD 8.2 \
                   rules -- cost_cents (in the PLAN's currency; a plan with none refuses a cost), \
                   again (yes|no|maybe|not_taken) and change_note. One row per plan, so a second POST is a \
-                  correction and answers 200. Different from POST /api/plans/:id/outcome, which \
+                  correction and answers 200. Different from POST /api/plans/{id}/outcome, which \
                   measures one stage against the option it was chosen under.",
         request_schema: Some(route_manifest::schema_of::<RetrospectiveBody>),
     },
@@ -173,7 +173,7 @@ const ROUTES: &[route_manifest::Route] = &[
     ),
     r(
         "GET",
-        "/api/plans/:id/cost",
+        "/api/plans/{id}/cost",
         "What one trip was meant to cost, what was committed to, and what was actually paid. \
          No parameters: the window is the plan's own dates, so nobody can ask for a partial \
          total. Carries all four of finance's per-trip figures rather than one flattened \
@@ -203,14 +203,14 @@ const ROUTES: &[route_manifest::Route] = &[
     },
     r(
         "GET",
-        "/api/plan-search/:id",
+        "/api/plan-search/{id}",
         "One search's state: running (with since_ms), failed (with error), or done with the \
          ranked result — reach per source, degraded[], considered/priced/unpriced and the \
          candidates with their visible score factors. 404 once the job is evicted.",
     ),
     route_manifest::Route {
         method: "POST",
-        path: "/api/plan-search/:id/adopt",
+        path: "/api/plan-search/{id}/adopt",
         summary: "Record a finished search as one option_set item on an existing plan. \
                   Body: {plan_id}. 400 for an archived plan, 404 for an expired job. \
                   Money is integer minor units; the payload carries no companion field.",
@@ -218,7 +218,7 @@ const ROUTES: &[route_manifest::Route] = &[
     },
     r(
         "GET",
-        "/api/plans/:id/pack",
+        "/api/plans/{id}/pack",
         "Pack lists for a plan, with what is still missing computed server-side. Optional \
          ?stage=<destination place id> adds missing_for_stage over that leg's list plus \
          every whole-trip list. interior_reachable distinguishes an unreachable inventory \
@@ -226,7 +226,7 @@ const ROUTES: &[route_manifest::Route] = &[
     ),
     route_manifest::Route {
         method: "POST",
-        path: "/api/plans/:id/pack",
+        path: "/api/plans/{id}/pack",
         summary: "Create a pack list. Body: {name, stage_destination_id?, stage_sequence?, \
                   template_key?}. The binding is the stage's DESTINATION place id, because \
                   a stage id is a pure function of position.",
@@ -234,12 +234,12 @@ const ROUTES: &[route_manifest::Route] = &[
     },
     r(
         "DELETE",
-        "/api/plans/:id/pack/:list_id",
+        "/api/plans/{id}/pack/{list_id}",
         "Delete one pack list and its items.",
     ),
     route_manifest::Route {
         method: "PUT",
-        path: "/api/plans/:id/pack/:list_id/items",
+        path: "/api/plans/{id}/pack/{list_id}/items",
         summary: "Replace a pack list's items. Body: {items:[{item_ref, packed, note?}]}. \
                   item_ref holds an interior_item.id as a soft reference with no foreign key.",
         request_schema: Some(route_manifest::schema_of::<trips::pack::PutPackItems>),
@@ -1786,12 +1786,12 @@ fn build_router(state: AppState) -> Router {
         .route("/ready", get(ready))
         .route("/api/plans", get(list_plans).post(create_plan))
         .route(
-            "/api/plans/:id",
+            "/api/plans/{id}",
             get(get_plan).patch(update_plan).delete(delete_plan),
         )
-        .route("/api/plans/:id/items", post(add_item))
+        .route("/api/plans/{id}/items", post(add_item))
         .route(
-            "/api/plans/:plan_id/items/:item_id",
+            "/api/plans/{plan_id}/items/{item_id}",
             delete(delete_item).patch(set_item_day),
         )
         .route("/api/places", get(list_places))
@@ -1799,9 +1799,9 @@ fn build_router(state: AppState) -> Router {
         .route("/api/flights/grid", get(flight_grid))
         .route("/api/flights/when", get(flight_when))
         .route("/api/flights/pivot", get(flight_pivot))
-        .route("/api/plans/:id/outcome", post(record_outcome))
-        .route("/api/plans/:id/retrospective", post(record_retrospective))
-        .route("/api/plans/:id/cost", get(plan_cost))
+        .route("/api/plans/{id}/outcome", post(record_outcome))
+        .route("/api/plans/{id}/retrospective", post(record_retrospective))
+        .route("/api/plans/{id}/cost", get(plan_cost))
         .route("/api/retrospectives/pending", get(pending_retrospectives))
         .route("/api/retrospectives/summary", get(retrospective_summary))
         .route("/api/import/obsidian/scan", get(scan_obsidian))
@@ -1809,11 +1809,14 @@ fn build_router(state: AppState) -> Router {
         .route("/api/import/obsidian", post(import_obsidian))
         .route("/api/plan-search", post(plan_search_start))
         .route("/api/bases", post(base_search))
-        .route("/api/plan-search/:id", get(plan_search_status))
-        .route("/api/plan-search/:id/adopt", post(plan_search_adopt))
-        .route("/api/plans/:id/pack", get(list_pack).post(create_pack_list))
-        .route("/api/plans/:id/pack/:list_id", delete(delete_pack_list))
-        .route("/api/plans/:id/pack/:list_id/items", put(put_pack_items))
+        .route("/api/plan-search/{id}", get(plan_search_status))
+        .route("/api/plan-search/{id}/adopt", post(plan_search_adopt))
+        .route(
+            "/api/plans/{id}/pack",
+            get(list_pack).post(create_pack_list),
+        )
+        .route("/api/plans/{id}/pack/{list_id}", delete(delete_pack_list))
+        .route("/api/plans/{id}/pack/{list_id}/items", put(put_pack_items))
         .route("/api/intent/draft", post(draft_intent))
         // ADD NEW ROUTES ABOVE THIS LINE. Below it they lose the origin guard.
         .layer(axum::middleware::from_fn_with_state(

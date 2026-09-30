@@ -292,6 +292,7 @@ impl BackupStore {
         exit_code: i64,
         archive: Option<&ArchiveIdentity>,
         detail: &str,
+        log_path: &str,
     ) -> Fallible<()> {
         let conn = self.conn()?;
         conn.execute(
@@ -299,7 +300,8 @@ impl BackupStore {
                 "UPDATE {}_runs
                     SET finished_at = {NOW}, exit_code = ?2,
                         archive_name = ?3, archive_bytes = ?4, archive_sha256 = ?5,
-                        detail = ?6
+                        detail = ?6,
+                        log_path = CASE WHEN ?7 = '' THEN log_path ELSE ?7 END
                   WHERE id = ?1",
                 self.prefix
             ),
@@ -310,6 +312,7 @@ impl BackupStore {
                 archive.map(|a| a.bytes),
                 archive.map(|a| a.sha256.as_str()),
                 detail,
+                log_path,
             ],
         )?;
         Ok(())
@@ -585,6 +588,7 @@ mod db_tests {
                 1,
                 None,
                 "icloud-item: upload failed: Couldn’t access your iCloud account",
+                "/tmp/log",
             )
             .unwrap();
 
@@ -624,7 +628,9 @@ mod db_tests {
             bytes: 47_208_702,
             sha256: "a".repeat(64),
         };
-        store.finish_run(id, 0, Some(&archive), "").unwrap();
+        store
+            .finish_run(id, 0, Some(&archive), "", "/tmp/log")
+            .unwrap();
 
         let runs = store.latest_runs().unwrap();
         assert_eq!(runs[0].archive.as_ref(), Some(&archive));

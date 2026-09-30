@@ -138,6 +138,7 @@ async fn one_pass(
             outcome.exit_code,
             outcome.archive.as_ref(),
             &outcome.detail,
+            &outcome.log_path.to_string_lossy(),
         )?;
         started += 1;
     }

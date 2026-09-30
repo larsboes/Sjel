@@ -4873,6 +4873,7 @@ name = "sjel-status"
 version = "0.1.0"
 dependencies = [
  "axum",
+ "backup",
  "devices",
  "reqwest",
  "ring",

@@ -205,6 +205,33 @@ pub struct Verdict {
     pub archive: Option<ArchiveIdentity>,
 }
 
+/// The latest receipt a capability wrote, for capabilities whose archives predate the
+/// per-archive history: `backup.sh` has always written this one, and it names its own
+/// tarball, so it identifies the archive it is about.
+fn latest_receipt_archive(overlay: &Path, capability: &str) -> Option<(ArchiveIdentity, PathBuf)> {
+    let path = overlay
+        .join("backup")
+        .join("receipts")
+        .join(format!("{capability}.json"));
+    let value: serde_json::Value = serde_json::from_str(&fs::read_to_string(&path).ok()?).ok()?;
+    let sha256 = value.get("sha256")?.as_str()?.to_string();
+    let name = value.get("tarball")?.as_str()?.to_string();
+    let bytes = value.get("bytes").and_then(|v| v.as_i64()).unwrap_or(0);
+    Some((
+        ArchiveIdentity {
+            name,
+            bytes,
+            sha256,
+        },
+        path,
+    ))
+}
+
+/// The archive a rehearsal should use for one capability: the newest one it recorded.
+fn recorded_archive(overlay: &Path, capability: &str) -> Option<(ArchiveIdentity, PathBuf)> {
+    newest_archive(overlay, capability).or_else(|| latest_receipt_archive(overlay, capability))
+}
+
 /// Rehearse a target: hash the newest archive the producer recorded, then restore it in
 /// isolation with its own receipt.
 ///
@@ -224,26 +251,54 @@ pub fn verify(root: &Path, overlay: &Path, target: &TargetDecl) -> Verdict {
             archive: None,
         };
     }
-    let Some(capability) = target.declared_by.first() else {
+    if target.declared_by.is_empty() {
         return Verdict {
             verdict: "failed",
             detail: "no capability declares this target, so there is no archive to rehearse".into(),
             archive: None,
         };
-    };
-    let Some((archive, receipt_path)) = newest_archive(overlay, capability) else {
+    }
+    // Rehearse an archive that is actually there. Taking the first declared capability was
+    // the wrong question: a capability can declare a target and have no archive recorded yet,
+    // and reporting that as a failed rehearsal would blame the target for the calendar.
+    // A candidate whose archive is missing from the target is still a real failure, so the
+    // first recorded candidate is kept as the fallback when none can be found on disk.
+    let mut fallback: Option<(String, ArchiveIdentity, PathBuf)> = None;
+    let mut candidate: Option<(String, ArchiveIdentity, PathBuf)> = None;
+    for name in &target.declared_by {
+        let Some((archive, receipt_path)) = recorded_archive(overlay, name) else {
+            continue;
+        };
+        let at_target = Path::new(&target.path)
+            .join(name)
+            .join(&archive.name)
+            .is_file();
+        if at_target {
+            candidate = Some((name.clone(), archive, receipt_path));
+            break;
+        }
+        if fallback.is_none() {
+            fallback = Some((name.clone(), archive, receipt_path));
+        }
+    }
+    let Some((capability, archive, receipt_path)) = candidate.or(fallback) else {
         return Verdict {
             verdict: "failed",
-            detail: format!("{capability} has no recorded archive to rehearse"),
+            detail: format!(
+                "no capability declaring '{}' has a recorded archive yet, so there is nothing to rehearse",
+                target.id
+            ),
             archive: None,
         };
     };
-    let archive_path = Path::new(&target.path).join(capability).join(&archive.name);
+    let archive_path = Path::new(&target.path)
+        .join(&capability)
+        .join(&archive.name);
     if !archive_path.is_file() {
         return Verdict {
             verdict: "failed",
             detail: format!(
-                "the recorded archive is not at the target: {}",
+                "{capability}'s recorded archive is not at the target: {}",
                 archive.name
             ),
             archive: Some(archive),
@@ -273,9 +328,20 @@ pub fn verify(root: &Path, overlay: &Path, target: &TargetDecl) -> Verdict {
 
     let scratch = std::env::temp_dir().join(format!("sjel-backup-verify-{}", std::process::id()));
     let _ = fs::remove_dir_all(&scratch);
+    // `restore.sh` creates the destination itself but requires its PARENT to exist — it
+    // refuses to invent a path, which is right, and makes creating the parent this
+    // process's job. Measured by running the rehearsal: without this the verdict was
+    // "destination parent does not exist" for a target that was perfectly fine.
+    if let Err(error) = fs::create_dir_all(&scratch) {
+        return Verdict {
+            verdict: "failed",
+            detail: format!("could not create a scratch directory for the rehearsal: {error}"),
+            archive: Some(archive),
+        };
+    }
     let destination = scratch.join("restored");
     let output = Command::new(root.join("tools/restore.sh"))
-        .arg(capability)
+        .arg(&capability)
         .arg(&archive_path)
         .arg("--receipt")
         .arg(&receipt_path)

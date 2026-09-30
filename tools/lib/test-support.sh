@@ -67,11 +67,11 @@ skippable() {
 # Call once, before resolving any scratch path. A test that wants its sandbox named explicitly
 # still exports SJEL_OVERLAY_ROOT itself AFTER this (tools/check-site-payload.test.sh does).
 #
-# Both names are cleared: tools/lib/env-compat.sh refills a SJEL_ name from its pre-rename AXON_
-# name, so clearing only the new one hands the test the real value again.
+# The settings are cleared so a value the operator's shell exports cannot stand in for the
+# sandbox's own.
 isolate_axon_env() {
   local v
   for v in ROOT OVERLAY_ROOT PERSONAL_ROOT MACHINE_TOML MACHINES_DIR CAPS_DIR OVERLAY_CAPS_DIR; do
-    unset "SJEL_$v" "AXON_$v"
+    unset "SJEL_$v"
   done
 }

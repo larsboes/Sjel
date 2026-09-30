@@ -100,6 +100,5 @@ fn a_listed_loopback_origin_is_fetched_and_its_neighbours_are_not() {
 
     std::env::remove_var("SJEL_COMMS_CONFIG");
 
-    std::env::remove_var("AXON_COMMS_CONFIG");
     let _ = std::fs::remove_dir_all(&dir);
 }

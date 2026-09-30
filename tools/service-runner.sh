@@ -252,7 +252,7 @@ FULL_DISK_ACCESS="$(toml_get full_disk_access "$MANIFEST")"
 if [ -f "$SJEL_MACHINE_TOML" ]; then
   _inference_backend="$(toml_get_in inference backend "$SJEL_MACHINE_TOML")"
   if [ -n "$_inference_backend" ]; then
-    export SJEL_INFERENCE_BACKEND="$_inference_backend" AXON_INFERENCE_BACKEND="$_inference_backend"
+    export SJEL_INFERENCE_BACKEND="$_inference_backend"
   fi
   unset _inference_backend
 fi
@@ -272,7 +272,7 @@ fi
 # not loopback stays a cloud endpoint.
 _trusted_peers="$(trusted_peers_env)"
 if [ -n "$_trusted_peers" ]; then
-  export SJEL_INFERENCE_TRUSTED_PEERS="$_trusted_peers" AXON_INFERENCE_TRUSTED_PEERS="$_trusted_peers"
+  export SJEL_INFERENCE_TRUSTED_PEERS="$_trusted_peers"
 fi
 unset _trusted_peers
 
@@ -394,9 +394,6 @@ process_init() {
   for _i in "${!COMMAND[@]}"; do
     COMMAND[$_i]="${COMMAND[$_i]//\$\{SJEL_ROOT\}/$SJEL_ROOT}"
     COMMAND[$_i]="${COMMAND[$_i]//\$\{SJEL_OVERLAY_ROOT\}/$SJEL_OVERLAY_ROOT}"
-    # The pre-rename placeholders, still accepted in a manifest written before 2026-09-26.
-    COMMAND[$_i]="${COMMAND[$_i]//\$\{AXON_ROOT\}/$SJEL_ROOT}"
-    COMMAND[$_i]="${COMMAND[$_i]//\$\{AXON_OVERLAY_ROOT\}/$SJEL_OVERLAY_ROOT}"
   done
 
   # command[0] is resolved against the capability's own root, not against workdir: a
@@ -422,8 +419,6 @@ process_init() {
   # the number would be written twice, and a machine.toml override would move one of them.
   for _i in "${!COMMAND[@]}"; do
     COMMAND[$_i]="${COMMAND[$_i]//\$\{SJEL_PORT\}/$PORT}"
-    # The pre-rename placeholder, still accepted in a manifest written before 2026-09-26.
-    COMMAND[$_i]="${COMMAND[$_i]//\$\{AXON_PORT\}/$PORT}"
   done
 }
 
@@ -647,8 +642,7 @@ start_process() {
     (
       cd "$CAP_ROOT/${WORKDIR:-.}"
       SJEL_SHELL_PORT="$(toml_get port "$SJEL_ROOT/dashboard/service.toml")"
-      # Under both names: a capability written before the rename reads AXON_SHELL_PORT.
-      export SJEL_SHELL_PORT AXON_SHELL_PORT="$SJEL_SHELL_PORT"
+      export SJEL_SHELL_PORT
       # No redirect and no pid file on purpose: stdout and stderr are inherited so the
       # supervisor's own capture is the one that gets them, and there is no long-lived process
       # for a pid file to describe.
@@ -678,16 +672,14 @@ start_process() {
     # to be what the process binds -- otherwise the registry describes a service that
     # is listening somewhere else. A capability honours SJEL_PORT above its own config;
     # one that ignores it is free to, and simply has to keep its config in step.
-    # Under both names, set explicitly: a capability written before the rename reads AXON_PORT,
-    # and an inherited AXON_PORT from another process must never stand in for this one.
-    if [ -n "$PORT" ]; then export SJEL_PORT="$PORT" AXON_PORT="$PORT"; fi
+    if [ -n "$PORT" ]; then export SJEL_PORT="$PORT"; fi
     # Where the shell lives, for a capability that serves its own page and needs a way
     # back to it. Read from dashboard/service.toml — the port keeps exactly one home,
     # and a panel never learns a number. Only the port: the HOST has to come from the
     # browser's own `location`, or the link breaks the moment the dashboard is opened
     # over Tailscale rather than as localhost (same reasoning as api.ts's panelUrl).
     SJEL_SHELL_PORT="$(toml_get port "$SJEL_ROOT/dashboard/service.toml")"
-    export SJEL_SHELL_PORT AXON_SHELL_PORT="$SJEL_SHELL_PORT"
+    export SJEL_SHELL_PORT
     nohup "${COMMAND[@]}" >>"$PROC_LOG" 2>>"$PROC_ERR" &
     echo $! > "$PID_FILE"
   )

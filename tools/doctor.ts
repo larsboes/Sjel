@@ -2106,12 +2106,12 @@ const CHECKS: Check[] = [
       if (!ctx.overlayPath || !existsSync(ctx.overlayPath)) return ctx.warn("no overlay — cannot read deployment.env");
       const envPath = join(ctx.overlayPath, "config", "deployment.env");
       if (!existsSync(envPath)) return ctx.ok("no deployment.env — no tailnet gate declared");
-      // Either key: AXON_TAILNET_OPERATOR is its name before the 2026-09-26 rename, and
-      // libs/sjel-config's deployment_value reads both the same way.
+      // The key under the name the rename settled on; libs/sjel-config's deployment_value
+      // reads it the same way.
       const lines = readFileSync(envPath, "utf8").split("\n").map((l) => l.trim());
       const valueOf = (key: string) =>
         lines.find((l) => l.startsWith(`${key}=`))?.slice(key.length + 1).trim() || undefined;
-      const declared = valueOf("SJEL_TAILNET_OPERATOR") ?? valueOf("AXON_TAILNET_OPERATOR");
+      const declared = valueOf("SJEL_TAILNET_OPERATOR");
       if (!declared) {
         // Not a failure. The undeclared deployment is the one that predates this gate,
         // and libs/sjel-server ignores the identity header entirely in that state.

@@ -263,10 +263,10 @@ mod tests {
             self
         }
 
-        /// Clears the Sjel name and its pre-rename Axon name, so a value the operator's shell
-        /// still exports under the old name cannot stand in for the setting under test.
+        /// Clears the setting, so a value the operator's shell still exports cannot stand in
+        /// for the setting under test.
         fn unset(mut self, key: &'static str) -> Self {
-            for name in std::iter::once(key.to_string()).chain(sjel_config::env::legacy_name(key)) {
+            for name in std::iter::once(key.to_string()) {
                 self.restore.push((name.clone(), std::env::var(&name).ok()));
                 std::env::remove_var(&name);
             }

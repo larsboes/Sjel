@@ -14,7 +14,7 @@ trap 'rm -rf "$SCRATCH"' EXIT
 
 # No overlay: the derived-term half of the check is inert here, which is also how it behaves
 # on a CI runner. The derived half is exercised by its own case at the bottom.
-unset SJEL_OVERLAY_ROOT AXON_OVERLAY_ROOT
+unset SJEL_OVERLAY_ROOT
 
 fails=0
 

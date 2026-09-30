@@ -184,7 +184,7 @@ fi  # HAVE_BUN
 #
 # Ambient value cleared first — an operator who exports one for debugging would otherwise
 # make the control below pass for the wrong reason.
-unset SJEL_INFERENCE_BACKEND AXON_INFERENCE_BACKEND
+unset SJEL_INFERENCE_BACKEND
 
 INF_ROOT="$SCRATCH/inference"
 INF_OVERLAY="$SCRATCH/inference-overlay"

@@ -308,13 +308,9 @@ mod tests {
     impl EnvGuard {
         fn take(keys: &[&'static str]) -> Self {
             let lock = env_lock();
-            // The pre-rename Axon name is cleared too, so a value the operator's shell still
-            // exports under it cannot stand in for the setting under test.
             let saved = keys
                 .iter()
-                .flat_map(|key| {
-                    std::iter::once(key.to_string()).chain(sjel_config::env::legacy_name(key))
-                })
+                .map(|key| key.to_string())
                 .map(|key| {
                     let previous = std::env::var(&key).ok();
                     std::env::remove_var(&key);

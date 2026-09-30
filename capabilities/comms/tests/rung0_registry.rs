@@ -80,6 +80,5 @@ fn a_bare_first_name_is_redacted_and_an_unknown_word_survives() {
 
     std::env::remove_var("SJEL_PEOPLE_REGISTRY");
 
-    std::env::remove_var("AXON_PEOPLE_REGISTRY");
     let _ = std::fs::remove_file(&p);
 }

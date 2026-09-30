@@ -163,10 +163,10 @@ mod tests {
             std::env::set_var(key, value);
             Self(vec![(key.to_string(), previous)])
         }
-        /// Clears the setting under its Sjel name and its pre-rename Axon name, so a value
-        /// the operator's shell still exports under the old name cannot stand in for it.
+        /// Clears the setting, so a value the operator's shell still exports cannot stand in
+        /// for it.
         fn take(key: &'static str) -> Self {
-            let names = std::iter::once(key.to_string()).chain(crate::env::legacy_name(key));
+            let names = std::iter::once(key.to_string());
             Self(
                 names
                     .map(|name| {

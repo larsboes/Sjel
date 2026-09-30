@@ -180,6 +180,17 @@ before an applied run exists; full per-file failure capture remains unproven.
 > *Probe:* run the perceptual pass; assert zero rows in any import or delete ledger attributable to
 > it, and that every candidate pair has a review row.
 
+### F5 · Human-reviewed organization preview
+
+A category-first archive can use chronological trip folders without forcing every other category into the same hierarchy. The private draft owns category names and reviewed collection mappings; the public tool owns validation and measurement. This slice does not change the existing importer or its `by-date` convention.
+
+- [x] MED-P1 — `media preview --structure FILE` reports reviewed destinations, unresolved collections and conflicts without opening the shared store or changing the source, archive or draft. Falsifier: an isolated CLI probe creates a database or changes a fixture tree.
+- [x] MED-P2 — source and archive must match the expected volume UUID; symlinks, traversal and unsafe destinations are refused or blocked. Falsifier: a fixture escapes its root or a wrong-volume live preview proceeds.
+- [x] MED-P3 — optional metadata inspection preserves date-field evidence and exposes location-tag presence, not coordinates. Missing metadata remains missing; provisional event membership does not become an approved move. Falsifier: synthetic fixtures emit a coordinate, silently prefer a 2026 container date over a retained 2016 recording date, or turn a provisional mapping into a reviewed destination.
+- [x] MED-P4 — incomplete extraction or changed source entries is visible and returns a failing completeness verdict. Falsifier: failed, missing or duplicate metadata rows, or newly added/removed files during extraction, produce a complete report.
+
+**2026-09-30 evidence.** The isolated crate run passed 18 tests and strict all-target clippy. The black-box `acceptance/preview.py` probe passed no-write checks, unsafe/repeated-option and wrong-volume refusals, mapped-only metadata scope, coordinate/diagnostic withholding, missing/duplicate/unexpected rows and added/removed entries during extraction. Existing `acceptance/scratch.py` also passed. A local preview on the registered archive volume found 14 collections, 2 reviewed proposals, 1 provisional collection and 11 unmapped collections, plus 1 loose file. The mapped-only pass read 1,134 videos, reproducing prior date-field/month evidence with zero extraction errors or standard location-tag presence. Independent before/after entry-stat snapshots of both roots and a draft-content comparison were unchanged; no scratch store or overlay was created. This is not a byte-integrity audit, proof of an atomic snapshot, or claim that deeper timed location metadata is absent. Reports and the real draft remain private. No apply action, model or production-binary replacement was performed.
+
 ## Not yet specified
 
 - **Per-file pre-classification failures.** A symlink, unreadable byte stream, or non-UTF-8
@@ -252,6 +263,8 @@ implementation at the same moment rather than against a stored number.
   useful after Immich arrives, because it is what makes the Immich import idempotent.
 
 ## Decisions
+
+**2026-09-30 — prepare organization through a read-only preview, not automatic sorting.** The principal chose explicit collection mappings and category-specific browsing: chronology inside Trips, meaningful collections elsewhere. Files and companion files remain together. Dates and GPS availability are evidence for review, not event identity or move permission. Rust provides the repeatable preview; local-model advice is a separate, unvalidated option. No model dependency or apply action is added to this slice.
 
 **2026-09-29 — exact hashing is authoritative, perceptual is advisory.** Evidence: a name-and-size
 heuristic was wrong 4 in 17,583; the recovered set looked like duplicates and was 0% duplicates.

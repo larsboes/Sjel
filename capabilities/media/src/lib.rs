@@ -1,6 +1,7 @@
 //! An exact-byte ingest gate. The shared store owns the database file; this crate owns media_ tables.
 
 pub mod ingest;
+pub mod preview;
 pub mod store;
 
 use std::collections::{BTreeMap, BTreeSet};

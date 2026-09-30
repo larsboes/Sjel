@@ -6,7 +6,7 @@ use media::{audit, index, verify_mirror, volume_uuid};
 
 fn usage() {
     eprintln!("media — exact-byte index, ingest gate and mirror verification\n\
-        usage:\n  media volume-id --root PATH\n  media index --root PATH --uuid UUID [--db PATH]\n  media audit --root PATH --uuid UUID --sample N [--db PATH]\n  media ingest --staging PATH --library PATH --uuid UUID [--apply] [--prune] [--db PATH]\n  media classify (--digest SHA256 | --digests-file PATH) [--db PATH]\n  media verify-mirror --left-root PATH --left-uuid UUID --right-root PATH --right-uuid UUID [--db PATH]\n  media status [--db PATH]\n\n\
+        usage:\n  media volume-id --root PATH\n  media index --root PATH --uuid UUID [--db PATH]\n  media audit --root PATH --uuid UUID --sample N [--db PATH]\n  media ingest --staging PATH --library PATH --uuid UUID [--apply] [--prune] [--db PATH]\n  media classify (--digest SHA256 | --digests-file PATH) [--db PATH]\n  media verify-mirror --left-root PATH --left-uuid UUID --right-root PATH --right-uuid UUID [--db PATH]\n  media status [--db PATH]\n  media preview --structure FILE [--metadata]\n\n\
         ingest is a dry run unless --apply is set. --prune additionally removes staging/originals\n\
         only after every new import verifies; neither verb deletes library content.");
 }
@@ -73,6 +73,19 @@ fn run(args: &[String]) -> Result<i32> {
     if matches!(verb.as_str(), "help" | "--help" | "-h") {
         usage();
         return Ok(0);
+    }
+    // Preview never reaches configuration/database resolution, even on invalid arguments.
+    if verb == "preview" {
+        return match run_preview(opts) {
+            Ok(code) => Ok(code),
+            Err(error) => {
+                println!(
+                    "{}",
+                    serde_json::json!({"complete": false, "moves_authorized": false, "error": error.to_string()})
+                );
+                Ok(1)
+            }
+        };
     }
     let (keys, flags): (&[&str], &[&str]) = match verb.as_str() {
         "volume-id" => (&["--root"], &[]),
@@ -243,12 +256,52 @@ fn run(args: &[String]) -> Result<i32> {
         _ => unreachable!(),
     }
 }
+fn run_preview(opts: &[String]) -> Result<i32> {
+    allowed(opts, &["--structure"], &["--metadata"])?;
+    if opts
+        .iter()
+        .filter(|arg| arg.as_str() == "--metadata")
+        .count()
+        > 1
+    {
+        return Err("repeated --metadata".into());
+    }
+    let structure = rooted(opts, "--structure")?;
+    let report = media::preview::preview(&structure, opts.iter().any(|arg| arg == "--metadata"))?;
+    let code = i32::from(!report.complete);
+    println!("{}", serde_json::to_string(&report)?);
+    Ok(code)
+}
+
 fn main() {
     match run(&std::env::args().skip(1).collect::<Vec<_>>()) {
         Ok(code) => std::process::exit(code),
         Err(e) => {
             eprintln!("media: {e}");
             std::process::exit(1);
+        }
+    }
+}
+
+#[cfg(test)]
+mod preview_tests {
+    use super::*;
+
+    #[test]
+    fn preview_rejects_unknown_repeated_and_execution_flags_before_database_resolution() {
+        for options in [
+            vec![],
+            vec!["--structure"],
+            vec!["--structure", "missing", "--db", "scratch.db"],
+            vec!["--structure", "missing", "--apply"],
+            vec!["--structure", "missing", "--prune"],
+            vec!["--structure", "missing", "--unknown"],
+            vec!["--structure", "missing", "--metadata", "--metadata"],
+            vec!["--structure", "missing", "--structure", "another"],
+        ] {
+            let mut args = vec!["preview".to_owned()];
+            args.extend(options.into_iter().map(str::to_owned));
+            assert_eq!(run(&args).unwrap(), 1);
         }
     }
 }

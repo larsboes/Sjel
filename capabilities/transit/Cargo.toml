@@ -56,7 +56,7 @@ reqwest = { workspace = true, features = ["json", "gzip", "blocking", "query", "
 thiserror.workspace = true
 regex = "1"
 pdf-extract = "0.12"
-mailparse = "0.16"
+mailparse = "0.17"
 html2text = "0.6"
 # The database, after PRD Q45 retired Postgres. Bundled so the deployment does
 # not depend on whichever SQLite the host ships; upstreams.toml [rusqlite] has

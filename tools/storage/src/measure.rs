@@ -163,7 +163,7 @@ impl Walk {
     #[cfg(not(unix))]
     fn charge(&mut self, meta: &std::fs::Metadata) -> u64 {
         // No inode identity to dedup on, and no allocated-block count. Apparent size is
-        // the best available answer; Axon's declared platforms are all unix.
+        // the best available answer; Sjel's declared platforms are all unix.
         meta.len()
     }
 }

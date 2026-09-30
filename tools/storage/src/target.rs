@@ -37,6 +37,22 @@ use crate::measure::Walk;
 /// PRD §9 R6. Three, not "a bit over three": the rule is the number.
 pub const R6_MAX_RATIO: f64 = 3.0;
 
+/// A Cargo target dir inside the repo that is not the one cargo resolves to here.
+///
+/// Cargo stamps its target dir with a `CACHEDIR.TAG`, so this finds them by that marker
+/// rather than by guessing directory names. The case that produced it, measured 2026-09-30:
+/// Xcode's build phase launches `cargo` without the shell environment, so `CARGO_TARGET_DIR`
+/// is unset and cargo falls back to the workspace-local `target/`. `prune --target` runs
+/// `cargo clean`, which honours that same variable, so it could only ever clean the one
+/// directory — and `dashboard/src-tauri/target` reached 15 GB unremarked.
+#[derive(Debug, Clone, Serialize)]
+pub struct SecondaryTarget {
+    pub path: String,
+    /// The workspace manifest whose `cargo clean` is what removes this directory.
+    pub manifest: String,
+    pub bytes: u64,
+}
+
 #[derive(Debug, Clone, Serialize)]
 pub struct Buckets {
     pub deps: u64,
@@ -92,6 +108,10 @@ pub struct TargetReport {
     /// `ok`, `over`, or `unknown`.
     pub r6: String,
     pub toolchain: Toolchain,
+    /// Cargo target dirs inside the repo that cargo does not resolve to. Empty on a checkout
+    /// where `CARGO_TARGET_DIR` covers everything, which is the intended state.
+    pub secondary: Vec<SecondaryTarget>,
+    pub secondary_bytes: u64,
 }
 
 /// Where this workspace's build cache is. `CARGO_TARGET_DIR` wins because that is what
@@ -101,6 +121,74 @@ pub fn target_dir(repo_root: &Path) -> (PathBuf, &'static str) {
     match std::env::var("CARGO_TARGET_DIR") {
         Ok(v) if !v.trim().is_empty() => (PathBuf::from(v), "CARGO_TARGET_DIR"),
         _ => (repo_root.join("target"), "repo"),
+    }
+}
+
+/// Every Cargo target dir under `repo_root` that is not `primary`, largest first.
+///
+/// The repo's own `target/` is deliberately never one of them. That directory is not an
+/// escapee — it is where a workspace build puts the binaries the supervisor runs
+/// (`capabilities/calendar/service.toml` names `target/release/calendar-server`), which is why
+/// `tools/cargo-hermetic` refuses to point `CARGO_TARGET_DIR` at anything inside the checkout.
+/// Reporting it as reclaimable would invite exactly the mistake that guard exists to prevent.
+/// What this is for is a *nested* workspace: `dashboard/src-tauri/target` is a second target dir
+/// under the repo root whose builds the checkout's own `target/` knows nothing about.
+///
+/// The walk is bounded and skips the two subtrees that cannot hold a workspace and are
+/// expensive to descend: `.git` and `node_modules`. A directory that *is* a target dir is
+/// recorded and not descended into, because cargo keeps no workspace inside one.
+pub fn secondary_targets(repo_root: &Path, primary: &Path) -> Vec<SecondaryTarget> {
+    let primary = std::fs::canonicalize(primary).unwrap_or_else(|_| primary.to_path_buf());
+    let deployment = canonical(repo_root.join("target"));
+    let mut out = Vec::new();
+    scan(repo_root, &primary, deployment.as_deref(), &mut out, 0);
+    out.sort_by(|a, b| b.bytes.cmp(&a.bytes));
+    out
+}
+
+/// `canonicalize` when the path exists, because a path that does not exist is not a directory
+/// this walk can meet, and the caller compares rather than opens.
+fn canonical(path: PathBuf) -> Option<PathBuf> {
+    std::fs::canonicalize(path).ok()
+}
+
+/// Deep enough for a capability, a Pack or a nested app; shallow enough to stay cheap on
+/// every `report`.
+const MAX_SCAN_DEPTH: usize = 8;
+
+fn scan(dir: &Path, primary: &Path, deployment: Option<&Path>, out: &mut Vec<SecondaryTarget>, depth: usize) {
+    if depth > MAX_SCAN_DEPTH {
+        return;
+    }
+    let Ok(entries) = std::fs::read_dir(dir) else {
+        return;
+    };
+    for entry in entries.flatten() {
+        let path = entry.path();
+        if !path.is_dir() {
+            continue;
+        }
+        let name = entry.file_name();
+        let name = name.to_string_lossy();
+        if name == ".git" || name == "node_modules" {
+            continue;
+        }
+        let real = std::fs::canonicalize(&path).unwrap_or_else(|_| path.clone());
+        if real == primary || Some(real.as_path()) == deployment {
+            continue;
+        }
+        if name == "target" && path.join("CACHEDIR.TAG").is_file() {
+            out.push(SecondaryTarget {
+                path: path.display().to_string(),
+                manifest: path
+                    .parent()
+                    .map(|p| p.join("Cargo.toml").display().to_string())
+                    .unwrap_or_default(),
+                bytes: Walk::default().size(&path),
+            });
+            continue;
+        }
+        scan(&path, primary, deployment, out, depth + 1);
     }
 }
 
@@ -229,6 +317,8 @@ pub fn measure(repo_root: &Path) -> TargetReport {
         .iter()
         .map(|p| p.buckets.deps + p.buckets.fingerprint)
         .sum();
+    let secondary = secondary_targets(repo_root, &dir);
+    let secondary_bytes = secondary.iter().map(|s| s.bytes).sum();
 
     TargetReport {
         target_dir: dir.display().to_string(),
@@ -244,6 +334,8 @@ pub fn measure(repo_root: &Path) -> TargetReport {
             matches,
             stale_candidate_bytes,
         },
+        secondary,
+        secondary_bytes,
     }
 }
 
@@ -355,5 +447,84 @@ mod tests {
         assert!(b.binaries >= 16 * 1024, "binaries: {}", b.binaries);
         // A directory cargo grows that this tool has no bucket for still lands somewhere.
         assert!(b.other >= 16 * 1024, "other: {}", b.other);
+    }
+
+    #[test]
+    fn a_second_target_dir_inside_the_repo_is_found_and_the_primary_is_not() {
+        let repo = crate::testutil::tempdir("secondary-target");
+        let primary = repo.join("target");
+        std::fs::create_dir_all(&primary).unwrap();
+        std::fs::write(primary.join("CACHEDIR.TAG"), b"").unwrap();
+        std::fs::write(primary.join("blob"), vec![0u8; 1024]).unwrap();
+
+        // The nested workspace whose target dir Xcode's build phase produces when
+        // CARGO_TARGET_DIR is not in the environment.
+        let nested = repo.join("dashboard").join("src-tauri");
+        std::fs::create_dir_all(nested.join("target")).unwrap();
+        std::fs::write(nested.join("Cargo.toml"), b"[workspace]\n").unwrap();
+        std::fs::write(nested.join("target").join("CACHEDIR.TAG"), b"").unwrap();
+        std::fs::write(nested.join("target").join("blob"), vec![0u8; 16 * 1024]).unwrap();
+
+        // A directory that merely bears the name is not a target dir. Cargo's own
+        // CACHEDIR.TAG is the marker, not the name, which is what keeps node_modules-style
+        // names out of the answer.
+        std::fs::create_dir_all(repo.join("looks-like").join("target")).unwrap();
+
+        let found = secondary_targets(&repo, &primary);
+        assert_eq!(found.len(), 1, "found: {found:?}");
+        assert!(found[0].path.ends_with("dashboard/src-tauri/target"), "{}", found[0].path);
+        assert!(
+            found[0].manifest.ends_with("dashboard/src-tauri/Cargo.toml"),
+            "{}",
+            found[0].manifest
+        );
+        assert!(found[0].bytes >= 16 * 1024, "bytes: {}", found[0].bytes);
+
+        let _ = std::fs::remove_dir_all(&repo);
+    }
+
+    #[test]
+    fn a_repo_with_only_the_primary_target_dir_reports_none() {
+        let repo = crate::testutil::tempdir("secondary-target-none");
+        let primary = repo.join("target");
+        std::fs::create_dir_all(&primary).unwrap();
+        std::fs::write(primary.join("CACHEDIR.TAG"), b"").unwrap();
+        // The intended state: CARGO_TARGET_DIR covers everything, so nothing is orphaned.
+        assert!(secondary_targets(&repo, &primary).is_empty());
+        let _ = std::fs::remove_dir_all(&repo);
+    }
+
+    #[test]
+    fn the_checkouts_own_target_dir_is_never_reported_as_reclaimable() {
+        let repo = crate::testutil::tempdir("deployment-target");
+        // Where a workspace build puts the binaries the supervisor runs.
+        let deployment = repo.join("target");
+        std::fs::create_dir_all(deployment.join("release")).unwrap();
+        std::fs::write(deployment.join("CACHEDIR.TAG"), b"").unwrap();
+        std::fs::write(
+            deployment.join("release").join("calendar-server"),
+            vec![0u8; 4096],
+        )
+        .unwrap();
+
+        // The nested workspace, which is the case this actually looks for.
+        let nested = repo.join("dashboard").join("src-tauri");
+        std::fs::create_dir_all(nested.join("target")).unwrap();
+        std::fs::write(nested.join("target").join("CACHEDIR.TAG"), b"").unwrap();
+
+        // cargo-hermetic points CARGO_TARGET_DIR somewhere outside the checkout, which is the
+        // state in which the repo's own target/ would otherwise be mistaken for an escapee.
+        // tools/cargo-hermetic refuses that directory for this very reason.
+        let elsewhere = crate::testutil::tempdir("deployment-primary");
+        let found = secondary_targets(&repo, &elsewhere);
+        assert_eq!(found.len(), 1, "found: {found:?}");
+        assert!(
+            found[0].path.ends_with("dashboard/src-tauri/target"),
+            "{}",
+            found[0].path
+        );
+
+        let _ = std::fs::remove_dir_all(&repo);
+        let _ = std::fs::remove_dir_all(&elsewhere);
     }
 }

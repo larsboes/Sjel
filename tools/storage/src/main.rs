@@ -118,7 +118,7 @@ fn repo_root() -> Result<PathBuf, String> {
         }
         if !dir.pop() {
             return Err(
-                "no Axon checkout here — set SJEL_ROOT or run this through tools/storage/storage"
+                "no Sjel checkout here — set SJEL_ROOT or run this through tools/storage/storage"
                     .to_string(),
             );
         }
@@ -218,7 +218,7 @@ fn cmd_report(json: bool, do_apply: bool) -> Result<u8, String> {
     } else {
         (disk.used as f64 / disk.total as f64 * 100.0).round() as u64
     };
-    println!("Axon storage · {}", disk.target);
+    println!("Sjel storage · {}", disk.target);
     println!(
         "  {} used / {} ({}%) · {} free · {}\n",
         fmt_bytes(disk.used),
@@ -360,7 +360,7 @@ fn cmd_target(json: bool) -> Result<u8, String> {
         });
     }
 
-    println!("Axon storage · {} ({})", report.target_dir, report.source);
+    println!("Sjel storage · {} ({})", report.target_dir, report.source);
     println!("  {} total\n", fmt_bytes(report.bytes));
 
     for p in &report.profiles {
@@ -442,6 +442,19 @@ fn cmd_target(json: bool) -> Result<u8, String> {
             fmt_bytes(t.stale_candidate_bytes),
         );
     }
+    if !report.secondary.is_empty() {
+        println!(
+            "\n  {} in {} target dir{} cargo does not resolve to here:",
+            fmt_bytes(report.secondary_bytes),
+            report.secondary.len(),
+            if report.secondary.len() == 1 { "" } else { "s" }
+        );
+        for s in &report.secondary {
+            println!("  {:>9}  {}", fmt_bytes(s.bytes), s.path);
+            println!("             cargo clean --manifest-path {}", s.manifest);
+        }
+    }
+
     Ok(if report.r6 == "over" {
         EXIT_OVER
     } else {
@@ -465,7 +478,7 @@ fn cmd_prune(
     let plan = prune::Plan::build(&root, &dir, incremental, want_target, node_modules);
 
     println!(
-        "Axon storage prune · {}{}",
+        "Sjel storage prune · {}{}",
         root.display(),
         if dry_run { " (dry run)" } else { "" }
     );

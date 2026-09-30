@@ -344,8 +344,16 @@ Placement, per `Packs/harness/skills/sjel/references/on-placement.md`: the measu
 in `tools/` ("Repository identity, install, wiring, or operator machinery"), because storage
 is operator machinery rather than a bounded domain. No new capability and no new route —
 `capabilities/sjel-status` already serves a host-watch finding for "a filling disk", and
-`dashboard/src/routes/systems/+page.svelte` is already the machine-state page. The change is
-two routes in its `service.toml`, one handler, and one panel.
+`dashboard/src/routes/systems/+page.svelte` is already the machine-state page. The
+change is two routes in its `service.toml`, one handler, and one panel.
+
+A machine-wide `[build] target-dir` in `~/.cargo/config.toml` was tried on 2026-09-30 as the
+quick fix for the recurrence and reverted the same day. It does stop Xcode recreating the
+nested tree, but it also redirects *every* cargo build on the machine, including the
+checkout's own — so a workspace build would land in `~/.cargo-target` while the supervisor kept
+running, and restarting, the stale binaries in `<repo>/target`. The deployment directory and
+the build output would have quietly diverged. Visibility in the tool is the fix instead,
+because it names the directory rather than moving where things are written.
 
 - [ ] ISC-27 — the `axon` symlink is gone and `sjel` is the only entry point. Falsifier: `axon`
   still resolves on PATH or at the repo root, or a tool or skill still invokes it. Probe:
@@ -365,7 +373,10 @@ two routes in its `service.toml`, one handler, and one panel.
   Probe: `sjel storage report --json` and the page.
 - [ ] ISC-32 — `tools/storage` sees a Cargo target dir that is not `CARGO_TARGET_DIR`.
   Falsifier: after an Xcode-driven build, `sjel storage target` reports one path while a second
-  target dir exists on disk. Probe: build via Xcode, then `sjel storage target`.
+  target dir exists on disk. Probe: build via Xcode, then `sjel storage target`. The checkout's
+  own `target/` is excluded from the answer on purpose: it holds the binaries the supervisor
+  runs, and `tools/cargo-hermetic` refuses to point `CARGO_TARGET_DIR` inside the checkout for
+  that reason. Only a *nested* workspace — `dashboard/src-tauri/target` — is an escapee.
 
 ## Not yet specified
 

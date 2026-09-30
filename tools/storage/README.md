@@ -27,6 +27,25 @@ the finished binary from `deps/` up to the profile root, so a naive walk reports
 Buckets are walked in a fixed order, so a hard link is charged to whichever bucket reaches
 it first. That is what `du` does with the first path it walks.
 
+**This checkout, again.** Cargo stamps its target dir with a `CACHEDIR.TAG`, and `target`
+reports every such directory under the repo root that is not the one cargo resolves to here.
+They appear because a `cargo` launched without the shell environment does not see
+`CARGO_TARGET_DIR` — Xcode's build phase is the case that produced one, and
+`dashboard/src-tauri/target` had reached 15 GB before anyone noticed (measured 2026-09-30).
+
+One directory is deliberately never reported: the checkout's own `target/`. That is not an
+escapee, it is where a workspace build puts the binaries the supervisor runs
+(`capabilities/calendar/service.toml` names `target/release/calendar-server`), which is why
+`tools/cargo-hermetic` refuses to point `CARGO_TARGET_DIR` at anything inside the checkout.
+Listing it as reclaimable would invite the mistake that guard exists to prevent. A second
+Cargo target dir under the repo root is a *nested* workspace, which the checkout's own
+`target/` never accounts for.
+
+`prune --target` cleans each secondary directory through its own manifest, with `--target-dir`
+naming it. The flag is load-bearing: scrubbing `CARGO_TARGET_DIR` is not enough, because a
+machine-wide `[build] target-dir` in a cargo config would then redirect cargo at the primary
+directory, clean that instead, and report success.
+
 ## The four verbs
 
 | Verb | Reads | Answers |

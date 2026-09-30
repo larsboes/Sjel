@@ -143,6 +143,11 @@ pub struct Plan {
     /// The whole target dir, when `--target` was asked for. Removed by `cargo clean`, not
     /// by this process.
     pub target: Option<Candidate>,
+    /// Target dirs cargo does not resolve to here. `cargo clean` run against the primary
+    /// directory cannot reach them, so each is cleaned through its own manifest with
+    /// `--target-dir` naming it, which outranks both `CARGO_TARGET_DIR` and the
+    /// machine-wide `[build] target-dir` in the cargo config.
+    pub secondary_targets: Vec<crate::target::SecondaryTarget>,
 }
 
 impl Plan {
@@ -168,6 +173,11 @@ impl Plan {
                 path: target_dir.to_path_buf(),
                 bytes: Walk::default().size(target_dir),
             }),
+            secondary_targets: if want_target {
+                crate::target::secondary_targets(repo_root, target_dir)
+            } else {
+                vec![]
+            },
         }
     }
 
@@ -175,6 +185,7 @@ impl Plan {
         self.incremental.iter().map(|c| c.bytes).sum::<u64>()
             + self.node_modules.iter().map(|c| c.bytes).sum::<u64>()
             + self.target.as_ref().map_or(0, |c| c.bytes)
+            + self.secondary_targets.iter().map(|s| s.bytes).sum::<u64>()
     }
 }
 
@@ -254,6 +265,47 @@ pub fn run(
                     lines.push(format!("  failed   cargo clean: {e}"));
                     refused += 1;
                 }
+            }
+        }
+    }
+
+    for secondary in &plan.secondary_targets {
+        if dry_run {
+            lines.push(format!(
+                "  {:>9}  {} via cargo clean (dry run)",
+                fmt_bytes(secondary.bytes),
+                secondary.path
+            ));
+            continue;
+        }
+        // `--target-dir` rather than a scrubbed environment: CARGO_TARGET_DIR is not the only
+        // thing that can redirect this. The machine-wide `[build] target-dir` in
+        // ~/.cargo/config.toml points at the primary dir, so removing the variable would
+        // make cargo clean THAT, report success, and leave this directory untouched. The
+        // CLI option outranks both the variable and the config.
+        let status = Command::new("cargo")
+            .arg("clean")
+            .arg("--manifest-path")
+            .arg(&secondary.manifest)
+            .arg("--target-dir")
+            .arg(&secondary.path)
+            .status();
+        match status {
+            Ok(s) if s.success() => lines.push(format!(
+                "  {:>9}  {} via cargo clean",
+                fmt_bytes(secondary.bytes),
+                secondary.path
+            )),
+            Ok(s) => {
+                lines.push(format!(
+                    "  failed   cargo clean exited {s} for {}",
+                    secondary.path
+                ));
+                refused += 1;
+            }
+            Err(e) => {
+                lines.push(format!("  failed   cargo clean: {e}"));
+                refused += 1;
             }
         }
     }

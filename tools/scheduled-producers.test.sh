@@ -3,9 +3,11 @@
 #
 # A capability that declares `schedule` has no supervisor. It is started by a timer, it runs, it
 # exits, and nothing watches it in between — so it cannot be "down". It simply stops producing, and
-# every other surface goes on saying fine. Seven of this machine's capabilities are that shape and
-# one of them is the backup. This section is the thing that asks; this file is the thing that
-# watches it answer wrongly on purpose.
+# every other surface goes on saying fine. The capabilities that declare a `schedule` are that
+# shape. The backup was one of them until 2026-09-29, when its timer moved into sjel-status's
+# stored policy (commit ced02ae5) and capabilities/backup/service.toml was deleted. It is a library
+# now and declares no `schedule`, so it is watched by the backup contract section instead. This
+# section is the thing that asks; this file is the thing that watches it answer wrongly on purpose.
 #
 # Everything launchd is stubbed rather than skipped. `launchctl` is a fake on PATH, the units are
 # planted plists and the "runs" are files with backdated mtimes, so all seven verdicts are exercised
@@ -38,7 +40,7 @@ mkdir -p "$UNIT_DIR" "$OVERLAY/config" "$LOGS" "$FAKE_BIN"
 cat > "$OVERLAY/config/machine.toml" <<'EOF'
 os = "macos"
 container_runtime = "docker"
-capabilities = ["feed-sweep", "host-watch", "people-registry", "sparpreis-watch", "host-patch", "backup", "finance-prices"]
+capabilities = ["feed-sweep", "host-watch", "people-registry", "sparpreis-watch", "host-patch", "container-refresh", "finance-prices"]
 EOF
 
 # `touch -t` takes CCYYMMDDhhmm.ss on both BSD and GNU; only the way to compute a past moment
@@ -71,12 +73,12 @@ plant_run() {  # <capability> <hours-ago>
 }
 
 # The real units' intervals, from their manifests.
-plant_unit feed-sweep      21600   # 6h
-plant_unit host-watch       3600   # 1h
-plant_unit people-registry 21600   # 6h
-plant_unit sparpreis-watch 43200   # 12h
-plant_unit host-patch      86400   # 24h
-plant_unit backup          86400   # 24h
+plant_unit feed-sweep        21600   # 6h
+plant_unit host-watch         3600   # 1h
+plant_unit people-registry   21600   # 6h
+plant_unit sparpreis-watch   43200   # 12h
+plant_unit host-patch        86400   # 24h
+plant_unit container-refresh 86400   # 24h
 # finance-prices deliberately gets NO unit.
 
 plant_run feed-sweep      0   # produced just now
@@ -84,7 +86,7 @@ plant_run host-watch      8   # eight hours for an hourly job: two runs missed, 
 plant_run people-registry 8   # eight hours for a six-hourly job: one interval, not three
 plant_run sparpreis-watch 1   # recent output, and the run behind it failed
 plant_run host-patch      3
-# backup deliberately gets NO log file at all.
+# container-refresh deliberately gets NO log file at all.
 
 # The fake launchd. `com.axon.host-patch` is absent from the table on purpose: that is exactly the
 # state the orchestrator left the real one in tonight, and the section must report it rather than
@@ -97,7 +99,7 @@ printf -- '-\t0\tcom.axon.feed-sweep\n'
 printf -- '-\t0\tcom.axon.host-watch\n'
 printf -- '-\t0\tcom.axon.people-registry\n'
 printf -- '-\t1\tcom.axon.sparpreis-watch\n'
-printf -- '-\t0\tcom.axon.backup\n'
+printf -- '-\t0\tcom.axon.container-refresh\n'
 printf -- '-\t0\tcom.axon.finance-prices\n'
 LAUNCHCTL
 chmod +x "$FAKE_BIN/launchctl"
@@ -135,7 +137,7 @@ says "host-patch — its unit is installed and launchd has not loaded it" \
 
 # --- no output this machine still holds ------------------------------------------------------------
 # Not the same claim as "never ran": macOS clears /tmp of untouched entries at boot.
-says "backup — runs every 24.0h and has written no output this machine still holds" \
+says "container-refresh — runs every 24.0h and has written no output this machine still holds" \
   || fail "a producer with no output file was not reported"
 
 # --- declared, and no unit was ever installed ------------------------------------------------------

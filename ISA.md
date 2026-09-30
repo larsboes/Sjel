@@ -199,6 +199,9 @@ identifier `com.lifeos.mobile`. Lars chose "everything, staged" over a brand-onl
   alias. Falsifier: `sjel help` fails, or an existing `axon` call in a tool or skill breaks.
   Evidence, 2026-09-26: `axon` is a tracked symlink to `sjel` (902a7a7); both answer `help`,
   the capability-probe, runargs, bootstrap, persistence and doctor tests pass.
+  **Superseded 2026-09-30 by ISC-27.** The alias was a migration aid, not a permanent surface.
+  Its own falsifier — "an existing `axon` call in a tool or skill breaks" — is what ISC-27 now
+  pays off deliberately, in one commit, rather than leaving it to be discovered later.
 - [x] ISC-12 — the iPhone app has a Sjel bundle identifier and the phone is paired again.
   Changing the identifier makes iOS treat it as a new app: its offline copy and its Keychain
   key are gone. Falsifier: `com.lifeos.mobile` remains in `tauri.conf.json`, or the new app
@@ -217,6 +220,16 @@ identifier `com.lifeos.mobile`. Lars chose "everything, staged" over a brand-onl
   the shell's URL mount the phone calls), `axon-fda-launcher` (renaming drops its Full Disk Access
   grant), Linux systemd unit names, the `X-Axon-*` request headers, and "Axon" in prose. Each of
   those is a separate decision, recorded under Not yet specified.
+  **Amended 2026-09-30:** the `AXON_*` fallback this criterion describes was retired rather
+  than kept, so the claim above no longer holds — settings are read under `SJEL_*` alone
+  (9faf670a). Four implementations went: `tools/lib/env-compat.sh`, the force-export loop in
+  `tools/lib/paths.sh`, the read fallback in `libs/sjel-config/src/env.rs`, and another in
+  `tools/lib/env.ts`. Nothing read the old name afterwards, so the five test helpers that
+  cleared both names now clear one, and `doctor.ts` lost its `AXON_TAILNET_OPERATOR` fallback.
+  The one real dependency was the private overlay's machine-local shell config, which located
+  itself by `AXON_PERSONAL_ROOT` and would have silently stopped sourcing `machine.zsh` and
+  `secrets.zsh`; it now exports `SJEL_HOME_ROOT`, the name the home-automation skills read (35
+  references, none under the old name). The three surfaces named above stay open under F7.
 
 ### F4 · The documents a stranger reads
 
@@ -312,6 +325,48 @@ rest is below or under Not yet specified; nothing new goes into the PRD.
   `autonomous_processing_has_zero_prompt_rate_answering_akhawe_and_felt`); both documented in
   `research/cloud-models-and-privacy.md` and `research/agent-safety.md`.
 
+### F7 · What fills the disk is visible where it is managed
+
+Why: `tools/storage` already measures this. Its four verbs are `report`, `apply`, `target`
+and `prune`; the first three emit `--json`, and it enforces PRD §9's R6, ratified as Q53 on
+2026-08-28: build artifacts are not state, and `target/debug` may not exceed `target/release`
+by more than 3×. What is missing is any surface a person looks at.
+
+Measured 2026-09-30: this machine held 400 GB of 460 GB with 34 GB free, and nothing in the
+dashboard said so. The largest item was invisible to the tool that exists to find it:
+`dashboard/src-tauri/target` had reached 15 GB because Xcode's build phase launches `cargo`
+without the shell environment, so `CARGO_TARGET_DIR` is unset and cargo falls back to the
+local target dir. `prune --target` runs `cargo clean`, which honours that same variable, so it
+could only ever clean the one directory. The user-facing gap and the tool's blind spot are the
+same gap, which is why they are one feature.
+
+Placement, per `Packs/harness/skills/sjel/references/on-placement.md`: the measurement stays
+in `tools/` ("Repository identity, install, wiring, or operator machinery"), because storage
+is operator machinery rather than a bounded domain. No new capability and no new route —
+`capabilities/sjel-status` already serves a host-watch finding for "a filling disk", and
+`dashboard/src/routes/systems/+page.svelte` is already the machine-state page. The change is
+two routes in its `service.toml`, one handler, and one panel.
+
+- [ ] ISC-27 — the `axon` symlink is gone and `sjel` is the only entry point. Falsifier: `axon`
+  still resolves on PATH or at the repo root, or a tool or skill still invokes it. Probe:
+  `command -v axon`, and `rg '$AXON|"axon"' tools/ Packs/`. Supersedes ISC-11.
+- [ ] ISC-28 — the signed-request headers are `X-Sjel-*`, with the old name still accepted
+  until the paired phone ships. Falsifier: a paired phone's signed request fails after the
+  rename. Probe: `libs/sjel-server/src/auth.rs` accepts both, asserted in its own tests.
+- [ ] ISC-29 — `axon-fda-launcher` is renamed, and its Full Disk Access grant is intact
+  afterwards. Falsifier: the binary runs without FDA and cannot read what it needs. Probe: run
+  it and confirm the grant. Renaming drops the grant, so re-granting is part of the work.
+- [ ] ISC-30 — "Axon" no longer appears in prose and doctrine. Falsifier: `rg -i axon` over the
+  tracked documents returns hits that are not historical record (a commit message, an entry in
+  this file), a platform-pinned identifier, or a deliberate alias. Probe: `rg -ci axon` over
+  `README.md ISA.md CONTRIBUTING.md ARCHITECTURE.md`.
+- [ ] ISC-31 — the Systems page shows what fills the disk, from the tool's own `--json`.
+  Falsifier: the page renders no storage panel, or `sjel storage report --json` exits non-zero.
+  Probe: `sjel storage report --json` and the page.
+- [ ] ISC-32 — `tools/storage` sees a Cargo target dir that is not `CARGO_TARGET_DIR`.
+  Falsifier: after an Xcode-driven build, `sjel storage target` reports one path while a second
+  target dir exists on disk. Probe: build via Xcode, then `sjel storage target`.
+
 ## Not yet specified
 
 - **knowledge-graph link prediction over the vault.** `knowledge-graph` serves the code
@@ -372,7 +427,10 @@ rest is below or under Not yet specified; nothing new goes into the PRD.
   when it is down; after the 2026-09-26 checkout move comms needed a rebuild, and feed-sweep's
   run failed with "cargo: command not found" while comms' own watchdog, whose PATH has cargo,
   rebuilt it. Transient, and only after a clean or a move. The fix is to add the build tools of
-  `requires` to persistence_path_dirs in tools/service-runner.sh.
+  `requires` to persistence_path_dirs in tools/service-runner.sh. **Fixed in `c7b4ed2a`**
+  (2026-09-30): `persistence_path_dirs` now adds every required capability's build tool
+  directory, deduplicated, the same way it already does for the job's own runtime and builder;
+  `tools/service-runner.test.sh` passes.
 - **Stale workflow worktrees under `.claude/worktrees/` fail `tools/doctor`** with "package.json
   is not in the index". Local leftovers, not a repository defect.
 
@@ -389,6 +447,12 @@ rest is below or under Not yet specified; nothing new goes into the PRD.
 | ISC-7 | code inspect | read transit's URL consts | env-overridable | rg | F1 |
 | ISC-8 | queue | `gh pr list --author app/dependabot` | every open entry merged or held with a written reason | gh | F2 |
 | ISC-9 | command | `git log` for the postgres retirement | its own commit | git | F2 |
+| ISC-27 | command | `command -v axon`; `rg '$AXON\|"axon"' tools/ Packs/` | no resolution, no call | bash, rg | F7 |
+| ISC-28 | code inspect | `libs/sjel-server/src/auth.rs` accepts `X-Sjel-*` and `X-Axon-*` | both accepted until the phone ships | rg | F7 |
+| ISC-29 | command | run the launcher; confirm the Full Disk Access grant | reads what it needs | bash | F7 |
+| ISC-30 | command | `rg -ci axon` over README, ISA, CONTRIBUTING, ARCHITECTURE | historical record and pinned names only | rg | F7 |
+| ISC-31 | command | `sjel storage report --json`, then the Systems page | panel present, exit 0 | jq, browser | F7 |
+| ISC-32 | command | build via Xcode, then `sjel storage target` | every target dir listed | bash | F7 |
 
 ## Anti-claims
 
@@ -402,6 +466,18 @@ rest is below or under Not yet specified; nothing new goes into the PRD.
 
 ## Decisions
 
+- **2026-09-30 — the rename's remaining surfaces are reopened deliberately** (principal's
+  call), against what ISC-13 recorded on 2026-09-27. Three things it had deliberately kept are
+  in scope again: the `X-Axon-*` signed-request headers (a protocol change, so the old name is
+  accepted until the phone ships, ISC-28), `axon-fda-launcher` (renaming drops its Full Disk
+  Access grant, so re-granting is part of the work, ISC-29), and "Axon" in prose (ISC-30). The
+  `axon` symlink goes as well, superseding ISC-11 (ISC-27). The `AXON_*` environment fallback
+  had already been retired earlier the same day, before this decision, and ISC-13 is amended
+  to match.
+- **2026-09-30 — the disk's own view belongs in the dashboard** (principal's call).
+  `tools/storage` measures it and enforces R6; nothing showed it to a person. Recorded as F7,
+  including the tool's own blind spot: a second Cargo target dir is invisible to
+  `prune --target`.
 - **2026-08-19 — the backlog moves from Issues to ISAs** (principal's call). Migrate
   first, then close; change the doctrine in all four places that state it; stop the one
   workflow that creates issues.
@@ -425,6 +501,9 @@ rest is below or under Not yet specified; nothing new goes into the PRD.
 
 ## Log
 
+- 2026-09-30 · F7 added with ISC-27…ISC-32; ISC-11 superseded and ISC-13 amended after the
+  environment fallback was retired (9faf670a). A disk-pressure session reclaimed ~137 GB on
+  this machine, which is how the blind spot F7 records was found.
 - 2026-08-19 · Scaffolded. Carries Axon issues #172, #174, #180 and the tracker
   retirement itself; #185 and #186 went to `Packs/travel/ISA.md`.
 - 2026-09-26 · F3 to F5 and five Not-yet-specified entries added from the session that named

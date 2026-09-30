@@ -8,7 +8,7 @@ Two note kinds so far.
 | Note | Reads | Shows |
 | --- | --- | --- |
 | `Atlas/People/*.md` | vault `GET /api/people` | `last_contact`, `met_at` and `mention_count` computed from the Journal, beside the values stored in the note, with each disagreement marked |
-| `Resources/Axon/Trips/*.md` | trips `GET /api/plans` | a staleness badge: whether the projection's `axon_revision` still matches the plan's `updated_at` |
+| `Resources/Sjel/Trips/*.md` | trips `GET /api/plans` | a staleness badge: whether the projection's `axon_revision` still matches the plan's `updated_at` |
 
 The trip folder and the `axon_*` keys are what trips writes today
 (`capabilities/trips/src/projection.rs`, `DIR` and `frontmatter`). They carry the old name,

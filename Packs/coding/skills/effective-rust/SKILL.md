@@ -1,12 +1,12 @@
 ---
 name: effective-rust
-description: Guides authoring, review, refactoring, and auditing of idiomatic, clean, safe Rust across Sjel workspace crates (capabilities, libs, tools) per Axon doctrine, Effective Rust principles, and zero-unsafe invariants. Use when writing new Rust modules, refactoring crates, reviewing error handling or concurrency, optimizing performance, or auditing unsafe code in the workspace. Do not use for frontend TypeScript/Svelte code or non-Rust scripting.
+description: Guides authoring, review, refactoring, and auditing of idiomatic, clean, safe Rust across Sjel workspace crates (capabilities, libs, tools) per Sjel doctrine, Effective Rust principles, and zero-unsafe invariants. Use when writing new Rust modules, refactoring crates, reviewing error handling or concurrency, optimizing performance, or auditing unsafe code in the workspace. Do not use for frontend TypeScript/Svelte code or non-Rust scripting.
 allowed-tools: Read, Write, Edit, Bash
 ---
 
 # Effective Rust
 
-Write clean, idiomatic, and robust Rust aligned with Axon doctrine, Effective Rust principles, and high-performance systems engineering (Polars, Tokio, Vector standards).
+Write clean, idiomatic, and robust Rust aligned with Sjel doctrine, Effective Rust principles, and high-performance systems engineering (Polars, Tokio, Vector standards).
 Zero-context ground truth: verify with `cargo check --workspace` and `cargo test -p <crate>`.
 
 ## Core Invariants

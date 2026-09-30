@@ -117,7 +117,7 @@ What the port removed, and why:
 
 | Removed | Why |
 |---|---|
-| The voice notification (a `curl` to `localhost:31337` before any action) | It calls a LifeOS daemon that Axon does not run. |
+| The voice notification (a `curl` to `localhost:31337` before any action) | It calls a LifeOS daemon that Sjel does not run. |
 | The execution log (a JSONL append to `~/.claude/LIFEOS/MEMORY/`) | Same: it writes into a harness layout that was uninstalled here on 2026-08-22, per the `[lifeos]` row in `upstreams.toml`. |
 | The customization preamble (`check ~/.claude/LIFEOS/USER/CUSTOMIZATIONS/…` first) | Same layout, and it spent the first tokens of every invocation on a directory that does not exist. |
 | RedTeam's 32 agents in four types | Eight copies of one role return eight versions of the same finding. Six lenses that ask different questions replace them. `skills/red-team/references/lenses.md` says so at the point of use. |
@@ -143,11 +143,11 @@ anything. It is this Pack's own answer to a hole the upstream shape leaves open.
                                                    # → ~/.pi/agent/agents/ (the same 7, tool names translated)
 ```
 
-The pi line needs the `pi-subagents` extension, which Axon now VENDORS at
+The pi line needs the `pi-subagents` extension, which Sjel now VENDORS at
 `Packs/harness/pi-packages/pi-subagents` and `tools/packs-pi deploy harness` registers with pi as a
 local path. That extension is what gives pi an `Agent` tool and a custom agent type at all; without
 it the eight files are deployed, on disk, and read by nothing. It is the one third-party thing
-Axon keeps inside a Pack rather than leaving to its own installer, and `Packs/harness/README.md`
+Sjel keeps inside a Pack rather than leaving to its own installer, and `Packs/harness/README.md`
 says why that exception is made for the extension that carries these agents' types — see also the
 `[pi-subagents]` row in `upstreams.toml`. A machine running this Pack needs its dependencies once:
 

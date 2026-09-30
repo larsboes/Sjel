@@ -44,7 +44,7 @@ This directory owns the small public quality baseline for semantic Feed–TELOS 
 separate from unit tests: the runner calls the real local oMLX server, while the committed
 corpus contains only synthetic text and explicit human judgements.
 
-Run it from the Axon root:
+Run it from the Sjel root:
 
 ```sh
 bun capabilities/comms/eval/run-relevance.ts

@@ -2,7 +2,7 @@
 
 Keep each fact with its owner:
 
-- Root README: human-facing Axon architecture and durable repository doctrine.
+- Root README: human-facing Sjel architecture and durable repository doctrine.
 - Capability or Pack README: purpose, verdict, tradeoffs, provenance, and local decisions.
 - Manifest or schema: machine-readable configuration contract.
 - Source comment: reasoning needed exactly where an implementation is changed.

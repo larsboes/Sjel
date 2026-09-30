@@ -16,7 +16,7 @@ loses a function on the host.
 
 **One file, not one per capability.** Cross-schema joins within one database are a single
 connection with no `dblink` or foreign-data-wrapper machinery. A file per capability would have
-bought migration isolation Axon already gets from table prefixes, and paid for it with exactly the
+bought migration isolation Sjel already gets from table prefixes, and paid for it with exactly the
 correlation queries the shared store exists for. The prefix IS the old schema: `comms.feed_items`
 became `comms_feed_items`, one namespace, one file.
 

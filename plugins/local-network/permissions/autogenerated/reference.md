@@ -1,6 +1,6 @@
 ## Default Permission
 
-Find an Axon node on the local network.
+Find an Sjel node on the local network.
 
 #### This default permission set includes the following:
 

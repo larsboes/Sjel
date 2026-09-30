@@ -5,7 +5,7 @@ does not automatically block unrelated work.
 
 | Missing or failing layer | Response |
 | --- | --- |
-| Axon checkout | Work inside the checkout or set the existing `SJEL_ROOT`; do not guess a path. |
+| Sjel checkout | Work inside the checkout or set the existing `SJEL_ROOT`; do not guess a path. |
 | Private overlay | Continue only with public-tree work; do not invent machine or personal values. |
 | Dirty worktree | Preserve all changes, identify ownership, and avoid switching or rewriting overlapping files. |
 | Live capability | Use registry and logs to diagnose; never substitute a remembered port or claim an API check passed. |

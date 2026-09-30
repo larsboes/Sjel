@@ -19,7 +19,7 @@ for it in pi costs a subprocess to do a worse job.
 ## Otherwise: the `defuddle` CLI
 
 For a harness with no fetch tool, this skill needs the CLI on `PATH`. It is installed
-globally through its own release tooling, not vendored into Axon:
+globally through its own release tooling, not vendored into Sjel:
 
 ```bash
 npm install -g defuddle        # → $(npm prefix -g)/bin/defuddle
@@ -27,7 +27,7 @@ defuddle --version             # expect 0.19.3 or newer
 ```
 
 If `defuddle` is not found, that install is the fix — run it, rather than switching to a
-fetch tool you do not have. Nothing else in Axon depends on it.
+fetch tool you do not have. Nothing else in Sjel depends on it.
 
 ### Usage
 

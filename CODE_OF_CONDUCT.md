@@ -1,6 +1,6 @@
 # Community conduct
 
-Axon is an owner-led project, but its public work should be safe to inspect and challenge. People
+Sjel is an owner-led project, but its public work should be safe to inspect and challenge. People
 should be able to improve it without being mistreated. This policy covers GitHub issues and pull
 requests, including reviews and project contact that follows from them.
 
@@ -34,5 +34,5 @@ establish a private channel before asking for evidence.
 Security vulnerabilities use [SECURITY.md](SECURITY.md) instead. GitHub's own abuse-reporting and
 blocking controls remain available for urgent platform-level concerns.
 
-This policy applies to project spaces and to private contact made in the course of Axon work. It
+This policy applies to project spaces and to private contact made in the course of Sjel work. It
 does not claim authority over unrelated conduct elsewhere.

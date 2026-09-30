@@ -19,7 +19,7 @@ interior import                    inventory/*.toml in die Tabellen (wiederholba
 interior serve                     HTTP-API, Port aus service.toml
 ```
 
-Die Oberfläche ist `/interior` in der Axon-Shell (`dashboard/src/routes/interior/`). Sie
+Die Oberfläche ist `/interior` in der Sjel-Shell (`dashboard/src/routes/interior/`). Sie
 **rendert und rechnet nicht**: jedes Verdikt, jede Korridorbreite und der Plan als SVG kommen
 fertig aus dieser Capability. Eine zweite Auslegung einer Räumungsregel im Frontend wäre genau
 die Drift, gegen die das hier existiert.
@@ -115,7 +115,7 @@ harter Verstoß offen ist.
 
 ## Herkunft
 
-Bis 2026-08-30 TypeScript im privaten Overlay — der einzige Ausreißer gegenüber core Axon, das
+Bis 2026-08-30 TypeScript im privaten Overlay — der einzige Ausreißer gegenüber core Sjel, das
 durchgehend ein Rust-Workspace ist. Die Portierung ist gegen ein aufgezeichnetes Protokoll der
 alten Engine abgesichert: zehn Layouts, jedes Verdikt, jede Korridorbreite, jeder
 Katalogeintrag. Das Protokoll beschreibt **eine** Wohnung und liegt deshalb im Overlay neben
@@ -130,7 +130,7 @@ Zwei Dinge wurden dabei gemessen statt vermutet:
   rund 100 s, parallel über rayon. Vorher lieferte sie die erste zulässige Lösung, jetzt die
   beste von allen.
 
-Nach core Axon verschoben am 2026-08-30 durch PRD Q59. Der Grund für die Overlay-Lage vom
+Nach core Sjel verschoben am 2026-08-30 durch PRD Q59. Der Grund für die Overlay-Lage vom
 2026-08-20 — *„die Seite, die sie ausliefert, bettet Fotos einer Wohnung ein"* — ist an dem Tag
 gestorben, an dem die Seite eine HTTP-API wurde, die Medien erst auf Anfrage ausliefert.
 

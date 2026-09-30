@@ -1,6 +1,6 @@
 ---
 name: travel
-description: Drives Axon's travel capabilities as one workflow — feasible days from calendar, journey search and split tickets from transit, measured delay history from punctuality, event discovery from scouting, and plan state in trips. Use when planning a trip, searching connections or fares, checking how late a train usually runs, or turning a discovered event into an itinerary. Do not use for home network or Home Assistant work, and never work from a remembered route or port — ask the service.
+description: Drives Sjel's travel capabilities as one workflow — feasible days from calendar, journey search and split tickets from transit, measured delay history from punctuality, event discovery from scouting, and plan state in trips. Use when planning a trip, searching connections or fares, checking how late a train usually runs, or turning a discovered event into an itinerary. Do not use for home network or Home Assistant work, and never work from a remembered route or port — ask the service.
 allowed-tools: Bash
 ---
 

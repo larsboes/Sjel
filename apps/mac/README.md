@@ -4,7 +4,7 @@ Native macOS menu bar companion and end-to-end encrypted CloudKit relay for Sjel
 
 ## Architecture
 
-Per Axon / Sjel doctrine and **Product Rule 4**:
+Per Sjel / Sjel doctrine and **Product Rule 4**:
 - **C2 Data Boundary**: Raw personally identifiable data (C2) never leaves the host without end-to-end encryption or pseudonymization.
 - **CloudKit Storage Invariant**: Records written to Apple's private CloudKit database use an opaque generic record type (`SjelEncryptedRecord`) and opaque hashed record identifiers.
 - **Zero Plaintext Leakage**: Stored CloudKit record dictionaries contain **zero** readable C2 field names and **zero** readable C2 values. The payload is sealed with authenticated AES-256-GCM (`CryptoKit.AES.GCM`) with keys stored strictly on user devices (Keychain / Secure Enclave).

@@ -89,7 +89,7 @@ a destination:
 |---|---|---|---|
 | `Focus.base` | `TELOS/Focus` | `Atlas/Focus` | 3 of 3 |
 | `Reflections.base` | `TELOS/Reflections` | `Atlas/Reflections` | 4 of 5 |
-| `Soma.base` | `Projects/Soma/Domains` | `Projects/Axon/Knowledge-Base/Domains` | 4 of 4 |
+| `Soma.base` | `Projects/Soma/Domains` | `Projects/Sjel/Knowledge-Base/Domains` | 4 of 4 |
 | `Investments.base` | `Atlas/Finance/Investments` | `Projects/Archive/Ledger/Notability/Investments` | **0 of 8** |
 | `Tasks.base`, `Calendar.base` | `Projects/Tasks` | nine of them | 7 of 10 at best |
 

@@ -1,6 +1,6 @@
 # pihole
 
-Reusable Pi-hole runtime contract for a private network. Axon owns the pinned image, host-network
+Reusable Pi-hole runtime contract for a private network. Sjel owns the pinned image, host-network
 requirements, capability permissions, lifecycle integration, public environment template, and
 backup contract. The active overlay owns DNS records, clients, query data, credentials, topology,
 and deployment evidence.
@@ -26,7 +26,7 @@ tools/service-runner.sh resume pihole
 - `Packs/home-automation/skills/pihole/` provides the generic API workflow.
 
 The public backup contract reads the declared container path and sends it to the overlay-selected
-`backup-target`. Target coordinates and restore evidence never belong in Axon.
+`backup-target`. Target coordinates and restore evidence never belong in Sjel.
 
 ## Attribution
 

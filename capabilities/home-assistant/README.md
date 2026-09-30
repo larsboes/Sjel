@@ -1,6 +1,6 @@
 # home-assistant
 
-Reusable Home Assistant runtime contract. Axon owns the pinned container definition, public
+Reusable Home Assistant runtime contract. Sjel owns the pinned container definition, public
 configuration shape, lifecycle integration, and generic operator tooling. It does not own a
 home's devices, entity IDs, automations, helpers, custom components, dashboards, or evidence.
 

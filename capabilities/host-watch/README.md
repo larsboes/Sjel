@@ -65,7 +65,7 @@ that has never fired manufactures alerts rather than information.
 ## How it reports
 
 It writes a row into `host_watch_findings` — its own table in the shared store
-(`capabilities/store`) — and nothing else. No new notification machinery: core Axon has
+(`capabilities/store`) — and nothing else. No new notification machinery: core Sjel has
 never had a notifier and does not grow one here; the precedent is stated in
 `tools/sparpreis-watch.ts`'s own header.
 

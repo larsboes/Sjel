@@ -1,6 +1,6 @@
 ---
 name: Bug report
-about: Report a reproducible defect in Axon's public code or contracts
+about: Report a reproducible defect in Sjel's public code or contracts
 title: ""
 labels: "type:fix"
 assignees: ""
@@ -20,7 +20,7 @@ State what should have happened instead.
 
 ## Environment
 
-Include the relevant Axon commit and operating system. Add the container runtime when it matters.
+Include the relevant Sjel commit and operating system. Add the container runtime when it matters.
 Do not include data that identifies a person or deployment; private hostnames and credentials are
 never useful in a public reproduction.
 

@@ -85,7 +85,7 @@ are **not measured at scale**, and its doc comment says so in those words.
 
 `tools/visocr` builds its image with `NSImage(contentsOfFile:)`, which renders page one of a PDF
 and nothing else. Registering the class would mean returning one page's text under a `producer`
-claiming the document was read. Axon has no rasterizer, so the honest boundary is that rung 2
+claiming the document was read. Sjel has no rasterizer, so the honest boundary is that rung 2
 reads pixels; rasterizing a PDF into pages is a named follow-up, not something to fake.
 
 ## The `xberg` feature

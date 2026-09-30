@@ -14,4 +14,4 @@ Reusable rules for automation logic operated through homectl.
 10. Introduce new automations disabled or gated until failure paths are exercised.
 
 The owning overlay records the concrete devices, entity IDs, thresholds, notification channels,
-and live verification evidence. Public Axon keeps only these reusable decision rules.
+and live verification evidence. Public Sjel keeps only these reusable decision rules.

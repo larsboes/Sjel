@@ -84,7 +84,7 @@ construction. `s.statement_reserve` exists so the arithmetic is stated once.
 
 **The skill is copied into a harness, never linked, and still resolves its own root.** The
 launcher resolves with `cd -P` and walks up from its own location rather than naming a
-checkout path, because Axon sits at `~/Developer/Axon` on one machine and `~/Axon` on
+checkout path, because Sjel sits at `~/Developer/Sjel` on one machine and `~/Sjel` on
 another. Hard-coding either breaks the other. `cd -P` is no longer load-bearing — the
 materializing deployer that replaced symlinks on 2026-08-09 is the only one left, and it
 refuses a symlinked source outright — but it stays, because a user who symlinks the skill

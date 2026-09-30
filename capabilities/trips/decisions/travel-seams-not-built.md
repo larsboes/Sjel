@@ -1,13 +1,13 @@
 # Travel seams deliberately not built
 
-Four things the Travel workspace suggests but Axon does not do. Each is a rejection with a
+Four things the Travel workspace suggests but Sjel does not do. Each is a rejection with a
 reason, not a backlog item, and each gets re-proposed every time somebody reads the travel page
 and notices the gap. They are written down here so the argument happens once.
 
-## No leave-home scheduler in Axon
+## No leave-home scheduler in Sjel
 
 `capabilities/home-assistant/` contains three files: `README.md`, `service.toml` and
-`home-assistant.env.example`. There is no `src/`, and the README says why: Axon owns the pinned
+`home-assistant.env.example`. There is no `src/`, and the README says why: Sjel owns the pinned
 runtime and the public configuration shape, while the overlay owns the home's devices, entity
 IDs and automations. A departure trigger is an automation over device state at a specific time,
 which is what Home Assistant already is, so building a second scheduler here would mean
@@ -17,9 +17,9 @@ The calendar entry such an automation would fire on already exists.
 `POST /api/trip-plans/:plan_id/sync` in `capabilities/calendar/src/server.rs` writes one all-day
 `away` entry per stage whose status is `booked` or `option_selected`, keyed
 `trip:stage:<stage-id>`, readable over `GET /api/entries`. The automation reads that entry and
-decides what leaving the house means; Axon's side of the seam is producing it.
+decides what leaving the house means; Sjel's side of the seam is producing it.
 
-## Axon never executes a booking
+## Sjel never executes a booking
 
 `capabilities/transit/src/hafas.rs` states in its first six lines what it talks to: bahn.de's
 internal, undocumented journey-search API, the same one the website calls from the browser, with

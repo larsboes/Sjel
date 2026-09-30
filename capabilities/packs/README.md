@@ -1,7 +1,7 @@
 
 # packs
 
-What Axon has deployed into each agent harness on this machine, and the proof that it did.
+What Sjel has deployed into each agent harness on this machine, and the proof that it did.
 
 This capability owns the deployment ledgers under `~/.local/state/axon/pack-deployments/`
 — one JSON file per harness, each recording every deployed unit, the Pack source it came
@@ -22,7 +22,7 @@ readers (four `packs-*` adapters, `tools/doctor`, `tools/harnesses`) and, until 
 manifest, no owner and no backup.
 
 Losing a ledger does not lose a skill. The copies stay on disk. It loses the proof that
-Axon put them there, and that is worse than it sounds: every deployed skill then reads as
+Sjel put them there, and that is worse than it sounds: every deployed skill then reads as
 an unowned collision, each Pack has to be re-adopted by hand, and `adopt` refuses anything
 that is not byte-identical to its source — so a copy that had drifted cannot be reclaimed
 at all.
@@ -48,13 +48,13 @@ at all.
 tools/harnesses list                     # which harnesses exist, and which are installed here
 tools/harnesses status [<pack>] [--json] # the matrix, and what sits unowned at each destination
 tools/harnesses drift [<pack>] [--diff]  # per-file detail
-tools/harnesses sync <pack>|--all        # one-way Axon -> harness
-tools/harnesses promote <skill> --pack <p>   # a harness skill Axon does not own
-tools/harnesses accept <pack> <skill>        # an edit to a skill Axon already owns
+tools/harnesses sync <pack>|--all        # one-way Sjel -> harness
+tools/harnesses promote <skill> --pack <p>   # a harness skill Sjel does not own
+tools/harnesses accept <pack> <skill>        # an edit to a skill Sjel already owns
 ```
 
 The direction rule is in `Packs/harness/skills/harness-sync/SKILL.md`: sync is one-way and
-destructive at the destination by design, and both moves back into Axon are manual because
+destructive at the destination by design, and both moves back into Sjel are manual because
 an edit made inside a harness is a decision.
 
 ## Concurrency

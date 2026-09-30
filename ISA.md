@@ -1,12 +1,12 @@
 ---
-project: axon
+project: sjel
 type: isa
 phase: climbing
 progress: 75
 principal_stated_goal: "I want no new issues, I wanna get rid of all issues for axon and axon personal and only carry through normal ISAs etc."
 ---
 
-# ISA · Axon
+# ISA · Sjel
 
 Repo-wide state of record. Open work that belongs to one capability or Pack lives in
 that owner's own `ISA.md` (`Packs/travel/ISA.md`, `capabilities/places/ISA.md`); this
@@ -27,7 +27,7 @@ tracker holds nothing, and no automation creates entries in it.
 
 ## Out of Scope
 
-- Disabling the issue tracker for the outside world. Axon is public; an external bug
+- Disabling the issue tracker for the outside world. Sjel is public; an external bug
   report still needs somewhere to land. What changes is that *our* backlog is not there.
 - Rewriting closed-issue history. Closed issues stay readable as the record of what was
   once tracked.
@@ -507,7 +507,7 @@ because it names the directory rather than moving where things are written.
   `manifest` field was `$SJEL_ROOT/upstreams.toml`, which sjel-status serves and the demo
   records. `tools/check-site-payload` refused to publish over it, which is the job that
   gate has. Now repo-relative.
-- **2026-08-19 — `.github/ISSUE_TEMPLATE/` stays.** Axon is public and an external
+- **2026-08-19 — `.github/ISSUE_TEMPLATE/` stays.** Sjel is public and an external
   report still needs somewhere to land; what changed is that our own backlog is not there.
 
 ## Log

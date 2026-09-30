@@ -263,7 +263,7 @@ thing, so it lives with that thing (CONTRIBUTING.md#decisions-live-with-their-ow
 
 `capabilities/punctuality` aggregates ~120M published stop records with the `parquet`
 crate (`upstreams.toml` [arrow-rs]) in a plain Rust binary, and writes the ~400k-row
-result into the shared store. No embedded analytics engine is added to Axon, at any layer.
+result into the shared store. No embedded analytics engine is added to Sjel, at any layer.
 
 Dated 2026-07-28, when the shared store was `capabilities/postgres`; PRD Q45 (2026-08-27)
 made it one SQLite file. The reasoning below is unchanged by that — it is about not adding
@@ -320,7 +320,7 @@ backup set, safe to delete, rebuilt by re-running ingest.
 - **DuckDB CLI driven from a shell script** — puts the statistical rules that decide the
   answer in untested SQL, and adds a binary dependency only this capability needs.
 - **`pg_parquet` in the Postgres container** — requires a custom image, which trades the
-  pinned official `postgres` image for one Axon has to build and audit itself.
+  pinned official `postgres` image for one Sjel has to build and audit itself.
 - **Loading raw stops into the shared store** — see above; the backup consequence decides
   it.
 

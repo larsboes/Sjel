@@ -1,6 +1,6 @@
 # comms
 
-General observed-information intake for Axon, plus reviewed mail triage. Its `feed_items`
+General observed-information intake for Sjel, plus reviewed mail triage. Its `feed_items`
 store is intentionally source-agnostic. Security advisories and updates to systems or
 packages belong here. So do watched-repository changes, news, useful articles and opportunity
 signals such as scholarships, hackathons, calls for papers or events. The extractors
@@ -522,7 +522,7 @@ vault. What the layer does *not* catch is enrichment — a summary that arrives 
 background drain comes from no request, so the note carries it after the next mutation or the
 next `comms export-sources`.
 
-**Why the folder is treated more carefully than `Resources/Axon/`.** Q49 sends this bridge
+**Why the folder is treated more carefully than `Resources/Sjel/`.** Q49 sends this bridge
 into the folder the Sources consolidation is building: humans write there, `Clippings/` merges
 in, and `Atlas/Media`'s V3 survivors move across. Three guards follow, and each has a test:
 
@@ -624,7 +624,7 @@ window without spending local compute on text it would truncate.
 
 On this memory-constrained interactive Mac, oMLX now uses its aggressive memory guard, at most
 eight concurrent requests, an embedding batch size of 32, a 60-second idle TTL for both E5
-models and 180 seconds for Gemma. Those are machine settings in oMLX, not tracked Axon defaults.
+models and 180 seconds for Gemma. Those are machine settings in oMLX, not tracked Sjel defaults.
 They should be tuned from measured peak memory and latency rather than copied as a universal
 configuration.
 
@@ -700,7 +700,7 @@ for a thread already present in the local proposal store:
 - Move to Trash calls `POST .../threads/{id}/trash`; it does not permanently delete.
 
 The dashboard requires a second confirmation for either Gmail write. Dismissing
-a proposal in Axon changes only local state and is labelled accordingly.
+a proposal in Sjel changes only local state and is labelled accordingly.
 
 ## Commands
 
@@ -742,7 +742,7 @@ HTTP and its input is a URL a stranger chose:
   be publicly routable. Loopback, RFC 1918 private, link-local (which carries
   the cloud metadata service at 169.254.169.254), unique-local, carrier-grade
   NAT, multicast and reserved addresses are all refused, in the IPv4-in-IPv6
-  spellings as well as the plain ones. Every Axon service binds `127.0.0.1`, so
+  spellings as well as the plain ones. Every Sjel service binds `127.0.0.1`, so
   without this an ingested link reaches them all: `http://127.0.0.1:8086/api/plans`
   is still http. `http_client`'s redirect policy re-runs both checks on each of
   at most three hops, so a `302` is not the way around them. Q74.
@@ -1020,8 +1020,8 @@ Routes:
   bounded retry window or cancels an action after five automatic failures. Queued work cannot be
   canceled while it may be in flight.
 - `POST /triage/reconcile` → retries due Gmail intents and compares up to 200 stored threads with
-  Gmail metadata labels. It updates Axon Archive/Trash/Inbox state without fetching bodies or
-  attachments. Gmail 404/410 becomes an explicit Missing state that retains Axon's local record;
+  Gmail metadata labels. It updates Sjel Archive/Trash/Inbox state without fetching bodies or
+  attachments. Gmail 404/410 becomes an explicit Missing state that retains Sjel's local record;
   a Trash cleanup deadline remains active. The server runs the same bounded maintenance on its
   configured interval.
 - `GET /health` → liveness. Answers from the process alone, so a start completes without a

@@ -28,7 +28,7 @@ Bitwarden at runtime.
 For subnet and SSH the env var wins if set, else the overlay config, else (subnet only)
 auto-derivation; the `--subnet` flag overrides everything. The bw item holds **only** the secret
 `FRITZBOX_PASSWORD` — the non-secret `FRITZBOX_HOST`/`FRITZBOX_USERNAME` live in `home-assistant.vars`
-(same split and shape as the `fritz` skill). Provision the password via Axon `setup-secret.sh`.
+(same split and shape as the `fritz` skill). Provision the password via Sjel `setup-secret.sh`.
 
 ## Run
 

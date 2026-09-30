@@ -216,7 +216,7 @@ now names the half it means — `tells-code.md` or `tells-ui.md`.
 See the SKILL.md Provenance section for detail, and `upstreams.toml
 [vibecoded-design-tells]` for the verdict. The repo's own MIT note applies here too: the
 licence covers the code/docs vendored into `skills/`; the raw Reddit harvest (`corpus.jsonl`,
-charts, CSVs) was never copied into Axon, so its separate data terms apply to nothing here.
+charts, CSVs) was never copied into Sjel, so its separate data terms apply to nothing here.
 
 ### skill-creator
 
@@ -256,7 +256,7 @@ do not get re-evaluated from scratch.
   than `technical`, for genuinely voiceless operational text (error messages, runbooks, CLI
   help) — not built yet. **The decline does not cover its other reader.** A skill for strings a
   *machine* must parse, where stripping voice is the point rather than a cost, exists in
-  `Packs/cognitive-load` as `asd-ste100` — promoted into Axon 2026-09-11 and packed beside
+  `Packs/cognitive-load` as `asd-ste100` — promoted into Sjel 2026-09-11 and packed beside
   `attention-control` on 2026-09-17, since every language rule it once duplicated there now
   lives only in it. That scope is disjoint from this pack's, so the two do not compete.
 - **[woosal1337/blog `ep01-the-cure-for-ai-slop`](https://github.com/woosal1337/blog/tree/main/videos/ep01-the-cure-for-ai-slop)**

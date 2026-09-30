@@ -53,7 +53,7 @@ via proleptic-Gregorian day arithmetic, soft-destination resolution through `sug
 session-summary JSON) rather than splitting them into a new module — same "one focused binary"
 shape the CLI kept through the whole rebuild.
 
-No CV generator (see Redactions). Cargo resolves this package through Axon's
+No CV generator (see Redactions). Cargo resolves this package through Sjel's
 root workspace and its single lockfile, which is what guarantees that the
 `Journey` types shared with scouting cross the `serde` boundary using the same
 compiled dependency instances.
@@ -534,7 +534,7 @@ why `config::redact_database_url()` is gone.
 ## What's not ported
 
 **ONNX delay-risk prediction.** The source service loaded a `tract-onnx` model
-(`infra/data/model.onnx`) to score each `Journey`'s delay risk. Axon has no such model artifact —
+(`infra/data/model.onnx`) to score each `Journey`'s delay risk. Sjel has no such model artifact —
 the training pipeline that produced it (`tools/delay-analyzer` in the source monorepo) was rated
 quarry-for-patterns-only in the original evaluation, never adopted. Carrying a heavy ML runtime
 dependency for a field that would only ever return a hardcoded fallback constant is the exact
@@ -575,7 +575,7 @@ score null.
 
 - **`hafas.rs`'s spoofed browser User-Agent is a deliberate exception to the "self-identifying
   UA" pattern** used elsewhere (`scouting`'s `source.rs`/`cfp_conferences`/`luma` all send
-  `Axon-Transit/0.1 (+...)`-style strings). bahn.de's endpoint here is undocumented and
+  `Sjel-Transit/0.1 (+...)`-style strings). bahn.de's endpoint here is undocumented and
   ungated *only because it looks like ordinary browser traffic* — there's no ToS/robots.txt
   contract being honored by identifying honestly here; a self-identifying UA would plausibly
   just get blocked outright. Named here rather than hidden, same as `scouting/adapters/meetup.rs`'s

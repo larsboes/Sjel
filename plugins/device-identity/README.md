@@ -1,6 +1,6 @@
 # Tauri device identity plugin
 
-This plugin is the iOS half of Axon's `axon-pairing/v1` enrollment flow.
+This plugin is the iOS half of Sjel's `axon-pairing/v1` enrollment flow.
 
 - The first invocation creates a Curve25519 signing key in iOS Keychain.
 - Later invocations load the same key.

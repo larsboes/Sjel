@@ -44,7 +44,7 @@ preset, and heat is gated behind an explicit human "go" that is a separate comma
       file", "arm with over-cap gcode" all refused, and "arm with within-cap gcode: allowed" so the
       gate is not simply always-off. The positive case writes to a throwaway arm file; the real one
       at `$SJEL_PERSONAL_ROOT/data/printing/.armed.json` was absent before and after.
-- [x] P7 · Nothing personal lives in Axon: host, presets and caps resolve from the overlay.
+- [x] P7 · Nothing personal lives in Sjel: host, presets and caps resolve from the overlay.
       *Probe:* `rg '([0-9]{1,3}\.){3}[0-9]{1,3}|[a-z0-9-]+\.local\b|homepi'` over the capability,
       minus `args.local` false positives → no hits; the example config carries the literal
       `PRINTER_LAN_IP` placeholder and `printctl.py` resolves `$SJEL_PERSONAL_ROOT`. Validate the
@@ -61,7 +61,7 @@ preset, and heat is gated behind an explicit human "go" that is a separate comma
 
 - **Where the model comes from.** The loop starts at "you already have an STL", and the
   `3d-printing` pack's own description says *"Do not use for CAD/mesh modeling."* Nothing in
-  Axon owns the step before slicing.
+  Sjel owns the step before slicing.
 
   One lead exists and is not committed work: **VibeCAD**, a working prototype of Lars's from
   June 2026, 15 files and 72 KB, retired off-repo by the 2026-08-19 skill-packs sweep. It has

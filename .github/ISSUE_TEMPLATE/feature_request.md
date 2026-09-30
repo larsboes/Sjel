@@ -1,6 +1,6 @@
 ---
 name: Feature request
-about: Propose a reusable Axon capability or contract change
+about: Propose a reusable Sjel capability or contract change
 title: ""
 labels: "type:feature"
 assignees: ""
@@ -8,7 +8,7 @@ assignees: ""
 
 ## Outcome
 
-What should an Axon operator be able to do?
+What should an Sjel operator be able to do?
 
 ## Consumer
 
@@ -27,5 +27,5 @@ able to reject the implementation while accepting the outcome.
 
 ## Alternatives and provenance
 
-Link relevant upstream projects or prior art. Say what Axon would adopt and what it would leave
+Link relevant upstream projects or prior art. Say what Sjel would adopt and what it would leave
 outside the repository.

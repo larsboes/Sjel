@@ -1,6 +1,6 @@
 ---
 name: sjel
-description: Operates Sjel (formerly Axon) and guides work on its repository through dynamic discovery, bounded self-context, capability APIs, architecture placement, focused branches, and proportionate verification. Use when operating Sjel or Axon services or feeds, diagnosing them, planning or coding inside the Sjel repository (~/Developer/Sjel, formerly Axon), deciding where code belongs there, or handling its branches and PRs. Do not use for unrelated repositories, direct Home Assistant or device control, or generic prose and skill authoring with no Sjel decision.
+description: Operates Sjel (formerly Axon) and guides work on its repository through dynamic discovery, bounded self-context, capability APIs, architecture placement, focused branches, and proportionate verification. Use when operating Sjel or Sjel services or feeds, diagnosing them, planning or coding inside the Sjel repository (~/Developer/Sjel, formerly Axon), deciding where code belongs there, or handling its branches and PRs. Do not use for unrelated repositories, direct Home Assistant or device control, or generic prose and skill authoring with no Sjel decision.
 ---
 
 # Sjel
@@ -17,13 +17,13 @@ tools/axon-context with [capability]
 tools/axon-context on [unit-or-path]
 ```
 
-The path is repository-relative: run it from the Axon checkout. The installed `axon` CLI
+The path is repository-relative: run it from the Sjel checkout. The installed `axon` CLI
 exposes the same surface as `axon context with|on`. Read `references/shared-failure-policy.md`
 when any expected tool, overlay, service, graph, or remote is unavailable.
 
 ## Select one mode
 
-### Work with Axon
+### Work with Sjel
 
 Use this mode to discover or operate running capabilities, feeds, APIs, and health surfaces.
 
@@ -33,7 +33,7 @@ Use this mode to discover or operate running capabilities, feeds, APIs, and heal
 3. Read `references/shared-data-boundaries.md` before handling personal, vault, or
    cross-capability data.
 
-### Work on Axon
+### Work on Sjel
 
 Use this mode to understand, review, plan, or change the repository.
 
@@ -56,7 +56,7 @@ are present. Treat it as a drill-down after bounded orientation, never as the bo
 ## Invariants
 
 - Preserve unrelated worktree changes and resolve the exact target before editing.
-- Keep public code and doctrine in Axon; keep private values and state in the active overlay.
+- Keep public code and doctrine in Sjel; keep private values and state in the active overlay.
 - Never generate, reveal, move, or overwrite secrets without explicit authorization.
 - Prefer manifests, registry output, self-model queries, and GitHub metadata over duplicated
   prose.

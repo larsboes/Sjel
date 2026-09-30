@@ -49,7 +49,7 @@ process can touch, and whether you can show it.
 
 Verdicts and licences for pi and for the retired `apple/container` live in
 `upstreams.toml`, not here. No version does: `agentbox build` and `agentbox host-install`
-resolve the latest release themselves (Q77, 2026-09-02). Docker has none: `toolchain.toml [docker]` records that Axon assumes
+resolve the latest release themselves (Q77, 2026-09-02). Docker has none: `toolchain.toml [docker]` records that Sjel assumes
 the `docker` CLI, and *which* daemon provides it — OrbStack here, Docker Desktop or colima
 elsewhere — is a machine fact, not adopted code.
 
@@ -139,7 +139,7 @@ box. What changed on 2026-09-02 is only how the box reaches across it.
   name rather than accepting it untested. `tools/service-runner.sh` still supports it for
   container capabilities, where the claim is availability rather than isolation.
 - **npm-installing the agent into a `node:22` image**, the shape of the writeup this was built
-  from. Declined on two counts: CONTRIBUTING.md#language-tooling bans npm in Axon code, and the release binary makes the
+  from. Declined on two counts: CONTRIBUTING.md#language-tooling bans npm in Sjel code, and the release binary makes the
   entire Node layer unnecessary. The writeup also predates the project's rename, so its package
   (`@mariozechner/pi-coding-agent`) stopped receiving releases at 0.73.1 while pi moved on to
   0.82.x under `@earendil-works`.
@@ -250,7 +250,7 @@ advisory reminder, which `host-install` now prints itself.
 
 **Advisories are a manual step, and host-install prints that every run.** Until 2026-08-28 it
 fetched published advisories and refused an install whose target sat inside an affected range.
-PRD Q41 retired the script behind that (`tools/lib/advisories.sh`) with the rest of Axon's
+PRD Q41 retired the script behind that (`tools/lib/advisories.sh`) with the rest of Sjel's
 homegrown supply-chain plumbing, and no standard tool replaces it *for this dependency*: the
 agent arrives as a release tarball, so it appears in no lockfile, which is exactly what
 GitHub's Dependabot alerts and `osv-scanner` both read. Dependabot does not watch release

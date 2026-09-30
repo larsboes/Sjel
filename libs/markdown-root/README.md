@@ -53,7 +53,7 @@ applies it before declaring a root.
 
 `region.rs` is the other half, added for #138. `capabilities/trips/README.md`
 specified it in prose a month earlier and nothing implemented it: regenerate only
-a marked Axon-owned section, preserve everything outside it, and record a conflict
+a marked Sjel-owned section, preserve everything outside it, and record a conflict
 rather than choosing between two changed revisions.
 
 ```text
@@ -81,14 +81,14 @@ the exact failure this was built to prevent.
 
 `projection.rs` is the case the region leaves open — **there is no human note to write
 a region into**. PRD Q31 (2026-08-23) named it pattern B, ruled it second-choice, and
-gave it one home: `Resources/Axon/`. Q49 (2026-08-27) then ruled that the mechanism is
+gave it one home: `Resources/Sjel/`. Q49 (2026-08-27) then ruled that the mechanism is
 shared rather than per-capability, which is why it is here and not in `trips`.
 
 The file carries a header instead of markers:
 
 ```text
 <!-- axon:projection owner=trips v=1 -->
-<!-- Axon generates this file and overwrites it whole. … -->
+<!-- Sjel generates this file and overwrites it whole. … -->
 ```
 
 Placed **after** the frontmatter, because Obsidian reads frontmatter only when the

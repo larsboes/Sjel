@@ -1,6 +1,6 @@
 ---
 name: secrets-guard
-description: Safe handling of secrets and credentials in a Claude Code session — how to use API keys, tokens, and .env / .secrets values for a task without ever pulling them into the model context, working WITH Axon's managed-settings deny policy instead of around it. Use when a task needs a credential (an authenticated API call, a deploy, a login), before reading a .env / .secrets / credentials / .pem / .key file, or when a command was blocked by the security policy and the safe equivalent is needed. Do not use for pi sessions (the secrets-guard extension enforces this there) or for creating/storing a new secret (that is tools/setup-secret.sh, run by the human).
+description: Safe handling of secrets and credentials in a Claude Code session — how to use API keys, tokens, and .env / .secrets values for a task without ever pulling them into the model context, working WITH Sjel's managed-settings deny policy instead of around it. Use when a task needs a credential (an authenticated API call, a deploy, a login), before reading a .env / .secrets / credentials / .pem / .key file, or when a command was blocked by the security policy and the safe equivalent is needed. Do not use for pi sessions (the secrets-guard extension enforces this there) or for creating/storing a new secret (that is tools/setup-secret.sh, run by the human).
 allowed-tools: Bash
 ---
 
@@ -70,8 +70,8 @@ refuses the row.
 
 `c3` stays out of **local** prompts too, and that is gated now:
 `content_item::local_prompt_allowed` answers `false` for `c3` and for any class it does not
-recognize, and both of Axon's prompt-builders over stored text ask it first (`digest.rs`,
-`media.rs`). Axon's own paths will stop you. Yours will not — if a task would put `c3` content in
+recognize, and both of Sjel's prompt-builders over stored text ask it first (`digest.rs`,
+`media.rs`). Sjel's own paths will stop you. Yours will not — if a task would put `c3` content in
 front of any model, local included, don't; route it around the model or hand off.
 
 ## When blocked

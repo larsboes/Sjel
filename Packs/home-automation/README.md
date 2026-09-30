@@ -30,9 +30,9 @@ harness-neutral, so this is a selection decision, not a build or wiring decision
 
 ## Ownership boundary
 
-Axon owns these harness-neutral workflows. The active family overlay owns its host, household
+Sjel owns these harness-neutral workflows. The active family overlay owns its host, household
 devices, automations, network topology, deployed configuration, and recovery evidence. Another deployment
-can reuse the same Pack with a different overlay without copying family state into Axon.
+can reuse the same Pack with a different overlay without copying family state into Sjel.
 
 External dependencies and adopted influences are recorded in `upstreams.toml`; private component
 sets remain in the overlay that runs them.

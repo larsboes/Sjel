@@ -1,11 +1,11 @@
-# Axon agent bootstrap
+# Sjel agent bootstrap
 
-For Axon operations, run `axon help` or `axon search <task>` before browsing files. For Axon
+For Sjel operations, run `axon help` or `axon search <task>` before browsing files. For Sjel
 repository changes, follow this file's data-boundary, repository, and GitHub workflow rules. Use
-Graphify only as optional symbol-level drill-down after bounded Axon context is available.
+Graphify only as optional symbol-level drill-down after bounded Sjel context is available.
 
 Before editing, run `git status --short --branch` and `tools/doctor`. Preserve unrelated worktree
-changes. Derive capabilities, ports, health, open claims and architecture from Axon tools, the owning
+changes. Derive capabilities, ports, health, open claims and architecture from Sjel tools, the owning
 `ISA.md` and live metadata rather than remembered prose.
 
 ## Branch discipline and multi-session concurrency
@@ -22,7 +22,7 @@ moves with it. Before invoking a backup, restore, audit or build, run
 `tools/toolchain-check --workflow <name>` first: a missing dependency found afterwards is one found
 with a service already held down.
 
-Keep public code and doctrine in Axon. Keep private values, machine state and secrets in the active
+Keep public code and doctrine in Sjel. Keep private values, machine state and secrets in the active
 overlay or Vaultwarden. Never generate, expose or change a secret without explicit authorization.
 
 ## graphify

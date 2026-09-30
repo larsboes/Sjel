@@ -1,6 +1,6 @@
 # vaultwarden
 
-Reusable Vaultwarden runtime contract. Axon owns the pinned image, lifecycle integration, public
+Reusable Vaultwarden runtime contract. Sjel owns the pinned image, lifecycle integration, public
 environment template, storage contract, and coherent backup mechanics. The active overlay owns
 users, network exposure, certificates, signup policy, secrets, data, and recovery evidence.
 
@@ -25,7 +25,7 @@ tools/service-runner.sh resume vaultwarden
 - User enrollment and master-password operations remain explicit human actions.
 
 Vault clients require a secure context. The selected overlay owns how TLS and authenticated remote
-access are provided; Axon does not publish a host-specific certificate or access recipe.
+access are provided; Sjel does not publish a host-specific certificate or access recipe.
 
 ## Recovery boundary
 

@@ -8,14 +8,14 @@ Destructive one-way redaction (`[person]`, `[link]`) was built for static feed a
 (`capabilities/comms/src/cloud_derivative.rs`). It protects privacy by erasing identity.
 That erasure is fatal for interactive assistants and cloud evaluators: if a trip query scrubs
 "Karlsruhe" and "Munich" both to `[place]`, an external routing model or Jev cannot reason over
-origin vs. destination, and Axon cannot re-hydrate the resulting travel legs upon return.
+origin vs. destination, and Sjel cannot re-hydrate the resulting travel legs upon return.
 
 This library replaces destructive masking with **bidirectional session tokenization**:
 - Personal and operational entities are mapped deterministically to typed tokens: `Lars` → `<TRAVELER_01>`,
   `Karlsruhe Hbf` → `<PLACE_01>`, `München Hbf` → `<PLACE_02>`.
 - The external evaluator (Jev / cloud LLM) reasons over structure, constraints, and tokens without
   ever receiving real personal identifiers.
-- On completion return, Axon re-hydrates tokens locally (`<PLACE_01>` → `Karlsruhe Hbf`) before
+- On completion return, Sjel re-hydrates tokens locally (`<PLACE_01>` → `Karlsruhe Hbf`) before
   storing in SQLite or rendering UI cards.
 
 ## What it does

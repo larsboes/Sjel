@@ -9,7 +9,7 @@ aggregates them at `GET /api/sjel-status/routes`.
 
 ## Why this and not a rename
 
-Axon's HTTP surface carries five conventions across seven capabilities:
+Sjel's HTTP surface carries five conventions across seven capabilities:
 
 | Shape | Capabilities |
 |---|---|

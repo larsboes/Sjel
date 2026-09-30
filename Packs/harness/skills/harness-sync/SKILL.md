@@ -1,21 +1,21 @@
 ---
 name: harness-sync
-description: Answers where every Axon Pack skill is deployed across the agent harnesses installed on this machine, what has drifted from its source, and which of the two reverse moves keeps an edit that was made inside a harness. Drives tools/harnesses (list, status, drift, sync, promote, accept). Use whenever the question involves deployed skills or agents — "is everything deployed", "sync my skills", "what drifted", "which harnesses have this skill", "bring this skill into Axon", "I edited a skill in place", "why is this skill missing in pi", "deploy the pack" — and whenever a Pack, a skill or an agent file has just been added, renamed or edited in the Axon repository. Do not use for writing the content of a skill, for choosing which skill to build next, or for shrinking always-on context files.
+description: Answers where every Sjel Pack skill is deployed across the agent harnesses installed on this machine, what has drifted from its source, and which of the two reverse moves keeps an edit that was made inside a harness. Drives tools/harnesses (list, status, drift, sync, promote, accept). Use whenever the question involves deployed skills or agents — "is everything deployed", "sync my skills", "what drifted", "which harnesses have this skill", "bring this skill into Sjel", "I edited a skill in place", "why is this skill missing in pi", "deploy the pack" — and whenever a Pack, a skill or an agent file has just been added, renamed or edited in the Sjel repository. Do not use for writing the content of a skill, for choosing which skill to build next, or for shrinking always-on context files.
 license: MIT
 ---
 
 # harness-sync
 
-Axon is the source. Every harness holds a copy or a pointer, and the two drift.
+Sjel is the source. Every harness holds a copy or a pointer, and the two drift.
 
-One tool answers all of it: `tools/harnesses` in the Axon repository. This skill is the judgment
+One tool answers all of it: `tools/harnesses` in the Sjel repository. This skill is the judgment
 around it — which direction a change should travel, and when the answer is not `sync`.
 
 ## The direction rule
 
 ```
-Axon Packs  ──(sync, routine, one-way, overwrites)──▶  harness
-Axon Packs  ◀──(promote / accept, manual, human decides)──  harness
+Sjel Packs  ──(sync, routine, one-way, overwrites)──▶  harness
+Sjel Packs  ◀──(promote / accept, manual, human decides)──  harness
 ```
 
 Sync is the normal move and it is destructive at the destination by design. The reverse moves are
@@ -51,7 +51,7 @@ harness lists what sits at its destination that no Pack owns:
 | Kind | What it means | What to do |
 |---|---|---|
 | `copy` | An ordinary directory nobody claims | A `promote` candidate. Read it first. |
-| `external` | Carries `.git`, `.graphify_version` or similar | **Never promote.** Another installer owns it and re-syncs from its own remote; a copy in Axon is a fork that will silently pin it. Record it in `upstreams.toml` instead. |
+| `external` | Carries `.git`, `.graphify_version` or similar | **Never promote.** Another installer owns it and re-syncs from its own remote; a copy in Sjel is a fork that will silently pin it. Record it in `upstreams.toml` instead. |
 | `symlink` | Points into a product install | **Never promote.** The target is the install; an upgrade updates it. |
 
 **3 — Resolve drift first.** `tools/harnesses drift [<pack>] [--diff]` names the differing files and

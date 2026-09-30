@@ -12,7 +12,7 @@ SKILL.md.
   pick up a false positive. **Re-apply this delta if the linter is ever re-vendored.**
 - Additive entries in `ai_prose_patterns.json`.
 - **Inline HTML ignore directives removed (2026-09-26).** The upstream linter supports
-  `human-voice` comments, but Axon does not. Keep scanner policy outside prose files.
+  `human-voice` comments, but Sjel does not. Keep scanner policy outside prose files.
 - **One user-facing string corrected in `patterns.py` (2026-09-17).** Its pattern-file-not-found
   message told the user to fall back to `references/ai-tells.md`, a path that has never existed in
   this repository. It now names `references/tells.md`, which is the catalog it means. A string, not
@@ -57,7 +57,7 @@ python3 scripts/detect_ai_prose.py --help    # prints without error
 
 Metadata and body-budget validation is **not** run from here. It used to be, as a command
 reaching into `skill-creator`'s own `scripts/validate_metadata.py` by repo path — a dependency on
-a sibling skill's file, which is exactly what a skill must not have: it resolves in the Axon
+a sibling skill's file, which is exactly what a skill must not have: it resolves in the Sjel
 checkout and nowhere else, so a skill copied into a harness carried a verification step that
 could not run. `tools/check-skill-metadata.sh` now runs that same validator over every authored
 SKILL.md on every push, which is strictly stronger than checking one skill when someone

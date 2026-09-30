@@ -1,6 +1,6 @@
 # travel pack
 
-One skill, **`travel`**, for driving Axon's travel capabilities as a single workflow: calendar,
+One skill, **`travel`**, for driving Sjel's travel capabilities as a single workflow: calendar,
 transit, punctuality, scouting and trips. It carries the ordering between them and the joins that
 fail quietly, not their route tables — each capability serves its own manifest at `GET /routes`,
 and a copy here would be a copy that goes stale.
@@ -39,7 +39,7 @@ profile decision; travel is a profile member candidate.
 
 ## Ownership boundary
 
-Axon owns the workflow. The active overlay owns every value that makes it personal: home and
+Sjel owns the workflow. The active overlay owns every value that makes it personal: home and
 destination stations, the geo policy behind scouting's event routing, the calendar credential and
 home timezone, and the shared database file. Nothing in this Pack names a station, a city or
 a route.

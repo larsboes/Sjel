@@ -1,6 +1,6 @@
 ## Default Permission
 
-Expose the iOS Keychain-backed Axon device identity.
+Expose the iOS Keychain-backed Sjel device identity.
 
 #### This default permission set includes the following:
 

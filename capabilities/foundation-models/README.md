@@ -4,7 +4,7 @@ Apple's on-device model, served over the OpenAI chat-completions shape on loopba
 
 ## Why this exists
 
-Axon's digest ladder picks a shape from how much source there is: a few bullets for a
+Sjel's digest ladder picks a shape from how much source there is: a few bullets for a
 short article, grouped sections for a long transcript. Until now every rung ran on the
 same 26B model through oMLX, which meant a two-paragraph digest of a short page competed
 for the same GPU memory as a forty-page paper.
@@ -43,7 +43,7 @@ a backend id in the same map this capability's role joins — see
 `libs/inference/inference.config.example.json`, which owns the ids, the addresses and the
 Metal/Apple-Silicon constraint.
 
-It is not an Axon capability. There is no `service.toml` for it and Axon neither installs
+It is not an Sjel capability. There is no `service.toml` for it and Sjel neither installs
 nor supervises it: it is a `systems.toml` entry (`[omlx]`, host-native because Metal is
 unavailable inside the Linux runtime), and `upstreams.toml` carries the verdicts for the models it serves
 (`multilingual-e5-base-mlx`, `bge-reranker-v2-m3-mlx`) rather than for the server. A machine
@@ -51,7 +51,7 @@ either has it running or configures roles that do not name it.
 
 Recorded here on 2026-08-25 because `capabilities/learning` was deleted (PRD D6). That
 capability was a README and an ISA with no code, and the one claim in it nothing else owned
-was that oMLX is the local-AI rung Axon builds on.
+was that oMLX is the local-AI rung Sjel builds on.
 
 ## Wiring it up
 

@@ -13,7 +13,7 @@ backtrace.
 | yes | served | `401` without a matching token | permitted |
 | no | served | served (or `403`, see below) | **refused at bind** |
 
-A token is presented as `Authorization: Bearer <token>` or `X-Axon-Token: <token>`, and
+A token is presented as `Authorization: Bearer <token>` or `X-Sjel-Token: <token>`, and
 compared byte-by-byte in constant time. Two header forms because two kinds of client
 call these ports: proxies and HTTP tooling that already speak `Authorization`, and the
 browser extension and `curl` callers for which a dedicated header is one fewer thing to
@@ -160,7 +160,7 @@ The check that makes both policies real is doctor's **Server bind policy** secti
 fails when any `capabilities/*/src/*.rs` that builds a `Router`
 also constructs its own `axum::serve` or `TcpListener::bind`. It lives in doctor rather
 than a repo gate because half the servers it has to cover are in the overlay, outside this
-repo, and a gate that globs Axon alone would report a clean policy while an overlay server
+repo, and a gate that globs Sjel alone would report a clean policy while an overlay server
 binds the LAN (CONTRIBUTING.md#documentation-stays-owned-and-current, same reasoning as the decision path-rot sweep).
 
 The identity gate's other half is not in this repository at all: it is the shape of

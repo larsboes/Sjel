@@ -154,7 +154,7 @@ python3 scripts/unslop_code_scan.py --help && python3 scripts/devibe_scan.py --h
 
 Metadata and body-budget validation is **not** run from here. It used to be, as a command
 reaching into `skill-creator`'s `scripts/validate_metadata.py` by repo path — a dependency on a
-sibling skill's file, which resolves in the Axon checkout and nowhere else, so a skill copied
+sibling skill's file, which resolves in the Sjel checkout and nowhere else, so a skill copied
 into a harness carried a verification step that could not run.
 `tools/check-skill-metadata.sh` runs that same validator over every authored SKILL.md on every
 push, which is strictly stronger than checking one skill on demand.

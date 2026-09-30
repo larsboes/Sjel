@@ -2,7 +2,7 @@
 
 A default-deny host firewall for a Linux node, rendered from the active overlay's declaration.
 
-Axon owns the posture, the rule shape, the ordering and the lifecycle. The overlay owns four
+Sjel owns the posture, the rule shape, the ordering and the lifecycle. The overlay owns four
 facts about one machine: which interface faces the network, which interfaces are trusted,
 which sources may connect, and which ports they may reach. Nothing here names a real address.
 `host-firewall.toml.example` uses RFC 5737 and RFC 3849 documentation ranges, which are

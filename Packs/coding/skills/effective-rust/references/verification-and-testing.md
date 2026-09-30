@@ -58,4 +58,4 @@ Before concluding changes, run the appropriate verification rungs:
 | `cargo check --workspace` | Workspace compile check |
 | `cargo test -p <crate>` | Fast unit and integration tests |
 | `cargo miri test -p <crate>` | Undefined behavior, aliasing, and memory leak validation for `unsafe` code |
-| `tools/doctor` | Comprehensive Axon/Sjel architecture, bind policy, and deployment hygiene |
+| `tools/doctor` | Comprehensive Sjel/Sjel architecture, bind policy, and deployment hygiene |

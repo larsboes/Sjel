@@ -13,7 +13,7 @@ sibling files, one per shell family:
   inject either line; wiring the login rc file stays a manual, per-machine step
   (same as zsh).
 
-**Verdict:** build (this is Axon-maintained config, not adopted from anywhere).
+**Verdict:** build (this is Sjel-maintained config, not adopted from anywhere).
 
 ## Layout
 

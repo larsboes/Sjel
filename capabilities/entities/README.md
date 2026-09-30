@@ -1,7 +1,7 @@
 # entities
 
-Axon's system of record for people, organisations, places and the operator's own context.
-PRD Q117 (2026-09-25) ruled that Axon holds these facts and that Obsidian, Google Contacts
+Sjel's system of record for people, organisations, places and the operator's own context.
+PRD Q117 (2026-09-25) ruled that Sjel holds these facts and that Obsidian, Google Contacts
 and TELOS are adapters, each optional. Prose stays in Obsidian; an entity links to its note
 through `note_ref`.
 
@@ -63,7 +63,7 @@ Google/Obsidian links move. Every merge stores the removed record whole, with it
 
 `GET /api/entities/:id/sources` asks each linked system what it says now: the Google contact
 (live) and the Obsidian note (through vault). The People page shows where they differ from
-Axon, and "Use this" writes the source's value back with that source as its owner, so the
+Sjel, and "Use this" writes the source's value back with that source as its owner, so the
 next sync keeps it current. On 2026-09-25 this found 9 values across 8 people that the first
 18 merges had dropped.
 

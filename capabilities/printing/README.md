@@ -33,7 +33,7 @@ later), klipper-config-mcp (subset of the former).
 
 ## Run it
 
-`printctl.py` lives here (stdlib-only Python, no installs). Config is resolved from the overlay at runtime — copy `printctl.config.example.json` to `$SJEL_PERSONAL_ROOT/config/printing.json` and fill in the printer host + saved OrcaSlicer preset names there; nothing personal is stored in Axon. The `3d-printing` pack (`Packs/3d-printing/`) is the agent-facing runbook over this tool.
+`printctl.py` lives here (stdlib-only Python, no installs). Config is resolved from the overlay at runtime — copy `printctl.config.example.json` to `$SJEL_PERSONAL_ROOT/config/printing.json` and fill in the printer host + saved OrcaSlicer preset names there; nothing personal is stored in Sjel. The `3d-printing` pack (`Packs/3d-printing/`) is the agent-facing runbook over this tool.
 
 ```bash
 python3 capabilities/printing/printctl.py selftest   # offline safety check → ALL PASS ✓

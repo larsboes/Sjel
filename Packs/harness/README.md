@@ -4,9 +4,9 @@
 
 Every other Pack does work. This one maintains the thing that does the work — and the repository
 that holds it: what skills should exist, what should stop being loaded into every session, and how
-to operate Axon itself.
+to operate Sjel itself.
 
-- **`axon`** operates and changes the Axon repository: capability discovery, service and feed
+- **`axon`** operates and changes the Sjel repository: capability discovery, service and feed
   operations, architecture placement, focused change. It carries the `axon` CLI
   (`help`, `search`, `doctor`, `context`, `storage`, `gates`, `test`, `cargo`, `capability`,
   `pack`) and the rules for working in this repo — where a change belongs, what to read before
@@ -21,7 +21,7 @@ to operate Axon itself.
   this machine, what has drifted, and which of the two reverse moves keeps an edit someone made
   inside a harness. It drives `tools/harnesses` and carries the judgment the tool's `--help`
   cannot: sync is one-way and destructive at the destination by design, and the two moves back into
-  Axon (`promote`, `accept`) are manual because an edit made inside a harness is a decision.
+  Sjel (`promote`, `accept`) are manual because an edit made inside a harness is a decision.
 - **`trim`** measures what actually loads every session — the user and project `CLAUDE.md`, their
   `@`-imports, the memory index — removes what is provably dead, then makes each judgment call in
   front of the user, one at a time, under a gate that refuses any edit which loses a directive.
@@ -47,9 +47,9 @@ maintenance skills it never loaded.
 tools/harnesses list                     # which harnesses exist, and which are installed here
 tools/harnesses status [<pack>]          # one matrix: every Pack skill x every harness
 tools/harnesses drift [<pack>] [--diff]  # per-file detail, with the diff
-tools/harnesses sync <pack>|--all        # one-way Axon -> harness
-tools/harnesses promote <skill> --pack <p>   # a harness skill Axon does not own
-tools/harnesses accept <pack> <skill>        # an edit to a skill Axon already owns
+tools/harnesses sync <pack>|--all        # one-way Sjel -> harness
+tools/harnesses promote <skill> --pack <p>   # a harness skill Sjel does not own
+tools/harnesses accept <pack> <skill>        # an edit to a skill Sjel already owns
 ```
 
 It exists because no adapter ever asked whether its harness was installed. On 2026-09-07 this
@@ -89,13 +89,13 @@ Three things sit near each other and do different jobs:
 | *How* is a skill written and audited? | `skill-creator`, in `Packs/writing` |
 | What loads every session, and can it be smaller? | `trim`, here |
 | Where is it deployed, and what drifted? | `harness-sync`, here |
-| How do I operate or change Axon itself? | `axon`, here |
+| How do I operate or change Sjel itself? | `axon`, here |
 
 `suggest-skills` hands its shortlist to the authoring skill and stops. The authoring skill never
 decides what to build. Keeping the two apart is the point: the same agent doing both will propose
 what it feels like writing.
 
-The authoring skill is `skill-creator` (`Packs/writing`), promoted into Axon 2026-09-11 from the
+The authoring skill is `skill-creator` (`Packs/writing`), promoted into Sjel 2026-09-11 from the
 private overlay's staging `meta` pack and superseding `writing-skills`, which the writing pack now
 retires. The boundary above is about jobs, not about which authoring skill currently holds the
 second row.
@@ -150,7 +150,7 @@ What the port changed, and why:
 | `Tools/CollectSignals.ts` over the LifeOS session and rating stores | `collect-signals.ts` over `~/.claude/history.jsonl` and the installed skill roots, with every source overridable by flag. |
 | Trim's deterministic pass = `ProposalGC.ts` over a LifeOS proposal inbox | No such inbox exists here. The deterministic pass became dead pointers and directives duplicated across two always-on files — both checkable, both free, and both found on the first real run. |
 | Trim commits to a private USER_DATA repository | Harness-neutral reversibility: the repository when the file is in one and clean, a timestamped `.bak` copy with a printed restore command when it is not. `~/.claude` is not a repository here. |
-| The voice notification, the JSONL execution log, the CUSTOMIZATIONS preamble | Removed, for the reasons the `deliberation` Pack's README already records — they address a LifeOS layout Axon does not run. |
+| The voice notification, the JSONL execution log, the CUSTOMIZATIONS preamble | Removed, for the reasons the `deliberation` Pack's README already records — they address a LifeOS layout Sjel does not run. |
 
 ### pi-subagents (vendored, not ported)
 
@@ -169,7 +169,7 @@ manager and the web access every session uses.
 | Not committed | `node_modules/` (installed in place), and upstream's own lockfile (the local `bun.lock` is committed) |
 | Local deltas | THREE. (1) One doc comment in `src/output-file.ts`: its POSIX path example became a placeholder so it stops reading as a workstation path to `tools/check-publication-hygiene.sh`. No behavioural change. `tsconfig.json` is upstream's, added to the vendored set so a customization can be typechecked before a restart. (2) `"overrides": { "undici": "^8.10.2" }` in `package.json`, added 2026-09-29 for GHSA-3wwx-pv8p-q78v / CVE-2026-85024: undici's WebSocket client kills the whole process on a malformed permessage-deflate block, fixed in 8.10.2. An update cannot reach it, because the vendored dev version of `@earendil-works/pi-coding-agent` pins `"undici": "8.9.0"` **exactly** — so the resolution sat one patch below the fix. `bun install` resolved the lockfile to 8.11.2 and `osv-scanner` reports no issues. (3) Host-provided `@sinclair/typebox` and `typebox` moved from runtime dependencies to `"*"` peers; the three pi peers also use `"*"`. This follows Pi 0.99's extension-loader contract and removes duplicate-module warnings. |
 
-| Owner | Axon. Upstream is a source to re-read, not a dependency that updates itself — `pi update` does not touch a local-path package |
+| Owner | Sjel. Upstream is a source to re-read, not a dependency that updates itself — `pi update` does not touch a local-path package |
 
 This reverses, for these three packages, the convention every other Pack README states: that a
 third-party tool is "driven through its own install/update tooling, never vendored" (see
@@ -208,7 +208,7 @@ package, so an npm install could never have the part the README calls the proof.
 | Not committed | `node_modules/`, and `accordion.js`. Upstream does not commit `accordion.js` either — it is built at `prepack` for the npm tarball, which excludes `core/` and `app/` |
 | Committed on purpose | `extension/dist/client/` — 2.3M, 54 files. This is the SvelteKit browser build the Map is served from, and it is the one generated artifact that IS committed, because it cannot be rebuilt from this tree: `build-client.mjs` copies `app/build`, and `app/` is not vendored. Upstream ships exactly this directory in its npm package (`files`) while never committing it to git |
 | Local deltas | FOUR, all reversible without touching upstream's structure. (1) A root `package.json` beside the vendored trees carrying `pi.extensions: ["./extension/accordion.ts"]`, so pi loads the TypeScript source directly and the extension needs no build — upstream points its manifest at the built `accordion.js`, which is only necessary when `core/` and the shared app module are absent from the tarball. (2) In `session_start`, folding is armed from `ACCORDION_FOLDING_DEFAULT` (default **on**) and a catalog-validated conductor is attached from `ACCORDION_CONDUCTOR_DEFAULT` (default **triptych**), where upstream hardcodes `setFolding(false)`. (3) `session_before_compact` cancels pi's native compaction only while a conductor is attached, where upstream cancels it whenever folding is armed. (4) The same wrapper `package.json` also carries `scripts.test` and a pinned `devDependencies.vitest`, so the byte-identical upstream suite runs under the runner it was written for — see below |
-| Owner | Axon, **detached**: no `.git`, no remote, no re-sync path. Upstream was read once, at the revision above. Divergence is expected, not drift |
+| Owner | Sjel, **detached**: no `.git`, no remote, no re-sync path. Upstream was read once, at the revision above. Divergence is expected, not drift |
 
 Rebuilding the browser client, if it ever needs to change — it needs a checkout of upstream,
 because `app/` is not vendored:
@@ -307,7 +307,7 @@ patch when a provider changed shape.
 | Not copied | `test/` (1.0M, 82 files), `pi-web-fetch-demo.mp4`, `banner.png`, `CHANGELOG.md`, `README.md`, `SECURITY.md`, and the upstream lockfile |
 | Not committed | `node_modules/` (installed in place); the local `bun.lock` is committed |
 | Local deltas | two, in `package.json`: (1) `"overrides": { "undici": "^8.10.2" }`, added 2026-09-29 for GHSA-3wwx-pv8p-q78v / CVE-2026-85024: undici's WebSocket client kills the whole process on a malformed permessage-deflate block, fixed in 8.10.2. This tree's own `undici` range had already resolved to 8.10.2, but the nested dev copy of `@earendil-works/pi-coding-agent/undici` sat at 8.9.0. `bun install` dropped the nested entry and `osv-scanner` reports no issues. (2) Host-provided `typebox` moved from runtime dependencies to a `"*"` peer to follow Pi 0.99's extension-loader contract. Upstream's manifest already points pi at `./index.ts`, so it still loads with no build |
-| Owner | Axon, **detached**: no `.git`, no remote. The npm package was removed from `settings.json` when this landed, so exactly one web-access extension loads |
+| Owner | Sjel, **detached**: no `.git`, no remote. The npm package was removed from `settings.json` when this landed, so exactly one web-access extension loads |
 
 ## Why this shape: the flip conditions
 

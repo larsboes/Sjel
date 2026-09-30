@@ -34,7 +34,7 @@ request is a GET or an `xhr=1` fetch, and no subcommand may be added that writes
    right. Use that user, not the box password.
 2. **In Bitwarden:** an item named by `FRITZ_BW_ITEM` (default `home-assistant/fritz`) carrying the
    password — either as a custom field `FRITZBOX_PASSWORD` or in the item's own password slot.
-   Provision via Axon `setup-secret.sh`.
+   Provision via Sjel `setup-secret.sh`.
 3. **In the overlay config** (`<overlay>/config/home-assistant.vars`): `FRITZBOX_HOST`,
    `FRITZBOX_USERNAME`, and optionally `FRITZ_BW_ITEM`. An env var of the same name wins per key.
 4. **Point `bw` at the vault once:** `bw config server <vault-url>`.

@@ -1,4 +1,4 @@
-# Discover Axon services
+# Discover Sjel services
 
 Always discover before operating.
 

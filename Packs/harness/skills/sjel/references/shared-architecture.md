@@ -1,12 +1,12 @@
 # Architecture and ownership
 
-Use this reference only for Axon-wide structure or ownership decisions. Derive the current unit
+Use this reference only for Sjel-wide structure or ownership decisions. Derive the current unit
 inventory and wiring with `tools/axon-context on [target]` and `tools/self`; do not copy those
 facts here.
 
 ## Stable model
 
-Axon has three architectural nouns:
+Sjel has three architectural nouns:
 
 - **Spine**: repository identity, contracts, shared libraries, tools, and the dashboard shell.
 - **Capability**: one bounded domain, external system, or data store under `capabilities/`.

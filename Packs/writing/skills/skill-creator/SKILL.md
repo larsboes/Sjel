@@ -1,6 +1,6 @@
 ---
 name: skill-creator
-description: Authors, audits, evolves, and evaluates open-standard agent skills (SKILL.md with references/scripts/assets) and the Axon Packs that bundle them, per the agentskills.io spec, current Claude Code skill features, and Claude-5-era authoring rules. Use when creating a new skill or pack, auditing or refactoring an existing one for progressive disclosure, metadata, or trigger quality, writing skill evals, de-prescribing a skill written for older models, or deciding which pack a skill belongs in. Do not use for prose or README docs (human-writing), non-agentic library code, or MCP-server implementation.
+description: Authors, audits, evolves, and evaluates open-standard agent skills (SKILL.md with references/scripts/assets) and the Sjel Packs that bundle them, per the agentskills.io spec, current Claude Code skill features, and Claude-5-era authoring rules. Use when creating a new skill or pack, auditing or refactoring an existing one for progressive disclosure, metadata, or trigger quality, writing skill evals, de-prescribing a skill written for older models, or deciding which pack a skill belongs in. Do not use for prose or README docs (human-writing), non-agentic library code, or MCP-server implementation.
 allowed-tools: Read, Write, Edit, Bash
 ---
 
@@ -146,5 +146,5 @@ Re-verify when sources drift — they are versioned and this is a snapshot:
 - `references/patterns.md` + `bootstrap-library.md`: a third-party PDF skill-authoring guide
   plus a "bootstrap a whole skill library" mega-prompt, both encountered without provenance
   (unknown author and license — mined for ideas only, rewritten from scratch, no text
-  retained); §Pack routing from the Axon pack schema (`schemas/pack.toml.example`) and the
+  retained); §Pack routing from the Sjel pack schema (`schemas/pack.toml.example`) and the
   2026-07 unslop merge history.

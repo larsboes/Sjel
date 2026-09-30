@@ -3,7 +3,7 @@
 What this machine's silicon is actually doing — temperature, power draw, CPU and GPU
 utilisation, memory — read without sudo.
 
-Axon does not build this one. [macmon](https://github.com/vladkens/macmon) is an adopted
+Sjel does not build this one. [macmon](https://github.com/vladkens/macmon) is an adopted
 Apple Silicon performance monitor (`upstreams.toml [macmon]`, MIT, installed with
 `cargo install`); this capability is the manifest that says how this machine runs it,
 nothing more.

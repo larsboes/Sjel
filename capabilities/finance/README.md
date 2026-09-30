@@ -13,13 +13,13 @@ The split is not a compromise between build and adopt. A plaintext journal under
 git satisfies the knowledge-boundary's V1 and an index rebuilt from it satisfies
 V2, so choosing the storage format did the boundary work rather than a rule someone
 has to remember. What gets built here is the layer nothing off the shelf does well.
-Axon owns the typed CSV adapter, duplicate detection, explicit review and journal
+Sjel owns the typed CSV adapter, duplicate detection, explicit review and journal
 write because those are product policy, not accounting-engine policy. Price feeds
 are still not built here: `pricehist` already emits `P` directives.
 
 Until 2026-08-28 this paragraph also said that return math was not built here
 because `hledger roi` already computes IRR and TWR. PRD Q50 retired that claim
-along with the executable. Nothing in Axon ever called `hledger roi`, so no IRR
+along with the executable. Nothing in Sjel ever called `hledger roi`, so no IRR
 or TWR figure was ever computed for this capability by anything — the sentence
 described an engine's feature list rather than this system's behaviour. Return
 math remains unbuilt, which is now stated as the absence it is.
@@ -139,7 +139,7 @@ series was in no file at all.
 
 PRD Q31 rules exactly this: write a region into the human's note when one exists, and
 create a projected file only when none does. `export_projections` is the second branch —
-one whole generated file per note-less subscription under `Resources/Axon/Subscriptions/`,
+one whole generated file per note-less subscription under `Resources/Sjel/Subscriptions/`,
 carrying the same `render_block` body so the two paths cannot drift into two shapes of
 one figure.
 
@@ -243,8 +243,8 @@ instrument, and the consequence is stated rather than hidden: an instrument pric
 reviewed price and names the mismatch. Converting silently would hide two provenance facts
 — the quote's date and the rate's date — behind one number.
 
-`finance_prices` is NOT `finance_price_points`, which is Axon's own subscription pricing
-history. Market data and what Axon pays for a streaming service are two different series
+`finance_prices` is NOT `finance_price_points`, which is Sjel's own subscription pricing
+history. Market data and what Sjel pays for a streaming service are two different series
 that happen to share a word.
 
 ## What cannot be computed here
@@ -371,7 +371,7 @@ deterministic occurrence identities, so legitimate repetition and overlapping-ex
 idempotency both survive in the candidate store.
 Named `investment_csv_mappings` supply the corresponding preview-only adapter. The
 stable source key and source identifier to symbolic commodity mapping belong there
-rather than in Axon. `investment_snapshot` names the private canonical collection
+rather than in Sjel. `investment_snapshot` names the private canonical collection
 written after review. Reconfirming one source replaces only that source; Overview
 derives its aggregate and review coverage from every confirmed source. A provider
 without an export can use a privately authored current-position CSV with one dated
@@ -457,6 +457,6 @@ verdict.
 | Tool | Good at | Relationship |
 |---|---|---|
 | [Actual Budget](https://actualbudget.org) | Envelope budgeting, fast local-first UI | Rejected as core. Its automatic German bank sync ran through GoCardless Bank Account Data, which stopped accepting new accounts in July 2025 |
-| [Firefly III](https://firefly-iii.org) | A serious rule engine and a real REST API | PHP with its own database. A second store inside Axon, and a ledger that is not git-diffable, so agent writes stop being reviewable |
+| [Firefly III](https://firefly-iii.org) | A serious rule engine and a real REST API | PHP with its own database. A second store inside Sjel, and a ledger that is not git-diffable, so agent writes stop being reviewable |
 | [Ghostfolio](https://ghostfol.io) | Portfolio math, price feeds, allocation | A candidate for the investment half later. It owns valuation well and models a subscription's history not at all |
-| [hledger](https://hledger.org) | Double-entry, commodities, reports and `roi` | Its journal FORMAT is what Axon writes and reads. The executable was adopted as the engine behind `AccountingEngine` until PRD Q50 (2026-08-28) and is retired; `src/journal.rs` parses the file in-process. Never the importer, never bundled |
+| [hledger](https://hledger.org) | Double-entry, commodities, reports and `roi` | Its journal FORMAT is what Sjel writes and reads. The executable was adopted as the engine behind `AccountingEngine` until PRD Q50 (2026-08-28) and is retired; `src/journal.rs` parses the file in-process. Never the importer, never bundled |

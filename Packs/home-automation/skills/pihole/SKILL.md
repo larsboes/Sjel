@@ -17,7 +17,7 @@ host is enough.
    `:port` optional) in `<overlay>/config/home-assistant.vars` (override its root with
    `$SJEL_HOME_ROOT`). The tool fails cleanly, naming a missing/`TODO-` key, until it's filled in.
 2. **In Bitwarden (secret only):** an item `home-assistant/pihole` (override with `$PIHOLE_BW_ITEM`)
-   with the custom field `PIHOLE_PASSWORD` (the admin/API password). Provision via Axon
+   with the custom field `PIHOLE_PASSWORD` (the admin/API password). Provision via Sjel
    `setup-secret.sh`. The item may not exist yet — the tool fails cleanly, naming the missing field,
    until it does.
 3. **Point `bw` at the vault once:** `bw config server <vault-url>`.

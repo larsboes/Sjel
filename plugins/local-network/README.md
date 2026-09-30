@@ -1,6 +1,6 @@
 # Tauri local network plugin
 
-Finds an Axon node on the same Wi-Fi (PRD Q119, "Same Wi-Fi").
+Finds an Sjel node on the same Wi-Fi (PRD Q119, "Same Wi-Fi").
 
 - `browse` runs an `NWBrowser` for `_sjel._tcp` for up to ten seconds (three by default) and
   returns each node's name, `<host>.local`, port and certificate fingerprint, read from the TXT

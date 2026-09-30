@@ -3,14 +3,14 @@
 **No engine enters the extraction ladder without a passing record here.**
 
 That rule is not new and this directory is not a new idea. It is the instrument that decided
-Axon's embedding and reranking adoptions, pointed at a different job:
+Sjel's embedding and reranking adoptions, pointed at a different job:
 `capabilities/comms/eval/README.md` holds the original and states the discipline that makes it
 worth anything.
 
 > Add or revise a judgement from its meaning and rationale before looking at a model's score.
 > Never tune a label merely to turn a failing model green.
 
-`multilingual-e5-base-mlx` and `bge-reranker-v2-m3-mlx` entered Axon by clearing a corpus like
+`multilingual-e5-base-mlx` and `bge-reranker-v2-m3-mlx` entered Sjel by clearing a corpus like
 this one. `multilingual-e5-small-mlx` and both Apple native embedding variants did not, and
 their failing runs are still on disk. The corpus was not weakened to accommodate any of them.
 
@@ -112,14 +112,14 @@ rung an engine is fit for.
 
 A third line reports the detector's own agreement. It scores `math.rs`, not the engine, and it
 is the only place a false positive on prose can be caught before it costs a rung-3 call on every
-German article Axon reads.
+German article Sjel reads.
 
 ## Results are append-only, including the failures
 
 Under [`results/`](results/), dated and named for the engine. The first record is
 [`2026-09-02-apple-vision-baseline.md`](results/2026-09-02-apple-vision-baseline.md), which
 clears the prose line at 100.0% and fails the notation line at 58.8%. Recording that here is
-what makes rung 3 evidence-backed inside Axon rather than a claim in somebody's memory.
+what makes rung 3 evidence-backed inside Sjel rather than a claim in somebody's memory.
 
 ## How an engine actually enters
 

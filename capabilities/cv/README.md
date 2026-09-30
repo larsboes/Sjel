@@ -63,4 +63,4 @@ capabilities/cv/cv list-profiles                    # tags in use, read from mas
 
 Config: copy `master_cv.schema.yaml`'s shape into
 `$SJEL_PERSONAL_ROOT/data/cv/master_cv.yaml` and fill in real content — nothing personal is
-stored in Axon.
+stored in Sjel.

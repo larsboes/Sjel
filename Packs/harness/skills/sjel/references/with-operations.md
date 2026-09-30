@@ -1,4 +1,4 @@
-# Operate Axon
+# Operate Sjel
 
 Resolve the capability first with `tools/axon-context with <capability>`. Read its current
 contract before using an unfamiliar route.

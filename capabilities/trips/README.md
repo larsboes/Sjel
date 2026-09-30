@@ -1,6 +1,6 @@
 # trips
 
-Persistent user intent and itinerary state for Axon's cross-capability Trips workspace.
+Persistent user intent and itinerary state for Sjel's cross-capability Trips workspace.
 It owns neither transport search nor event discovery: the dashboard composes `transit`
 and `scouting`, and reads bounded `calendar` entries as trip fixpoints. Trips stores only
 the references the operator explicitly adds to the itinerary, with inert provider payloads.
@@ -58,7 +58,7 @@ stage had no coordinate, the December Berlin place did, and the search rode that
 The Travel workspace exposes plan editing for title, start, up to four destinations, dates,
 interests, travelers and transport modes through the existing `PATCH /api/plans/:id` contract.
 Deletion uses `DELETE /api/plans/:id` behind a two-step UI confirmation. Deleting an imported
-Axon plan never deletes its source Obsidian note.
+Sjel plan never deletes its source Obsidian note.
 
 For an active plan, the dashboard queries Calendar with the plan's inclusive date window
 converted to Calendar's exclusive `to` bound. Planned and committed events at a destination
@@ -391,23 +391,23 @@ Trip planning is a bounded domain with its own persistent state. Putting plan it
 discovery own journeys. The dashboard remains a shell: it coordinates calls and renders
 the workspace, while this capability owns the data.
 
-## Related tools and why Axon is not all of them
+## Related tools and why Sjel is not all of them
 
-Axon is useful when a plan should remain local-first and connect personal context across
+Sjel is useful when a plan should remain local-first and connect personal context across
 `trips`, `transit`, `scouting` and the vault. It should still point to a narrower or more
 mature tool when that tool already owns the immediate job:
 
-| Tool | Individually good at | Relationship to Axon |
+| Tool | Individually good at | Relationship to Sjel |
 |---|---|---|
-| [TREK](https://github.com/liketrek/TREK) | Self-hosted, real-time group planning with invitations, reservations, shared costs, packing lists, documents and a PWA | A serious whole-product alternative for collaborative trips. Axon should exchange neutral exports later rather than recreate TREK's group surface |
+| [TREK](https://github.com/liketrek/TREK) | Self-hosted, real-time group planning with invitations, reservations, shared costs, packing lists, documents and a PWA | A serious whole-product alternative for collaborative trips. Sjel should exchange neutral exports later rather than recreate TREK's group surface |
 | [TripIt](https://www.tripit.com/web/free) | Turning forwarded booking confirmations into one itinerary | The strongest reference for automatic intake. It remains a cloud handoff because using it sends travel and booking data to an external service |
-| [Besser Bahn](https://github.com/chuk-development/Besser-Bahn) | Android-first live rail assistance, connection predictions, disruption alerts and split-ticket booking links | Better during a running rail journey; Axon keeps the result in the broader trip plan |
+| [Besser Bahn](https://github.com/chuk-development/Besser-Bahn) | Android-first live rail assistance, connection predictions, disruption alerts and split-ticket booking links | Better during a running rail journey; Sjel keeps the result in the broader trip plan |
 | [BetterBahn](https://betterbahn.de) | A focused, inspectable split-ticket workflow | Product and algorithm inspiration. Upstream currently provides local/self-hosted use, not an official hosted calculator |
 | Plan Bahn (`troyriverabusiness/msg-code-create`, gone) | The earlier Vue, FastAPI and LangGraph take on agent-assisted rail planning | Lineage only, and no longer reachable in any form. Upstream was already unavailable at the 2026-07-29 re-check; the one vendored copy, which lived inside the Event Horizon repository, went with that repository on 2026-08-17. Named without a link because the URL resolves to nothing, and the dashboard does not present it as a handoff |
 
 The dashboard renders the useful subset as contextual disclosures: planning shows TREK and
 TripIt; connection search shows Besser Bahn and BetterBahn. MapLibre, OpenFreeMap and
-Wikimedia are providers used by Axon, so their attribution stays next to the data they
+Wikimedia are providers used by Sjel, so their attribution stays next to the data they
 render rather than being mislabeled as alternatives.
 
 ## Obsidian sync boundary
@@ -422,10 +422,10 @@ reference preserved.
 This paragraph specified it a month before anything implemented it, and PRD Q47
 (2026-08-27) then made it a requirement rather than a roadmap item: `trips_plan_items`
 holds 21 rows that exist nowhere else, and a capability holding only-copy rows projects
-them to files. Every plan is now one Markdown file under `Resources/Axon/Trips/`, in the
+them to files. Every plan is now one Markdown file under `Resources/Sjel/Trips/`, in the
 vault named by `<overlay>/config/trips.json`.
 
-The four points above survive with one correction. Point 3 said "a marked Axon-owned
+The four points above survive with one correction. Point 3 said "a marked Sjel-owned
 section", which is right for a note a human already writes and wrong here: no human note
 exists per trip, so PRD Q31 (2026-08-23) ruled this pattern B — a whole generated file,
 in the one vault folder a human never edits. So the file carries an
@@ -463,7 +463,7 @@ data loss.
 
 Two-way synchronization comes only after that export shape has been used. It should accept
 only explicit fields such as notes, places and links, validate them into `PlanItem` data,
-and record a conflict instead of silently choosing between two changed revisions. Axon's
+and record a conflict instead of silently choosing between two changed revisions. Sjel's
 database remains authoritative for trip identity, stages and item IDs; the vault remains
 the authoritative writing surface for human notes.
 

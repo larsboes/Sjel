@@ -97,7 +97,7 @@ sits next to scouting's `8081`... — actually next to nothing taken (`8081` was
 scouting's true default is `8084`, since `8080` belongs to vaultwarden — see
 `dashboard/README.md`) — chosen simply as the next free, unclaimed port.
 
-**Forecloses:** no Axon capability may claim port `31337` or the name "Pulse"/"pulse" — that
+**Forecloses:** no Sjel capability may claim port `31337` or the name "Pulse"/"pulse" — that
 identity belongs to LifeOS, whether or not any machine still runs it. The root `dashboard`
 proxied LifeOS Pulse as a distinct upstream from `sjel-status`, never conflated into one
 capability; that proxy and the panel behind it were deleted on 2026-08-25 with the rest of

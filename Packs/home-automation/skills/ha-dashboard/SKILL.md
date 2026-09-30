@@ -21,7 +21,7 @@ comes from a Bitwarden item at runtime, never hardcoded.
    reverse-proxy URL) in `<overlay>/config/home-assistant.vars` (override the root with
    `$SJEL_HOME_ROOT`). The WebSocket URL is derived from it.
 3. **In Bitwarden:** an item `home-assistant/ha` (override with `$HA_BW_ITEM`) holding only the
-   secret field `HA_TOKEN` — the same item ha-cli uses. Provision via Axon `setup-secret.sh`.
+   secret field `HA_TOKEN` — the same item ha-cli uses. Provision via Sjel `setup-secret.sh`.
 4. **Point `bw` at the vault once:** `bw config server <vault-url>`.
 
 ## Run

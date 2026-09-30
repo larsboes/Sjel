@@ -9,7 +9,7 @@ pin, license, and reason before consumption. Never use an unpinned floating rele
 
 - Add backend logic in Rust unless the existing owner has a justified different runtime.
 - Use `uv` for Python execution and `bun` for TypeScript; do not add `pip`, `npm`, or bare `node`
-  commands to Axon code or documentation.
+  commands to Sjel code or documentation.
 - Keep shell compatible with macOS Bash 3.2. Avoid associative arrays and Bash 4 features.
 - Express container-backed capabilities as manifests consumed by shared runners, not new bespoke
   lifecycle scripts.

@@ -2,7 +2,7 @@
 
 The vault, as a thing that gets backed up.
 
-`kind = "data"` — no image, no command, nothing to start. Obsidian owns this directory and Axon
+`kind = "data"` — no image, no command, nothing to start. Obsidian owns this directory and Sjel
 writes to it only inside declared projection regions (`libs/markdown-root/src/projection.rs`).
 The manifest exists for the one thing a file tree needs an owner for, which is backup.
 

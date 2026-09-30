@@ -14,7 +14,7 @@ Scouting finds and ranks opportunities. It normalizes source data and preserves 
 state for each result. Scholarships, hackathons, events, calls for papers and travel deals
 belong here when they need ranking against an interest profile.
 
-It does not own Axon's general observation stream. Security advisories and updates to systems
+It does not own Sjel's general observation stream. Security advisories and updates to systems
 or packages belong in Feed. Watched-repository changes, general news and interesting articles
 also stay there unless a user explicitly promotes one into an opportunity workflow. Scouting
 may consume a typed Feed reference and may publish a scored result back to Feed, but the source
@@ -135,7 +135,7 @@ the CI-grade path; PRD Q44 retired it, and CI runs the cargo commands above dire
   human triage state; a later source scan preserves that decision.
 
 The server was originally dropped during the port — the source
-service's server binary had zero consumers in Axon at the time, the same "more machinery
+service's server binary had zero consumers in Sjel at the time, the same "more machinery
 than needed" anti-pattern `capabilities/vaultwarden/README.md` flags for the old HashiCorp
 Vault setup. Reopened once `dashboard` landed as a real, named consumer — see
 `dashboard/README.md` for the full reasoning and why
@@ -202,7 +202,7 @@ into an adapter yet:
 
 ## Alternatives considered (adopt-before-build check)
 
-Axon doctrine (CONTRIBUTING.md#dependency-verdicts-and-provenance, `upstreams.toml`) requires checking for an existing tool
+Sjel doctrine (CONTRIBUTING.md#dependency-verdicts-and-provenance, `upstreams.toml`) requires checking for an existing tool
 before building custom. Researched before writing this section:
 
 **Whole capability** — nothing found that does "aggregate heterogeneous sources → score
@@ -252,7 +252,7 @@ The heading keeps the shape it was written in; what it rules out has since been 
 because the original absolute ruled out something worth having.
 
 **What runs is declared.** Nothing polls unless it has an entry in the overlay's `sources[]`
-array. Axon does not probe for unannounced sources, and no discovery path may promote itself
+array. Sjel does not probe for unannounced sources, and no discovery path may promote itself
 into a running one — explicit declaration beats heuristic detection, and the overlay is the
 right place for personal declarations. This half is unchanged and is the one that matters.
 
@@ -322,7 +322,7 @@ Mirrors `capabilities/printing/printctl.py`'s `_cfg_path()`/`load_cfg()` exactly
 3. `capabilities/scouting/scouting.config.json` — local, gitignored, dev fallback
 
 Copy `scouting.config.example.json` to `$SJEL_PERSONAL_ROOT/config/scouting.json` and fill
-in real values there; nothing personal is stored in Axon. Every field is optional — the tool
+in real values there; nothing personal is stored in Sjel. Every field is optional — the tool
 runs against empty/local directories with zero config (interest-profile dir gets created if
 missing, events-dir cross-referencing is silently skipped if unset). CLI args
 (`--database-path`, `--limit`, `--opp-embeddings`, etc.) always override whatever the config
@@ -443,7 +443,7 @@ with, and the event route, basis, reason, and optional distance.
 
 The first scholarship integration is deliberately a manual-sweep workflow, matching the vault's
 own rollout rule: verify 2–3 agent-assisted sweeps before adding a scheduled scraper. Scouting reads
-the private vault directly; it does not copy personal profile data into Axon.
+the private vault directly; it does not copy personal profile data into Sjel.
 
 Configure an `obsidian-markdown` source with:
 
@@ -607,7 +607,7 @@ stops, so none of the three falls through now.
   all replaced by `config.rs` (that guessing logic was monorepo-structure-specific and has no
   place in a standalone crate).
 - User-Agent strings in `source.rs`, `adapters/cfp_conferences.rs`, `adapters/luma.rs` —
-  rebranded to `Axon-Scouting/0.1 (+https://github.com/larsboes/Sjel)`. Axon has no public
+  rebranded to `Sjel-Scouting/0.1 (+https://github.com/larsboes/Sjel)`. Sjel has no public
   GitHub remote yet (see `PROJECTS.md`) — this is the intended future URL, update the comment
   once it's live.
 - The source's separate `server_main.rs` entrypoint collapsed into this port's single

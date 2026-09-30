@@ -1,6 +1,6 @@
-# Axon Clip — Browser Extension
+# Sjel Clip — Browser Extension
 
-`axon-clip` is a Manifest V3 browser extension for Chrome and Brave that clips web pages, text selections and URLs into the local Axon Feed (`capabilities/comms`).
+`axon-clip` is a Manifest V3 browser extension for Chrome and Brave that clips web pages, text selections and URLs into the local Sjel Feed (`capabilities/comms`).
 
 It captures and posts, nothing more. Extraction, normalization, storage, scoring and grouping all belong to `comms-server`; this holds no parsing logic and makes no model calls. It stays a human-triggered capture of a page the operator is already looking at. It does not automate access, and it collects nothing in the background.
 
@@ -26,7 +26,7 @@ Requests go to `POST /ingest` with your `comms-server` shared secret, tagged `cl
 
 ## Configuration
 
-1. Click the Axon Clip icon in the toolbar.
+1. Click the Sjel Clip icon in the toolbar.
 2. Open Settings with the gear icon at the top right of the popup.
 3. Set the comms server base URL (`http://127.0.0.1:8083`) and the API shared secret, the one your overlay `comms.json` points at via `api_secret_file`.
 4. Save.

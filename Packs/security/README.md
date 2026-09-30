@@ -60,7 +60,7 @@ Or reference from `settings.json`:
 
 ```json
 {
-  "extensions": ["/path/to/Axon/Packs/security/extensions/secrets-guard.ts"]
+  "extensions": ["/path/to/Sjel/Packs/security/extensions/secrets-guard.ts"]
 }
 ```
 

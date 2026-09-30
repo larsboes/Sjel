@@ -1,6 +1,6 @@
 # Moonraker REST — quick reference
 
-For ad-hoc calls beyond printctl. Base: `http://$HOST`. Export `HOST` from the overlay first (keeps the LAN IP out of Axon):
+For ad-hoc calls beyond printctl. Base: `http://$HOST`. Export `HOST` from the overlay first (keeps the LAN IP out of Sjel):
 ```bash
 HOST=$(uv run --python 3 python -c 'import json,os;c=json.load(open(os.path.expanduser(os.environ["SJEL_PERSONAL_ROOT"])+"/config/printing.json"));print(f"{c[\"printer_host\"]}:{c[\"moonraker_port\"]}")')
 ```

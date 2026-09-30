@@ -1,6 +1,6 @@
 # sjel-http
 
-One home for **outbound HTTP**: the blocking client, the user-agent every Axon
+One home for **outbound HTTP**: the blocking client, the user-agent every Sjel
 request carries, and the timeout no caller can forget.
 
 Before this crate, 33 call sites across nine capabilities and two libs each built
@@ -38,13 +38,13 @@ that need an option this crate does not decide: gzip, a cookie store, a redirect
 policy, and `scouting/adapters/meetup.rs`, which overrides the user-agent with a
 browser string because the site refuses anything else.
 
-The agent is `Axon-<purpose>/<version> (+https://github.com/larsboes/Sjel)`. The
+The agent is `Sjel-<purpose>/<version> (+https://github.com/larsboes/Sjel)`. The
 version is this crate's, which is the workspace version, so a server sees one
-product rather than nine. The URL is the intended remote, not a live one — Axon
+product rather than nine. The URL is the intended remote, not a live one — Sjel
 has no public GitHub remote yet (PROJECTS.md).
 
 **Not for use from an async runtime worker.** A blocking client driven from inside
-a Tokio worker panics at run time. Every caller in Axon is either a CLI or inside
+a Tokio worker panics at run time. Every caller in Sjel is either a CLI or inside
 `tokio::task::spawn_blocking`, whose threads are not runtime workers.
 
 ## Why its own crate
@@ -53,7 +53,7 @@ a Tokio worker panics at run time. Every caller in Axon is either a CLI or insid
 `interior`, `soundscape`, `vault` and `tools/storage` depend on sjel-config and
 make no outbound request, and `reqwest` brings a TLS stack with it. A lib here is
 spine-owned shared code with no domain of its own (ARCHITECTURE.md, "Libs"), and
-"how Axon talks to the network" is exactly that.
+"how Sjel talks to the network" is exactly that.
 
 Consumers: `calendar`, `comms`, `finance`, `places`, `punctuality`, `scouting`,
 `transit`, `trips`, `libs/inference`, `libs/summarize`.

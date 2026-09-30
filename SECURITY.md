@@ -2,7 +2,7 @@
 
 ## Supported versions
 
-Axon has no stable release line yet. Security fixes target the current `main` branch. Older
+Sjel has no stable release line yet. Security fixes target the current `main` branch. Older
 commits and archived branches are not supported. Neither are private deployment overlays or
 downstream forks.
 
@@ -23,7 +23,7 @@ data you do not own or have permission to assess.
 
 ## Scope
 
-Reports about Axon's public code and schemas are in scope, as are its build and installer. Shipped
+Reports about Sjel's public code and schemas are in scope, as are its build and installer. Shipped
 defaults and capability contracts are also covered. Findings that concern only a private overlay
 or one deployment still belong in the private reporting channel, but they may be redirected if no
-reusable Axon defect exists.
+reusable Sjel defect exists.

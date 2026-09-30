@@ -13,7 +13,7 @@ every 24 hours, this one moves the images, and both write a receipt `tools/docto
 
 **Build, and it is one script over the runtime already on the machine.** There is a whole class of
 tool for this — Watchtower, podman-auto-update, Renovate against a digest — and each one adds a
-scheduler, a config format and a daemon that has to be trusted with the docker socket. Axon
+scheduler, a config format and a daemon that has to be trusted with the docker socket. Sjel
 already has the three things such a tool would bring: a manifest that declares the image
 (`service.toml`), a runner that recreates a container from that declaration
 (`tools/service-runner.sh recreate`), and a scheduler that renders launchd and systemd units from

@@ -1,6 +1,6 @@
 
 
-# Axon (dashboard)
+# Sjel (dashboard)
 
 The spine's shell. It shows what this machine has enabled, what those capabilities are
 saying, and it starts one when you open it. It owns no data: every capability keeps its
@@ -249,7 +249,7 @@ instead of embedding it, so each SvelteKit site owns its own navigation and stor
 
 ## Device mesh boundary
 
-The phone is a client of an Axon deployment, not an always-on Axon server. The first device
+The phone is a client of an Sjel deployment, not an always-on Sjel server. The first device
 mesh slice (2026-09-25) keeps the Mac as the canonical node so the current installation remains
 working, but addresses it through the versioned `axon-node/v1` connection contract in
 `schemas/device-mesh.schema.json`. A future home server occupies the same canonical-node slot;
@@ -262,15 +262,15 @@ conflicts are visible and require a person to resolve them.
 
 The deployment choices are deliberately staged:
 
-1. **Direct canonical node — selected now.** The phone connects to the configured Axon node over
+1. **Direct canonical node — selected now.** The phone connects to the configured Sjel node over
    HTTPS/Tailscale. Today that node is the Mac. This is the smallest safe change and keeps the
    existing bridge and local outbox useful.
-2. **Home canonical node — selected as the next deployment.** A home server runs the same Axon
+2. **Home canonical node — selected as the next deployment.** A home server runs the same Sjel
    contracts and replaces the Mac without changing the phone's connection model. The Mac becomes
    an administration, development or inference peer rather than a runtime dependency.
 3. **Encrypted relay — optional later.** Cloudflare or another small public service may carry
    opaque, encrypted sync envelopes when direct phone-to-home reachability is inconvenient. It is
-   a mailbox, not a second Axon database and cannot query capability state.
+   a mailbox, not a second Sjel database and cannot query capability state.
 4. **Full peer-to-peer multi-master mesh — deferred.** It would require stable node identities,
    per-record operation clocks, merge rules and more difficult conflict semantics. “Mesh” first
    means several devices attached to one canonical deployment, not every device silently becoming
@@ -558,7 +558,7 @@ way the shelved attempt was.
 
 **Why:** both Cargo.toml files previously carried an explicit comment declining an HTTP
 server — transit's: *"No tokio/axum... out of scope here"*; scouting's: *"No HTTP server
-binary. The original had one... fronting a dashboard that was never adopted into Axon... zero
+binary. The original had one... fronting a dashboard that was never adopted into Sjel... zero
 consumers is exactly the 'way more machinery than needed' anti-pattern."* Both were correct
 when written — there was no consumer. A 2026-07-10 session silently deleted both comments and
 added the server binaries anyway, without a named consumer, without a declared build target,
@@ -580,13 +580,13 @@ resolved by `capabilities/sjel-status/README.md`).
 Migrated from its dissolved `decisions/` entry on 2026-07-28: this governs one
 thing, so it lives with that thing (CONTRIBUTING.md#decisions-live-with-their-owner).
 
-# Decision: Svelte is Axon's frontend standard
+# Decision: Svelte is Sjel's frontend standard
 
-**Status:** accepted · **Date:** 2026-07-28 · **Domain:** every Axon web surface
+**Status:** accepted · **Date:** 2026-07-28 · **Domain:** every Sjel web surface
 
 ## Decision
 
-Axon standardizes on **Svelte 5 in runes mode and SvelteKit** for dashboards, capability
+Sjel standardizes on **Svelte 5 in runes mode and SvelteKit** for dashboards, capability
 panels, project sites and future web surfaces.
 
 - Svelte components own presentation and local interaction state.
@@ -599,13 +599,13 @@ panels, project sites and future web surfaces.
 - WASM remains a measured optimization for compute-heavy parsing, simulation or visualization,
   never a default UI layer.
 
-Tried first: React, selected 2026-07-16 on the assumption that Axon would assemble arbitrary
+Tried first: React, selected 2026-07-16 on the assumption that Sjel would assemble arbitrary
 AI-generated React components. That assumption is what this decision removes; the separate
 entry recording it was folded in here 2026-07-28.
 
-## Boundary: Svelte is the renderer, not the Axon core
+## Boundary: Svelte is the renderer, not the Sjel core
 
-Axon's durable contracts must not depend on `.svelte` files:
+Sjel's durable contracts must not depend on `.svelte` files:
 
 - capability manifests and HTTP/event contracts;
 - typed data and action schemas;
@@ -615,16 +615,16 @@ Axon's durable contracts must not depend on `.svelte` files:
 
 Agents and model providers produce inert data, actions or validated layout specifications.
 They do not generate arbitrary framework component source at runtime. Codex, Claude Code,
-local models and later providers therefore share one contract even though Axon's maintained
+local models and later providers therefore share one contract even though Sjel's maintained
 renderer is Svelte.
 
-This removes the former React decision's load-bearing assumption: Axon no longer optimizes for
+This removes the former React decision's load-bearing assumption: Sjel no longer optimizes for
 assembling arbitrary AI-generated React components. It optimizes for a small, inspectable UI
 surface over provider-independent contracts.
 
-## Why this fits Axon
+## Why this fits Sjel
 
-Axon is primarily a solo-maintained, self-hosted system with custom live feeds,
+Sjel is primarily a solo-maintained, self-hosted system with custom live feeds,
 evidence-oriented dashboards and a phone-accessible web surface. Its recurring work is local
 state, filters, WebSockets, progressive disclosure and purpose-built visualization. Svelte's
 compiled reactivity and component-local HTML/CSS fit that profile more directly than a hooks
@@ -634,7 +634,7 @@ React still has a broader off-the-shelf ecosystem. In particular, vis.gl provide
 React bindings. That advantage is real but bounded:
 
 - deck.gl core and MapLibre remain framework-independent;
-- Axon accepts a small maintained Svelte lifecycle wrapper for map/WebGL surfaces;
+- Sjel accepts a small maintained Svelte lifecycle wrapper for map/WebGL surfaces;
 - a wrapper becomes shared infrastructure only after two real consumers need it;
 - a missing integration is evaluated against a concrete feature, not treated as a standing
   reason to keep every surface in React.

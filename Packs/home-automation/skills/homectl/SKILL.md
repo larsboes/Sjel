@@ -6,7 +6,7 @@ allowed-tools: Read, Write, Edit, Bash
 
 # homectl
 
-Operate the public materialization mechanism over a private Home Assistant definition. Axon owns
+Operate the public materialization mechanism over a private Home Assistant definition. Sjel owns
 the parser, validation, and vendoring behavior. The selected overlay owns the templates, variable
 map, component lockfile, helpers, and generated output.
 
@@ -30,7 +30,7 @@ Every path remains overridable for isolated tests.
 
 ## Boundary
 
-- Never point generated output into public Axon.
+- Never point generated output into public Sjel.
 - Never place a real entity ID, hostname, component selection, or device name in this Pack.
 - Treat the set of templates and components as a private inventory even when their contents use
   placeholders and public Git references.

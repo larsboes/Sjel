@@ -25,7 +25,7 @@ Reject generic AI/SaaS landing page tropes in favor of intentional, high-utility
 
 ### 1. Identify the View Persona
 * Determine the layout's purpose:
-  * **Operational Dashboard** (e.g. `AxonGlance`, `HomeHorizon`): High density, tabular alignment, glanceable metric tiles, low visual noise.
+  * **Operational Dashboard** (e.g. `SjelGlance`, `HomeHorizon`): High density, tabular alignment, glanceable metric tiles, low visual noise.
   * **Interactive Explorer** (e.g. `TransactionTable`, `OmniSearch`, `MonthGrid`): Clear keyboard navigation, fixed column widths, sticky headers, instant feedback.
   * **Inspector / Modal** (e.g. `AssistantDrawer`, `DecisionEngineModal`): Focused task surface, escape-to-close, trap focus cleanly.
 

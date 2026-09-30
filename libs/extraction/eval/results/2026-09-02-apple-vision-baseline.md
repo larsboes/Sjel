@@ -95,7 +95,7 @@ find. With it, the detector fires on both notation pages and stays quiet on all 
 pages: agreement 100.0%.
 
 That number is the one that matters most in this run. A false positive here would send every
-German article Axon reads to a rung that does not exist.
+German article Sjel reads to a rung that does not exist.
 
 ## Verdict
 

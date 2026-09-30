@@ -1,6 +1,6 @@
 # calendar
 
-Axon's personal calendar layer: the source of truth for what time means on any
+Sjel's personal calendar layer: the source of truth for what time means on any
 given day — availability windows for travel, on‑site work, remote‑work
 blocks, busy periods, events you're attending, rhythms that materialize those
 blocks, and (later) day‑planning detail. Open by default: an empty day carries
@@ -25,9 +25,9 @@ The Google sync (Phase E) is code‑complete, fixture‑tested and connected to 
 configured account. The dashboard starts with a 30-day, read-only review: it
 shows exact-title/time duplicate candidates, requires explicit selection, then
 re-fetches each selection and rejects a changed Google revision before writing a
-non-blocking Axon draft. The Calendar workspace also has a 90-day draft inbox:
+non-blocking Sjel draft. The Calendar workspace also has a 90-day draft inbox:
 adopting an entry picks its kind and raises it to `planned`, while removing one
-deletes only Axon's copy. Every path that needs a token still fails loudly and
+deletes only Sjel's copy. Every path that needs a token still fails loudly and
 by name (which key, which file, which setup step) instead of returning an empty
 success; the setup steps are in § Phases > E. No event clustering, no travel-day
 view. This README carries the full build plan — it's the working document until
@@ -43,7 +43,7 @@ without a check are not started.
 - [x] Dashboard week and day views — hour columns, all‑day band, create by clicking an hour
 - [x] Feasibility verdicts for dated candidates, with the entries that drove them
 - [x] Feasible travel windows, in the day shape `transit plan --dates` consumes
-- [x] Google import as drafts, deduped on the Google event id, Axon‑wins on collision
+- [x] Google import as drafts, deduped on the Google event id, Sjel‑wins on collision
 - [x] Dashboard Google import review — bounded preview, duplicate warnings, explicit selection, revision-checked draft import
 - [x] Google export gated on a per‑entry opt‑in ledger
 - [x] Real offset handling both ways, DST boundaries included (`src/zone.rs`)
@@ -409,7 +409,7 @@ one. Listing what is waiting is `GET /api/entries?from=&to=&kind=draft`.
 Both sync routes answer **400 with a named error** when the home timezone, the
 calendar id or the credential is missing — never 200 with an empty report. A
 selected import answers **409** when Google changed an event after the review;
-the user must inspect the current version before Axon writes it.
+the user must inspect the current version before Sjel writes it.
 
 ## Content contract
 
@@ -691,11 +691,11 @@ each event as a draft.
   transition — is reported as skipped with its reason and left alone. The rest
   of the run still imports.
 
-### Conflict policy: Axon wins
+### Conflict policy: Sjel wins
 
 One rule decides it, and adoption is the signal (§ Drafts):
 
-| Google says | Axon holds | What happens |
+| Google says | Sjel holds | What happens |
 |---|---|---|
 | an event | nothing | `create` — a new draft |
 | an event | a `draft` | `refresh-draft`, or nothing if it did not move |
@@ -780,7 +780,7 @@ axis this capability cares about — can an entry be created without guessing?
 The JSON endpoint returns the **same `entries[].event` object** as the discover
 feed the adapter already read, so supporting it cost one URL and no new parsing.
 ICS would have cost a parser and still delivered less: with no per‑event zone,
-turning `DTSTART` into local wall time needs a geo→timezone lookup Axon does not
+turning `DTSTART` into local wall time needs a geo→timezone lookup Sjel does not
 have — precisely the guessing this capability refuses. ICS stays the fallback
 for a calendar `get-items` does not serve; none encountered yet.
 
@@ -822,7 +822,7 @@ public slug lookup.
       § Google sync contract and § Drafts.
 - [x] Export: per‑event opt‑in → push to Google Calendar. The
       `calendar.google_exports` ledger is the opt‑in; nothing exports by default.
-- [x] Conflict policy: Axon is the source of truth; sync resolves toward Axon.
+- [x] Conflict policy: Sjel is the source of truth; sync resolves toward Sjel.
       Implemented in `google::decide`, table in § Conflict policy.
 - [x] Real offset handling, both directions, both DST edges — § Time model >
       What Phase E settled.
@@ -833,7 +833,7 @@ public slug lookup.
       existing entries and likely exact-title/time duplicates, then imports only
       explicit, revision-checked selections as drafts.
 - [x] Dashboard draft inbox: 90-day Google-source/possible queue, with
-      re-kind + planned adoption or Axon-only removal.
+      re-kind + planned adoption or Sjel-only removal.
 - [x] Per-entry Google export toggle plus a dry-run review and explicit push.
       The toggle writes only the opt-in ledger; the separate sync review is
       the only dashboard action that contacts Google.
@@ -887,7 +887,7 @@ on its own. In order:
 - [x] Create by clicking an empty hour or the all‑day band; edit by clicking a chip
 - [ ] Travel‑day view: transit legs + event + buffer times
 - [ ] General day‑planning blocks (the stuff that would overload Google Calendar)
-- [ ] Not synced to Google — these are Axon‑only detail
+- [ ] Not synced to Google — these are Sjel‑only detail
 
 ## Done looks like
 

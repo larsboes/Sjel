@@ -22,7 +22,7 @@ one house.
    `config/home-assistant.vars` (resolved via `$SJEL_HOME_ROOT`). The WebSocket endpoint is
    derived from it (http→ws, https→wss, `/api/websocket`).
 3. **In Bitwarden:** item `home-assistant/ha` (override with `$HA_BW_ITEM`) holding **only** the
-   secret custom field `HA_TOKEN` — the **same item the `ha-cli` skill uses**. Provision via Axon
+   secret custom field `HA_TOKEN` — the **same item the `ha-cli` skill uses**. Provision via Sjel
    `setup-secret.sh`.
 4. **Point `bw` at the vault once:** `bw config server <vault-url>`.
 

@@ -8,7 +8,7 @@ default.
 
 ## Why this exists
 
-Axon could search and could rank, and the ranking was the same for everyone.
+Sjel could search and could rank, and the ranking was the same for everyone.
 `capabilities/trips/src/plan_search.rs` built destination candidates from
 calendar windows, cities, events, climate and presence, then weighed them with
 four `const` values — `WEIGHT_BUDGET_FIT` 0.35, `WEIGHT_FEASIBILITY` 0.30,

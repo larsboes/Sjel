@@ -1,6 +1,6 @@
 # knowledge-graph
 
-REST API over the Axon code-dependency graph built by
+REST API over the Sjel code-dependency graph built by
 [graphify](https://github.com/safishamsi/graphify).
 
 ## What it serves

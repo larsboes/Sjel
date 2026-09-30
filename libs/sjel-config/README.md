@@ -1,6 +1,6 @@
 # sjel-config
 
-Shared overlay/config resolution for Axon's Rust capabilities: tilde expansion, overlay
+Shared overlay/config resolution for Sjel's Rust capabilities: tilde expansion, overlay
 paths (`SJEL_PERSONAL_ROOT`), the store's location, the deployment's home timezone, and the
 runner's port contract (`SJEL_PORT` first, capability escape hatch second, config file
 third, shipped default last).

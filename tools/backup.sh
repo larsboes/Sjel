@@ -31,16 +31,34 @@ source "$TOOLS_DIR/lib/external-ref.sh"          # capability_provider — whose
 # interactive shell (shared with init.zsh). No-op if the app isn't running.
 source "$TOOLS_DIR/lib/bw-agent.sh" 2>/dev/null || true
 
-usage() { echo "usage: backup.sh [--no-prune|--stream] <capability>" >&2; exit 1; }
+usage() { echo "usage: backup.sh [--no-prune] [--target <id>] <capability> | --stream <capability>" >&2; exit 1; }
 NO_PRUNE=0
 STREAM=0
-case "$#:${1:-}" in
-  1:--no-prune|1:--stream) usage ;;
-  1:*) CAP="$1" ;;
-  2:--no-prune) NO_PRUNE=1; CAP="$2" ;;
-  2:--stream) STREAM=1; CAP="$2" ;;
-  *) usage ;;
-esac
+TARGET_FLAG=""
+CAP=""
+# A flag loop rather than the fixed-arity `case` this replaced, because
+# `--target` is a third axis: capabilities/backup drives one run per capability
+# and names the target itself, which is what makes the target a per-run choice
+# instead of one overlay role for the whole machine.
+while [ $# -gt 0 ]; do
+  case "$1" in
+    --no-prune) NO_PRUNE=1; shift ;;
+    --stream)   STREAM=1; shift ;;
+    --target)
+      [ $# -ge 2 ] || usage
+      TARGET_FLAG="$2"; shift 2 ;;
+    -*) usage ;;
+    *)
+      [ -z "$CAP" ] || usage
+      CAP="$1"; shift ;;
+  esac
+done
+[ -n "$CAP" ] || usage
+# Stream mode has no destination to choose and no retention to apply, so
+# combining it with either flag is a caller mistake rather than a no-op.
+if [ "$STREAM" -eq 1 ] && { [ "$NO_PRUNE" -eq 1 ] || [ -n "$TARGET_FLAG" ]; }; then
+  usage
+fi
 
 MANIFEST="$SJEL_ROOT/capabilities/$CAP/service.toml"
 [ -f "$MANIFEST" ] || { echo "backup.sh: no $MANIFEST" >&2; exit 1; }
@@ -168,6 +186,11 @@ if [ -f "$SJEL_MACHINE_TOML" ]; then
   TARGET_OVERRIDE="$(toml_get_in "capability.$CAP" backup_target "$SJEL_MACHINE_TOML")"
   if [ -n "$TARGET_OVERRIDE" ]; then TARGET_ID="$TARGET_OVERRIDE"; fi
 fi
+
+# `--target` is the per-RUN choice and outranks both the manifest and the
+# machine's own override: capabilities/backup resolved it for this run, and a
+# flag that silently lost to a config file would be worse than no flag at all.
+if [ -n "$TARGET_FLAG" ]; then TARGET_ID="$TARGET_FLAG"; fi
 
 if [ "$STREAM" -eq 0 ]; then
   [ -n "$TARGET_ID" ] || { echo "backup.sh: $CAP has no backup_target in service.toml" >&2; exit 1; }
@@ -858,6 +881,40 @@ contents=""
 [ "${#PATHS[@]}" -gt 0 ] && contents="paths"
 [ "${#CPATHS[@]}" -gt 0 ] && contents="${contents:+$contents+}container_paths"
 [ -n "$SQLITE_ONLINE_REL" ] && contents="${contents:+$contents+}sqlite_online"
+
+# An immutable receipt PER ARCHIVE, beside the rolling latest-receipt above.
+#
+# The latest receipt answers "when did a backup last land"; a history receipt
+# answers "what was IN the archive that landed", which is the question a
+# later verification needs: retention must check an archive against the digest
+# recorded when it was produced, never against one recomputed from bytes that
+# may already have changed. capabilities/backup records one run row per
+# archive and reads these; the store iCloud gate already writes them for its
+# own target, which is why an identical pre-existing file is accepted and a
+# conflicting one is fatal rather than silently replaced.
+HISTORY_DIR="$RECEIPT_DIR/history/$CAP"
+mkdir -p "$HISTORY_DIR"
+HISTORY_RECEIPT="$HISTORY_DIR/$CAP-$TS.tar.gz.json"
+if [ -e "$HISTORY_RECEIPT" ]; then
+  if ! grep -q "\"sha256\": \"$LOCAL_SHA256\"" "$HISTORY_RECEIPT"; then
+    echo "backup.sh: $HISTORY_RECEIPT already describes a different archive; refusing to overwrite it" >&2
+    exit 1
+  fi
+else
+  cat > "$HISTORY_RECEIPT" <<HISTRECEIPT
+{
+  "capability": "$CAP",
+  "completed_at": "$TS",
+  "target": "$TARGET_ID",
+  "tarball": "$CAP-$TS.tar.gz",
+  "bytes": $LOCAL_BYTES,
+  "sha256": "$LOCAL_SHA256",
+  "contents": "$contents",
+  "retention_applied": $RETENTION_APPLIED
+}
+HISTRECEIPT
+fi
+
 cat > "$RECEIPT_DIR/$CAP.json" <<RECEIPT
 {
   "capability": "$CAP",

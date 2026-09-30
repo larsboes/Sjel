@@ -22,6 +22,50 @@ pub(crate) struct Receipt {
     pub(crate) contents: String,
 }
 
+/// The backup library answers with `Box<dyn Error>`; this surface answers with a message.
+///
+/// Named so the conversion is visible at each call site rather than looking like the
+/// `Result<_, String>` conversions `bad_gateway` already handles.
+fn gateway(error: Box<dyn std::error::Error>) -> (StatusCode, Json<Value>) {
+    bad_gateway(error.to_string())
+}
+
+/// The durable half of a run's story: what the last attempt did, including the ones that
+/// failed and left no receipt behind. This is the field the receipts could never provide.
+pub(crate) fn backup_store() -> Result<::backup::BackupStore, String> {
+    ::backup::BackupStore::open(&sjel_config::database_path())
+        .map_err(|error| format!("cannot open the backup tables in the shared store: {error}"))
+}
+
+/// The target a capability declares, from the one place that derives the set.
+pub(crate) fn contract_target(
+    root: &std::path::Path,
+    capability: &str,
+) -> Result<String, (StatusCode, Json<Value>)> {
+    let contracts = ::backup::targets::contracts(root).map_err(gateway)?;
+    contracts
+        .into_iter()
+        .find(|(name, _)| name == capability)
+        .map(|(_, target)| target)
+        .ok_or_else(|| {
+            (
+                StatusCode::NOT_FOUND,
+                Json(json!({ "error": format!("'{capability}' declares no backup target") })),
+            )
+        })
+}
+
+/// Body of `POST .../backup`: which destination to run against.
+///
+/// Optional, and absent means "the target the manifest declares". A body is accepted so
+/// the surface can offer a choice; the no-body form is what the dashboard already sends, so
+/// both have to keep working.
+#[derive(Deserialize, Default)]
+pub(crate) struct RunRequest {
+    #[serde(default)]
+    pub(crate) target: Option<String>,
+}
+
 /// `20260805T220018Z` — fixed-width UTC, written by `date -u +%Y%m%dT%H%M%SZ` in
 /// `backup.sh`, parsed here by hand.
 ///
@@ -156,6 +200,16 @@ pub(crate) async fn backups_handler() -> Result<Json<Value>, (StatusCode, Json<V
     let now = now_epoch();
     let runs = backup_runs().clone();
 
+    // The durable attempt record, when the store is reachable. A status page that could not
+    // draw because the database was down would hide the very failures this field exists to
+    // show, so the degradation is named in the response rather than raised.
+    let (attempts, attempt_error) = match backup_store()
+        .and_then(|store| store.latest_runs().map_err(|error| error.to_string()))
+    {
+        Ok(attempts) => (attempts, Value::Null),
+        Err(error) => (Vec::new(), Value::String(error)),
+    };
+
     let mut out = Vec::new();
     for service in services {
         let Some(contract) = service.backup_contract() else {
@@ -187,9 +241,12 @@ pub(crate) async fn backups_handler() -> Result<Json<Value>, (StatusCode, Json<V
             "bytes": receipt.as_ref().map(|r| r.bytes),
             "contents": receipt.as_ref().map(|r| r.contents.clone()),
             "run": runs.get(&service.name),
+            "attempt": attempts.iter().find(|row| row.capability == service.name),
         }));
     }
-    Ok(Json(json!({ "backups": out })))
+    Ok(Json(
+        json!({ "backups": out, "attempt_error": attempt_error }),
+    ))
 }
 
 /// Ask for a backup now. Accepts the run and returns; it does not wait for it.
@@ -200,6 +257,7 @@ pub(crate) async fn backups_handler() -> Result<Json<Value>, (StatusCode, Json<V
 /// refresh because the state lives here rather than in the page.
 pub(crate) async fn backup_handler(
     Path(name): Path<String>,
+    body: Option<Json<RunRequest>>,
 ) -> Result<Json<Value>, (StatusCode, Json<Value>)> {
     let services = registry().await.map_err(bad_gateway)?;
     let Some(service) = services.into_iter().find(|s| s.name == name) else {
@@ -218,6 +276,24 @@ pub(crate) async fn backup_handler(
     }
 
     let root = axon_root().map_err(bad_gateway)?;
+    let overlay = overlay_root().map_err(bad_gateway)?;
+    let store = backup_store().map_err(bad_gateway)?;
+    // A body names the destination; no body means the one the manifest declares. The
+    // no-body form is what the dashboard already sends, so both keep working.
+    let target = match body.and_then(|Json(body)| body.target) {
+        Some(target) => target,
+        None => contract_target(&root, &name)?,
+    };
+    // Refuse rather than queue, and ask the durable record as well as this process's map: a
+    // run an earlier process left unfinished and one this process is holding mean the same
+    // thing to the staging directory they would share.
+    if store.running_for(&name).map_err(gateway)? {
+        return Err((
+            StatusCode::CONFLICT,
+            Json(json!({ "error": format!("a backup of '{name}' is already running") })),
+        ));
+    }
+    let run_id = store.start_run(&name, &target, "").map_err(gateway)?;
     let started = now_epoch();
     {
         // Refuse rather than queue. A second concurrent run on one capability is not a
@@ -246,22 +322,42 @@ pub(crate) async fn backup_handler(
     }
 
     let task_name = name.clone();
+    let task_target = target.clone();
+    let ledger_name = name.clone();
     tokio::spawn(async move {
-        let out = tokio::process::Command::new(root.join("tools/backup.sh"))
-            .arg(&task_name)
-            .output()
-            .await;
-        let (state, detail) = match out {
-            Ok(o) if o.status.success() => ("succeeded", String::new()),
-            Ok(o) => (
+        // The runner rather than a bare `Command`: it logs the run, writes an attempt marker
+        // `tools/doctor` can read offline, and reads back the producer's immutable receipt so
+        // the row carries the archive's own digest. Driving the mechanism here directly is
+        // what left a failed run with no durable trace.
+        let outcome = tokio::task::spawn_blocking(move || {
+            ::backup::runner::run(&root, &overlay, &task_name, &task_target)
+        })
+        .await;
+        let (state, detail, log_path, archive, code) = match outcome {
+            Ok(outcome) => {
+                let code = outcome.exit_code;
+                (
+                    if code == 0 { "succeeded" } else { "failed" },
+                    outcome.detail.clone(),
+                    outcome.log_path.to_string_lossy().into_owned(),
+                    outcome.archive,
+                    code,
+                )
+            }
+            Err(error) => (
                 "failed",
-                String::from_utf8_lossy(&o.stderr).trim().to_string(),
+                format!("the run task did not finish: {error}"),
+                String::new(),
+                None,
+                1,
             ),
-            Err(e) => ("failed", format!("could not run tools/backup.sh: {e}")),
         };
+        if let Err(error) = store.finish_run(run_id, code, archive.as_ref(), &detail, &log_path) {
+            eprintln!("[sjel-status] could not close backup run {run_id}: {error}");
+        }
         let mut runs = backup_runs();
         runs.insert(
-            task_name,
+            ledger_name,
             BackupRun {
                 state,
                 started_at: started,
@@ -274,6 +370,137 @@ pub(crate) async fn backup_handler(
     Ok(Json(json!({
         "name": name,
         "accepted": true,
+        "target": target,
+        "run_id": run_id,
         "holds_service": service.backup_contract().map(|c| c.holds_service),
+    })))
+}
+
+/// `GET /api/sjel-status/backup/targets` — the declared destinations and what each proved.
+///
+/// The declarations are re-read from the tools on every call, so a capability that starts
+/// declaring a contract appears without a restart of this process.
+pub(crate) async fn backup_targets_handler() -> Result<Json<Value>, (StatusCode, Json<Value>)> {
+    let root = axon_root().map_err(bad_gateway)?;
+    let store = backup_store().map_err(bad_gateway)?;
+    let declared = ::backup::targets::declared(&root).map_err(gateway)?;
+    store.refresh_targets(&declared).map_err(gateway)?;
+    let targets = store.targets().map_err(gateway)?;
+    Ok(Json(json!({ "targets": targets })))
+}
+
+/// `GET /api/sjel-status/backup/runs?limit=N` — every attempt, newest first.
+///
+/// Failures are here. That is the point: this route is what makes "the last run failed"
+/// answerable, which no receipt ever could.
+pub(crate) async fn backup_runs_handler(
+    axum::extract::Query(query): axum::extract::Query<RunQuery>,
+) -> Result<Json<Value>, (StatusCode, Json<Value>)> {
+    let store = backup_store().map_err(bad_gateway)?;
+    let limit = query.limit.unwrap_or(50).clamp(1, 500);
+    let runs = store.runs(limit).map_err(gateway)?;
+    let running = store.running_count().map_err(gateway)?;
+    Ok(Json(json!({ "runs": runs, "running": running })))
+}
+
+#[derive(Deserialize, Default)]
+pub(crate) struct RunQuery {
+    #[serde(default)]
+    pub(crate) limit: Option<i64>,
+}
+
+/// Body of `POST .../backup/policy`: the interval an operator chose for a target.
+#[derive(Deserialize)]
+pub(crate) struct PolicyRequest {
+    pub(crate) target: String,
+    /// `null` is off. Absent is also off, so a caller cannot accidentally leave the previous
+    /// interval in place by omitting the field.
+    #[serde(default)]
+    pub(crate) interval_hours: Option<i64>,
+}
+
+/// `POST /api/sjel-status/backup/policy` — set, change or clear a target's interval.
+///
+/// Stored, not declared: this is the line that used to be `schedule = "24h"` in a tracked
+/// manifest, where an operator could not turn it off without editing a file.
+pub(crate) async fn backup_policy_handler(
+    Json(request): Json<PolicyRequest>,
+) -> Result<Json<Value>, (StatusCode, Json<Value>)> {
+    let root = axon_root().map_err(bad_gateway)?;
+    let store = backup_store().map_err(bad_gateway)?;
+    let declared = ::backup::targets::declared(&root).map_err(gateway)?;
+    if !declared.iter().any(|target| target.id == request.target) {
+        return Err((
+            StatusCode::NOT_FOUND,
+            Json(
+                json!({ "error": format!("'{}' is not a declared backup target", request.target) }),
+            ),
+        ));
+    }
+    store.refresh_targets(&declared).map_err(gateway)?;
+    if let Err(error) = store.set_policy(&request.target, request.interval_hours) {
+        return Err((
+            StatusCode::BAD_REQUEST,
+            Json(json!({ "error": error.to_string() })),
+        ));
+    }
+    let targets = store.targets().map_err(gateway)?;
+    let target = targets.into_iter().find(|row| row.id == request.target);
+    Ok(Json(json!({ "target": target })))
+}
+
+/// Body of `POST .../backup/verify`.
+#[derive(Deserialize)]
+pub(crate) struct VerifyRequest {
+    pub(crate) target: String,
+}
+
+/// `POST /api/sjel-status/backup/verify` — rehearse a target and record the verdict.
+///
+/// A rehearsal produces, retrieves, hashes and restores. It is the only thing that makes a
+/// target offered as verified, and what it can prove depends on its kind — a remote target
+/// answers `unchecked` with the reason rather than a claim.
+pub(crate) async fn backup_verify_handler(
+    Json(request): Json<VerifyRequest>,
+) -> Result<Json<Value>, (StatusCode, Json<Value>)> {
+    let root = axon_root().map_err(bad_gateway)?;
+    let overlay = overlay_root().map_err(bad_gateway)?;
+    let store = backup_store().map_err(bad_gateway)?;
+    let declared = ::backup::targets::declared(&root).map_err(gateway)?;
+    store.refresh_targets(&declared).map_err(gateway)?;
+    let Some(target) = declared
+        .into_iter()
+        .find(|target| target.id == request.target)
+    else {
+        return Err((
+            StatusCode::NOT_FOUND,
+            Json(
+                json!({ "error": format!("'{}' is not a declared backup target", request.target) }),
+            ),
+        ));
+    };
+    let capability = target.declared_by.first().cloned().unwrap_or_default();
+    let verdict =
+        tokio::task::spawn_blocking(move || ::backup::runner::verify(&root, &overlay, &target))
+            .await
+            .map_err(|error| {
+                (
+                    StatusCode::INTERNAL_SERVER_ERROR,
+                    Json(json!({ "error": error.to_string() })),
+                )
+            })?;
+    store
+        .record_verification(
+            &request.target,
+            &capability,
+            verdict.verdict,
+            &verdict.detail,
+            verdict.archive.as_ref(),
+        )
+        .map_err(gateway)?;
+    Ok(Json(json!({
+        "target": request.target,
+        "verdict": verdict.verdict,
+        "detail": verdict.detail,
     })))
 }

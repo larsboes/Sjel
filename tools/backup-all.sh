@@ -19,6 +19,21 @@ set -uo pipefail
 TOOLS_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 source "$TOOLS_DIR/lib/paths.sh"
 
+# Three modes, one derivation. `--list` and `--targets-json` exist for
+# capabilities/backup, which drives one run per capability and needs to know
+# which capabilities declare what. The set is derived HERE and read there, so
+# there is still exactly one definition of "which capabilities are backed up".
+MODE="run"
+case "${1:-}" in
+  --list|--targets-json) MODE="$1" ;;
+  "") ;;
+  *)
+    echo "usage: backup-all.sh [--list | --targets-json]" >&2
+    exit 2
+    ;;
+esac
+[ "$#" -le 1 ] || { echo "usage: backup-all.sh [--list | --targets-json]" >&2; exit 2; }
+
 # `scope` filters out a capability this machine only consumes: its data lives on the deployment
 # that provides it, and so does the authority to back it up (tools/backup.sh says so itself and
 # exits 1). Asking anyway would turn a correct refusal into a failed run every night.
@@ -66,7 +81,7 @@ if ! "$TOOLS_DIR/capability.sh" registry 2>/dev/null \
         for (const r of rows) {
           if (r.scope === "external") continue;
           if (!r.backup_target) continue;
-          console.log(r.name);
+          console.log(r.name + "\t" + r.backup_target);
         }
       ' > "$DERIVED"; then
   echo "backup-all.sh: could not derive the backup set from the capability registry — refusing to report success" >&2
@@ -74,9 +89,80 @@ if ! "$TOOLS_DIR/capability.sh" registry 2>/dev/null \
 fi
 
 CAPS=()
-while IFS= read -r line; do
-  [ -n "$line" ] && CAPS+=("$line")
+TARGETS=()
+SEEN_TARGETS=""
+while IFS="$(printf '\t')" read -r cap target; do
+  [ -n "$cap" ] || continue
+  CAPS+=("$cap")
+  # Dedupe without associative arrays: bash 3.2 is the floor here.
+  case " $SEEN_TARGETS " in
+    *" $target "*) ;;
+    *) SEEN_TARGETS="${SEEN_TARGETS:+$SEEN_TARGETS }$target"; TARGETS+=("$target") ;;
+  esac
 done < "$DERIVED"
+
+# `--list` answers before the empty-set branch below: a machine with no contracts
+# is a legitimate answer to a question, not a failure.
+if [ "$MODE" = "--list" ]; then
+  while IFS="$(printf '\t')" read -r cap target; do
+    [ -n "$cap" ] && printf '%s\t%s\n' "$cap" "$target"
+  done < "$DERIVED"
+  exit 0
+fi
+
+# A target's coordinates are private, so they are resolved from the overlay
+# exactly as tools/backup.sh resolves them: `kind` first (ssh is the default),
+# then the shape that kind uses. `present` answers only what can be answered
+# without the network: a local path that exists, or an ssh target that is merely
+# configured. "unknown" is a real answer here and never a claim that a target is
+# reachable.
+json_escape() {
+  printf '%s' "$1" | sed -e 's/\\/\\\\/g' -e 's/"/\\"/g'
+}
+
+targets_json() {
+  printf '['
+  sep=""
+  for target in ${TARGETS[@]+"${TARGETS[@]}"}; do
+    kind="$(toml_get_in "$target" kind "$SYS_LOCAL")"; kind="${kind:-ssh}"
+    host=""; path=""; present="unknown"
+    case "$kind" in
+      local)
+        path="$(toml_get_in "$target" path "$SYS_LOCAL")"
+        case "$path" in "~/"*) path="$HOME/${path#\~/}" ;; esac
+        if [ -n "$path" ]; then
+          if [ -d "$path" ]; then present="true"; else present="false"; fi
+        fi
+        ;;
+      ssh)
+        host="$(toml_get_in "$target" host "$SYS_LOCAL")"
+        [ -n "$host" ] && present="unchecked"
+        ;;
+    esac
+    declared=""
+    while IFS="$(printf '\t')" read -r cap t; do
+      [ "$t" = "$target" ] || continue
+      declared="${declared:+$declared,}\"$(json_escape "$cap")\""
+    done < "$DERIVED"
+    printf '%s{"id":"%s","kind":"%s","path":"%s","host":"%s","present":"%s","declared_by":[%s]}' \
+      "$sep" "$(json_escape "$target")" "$(json_escape "$kind")" \
+      "$(json_escape "$path")" "$(json_escape "$host")" "$present" "$declared"
+    sep=","
+  done
+  printf ']\n'
+}
+
+SYS_LOCAL="$SJEL_PERSONAL_ROOT/config/systems.local.toml"
+
+if [ "$MODE" = "--targets-json" ]; then
+  if [ ! -f "$SYS_LOCAL" ]; then
+    echo "backup-all.sh: no $SYS_LOCAL — no target coordinates to report" >&2
+    printf '[]\n'
+    exit 1
+  fi
+  targets_json
+  exit 0
+fi
 
 if [ "${#CAPS[@]}" -eq 0 ]; then
   echo "backup-all.sh: no capability declares a backup contract on this machine — nothing to do."

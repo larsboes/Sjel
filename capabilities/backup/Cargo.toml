@@ -1,0 +1,30 @@
+[package]
+name = "backup"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+description = "Backup management: declared targets, run records with their verification, and the timing policy. A library — the surface is sjel-status."
+publish = false
+
+[lib]
+name = "backup"
+path = "src/lib.rs"
+
+[dependencies]
+sjel-config = { path = "../../libs/sjel-config" }
+sjel-store = { path = "../../libs/sjel-store" }
+# The archive digest a verification checks against a run's recorded receipt. Hashing in
+# Rust rather than shelling out to `shasum`: the whole point is to compare two independent
+# statements about the same bytes, so the second one should not come from the same tools
+# the producer used.
+sha2.workspace = true
+serde = { workspace = true, features = ["derive"] }
+serde_json.workspace = true
+rusqlite.workspace = true
+# `process` for the mechanism this drives, `time` for the policy loop, `rt`/`rt-multi-thread`
+# so the loop can be spawned from either runtime shape.
+tokio = { workspace = true, features = ["macros", "rt", "rt-multi-thread", "process", "time"] }
+
+[lints]
+workspace = true

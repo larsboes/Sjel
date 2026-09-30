@@ -41,7 +41,11 @@ const ROUTES: &[route_manifest::Route] = &[
     r("GET", "/api/sjel-status/self", "This machine's resolved Axon model."),
     r("GET", "/api/sjel-status/repos", "Sjel and overlay repo state."),
     r("GET", "/api/sjel-status/links", "Operator-pinned links from the overlay's links.toml."),
-    r("GET", "/api/sjel-status/backups", "Every capability with a backup contract: last success, age, and whether it is overdue."),
+    r("GET", "/api/sjel-status/backups", "Every capability with a backup contract: last success, age, whether it is overdue, and what its last attempt did."),
+    r("GET", "/api/sjel-status/backup/targets", "The declared backup targets: kind, coordinates, presence, the verdict of the last rehearsal, and the interval an operator set."),
+    r("GET", "/api/sjel-status/backup/runs", "Every backup attempt, newest first, including the ones that failed. Optional ?limit=N (default 50, max 500)."),
+    r("POST", "/api/sjel-status/backup/policy", "Set a target's interval, or turn it off. Body: { target, interval_hours } where null means off and one hour is the minimum."),
+    r("POST", "/api/sjel-status/backup/verify", "Rehearse a target: hash its newest recorded archive and restore it in isolation under its own receipt. Body: { target }."),
     r("GET", "/api/sjel-status/host-watch", "Open findings from the hourly host watch: a runaway process or a filling disk."),
     r("GET", "/api/sjel-status/packs", "Every Pack skill against every agent harness: deployed, drifted, or unowned at the destination."),
     r("POST", "/api/sjel-status/capabilities/{name}/backup", "Request a backup of one capability. Accepts the run and returns; poll /backups for the outcome."),
@@ -81,6 +85,31 @@ async fn main() {
     // job for the same reason: a reaper that outlives sjel-status could stop panels
     // while nothing is left to bring them back.
     let _idle_reaper = IdlePanelReaper::start();
+
+    // The timing policy. A target whose interval an operator set is run when it comes due,
+    // and the loop lives here because this process already owns the state the decision reads
+    // and the trigger that acts on it. `off` is the row being absent, so nothing runs until
+    // somebody sets an interval from the surface.
+    match (backup_store(), axon_root(), sjel_config::overlay_root()) {
+        (Ok(store), Ok(root), Some(overlay)) => {
+            tokio::spawn(::backup::policy::due_loop(
+                std::sync::Arc::new(store),
+                root,
+                overlay,
+            ));
+        }
+        (Err(error), _, _) => {
+            // Said at startup rather than discovered as a policy that never fires: the
+            // surface still works, but nothing is scheduled.
+            eprintln!("[sjel-status] backup policy loop not started: {error}");
+        }
+        (_, Err(error), _) => {
+            eprintln!("[sjel-status] backup policy loop not started: {error}");
+        }
+        (_, _, None) => {
+            eprintln!("[sjel-status] backup policy loop not started: no overlay root");
+        }
+    }
 
     // Resolved once at startup, from the same registry every other surface here reads. A
     // capability added later needs a restart to be proxied, which is honest: the shell's shape
@@ -197,6 +226,19 @@ fn build_router(shell: proxy::Proxy) -> Router {
             post(stop_handler),
         )
         .route("/api/sjel-status/backups", get(backups_handler))
+        .route(
+            "/api/sjel-status/backup/targets",
+            get(backup_targets_handler),
+        )
+        .route("/api/sjel-status/backup/runs", get(backup_runs_handler))
+        .route(
+            "/api/sjel-status/backup/policy",
+            post(backup_policy_handler),
+        )
+        .route(
+            "/api/sjel-status/backup/verify",
+            post(backup_verify_handler),
+        )
         .route("/api/sjel-status/host-watch", get(host_watch_handler))
         .route("/api/sjel-status/packs", get(packs_handler))
         .route(

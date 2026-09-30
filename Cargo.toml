@@ -1,5 +1,6 @@
 [workspace]
 members = [
+    "capabilities/backup",
     "capabilities/sjel-status",
     "capabilities/calendar",
     "capabilities/comms",

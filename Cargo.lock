@@ -646,6 +646,19 @@ dependencies = [
 ]
 
 [[package]]
+name = "backup"
+version = "0.1.0"
+dependencies = [
+ "rusqlite",
+ "serde",
+ "serde_json",
+ "sha2 0.11.0",
+ "sjel-config",
+ "sjel-store",
+ "tokio",
+]
+
+[[package]]
 name = "base64"
 version = "0.22.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -4860,6 +4873,7 @@ name = "sjel-status"
 version = "0.1.0"
 dependencies = [
  "axum",
+ "backup",
  "devices",
  "reqwest",
  "ring",

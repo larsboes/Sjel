@@ -37,7 +37,7 @@ pub struct PseudonymizerSession {
 impl std::fmt::Debug for PseudonymizerSession {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.debug_struct("PseudonymizerSession")
-            .field("tokens", &self.reverse.len())
+            .field("tokens", &self.forward.len())
             .field("findings", &self.findings)
             .finish_non_exhaustive()
     }
@@ -85,7 +85,8 @@ impl PseudonymizerSession {
 
     /// Distinct tokens issued, escapes of literal token-shaped text included.
     pub fn token_count(&self) -> usize {
-        self.reverse.len()
+        // Forward, not reverse: an alias adds a way back but issues no token.
+        self.forward.len()
     }
 
     /// Q9b's receipt for the current call (see [`Self::findings`]), or `None` when nothing
@@ -167,6 +168,16 @@ impl PseudonymizerSession {
         self.forward.insert(original.to_string(), token.clone());
         self.reverse.insert(token.clone(), original.to_string());
         token
+    }
+
+    /// Makes `rendered` rehydrate to `original` as a whole.
+    ///
+    /// For a token shown with context beside it, `<SENDER_k3x9qa> (dhl.de)`: an agent that
+    /// copies the whole field back must get the original field, not the original plus
+    /// ` (dhl.de)`. Rehydration matches leftmost-longest, so the alias wins over its token.
+    pub fn alias(&mut self, rendered: &str, original: &str) {
+        self.reverse
+            .insert(rendered.to_string(), original.to_string());
     }
 
     /// Replaces the whole of `value` with one token of `entity_type`, whatever it contains.

@@ -7,6 +7,10 @@
 //!   and a follow-up call needs it exactly.
 //! - **Identity** fields (a sender, a recipient) become one token each, through
 //!   [`PseudonymizerSession::tokenize_whole`]. Part by part, `Alice <a@x.de>` would keep `Alice`.
+//!   An organisation's domain stays beside the token, `<SENDER_k3x9qa> (dhl.de)`, because
+//!   without it an agent cannot tell a parcel service from a bank. It is dropped for a freemail
+//!   domain, a domain that contains a known name, and every sender on a c2 object: a medical
+//!   practice's domain would say what the c2 mail is about.
 //! - Every other string goes through the text ladder ([`PseudonymizerSession::tokenize_text`]).
 //!
 //! An object whose `data_class` is `c3` is removed and counted. Secret content never leaves
@@ -105,8 +109,31 @@ pub fn agent_view(
     registry: &EntityRegistry,
 ) -> ViewReport {
     let mut report = ViewReport::default();
-    walk(value, None, session, registry, &mut report);
+    walk(value, None, None, session, registry, &mut report);
     report
+}
+
+/// One identity field: a token, plus the sender's domain where the domain is an organisation's.
+fn identity(
+    value: &str,
+    class: Option<&str>,
+    session: &mut PseudonymizerSession,
+    registry: &EntityRegistry,
+) -> String {
+    let token = session.tokenize_whole(value, EntityType::Identity);
+    let domain = crate::pattern::sender_domain(value).filter(|d| {
+        class != Some("c2")
+            && !crate::pattern::is_freemail_domain(d)
+            && registry.find_matches(d).is_empty()
+    });
+    match domain {
+        Some(d) if token != value => {
+            let rendered = format!("{token} ({d})");
+            session.alias(&rendered, value.trim());
+            rendered
+        }
+        _ => token,
+    }
 }
 
 /// Whether the whole response is one c3 object and must not be sent at all.
@@ -117,6 +144,8 @@ pub fn is_withheld(value: &Value) -> bool {
 fn walk(
     value: &mut Value,
     key: Option<&str>,
+    // The nearest enclosing `data_class`, so a field knows which class of row it sits in.
+    class: Option<&str>,
     session: &mut PseudonymizerSession,
     registry: &EntityRegistry,
     report: &mut ViewReport,
@@ -124,9 +153,7 @@ fn walk(
     match value {
         Value::String(s) => match key {
             Some(k) if is_structural(k) => {}
-            Some(k) if IDENTITY_KEYS.contains(&k) => {
-                *s = session.tokenize_whole(s, EntityType::Identity);
-            }
+            Some(k) if IDENTITY_KEYS.contains(&k) => *s = identity(s, class, session, registry),
             _ => *s = session.tokenize_text(s, registry),
         },
         Value::Array(items) => {
@@ -135,17 +162,22 @@ fn walk(
             report.withheld_secret += before - items.len();
             for item in items {
                 // An array inherits its key: `"to": ["a@x.de"]` is still identities.
-                walk(item, key, session, registry, report);
+                walk(item, key, class, session, registry, report);
             }
         }
         Value::Object(map) => {
+            let own = map
+                .get("data_class")
+                .and_then(Value::as_str)
+                .map(str::to_string);
+            let class = own.as_deref().or(class);
             for (k, v) in map.iter_mut() {
                 if is_secret_object(v) {
                     *v = Value::Null;
                     report.withheld_secret += 1;
                     continue;
                 }
-                walk(v, Some(k.as_str()), session, registry, report);
+                walk(v, Some(k.as_str()), class, session, registry, report);
             }
         }
         _ => {}
@@ -227,6 +259,39 @@ mod tests {
     fn a_top_level_secret_is_reported_as_withheld() {
         assert!(is_withheld(&json!({"data_class": "c3"})));
         assert!(!is_withheld(&json!([{"data_class": "c3"}])));
+    }
+
+    #[test]
+    fn an_organisation_keeps_its_domain_and_a_person_does_not() {
+        let mut value = json!([
+            {"data_class": "c1", "from_addr": "DHL Paket <noreply@dhl.de>"},
+            {"data_class": "c1", "from_addr": "Anna <anna.b@gmail.com>"},
+            {"data_class": "c1", "from_addr": "x <hi@mail.gmx.net>"},
+            {"data_class": "c1", "from_addr": "K <k@katrin-design.de>"},
+            {"data_class": "c2", "from_addr": "Praxis <termine@praxis-am-see.de>"}
+        ]);
+        agent_view(&mut value, &mut session(), &registry());
+        let from = |i: usize| value[i]["from_addr"].as_str().unwrap().to_string();
+        assert!(
+            from(0).starts_with("<SENDER_") && from(0).ends_with(" (dhl.de)"),
+            "{}",
+            from(0)
+        );
+        assert!(!from(0).contains("noreply"), "{}", from(0));
+        let mut s = session();
+        let mut again = json!({"from": "DHL Paket <noreply@dhl.de>"});
+        agent_view(&mut again, &mut s, &registry());
+        assert_eq!(
+            s.rehydrate_text(again["from"].as_str().unwrap()),
+            "DHL Paket <noreply@dhl.de>"
+        );
+        for i in 1..5 {
+            assert!(
+                !from(i).contains('(') && !from(i).contains('.'),
+                "{}",
+                from(i)
+            );
+        }
     }
 
     #[test]

@@ -173,3 +173,99 @@ mod tests {
         assert_eq!(cue_word("im"), "im");
     }
 }
+
+/// Mail providers whose domain says nothing about the sender but that a person has an address.
+/// Exact domains, matched with their subdomains.
+const FREEMAIL_DOMAINS: &[&str] = &[
+    "gmail.com",
+    "googlemail.com",
+    "icloud.com",
+    "me.com",
+    "mac.com",
+    "msn.com",
+    "aol.com",
+    "ymail.com",
+    "web.de",
+    "t-online.de",
+    "freenet.de",
+    "posteo.de",
+    "posteo.net",
+    "mailbox.org",
+    "proton.me",
+    "pm.me",
+    "arcor.de",
+    "online.de",
+    "1und1.de",
+    "tuta.io",
+    "hey.com",
+    "zoho.com",
+    "mail.ru",
+    "orange.fr",
+    "libero.it",
+    "qq.com",
+    "163.com",
+    "kabelmail.de",
+    "mail.de",
+];
+
+/// Freemail brands registered under many country domains (`gmx.de`, `gmx.net`, `outlook.fr`).
+const FREEMAIL_BRANDS: &[&str] = &[
+    "outlook",
+    "hotmail",
+    "live",
+    "yahoo",
+    "gmx",
+    "tutanota",
+    "fastmail",
+    "yandex",
+    "protonmail",
+];
+
+/// Whether `domain` belongs to a mail provider for private people (ISA F9: such a domain is not
+/// kept beside a sender token, because it tells nothing and the address belongs to a person).
+pub fn is_freemail_domain(domain: &str) -> bool {
+    let domain = domain.trim().trim_end_matches('.').to_ascii_lowercase();
+    if FREEMAIL_DOMAINS
+        .iter()
+        .any(|f| domain == *f || domain.ends_with(&format!(".{f}")))
+    {
+        return true;
+    }
+    let labels: Vec<&str> = domain.split('.').collect();
+    labels.len() >= 2 && FREEMAIL_BRANDS.contains(&labels[labels.len() - 2])
+}
+
+/// The domain of the first address in a sender field: `DHL <noreply@dhl.de>` → `dhl.de`.
+pub fn sender_domain(field: &str) -> Option<String> {
+    let at = field.rfind('@')?;
+    let domain: String = field[at + 1..]
+        .chars()
+        .take_while(|c| c.is_ascii_alphanumeric() || *c == '.' || *c == '-')
+        .collect();
+    let domain = domain.trim_matches('.').to_ascii_lowercase();
+    (domain.contains('.') && !domain.starts_with('-')).then_some(domain)
+}
+
+#[cfg(test)]
+mod sender_domain_tests {
+    use super::*;
+
+    #[test]
+    fn freemail_and_sender_domains() {
+        assert!(is_freemail_domain("gmail.com"));
+        assert!(is_freemail_domain("gmx.de"));
+        assert!(is_freemail_domain("outlook.fr"));
+        assert!(is_freemail_domain("mail.gmx.net"));
+        assert!(!is_freemail_domain("dhl.de"));
+        assert!(!is_freemail_domain("live-nation.de"));
+        assert_eq!(
+            sender_domain("DHL <noreply@DHL.de>").as_deref(),
+            Some("dhl.de")
+        );
+        assert_eq!(
+            sender_domain("noreply@telekom.de").as_deref(),
+            Some("telekom.de")
+        );
+        assert_eq!(sender_domain("DHL Paket"), None);
+    }
+}

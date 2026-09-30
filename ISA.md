@@ -508,7 +508,9 @@ Design:
   issue the same token without shared state. Without the secret, a party that sees tokens
   cannot confirm a guessed name.
 - The JSON view keeps structural fields verbatim (ids, timestamps, enums, classes), tokenizes
-  identity fields as one unit, tokenizes free text with the existing ladder, and removes every
+  identity fields as one unit (an organisation's domain stays beside the token, as in
+  `<SENDER_k3x9qa> (dhl.de)`, except for freemail, a domain holding a known name, or any c2
+  row; principal, 2026-09-30), tokenizes free text with the existing ladder, and removes every
   object with `data_class` `c3`.
 - The gate admits the agent token for `GET` and `HEAD` only, and only on a capability that
   opted in. It refuses a response that is not JSON, because it cannot transform it.

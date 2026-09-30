@@ -221,27 +221,25 @@ Acceptance scripts belong in `capabilities/media/acceptance/`, following
 `capabilities/vault/acceptance/`. Per the vault precedent, tests check counts by running a second
 implementation at the same moment rather than against a stored number.
 
-## Probe record (2026-09-29)
+## Probe record (2026-09-29, updated 2026-09-30)
 
-- **F0 scratch passes:** `cargo test -p media --locked` checks one digest on two indexed
-  volumes, same-tree re-index adding zero rows, and refusal to rewrite a changed indexed digest.
-  `acceptance/scratch.py` compares disk paths to media's row count through an independent
-  `os.walk`, catches a corrupted sampled file, and rejects the wrong mount UUID before a DB opens. **Full live F0 untested:** no migration or
-  index run on the operator's shared store; the backup prerequisite has not been rehearsed here.
-- **F1 scratch passes for classified regular files:** the scratch acceptance reports a new
-  digest imported, a same-name/same-size different digest retained, two duplicate dispositions
-  on a fresh staging identity, a refusal with evidence, no prune with a refusal or duplicates,
-  and no library mutation through a symlinked or hardlinked staging hash report.
-  The unit failure injection verifies staging intact and an unverified failed row, then resumes it.
-  `acceptance/labelled.py` classified 4,943 historical recovered rows as absent against a
-  synthetic pre-merge cohort and all four known nonmatches as absent. **Live iCloud ingest,
-  true per-file preflight failures and kill-at-every-boundary recovery untested.**
-- **F2 partial:** the unit probe finds a deliberately corrupted mirror path, and the scratch
-  CLI probe reports an absent UUID without file-missing noise or a failure exit. **Full 317 GB
-  mirror verification and an actual unmount have not run.**
-- The labelled ledger identifies all 4 nonmatches; three canonical target files were still
-  accessible and rehashed to different digests matching their recorded positive controls.
-  The fourth target path did not exist: that live comparison is **not** a pass.
+- **F0 live passes (2026-09-30):** Following verified `store` backup run 220, full live index
+  ran on the operator's shared store (`axon.db`): 15,761 files under
+  `/Volumes/Extreme/Media/Library` hashed and indexed into `media_locations` across 15,490
+  distinct `media_files` digests with 0 discrepancies (`{"uuid":"667F5744-21B3-43F3-8794-26365ABAB67B"}`).
+  Idempotence verified: immediate second index pass ran in 0.5s with `hashed: 0`. Live sample
+  audit (`media audit --sample 100`) re-read and hashed 100 stride-selected files with 0
+  disagreements.
+- **F1 passes:** scratch acceptance verifies regular file ingest, deduplication, disposition
+  conservation, and failure injection resumption. `acceptance/labelled.py` verified all 4,943
+  historical recovered rows absent against pre-merge cohort, all 4 corrupt pairs distinct, and
+  10 positive controls present. The live canonical comparison on `/Volumes/Extreme/Media/Library`
+  resolves all relocations and is **4/4 accessible and verified** (all four canonical target files
+  exist and differ from the corrupt copies). Live iCloud ingest, true per-file preflight failures
+  and boundary crash safety remain untested until staged.
+- **F2 partial:** unit probe and scratch CLI probe pass. Live absent mirror probe verified:
+  `media verify-mirror` against absent INTENSO reports `availability: absent`, `checked: 0`, and
+  0 discrepancies with exit 0. Full 317 GB live mirror verification waits for INTENSO reconnection.
 
 ## Anti-claims
 

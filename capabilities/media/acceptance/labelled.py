@@ -75,11 +75,11 @@ def main(binary, trail, library=None):
         output = subprocess.check_output([str(binary), "classify", "--db", str(db), "--digests-file", str(hashes)], text=True)
         got = [json.loads(line) for line in output.splitlines()]
         assert len(got) == len(inputs)
-        for sent, actual in zip(inputs, got):
-            # Independent implementation: SQLite membership, not media's own lookup.
-            with sqlite3.connect(db) as conn:
+        with sqlite3.connect(db) as conn:
+            for sent, actual in zip(inputs, got):
+                # Independent implementation: SQLite membership, not media's own lookup.
                 expected = conn.execute("SELECT 1 FROM media_files WHERE digest=?", (sent,)).fetchone() is not None
-            assert actual == {"digest": sent, "present": expected}, sent
+                assert actual == {"digest": sent, "present": expected}, sent
         assert not any(r["present"] for r in got[:len(recovered)]), "recovered classified as historical duplicate"
         assert not any(r["present"] for r in got[len(recovered):len(recovered)+4]), "corrupt pair classified as duplicate"
         assert all(r["present"] for r in got[-10:]), "known duplicates not classified as present"

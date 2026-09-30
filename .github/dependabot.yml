@@ -93,6 +93,24 @@ updates:
       soundscape-ui:
         patterns: ["*"]
         update-types: ["minor", "patch"]
+    # `typescript` is held on 6.x in this tree, and it is the one dependency here whose major
+    # must not arrive. This is not a pin and not a cooldown -- nothing here ever ends in a
+    # human's hands. The tree runs TWO TypeScripts deliberately: `typescript` ~6.0.0 is the
+    # one svelte-check and @sveltejs/kit resolve against, and `@typescript/native`
+    # (npm:typescript@^7.0.2) is the 7.x binary that the check script's `--tsgo` flag drives.
+    #
+    # Both peer ranges exclude 7 from the primary slot, which is the whole measurement:
+    # svelte-check 4.7.6 declares `typescript: ^5.0.0 || ^6.0.0`, @sveltejs/kit 2.70.3 declares
+    # `^5.3.3 || ^6.0.0`, and svelte-check refuses to start with 7 there -- naming the
+    # two-version setup as its own fix. Measured 2026-09-30 on #204, which moved the primary
+    # to ~7.0.2: of the seven open dependabot pull requests that day it was the only one whose
+    # failure was its own doing rather than a stale merge ref, failing `bun run check` with
+    # "TypeScript 7 support currently requires both TypeScript 7 and TypeScript 6".
+    #
+    # Only majors are ignored, so 6.x patches still arrive and the 7.x alias is unaffected.
+    ignore:
+      - dependency-name: "typescript"
+        update-types: ["version-update:semver-major"]
 
   - package-ecosystem: "github-actions"
     directory: "/"

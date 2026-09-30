@@ -95,17 +95,20 @@ export async function classifyClm(
 }
 
 export default function (pi: ExtensionAPI): void {
-  if (process.env.SJEL_CLM_ENABLE !== '1') return;
-  pi.registerProvider('sjel-clm', {
-    apiKey: 'local',
-    models: [{ type: 'classifier', id: MODEL_ID, name: 'CLM v0.1 (local)',
-      api: 'typesafe-system-one', baseUrl: BASE_URL, input: ['text'], contextWindow: 2048,
-      cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 } }],
-    classifiers: { 'typesafe-system-one': { classify: classifyClm } },
-  });
+  // The probe is registered whether or not the classifier is, and this is the point rather
+  // than tidiness. With the gate closed this extension used to register NOTHING, which made
+  // it indistinguishable from a broken one -- tools/pack-extensions.test.ts says exactly
+  // that ("an extension that loads but registers nothing is dead code, or a registration
+  // guarded by something that is not there") and it was right: the only way to discover the
+  // gate was to read this file. The classifier stays opt-in; the way to learn that is now a
+  // command that tells you, not an absence you have to notice.
   pi.registerCommand('clm-probe', {
     description: 'Check that the local CLM service has a real encoder and head, then classify synthetic text',
     handler: async (_args, ctx) => {
+      if (process.env.SJEL_CLM_ENABLE !== '1') {
+        ctx.ui.notify('CLM is not enabled; set SJEL_CLM_ENABLE=1 and restart to register the classifier', 'info');
+        return;
+      }
       try {
         const response = await fetch(new URL('../health', BASE_URL), { signal: AbortSignal.timeout(5000) });
         if (!response.ok) throw new Error(`CLM health returned HTTP ${response.status}`);
@@ -128,5 +131,17 @@ export default function (pi: ExtensionAPI): void {
         ctx.ui.notify(`CLM probe failed: ${error instanceof Error ? error.message : 'unknown error'}`, 'error');
       }
     },
+  });
+
+  // Opt-in, and the only thing the gate withholds: a provider whose endpoint may not be
+  // running. Registering it unconditionally would put a classifier whose origin is absent in
+  // front of every pi session that happens to load this Pack.
+  if (process.env.SJEL_CLM_ENABLE !== '1') return;
+  pi.registerProvider('sjel-clm', {
+    apiKey: 'local',
+    models: [{ type: 'classifier', id: MODEL_ID, name: 'CLM v0.1 (local)',
+      api: 'typesafe-system-one', baseUrl: BASE_URL, input: ['text'], contextWindow: 2048,
+      cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 } }],
+    classifiers: { 'typesafe-system-one': { classify: classifyClm } },
   });
 }

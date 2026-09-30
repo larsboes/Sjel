@@ -180,7 +180,7 @@ change a subagent's behaviour is the reason this Pack exists at all.
 
 ### Local CLM classifier (experimental Pi extension)
 
-`extensions/clm-classifier.ts` is an opt-in adapter for the real CLM System One API, not a substitute for its encoder or projection heads. It never connects to anything unless `SJEL_CLM_ENABLE=1`; even then its endpoint is fixed to `127.0.0.1:8700`, so a model override cannot send a prompt off-machine. Try it without deploying the Pack:
+`extensions/clm-classifier.ts` is an opt-in adapter for the real CLM System One API, not a substitute for its encoder or projection heads. `/clm-probe` is registered either way — with the gate shut it names the variable to set rather than probing — but the classifier itself is not registered unless `SJEL_CLM_ENABLE=1`, so a session that has not opted in holds no provider that could reach the service. It never connects to anything unless `SJEL_CLM_ENABLE=1`; even then its endpoint is fixed to `127.0.0.1:8700`, so a model override cannot send a prompt off-machine. Try it without deploying the Pack:
 
 ```bash
 SJEL_CLM_ENABLE=1 pi -e ./Packs/harness/extensions/clm-classifier.ts

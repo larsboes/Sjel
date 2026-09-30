@@ -64,13 +64,25 @@ describe('local CLM classifier (synthetic wire responses, not model validation)'
     expect(result.errorMessage).toBe('CLM returned HTTP 502');
   });
 
-  test('is not registered unless deliberately enabled', () => {
+  test('registers the probe always, and the classifier only when deliberately enabled', () => {
     const previous = process.env.SJEL_CLM_ENABLE;
-    delete process.env.SJEL_CLM_ENABLE;
-    let registered = false;
+    // Recording both halves, because the property that matters is not "the factory returns
+    // early" -- it is that a session which has not opted in holds no provider that could
+    // reach the service. The probe is not that: with the gate shut it says so and returns.
+    const load = () => {
+      const seen = { providers: [] as string[], commands: [] as string[] };
+      register({
+        registerProvider: (id: string) => { seen.providers.push(id); },
+        registerCommand: (name: string) => { seen.commands.push(name); },
+      } as any);
+      return seen;
+    };
     try {
-      register({ registerProvider: () => { registered = true; } } as any);
-      expect(registered).toBe(false);
+      delete process.env.SJEL_CLM_ENABLE;
+      expect(load()).toEqual({ providers: [], commands: ['clm-probe'] });
+
+      process.env.SJEL_CLM_ENABLE = '1';
+      expect(load()).toEqual({ providers: ['sjel-clm'], commands: ['clm-probe'] });
     } finally {
       if (previous === undefined) delete process.env.SJEL_CLM_ENABLE;
       else process.env.SJEL_CLM_ENABLE = previous;

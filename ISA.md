@@ -326,13 +326,9 @@ rest is below or under Not yet specified; nothing new goes into the PRD.
   rather than in Features.
 - **Operator installs past cooldown**, neither a security item: tailscale 1.98.9 →
   1.102.2, xberg 1.0.5 → 1.0.14.
-- **The remaining three database-URL call sites.** calendar, finance and trips each
-  hand-roll the same `std::env::var("SJEL_<CAP>_DATABASE_URL")` two-liner that
-  `sjel_config::database_url_override` now owns. Four until 2026-08-27, when PRD Q48
-  retired `tasks` and deleted its copy — the entry below still says four because that is
-  what was true when it was written. They work, so this is deduplication rather
-  than a defect, and the repo's rule is that shared logic moves into the lib. Not swept in
-  the run that added the helper, deliberately: that run was about the demo.
+- **The remaining three database-URL call sites.** Retired with PostgreSQL (PRD Q45):
+  all capabilities migrated to the shared SQLite store (`sjel-store`), eliminating
+  `SJEL_<CAP>_DATABASE_URL` and `sjel_config::database_url_override` entirely.
 
 - **Open source or open core.** AGPL-3.0 keeps both possible. Undecided whether parts stay
   closed later.
@@ -355,15 +351,11 @@ rest is below or under Not yet specified; nothing new goes into the PRD.
   `tools/self generate` needs no graph at all. What it still blocks is the graph's own freshness —
   `status` shows counts rolled up from whatever graph exists, and this machine's is behind the
   tree. Commit `2f0feb6` says it regenerated `self.json`; only `ARCHITECTURE.md` changed.
-- **A comms test is about this machine, and its own comment says it is not.**
-  `triage::tests::the_shadow_route_writes_verdicts_and_changes_no_category` takes
-  `..Config::load()` for everything but the database path, so on a machine where
-  `foundation-models` is running the shadow pass reaches a real model, takes the escalation
-  branch in `settle`, and asserts `"shadow"` against `"held"`. Measured 2026-09-29: it fails the
-  same way at `eae349a6` with nothing applied, passes again when the model is down, and CI —
-  hermetic, no overlay — never sees it. The sentence it contradicts is its own: "a test that took
-  that route would be a test about this machine." The fix is to build that `Config` from a
-  fixture instead of from the operator's overlay.
+- **A comms test is about this machine, and its own comment says it is not.** Fixed in
+  `c473694b`: `triage::tests::the_shadow_route_writes_verdicts_and_changes_no_category` now sets
+  `inference: sjel_inference::InferenceConfig::default()` and points `database_path` at its own
+  unique test fixture directory, hermetically isolating the shadow pass from both live models
+  and overlay locks.
 - **The demo site shows two areas less than it could.** Fixed 2026-09-27 (22793de3): the page
   clock runs on the recording's anchor date, so Travel shows 2 upcoming trips, and seven services
   missing from demo.toml now say why instead of showing a host's 404 page. People followed

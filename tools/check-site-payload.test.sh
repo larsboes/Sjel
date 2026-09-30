@@ -65,6 +65,9 @@ expect_reject "a tailnet hostname"
 plant systems.json '{"host":"192.168.1.42"}'
 expect_reject "an RFC1918 address"
 
+plant systems.json '{"url":"http://10.0.0.5:8080/health","peer":"172.16.0.1,"}'
+expect_reject "RFC1918 addresses in the shapes they are actually written in"
+
 # Assembled rather than written out: a tracked file containing the literal would itself trip
 # tools/check-publication-hygiene.sh, and growing that script's exclusion list to cover test
 # fixtures is how an exclusion list stops meaning anything.
@@ -96,6 +99,20 @@ expect_pass "a link to the repository the site is generated from"
 # the shape most likely to produce a false positive on a real bundle.
 plant asset.js 'const HASH="a3f9c2e18b7d4600aa12cc34dd56ee78";'
 expect_pass "a lowercase hex digest"
+
+# Regression, measured 2026-09-30: the minifier vite 8 brought with it folds an array of
+# two-character hex strings into one dot-delimited literal plus `.split(`.`)`, and three.js
+# ships exactly such an array (its 256-entry `_lut`). Folded, three consecutive entries read
+# `10.11.12.13`, which `\b` happily matched as an RFC1918 address -- and the Pages build went
+# red on a payload containing no address at all. The fragment below is that shape in
+# miniature; the guard is neighbour-based, so length is not what distinguishes the two cases.
+plant asset.js 'const LUT=`00.01.02.03.04.05.06.07.08.09.0a.0b.0c.0d.0e.0f.10.11.12.13.14.15.16.17.18.19.1a.1b.1c.1d.1e.1f`.split(`.`);'
+expect_pass "a hex byte table the minifier folded into one dot-delimited literal"
+
+# The other half of the same guard: the fold must not become a hiding place for a real
+# address written next to it.
+plant asset.js 'const LUT=`00.01.02.03.04.05.06.07.08.09`;fetch("http://192.168.5.5/admin");'
+expect_reject "a real RFC1918 address sharing a file with a folded table"
 
 # ─── The derived half ─────────────────────────────────────────────────────────
 #

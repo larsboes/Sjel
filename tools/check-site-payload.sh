@@ -79,8 +79,25 @@ scan "a tailnet hostname" '[A-Za-z0-9-]+\.ts\.net'
 
 # RFC1918. 127.0.0.1 is deliberately not here: loopback names no host and appears honestly in
 # a recorded health URL.
+#
+# The boundaries are not `\b`, and that is a measurement rather than a tidy-up. The minifier
+# vite 8 brought with it (oxc, under rolldown) folds an array of two-character hex strings into
+# one dot-delimited literal followed by `.split(`.`)`, and three.js ships exactly such an array
+# -- its 256-entry `_lut`, which builds UUIDs. Folded, that literal reads
+# `00.01.02....0d.0e.0f.10.11.12.13.14..., so `10.11.12.13` is three consecutive table entries
+# and parses as an RFC1918 address. `\b` matched it and did not care that the dotted run
+# continues, so this gate failed the Pages build on 2026-09-30 on a payload containing no
+# address at all (see the regression case in check-site-payload.test.sh).
+#
+# The guards below require the address to stand alone: no hex digit or dot before it, and
+# nothing dot-hex after it -- while still allowing a sentence-ending `.` when a non-hex
+# character follows. A real address is written `//10.0.0.5:8080`, `"192.168.1.42"` or
+# `=172.16.0.1,`, and none of those is a dot-hex continuation.
+#
+# The narrowing this buys, stated so it is not discovered: a dotted run of five or more octets
+# is never reported, because that is a version string or a table rather than a host.
 scan "a private network address" \
-  '\b(10\.[0-9]{1,3}|192\.168|172\.(1[6-9]|2[0-9]|3[01]))\.[0-9]{1,3}\.[0-9]{1,3}\b'
+  '(^|[^0-9a-fA-F.])(10\.[0-9]{1,3}|192\.168|172\.(1[6-9]|2[0-9]|3[01]))\.[0-9]{1,3}\.[0-9]{1,3}([^.]|\.[^0-9a-fA-F]|$)'
 
 # The same deployment-instance names tools/check-publication-hygiene.sh rejects from the index.
 # Same trailing-character guard as tools/check-publication-hygiene.sh, and for the same

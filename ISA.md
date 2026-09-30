@@ -384,9 +384,17 @@ because it names the directory rather than moving where things are written.
   it until 2026-08-25`, `Axon#126`, `Projects/Axon/PRD Axon.md`), the transition's own name
   (F3 and the `/Axon/` URL that 404s as its evidence), an identifier rather than prose
   (`axon-*`, `AXON_*`, `X-Axon-*`), or this ISC's own text.
-- [ ] ISC-31 — the Systems page shows what fills the disk, from the tool's own `--json`.
+- [x] ISC-31 — the Systems page shows what fills the disk, from the tool's own `--json`.
   Falsifier: the page renders no storage panel, or `sjel storage report --json` exits non-zero.
-  Probe: `sjel storage report --json` and the page.
+  Probe: `sjel storage report --json` and the page. Evidence, 2026-09-30: the report exits 0 and
+  `GET /api/sjel-status/storage` returns it unchanged, a non-zero exit carried as data because
+  that is how the critical state arrives. The panel rendered in Safari at 1512×868 through the
+  dev server: state OK, `326.0 GB used of 460.4 GB`, `107.8 GB free`, the measured classes
+  largest-first (`rust-workspace-target` 1.9 GB, report-only; `package-manager-caches` 430 MB),
+  `430 MB reclaimable — sjel storage apply`, and six protected paths each carrying the tool's own
+  reason plus `4 of these could not be read by the measuring user`. Every figure equals the
+  tool's own text and JSON, and `used` moved between two loads (322.8 GB, then 326.0 GB), so the
+  panel reads the disk rather than a fixture. It is read-only by decision.
 - [ ] ISC-32 — `tools/storage` sees a Cargo target dir that is not `CARGO_TARGET_DIR`.
   Falsifier: after an Xcode-driven build, `sjel storage target` reports one path while a second
   target dir exists on disk. Probe: build via Xcode, then `sjel storage target`. The checkout's
@@ -528,6 +536,16 @@ because it names the directory rather than moving where things are written.
 
 ## Log
 
+- 2026-09-30 · ISC-31 landed: `sjel-status` serves `sjel storage report --json` at
+  `GET /api/sjel-status/storage`, and the Systems page draws it — checked figure by figure
+  against the tool, not against a 200. Reaching the page found a bug older than the feature: the
+  rune probe at `dashboard/src/lib/models/decision-engine.svelte.ts:31` (481a2d5d, 2026-09-29)
+  read `globalThis.$state`, which a browser defines as a getter that throws, so every route
+  served SvelteKit's 500 page while 183 tests and `svelte-check` were green — nothing mounts a
+  component. Fixed by making the probe catch. c68e7fb6 left ARCHITECTURE.md and its renamed
+  inputs uncommitted; they land with this. Four repo gates stay red for neither reason:
+  `capabilities/operator-profile/` is untracked (the F8 session, 18:12), which is what fails
+  generator inputs, ARCHITECTURE freshness and `self.json`.
 - 2026-09-30 · F7 added with ISC-27…ISC-32; ISC-11 superseded and ISC-13 amended after the
   environment fallback was retired (9faf670a). A disk-pressure session reclaimed ~137 GB on
   this machine, which is how the blind spot F7 records was found.

@@ -10,7 +10,7 @@
    */
   type Name =
     | "home" | "feed" | "boxes" | "graduation" | "server" | "compass" | "train"
-    | "map-pin" | "database" | "external" | "arrow-right" | "play" | "square"
+    | "map-pin" | "database" | "hard-drive" | "external" | "arrow-right" | "play" | "square"
     | "refresh" | "sun" | "moon" | "menu" | "close" | "clock" | "alert" | "wifi-off"
     | "check" | "loader" | "plus" | "search" | "swap" | "calendar" | "ticket"
     | "git-branch" | "thermometer" | "cpu" | "activity" | "chevron" | "mail" | "globe"
@@ -35,6 +35,7 @@
     "train": "M5 9h14 M8 19l-2 3 M16 19l2 3 M7 4h10a3 3 0 0 1 3 3v9a3 3 0 0 1-3 3H7a3 3 0 0 1-3-3V7a3 3 0 0 1 3-3z M9 15h.01 M15 15h.01",
     "map-pin": "M20 10c0 6-8 12-8 12s-8-6-8-12a8 8 0 0 1 16 0z M12 12a2.5 2.5 0 1 0 0-5 2.5 2.5 0 0 0 0 5z",
     "database": "M12 8c4.4 0 8-1.3 8-3s-3.6-3-8-3-8 1.3-8 3 3.6 3 8 3z M4 5v14c0 1.7 3.6 3 8 3s8-1.3 8-3V5 M4 12c0 1.7 3.6 3 8 3s8-1.3 8-3",
+    "hard-drive": "M22 12H2 M5.45 5.11 2 12v6a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2v-6l-3.45-6.89A2 2 0 0 0 16.76 4H7.24a2 2 0 0 0-1.79 1.11z M6 16h.01 M10 16h.01",
     "external": "M15 3h6v6 M10 14 21 3 M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6",
     "arrow-right": "M5 12h14 M12 5l7 7-7 7",
     "play": "M6 3l14 9-14 9z",

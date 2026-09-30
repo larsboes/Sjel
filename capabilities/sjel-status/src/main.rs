@@ -48,6 +48,7 @@ const ROUTES: &[route_manifest::Route] = &[
     r("POST", "/api/sjel-status/backup/verify", "Rehearse a target: hash its newest recorded archive and restore it in isolation under its own receipt. Body: { target }."),
     r("GET", "/api/sjel-status/host-watch", "Open findings from the hourly host watch: a runaway process or a filling disk."),
     r("GET", "/api/sjel-status/packs", "Every Pack skill against every agent harness: deployed, drifted, or unowned at the destination."),
+    r("GET", "/api/sjel-status/storage", "What fills the disk: the volume, every reclaimable class, and what the overlay's policy protects from reclaim. From tools/storage's own report --json."),
     r("POST", "/api/sjel-status/capabilities/{name}/backup", "Request a backup of one capability. Accepts the run and returns; poll /backups for the outcome."),
     // Undeclared until 2026-08-31, and served the whole time. The dashboard's panel page
     // calls both; `/routes` denied they existed. The coverage test below did not catch it:
@@ -241,6 +242,7 @@ fn build_router(shell: proxy::Proxy) -> Router {
         )
         .route("/api/sjel-status/host-watch", get(host_watch_handler))
         .route("/api/sjel-status/packs", get(packs_handler))
+        .route("/api/sjel-status/storage", get(storage_handler))
         .route(
             "/api/sjel-status/capabilities/{name}/backup",
             post(backup_handler),

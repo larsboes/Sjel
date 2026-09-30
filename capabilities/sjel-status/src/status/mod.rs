@@ -8,6 +8,7 @@ mod links;
 mod packs;
 mod reaper;
 mod registry;
+mod storage;
 
 pub(crate) use backup::*;
 pub(crate) use health::*;
@@ -17,3 +18,4 @@ pub(crate) use links::*;
 pub(crate) use packs::*;
 pub(crate) use reaper::*;
 pub(crate) use registry::*;
+pub(crate) use storage::*;

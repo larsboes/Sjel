@@ -2,7 +2,8 @@
   import { onDestroy, onMount } from "svelte";
   import Icon from "$lib/Icon.svelte";
   import PageHeader from "$lib/PageHeader.svelte";
-  import { macmon, type MacmonSample } from "$lib/api";
+  import { axonStatus, macmon, type MacmonSample, type StorageReport } from "$lib/api";
+  import { formatBytes, storageView } from "$lib/systems/storage";
 
   let macmonState = $state<"checking" | "up" | "down">("checking");
   let sample = $state<MacmonSample | null>(null);
@@ -11,6 +12,12 @@
   let topProcs = $state<Array<{ pid: number; rss_mb: number; name: string }>>([]);
   let procErr = $state(false);
 
+  // Storage is fetched once, not on macmon's 3 s beat: `report` runs a `du` walk per class
+  // and takes seconds, which is a cost a poll would pay forever. Null while in flight.
+  let storage = $state<StorageReport | null>(null);
+  let storageErr = $state<string | null>(null);
+  const view = $derived(storage ? storageView(storage) : null);
+
   /** °C → CSS class name */
   function tempClass(celsius: number): string {
     if (celsius >= 80) return "hot";
@@ -18,7 +25,7 @@
     return "cool";
   }
 
-  /** Bytes → human-readable */
+  /** Bytes → human-readable. `gb` is macmon's unit: its fields are already gigabytes. */
   function bytes(gb: number): string {
     return (gb / 1024 / 1024 / 1024).toFixed(1) + " GB";
   }
@@ -43,6 +50,13 @@
       .then((r) => { if (r.ok) return r.json(); throw new Error(); })
       .then((d) => { topProcs = d; procErr = false; })
       .catch(() => { procErr = true; });
+
+    // Served by sjel-status, not by macmon, so it answers even when macmon is down —
+    // which is the state a full disk is hardest to see in.
+    axonStatus
+      .storage()
+      .then((d) => { storage = d; storageErr = null; })
+      .catch((e) => { storageErr = e instanceof Error ? e.message : String(e); });
 
     const poll = () => {
       macmon
@@ -224,6 +238,101 @@
     (every 3 s)
   </p>
 {/if}
+
+<!-- ─── Storage ──────────────────────────────────────────────────────────
+     Its own section rather than a card in the metric grid above, and outside
+     the macmon condition on purpose: this comes from sjel-status, and "what
+     fills the disk" has to stay readable when macmon is down. ─────────────── -->
+<section class="storage">
+  <h2 class="section-head">
+    <Icon name="hard-drive" size={14} />
+    Storage
+    {#if view}
+      <span class="state {view.state}">{view.stateLabel}</span>
+    {/if}
+  </h2>
+
+  {#if storageErr}
+    <div class="card err-card">
+      <p class="err">
+        <Icon name="alert" size={14} />
+        Storage report unavailable
+      </p>
+      <p class="err-detail mono">{storageErr}</p>
+    </div>
+  {:else if !view}
+    <p class="loading"><Icon name="loader" size={14} /> measuring the disk…</p>
+  {:else}
+    <div class="vol">
+      <div class="bar-track">
+        <div
+          class="bar-fill"
+          class:warn={view.state === "warn"}
+          class:crit={view.state === "critical"}
+          style="width: {view.usedPct}%"
+        ></div>
+      </div>
+      <p class="vol-line">
+        <span class="mono">{view.used} used of {view.total}</span>
+        <span class="mono dim">{view.free} free</span>
+      </p>
+    </div>
+
+    <div class="stor-cols">
+      <div>
+        <h3 class="col-head">Reclaimable by class</h3>
+        {#if view.classes.length === 0}
+          <p class="mem-hint">Nothing measured in any class.</p>
+        {:else}
+          <ul class="stor-list">
+            {#each view.classes as row (row.name)}
+              <li class="stor-row">
+                <span class="stor-name">
+                  <!-- title because the column is a fraction of the row and a class name is the
+                       row's key: the tool knows headless-browser-payloads and
+                       chrome-on-device-models, both longer than it holds. -->
+                  <span class="mono" title={row.name}>{row.name}</span>
+                  {#if !row.applicable}<span class="tag">report-only</span>{/if}
+                  {#if row.flagged}<span class="tag warn">over flag</span>{/if}
+                </span>
+                <span class="stor-bar">
+                  <span
+                    class="stor-bar-fill"
+                    class:flag={row.flagged}
+                    style="width: {Math.min(100, (row.bytes / view.classes[0].bytes) * 100)}%"
+                  ></span>
+                </span>
+                <span class="stor-bytes mono">{formatBytes(row.bytes)}</span>
+              </li>
+            {/each}
+          </ul>
+          <p class="mem-hint">
+            {view.reclaimableLabel} reclaimable — <code class="mono">sjel storage apply</code>
+          </p>
+        {/if}
+      </div>
+
+      <div>
+        <h3 class="col-head">Protected — reported, never cleaned</h3>
+        <ul class="stor-list">
+          {#each view.protected as row (row.path)}
+            <li class="stor-row protected">
+              <span class="stor-name mono" title={row.path}>{row.path}</span>
+              <span class="stor-bytes mono">{formatBytes(row.bytes)}</span>
+              <span class="stor-reason">{row.reason}</span>
+            </li>
+          {/each}
+        </ul>
+        {#if view.protectedUnmeasured > 0}
+          <p class="mem-hint">
+            {view.protectedUnmeasured} of these could not be read by the measuring user, so
+            their size reads 0 MB.
+          </p>
+        {/if}
+      </div>
+    </div>
+  {/if}
+</section>
 
 <style>
   /* ── Loading / error ────────────────────────────────────────── */
@@ -533,5 +642,172 @@
     font-size: var(--text-2xs);
     color: var(--text-tertiary);
     margin: 0 0 1.5rem;
+  }
+
+  /* ── Storage ────────────────────────────────────────────────── */
+  .section-head {
+    display: flex;
+    align-items: center;
+    gap: 0.4rem;
+    font-size: var(--text-2xs);
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    color: var(--text-secondary);
+    margin: 1.25rem 0 0.75rem;
+  }
+
+  .state {
+    margin-left: auto;
+    padding: 0.05rem 0.4rem;
+    border: 1px solid var(--card-border);
+    border-radius: 999px;
+    color: var(--text-secondary);
+  }
+
+  .state.warn {
+    color: var(--warning-ink);
+    border-color: var(--warning-ink);
+  }
+
+  .state.critical {
+    color: var(--danger);
+    border-color: var(--danger);
+  }
+
+  .vol {
+    margin: 0 0 1rem;
+  }
+
+  .bar-fill.warn {
+    background-color: var(--warning-ink);
+  }
+
+  .bar-fill.crit {
+    background-color: var(--danger);
+  }
+
+  .vol-line {
+    display: flex;
+    justify-content: space-between;
+    gap: 0.5rem;
+    font-size: var(--text-xs);
+    color: var(--text-secondary);
+    margin: 0.35rem 0 0;
+  }
+
+  .dim {
+    color: var(--text-tertiary);
+  }
+
+  .stor-cols {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(19rem, 1fr));
+    gap: 0.75rem 1.5rem;
+  }
+
+  .col-head {
+    font-size: var(--text-2xs);
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    color: var(--text-tertiary);
+    margin: 0 0 0.4rem;
+  }
+
+  .stor-list {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 0.3rem;
+  }
+
+  .stor-row {
+    display: grid;
+    grid-template-columns: minmax(7rem, 1.2fr) 1.5fr 4.5rem;
+    align-items: center;
+    gap: 0.5rem;
+    font-size: 0.72rem;
+  }
+
+  /* A protected path needs a second line for its reason; a class row does not. */
+  .stor-row.protected {
+    grid-template-columns: minmax(7rem, 1.2fr) 4.5rem;
+    grid-template-areas: "name bytes" "reason reason";
+    row-gap: 0.1rem;
+  }
+
+  .stor-row.protected .stor-name {
+    grid-area: name;
+  }
+
+  .stor-row.protected .stor-bytes {
+    grid-area: bytes;
+  }
+
+  .stor-name {
+    display: flex;
+    align-items: center;
+    gap: 0.35rem;
+    min-width: 0;
+  }
+
+  .stor-name.mono,
+  .stor-row > .stor-name > .mono {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    min-width: 0;
+  }
+
+  .tag {
+    flex: none;
+    padding: 0.05rem 0.3rem;
+    border: 1px solid var(--card-border);
+    border-radius: 999px;
+    font-size: 0.6rem;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.03em;
+    color: var(--text-tertiary);
+  }
+
+  .tag.warn {
+    color: var(--warning-ink);
+    border-color: var(--warning-ink);
+  }
+
+  .stor-bar {
+    height: 0.35rem;
+    border-radius: 999px;
+    background: var(--surface);
+    overflow: hidden;
+  }
+
+  .stor-bar-fill {
+    display: block;
+    height: 100%;
+    border-radius: 999px;
+    background: var(--primary-soft);
+  }
+
+  .stor-bar-fill.flag {
+    background: var(--warning-ink);
+  }
+
+  .stor-bytes {
+    text-align: right;
+    font-size: 0.68rem;
+    color: var(--text-secondary);
+    font-variant-numeric: tabular-nums;
+  }
+
+  .stor-reason {
+    grid-area: reason;
+    font-size: 0.65rem;
+    color: var(--text-tertiary);
+    line-height: 1.35;
   }
 </style>

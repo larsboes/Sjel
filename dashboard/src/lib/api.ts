@@ -1741,6 +1741,39 @@ export interface HostWatchFinding {
   last_seen: string;
 }
 
+/** One reclaimable class in the storage report, as `tools/storage` names it. */
+export interface StorageClass {
+  name: string;
+  bytes: number;
+  /** Whether the overlay's policy lets `apply` reclaim it. `false` is report-only, and
+   *  the tool never runs an empty reclaim command even here. */
+  applicable: boolean;
+  /** Over the policy's `class_flag_gb`. Loud on this machine, not necessarily wrong: a
+   *  class can be over the flag with the disk nowhere near full. */
+  flagged: boolean;
+}
+
+/** A path the policy reports and never reclaims, with the reason it is safe to leave. */
+export interface StorageProtected {
+  path: string;
+  bytes: number;
+  reason: string;
+}
+
+/** `sjel storage report --json`, passed through verbatim.
+ *
+ *  Served by sjel-status rather than by `tools/storage`, which is operator machinery with
+ *  no server — it measures, prints and exits. `state` is `ok`, `warn` or `critical`, and
+ *  it is the volume's state, never a class being large: a class over the flag on a machine
+ *  with free space is not a fault (the tool's own rule, tested in tools/host-watch.test.ts). */
+export interface StorageReport {
+  disk: { used: number; free: number; total: number; target: string };
+  state: string;
+  classes: StorageClass[];
+  protected: StorageProtected[];
+  expected_service: Array<{ kind: string; name: string; note: string }>;
+}
+
 /** One Pack skill (or the agents/ tree) as one harness currently holds it. */
 export interface PackUnitView {
   pack: string;
@@ -1832,6 +1865,12 @@ export const axonStatus = {
       '/sjel-status/api/sjel-status/host-watch',
       signal ? { signal } : undefined,
     ).then((response) => response.findings),
+  /** What fills the disk, from the tool's own `report --json`. Served here because
+   *  `tools/storage` is operator machinery with no server — it measures, prints and exits
+   *  — for the same reason `hostWatch()` above is. A non-zero exit is not an error: it is
+   *  how `report` says free space is below the policy's critical threshold. */
+  storage: (signal?: AbortSignal) =>
+    request<StorageReport>('/sjel-status/api/sjel-status/storage', signal ? { signal } : undefined),
   /** Every Pack skill against every agent harness. Served here rather than by `packs`
    *  itself because that capability is `kind = "data"`: it owns the deployment ledgers and
    *  nothing starts, so it has no port. Same reason as `hostWatch()` above. */

@@ -40,7 +40,7 @@ reqwest = { workspace = true, features = ["json", "stream", "query", "form"] }
 # The shell's front door (src/proxy.rs): ServeDir/ServeFile for the built bundle, and
 # ServiceExt::oneshot to hand a request to them from inside a fallback handler rather than
 # mounting them as the fallback outright -- the proxy has to get first refusal on the path.
-tower = { version = "0.4", features = ["util"] }   # ServiceExt::oneshot
+tower = { version = "0.5", features = ["util"] }   # ServiceExt::oneshot
 tower-http = { workspace = true, features = ["fs"] }
 
 # Signs a request with a real Ed25519 key in src/device_gate.rs's test, the same algorithm

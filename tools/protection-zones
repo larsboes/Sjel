@@ -48,7 +48,7 @@ harness_roster() {
 harness_verdict() { # -> "<verdict>\t<mechanism-or-reason>"
   case "$1" in
     claude)
-      printf 'supported\tmanaged policy at /etc/claude-code/managed-settings.json — highest precedence, permissions.deny + sandbox.filesystem.denyRead, additive-only from the overlay (tools/claude-code-config)' ;;
+      printf 'supported\tmanaged policy at /Library/Application Support/ClaudeCode/managed-settings.json (macOS) or /etc/claude-code/managed-settings.json (Linux) — highest precedence, permissions.deny + sandbox.filesystem.denyRead, additive-only from the overlay (tools/claude-code-config)' ;;
     pi)
       printf 'separately-profiled\tenforced inside the agentbox micro-VM, not on the host: capabilities/agentbox/profiles/pi/extensions/protected-paths blocks CONTAINER paths, and only /workspace is mounted. Says nothing about a host-installed pi' ;;
     codex|opencode)

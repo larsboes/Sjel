@@ -296,9 +296,10 @@ echo "Deploy for Pi:           tools/packs-pi deploy <name>"
 echo
 if command -v bun >/dev/null 2>&1; then
   "$TOOLS_DIR/claude-code-config" || echo "  (baseline settings step skipped — re-run: tools/claude-code-config)"
-  # The managed security policy (/etc/claude-code) is opt-in and needs root, so it is a
+  # The managed security policy (macOS: /Library/Application Support/ClaudeCode, Linux:
+  # /etc/claude-code) is opt-in and needs root, so it is a
   # deliberate step rather than part of the guided install — just point at it.
-  echo "  Optional hardening: tools/claude-code-config --managed  (deploys the /etc security policy; needs sudo)"
+  echo "  Optional hardening: tools/claude-code-config --managed  (deploys the managed security policy; needs sudo)"
 else
   echo "Claude Code baseline settings: skipped ('bun' not on PATH yet)."
   echo "  Apply them later with: tools/claude-code-config"

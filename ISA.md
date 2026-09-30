@@ -530,6 +530,14 @@ Design:
   deployment token, every capability but comms serves loopback callers without any check
   (`authenticated`, `libs/sjel-server/src/auth.rs:410`). The comms token file is also
   readable from an agent session.
+  2026-09-30, agent side: `tools/claude-code-config` deployed the managed policy to
+  `/etc/claude-code/` on every platform, and macOS reads only
+  `/Library/Application Support/ClaudeCode/` (https://code.claude.com/docs/en/managed-settings.md).
+  On a Mac the policy was never in force. Fixed in the tool; the policy now also turns on the
+  macOS sandbox (loopback allowed), denies full-token `capability-auth` calls and
+  `SJEL_AGENT=0`, and the overlay fragment denies the overlay `secrets/`. In force only after
+  the operator deploys it with sudo. Server side stays open: declaring a deployment token
+  locks the browser out of `127.0.0.1:8082` until the dashboard has a login.
 
 ## Not yet specified
 

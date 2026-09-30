@@ -53,7 +53,13 @@
       "Bash(*_TOKEN*)",
       "Bash(*_SECRET*)",
       "Bash(*_API_KEY*)",
-      "Bash(*APIKEY*)"
+      "Bash(*APIKEY*)",
+      "Bash(*SJEL_AGENT=0*)",
+      "Bash(*capability-auth comms*)",
+      "Bash(*capability-auth)",
+      "Bash(*capability-auth\")",
+      "Bash(*capability-auth |*)",
+      "Bash(*capability-auth >*)"
     ],
     "ask": [
       "Bash(sudo *)",
@@ -69,7 +75,8 @@
   "sandbox": {
     "enabled": true,
     "enabledPlatforms": [
-      "linux"
+      "linux",
+      "macos"
     ],
     "failIfUnavailable": true,
     "autoAllowBashIfSandboxed": false,
@@ -174,6 +181,12 @@
           "name": "GITHUB_TOKEN",
           "mode": "deny"
         }
+      ]
+    },
+    "network": {
+      "allowedDomains": [
+        "localhost",
+        "127.0.0.1"
       ]
     }
   },

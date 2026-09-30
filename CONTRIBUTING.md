@@ -317,8 +317,8 @@ in.
 `tools/claude-code-config` is the one write that happens without being asked, on every install
 including a non-interactive one. It merges the USER layer into `settings.json` with existing keys
 winning, so it can add a default and can never remove or overwrite one the operator set, and it
-refuses to touch a `settings.json` it cannot parse rather than replacing it. The MANAGED layer at
-`/etc/claude-code` *is* a full replace — and the installer never deploys it, only prints the sudo
+refuses to touch a `settings.json` it cannot parse rather than replacing it. The MANAGED layer
+(`/Library/Application Support/ClaudeCode` on macOS, `/etc/claude-code` on Linux) *is* a full replace — and the installer never deploys it, only prints the sudo
 command, because a security policy that arrives unasked is not one anybody chose.
 
 Nothing else writes unasked. The installer lists Packs and prints the activation command; it never

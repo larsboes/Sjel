@@ -11,7 +11,8 @@ secret is in context it can leak into session files, logs, or provider requests.
 workflow; enforcement is separate and already active:
 
 - **Managed policy** — `tools/templates/claude-code/managed-settings.json` (deployed to
-  `/etc/claude-code/managed-settings.json`) denies reads of `**/*.env`, `**/*.pem`, `~/.ssh`,
+  `/Library/Application Support/ClaudeCode/managed-settings.json` on macOS,
+  `/etc/claude-code/managed-settings.json` on Linux) denies reads of `**/*.env`, `**/*.pem`, `~/.ssh`,
   `~/.aws`, `git-credentials`, `printenv`, `*_TOKEN*`, etc., and denies ~20 secret env vars to the
   sandbox. You cannot relax it from a repo. If a command here is blocked, that is the floor working.
 - **pi** — the same protection is enforced as a tool-call extension (`Packs/security/extensions/

@@ -14,6 +14,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import {
   managedHandoffInstructions,
+  managedSettingsPath,
   mergeFragment,
   stageManagedPolicy,
   writeFileAtomic,
@@ -258,6 +259,14 @@ describe("managed-policy CLI deployment boundary", () => {
     } finally {
       rmSync(root, { recursive: true, force: true });
     }
+  });
+
+  test("the managed policy goes where the platform's Claude Code reads it", () => {
+    // macOS never reads /etc/claude-code; deploying there left the policy inert (2026-09-30).
+    expect(managedSettingsPath("darwin")).toBe("/Library/Application Support/ClaudeCode/managed-settings.json");
+    expect(managedSettingsPath("linux")).toBe("/etc/claude-code/managed-settings.json");
+    const lines = managedHandoffInstructions(managedSettingsPath("darwin"), "/tmp/x/managed-settings.json", null);
+    expect(lines[1]).toContain('sudo install -d -m 0755 "/Library/Application Support/ClaudeCode"');
   });
 
   test("privileged staging is unique, private, and cleans only its owned directory", () => {

@@ -5,10 +5,10 @@
 //               deep-merged into ~/.claude/settings.json, existing keys win.
 //   --managed   MANAGED layer — tools/templates/claude-code/managed-settings.json
 //               plus this machine's overlay fragment (see below), deployed to
-//               /etc/claude-code/managed-settings.json (full replace).
+//               the platform's managed-settings path (full replace): see managedSettingsPath.
 //
 // Why two layers with different merge rules: Claude Code reads user settings and an
-// enterprise "managed" policy at /etc/claude-code/managed-settings.json, and the managed
+// enterprise "managed" policy at the platform's managed-settings path, and the managed
 // policy is the HIGHEST-precedence layer — it overrides user and project settings and
 // cannot be relaxed by an untrusted repo's .claude/settings.json or by a prompt-injection.
 // So the two layers carry different things:
@@ -47,7 +47,7 @@
 // Invoke via the tools/claude-code-config launcher (exec bun run), not directly.
 //
 //   tools/claude-code-config              merge the user baseline into ~/.claude/settings.json
-//   tools/claude-code-config --managed    deploy/check the managed policy at /etc/claude-code
+//   tools/claude-code-config --managed    deploy/check the managed policy (managedSettingsPath)
 //   tools/claude-code-config [...] --dry-run   report what would change, write nothing
 //   tools/claude-code-config -h           this help
 //
@@ -114,7 +114,7 @@ export function writeFileAtomic(target: string, contents: string, mode: number):
 const HELP = `tools/claude-code-config — deploy Axon's Claude Code harness config.
 
   tools/claude-code-config              merge the user baseline into ~/.claude/settings.json
-  tools/claude-code-config --managed    deploy/check the managed policy at /etc/claude-code/managed-settings.json
+  tools/claude-code-config --managed    deploy/check the managed policy (macOS: /Library/Application Support/ClaudeCode, Linux: /etc/claude-code)
   tools/claude-code-config --dry-run    report what would change, write nothing (combine with --managed)
   tools/claude-code-config -h           this help
 
@@ -342,6 +342,20 @@ export function stageManagedPolicy(desired: string): { stageDir: string; source:
   return { stageDir, source };
 }
 
+/**
+ * Where Claude Code reads the managed policy on this platform.
+ *
+ * macOS reads only `/Library/Application Support/ClaudeCode/`; `/etc/claude-code/` is the
+ * Linux and WSL path (https://code.claude.com/docs/en/managed-settings.md). This tool wrote
+ * `/etc/claude-code/` on every platform until 2026-09-30, so on a Mac the policy it deployed
+ * was never read: every deny rule and the protected-zone fragment were inert.
+ */
+export function managedSettingsPath(platform: string = process.platform): string {
+  return platform === "darwin"
+    ? "/Library/Application Support/ClaudeCode/managed-settings.json"
+    : "/etc/claude-code/managed-settings.json";
+}
+
 export function managedHandoffInstructions(
   target: string,
   source: string,
@@ -349,7 +363,9 @@ export function managedHandoffInstructions(
 ): string[] {
   const lines = [
     `  Review:  diff "${target}" "${source}"`,
-    `  Deploy:  sudo install -m 0644 "${source}" "${target}"`,
+    // `install -d` first: `/Library/Application Support/ClaudeCode` does not exist on a Mac
+    // that never had a policy, and BSD install has no -D to create it.
+    `  Deploy:  sudo install -d -m 0755 "${dirname(target)}" && sudo install -m 0644 "${source}" "${target}"`,
   ];
   if (stageDir) lines.push(`  Cleanup: rm -rf "${stageDir}"`);
   return lines;
@@ -367,7 +383,7 @@ function deployManagedLayer(): never {
   // Overridable for testing; the real Claude Code enterprise-policy path otherwise.
   const target = process.env.MANAGED_SETTINGS_PATH
     ? expandHome(process.env.MANAGED_SETTINGS_PATH)
-    : "/etc/claude-code/managed-settings.json";
+    : managedSettingsPath();
 
   // Compare parsed JSON (formatting-insensitive) so a whitespace-only difference isn't drift.
   let current: Json | null = null;

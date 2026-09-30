@@ -871,7 +871,7 @@ dependencies = [
  "sjel-store",
  "tokio",
  "tower 0.5.3",
- "tower-http",
+ "tower-http 0.7.1",
 ]
 
 [[package]]
@@ -1081,7 +1081,7 @@ dependencies = [
  "sjel-summarize",
  "thiserror 1.0.69",
  "tokio",
- "tower-http",
+ "tower-http 0.7.1",
 ]
 
 [[package]]
@@ -1596,7 +1596,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "39cab71617ae0d63f51a36d69f866391735b51691dbda63cf6f96d042b63efeb"
 dependencies = [
  "libc",
- "windows-sys 0.52.0",
+ "windows-sys 0.61.2",
 ]
 
 [[package]]
@@ -1713,7 +1713,7 @@ dependencies = [
  "sjel-store",
  "tokio",
  "tower 0.5.3",
- "tower-http",
+ "tower-http 0.7.1",
 ]
 
 [[package]]
@@ -3821,7 +3821,7 @@ dependencies = [
  "sjel-store",
  "thiserror 1.0.69",
  "tokio",
- "tower-http",
+ "tower-http 0.7.1",
 ]
 
 [[package]]
@@ -3900,7 +3900,7 @@ dependencies = [
  "once_cell",
  "socket2",
  "tracing",
- "windows-sys 0.52.0",
+ "windows-sys 0.61.2",
 ]
 
 [[package]]
@@ -4276,7 +4276,7 @@ dependencies = [
  "tokio-rustls",
  "tokio-util",
  "tower 0.5.3",
- "tower-http",
+ "tower-http 0.6.11",
  "tower-service",
  "url",
  "wasm-bindgen",
@@ -4451,7 +4451,7 @@ dependencies = [
  "security-framework",
  "security-framework-sys",
  "webpki-root-certs",
- "windows-sys 0.52.0",
+ "windows-sys 0.61.2",
 ]
 
 [[package]]
@@ -4562,7 +4562,7 @@ dependencies = [
  "thiserror 1.0.69",
  "tokio",
  "tower 0.5.3",
- "tower-http",
+ "tower-http 0.7.1",
  "transit",
 ]
 
@@ -4886,7 +4886,7 @@ dependencies = [
  "sjel-store",
  "tokio",
  "tower 0.4.13",
- "tower-http",
+ "tower-http 0.7.1",
 ]
 
 [[package]]
@@ -4988,7 +4988,7 @@ dependencies = [
  "sjel-server",
  "tokio",
  "tokio-stream",
- "tower-http",
+ "tower-http 0.7.1",
 ]
 
 [[package]]
@@ -5546,6 +5546,28 @@ dependencies = [
  "http",
  "http-body",
  "http-body-util",
+ "pin-project-lite",
+ "tokio",
+ "tokio-util",
+ "tower 0.5.3",
+ "tower-layer",
+ "tower-service",
+ "url",
+]
+
+[[package]]
+name = "tower-http"
+version = "0.7.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "08a05a66a4fdd61cbbe0a1d755ffe0ca6aba159dd4820936a0ff8a8278245b9c"
+dependencies = [
+ "bitflags 2.13.1",
+ "bytes",
+ "futures-core",
+ "futures-util",
+ "http",
+ "http-body",
+ "http-body-util",
  "http-range-header",
  "httpdate",
  "mime",
@@ -5554,10 +5576,8 @@ dependencies = [
  "pin-project-lite",
  "tokio",
  "tokio-util",
- "tower 0.5.3",
  "tower-layer",
  "tower-service",
- "url",
 ]
 
 [[package]]
@@ -5627,7 +5647,7 @@ dependencies = [
  "thiserror 1.0.69",
  "tokio",
  "tower 0.5.3",
- "tower-http",
+ "tower-http 0.7.1",
 ]
 
 [[package]]
@@ -5669,7 +5689,7 @@ dependencies = [
  "station-time",
  "thiserror 1.0.69",
  "tokio",
- "tower-http",
+ "tower-http 0.7.1",
 ]
 
 [[package]]
@@ -5874,7 +5894,7 @@ dependencies = [
  "sjel-server",
  "tokio",
  "tower 0.5.3",
- "tower-http",
+ "tower-http 0.7.1",
 ]
 
 [[package]]
@@ -6050,7 +6070,7 @@ version = "0.1.11"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "c2a7b1c03c876122aa43f3020e6c3c3ee5c05081c9a00739faf7503aeba10d22"
 dependencies = [
- "windows-sys 0.52.0",
+ "windows-sys 0.61.2",
 ]
 
 [[package]]

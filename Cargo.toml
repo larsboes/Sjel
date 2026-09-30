@@ -112,7 +112,7 @@ thiserror = "1.0"
 tokio = "1"
 toml = "0.8"
 tower = "0.5"
-tower-http = "0.6"
+tower-http = "0.7"
 
 # Dependencies carry no debug info; workspace crates keep all of it.
 #

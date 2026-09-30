@@ -234,12 +234,11 @@ from `tools/backup-all.sh --list` and `--targets-json`, so the derivation stays 
 names one; a target keeps the verdict of its last rehearsal; `unchecked` is what an `ssh` target
 answers, with the reason. Deliverable met for local: `verify` refuses what it cannot prove.
 
-**Step 4 — timing policy. PARTIAL (2026-09-29).** The interval is stored policy with `off` as
-`null`, writable and readable from the surface, and the loop that acts on it runs inside
-sjel-status. What has NOT happened is the handover in F0: the manifest still declares
-`schedule = "24h"` and no `port`, because the handover is one commit that gives the manifest a port
-while the stored policy takes over the timer. Until then the declared schedule fires and the policy
-table is inert.
+**Step 4 — timing policy. DONE (2026-09-29).** The interval is stored policy with `off` as `null`,
+writable and readable from the surface, and the loop that acts on it runs inside sjel-status. The F0
+handover was made in the order that keeps coverage: the policy row was set to 24h first, then the
+manifest and its LaunchAgent were removed. One timer owns the interval now, and it is the one an
+operator can change.
 
 **Step 5 — media live probes.** F0 index and audit, F1 ingest once a staging export exists, F2 full
 mirror verification plus a real unmount (F5). Deliverable: the media ISA's live claims, moved from
@@ -259,10 +258,13 @@ mirror verification plus a real unmount (F5). Deliverable: the media ISA's live 
 - **F2 passes.** `GET /backup/targets` resolves the declared target from the overlay
   (`kind=local`, `present=true`, five declaring capabilities) and re-reads it on every call, so a
   capability that starts declaring a contract appears without a restart.
-- **F4 partial.** The interval round-trips (`24` → stored → `null` for off), `0` is refused by
-  name, an unknown target is refused with 404, and the loop acts on what is stored. The F0
-  handover — manifest gives up `schedule` for `port` — has not been made, so the declared 24h is
-  still the timer that fires.
+- **F4 passes, and F0 with it.** The interval round-trips (`24` → stored → `null` for off), `0` is
+  refused by name, and an unknown target is refused with 404. The declared schedule and its
+  LaunchAgent are gone; the stored 24h policy is what fires, and the first sweep under it recorded
+  `finance exit=0` with its archive, `store exit=1` **with the archive it produced and the upload
+  gate's reason**, and `knowledge-base` still running. That store row is the whole point of this
+  work: the bytes landed, the verification failed, and the failure is a record with a log rather
+  than an absence.
 - **Two defects the live run found, both fixed:** the rehearsal selected the first declared
   capability rather than one whose archive is actually at the target, and `restore.sh` requires the
   destination's *parent* to exist, so the scratch directory is created first.

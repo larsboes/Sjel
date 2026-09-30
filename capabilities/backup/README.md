@@ -42,17 +42,23 @@ Four things the receipts could not carry, and this does:
 - **The interval is data.** `backup_policy.interval_hours` is written from the surface, where `null`
   is `off`.
 
-## The declared schedule is the bootstrap, not the destination
+## The timer is stored policy (2026-09-29)
 
-`capabilities/backup/service.toml`'s `schedule = "24h"` still runs, unchanged. An earlier attempt
-deleted the manifest outright — a `kind = "process"` manifest needs `schedule` or `port`, and the
-schedule was only ever a placeholder — which also deleted the only automatic backup on the machine.
-That was the wrong reading of "make the timing customizable" and it was reverted the same session
-(`tools/service-runner.sh install-persistence backup`).
+There is **no `service.toml` here and no LaunchAgent**. This capability is a library, and the
+process that owns the timer is `sjel-status`, which is supervised and always up. The interval lives
+in `backup_policy` and is written from the surface: `24` for a daily sweep, another number of hours,
+or `null` for off.
 
-`ISA.md` F0 states the handover: the manifest keeps its `schedule` until the process has a `port`,
-and the interval then lives in `backup_policy` where the surface writes it. Until that commit
-lands, the timer keeps firing and the policy table is inert.
+The handover was made in that order on purpose — the policy row was set to 24h **before** the
+declared schedule and its unit were removed — so automatic backups never stopped. What it costs is
+stated rather than hidden: the timer now depends on `sjel-status` being up, and if it is not, nothing
+runs and `tools/doctor` reports the contract overdue rather than a schedule that failed. That is a
+trade an operator can see; the previous arrangement's failure mode was a fixed interval nobody could
+change without editing a tracked file.
+
+An earlier attempt deleted the manifest without setting the policy first, which deleted the only
+automatic backup on the machine. That was reverted the same session; `ISA.md` records it, because the
+ordering is the whole lesson.
 
 ## Why this is a capability and not a LaunchAgent
 

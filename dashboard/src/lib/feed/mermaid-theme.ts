@@ -123,11 +123,31 @@ const THEME_CSS = [
   ".marker { stroke-width: 1.5px; }",
 ].join(" ");
 
+/**
+ * `layout` and `look` are pinned, and they are the whole visual surface of the mermaid 12
+ * upgrade rather than caution for its own sake.
+ *
+ * 12.0.0 bundles ELK and makes it the default layout, and makes `neo` the default look:
+ * "Existing flowcharts, state and class diagrams will re-lay out and recolour; add
+ * `layout: dagre`, `theme: default` and `look: classic` to your config to keep the old look"
+ * (mermaid@12.0.0 release notes, 2026-09-10). `theme` stays `base` here, because the palette
+ * above is this repository's rather than mermaid's. The other two are exactly the settings
+ * that would restyle every diagram in the reader with nobody looking at one.
+ *
+ * `layout` is the sharper edge of the two. The `flowchart.nodeSpacing` and `rankSpacing` below
+ * are dagre's knobs and ELK does not read them -- it has its own `elk.*` spacing -- so moving
+ * to ELK is not a layout swap that leaves this file alone. It is a re-tune plus a look at
+ * every figure, which is a review, not a config default to drift into.
+ *
+ * Deleting these two lines is the first step of doing that deliberately.
+ */
 export function mermaidConfig(dark: boolean) {
   return {
     startOnLoad: false,
     securityLevel: "strict" as const,
     theme: "base" as const,
+    layout: "dagre" as const,
+    look: "classic" as const,
     themeVariables: themeVariables(dark),
     themeCSS: THEME_CSS,
     flowchart: {

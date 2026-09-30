@@ -17,7 +17,13 @@ const APP_BUNDLE_LIMIT_BYTES = 500_000;
 // A chunk nobody can reach without a dynamic import is not application weight, but it is
 // still weight. Capped separately and higher: a diagram renderer is legitimately large, and
 // what this guards against is one arriving unnoticed rather than one existing at all.
-const LAZY_CHUNK_LIMIT_BYTES = 1_200_000;
+//
+// 1.6 MB rather than 1.2 MB since 2026-09-30, and the reason is a single chunk: mermaid 12
+// bundles ELK, and `elkjs/lib/elk.bundled.js` is emitted as one lazy chunk of 1,456,240
+// bytes -- larger than the whole previous cap, and now the largest single download in the
+// bundle. It has its own row below; this number has to sit above it or that row is
+// unreachable.
+const LAZY_CHUNK_LIMIT_BYTES = 1_600_000;
 // Renderers heavy enough that reaching the eager graph would be a regression nobody notices
 // until every page is slow. One row per library rather than a second copy of the rule.
 //
@@ -30,10 +36,22 @@ const LAZY_CHUNK_LIMIT_BYTES = 1_200_000;
 // four minor releases, and entirely inside the lazy graph, so the eager limit above is
 // untouched by it. The bound moved rather than the dependency: Q77 rolls on the latest, and
 // what this number exists to catch is a doubling nobody saw, not a 2.8% nobody would.
-// Mermaid self-splits by diagram type across 52
-// chunks totalling 2.57 MB, of which a reader pulls the ~1.3 MB core plus only the diagram
-// types actually on the page. What bounds any single download is LAZY_CHUNK_LIMIT_BYTES
-// above; this bounds the library growing while nobody is watching.
+//
+// Mermaid is why a per-load bound and a footprint bound are different numbers, and 12.0.0
+// widened the gap: it self-splits by diagram type over 82 chunks totalling 4,307,161 bytes,
+// against the 52 chunks and 2.57 MB that 11.x measured. A reader pulls only the diagram types
+// actually on the page, so the footprint is not what anyone downloads. What bounds any single
+// download is LAZY_CHUNK_LIMIT_BYTES above; this bounds the library growing while nobody is
+// watching.
+//
+// Mermaid 12 also bundles ELK, which is the row below rather than part of this one: ELK's
+// chunk arrives separately and 1.46 MB on its own is worth naming.
+//
+// One limit of this list, written down because the rows read broader than they are: only the
+// library's OWN modules are attributed. Mermaid's dependencies load only when it does and are
+// not counted here -- the shared d3 chunk measures 784,614 bytes, cytoscape 434,698, katex
+// 258,685 -- so what this list guarantees for those is that they cannot reach the eager graph,
+// while LAZY_CHUNK_LIMIT_BYTES is the only thing bounding how big one may grow.
 //
 // `assets` is why a footprint bound has to name more than modules. Vite builds a worker in a
 // SEPARATE Rollup pass and emits the result as an asset, so its modules never appear in any
@@ -48,7 +66,13 @@ const LAZY_VENDORS = [
     assets: [/maplibre-gl-worker.*\.js$/],
     total: 1_650_000,
   },
-  { label: "Mermaid", match: ["/mermaid/", "/@mermaid-js/"], assets: [], total: 2_700_000 },
+  { label: "Mermaid", match: ["/mermaid/", "/@mermaid-js/"], assets: [], total: 4_500_000 },
+  // Not a renderer this repository chose: mermaid 12 bundles ELK and the chunk ships whether
+  // or not a diagram asks for an ELK layout. `layout: "dagre"` is pinned in
+  // src/lib/feed/mermaid-theme.ts, so nothing in the reader fetches this today -- which is
+  // exactly why it needs a row. It is 1.46 MB of weight that must stay unreachable, and its
+  // presence is invisible in every page that renders.
+  { label: "ELK", match: ["/elkjs/"], assets: [], total: 1_530_000 },
 ];
 
 interface RegistryEntry {

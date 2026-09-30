@@ -142,7 +142,7 @@ pub fn secondary_targets(repo_root: &Path, primary: &Path) -> Vec<SecondaryTarge
     let deployment = canonical(repo_root.join("target"));
     let mut out = Vec::new();
     scan(repo_root, &primary, deployment.as_deref(), &mut out, 0);
-    out.sort_by(|a, b| b.bytes.cmp(&a.bytes));
+    out.sort_by_key(|entry| std::cmp::Reverse(entry.bytes));
     out
 }
 

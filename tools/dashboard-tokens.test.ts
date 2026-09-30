@@ -175,23 +175,10 @@ describe("no primitive is declared that nothing uses", () => {
   }
 
   /**
-   * The escape list, one entry, with what was measured.
-   *
-   * `.table` and its five descendant rules are declared in app.css, documented in
-   * `dashboard/README.md` as one of the five surviving primitives, and written by no
-   * component: `grep -rn 'class="table"' dashboard/src` returns nothing, and the seven
-   * hits for `\btable\b` are `table-wrap`, `chart-table`, `forecast-table` and
-   * `subscription-table`. It is the same defect as the four classes deleted on
-   * 2026-09-08 and it survived the sweep because of the word-boundary hole above.
-   *
-   * Left rather than deleted because the choice is not this file's to make: the fourteen
-   * hand-rolled tables either adopt `.table` or the class and its README line go. Whoever
-   * decides also owns `.table .num`, which is the only declaration of `.num` and matches
-   * nothing today — all four components that write `class="num"` restyle it themselves.
+   * The escape list for unused primitives in app.css.
+   * Empty now that `routes/backup/+page.svelte` adopts `.table`.
    */
-  const KNOWN: Record<string, string> = {
-    table: "0 consumers, documented as a primitive (verifier, 2026-09-08)",
-  };
+  const KNOWN: Record<string, string> = {};
 
   test("the reader finds the primitives and not the font URLs", () => {
     const declared = declaredClasses();
@@ -220,11 +207,8 @@ describe("no primitive is declared that nothing uses", () => {
     expect(unused.filter((line) => !line.includes("[known:"))).toEqual([]);
   });
 
-  test("the escape list stays exactly one entry, so it cannot grow quietly", () => {
-    expect(Object.keys(KNOWN)).toEqual(["table"]);
-    // And the entry is a live fact, not a leftover: if somebody adopts `.table`, this
-    // fails and the escape goes with the same commit.
-    expect(consumers("table")).toEqual([]);
+  test("the escape list stays empty now that all primitives have consumers", () => {
+    expect(Object.keys(KNOWN)).toEqual([]);
   });
 
   test("the consumer count is real, so a passing run means something", () => {

@@ -135,6 +135,11 @@
               <!-- Terminal and readable. A locked vault is the normal way this fails, and
                    the operator needs backup.sh's own words to know it was the vault. -->
               <p class="failed">backup failed{b.run.detail ? `: ${b.run.detail}` : ""}</p>
+            {:else if b?.attempt && b.attempt.exit_code !== 0 && b.attempt.exit_code !== null}
+              {@const attemptAgeSeconds = b.attempt.started_epoch ? Math.max(0, Math.floor(Date.now() / 1000) - b.attempt.started_epoch) : Math.max(0, Math.floor((Date.now() - new Date(b.attempt.started_at).getTime()) / 1000))}
+              <p class="failed">
+                the last attempt FAILED {age(attemptAgeSeconds)} (exit {b.attempt.exit_code}){b.attempt.detail ? `: ${b.attempt.detail.split("\n")[0]}` : ""} · <a href={link("/backup")}>Backup ledger →</a>
+              </p>
             {/if}
           </div>
         </div>
@@ -185,7 +190,7 @@
 
   <p class="note">
     Only services marked <code>autostart</code> run without being requested. Everything else
-    starts when you open it.
+    starts when you open it. See <a href={link("/backup")}>Backup management</a> for target policies, intervals, and attempt history.
   </p>
 {/if}
 

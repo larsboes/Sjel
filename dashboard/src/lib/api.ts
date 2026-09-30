@@ -1668,12 +1668,45 @@ export interface BackupRun {
   detail?: string;
 }
 
+export interface BackupArchiveIdentity {
+  name: string;
+  bytes: number;
+  sha256: string;
+}
+
+export interface BackupRunAttempt {
+  id: number;
+  capability: string;
+  target: string;
+  started_at: string;
+  started_epoch: number;
+  finished_at: string | null;
+  finished_epoch: number | null;
+  exit_code: number | null;
+  archive: BackupArchiveIdentity | null;
+  detail: string;
+  log_path: string;
+}
+
+export interface BackupTargetView {
+  id: string;
+  kind: string;
+  path: string;
+  host: string;
+  present: string; // "true" | "false" | "unchecked" | "unknown"
+  declared_by: string[];
+  seen_at: string;
+  verified_at: string | null;
+  verified_verdict: string | null; // "verified" | "failed" | "unchecked" | null
+  verified_detail: string | null;
+  interval_hours: number | null;
+}
+
 /**
  * One capability's backup standing.
  *
- * Note what is absent: no target, no tarball, no hash. The receipt on disk carries all
- * three and the server drops them before answering — where a backup goes is the
- * overlay's business, and a dashboard has no use for it.
+ * `attempt` carries the durable record of what the last run actually did, including failures
+ * that left no fresh receipt behind.
  */
 export interface BackupStatus {
   capability: string;
@@ -1687,6 +1720,7 @@ export interface BackupStatus {
   bytes: number | null;
   contents: string | null;
   run: BackupRun | null;
+  attempt?: BackupRunAttempt | null;
 }
 
 /** One thing wrong with this machine, as the hourly host watch found it.
@@ -1746,13 +1780,45 @@ export interface PacksView {
 export const axonStatus = {
   health: () => request<AxonStatusHealth>('/sjel-status/api/sjel-status/health'),
   capabilities: () => request<CapabilityView[]>('/sjel-status/api/sjel-status/capabilities'),
-  backups: () => request<{ backups: BackupStatus[] }>('/sjel-status/api/sjel-status/backups'),
+  backups: () =>
+    request<{ backups: BackupStatus[]; attempt_error: string | null }>(
+      '/sjel-status/api/sjel-status/backups',
+    ),
   /** Accepts the run and returns — it does not wait for it. Poll `backups()` for the
    *  outcome, which is also what lets a slow run survive a page refresh. */
-  backup: (name: string) =>
-    request<{ name: string; accepted: boolean; holds_service: boolean }>(
+  backup: (name: string, target?: string) =>
+    request<{ name: string; accepted: boolean; target?: string; run_id?: number; holds_service: boolean }>(
       `/sjel-status/api/sjel-status/capabilities/${encodeURIComponent(name)}/backup`,
-      { method: 'POST' },
+      {
+        method: 'POST',
+        ...(target
+          ? {
+              body: JSON.stringify({ target }),
+              headers: { 'Content-Type': 'application/json' },
+            }
+          : {}),
+      },
+    ),
+  backupTargets: () =>
+    request<{ targets: BackupTargetView[] }>('/sjel-status/api/sjel-status/backup/targets'),
+  backupRuns: (limit = 50) =>
+    request<{ runs: BackupRunAttempt[]; running: number }>(
+      `/sjel-status/api/sjel-status/backup/runs?limit=${limit}`,
+    ),
+  setBackupPolicy: (target: string, interval_hours: number | null) =>
+    request<{ target: BackupTargetView | null }>('/sjel-status/api/sjel-status/backup/policy', {
+      method: 'POST',
+      body: JSON.stringify({ target, interval_hours }),
+      headers: { 'Content-Type': 'application/json' },
+    }),
+  verifyBackupTarget: (target: string) =>
+    request<{ target: string; verdict: string; detail: string }>(
+      '/sjel-status/api/sjel-status/backup/verify',
+      {
+        method: 'POST',
+        body: JSON.stringify({ target }),
+        headers: { 'Content-Type': 'application/json' },
+      },
     ),
   self: () => request<SelfModelResponse>('/sjel-status/api/sjel-status/self'),
   repos: () => request<{ repos: RepoStatus[] }>('/sjel-status/api/sjel-status/repos'),

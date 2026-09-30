@@ -1,6 +1,6 @@
 # See schemas/pack.toml.example for the field reference.
 name         = "travel"
-description  = "Travel planning across Axon's capabilities — feasible days from calendar, journey and fare search in transit, measured delay history from punctuality, event discovery from scouting, and itinerary state in trips."
+description  = "Travel planning across Sjel's capabilities — feasible days from calendar, journey and fare search in transit, measured delay history from punctuality, event discovery from scouting, and itinerary state in trips."
 skills       = ["travel"]
 license      = "MIT"
 capabilities = ["calendar", "transit", "punctuality", "scouting", "trips"]

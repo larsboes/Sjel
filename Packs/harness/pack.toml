@@ -13,7 +13,7 @@
 # The vendored pi packages under pi-packages/ and the opt-in Pi classifier under extensions/
 # are Pi adapter conventions, not manifest-declared skills.
 name        = "harness"
-description = "Keep the agent system and its repository in shape: operate and change Axon, propose the skills the recorded work actually needs, shrink what loads into every session, and keep every harness in step with the Packs that feed it."
+description = "Keep the agent system and its repository in shape: operate and change Sjel, propose the skills the recorded work actually needs, shrink what loads into every session, and keep every harness in step with the Packs that feed it."
 skills      = ["sjel", "suggest-skills", "trim", "harness-sync"]
 # `axon` became `sjel` on 2026-09-26 with the product rename; the ledger removes the old copy.
 retired_skills = ["axon"]

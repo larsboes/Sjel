@@ -45,7 +45,7 @@ AX="$SJEL_ROOT/axon.toml"
     trimmed="${desc%%. *}"
     if [ "$trimmed" != "$desc" ]; then desc="$trimmed."; else desc="${desc% }"; fi
     # Port and panel read from the same manifest the Service column already opens
-    # (Axon#39). Emitting them is what stops a port number living in two homes — the
+    # (Sjel#39). Emitting them is what stops a port number living in two homes — the
     # manifest and a hand-maintained table in dashboard/README.md — since a generated
     # column cannot drift from its source. The Panel column is a dash for every
     # capability today because none declares panel_port/panel_path yet; it is emitted
@@ -133,7 +133,7 @@ AX="$SJEL_ROOT/axon.toml"
 
   echo "## State mounts"
   echo
-  echo "Where tools actually persist data — Axon records where a tool already writes, it never"
+  echo "Where tools actually persist data — Sjel records where a tool already writes, it never"
   echo "relocates the directory (see [State mounts record reality](CONTRIBUTING.md#state-mounts-record-reality))."
   echo
   echo "**Not tabulated here.** The \`[[state_mount]]\` registry moved from \`axon.toml\` into"

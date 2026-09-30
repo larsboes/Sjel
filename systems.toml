@@ -1,8 +1,8 @@
-# systems.toml — the map of systems Axon connects to.
+# systems.toml — the map of systems Sjel connects to.
 #
 # One section per system: a service, tool, or project that has a ROLE in the
 # setup — something a pack or capability references by id (its section name),
-# or a separate repo Axon integrates with. This is deliberately NOT:
+# or a separate repo Sjel integrates with. This is deliberately NOT:
 #   * upstreams.toml — that is external CODE dependencies with an audit verdict.
 #   * a bookmark dump — reading/inspiration links don't earn a section here.
 #   * a graveyard — a system evaluated and declined gets no section, only the note below.
@@ -64,7 +64,7 @@ why   = "The public core: reusable contracts, capabilities and deployment toolin
 url   = "overlay:systems.local.toml"
 kind  = "project"
 local = "yes"
-why   = "Private home-automation deployment consumed through Axon's public capability and Pack contracts; coordinates live in the selected overlay."
+why   = "Private home-automation deployment consumed through Sjel's public capability and Pack contracts; coordinates live in the selected overlay."
 
 [backup-target]
 url   = "overlay:systems.local.toml"
@@ -88,7 +88,7 @@ why   = "Open-source coding agent CLI (MIT) — third swappable harness alongsid
 url   = "overlay:systems.local.toml"
 kind  = "project"
 local = "yes"
-why   = "Private knowledge store with its own sync lifecycle, connected through explicit capability contracts rather than treated as an Axon-wide database."
+why   = "Private knowledge store with its own sync lifecycle, connected through explicit capability contracts rather than treated as an Sjel-wide database."
 
 [obsidian-local-rest-api]
 url   = "https://github.com/coddingtonbear/obsidian-local-rest-api"
@@ -106,7 +106,7 @@ why   = "Swift monorepo of macOS/iOS quality-of-life utilities; plugin-first, ex
 url   = "https://github.com/danielmiessler/LifeOS"
 kind  = "platform"
 local = "yes"
-why   = "Personalization + tooling layer under the agent runtime, and the ancestor of Axon's public-core-plus-private-overlay shape. Axon held a reviewed delta against it until 2026-08-25 and holds none now — see upstreams.toml's [lifeos] entry, which owns the last consumed pin and the reason it stopped. Ideas flow from here into Axon."
+why   = "Personalization + tooling layer under the agent runtime, and the ancestor of Sjel's public-core-plus-private-overlay shape. Axon held a reviewed delta against it until 2026-08-25 and holds none now — see upstreams.toml's [lifeos] entry, which owns the last consumed pin and the reason it stopped. Ideas flow from here into Sjel."
 
 # ---- 3d-printing stack (referenced by Packs/3d-printing) -------------------
 
@@ -134,7 +134,7 @@ why   = "Headless slicer printctl shells out to (STL/3MF -> gcode). User presets
 url   = "https://ollama.com/"
 kind  = "tool"
 local = "yes"
-why   = "Portable local-model runner. Holds the `embedding` and `summarization` inference roles on this deployment since 2026-08-30, oMLX having left the host. CONTEXT WINDOWS ARE NOT AUTOMATIC HERE and the failure is silent: it loads a model at 4096 tokens whatever the architecture declares (qwen3:4b declares 262144), its OpenAI-compatible /v1/chat/completions -- the endpoint libs/inference uses for an `api = \"ollama\"` backend -- takes no per-request num_ctx, and an over-window prompt is TRUNCATED FROM THE FRONT and answered 200 rather than refused. Measured 2026-08-30: a 7,399-token prompt came back reported as 2,050 with its opening gone. oMLX and apfel both refuse instead, so Axon had been relying on the server to hold that line. A chat role on Ollama therefore names a model built with an explicit `PARAMETER num_ctx` covering `sjel_summarize::worst_case_prompt_tokens()` (6,400) -- here `axon-qwen3-4b:ctx8k`, derived FROM qwen3:4b at 8192. Embedding roles are unaffected: bge-m3 is called on /api/embed and its own max sequence bounds it."
+why   = "Portable local-model runner. Holds the `embedding` and `summarization` inference roles on this deployment since 2026-08-30, oMLX having left the host. CONTEXT WINDOWS ARE NOT AUTOMATIC HERE and the failure is silent: it loads a model at 4096 tokens whatever the architecture declares (qwen3:4b declares 262144), its OpenAI-compatible /v1/chat/completions -- the endpoint libs/inference uses for an `api = \"ollama\"` backend -- takes no per-request num_ctx, and an over-window prompt is TRUNCATED FROM THE FRONT and answered 200 rather than refused. Measured 2026-08-30: a 7,399-token prompt came back reported as 2,050 with its opening gone. oMLX and apfel both refuse instead, so Sjel had been relying on the server to hold that line. A chat role on Ollama therefore names a model built with an explicit `PARAMETER num_ctx` covering `sjel_summarize::worst_case_prompt_tokens()` (6,400) -- here `axon-qwen3-4b:ctx8k`, derived FROM qwen3:4b at 8192. Embedding roles are unaffected: bge-m3 is called on /api/embed and its own max sequence bounds it."
 
 [omlx]
 url   = "https://github.com/jundot/omlx"
@@ -157,7 +157,7 @@ why   = "OS-managed native embedding comparator for Comms, not the production re
 url   = "https://developer.apple.com/documentation/vision/vnrecognizetextrequest"
 kind  = "platform"
 local = "yes"
-why   = "the OS framework rung 2 of the extraction ladder stands on (PRD Q63 -> B30), reached through Axon's own tools/visocr (built by tools/visocr/build.sh; no toolchain.toml entry until a capability execs it). Measured against the frozen DE/EN corpus on 2026-09-02: 100.0% prose recall across four German and English pages at 0.14 s per page with zero model bytes, and 58.8% notation recall, because it does not corrupt a printed formula -- it deletes it and returns the surrounding prose as though the page had none. That split is why the ladder has a third rung; the record is libs/extraction/eval/results/2026-09-02-apple-vision-baseline.md. macOS-only, so on a Linux host this rung is absent and says so rather than being compiled away."
+why   = "the OS framework rung 2 of the extraction ladder stands on (PRD Q63 -> B30), reached through Sjel's own tools/visocr (built by tools/visocr/build.sh; no toolchain.toml entry until a capability execs it). Measured against the frozen DE/EN corpus on 2026-09-02: 100.0% prose recall across four German and English pages at 0.14 s per page with zero model bytes, and 58.8% notation recall, because it does not corrupt a printed formula -- it deletes it and returns the surrounding prose as though the page had none. That split is why the ladder has a third rung; the record is libs/extraction/eval/results/2026-09-02-apple-vision-baseline.md. macOS-only, so on a Linux host this rung is absent and says so rather than being compiled away."
 
 [opencode-zen-go]
 url   = "https://opencode.ai/zen/go/v1"
@@ -169,7 +169,7 @@ why   = "OpenAI-compatible hosted inference, the paid fallback behind nvidia-nim
 url   = "https://generativelanguage.googleapis.com/"
 kind  = "service"
 local = "no"
-why   = "Free-tier hosted inference (OpenAI-compatible /v1beta/openai/chat/completions, bearer key) behind the comms `cloud_gemini_content_analysis` role. FREE-TIER CEILING IS 20 REQUESTS PER DAY, per project per model, for gemini-3.6-flash -- not an estimate: the provider names it in its own 429 body as quotaId GenerateRequestsPerDayPerProjectPerModel-FreeTier, quotaValue 20, read on 2026-08-30. The role had declared 1000, so Axon kept dispatching 50x past the point the provider stopped serving; `max_requests_per_day` is a LOCAL guard and is worth nothing set above the real limit. Second caveat, measured the same day: gemini-3.6-flash reasons before answering and truncates every digest at finish_reason=length, 33 failures to 0 successes, because `chat_template_kwargs` can only emit the key vLLM and NIM read and this endpoint wants top-level `reasoning_effort` -- see libs/inference/src/lib.rs. The role now sets `request_overrides = {reasoning_effort: none}` through the general field added the same day, and that value is UNVERIFIED: the 20/day quota was already spent by the 33 truncated attempts, so the first real test of it is the next drain after the quota resets. If it does not clear the truncation, the alternatives are a larger reply budget for this role or leaving it as the last failover rung it now is. Key provisioned via Vaultwarden and tools/materialize-inference-key, never by an agent."
+why   = "Free-tier hosted inference (OpenAI-compatible /v1beta/openai/chat/completions, bearer key) behind the comms `cloud_gemini_content_analysis` role. FREE-TIER CEILING IS 20 REQUESTS PER DAY, per project per model, for gemini-3.6-flash -- not an estimate: the provider names it in its own 429 body as quotaId GenerateRequestsPerDayPerProjectPerModel-FreeTier, quotaValue 20, read on 2026-08-30. The role had declared 1000, so Sjel kept dispatching 50x past the point the provider stopped serving; `max_requests_per_day` is a LOCAL guard and is worth nothing set above the real limit. Second caveat, measured the same day: gemini-3.6-flash reasons before answering and truncates every digest at finish_reason=length, 33 failures to 0 successes, because `chat_template_kwargs` can only emit the key vLLM and NIM read and this endpoint wants top-level `reasoning_effort` -- see libs/inference/src/lib.rs. The role now sets `request_overrides = {reasoning_effort: none}` through the general field added the same day, and that value is UNVERIFIED: the 20/day quota was already spent by the 33 truncated attempts, so the first real test of it is the next drain after the quota resets. If it does not clear the truncation, the alternatives are a larger reply budget for this role or leaving it as the last failover rung it now is. Key provisioned via Vaultwarden and tools/materialize-inference-key, never by an agent."
 
 [groq]
 url   = "https://api.groq.com/openai/v1"
@@ -181,7 +181,7 @@ why   = "Free-tier hosted inference (OpenAI-compatible /v1/chat/completions, bea
 url   = "https://api.cohere.ai/compatibility/v1"
 kind  = "service"
 local = "no"
-why   = "Free trial-key inference behind an OPENAI-COMPATIBLE endpoint -- `https://api.cohere.ai/compatibility/v1`, Cohere's own Compatibility API, which takes the standard chat/completions shape including max_tokens. Held as a third public-tier role behind Cloudflare and Groq. CORRECTION, recorded because the first pass got it wrong: this provider was initially rejected here as needing a new `Api` variant, on the strength of a community directory listing its native `api.cohere.com/v2` schema. That was the directory's URL, not the provider's only one, and the compatibility layer is a config entry rather than a code change. THE REAL CONSTRAINT IS THE PERIOD, not the shape: trial keys allow 20 req/min and 1000 API calls per MONTH, and `max_requests_per_day` can only express a UTC day. 30/day is the daily figure that keeps a full month inside that budget (30x31 = 930), so the role declares 30 and the monthly ceiling is respected by construction rather than by a counter Axon does not have. Key provisioned manually via Vaultwarden and tools/materialize-inference-key, never by an agent."
+why   = "Free trial-key inference behind an OPENAI-COMPATIBLE endpoint -- `https://api.cohere.ai/compatibility/v1`, Cohere's own Compatibility API, which takes the standard chat/completions shape including max_tokens. Held as a third public-tier role behind Cloudflare and Groq. CORRECTION, recorded because the first pass got it wrong: this provider was initially rejected here as needing a new `Api` variant, on the strength of a community directory listing its native `api.cohere.com/v2` schema. That was the directory's URL, not the provider's only one, and the compatibility layer is a config entry rather than a code change. THE REAL CONSTRAINT IS THE PERIOD, not the shape: trial keys allow 20 req/min and 1000 API calls per MONTH, and `max_requests_per_day` can only express a UTC day. 30/day is the daily figure that keeps a full month inside that budget (30x31 = 930), so the role declares 30 and the monthly ceiling is respected by construction rather than by a counter Sjel does not have. Key provisioned manually via Vaultwarden and tools/materialize-inference-key, never by an agent."
 
 [cloudflare-workers-ai]
 url   = "https://developers.cloudflare.com/workers-ai/"

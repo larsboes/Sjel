@@ -558,6 +558,26 @@ export function classifyArchiveAtTarget(input: {
   return { level: "ok", detail: `${input.receiptBytes} bytes, present at the destination` };
 }
 
+/// A failed attempt, from the marker `capabilities/backup`'s runner writes.
+///
+/// The receipts cannot carry this: `tools/backup.sh` writes one only after a run lands, so a
+/// run that failed leaves the previous receipt in place and the age line above keeps calling
+/// it fresh. Measured 2026-09-29: store's iCloud uploads had failed for days, two gated runs
+/// exited non-zero, and doctor still said "backed up 0.0d ago". The marker is removed the
+/// moment a run succeeds, so one existing means the last attempt failed.
+export function attemptFinding(
+  attempt: { exit_code: number; at_epoch: number; detail: string },
+  now: number,
+): { level: "bad"; detail: string } {
+  const since = Math.max(0, now - attempt.at_epoch);
+  const hours = (since / 3_600).toFixed(1);
+  const reason = attempt.detail.trim() === "" ? "" : `: ${attempt.detail.trim()}`;
+  return {
+    level: "bad",
+    detail: `the last attempt FAILED ${hours}h ago (exit ${attempt.exit_code})${reason}`,
+  };
+}
+
 // --- scheduled producers ----------------------------------------------------------------------
 //
 // A capability that declares `schedule` has no supervisor watching it. It is started, it runs, it
@@ -2409,6 +2429,43 @@ const CHECKS: Check[] = [
         const age = at === null ? null : Math.max(0, now - at);
         const state = backupAgeState(age, advise, stale);
         const days = age === null ? 0 : (age / 86_400).toFixed(1);
+
+        // Checked before the age switch, and independent of it: a fresh receipt and a failed
+        // last attempt are exactly the combination that used to read as healthy, and the
+        // `never` case below would otherwise `continue` past this.
+        const attemptPath = join(
+          ctx.overlayPath,
+          "backup",
+          "receipts",
+          "attempts",
+          `${service.name}.json`,
+        );
+        if (existsSync(attemptPath)) {
+          try {
+            const attempt = JSON.parse(readFileSync(attemptPath, "utf8")) as {
+              exit_code?: number;
+              at_epoch?: number;
+              detail?: string;
+            };
+            if (typeof attempt.at_epoch === "number") {
+              ctx.bad(
+                `${service.name} — ${attemptFinding(
+                  {
+                    exit_code: typeof attempt.exit_code === "number" ? attempt.exit_code : -1,
+                    at_epoch: attempt.at_epoch,
+                    detail: typeof attempt.detail === "string" ? attempt.detail : "",
+                  },
+                  now,
+                ).detail}`,
+              );
+            } else {
+              ctx.warn(`${service.name} — ${attemptPath} has no timestamp; a failed attempt cannot be dated`);
+            }
+          } catch {
+            ctx.warn(`${service.name} — ${attemptPath} is not readable JSON; whether the last attempt failed is unknown`);
+          }
+        }
+
         switch (state) {
           case "never":
             ctx.bad(`${service.name} — declares a backup contract and has no usable receipt; nothing has ever landed (tools/backup.sh ${service.name})`);

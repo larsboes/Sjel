@@ -17,6 +17,7 @@ import {
   parseLaunchdJobs,
   parseLaunchdSchedule,
   classifyArchiveAtTarget,
+  attemptFinding,
   parseReceiptTimestamp,
   classifyProbeOutcome,
   resolveProbeTargets,
@@ -651,6 +652,28 @@ describe("backup receipts", () => {
       .toBe("bad");
     expect(classifyArchiveAtTarget({ exists: true, sizeBytes: 2361, flags: "-", receiptBytes: 2361 }).level)
       .toBe("ok");
+  });
+
+  test("a failed attempt is reported even while the receipt still looks fresh", () => {
+    // 2026-09-29: store's iCloud uploads had failed for days, two gated runs exited
+    // non-zero, and the receipt-based age line still read "backed up 0.0d ago". The marker
+    // the runner writes is what makes the failure outlive the log.
+    const finding = attemptFinding(
+      {
+        exit_code: 1,
+        at_epoch: 1_000_000,
+        detail: "icloud-item: upload failed: Couldn't access your iCloud account",
+      },
+      1_000_000 + 3 * 3_600,
+    );
+    expect(finding.level).toBe("bad");
+    expect(finding.detail).toContain("FAILED 3.0h ago");
+    expect(finding.detail).toContain("exit 1");
+    expect(finding.detail).toContain("iCloud account");
+    // A marker with no reason still says the thing that matters.
+    const terse = attemptFinding({ exit_code: 23, at_epoch: 1_000_000, detail: "" }, 1_000_000);
+    expect(terse.detail).toContain("exit 23");
+    expect(terse.detail.endsWith(")")).toBe(true);
   });
 
   test("an evicted archive is listed, named, correctly sized and not there", () => {

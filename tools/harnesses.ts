@@ -500,22 +500,39 @@ function useProfile(): void {
 
 // ---------------------------------------------------------------- sync
 
+/**
+ * Which packs `sync` should touch, given what the harness already knows about.
+ *
+ * `--all` is a flag here, not a positional value. The argv filter that builds `positional`
+ * strips every `--`-prefixed argument, so the documented `sync --all` form could never reach
+ * `positional[1]` — and the `target === "--all"` checks it used to feed were therefore dead
+ * code, because the command always threw its own usage error first. Measured 2026-09-30,
+ * which is why this is a named function with a test rather than two inline ternaries.
+ */
+export function syncTargets(pack: string | undefined, all: boolean, known: string[]): string[] {
+  if (all) return [...known].sort();
+  return pack ? [pack] : [];
+}
+
 function sync(): void {
-  const target = positional[1];
-  if (!target) throw new Error("usage: tools/harnesses sync <pack>|--all [--harness <id>]");
+  const pack = positional[1];
+  const all = has("all");
+  if (pack && all) throw new Error("tools/harnesses sync: give a pack or --all, not both");
+  if (!pack && !all) throw new Error("usage: tools/harnesses sync <pack>|--all [--harness <id>]");
   for (const h of selectedHarnesses()) {
     console.log(`${h.label}:`);
     if (h.model === "registry") {
-      console.log(`  registry harness — run: ${h.cli} deploy ${target === "--all" ? "<pack>" : target}`);
+      // A registry harness deploys one pack per invocation, so this line is a hint to run
+      // per pack rather than a loop this command could perform.
+      console.log(`  registry harness — run: ${h.cli} deploy ${all ? "<pack>" : pack}`);
       continue;
     }
     const config = h.config();
-    const packs = target === "--all" ? Object.keys(readState(config).packs).sort() : [target];
-    for (const pack of packs) {
+    for (const target of syncTargets(pack, all, Object.keys(readState(config).packs))) {
       try {
-        for (const line of syncPack(config, pack)) console.log(`  ${line}`);
+        for (const line of syncPack(config, target)) console.log(`  ${line}`);
       } catch (error) {
-        console.log(`  ✗ ${pack}: ${(error as Error).message}`);
+        console.log(`  ✗ ${target}: ${(error as Error).message}`);
       }
     }
   }

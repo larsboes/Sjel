@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
 
-import { skillsLineWith } from "./harnesses.ts";
+import { skillsLineWith, syncTargets } from "./harnesses.ts";
 
 // `promote` takes the skill name off the command line and it names a directory under
 // the harness destination, so the alphabet is "whatever a filename may contain" and
@@ -46,5 +46,33 @@ describe("skillsLineWith", () => {
   // success, so the skill was copied into the Pack and never declared by it.
   test("refuses a skills array that does not close on this line", () => {
     expect(() => skillsLineWith('skills = [', "trim")).toThrow("multi-line array");
+  });
+});
+
+// `sync --all` was documented from the day the verb was written and never worked. The argv
+// filter that builds `positional` drops anything starting with `--`, so `positional[1]` was
+// always undefined for that form and `sync()` threw its usage error before reaching the
+// `target === "--all"` branch — dead code that nothing exercised. Measured 2026-09-30.
+describe("syncTargets", () => {
+  test("a named pack is the only target", () => {
+    expect(syncTargets("coding", false, ["writing", "coding"])).toEqual(["coding"]);
+  });
+
+  test("--all takes every pack the harness knows, sorted", () => {
+    expect(syncTargets(undefined, true, ["writing", "coding", "harness"])).toEqual([
+      "coding",
+      "harness",
+      "writing",
+    ]);
+  });
+
+  test("--all with nothing deployed is an empty list, not a crash", () => {
+    expect(syncTargets(undefined, true, [])).toEqual([]);
+  });
+
+  // The caller turns this into the usage error; the point of the case is that the
+  // neither-given path is not silently an empty list.
+  test("neither a pack nor --all selects nothing", () => {
+    expect(syncTargets(undefined, false, ["coding"])).toEqual([]);
   });
 });

@@ -252,8 +252,16 @@ function main(): void {
   const fixturesDir = fixIdx >= 0 ? args[fixIdx + 1] : join(SJEL_ROOT, manifest.fixturesDir);
 
   const model = JSON.parse(readFileSync(join(SJEL_ROOT, "self.json"), "utf8")) as SelfModel;
-  if (model.schema !== 1) {
-    console.error(`generate-docs: self.json is schema ${model.schema}, this generator knows schema 1`);
+  // A schema bump means the shape read below may have moved. Fail rather than publish pages
+  // built from fields that no longer mean what they did.
+  //
+  // Schema 2 (2026-09-29) dropped the per-unit `code` counts and the `graph` block. This file
+  // never read either — the fields it does read (`units`, `coupling`, and the `service` block
+  // inside a unit) are unchanged — so only the accepted version moves. tools/generate-site.ts
+  // took the same bump; this consumer was missed, and the Pages build was red for it from
+  // 2026-09-29 17:25 until here.
+  if (model.schema !== 2) {
+    console.error(`generate-docs: self.json is schema ${model.schema}, this generator knows schema 2`);
     process.exit(1);
   }
 

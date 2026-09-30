@@ -8,7 +8,7 @@ import {
   installCommsProxyAuthorization,
   isMutation,
   loadCommsProxyCredential,
-} from "./vite/comms-proxy-auth";
+} from "./vite/comms-proxy-auth.ts";
 
 const SJEL_ROOT = resolve(fileURLToPath(new URL(".", import.meta.url)), "..");
 const port = Number(process.env.SJEL_PORT ?? 47117);
@@ -24,8 +24,13 @@ const LAZY_CHUNK_LIMIT_BYTES = 1_200_000;
 // `total` bounds the library across every chunk Rollup splits it into, measured with ~5%
 // headroom so an upstream bump that doubles something has to be looked at. It is a
 // footprint bound, not a per-load one, and the two differ by a lot for Mermaid: MapLibre
-// arrives as one real chunk of 0.98 MB (v6.4.1; it was ~1.05 MB on v5) plus a 0.46 MB worker,
-// while Mermaid self-splits by diagram type across 52
+// arrives as one real chunk of 1.01 MB plus a 0.49 MB worker. Both halves grew with the
+// 2026-09-30 bump to v6.11.2, which measured 1,573,065 bytes against the 1,530,000 v6.4.1
+// had set (0.98 MB + 0.46 MB there; v5 was ~1.05 MB for the chunk alone) -- +2.8% across
+// four minor releases, and entirely inside the lazy graph, so the eager limit above is
+// untouched by it. The bound moved rather than the dependency: Q77 rolls on the latest, and
+// what this number exists to catch is a doubling nobody saw, not a 2.8% nobody would.
+// Mermaid self-splits by diagram type across 52
 // chunks totalling 2.57 MB, of which a reader pulls the ~1.3 MB core plus only the diagram
 // types actually on the page. What bounds any single download is LAZY_CHUNK_LIMIT_BYTES
 // above; this bounds the library growing while nobody is watching.
@@ -41,7 +46,7 @@ const LAZY_VENDORS = [
     label: "MapLibre",
     match: ["/maplibre-gl/"],
     assets: [/maplibre-gl-worker.*\.js$/],
-    total: 1_530_000,
+    total: 1_650_000,
   },
   { label: "Mermaid", match: ["/mermaid/", "/@mermaid-js/"], assets: [], total: 2_700_000 },
 ];

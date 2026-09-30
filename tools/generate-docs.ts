@@ -179,8 +179,8 @@ function endpointSection(recs: Recording[], absentReason: string | undefined): s
 function unitPage(unit: Unit, model: SelfModel, recs: Recording[], absentReason?: string): string {
   const dir = sourceDir(unit);
   return page({
-    title: `${unit.name} — Axon reference`,
-    description: `The declared contract, coupling and recorded response shapes for Axon's ${unit.name} ${(KIND_LABEL[unit.kind] ?? unit.kind).toLowerCase()}.`,
+    title: `${unit.name} — Sjel reference`,
+    description: `The declared contract, coupling and recorded response shapes for Sjel's ${unit.name} ${(KIND_LABEL[unit.kind] ?? unit.kind).toLowerCase()}.`,
     root: "../",
     current: "docs",
     body: `
@@ -204,8 +204,8 @@ function indexPage(units: Unit[], model: SelfModel, absent: Record<string, strin
     .map((kind) => [kind, units.filter((u) => u.kind === kind)] as const)
     .filter(([, list]) => list.length > 0);
   return page({
-    title: "Axon — reference",
-    description: "One reference page per Axon capability, library and Pack, generated from the repository's own manifests.",
+    title: "Sjel — reference",
+    description: "One reference page per Sjel capability, library and Pack, generated from the repository's own manifests.",
     root: "../",
     current: "docs",
     body: `

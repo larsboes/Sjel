@@ -76,6 +76,21 @@ export const SITE_CSS = `
   .sitenav a[aria-current] { border-color: var(--accent); }
   .sitenav .sep { flex: 1 }
 
+  /* Top brand header with hedgehog mark */
+  .site-header {
+    display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between;
+    gap: .75rem; padding: 1.25rem 0 .75rem; border-bottom: 1px solid var(--line); margin-bottom: 1.5rem;
+  }
+  .site-brand {
+    display: inline-flex; align-items: center; gap: .6rem; text-decoration: none;
+    color: var(--fg); font-weight: 600; font-size: 1.15rem; letter-spacing: -.01em;
+  }
+  .site-brand:hover { color: var(--accent); }
+  .site-logo {
+    display: block; width: 28px; height: 28px; border-radius: 6px; flex-shrink: 0;
+  }
+  .site-header .sitenav { padding: 0; }
+
   /* Cards: the landing page's three ways in, and the docs index. */
   .cards { display: grid; gap: .75rem; grid-template-columns: repeat(auto-fill, minmax(17rem, 1fr)); padding: 0; margin: 1rem 0 0; list-style: none; }
   .cards li { border: 1px solid var(--line); border-radius: 8px; background: var(--card); }
@@ -122,10 +137,26 @@ export function page(opts: PageOptions): string {
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>${esc(opts.title)}</title>
 <meta name="description" content="${esc(opts.description)}">
+<link rel="icon" href="${opts.root}favicon.svg" type="image/svg+xml">
+<link rel="apple-touch-icon" sizes="180x180" href="${opts.root}apple-touch-icon.png">
 <style>${SITE_CSS}</style>
 </head>
 <body>
 <main>
+<header class="site-header">
+  <a class="site-brand" href="${opts.root}">
+    <img class="site-logo" src="${opts.root}favicon.svg" alt="" width="28" height="28">
+    <span>Sjel</span>
+  </a>
+  <nav class="sitenav" aria-label="Site">
+    ${link("", "Dashboard", "demo")}
+    ${link("docs/index.html", "Reference", "docs")}
+    ${link("docs/self-model.html", "Self-model", "overview")}
+    ${link("research/index.html", "Research", "research")}
+    <span class="sep"></span>
+    <a href="https://github.com/larsboes/Sjel">Source</a>
+  </nav>
+</header>
 ${opts.body}
 <footer>
 ${opts.footer}

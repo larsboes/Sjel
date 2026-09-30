@@ -134,20 +134,19 @@ ${body}
 </section>`;
 }
 
-export function renderSite(model: SelfModel, demoed: string[] = []): string {
+export function renderSite(model: SelfModel, demoed: string[] = [], root = "../"): string {
   const counts = KIND_ORDER
     .map((k) => [k, model.units.filter((u) => u.kind === k).length] as const)
     .filter(([, n]) => n > 0);
   return page({
-    title: "Axon — one tree that knows what it runs",
+    title: "Sjel — one tree that knows what it runs",
     description:
-      "What Axon is: its capabilities, their contracts, and how they connect — generated from the repository's own manifests, with a live demo running on synthetic data.",
-    // Lives at /docs/self-model.html since #170, so one level up.
-    root: "../",
+      "What Sjel is: its capabilities, their contracts, and how they connect — generated from the repository's own manifests, with a live demo running on synthetic data.",
+    root,
     current: "overview",
     body: `
 <header>
-  <h1>Axon</h1>
+  <h1>Sjel</h1>
   <p class="tagline">One tree that knows what it runs. Every capability declares what it needs in a manifest; one shared runner decides how to satisfy it on this machine.</p>
   <ul class="totals">
 ${counts.map(([k, n]) => `    <li><strong>${n}</strong> ${esc(KIND_LABEL[k].toLowerCase())}</li>`).join("\n")}
@@ -206,7 +205,9 @@ function main(): void {
   // Which capabilities the demo actually runs, read from demo.toml rather than inferred from
   // what is NOT in its absent list — the demo covers a handful of the tree's capabilities, and
   // "everything except the three we wrote a reason for" would overstate it by twenty.
-  const html = renderSite(model, loadManifest().capabilities.map((c) => c.name));
+  const isSubdir = outDir.endsWith("docs") || outDir.endsWith("research");
+  const root = isSubdir ? "../" : "";
+  const html = renderSite(model, loadManifest().capabilities.map((c) => c.name), root);
   if (args.includes("--check")) {
     console.log(`generate-site: renders ${html.length} bytes from schema ${model.schema} (nothing written)`);
     return;

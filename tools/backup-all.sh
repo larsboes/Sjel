@@ -53,6 +53,18 @@ esac
 # SJEL_BUN is how a machine whose supervisor cannot see the login PATH states the real path,
 # declared in the overlay's machine.toml under `[capability.backup] env` — the seam
 # persistence_env_block exists for, rather than a hand-edit of the generated unit.
+# A supervised run gets a minimal PATH with no /opt/homebrew/bin, which is how this script
+# once reported success while backing up nothing for 8.3 days (see the block above). It was
+# solved then by declaring SJEL_BUN for the launchd unit, and that seam is keyed on THIS
+# capability — so it does not reach the other caller this script now has: sjel-status, which
+# serves the backup surface and starts a run on an operator's behalf. Widening the search
+# here fixes both without teaching either caller where bun lives, and the refusal below
+# still fires when bun is genuinely absent: this widens the search, it does not assume an
+# answer. host-patch.sh and container-refresh.sh prepend the same directories for the same
+# reason.
+PATH="/opt/homebrew/bin:/opt/homebrew/sbin:/usr/local/bin:$HOME/.bun/bin:$HOME/.local/bin:$PATH"
+export PATH
+
 BUN="${SJEL_BUN:-bun}"
 case "$BUN" in
   /*)

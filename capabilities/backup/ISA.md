@@ -195,6 +195,14 @@ manifest needs `schedule` or `port`. The manifest therefore keeps its declared s
 process is built, and gives it up only in the commit that adds both the `port` and the stored policy
 that replaces it. No commit leaves this capability without either a valid timer or a running process.
 
+**2026-09-29 — the surface is sjel-status, and this capability is a library.** The plan said a new
+process with its own port and panel. Reading the tree first showed `sjel-status` already serves
+`GET /api/sjel-status/backups` and `POST /api/sjel-status/capabilities/{name}/backup`, already opens
+the shared store, and already links a capability's store module (`capabilities/devices`). A second
+process would therefore have been a second trigger and a second truth for one job. So the tables,
+the runner, the verifiers and the policy loop live here, and sjel-status links this crate and serves
+the routes. `capabilities/backup` keeps no `service.toml`: a library needs no port.
+
 **2026-09-29 — the mechanism does not move.** `tools/backup.sh` already handles ssh, local and stream
 targets, and its iCloud gate already implements the one per-kind check that matters most here.
 Rewriting it in Rust would trade a tested mechanism for an untested one.
@@ -214,20 +222,62 @@ Rewriting it in Rust would trade a tested mechanism for an untested one.
 phases. Nothing about the running backup changes: the manifest, its `schedule = "24h"` and the
 LaunchAgent stay exactly as they are. Deliverable: a recorded plan, and a timer still firing.
 
-**Step 2 — the surface.** `capabilities/backup` becomes a process with a port, a panel and
-`backup_` tables in the shared store, while the manifest keeps its declared schedule so coverage is
-unbroken. Two verbs: trigger a run, poll status. Records every attempt, including failures (F1).
-Deliverable: a panel that starts and reports, against the one configured target.
+**Step 2 — the surface. DONE (2026-09-29).** `backup_` tables in the shared store, and routes on
+sjel-status: trigger with an optional target, `/backup/targets`, `/backup/runs`, `/backup/policy`,
+`/backup/verify`, and `attempt` on `/backups`. Records every attempt, including failures (F1). The
+declared schedule still runs, so coverage never broke. Verified live against the real target with a
+scratch database: the rehearsal hashed and restored a real archive, and the policy loop started two
+runs and recorded one landing and one failing with its reason.
 
-**Step 3 — targets and their verifiers.** Targets become declared data with a kind; the panel picks
-one per run; each kind's verifier and refusal lands with tests (F2, F3). Deliverable: a target list
-that refuses what it cannot prove.
+**Step 3 — targets and their verifiers. DONE for the local kind (2026-09-29).** Targets are read
+from `tools/backup-all.sh --list` and `--targets-json`, so the derivation stays in one place; a run
+names one; a target keeps the verdict of its last rehearsal; `unchecked` is what an `ssh` target
+answers, with the reason. Deliverable met for local: `verify` refuses what it cannot prove.
 
-**Step 4 — timing policy.** The panel writes the interval as stored policy and reads it (off, 24h,
-or another interval), and the manifest gives up its `schedule` for its `port` in the same commit —
-the one structural handover F0 describes (F4). Deliverable: a schedule the operator can turn on, off
-and re-time, with no source change.
+**Step 4 — timing policy. PARTIAL (2026-09-29).** The interval is stored policy with `off` as
+`null`, writable and readable from the surface, and the loop that acts on it runs inside
+sjel-status. What has NOT happened is the handover in F0: the manifest still declares
+`schedule = "24h"` and no `port`, because the handover is one commit that gives the manifest a port
+while the stored policy takes over the timer. Until then the declared schedule fires and the policy
+table is inert.
 
 **Step 5 — media live probes.** F0 index and audit, F1 ingest once a staging export exists, F2 full
 mirror verification plus a real unmount (F5). Deliverable: the media ISA's live claims, moved from
 "untested" only where a probe passed.
+
+## Probe record (2026-09-29)
+
+- **F1 passes live, and is the claim this work exists for.** With a scratch database and a
+  scratch overlay narrowed to two small contracts, the policy loop started two runs:
+  `packs` landed `packs-20260930T054422Z.tar.gz` (exit 0, archive identity recorded) and
+  `finance` recorded `exit=1` with `backup.sh: declared backup path is missing` — a failure that
+  before this left only a log line. The attempt marker was then read by `tools/doctor`, which
+  reports a failed attempt as a finding even while the receipt's age still looks fresh.
+- **F3 passes for the local kind.** `POST /backup/verify` hashed `finance-20260929T210314Z.tar.gz`
+  against its recorded receipt and restored it in isolation: verdict `verified`. An `ssh` target
+  answers `unchecked` with the reason, which is the honest value, not a claim.
+- **F2 passes.** `GET /backup/targets` resolves the declared target from the overlay
+  (`kind=local`, `present=true`, five declaring capabilities) and re-reads it on every call, so a
+  capability that starts declaring a contract appears without a restart.
+- **F4 partial.** The interval round-trips (`24` → stored → `null` for off), `0` is refused by
+  name, an unknown target is refused with 404, and the loop acts on what is stored. The F0
+  handover — manifest gives up `schedule` for `port` — has not been made, so the declared 24h is
+  still the timer that fires.
+- **Two defects the live run found, both fixed:** the rehearsal selected the first declared
+  capability rather than one whose archive is actually at the target, and `restore.sh` requires the
+  destination's *parent* to exist, so the scratch directory is created first.
+- **Not built: the dashboard page.** The surface is JSON plus sjel-status's existing panel; a
+  picker and an interval control in `dashboard/` are the remaining UI work, and the API they need
+  is in place.
+- **Not built: an offsite or encrypted target kind.** `tools/backup.sh --stream` exists to pipe an
+  archive into one; nothing consumes it yet.
+
+### A mistake worth recording
+
+Testing the surface used a scratch overlay whose `config/*.toml` were **symlinks** to the live
+overlay's. Editing "the scratch copy" therefore rewrote the live `machine.toml` (enabled set) and
+the live `systems.local.toml` (the backup target's path), which made `doctor` report a real archive
+as missing. Both were restored — `machine.toml` from git, the untracked `systems.local.toml` by
+hand — and the receipt a test run had overwritten was reconstructed from the archive it names.
+The lesson is specific and cheap to apply: a scratch overlay must **copy** the files it intends to
+edit, never symlink them.

@@ -1,6 +1,7 @@
 # backup
 
-The scheduled run of every capability's backup contract.
+Every capability's backup contract: the run, the surface that manages it, and the record of what
+each attempt did.
 
 `tools/backup-all.sh` asks the registry which capabilities declare `backup_target` and runs
 `tools/backup.sh` for each. The set is derived, never typed: a capability is backed up because its
@@ -9,6 +10,49 @@ manifest says it has something to back up.
 It runs every contract even when one fails, and exits non-zero if any did. Stopping at the first
 failure would let one broken capability cancel the others' backups — the shape of outage that ends
 with two weeks of nothing.
+
+## Shape: a library here, the surface in sjel-status
+
+This directory holds a **library**. `capabilities/sjel-status` is the **surface**, because it
+already listed backup age and already triggered a backup: a second process would have been a second
+trigger and a second truth for one job. The capability owns the tables, the runner, the verifiers
+and the timing policy; sjel-status links it the way it already links `capabilities/devices`.
+
+| Route (on sjel-status) | What it answers |
+|---|---|
+| `GET /api/sjel-status/backups` | age from the receipt, **plus `attempt`** — what the last run actually did |
+| `POST /api/sjel-status/capabilities/{name}/backup` | run one capability, optionally against a named `{ "target" }` |
+| `GET /api/sjel-status/backup/targets` | declared targets: kind, coordinates, presence, last rehearsal verdict, interval |
+| `GET /api/sjel-status/backup/runs?limit=N` | every attempt, newest first, failures included |
+| `POST /api/sjel-status/backup/policy` | `{ "target", "interval_hours" }` — set, change, or `null` for off |
+| `POST /api/sjel-status/backup/verify` | `{ "target" }` — hash the newest recorded archive and restore it in isolation |
+
+Four things the receipts could not carry, and this does:
+
+- **A failed run is a row.** `tools/backup.sh` writes a receipt only after a run lands, so a failed
+  run left the previous receipt in place and `doctor` read its age as fresh. Every attempt is now
+  recorded with its exit status, reason and log, and a failure also writes
+  `<overlay>/backup/receipts/attempts/<capability>.json` — removed the moment a run succeeds — so an
+  offline check can see it.
+- **The target is a per-run choice.** `tools/backup.sh --target <id>` outranks both the manifest and
+  the machine override.
+- **A target is verified or it is not.** `verify` hashes the newest archive the producer recorded
+  against its own receipt and restores it in isolation, per kind and honestly: a local path proves
+  its bytes are here, while an `ssh` target answers `unchecked` with the reason rather than a claim.
+- **The interval is data.** `backup_policy.interval_hours` is written from the surface, where `null`
+  is `off`.
+
+## The declared schedule is the bootstrap, not the destination
+
+`capabilities/backup/service.toml`'s `schedule = "24h"` still runs, unchanged. An earlier attempt
+deleted the manifest outright — a `kind = "process"` manifest needs `schedule` or `port`, and the
+schedule was only ever a placeholder — which also deleted the only automatic backup on the machine.
+That was the wrong reading of "make the timing customizable" and it was reverted the same session
+(`tools/service-runner.sh install-persistence backup`).
+
+`ISA.md` F0 states the handover: the manifest keeps its `schedule` until the process has a `port`,
+and the interval then lives in `backup_policy` where the surface writes it. Until that commit
+lands, the timer keeps firing and the policy table is inert.
 
 ## Why this is a capability and not a LaunchAgent
 

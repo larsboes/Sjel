@@ -8,7 +8,7 @@ if arguments.count != 4 || !["wait-upload", "wait-download", "check-upload"].con
     exit(2)
 }
 let mode = arguments[1]
-let url = URL(fileURLWithPath: arguments[2])
+var url = URL(fileURLWithPath: arguments[2])
 guard let deadline = TimeInterval(arguments[3]), deadline >= 0 else {
     fputs("icloud-item: invalid timeout\n", stderr)
     exit(2)
@@ -21,8 +21,11 @@ let keys: Set<URLResourceKey> = [
 ]
 let started = Date()
 var requestedDownload = false
+var lastUploadingError: String? = nil
+
 while true {
     do {
+        url.removeAllCachedResourceValues()
         let state = try url.resourceValues(forKeys: keys)
         guard state.isUbiquitousItem == true else {
             fputs("icloud-item: path is not an iCloud item\n", stderr)
@@ -37,8 +40,11 @@ while true {
         } else {
             if state.ubiquitousItemIsUploaded == true { exit(0) }
             if let error = state.ubiquitousItemUploadingError {
-                fputs("icloud-item: upload failed: \(error.localizedDescription)\n", stderr)
-                exit(1)
+                if mode == "check-upload" {
+                    fputs("icloud-item: upload failed: \(error.localizedDescription)\n", stderr)
+                    exit(1)
+                }
+                lastUploadingError = error.localizedDescription
             }
         }
     } catch {
@@ -46,7 +52,11 @@ while true {
         exit(1)
     }
     if mode == "check-upload" || Date().timeIntervalSince(started) >= deadline {
-        fputs("icloud-item: upload or download not complete within deadline\n", stderr)
+        if let error = lastUploadingError {
+            fputs("icloud-item: upload failed: \(error)\n", stderr)
+        } else {
+            fputs("icloud-item: upload or download not complete within deadline\n", stderr)
+        }
         exit(1)
     }
     Thread.sleep(forTimeInterval: 5)

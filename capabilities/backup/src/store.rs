@@ -547,6 +547,28 @@ impl BackupStore {
             .flatten();
         Ok(epoch)
     }
+
+    /// When a capability last attempted a run against a target, and its exit code.
+    ///
+    /// Used by policy evaluation to enforce failure backoff: if a run fails, we avoid
+    /// spinning in a tight retry loop on transient provider/network issues.
+    pub fn last_attempt(&self, capability: &str, target: &str) -> Fallible<Option<(i64, i64)>> {
+        let conn = self.conn()?;
+        let row = conn
+            .query_row(
+                &format!(
+                    "SELECT CAST(strftime('%s', started_at) AS INTEGER), exit_code
+                       FROM {}_runs
+                      WHERE capability = ?1 AND target = ?2 AND finished_at IS NOT NULL
+                      ORDER BY id DESC LIMIT 1",
+                    self.prefix
+                ),
+                params![capability, target],
+                |row| Ok((row.get(0)?, row.get(1)?)),
+            )
+            .optional()?;
+        Ok(row)
+    }
 }
 
 #[cfg(test)]
@@ -601,19 +623,35 @@ mod db_tests {
             runs[0].detail
         );
 
-        // The defect this crate exists for: a failed run must not defer the next attempt,
-        // because it has no successful archive behind it.
+        // The defect this crate exists for: a failed run must not defer the next attempt
+        // by a full interval because it has no successful archive behind it, but it must
+        // back off so a transient failure does not thrash on every minute's tick.
         assert_eq!(store.last_success_epoch("store", "t").unwrap(), None);
+        let attempt = store.last_attempt("store", "t").unwrap();
+        assert_eq!(attempt.map(|(_, exit_code)| exit_code), Some(1));
+        let attempt_epoch = attempt.unwrap().0;
+
         let policies = vec![("t".to_string(), 24_i64)];
         let contracts = vec![("store".to_string(), "t".to_string())];
+        let immediate = crate::policy::due_runs(
+            &policies,
+            &contracts,
+            |_, _| store.last_success_epoch("store", "t").unwrap(),
+            |_, _| store.last_attempt("store", "t").unwrap(),
+            attempt_epoch + 60,
+            false,
+        );
+        assert!(immediate.is_empty(), "a fresh failure backs off rather than thrashing");
+
         let due = crate::policy::due_runs(
             &policies,
             &contracts,
             |_, _| store.last_success_epoch("store", "t").unwrap(),
-            1_000_000,
+            |_, _| store.last_attempt("store", "t").unwrap(),
+            attempt_epoch + crate::policy::FAILURE_BACKOFF_SECS,
             false,
         );
-        assert_eq!(due.len(), 1, "a failed run leaves the target due");
+        assert_eq!(due.len(), 1, "a failed run leaves the target due after backoff");
     }
 
     #[test]

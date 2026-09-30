@@ -134,7 +134,7 @@ has to be visible is the pull request, the alert and the receipt. Q109 (2026-09-
 narrow age window rather than a version pin: Bun/npm resolutions wait 24 hours, the two UI trees
 run Socket's scanner, and Cargo/actions keep the zero-day path.
 
-- [ ] ISC-8 — every entry a Dependabot pull request or alert names as behind or vulnerable
+- [x] ISC-8 — every entry a Dependabot pull request or alert names as behind or vulnerable
   is either merged or has a written reason it is held. Falsifier: an open Dependabot pull
   request older than a week with neither. (2026-08-19, measured by the since-retired
   `tools/upstream-checker`: 76 entries · 50 ok · 17 n/a · 9 warn · 0 fail, every warn inside
@@ -152,20 +152,12 @@ run Socket's scanner, and Cargo/actions keep the zero-day path.
   resolving UI tree carries `minimumReleaseAge = 86400` and
   `@socketsecurity/bun-security-scanner`, and CI runs `bun pm scan`. The scanner is free-mode
   network-backed and therefore an operational dependency, not a replacement for the hold.
-  2026-09-29, measured with `gh` and the workflow logs: ELEVEN open Dependabot pull requests,
-  every one with `autoMergeRequest` armed, ten of them older than a week — so the falsifier fires,
-  and not one of them is a judgment somebody withheld. They were queued behind a red `main`,
-  which failed four checks for two independent causes: the committed `self.json` carried per-unit
-  code counts no fresh clone could reproduce (CI's `bun test`, `repo gates` and Pages'
-  `build the page`; repaired by ISC-26, e14dabb8), and `undici 8.9.0` in
-  `Packs/harness/pi-packages/pi-subagents` and `pi-web-access` — GHSA-3wwx-pv8p-q78v, fixed in
-  8.10.2, and unreachable by any pull request because `.github/dependabot.yml` watches `/`,
-  `/dashboard` and `capabilities/soundscape/ui` but neither tree; `osv-scanner` reports no issues
-  after the override. What remains for this claim is the push that lets the armed pull requests
-  land, and a dismissal of the one open Dependabot *alert* — `glib 0.18.5` in
-  `dashboard/src-tauri/Cargo.lock`, which the `cargo` block cannot reach either. Its reason is
-  already written in `osv-scanner.toml` (Linux-only via `gtk 0.18 <- muda/tao <- tauri`; the app
-  ships macOS and iOS), so it needs dismissing with that reason rather than a bump.)
+  Done 2026-09-30: all 11 queued pull requests merged after `self.json` schema 2 and undici 8.10.2
+  greened `main` (d49fd70e, 016d9251, eac7c93b, d25a7353, 8d43b981, 0451bc7a; 0 open PRs). The
+  single open Dependabot security alert (#1, glib 0.18.5) was dismissed on 2026-09-29 with the
+  documented `osv-scanner.toml` rationale: Linux-only via `gtk 0.18 <- muda/tao <- tauri`, not compiled
+  on macOS/iOS and unbuilt in CI. Evidence: `gh pr list` returns 0; `gh api repos/larsboes/Sjel/dependabot/alerts`
+  reports 0 open alerts.)
 - [x] ISC-9 — the postgres 17.9 → 17.10 image decision is made on its own, not ridden
   along with another change. Falsifier: the bump appears in a commit about something else.
   Closed 2026-08-27 by PRD Q45, which retired the image rather than bumping it: the running

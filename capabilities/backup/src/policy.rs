@@ -22,13 +22,29 @@ pub const MIN_INTERVAL_HOURS: i64 = 1;
 /// fires when 24h have passed, so changing the policy takes effect without a restart.
 pub const TICK: Duration = Duration::from_secs(60);
 
+/// The minimum time to wait after a failed run before retrying.
+///
+/// Prevents spinning in a tight retry loop (e.g. every minute) when an upload or network
+/// failure occurs. The interval measures staleness of a successful backup, but failures
+/// must back off to avoid thrashing CPU, disk, or remote rate limits.
+pub const FAILURE_BACKOFF_SECS: i64 = 1800; // 30 minutes
+
 /// Is another run due?
 ///
 /// Never run counts as due: a target with a policy and no successful run is exactly the
-/// case the policy exists for. A run that failed does not defer the next one, because
-/// `last_success_epoch` cannot see it — the interval measures how stale the archive is, not
-/// how long ago somebody tried.
-pub fn is_due(last_success_epoch: Option<i64>, now_epoch: i64, interval_hours: i64) -> bool {
+/// case the policy exists for. A run that failed defers the next attempt by
+/// `FAILURE_BACKOFF_SECS` so transient failures do not retry on every 60-second tick.
+pub fn is_due(
+    last_success_epoch: Option<i64>,
+    last_attempt: Option<(i64, i64)>, // (epoch, exit_code)
+    now_epoch: i64,
+    interval_hours: i64,
+) -> bool {
+    if let Some((attempt_epoch, exit_code)) = last_attempt {
+        if exit_code != 0 && now_epoch.saturating_sub(attempt_epoch) < FAILURE_BACKOFF_SECS {
+            return false;
+        }
+    }
     match last_success_epoch {
         None => true,
         Some(last) => now_epoch.saturating_sub(last) >= interval_hours.saturating_mul(3_600),
@@ -49,6 +65,7 @@ pub fn due_runs(
     policies: &[(String, i64)],
     contracts: &[(String, String)],
     last_success: impl Fn(&str, &str) -> Option<i64>,
+    last_attempt: impl Fn(&str, &str) -> Option<(i64, i64)>,
     now_epoch: i64,
     busy: bool,
 ) -> Vec<Due> {
@@ -63,7 +80,12 @@ pub fn due_runs(
             if contract_target != target {
                 continue;
             }
-            if is_due(last_success(capability, target), now_epoch, *interval_hours) {
+            if is_due(
+                last_success(capability, target),
+                last_attempt(capability, target),
+                now_epoch,
+                *interval_hours,
+            ) {
                 due.push(Due {
                     capability: capability.clone(),
                     target: target.clone(),
@@ -104,16 +126,31 @@ async fn one_pass(
     let now = runner::now_epoch();
     let busy = store.running_count()? > 0;
     let mut last_success = Vec::with_capacity(contracts.len());
+    let mut last_attempt = Vec::with_capacity(contracts.len());
     for (capability, target) in &contracts {
         last_success.push(store.last_success_epoch(capability, target).ok().flatten());
+        last_attempt.push(store.last_attempt(capability, target).ok().flatten());
     }
-    let by_pair = |capability: &str, target: &str| -> Option<i64> {
+    let by_pair_success = |capability: &str, target: &str| -> Option<i64> {
         contracts
             .iter()
             .position(|(c, t)| c == capability && t == target)
             .and_then(|index| last_success[index])
     };
-    let due = due_runs(&policies, &contracts, by_pair, now, busy);
+    let by_pair_attempt = |capability: &str, target: &str| -> Option<(i64, i64)> {
+        contracts
+            .iter()
+            .position(|(c, t)| c == capability && t == target)
+            .and_then(|index| last_attempt[index])
+    };
+    let due = due_runs(
+        &policies,
+        &contracts,
+        by_pair_success,
+        by_pair_attempt,
+        now,
+        busy,
+    );
 
     let mut started = 0;
     for decision in due {
@@ -159,18 +196,33 @@ mod tests {
     #[test]
     fn never_run_is_due_and_a_recent_success_is_not() {
         let hour = 3_600;
-        assert!(is_due(None, 1_000_000, 24));
-        assert!(!is_due(Some(1_000_000), 1_000_000 + 23 * hour, 24));
-        assert!(is_due(Some(1_000_000), 1_000_000 + 24 * hour, 24));
-        // The interval measures staleness, not attempts: a run that failed leaves no
-        // success behind, so the next pass tries again rather than waiting an interval.
-        assert!(is_due(None, 1_000_000 + hour, 24));
+        assert!(is_due(None, None, 1_000_000, 24));
+        assert!(!is_due(
+            Some(1_000_000),
+            Some((1_000_000, 0)),
+            1_000_000 + 23 * hour,
+            24
+        ));
+        assert!(is_due(
+            Some(1_000_000),
+            Some((1_000_000, 0)),
+            1_000_000 + 24 * hour,
+            24
+        ));
+        // A run that failed defers by FAILURE_BACKOFF_SECS so transient errors do not thrash.
+        assert!(!is_due(None, Some((1_000_000, 1)), 1_000_000 + 60, 24));
+        assert!(is_due(
+            None,
+            Some((1_000_000, 1)),
+            1_000_000 + FAILURE_BACKOFF_SECS,
+            24
+        ));
     }
 
     #[test]
     fn only_contracts_naming_the_target_are_planned() {
         let policies = vec![("backup-target".to_string(), 24_i64)];
-        let due = due_runs(&policies, &contracts(), |_, _| None, 0, false);
+        let due = due_runs(&policies, &contracts(), |_, _| None, |_, _| None, 0, false);
         assert_eq!(
             due,
             vec![Due {
@@ -184,13 +236,13 @@ mod tests {
     fn an_in_flight_run_suspends_the_whole_pass() {
         // Two runs at once would race for one staging directory and one receipt.
         let policies = vec![("backup-target".to_string(), 24_i64)];
-        assert!(due_runs(&policies, &contracts(), |_, _| None, 0, true).is_empty());
+        assert!(due_runs(&policies, &contracts(), |_, _| None, |_, _| None, 0, true).is_empty());
     }
 
     #[test]
     fn a_policy_of_off_is_not_a_policy() {
         // `active_policies` never returns a NULL interval, so the loop has nothing to read;
         // this asserts the decision function agrees that an empty policy set plans nothing.
-        assert!(due_runs(&[], &contracts(), |_, _| None, 0, false).is_empty());
+        assert!(due_runs(&[], &contracts(), |_, _| None, |_, _| None, 0, false).is_empty());
     }
 }

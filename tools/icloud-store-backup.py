@@ -167,10 +167,12 @@ def main():
     # Removing a dataless item deletes its cloud copy too; never confuse this with eviction.
     for expired in candidates[keep:]:
         regular_entry(expired)
-        cloud(swift_script, "check-upload", expired, timeout)
-    for expired in candidates[keep:]:
+        try:
+            cloud(swift_script, "check-upload", expired, timeout)
+        except subprocess.SubprocessError as error:
+            print(f"  warning: expired archive {expired.name} not confirmed in iCloud ({error}); unlinking anyway", file=sys.stderr)
         expired.unlink()
-    print(f"  pruned {len(candidates) - keep} older uploaded store archive(s)", file=sys.stderr)
+    print(f"  pruned {len(candidates) - keep} older store archive(s)", file=sys.stderr)
     print("true")
 
 

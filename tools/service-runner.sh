@@ -1037,7 +1037,7 @@ persistence_companion_path() {
 # Same defect, same fix, for a process capability: what it needs on PATH is its own interpreter
 # (bun, uv) and its builder (cargo, bun), resolved here rather than hardcoded.
 persistence_path_dirs() {
-  local runtime_dir cmd_bin build_bin
+  local runtime_dir cmd_bin build_bin dep_mf dep_build_bin
   if [ "$KIND" = container ]; then
     resolve_runtime
     runtime_dir="$(dirname "$RUNTIME_PATH")"
@@ -1052,6 +1052,29 @@ persistence_path_dirs() {
       build_bin="$(command -v "${BUILD_CMD[0]}" 2>/dev/null || true)"
       if [ -n "$build_bin" ]; then runtime_dir="$runtime_dir:$(dirname "$build_bin")"; fi
     fi
+    # A scheduled job that requires on-demand dependencies calls `service-runner.sh start <dep>`
+    # from within the launchd environment, which in turn runs each dependency's build command
+    # (e.g. `cargo build …`). Without the dependency's build tool on PATH that build fails with
+    # "command not found" even though the tool exists on the login shell's PATH.
+    # Measured 2026-09-30: sparpreis-watch's plist PATH contained only /opt/homebrew/bin (bun),
+    # so `service-runner.sh start trips` hit `cargo: command not found` and trips never started.
+    # Fix: also add every required capability's build tool dir to the rendered PATH.
+    while IFS= read -r dep; do
+      [ -n "$dep" ] || continue
+      dep_mf="$SJEL_ROOT/capabilities/$dep/service.toml"
+      [ -f "$dep_mf" ] || continue
+      local dep_build_word
+      dep_build_word="$(toml_array build "$dep_mf" 2>/dev/null | head -1)"
+      [ -n "$dep_build_word" ] || continue
+      dep_build_bin="$(command -v "$dep_build_word" 2>/dev/null || true)"
+      if [ -n "$dep_build_bin" ]; then
+        local dep_build_dir
+        dep_build_dir="$(dirname "$dep_build_bin")"
+        case ":$runtime_dir:" in *":$dep_build_dir:"*) ;; *)
+          runtime_dir="$runtime_dir:$dep_build_dir" ;;
+        esac
+      fi
+    done < <(toml_array requires "$MANIFEST")
   fi
   printf '%s\n' "$runtime_dir"
 }

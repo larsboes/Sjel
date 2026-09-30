@@ -49,6 +49,24 @@ The ladder is PRD §6.2's, applied in `session.rs` (`tokenize_text`):
 Not covered: decomposed Unicode umlauts (`u` + U+0308), postal addresses, and names that no
 rung recognises.
 
+## Keyed sessions and the agent view
+
+Two additions serve agents that read Sjel through its APIs (ISA F9).
+
+- **Keyed tokens (`keyed.rs`).** `PseudonymizerSession::keyed(key)` issues
+  `<TRAVELER_k3x9qa>` instead of `<TRAVELER_01>`. The suffix is HMAC-SHA256 over the entity
+  type and the exact value, so two processes that hold one key give one value the same token
+  without shared state. `keyed::session_key` derives the key from a machine secret and a
+  session id. Without that secret, a party that sees a token cannot test a guessed name
+  against it.
+- **The agent view (`view.rs`).** `view::agent_view` rewrites a JSON response by field name.
+  Ids, timestamps, enums and classes stay verbatim, so follow-up calls still work. Sender and
+  recipient fields become one identity token each. Other strings go through the ladder. Any
+  object with `data_class` `c3` is removed and counted.
+
+`libs/sjel-server/src/agent.rs` applies both at the gate to every response for the agent
+token, on each capability that calls `InboundAuth::admit_agents`.
+
 ## Usage
 
 ```rust

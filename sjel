@@ -49,6 +49,8 @@ Operate capabilities:
   capability call <name> <get|post|put|patch|delete> <path> [body] [curl-args...]
   capability ingest <url>        Ingest a URL through comms
   capability feed [days]         Read the comms feed
+  capability mail [status]       Read mail triage without Secret rows; pseudonymized for an agent
+  agent enroll                   Create or rotate the agent token (Keychain) and its server hash
 
 Manage Packs:
   pack list [harness]            List available Packs, optionally for one harness
@@ -216,6 +218,33 @@ capability_health() {
   return "$failed"
 }
 
+# One curl, with or without the inbound header. Process substitution has to sit on the curl
+# command line itself, which is why this is a function and not an argument array.
+# An agent session calls with the agent token only: read-only, every response pseudonymized
+# (ISA F9). It never falls back to a full token, so an unenrolled agent gets an error rather
+# than raw data. `SJEL_AGENT=1` marks a session by hand; `CLAUDECODE=1` is Claude Code's own
+# marker. `SJEL_AGENT=0` turns it off for the operator.
+in_agent_session() {
+  case "${SJEL_AGENT:-}" in
+    1) return 0 ;;
+    0) return 1 ;;
+  esac
+  [ "${CLAUDECODE:-}" = 1 ]
+}
+
+capability_curl() {  # <capability|agent|no> <url> [curl-args...]
+  local authed="$1" url="$2"
+  shift 2
+  if [ "$authed" = agent ]; then
+    curl -s --fail-with-body "$url" "$@" -H @<("$SJEL_ROOT/tools/capability-auth/capability-auth" --agent) \
+      ${SJEL_AGENT_SESSION:+-H "X-Sjel-Agent-Session: $SJEL_AGENT_SESSION"}
+  elif [ "$authed" != no ]; then
+    curl -s --fail-with-body "$url" "$@" -H @<("$SJEL_ROOT/tools/capability-auth/capability-auth" "$authed")
+  else
+    curl -s --fail-with-body "$url" "$@"
+  fi
+}
+
 # `--fail-with-body`, not `-f`: a capability that rejects a write puts the reason in the
 # response body, and `-f` throws that body away before the caller ever sees it. A caller
 # then gets exit 22 and no way to learn which field was wrong, which is the opposite of
@@ -226,19 +255,41 @@ capability_health() {
 # `PATCH /api/plans/:id` and two DELETE routes, and calendar's idempotent upsert is
 # `PUT /api/entries/external`. Without these arms, half of a capability's own lifecycle
 # is unreachable through the one sanctioned non-browser transport.
+#
+# The inbound token rides as `-H @<(...)`: curl reads the header from a file descriptor, so
+# the value is in no argv and `ps` cannot show it. It is attached to a loopback base URL
+# only. An external capability answers on another host, and the deployment-wide token is a
+# credential for this machine's gate, not for whatever a registry endpoint points at.
+# `sjel-capability-auth` exits 3 when no token is declared, which is the loopback-only
+# deployment: no header is sent and the gate, if it is not layered on, does not ask for one.
 capability_call() {
   local name="$1" method="$2" path="$3"
   shift 3
   local base verb
   base="$(capability_url "$name")"
   verb="$(printf '%s' "$method" | tr '[:lower:]' '[:upper:]')"
+  local authed=no
+  case "$base" in
+    http://127.0.0.1:*)
+      if in_agent_session; then
+        "$SJEL_ROOT/tools/capability-auth/capability-auth" --check --agent 2>/dev/null | grep -qx configured || {
+          echo "sjel: this is an agent session and no agent token is enrolled. The operator runs 'sjel agent enroll'." >&2
+          exit 1
+        }
+        authed=agent
+      else
+        "$SJEL_ROOT/tools/capability-auth/capability-auth" --check "$name" 2>/dev/null | grep -qx configured &&
+          authed="$name"
+      fi
+      ;;
+  esac
   case "$method" in
-    get) curl -s --fail-with-body "$base$path" "$@" ;;
-    delete) curl -s --fail-with-body -X DELETE "$base$path" "$@" ;;
+    get) capability_curl "$authed" "$base$path" "$@" ;;
+    delete) capability_curl "$authed" "$base$path" -X DELETE "$@" ;;
     post|put|patch)
       local body="${1:-}"
       [ "$#" -eq 0 ] || shift
-      curl -s --fail-with-body -X "$verb" "$base$path" \
+      capability_curl "$authed" "$base$path" -X "$verb" \
         -H 'Content-Type: application/json' -d "$body" "$@"
       ;;
     *) echo "sjel: method must be one of get, post, put, patch, delete" >&2; exit 1 ;;
@@ -262,7 +313,14 @@ capability_command() {
       case "$days" in *[!0-9]*|'') echo "sjel: days must be a positive integer" >&2; exit 1 ;; esac
       capability_call comms get "/feed?days=$days"
       ;;
-    *) echo "usage: sjel capability {list|health|url|call|ingest|feed}" >&2; exit 1 ;;
+    mail)
+      # Mail triage without Secret rows. From an agent session the gate also pseudonymizes
+      # every row (ISA F9); from the operator's shell the rows are raw.
+      local status="${1:-}"
+      case "$status" in *[!a-z_]*) echo "sjel: status must be a word like proposed" >&2; exit 1 ;; esac
+      capability_call comms get "/triage?max_data_class=c2${status:+&status=$status}"
+      ;;
+    *) echo "usage: sjel capability {list|health|url|call|ingest|feed|mail}" >&2; exit 1 ;;
   esac
 }
 
@@ -341,6 +399,12 @@ case "${1:-help}" in
   test) shift; exec "$SJEL_ROOT/tools/ci-local" run bun-tests "$@" ;;
   cargo) shift; exec "$SJEL_ROOT/tools/cargo-hermetic" "$@" ;;
   capability) shift; capability_command "$@" ;;
+  agent)
+    case "${2:-}" in
+      enroll) exec "$SJEL_ROOT/tools/capability-auth/capability-auth" enroll ;;
+      *) echo "usage: sjel agent enroll" >&2; exit 1 ;;
+    esac
+    ;;
   pack) shift; pack_command "$@" ;;
   *) echo "sjel: unknown command '$1'" >&2; echo "Run 'sjel help'." >&2; exit 1 ;;
 esac

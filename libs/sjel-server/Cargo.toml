@@ -28,6 +28,8 @@ tokio-rustls = "0.26"
 rcgen = "0.14"
 hyper-util = { version = "0.1", features = ["server-auto", "tokio", "service"] }
 sha2.workspace = true
+# The agent view (ISA F9): the gate rewrites every agent response through this crate.
+sjel-pseudonymize = { path = "../pseudonymize" }
 
 # The gate is a middleware layer, so a handler called directly would skip the
 # thing under test. Same reasoning, same client, as comms' server tests.

@@ -76,6 +76,19 @@ flowchart LR
 4. Data about other people never reaches a cloud model (`libs/content-item`, `cloud_admission`).
 5. Home shows only what still waits for a decision.
 
+## Design rule: clever inside, easy outside
+
+The goal is a system that is easy to use and easy to maintain. The design underneath may be
+smart. Using and maintaining it may not require that smartness.
+
+- One way in. A capability is not finished until `sjel` can find it, check its health and call it
+  (`sjel capability list`, `sjel capability call`).
+- One place per kind of fact. Public code and doctrine live here. Private values and machine state
+  live in the overlay. A secret lives in the user's own secret store (the macOS Keychain on a
+  Mac), and everything else holds a reference to it.
+- No setup step that only its author remembers. If a step must be done by hand, a tool does it
+  (`tools/setup-secret.sh`) and `tools/doctor` reports it when it is missing.
+
 ## State
 
 | Feature | State |

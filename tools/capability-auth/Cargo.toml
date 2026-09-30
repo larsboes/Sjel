@@ -1,0 +1,27 @@
+[package]
+name = "sjel-capability-auth"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+description = "The Authorization header `sjel capability call` sends: the deployment-wide inbound token, resolved by the same InboundAuth every sibling capability uses."
+publish = false
+
+# sjel-capability-auth, not capability-auth: tools/capability-auth/capability-auth is the
+# launcher that execs this. Same collision the sjel-storage prefix avoids.
+[[bin]]
+name = "sjel-capability-auth"
+path = "src/main.rs"
+
+[dependencies]
+# InboundAuth::from_deployment().bearer_header() is what sjel-status, trips, finance and vault
+# already call to reach a sibling (capabilities/sjel-status/src/status/health.rs:192). A fourth
+# reader of deployment.env would be a fourth place for the token rule to drift.
+sjel-server = { path = "../../libs/sjel-server" }
+# `enroll` (ISA F9): the overlay root, a random token and key, and the hash the server stores.
+sjel-config = { path = "../../libs/sjel-config" }
+getrandom.workspace = true
+sha2.workspace = true
+
+[lints]
+workspace = true

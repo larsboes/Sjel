@@ -168,7 +168,7 @@ const ROUTES: &[route_manifest::Route] = &[
         "/sources/scan",
         "Collect from the declared sources.",
     ),
-    r("GET", "/triage", "Mail proposals. Optional status filter."),
+    r("GET", "/triage", "Mail proposals. Optional status and max_data_class filters."),
     r(
         "POST",
         "/triage/{id}/status",
@@ -502,8 +502,13 @@ async fn project_library_after_write(
 /// and a page open in the operator's own browser is already inside loopback.
 /// Without this, an unconfigured secret would leave those routes open instead
 /// of closed, which is the one direction this must never move.
+///
+/// `admit_agents` because mail is what an agent most needs to read and the one capability
+/// where a raw read leaked the most (ISA F9): the agent token gets `GET` only, pseudonymized.
 fn inbound_auth(cfg: &Config) -> sjel_server::InboundAuth {
-    sjel_server::InboundAuth::resolve(cfg.api_secret.clone()).refuse_without_token()
+    sjel_server::InboundAuth::resolve(cfg.api_secret.clone())
+        .refuse_without_token()
+        .admit_agents()
 }
 
 #[tokio::main]

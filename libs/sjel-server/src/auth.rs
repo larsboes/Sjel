@@ -180,6 +180,8 @@ pub struct InboundAuth {
     /// Set on the LAN listener (`crate::lan`): a device signature is required, and a tailnet
     /// identity header is removed rather than believed, because anyone on the Wi-Fi can write it.
     lan_devices_only: bool,
+    /// Set by [`InboundAuth::admit_agents`] when the deployment enrolled an agent (ISA F9).
+    agent: Option<Arc<crate::agent::AgentAccess>>,
 }
 
 /// Redacts the token. A capability that logs its own config must not turn this
@@ -195,6 +197,7 @@ impl std::fmt::Debug for InboundAuth {
             .field("tailnet_operator", &self.tailnet_operator)
             .field("device_verifier", &self.device_verifier.is_some())
             .field("lan_devices_only", &self.lan_devices_only)
+            .field("admits_agents", &self.agent.is_some())
             .finish()
     }
 }
@@ -227,6 +230,7 @@ impl InboundAuth {
             tailnet_operator: crate::tailnet::deployment_operator(),
             device_verifier: None,
             lan_devices_only: false,
+            agent: None,
         }
     }
 
@@ -241,6 +245,7 @@ impl InboundAuth {
             tailnet_operator: None,
             device_verifier: None,
             lan_devices_only: false,
+            agent: None,
         }
     }
 
@@ -264,6 +269,19 @@ impl InboundAuth {
     /// tailnet identity, a device key does not satisfy [`Self::refuse_without_token`].
     pub fn with_device_verifier(mut self, verifier: Arc<dyn DeviceVerifier>) -> Self {
         self.device_verifier = Some(verifier);
+        self
+    }
+
+    /// Admit the deployment's agent token on this capability: read-only, and every response
+    /// pseudonymized (ISA F9). A no-op when no agent is enrolled.
+    pub fn admit_agents(mut self) -> Self {
+        self.agent = crate::agent::AgentAccess::from_deployment().map(Arc::new);
+        self
+    }
+
+    /// The same, with agent access resolved by the caller. For tests.
+    pub fn with_agent_access(mut self, access: crate::agent::AgentAccess) -> Self {
+        self.agent = Some(Arc::new(access));
         self
     }
 
@@ -314,6 +332,7 @@ impl InboundAuth {
             || self.refuse_without_token
             || self.tailnet_operator.is_some()
             || self.device_verifier.is_some()
+            || self.agent.is_some()
     }
 
     /// `Some(rejection)` when this request must not reach a handler.
@@ -444,6 +463,13 @@ async fn gate(State(auth): State<InboundAuth>, mut request: Request, next: Next)
         )
             .into_response();
     }
+    // The agent branch runs before the token rule and replaces it: an agent token is never
+    // the deployment token, and must never fall through to the full-access path.
+    if let Some(agent) = auth.agent.as_ref() {
+        if !exempt && presented_token(request.headers()).is_some_and(|t| agent.matches(t)) {
+            return crate::agent::admit_agent(Arc::clone(agent), request, next).await;
+        }
+    }
     match auth.reject(request.method(), request.uri().path(), request.headers()) {
         Some(rejection) => rejection,
         None => next.run(request).await,
@@ -516,7 +542,7 @@ fn presented_token(headers: &HeaderMap) -> Option<&str> {
 /// response time, which turns guessing a token from an exhaustive search into a
 /// per-character one. The length check ahead of it leaks only the length, which
 /// an attacker who can send a token already knows how to measure another way.
-fn constant_time_eq(a: &[u8], b: &[u8]) -> bool {
+pub(crate) fn constant_time_eq(a: &[u8], b: &[u8]) -> bool {
     if a.len() != b.len() {
         return false;
     }
@@ -561,6 +587,35 @@ pub fn token_from_file(path: &Path) -> Option<String> {
             .map(str::to_string);
     }
     Some(trimmed.to_string())
+}
+
+/// The token comms' own `api_secret_file` names, or none.
+///
+/// comms still holds its own token (`capabilities/comms/src/server/main.rs`, `inbound_auth`), so
+/// a caller that reaches comms needs this value, not the deployment's. Two callers do:
+/// sjel-status's proxy and `tools/capability-auth`. Neither depends on comms, so the path rule is
+/// re-derived here once, in comms' own order (`capabilities/comms/src/config.rs`, `config_path`):
+/// `SJEL_COMMS_CONFIG`, then `<overlay>/config/comms.json`, then the in-repo example path.
+///
+/// Two hops, because `comms.json` NAMES the token file rather than holding the token. Handing
+/// `comms.json` straight to [`token_from_file`] was sjel-status's first version and it failed in
+/// silence: that reader accepts JSON only when it carries `auth.api_key`, so it returned `None`
+/// and comms answered 401 to every proxied read while running and healthy.
+pub fn comms_config_token() -> Option<String> {
+    let path = if let Ok(p) = sjel_config::env_var("SJEL_COMMS_CONFIG") {
+        sjel_config::expand_tilde(&p)
+    } else if let Some(p) = sjel_config::overlay_config("comms.json") {
+        p
+    } else {
+        std::path::PathBuf::from("capabilities/comms/comms.config.json")
+    };
+    let config = std::fs::read_to_string(&path).ok()?;
+    let secret_file = serde_json::from_str::<serde_json::Value>(&config)
+        .ok()?
+        .get("api_secret_file")?
+        .as_str()?
+        .to_string();
+    token_from_file(&sjel_config::expand_tilde(&secret_file))
 }
 
 #[cfg(test)]

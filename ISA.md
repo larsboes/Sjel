@@ -402,6 +402,133 @@ because it names the directory rather than moving where things are written.
   runs, and `tools/cargo-hermetic` refuses to point `CARGO_TARGET_DIR` inside the checkout for
   that reason. Only a *nested* workspace — `dashboard/src-tauri/target` — is an escapee.
 
+### F8 · An agent reaches what Sjel holds, and only what it should
+
+Why: the data and tools exist (33 registered capabilities), but a local assistant cannot find
+or call them without the operator's hands. Measured 2026-09-30, asking "what is the latest mail
+from Ollama": `sjel search mail` returned no capability although `capabilities/comms` sweeps
+the inbox; `sjel capability call comms get /triage` returned `invalid or missing authentication
+token`, because `capability_call` in `sjel` sent no credential at all. Three gaps, one
+feature: an agent cannot find a capability, cannot authenticate to it, and nothing limits what
+it does once it can.
+
+This feature is planned, not started. Order matters: each step needs the one before it.
+
+Guideline, from the principal (2026-09-30): Sjel is easy to use and easy to maintain. The
+design underneath may be clever. It is stated in `README.md`, "Design rule: clever inside, easy
+outside". It binds this feature: an agent's access must not need a hand-edited config file.
+
+Measured inputs, all 2026-09-30 and all lower bounds:
+
+- 15 capabilities serve a `/routes` manifest (`capabilities/comms/src/server/main.rs:79`
+  is one). The registry lists 20 with HTTP. `knowledge-graph`, `macmon`, `foundation-models`,
+  `ytalbum` and `dashboard` have none in `capabilities/*/src`; whether each should is not yet
+  checked.
+- Four capabilities have no README: `entities-sync`, `entities-google-sync`, `feed-sweep`,
+  `sparpreis-watch`.
+- A single-line grep of route registrations finds 164 `GET` and 92 write routes (85 `POST`, 5
+  `PUT`, 2 `DELETE`). Multi-line `.route(` calls are missed. Whether any `GET` handler changes
+  state is not measured.
+- The gate has one shared token (`libs/sjel-server/src/auth.rs:48`). Whoever holds it may call
+  every route, including comms' move-to-Trash action. Whether the API, not only the dashboard,
+  enforces that action's separate confirmation is not checked.
+- An assistant reading mail is reading text an attacker can write. In InjecAgent, injected
+  tool output steered a GPT-4 agent 24% of the time (`research/agent-safety.md`). A read-only
+  token limits what a steered agent can do. It does not stop the steering.
+
+Placement, per `Packs/harness/skills/sjel/references/on-placement.md`: discovery and the
+client stay in `sjel` and `tools/` (operator machinery). The gate stays in `libs/sjel-server`
+(shared code, several consumers). No new capability. Any agent-protocol wrapper (MCP) is a thin
+last layer over the routes and adds no data path of its own.
+
+- [ ] ISC-33 — `sjel search <word>` finds a registered capability by its README and by its
+  `/routes`. Falsifier: `sjel search mail` returns no `comms`. Probe: that command. Evidence
+  today: it returns an empty Capabilities list.
+- [ ] ISC-34 — every registered HTTP capability serves `GET /routes`, or its registry entry
+  says why it does not. Falsifier: a capability in `sjel capability list` answers `/routes`
+  with 404 and has no stated reason. Probe: loop over the list. `tools/doctor` runs it, so the
+  rule is enforced where the tool reads it. Today: 15 of 20.
+- [ ] ISC-35 — every capability has a README. Falsifier: `ls capabilities/*/README.md` misses a
+  directory. Today: four miss.
+- [ ] ISC-36 — from an agent session, `sjel capability call comms get /triage` returns data
+  without the token appearing in argv, the environment or the transcript. Falsifier: it returns
+  401, or the token shows in `ps`. Evidence, partial: `tools/capability-auth` reads the
+  deployment token and `sjel` passes it through `curl -H @<(...)`, tested in
+  `tools/capability-auth.test.sh`. Holds for comms since 2026-09-30 evening: `capability-auth
+  comms` reads comms' own `api_secret_file` through `sjel_server::comms_config_token`, shared
+  with sjel-status's proxy. It still uses the full comms token, which can trash mail (the
+  principal's call that day; ISC-38 replaces it). Not yet ticked, because ISC-37's Keychain
+  source is still missing.
+- [ ] ISC-37 — the token is read on demand from the user's own secret store (the macOS Keychain
+  on a Mac), set up per user, with no `deployment.env` edit and no exported variable. Falsifier:
+  the client works only after the user edits a file, or exports a secret into the environment.
+  The principal's call, 2026-09-30. `tools/setup-secret.sh` and `upstreams.toml:173` still name
+  Vaultwarden as canonical and contradict it; they change with this criterion.
+- [ ] ISC-38 — an agent identity admits `GET` and `HEAD` only. Falsifier: a `POST` carrying it
+  reaches a handler. Probe: a unit test in `libs/sjel-server/src/auth.rs`. This amends the
+  one-token ruling at `auth.rs:48` and the module docs change with it. It depends on ISC-37.
+  Blocked in session 2026-09-30 by the safety check as a permission change: it needs an
+  explicit go-ahead. Precondition: a measured list of `GET` handlers that change state, each
+  fixed or listed as an exception.
+- [ ] ISC-39 — a `GET` by an agent identity returns no value of class Secret, and no Others
+  value it could not already read. Falsifier: an agent read returns a Secret row. Partial,
+  2026-09-30: `GET /triage?max_data_class=c1` drops Others and Secret rows, and `sjel capability
+  mail` always sends it. The ceiling is the caller's choice, not a gate, until ISC-38. The
+  first live read found a leak the ceiling cannot catch: a one-time passcode in a subject
+  line, stored as c1 and unredacted (UNiDAYS, 2026-09-26), and a named person's live-location
+  mail stored as c1. The classifier's c3 and c2 rules miss both.
+- [ ] ISC-40 — one MCP server exposes the capabilities' `/routes` as tools: read tools by
+  default, write tools only with a per-capability grant. Falsifier: the tool list contains a
+  `POST` route without a grant. Depends on ISC-33, 34, 36 and 38.
+
+Not decided, and the principal's call: the form of a write grant, and whether each agent call
+is logged (who, which route, when).
+
+### F9 · One pseudonymizer, applied by the gate to every agent read
+
+Why: an agent read of comms on 2026-09-30 returned 278 Mine rows verbatim: full addresses,
+names, order numbers and a one-time passcode. Only c2 and c3 rows are redacted at intake
+(`capabilities/comms/README.md`, "For c2 and c3 mail"). The reversible engine exists
+(`libs/pseudonymize`, ISC-20) but only comms' review queue and trips call it, and each call
+site chooses to. F9 makes the gate choose, so a capability cannot forget.
+
+Rulings, principal, 2026-09-30:
+
+- An agent has its own token (ISC-37, ISC-38). The gate pseudonymizes every response to
+  that token. The dashboard token is unchanged.
+- The mode is reversible, per session. One value gets the same token for the whole session in
+  every capability, so an agent can refer back to it.
+- **Pseudonymized c2 may reach an agent.** This amends Q27 for agent reads only: c2 leaves
+  the machine as a pseudonymized derivative, never verbatim. c3 still never leaves.
+
+Design:
+
+- Tokens are keyed, not counted: `<PERSON_k3x9qa>` from HMAC-SHA256 over the type and the
+  exact value. The key is derived from a machine secret and the session id, so two processes
+  issue the same token without shared state. Without the secret, a party that sees tokens
+  cannot confirm a guessed name.
+- The JSON view keeps structural fields verbatim (ids, timestamps, enums, classes), tokenizes
+  identity fields as one unit, tokenizes free text with the existing ladder, and removes every
+  object with `data_class` `c3`.
+- The gate admits the agent token for `GET` and `HEAD` only, and only on a capability that
+  opted in. It refuses a response that is not JSON, because it cannot transform it.
+- The server holds only a hash of the agent token. The token itself lives in the login
+  Keychain, and the client reads it from there.
+
+- [x] ISC-41 — keyed tokens: one value maps to one token across two sessions of one key, and
+  to a different token under another key. Probe: unit test in `libs/pseudonymize`.
+- [x] ISC-42 — the JSON view: ids and timestamps survive, a sender becomes one identity
+  token, a c3 object is removed and counted. Probe: unit test.
+- [x] ISC-43 — the gate: an agent `GET` to an opted-in capability returns pseudonymized
+  JSON; an agent `POST` returns 403; an agent call to a capability that did not opt in returns
+  403. Probe: HTTP tests in `libs/sjel-server`.
+- [x] ISC-44 — `sjel capability mail` from an agent session returns no raw sender address.
+  Falsifier: an `@` in `from_addr`. Probe: that command after enrollment.
+- [ ] ISC-45 — an agent cannot go around the gate. Open, and not part of this build: with no
+  deployment token, every capability but comms serves loopback callers without any check
+  (`authenticated`, `libs/sjel-server/src/auth.rs:410`). The comms token file is also
+  readable from an agent session.
+
 ## Not yet specified
 
 - **knowledge-graph link prediction over the vault.** `knowledge-graph` serves the code
@@ -501,6 +628,14 @@ because it names the directory rather than moving where things are written.
 
 ## Decisions
 
+- **2026-09-30 — the gate pseudonymizes agent reads; pseudonymized c2 may reach an agent**
+  (principal's call). Recorded as F9. An own agent token, reversible per-session tokens, c3
+  never. Amends Q27 for agent reads.
+- **2026-09-30 — agents get read access first, through one authenticated path** (principal's
+  call). Recorded as F8. Read-only by default, writes only by explicit grant per capability;
+  secrets come from the user's own secret store per user, with Vaultwarden no longer the
+  default. The order is discovery, then authentication, then the read-only scope, then MCP.
+  Planning only that day: no gate code changed.
 - **2026-09-30 — the rename's remaining surfaces are reopened deliberately** (principal's
   call), against what ISC-13 recorded on 2026-09-27. Three things it had deliberately kept are
   in scope again: the `X-Axon-*` signed-request headers (a protocol change, so the old name is
@@ -546,6 +681,14 @@ because it names the directory rather than moving where things are written.
   inputs uncommitted; they land with this. Four repo gates stay red for neither reason:
   `capabilities/operator-profile/` is untracked (the F8 session, 18:12), which is what fails
   generator inputs, ARCHITECTURE freshness and `self.json`.
+- 2026-09-30 · F9 built: keyed tokens and the agent view in `libs/pseudonymize`, the agent
+  branch of the gate in `libs/sjel-server/src/agent.rs`, comms opted in, `sjel agent enroll`.
+  ISC-41…43 pass as unit and HTTP tests. ISC-44 passes live: 364 rows, no address, no
+  six-digit run, 13 Secret rows withheld.
+- 2026-09-30 · F8: `sjel capability mail` reads comms triage with a c1 ceiling (ISC-36 for
+  comms, ISC-39 partial); two classifier misses recorded under ISC-39.
+- 2026-09-30 · F8 added with ISC-33…ISC-40, planning only. `tools/capability-auth` and the
+  `sjel capability call` change (ISC-36, partial) landed uncommitted the same day.
 - 2026-09-30 · F7 added with ISC-27…ISC-32; ISC-11 superseded and ISC-13 amended after the
   environment fallback was retired (9faf670a). A disk-pressure session reclaimed ~137 GB on
   this machine, which is how the blind spot F7 records was found.

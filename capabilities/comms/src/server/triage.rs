@@ -3,13 +3,36 @@ use super::*;
 #[derive(Debug, Deserialize)]
 pub(super) struct TriageParams {
     status: Option<String>,
+    /// Drop every row whose class ranks above this one (`c1` keeps Public and Mine).
+    /// The caller chooses it: the one shared token cannot tell an agent from the
+    /// dashboard, so this is a policy an agent client applies, not a gate (ISA F8,
+    /// ISC-39 — the gate needs the agent identity of ISC-38).
+    max_data_class: Option<String>,
 }
 
 pub(super) async fn triage_handler(Query(params): Query<TriageParams>) -> Json<Value> {
+    // Refused rather than ignored: a typo in the ceiling must not return every class.
+    let ceiling = match params.max_data_class.as_deref() {
+        None => None,
+        Some(class) => match content_item::class_rank(class) {
+            Some(rank) => Some(rank),
+            None => {
+                return Json(json!({
+                    "error": format!("max_data_class must be one of c0, c1, c2, c3, not '{class}'")
+                }));
+            }
+        },
+    };
     let result = tokio::task::spawn_blocking(move || -> Option<Vec<TriageOut>> {
         let cfg = Config::load();
         let store = Store::open(&cfg.database_path).ok()?;
-        let items = store.list_triage(params.status.as_deref()).ok()?;
+        let mut items = store.list_triage(params.status.as_deref()).ok()?;
+        if let Some(ceiling) = ceiling {
+            // An unknown stored class ranks as unreadable, not as Public.
+            items.retain(|item| {
+                content_item::class_rank(&item.data_class).is_some_and(|rank| rank <= ceiling)
+            });
+        }
         // One grouped read for the whole list, not one per row. The list already
         // knows the keys; asking per item would be a query per rendered line.
         let scores = store.triage_score_map().unwrap_or_default();

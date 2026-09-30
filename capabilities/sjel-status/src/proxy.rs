@@ -192,35 +192,10 @@ impl Proxy {
     }
 }
 
-/// The comms credential, read from the same config the comms server reads.
+/// The comms credential, read from the same config the comms server reads
+/// (`sjel_server::comms_config_token`, shared with `tools/capability-auth`).
 fn comms_authorization() -> Option<HeaderValue> {
-    // The same three candidates comms itself resolves, in the same order
-    // (`capabilities/comms/src/config.rs`). Re-derived rather than imported because sjel-status
-    // does not depend on comms and must not start doing so to read one path.
-    let path = if let Ok(p) = sjel_config::env_var("SJEL_COMMS_CONFIG") {
-        sjel_config::expand_tilde(&p)
-    } else if let Some(p) = sjel_config::overlay_config("comms.json") {
-        p
-    } else {
-        std::path::PathBuf::from("capabilities/comms/comms.config.json")
-    };
-    // Two hops, because `comms.json` NAMES the token file rather than holding the token:
-    // `api_secret_file` -> that path -> the value (`capabilities/comms/src/config.rs`
-    // `api_key_from_file`, which is the same two hops through the same reader).
-    //
-    // Handing `comms.json` straight to `token_from_file` was the first version and it failed in
-    // silence. That reader accepts either a raw token file or a JSON file carrying
-    // `auth.api_key`; `comms.json` parses as JSON and has no such key, so it returned `None`,
-    // the fail-closed path below sent no header, and comms answered 401 to every proxied read
-    // WHILE RUNNING AND HEALTHY. The dashboard showed "Feed" unavailable, which is
-    // indistinguishable from the capability being down and is why it survived the B19 cutover.
-    let config = std::fs::read_to_string(&path).ok()?;
-    let secret_file = serde_json::from_str::<serde_json::Value>(&config)
-        .ok()?
-        .get("api_secret_file")?
-        .as_str()?
-        .to_string();
-    let token = sjel_server::token_from_file(&sjel_config::expand_tilde(&secret_file))?;
+    let token = sjel_server::comms_config_token()?;
     HeaderValue::from_str(&format!("Bearer {token}")).ok()
 }
 

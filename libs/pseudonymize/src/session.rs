@@ -30,6 +30,8 @@ pub struct PseudonymizerSession {
     literals: usize,
     /// Occurrences replaced since the session began or since the last [`Self::take_findings`].
     findings: Vec<RedactionFinding>,
+    /// Set for a keyed session ([`Self::keyed`]): tokens come from the key, not a counter.
+    key: Option<[u8; 32]>,
 }
 
 impl std::fmt::Debug for PseudonymizerSession {
@@ -44,6 +46,18 @@ impl std::fmt::Debug for PseudonymizerSession {
 impl PseudonymizerSession {
     pub fn new() -> Self {
         Self::default()
+    }
+
+    /// A session whose tokens are a function of `key`, the entity type and the value.
+    ///
+    /// Two keyed sessions with one key issue the same token for the same value, in any
+    /// process and in any order (ISA F9, ISC-41). Use [`crate::keyed::session_key`] to derive
+    /// the key; never pass a key an agent can read.
+    pub fn keyed(key: [u8; 32]) -> Self {
+        Self {
+            key: Some(key),
+            ..Self::default()
+        }
     }
 
     pub fn forward_map(&self) -> &HashMap<String, String> {
@@ -108,6 +122,9 @@ impl PseudonymizerSession {
         if let Some(existing) = self.forward.get(original) {
             return existing.clone();
         }
+        if self.key.is_some() {
+            return self.keyed_token_for(original, entity_type.token_prefix());
+        }
         let counter = self.counters.entry(entity_type).or_insert(0);
         *counter += 1;
         let token = format!("<{}_{:02}>", entity_type.token_prefix(), *counter);
@@ -118,9 +135,32 @@ impl PseudonymizerSession {
         if let Some(existing) = self.forward.get(original) {
             return existing.clone();
         }
+        if self.key.is_some() {
+            return self.keyed_token_for(original, LITERAL_PREFIX);
+        }
         self.literals += 1;
         let token = format!("<{LITERAL_PREFIX}_{:02}>", self.literals);
         self.issue(original, token)
+    }
+
+    /// Six base32 characters, lengthened only if this session already issued the same
+    /// token for another value. The lengthened form is still a function of the value, but
+    /// it depends on the collision, so it is the one case where two processes can disagree.
+    fn keyed_token_for(&mut self, original: &str, prefix: &str) -> String {
+        let key = self
+            .key
+            .expect("keyed_token_for is called only on a keyed session");
+        let mut chars = 6;
+        loop {
+            let token = format!(
+                "<{prefix}_{}>",
+                crate::keyed::suffix(&key, prefix, original, chars)
+            );
+            match self.reverse.get(&token) {
+                Some(other) if other != original && chars < 26 => chars += 4,
+                _ => return self.issue(original, token),
+            }
+        }
     }
 
     fn issue(&mut self, original: &str, token: String) -> String {
@@ -467,6 +507,35 @@ mod tests {
         let printed = format!("{session:?}");
         assert!(!printed.to_lowercase().contains("anna"), "{printed}");
         assert!(printed.contains("tokens: 2"), "{printed}");
+    }
+
+    #[test]
+    fn keyed_sessions_with_one_key_agree_whatever_they_saw_first() {
+        let key = crate::keyed::session_key(b"machine-secret", "session-1");
+        let mut first = PseudonymizerSession::keyed(key);
+        let mut second = PseudonymizerSession::keyed(key);
+        let registry = registry();
+        let a = first.tokenize_text("Anna wrote to anna@example.com", &registry);
+        // The second session sees the values in the opposite order.
+        second.tokenize_text("mail anna@example.com", &registry);
+        let b = second.tokenize_text("Anna wrote to anna@example.com", &registry);
+        assert_eq!(a, b);
+        assert!(!a.contains("Anna") && !a.contains("anna@"), "{a}");
+        assert_eq!(first.rehydrate_text(&a), "Anna wrote to anna@example.com");
+
+        let other = crate::keyed::session_key(b"machine-secret", "session-2");
+        let c = PseudonymizerSession::keyed(other).tokenize_text("Anna", &registry);
+        assert_ne!(c, first.tokenize_text("Anna", &registry));
+    }
+
+    #[test]
+    fn a_keyed_literal_still_escapes_token_shaped_source_text() {
+        let key = crate::keyed::session_key(b"k", "s");
+        let mut session = PseudonymizerSession::keyed(key);
+        let text = "Anna and <TRAVELER_abcdef>";
+        let out = session.tokenize_text(text, &registry());
+        assert!(!out.contains("<TRAVELER_abcdef>"), "{out}");
+        assert_eq!(session.rehydrate_text(&out), text);
     }
 
     #[test]

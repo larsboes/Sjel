@@ -5,10 +5,12 @@
 //! requests can be dispatched to remote evaluators (such as Jev/TypeSafe AI or cloud LLMs)
 //! without leaking raw C1 personal state off-device.
 
+pub mod keyed;
 pub mod pattern;
 pub mod registry;
 pub mod session;
 pub mod types;
+pub mod view;
 
 pub use registry::{EntityRegistry, EntityRegistryBuilder};
 pub use session::PseudonymizerSession;

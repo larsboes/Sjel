@@ -1,0 +1,26 @@
+#!/usr/bin/env bash
+# Thin launcher: the logic lives in the sjel-capability-auth crate beside this file.
+#
+# Builds the release binary when it is missing or older than its sources, so
+# `sjel capability call` works on a fresh clone without a separate build step. Same shape as
+# tools/storage/storage. bash 3.2-safe.
+set -u
+
+_here="$(cd "$(dirname "${BASH_SOURCE[0]:-$0}")" && pwd)"
+# shellcheck source=tools/lib/paths.sh
+. "$_here/../lib/paths.sh"   # SJEL_ROOT, SJEL_OVERLAY_ROOT, SJEL_PERSONAL_ROOT
+
+BIN="${CARGO_TARGET_DIR:-$SJEL_ROOT/target}/release/sjel-capability-auth"
+
+_stale=""
+if [ ! -x "$BIN" ]; then
+  _stale="yes"
+elif [ -n "$(find "$_here/src" "$_here/Cargo.toml" -newer "$BIN" -print -quit 2>/dev/null)" ]; then
+  _stale="yes"
+fi
+if [ -n "$_stale" ]; then
+  echo "capability-auth: building sjel-capability-auth (release)..." >&2
+  cargo build --locked --release -p sjel-capability-auth --manifest-path "$SJEL_ROOT/Cargo.toml" >&2 || exit 2
+fi
+
+exec "$BIN" "$@"

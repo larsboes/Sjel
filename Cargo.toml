@@ -35,6 +35,7 @@ members = [
     "libs/summarize",
     # A tool, not a capability: operator machinery lives in tools/ (on-placement.md), and its
     # backend logic is Rust (on-dependencies-and-build.md), so tools/ holds a Cargo member.
+    "tools/capability-auth",
     "tools/fda-launcher",
     "tools/storage",
 ]

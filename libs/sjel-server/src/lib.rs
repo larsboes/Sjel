@@ -23,6 +23,8 @@
 
 use std::net::SocketAddr;
 
+/// The agent identity: read-only, every response pseudonymized (ISA F9).
+pub mod agent;
 mod auth;
 /// The TLS listener for paired devices on the local network (PRD Q119).
 pub mod lan;
@@ -32,8 +34,8 @@ pub mod origin;
 pub mod tailnet;
 
 pub use auth::{
-    authenticated, device_signed_path, token_from_file, AdmittedDevice, AdmittedPairingClaim,
-    DeviceVerifier, InboundAuth, DEVICE_SIGNATURE_HEADER, PAIRING_CLAIM_PATH,
+    authenticated, comms_config_token, device_signed_path, token_from_file, AdmittedDevice,
+    AdmittedPairingClaim, DeviceVerifier, InboundAuth, DEVICE_SIGNATURE_HEADER, PAIRING_CLAIM_PATH,
 };
 
 // Re-exported so a server binary that depends only on sjel-server still gets the
@@ -218,6 +220,165 @@ mod http_tests {
             let _ = axum::serve(listener, app).await;
         });
         format!("http://{addr}")
+    }
+
+    // --- the agent identity (ISA F9, ISC-43) ---------------------------------------------
+
+    fn agent_access() -> agent::AgentAccess {
+        use sha2::Digest;
+        let hash: [u8; 32] = sha2::Sha256::digest(b"agent-token").into();
+        let registry = sjel_pseudonymize::EntityRegistry::builder()
+            .add_people(["Katrin"])
+            .build();
+        agent::AgentAccess::new(hash, vec![9; 32], registry)
+    }
+
+    async fn serve_agent_router(auth: InboundAuth) -> String {
+        use axum::routing::post;
+        let router = axum::Router::new()
+            .route(
+                "/triage",
+                get(|q: axum::extract::Query<std::collections::HashMap<String, String>>| async move {
+                    let from_matches = q.get("from").map(|f| f == "Katrin Wissem <katrin@example.com>");
+                    axum::Json(serde_json::json!([
+                        {"id": "18f3a9c2b7d41e05", "data_class": "c1",
+                         "from_addr": "Katrin Wissem <katrin@example.com>",
+                         "subject": "Scans from Katrin", "from_matches": from_matches},
+                        {"id": "18f3a9c2b7d41e06", "data_class": "c3",
+                         "subject": "616685 is your code"}
+                    ]))
+                }),
+            )
+            .route("/secret", get(|| async { axum::Json(serde_json::json!({"data_class": "c3"})) }))
+            .route("/page", get(|| async { "<html>Katrin</html>" }))
+            .route("/triage/{id}/status", post(|| async { "moved" }));
+        let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let addr = listener.local_addr().unwrap();
+        let app = authenticated(router, auth);
+        tokio::spawn(async move {
+            let _ = axum::serve(listener, app).await;
+        });
+        format!("http://{addr}")
+    }
+
+    #[tokio::test]
+    async fn an_agent_read_is_pseudonymized_and_secret_rows_are_withheld() {
+        let auth = InboundAuth::with_token(Some("full".into())).with_agent_access(agent_access());
+        let base = serve_agent_router(auth).await;
+        let client = reqwest::Client::new();
+        let response = client
+            .get(format!("{base}/triage"))
+            .bearer_auth("agent-token")
+            .send()
+            .await
+            .unwrap();
+        assert_eq!(response.status(), 200);
+        assert_eq!(response.headers()[agent::WITHHELD_HEADER], "1");
+        assert!(response.headers().contains_key(agent::RECEIPT_HEADER));
+        let body: serde_json::Value = response.json().await.unwrap();
+        let rows = body.as_array().unwrap();
+        assert_eq!(rows.len(), 1, "{body}");
+        assert_eq!(rows[0]["id"], "18f3a9c2b7d41e05");
+        let text = body.to_string();
+        assert!(!text.contains("Katrin") && !text.contains('@'), "{text}");
+
+        // The full token still gets the raw rows: the dashboard is unchanged.
+        let raw: serde_json::Value = client
+            .get(format!("{base}/triage"))
+            .bearer_auth("full")
+            .send()
+            .await
+            .unwrap()
+            .json()
+            .await
+            .unwrap();
+        assert_eq!(raw.as_array().unwrap().len(), 2);
+    }
+
+    #[tokio::test]
+    async fn one_value_gets_one_token_per_session_and_the_query_maps_back() {
+        let auth = InboundAuth::with_token(Some("full".into())).with_agent_access(agent_access());
+        let base = serve_agent_router(auth).await;
+        let client = reqwest::Client::new();
+        let read = |session: &'static str| {
+            let client = client.clone();
+            let base = base.clone();
+            async move {
+                client
+                    .get(format!("{base}/triage"))
+                    .bearer_auth("agent-token")
+                    .header(agent::AGENT_SESSION_HEADER, session)
+                    .send()
+                    .await
+                    .unwrap()
+                    .json::<serde_json::Value>()
+                    .await
+                    .unwrap()
+            }
+        };
+        let a = read("one").await;
+        let b = read("one").await;
+        let c = read("two").await;
+        assert_eq!(a[0]["from_addr"], b[0]["from_addr"]);
+        assert_ne!(a[0]["from_addr"], c[0]["from_addr"]);
+
+        // The agent filters by the token; the handler sees the real value.
+        let token = a[0]["from_addr"].as_str().unwrap().to_string();
+        let echoed: serde_json::Value = client
+            .get(format!(
+                "{base}/triage?from={}",
+                token.replace('<', "%3C").replace('>', "%3E")
+            ))
+            .bearer_auth("agent-token")
+            .header(agent::AGENT_SESSION_HEADER, "one")
+            .send()
+            .await
+            .unwrap()
+            .json()
+            .await
+            .unwrap();
+        assert_eq!(echoed[0]["from_matches"], true, "{echoed}");
+    }
+
+    #[tokio::test]
+    async fn the_agent_token_cannot_write_or_read_what_it_cannot_rewrite() {
+        let auth = InboundAuth::with_token(Some("full".into())).with_agent_access(agent_access());
+        let base = serve_agent_router(auth).await;
+        let client = reqwest::Client::new();
+        let post = client
+            .post(format!("{base}/triage/18f3a9c2b7d41e05/status"))
+            .bearer_auth("agent-token")
+            .send()
+            .await
+            .unwrap();
+        assert_eq!(post.status(), 403);
+        let page = client
+            .get(format!("{base}/page"))
+            .bearer_auth("agent-token")
+            .send()
+            .await
+            .unwrap();
+        assert_eq!(page.status(), 406);
+        assert!(!page.text().await.unwrap().contains("Katrin"));
+        let secret = client
+            .get(format!("{base}/secret"))
+            .bearer_auth("agent-token")
+            .send()
+            .await
+            .unwrap();
+        assert_eq!(secret.status(), 403);
+    }
+
+    #[tokio::test]
+    async fn a_capability_that_did_not_opt_in_refuses_the_agent_token() {
+        let base = serve_agent_router(InboundAuth::with_token(Some("full".into()))).await;
+        let response = reqwest::Client::new()
+            .get(format!("{base}/triage"))
+            .bearer_auth("agent-token")
+            .send()
+            .await
+            .unwrap();
+        assert_eq!(response.status(), 401);
     }
 
     /// Admits exactly one signature value, and records what it was asked to verify.

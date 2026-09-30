@@ -28,8 +28,18 @@ const OLLAMA_BASE = 'http://127.0.0.1:11434';
 const STORAGE_KEY = 'sjel-decision-mechanism';
 
 // In non-compiled test runners (e.g. Bun test), $state rune is not defined globally.
-if (typeof (globalThis as any).$state === 'undefined') {
-  (globalThis as any).$state = <T>(val: T): T => val;
+//
+// The probe is not `typeof` alone: a browser DOES define `globalThis.$state`, as a getter
+// Svelte installs to reject the rune outside a compiled file, and reading it throws
+// rune_outside_svelte — which took the whole dashboard down in dev, `/` and `/systems` both
+// rendering SvelteKit's 500 page. So a read that throws means a real rune is present, and
+// only a silent `undefined` means the stand-in is needed.
+try {
+  if (typeof (globalThis as any).$state === 'undefined') {
+    (globalThis as any).$state = <T>(val: T): T => val;
+  }
+} catch {
+  // A browser: the rune answered by refusing to be read.
 }
 
 class DecisionEngineStore {

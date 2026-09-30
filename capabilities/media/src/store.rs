@@ -108,6 +108,30 @@ impl Ledger {
         ).optional()?)
     }
 
+    /// Drop one recorded location, and with it any file row left with no location at all.
+    ///
+    /// This exists for a path that was recorded and should never have been: macOS writes
+    /// `.DS_Store` and AppleDouble `._*` beside the media on its own schedule, so an index that
+    /// admits them starts refusing on a file the operator never put there. Removing a location is
+    /// not how a deleted media file is handled — that stays visible as an unindexed absence, which
+    /// is the whole point of the audit.
+    pub fn forget(&self, uuid: &str, relpath: &str) -> Result<bool> {
+        let mut conn = self.pool.get()?;
+        let tx = sjel_store::write_transaction(&mut conn)?;
+        let removed = tx.execute(
+            "DELETE FROM media_locations WHERE uuid=?1 AND relpath=?2",
+            params![uuid, relpath],
+        )?;
+        if removed > 0 {
+            tx.execute(
+                "DELETE FROM media_files WHERE digest NOT IN (SELECT digest FROM media_locations)",
+                [],
+            )?;
+        }
+        tx.commit()?;
+        Ok(removed > 0)
+    }
+
     pub fn has_digest(&self, digest: &str) -> Result<bool> {
         let conn = self.pool.get()?;
         Ok(conn

@@ -6,7 +6,7 @@ use media::{audit, index, verify_mirror, volume_uuid};
 
 fn usage() {
     eprintln!("media — exact-byte index, ingest gate and mirror verification\n\
-        usage:\n  media volume-id --root PATH\n  media index --root PATH --uuid UUID [--db PATH]\n  media audit --root PATH --uuid UUID --sample N [--db PATH]\n  media ingest --staging PATH --library PATH --uuid UUID [--apply] [--prune] [--db PATH]\n  media classify (--digest SHA256 | --digests-file PATH) [--db PATH]\n  media verify-mirror --left-root PATH --left-uuid UUID --right-root PATH --right-uuid UUID [--db PATH]\n  media status [--db PATH]\n  media preview --structure FILE [--metadata]\n\n\
+        usage:\n  media volume-id --root PATH\n  media index --root PATH --uuid UUID [--db PATH]\n  media audit --root PATH --uuid UUID --sample N [--db PATH]\n  media ingest --staging PATH --library PATH --uuid UUID [--apply] [--prune] [--db PATH]\n  media classify (--digest SHA256 | --digests-file PATH) [--db PATH]\n  media verify-mirror --left-root PATH --left-uuid UUID --right-root PATH --right-uuid UUID [--db PATH]\n  media status [--db PATH]\n  media duplicates --uuid UUID [--legacy PREFIX] [--resolve-inside PREFIX --root PATH --metadata] [--list PATH] [--db PATH]\n  media supersede --root PATH --uuid UUID --list PATH --quarantine PATH --journal PATH [--apply]\n  media preview --structure FILE [--metadata]\n  media organize --structure FILE [--apply --journal PATH] [--settled-for SECONDS] [--only COLLECTION]\n\n\
         ingest is a dry run unless --apply is set. --prune additionally removes staging/originals\n\
         only after every new import verifies; neither verb deletes library content.");
 }
@@ -74,7 +74,7 @@ fn run(args: &[String]) -> Result<i32> {
         usage();
         return Ok(0);
     }
-    // Preview never reaches configuration/database resolution, even on invalid arguments.
+    // Preview and organize never reach configuration/database resolution, even on invalid arguments.
     if verb == "preview" {
         return match run_preview(opts) {
             Ok(code) => Ok(code),
@@ -82,6 +82,18 @@ fn run(args: &[String]) -> Result<i32> {
                 println!(
                     "{}",
                     serde_json::json!({"complete": false, "moves_authorized": false, "error": error.to_string()})
+                );
+                Ok(1)
+            }
+        };
+    }
+    if verb == "organize" {
+        return match run_organize(opts) {
+            Ok(code) => Ok(code),
+            Err(error) => {
+                println!(
+                    "{}",
+                    serde_json::json!({"complete": false, "applied": false, "moves_authorized": true, "error": error.to_string()})
                 );
                 Ok(1)
             }
@@ -107,6 +119,28 @@ fn run(args: &[String]) -> Result<i32> {
             &[],
         ),
         "status" => (&["--db"], &[]),
+        "duplicates" => (
+            &[
+                "--uuid",
+                "--db",
+                "--legacy",
+                "--list",
+                "--root",
+                "--resolve-inside",
+            ],
+            &["--metadata"],
+        ),
+        "supersede" => (
+            &[
+                "--root",
+                "--uuid",
+                "--list",
+                "--quarantine",
+                "--journal",
+                "--db",
+            ],
+            &["--apply"],
+        ),
         _ => {
             usage();
             return Err(format!("unknown command {verb}").into());
@@ -145,11 +179,11 @@ fn run(args: &[String]) -> Result<i32> {
                 .file_name()
                 .and_then(|s| s.to_str())
                 .unwrap_or("library");
-            let hashed = index(&ledger, &root, uuid, label)?;
+            let counted = index(&ledger, &root, uuid, label)?;
             let report = audit(&ledger, &root, uuid, 0)?;
             println!(
                 "{}",
-                serde_json::json!({"uuid":uuid,"hashed":hashed,"disk_files":report.disk_files,"indexed_locations":report.indexed_locations,"discrepancies":report.disagreements})
+                serde_json::json!({"uuid":uuid,"hashed":counted.hashed,"pruned":counted.pruned,"disk_files":report.disk_files,"indexed_locations":report.indexed_locations,"discrepancies":report.disagreements})
             );
             Ok(i32::from(!report.disagreements.is_empty()))
         }
@@ -253,6 +287,52 @@ fn run(args: &[String]) -> Result<i32> {
             );
             Ok(0)
         }
+        "duplicates" => {
+            let uuid = required(opts, "--uuid")?;
+            let legacy = option(opts, "--legacy")?;
+            let list = option(opts, "--list")?.map(PathBuf::from);
+            let root = option(opts, "--root")?.map(PathBuf::from);
+            let inside = option(opts, "--resolve-inside")?;
+            if inside.is_some() && root.is_none() {
+                return Err("--resolve-inside needs --root so the files can be read".into());
+            }
+            let resolve = inside.as_deref().map(|inside| media::duplicates::Resolve {
+                inside,
+                metadata: opts.iter().any(|arg| arg == "--metadata"),
+            });
+            let report = media::duplicates::duplicates(
+                &ledger,
+                &uuid,
+                root.as_deref().unwrap_or_else(|| Path::new("/")),
+                legacy.as_deref(),
+                resolve,
+                list.as_deref(),
+            )?;
+            println!("{}", serde_json::to_string(&report)?);
+            Ok(0)
+        }
+        "supersede" => {
+            let root = rooted(opts, "--root")?;
+            let uuid = mounted(&root, &required(opts, "--uuid")?)?;
+            let list = rooted(opts, "--list")?;
+            let quarantine = rooted(opts, "--quarantine")?;
+            let journal = rooted(opts, "--journal")?;
+            let report = media::supersede::supersede(
+                &root,
+                &list,
+                &quarantine,
+                &journal,
+                opts.iter().any(|arg| arg == "--apply"),
+            )?;
+            // A declared removal is not an absence: the index row goes with the file, and the
+            // journal is the record of why. An undeclared disappearance still shows up in audit.
+            for relpath in &report.quarantined_paths {
+                ledger.forget(&uuid, relpath)?;
+            }
+            let fail = !report.complete || report.refused > 0;
+            println!("{}", serde_json::to_string(&report)?);
+            Ok(i32::from(fail))
+        }
         _ => unreachable!(),
     }
 }
@@ -271,6 +351,66 @@ fn run_preview(opts: &[String]) -> Result<i32> {
     let code = i32::from(!report.complete);
     println!("{}", serde_json::to_string(&report)?);
     Ok(code)
+}
+
+fn run_organize(opts: &[String]) -> Result<i32> {
+    allowed(
+        opts,
+        &["--structure", "--journal", "--settled-for", "--only"],
+        &["--apply"],
+    )?;
+    for flag in ["--apply", "--journal", "--structure", "--settled-for"] {
+        if opts.iter().filter(|arg| arg.as_str() == flag).count() > 1 {
+            return Err(format!("repeated {flag}").into());
+        }
+    }
+    let only: Vec<String> = only_values(opts, "--only")?;
+    if only.iter().any(|name| name.is_empty() || name.contains('/')) {
+        return Err("--only takes a collection name, not a path".into());
+    }
+    if only.len() != only.iter().collect::<std::collections::BTreeSet<_>>().len() {
+        return Err("repeated --only collection".into());
+    }
+    let structure = rooted(opts, "--structure")?;
+    let journal = option(opts, "--journal")?.map(PathBuf::from);
+    let settled_for = match option(opts, "--settled-for")? {
+        Some(text) => text
+            .parse::<i64>()
+            .map_err(|_| "--settled-for must be a whole number of seconds")?,
+        None => 300,
+    };
+    if settled_for < 0 {
+        return Err("--settled-for must not be negative".into());
+    }
+    let report = media::organize::organize(
+        &structure,
+        opts.iter().any(|arg| arg == "--apply"),
+        settled_for,
+        journal.as_deref(),
+        &only,
+    )?;
+    let code = i32::from(!report.complete);
+    println!("{}", serde_json::to_string(&report)?);
+    Ok(code)
+}
+
+/// Every value of a repeatable option, in order. `option` refuses a repeat; `--only` is the one
+/// option where repeating is the point.
+fn only_values(args: &[String], key: &str) -> Result<Vec<String>> {
+    let mut values = Vec::new();
+    let mut i = 0;
+    while i < args.len() {
+        if args[i] == key {
+            match args.get(i + 1) {
+                Some(value) if !value.starts_with("--") => values.push(value.clone()),
+                _ => return Err(format!("{key} needs a value").into()),
+            }
+            i += 2;
+            continue;
+        }
+        i += 1;
+    }
+    Ok(values)
 }
 
 fn main() {
@@ -298,6 +438,9 @@ mod preview_tests {
             vec!["--structure", "missing", "--unknown"],
             vec!["--structure", "missing", "--metadata", "--metadata"],
             vec!["--structure", "missing", "--structure", "another"],
+            vec!["--structure", "missing", "--only"],
+            vec!["--structure", "missing", "--only", "a", "--only", "a"],
+            vec!["--structure", "missing", "--only", "Trips/2016/x"],
         ] {
             let mut args = vec!["preview".to_owned()];
             args.extend(options.into_iter().map(str::to_owned));

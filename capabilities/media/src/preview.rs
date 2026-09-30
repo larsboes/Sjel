@@ -16,34 +16,91 @@ use crate::store::Result;
 #[derive(Debug, Deserialize)]
 pub struct Draft {
     draft_version: u32,
-    archive_root: PathBuf,
-    source_root: PathBuf,
-    expected_volume_uuid: String,
+    pub(crate) archive_root: PathBuf,
+    pub(crate) source_root: PathBuf,
+    pub(crate) expected_volume_uuid: String,
     organization: Organization,
-    mappings: Vec<Mapping>,
+    pub(crate) mappings: Vec<Mapping>,
     execution: Execution,
 }
 
 #[derive(Debug, Deserialize)]
 struct Organization {
     categories: Vec<Category>,
+    default_rule: Option<DefaultRule>,
 }
 #[derive(Debug, Deserialize)]
 struct Category {
     name: String,
 }
+
+/// The declared default placement. It is not a guesser: it fires only on a collection whose name
+/// carries a `YYYY-` prefix, and the operator declares the category and the shape in the draft.
+/// Anything that does not match stays `unresolved`, which is a reportable state and not an error.
+#[derive(Debug, Deserialize)]
+struct DefaultRule {
+    category: String,
+    /// `{category}`, `{year}` and `{collection}` are substituted. `{collection}` is mandatory.
+    destination: String,
+    #[serde(default = "default_true")]
+    require_dated_name: bool,
+    /// Collections this rule must not place, named one by one.
+    #[serde(default)]
+    skip: Vec<String>,
+}
+fn default_true() -> bool {
+    true
+}
+impl DefaultRule {
+    fn destination_for(&self, name: &str, categories: &BTreeSet<&str>) -> Option<String> {
+        if self.skip.iter().any(|skip| skip == name) {
+            return None;
+        }
+        let year = dated_prefix_year(name);
+        if self.require_dated_name && year.is_none() {
+            return None;
+        }
+        let year = year.unwrap_or_default();
+        if self.destination.contains("{year}") && year.is_empty() {
+            return None;
+        }
+        let candidate = self
+            .destination
+            .replace("{category}", &self.category)
+            .replace("{year}", year)
+            .replace("{collection}", name);
+        destination_ok(&candidate, categories).then_some(candidate)
+    }
+}
+
+/// `YYYY-` prefix, with or without a month: `2018-03-Iceland` and `2018-Finland` both answer
+/// `2018`. Anything else answers `None` rather than a guessed year.
+fn dated_prefix_year(name: &str) -> Option<&str> {
+    let bytes = name.as_bytes();
+    if bytes.len() < 5 || !name.is_char_boundary(4) {
+        return None;
+    }
+    (bytes[..4].iter().all(u8::is_ascii_digit) && bytes[4] == b'-').then(|| &name[..4])
+}
+
 #[derive(Debug, Deserialize)]
 struct Execution {
     file_moves_authorized: bool,
 }
+// The shared suffix is the draft's on-disk vocabulary (`destination_reviewed`,
+// `provisional_event_membership_needs_review`, `rule_reviewed`). Renaming the variants would
+// decouple the code from the file an operator actually edits, so the repetition is the point.
+#[allow(clippy::enum_variant_names)]
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "snake_case")]
 enum Review {
     DestinationReviewed,
     ProvisionalEventMembershipNeedsReview,
+    /// Placed by the operator's declared rule rather than one destination written out by hand.
+    RuleReviewed,
 }
 #[derive(Debug, Deserialize)]
-struct Mapping {
+pub(crate) struct Mapping {
     source_collection: String,
     proposed_destination_relative: Option<String>,
     candidate_destination_relative: Option<String>,
@@ -71,16 +128,32 @@ fn destination_ok(path: &str, categories: &BTreeSet<&str>) -> bool {
 }
 
 impl Draft {
+    /// Preview semantics. A draft that authorizes moves is refused, so preparing a plan can never
+    /// be confused with approving one.
     pub fn parse(input: &str) -> Result<Self> {
         let draft: Self = serde_json::from_str(input)?;
-        draft.validate()?;
+        draft.validate(false)?;
         Ok(draft)
     }
 
-    fn validate(&self) -> Result<()> {
+    /// Apply semantics. The operator's `file_moves_authorized` flag is the authorization, and the
+    /// organizing verb will not run without it.
+    pub fn parse_authorized(input: &str) -> Result<Self> {
+        let draft: Self = serde_json::from_str(input)?;
+        draft.validate(true)?;
+        Ok(draft)
+    }
+
+    fn validate(&self, moves_authorized: bool) -> Result<()> {
         let draft = self;
-        if draft.draft_version != 1 || draft.execution.file_moves_authorized {
-            return Err("preview requires draft_version=1 and file_moves_authorized=false".into());
+        if draft.draft_version != 1 {
+            return Err("draft_version must be 1".into());
+        }
+        if draft.execution.file_moves_authorized != moves_authorized {
+            return Err(match moves_authorized {
+                true => "apply requires file_moves_authorized=true in the draft".into(),
+                false => "preview requires file_moves_authorized=false in the draft".into(),
+            });
         }
         if draft.expected_volume_uuid.is_empty()
             || !draft
@@ -107,6 +180,30 @@ impl Draft {
         }
         if categories.is_empty() {
             return Err("at least one category is required".into());
+        }
+        if let Some(rule) = &draft.organization.default_rule {
+            if !categories.contains(rule.category.as_str()) {
+                return Err("default_rule category is not declared in organization.categories".into());
+            }
+            if !rule.destination.contains("{collection}") {
+                return Err("default_rule destination must use {collection}".into());
+            }
+            for skip in &rule.skip {
+                if !component_ok(skip) {
+                    return Err("default_rule skip entry must be a plain name".into());
+                }
+            }
+            let sample = rule
+                .destination
+                .replace("{category}", &rule.category)
+                .replace("{year}", "2000")
+                .replace("{collection}", "2000-01-Sample");
+            if !destination_ok(&sample, &categories) {
+                return Err(
+                    "default_rule destination must be a safe relative path in a declared category"
+                        .into(),
+                );
+            }
         }
         let mut sources = BTreeSet::new();
         for mapping in &draft.mappings {
@@ -147,7 +244,7 @@ impl Draft {
 }
 
 /// Check every existing component with lstat, not exists()/canonicalize() alone.
-fn real_directory(path: &Path) -> Result<()> {
+pub(crate) fn real_directory(path: &Path) -> Result<()> {
     if !path.is_absolute() {
         return Err("directory path must be absolute".into());
     }
@@ -165,8 +262,8 @@ fn real_directory(path: &Path) -> Result<()> {
     Ok(())
 }
 
-fn validated_roots(draft: &Draft) -> Result<(PathBuf, PathBuf)> {
-    draft.validate()?;
+pub(crate) fn validated_roots(draft: &Draft, moves_authorized: bool) -> Result<(PathBuf, PathBuf)> {
+    draft.validate(moves_authorized)?;
     real_directory(&draft.source_root)?;
     real_directory(&draft.archive_root)?;
     let source = draft.source_root.canonicalize()?;
@@ -180,14 +277,98 @@ fn validated_roots(draft: &Draft) -> Result<(PathBuf, PathBuf)> {
 /// Fixture-facing evaluation: filesystem metadata only, no UUID helper, subprocess or database.
 /// Parsing and root validation remain mandatory; no writes or hashes are performed.
 pub fn evaluate(draft: &Draft) -> Result<Report> {
-    let (source, archive) = validated_roots(draft)?;
+    let (source, archive) = validated_roots(draft, false)?;
     Ok(scan(draft, &source, &archive, false))
+}
+
+/// A collection the draft actually places, and how it was placed.
+#[derive(Debug, Clone)]
+pub(crate) struct Resolved {
+    pub(crate) collection: String,
+    pub(crate) destination: String,
+    pub(crate) origin: &'static str,
+}
+
+/// Every collection the draft places. A hand mapping wins over the rule, so an exception is
+/// written once, in one place, and the rule stays general.
+///
+/// `rule_reviewed` is an override carried in `mappings[]`; `rule` is the default rule firing. Both
+/// are actionable. The provisional status is deliberately absent: an unresolved human choice must
+/// not reach an executing verb.
+pub(crate) fn resolved_destinations(draft: &Draft) -> Result<Vec<Resolved>> {
+    let categories: BTreeSet<&str> = draft
+        .organization
+        .categories
+        .iter()
+        .map(|category| category.name.as_str())
+        .collect();
+    let mut resolved = Vec::new();
+    let mut mapped = BTreeSet::new();
+    for mapping in &draft.mappings {
+        mapped.insert(mapping.source_collection.as_str());
+        if matches!(
+            mapping.status,
+            Review::ProvisionalEventMembershipNeedsReview
+        ) {
+            continue;
+        }
+        let destination = mapping
+            .destination()
+            .ok_or("a reviewed mapping must carry a destination")?;
+        resolved.push(Resolved {
+            collection: mapping.source_collection.clone(),
+            destination: destination.to_owned(),
+            origin: "mapping",
+        });
+    }
+    if let Some(rule) = &draft.organization.default_rule {
+        for name in collection_names(&draft.source_root)? {
+            if mapped.contains(name.as_str()) {
+                continue;
+            }
+            if let Some(destination) = rule.destination_for(&name, &categories) {
+                resolved.push(Resolved {
+                    collection: name,
+                    destination,
+                    origin: "rule",
+                });
+            }
+        }
+    }
+    Ok(resolved)
+}
+
+pub(crate) fn category_names(draft: &Draft) -> BTreeSet<&str> {
+    draft
+        .organization
+        .categories
+        .iter()
+        .map(|category| category.name.as_str())
+        .collect()
+}
+
+/// Real child directories of the source root, sorted. Symlinks and non-directories are left out;
+/// the caller reports what it does not act on rather than acting on a guess.
+fn collection_names(source: &Path) -> Result<Vec<String>> {
+    real_directory(source)?;
+    let mut names = Vec::new();
+    for entry in fs::read_dir(source)? {
+        let entry = entry?;
+        let Ok(name) = entry.file_name().into_string() else {
+            continue;
+        };
+        if entry.file_type()?.is_dir() {
+            names.push(name);
+        }
+    }
+    names.sort();
+    Ok(names)
 }
 
 /// The production entry point checks both mount identities before any traversal.
 pub fn preview(structure: &Path, metadata: bool) -> Result<Report> {
     let draft = Draft::parse(&fs::read_to_string(structure)?)?;
-    let (source, archive) = validated_roots(&draft)?;
+    let (source, archive) = validated_roots(&draft, false)?;
     for root in [&source, &archive] {
         let actual = crate::volume_uuid(root)?;
         if !actual.eq_ignore_ascii_case(&draft.expected_volume_uuid) {
@@ -407,15 +588,27 @@ fn scan(draft: &Draft, source: &Path, archive: &Path, metadata: bool) -> Report 
                 collection.metadata = Some(summary);
             }
             match mappings.get(name.as_str()) {
-                Some(mapping) if matches!(mapping.status, Review::DestinationReviewed) => {
+                Some(mapping)
+                    if !matches!(
+                        mapping.status,
+                        Review::ProvisionalEventMembershipNeedsReview
+                    ) =>
+                {
                     let destination = mapping.destination().expect("validated reviewed destination");
+                    // A hand-written destination is reported as a proposal; one the operator's own
+                    // rule placed is reported as a rule placement. Both are actionable, and the
+                    // distinction is visible so a rule's reach can be reviewed before it runs.
+                    let placed = match mapping.status {
+                        Review::DestinationReviewed => "proposal",
+                        _ => "rule",
+                    };
                     match target_conflict(archive, destination) {
                         Ok(true) => {
                             collection.status = "conflict";
                             collection.issues.push("destination exists or an ancestor is a symlink/non-directory; no overwrite proposed".into());
                         }
                         Ok(false) => {
-                            collection.status = "proposal";
+                            collection.status = placed;
                             collection.proposal_destination_relative = Some(destination.to_owned());
                         }
                         Err(_) => collection.incomplete("cannot inspect destination ancestors".into()),
@@ -423,8 +616,32 @@ fn scan(draft: &Draft, source: &Path, archive: &Path, metadata: bool) -> Report 
                 }
                 Some(_) => collection.issues.push("event membership needs human review; candidate is not an executable destination".into()),
                 None => {
-                    collection.status = "unresolved";
-                    collection.issues.push("no reviewed mapping for collection".into());
+                    let categories = category_names(draft);
+                    let placed = draft
+                        .organization
+                        .default_rule
+                        .as_ref()
+                        .and_then(|rule| rule.destination_for(&name, &categories));
+                    match placed {
+                        Some(destination) => match target_conflict(archive, &destination) {
+                            Ok(true) => {
+                                collection.status = "conflict";
+                                collection.issues.push("rule destination exists or an ancestor is a symlink/non-directory; no overwrite proposed".into());
+                            }
+                            Ok(false) => {
+                                collection.status = "rule";
+                                collection.proposal_destination_relative = Some(destination);
+                            }
+                            Err(_) => collection
+                                .incomplete("cannot inspect destination ancestors".into()),
+                        },
+                        None => {
+                            collection.status = "unresolved";
+                            collection
+                                .issues
+                                .push("no reviewed mapping and no rule match for collection".into());
+                        }
+                    }
                 }
             }
             if !collection.complete {
@@ -687,7 +904,7 @@ impl MetadataSummary {
 }
 
 // Keep the civil day as recorded, without applying the suffix's UTC offset.
-fn metadata_day(input: &str) -> Option<String> {
+pub(crate) fn metadata_day(input: &str) -> Option<String> {
     let bytes = input.as_bytes();
     if bytes.len() < 10
         || !bytes[..4].iter().all(u8::is_ascii_digit)
@@ -720,7 +937,7 @@ fn collection_month(name: &str) -> Option<&str> {
     Some(prefix)
 }
 
-fn date_priority(key: &str) -> Option<u8> {
+pub(crate) fn date_priority(key: &str) -> Option<u8> {
     let (group, tag) = key.rsplit_once(':').unwrap_or(("", key));
     match tag {
         "DateTimeOriginal" => Some(0),
@@ -858,7 +1075,7 @@ fn consume_metadata(
     }
 }
 
-const EXIF_ARGS: &[&str] = &[
+pub(crate) const EXIF_ARGS: &[&str] = &[
     "-config",
     "",
     "-json",
@@ -1451,6 +1668,22 @@ mod tests {
         let report = evaluate(&draft).unwrap();
         assert!(!report.complete);
         assert_eq!(report.collections[0].status, "blocked");
+    }
+
+    #[test]
+    fn a_rule_reviewed_mapping_is_reported_as_a_rule_placement_not_as_unresolved_event_membership() {
+        let fixture = Fixture::new();
+        fixture.collection();
+        let mut draft = fixture.draft();
+        draft.mappings[0].status = Review::RuleReviewed;
+        let report = evaluate(&draft).unwrap();
+        assert!(report.complete);
+        assert_eq!(report.collections[0].status, "rule");
+        assert_eq!(
+            report.collections[0].proposal_destination_relative.as_deref(),
+            Some("Trips/2016/2016-06 New York")
+        );
+        assert!(report.collections[0].issues.is_empty());
     }
 
     #[test]

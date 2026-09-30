@@ -90,19 +90,29 @@ unsafe_code = "deny"
 # (tower-http 0.6 and tower 0.5 through reqwest 0.13 and axum 0.7, toml 1.1 and thiserror 2.0
 # through xberg). Unification of declarations cannot remove a duplicate a dependency requires.
 #
+# Re-measured 2026-09-30, on the five-major commit: 100 entries, and of the examples above
+# tower 0.5 and toml 1.1 are no longer duplicates at all -- that commit removed tower 0.4.13
+# and the whole toml 0.8 family (toml, toml_datetime, serde_spanned, winnow). What it added in
+# their place is tower-http 0.7 beside reqwest 0.13's 0.6, and parquet 60's brotli 9 and
+# alloc-stdlib 0.3 beside the brotli 8 and alloc-stdlib 0.2 that xberg already brought. A wash
+# in the count and not optional on either side: reqwest's compression stack and parquet's
+# reader are not this workspace's declarations to unify.
+#
 # capabilities/interior stays out of the `thiserror` entry: it is on 2.0 while six members are
 # on 1.0, and moving either way would be a version change. It says so at its own declaration.
 #
-# capabilities/sjel-status stays out of the `tower` entry for the same reason: it declares 0.4
-# as a normal dependency and moving it to 0.5 is a version change, which Q77 puts on a
-# Dependabot commit rather than on a security one. Both versions were already in Cargo.lock
-# before this entry existed — 0.5.3 arrives through axum 0.7 and reqwest 0.13 — so the six
-# `dev-dependencies` that point here add an edge and no package.
+# capabilities/sjel-status was the exception to the `tower` entry until 2026-09-30: it declared
+# 0.4 as a normal dependency, and moving it to 0.5 was a version change, which Q77 puts on a
+# Dependabot commit rather than on a security one. That commit arrived (the tower 0.4 -> 0.5.3
+# bump), sjel-status now reads the entry like the other six, and 0.4.13 leaves Cargo.lock
+# because nothing declares it any more. The move added no package: 0.5.3 was already there
+# through axum and reqwest, so what changed is an edge in this file and one fewer version in
+# the lock.
 [workspace.dependencies]
 aho-corasick = "1.1"
 axum = "0.8"
 chrono = { version = "0.4", default-features = false, features = ["std", "clock"] }
-getrandom = "0.3"
+getrandom = "0.4"
 reqwest = "0.13"
 rusqlite = { version = "0.40", features = ["bundled"] }
 serde = "1.0"
@@ -110,9 +120,9 @@ serde_json = "1.0"
 sha2 = "0.11"
 thiserror = "1.0"
 tokio = "1"
-toml = "0.8"
+toml = "1.1"
 tower = "0.5"
-tower-http = "0.6"
+tower-http = "0.7"
 
 # Dependencies carry no debug info; workspace crates keep all of it.
 #

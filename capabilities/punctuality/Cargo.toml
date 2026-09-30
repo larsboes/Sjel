@@ -37,8 +37,8 @@ route-manifest = { path = "../../libs/route-manifest" }
 # arrow-rs (upstreams.toml [arrow-rs]) -- the parquet reader. Pure Rust, which is the
 # reason it is here rather than an embedded database: see
 # capabilities/punctuality/README.md.
-parquet = "=59.3.0"
-arrow = "=59.3.0"
+parquet = "=60.0.0"
+arrow = "=60.0.0"
 
 # The database, after PRD Q45 retired Postgres. Bundled so the deployment does not
 # depend on whichever SQLite the host ships; upstreams.toml [rusqlite] has the

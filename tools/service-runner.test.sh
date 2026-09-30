@@ -237,6 +237,30 @@ seen="$(inference_backend_seen)"
 [ "$seen" = "<unset>" ] \
   || fail "a machine declaring no [inference] backend still exported one (saw '$seen')"
 
+# A restart builds into the root's target/, whatever CARGO_TARGET_DIR the caller exported.
+# Every manifest runs `target/release/<bin>`; a build that honoured the caller's directory
+# left that binary stale and the restart relaunched it (2026-09-30).
+mkdir -p "$INF_ROOT/capabilities/buildhog"
+TARGET_DUMP="$SCRATCH/buildhog-target"
+cat > "$INF_ROOT/capabilities/buildhog/service.toml" <<'TOML'
+kind = "process"
+name = "buildhog"
+command = ["capabilities/buildhog/run"]
+build = ["capabilities/buildhog/build"]
+TOML
+printf '#!/bin/bash\nprintf "%%s" "${CARGO_TARGET_DIR:-<unset>}" > "%s"\n' "$TARGET_DUMP" \
+  > "$INF_ROOT/capabilities/buildhog/build"
+printf '#!/bin/bash\nsleep 30\n' > "$INF_ROOT/capabilities/buildhog/run"
+chmod +x "$INF_ROOT/capabilities/buildhog/build" "$INF_ROOT/capabilities/buildhog/run"
+printf 'os = "linux"\ncontainer_runtime = "docker"\ncapabilities = ["buildhog"]\n' \
+  > "$INF_OVERLAY/config/machine.toml"
+CARGO_TARGET_DIR="$SCRATCH/elsewhere" "$INF_SR" restart buildhog >/dev/null 2>&1
+"$INF_SR" stop buildhog >/dev/null 2>&1
+seen="$(cat "$TARGET_DUMP" 2>/dev/null)"
+[ "$seen" = "$INF_ROOT/target" ] \
+  || fail "a restart built outside the root's target/ (CARGO_TARGET_DIR seen: '$seen')"
+rm -f /tmp/axon-buildhog.pid /tmp/axon-buildhog.maintenance /tmp/axon-buildhog.log /tmp/axon-buildhog.err
+
 # The runtime gate that stood here until 2026-09-02 (Q75) guarded #125: a dead
 # apple-container apiserver aborted start_service before ensure_runtime could revive it, so a
 # Mac whose apiserver went down never came back on its own. Both the gate and the runtime are

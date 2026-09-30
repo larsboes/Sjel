@@ -499,7 +499,12 @@ maybe_build() {  # [force] — build when the artifact is missing, or always on 
   # In the capability's own workdir, not the repo root: `bun run build` has to run where
   # the package.json is. A capability without a workdir (every Rust one) still builds at
   # the root, which is where cargo resolves the workspace and its shared target/.
-  ( cd "$CAP_ROOT/${WORKDIR:-.}" && "${BUILD_CMD[@]}" ) || return 1
+  #
+  # CARGO_TARGET_DIR is pinned to the root's target/, because that is where every manifest's
+  # command points (`target/release/<bin>`). Inherited from the caller's shell, it built the new
+  # binary somewhere else and the restart relaunched the old one, reporting healthy
+  # (2026-09-30, comms). Harmless for a non-cargo build command.
+  ( cd "$CAP_ROOT/${WORKDIR:-.}" && CARGO_TARGET_DIR="$CAP_ROOT/target" "${BUILD_CMD[@]}" ) || return 1
   # `sign = "<identifier>"` signs the built command binary with a stable identity, so a
   # firewall or privacy grant survives rebuilds (tools/codesign-binary.sh). Here, after the
   # build, and not inside the build command: the unit's PATH is derived from the build

@@ -1,6 +1,6 @@
 # Sjel agent bootstrap
 
-For Sjel operations, run `axon help` or `axon search <task>` before browsing files. For Sjel
+For Sjel operations, run `sjel help` or `sjel search <task>` before browsing files. For Sjel
 repository changes, follow this file's data-boundary, repository, and GitHub workflow rules. Use
 Graphify only as optional symbol-level drill-down after bounded Sjel context is available.
 

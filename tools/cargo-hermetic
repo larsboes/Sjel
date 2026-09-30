@@ -153,7 +153,7 @@ if [ "${1:-}" = "--print-env" ]; then
   exit 0
 fi
 
-[ "$#" -gt 0 ] || die "needs a cargo subcommand, e.g. 'test --workspace --locked'. Run 'axon help cargo'."
+[ "$#" -gt 0 ] || die "needs a cargo subcommand, e.g. 'test --workspace --locked'. Run 'sjel help cargo'."
 
 echo "cargo-hermetic: target $CARGO_TARGET_DIR, overlay $SJEL_PERSONAL_ROOT" >&2
 # Not exec: the trap has to run so the sandbox goes away, and the exit status has to be

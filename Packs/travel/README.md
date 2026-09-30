@@ -8,7 +8,7 @@ and a copy here would be a copy that goes stale.
 ## Skills
 
 - `travel` routes a question to the capability that owns it, runs the calendar → transit → trips
-  order, and reaches every service through `axon capability call`. Its one reference,
+  order, and reaches every service through `sjel capability call`. Its one reference,
   `references/traps.md`, holds the failures that return an empty or plausible answer instead of
   an error.
 
@@ -18,16 +18,16 @@ writes nothing until `POST /api/plan-search/:id/adopt` (PRD Q91,
 `capabilities/trips/README.md`). The skill's hand-run order stays the path for everything the
 job does not cover, and it stays the explanation of why the order is what it is. Two facts a
 caller of this Pack needs: `trips` now answers 403 to a browser `Origin` it does not serve the
-dashboard from, which `axon capability call` never trips because it sends no `Origin`; and the
+dashboard from, which `sjel capability call` never trips because it sends no `Origin`; and the
 job reads `places` for climate normals and companion presence, which `pack.toml`'s
-`capabilities` list does not yet name — `axon capability list` is the current answer, this
+`capabilities` list does not yet name — `sjel capability list` is the current answer, this
 manifest is not.
 
 ## Activate
 
 ```sh
-axon pack deploy claude travel
-axon pack deploy codex travel
+sjel pack deploy claude travel
+sjel pack deploy codex travel
 ```
 
 ## Deployment status

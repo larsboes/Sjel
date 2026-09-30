@@ -2879,7 +2879,7 @@ const CHECKS: Check[] = [
       const targetDir = process.env.CARGO_TARGET_DIR || join(ctx.root, "target");
       const bin = join(targetDir, "release", "sjel-storage");
       if (!existsSync(bin)) {
-        ctx.warn("sjel-storage not built — run `axon storage target` to check R6");
+        ctx.warn("sjel-storage not built — run `sjel storage target` to check R6");
         return;
       }
       const proc = Bun.spawnSync({ cmd: [bin, "target", "--json"], stdout: "pipe", stderr: "pipe" });
@@ -2887,7 +2887,7 @@ const CHECKS: Check[] = [
       try {
         data = JSON.parse(proc.stdout.toString());
       } catch {
-        ctx.warn("sjel-storage target did not emit JSON — run `axon storage target` for detail");
+        ctx.warn("sjel-storage target did not emit JSON — run `sjel storage target` for detail");
         return;
       }
       const gb = (b: number) => `${(b / 1024 ** 3).toFixed(1)} GB`;
@@ -2902,7 +2902,7 @@ const CHECKS: Check[] = [
         // a real finding and two builds that were never comparable.
         ctx.warn(
           `target/debug is ${data.ratio.toFixed(1)}× target/release, over R6's ${data.r6_max_ratio}× ` +
-            `(${units("debug")} vs ${units("release")} units) — axon storage prune --incremental, or ` +
+            `(${units("debug")} vs ${units("release")} units) — sjel storage prune --incremental, or ` +
             `build both profiles and re-check`,
         );
       } else {
@@ -2917,7 +2917,7 @@ const CHECKS: Check[] = [
         ctx.warn(
           `target/.rustc_info.json records rustc ${String(tc.recorded).slice(0, 9)} but this machine runs ` +
             `${String(tc.current).slice(0, 9)} — ${gb(tc.stale_candidate_bytes ?? 0)} of deps and fingerprints ` +
-            `was built by a compiler that is gone; axon storage prune --target`,
+            `was built by a compiler that is gone; sjel storage prune --target`,
         );
       } else if (tc.recorded) {
         // "last recorded", not "clean": cargo rewrites .rustc_info.json on its first run

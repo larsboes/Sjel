@@ -32,7 +32,7 @@ WindowServer had **more** cumulative CPU than the stuck extension — 168 minute
 frozen as a fixture in `tools/host-watch.test.ts`, because it is the one comparison that
 tells a working implementation from a plausible one.
 
-**Free space.** Delegated whole to `axon storage report --json`; this reads its verdict and
+**Free space.** Delegated whole to `sjel storage report --json`; this reads its verdict and
 adds no thresholds of its own. Deliberately fires on the volume state alone and **not**
 on a class being large: `class_flag_gb` legitimately fires today, on a 28 GB cargo target
 dir, on a machine with 130 GB free and nothing wrong with it. Alerting on that would mean

@@ -2,7 +2,7 @@
 # Tests for tools/lib/capability-probe.sh — where the CLI polls a capability, and what the
 # answer means.
 #
-# Every case here is a wrong answer `axon capability health` gave on a real machine on
+# Every case here is a wrong answer `sjel capability health` gave on a real machine on
 # 2026-09-08, held as a fixture so it cannot come back. None of them could be caught by
 # running the CLI: they need capabilities that are running, capabilities that are refusing,
 # and a capability on another host, and CI has none of the three.

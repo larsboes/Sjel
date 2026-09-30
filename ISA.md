@@ -3,7 +3,7 @@ project: sjel
 type: isa
 phase: climbing
 progress: 75
-principal_stated_goal: "I want no new issues, I wanna get rid of all issues for axon and axon personal and only carry through normal ISAs etc."
+principal_stated_goal: "I want no new issues, I wanna get rid of all issues for sjel and sjel personal and only carry through normal ISAs etc."
 ---
 
 # ISA · Sjel
@@ -355,19 +355,35 @@ running, and restarting, the stale binaries in `<repo>/target`. The deployment d
 the build output would have quietly diverged. Visibility in the tool is the fix instead,
 because it names the directory rather than moving where things are written.
 
-- [ ] ISC-27 — the `axon` symlink is gone and `sjel` is the only entry point. Falsifier: `axon`
+- [x] ISC-27 — the `axon` symlink is gone and `sjel` is the only entry point. Falsifier: `axon`
   still resolves on PATH or at the repo root, or a tool or skill still invokes it. Probe:
-  `command -v axon`, and `rg '$AXON|"axon"' tools/ Packs/`. Supersedes ISC-11.
+  `command -v axon`, and `rg '$AXON|"axon"' tools/ Packs/`. Supersedes ISC-11. Evidence,
+  2026-09-30: the tracked symlink and `~/.local/bin/axon` are removed, `command -v axon` returns
+  nothing, and 65 `axon <verb>` invocations across 25 files now say `sjel` (this commit). The
+  removal also exposed a live break: `profiles.toml` still named the old skill,
+  `skills = { "harness" = ["axon"] }`, and the harness deployer refuses a profile that names a
+  skill its Pack lacks — so `productive` and `coding` could not be activated at all. Fixed;
+  both activate. Still named `axon`, each its own decision: `tools/axon-context`,
+  `capabilities/comms/axon-clip/`, `dashboard/src/lib/home/AxonGlance.svelte`,
+  `schemas/axon-sync.schema.json`, `Packs/harness/codex/axon/` (a Codex agent),
+  `axon.toml`/`axon.local.toml`, the `~/.local/state/axon/` deployment ledger,
+  `~/.local/bin/axon-eject` (the private overlay's tool), and `AXON_`-looking fixture names in
+  tests.
 - [ ] ISC-28 — the signed-request headers are `X-Sjel-*`, with the old name still accepted
   until the paired phone ships. Falsifier: a paired phone's signed request fails after the
   rename. Probe: `libs/sjel-server/src/auth.rs` accepts both, asserted in its own tests.
 - [ ] ISC-29 — `axon-fda-launcher` is renamed, and its Full Disk Access grant is intact
   afterwards. Falsifier: the binary runs without FDA and cannot read what it needs. Probe: run
   it and confirm the grant. Renaming drops the grant, so re-granting is part of the work.
-- [ ] ISC-30 — "Axon" no longer appears in prose and doctrine. Falsifier: `rg -i axon` over the
+- [x] ISC-30 — "Axon" no longer appears in prose and doctrine. Falsifier: `rg -i axon` over the
   tracked documents returns hits that are not historical record (a commit message, an entry in
   this file), a platform-pinned identifier, or a deliberate alias. Probe: `rg -ci axon` over
-  `README.md ISA.md CONTRIBUTING.md ARCHITECTURE.md`.
+  `README.md ISA.md CONTRIBUTING.md ARCHITECTURE.md`. Evidence, 2026-09-30 (c68e7fb6): 284
+  occurrences rewritten across 100 files, of which `README.md` and `CONTRIBUTING.md` were
+  already clean. 22 remain, each one of: historical record (`Axon held a reviewed delta against
+  it until 2026-08-25`, `Axon#126`, `Projects/Axon/PRD Axon.md`), the transition's own name
+  (F3 and the `/Axon/` URL that 404s as its evidence), an identifier rather than prose
+  (`axon-*`, `AXON_*`, `X-Axon-*`), or this ISC's own text.
 - [ ] ISC-31 — the Systems page shows what fills the disk, from the tool's own `--json`.
   Falsifier: the page renders no storage panel, or `sjel storage report --json` exits non-zero.
   Probe: `sjel storage report --json` and the page.

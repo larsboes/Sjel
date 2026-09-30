@@ -134,7 +134,7 @@ fn repo_root() -> Result<PathBuf, String> {
 fn policy_path() -> Result<PathBuf, String> {
     let root = sjel_config::overlay_root().ok_or_else(|| {
         "no overlay — SJEL_PERSONAL_ROOT is unset. Run this through tools/storage/storage \
-         or `axon storage`, which source tools/lib/paths.sh."
+         or `sjel storage`, which source tools/lib/paths.sh."
             .to_string()
     })?;
     Ok(root.join("config").join("storage-policy.toml"))
@@ -285,7 +285,7 @@ fn cmd_report(json: bool, do_apply: bool) -> Result<u8, String> {
     }
 
     if !do_apply {
-        println!("Read-only. Re-run as `axon storage apply` to execute the applicable reclaims.");
+        println!("Read-only. Re-run as `sjel storage apply` to execute the applicable reclaims.");
         return Ok(if over_critical { EXIT_OVER } else { EXIT_OK });
     }
 
@@ -436,7 +436,7 @@ fn cmd_target(json: bool) -> Result<u8, String> {
         println!(
             "Toolchain: STALE — .rustc_info.json records {} and rustc is {}. \
              {} of deps and fingerprints was built by a compiler this machine no longer has; \
-             `axon storage prune --target` reclaims it.",
+             `sjel storage prune --target` reclaims it.",
             t.recorded.as_deref().unwrap_or("?"),
             t.current.as_deref().unwrap_or("?"),
             fmt_bytes(t.stale_candidate_bytes),

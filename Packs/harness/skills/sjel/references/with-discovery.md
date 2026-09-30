@@ -3,8 +3,8 @@
 Always discover before operating.
 
 1. Run `tools/axon-context with [capability]`.
-2. For the current service state, run `axon capability list` or `axon capability health`.
-3. For one HTTP base URL, run `axon capability url <capability>`.
+2. For the current service state, run `sjel capability list` or `sjel capability health`.
+3. For one HTTP base URL, run `sjel capability url <capability>`.
 4. Read only the returned capability README and manifest before composing an unfamiliar call.
 
 The registry owns service identity, ports, health paths, dependencies, and proxy behavior. Do not

@@ -73,7 +73,7 @@ writing. That is the one `tools/travel.ts` uses.
 ## A 404 from `GET /api/split` means "no cheaper split exists"
 
 `hafas_fail` maps `NoSplitFound` to 404 deliberately — answering 500 made the absence of a
-bargain look like a broken server (`capabilities/transit/src/server.rs`). `axon capability call`
+bargain look like a broken server (`capabilities/transit/src/server.rs`). `sjel capability call`
 exits non-zero on it while printing the body, so a script that reads the exit code alone reports
 an outage that did not happen.
 

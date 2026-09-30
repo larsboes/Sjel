@@ -6,13 +6,13 @@ contract before using an unfamiliar route.
 ## Common operations
 
 ```bash
-axon capability ingest <url>
-axon capability feed [days]
-axon capability call <capability> get <path> [curl-args...]
-axon capability call <capability> post <path> '<json>' [curl-args...]
+sjel capability ingest <url>
+sjel capability feed [days]
+sjel capability call <capability> get <path> [curl-args...]
+sjel capability call <capability> post <path> '<json>' [curl-args...]
 ```
 
-Use `axon capability url <capability>` plus `curl` when the generic wrapper does not express the
+Use `sjel capability url <capability>` plus `curl` when the generic wrapper does not express the
 contract. Prefer read-only requests for orientation.
 
 Before a write:

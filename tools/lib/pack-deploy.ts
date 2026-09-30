@@ -7,7 +7,7 @@
 // edits or anything this deployment does not own.
 //
 // Extracted from tools/packs-codex.ts on 2026-08-09, when the Claude adapter
-// stopped using symlinks (principal: "we should only deploy from axon overlays
+// stopped using symlinks (principal: "we should only deploy from sjel overlays
 // never using symlinks"). A symlink's target WAS its ownership proof — reading it
 // told you whether a directory was ours to remove. Copies destroy that proof, so
 // the ledger has to supply it, and the ledger already existed here. Two adapters

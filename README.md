@@ -52,7 +52,7 @@ Sjel is designed with two deliberate surfaces:
 2. **Under the hood**: A completely open, scriptable node. Every capability serves a live route
    manifest (`GET /routes`), speaks typed JSON over loopback HTTP, and stores state in queryable
    SQLite files. Developers and operators can drive every workflow from the terminal (`sjel`,
-   `axon capability call`), plug in local models, or automate tasks via standard UNIX tools
+   `sjel capability call`), plug in local models, or automate tasks via standard UNIX tools
    without touching the browser.
 
 ## How it works

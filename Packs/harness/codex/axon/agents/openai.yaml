@@ -1,4 +1,4 @@
 interface:
   display_name: "Axon"
   short_description: "Operate and develop Axon with live context"
-  default_prompt: "Use $axon to orient to this Axon task and select the smallest relevant workflow."
+  default_prompt: "Use $sjel to orient to this Axon task and select the smallest relevant workflow."

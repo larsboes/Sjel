@@ -38,7 +38,7 @@ CAPABILITY_FS=$'\037'
 #   is a fact about the host that binds it, and hands over `endpoint` instead. The CLI
 #   filtered its rows on `.port != ""`, so vaultwarden — which declares
 #   `health_path = "/alive"` and resolves an endpoint — was not merely unprobed, it was
-#   absent from `axon capability list` and `axon capability health` entirely.
+#   absent from `sjel capability list` and `sjel capability health` entirely.
 #
 # Prints nothing when there is nothing to poll. The caller reports that as unknown, which is
 # what sjel-status does too: "a capability without such a surface is reported as unknown
@@ -77,7 +77,7 @@ capability_base_url() {  # <scope> <port> <endpoint>
 # The case that forced it: `dashboard` declares port 47117 and `autostart = "false"`. That
 # port is the hot-reload dev server, started by hand for an editing session; the shell it
 # serves has been served by sjel-status on its own port since 2026-08-29. So
-# `axon capability health` printed `down dashboard http://127.0.0.1:47117/` while the
+# `sjel capability health` printed `down dashboard http://127.0.0.1:47117/` while the
 # dashboard answered 200, and exited non-zero for it. That line sent at least two sessions to
 # a dead URL.
 #

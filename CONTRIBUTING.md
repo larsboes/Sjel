@@ -394,9 +394,9 @@ toolchain cost it adds. `tools/doctor` stays an interpreted command because wrap
 machinery without improving correctness. The dashboard build was deliberately reopened when
 production began consuming capability-owned UI bundles; its README records that trigger.
 
-Build artifacts are not state. `axon storage target` measures `target/` per profile and per
+Build artifacts are not state. `sjel storage target` measures `target/` per profile and per
 bucket and checks PRD §9's R6 — `target/debug` may not exceed `target/release` by more than 3× —
-and `tools/doctor` reports the verdict. `axon storage prune` gives the space back:
+and `tools/doctor` reports the verdict. `sjel storage prune` gives the space back:
 `--incremental` for the cache that always regrows, `--target` for a `cargo clean`, and
 `--node-modules` for every ignored `node_modules`, `.svelte-kit` and `dist` in the checkout. The
 `[profile.dev.package."*"]` stanza in the root `Cargo.toml` is the measurement that produced the
@@ -731,13 +731,13 @@ part of an argument, but it must not claim a changing count that no gate verifie
 
 ### Public CLI
 
-`axon` is the public command interface for humans and agents. Run `axon help` to discover
-operations and `axon search <task>` to narrow the current capability and Pack surface without an
+`axon` is the public command interface for humans and agents. Run `sjel help` to discover
+operations and `sjel search <task>` to narrow the current capability and Pack surface without an
 installed agent skill. Repository policy lives in `AGENTS.md`; command help and capability or Pack
 contracts own operational detail.
 
 There is deliberately no separate CLI reference. `docs/axon-cli.md` was one, and every row of it
-restated something `axon help` already prints — a command table, the harness names, the discovery
+restated something `sjel help` already prints — a command table, the harness names, the discovery
 instruction `AGENTS.md` carries verbatim. A second copy of a generated surface is the kind of doc
 that rots first and is believed longest. `tools/install.sh` owns the installation contract: it
 links `~/.local/bin/axon` to the tracked launcher, never overwrites a non-Sjel command at that

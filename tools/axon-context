@@ -8,7 +8,7 @@ mode="${1:-}"
 target="${2:-}"
 
 usage() {
-  echo "usage: axon context with [capability] | on [unit-or-path]" >&2
+  echo "usage: sjel context with [capability] | on [unit-or-path]" >&2
   exit 1
 }
 
@@ -24,12 +24,12 @@ context_with() {
   if [ -z "$target" ]; then
     echo "capabilities:"
     printf '%s\n' "$registry" | jq -r '.[] | "  \(.name)\tkind=\(.kind)\thttp=\(if .port == "" then "none" else "registered" end)"'
-    echo "next=axon capability list"
+    echo "next=sjel capability list"
     return
   fi
   row="$(printf '%s\n' "$registry" | jq -c --arg name "$target" '.[] | select(.name == $name)' | head -n 1)"
   if [ -z "$row" ]; then
-    echo "axon context: unknown capability '$target'" >&2
+    echo "sjel context: unknown capability '$target'" >&2
     printf '%s\n' "$registry" | jq -r '.[].name' >&2
     exit 1
   fi
@@ -37,7 +37,7 @@ context_with() {
   echo "registry=$row"
   print_path_if_present "capabilities/$target/README.md"
   print_path_if_present "capabilities/$target/service.toml"
-  echo "next=axon capability url $target"
+  echo "next=sjel capability url $target"
 }
 
 unit_from_target() {
@@ -56,7 +56,7 @@ context_on() {
   if [ -z "$target" ]; then
     "$SJEL_ROOT/tools/self" status
     echo "read=README.md"
-    echo "next=axon doctor"
+    echo "next=sjel doctor"
     return
   fi
   normalized="${target#./}"
@@ -76,7 +76,7 @@ context_on() {
   print_path_if_present "Packs/$unit/README.md"
   print_path_if_present "Packs/$unit/pack.toml"
   print_path_if_present "$normalized"
-  echo "next=axon doctor"
+  echo "next=sjel doctor"
 }
 
 case "$mode" in

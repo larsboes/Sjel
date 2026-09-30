@@ -1,12 +1,12 @@
 #!/bin/bash
-# Tests for tools/lib/tool-index.sh — the tools/ half of `axon search`.
+# Tests for tools/lib/tool-index.sh — the tools/ half of `sjel search`.
 #
 # Driven against planted checkouts rather than against the real tools/ directory, so a case
 # describes exactly one shape and stays true when a tool is added or renamed. The exception
 # is the last block, which asks the real tools/ one question that no fixture can answer: does
 # the index actually cover this repository's own machinery.
 #
-# `axon search` itself cannot run in CI — it calls tools/capability.sh registry, which
+# `sjel search` itself cannot run in CI — it calls tools/capability.sh registry, which
 # hard-fails without a machine.toml — which is why the rules live in a library at all.
 set -uo pipefail
 
@@ -113,7 +113,7 @@ find_in "what lives here"
 
 # --- the miss, which is the whole point ------------------------------------
 #
-# `axon search` printed four empty headings and exited 0. A search that cannot say no is a
+# `sjel search` printed four empty headings and exited 0. A search that cannot say no is a
 # search whose silence the caller has to guess at.
 
 find_in nothing-in-this-tree-says-this

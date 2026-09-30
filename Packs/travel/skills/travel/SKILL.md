@@ -11,8 +11,8 @@ whether the answer is worth anything. That order, and the joins that quietly ret
 are what this skill carries. The routes are not: every capability serves its own manifest.
 
 ```sh
-axon capability list
-axon capability call transit get /routes
+sjel capability list
+sjel capability call transit get /routes
 ```
 
 ## Who answers what
@@ -46,8 +46,8 @@ the fan-out.
 ## Calling a capability
 
 ```sh
-axon capability call <name> <get|post|put|patch|delete> <path> [body] [curl-args...]
-axon capability url calendar
+sjel capability call <name> <get|post|put|patch|delete> <path> [body] [curl-args...]
+sjel capability url calendar
 ```
 
 The body for `post`/`put`/`patch` is one JSON string argument; the content type is set for you.

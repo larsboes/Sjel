@@ -4,7 +4,7 @@
 # It does two things the binary cannot do for itself. It sources tools/lib/paths.sh, which
 # is what resolves SJEL_ROOT and the active overlay (axon.local.toml, then axon.toml) —
 # sjel-storage reads SJEL_PERSONAL_ROOT and never re-derives that order. And it builds the
-# release binary when it is missing or older than its sources, so `axon storage` works on a
+# release binary when it is missing or older than its sources, so `sjel storage` works on a
 # fresh clone without a separate build step.
 #
 # Rust, not the TypeScript this replaced on 2026-09-03: see tools/storage/README.md.

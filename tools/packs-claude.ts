@@ -2,7 +2,7 @@
 // tools/packs-claude.ts — materialize Axon Packs into Claude Code's skill root.
 //
 // Replaces the symlink deployment tools/packs.sh used to do (principal,
-// 2026-08-09: "we should only deploy from axon overlays never using symlinks").
+// 2026-08-09: "we should only deploy from sjel overlays never using symlinks").
 // ~/.claude is a deployment target now, not a set of pointers into this repo:
 // nothing under it can write back into a checkout, and a hand edit there is
 // reported as drift instead of silently becoming a commit.

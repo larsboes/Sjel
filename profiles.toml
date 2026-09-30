@@ -24,13 +24,13 @@
 # unit, so the test is whether this file already deployed them together. Merged:
 #   writing        <- academic-writing, unslop
 #   cognitive-load <- asd-ste100
-#   harness        <- axon
+#   harness        <- sjel
 # Skills kept their names, so nothing changed about what loads — except where it
 # did, and those two are why the subsets below exist rather than a bare pack list:
-#   - `productive` held `axon` but NOT `harness`. Listing the merged Pack would drag
-#     suggest-skills, trim and harness-sync into every session, so it narrows to axon.
-#   - `coding` held writing + skill-creator + unslop + axon and no academic-writing, so it
-#     names its three writing skills and takes axon from harness.
+#   - `productive` held `sjel` but NOT `harness`. Listing the merged Pack would drag
+#     suggest-skills, trim and harness-sync into every session, so it narrows to sjel.
+#   - `coding` held writing + skill-creator + unslop + sjel and no academic-writing, so it
+#     names its three writing skills and takes sjel from harness.
 #
 # FIVE PROFILES WERE DELETED as aliases: writing, knowledge, harness, security, travel
 # each named exactly one Pack, so `use <pack>` already did the same thing and the
@@ -52,9 +52,9 @@
 name = "productive"
 description = "Daily driver — coding, prose, academic writing, decks, deliberation, orientation, focus"
 packs = ["writing", "presentations", "deliberation", "cognitive-load", "harness"]
-# harness narrowed: this profile wants axon (repo orientation), not the three
+# harness narrowed: this profile wants sjel (repo orientation), not the three
 # maintenance skills. See the 2026-09-17 note above.
-skills = { "harness" = ["axon"] }
+skills = { "harness" = ["sjel"] }
 # writing: human-writing 15 runs (430 audit-era) + skill-creator 12 runs · academic-writing 7
 #   runs (45 audit-era) + unslop 0 script runs (code-quality review pass by role). One Pack now;
 #   all four skills load, which is the same set this profile already carried.
@@ -62,7 +62,7 @@ skills = { "harness" = ["axon"] }
 #   academic-writing and a deck request would otherwise land in a profile that has neither
 # deliberation: council/red-team drive subagents; role-keeper in the writing stack (0 runs)
 # cognitive-load: attention-control + asd-ste100; small focus metacognition; role (0 runs)
-# harness (axon only): orientation for repo work; role (0 runs)
+# harness (sjel only): orientation for repo work; role (0 runs)
 
 [[profile]]
 name = "home"
@@ -89,8 +89,8 @@ description = "Code quality and the tools that write it"
 packs = ["writing", "harness"]
 # Named skills rather than whole Packs: a coding session wants the code/UI tell scanner,
 # the prose skill, and the skill author — not academic-writing, and not trim/harness-sync.
-skills = { "writing" = ["unslop", "human-writing", "skill-creator"], "harness" = ["axon"] }
-# unslop: 0 script runs — code-quality review pass by role · axon: orientation for repo work
+skills = { "writing" = ["unslop", "human-writing", "skill-creator"], "harness" = ["sjel"] }
+# unslop: 0 script runs — code-quality review pass by role · sjel: orientation for repo work
 
 [[profile]]
 name = "full"

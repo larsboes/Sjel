@@ -102,7 +102,7 @@ unsafe_code = "deny"
 aho-corasick = "1.1"
 axum = "0.8"
 chrono = { version = "0.4", default-features = false, features = ["std", "clock"] }
-getrandom = "0.3"
+getrandom = "0.4"
 reqwest = "0.13"
 rusqlite = { version = "0.40", features = ["bundled"] }
 serde = "1.0"

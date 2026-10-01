@@ -355,8 +355,11 @@ struct NotAWrite;
 /// reintroduce the second definition of "which routes mutate" the note on
 /// `project_after_write` warns against. `POST /api/plan-search` answers 202 and
 /// would otherwise cost a listing and thirteen file comparisons per search.
+///
+/// `is_safe`, not `!= GET`: a HEAD is a read too, and counting it as a write
+/// made every HEAD rewrite the vault projection (ISA ISC-38's audit, 2026-10-01).
 fn completes_a_write(method: &axum::http::Method, response: &axum::response::Response) -> bool {
-    *method != axum::http::Method::GET
+    !method.is_safe()
         && response.status().is_success()
         && response.status() != StatusCode::ACCEPTED
         && response.extensions().get::<NotAWrite>().is_none()
@@ -1956,6 +1959,8 @@ mod projection_trigger_tests {
         let ok = response(StatusCode::OK, json!({})).into_response();
         assert!(completes_a_write(&Method::PATCH, &ok));
         assert!(!completes_a_write(&Method::GET, &ok));
+        assert!(!completes_a_write(&Method::HEAD, &ok), "a HEAD is a read");
+        assert!(!completes_a_write(&Method::OPTIONS, &ok));
         let accepted = response(StatusCode::ACCEPTED, json!({})).into_response();
         assert!(!completes_a_write(&Method::POST, &accepted));
         let refused = response(StatusCode::BAD_REQUEST, json!({})).into_response();

@@ -51,6 +51,10 @@
 //!
 //! ## Token sourcing: shared, not per-capability
 //!
+//! One deployment token, plus one agent token (ISA ISC-38). The agent token is a second
+//! identity, not a second boundary: it is admitted only where a capability calls
+//! [`InboundAuth::admit_agents`], for GET and HEAD only, and every answer is pseudonymized.
+//!
 //! One token for the whole deployment, because the thing it gates is one thing:
 //! whether an inbound request reached this machine legitimately. Twelve tokens
 //! would be twelve secrets for one boundary and twelve injections in every
@@ -289,6 +293,10 @@ impl InboundAuth {
 
     /// Admit the deployment's agent token on this capability: read-only, and every response
     /// pseudonymized (ISA F9). A no-op when no agent is enrolled.
+    ///
+    /// Read-only means GET and HEAD, so it holds only while no GET or HEAD handler here
+    /// changes state. Before a capability calls this, check ISA ISC-38's list: on
+    /// 2026-10-01, scouting's `GET /discover` and two sjel-status GETs still did.
     pub fn admit_agents(mut self) -> Self {
         self.agent = crate::agent::AgentAccess::from_deployment().map(Arc::new);
         self

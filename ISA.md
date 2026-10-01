@@ -489,12 +489,22 @@ last layer over the routes and adds no data path of its own.
   `tools/setup-inbound-auth.sh` now writes the login Keychain, not Vaultwarden, and
   `tools/setup-secret.sh` and `upstreams.toml [bitwarden-cli]` no longer call Vaultwarden
   canonical.
-- [ ] ISC-38 — an agent identity admits `GET` and `HEAD` only. Falsifier: a `POST` carrying it
+- [x] ISC-38 — an agent identity admits `GET` and `HEAD` only. Falsifier: a `POST` carrying it
   reaches a handler. Probe: a unit test in `libs/sjel-server/src/auth.rs`. This amends the
   one-token ruling at `auth.rs:48` and the module docs change with it. It depends on ISC-37.
   Blocked in session 2026-09-30 by the safety check as a permission change: it needs an
   explicit go-ahead. Precondition: a measured list of `GET` handlers that change state, each
-  fixed or listed as an exception.
+  fixed or listed as an exception. Go-ahead given 2026-10-01. Done that day: the gate refuses
+  every other method for the agent identity (`libs/sjel-server/src/agent.rs:192`, held by
+  `the_agent_token_cannot_write_or_read_what_it_cannot_rewrite` in `lib.rs`), and a live POST
+  from an agent session answered "the agent token is read-only". The audit read 177 `GET` routes
+  in 18 capabilities and found four that change state. Fixed: trips counted a `HEAD` as a
+  completed write and rewrote the vault projection (`completes_a_write` now uses `is_safe`).
+  Exceptions, none reachable by an agent because neither capability calls `admit_agents`:
+  scouting `GET /discover` crawls third-party sources and stores the results (moving it to
+  `POST` changes the demo recordings); sjel-status `GET /backup/targets` re-syncs the declared
+  targets; sjel-status `GET /storage` may build the storage tool. `admit_agents`' doc names
+  this list. Benign and not exceptions: lazy migrations, the device nonce, idle heartbeats.
 - [ ] ISC-39 — a `GET` by an agent identity returns no value of class Secret, and no Others
   value it could not already read. Falsifier: an agent read returns a Secret row. Partial,
   2026-09-30: `GET /triage?max_data_class=c1` drops Others and Secret rows, and `sjel capability

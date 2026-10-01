@@ -329,6 +329,11 @@ fn run(args: &[String]) -> Result<i32> {
             for relpath in &report.quarantined_paths {
                 ledger.forget(&uuid, relpath)?;
             }
+            // A normalised name is a path change too: the old row goes, and the next `index`
+            // records the new one. Leaving it would report a rename as an absence.
+            for relpath in &report.renamed_paths {
+                ledger.forget(&uuid, relpath)?;
+            }
             let fail = !report.complete || report.refused > 0;
             println!("{}", serde_json::to_string(&report)?);
             Ok(i32::from(fail))

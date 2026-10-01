@@ -37,10 +37,17 @@ pub struct SupersedeReport {
     pub already_quarantined: usize,
     pub bytes_quarantined: u64,
     pub refused: usize,
+    /// Kept copies renamed to drop a macOS duplicate suffix, adopting the superseded copy's name.
+    pub names_normalised: usize,
+    /// Groups where the clean name was already taken by a different file, so the suffix stayed.
+    pub name_collisions: usize,
     pub journal: PathBuf,
     /// The relpaths moved out, so the caller can drop their index rows. The index must not be left
     /// describing a file the volume no longer holds, and a disappearance is never pruned silently.
     pub quarantined_paths: Vec<String>,
+    /// Surviving copies whose name changed. The index row for the old name must go too, and the
+    /// next `index` records the new one — a rename is a path change like any other.
+    pub renamed_paths: Vec<String>,
     pub issues: Vec<String>,
     pub limitations: Vec<&'static str>,
 }
@@ -54,21 +61,33 @@ const LIMITATIONS: [&str; 5] = [
 ];
 
 /// The `from` column of an existing journal: the paths an earlier run already moved out.
-fn already_quarantined(journal: &Path) -> Result<Vec<String>> {
+/// One line of an existing journal: the superseded path, and the surviving path's previous name
+/// when it was normalised. Re-running a list needs both — a rename is a path change too, and an
+/// index row for a name that no longer exists is a stale row.
+struct JournalRow {
+    from: String,
+    renamed_from: String,
+}
+
+fn journal_rows(journal: &Path) -> Result<Vec<JournalRow>> {
     let Ok(file) = fs::File::open(journal) else {
         return Ok(Vec::new());
     };
-    let mut done = Vec::new();
+    let mut rows = Vec::new();
     for (index, line) in BufReader::new(file).lines().enumerate() {
         let line = line?;
         if index == 0 || line.trim().is_empty() {
             continue;
         }
-        if let Some(from) = line.split('\t').nth(3) {
-            done.push(from.to_owned());
+        let fields: Vec<&str> = line.split('\t').collect();
+        if fields.len() >= 5 {
+            rows.push(JournalRow {
+                from: fields[3].to_owned(),
+                renamed_from: fields.get(6).map_or(String::new(), |f| f.to_string()),
+            });
         }
     }
-    Ok(done)
+    Ok(rows)
 }
 
 struct Row {
@@ -124,6 +143,57 @@ fn member(root: &Path, relative: &str) -> Result<PathBuf> {
     Ok(path)
 }
 
+/// The clean name a suffixed copy should adopt, when the superseded copy holds it.
+///
+/// macOS appends ` 2`, ` 3`, ` (1)` when it will not overwrite, and an export can add both
+/// (`DJI_0609 (1) 2.MP4`). Guessing from a pattern alone would be dangerous — `video 21.01.18, 14 34 37.mov`
+/// ends in a number and duplicates nothing. So the suffix is only stripped when doing so reproduces
+/// **exactly** the superseded copy's own name, which the removal list already proves is the same
+/// bytes. The name is then the only difference, and the clean one can be adopted.
+fn cleaned_name(stays: &Path, gone: &Path) -> Option<PathBuf> {
+    let stays_name = stays.file_name()?.to_str()?;
+    let gone_name = gone.file_name()?.to_str()?;
+    let mut candidate = stays_name.to_owned();
+    for _ in 0..8 {
+        let next = strip_one_suffix(&candidate)?;
+        if next == gone_name {
+            return Some(stays.with_file_name(&next));
+        }
+        candidate = next;
+    }
+    None
+}
+
+/// Remove one trailing ` (N)` or ` N` from a file name, keeping the extension.
+pub(crate) fn strip_one_suffix(name: &str) -> Option<String> {
+    let (stem, extension) = match name.rsplit_once('.') {
+        Some((stem, extension)) if !stem.is_empty() && !extension.is_empty() => {
+            (stem.to_owned(), Some(extension.to_owned()))
+        }
+        _ => (name.to_owned(), None),
+    };
+    let shortened = if let Some(open) = stem.rfind(" (") {
+        match stem[open + 2..].strip_suffix(')') {
+            Some(digits) if !digits.is_empty() && digits.bytes().all(|b| b.is_ascii_digit()) => {
+                Some(stem[..open].to_owned())
+            }
+            _ => None,
+        }
+    } else {
+        None
+    }
+    .or_else(|| {
+        let space = stem.rfind(' ')?;
+        let digits = &stem[space + 1..];
+        (!digits.is_empty() && digits.bytes().all(|b| b.is_ascii_digit()))
+            .then(|| stem[..space].to_owned())
+    })?;
+    Some(match extension {
+        Some(extension) => format!("{shortened}.{extension}"),
+        None => shortened,
+    })
+}
+
 pub fn supersede(
     root: &Path,
     list: &Path,
@@ -133,7 +203,7 @@ pub fn supersede(
 ) -> Result<SupersedeReport> {
     let root = root.canonicalize()?;
     let rows = read_list(list)?;
-    let done = already_quarantined(journal)?;
+    let applied_journal = journal_rows(journal)?;
     let mut report = SupersedeReport {
         applied: apply,
         complete: true,
@@ -145,21 +215,37 @@ pub fn supersede(
         already_quarantined: 0,
         bytes_quarantined: 0,
         refused: 0,
+        names_normalised: 0,
+        name_collisions: 0,
         journal: journal.to_path_buf(),
         quarantined_paths: Vec::new(),
+        renamed_paths: Vec::new(),
         issues: Vec::new(),
         limitations: LIMITATIONS.to_vec(),
     };
 
     // Phase one: verify every row. Nothing moves while any row is unproven.
-    let mut plans: Vec<(Row, PathBuf, PathBuf, u64)> = Vec::new();
+    // (row, superseded path, surviving path, size, name to adopt, clean name already taken)
+    let mut plans: Vec<(Row, PathBuf, PathBuf, u64, Option<PathBuf>, bool)> = Vec::new();
     for row in rows {
         let declared = root.join(&row.superseded);
-        if done.iter().any(|from| from == &declared.to_string_lossy()) && !declared.exists() {
-            // An earlier run of this same journal already moved it. Reconcile its index row and
-            // move on, so re-running an approved list is safe rather than a refusal.
+        if let Some(done) = applied_journal
+            .iter()
+            .find(|entry| entry.from == declared.to_string_lossy())
+            .filter(|_| !declared.exists())
+        {
+            // An earlier run of this same journal already moved it. Reconcile its index rows — both
+            // the quarantined path and the name the surviving copy used to have — and move on, so
+            // re-running an approved list is safe rather than a refusal.
             report.already_quarantined += 1;
             report.quarantined_paths.push(row.superseded.clone());
+            if !done.renamed_from.is_empty() {
+                if let Ok(relative) = Path::new(&done.renamed_from).strip_prefix(&root) {
+                    if let Some(relative) = relative.to_str() {
+                        report.renamed_paths.push(relative.to_owned());
+                    }
+                }
+            }
             continue;
         }
         let gone = match member(&root, &row.superseded) {
@@ -211,7 +297,24 @@ pub fn supersede(
         }
         report.verified += 1;
         let size = fs::metadata(&gone)?.len();
-        plans.push((row, gone, stays, size));
+        // Decide the name here, in the phase that runs for a dry run too, so both modes report the
+        // same numbers and the operator approves what will actually happen.
+        let mut adopt = None;
+        let mut collision = false;
+        if let Some(clean) = cleaned_name(&stays, &gone) {
+            if fs::symlink_metadata(&clean).is_err() {
+                adopt = Some(clean);
+                report.names_normalised += 1;
+            } else {
+                collision = true;
+                report.name_collisions += 1;
+                report.issues.push(format!(
+                    "kept the suffixed name: {} is already present in that folder",
+                    clean.display()
+                ));
+            }
+        }
+        plans.push((row, gone, stays, size, adopt, collision));
     }
     if report.refused > 0 {
         report
@@ -241,10 +344,35 @@ pub fn supersede(
     if fresh {
         writeln!(
             log,
-            "quarantined_at\tdigest\tsize\tfrom\tto\tkept"
+            "quarantined_at\tdigest\tsize\tfrom\tto\tkept\tkept_renamed_from"
         )?;
     }
-    for (row, gone, stays, size) in plans {
+    for (row, gone, stays, size, adopt, collision) in plans {
+        // Adopt the cleaner name before the copy holding it is quarantined. The decision was made
+        // while verifying; here it is only carried out.
+        let mut stays = stays;
+        let mut renamed_from = String::new();
+        if collision {
+            report.issues.push(format!(
+                "kept the suffixed name for {}",
+                stays.display()
+            ));
+        }
+        if let Some(clean) = adopt {
+            match fs::rename(&stays, &clean) {
+                Ok(()) => {
+                    renamed_from = stays.display().to_string();
+                    if let Some(old) = stays.strip_prefix(&root).ok().and_then(|p| p.to_str()) {
+                        report.renamed_paths.push(old.to_owned());
+                    }
+                    stays = clean;
+                }
+                Err(error) => report.issues.push(format!(
+                    "name normalisation failed for {}: {error}",
+                    stays.display()
+                )),
+            }
+        }
         let relative = gone.strip_prefix(&root)?.to_path_buf();
         let target = batch.join(&relative);
         if let Some(parent) = target.parent() {
@@ -262,12 +390,13 @@ pub fn supersede(
         report.quarantined_paths.push(row.superseded.clone());
         writeln!(
             log,
-            "{stamp}\t{}\t{}\t{}\t{}\t{}",
+            "{stamp}\t{}\t{}\t{}\t{}\t{}\t{}",
             row.digest,
             size,
             gone.display(),
             target.display(),
-            stays.display()
+            stays.display(),
+            renamed_from
         )?;
     }
     log.sync_all()?;
@@ -320,6 +449,126 @@ mod tests {
         fn drop(&mut self) {
             let _ = fs::remove_dir_all(&self.0);
         }
+    }
+
+    #[test]
+    fn a_suffixed_kept_copy_adopts_the_clean_name_before_its_twin_is_quarantined() {
+        let fixture = Fixture::new();
+        let gone = fixture.library().join("by-date/2018-03/DJI_0653.MP4");
+        let stays = fixture
+            .library()
+            .join("Trips/2018/2018-03-Iceland/DJI_0653 2.MP4");
+        fs::write(&gone, b"same bytes").unwrap();
+        fs::write(&stays, b"same bytes").unwrap();
+        let digest = crate::hash(&stays).unwrap();
+        let list = fixture.list(&[(
+            &digest,
+            "by-date/2018-03/DJI_0653.MP4",
+            "Trips/2018/2018-03-Iceland/DJI_0653 2.MP4",
+        )]);
+        let journal = fixture.0.join("j.tsv");
+        let report = supersede(
+            &fixture.library(),
+            &list,
+            &fixture.0.join("q"),
+            &journal,
+            true,
+        )
+        .unwrap();
+        assert!(report.complete, "{:?}", report.issues);
+        assert_eq!(report.names_normalised, 1);
+        assert_eq!(report.name_collisions, 0);
+        assert_eq!(report.quarantined, 1);
+        let clean = fixture
+            .library()
+            .join("Trips/2018/2018-03-Iceland/DJI_0653.MP4");
+        assert!(clean.exists(), "the clean name was adopted");
+        assert_eq!(fs::read(&clean).unwrap(), b"same bytes");
+        assert!(!stays.exists(), "the suffixed name is gone");
+        assert!(!gone.exists(), "the twin is quarantined");
+        assert!(fs::read_to_string(&journal).unwrap().contains("DJI_0653 2.MP4"));
+        let _ = fs::remove_dir_all(&fixture.0);
+    }
+
+    #[test]
+    fn a_taken_clean_name_leaves_the_suffix_alone_and_is_reported() {
+        let fixture = Fixture::new();
+        let gone = fixture.library().join("by-date/2018-03/DJI_0653.MP4");
+        let stays = fixture
+            .library()
+            .join("Trips/2018/2018-03-Iceland/DJI_0653 2.MP4");
+        // A *different* file already holds the clean name in that folder.
+        let occupied = fixture
+            .library()
+            .join("Trips/2018/2018-03-Iceland/DJI_0653.MP4");
+        fs::write(&gone, b"same bytes").unwrap();
+        fs::write(&stays, b"same bytes").unwrap();
+        fs::write(&occupied, b"different bytes").unwrap();
+        let digest = crate::hash(&stays).unwrap();
+        let list = fixture.list(&[(
+            &digest,
+            "by-date/2018-03/DJI_0653.MP4",
+            "Trips/2018/2018-03-Iceland/DJI_0653 2.MP4",
+        )]);
+        let report = supersede(
+            &fixture.library(),
+            &list,
+            &fixture.0.join("q"),
+            &fixture.0.join("j.tsv"),
+            true,
+        )
+        .unwrap();
+        assert_eq!(report.names_normalised, 0);
+        assert_eq!(report.name_collisions, 1);
+        assert_eq!(fs::read(&occupied).unwrap(), b"different bytes", "never overwritten");
+        assert!(stays.exists(), "the suffixed name is kept rather than forced");
+        assert_eq!(report.quarantined, 1, "the twin still goes");
+        let _ = fs::remove_dir_all(&fixture.0);
+    }
+
+    #[test]
+    fn a_name_that_merely_ends_in_a_number_is_never_rewritten() {
+        // The same name on both sides means there is no suffix to adopt, even though stripping this
+        // name repeatedly would produce shorter ones.
+        let fixture = Fixture::new();
+        let name = "video 21.01.18, 14 34 37.mov";
+        let gone = fixture.library().join("by-date/2018-03").join(name);
+        let stays = fixture
+            .library()
+            .join("Trips/2018/2018-03-Iceland")
+            .join(name);
+        fs::write(&gone, b"bytes").unwrap();
+        fs::write(&stays, b"bytes").unwrap();
+        let digest = crate::hash(&stays).unwrap();
+        let list = fixture.list(&[(
+            &digest,
+            "by-date/2018-03/video 21.01.18, 14 34 37.mov",
+            "Trips/2018/2018-03-Iceland/video 21.01.18, 14 34 37.mov",
+        )]);
+        let report = supersede(
+            &fixture.library(),
+            &list,
+            &fixture.0.join("q"),
+            &fixture.0.join("j.tsv"),
+            true,
+        )
+        .unwrap();
+        assert_eq!(report.names_normalised, 0);
+        assert_eq!(report.name_collisions, 0);
+        assert!(stays.exists(), "the name is untouched");
+        let _ = fs::remove_dir_all(&fixture.0);
+    }
+
+    #[test]
+    fn the_suffix_stripper_handles_both_macos_forms_and_their_combination() {
+        assert_eq!(strip_one_suffix("DJI_1 2.MP4").as_deref(), Some("DJI_1.MP4"));
+        assert_eq!(strip_one_suffix("photo (1).JPG").as_deref(), Some("photo.JPG"));
+        assert_eq!(
+            strip_one_suffix("DJI_0609 (1) 2.MP4").as_deref(),
+            Some("DJI_0609 (1).MP4")
+        );
+        assert_eq!(strip_one_suffix("no-suffix.MP4"), None);
+        assert_eq!(strip_one_suffix("2.MP4"), None, "a numeric stem is not an index");
     }
 
     #[test]

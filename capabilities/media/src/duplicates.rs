@@ -160,11 +160,32 @@ fn basename(relpath: &str) -> String {
 /// (path to keep, paths to supersede, why, whether metadata actually matched)
 type Resolution = (String, Vec<String>, String, bool);
 
+/// How many macOS duplicate suffixes a name carries: `X.MP4` is 0, `X 2.MP4` and `X (1).MP4` are 1,
+/// `X (1) 2.MP4` is 2. An export can leave one video in a folder four times over, and the library's
+/// convention is the plain name — the 2026-09-29 handoff named this as the fix to build rather than
+/// patch afterwards.
+fn suffix_depth(name: &str) -> usize {
+    let mut depth = 0;
+    let mut current = name.to_owned();
+    while let Some(next) = crate::supersede::strip_one_suffix(&current) {
+        depth += 1;
+        current = next;
+        if depth > 8 {
+            break;
+        }
+    }
+    depth
+}
+
 /// Choose which copy survives when every copy of a group sits under one prefix.
 ///
-/// The rule: read each copy's embedded capture date and keep the copy whose `prefix/YYYY-MM` bucket
-/// agrees with it. When no copy agrees, the earliest bucket wins — and the caller is told that was a
-/// tie-break, not a match, so the choice is never presented as evidence it is not.
+/// Two things decide it, in order. First, when `--metadata` is on, a copy whose `prefix/YYYY-MM`
+/// bucket agrees with the file's embedded capture date is preferred over one whose bucket does not.
+/// Then, whatever the bucket said, the plainest name wins — a copy carrying ` 2` or ` (1)` is an
+/// export artefact and the library keeps the plain name. Ties go to the earliest path.
+///
+/// A tie-break is reported as a tie-break, never as a match, so the choice is never dressed up as
+/// evidence it is not.
 fn resolve_group(
     root: &Path,
     locations: &[String],
@@ -175,33 +196,37 @@ fn resolve_group(
     } else {
         BTreeMap::new()
     };
-    let matching: Vec<(String, String)> = locations
+    let matching: Vec<&String> = locations
         .iter()
-        .filter_map(|rel| {
-            let bucket = bucket_month(rel, rule.inside)?;
-            let month = months.get(rel)?;
-            (bucket == *month).then(|| (rel.clone(), month.clone()))
+        .filter(|rel| {
+            let Some(bucket) = bucket_month(rel, rule.inside) else {
+                return false;
+            };
+            months.get(*rel).is_some_and(|month| bucket == *month)
         })
         .collect();
-    let (keep, why, matched) = match matching.first() {
-        Some((first, month)) => (
-            first.clone(),
-            format!("kept the copy whose bucket matches its embedded capture month {month}"),
-            true,
-        ),
-        None => {
-            let first = locations
-                .first()
-                .cloned()
-                .ok_or("a duplicate group has no locations")?;
-            let why = if months.is_empty() {
-                "no embedded capture date was readable; kept the earliest bucket".to_owned()
-            } else {
-                "no copy's bucket matches its embedded capture month; kept the earliest bucket"
-                    .to_owned()
-            };
-            (first, why, false)
-        }
+    let matched = !matching.is_empty();
+    // Prefer a copy whose bucket agreed with its capture date, then the plainest name, then the
+    // earliest path. `locations` is already sorted, so the last comparison is stable.
+    let candidates: Vec<&String> = if matched {
+        matching
+    } else {
+        locations.iter().collect()
+    };
+    let keep = candidates
+        .into_iter()
+        .min_by_key(|rel| {
+            let name = rel.rsplit('/').next().unwrap_or(rel.as_str());
+            (suffix_depth(name), rel.as_str())
+        })
+        .ok_or("a duplicate group has no locations")?
+        .to_string();
+    let name = keep.rsplit('/').next().unwrap_or(&keep);
+    let why = match (matched, suffix_depth(name)) {
+        (true, 0) => format!("kept {name}: its bucket matches its embedded capture date and its name is plain"),
+        (true, n) => format!("kept {name}: its bucket matches its embedded capture date ({n} duplicate suffix(es) remain)"),
+        (false, 0) => format!("kept {name}: the plainest name, with no export duplicate suffix"),
+        (false, n) => format!("kept {name}: the plainest of the copies, which still carry {n} duplicate suffix(es)"),
     };
     let gone: Vec<String> = locations.iter().filter(|rel| **rel != keep).cloned().collect();
     Ok(Some((keep, gone, why, matched)))
@@ -251,27 +276,26 @@ pub fn duplicates(
         let size = rows[0].1.max(0) as u64;
         let mut all: Vec<String> = rows.iter().map(|(relpath, _)| relpath.clone()).collect();
         all.sort();
-        // A group the legacy prefix cannot decide may still be decidable by metadata — but only
-        // when every copy sits under the declared prefix, never by reaching outside it.
+        // A group the legacy prefix cannot decide — because every copy sits on the same side of it —
+        // may still be decidable by the resolver. The condition is that every copy is under the
+        // declared prefix, never that some other prefix claimed them first.
         let mut resolution = None;
-        if kept.is_empty() {
-            if let Some(rule) = &resolve {
-                if all.iter().all(|rel| is_legacy(rel, Some(rule.inside))) {
-                    match resolve_group(root, &all, rule) {
-                        Ok(Some((keep, gone, why, matched))) => {
-                            kept = vec![keep];
-                            superseded = gone;
-                            resolution = Some(why);
-                            if matched {
-                                resolved_by_metadata += 1;
-                            } else {
-                                resolved_without_a_metadata_match += 1;
-                            }
+        if let Some(rule) = &resolve {
+            if all.iter().all(|rel| is_legacy(rel, Some(rule.inside))) {
+                match resolve_group(root, &all, rule) {
+                    Ok(Some((keep, gone, why, matched))) => {
+                        kept = vec![keep];
+                        superseded = gone;
+                        resolution = Some(why);
+                        if matched {
+                            resolved_by_metadata += 1;
+                        } else {
+                            resolved_without_a_metadata_match += 1;
                         }
-                        Ok(None) => {}
-                        Err(error) => {
-                            resolve_issues.push(format!("group {}: {error}", &digest[..12]))
-                        }
+                    }
+                    Ok(None) => {}
+                    Err(error) => {
+                        resolve_issues.push(format!("group {}: {error}", &digest[..12]))
                     }
                 }
             }

@@ -25,7 +25,7 @@
 
 use std::collections::BTreeSet;
 use std::fs::{self, OpenOptions};
-use std::io::Write;
+use std::io::{BufRead, BufReader, Write};
 use std::path::{Path, PathBuf};
 use std::time::{SystemTime, UNIX_EPOCH};
 
@@ -60,6 +60,8 @@ pub struct OrganizeReport {
     pub moved: usize,
     pub skipped: usize,
     pub conflicts: usize,
+    /// Mappings this journal already applied: the source is gone and the destination exists.
+    pub already_moved: usize,
     /// Empty means every collection the draft places; otherwise the named subset a pilot ran on.
     pub only: Vec<String>,
     pub journal: Option<PathBuf>,
@@ -67,11 +69,12 @@ pub struct OrganizeReport {
     pub limitations: Vec<&'static str>,
 }
 
-const LIMITATIONS: [&str; 4] = [
+const LIMITATIONS: [&str; 5] = [
     "Only whole collections move, and only by rename within one volume; no file is copied, hashed, dated or deleted.",
     "A move is not a duplicate verdict. The ledger and the index are untouched, so library-internal duplicates are neither created nor removed by this verb.",
     "Correcting a move means swapping that journal row's two paths back; nothing else in the journal is implied.",
     "The destination path is reserved by checking it does not exist, which is not an atomic reservation against a concurrent writer.",
+    "A mapping is reported as already applied only when this journal records the move and the destination is present; the filesystem alone is never read that way.",
 ];
 
 impl OrganizeReport {
@@ -206,6 +209,30 @@ fn unix_now() -> Result<i64> {
 
 /// Append the move journal. It is append-only on purpose: a re-run adds rows rather than rewriting
 /// history, and the reversal of a row is the same row with the paths exchanged.
+/// The `collection -> destination` pairs an existing journal already applied.
+///
+/// Re-running a plan must not read as a collision. A mapping whose source is gone and whose
+/// destination exists is only treated as applied when this journal says so — the filesystem alone
+/// cannot tell "already moved" from "somebody put something there", and guessing in that direction
+/// is how a plan stops describing the disk.
+fn applied_moves(journal: &Path) -> Result<Vec<(String, String)>> {
+    let Ok(file) = fs::File::open(journal) else {
+        return Ok(Vec::new());
+    };
+    let mut applied = Vec::new();
+    for (index, line) in BufReader::new(file).lines().enumerate() {
+        let line = line?;
+        if index == 0 || line.trim().is_empty() {
+            continue;
+        }
+        let fields: Vec<&str> = line.split('\t').collect();
+        if fields.len() >= 5 {
+            applied.push((fields[1].to_owned(), fields[4].to_owned()));
+        }
+    }
+    Ok(applied)
+}
+
 fn append_journal(path: &Path, report: &OrganizeReport, now: i64) -> Result<()> {
     let fresh = !path.exists();
     if let Some(parent) = path.parent() {
@@ -304,10 +331,17 @@ fn run(
         moved: 0,
         skipped: 0,
         conflicts: 0,
+        already_moved: 0,
         only: only.to_vec(),
         journal: journal.map(Path::to_path_buf),
         issues: Vec::new(),
         limitations: LIMITATIONS.to_vec(),
+    };
+    // (row index, destination relative) for the entries that passed every check.
+    // What this journal already applied, so re-running a plan is idempotent rather than a collision.
+    let applied = match journal {
+        Some(path) => applied_moves(path)?,
+        None => Vec::new(),
     };
     // (row index, destination relative) for the entries that passed every check.
     let mut ready: Vec<(usize, String)> = Vec::new();
@@ -334,8 +368,21 @@ fn run(
             row.reason = Some(reason);
         };
         if let Err(error) = preview::real_directory(&from) {
-            conflict(&mut row, error.to_string());
-            report.conflicts += 1;
+            // Already applied? Only the journal may say so, and only when the destination is there.
+            let recorded = applied
+                .iter()
+                .any(|(name, to)| name == &row.collection && Path::new(to) == row.to);
+            if recorded && fs::symlink_metadata(&row.to).is_ok() {
+                row.outcome = "already-moved";
+                row.reason = Some(
+                    "source is gone and the destination exists, and this journal records the move"
+                        .into(),
+                );
+                report.already_moved += 1;
+            } else {
+                conflict(&mut row, error.to_string());
+                report.conflicts += 1;
+            }
             report.moves.push(row);
             continue;
         }
@@ -711,6 +758,71 @@ mod tests {
             report.moves[0].reason.as_deref(),
             Some("destination already exists; nothing is ever overwritten")
         );
+    }
+
+    /// A draft with explicit mappings, which — unlike rule-derived placements — persist after they
+    /// have been applied, because the rule enumerates the source root and an applied collection is
+    /// no longer in it.
+    fn mapped(names: &[(&str, &str)]) -> Value {
+        let mut value = base(true);
+        value["mappings"] = json!(names
+            .iter()
+            .map(|(collection, destination)| json!({
+                "source_collection": collection,
+                "proposed_destination_relative": destination,
+                "status": "destination_reviewed"
+            }))
+            .collect::<Vec<_>>());
+        value
+    }
+
+    #[test]
+    fn a_mapping_this_journal_already_applied_is_not_a_collision_on_the_next_run() {
+        let fixture = Fixture::new();
+        fixture.collection("2018-Finland", 2, 3600);
+        fixture.collection("2018-03-Iceland", 2, 3600);
+        let value = mapped(&[
+            ("2018-Finland", "Trips/2018/2018-Finland"),
+            ("2018-03-Iceland", "Trips/2018/2018-03-Iceland"),
+        ]);
+        let draft = fixture.draft(&value);
+        let (source, archive) = fixture.roots();
+        let journal = fixture.0.join("journal.tsv");
+        // First run moves both.
+        let first = run(&draft, &source, &archive, true, 0, Some(&journal), &[]).unwrap();
+        assert_eq!(first.moved, 2);
+        assert_eq!(first.already_moved, 0);
+        // Second run must recognise them, not report a conflict and refuse everything.
+        let second = run(&draft, &source, &archive, true, 0, Some(&journal), &[]).unwrap();
+        assert!(second.complete, "{:?}", second.issues);
+        assert_eq!(second.moved, 0);
+        assert_eq!(second.conflicts, 0);
+        assert_eq!(second.already_moved, 2);
+        assert!(second
+            .moves
+            .iter()
+            .all(|m| m.outcome == "already-moved"));
+        // The journal did not grow a second time.
+        assert_eq!(fs::read_to_string(&journal).unwrap().lines().count(), 3);
+        let _ = fs::remove_dir_all(&fixture.0);
+    }
+
+    #[test]
+    fn a_missing_source_with_a_destination_but_no_journal_row_stays_a_conflict() {
+        let fixture = Fixture::new();
+        fixture.collection("2018-Finland", 2, 3600);
+        let value = mapped(&[("2018-Finland", "Trips/2018/2018-Finland")]);
+        let draft = fixture.draft(&value);
+        let (source, archive) = fixture.roots();
+        // Something is at the destination, but nothing says this verb put it there.
+        fs::create_dir_all(archive.join("Trips/2018/2018-Finland")).unwrap();
+        fs::remove_dir_all(source.join("2018-Finland")).unwrap();
+        let report = run(&draft, &source, &archive, false, 0, None, &[]).unwrap();
+        assert!(!report.complete);
+        assert_eq!(report.conflicts, 1);
+        assert_eq!(report.already_moved, 0);
+        assert_eq!(report.moves[0].outcome, "conflict");
+        let _ = fs::remove_dir_all(&fixture.0);
     }
 
     #[test]

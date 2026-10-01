@@ -1,0 +1,317 @@
+{
+  "suite": "decisions",
+  "date": "2026-09-30",
+  "backend": "ollama",
+  "model": "tev1",
+  "host": "Apple M4 Pro, macOS 27.0.1",
+  "n": 43,
+  "correct": 43,
+  "accuracy": 1,
+  "latency_ms": {
+    "p50": 350,
+    "p95": 440
+  },
+  "cases": [
+    {
+      "id": "triage-01",
+      "expected": "act_today",
+      "got": "act_today",
+      "confidence": 0.3050946379771632,
+      "ms": 52
+    },
+    {
+      "id": "triage-02",
+      "expected": "read_later",
+      "got": "read_later",
+      "confidence": 0.6883299715635658,
+      "ms": 442
+    },
+    {
+      "id": "triage-03",
+      "expected": "archive",
+      "got": "archive",
+      "confidence": 0.5061122353133274,
+      "ms": 400
+    },
+    {
+      "id": "triage-04",
+      "expected": "spam",
+      "got": "spam",
+      "confidence": 0.5546484336422459,
+      "ms": 399
+    },
+    {
+      "id": "triage-05",
+      "expected": "act_today",
+      "got": "act_today",
+      "confidence": 0.6458526732079063,
+      "ms": 440
+    },
+    {
+      "id": "triage-06",
+      "expected": "act_today",
+      "got": "act_today",
+      "confidence": 0.6181773854967361,
+      "ms": 401
+    },
+    {
+      "id": "triage-07",
+      "expected": "read_later",
+      "got": "read_later",
+      "confidence": 0.5452141678770968,
+      "ms": 401
+    },
+    {
+      "id": "triage-08",
+      "expected": "archive",
+      "got": "archive",
+      "confidence": 0.616215232052722,
+      "ms": 402
+    },
+    {
+      "id": "triage-09",
+      "expected": true,
+      "got": true,
+      "confidence": 0.9957513397523582,
+      "ms": 304
+    },
+    {
+      "id": "triage-10",
+      "expected": false,
+      "got": false,
+      "confidence": 0.9896610796248833,
+      "ms": 303
+    },
+    {
+      "id": "media-01",
+      "expected": "travel",
+      "got": "travel",
+      "confidence": 0.9935122068724284,
+      "ms": 441
+    },
+    {
+      "id": "media-02",
+      "expected": "screenshots",
+      "got": "screenshots",
+      "confidence": 0.9911797030350242,
+      "ms": 440
+    },
+    {
+      "id": "media-03",
+      "expected": "documents",
+      "got": "documents",
+      "confidence": 0.9566414995426002,
+      "ms": 399
+    },
+    {
+      "id": "media-04",
+      "expected": "family_event",
+      "got": "family_event",
+      "confidence": 0.9750569272202715,
+      "ms": 398
+    },
+    {
+      "id": "media-05",
+      "expected": "food",
+      "got": "food",
+      "confidence": 0.5537993773880829,
+      "ms": 397
+    },
+    {
+      "id": "media-06",
+      "expected": "documents",
+      "got": "documents",
+      "confidence": 0.9171898116638922,
+      "ms": 401
+    },
+    {
+      "id": "media-07",
+      "expected": true,
+      "got": true,
+      "confidence": 0.9969274364649602,
+      "ms": 399
+    },
+    {
+      "id": "media-08",
+      "expected": false,
+      "got": false,
+      "confidence": 0.9932256073911155,
+      "ms": 398
+    },
+    {
+      "id": "role-01",
+      "expected": "ocr",
+      "got": "ocr",
+      "confidence": 0.9943910599316927,
+      "ms": 347
+    },
+    {
+      "id": "role-02",
+      "expected": "embedding",
+      "got": "embedding",
+      "confidence": 0.9934499869312772,
+      "ms": 348
+    },
+    {
+      "id": "role-03",
+      "expected": "reranking",
+      "got": "reranking",
+      "confidence": 0.9952115399080875,
+      "ms": 350
+    },
+    {
+      "id": "role-04",
+      "expected": "summarization",
+      "got": "summarization",
+      "confidence": 0.9855704804828367,
+      "ms": 346
+    },
+    {
+      "id": "role-05",
+      "expected": "embedding",
+      "got": "embedding",
+      "confidence": 0.9856071710533897,
+      "ms": 349
+    },
+    {
+      "id": "role-06",
+      "expected": "ocr",
+      "got": "ocr",
+      "confidence": 0.9932099704871734,
+      "ms": 347
+    },
+    {
+      "id": "role-07",
+      "expected": true,
+      "got": true,
+      "confidence": 0.9630699580677423,
+      "ms": 300
+    },
+    {
+      "id": "role-08",
+      "expected": false,
+      "got": false,
+      "confidence": 0.9618449741296053,
+      "ms": 299
+    },
+    {
+      "id": "calendar-01",
+      "expected": "health",
+      "got": "health",
+      "confidence": 0.9876432545676606,
+      "ms": 399
+    },
+    {
+      "id": "calendar-02",
+      "expected": "travel",
+      "got": "travel",
+      "confidence": 0.9688435337599324,
+      "ms": 396
+    },
+    {
+      "id": "calendar-03",
+      "expected": "work",
+      "got": "work",
+      "confidence": 0.9652990408718967,
+      "ms": 397
+    },
+    {
+      "id": "calendar-04",
+      "expected": "admin",
+      "got": "admin",
+      "confidence": 0.9506880715248647,
+      "ms": 397
+    },
+    {
+      "id": "calendar-05",
+      "expected": "personal",
+      "got": "personal",
+      "confidence": 0.9949909895964197,
+      "ms": 396
+    },
+    {
+      "id": "calendar-06",
+      "expected": "health",
+      "got": "health",
+      "confidence": 0.9720295690329454,
+      "ms": 398
+    },
+    {
+      "id": "calendar-07",
+      "expected": false,
+      "got": false,
+      "confidence": 0.993776978510096,
+      "ms": 304
+    },
+    {
+      "id": "calendar-08",
+      "expected": true,
+      "got": true,
+      "confidence": 0.9508699275657836,
+      "ms": 297
+    },
+    {
+      "id": "alert-01",
+      "expected": "info",
+      "got": "info",
+      "confidence": 0.9320251400995496,
+      "ms": 346
+    },
+    {
+      "id": "alert-02",
+      "expected": "warn",
+      "got": "warn",
+      "confidence": 0.7207768357274158,
+      "ms": 344
+    },
+    {
+      "id": "alert-03",
+      "expected": "warn",
+      "got": "warn",
+      "confidence": 0.6494991834023802,
+      "ms": 345
+    },
+    {
+      "id": "alert-04",
+      "expected": "critical",
+      "got": "critical",
+      "confidence": 0.8689629843423157,
+      "ms": 306
+    },
+    {
+      "id": "alert-05",
+      "expected": "info",
+      "got": "info",
+      "confidence": 0.37202258090496376,
+      "ms": 305
+    },
+    {
+      "id": "alert-06",
+      "expected": "critical",
+      "got": "critical",
+      "confidence": 0.6897411280944988,
+      "ms": 306
+    },
+    {
+      "id": "alert-07",
+      "expected": "critical",
+      "got": "critical",
+      "confidence": 0.816474549009267,
+      "ms": 306
+    },
+    {
+      "id": "alert-08",
+      "expected": true,
+      "got": true,
+      "confidence": 0.9444568823924385,
+      "ms": 301
+    },
+    {
+      "id": "alert-09",
+      "expected": false,
+      "got": false,
+      "confidence": 0.9302035821748164,
+      "ms": 297
+    }
+  ]
+}

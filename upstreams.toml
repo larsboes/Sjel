@@ -844,3 +844,24 @@ verdict = "adopt"
 license = "MIT"
 summary = "Dependency-free QR code generator that draws the Mac's pairing code as SVG"
 why = "Draws the pairing QR code on the Mac as SVG (dashboard/src/lib/DeviceRegistry.svelte). No dependencies of its own, ESM, renders from the encoded modules only. Added 2026-09-27 at 0.1.3 (2026-04-03)."
+
+[gpui]
+url = "https://github.com/zed-industries/zed/tree/main/crates/gpui"
+verdict = "watch"
+license = "Apache-2.0"
+summary = "Zed's GPU-rendered Rust UI framework; a candidate for one fast native Sjel surface"
+why = "noted 2026-09-30 from Conrad Irwin's EuroRust 2025 talk (https://www.youtube.com/watch?v=sheIOOf-xRo). Published to crates.io as gpui 0.2.2, Apache-2.0 per crates/gpui/Cargo.toml on that date. Not audited. The open question is in research/README.md#ideas: whether one small native surface written in GPUI is worth a third UI stack beside the Svelte dashboard and the SwiftUI menu-bar app"
+
+[nimble]
+url = "https://ollama.com/library/nimble"
+verdict = "watch"
+license = "Apache-2.0"
+summary = "Bespoke Labs decision model served by Ollama's System One API; a candidate local classifier"
+why = "noted 2026-09-30. The ollama.com library page names Bespoke Labs, typed classification, a 9.5 GB download and the Apache 2.0 license. Ollama 0.35.0 on this Mac answers POST /v1/systemone with 400 on an empty body, not 404, so the endpoint exists; the model is not pulled and nothing was measured. The open question is in research/README.md#ideas and research/local-decision-models.md"
+
+[clm]
+url = "https://github.com/Contrastive-LM/CLM"
+verdict = "watch"
+license = "Apache-2.0"
+summary = "Contrastive model that scores supplied candidates; Sjel has an opt-in Pi adapter, no measured use"
+why = "noted 2026-09-30. CLM-v0.1-8B puts two projection heads on a frozen Qwen3-8B encoder and ranks candidates rather than generating text (https://contrastive-lm.notion.site/, https://huggingface.co/Contrastive-LM/CLM-v0.1-8B). Repository and model card both name Apache-2.0 via the GitHub and Hugging Face APIs on that date. Watch, not adopt: no CLM code is vendored. Packs/harness/extensions/clm-classifier.ts is a loopback client, off unless SJEL_CLM_ENABLE=1, and its tests use synthetic responses only. Nothing ran the encoder and heads on this Mac and no accuracy on a Sjel task is measured. The evidence and its gaps are in research/local-decision-models.md; the Ollama System One comparison is in research/README.md#ideas"

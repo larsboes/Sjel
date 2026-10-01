@@ -180,14 +180,25 @@ change a subagent's behaviour is the reason this Pack exists at all.
 
 ### Local CLM classifier (experimental Pi extension)
 
-`extensions/clm-classifier.ts` is an opt-in adapter for the real CLM System One API, not a substitute for its encoder or projection heads. `/clm-probe` is registered either way — with the gate shut it names the variable to set rather than probing — but the classifier itself is not registered unless `SJEL_CLM_ENABLE=1`, so a session that has not opted in holds no provider that could reach the service. It never connects to anything unless `SJEL_CLM_ENABLE=1`; even then its endpoint is fixed to `127.0.0.1:8700`, so a model override cannot send a prompt off-machine. Try it without deploying the Pack:
+`extensions/clm-classifier.ts` is an opt-in adapter for the real CLM System One API, not a substitute for its encoder or projection heads. `/clm-probe` is registered either way — with the gate shut it names the variable to set rather than probing — but the classifier itself is not registered unless `SJEL_CLM_ENABLE=1`, so a session that has not opted in holds no provider that could reach the service. It never connects to anything unless `SJEL_CLM_ENABLE=1`.
+
+The same adapter serves two local servers, because both expose the same `POST /v1/systemone` shape: CLM's reference server ([API reference](https://github.com/Contrastive-LM/CLM#api-reference)) and Ollama 0.35 or later ([System One API](https://docs.ollama.com/api/systemone)). Three variables select the server:
+
+| Variable | Default | Meaning |
+|---|---|---|
+| `SJEL_SYSTEMONE_BACKEND` | `clm` | `clm` or `ollama`. Sets the provider (`sjel-clm` or `sjel-ollama`) and the defaults below. |
+| `SJEL_SYSTEMONE_URL` | `http://127.0.0.1:8700/v1/` for CLM, `http://127.0.0.1:11434/v1/` for Ollama | Must be `http://` on loopback. Any other address is refused, so a setting cannot send a prompt off this machine. |
+| `SJEL_SYSTEMONE_MODEL` | `clm-latest` for CLM, `nimble` for Ollama | Model id. Ollama may answer with the `:latest` tag. The adapter accepts that tag and no other model. |
+
+Try it without deploying the Pack:
 
 ```bash
 SJEL_CLM_ENABLE=1 pi -e ./Packs/harness/extensions/clm-classifier.ts
+SJEL_CLM_ENABLE=1 SJEL_SYSTEMONE_BACKEND=ollama pi -e ./Packs/harness/extensions/clm-classifier.ts
 # In pi: /clm-probe
 ```
 
-`/clm-probe` checks that `/health` reports a working encoder, the `clm-latest` head and no mock mode, then asks one synthetic question. Only **after** a real service passes that probe can Pi scripts call `models.getModelOfType("classifier", "sjel-clm", "clm-latest")` and `models.classify(...)` (enable codemode with `--tools read,bash,edit,write,codemode` for a one-off session). A passing synthetic probe checks the wire contract, **not** decision quality: compare labeled Sjel routes against the current keyword baseline before activating any product route. `tools/pi-clm-classifier.test.ts` checks the adapter against synthetic responses without claiming a model was run.
+For CLM, `/clm-probe` checks that `/health` reports a working encoder, the `clm-latest` head and no mock mode. Ollama has no such route. For Ollama the probe reads `/api/tags` and checks that the model is pulled. Then the probe asks one synthetic question. Accuracy on Sjel-shaped decisions is measured separately in [`research/benchmarks/decisions/`](../../research/benchmarks/decisions/README.md). Only **after** a real service passes that probe can Pi scripts call `models.getModelOfType("classifier", "sjel-clm", "clm-latest")` (or `"sjel-ollama", "nimble"`) and `models.classify(...)` (enable codemode with `--tools read,bash,edit,write,codemode` for a one-off session). A passing synthetic probe checks the wire contract, **not** decision quality: compare labeled Sjel routes against the current keyword baseline before activating any product route. `tools/pi-clm-classifier.test.ts` checks the adapter against synthetic responses without claiming a model was run.
 
 The CLM v0.1 release is Apache-2.0 (checkpoint and code, <https://huggingface.co/Contrastive-LM/CLM-v0.1-8B>); it needs the matching Qwen3-8B last-token pooling encoder plus its trained heads. An Ollama `/api/embed` cosine of Qwen3-8B vectors is **not CLM**. The reference `contrastive-lm` package currently installs vLLM, and its documented serving recipe targets an NVIDIA GPU. vllm-metal documents experimental LAST pooling on macOS, but that is not yet an end-to-end validation of this checkpoint. On this Mac the service and Qwen3-8B are not installed; with 35 GiB free, no model download or background service was started. Keep this extension off until an exact encoder/head match and labeled accuracy are measured. Hosted Jev through Pi's built-in `typesafe/jev-latest` is the next, separate step after local validation; it needs credentials and Sjel's egress approval before personal data is sent.
 

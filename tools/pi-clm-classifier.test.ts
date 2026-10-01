@@ -1,6 +1,6 @@
 import { describe, expect, test } from 'bun:test';
 import type { ClassifierContext, ClassifierModel, ClassifierOptions } from '@earendil-works/pi-ai';
-import register, { classifyClm } from '../Packs/harness/extensions/clm-classifier';
+import register, { checkHealth, classifyClm, endpoint } from '../Packs/harness/extensions/clm-classifier';
 
 const model = {
   type: 'classifier', id: 'clm-latest', name: 'CLM', provider: 'sjel-clm',
@@ -87,5 +87,45 @@ describe('local CLM classifier (synthetic wire responses, not model validation)'
       if (previous === undefined) delete process.env.SJEL_CLM_ENABLE;
       else process.env.SJEL_CLM_ENABLE = previous;
     }
+  });
+
+  test('the endpoint defaults to CLM and refuses anything but plain HTTP on loopback', () => {
+    expect(endpoint({})).toMatchObject({ backend: 'clm', baseUrl: 'http://127.0.0.1:8700/v1/', model: 'clm-latest' });
+    expect(endpoint({ SJEL_SYSTEMONE_BACKEND: 'ollama' })).toMatchObject(
+      { backend: 'ollama', provider: 'sjel-ollama', baseUrl: 'http://127.0.0.1:11434/v1/', model: 'nimble' });
+    expect(endpoint({ SJEL_SYSTEMONE_BACKEND: 'ollama', SJEL_SYSTEMONE_MODEL: 'tev1:0.8b' }).model).toBe('tev1:0.8b');
+    for (const url of ['http://192.168.1.5:11434/v1/', 'https://127.0.0.1:8700/v1/', 'http://example.com/v1/']) {
+      expect(() => endpoint({ SJEL_SYSTEMONE_URL: url })).toThrow('loopback');
+    }
+    expect(() => endpoint({ SJEL_SYSTEMONE_BACKEND: 'jev' })).toThrow('clm or ollama');
+  });
+
+  test('an Ollama backend is called on its own port and may answer with the :latest tag', async () => {
+    const previous = process.env.SJEL_SYSTEMONE_BACKEND;
+    process.env.SJEL_SYSTEMONE_BACKEND = 'ollama';
+    try {
+      const result = await classifyClm({ ...model, id: 'nimble', provider: 'sjel-ollama' }, context, {
+        fetch: async (url) => {
+          expect(String(url)).toBe('http://127.0.0.1:11434/v1/systemone');
+          return new Response(JSON.stringify({ ...valid, model: 'nimble:latest' }));
+        },
+      });
+      expect(result.stopReason).toBe('stop');
+      const wrong = await classifyClm(model, context, response({ ...valid, model: 'tev1:latest' }));
+      expect(wrong.errorMessage).toBe('Ollama returned an unexpected model or response');
+    } finally {
+      if (previous === undefined) delete process.env.SJEL_SYSTEMONE_BACKEND;
+      else process.env.SJEL_SYSTEMONE_BACKEND = previous;
+    }
+  });
+
+  test('the Ollama health check reads /api/tags, because Ollama has no CLM /health', async () => {
+    const target = endpoint({ SJEL_SYSTEMONE_BACKEND: 'ollama' });
+    const tags = (names: string[]) => (async (url: string | URL | Request) => {
+      expect(String(url)).toBe('http://127.0.0.1:11434/api/tags');
+      return new Response(JSON.stringify({ models: names.map((name) => ({ name })) }));
+    }) as typeof fetch;
+    await checkHealth(target, tags(['qwen3:4b', 'nimble:latest']));
+    await expect(checkHealth(target, tags(['qwen3:4b']))).rejects.toThrow('ollama pull nimble');
   });
 });

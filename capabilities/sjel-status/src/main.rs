@@ -27,6 +27,7 @@ use tower::Layer;
 mod device_gate;
 mod lan;
 mod proxy;
+mod session;
 mod status;
 
 use status::*;
@@ -113,6 +114,21 @@ const ROUTES: &[route_manifest::Route] = &[
         "GET",
         "/api/sjel-status/storage",
         "What fills the disk: the volume, every reclaimable class, and what the overlay's policy protects from reclaim. From tools/storage's own report --json.",
+    ),
+    r(
+        "POST",
+        "/api/sjel-status/session/ticket",
+        "A single-use, 60-second ticket for the browser login. The Mac app calls it with the deployment token.",
+    ),
+    r(
+        "GET",
+        "/session/open",
+        "Trade ?ticket= for a 30-day browser session cookie and redirect to the dashboard. Needs no other credential.",
+    ),
+    r(
+        "POST",
+        "/api/sjel-status/session/logout",
+        "End this browser's session and clear its cookie.",
     ),
     r(
         "POST",
@@ -226,6 +242,12 @@ async fn main() {
         None => sjel_server::InboundAuth::from_deployment(),
     }
     .require_credential();
+    // A browser on this Mac logs in through the menu-bar app (ISA ISC-45, src/session.rs).
+    // Only this listener: the LAN admits paired devices and the socket admits the tailnet.
+    let auth = match session::sessions() {
+        Some(sessions) => auth.with_session_verifier(sessions),
+        None => auth,
+    };
     // The same router on the local network, for paired devices only, when the deployment
     // enabled it. Without the registry there is nothing to admit, so it does not start.
     if let Some(verifier) = verifier {
@@ -339,6 +361,15 @@ fn build_router(shell: proxy::Proxy) -> Router {
             post(upstream_watch_handler),
         )
         .route("/api/sjel-status/storage", get(storage_handler))
+        .route(
+            "/api/sjel-status/session/ticket",
+            post(session::ticket_handler),
+        )
+        .route(
+            "/api/sjel-status/session/logout",
+            post(session::logout_handler),
+        )
+        .route(sjel_server::SESSION_OPEN_PATH, get(session::open_handler))
         .route(
             "/api/sjel-status/capabilities/{name}/backup",
             post(backup_handler),

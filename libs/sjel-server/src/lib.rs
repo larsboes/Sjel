@@ -34,8 +34,9 @@ pub mod origin;
 pub mod tailnet;
 
 pub use auth::{
-    authenticated, comms_config_token, device_signed_path, token_from_file, AdmittedDevice,
-    AdmittedPairingClaim, DeviceVerifier, InboundAuth, DEVICE_SIGNATURE_HEADER, PAIRING_CLAIM_PATH,
+    authenticated, comms_config_token, device_signed_path, session_cookie, token_from_file,
+    AdmittedDevice, AdmittedPairingClaim, DeviceVerifier, InboundAuth, SessionVerifier,
+    DEVICE_SIGNATURE_HEADER, PAIRING_CLAIM_PATH, SESSION_COOKIE, SESSION_OPEN_PATH,
 };
 
 // Re-exported so a server binary that depends only on sjel-server still gets the
@@ -279,6 +280,86 @@ mod http_tests {
             let _ = axum::serve(listener, app).await;
         });
         format!("http://{addr}")
+    }
+
+    // --- the local browser session (ISA ISC-45) --------------------------------------------
+
+    struct OneSession;
+    impl SessionVerifier for OneSession {
+        fn verify(&self, session: &str) -> bool {
+            session == "live"
+        }
+    }
+
+    async fn session_server() -> String {
+        let auth = InboundAuth::with_token(Some("full".into()))
+            .require_credential()
+            .with_session_verifier(std::sync::Arc::new(OneSession));
+        let router = axum::Router::new()
+            .route("/api/thing", get(|| async { "{}" }))
+            .route(SESSION_OPEN_PATH, get(|| async { "opened" }));
+        let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let addr = listener.local_addr().unwrap();
+        let app = authenticated(router, auth);
+        tokio::spawn(async move {
+            let _ = axum::serve(listener, app).await;
+        });
+        format!("http://{addr}")
+    }
+
+    #[tokio::test]
+    async fn a_live_session_cookie_is_a_credential_and_any_other_is_not() {
+        let base = session_server().await;
+        let client = reqwest::Client::new();
+        let status = |cookie: &'static str| {
+            let request = client.get(format!("{base}/api/thing"));
+            async move {
+                let request = if cookie.is_empty() {
+                    request
+                } else {
+                    request.header("cookie", cookie)
+                };
+                request.send().await.unwrap().status().as_u16()
+            }
+        };
+        assert_eq!(status("theme=dark; sjel_session=live").await, 200);
+        assert_eq!(status("sjel_session=stale").await, 401);
+        assert_eq!(status("sjel_session=").await, 401);
+        assert_eq!(status("").await, 401);
+    }
+
+    #[tokio::test]
+    async fn the_open_path_needs_no_credential_only_where_sessions_exist() {
+        let base = session_server().await;
+        let client = reqwest::Client::new();
+        let opened = client
+            .get(format!("{base}{SESSION_OPEN_PATH}?ticket=x"))
+            .send()
+            .await
+            .unwrap();
+        assert_eq!(opened.status().as_u16(), 200);
+        let posted = client
+            .post(format!("{base}{SESSION_OPEN_PATH}"))
+            .send()
+            .await
+            .unwrap();
+        assert_ne!(posted.status().as_u16(), 200, "only GET is exempt");
+
+        // Without a verifier the same path is gated like any other.
+        let plain = InboundAuth::with_token(Some("full".into())).require_credential();
+        let router = axum::Router::new().route(SESSION_OPEN_PATH, get(|| async { "opened" }));
+        let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let addr = listener.local_addr().unwrap();
+        let app = authenticated(router, plain);
+        tokio::spawn(async move {
+            let _ = axum::serve(listener, app).await;
+        });
+        let gated = client
+            .get(format!("http://{addr}{SESSION_OPEN_PATH}"))
+            .send()
+            .await
+            .unwrap();
+        assert_eq!(gated.status().as_u16(), 401);
     }
 
     // --- the agent identity (ISA F9, ISC-43) ---------------------------------------------

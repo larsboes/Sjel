@@ -27,6 +27,9 @@ devices = { path = "../devices" }
 # records and this file owns the surface -- the same split as `devices` above.
 backup = { path = "../backup" }
 route-manifest = { path = "../../libs/route-manifest" }
+# The browser login (src/session.rs): a random ticket and session, and the digest the store keeps.
+getrandom.workspace = true
+sha2.workspace = true
 axum.workspace = true
 # Not `full`: these are the drivers this crate reaches for, verified with a lone
 # `cargo check -p <crate> --all-targets`, which is the only build where a missing

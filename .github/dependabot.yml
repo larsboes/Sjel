@@ -84,7 +84,9 @@ updates:
     # `typescript` is held on 6.x here, for the same reason it is in the soundscape block
     # below: svelte-check 4.7.6 declares `typescript: ^5.0.0 || ^6.0.0`, so 7 in the primary
     # slot fails `bun run check` -- the failure #204 was refused for, where svelte-check names
-    # the two-version setup as its own fix.
+    # the two-version setup as its own fix. Since 2026-10-01 this tree runs that setup too:
+    # `@typescript/native` (npm:typescript@^7.0.2) beside `typescript` ~6.0.0, driven by
+    # `--tsgo` in the check script.
     #
     # This became correct on 2026-09-30 and was not before. The tree moved to 6.0.3 in
     # d25a7353, so its next major is a 7 rather than a 6; a blanket major ignore would have

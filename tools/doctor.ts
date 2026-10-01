@@ -2713,6 +2713,26 @@ const CHECKS: Check[] = [
     },
   },
 
+  // The service.toml gate CI runs, here over the overlay as well. CI has no overlay, so a
+  // private manifest is held to the same rules only on the machine that runs it. Among them:
+  // a port serves GET /routes or names why it cannot (ISA ISC-34).
+  {
+    name: "Service manifests (both roots)",
+    run(ctx) {
+      const checkPath = join(ctx.root, "tools", "check-service-tomls.sh");
+      const proc = Bun.spawnSync({
+        cmd: ["bash", checkPath],
+        env: { ...process.env, SJEL_CHECK_OVERLAY: "1" },
+        stdout: "pipe",
+        stderr: "pipe",
+      });
+      const failures = proc.stderr.toString().split("\n").filter((l) => l.startsWith("FAIL"));
+      for (const line of failures) ctx.bad(line.replace(/^FAIL /, ""));
+      if (proc.exitCode === 0) ctx.ok("every manifest passes tools/check-service-tomls.sh, overlay included");
+      else if (failures.length === 0) ctx.bad(`tools/check-service-tomls.sh exited ${proc.exitCode}`);
+    },
+  },
+
   // Public-checkout hygiene — delegate to the index scanner so Doctor and CI enforce
   // the same rule. It inspects tracked blob contents, including binary metadata, rather
   // than pretending .gitignore can remove a file that is already in the index.

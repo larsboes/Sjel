@@ -454,10 +454,15 @@ last layer over the routes and adds no data path of its own.
   off. `sjel search mail` returns `comms` with `GET /triage`; `sjel search trash` returns
   `POST /triage/{id}/gmail`. Only the opening paragraph, because the whole README matched
   `backup` in 16 capabilities. Held by `tools/capability-index.test.sh`.
-- [ ] ISC-34 — every registered HTTP capability serves `GET /routes`, or its registry entry
+- [x] ISC-34 — every registered HTTP capability serves `GET /routes`, or its registry entry
   says why it does not. Falsifier: a capability in `sjel capability list` answers `/routes`
   with 404 and has no stated reason. Probe: loop over the list. `tools/doctor` runs it, so the
-  rule is enforced where the tool reads it. Today: 15 of 20.
+  rule is enforced where the tool reads it. Done 2026-10-01: 17 of 20 serve it. `knowledge-graph`
+  and the overlay's `ytalbum` gained a manifest in the Rust shape. `macmon` and
+  `foundation-models` (upstream binaries) and `dashboard` (the UI) carry a `routes_absent` reason,
+  which the registry emits. The probe is static, not a live loop: a live `/routes` answers 401
+  without the token, and so does a missing route. `tools/check-service-tomls.sh` refuses a port
+  with neither (CI), and doctor's "Service manifests (both roots)" runs it over the overlay too.
 - [x] ISC-35 — every capability has a README. Falsifier: `ls capabilities/*/README.md` misses a
   directory. Done 2026-10-01: `entities-sync`, `entities-google-sync`, `feed-sweep` and
   `sparpreis-watch` each have one, in the shape of `capabilities/punctuality-ingest/README.md`.

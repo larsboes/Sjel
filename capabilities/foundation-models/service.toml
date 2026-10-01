@@ -36,6 +36,8 @@ name        = "foundation-models"
 command     = ["apfel", "--serve", "--port", "${SJEL_PORT}"]
 port        = "8091"
 health_path = "/health"
+# No `GET /routes` (ISA ISC-34): apfel is an upstream binary. Its surface is the OpenAI shape.
+routes_absent = "upstream binary (apfel); serves the OpenAI chat-completions API under /v1"
 
 # No `requires`: this talks to nothing. It reads a prompt, asks the OS, and
 # answers. The dependency runs the other way — comms names it in inference.json

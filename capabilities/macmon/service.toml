@@ -9,6 +9,8 @@ name        = "macmon"
 command     = ["macmon", "serve", "--port", "${SJEL_PORT}", "--interval", "5000"]
 port        = "9911"
 health_path = "/json"
+# No `GET /routes` (ISA ISC-34): macmon is an upstream binary, and its surface is upstream's.
+routes_absent = "upstream binary (vladkens/macmon); serves /json only"
 
 # Why ${SJEL_PORT} rather than the literal: macmon takes its port on argv and cannot read
 # the SJEL_PORT env var an Axon-owned process would. Writing 9911 twice — once here, once

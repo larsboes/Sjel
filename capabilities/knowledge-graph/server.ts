@@ -93,10 +93,29 @@ function getCommunities(nodes: FlatNode[]): number[] {
   return [...set].sort((a, b) => a - b);
 }
 
+// ── Route manifest ──────────────────────────────────────────────────────────
+
+// `GET /routes`, in the shape every Rust capability serves through
+// libs/route-manifest (`{capability, routes: [{method, path, summary}]}`), so an
+// agent and `sjel search` read this surface the way they read the others (ISA ISC-34).
+// Written as `r(...)` calls because tools/lib/capability-index.sh indexes that form.
+const r = (method: string, path: string, summary: string) => ({ method, path, summary });
+export const ROUTES = [
+  r("GET", "/routes", "This manifest."),
+  r("GET", "/api/graph", "The whole code graph, as graphify wrote it."),
+  r("GET", "/api/graph/stats", "Node, edge and community counts, and the commit the graph was built at."),
+  r("GET", "/api/graph/search", "Nodes whose label, file or type contains ?q=, and the edges among them."),
+  r("GET", "/api/graph/community/{id}", "One community's nodes and the edges among them."),
+  r("GET", "/api/graph/node/{id}", "One node and every node it connects to."),
+  r("GET", "/api/graph/unit/{name}", "One unit's files and the edges among them, ranked by degree and capped."),
+];
+
 // ── API handlers ────────────────────────────────────────────────────────────
 
 export function handleAPI(url: URL): Response | null {
   const path = url.pathname;
+
+  if (path === "/routes") return jsonOk({ capability: "knowledge-graph", routes: ROUTES });
 
   // /api/graph — full graph
   if (path === "/api/graph") {
@@ -307,11 +326,11 @@ function main(): void {
         });
       }
 
-      if (url.pathname.startsWith("/api/")) {
+      if (url.pathname.startsWith("/api/") || url.pathname === "/routes") {
         return handleAPI(url) ?? json404("unknown API endpoint");
       }
 
-      return json404("knowledge-graph serves /api/graph* only — the browser view is the dashboard's self-model page");
+      return json404("knowledge-graph serves /routes and /api/graph* only — the browser view is the dashboard's self-model page");
     },
   });
 

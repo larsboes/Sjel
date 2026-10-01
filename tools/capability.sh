@@ -341,7 +341,7 @@ _emit_service() {  # <name> <manifest> <scope> [endpoint]
   # honest: capabilities/store's file is copied while it is open, so a run holds nothing
   # down. A consumer reading only `backup_sqlite` would render "this stops the service"
   # over a contract that does not.
-  for key in port health_path ready_path panel_port panel_path autostart schedule proxy_api_only idle_timeout \
+  for key in port health_path ready_path panel_port panel_path autostart schedule proxy_api_only idle_timeout routes_absent \
              backup_target backup_sqlite backup_sqlite_online backup_advise_days backup_stale_days \
              freshness_advise_hours freshness_stale_hours; do
     value="$(toml_get "$key" "$mf")"

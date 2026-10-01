@@ -18,7 +18,7 @@ import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
-import { handleAPI } from "./server.ts";
+import { handleAPI, ROUTES } from "./server.ts";
 
 // graphify's own output shape: nodes carry id/label/file_type/source_file/community, edges
 // arrive as links with source/target. Both aliases the flatteners accept are exercised —
@@ -62,6 +62,23 @@ afterEach(() => {
   rmSync(root, { recursive: true, force: true });
   if (previousRoot === undefined) delete process.env.SJEL_ROOT;
   else process.env.SJEL_ROOT = previousRoot;
+});
+
+describe("GET /routes", () => {
+  test("serves the manifest in the shape libs/route-manifest gives the Rust capabilities", async () => {
+    const { status, body } = await call("/routes");
+    expect(status).toBe(200);
+    expect(body.capability).toBe("knowledge-graph");
+    expect(body.routes).toEqual(ROUTES);
+    for (const route of body.routes) expect(Object.keys(route).sort()).toEqual(["method", "path", "summary"]);
+  });
+
+  test("every declared route is one this server answers", async () => {
+    for (const { path } of ROUTES) {
+      const concrete = path.replace("{id}", "0").replace("{name}", "capabilities/knowledge-graph");
+      expect(handleAPI(new URL(`http://127.0.0.1:4244${concrete}?q=a`))).not.toBeNull();
+    }
+  });
 });
 
 describe("GET /api/graph", () => {

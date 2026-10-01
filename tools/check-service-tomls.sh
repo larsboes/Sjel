@@ -31,7 +31,13 @@ source "$_lib/paths.sh"
 
 fail=0
 found=0
-for svc in "$SJEL_ROOT"/capabilities/*/service.toml "$SJEL_ROOT"/*/service.toml; do
+# SJEL_CHECK_OVERLAY=1 adds the active overlay's capabilities. CI has no overlay, so this is
+# how tools/doctor holds a private manifest to the same rules on the machine that runs it.
+overlay_glob=""
+if [ "${SJEL_CHECK_OVERLAY:-}" = 1 ] && [ -d "${SJEL_OVERLAY_CAPS_DIR:-}" ]; then
+  overlay_glob="$SJEL_OVERLAY_CAPS_DIR"
+fi
+for svc in "$SJEL_ROOT"/capabilities/*/service.toml "$SJEL_ROOT"/*/service.toml ${overlay_glob:+"$overlay_glob"/*/service.toml}; do
   [ -f "$svc" ] || continue          # empty glob → literal path, skip it
   found=1
   cap="$(basename "$(dirname "$svc")")"
@@ -76,6 +82,15 @@ for svc in "$SJEL_ROOT"/capabilities/*/service.toml "$SJEL_ROOT"/*/service.toml;
         fi
       elif [ -z "$(toml_get port "$svc")" ]; then
         echo "FAIL [$cap]: kind=process needs a port — the registry, the proxy and the health poll all read it — $svc" >&2
+        fail=1
+      # A port is a surface, and an agent learns a surface from `GET /routes` (ISA ISC-34). The
+      # route is found in the source, not by asking the server: most capabilities are off on a
+      # given machine, and a live /routes answers 401 without the token, which is also what a
+      # missing route answers. A process that cannot serve one names the reason instead.
+      elif [ -z "$(toml_get routes_absent "$svc")" ] &&
+           ! grep -rqsF --include='*.rs' --include='*.ts' --include='*.py' \
+               --exclude-dir=node_modules --exclude-dir=target -- '"/routes"' "$(dirname "$svc")"; then
+        echo "FAIL [$cap]: has a port but serves no GET /routes and declares no routes_absent reason — $svc" >&2
         fail=1
       fi
       for key in image tag volumes env_file; do

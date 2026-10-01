@@ -276,6 +276,11 @@ freshness_stale_hours  = "24"             # past this age nothing is arriving, a
 #                                           # the uniform rule. Every process capability always gets
 #                                           # /<name> proxied with the prefix stripped — that one is
 #                                           # convention, not configuration, and needs no field.
+# routes_absent = "upstream binary"         # optional, a reason. A process with a port serves
+#                                           # GET /routes (libs/route-manifest, ISA ISC-34), or says
+#                                           # here why it cannot: an upstream binary, a UI with no
+#                                           # API of its own. tools/check-service-tomls.sh refuses a
+#                                           # port with neither.
 # proxy_api_only = "true"                   # optional. When the dashboard owns /<name> as a page,
 #                                           # proxy only /<name>/api and still strip /<name>.
 # panel_port  = "4242"                      # a capability that serves its OWN UI (CONTRIBUTING.md#three-architectural-nouns); the shell

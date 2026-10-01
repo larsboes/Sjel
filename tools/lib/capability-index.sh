@@ -37,10 +37,10 @@ capability_summary() {  # <dir>
        NF { seen = 1; printf "%s%s", (n++ ? " " : ""), $0 }' "$1/README.md"
 }
 
-# One line per declared route: `METHOD /path  description`.
+# One line per declared route: `METHOD /path  description`. Rust and TypeScript sources both,
+# because capabilities/knowledge-graph declares its manifest in server.ts with the same `r(...)`.
 capability_routes() {  # <dir>
-  [ -d "$1/src" ] || return 0
-  find "$1/src" -name '*.rs' -print0 |
+  find "$1" \( -name node_modules -o -name target \) -prune -o \( -name '*.rs' -o -name '*.ts' \) -print0 |
     xargs -0 perl -0777 -ne '
       while (/\br\(\s*"(GET|POST|PUT|PATCH|DELETE|HEAD)",\s*"([^"]*)",\s*"((?:[^"\\]|\\.)*)"/g) {
         print "$1 $2  $3\n";

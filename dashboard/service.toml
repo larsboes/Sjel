@@ -23,6 +23,9 @@ command     = ["bun", "run", "dev"]
 workdir     = "dashboard"
 port        = "47117"
 health_path = "/"
+# No `GET /routes` (ISA ISC-34): the dashboard is the UI. Its data comes from sjel-status,
+# which serves the manifest for the whole proxy table.
+routes_absent = "the UI spine; its API is sjel-status' proxy, which serves /routes"
 # false since 2026-08-29. The shell no longer needs a process of its own; this is the
 # hot-reload mode, started by hand for an editing session:
 #   tools/service-runner.sh start dashboard

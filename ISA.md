@@ -623,6 +623,10 @@ Design:
   request, `tailscale debug daemon-logs` printed `http: proxy error: dial unix <overlay
   secrets/>sjel-status.sock: connect: operation not permitted`, while `lsof` showed sjel-status
   holding that socket. The extension's sandbox refuses the connect; the listener is not at fault.
+  Ruling, principal, 2026-10-01: keep the installed Tailscale app, and install no other Tailscale
+  build. The open-source `tailscaled` is therefore not a fix for this. The tailnet shell stays
+  unreachable until a socket path the extension may connect to is found; everything else on the
+  tailnet is unaffected.
 
 ### F10 · An agent writes, under a mode the owner sets
 

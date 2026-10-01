@@ -80,6 +80,11 @@ else
     # below, and the menu-bar app (apps/mac/install), which trades the token for a browser login.
     TRUSTED="-T /usr/bin/security"
     [ -d "$HOME/Applications/Sjel.app" ] && TRUSTED="$TRUSTED -T $HOME/Applications/Sjel.app"
+    # Delete first: `-U` on an existing item replaces the value but keeps the item's old access
+    # list, so an item made before Sjel.app was installed never gained the app, and the app
+    # prompted for the login password on every read (2026-10-01). If the add fails, the script
+    # exits before it touches the runtime file, so the services keep the token they have.
+    security delete-generic-password -a "$ACCOUNT" -s "$KEYCHAIN_SERVICE" >/dev/null 2>&1 || true
     printf 'add-generic-password -U -a %s -s %s -l "Sjel inbound token" %s -w %s\n' \
       "$ACCOUNT" "$KEYCHAIN_SERVICE" "$TRUSTED" "$(cat "$TOKEN_TMP")" | security -i >/dev/null
     # Read it back without printing it. A mismatch changes no runtime configuration.

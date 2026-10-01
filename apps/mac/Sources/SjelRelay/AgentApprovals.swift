@@ -26,13 +26,22 @@ public struct AgentApproval: Sendable, Equatable, Identifiable, Decodable {
 public struct AgentApprovals: Sendable {
     public let baseURL: URL
     private let readToken: @Sendable () -> String?
+    private let forgetToken: @Sendable () -> Void
 
-    public init(
+    /// Polled every five seconds, so the token comes from a `CachedToken`: one Keychain read,
+    /// not one prompt per poll.
+    public init(baseURL: URL = URL(string: "http://127.0.0.1:8082")!, token: CachedToken = CachedToken()) {
+        self.init(baseURL: baseURL, readToken: { token.get() }, forgetToken: { token.forget() })
+    }
+
+    init(
         baseURL: URL = URL(string: "http://127.0.0.1:8082")!,
-        readToken: @escaping @Sendable () -> String? = { DashboardLogin.keychainToken() }
+        readToken: @escaping @Sendable () -> String?,
+        forgetToken: @escaping @Sendable () -> Void = {}
     ) {
         self.baseURL = baseURL
         self.readToken = readToken
+        self.forgetToken = forgetToken
     }
 
     private func request(_ path: String, method: String, body: Data? = nil) -> URLRequest? {
@@ -68,9 +77,12 @@ public struct AgentApprovals: Sendable {
     /// The waiting writes, or an empty list when the shell or the token is not there.
     public func pending(session: URLSession = .shared) async -> [AgentApproval] {
         guard let request = pendingRequest(),
-              let (data, response) = try? await session.data(for: request),
-              (response as? HTTPURLResponse)?.statusCode == 200
+              let (data, response) = try? await session.data(for: request)
         else { return [] }
+        let status = (response as? HTTPURLResponse)?.statusCode
+        // A 401 means the kept token is no longer the deployment's: read it again next poll.
+        if status == 401 { forgetToken() }
+        guard status == 200 else { return [] }
         return Self.pending(fromAgentView: data)
     }
 

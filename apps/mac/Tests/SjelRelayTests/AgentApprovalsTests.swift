@@ -35,3 +35,40 @@ import Testing
         #expect(none.decisionRequest(id: "ab", allow: true) == nil)
     }
 }
+
+@Suite struct CachedTokenTests {
+    final class Reads: @unchecked Sendable {
+        var count = 0
+        var answer: DashboardLogin.KeychainRead
+        init(_ answer: DashboardLogin.KeychainRead) { self.answer = answer }
+    }
+
+    @Test func aTokenIsReadOnceAndKept() {
+        let reads = Reads(.token("t"))
+        let cache = CachedToken(read: { reads.count += 1; return reads.answer })
+        #expect(cache.get() == "t")
+        #expect(cache.get() == "t")
+        #expect(reads.count == 1)
+    }
+
+    @Test func aRefusalIsNotAskedAgainUntilForgotten() {
+        let reads = Reads(.refused)
+        let cache = CachedToken(read: { reads.count += 1; return reads.answer })
+        #expect(cache.get() == nil)
+        #expect(cache.get() == nil)
+        #expect(reads.count == 1)
+        reads.answer = .token("t")
+        cache.forget()
+        #expect(cache.get() == "t")
+        #expect(reads.count == 2)
+    }
+
+    @Test func aMissingItemIsReadAgain() {
+        let reads = Reads(.missing)
+        let cache = CachedToken(read: { reads.count += 1; return reads.answer })
+        #expect(cache.get() == nil)
+        reads.answer = .token("t")
+        #expect(cache.get() == "t")
+        #expect(reads.count == 2)
+    }
+}

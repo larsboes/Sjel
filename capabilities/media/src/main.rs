@@ -6,7 +6,7 @@ use media::{audit, index, verify_mirror, volume_uuid};
 
 fn usage() {
     eprintln!("media — exact-byte index, ingest gate and mirror verification\n\
-        usage:\n  media volume-id --root PATH\n  media index --root PATH --uuid UUID [--db PATH]\n  media audit --root PATH --uuid UUID --sample N [--db PATH]\n  media ingest --staging PATH --library PATH --uuid UUID [--apply] [--prune] [--db PATH]\n  media classify (--digest SHA256 | --digests-file PATH) [--db PATH]\n  media verify-mirror --left-root PATH --left-uuid UUID --right-root PATH --right-uuid UUID [--db PATH]\n  media status [--db PATH]\n  media duplicates --uuid UUID [--legacy PREFIX] [--resolve-inside PREFIX --root PATH --metadata] [--list PATH] [--db PATH]\n  media supersede --root PATH --uuid UUID --list PATH --quarantine PATH --journal PATH [--apply]\n  media preview --structure FILE [--metadata]\n  media organize --structure FILE [--apply --journal PATH] [--settled-for SECONDS] [--only COLLECTION]\n\n\
+        usage:\n  media volume-id --root PATH\n  media index --root PATH --uuid UUID [--db PATH]\n  media audit --root PATH --uuid UUID --sample N [--db PATH]\n  media ingest --staging PATH --library PATH --uuid UUID [--apply] [--prune] [--db PATH]\n  media classify (--digest SHA256 | --digests-file PATH) [--db PATH]\n  media verify-mirror --left-root PATH --left-uuid UUID --right-root PATH --right-uuid UUID [--db PATH]\n  media status [--db PATH]\n  media duplicates --uuid UUID [--legacy PREFIX] [--resolve-inside PREFIX --root PATH --metadata] [--list PATH] [--db PATH]\n  media supersede --root PATH --uuid UUID --list PATH --quarantine PATH --journal PATH [--apply]\n  media relabel --from DIR --to DIR --uuid UUID --journal PATH [--apply] [--settled-for SECONDS]\n  media preview --structure FILE [--metadata]\n  media organize --structure FILE [--apply --journal PATH] [--settled-for SECONDS] [--only COLLECTION]\n\n\
         ingest is a dry run unless --apply is set. --prune additionally removes staging/originals\n\
         only after every new import verifies; neither verb deletes library content.");
 }
@@ -129,6 +129,10 @@ fn run(args: &[String]) -> Result<i32> {
                 "--resolve-inside",
             ],
             &["--metadata"],
+        ),
+        "relabel" => (
+            &["--from", "--to", "--uuid", "--journal", "--settled-for"],
+            &["--apply"],
         ),
         "supersede" => (
             &[
@@ -334,6 +338,34 @@ fn run(args: &[String]) -> Result<i32> {
             for relpath in &report.renamed_paths {
                 ledger.forget(&uuid, relpath)?;
             }
+            let fail = !report.complete || report.refused > 0;
+            println!("{}", serde_json::to_string(&report)?);
+            Ok(i32::from(fail))
+        }
+        "relabel" => {
+            let from = rooted(opts, "--from")?;
+            let to = rooted(opts, "--to")?;
+            // The destination must be on the volume the draft registered, so a move cannot land on
+            // a mount that merely looks like the library. The source is outside the library, so it
+            // has no index rows to reconcile — the next `index` records the new names.
+            mounted(&to, &required(opts, "--uuid")?)?;
+            let journal = rooted(opts, "--journal")?;
+            let settled_for = match option(opts, "--settled-for")? {
+                Some(text) => text
+                    .parse::<i64>()
+                    .map_err(|_| "--settled-for must be a whole number of seconds")?,
+                None => 300,
+            };
+            if settled_for < 0 {
+                return Err("--settled-for must not be negative".into());
+            }
+            let report = media::relabel::relabel(
+                &from,
+                &to,
+                &journal,
+                opts.iter().any(|arg| arg == "--apply"),
+                settled_for,
+            )?;
             let fail = !report.complete || report.refused > 0;
             println!("{}", serde_json::to_string(&report)?);
             Ok(i32::from(fail))

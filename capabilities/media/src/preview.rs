@@ -928,6 +928,56 @@ pub(crate) fn metadata_day(input: &str) -> Option<String> {
     Some(civil_date::iso_of_unix_day(unix))
 }
 
+/// The best embedded capture date for each file, as `(YYYY-MM-DD, field)`, from one ExifTool pass.
+///
+/// The field precedence is the preview's, so no two verbs can disagree about what a capture date is.
+/// A file with no usable date is absent from the map; a caller treats that as unknown rather than
+/// inventing one, and reports how many it could not date.
+pub(crate) fn capture_days(
+    root: &Path,
+    relpaths: &[String],
+) -> Result<BTreeMap<String, (String, String)>> {
+    let mut out = BTreeMap::new();
+    if relpaths.is_empty() {
+        return Ok(out);
+    }
+    let output = Command::new("exiftool")
+        .args(EXIF_ARGS)
+        .args(relpaths.iter().map(|rel| root.join(rel)))
+        .output()?;
+    if !output.status.success() {
+        return Err("exiftool exited unsuccessfully; no capture dates were read".into());
+    }
+    let rows: Vec<Value> = serde_json::from_slice(&output.stdout)?;
+    for row in rows {
+        let Some(source) = row.get("SourceFile").and_then(Value::as_str) else {
+            continue;
+        };
+        let Some(object) = row.as_object() else { continue };
+        let mut best: Option<(u8, String, String)> = None;
+        for (key, value) in object {
+            let Some(priority) = date_priority(key) else {
+                continue;
+            };
+            let Some(day) = value.as_str().and_then(metadata_day) else {
+                continue;
+            };
+            if best.as_ref().is_none_or(|(p, _, _)| priority < *p) {
+                best = Some((priority, day, key.clone()));
+            }
+        }
+        let Some((_, day, field)) = best else { continue };
+        let Ok(path) = PathBuf::from(source).strip_prefix(root).map(Path::to_path_buf) else {
+            continue;
+        };
+        let Some(relative) = path.to_str() else {
+            continue;
+        };
+        out.insert(relative.to_owned(), (day, field));
+    }
+    Ok(out)
+}
+
 fn collection_month(name: &str) -> Option<&str> {
     let prefix = name.get(..7)?;
     if name.as_bytes().get(7).is_some_and(u8::is_ascii_digit) {

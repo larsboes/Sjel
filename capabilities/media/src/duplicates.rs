@@ -17,11 +17,9 @@ use std::collections::{BTreeMap, BTreeSet};
 use std::fs::File;
 use std::io::{BufWriter, Write};
 use std::path::{Path, PathBuf};
-use std::process::Command;
 
 use serde::Serialize;
 
-use crate::preview::{date_priority, metadata_day, EXIF_ARGS};
 use crate::store::{Ledger, Result};
 
 /// How to resolve a group the `--legacy` prefix cannot decide: every copy sits inside one prefix,
@@ -37,7 +35,7 @@ pub struct Resolve<'a> {
 fn bucket_month(relpath: &str, prefix: &str) -> Option<String> {
     let rest = relpath.strip_prefix(prefix)?.strip_prefix('/')?;
     let month = rest.get(..7)?;
-    metadata_day(&format!("{month}-01"))?;
+    crate::preview::metadata_day(&format!("{month}-01"))?;
     Some(month.to_owned())
 }
 
@@ -46,47 +44,12 @@ fn bucket_month(relpath: &str, prefix: &str) -> Option<String> {
 /// The field precedence is the preview's, so the two verbs cannot disagree about what a capture
 /// date is. A file with no usable date is absent from the map, which the caller treats as unknown
 /// rather than inventing a month.
+/// The embedded capture month of each file, from the one shared ExifTool reader.
 fn capture_months(root: &Path, relpaths: &[String]) -> Result<BTreeMap<String, String>> {
-    let mut out = BTreeMap::new();
-    if relpaths.is_empty() {
-        return Ok(out);
-    }
-    let output = Command::new("exiftool")
-        .args(EXIF_ARGS)
-        .args(relpaths.iter().map(|rel| root.join(rel)))
-        .output()?;
-    if !output.status.success() {
-        return Err("exiftool exited unsuccessfully; no capture dates were read".into());
-    }
-    let rows: Vec<serde_json::Value> = serde_json::from_slice(&output.stdout)?;
-    for row in rows {
-        let Some(source) = row.get("SourceFile").and_then(|v| v.as_str()) else {
-            continue;
-        };
-        let Some(object) = row.as_object() else { continue };
-        let mut best: Option<(u8, String)> = None;
-        for (key, value) in object {
-            let Some(priority) = date_priority(key) else {
-                continue;
-            };
-            let Some(day) = value.as_str().and_then(metadata_day) else {
-                continue;
-            };
-            if best.as_ref().is_none_or(|(p, _)| priority < *p) {
-                best = Some((priority, day));
-            }
-        }
-        let Some((_, day)) = best else { continue };
-        let path = PathBuf::from(source);
-        let Ok(relative) = path.strip_prefix(root) else {
-            continue;
-        };
-        let Some(relative) = relative.to_str() else {
-            continue;
-        };
-        out.insert(relative.to_owned(), day[..7].to_owned());
-    }
-    Ok(out)
+    Ok(crate::preview::capture_days(root, relpaths)?
+        .into_iter()
+        .map(|(rel, (day, _))| (rel, day[..7.min(day.len())].to_owned()))
+        .collect())
 }
 
 #[derive(Debug, Serialize)]

@@ -655,9 +655,16 @@ Placement: the gate stays in `libs/sjel-server`. sjel-status owns the policy, th
 the call log, because it already owns the Systems page. The MCP server is operator machinery in
 `tools/`. sjel-status itself never admits an agent: it starts and stops the machine's services.
 
-- [ ] ISC-46 — the mode is per capability, starts at auto, and is changed on the Systems page.
+- [x] ISC-46 — the mode is per capability, starts at auto, and is changed on the Systems page.
   Falsifier: changing it needs a file edit, or an agent `POST` to a read-only capability reaches a
-  handler. Probe: gate tests, and the page.
+  handler. Probe: gate tests, and the page. Done 2026-10-01: the page lists calendar, comms and
+  devices at `auto`. Setting devices to Read only there survived a reload, wrote
+  `data/agent-modes.json`, and cut `sjel mcp`'s devices tools from ten to the four GETs; it was
+  then set back to Auto. `the_agent_token_cannot_write_or_read_what_it_cannot_rewrite` refuses a
+  read-only `POST` with 403 (65 of 65 `sjel-server` tests pass). Two faults found on the way:
+  the served `dashboard/dist` predated the panel until rebuilt, and the running sjel-status was
+  an image older than `target/release/sjel-status` (inode 614898429 against 615154997), so it
+  wrote the policy but not the copy until restarted.
 - [x] ISC-47 — in auto mode an agent write reaches the handler, and a route declared `confirm`
   asks anyway. Falsifier: an agent moves mail to Trash with no approval. Probe: gate tests.
   Done 2026-10-01: `a_confirm_route_asks_even_in_auto_and_one_approval_admits_one_write` and
@@ -677,8 +684,12 @@ the call log, because it already owns the Systems page. The MCP server is operat
   above. A limit, measured in the design and not yet answered: keyed tokens are one-way, so only
   the capability process that issued a token can restore it. A token read from comms and written
   to trips is refused with a message that says so.
-- [ ] ISC-50 — every agent call leaves one log row with no body, and the Systems page shows the
-  latest. Falsifier: an agent call with no row. Probe: gate tests and the page.
+- [x] ISC-50 — every agent call leaves one log row with no body, and the Systems page shows the
+  latest. Falsifier: an agent call with no row. Probe: gate tests and the page. Done 2026-10-01:
+  one `devices__get_api_devices` call through `sjel mcp` appeared under Latest calls as time,
+  `devices`, `GET /api/devices`, `200`, `read`, with no body, beside the `GET /routes` rows from
+  tool discovery. The gate test is
+  `in_auto_a_write_reaches_the_handler_with_its_tokens_restored_and_is_logged`.
 
 ### F11 · What nothing was moving
 

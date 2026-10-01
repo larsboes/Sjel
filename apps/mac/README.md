@@ -37,6 +37,13 @@ written by `tools/setup-inbound-auth.sh`). It trades the token for a single-use 
 the browser with it. The shell turns the ticket into a 30-day session cookie
 (`capabilities/sjel-status/src/session.rs`). The token never reaches the browser.
 
+## Agent writes that ask
+
+In ask mode, and for an action that leaves Sjel or cannot be undone, an agent's write waits for
+the owner (ISA F10). The app reads the waiting writes from the shell every five seconds. It lists
+them in its menu with **Allow** and **Deny**, and posts a notification with the same two
+buttons. The first notification asks macOS for permission to notify.
+
 ## Testing
 
 ```sh

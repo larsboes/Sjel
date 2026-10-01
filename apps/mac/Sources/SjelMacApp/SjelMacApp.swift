@@ -1,6 +1,7 @@
 import ServiceManagement
 import SwiftUI
 import SjelRelay
+import UserNotifications
 
 @main
 struct SjelMacApp: App {
@@ -21,17 +22,49 @@ final class SjelMacViewModel: ObservableObject {
     @Published var openProblem: String? = nil
     @Published var launchesAtLogin: Bool = SMAppService.mainApp.status == .enabled
 
+    /// Agent writes that wait for the owner in ask mode (ISA F10).
+    @Published var pendingWrites: [AgentApproval] = []
+
     private let bridge = NodeBridge()
     private let login = DashboardLogin()
+    private let approvals = AgentApprovals()
+    private let notifications = ApprovalNotifications()
+    private var announced: Set<String> = []
 
     var statusImageName: String {
         nodeStatus.isReachable ? "circle.inset.filled" : "circle.dotted"
     }
 
     init() {
+        notifications.onDecision = { [weak self] id, allow in
+            Task { @MainActor in await self?.decide(id: id, allow: allow) }
+        }
+        notifications.start()
         Task {
             await refreshStatus()
         }
+        // Every five seconds: an agent waiting on Allow is waiting on this.
+        Task { [weak self] in
+            while !Task.isCancelled {
+                await self?.refreshPending()
+                try? await Task.sleep(for: .seconds(5))
+            }
+        }
+    }
+
+    func refreshPending() async {
+        let pending = await approvals.pending()
+        pendingWrites = pending
+        for approval in pending where !announced.contains(approval.id) {
+            announced.insert(approval.id)
+            notifications.announce(approval)
+        }
+    }
+
+    func decide(id: String, allow: Bool) async {
+        _ = await approvals.decide(id: id, allow: allow)
+        notifications.withdraw(id: id)
+        await refreshPending()
     }
 
     func refreshStatus() async {
@@ -107,6 +140,26 @@ struct SjelMenuBarView: View {
                 }
             }
 
+            if !model.pendingWrites.isEmpty {
+                VStack(alignment: .leading, spacing: 6) {
+                    Text("Agent asks to")
+                        .font(.system(size: 11, weight: .semibold))
+                    ForEach(model.pendingWrites) { approval in
+                        VStack(alignment: .leading, spacing: 3) {
+                            Text(approval.summary)
+                                .font(.system(size: 11, design: .monospaced))
+                                .lineLimit(2)
+                            HStack {
+                                Button("Allow") { Task { await model.decide(id: approval.id, allow: true) } }
+                                Button("Deny") { Task { await model.decide(id: approval.id, allow: false) } }
+                            }
+                            .controlSize(.small)
+                        }
+                    }
+                }
+                Divider()
+            }
+
             if let problem = model.openProblem {
                 Text(problem)
                     .font(.system(size: 11))
@@ -151,5 +204,59 @@ struct SjelMenuBarView: View {
         }
         .padding(14)
         .frame(width: 280)
+    }
+}
+
+/// Posts one notification per waiting agent write, with Allow and Deny on it, and reports the
+/// owner's choice back. Needs an app bundle, which `apps/mac/install` builds.
+final class ApprovalNotifications: NSObject, UNUserNotificationCenterDelegate, @unchecked Sendable {
+    private static let category = "SJEL_AGENT_WRITE"
+    var onDecision: (@Sendable (String, Bool) -> Void)?
+
+    func start() {
+        let center = UNUserNotificationCenter.current()
+        center.delegate = self
+        let allow = UNNotificationAction(identifier: "ALLOW", title: "Allow")
+        let deny = UNNotificationAction(identifier: "DENY", title: "Deny", options: [.destructive])
+        center.setNotificationCategories([
+            UNNotificationCategory(identifier: Self.category, actions: [allow, deny], intentIdentifiers: []),
+        ])
+        center.requestAuthorization(options: [.alert, .sound]) { _, _ in }
+    }
+
+    func announce(_ approval: AgentApproval) {
+        let content = UNMutableNotificationContent()
+        content.title = "An agent asks to change something"
+        content.body = approval.summary
+        content.categoryIdentifier = Self.category
+        content.sound = .default
+        let request = UNNotificationRequest(identifier: approval.id, content: content, trigger: nil)
+        UNUserNotificationCenter.current().add(request)
+    }
+
+    func withdraw(id: String) {
+        UNUserNotificationCenter.current().removeDeliveredNotifications(withIdentifiers: [id])
+    }
+
+    func userNotificationCenter(
+        _ center: UNUserNotificationCenter,
+        didReceive response: UNNotificationResponse,
+        withCompletionHandler completionHandler: @escaping () -> Void
+    ) {
+        let id = response.notification.request.identifier
+        switch response.actionIdentifier {
+        case "ALLOW": onDecision?(id, true)
+        case "DENY": onDecision?(id, false)
+        default: break
+        }
+        completionHandler()
+    }
+
+    func userNotificationCenter(
+        _ center: UNUserNotificationCenter,
+        willPresent notification: UNNotification,
+        withCompletionHandler completionHandler: @escaping (UNNotificationPresentationOptions) -> Void
+    ) {
+        completionHandler([.banner, .sound])
     }
 }

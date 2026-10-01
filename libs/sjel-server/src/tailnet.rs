@@ -33,11 +33,10 @@
 //!
 //! ## What this gate does NOT do
 //!
-//! It does not change the loopback trust model. A process on this machine can
-//! set any header it likes, so the identity below is meaningful only for
-//! requests that came through the proxy. That is not a weakening: a local
-//! process already reaches `127.0.0.1:<port>` directly, which is the trust
-//! boundary every capability has always had (PRD §7.1, single operator, Q3).
+//! It does not make an identity header trustworthy on a direct TCP listener. A process on
+//! this machine can set any header it likes, so ordinary loopback listeners require the
+//! deployment credential. Only `tailnet_proxy_only` accepts this identity, and only on the
+//! Unix socket that Tailscale Serve reaches and the managed agent sandbox denies.
 //!
 //! It also never satisfies [`crate::InboundAuth::refuse_without_token`]. comms
 //! turns that on because `POST /ingest` fetches an attacker-chosen URL and "a

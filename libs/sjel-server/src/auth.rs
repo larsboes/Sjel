@@ -17,7 +17,7 @@
 //! | Configured token | `/health`, `/ready`, `OPTIONS` | Every other route | Reach beyond loopback |
 //! |---|---|---|---|
 //! | yes | served | `401` without a matching token | permitted |
-//! | no | served | served (or `403`, see below) | **refused at bind** |
+//! | no | served | `403` when credential-required; open only in explicit compatibility mode | **refused at bind** |
 //!
 //! ## The second gate, and why one struct decides
 //!
@@ -36,8 +36,12 @@
 //! | yes | the operator | served, without a token |
 //! | yes | anyone else | `401` |
 //!
-//! The one exception is [`InboundAuth::refuse_without_token`], which an identity
-//! never satisfies.
+//! `require_credential` refuses direct loopback requests, including requests that forge a
+//! tailnet identity header. `tailnet_proxy_only` is reserved for a Unix-socket listener that
+//! only Tailscale Serve can reach; the managed agent sandbox denies that socket path.
+//!
+//! The separate [`InboundAuth::refuse_without_token`] policy remains stricter: a paired-device
+//! signature and tailnet identity never satisfy a route that specifically requires the token.
 //!
 //! `Reach::AllInterfaces` without a token has no representation:
 //! [`crate::bind_addr_for`] is the only constructor of a non-loopback
@@ -171,6 +175,12 @@ pub struct InboundAuth {
     /// `true` when the absence of a token must close the non-exempt routes
     /// rather than leave them open. See [`InboundAuth::refuse_without_token`].
     refuse_without_token: bool,
+    /// Protected local listeners reject direct requests without a shared token.
+    /// Valid device signatures are admitted before this token-only branch.
+    require_credential: bool,
+    /// A listener reachable only through a trusted proxy admits the declared operator identity,
+    /// but never treats a direct loopback request as that identity.
+    tailnet_proxy_only: bool,
     /// The login `tailscale serve` must vouch for, when the deployment declared
     /// one. See [`crate::tailnet`] for why a second gate exists and what it may
     /// not do.
@@ -191,6 +201,8 @@ impl std::fmt::Debug for InboundAuth {
         f.debug_struct("InboundAuth")
             .field("token", &self.token.as_ref().map(|_| "<redacted>"))
             .field("refuse_without_token", &self.refuse_without_token)
+            .field("require_credential", &self.require_credential)
+            .field("tailnet_proxy_only", &self.tailnet_proxy_only)
             // Printed in full, unlike the token: a login is a public value, and
             // "which operator is this deployment admitting" is the first thing
             // worth seeing when the phone is answered 401.
@@ -206,9 +218,8 @@ impl InboundAuth {
     /// The deployment-wide token, or none.
     ///
     /// Reads `SJEL_INBOUND_TOKEN_FILE` from `<overlay>/config/deployment.env`
-    /// and then that file. Every step is allowed to be absent: an overlay that
-    /// has not declared a token yields `None`, which is the loopback-only
-    /// deployment that predates this gate.
+    /// and then that file. Every step is allowed to be absent; each listener chooses
+    /// whether absence means explicit compatibility mode or denial.
     pub fn from_deployment() -> Self {
         Self::resolve(None)
     }
@@ -227,6 +238,8 @@ impl InboundAuth {
         Self {
             token,
             refuse_without_token: false,
+            require_credential: false,
+            tailnet_proxy_only: false,
             tailnet_operator: crate::tailnet::deployment_operator(),
             device_verifier: None,
             lan_devices_only: false,
@@ -242,6 +255,8 @@ impl InboundAuth {
                 .map(|t| t.trim().to_string())
                 .filter(|t| !t.is_empty()),
             refuse_without_token: false,
+            require_credential: false,
+            tailnet_proxy_only: false,
             tailnet_operator: None,
             device_verifier: None,
             lan_devices_only: false,
@@ -285,6 +300,20 @@ impl InboundAuth {
         self
     }
 
+    /// Require a deployment credential on protected routes, even when the request arrived
+    /// directly over loopback. A valid paired-device signature is still a credential.
+    pub fn require_credential(mut self) -> Self {
+        self.require_credential = true;
+        self
+    }
+
+    /// Admit only the operator identity injected by the trusted tailnet proxy. Use only on a
+    /// listener whose Unix socket is inaccessible to untrusted local processes.
+    pub fn tailnet_proxy_only(mut self) -> Self {
+        self.tailnet_proxy_only = true;
+        self
+    }
+
     /// Whether this gate admits paired devices by key.
     pub fn admits_devices(&self) -> bool {
         self.device_verifier.is_some()
@@ -323,6 +352,22 @@ impl InboundAuth {
         self.token.as_ref().map(|t| format!("Bearer {t}"))
     }
 
+    /// Add the deployment credential only when `url` names this machine's loopback interface.
+    /// Internal capability calls use this helper; it must not leak the token to a configured
+    /// remote endpoint or a model provider.
+    pub fn with_loopback_auth(
+        request: reqwest::blocking::RequestBuilder,
+        url: &str,
+    ) -> reqwest::blocking::RequestBuilder {
+        let loopback = is_loopback_destination(url);
+        if loopback {
+            if let Some(bearer) = Self::from_deployment().bearer_header() {
+                return request.header(reqwest::header::AUTHORIZATION, bearer);
+            }
+        }
+        request
+    }
+
     /// Whether this gate rejects anything at all. A gate with no token and no
     /// refusal is not layered onto the router, so an unconfigured deployment
     /// pays nothing per request.
@@ -330,6 +375,8 @@ impl InboundAuth {
         self.token.is_some()
             || self.lan_devices_only
             || self.refuse_without_token
+            || self.require_credential
+            || self.tailnet_proxy_only
             || self.tailnet_operator.is_some()
             || self.device_verifier.is_some()
             || self.agent.is_some()
@@ -346,6 +393,36 @@ impl InboundAuth {
         // token, and axum answers an unrouted method with 405, not a handler.
         if method == Method::OPTIONS || EXEMPT_PATHS.contains(&path) {
             return None;
+        }
+
+        if self.tailnet_proxy_only {
+            let Some(operator) = self.tailnet_operator.as_deref() else {
+                return Some(
+                    (
+                        StatusCode::FORBIDDEN,
+                        Json(json!({ "error": "tailnet operator identity is not configured" })),
+                    )
+                        .into_response(),
+                );
+            };
+            return match crate::tailnet::arrival(headers) {
+                crate::tailnet::Arrival::Tailnet(login)
+                    if crate::tailnet::is_operator(&login, operator) => None,
+                crate::tailnet::Arrival::Tailnet(_) => Some(
+                    (
+                        StatusCode::UNAUTHORIZED,
+                        Json(json!({ "error": "this tailnet identity is not the declared operator" })),
+                    )
+                        .into_response(),
+                ),
+                crate::tailnet::Arrival::Direct => Some(
+                    (
+                        StatusCode::UNAUTHORIZED,
+                        Json(json!({ "error": "this listener accepts requests from the tailnet proxy only" })),
+                    )
+                        .into_response(),
+                ),
+            };
         }
 
         // The tailnet gate runs first, and only when the deployment declared an
@@ -379,7 +456,11 @@ impl InboundAuth {
                 // /ingest` fetches an attacker-chosen URL, and its own comment
                 // records that being inside the loopback boundary is not what
                 // contains it. A name is not what contains it either.
-                crate::tailnet::Arrival::Tailnet(_) if !self.refuse_without_token => return None,
+                crate::tailnet::Arrival::Tailnet(_)
+                    if !self.refuse_without_token && !self.require_credential =>
+                {
+                    return None;
+                }
                 // Either the request came straight to loopback, or the proxy is
                 // not injecting identity. Both fall through to the token rule
                 // below, which is the behaviour that predates this gate. Doctor's
@@ -390,12 +471,12 @@ impl InboundAuth {
         }
 
         let Some(expected) = self.token.as_deref() else {
-            if self.refuse_without_token {
+            if self.refuse_without_token || self.require_credential {
                 return Some(
                     (
                         StatusCode::FORBIDDEN,
                         Json(json!({
-                            "error": "no inbound token is configured — these routes are disabled. Declare SJEL_INBOUND_TOKEN_FILE in <overlay>/config/deployment.env."
+                            "error": "no inbound token is configured — protected routes are disabled. Run tools/setup-inbound-auth.sh from an operator terminal."
                         })),
                     )
                         .into_response(),
@@ -490,7 +571,7 @@ async fn admit_device(
                 StatusCode::PAYLOAD_TOO_LARGE,
                 Json(json!({ "error": "signed request body is too large" })),
             )
-                .into_response()
+                .into_response();
         }
     };
     let target = parts
@@ -510,7 +591,7 @@ async fn admit_device(
                 StatusCode::UNAUTHORIZED,
                 Json(json!({ "error": format!("device signature rejected: {reason}") })),
             )
-                .into_response()
+                .into_response();
         }
     };
     if auth.refuse_without_token {
@@ -616,6 +697,21 @@ pub fn comms_config_token() -> Option<String> {
         .as_str()?
         .to_string();
     token_from_file(&sjel_config::expand_tilde(&secret_file))
+}
+
+fn is_loopback_destination(url: &str) -> bool {
+    reqwest::Url::parse(url).ok().is_some_and(|parsed| {
+        matches!(parsed.scheme(), "http" | "https")
+            && parsed.host_str().is_some_and(|host| {
+                host.eq_ignore_ascii_case("localhost")
+                    || host
+                        .strip_prefix('[')
+                        .and_then(|value| value.strip_suffix(']'))
+                        .unwrap_or(host)
+                        .parse::<std::net::IpAddr>()
+                        .is_ok_and(|address| address.is_loopback())
+            })
+    })
 }
 
 #[cfg(test)]
@@ -889,6 +985,26 @@ mod tests {
         assert_eq!(token_from_file(&dir.join("absent")), None);
 
         let _ = std::fs::remove_dir_all(dir);
+    }
+
+    #[test]
+    fn shared_credentials_are_scoped_to_loopback_endpoints() {
+        for url in [
+            "http://127.0.0.1:8082/routes",
+            "http://localhost:8082/api/items",
+            "http://[::1]:8082/health",
+        ] {
+            assert!(is_loopback_destination(url), "{url}");
+        }
+        for url in [
+            "https://model.example/v1/chat/completions",
+            "http://192.168.1.4:8082/api/items",
+            "https://operator.ts.net/assistant",
+            "file:///tmp/x",
+            "not a URL",
+        ] {
+            assert!(!is_loopback_destination(url), "{url}");
+        }
     }
 
     /// The value is a live credential; a capability that dumps its config must

@@ -8,10 +8,11 @@ backtrace.
 
 ## The inbound gate
 
-| Configured token | `/health`, `/ready`, CORS preflight | Every other route | Reach beyond loopback |
+| Listener policy | `/health`, `/ready`, CORS preflight | Every other route | Reach beyond loopback |
 |---|---|---|---|
-| yes | served | `401` without a matching token | permitted |
-| no | served | served (or `403`, see below) | **refused at bind** |
+| `serve_local` (credential-required) | served | `401` without a credential; `403` if no token is configured | loopback only |
+| explicit compatibility `serve` | served | served unless another policy closes it | **refused at bind** without a token |
+| tailnet proxy-only Unix socket | liveness served | declared operator identity only | socket access is restricted |
 
 A token is presented as `Authorization: Bearer <token>` or `X-Sjel-Token: <token>`, and
 compared byte-by-byte in constant time. Two header forms because two kinds of client
@@ -25,10 +26,11 @@ would report a healthy capability as down, and their answer carries nothing a ca
 could not learn by observing that the port accepts a connection. `/routes` is **not**
 exempt: a route manifest describes the surface, which is not liveness.
 
-`InboundAuth::refuse_without_token()` closes the non-exempt routes with `403` instead of
-serving them when no token is configured. comms is the reason it exists: `POST /ingest`
-fetches an attacker-chosen URL, and a page open in the operator's own browser is already
-inside the loopback boundary, so `127.0.0.1` was never what contained that route.
+`InboundAuth::require_credential()` closes protected loopback routes even when no token is
+configured. A valid paired-device signature and an opted-in agent token remain separate,
+narrow credentials. `refuse_without_token()` is stricter: it requires the shared token itself
+and will not accept a tailnet identity or device signature. comms uses it because `POST /ingest`
+fetches an attacker-chosen URL.
 
 ### The tailnet identity gate
 
@@ -45,7 +47,7 @@ console, in `tailscale status`, and in the header of every request that arrives.
 |---|---|---|
 | no | anything | header ignored, the token rule alone decides |
 | yes | absent | the token rule alone decides — a direct loopback caller |
-| yes | the operator | served, without a token |
+| yes | the operator | served by the proxy-only socket; TCP still requires a token/device credential |
 | yes | anyone else | `401` |
 
 **Why the header can be trusted: the proxy overwrites it.** Measured against tailscale
@@ -54,11 +56,12 @@ and `X-Forwarded-For: 9.9.9.9` reached the backend as the authenticated node's o
 and 100.x address. A client cannot inject an identity through `tailscale serve`; it can
 only fail to have one.
 
-**What it does not do.** It does not change the loopback trust model — a process on this
-machine can write any header, so the identity means something only for requests the proxy
-created, and a local process already reaches `127.0.0.1:<port>` directly. And it never
-satisfies `refuse_without_token`: a route that opts into that wants the secret, not a
-name.
+**What it does not do.** A header alone does not prove proxy provenance on a direct TCP
+listener. Ordinary loopback routes therefore require the deployment token; the operator
+identity is accepted only by `tailnet_proxy_only`, on a Unix socket under the protected
+overlay `secrets/` directory. The managed agent sandbox denies that directory. The identity
+also never satisfies `refuse_without_token`: a route that opts into that wants the secret, not
+a name.
 
 **The failure it is exposed to, and what catches it.** Reconfigure `tailscale serve` as a
 raw TCP forward and no identity header is injected, every tailnet request becomes
@@ -69,9 +72,9 @@ exactly that shape, and on funnel being on at all (PRD N3).
 ### Token sourcing: one token for the deployment
 
 `<overlay>/config/deployment.env` declares `SJEL_INBOUND_TOKEN_FILE=<path>` and the token
-is that private file's contents (`schemas/deployment.env.example`). A reference, not a
-value, following the pattern comms established for `api_secret_file` — a path is not a
-secret, which is why it may live in a tracked-shape file.
+is that private file's contents (`schemas/deployment.env.example`). Run `tools/setup-inbound-auth.sh`
+from an operator terminal to provision it interactively. The declaration is a reference, not a
+value; the token remains in the private file and Vaultwarden.
 
 Shared rather than per-capability because it gates one thing: whether an inbound request
 reached this machine legitimately. Twelve tokens would be twelve secrets for one boundary

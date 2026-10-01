@@ -91,19 +91,72 @@ pub fn bind_addr_for(reach: Reach, port: u16, auth: &InboundAuth) -> Result<Sock
 
 /// Binds loopback, logs, serves, never returns on success.
 ///
-/// The gate comes from [`InboundAuth::from_deployment`], so declaring the
-/// deployment's token file is the one act that authenticates every capability
-/// that starts here. Until that file exists this behaves exactly as it did
-/// before the gate: loopback, no per-request check.
+/// Protected routes require a deployment credential. Enrolled agent tokens still take the
+/// read-only pseudonymization branch, and valid paired-device signatures remain credentials.
+/// Without a token, ordinary direct loopback requests fail closed.
 pub async fn serve_local(name: &str, port: u16, router: axum::Router) {
     serve(
         name,
         Reach::Loopback,
         port,
         router,
-        InboundAuth::from_deployment(),
+        InboundAuth::from_deployment().require_credential(),
     )
     .await
+}
+
+/// Serves a Unix-domain listener for a trusted reverse proxy. The socket path must be under
+/// the operator's protected overlay secrets directory, which the managed agent sandbox denies.
+/// The proxy-only gate rejects callers without the identity header Tailscale Serve injects.
+#[cfg(unix)]
+pub async fn serve_unix(
+    name: &str,
+    path: &std::path::Path,
+    router: axum::Router,
+    auth: InboundAuth,
+) {
+    use std::os::unix::fs::{FileTypeExt, PermissionsExt};
+
+    if let Some(parent) = path.parent() {
+        if let Err(error) = std::fs::create_dir_all(parent) {
+            eprintln!("{name}: cannot create Unix socket directory: {error}");
+            std::process::exit(1);
+        }
+    }
+    match std::fs::symlink_metadata(path) {
+        Ok(metadata) if metadata.file_type().is_socket() => {
+            if let Err(error) = std::fs::remove_file(path) {
+                eprintln!("{name}: cannot remove stale Unix socket: {error}");
+                std::process::exit(1);
+            }
+        }
+        Ok(_) => {
+            eprintln!("{name}: refusing to replace a non-socket at the Unix listener path");
+            std::process::exit(1);
+        }
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => {}
+        Err(error) => {
+            eprintln!("{name}: cannot inspect Unix listener path: {error}");
+            std::process::exit(1);
+        }
+    }
+    let listener = match tokio::net::UnixListener::bind(path) {
+        Ok(listener) => listener,
+        Err(error) => {
+            eprintln!("{name}: cannot bind Unix socket: {error}");
+            std::process::exit(1);
+        }
+    };
+    if let Err(error) = std::fs::set_permissions(path, std::fs::Permissions::from_mode(0o600)) {
+        eprintln!("{name}: cannot restrict Unix socket permissions: {error}");
+        std::process::exit(1);
+    }
+    let gated = authenticated(router, auth);
+    println!("{name} tailnet listener ready on protected Unix socket");
+    if let Err(error) = axum::serve(listener, gated).await {
+        eprintln!("{name}: Unix listener failed: {error}");
+        std::process::exit(1);
+    }
 }
 
 /// [`serve_local`] with the gate spelled out. For a capability that resolves
@@ -207,6 +260,12 @@ mod http_tests {
     use super::*;
     use axum::routing::get;
 
+    const OPERATOR: &str = "operator@example.com";
+
+    fn tailnet(auth: InboundAuth) -> InboundAuth {
+        auth.with_tailnet_operator(Some(OPERATOR.into()))
+    }
+
     async fn serve_router(auth: InboundAuth) -> String {
         let router = axum::Router::new()
             .route("/health", get(|| async { "ok" }))
@@ -263,7 +322,9 @@ mod http_tests {
 
     #[tokio::test]
     async fn an_agent_read_is_pseudonymized_and_secret_rows_are_withheld() {
-        let auth = InboundAuth::with_token(Some("full".into())).with_agent_access(agent_access());
+        let auth = InboundAuth::with_token(None)
+            .require_credential()
+            .with_agent_access(agent_access());
         let base = serve_agent_router(auth).await;
         let client = reqwest::Client::new();
         let response = client
@@ -282,17 +343,15 @@ mod http_tests {
         let text = body.to_string();
         assert!(!text.contains("Katrin") && !text.contains('@'), "{text}");
 
-        // The full token still gets the raw rows: the dashboard is unchanged.
-        let raw: serde_json::Value = client
+        // With no deployment token provisioned, ordinary callers remain closed. The agent
+        // credential is not promoted into a raw-data bypass; it only entered the agent branch.
+        let raw = client
             .get(format!("{base}/triage"))
-            .bearer_auth("full")
+            .bearer_auth("some-other-token")
             .send()
             .await
-            .unwrap()
-            .json()
-            .await
             .unwrap();
-        assert_eq!(raw.as_array().unwrap().len(), 2);
+        assert_eq!(raw.status().as_u16(), 403);
     }
 
     #[tokio::test]
@@ -556,6 +615,72 @@ mod http_tests {
                 .status(),
             401,
             "the manifest is surface description, not liveness"
+        );
+    }
+
+    #[tokio::test]
+    async fn a_credential_required_server_fails_closed_without_a_token() {
+        let base = serve_router(InboundAuth::with_token(None).require_credential()).await;
+        let client = reqwest::Client::new();
+        for path in ["/health", "/ready"] {
+            assert_eq!(
+                client
+                    .get(format!("{base}{path}"))
+                    .send()
+                    .await
+                    .unwrap()
+                    .status(),
+                200
+            );
+        }
+        for path in ["/routes", "/api/thing"] {
+            assert_eq!(
+                client
+                    .get(format!("{base}{path}"))
+                    .header("Tailscale-User-Login", OPERATOR)
+                    .send()
+                    .await
+                    .unwrap()
+                    .status(),
+                403,
+                "loopback callers cannot forge trusted-proxy identity"
+            );
+        }
+    }
+
+    #[tokio::test]
+    async fn the_proxy_only_listener_requires_the_declared_operator_identity() {
+        let auth = tailnet(InboundAuth::with_token(None)).tailnet_proxy_only();
+        let base = serve_router(auth).await;
+        let client = reqwest::Client::new();
+        assert_eq!(
+            client
+                .get(format!("{base}/api/thing"))
+                .send()
+                .await
+                .unwrap()
+                .status(),
+            401
+        );
+        assert_eq!(
+            client
+                .get(format!("{base}/api/thing"))
+                .header("Tailscale-User-Login", "stranger@example.com")
+                .send()
+                .await
+                .unwrap()
+                .status(),
+            401
+        );
+        assert_eq!(
+            client
+                .get(format!("{base}/api/thing"))
+                .header("Tailscale-User-Login", OPERATOR)
+                .send()
+                .await
+                .unwrap()
+                .status(),
+            200
         );
     }
 

@@ -14,6 +14,7 @@ path = "src/lib.rs"
 [dependencies]
 sjel-config = { path = "../sjel-config" }
 axum.workspace = true
+reqwest = { workspace = true, features = ["blocking"] }
 # The gate's refusal bodies are JSON because every consumer already parses the
 # capability's errors that way. No new build cost: axum's default features
 # already resolve serde_json for `axum::Json`.
@@ -34,7 +35,6 @@ sjel-pseudonymize = { path = "../pseudonymize" }
 # The gate is a middleware layer, so a handler called directly would skip the
 # thing under test. Same reasoning, same client, as comms' server tests.
 [dev-dependencies]
-reqwest.workspace = true
 tokio = { workspace = true, features = ["macros", "rt-multi-thread"] }
 
 [lints]

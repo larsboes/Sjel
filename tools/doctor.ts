@@ -424,7 +424,9 @@ export function findDanglingDecisionRefs(
   const seen = new Set<string>();
   for (const { path, text } of files) {
     for (const m of text.matchAll(/decisions\/([a-z0-9][a-z0-9-]*)/g)) {
-      if (ROUTE_PREFIX.test(text.slice(Math.max(0, (m.index ?? 0) - 64), m.index ?? 0))) continue;
+      const prefix = text.slice(Math.max(0, (m.index ?? 0) - 64), m.index ?? 0);
+      // `benchmarks/decisions/<file>` is the live model-evaluation dataset, not the dissolved decision archive.
+      if (ROUTE_PREFIX.test(prefix) || /(?:^|[^A-Za-z0-9_-])benchmarks\/$/.test(prefix)) continue;
       const slug = m[1];
       const key = `${path}::${slug}`;
       if (seen.has(key) || slugExists(slug)) continue;

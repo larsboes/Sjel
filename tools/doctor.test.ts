@@ -405,6 +405,13 @@ describe("findDanglingDecisionRefs", () => {
     )).toEqual([{ file: "README.md", slug: "dissolved-entry" }]);
   });
 
+  test("benchmark datasets under benchmarks/decisions are not legacy decision records", () => {
+    expect(findDanglingDecisionRefs(
+      [{ path: "research/local-decision-models.md", text: "`benchmarks/decisions/results/` and `research/benchmarks/decisions/cases.jsonl` and `[benchmarks/decisions/results/](benchmarks/decisions/results/)`" }],
+      alive,
+    )).toEqual([]);
+  });
+
   test("a live entry is not reported", () => {
     expect(findDanglingDecisionRefs(
       [{ path: "README.md", text: "See `CONTRIBUTING.md#three-architectural-nouns`." }], alive,

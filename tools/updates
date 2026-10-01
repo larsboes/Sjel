@@ -1,0 +1,30 @@
+#!/usr/bin/env bash
+# tools/updates — every piece of software installed outside this checkout: who owns moving it,
+# what has gone stale, and what nothing moves at all. The logic lives in updates.ts; this
+# launcher only resolves the overlay for it.
+#
+# It sources tools/lib/paths.sh and exports what it resolves, because the receipt this reads
+# lives in the overlay (<overlay>/data/host-patch/last.json) and the overlay's location is
+# resolved in one place — axon.local.toml, then axon.toml — never re-derived here.
+#
+# TypeScript runs through bun (CONTRIBUTING.md#language-tooling): this reads JSON receipts and
+# upstream marker files, parses three package managers' output shapes, and emits both a table and
+# a machine-readable payload, none of which tools/lib/toml.sh's single-line grep/sed contract can
+# express. Mirrors the tools/doctor and tools/self launcher pattern.
+#
+#   sjel update                 report: what is installed, who owns moving it, what is stale
+#   sjel update --json          the same, machine-readable (this is what a UI reads)
+#   sjel update --offline       receipts and installed versions only; no registry is asked
+#   sjel update apply [--only <class>...]
+#                               move what this tool owns, and delegate the rest
+# bash 3.2-safe.
+set -euo pipefail
+
+_here="$(cd "$(dirname "${BASH_SOURCE[0]:-$0}")" && pwd)"
+# shellcheck source=tools/lib/paths.sh
+. "$_here/lib/paths.sh"   # SJEL_ROOT, SJEL_OVERLAY_ROOT, SJEL_PERSONAL_ROOT, SJEL_MACHINE_TOML
+
+export SJEL_UPDATES_ROOT="$SJEL_ROOT"
+export SJEL_UPDATES_OVERLAY="$SJEL_OVERLAY_ROOT"
+
+exec bun "$_here/updates.ts" "$@"

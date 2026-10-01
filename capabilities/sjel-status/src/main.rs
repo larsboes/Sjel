@@ -117,6 +117,16 @@ const ROUTES: &[route_manifest::Route] = &[
     ),
     r(
         "GET",
+        "/api/sjel-status/updates",
+        "Software installed outside this checkout: who owns moving each class, what is stale, and the last apply's outcome. From tools/updates' own report --json.",
+    ),
+    r(
+        "POST",
+        "/api/sjel-status/updates/apply",
+        "Start one class of software moving. Body: { class } from brew, uv, rustup, graphify, interceptor, cargo, npm. Answers 202 immediately; the tool writes a receipt the next GET carries as lastApply.",
+    ),
+    r(
+        "GET",
         "/api/sjel-status/agent",
         "The agent's reach: enrolment, each capability's mode, writes waiting for the owner, and the latest calls.",
     ),
@@ -376,6 +386,11 @@ fn build_router(shell: proxy::Proxy) -> Router {
             post(upstream_watch_handler),
         )
         .route("/api/sjel-status/storage", get(storage_handler))
+        .route("/api/sjel-status/updates", get(updates_handler))
+        .route(
+            "/api/sjel-status/updates/apply",
+            post(updates_apply_handler),
+        )
         .route(
             "/api/sjel-status/session/ticket",
             post(session::ticket_handler),
@@ -873,6 +888,70 @@ mod origin_tests {
         ] {
             assert_eq!(reply(legacy).await, current, "{legacy}");
         }
+    }
+
+    /// The apply route takes a JSON body, so unlike the three above it is not a CORS *simple*
+    /// request and a hostile page would need a preflight this surface never grants. It is
+    /// asserted anyway, for the invariant rather than the attack: the route is mounted above
+    /// `build_router`'s guard line, and an edit that moved it below would lose the guard with
+    /// nothing to say so — the same failure the three above exist to catch.
+    #[tokio::test]
+    async fn a_foreign_origin_cannot_start_an_apply() {
+        assert_eq!(
+            answer(
+                "POST",
+                "/api/sjel-status/updates/apply",
+                Some("https://evil.example")
+            )
+            .await,
+            StatusCode::FORBIDDEN,
+            "the apply route is registered below the guard layer"
+        );
+    }
+
+    /// The other half of the same invariant: the dashboard's own origin, and a caller with no
+    /// origin at all (curl, the Mac app), must still reach the handler. A guard that refused
+    /// everything would pass the test above and break the panel.
+    #[tokio::test]
+    async fn the_dashboard_origin_reaches_the_apply_route() {
+        // Not FORBIDDEN. The handler itself may answer anything — this machine may have no
+        // overlay, or no `tools/updates` — so the assertion is only about the guard.
+        assert_ne!(
+            answer("POST", "/api/sjel-status/updates/apply", None).await,
+            StatusCode::FORBIDDEN,
+            "a caller with no origin was refused by the guard"
+        );
+    }
+
+    /// The route is wired, not merely declared in `ROUTES`. A `GET` that fell through to the page
+    /// fallback would answer 200 `text/html`, which a panel renders as a blank section rather than
+    /// as an error — and `undeclared_routes` only checks the other direction, so nothing else here
+    /// would notice.
+    ///
+    /// The content type is asserted rather than the body: on a machine with no overlay the handler
+    /// answers 502 with a JSON error, and that is still proof the route was reached.
+    #[tokio::test]
+    async fn the_updates_route_answers_json_and_not_the_page_fallback() {
+        let response = router()
+            .oneshot(
+                Request::builder()
+                    .uri("/api/sjel-status/updates")
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .expect("the router answers");
+        assert_ne!(response.status(), StatusCode::NOT_FOUND);
+        let kind = response
+            .headers()
+            .get(axum::http::header::CONTENT_TYPE)
+            .and_then(|v| v.to_str().ok())
+            .unwrap_or_default()
+            .to_string();
+        assert!(
+            kind.contains("json"),
+            "the updates route fell through to the fallback: {kind}"
+        );
     }
 
     /// Each of these three takes `Path(name)` and no body, so a hostile page

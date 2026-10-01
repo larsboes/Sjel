@@ -652,6 +652,99 @@ the call log, because it already owns the Systems page. The MCP server is operat
 - [ ] ISC-50 — every agent call leaves one log row with no body, and the Systems page shows the
   latest. Falsifier: an agent call with no row. Probe: gate tests and the page.
 
+### F11 · What nothing was moving
+
+Why: `capabilities/host-patch` moves brew, uv and rustup nightly (Q77),
+`capabilities/container-refresh` moves the images, and the agent harnesses move themselves.
+Everything else was moved only when somebody remembered it existed. Measured 2026-10-01 on this
+host: four `cargo install`ed crates, all four behind — including `macmon` 0.7.0 against 0.8.2,
+whose only declared update path is `toolchain.toml` [macmon]'s own install hint — and eleven
+stale global npm packages, none of which anything had ever asked about. The two upstream harness
+integrations had gone 21 days since upstream's installer last wrote their files.
+
+Placement, per `Packs/harness/skills/sjel/references/on-placement.md`: a new tool in `tools/`
+("Repository identity, install, wiring, or operator machinery"), reached as `sjel update`. No new
+capability and no new route on the CLI side — the scheduled jobs stay the owners of what they own
+and this reports and delegates to them. The one thing it must never do is grow a second
+`brew upgrade`: one binary, one owner is `tools/host-patch.sh`'s own rule, and PRD §13 is what
+this deployment paid the last time it was broken.
+
+- [x] ISC-51 — `sjel update` reports every class of installed software with its owner named, and
+  exits 1 when anything is stale. Falsifier: a class of installed software that no row names, or
+  a stale row with no owner. Probe: `sjel update`, and `sjel update --json` against the table.
+  Evidence, 2026-10-01: ten classes, 15 stale rows on this host, every one carrying the command
+  that moves it. The row set is `SURFACES` in `tools/updates.ts`, and a unit test asserts every
+  row groups under a known surface so the renderer cannot drop one silently.
+- [x] ISC-52 — `apply` moves only what nothing else owns, and delegates the rest to its owner.
+  Falsifier: `apply` runs a package manager whose binaries already have an owner. Probe: unit
+  test over the plan, asserting no step's argv contains `brew upgrade`, `uv tool` or
+  `rustup update`. Evidence, 2026-10-01: brew, uv and rustup go through `tools/host-patch.sh`;
+  the integrations through `tools/agent-integrations.sh update`; only cargo and npm are run
+  directly, because nothing else runs them.
+- [x] ISC-53 — the report distinguishes "the job ran" from "something is newer", and never
+  prints an unchecked class as current. Falsifier: a `--offline` run that reports a row current
+  without having asked. Probe: `sjel update --offline`, and the unit test asserting no registry
+  is consulted. Evidence, 2026-10-01: brew answers for itself via `brew outdated`, rustup via
+  `rustup check`, and the job's receipt is reported as a note rather than folded into a status,
+  because the audit's verdict is a fact about the machine and not about brew.
+- [x] ISC-54 — a pre-release that merely sorts higher is named and not adopted. Falsifier:
+  `apply` installs an `-alpha`/`-beta` over a stable release. Probe: `cargo search tauri-cli`
+  answers `3.0.0-alpha.4` over the installed `2.12.0`; the row must say current. Evidence,
+  2026-10-01: the row reads `newer pre-release 3.0.0-alpha.4 exists — not adopted` with no
+  action, asserted in `tools/updates.test.ts`.
+- [x] ISC-55 — the Systems page shows what is stale and what nothing owns, from the tool's own
+  `--json`, and can start one class moving. Falsifier: the page renders no updates panel, or
+  `sjel update --json` exits non-zero without emitting it. Probe: `sjel update --json` and the
+  page. Evidence, 2026-10-01: `GET /api/sjel-status/updates` serves the report and
+  `POST /api/sjel-status/updates/apply` starts one class, both mounted above `build_router`'s
+  origin-guard line and declared in `ROUTES` (the coverage test passes both ways). The apply
+  route answers `202` before the work starts and the tool writes
+  `<overlay>/data/updates/last-apply.json`, which every report carries as `lastApply` — because
+  `apply --only cargo` was measured at 5m06s for three crates, and a held request would have
+  timed out in the browser while the install succeeded. Verified: 62 Rust tests, 977 root bun
+  tests, 215 dashboard tests, `svelte-check` 0 errors, 17/17 repo gates, and the panel present in
+  the built bundle (`dashboard/dist/_app/immutable/nodes/23.*.js`). NOT verified: the panel
+  rendering in a browser, because every route here needs the operator's credential and an agent
+  session is refused one by design (403 `no inbound token is configured` on `/storage` too, which
+  is pre-existing). That check is the operator's, and it is the one thing this ISC still owes.
+  The apply button is narrower than the CLI on purpose: `APPLY_CLASSES` in
+  `capabilities/sjel-status/src/status/updates.rs` omits `containers`, `checkout` and `vendor`,
+  which already have owners, and the class is an allowlist because it becomes an argv element.
+
+- [x] ISC-56 — the report never recommends an upgrade that would break a constraint, and never
+  one the registry has deprecated. Falsifier: a row offering an action whose version another
+  global's range does not admit, or whose package npm marks deprecated. Probe: `sjel update`
+  against `npm ls -g --json --all` and `npm view <pkg> deprecated`. Evidence, 2026-10-01: the
+  first version of this tool recommended three upgrades that were all wrong —
+  `@mariozechner/pi-agent-core` and `@sinclair/typebox` are `^0.52.12` / `^0.34.48` requirements
+  of `claude-agent-sdk-pi` and `@marckrenn/pi-sub-bar` (so 0.73.1 is not admitted, and npm's own
+  `wanted` column cannot see this because the range belongs to a different package), and the
+  whole `@mariozechner` scope is deprecated in favour of `@earendil-works`. Both are now rows
+  with a reason and no action. The version-aware refinement came next: matching a parent's
+  subtree by NAME conflated a hoisted pin with a leftover, so a parent that bundles its own copy
+  now reads `unused duplicate` rather than `pinned by`.
+- [x] ISC-57 — `tools/agent-integrations.sh update interceptor` updates the product and dates its
+  marker. Falsifier: the verb exits non-zero, or the harnesses' marker keeps its old date after a
+  successful run. Probe: `tools/agent-integrations.sh update interceptor` and the marker's
+  contents. Evidence, 2026-10-01: the branch called `interceptor upgrade`, which on 1.0.19 is
+  "Promote browser-only install to full computer-use mode (macOS)" and exits 1 without `--full`
+  — so `interceptor skills`, the second half of the pair, had never once run, and the marker sat
+  at 2026-09-10 through every "update". It is `interceptor update` (the product's own appcast),
+  and the branch now writes the marker for each configured harness the way graphify's arm does.
+  All four markers read 2026-10-01 after the fix. upstreams.toml [interceptor] said "its own
+  update/upgrade verbs keep it current"; the half that was true is `update`.
+
+- [x] ISC-58 — the newest STABLE release decides a crate's row, not the newest release. Falsifier:
+  a crate whose newest stable is above the installed version while a pre-release sorts higher is
+  reported current. Probe: `sjel update` against `https://crates.io/api/v1/crates/<name>/versions`.
+  Evidence, 2026-10-01: `cargo search tauri-cli` answers only the maximum, which was
+  `3.0.0-alpha.4`, so this tool called the crate current and hid the released patch `2.12.1`
+  above the installed `2.12.0` — the fix is a crate that was already on this machine and had a
+  one-line upgrade waiting. The full version list is now read (crates.io 403s without a
+  User-Agent, measured), yanked releases are dropped, and a pre-release above the newest stable
+  is still named on the row so the reader sees both facts. `cargo search` remains the fallback
+  when crates.io does not answer.
+
 ## Not yet specified
 
 - **knowledge-graph link prediction over the vault.** `knowledge-graph` serves the code
@@ -751,6 +844,16 @@ the call log, because it already owns the Systems page. The MCP server is operat
 
 ## Decisions
 
+- **2026-10-01 — the software nothing owns gets a report and a front door** (principal's call).
+  `sjel update` reports every class of installed software with its owner, and `apply` moves what
+  nothing else moves while delegating the rest to its owner. Recorded as F11. The UI was decided
+  in a second round and overruled the read-only recommendation: the Systems panel gets an apply
+  button, which is a mutation path from a web page to host package installs. What makes that
+  acceptable is narrower than it sounds — sjel-status is the one capability that admits no agent
+  token at all (ISC-47), the route inherits the origin guard and the session verifier from
+  `build_router`'s layers, and `APPLY_CLASSES` refuses every class another tool already owns.
+  cargo and npm stay unscheduled (decided the same day): they remain a report you run, and
+  nothing compiles in the background at 3am.
 - **2026-09-30 — the gate pseudonymizes agent reads; pseudonymized c2 may reach an agent**
   (principal's call). Recorded as F9. An own agent token, reversible per-session tokens, c3
   never. Amends Q27 for agent reads.
@@ -794,6 +897,47 @@ the call log, because it already owns the Systems page. The MCP server is operat
 
 ## Log
 
+- 2026-10-01 · F11 finished, and the rest of the machine with it. `tauri-cli` was the last
+  upgrade and it was invisible: `cargo search` reports only the maximum version, so the released
+  patch 2.12.1 sat hidden behind `3.0.0-alpha.4` and the tool called the crate current (ISC-58,
+  now 2.12.1). The pre-existing audit finding was one package: `devalue` was pinned to exactly
+  5.9.2 in `dashboard/package.json` and `capabilities/soundscape/ui/package.json`, carrying 14
+  advisories (8 High, worst 8.2) against a fix in 5.9.3 — bumped to 5.9.3 in both, which
+  satisfies the `^5.9.2` ranges svelte and kit ask for where 6.x would not. `tools/audit` now
+  exits 0, so the host-patch receipt's `audit: finding` should clear on the next run. Two
+  leftovers were removed rather than upgraded, neither deprecated and neither a version problem:
+  npm's `uv@1.4.0` (an unrelated JS library with no bin and no dependents, colliding on the name
+  with brew's uv) and `websockets` 16.0 in brew's python site-packages, which pip refuses to
+  touch under PEP 668 and brew discards on the next python bump. That second one is why no `pip`
+  class was added to `sjel update`: a class that can only hold leftovers in a directory brew
+  wipes is a warning channel that stops being read. Everything else on the machine is already
+  current — ollama 0.35.0 is the latest release, and pi and Claude Code self-update and sit at
+  their latest. **`sjel update` reports nothing stale and exits 0.**
+- 2026-10-01 · F11 continued, and the upgrade of everything else run through it. 11 stale npm
+  globals were not 11 upgrades: `claude-agent-sdk-pi@1.0.22` and `@marckrenn/pi-sub-bar@1.5.0`
+  dropped the `@mariozechner` lineage first (the latter only partly — it still bundles
+  `@mariozechner/pi-coding-agent@0.73.1`, which upstream has not migrated), which released
+  `@sinclair/typebox`. Done: pi-sub-bar 1.5.0, server-filesystem 2026.8.31, playwright/cli
+  0.1.22, claude-agent-sdk-pi 1.0.22, defuddle 0.19.4, typebox 0.34.52, npm 12.2.0, pnpm 12.8.1,
+  openjpeg 2.5.4_1, and both integration markers re-derived to today. The three leftovers were
+  then REMOVED rather than upgraded (principal's call): `@mariozechner/pi-agent-core`, `pi-tui`
+  and `pi-web-ui` at 0.52.12 were the pre-rename scope, which npm deprecates outright, and
+  removing them took 64 packages with them. `sjel update` now reports nothing stale and exits 0 —
+  the first time this machine has had a single answer to "is everything current". Two tool
+  defects were found by using it (ISC-56) and one in `tools/agent-integrations.sh` that predates
+  this work (ISC-57). The `apply --only brew` step reports as failed on this host because
+  `tools/host-patch.sh` ends in `tools/audit`, whose pre-existing finding makes it exit 1 — the
+  brew, uv and rustup steps themselves succeeded.
+- 2026-10-01 · F11 built: `tools/updates` + `sjel update`, 53 unit tests, ISC-51…54 pass. Live
+  probe on this host found four stale `cargo install`ed crates (macmon 0.7.0 → 0.8.2, at the
+  `toolchain.toml` floor) and eleven stale global npm packages, and named the one trap worth
+  encoding: `cargo search` returns pre-releases, so `tauri-cli` answered `3.0.0-alpha.4` over an
+  installed `2.12.0` and ISC-54 exists because of it. The graphify and interceptor integration
+  markers both read 2026-09-10 — 21 days — which is the drift ISC-51's row now shows.
+  `apply --only cargo --yes` was then run on this host: bottom 0.14.7→0.14.9, macmon
+  0.7.0→0.8.2, xberg-cli 1.0.14→1.3.0, 5m06s, `tauri-cli` left at 2.12.0 because only an alpha was
+  newer. The Systems panel and its two routes landed the same day (ISC-55), verified by test
+  rather than by eye — see that ISC for what could not be checked from an agent session.
 - 2026-09-30 · ISC-31 landed: `sjel-status` serves `sjel storage report --json` at
   `GET /api/sjel-status/storage`, and the Systems page draws it — checked figure by figure
   against the tool, not against a 200. Reaching the page found a bug older than the feature: the

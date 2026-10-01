@@ -34,6 +34,17 @@ pull, on the hosts that run containers; `grype` is the scan, in
 `.github/workflows/security.yml`, which installs it itself and runs whether or not this Mac is
 awake.
 
+## The half this job does not cover
+
+Everything above is a class this job or `container-refresh` already owns. The classes nothing
+owned were invisible until 2026-10-01, when four `cargo install`ed crates and eleven global npm
+packages were found behind and the two upstream harness integrations had gone three weeks since
+upstream's installer last wrote them. `sjel update` is that surface: it reports every class with
+its owner named, and `apply` moves only what nothing else moves — `cargo install`ed crates and
+`npm -g` packages — while sending brew, uv and rustup straight back through this script. It
+deliberately does not reimplement a step below, for the one-owner reason this file states twice
+already. See `tools/updates.ts` and ISA.md F11.
+
 ## The cadence, honestly
 
 A launchd `StartInterval` job does not fire while the Mac sleeps; it runs once on wake. So "every
@@ -74,3 +85,5 @@ recorded in `capabilities/backup/service.toml`.
 - A failing upgrade step does not stop the steps after it, and the run exits 2 with the step
   named in the receipt.
 - `tools/doctor` reports the receipt's age, and warns once it is over 48 hours old.
+- `sjel update` reports this job's receipt as one row among the classes, and never as a claim
+  that the audit was clean.

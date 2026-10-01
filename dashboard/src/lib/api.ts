@@ -1812,6 +1812,71 @@ export interface StorageReport {
   expected_service: Array<{ kind: string; name: string; note: string }>;
 }
 
+/** Who owns moving one class of installed software. The tool's own vocabulary, verbatim:
+ *  `scheduled` a capability moves it · `manual` a verb exists and nothing schedules it ·
+ *  `unowned` nothing moves it · `self` the vendor does. */
+export type UpdateOwner = 'scheduled' | 'manual' | 'unowned' | 'self';
+
+/** current · stale · unknown · n/a. `unknown` is a claim the tool refuses to make rather
+ *  than a soft "current" — a `--offline` report says so on every row it did not check. */
+export type UpdateStatus = 'current' | 'stale' | 'unknown' | 'n/a';
+
+/** One class of installed software and who moves it, as `tools/updates.ts` `SURFACES`
+ *  declares it. Sent with the report so the panel renders the tool's reasoning rather
+ *  than a second copy of the ownership table. */
+export interface UpdateSurface {
+  id: string;
+  title: string;
+  owner: UpdateOwner;
+  ownerDetail: string;
+  /** Whether `apply` moves this class. A `self` class is never actionable: that would be
+   *  a second updater for a binary that already has one. */
+  actionable: boolean;
+  why: string;
+}
+
+/** One row: a package, a crate, an integration or a class's own receipt line. */
+export interface UpdateRow {
+  surface: string;
+  name: string;
+  owner: UpdateOwner;
+  ownerDetail: string;
+  installed?: string;
+  latest?: string;
+  status: UpdateStatus;
+  /** The command that moves it. Present only on rows the tool can act on. */
+  action?: string;
+  note?: string;
+}
+
+/** What `apply` recorded, written by the tool and carried on every report.
+ *
+ *  This is how the panel learns an outcome it did not wait for: the apply route answers
+ *  `202` before the work starts, because a cargo step compiles for minutes and a held
+ *  request would time out while the install succeeded. */
+export interface UpdateApply {
+  at?: string;
+  class?: string;
+  steps?: number;
+  failed?: number;
+  stillStale?: number;
+  state?: 'running' | 'done' | 'failed';
+}
+
+/** `sjel update --json`, passed through verbatim.
+ *
+ *  Served by sjel-status rather than by `tools/updates`, which is operator machinery with
+ *  no server — the same arrangement `storage` above has, and for the same reason. A
+ *  non-zero exit is not an error: `report` exits 1 whenever anything is stale, which is
+ *  the answer the panel exists to show. */
+export interface UpdatesReport {
+  generatedAt: string;
+  offline: boolean;
+  lastApply: UpdateApply | null;
+  surfaces: UpdateSurface[];
+  rows: UpdateRow[];
+}
+
 /** One Pack skill (or the agents/ tree) as one harness currently holds it. */
 export interface PackUnitView {
   pack: string;
@@ -1909,6 +1974,24 @@ export const axonStatus = {
    *  how `report` says free space is below the policy's critical threshold. */
   storage: (signal?: AbortSignal) =>
     request<StorageReport>('/sjel-status/api/sjel-status/storage', signal ? { signal } : undefined),
+  /** Software installed outside this checkout, from the tool's own `report --json`.
+   *
+   *  A non-zero exit is not an error here either: `report` exits 1 whenever anything is
+   *  stale, which is exactly the answer this call exists to fetch. */
+  updates: (signal?: AbortSignal) =>
+    request<UpdatesReport>('/sjel-status/api/sjel-status/updates', signal ? { signal } : undefined),
+  /** Start one class of software moving.
+   *
+   *  `202` means STARTED, not finished: the handler spawns the tool detached because a
+   *  cargo step compiles for minutes, and the outcome arrives on the next `updates()` call
+   *  as `lastApply`. Polling the report is the whole progress mechanism — there is no
+   *  second endpoint and no state held in sjel-status. */
+  updatesApply: (className: string) =>
+    request<{ started: boolean; class: string }>('/sjel-status/api/sjel-status/updates/apply', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ class: className }),
+    }),
   /** The agent's reach (ISA F10): each capability's mode, writes waiting, latest calls. */
   agent: (signal?: AbortSignal) =>
     request<AgentView>('/sjel-status/api/sjel-status/agent', signal ? { signal } : undefined),

@@ -39,6 +39,8 @@ Discover Sjel:
   context on [unit-or-path]      Emit bounded current repository context
   storage <report|apply|target|prune>
                                  What is filling this disk, and what is safe to reclaim
+  update [--json|--offline]      Software installed outside this checkout, and what is stale
+  update apply [--only <class>]  Move what Sjel owns, and delegate the rest
 
 Check a change before pushing it:
   gates                          Run CI's repo gates here, from CI's own definition
@@ -108,6 +110,23 @@ Usage: sjel storage <command>
   prune [--incremental] [--target] [--node-modules] [--dry-run]
 
 Policy: <overlay>/config/storage-policy.toml. See tools/storage/README.md.
+EOF
+      ;;
+    update) cat <<'EOF'
+Usage: sjel update [report|apply] [--json] [--offline] [--only <class>...]
+
+  report [--json]   what is installed outside this checkout, who owns moving each
+                    class, and what has gone stale; --offline reads receipts and
+                    installed versions without asking a registry anything
+  apply             move what nothing else owns (cargo binaries, npm -g packages)
+                    and delegate the rest to its owner: brew/uv/rustup go through
+                    tools/host-patch.sh, the two integrations through their verb
+
+Classes for --only:
+  brew uv rustup containers graphify interceptor checkout cargo npm vendor
+
+Report exits 1 when something is stale. Apply exits 1 when there was nothing to do.
+The --json payload is the stable surface a UI reads; see tools/updates.ts.
 EOF
       ;;
     gates|test) cat <<'EOF'
@@ -401,6 +420,9 @@ case "${1:-help}" in
   # Same delegation as doctor: the launcher owns the overlay resolution and the lazy
   # release build, so there is one implementation of both.
   storage) shift; exec "$SJEL_ROOT/tools/storage/storage" "$@" ;;
+  # Same delegation: the launcher owns the overlay resolution the receipt needs, and the tool
+  # itself owns the class table, so there is one implementation of each.
+  update) shift; exec "$SJEL_ROOT/tools/updates" "$@" ;;
   # Same delegation again, and the job names are CI's own. `gates` and `test` are two
   # jobs of one workflow, not two tools: tools/ci-local reads the step list out of
   # .github/workflows/ci.yml so neither verb can drift from what the push will run.

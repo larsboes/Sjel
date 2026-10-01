@@ -32,32 +32,14 @@ pub(crate) async fn storage_handler() -> Result<Json<Value>, (StatusCode, Json<V
         .output()
         .await
         .map_err(|e| bad_gateway(format!("could not run tools/storage: {e}")))?;
-    interpret_report(&out.stdout, &out.stderr, out.status.code())
+    interpret_tool_report("tools/storage", &out.stdout, &out.stderr, out.status.code())
         .map(Json)
         .map_err(bad_gateway)
 }
 
-/// The handler's whole decision, split out so the rule above is a test rather than a
-/// comment: a parseable report is the answer whatever the exit code says, and the exit
-/// code and stderr are context for the failure when it is not.
-pub(crate) fn interpret_report(
-    stdout: &[u8],
-    stderr: &[u8],
-    exit_code: Option<i32>,
-) -> Result<Value, String> {
-    match serde_json::from_slice(stdout) {
-        Ok(report) => Ok(report),
-        Err(parse_error) => Err(format!(
-            "tools/storage did not emit JSON (exit {}): {} — {parse_error}",
-            match exit_code {
-                Some(code) => code.to_string(),
-                None => "killed by signal".to_string(),
-            },
-            String::from_utf8_lossy(stderr).trim(),
-        )),
-    }
-}
-
+/// The handler's whole decision lives in [`super::interpret_tool_report`], shared with
+/// `updates.rs` because the rule is the same rule: a parseable report is the answer whatever
+/// the exit code says, and the exit code and stderr are context for the failure when it is not.
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -67,8 +49,13 @@ mod tests {
     /// reader most needs; treating the exit code as failure would serve a 502 instead.
     #[test]
     fn a_report_that_exits_over_threshold_is_still_the_answer() {
-        let report = interpret_report(br#"{"state":"critical","disk":{"free":1}}"#, b"", Some(1))
-            .expect("an over-threshold report is data, not a failure");
+        let report = interpret_tool_report(
+            "tools/storage",
+            br#"{"state":"critical","disk":{"free":1}}"#,
+            b"",
+            Some(1),
+        )
+        .expect("an over-threshold report is data, not a failure");
         assert_eq!(report["state"], "critical");
     }
 
@@ -76,8 +63,13 @@ mod tests {
     /// tool's own stderr and exit code or it says nothing a reader can act on.
     #[test]
     fn unparseable_output_reports_the_exit_code_and_stderr() {
-        let error = interpret_report(b"", b"storage: no policy at /nowhere\n", Some(2))
-            .expect_err("empty output is not a report");
+        let error = interpret_tool_report(
+            "tools/storage",
+            b"",
+            b"storage: no policy at /nowhere\n",
+            Some(2),
+        )
+        .expect_err("empty output is not a report");
         assert!(error.contains("exit 2"), "{error}");
         assert!(error.contains("no policy at /nowhere"), "{error}");
     }

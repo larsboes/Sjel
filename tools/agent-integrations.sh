@@ -589,9 +589,28 @@ cmd_update() {  # update [<upstream>...]
         done
         ;;
       interceptor)
-        # the product's own updater, then re-adopt its skills for the harnesses
+        # `interceptor update`, NOT `interceptor upgrade`. Measured 2026-10-01 on 1.0.19:
+        # `upgrade` is "Promote browser-only install to full computer-use mode (macOS)" and exits
+        # 1 without `--full`, so `interceptor skills` — the second half of the pair — had never
+        # once run, and the harnesses' skills marker kept whatever date it was given by hand.
+        # `update` is the verb that asks the product's own appcast
+        # (https://updates.hackervalley.media/appcast.xml); `skills` re-adopts the five skills
+        # the product owns. upstreams.toml [interceptor] said "its own update/upgrade verbs keep
+        # it current" — the half that was true is `update`, and this is that half.
         if command -v interceptor >/dev/null 2>&1; then
-          interceptor upgrade && interceptor skills
+          # The marker records the DATE the skills were last re-adopted, and `sjel update` reads
+          # that date to say whether the integration has drifted. Without the write below the
+          # branch refreshed the skills and left the date at whatever it had been, so a
+          # successful update still read as three weeks stale. graphify's arm above writes its
+          # marker for the same reason; this arm was missing the other half of its own pair.
+          if interceptor update && interceptor skills; then
+            local h
+            for h in $(configured_harnesses); do
+              interceptor_write_marker "$h"
+            done
+          else
+            echo "  ✗ interceptor update or skills failed — the marker is left alone so the\n    integration keeps reading as stale rather than being dated by a failed run" >&2
+          fi
         else
           echo "  interceptor CLI not found — install the product first (its own installer)" >&2
         fi

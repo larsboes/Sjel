@@ -2,9 +2,10 @@
   import { onDestroy, onMount } from "svelte";
   import Icon from "$lib/Icon.svelte";
   import PageHeader from "$lib/PageHeader.svelte";
-  import { axonStatus, macmon, type MacmonSample, type StorageReport } from "$lib/api";
+  import { axonStatus, macmon, type MacmonSample, type StorageReport, type UpdatesReport } from "$lib/api";
   import { formatBytes, storageView } from "$lib/systems/storage";
   import AgentPanel from "$lib/systems/AgentPanel.svelte";
+  import { applySummary, updatesView, versionLabel } from "$lib/systems/updates";
 
   let macmonState = $state<"checking" | "up" | "down">("checking");
   let sample = $state<MacmonSample | null>(null);
@@ -18,6 +19,50 @@
   let storage = $state<StorageReport | null>(null);
   let storageErr = $state<string | null>(null);
   const view = $derived(storage ? storageView(storage) : null);
+
+  // Updates, fetched on demand rather than on macmon's 3 s beat for a stronger reason than
+  // storage's: `report` asks three registries and one crate registry per crate, so polling it
+  // would be a dozen network calls every three seconds. Null while in flight.
+  let updates = $state<UpdatesReport | null>(null);
+  let updatesErr = $state<string | null>(null);
+  let applyErr = $state<string | null>(null);
+  let applyTimer: ReturnType<typeof setInterval> | undefined;
+  const updView = $derived(updates ? updatesView(updates) : null);
+  const updSummary = $derived(updView ? applySummary(updView) : "");
+
+  /** Refetch the report, and stop polling once nothing is running. */
+  function loadUpdates() {
+    axonStatus
+      .updates()
+      .then((d) => {
+        updates = d;
+        updatesErr = null;
+        if (d.lastApply?.state !== "running" && applyTimer) {
+          clearInterval(applyTimer);
+          applyTimer = undefined;
+        }
+      })
+      .catch((e) => { updatesErr = e instanceof Error ? e.message : String(e); });
+  }
+
+  /**
+   * Start one class moving. The route answers 202 — started, not finished — because the
+   * cargo and host-patch steps compile for minutes, and a request held that long would time
+   * out in the browser while the install succeeded. So the poll below IS the progress: the
+   * tool writes a receipt and every report carries it as `lastApply`.
+   */
+  async function applyClass(className: string) {
+    applyErr = null;
+    try {
+      await axonStatus.updatesApply(className);
+    } catch (e) {
+      applyErr = e instanceof Error ? e.message : String(e);
+      return;
+    }
+    loadUpdates();
+    if (applyTimer) clearInterval(applyTimer);
+    applyTimer = setInterval(loadUpdates, 4_000);
+  }
 
   /** °C → CSS class name */
   function tempClass(celsius: number): string {
@@ -59,6 +104,8 @@
       .then((d) => { storage = d; storageErr = null; })
       .catch((e) => { storageErr = e instanceof Error ? e.message : String(e); });
 
+    loadUpdates();
+
     const poll = () => {
       macmon
         .json()
@@ -79,6 +126,7 @@
 
   onDestroy(() => {
     if (pollTimer) clearInterval(pollTimer);
+    if (applyTimer) clearInterval(applyTimer);
   });
 </script>
 
@@ -334,6 +382,87 @@
         {/if}
       </div>
     </div>
+  {/if}
+</section>
+
+<!-- ─── Updates ──────────────────────────────────────────────────────────
+     The same delegation shape as Storage above: `tools/updates` measures and
+     sjel-status serves it, so the ownership table cannot drift from the tool's
+     own. The Apply button is the only write on this page, and it answers 202 —
+     the outcome arrives on the next poll as `lastApply`, which is why the panel
+     shows what the last run did rather than a spinner that outlives it. ──────── -->
+<section class="updates">
+  <h2 class="section-head">
+    <Icon name="boxes" size={14} />
+    Updates
+    {#if updView}
+      <span class="state" class:warn={updView.stale > 0}>
+        {updView.stale > 0 ? `${updView.stale} stale` : "nothing stale"}
+      </span>
+    {/if}
+  </h2>
+
+  {#if updatesErr}
+    <div class="card err-card">
+      <p class="err">
+        <Icon name="alert" size={14} />
+        Update report unavailable
+      </p>
+      <p class="err-detail mono">{updatesErr}</p>
+    </div>
+  {:else if !updView}
+    <p class="loading"><Icon name="loader" size={14} /> asking three registries…</p>
+  {:else}
+    {#if updSummary}
+      <p class="upd-summary" class:running={updView.busy}>
+        {#if updView.busy}<Icon name="loader" size={12} />{/if}
+        {updSummary}
+      </p>
+    {/if}
+    {#if applyErr}
+      <p class="err-detail mono">{applyErr}</p>
+    {/if}
+
+    {#each updView.groups as group (group.surface.id)}
+      <div class="upd-group">
+        <h3 class="col-head">
+          <span title={group.surface.why}>{group.surface.title}</span>
+          <span class="dim mono">{group.surface.ownerDetail}</span>
+          {#if group.actionable > 0 && !updView.busy}
+            <button class="btn btn-soft" onclick={() => applyClass(group.surface.id)}>
+              <Icon name="refresh" size={12} />
+              Apply {group.actionable}
+            </button>
+          {/if}
+        </h3>
+        <ul class="upd-list">
+          {#each group.rows as row (`${row.surface}-${row.name}`)}
+            <li class="upd-row">
+              <span class="upd-mark {row.status}">
+                {#if row.status === "stale"}
+                  <Icon name="alert" size={12} />
+                {:else if row.status === "current"}
+                  <Icon name="check" size={12} />
+                {:else if row.status === "unknown"}
+                  <span class="mono">?</span>
+                {:else}
+                  <span class="mono">·</span>
+                {/if}
+              </span>
+              <span class="upd-name mono" title={row.name}>{row.name}</span>
+              <span class="upd-vers mono dim">{versionLabel(row)}</span>
+              <span class="upd-note dim">{row.note}</span>
+            </li>
+          {/each}
+        </ul>
+      </div>
+    {/each}
+
+    {#if updView.unknown > 0}
+      <p class="mem-hint">
+        {updView.unknown} row(s) were not checked — not stale, but not confirmed current either.
+      </p>
+    {/if}
   {/if}
 </section>
 
@@ -812,5 +941,101 @@
     font-size: 0.65rem;
     color: var(--text-tertiary);
     line-height: 1.35;
+  }
+
+  /* ── Updates ────────────────────────────────────────────────────
+     A class per group, rows inside it. The grid is name · version · note,
+     with the note taking what is left — the notes carry the tool's own words
+     (a receipt's age, why a pre-release was skipped) and are the reason this
+     panel is worth reading rather than a count of stale packages. ────────── */
+  .updates {
+    margin-top: 1.4rem;
+  }
+
+  .upd-summary {
+    display: flex;
+    align-items: center;
+    gap: 0.4rem;
+    font-size: 0.72rem;
+    color: var(--text-secondary);
+    margin: 0 0 0.7rem;
+  }
+
+  .upd-summary.running {
+    color: var(--text-primary);
+  }
+
+  .upd-group {
+    margin-bottom: 0.9rem;
+  }
+
+  .upd-group .col-head {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    flex-wrap: wrap;
+  }
+
+  .upd-group .col-head .btn {
+    margin-left: auto;
+    font-size: 0.68rem;
+    padding: 0.15rem 0.5rem;
+  }
+
+  .upd-list {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+  }
+
+  .upd-row {
+    display: grid;
+    grid-template-columns: 1rem minmax(8rem, auto) minmax(6rem, auto) 1fr;
+    align-items: baseline;
+    gap: 0.6rem;
+    padding: 0.3rem 0;
+    border-top: 1px solid var(--rule);
+    font-size: 0.72rem;
+  }
+
+  .upd-mark {
+    display: flex;
+    align-items: center;
+    color: var(--text-tertiary);
+  }
+
+  .upd-mark.stale {
+    color: var(--warning-ink);
+  }
+
+  .upd-mark.current {
+    color: var(--success);
+  }
+
+  .upd-name {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .upd-vers {
+    font-variant-numeric: tabular-nums;
+  }
+
+  .upd-note {
+    font-size: 0.66rem;
+    line-height: 1.35;
+  }
+
+  /* A narrow window is the phone, and four columns do not fit: the note wraps
+     under the name rather than being clipped, because the note is the content. */
+  @media (max-width: 640px) {
+    .upd-row {
+      grid-template-columns: 1rem 1fr auto;
+    }
+
+    .upd-note {
+      grid-column: 2 / -1;
+    }
   }
 </style>

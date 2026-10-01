@@ -495,6 +495,10 @@ last layer over the routes and adds no data path of its own.
   first live read found a leak the ceiling cannot catch: a one-time passcode in a subject
   line, stored as c1 and unredacted (UNiDAYS, 2026-09-26), and a named person's live-location
   mail stored as c1. The classifier's c3 and c2 rules miss both.
+  Classifier fixed 2026-10-01 (`data-class-rules-v3`, `libs/content-item/src/lib.rs`): a code
+  word beside a standalone 4–8 digit number is c3 (a year is not a code), and location-sharing
+  phrases are c2. `POST /triage/data-class/refresh` re-derives stored rows and redacts what the
+  new class requires. Still open: the ceiling becomes a gate only with ISC-38.
 - [ ] ISC-40 — one MCP server exposes the capabilities' `/routes` as tools: read tools by
   default, write tools only with a per-capability grant. Falsifier: the tool list contains a
   `POST` route without a grant. Depends on ISC-33, 34, 36 and 38.

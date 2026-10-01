@@ -348,7 +348,7 @@ pub const DATA_CLASSES: [&str; 4] = ["c0", "c1", "c2", "c3"];
 /// Stamped on every rules-produced classification, so a stored row records
 /// which rule set decided it. Bump with any change to [`mail_secret_reason`] or
 /// [`mail_others_reason`].
-pub const MAIL_CLASSIFIER_VERSION: &str = "data-class-rules-v2";
+pub const MAIL_CLASSIFIER_VERSION: &str = "data-class-rules-v3";
 
 /// Stamped by a collector that declared a class for what it fetches.
 pub const SOURCE_CLASSIFIER_VERSION: &str = "data-class-source-v1";
@@ -543,14 +543,48 @@ fn mail_secret_reason(lowercased_text: &str) -> Option<&'static str> {
     // `2fa` and `otp` are matched as whole words: `otp` alone also sits inside
     // ordinary German words, and a substring match there classified unrelated
     // mail as Secret.
-    let bounded_token = lowercased_text
+    let words: Vec<&str> = lowercased_text
         .split(|c: char| !c.is_alphanumeric())
-        .any(|word| word == "2fa" || word == "otp");
+        .filter(|word| !word.is_empty())
+        .collect();
+    let bounded_token = words.iter().any(|word| *word == "2fa" || *word == "otp");
 
-    if bounded_token || contains_any(lowercased_text, &AUTHENTICATION) {
+    if bounded_token || contains_any(lowercased_text, &AUTHENTICATION) || carries_a_code(&words) {
         return Some("Authentication or account-recovery metadata is Secret.");
     }
     None
+}
+
+/// A code word next to the code itself: "Your UNiDAYS code is 482913",
+/// "482913 is your passcode", "Dein Anmeldecode: 4829".
+///
+/// Added 2026-10-01 (ISA ISC-39). A one-time passcode from a student-discount
+/// service was stored as c1 with the code in its subject, because no phrase in
+/// the list above matched it. The phrase list cannot grow to every sender's
+/// wording, but the shape is constant: a code word, and a standalone number of
+/// four to eight digits. A four-digit number that reads as a year (1900–2099) is
+/// not counted, so "Advent of Code 2026" stays Mine.
+fn carries_a_code(words: &[&str]) -> bool {
+    const CODE_WORDS: [&str; 10] = [
+        "code",
+        "codes",
+        "passcode",
+        "pin",
+        "tan",
+        "anmeldecode",
+        "zugangscode",
+        "einmalpasswort",
+        "kennwort",
+        "token",
+    ];
+    let has_code_word = words.iter().any(|word| CODE_WORDS.contains(word));
+    let has_code = words.iter().any(|word| {
+        let digits = word.len();
+        word.bytes().all(|b| b.is_ascii_digit())
+            && (4..=8).contains(&digits)
+            && !(digits == 4 && matches!(word.parse::<u32>(), Ok(1900..=2099)))
+    });
+    has_code_word && has_code
 }
 
 /// Why a mail's metadata alone is enough to call it Others, or `None` for the
@@ -596,6 +630,25 @@ fn mail_others_reason(stream: &str, lowercased_text: &str) -> Option<&'static st
     }
     if contains_any(lowercased_text, &HEALTH) {
         return Some("Health-related metadata is Others.");
+    }
+    // Added 2026-10-01 (ISA ISC-39): a named person's live-location mail was
+    // stored as c1. Where somebody is, right now, is a fact about them.
+    const LOCATION: [&str; 12] = [
+        "sharing their location",
+        "sharing location",
+        "shared their location",
+        "shared a location",
+        "location sharing",
+        "live location",
+        "real-time location",
+        "standort geteilt",
+        "teilt den standort",
+        "teilt seinen standort",
+        "teilt ihren standort",
+        "standortfreigabe",
+    ];
+    if contains_any(lowercased_text, &LOCATION) {
+        return Some("A person's location is Others.");
     }
     None
 }
@@ -1469,7 +1522,7 @@ mod tests {
         assert_eq!(result.value, "c1");
         assert_eq!(result.rationale, "Mail metadata is Mine by default.");
         assert_eq!(result.method, METHOD_DETERMINISTIC);
-        assert_eq!(result.version, "data-class-rules-v2");
+        assert_eq!(result.version, "data-class-rules-v3");
         assert_eq!(
             processing_policy(&result.value).cloud_handling,
             "pseudonymization_required"
@@ -1547,6 +1600,53 @@ mod tests {
                 "c3",
                 "{subject} should be Secret"
             );
+        }
+    }
+
+    /// ISC-39: a code word beside the code is Secret, whatever phrase the sender
+    /// chose. These are the shapes the phrase list missed.
+    #[test]
+    fn a_code_beside_a_code_word_is_secret() {
+        for subject in [
+            "Your UNiDAYS code is 482913",
+            "482913 is your passcode",
+            "Dein Anmeldecode: 4829",
+            "PIN 90210384 for your card",
+        ] {
+            let result = DataClass::classify_mail("aktiv", "noreply@example.com", subject);
+            assert_eq!(result.value, "c3", "{subject} should be Secret");
+        }
+    }
+
+    /// The other half of the code rule: a code word with no code, a number with
+    /// no code word, and a year beside a code word all stay Mine.
+    #[test]
+    fn a_code_word_or_a_number_alone_is_not_secret() {
+        for subject in [
+            "Advent of Code 2026",
+            "Promo code SPRING inside",
+            "Order 48291337 shipped",
+            "Your code review is ready",
+        ] {
+            assert_eq!(
+                DataClass::classify_mail("aktiv", "noreply@example.com", subject).value,
+                "c1",
+                "{subject} should stay Mine"
+            );
+        }
+    }
+
+    /// ISC-39: where another person is, right now, is a fact about them.
+    #[test]
+    fn location_sharing_mail_is_others() {
+        for subject in [
+            "Erika is sharing their location with you",
+            "Erika hat ihren Standort geteilt",
+            "Live location: Erika",
+        ] {
+            let result = DataClass::classify_mail("aktiv", "noreply@example.com", subject);
+            assert_eq!(result.value, "c2", "{subject} should be Others");
+            assert_eq!(result.rationale, "A person's location is Others.");
         }
     }
 

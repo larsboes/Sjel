@@ -1268,7 +1268,13 @@ persistence_state() {
     printf 'missing\t%s\n' "$unit"
     return 0
   fi
-  tmp="$(mktemp)"
+  # A template under $TMPDIR, not bare `mktemp`: macOS mktemp without one ignores $TMPDIR and
+  # writes to the per-user /var/folders directory. A sandboxed agent session cannot write there,
+  # and the empty path that came back was reported as "cannot render a unit".
+  if ! tmp="$(mktemp "${TMPDIR:-/tmp}/sjel-unit.XXXXXX")"; then
+    printf 'unsupported\tcannot create a temp file to compare %s against its declaration\n' "$unit"
+    return 0
+  fi
   if ! render_persistence_unit "$tmp"; then
     rm -f "$tmp"
     printf 'unsupported\tcannot render a unit for os %s\n' "$SJEL_OS"
@@ -1318,7 +1324,13 @@ persistence_loaded() {
       # into a failed pipeline. It reported the loaded sjel-status agent as not loaded, and
       # whether it did so depended on where in the output the label happened to sit. -c consumes
       # the whole stream, so the producer always finishes.
-      hits="$(launchctl list 2>/dev/null | grep -cE "${UNIT_LABEL_PREFIX//./\\.}\.${CAP}\$" || true)"
+      # The list is captured before it is searched, so a failed `launchctl list` reads as
+      # unknown and not as "not loaded". A sandboxed agent session gets a failed, empty list and
+      # reported loaded jobs as installed-not-loaded. tools/doctor.ts treats the same failure as
+      # "unverified".
+      local listing
+      listing="$(launchctl list 2>/dev/null)" || { echo unknown; return 0; }
+      hits="$(printf '%s\n' "$listing" | grep -cE "${UNIT_LABEL_PREFIX//./\\.}\.${CAP}\$" || true)"
       if [ "${hits:-0}" -gt 0 ]; then echo yes; else echo no; fi
       ;;
     linux)

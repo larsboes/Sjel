@@ -49,7 +49,7 @@ sjel-inference = { path = "../inference" }
 # consumer's tree.
 serde = { workspace = true, features = ["derive"] }
 serde_json.workspace = true
-xberg = { version = "=1.0.14", features = ["html", "pdf"], optional = true }
+xberg = { version = "=1.3.0", features = ["html", "pdf"], optional = true }
 # `full` because that is what `capabilities/comms` carried when this code lived
 # there: `extract_blocking` calls `enable_all()`, which enables whichever
 # drivers are compiled in, so trimming the feature set here would silently give

@@ -21,6 +21,11 @@
 // layer (settings.base.json ships defaultMode:"auto"); pinning it in the managed layer only
 // forbids the mode you actually want while adding no security (the deny/ask rules are the
 // real boundary). `disableBypassPermissionsMode` is KEPT — full-bypass is a real hole.
+// The managed policy also does NOT set `sandbox.enabled`. The principal ruled on 2026-10-01
+// that the sandbox is chosen per launch: plain `claude` runs without it, and
+// tools/claude-sandboxed turns it on through `--settings`, the layer directly below managed
+// (https://code.claude.com/docs/en/settings#settings-precedence). The sandbox keys this
+// policy does set (deny lists, network, no unsandboxed fallback) apply whenever it is on.
 //
 // The managed policy is deliberately extensible from the overlay, because some deny rules
 // describe one deployment rather than Axon. The public base contains only generic protection;
@@ -31,7 +36,7 @@
 // merged in by mergeFragment() below. The merge is deliberately ADDITIVE-ONLY: a fragment
 // may append elements to arrays the base already declares, and nothing else. It cannot
 // introduce a key, overwrite a scalar, or reorder anything — so no overlay, and no prompt
-// injection that manages to write one, can relax `sandbox.enabled`, flip
+// injection that manages to write one, can add `sandbox.enabled`, flip
 // `allowManagedPermissionRulesOnly`, or delete a deny rule. An overlay can only ever make
 // this policy stricter. Violations are a hard error naming the dotted path, never a
 // silent skip: a security fragment that half-applied would be worse than one that failed.

@@ -75,7 +75,6 @@
     ]
   },
   "sandbox": {
-    "enabled": true,
     "enabledPlatforms": [
       "linux",
       "macos"

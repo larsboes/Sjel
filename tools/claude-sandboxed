@@ -1,0 +1,11 @@
+#!/usr/bin/env bash
+# Start Claude Code with the Bash sandbox on. Plain `claude` starts it off.
+#
+# The managed policy (tools/templates/claude-code/managed-settings.json) leaves
+# `sandbox.enabled` unset by the principal's ruling of 2026-10-01, so the choice is made per
+# launch. `--settings` is the layer directly below managed
+# (https://code.claude.com/docs/en/settings#settings-precedence): it can turn the sandbox on,
+# and the managed deny lists, network allowlist and allowUnsandboxedCommands=false then apply.
+#
+# All arguments pass through: tools/claude-sandboxed --continue
+exec claude --settings '{"sandbox":{"enabled":true}}' "$@"

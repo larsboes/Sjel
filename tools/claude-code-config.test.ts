@@ -146,6 +146,10 @@ describe("public managed-policy boundary", () => {
     }
   });
 
+  test("leaves sandbox.enabled to the launch, so tools/claude-sandboxed can turn it on", () => {
+    expect("enabled" in policy.sandbox).toBe(false);
+  });
+
   test("denies extensionless runtime tokens under any secrets directory", () => {
     expect(policy.permissions.deny).toContain("Read(//**/secrets/**)");
     expect(policy.sandbox.filesystem.denyRead).toContain("~/**/secrets/**");

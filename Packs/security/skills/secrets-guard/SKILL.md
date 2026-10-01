@@ -15,6 +15,8 @@ workflow; enforcement is separate and already active:
   `/etc/claude-code/managed-settings.json` on Linux) denies reads of `**/*.env`, `**/*.pem`, `~/.ssh`,
   `~/.aws`, `git-credentials`, `printenv`, `*_TOKEN*`, etc., and denies ~20 secret env vars to the
   sandbox. You cannot relax it from a repo. If a command here is blocked, that is the floor working.
+  The OS sandbox is on only in sessions started with `tools/claude-sandboxed`. Plain `claude` has
+  the permission rules alone, and a Bash command that does not name a denied path is not refused.
 - **pi** — the same protection is enforced as a tool-call extension (`Packs/security/extensions/
   secrets-guard.ts`); this skill is the Claude Code counterpart for the parts a policy can't teach.
 

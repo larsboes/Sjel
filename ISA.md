@@ -609,6 +609,18 @@ Design:
   before it ran. The session's sandbox also lists the overlay `secrets/` paths as read-denied.
   This confirms the startup-read explanation above. Still open: `tools/setup-tailnet-shell.sh`
   and the soundscape panel.
+  Ruling, principal, 2026-10-01: the Bash sandbox is chosen per launch and is off by default.
+  It blocked `git push`, the interceptor daemon, local ports and the Tailscale CLI. The managed
+  policy no longer sets `sandbox.enabled`, and `tools/claude-sandboxed` turns it on. Without it,
+  the permission deny rules still refuse a `Read` of `secrets/**` and a Bash command that names
+  `personal/secrets`. A Bash command that reaches the file without naming the path is not
+  refused. ISC-45 therefore holds in full only for sessions started with `tools/claude-sandboxed`.
+  Measured the same evening: Tailscale Serve proxies `/` to the protected socket and answers
+  `/health` with 502, while the sjel-status log reports the socket listener ready. This Mac runs
+  the Tailscale system-extension build (`io.tailscale.ipn.macsys`). Upstream says that extension
+  "cannot serve arbitrary paths on macOS due to sandbox restrictions"
+  (`cmd/tailscale/cli/serve_v2.go`). Whether that also stops it reaching a Unix socket is not
+  verified.
 
 ### F10 · An agent writes, under a mode the owner sets
 

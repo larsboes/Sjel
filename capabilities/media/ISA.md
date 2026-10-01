@@ -193,6 +193,23 @@ A category-first archive can use chronological trip folders without forcing ever
 
 **Later 2026-09-30 recheck — paused, not cleared.** A repeat using the final source returned a complete CLI report, but an independent combined assertion comparing source/archive entry-stat snapshots and exact draft bytes failed. The failing subcondition and cause were not isolated, and the failed run's snapshots were not persisted. Earlier passing probes remain evidence of those runs, not clearance of this later warning. Work is paused at the principal's request. The private organization draft records the handoff; resumption requires permission and instrumented, separately reported comparisons before attributing a change or claiming consistency. No move/apply command was run.
 
+### F6 · Applied organisation, removal and reconciliation
+
+F5 previews destinations; this slice acts on them, and the ledger is kept in step with the volume afterwards. Nothing here copies bytes the drives already hold: `organize` and `relabel` are same-volume renames, and `supersede` renames into quarantine rather than deleting.
+
+- [x] MED-P5 — `organize` moves whole collections by rename only, refusing a mapping that was not reviewed, and aborts **every** move if one conflicts. Falsifier: an unreviewed collection moves, or a re-run after its own success refuses the run it already applied.
+- [x] MED-P6 — `duplicates` reports one row per digest with two or more locations and never treats a look-alike as a removal candidate; `supersede` re-hashes every row immediately before moving and refuses the whole list if one row is unproven. Falsifier: a row moves after its bytes changed, or a group whose copies all sit under the declared prefix yields removals.
+- [x] MED-P7 — `relabel` places a flat pile by capture day and resolves a name collision instead of overwriting; `--plan` moves exactly the rows an approved TSV names. Falsifier: a plan that does not describe the disk moves the rows that happen to fit.
+- [x] MED-P8 — a path change is dropped from the ledger, so a rename is never reported as an absence, and a disappearance that is not a rename stays visible. Falsifier: `audit` reports a moved file as `unindexed absence`, or a row whose bytes are nowhere gets dropped.
+
+**2026-10-01 evidence — MED-P8 was found by a live run, not by review.** 13 `.lrv` proxies were moved from `To Sort/` into `Trips/2026/2026-05-Oberstdorf/` with `relabel --plan`. `main.rs` assumed a relabel source is always outside the library — true for `Inbox/`, false here — so no index row was dropped. One defect, two false findings from the same 13 rows: 13 `unindexed absence` disagreements in `audit`, and 13 phantom duplicate groups in `duplicates`, each naming the same file at its old and new path. `media reconcile` was added as the resolution and `relabel` now drops its own rows. After the fix the live library reports `disk 16,790 = indexed 16,790`, 0 disagreements on an 80-file sample, and 1 duplicate group — a genuine pair inside `To Sort/`.
+
+**The `reconcile` guard, and its precondition.** A gone location is dropped only when its digest is recorded at another path *present on this volume*; bytes that are nowhere leave the row in place, so a mounted-but-empty library root reconciles to nothing rather than to a mass deletion. The precondition is that the index is current. A moved file's new path is not recorded until `index` runs, so reconciling first would find no witness and read a rename as a disappearance; an unindexed path therefore refuses the whole run. This was measured by a test that failed before the guard existed, not assumed.
+
+**A rename and a hand-deletion are indistinguishable afterwards.** Both leave one path gone and the same bytes elsewhere, and the digest is the only judge available. `reconcile` reports `survives_at` rather than claiming which of the two happened.
+
+**Corpus of record for this slice:** `relabel` moved 198 `Inbox-old` files (56.45 GB), `organize` moved 17 collections, and `supersede` applied five approved removal lists — 1,353 then 322 then 24 rows — each row re-hashed at the moment of removal with 0 refused.
+
 ## Not yet specified
 
 - **Per-file pre-classification failures.** A symlink, unreadable byte stream, or non-UTF-8

@@ -4,6 +4,7 @@ pub mod duplicates;
 pub mod ingest;
 pub mod organize;
 pub mod preview;
+pub mod reconcile;
 pub mod relabel;
 pub mod store;
 pub mod supersede;

@@ -6,7 +6,7 @@ use media::{audit, index, verify_mirror, volume_uuid};
 
 fn usage() {
     eprintln!("media — exact-byte index, ingest gate and mirror verification\n\
-        usage:\n  media volume-id --root PATH\n  media index --root PATH --uuid UUID [--db PATH]\n  media audit --root PATH --uuid UUID --sample N [--db PATH]\n  media ingest --staging PATH --library PATH --uuid UUID [--apply] [--prune] [--db PATH]\n  media classify (--digest SHA256 | --digests-file PATH) [--db PATH]\n  media verify-mirror --left-root PATH --left-uuid UUID --right-root PATH --right-uuid UUID [--db PATH]\n  media status [--db PATH]\n  media duplicates --uuid UUID [--legacy PREFIX] [--resolve-inside PREFIX --root PATH --metadata] [--list PATH] [--db PATH]\n  media supersede --root PATH --uuid UUID --list PATH --quarantine PATH --journal PATH [--apply]\n  media relabel --from DIR --to DIR --uuid UUID --journal PATH [--apply] [--settled-for SECONDS] [--plan FILE]\n  media preview --structure FILE [--metadata]\n  media organize --structure FILE [--apply --journal PATH] [--settled-for SECONDS] [--only COLLECTION]\n\n\
+        usage:\n  media volume-id --root PATH\n  media index --root PATH --uuid UUID [--db PATH]\n  media audit --root PATH --uuid UUID --sample N [--db PATH]\n  media ingest --staging PATH --library PATH --uuid UUID [--apply] [--prune] [--db PATH]\n  media classify (--digest SHA256 | --digests-file PATH) [--db PATH]\n  media verify-mirror --left-root PATH --left-uuid UUID --right-root PATH --right-uuid UUID [--db PATH]\n  media status [--db PATH]\n  media duplicates --uuid UUID [--legacy PREFIX] [--resolve-inside PREFIX --root PATH --metadata] [--list PATH] [--db PATH]\n  media supersede --root PATH --uuid UUID --list PATH --quarantine PATH --journal PATH [--apply]\n  media reconcile --root PATH --uuid UUID [--apply] [--db PATH]\n  media relabel --from DIR --to DIR --uuid UUID --journal PATH [--library PATH] [--apply] [--settled-for SECONDS] [--plan FILE]\n  media preview --structure FILE [--metadata]\n  media organize --structure FILE [--apply --journal PATH] [--settled-for SECONDS] [--only COLLECTION]\n\n\
         ingest is a dry run unless --apply is set. --prune additionally removes staging/originals\n\
         only after every new import verifies; neither verb deletes library content.");
 }
@@ -130,14 +130,17 @@ fn run(args: &[String]) -> Result<i32> {
             ],
             &["--metadata"],
         ),
+        "reconcile" => (&["--root", "--uuid", "--db"], &["--apply"]),
         "relabel" => (
             &[
                 "--from",
                 "--to",
                 "--uuid",
                 "--journal",
+                "--library",
                 "--settled-for",
                 "--plan",
+                "--db",
             ],
             &["--apply"],
         ),
@@ -166,7 +169,7 @@ fn run(args: &[String]) -> Result<i32> {
     // Mount identity and required arguments are checked before open_pool can migrate
     // the shared database. A removed drive must not be registered as the host volume.
     let mounted_uuid = match verb.as_str() {
-        "index" | "audit" => Some(mounted(
+        "index" | "audit" | "reconcile" => Some(mounted(
             &rooted(opts, "--root")?,
             &required(opts, "--uuid")?,
         )?),
@@ -208,6 +211,23 @@ fn run(args: &[String]) -> Result<i32> {
             let fail = !report.disagreements.is_empty();
             println!("{}", serde_json::to_string(&report)?);
             Ok(i32::from(fail))
+        }
+        "reconcile" => {
+            let root = rooted(opts, "--root")?;
+            let uuid = mounted_uuid
+                .as_deref()
+                .ok_or("reconcile needs a mounted volume")?;
+            let report = media::reconcile::reconcile(
+                &ledger,
+                &root,
+                uuid,
+                opts.iter().any(|arg| arg == "--apply"),
+            )?;
+            // Bytes that are nowhere stay recorded, so a real disappearance keeps the index honest
+            // and does not fail the run. A refusal — an index behind the disk — does.
+            let pending = !report.complete || (!report.applied && !report.relocated.is_empty());
+            println!("{}", serde_json::to_string(&report)?);
+            Ok(i32::from(pending))
         }
         "ingest" => {
             let apply = opts.iter().any(|s| s == "--apply");
@@ -353,9 +373,21 @@ fn run(args: &[String]) -> Result<i32> {
             let from = rooted(opts, "--from")?;
             let to = rooted(opts, "--to")?;
             // The destination must be on the volume the draft registered, so a move cannot land on
-            // a mount that merely looks like the library. The source is outside the library, so it
-            // has no index rows to reconcile — the next `index` records the new names.
-            mounted(&to, &required(opts, "--uuid")?)?;
+            // a mount that merely looks like the library.
+            let uuid = mounted(&to, &required(opts, "--uuid")?)?;
+            // A source inside the library is a path change like any other and its rows go with it,
+            // or the next audit reports a rename as an absence and the old path as a duplicate. A
+            // source outside the library — a staging Inbox — has no rows, and `--library` is then
+            // simply absent. A library on another volume is refused rather than silently
+            // reconciling nothing.
+            let library = match option(opts, "--library")? {
+                Some(path) => {
+                    let path = PathBuf::from(path).canonicalize()?;
+                    mounted(&path, &uuid)?;
+                    Some(path)
+                }
+                None => None,
+            };
             let journal = rooted(opts, "--journal")?;
             let settled_for = match option(opts, "--settled-for")? {
                 Some(text) => text
@@ -375,6 +407,19 @@ fn run(args: &[String]) -> Result<i32> {
                 settled_for,
                 plan.as_deref(),
             )?;
+            // Every moved row's old path is dropped, so the ledger describes the volume after the
+            // move rather than before it.
+            if report.applied {
+                if let Some(library) = &library {
+                    for moved in report.moves.iter().filter(|row| row.outcome == "moved") {
+                        if let Ok(rel) = moved.from.strip_prefix(library) {
+                            if let Some(rel) = rel.to_str() {
+                                ledger.forget(&uuid, rel)?;
+                            }
+                        }
+                    }
+                }
+            }
             let fail = !report.complete || report.refused > 0;
             println!("{}", serde_json::to_string(&report)?);
             Ok(i32::from(fail))
@@ -492,5 +537,45 @@ mod preview_tests {
             args.extend(options.into_iter().map(str::to_owned));
             assert_eq!(run(&args).unwrap(), 1);
         }
+    }
+
+    /// `--library` is how a `relabel` whose source is inside the library reconciles its own rows.
+    /// `reconcile` takes no such flag: `--root` already names the library there, and a second way
+    /// to say it would be a second thing to keep in agreement.
+    #[test]
+    fn library_belongs_to_relabel_and_not_to_reconcile() {
+        let scratch = std::env::temp_dir().join(format!("media-args-{}.db", std::process::id()));
+        let db = scratch.to_string_lossy().to_string();
+
+        let refused = run(&[
+            "reconcile", "--root", "/nonexistent", "--uuid", "V", "--library", "/lib", "--db",
+            &db,
+        ]
+        .map(str::to_owned))
+        .unwrap_err()
+        .to_string();
+        assert!(refused.contains("unknown option --library"), "{refused}");
+
+        // Accepted by the argument table, so it falls through to the volume check instead.
+        let accepted = run(&[
+            "relabel",
+            "--from",
+            "/nonexistent",
+            "--to",
+            "/nonexistent",
+            "--uuid",
+            "V",
+            "--journal",
+            "/tmp/journal.tsv",
+            "--library",
+            "/lib",
+            "--db",
+            &db,
+        ]
+        .map(str::to_owned))
+        .unwrap_err()
+        .to_string();
+        assert!(!accepted.contains("unknown option"), "{accepted}");
+        let _ = std::fs::remove_file(&scratch);
     }
 }

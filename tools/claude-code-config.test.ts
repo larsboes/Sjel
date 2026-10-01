@@ -145,6 +145,12 @@ describe("public managed-policy boundary", () => {
       expect(name).toMatch(/^(ANTHROPIC_|AWS_|GITHUB_TOKEN$)/);
     }
   });
+
+  test("denies extensionless runtime tokens under any secrets directory", () => {
+    expect(policy.permissions.deny).toContain("Read(//**/secrets/**)");
+    expect(policy.sandbox.filesystem.denyRead).toContain("~/**/secrets/**");
+    expect(policy.sandbox.filesystem.denyWrite).toContain("~/**/secrets/**");
+  });
 });
 
 const cli = join(import.meta.dir, "claude-code-config.ts");

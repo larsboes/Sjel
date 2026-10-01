@@ -542,18 +542,22 @@ Design:
   403. Probe: HTTP tests in `libs/sjel-server`.
 - [x] ISC-44 — `sjel capability mail` from an agent session returns no raw sender address.
   Falsifier: an `@` in `from_addr`. Probe: that command after enrollment.
-- [ ] ISC-45 — an agent cannot go around the gate. Open, and not part of this build: with no
-  deployment token, every capability but comms serves loopback callers without any check
-  (`authenticated`, `libs/sjel-server/src/auth.rs:410`). The comms token file is also
-  readable from an agent session.
-  2026-09-30, agent side: `tools/claude-code-config` deployed the managed policy to
-  `/etc/claude-code/` on every platform, and macOS reads only
-  `/Library/Application Support/ClaudeCode/` (https://code.claude.com/docs/en/managed-settings.md).
-  On a Mac the policy was never in force. Fixed in the tool; the policy now also turns on the
-  macOS sandbox (loopback allowed), denies full-token `capability-auth` calls and
-  `SJEL_AGENT=0`, and the overlay fragment denies the overlay `secrets/`. In force only after
-  the operator deploys it with sudo. Server side stays open: declaring a deployment token
-  locks the browser out of `127.0.0.1:8082` until the dashboard has a login.
+- [ ] ISC-45 — an agent cannot go around the gate. Code now makes `serve_local` fail closed
+  on protected routes, keeps health/readiness exempt, preserves an agent bearer through both
+  shells, and injects the deployment token only on server-to-server proxy hops. `sjel-status`
+  also has a Tailscale-identity listener over a mode-0600 Unix socket under overlay `secrets/`;
+  the dashboard browser never receives the shared token. Internal loopback capability callers
+  use a helper that adds the token only to loopback destinations. The managed policy now denies
+  `secrets/**`, including extensionless token files. Still open until the operator runs
+  `tools/setup-inbound-auth.sh`, deploys the updated managed policy to the platform's actual
+  path, starts the protected listener, applies `tools/setup-tailnet-shell.sh`, and verifies from
+  an agent session that secret reads fail while Comms remains pseudonymized. No deployment
+  credential or Tailscale Serve configuration was changed in this code session.
+  Two consequences of failing closed, measured 2026-10-01 and not yet answered: a browser on
+  this Mac at `127.0.0.1:8082` carries no token, so only the tailnet URL, the dev server and the
+  Mac app reach the dashboard (`apps/mac/Sources/SjelMacApp/SjelMacApp.swift:41` still opens
+  the loopback one); and soundscape's panel loads from its own port (`panelUrl` in
+  `dashboard/src/lib/api.ts`), so its browser requests carry no token either.
 
 ## Not yet specified
 

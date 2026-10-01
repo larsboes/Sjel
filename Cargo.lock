@@ -634,10 +634,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "axon-fda-launcher"
-version = "0.1.0"
-
-[[package]]
 name = "axum"
 version = "0.8.9"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -4885,6 +4881,10 @@ dependencies = [
  "tokio",
  "xberg",
 ]
+
+[[package]]
+name = "sjel-fda-launcher"
+version = "0.1.0"
 
 [[package]]
 name = "sjel-http"

@@ -1,5 +1,5 @@
 [package]
-name = "axon-fda-launcher"
+name = "sjel-fda-launcher"
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true
@@ -8,7 +8,7 @@ description = "Runs one command as a child and waits, so macOS attributes the ch
 publish = false
 
 [[bin]]
-name = "axon-fda-launcher"
+name = "sjel-fda-launcher"
 path = "src/main.rs"
 
 # No dependencies. std::process is the whole job.

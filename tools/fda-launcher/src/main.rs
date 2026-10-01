@@ -1,4 +1,4 @@
-//! `axon-fda-launcher <program> [args...]`: run the program as a child, wait, and exit
+//! `sjel-fda-launcher <program> [args...]`: run the program as a child, wait, and exit
 //! with its status.
 //!
 //! macOS decides whether a process may read another app's iCloud container, such as
@@ -21,14 +21,14 @@ use std::process::{Command, ExitCode};
 fn main() -> ExitCode {
     let mut args = std::env::args_os().skip(1);
     let Some(program) = args.next() else {
-        eprintln!("usage: axon-fda-launcher <program> [args...]");
+        eprintln!("usage: sjel-fda-launcher <program> [args...]");
         return ExitCode::from(64);
     };
     match Command::new(&program).args(args).status() {
         Ok(status) => ExitCode::from(exit_byte(status)),
         Err(error) => {
             eprintln!(
-                "axon-fda-launcher: cannot start {}: {error}",
+                "sjel-fda-launcher: cannot start {}: {error}",
                 program.to_string_lossy()
             );
             ExitCode::from(127)

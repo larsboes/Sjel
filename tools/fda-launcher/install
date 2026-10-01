@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
-# tools/fda-launcher/install — build, sign and install axon-fda-launcher for this Mac.
+# tools/fda-launcher/install — build, sign and install sjel-fda-launcher for this Mac.
 #
-# Installs to $SJEL_PERSONAL_ROOT/bin/axon-fda-launcher: machine-local, outside target/, so a
+# Installs to $SJEL_PERSONAL_ROOT/bin/sjel-fda-launcher: machine-local, outside target/, so a
 # cargo build never replaces the signed copy. macOS keys a Full Disk Access grant on the code
 # signature; an ad-hoc signature changes with every build and the grant would silently lapse.
 # So it is signed with the first valid code-signing identity in the keychain, or the one named
@@ -21,16 +21,20 @@ if [ -z "$identity" ]; then
 fi
 [ -n "$identity" ] || { echo "fda-launcher: no code-signing identity in the keychain" >&2; exit 1; }
 
-(cd "$SJEL_ROOT" && cargo build --release -p axon-fda-launcher)
+(cd "$SJEL_ROOT" && cargo build --release -p sjel-fda-launcher)
 dest_dir="$SJEL_PERSONAL_ROOT/bin"
-dest="$dest_dir/axon-fda-launcher"
+dest="$dest_dir/sjel-fda-launcher"
 mkdir -p "$dest_dir"
 # CARGO_TARGET_DIR is honoured so a relocated target dir does not install a stale or
 # missing binary; same pattern as tools/storage/storage.
-cp "${CARGO_TARGET_DIR:-$SJEL_ROOT/target}/release/axon-fda-launcher" "$dest.new"
-codesign --force --sign "$identity" --identifier dev.axon.fda-launcher --options runtime "$dest.new"
+cp "${CARGO_TARGET_DIR:-$SJEL_ROOT/target}/release/sjel-fda-launcher" "$dest.new"
+codesign --force --sign "$identity" --identifier dev.sjel.fda-launcher --options runtime "$dest.new"
 mv "$dest.new" "$dest"
 codesign --verify --strict "$dest"
+# The binary was axon-fda-launcher until 2026-10-01 (ISA ISC-29). A grant is keyed on the
+# signature's identifier, which changed with the name, so the old copy holds a grant nothing
+# uses. Removed here so the list in System Settings has one entry to re-grant.
+rm -f "$dest_dir/axon-fda-launcher"
 echo "fda-launcher: installed and signed $dest"
-echo "fda-launcher: grant it Full Disk Access once, then re-render scheduled jobs:"
-echo "  tools/service-runner.sh install-persistence backup"
+echo "fda-launcher: grant it Full Disk Access once, then re-render each scheduled job whose"
+echo "  manifest declares full_disk_access = \"true\": tools/service-runner.sh install-persistence <name>"

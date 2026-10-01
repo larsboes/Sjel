@@ -231,7 +231,7 @@ AUTOSTART="$(toml_get autostart "$MANIFEST")"
 # answering both at once is a contradiction this file refuses rather than picks a winner for.
 SCHEDULE="$(toml_get schedule "$MANIFEST")"
 # `full_disk_access = true`: on macOS a scheduled run starts through the signed
-# axon-fda-launcher, which holds the Full Disk Access grant, instead of as /bin/bash, which
+# sjel-fda-launcher, which holds the Full Disk Access grant, instead of as /bin/bash, which
 # has none. Measured 2026-09-25: without it the backup could not read the vault or list its
 # own iCloud Drive destination. tools/fda-launcher/src/main.rs says why it spawns, not execs.
 FULL_DISK_ACCESS="$(toml_get full_disk_access "$MANIFEST")"
@@ -1179,7 +1179,7 @@ render_persistence_unit() {
       tmpl="$TOOLS_DIR/templates/launchd-schedule.plist.tmpl"
       local launcher_line=""
       if [ "$FULL_DISK_ACCESS" = "true" ]; then
-        local launcher="$SJEL_PERSONAL_ROOT/bin/axon-fda-launcher"
+        local launcher="$SJEL_PERSONAL_ROOT/bin/sjel-fda-launcher"
         if [ ! -x "$launcher" ]; then
           echo "service-runner.sh: $CAP declares full_disk_access but $launcher is not installed." >&2
           echo "  Run tools/fda-launcher/install, grant it Full Disk Access, then install-persistence again." >&2

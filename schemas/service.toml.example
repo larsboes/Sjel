@@ -241,7 +241,7 @@ freshness_stale_hours  = "24"             # past this age nothing is arriving, a
 #                                           # the capability is on-demand — dashboard starts it when
 #                                           # you open its surface. Default: on-demand.
 # full_disk_access = "true"                 # optional, macOS only. A scheduled run starts through
-#                                           # the signed axon-fda-launcher, which holds Full Disk
+#                                           # the signed sjel-fda-launcher, which holds Full Disk
 #                                           # Access, instead of as /bin/bash. For a job that reads
 #                                           # another app's iCloud container or lists iCloud Drive.
 #                                           # Install: tools/fda-launcher/install.

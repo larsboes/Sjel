@@ -116,6 +116,21 @@ const ROUTES: &[route_manifest::Route] = &[
         "What fills the disk: the volume, every reclaimable class, and what the overlay's policy protects from reclaim. From tools/storage's own report --json.",
     ),
     r(
+        "GET",
+        "/api/sjel-status/agent",
+        "The agent's reach: enrolment, each capability's mode, writes waiting for the owner, and the latest calls.",
+    ),
+    r(
+        "POST",
+        "/api/sjel-status/agent/mode",
+        "Set one capability's agent mode. Body: { capability, mode } where mode is off, read-only, ask or auto.",
+    ),
+    r(
+        "POST",
+        "/api/sjel-status/agent/approvals/{id}",
+        "Allow or deny one agent write that waits in ask mode. Body: { allow }.",
+    ),
+    r(
         "POST",
         "/api/sjel-status/session/ticket",
         "A single-use, 60-second ticket for the browser login. The Mac app calls it with the deployment token.",
@@ -370,6 +385,12 @@ fn build_router(shell: proxy::Proxy) -> Router {
             post(session::logout_handler),
         )
         .route(sjel_server::SESSION_OPEN_PATH, get(session::open_handler))
+        .route("/api/sjel-status/agent", get(agent_handler))
+        .route("/api/sjel-status/agent/mode", post(agent_mode_handler))
+        .route(
+            "/api/sjel-status/agent/approvals/{id}",
+            post(agent_decision_handler),
+        )
         .route(
             "/api/sjel-status/capabilities/{name}/backup",
             post(backup_handler),

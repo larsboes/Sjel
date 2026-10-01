@@ -4,6 +4,7 @@
   import PageHeader from "$lib/PageHeader.svelte";
   import { axonStatus, macmon, type MacmonSample, type StorageReport } from "$lib/api";
   import { formatBytes, storageView } from "$lib/systems/storage";
+  import AgentPanel from "$lib/systems/AgentPanel.svelte";
 
   let macmonState = $state<"checking" | "up" | "down">("checking");
   let sample = $state<MacmonSample | null>(null);
@@ -238,6 +239,8 @@
     (every 3 s)
   </p>
 {/if}
+
+<AgentPanel />
 
 <!-- ─── Storage ──────────────────────────────────────────────────────────
      Its own section rather than a card in the metric grid above, and outside

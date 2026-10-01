@@ -1,5 +1,6 @@
 use super::*;
 
+mod agent;
 mod backup;
 mod health;
 mod host_watch;
@@ -11,6 +12,7 @@ mod registry;
 mod storage;
 mod upstreams;
 
+pub(crate) use agent::*;
 pub(crate) use backup::*;
 pub(crate) use health::*;
 pub(crate) use host_watch::*;

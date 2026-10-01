@@ -1,13 +1,24 @@
 //! What an agent may do on each capability, and the record of what it did (ISA F10).
 //!
-//! Three files under the overlay, shared by every capability's gate and by sjel-status, which
-//! owns the Systems page that writes them. Files rather than a table, because this crate is
-//! under every capability and must not depend on the store:
+//! Files under the overlay, shared by every capability's gate and by sjel-status, which owns
+//! the Systems page that writes them. Files rather than a table, because this crate is under
+//! every capability and must not depend on the store.
 //!
-//! - `config/agent-policy.json`: one [`Mode`] per capability. Absent means [`Mode::Auto`], the
+//! The policy, the approvals and the log are under `secrets/agent/`, because an agent must
+//! not be able to write them: an agent that could edit an approval would allow its own write.
+//! The managed Claude Code policy denies `secrets/**` to an agent session
+//! (`tools/templates/claude-code/managed-settings.json`).
+//!
+//! - `secrets/agent/policy.json`: one [`Mode`] per capability. Absent means [`Mode::Auto`], the
 //!   principal's default of 2026-10-01. Written only by sjel-status, never by hand.
-//! - `data/agent-approvals/<id>.json`: one write waiting in ask mode, or decided.
-//! - `data/agent-calls/<YYYY-MM>.jsonl`: one line per agent call. Never a body, never a query.
+//! - `secrets/agent/approvals/<id>.json`: one write waiting in ask mode, or decided.
+//! - `secrets/agent/calls/<YYYY-MM>.jsonl`: one line per agent call. Never a body or a query.
+//!
+//! Two files an agent may read, because they grant nothing:
+//!
+//! - `data/agent-gates/<capability>.json`: which capabilities run a gate, and their routes.
+//! - `data/agent-modes.json`: a copy of the modes, written beside every change, so the MCP
+//!   server offers only the tools a mode allows. Editing it changes a list, not the gate.
 
 use std::collections::HashMap;
 use std::fs;
@@ -142,15 +153,63 @@ impl PolicyFiles {
     }
 
     fn policy_path(&self) -> PathBuf {
-        self.root.join("config/agent-policy.json")
+        self.root.join("secrets/agent/policy.json")
+    }
+
+    fn mirror_path(&self) -> PathBuf {
+        self.root.join("data/agent-modes.json")
     }
 
     fn approvals_dir(&self) -> PathBuf {
-        self.root.join("data/agent-approvals")
+        self.root.join("secrets/agent/approvals")
     }
 
     fn calls_dir(&self) -> PathBuf {
-        self.root.join("data/agent-calls")
+        self.root.join("secrets/agent/calls")
+    }
+
+    fn gates_dir(&self) -> PathBuf {
+        self.root.join("data/agent-gates")
+    }
+
+    /// Records that `capability`'s gate admits the agent, with its special routes, so the
+    /// Systems page lists only switches that act on something. Written when the gate starts.
+    pub fn register_gate(&self, capability: &str, routes: &AgentRoutes) {
+        let pairs = |list: &[(&str, &str)]| -> Vec<String> {
+            list.iter().map(|(m, p)| format!("{m} {p}")).collect()
+        };
+        let record = json!({
+            "capability": capability,
+            "confirm": pairs(routes.confirm),
+            "get_writes": pairs(routes.get_writes),
+            "registered_at": now_secs(),
+        });
+        let safe = !capability.is_empty()
+            && capability
+                .bytes()
+                .all(|b| b.is_ascii_alphanumeric() || b == b'-' || b == b'_');
+        if !safe {
+            return;
+        }
+        let path = self.gates_dir().join(format!("{capability}.json"));
+        if let Err(error) = write_atomic(&path, record.to_string().as_bytes()) {
+            eprintln!("agent gate registration: {error}");
+        }
+    }
+
+    /// Every registered gate, by name.
+    pub fn gates(&self) -> Vec<Value> {
+        let Ok(entries) = fs::read_dir(self.gates_dir()) else {
+            return Vec::new();
+        };
+        let mut out: Vec<Value> = entries
+            .filter_map(Result::ok)
+            .filter(|e| e.path().extension().is_some_and(|x| x == "json"))
+            .filter_map(|e| fs::read_to_string(e.path()).ok())
+            .filter_map(|t| serde_json::from_str::<Value>(&t).ok())
+            .collect();
+        out.sort_by(|a, b| a["capability"].as_str().cmp(&b["capability"].as_str()));
+        out
     }
 
     /// Every mode the policy names. A name it does not hold is at [`DEFAULT_MODE`].
@@ -179,7 +238,7 @@ impl PolicyFiles {
                 let mode = mode
                     .as_str()
                     .and_then(Mode::parse)
-                    .ok_or_else(|| format!("agent-policy.json: {name} has no valid mode"))?;
+                    .ok_or_else(|| format!("agent policy: {name} has no valid mode"))?;
                 modes.insert(name.clone(), mode);
             }
         }
@@ -212,7 +271,12 @@ impl PolicyFiles {
             .collect();
         let text =
             serde_json::to_vec_pretty(&json!({ "modes": map })).map_err(|e| e.to_string())?;
-        write_atomic(&self.policy_path(), &text).map_err(|e| e.to_string())
+        write_atomic(&self.policy_path(), &text).map_err(|e| e.to_string())?;
+        // The readable copy follows the real one. Failing to write it costs a tool list only.
+        if let Err(error) = write_atomic(&self.mirror_path(), &text) {
+            eprintln!("agent-modes.json: {error}");
+        }
+        Ok(())
     }
 
     // --- approvals ----------------------------------------------------------------------
@@ -441,6 +505,9 @@ mod tests {
         assert_eq!(files.mode_for("comms"), Mode::Auto);
         files.set_mode("comms", Mode::Ask).unwrap();
         files.set_mode("finance", Mode::Off).unwrap();
+        assert!(files.policy_path().starts_with(files.root.join("secrets")));
+        let mirror = fs::read_to_string(files.mirror_path()).unwrap();
+        assert!(mirror.contains("\"finance\": \"off\""), "{mirror}");
         assert_eq!(files.mode_for("comms"), Mode::Ask);
         assert_eq!(files.mode_for("finance"), Mode::Off);
         assert_eq!(files.mode_for("trips"), Mode::Auto);

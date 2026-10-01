@@ -1766,6 +1766,44 @@ export interface StorageProtected {
  *  no server — it measures, prints and exits. `state` is `ok`, `warn` or `critical`, and
  *  it is the volume's state, never a class being large: a class over the flag on a machine
  *  with free space is not a fault (the tool's own rule, tested in tools/host-watch.test.ts). */
+/** What an agent may do on one capability (ISA F10). */
+export type AgentMode = 'off' | 'read-only' | 'ask' | 'auto';
+
+/** One write that waits for the owner, or was decided. */
+export interface AgentApproval {
+  id: string;
+  capability: string;
+  method: string;
+  path: string;
+  preview: string;
+  created_at: number;
+  state: 'pending' | 'allowed' | 'denied' | 'used';
+}
+
+/** One logged agent call. Never a body or a query. */
+export interface AgentCall {
+  at: number;
+  capability: string;
+  method: string;
+  path: string;
+  status: number;
+  decision: string;
+}
+
+export interface AgentView {
+  enrolled: boolean;
+  modes: AgentMode[];
+  default_mode: AgentMode;
+  capabilities: {
+    capability: string;
+    mode: AgentMode;
+    confirm: string[];
+    get_writes: string[];
+  }[];
+  pending: AgentApproval[];
+  calls: AgentCall[];
+}
+
 export interface StorageReport {
   disk: { used: number; free: number; total: number; target: string };
   state: string;
@@ -1871,6 +1909,21 @@ export const axonStatus = {
    *  how `report` says free space is below the policy's critical threshold. */
   storage: (signal?: AbortSignal) =>
     request<StorageReport>('/sjel-status/api/sjel-status/storage', signal ? { signal } : undefined),
+  /** The agent's reach (ISA F10): each capability's mode, writes waiting, latest calls. */
+  agent: (signal?: AbortSignal) =>
+    request<AgentView>('/sjel-status/api/sjel-status/agent', signal ? { signal } : undefined),
+  setAgentMode: (capability: string, mode: AgentMode) =>
+    request<{ capability: string; mode: AgentMode }>('/sjel-status/api/sjel-status/agent/mode', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ capability, mode }),
+    }),
+  decideAgentWrite: (id: string, allow: boolean) =>
+    request<AgentApproval>(`/sjel-status/api/sjel-status/agent/approvals/${encodeURIComponent(id)}`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ allow }),
+    }),
   /** Every Pack skill against every agent harness. Served here rather than by `packs`
    *  itself because that capability is `kind = "data"`: it owns the deployment ledgers and
    *  nothing starts, so it has no port. Same reason as `hostWatch()` above. */

@@ -332,6 +332,9 @@ impl InboundAuth {
         routes: crate::agent_policy::AgentRoutes,
     ) -> Self {
         let files = crate::agent_policy::PolicyFiles::from_deployment().map(Arc::new);
+        if let Some(files) = &files {
+            files.register_gate(capability, &routes);
+        }
         self.agent = crate::agent::AgentAccess::from_deployment()
             .map(|access| Arc::new(access.for_capability(capability, routes, files)));
         self

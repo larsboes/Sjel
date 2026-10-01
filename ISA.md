@@ -606,6 +606,11 @@ Product Rule 5 still applies inside auto ([product rules](CONTRIBUTING.md#produc
 change that leaves Sjel, or cannot be undone, asks." A route that does either declares it in its
 manifest, and the gate asks for it whatever the mode.
 
+Where the files live: the policy, the approvals and the call log are under the overlay's
+`secrets/agent/`, which the managed agent policy denies, because an agent that could edit an
+approval would allow its own write. A readable copy of the modes and the gate registry are under
+`data/`; they decide which tools are offered, never what the gate admits.
+
 Placement: the gate stays in `libs/sjel-server`. sjel-status owns the policy, the approvals and
 the call log, because it already owns the Systems page. The MCP server is operator machinery in
 `tools/`. sjel-status itself never admits an agent: it starts and stops the machine's services.

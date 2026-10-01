@@ -603,6 +603,12 @@ Design:
   trades the Keychain token for a single-use ticket, and the shell turns it into a session cookie
   (`capabilities/sjel-status/src/session.rs`). Still open: soundscape's panel loads from its own
   port (`panelUrl` in `dashboard/src/lib/api.ts`), so its browser requests carry no token.
+  Progress 2026-10-01, later: a session started after the policy was installed refuses a
+  `secrets/**` read. `Read` of a missing file under `sjel-personal/secrets/` returned "denied by
+  your permission settings" instead of "not found", and `cat` of the same path was denied
+  before it ran. The session's sandbox also lists the overlay `secrets/` paths as read-denied.
+  This confirms the startup-read explanation above. Still open: `tools/setup-tailnet-shell.sh`
+  and the soundscape panel.
 
 ### F10 · An agent writes, under a mode the owner sets
 

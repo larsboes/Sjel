@@ -1175,8 +1175,8 @@ async fn flight_when(Query(params): Query<FlightWhenParams>) -> ApiResponse {
                 std::time::Duration::from_secs(3),
             )
             .map_err(|error| error.to_string())?;
-            let response = client
-                .get(calendar_entries_url(&date_from, &date_to))
+            let url = calendar_entries_url(&date_from, &date_to);
+            let response = sjel_server::InboundAuth::with_loopback_auth(client.get(&url), &url)
                 .send()
                 .map_err(|_| "calendar is not answering".to_string())?;
             if !response.status().is_success() {
@@ -1523,11 +1523,12 @@ fn interior_base_url() -> String {
 /// there would be a worse answer than one that renders labels and says the attributes are
 /// absent.
 fn interior_index() -> Option<std::collections::HashMap<String, trips::pack::InventoryItem>> {
-    let body: Value = reqwest::blocking::Client::builder()
+    let client = reqwest::blocking::Client::builder()
         .timeout(std::time::Duration::from_secs(3))
         .build()
-        .ok()?
-        .get(format!("{}/api/inventory", interior_base_url()))
+        .ok()?;
+    let url = format!("{}/api/inventory", interior_base_url());
+    let body: Value = sjel_server::InboundAuth::with_loopback_auth(client.get(&url), &url)
         .send()
         .ok()?
         .json()

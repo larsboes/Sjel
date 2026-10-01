@@ -33,6 +33,7 @@ import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 
 import { axonRoot } from "./lib/overlay.ts";
+import { authorizedLoopbackRequest, loadInboundCredential } from "./lib/inbound-auth.ts";
 
 function fail(message: string): never {
   console.error(`sparpreis-watch: ${message}`);
@@ -40,6 +41,15 @@ function fail(message: string): never {
 }
 
 const SJEL_ROOT = axonRoot();
+
+export { authorizedLoopbackRequest };
+
+function capabilityFetch(url: string, init: RequestInit = {}): Promise<Response> {
+  const credential = loadInboundCredential(SJEL_ROOT).authorization;
+  if (!credential) throw new Error("deployment inbound credential is not configured");
+  const request = authorizedLoopbackRequest(url, init, credential);
+  return fetch(request.target, request.init);
+}
 
 /**
  * The port a service.toml declares. Throws with the reason when it declares none, or
@@ -275,7 +285,7 @@ export function withObservation(history: Observation[], today: Observation): Obs
 }
 
 async function postItem(trips: string, planId: string, body: unknown): Promise<boolean> {
-  const response = await fetch(`${trips}/api/plans/${encodeURIComponent(planId)}/items`, {
+  const response = await capabilityFetch(`${trips}/api/plans/${encodeURIComponent(planId)}/items`, {
     method: "POST",
     headers: { "content-type": "application/json" },
     body: JSON.stringify(body),
@@ -285,7 +295,7 @@ async function postItem(trips: string, planId: string, body: unknown): Promise<b
 }
 
 async function loadItems(trips: string, planId: string): Promise<{ items: unknown[]; stages: Stage[] }> {
-  const details = (await (await fetch(`${trips}/api/plans/${encodeURIComponent(planId)}`)).json()) as {
+  const details = (await (await capabilityFetch(`${trips}/api/plans/${encodeURIComponent(planId)}`)).json()) as {
     items?: unknown[];
     stages?: Stage[];
   };
@@ -315,7 +325,7 @@ async function consolidate(trips: string, planId: string, items: unknown[]): Pro
     if (!wrote) continue;
     for (const item of legacy) {
       if (!item.id) continue;
-      const response = await fetch(
+      const response = await capabilityFetch(
         `${trips}/api/plans/${encodeURIComponent(planId)}/items/${encodeURIComponent(item.id)}`,
         { method: "DELETE" },
       );
@@ -337,7 +347,7 @@ async function main(): Promise<void> {
   const transit = `http://127.0.0.1:${portOf("transit")}`;
   const today = new Date().toISOString().slice(0, 10);
 
-  const plans = (await (await fetch(`${trips}/api/plans`)).json()) as Array<{
+  const plans = (await (await capabilityFetch(`${trips}/api/plans`)).json()) as Array<{
     id: string;
     date_start: string;
     title: string;
@@ -360,7 +370,7 @@ async function main(): Promise<void> {
     if (watch.bc) params.set("bc", String(watch.bc));
     if (watch.dTicket) params.set("d_ticket", "true");
     if (watch.firstClass) params.set("first_class", "true");
-    const search = await fetch(`${transit}/api/search?${params}`);
+    const search = await capabilityFetch(`${transit}/api/search?${params}`);
     if (!search.ok) {
       console.error(
         `sparpreis-watch: search ${watch.from}->${watch.to} HTTP ${search.status}: ${(await search.text()).slice(0, 200)}`,

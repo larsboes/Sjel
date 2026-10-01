@@ -286,9 +286,9 @@ fn calendar_entry_text(cfg: &Config, id: &str) -> Result<Option<SourceText>> {
         sjel_http::Purpose::new("comms-digest"),
         std::time::Duration::from_millis(cfg.calendar_context.timeout_ms),
     )?;
-    let response = http
-        .get(format!("{base}/api/content/calendar/{id}"))
-        .send()?;
+    let url = format!("{base}/api/content/calendar/{id}");
+    let request = sjel_server::InboundAuth::with_loopback_auth(http.get(&url), &url);
+    let response = request.send()?;
     if response.status() == reqwest::StatusCode::NOT_FOUND {
         return Ok(None);
     }

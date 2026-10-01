@@ -865,9 +865,12 @@ pub fn stations(store: &PlacesStore, today: &str) -> Fallible<()> {
                     .optional()?
                 };
                 let query = known_name.clone().unwrap_or_else(|| eva.clone());
-                let resolved = client
-                    .get(format!("{suggest_base}/api/suggest"))
-                    .query(&[("q", query.as_str())])
+                let url = format!("{suggest_base}/api/suggest");
+                let request = sjel_server::InboundAuth::with_loopback_auth(
+                    client.get(&url).query(&[("q", query.as_str())]),
+                    &url,
+                );
+                let resolved = request
                     .send()
                     .ok()
                     .filter(|response| response.status().is_success())
@@ -1336,7 +1339,9 @@ pub fn vault(store: &PlacesStore, today: &str) -> Fallible<()> {
                         match outcome.place {
                             Some(place) => place.id,
                             None => {
-                                eprintln!("backfill vault: home {home:?} of one person note did not geocode; skipped");
+                                eprintln!(
+                                    "backfill vault: home {home:?} of one person note did not geocode; skipped"
+                                );
                                 continue;
                             }
                         }

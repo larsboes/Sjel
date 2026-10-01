@@ -1,6 +1,7 @@
 import { describe, expect, test } from "bun:test";
 
 import {
+  authorizedLoopbackRequest,
   dropped,
   historyOf,
   legacyObservations,
@@ -12,6 +13,28 @@ import {
   watchKey,
   withObservation,
 } from "./sparpreis-watch.ts";
+
+describe("authorizedLoopbackRequest", () => {
+  test("adds the deployment credential to a loopback request", () => {
+    const request = authorizedLoopbackRequest(
+      "http://127.0.0.1:8090/api/plans",
+      { method: "POST", headers: { "content-type": "application/json" }, body: "{}" },
+      "Bearer test-token",
+    );
+    expect(new Headers(request.init.headers).get("authorization")).toBe("Bearer test-token");
+    expect(request.init.method).toBe("POST");
+  });
+
+  test("refuses to put the deployment credential on a non-loopback request", () => {
+    expect(() =>
+      authorizedLoopbackRequest(
+        "https://provider.example/api",
+        {},
+        "Bearer test-token",
+      ),
+    ).toThrow("not loopback");
+  });
+});
 
 describe("railWatchesOf", () => {
   const railItem = {

@@ -69,10 +69,8 @@ fn client(timeout: Duration) -> Result<reqwest::blocking::Client, String> {
 
 /// One GET, with the status checked before the body is parsed.
 fn get_json(url: &str, timeout: Duration) -> Result<Value, String> {
-    let response = client(timeout)?
-        .get(url)
-        .send()
-        .map_err(|error| short(&error.to_string()))?;
+    let request = sjel_server::InboundAuth::with_loopback_auth(client(timeout)?.get(url), url);
+    let response = request.send().map_err(|error| short(&error.to_string()))?;
     let status = response.status();
     if !status.is_success() {
         return Err(format!("answered {}", status.as_u16()));

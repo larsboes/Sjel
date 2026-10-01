@@ -123,14 +123,15 @@ fn empty(from_cache: bool) -> LoadedTravelContext {
 
 fn fetch(config: &TravelContextConfig) -> Result<Vec<TravelContext>, Box<dyn std::error::Error>> {
     let url = format!("{}/api/plans", config.base_url.trim_end_matches('/'));
-    let plans = sjel_http::client(
+    let client = sjel_http::client(
         sjel_http::Purpose::new("comms-travel"),
         Duration::from_millis(config.timeout_ms.clamp(250, 10_000)),
-    )?
-    .get(url)
-    .send()?
-    .error_for_status()?
-    .json::<Vec<TripPlanResponse>>()?;
+    )?;
+    let request = sjel_server::InboundAuth::with_loopback_auth(client.get(&url), &url);
+    let plans = request
+        .send()?
+        .error_for_status()?
+        .json::<Vec<TripPlanResponse>>()?;
     let today = current_date();
     let mut contexts = plans
         .into_iter()

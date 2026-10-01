@@ -78,16 +78,8 @@ pub fn create_item<T: Serialize>(item: &T, state: &str, note: &str) -> Written {
         Ok(client) => client,
         Err(error) => return Written::Unreachable(format!("interior client: {error}")),
     };
-    let mut request = client
-        .post(format!("{}/api/items", interior_base_url()))
-        .json(&body);
-    // The inbound gate covers every route but /health and /ready. Without the token a gated
-    // interior reads as "not running", which would turn a refused write into a false
-    // unreachable — the same rule `finance_client` states, resolved per request so a rotated
-    // token needs no restart.
-    if let Some(bearer) = sjel_server::InboundAuth::from_deployment().bearer_header() {
-        request = request.header(reqwest::header::AUTHORIZATION, bearer);
-    }
+    let url = format!("{}/api/items", interior_base_url());
+    let request = sjel_server::InboundAuth::with_loopback_auth(client.post(&url).json(&body), &url);
     let response = match request.send() {
         Ok(response) => response,
         // `without_url` for the same reason finance_client gives: the URL is already known

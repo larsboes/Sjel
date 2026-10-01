@@ -33,9 +33,11 @@ pub fn resolve(places_url: &str, place: &str) -> Resolved {
         Err(error) => return Resolved::Unavailable(format!("client build: {error}")),
     };
     let url = format!("{}/api/geocode", places_url.trim_end_matches('/'));
-    let body: Value = match client
-        .post(&url)
-        .json(&json!({ "query": place }))
+    let request = sjel_server::InboundAuth::with_loopback_auth(
+        client.post(&url).json(&json!({ "query": place })),
+        &url,
+    );
+    let body: Value = match request
         .send()
         .and_then(|r| r.error_for_status())
         .and_then(|r| r.json())

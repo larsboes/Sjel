@@ -120,8 +120,9 @@ pub fn fetch(vault_url: &str) -> Result<Vec<Incoming>, String> {
         Duration::from_secs(60),
     )
     .map_err(|e| e.to_string())?;
-    let body: Value = client
-        .get(format!("{}/api/people", vault_url.trim_end_matches('/')))
+    let url = format!("{}/api/people", vault_url.trim_end_matches('/'));
+    let request = sjel_server::InboundAuth::with_loopback_auth(client.get(&url), &url);
+    let body: Value = request
         .send()
         .and_then(|r| r.error_for_status())
         .and_then(|r| r.json())

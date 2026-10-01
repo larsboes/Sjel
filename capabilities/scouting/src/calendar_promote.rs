@@ -249,7 +249,9 @@ pub fn promote_saved_luma(
             continue;
         }
 
-        let response = client.put(&url).json(&body).send();
+        let request =
+            sjel_server::InboundAuth::with_loopback_auth(client.put(&url).json(&body), &url);
+        let response = request.send();
         match response {
             Ok(resp) => {
                 let status = resp.status();

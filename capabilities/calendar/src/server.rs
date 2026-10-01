@@ -826,8 +826,8 @@ async fn sync_trip_plan(State(state): State<AppState>, Path(plan_id): Path<Strin
         let base = config.trips_base_url.trim_end_matches('/').to_string();
 
         let url = format!("{base}/api/plans/{plan_id}");
-        let response = client
-            .get(&url)
+        let request = sjel_server::InboundAuth::with_loopback_auth(client.get(&url), &url);
+        let response = request
             .send()
             .map_err(|e| format!("GET {url}: {e}"))?;
         if response.status() == reqwest::StatusCode::NOT_FOUND {
@@ -999,8 +999,8 @@ async fn materialize_trip(
             let Some(plan_id) = store.trip_plan_for(entry_id).map_err(|e| e.to_string())? else {
                 continue;
             };
-            let probe = client
-                .get(format!("{base}/api/plans/{plan_id}"))
+            let url = format!("{base}/api/plans/{plan_id}");
+            let probe = sjel_server::InboundAuth::with_loopback_auth(client.get(&url), &url)
                 .send()
                 .map_err(|e| {
                     // Unreachable is not the same as gone. Forgetting the row
@@ -1070,11 +1070,9 @@ async fn materialize_trip(
         });
 
         let url = format!("{base}/api/plans");
-        let response = client
-            .post(&url)
-            .json(&payload)
-            .send()
-            .map_err(|e| format!("POST {url}: {e}"))?;
+        let request =
+            sjel_server::InboundAuth::with_loopback_auth(client.post(&url).json(&payload), &url);
+        let response = request.send().map_err(|e| format!("POST {url}: {e}"))?;
         let status = response.status();
         let plan: Value = response
             .json()
@@ -1414,7 +1412,7 @@ async fn opt_in_export(
                 json!({
                     "error": "no google_calendar_id given and none configured — set google.calendar_id in the overlay's calendar.json or pass it in the body"
                 }),
-            )
+            );
         }
     };
     let database_path = state.database_path.clone();

@@ -58,24 +58,26 @@ struct HardBody {
 /// read at all — a different fact from an empty list, which means they named none.
 pub fn home_airports() -> Option<Vec<String>> {
     let client = sjel_http::client(sjel_http::Purpose::new("trips-traveler"), TIMEOUT).ok()?;
-    let envelope: ProfileEnvelope = client
-        .get(format!("{}/api/profile", traveler_base_url()))
-        .send()
-        .and_then(|response| response.error_for_status())
-        .and_then(|response| response.json())
-        .ok()?;
+    let url = format!("{}/api/profile", traveler_base_url());
+    let envelope: ProfileEnvelope =
+        sjel_server::InboundAuth::with_loopback_auth(client.get(&url), &url)
+            .send()
+            .and_then(|response| response.error_for_status())
+            .and_then(|response| response.json())
+            .ok()?;
     Some(envelope.profile.hard.home_airports)
 }
 
 /// The soft ranking weights stated or derived in traveler profile, if available.
 pub fn soft_weights() -> Option<SoftWeights> {
     let client = sjel_http::client(sjel_http::Purpose::new("trips-traveler"), TIMEOUT).ok()?;
-    let envelope: ProfileEnvelope = client
-        .get(format!("{}/api/profile", traveler_base_url()))
-        .send()
-        .and_then(|response| response.error_for_status())
-        .and_then(|response| response.json())
-        .ok()?;
+    let url = format!("{}/api/profile", traveler_base_url());
+    let envelope: ProfileEnvelope =
+        sjel_server::InboundAuth::with_loopback_auth(client.get(&url), &url)
+            .send()
+            .and_then(|response| response.error_for_status())
+            .and_then(|response| response.json())
+            .ok()?;
     envelope.profile.soft
 }
 

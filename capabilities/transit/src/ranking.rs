@@ -130,12 +130,13 @@ pub fn read_profile() -> Option<ProfileSnapshot> {
         std::time::Duration::from_secs(3),
     )
     .ok()?;
-    let envelope: ProfileEnvelope = client
-        .get(format!("{}/api/profile", base_url()))
-        .send()
-        .and_then(|response| response.error_for_status())
-        .and_then(|response| response.json())
-        .ok()?;
+    let url = format!("{}/api/profile", base_url());
+    let envelope: ProfileEnvelope =
+        sjel_server::InboundAuth::with_loopback_auth(client.get(&url), &url)
+            .send()
+            .and_then(|response| response.error_for_status())
+            .and_then(|response| response.json())
+            .ok()?;
     // `default` means nobody has looked. Ranking on it would be ranking on the
     // repo's guess while presenting it as the traveller's, which is the exact
     // confusion the provenance map exists to prevent.
@@ -365,7 +366,7 @@ fn parse_weights(spec: &str) -> Result<JourneyWeights, String> {
             other => {
                 return Err(format!(
                     "unknown weight {other:?}; known: price, duration, changes, reliability"
-                ))
+                ));
             }
         }
         named += 1;

@@ -218,9 +218,9 @@ fn lookup(stops: Vec<StopQuery>) -> Option<Vec<Option<StopStats>>> {
         let body = LookupBody {
             stops: chunk.to_vec(),
         };
-        let response = client
-            .post(&url)
-            .json(&body)
+        let request =
+            sjel_server::InboundAuth::with_loopback_auth(client.post(&url).json(&body), &url);
+        let response = request
             .send()
             .and_then(|r| r.error_for_status())
             .and_then(|r| r.json::<LookupResponse>())

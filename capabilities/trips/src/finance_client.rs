@@ -89,14 +89,7 @@ pub fn trip_spending_at(base_url: &str, plan_id: &str) -> Result<TripSpending, U
     let url = format!("{}/api/trips/{}/spending", base_url, urlencode(plan_id));
     let client = sjel_http::client(sjel_http::Purpose::new("trips-finance"), TIMEOUT)
         .map_err(|error| Unreachable::new(format!("finance client: {error}")))?;
-    let mut request = client.get(&url);
-    // The inbound gate is on every route except /health and /ready, so without
-    // the token a gated finance reads as "not running" — the one wrong answer
-    // this must not give. Resolved per request, so rotating the token file needs
-    // no restart here (the sjel-status precedent).
-    if let Some(bearer) = sjel_server::InboundAuth::from_deployment().bearer_header() {
-        request = request.header(reqwest::header::AUTHORIZATION, bearer);
-    }
+    let request = sjel_server::InboundAuth::with_loopback_auth(client.get(&url), &url);
     // `without_url` before the message is built: reqwest prints the full request
     // URL in its Display, and this reason is served in the cost body and printed
     // verbatim in the card's footer. Same rule, same reason, as

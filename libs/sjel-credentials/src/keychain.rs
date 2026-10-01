@@ -2,7 +2,9 @@ use crate::{
     CredentialError, CredentialId, CredentialProvider, Presence, ProviderKind, ProviderReference,
     SecretValue,
 };
+#[cfg(target_os = "macos")]
 use std::io::Write;
+#[cfg(target_os = "macos")]
 use std::process::{Command, Stdio};
 
 /// Redacted result from a subprocess. Standard error is intentionally discarded by provider

@@ -54,6 +54,7 @@ Operate capabilities:
   capability feed [days]         Read the comms feed
   capability mail [status]       Read mail triage without Secret rows; pseudonymized for an agent
   agent enroll                   Create or rotate the agent token (Keychain) and its server hash
+  mcp                            Serve the capabilities as MCP tools on stdio, under each one's agent mode
 
 Manage Packs:
   pack list [harness]            List available Packs, optionally for one harness
@@ -394,6 +395,8 @@ case "${1:-help}" in
   -h|--help) usage ;;
   search) shift; search "$@" ;;
   doctor) shift; exec "$SJEL_ROOT/tools/doctor" "$@" ;;
+  # stdio MCP server (ISA ISC-40). Register once: claude mcp add sjel -- sjel mcp
+  mcp) shift; exec bun run "$SJEL_ROOT/tools/sjel-mcp.ts" "$@" ;;
   context) shift; exec "$SJEL_ROOT/tools/axon-context" "$@" ;;
   # Same delegation as doctor: the launcher owns the overlay resolution and the lazy
   # release build, so there is one implementation of both.

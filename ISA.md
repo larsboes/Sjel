@@ -516,10 +516,15 @@ last layer over the routes and adds no data path of its own.
   word beside a standalone 4–8 digit number is c3 (a year is not a code), and location-sharing
   phrases are c2. `POST /triage/data-class/refresh` re-derives stored rows and redacts what the
   new class requires. Still open: the ceiling becomes a gate only with ISC-38.
-- [ ] ISC-40 — one MCP server exposes the capabilities' `/routes` as tools: read tools by
+- [x] ISC-40 — one MCP server exposes the capabilities' `/routes` as tools: read tools by
   default, write tools only with a per-capability grant. Falsifier: the tool list contains a
   `POST` route without a grant. Depends on ISC-33, 34, 36 and 38. Amended 2026-10-01: the grant
   is F10's per-capability mode, so a write tool is listed unless its capability is read-only.
+  Done 2026-10-01: `tools/sjel-mcp.ts`, run as `sjel mcp`, register with `claude mcp add sjel --
+  sjel mcp`. Tools come from each registered gate's `GET /routes`, so a new route is a new tool.
+  Live, from this agent session: 43 comms tools (31 writes, 10 marked as waiting for the owner),
+  and `comms__get_triage` returned 382 rows with no raw sender address. Held by
+  `tools/sjel-mcp.test.ts`. Other capabilities register their gates on their next restart.
 
 Decided 2026-10-01, see F10: the write grant is a per-capability mode, and each agent call is
 logged.

@@ -589,6 +589,14 @@ Design:
   path, starts the protected listener, applies `tools/setup-tailnet-shell.sh`, and verifies from
   an agent session that secret reads fail while Comms remains pseudonymized. No deployment
   credential or Tailscale Serve configuration was changed in this code session.
+  Progress 2026-10-01: the operator ran `tools/setup-inbound-auth.sh` and installed the managed
+  policy at `/Library/Application Support/ClaudeCode/managed-settings.json`. Until then this Mac
+  had none: the only copy was the Linux path `/etc/claude-code/`, which macOS ignores. After a
+  restart on the new token, every running capability answers `/health` with 200 and a protected
+  route with 401 when no token is sent, and `sjel capability mail` returns 383 rows with no
+  address. Still open: `tools/setup-tailnet-shell.sh`, and a probe of the `secrets/**` deny from
+  a session started after the policy was installed. The session that installed it was not
+  refused, which fits a policy read at startup (not verified).
   Two consequences of failing closed, measured 2026-10-01. A browser on this Mac at
   `127.0.0.1:8082` carries no token: answered the same day by the principal's ruling (no command
   line, a 30-day sliding session). The menu-bar app (`apps/mac/install`, `~/Applications/Sjel.app`)

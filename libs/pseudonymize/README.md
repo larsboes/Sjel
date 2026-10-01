@@ -46,8 +46,9 @@ The ladder is PRD §6.2's, applied in `session.rs` (`tokenize_text`):
   document hash uses one fresh session per call.
 - `Debug` prints counts only. The maps hold the personal values.
 
-Not covered: decomposed Unicode umlauts (`u` + U+0308), postal addresses, and names that no
-rung recognises.
+Not covered: postal addresses and names that no rung recognises. Composed and decomposed
+German umlauts use the same dictionary folding, while tokenization and rehydration preserve the
+source spelling.
 
 ## Keyed sessions and the agent view
 

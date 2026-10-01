@@ -34,17 +34,36 @@ impl std::fmt::Debug for MatchSpan {
 ///
 /// Unicode lowercase (not ASCII-only, which left `MÜNCHEN` unmatched against `München`),
 /// then the German transliterations a sender types when the keyboard has no umlaut:
-/// `ß`→`ss`, `ä`→`ae`, `ö`→`oe`, `ü`→`ue`. Both the dictionary and the text pass through
-/// this function, so the folding cannot disagree with itself.
-///
-/// Not covered: decomposed Unicode (`u` + U+0308). The crate carries no normalization table;
-/// a sender whose client writes NFD umlauts is matched only on the ASCII part.
+/// `ß`→`ss`, `ä`→`ae`, `ö`→`oe`, `ü`→`ue`. Decomposed umlauts (`u` + U+0308) fold the
+/// same way. Both dictionary entries and text pass through this function.
 pub fn fold(value: &str) -> String {
     let mut out = String::with_capacity(value.len());
-    for c in value.chars() {
-        push_folded(&mut out, c);
+    let mut chars = value.chars().peekable();
+    while let Some(c) = chars.next() {
+        let decomposed_umlaut = is_umlaut_base(c) && chars.peek() == Some(&'\u{0308}');
+        if decomposed_umlaut {
+            chars.next();
+        }
+        push_folded_sequence(&mut out, c, decomposed_umlaut);
     }
     out
+}
+
+fn is_umlaut_base(c: char) -> bool {
+    matches!(c.to_lowercase().next(), Some('a' | 'o' | 'u'))
+}
+
+fn push_folded_sequence(out: &mut String, c: char, decomposed_umlaut: bool) {
+    if decomposed_umlaut {
+        match c.to_lowercase().next() {
+            Some('a') => out.push_str("ae"),
+            Some('o') => out.push_str("oe"),
+            Some('u') => out.push_str("ue"),
+            _ => push_folded(out, c),
+        }
+    } else {
+        push_folded(out, c);
+    }
 }
 
 fn push_folded(out: &mut String, c: char) {
@@ -69,9 +88,15 @@ struct Folded {
 fn fold_with_offsets(value: &str) -> Folded {
     let mut text = String::with_capacity(value.len());
     let mut boundary = Vec::with_capacity(value.len() + 1);
-    for (index, c) in value.char_indices() {
+    let mut chars = value.char_indices().peekable();
+    while let Some((index, c)) = chars.next() {
+        let decomposed_umlaut =
+            is_umlaut_base(c) && chars.peek().is_some_and(|(_, next)| *next == '\u{0308}');
+        if decomposed_umlaut {
+            chars.next();
+        }
         let before = text.len();
-        push_folded(&mut text, c);
+        push_folded_sequence(&mut text, c, decomposed_umlaut);
         boundary.push(Some(index));
         boundary.extend(std::iter::repeat_n(None, text.len() - before - 1));
     }
@@ -329,6 +354,21 @@ mod tests {
             ["Joerg Mueller", "Muenchen Hbf"]
         );
         assert_eq!(matched(&registry, "in der Grossstrasse"), ["Grossstrasse"]);
+    }
+
+    #[test]
+    fn composed_and_decomposed_umlauts_match_and_preserve_original_spans() {
+        let registry = EntityRegistry::builder()
+            .add_person("Jörg Müller")
+            .add_place("München Hbf")
+            .add_person("Jo\u{0308}rg Mu\u{0308}ller")
+            .build();
+        let text = "JÖRG MU\u{0308}LLER kommt aus Mu\u{0308}nchen Hbf";
+        assert_eq!(
+            matched(&registry, text),
+            ["JÖRG MU\u{0308}LLER", "Mu\u{0308}nchen Hbf"]
+        );
+        assert_eq!(fold("Jörg Jo\u{0308}rg"), "joerg joerg");
     }
 
     #[test]

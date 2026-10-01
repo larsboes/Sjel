@@ -469,6 +469,16 @@ mod tests {
     }
 
     #[test]
+    fn decomposed_umlauts_are_tokenized_and_rehydrated_without_normalizing_source() {
+        let registry = EntityRegistry::builder().add_person("Jörg Müller").build();
+        let original = "JÖRG MU\u{0308}LLER schreibt";
+        let mut session = PseudonymizerSession::new();
+        let tokenized = session.tokenize_text(original, &registry);
+        assert_eq!(tokenized, "<TRAVELER_01> schreibt");
+        assert_eq!(session.rehydrate_text(&tokenized), original);
+    }
+
+    #[test]
     fn a_compound_and_a_genitive_do_not_leak_half_a_name() {
         let mut session = PseudonymizerSession::new();
         let out = session.tokenize_text("Anna-Lena und Annas neue Wohnung", &registry());

@@ -619,8 +619,10 @@ Design:
   `/health` with 502, while the sjel-status log reports the socket listener ready. This Mac runs
   the Tailscale system-extension build (`io.tailscale.ipn.macsys`). Upstream says that extension
   "cannot serve arbitrary paths on macOS due to sandbox restrictions"
-  (`cmd/tailscale/cli/serve_v2.go`). Whether that also stops it reaching a Unix socket is not
-  verified.
+  (`cmd/tailscale/cli/serve_v2.go`). Verified later the same evening: it does. During one
+  request, `tailscale debug daemon-logs` printed `http: proxy error: dial unix <overlay
+  secrets/>sjel-status.sock: connect: operation not permitted`, while `lsof` showed sjel-status
+  holding that socket. The extension's sandbox refuses the connect; the listener is not at fault.
 
 ### F10 · An agent writes, under a mode the owner sets
 

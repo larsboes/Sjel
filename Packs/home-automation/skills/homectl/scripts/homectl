@@ -55,9 +55,8 @@ import yaml
 # ── Path defaults (env-derived, all overridable via args — zero hardcoded paths) ──
 # Fall back to this file's own position rather than a guessed checkout location: the script
 # lives at <SJEL_ROOT>/Packs/home-automation/skills/homectl/scripts/homectl, which is true on
-# every machine. The previous default was ~/Developer/Axon, a Mac-shaped path that does not
-# exist on the family Pi (Axon sits at ~/Axon there), so every invocation without SJEL_ROOT
-# died on a missing components.toml.
+# every machine. The previous default was a Mac-specific checkout path that did not
+# exist on the family Pi, so invocations without SJEL_ROOT died on a missing components.toml.
 # parents[5] is the canonical depth. Guard it: a copy of this script somewhere flat (a scratch
 # dir, a container /tmp) would otherwise die with an IndexError at import, before it can even
 # say what it was looking for.

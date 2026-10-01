@@ -52,9 +52,8 @@ def _default_gateway():
 
 
 GATEWAY = _default_gateway()
-# The sibling `fritz` skill, found relative to this file rather than through a
-# hardcoded checkout location: Axon lives at ~/Developer/Axon on one machine and
-# ~/Axon on the family node, and .resolve() also sees through the symlink that
+# The sibling `fritz` skill is found relative to this file rather than through
+# a hardcoded checkout location. `.resolve()` also sees through the symlink that
 # packs.sh plants in ~/.claude/skills.
 FRITZ = os.environ.get(
     "FRITZ_BIN",

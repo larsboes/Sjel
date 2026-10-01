@@ -1579,7 +1579,7 @@ async fn main() {
         database_path: Arc::new(config.database_path.clone()),
         config: Arc::new(config),
     };
-    sjel_server::serve_local("calendar-server", port, build_router(state)).await;
+    sjel_server::serve_local("calendar", port, build_router(state)).await;
 }
 
 /// This capability's name, for the origin guard's env var

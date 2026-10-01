@@ -141,6 +141,15 @@ struct DiscoverResponse {
     results: Vec<ScoredResult>,
 }
 
+/// `GET /discover` crawls third-party sources and stores what it scores, so an agent's mode
+/// treats it as a write (ISA ISC-38's audit, F10). Moving it to `POST` would change the demo
+/// recordings that replay it.
+const AGENT_ROUTES: sjel_server::agent_policy::AgentRoutes =
+    sjel_server::agent_policy::AgentRoutes {
+        confirm: &[],
+        get_writes: &[("GET", "/discover")],
+    };
+
 async fn discover_handler(Query(params): Query<DiscoverParams>) -> Json<Value> {
     let adapter_name = params
         .adapter
@@ -584,7 +593,7 @@ async fn main() {
     // Was 0.0.0.0, which put an unauthenticated POST /opportunities/{id}/status on
     // the LAN. Nothing documented that bind as a decision; it was the last of the
     // three divergences libs/sjel-server exists to end.
-    sjel_server::serve_local("scout-server", cfg.port, build_router()).await;
+    sjel_server::serve_local_with("scouting", cfg.port, build_router(), AGENT_ROUTES).await;
 }
 
 /// This capability's name, for the origin guard's env var

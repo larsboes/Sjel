@@ -503,13 +503,39 @@ async fn project_library_after_write(
 /// Without this, an unconfigured secret would leave those routes open instead
 /// of closed, which is the one direction this must never move.
 ///
-/// `admit_agents` because mail is what an agent most needs to read and the one capability
-/// where a raw read leaked the most (ISA F9): the agent token gets `GET` only, pseudonymized.
+/// `admit_agents` because mail is what an agent most needs to read, pseudonymized (ISA F9),
+/// under the mode the owner set (ISA F10). [`AGENT_ROUTES`] names the writes that ask in
+/// every mode.
 fn inbound_auth(cfg: &Config) -> sjel_server::InboundAuth {
     sjel_server::InboundAuth::resolve(cfg.api_secret.clone())
         .refuse_without_token()
-        .admit_agents()
+        .admit_agents("comms", AGENT_ROUTES)
 }
+
+/// The comms writes an agent's call waits on the owner for, whatever the mode (Product Rule
+/// 5: "A change that leaves Sjel, or cannot be undone, asks.").
+///
+/// - Leaves Sjel: a Gmail action, a cloud approval or run, and `/ingest`, which fetches a URL
+///   the caller chose.
+/// - Cannot be undone: redaction, and the reclassification pass that redacts.
+/// - Setting a data class by hand: an agent that lowered a class could then read what the
+///   class withheld from it.
+const AGENT_ROUTES: sjel_server::agent_policy::AgentRoutes =
+    sjel_server::agent_policy::AgentRoutes {
+        confirm: &[
+            ("POST", "/triage/{id}/gmail"),
+            ("POST", "/triage/{id}/gmail-job"),
+            ("POST", "/triage/bulk"),
+            ("POST", "/content/{source}/{id}/cloud-approval"),
+            ("POST", "/content/cloud-jobs/{job_id}/run"),
+            ("POST", "/ingest"),
+            ("POST", "/triage/redact"),
+            ("POST", "/triage/data-class/refresh"),
+            ("POST", "/triage/{id}/data-class"),
+            ("POST", "/feed/{id}/data-class"),
+        ],
+        get_writes: &[],
+    };
 
 #[tokio::main]
 async fn main() {

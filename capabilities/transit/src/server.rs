@@ -517,7 +517,7 @@ async fn main() {
     // Port contract and loopback bind live in sjel_server; the old 0.0.0.0 bind
     // here was never a documented decision and is retired with it.
     let port = sjel_server::resolve_port(Some("TRANSIT_PORT"), None, 3000);
-    sjel_server::serve_local("transit-server", port, build_router(state)).await;
+    sjel_server::serve_local("transit", port, build_router(state)).await;
 }
 
 /// This capability's name, for the origin guard's env var

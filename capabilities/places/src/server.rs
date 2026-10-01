@@ -947,7 +947,7 @@ pub async fn serve() {
     let state = AppState {
         database_path: Arc::new(config.database_path),
     };
-    sjel_server::serve_local("places-server", config.port, build_router(state)).await;
+    sjel_server::serve_local("places", config.port, build_router(state)).await;
 }
 
 #[cfg(test)]

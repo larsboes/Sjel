@@ -278,7 +278,7 @@ async fn main() {
         vault_root: Arc::new(vault.path().to_string_lossy().into_owned()),
     };
     let port = sjel_server::resolve_port(None, None, 8094);
-    sjel_server::serve_local("vault-server", port, build_router(state)).await;
+    sjel_server::serve_local("vault", port, build_router(state)).await;
 }
 
 /// This capability's name, for the origin guard's env var

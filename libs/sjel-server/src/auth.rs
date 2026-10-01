@@ -320,14 +320,20 @@ impl InboundAuth {
         self
     }
 
-    /// Admit the deployment's agent token on this capability: read-only, and every response
-    /// pseudonymized (ISA F9). A no-op when no agent is enrolled.
+    /// Admit the deployment's agent token on this capability, under the mode the owner set
+    /// for it (ISA F10), with every response pseudonymized (ISA F9). A no-op when no agent is
+    /// enrolled.
     ///
-    /// Read-only means GET and HEAD, so it holds only while no GET or HEAD handler here
-    /// changes state. Before a capability calls this, check ISA ISC-38's list: on
-    /// 2026-10-01, scouting's `GET /discover` and two sjel-status GETs still did.
-    pub fn admit_agents(mut self) -> Self {
-        self.agent = crate::agent::AgentAccess::from_deployment().map(Arc::new);
+    /// A mode that forbids writes forbids every method but GET and HEAD, so a GET that changes
+    /// state must be named in `routes.get_writes`. ISA ISC-38 lists the ones its audit found.
+    pub fn admit_agents(
+        mut self,
+        capability: &str,
+        routes: crate::agent_policy::AgentRoutes,
+    ) -> Self {
+        let files = crate::agent_policy::PolicyFiles::from_deployment().map(Arc::new);
+        self.agent = crate::agent::AgentAccess::from_deployment()
+            .map(|access| Arc::new(access.for_capability(capability, routes, files)));
         self
     }
 

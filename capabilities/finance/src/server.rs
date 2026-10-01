@@ -2484,7 +2484,7 @@ async fn trip_spending(State(state): State<AppState>, Path(id): Path<String>) ->
 async fn main() {
     let config = Config::load();
     let port = config.port;
-    sjel_server::serve_local("finance-server", port, build_router(state_from(config))).await;
+    sjel_server::serve_local("finance", port, build_router(state_from(config))).await;
 }
 
 /// This capability's name, for the origin guard's env var

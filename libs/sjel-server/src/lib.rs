@@ -25,6 +25,7 @@ use std::net::SocketAddr;
 
 /// The agent identity: read-only, every response pseudonymized (ISA F9).
 pub mod agent;
+pub mod agent_policy;
 mod auth;
 /// The TLS listener for paired devices on the local network (PRD Q119).
 pub mod lan;
@@ -96,12 +97,28 @@ pub fn bind_addr_for(reach: Reach, port: u16, auth: &InboundAuth) -> Result<Sock
 /// read-only pseudonymization branch, and valid paired-device signatures remain credentials.
 /// Without a token, ordinary direct loopback requests fail closed.
 pub async fn serve_local(name: &str, port: u16, router: axum::Router) {
+    serve_local_with(name, port, router, agent_policy::AgentRoutes::NONE).await
+}
+
+/// [`serve_local`], for a capability with routes an agent must treat specially: a write that
+/// leaves Sjel or cannot be undone, or a `GET` that changes state (ISA F10).
+///
+/// Every capability served here admits the agent token under the mode the owner set for it on
+/// the Systems page (`agent_policy`). The default is auto.
+pub async fn serve_local_with(
+    name: &str,
+    port: u16,
+    router: axum::Router,
+    agent_routes: agent_policy::AgentRoutes,
+) {
     serve(
         name,
         Reach::Loopback,
         port,
         router,
-        InboundAuth::from_deployment().require_credential(),
+        InboundAuth::from_deployment()
+            .require_credential()
+            .admit_agents(name, agent_routes),
     )
     .await
 }
@@ -373,6 +390,27 @@ mod http_tests {
         agent::AgentAccess::new(hash, vec![9; 32], registry)
     }
 
+    const TEST_ROUTES: agent_policy::AgentRoutes = agent_policy::AgentRoutes {
+        confirm: &[("POST", "/triage/{id}/gmail")],
+        get_writes: &[("GET", "/discover")],
+    };
+
+    /// Agent access for "comms" under `mode`, with its own policy files in a temp directory.
+    fn agent_access_in(
+        name: &str,
+        mode: agent_policy::Mode,
+    ) -> (
+        agent::AgentAccess,
+        std::sync::Arc<agent_policy::PolicyFiles>,
+    ) {
+        let dir = std::env::temp_dir().join(format!("sjel-gate-{name}-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        let files = std::sync::Arc::new(agent_policy::PolicyFiles::new(dir));
+        files.set_mode("comms", mode).unwrap();
+        let access = agent_access().for_capability("comms", TEST_ROUTES, Some(files.clone()));
+        (access, files)
+    }
+
     async fn serve_agent_router(auth: InboundAuth) -> String {
         use axum::routing::post;
         let router = axum::Router::new()
@@ -391,7 +429,15 @@ mod http_tests {
             )
             .route("/secret", get(|| async { axum::Json(serde_json::json!({"data_class": "c3"})) }))
             .route("/page", get(|| async { "<html>Katrin</html>" }))
-            .route("/triage/{id}/status", post(|| async { "moved" }));
+            .route("/triage/{id}/status", post(|| async { "moved" }))
+            .route("/discover", get(|| async { axum::Json(serde_json::json!({"crawled": true})) }))
+            .route(
+                "/triage/{id}/reply",
+                post(|body: axum::Json<serde_json::Value>| async move {
+                    axum::Json(serde_json::json!({ "received": body.0 }))
+                }),
+            )
+            .route("/triage/{id}/gmail", post(|| async { axum::Json(serde_json::json!({"trashed": true})) }));
         let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
         let addr = listener.local_addr().unwrap();
         let app = authenticated(router, auth);
@@ -482,7 +528,8 @@ mod http_tests {
 
     #[tokio::test]
     async fn the_agent_token_cannot_write_or_read_what_it_cannot_rewrite() {
-        let auth = InboundAuth::with_token(Some("full".into())).with_agent_access(agent_access());
+        let (access, _files) = agent_access_in("read-only", agent_policy::Mode::ReadOnly);
+        let auth = InboundAuth::with_token(Some("full".into())).with_agent_access(access);
         let base = serve_agent_router(auth).await;
         let client = reqwest::Client::new();
         let post = client
@@ -507,6 +554,172 @@ mod http_tests {
             .await
             .unwrap();
         assert_eq!(secret.status(), 403);
+    }
+
+    // --- writes under the owner's mode (ISA F10) -----------------------------------------
+
+    async fn agent_post(
+        base: &str,
+        path: &str,
+        body: serde_json::Value,
+        approval: Option<&str>,
+    ) -> reqwest::Response {
+        let mut request = reqwest::Client::new()
+            .post(format!("{base}{path}"))
+            .bearer_auth("agent-token")
+            .header(agent::AGENT_SESSION_HEADER, "writer")
+            .json(&body);
+        if let Some(id) = approval {
+            request = request.header(agent::APPROVAL_HEADER, id);
+        }
+        request.send().await.unwrap()
+    }
+
+    /// The token the agent sees for Katrin's address, read in the "writer" session.
+    async fn sender_token(base: &str) -> String {
+        let rows: serde_json::Value = reqwest::Client::new()
+            .get(format!("{base}/triage"))
+            .bearer_auth("agent-token")
+            .header(agent::AGENT_SESSION_HEADER, "writer")
+            .send()
+            .await
+            .unwrap()
+            .json()
+            .await
+            .unwrap();
+        rows[0]["from_addr"].as_str().unwrap().to_string()
+    }
+
+    #[tokio::test]
+    async fn off_refuses_everything_and_read_only_refuses_a_get_that_writes() {
+        let (access, _files) = agent_access_in("off", agent_policy::Mode::Off);
+        let base = serve_agent_router(
+            InboundAuth::with_token(Some("full".into())).with_agent_access(access),
+        )
+        .await;
+        let read = reqwest::Client::new()
+            .get(format!("{base}/triage"))
+            .bearer_auth("agent-token")
+            .send()
+            .await
+            .unwrap();
+        assert_eq!(read.status(), 403);
+
+        let (access, _files) = agent_access_in("ro-get", agent_policy::Mode::ReadOnly);
+        let base = serve_agent_router(
+            InboundAuth::with_token(Some("full".into())).with_agent_access(access),
+        )
+        .await;
+        let discover = reqwest::Client::new()
+            .get(format!("{base}/discover"))
+            .bearer_auth("agent-token")
+            .send()
+            .await
+            .unwrap();
+        assert_eq!(discover.status(), 403, "a declared GET-write is a write");
+    }
+
+    #[tokio::test]
+    async fn in_auto_a_write_reaches_the_handler_with_its_tokens_restored_and_is_logged() {
+        let (access, files) = agent_access_in("auto", agent_policy::Mode::Auto);
+        let base = serve_agent_router(
+            InboundAuth::with_token(Some("full".into())).with_agent_access(access),
+        )
+        .await;
+        let token = sender_token(&base).await;
+        let response = agent_post(
+            &base,
+            "/triage/1/reply",
+            serde_json::json!({ "to": token, "text": "Danke" }),
+            None,
+        )
+        .await;
+        assert_eq!(response.status(), 200);
+        // The handler saw the real address; the agent's copy of the answer is tokenized again.
+        let echoed: serde_json::Value = response.json().await.unwrap();
+        let shown = echoed.to_string();
+        assert!(!shown.contains('@'), "{shown}");
+        assert_eq!(
+            echoed["received"]["to"], token,
+            "the answer is pseudonymized with the same token"
+        );
+
+        let calls = files.recent_calls(10);
+        assert_eq!(calls[0]["method"], "POST");
+        assert_eq!(calls[0]["path"], "/triage/1/reply");
+        assert_eq!(calls[0]["decision"], "auto");
+        assert_eq!(calls[1]["decision"], "read");
+        assert!(calls.iter().all(|c| c.get("body").is_none()));
+    }
+
+    #[tokio::test]
+    async fn a_token_the_session_never_issued_is_refused() {
+        let (access, _files) = agent_access_in("unknown", agent_policy::Mode::Auto);
+        let base = serve_agent_router(
+            InboundAuth::with_token(Some("full".into())).with_agent_access(access),
+        )
+        .await;
+        let response = agent_post(
+            &base,
+            "/triage/1/reply",
+            serde_json::json!({ "to": "<SENDER_zzzzzz>" }),
+            None,
+        )
+        .await;
+        assert_eq!(response.status(), 400);
+    }
+
+    #[tokio::test]
+    async fn a_confirm_route_asks_even_in_auto_and_one_approval_admits_one_write() {
+        let (access, files) = agent_access_in("confirm", agent_policy::Mode::Auto);
+        let base = serve_agent_router(
+            InboundAuth::with_token(Some("full".into())).with_agent_access(access),
+        )
+        .await;
+        let body = serde_json::json!({ "action": "trash" });
+        let first = agent_post(&base, "/triage/1/gmail", body.clone(), None).await;
+        assert_eq!(first.status(), 202);
+        let id = first.json::<serde_json::Value>().await.unwrap()["approval"]
+            .as_str()
+            .unwrap()
+            .to_string();
+
+        let waiting = agent_post(&base, "/triage/1/gmail", body.clone(), Some(&id)).await;
+        assert_eq!(waiting.status(), 202, "pending until the owner decides");
+
+        files.decide(&id, true).unwrap();
+        let other = agent_post(
+            &base,
+            "/triage/1/gmail",
+            serde_json::json!({ "action": "restore" }),
+            Some(&id),
+        )
+        .await;
+        assert_eq!(other.status(), 409, "the approval is for that body only");
+        let done = agent_post(&base, "/triage/1/gmail", body.clone(), Some(&id)).await;
+        assert_eq!(done.status(), 200);
+        let again = agent_post(&base, "/triage/1/gmail", body, Some(&id)).await;
+        assert_eq!(again.status(), 409, "single-use");
+    }
+
+    #[tokio::test]
+    async fn in_ask_every_write_waits_and_a_denial_holds() {
+        let (access, files) = agent_access_in("ask", agent_policy::Mode::Ask);
+        let base = serve_agent_router(
+            InboundAuth::with_token(Some("full".into())).with_agent_access(access),
+        )
+        .await;
+        let body = serde_json::json!({ "text": "hi" });
+        let first = agent_post(&base, "/triage/1/reply", body.clone(), None).await;
+        assert_eq!(first.status(), 202);
+        let id = first.json::<serde_json::Value>().await.unwrap()["approval"]
+            .as_str()
+            .unwrap()
+            .to_string();
+        assert_eq!(files.approvals(Some("pending")).len(), 1);
+        files.decide(&id, false).unwrap();
+        let denied = agent_post(&base, "/triage/1/reply", body, Some(&id)).await;
+        assert_eq!(denied.status(), 403);
     }
 
     #[tokio::test]

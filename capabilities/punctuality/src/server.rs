@@ -299,7 +299,7 @@ async fn main() {
     // with no auth, and binding it to the LAN would be a decision nobody made. That
     // rationale is now sjel_server::serve_local's policy (this crate's bind-failure
     // behavior became the shared default there, too).
-    sjel_server::serve_local("punctuality-server", port, app).await;
+    sjel_server::serve_local("punctuality", port, app).await;
 }
 
 #[cfg(test)]

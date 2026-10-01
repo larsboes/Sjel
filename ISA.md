@@ -613,13 +613,25 @@ the call log, because it already owns the Systems page. The MCP server is operat
 - [ ] ISC-46 — the mode is per capability, starts at auto, and is changed on the Systems page.
   Falsifier: changing it needs a file edit, or an agent `POST` to a read-only capability reaches a
   handler. Probe: gate tests, and the page.
-- [ ] ISC-47 — in auto mode an agent write reaches the handler, and a route declared `confirm`
+- [x] ISC-47 — in auto mode an agent write reaches the handler, and a route declared `confirm`
   asks anyway. Falsifier: an agent moves mail to Trash with no approval. Probe: gate tests.
-- [ ] ISC-48 — an approval is single-use and bound to the method, the path and a digest of the
+  Done 2026-10-01: `a_confirm_route_asks_even_in_auto_and_one_approval_admits_one_write` and
+  `in_auto_a_write_reaches_the_handler_with_its_tokens_restored_and_is_logged` in
+  `libs/sjel-server/src/lib.rs`. comms declares ten confirm routes (`AGENT_ROUTES` in
+  `capabilities/comms/src/server/main.rs`): the Gmail actions, the cloud approval and run,
+  `/ingest`, redaction, and setting a data class by hand, because an agent that lowered a class
+  could then read what it withheld. Every `serve_local` capability now admits the agent under
+  its mode, keyed by its registry name; sjel-status does not.
+- [x] ISC-48 — an approval is single-use and bound to the method, the path and a digest of the
   body. Falsifier: one approval admits a second write, or a different body. Probe: unit tests.
-- [ ] ISC-49 — tokens in an agent's write body become the real values before the handler, and a
+  Done 2026-10-01: `an_approval_admits_its_own_write_once` in `agent_policy.rs` and the gate
+  test above. A claim is a file rename, so two requests racing for one approval admit one.
+- [x] ISC-49 — tokens in an agent's write body become the real values before the handler, and a
   token the session never issued is refused. Falsifier: a handler receives `<PERSON_…>`. Probe:
-  gate tests.
+  gate tests. Done 2026-10-01: `a_token_the_session_never_issued_is_refused` and the auto test
+  above. A limit, measured in the design and not yet answered: keyed tokens are one-way, so only
+  the capability process that issued a token can restore it. A token read from comms and written
+  to trips is refused with a message that says so.
 - [ ] ISC-50 — every agent call leaves one log row with no body, and the Systems page shows the
   latest. Falsifier: an agent call with no row. Probe: gate tests and the page.
 

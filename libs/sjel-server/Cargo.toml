@@ -19,6 +19,8 @@ reqwest = { workspace = true, features = ["blocking"] }
 # capability's errors that way. No new build cost: axum's default features
 # already resolve serde_json for `axum::Json`.
 serde_json.workspace = true
+# Approval ids (src/agent_policy.rs).
+getrandom.workspace = true
 tokio = { workspace = true, features = ["net"] }
 # The LAN listener (src/lan.rs, PRD Q119): TLS with a self-signed certificate the phone pins.
 # rustls and tokio-rustls are already in the tree through reqwest; aws-lc-rs is their default

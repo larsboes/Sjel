@@ -1772,7 +1772,7 @@ async fn main() {
     };
     // Loopback via sjel_server; the old 0.0.0.0 bind here was never a
     // documented decision and is retired with it.
-    sjel_server::serve_local("trips-server", config.port, build_router(state)).await;
+    sjel_server::serve_local("trips", config.port, build_router(state)).await;
 }
 
 #[cfg(test)]

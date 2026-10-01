@@ -35,9 +35,10 @@ pub mod origin;
 pub mod tailnet;
 
 pub use auth::{
-    authenticated, comms_config_token, device_signed_path, session_cookie, token_from_file,
-    AdmittedDevice, AdmittedPairingClaim, DeviceVerifier, InboundAuth, SessionVerifier,
-    DEVICE_SIGNATURE_HEADER, PAIRING_CLAIM_PATH, SESSION_COOKIE, SESSION_OPEN_PATH,
+    authenticated, comms_config_token, device_signed_path, normalize_legacy_headers,
+    session_cookie, token_from_file, AdmittedDevice, AdmittedPairingClaim, DeviceVerifier,
+    InboundAuth, SessionVerifier, DEVICE_SIGNATURE_HEADER, LEGACY_HEADERS, PAIRING_CLAIM_PATH,
+    SESSION_COOKIE, SESSION_OPEN_PATH,
 };
 
 // Re-exported so a server binary that depends only on sjel-server still gets the
@@ -802,6 +803,37 @@ mod http_tests {
         assert_eq!(
             registry.seen.lock().unwrap()[0],
             ("POST".into(), "/api/items?room=k".into(), b"lamp".to_vec())
+        );
+    }
+
+    /// ISA ISC-28: a paired phone that still sends the `x-axon-*` names is admitted.
+    #[tokio::test]
+    async fn a_phone_sending_the_legacy_header_names_is_still_admitted() {
+        let registry = std::sync::Arc::new(FakeRegistry {
+            seen: Default::default(),
+        });
+        let auth =
+            InboundAuth::with_token(Some("s3cret".into())).with_device_verifier(registry.clone());
+        let base = serve_device_router(auth).await;
+        let response = reqwest::Client::new()
+            .post(format!("{base}/interior/api/items"))
+            .header("x-axon-signature", "good")
+            .body("lamp")
+            .send()
+            .await
+            .unwrap();
+        assert_eq!(response.status(), 200);
+        let token = reqwest::Client::new()
+            .post(format!("{base}/interior/api/items"))
+            .header("x-axon-token", "s3cret")
+            .body("lamp")
+            .send()
+            .await
+            .unwrap();
+        assert_ne!(
+            token.status(),
+            401,
+            "the legacy token header still authenticates"
         );
     }
 

@@ -371,9 +371,16 @@ because it names the directory rather than moving where things are written.
   `axon.toml`/`axon.local.toml`, the `~/.local/state/axon/` deployment ledger,
   `~/.local/bin/axon-eject` (the private overlay's tool), and `AXON_`-looking fixture names in
   tests.
-- [ ] ISC-28 — the signed-request headers are `X-Sjel-*`, with the old name still accepted
+- [x] ISC-28 — the signed-request headers are `X-Sjel-*`, with the old name still accepted
   until the paired phone ships. Falsifier: a paired phone's signed request fails after the
-  rename. Probe: `libs/sjel-server/src/auth.rs` accepts both, asserted in its own tests.
+  rename. Probe: `libs/sjel-server/src/auth.rs` accepts both, asserted in its own tests. Done
+  2026-10-01: the gate renames each `x-axon-*` header to its `x-sjel-*` name before anything
+  reads it (`normalize_legacy_headers`), held by
+  `a_legacy_header_is_renamed_and_the_current_one_wins` and
+  `a_phone_sending_the_legacy_header_names_is_still_admitted`. The phone's signer
+  (`dashboard/src-tauri/src/mac_bridge.rs`) still sends the old names on purpose, until every
+  server has restarted on the renaming gate. The protocol string `axon-device-auth/v1` stays: it
+  is part of what the device signs.
 - [ ] ISC-29 — `axon-fda-launcher` is renamed, and its Full Disk Access grant is intact
   afterwards. Falsifier: the binary runs without FDA and cannot read what it needs. Probe: run
   it and confirm the grant. Renaming drops the grant, so re-granting is part of the work.

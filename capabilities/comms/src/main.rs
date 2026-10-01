@@ -1279,7 +1279,7 @@ fn cmd_relevance(args: &[String], cfg: &Config) {
                     "force": force,
                 }));
         if let Some(secret) = cfg.api_secret.as_deref() {
-            request = request.header("X-Axon-Token", secret);
+            request = request.header("X-Sjel-Token", secret);
         }
         let response = match request.send() {
             Ok(response) => response,

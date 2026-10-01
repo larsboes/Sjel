@@ -8,10 +8,14 @@ use axum::http::HeaderMap;
 use sha2::{Digest, Sha256};
 
 pub const PROTOCOL_VERSION: &str = "axon-device-auth/v1";
-pub const DEVICE_ID_HEADER: &str = "x-axon-device-id";
-pub const TIMESTAMP_HEADER: &str = "x-axon-timestamp";
-pub const NONCE_HEADER: &str = "x-axon-nonce";
-pub const SIGNATURE_HEADER: &str = "x-axon-signature";
+// `x-sjel-*` since 2026-10-01 (ISA ISC-28). The gate renames a legacy `x-axon-*` header to these
+// names before anything reads it (`sjel_server::normalize_legacy_headers`), so a paired phone
+// that still sends the old names keeps working. The protocol string above is unchanged: it is
+// part of what the device signs.
+pub const DEVICE_ID_HEADER: &str = "x-sjel-device-id";
+pub const TIMESTAMP_HEADER: &str = "x-sjel-timestamp";
+pub const NONCE_HEADER: &str = "x-sjel-nonce";
+pub const SIGNATURE_HEADER: &str = "x-sjel-signature";
 pub const MAX_CLOCK_SKEW_SECONDS: i64 = 5 * 60;
 pub const NONCE_TTL_SECONDS: i64 = 10 * 60;
 

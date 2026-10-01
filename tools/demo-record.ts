@@ -58,7 +58,7 @@ function countRows(body: unknown): number | null {
  *  tools/demo-seed.ts authHeaders. */
 function authHeaders(): Record<string, string> {
   const token = process.env.SJEL_DEMO_COMMS_TOKEN;
-  return token ? { "X-Axon-Token": token } : {};
+  return token ? { "X-Sjel-Token": token } : {};
 }
 
 async function fetchJson(url: string): Promise<unknown> {

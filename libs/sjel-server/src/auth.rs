@@ -4,7 +4,7 @@
 //!
 //! Until this module existed, exactly one of twelve Rust capabilities
 //! authenticated an inbound request — comms, whose `src/server/auth.rs` carried
-//! a constant-time Bearer / `X-Axon-Token` check on its mutating routes. The
+//! a constant-time Bearer / `X-Sjel-Token` check on its mutating routes. The
 //! other eleven relied entirely on the loopback bind, including sjel-status,
 //! which serves `POST /api/sjel-status/capabilities/:name/start|stop`: process
 //! control. "Reachable from the phone" and "unauthenticated process control"
@@ -100,7 +100,35 @@ const EXEMPT_PATHS: &[&str] = &["/health", "/ready", "/__axon/freshness"];
 
 /// The header whose presence makes a request a device-signed one (`axon-device-auth/v1`,
 /// `capabilities/devices/src/auth.rs`). The other three headers are read by the verifier.
-pub const DEVICE_SIGNATURE_HEADER: &str = "x-axon-signature";
+pub const DEVICE_SIGNATURE_HEADER: &str = "x-sjel-signature";
+
+/// The request headers renamed from Axon to Sjel (ISA ISC-28): legacy name, current name.
+pub const LEGACY_HEADERS: [(&str, &str); 5] = [
+    ("x-axon-device-id", "x-sjel-device-id"),
+    ("x-axon-timestamp", "x-sjel-timestamp"),
+    ("x-axon-nonce", "x-sjel-nonce"),
+    ("x-axon-signature", "x-sjel-signature"),
+    ("x-axon-token", "x-sjel-token"),
+];
+
+/// Renames each legacy `x-axon-*` header to its `x-sjel-*` name, so everything behind the gate
+/// reads the current names only. When a request carries both, the current one wins and the
+/// legacy one is dropped. Kept until every paired phone sends the new names.
+pub fn normalize_legacy_headers(headers: &mut HeaderMap) {
+    for (legacy, current) in LEGACY_HEADERS {
+        let values: Vec<_> = headers.get_all(legacy).iter().cloned().collect();
+        if values.is_empty() {
+            continue;
+        }
+        headers.remove(legacy);
+        if headers.contains_key(current) {
+            continue;
+        }
+        for value in values {
+            headers.append(axum::http::HeaderName::from_static(current), value);
+        }
+    }
+}
 
 /// The largest body the gate buffers to check a device signature. Same ceiling as the shell's
 /// proxy (`capabilities/sjel-status/src/proxy.rs`, `forward`), which buffers it anyway.
@@ -562,6 +590,7 @@ pub fn authenticated(router: Router, auth: InboundAuth) -> Router {
 }
 
 async fn gate(State(auth): State<InboundAuth>, mut request: Request, next: Next) -> Response {
+    normalize_legacy_headers(request.headers_mut());
     if auth.lan_devices_only {
         let forged: Vec<_> = request
             .headers()
@@ -676,7 +705,8 @@ async fn admit_device(
         .await
 }
 
-/// `Authorization: Bearer <token>` first, then `X-Axon-Token: <token>`.
+/// `Authorization: Bearer <token>` first, then `X-Sjel-Token: <token>` (or the legacy
+/// `X-Axon-Token`, which the gate renames to it first).
 ///
 /// Two header forms because two kinds of client call these ports: HTTP tooling
 /// and proxies that already speak `Authorization`, and the browser extension /
@@ -686,7 +716,7 @@ fn presented_token(headers: &HeaderMap) -> Option<&str> {
         .get(axum::http::header::AUTHORIZATION)
         .and_then(|v| v.to_str().ok())
         .and_then(|v| v.strip_prefix("Bearer "))
-        .or_else(|| headers.get("x-axon-token").and_then(|v| v.to_str().ok()))
+        .or_else(|| headers.get("x-sjel-token").and_then(|v| v.to_str().ok()))
 }
 
 /// Compares every byte regardless of where the first difference is.
@@ -985,11 +1015,26 @@ mod tests {
         let auth = InboundAuth::with_token(Some("s3cret".into()));
         for (name, good, bad) in [
             ("authorization", "Bearer s3cret", "Bearer wrong"),
-            ("x-axon-token", "s3cret", "wrong"),
+            ("x-sjel-token", "s3cret", "wrong"),
         ] {
             assert_eq!(status(&auth, Method::GET, "/feed", &[(name, good)]), 200);
             assert_eq!(status(&auth, Method::GET, "/feed", &[(name, bad)]), 401);
         }
+    }
+
+    /// ISA ISC-28: a legacy `x-axon-*` header reaches the reader under its `x-sjel-*` name, and
+    /// when both arrive the current one wins.
+    #[test]
+    fn a_legacy_header_is_renamed_and_the_current_one_wins() {
+        let mut headers = HeaderMap::new();
+        headers.insert("x-axon-signature", "legacy".parse().unwrap());
+        headers.insert("x-axon-token", "old".parse().unwrap());
+        headers.insert("x-sjel-token", "new".parse().unwrap());
+        normalize_legacy_headers(&mut headers);
+        assert_eq!(headers.get("x-sjel-signature").unwrap(), "legacy");
+        assert_eq!(headers.get("x-sjel-token").unwrap(), "new");
+        assert!(headers.get("x-axon-signature").is_none());
+        assert!(headers.get("x-axon-token").is_none());
     }
 
     /// The browser strips `Authorization` from a preflight, so gating OPTIONS

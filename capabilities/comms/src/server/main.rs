@@ -308,6 +308,8 @@ fn build_router(dashboard_origin: &str) -> Router {
         .allow_headers([
             axum::http::header::CONTENT_TYPE,
             axum::http::header::AUTHORIZATION,
+            HeaderName::from_static("x-sjel-token"),
+            // ISA ISC-28: the legacy name, for a client not yet updated.
             HeaderName::from_static("x-axon-token"),
         ]);
 

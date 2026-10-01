@@ -56,7 +56,7 @@ interface Ctx {
  *  forgets. */
 function authHeaders(): Record<string, string> {
   const token = process.env.SJEL_DEMO_COMMS_TOKEN;
-  return token ? { "X-Axon-Token": token } : {};
+  return token ? { "X-Sjel-Token": token } : {};
 }
 
 async function send<T>(method: string, url: string, body?: unknown): Promise<T> {

@@ -572,6 +572,9 @@ fn signed_request(
     );
     let signature = hex(&signer.sign(message.as_bytes())?);
     Ok([
+        // Still the legacy names, on purpose (ISA ISC-28): a server accepts both since
+        // 2026-10-01, and a phone build sending `x-sjel-*` would fail against a server that has
+        // not restarted since. Switch once every server runs the renaming gate.
         ("x-axon-device-id".into(), signer.device_id().into()),
         ("x-axon-timestamp".into(), timestamp.to_string()),
         ("x-axon-nonce".into(), nonce),

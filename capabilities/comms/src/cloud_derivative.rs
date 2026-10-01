@@ -120,8 +120,9 @@ pub fn tier_allows(
     let representation_pinned = match original_data_class {
         "c0" => transformation == PASSTHROUGH_VERSION,
         // Both c1 transformations clear the same recall floor on the frozen corpus (PRD
-        // §6.2, `comms-redaction-eval` and `--pseudonymized`). No stage or queue path writes
-        // a PSEUDONYMIZE_VERSION job today; the server re-prepares with `prepare` only.
+        // §6.2, `comms-redaction-eval` and `--pseudonymized`). Reviewed analysis and digest
+        // jobs use `PSEUDONYMIZE_VERSION`; destructive redaction remains available for stored
+        // review fields and its separate evaluation mode.
         "c1" => transformation == REDACTION_VERSION || transformation == PSEUDONYMIZE_VERSION,
         // Unreachable behind the admission check below, which refuses every
         // other class outright. Written as a refusal anyway: this is the arm a
@@ -174,6 +175,77 @@ pub struct CloudDerivativePreview {
     pub limitations: Vec<&'static str>,
 }
 
+fn build_document(
+    input: &CloudDocumentInput,
+    mut transform: impl FnMut(&str, bool) -> String,
+) -> String {
+    let mut sections = Vec::with_capacity(4);
+    if let Some(value) = input
+        .title
+        .as_deref()
+        .filter(|value| !value.trim().is_empty())
+    {
+        sections.push(format!("Title\n{}", transform(value, false)));
+    }
+    if let Some(value) = input
+        .author
+        .as_deref()
+        .filter(|value| !value.trim().is_empty())
+    {
+        sections.push(format!("Author\n{}", transform(value, true)));
+    }
+    for (heading, value) in [
+        ("Summary", input.summary.as_deref()),
+        ("Source content", input.content.as_deref()),
+    ] {
+        if let Some(value) = value.filter(|value| !value.trim().is_empty()) {
+            sections.push(format!("{heading}\n{}", transform(value, false)));
+        }
+    }
+    sections.join("\n\n")
+}
+
+fn build_preview(
+    input: &CloudDocumentInput,
+    transformation: &'static str,
+    derivative_data_class: &'static str,
+    entity_detection: &'static str,
+    document: String,
+    redactions: Vec<RedactionFinding>,
+    limitations: Vec<&'static str>,
+) -> CloudDerivativePreview {
+    let source_revision = source_revision(input);
+    let (document, truncated) = bounded_chars(&document, MAX_DOCUMENT_CHARS);
+    let preview_hash = digest(&[
+        PREVIEW_SCHEMA_VERSION,
+        &source_revision,
+        transformation,
+        derivative_data_class,
+        &document,
+    ]);
+    let redaction_count = redactions.iter().map(|finding| finding.count).sum();
+    let receipt = redaction_receipt(&redactions);
+    CloudDerivativePreview {
+        schema_version: PREVIEW_SCHEMA_VERSION,
+        source: input.source.clone(),
+        id: input.id.clone(),
+        source_revision,
+        preview_hash,
+        original_data_class: input.data_class.clone(),
+        derivative_data_class: derivative_data_class.into(),
+        transformation,
+        document,
+        redaction_count,
+        redactions,
+        redaction_receipt: receipt,
+        entity_detection,
+        truncated,
+        approval_required: true,
+        provider_calls: 0,
+        limitations,
+    }
+}
+
 /// Build the reviewable, hashable derivative for one stored item.
 ///
 /// `Err(LocalOnlyRefused)` for everything that is not `c0` or `c1`: there is no
@@ -202,7 +274,6 @@ pub fn prepare(input: &CloudDocumentInput) -> Result<CloudDerivativePreview, Loc
     if !crate::content_item::has_cloud_lane(&input.data_class) {
         return Err(LocalOnlyRefused);
     }
-    let source_revision = source_revision(input);
     let needs_redaction = input.data_class != "c0";
     let transformation = if needs_redaction {
         REDACTION_VERSION
@@ -210,95 +281,42 @@ pub fn prepare(input: &CloudDocumentInput) -> Result<CloudDerivativePreview, Loc
         PASSTHROUGH_VERSION
     };
     let derivative_data_class = if needs_redaction { "c1" } else { "c0" };
-
     let mut redactions = Vec::new();
-    let mut sections = Vec::new();
-    if let Some(title) = input
-        .title
-        .as_deref()
-        .filter(|value| !value.trim().is_empty())
-    {
-        let value = transform_text(title, needs_redaction, &mut redactions);
-        sections.push(format!("Title\n{value}"));
-    }
-    if !needs_redaction {
-        if let Some(author) = input
-            .author
-            .as_deref()
-            .filter(|value| !value.trim().is_empty())
-        {
-            sections.push(format!("Author\n{}", author.trim()));
+    let document = build_document(input, |value, is_author| {
+        if is_author && needs_redaction {
+            record_redaction(&mut redactions, "identity", "[identity removed]");
+            "[identity removed]".into()
+        } else if is_author {
+            value.trim().into()
+        } else {
+            transform_text(value, needs_redaction, &mut redactions)
         }
-    } else if input
-        .author
-        .as_deref()
-        .is_some_and(|value| !value.trim().is_empty())
-    {
-        record_redaction(&mut redactions, "identity", "[identity removed]");
-        sections.push("Author\n[identity removed]".into());
-    }
-    if let Some(summary) = input
-        .summary
-        .as_deref()
-        .filter(|value| !value.trim().is_empty())
-    {
-        let value = transform_text(summary, needs_redaction, &mut redactions);
-        sections.push(format!("Summary\n{value}"));
-    }
-    if let Some(content) = input
-        .content
-        .as_deref()
-        .filter(|value| !value.trim().is_empty())
-    {
-        let value = transform_text(content, needs_redaction, &mut redactions);
-        sections.push(format!("Source content\n{value}"));
-    }
-
-    let unbounded_document = sections.join("\n\n");
-    let (document, truncated) = bounded_chars(&unbounded_document, MAX_DOCUMENT_CHARS);
-    let preview_hash = digest(&[
-        PREVIEW_SCHEMA_VERSION,
-        &source_revision,
+    });
+    let limitations = if needs_redaction {
+        vec![
+            "Only the bounded reader document is included; attachments and linked pages are excluded.",
+            "Local deterministic entity detection removes recognized people after a salutation or a self-introduction, a person named as being from an organisation, login handles, email addresses, links, phone or account numbers, and token-like secrets; unrecognized names and contextual clues may remain.",
+            "Human review is required before this derivative becomes cloud-eligible.",
+        ]
+    } else {
+        vec![
+            "Only the bounded reader document is included; attachments and linked pages are excluded.",
+            "Public classification permits cloud use but does not select a provider or send the document.",
+        ]
+    };
+    Ok(build_preview(
+        input,
         transformation,
         derivative_data_class,
-        &document,
-    ]);
-
-    let mut limitations = vec![
-        "Only the bounded reader document is included; attachments and linked pages are excluded.",
-    ];
-    if needs_redaction {
-        limitations.push(
-            "Local deterministic entity detection removes recognized people after a salutation or a self-introduction, a person named as being from an organisation, login handles, email addresses, links, phone or account numbers, and token-like secrets; unrecognized names and contextual clues may remain.",
-        );
-        limitations.push("Human review is required before this derivative becomes cloud-eligible.");
-    } else {
-        limitations.push("Public classification permits cloud use but does not select a provider or send the document.");
-    }
-
-    Ok(CloudDerivativePreview {
-        schema_version: PREVIEW_SCHEMA_VERSION,
-        source: input.source.clone(),
-        id: input.id.clone(),
-        source_revision,
-        preview_hash,
-        original_data_class: input.data_class.clone(),
-        derivative_data_class: derivative_data_class.into(),
-        transformation,
-        document,
-        redaction_count: redactions.iter().map(|finding| finding.count).sum(),
-        redaction_receipt: redaction_receipt(&redactions),
-        redactions,
-        entity_detection: if needs_redaction {
+        if needs_redaction {
             "local-deterministic-v3"
         } else {
             "not-required"
         },
-        truncated,
-        approval_required: true,
-        provider_calls: 0,
+        document,
+        redactions,
         limitations,
-    })
+    ))
 }
 
 /// A reversible derivative and the symbol table that reverses it.
@@ -340,7 +358,6 @@ pub fn prepare_pseudonymized(
     if !crate::content_item::has_cloud_lane(&input.data_class) {
         return Err(LocalOnlyRefused);
     }
-    let source_revision = source_revision(input);
     let needs_redaction = input.data_class != "c0";
     let transformation = if needs_redaction {
         PSEUDONYMIZE_VERSION
@@ -348,50 +365,17 @@ pub fn prepare_pseudonymized(
         PASSTHROUGH_VERSION
     };
     let derivative_data_class = if needs_redaction { "c1" } else { "c0" };
-
     let mut session = sjel_pseudonymize::PseudonymizerSession::new();
-    let field = |value: &str, session: &mut sjel_pseudonymize::PseudonymizerSession| {
-        if needs_redaction {
+    let document = build_document(input, |value, is_author| {
+        let rendered = if is_author && needs_redaction {
+            session.tokenize_whole(value, sjel_pseudonymize::EntityType::Identity)
+        } else if needs_redaction {
             session.tokenize_text(value, registry)
         } else {
             value.trim().to_string()
-        }
-    };
-    let present = |value: &Option<String>| {
-        value
-            .as_deref()
-            .filter(|value| !value.trim().is_empty())
-            .map(str::to_string)
-    };
-
-    let mut sections = Vec::new();
-    if let Some(title) = present(&input.title) {
-        sections.push(format!("Title\n{}", field(&title, &mut session)));
-    }
-    if let Some(author) = present(&input.author) {
-        let value = if needs_redaction {
-            session.tokenize_whole(&author, sjel_pseudonymize::EntityType::Identity)
-        } else {
-            author.trim().to_string()
         };
-        sections.push(format!("Author\n{value}"));
-    }
-    if let Some(summary) = present(&input.summary) {
-        sections.push(format!("Summary\n{}", field(&summary, &mut session)));
-    }
-    if let Some(content) = present(&input.content) {
-        sections.push(format!("Source content\n{}", field(&content, &mut session)));
-    }
-
-    let unbounded_document = sections.join("\n\n");
-    let (document, truncated) = bounded_chars(&unbounded_document, MAX_DOCUMENT_CHARS);
-    let preview_hash = digest(&[
-        PREVIEW_SCHEMA_VERSION,
-        &source_revision,
-        transformation,
-        derivative_data_class,
-        &document,
-    ]);
+        rendered
+    });
 
     // The comms receipt vocabulary, not the library's, so both transformations read the
     // same way to the person approving them.
@@ -419,29 +403,19 @@ pub fn prepare_pseudonymized(
         ]
     };
 
-    let preview = CloudDerivativePreview {
-        schema_version: PREVIEW_SCHEMA_VERSION,
-        source: input.source.clone(),
-        id: input.id.clone(),
-        source_revision,
-        preview_hash,
-        original_data_class: input.data_class.clone(),
-        derivative_data_class: derivative_data_class.into(),
+    let preview = build_preview(
+        input,
         transformation,
-        document,
-        redaction_count: redactions.iter().map(|finding| finding.count).sum(),
-        redaction_receipt: redaction_receipt(&redactions),
-        redactions,
-        entity_detection: if needs_redaction {
+        derivative_data_class,
+        if needs_redaction {
             PSEUDONYMIZE_DETECTION
         } else {
             "not-required"
         },
-        truncated,
-        approval_required: true,
-        provider_calls: 0,
+        document,
+        redactions,
         limitations,
-    };
+    );
     Ok(PseudonymizedPreview { preview, session })
 }
 

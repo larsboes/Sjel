@@ -642,6 +642,111 @@ impl ContentItemOut {
             &preview.source_revision,
             &preview.preview_hash,
         )?;
+        rehydrate_current_cloud_output(
+            &mut self.cloud_processing,
+            &prepared.session,
+            self.digest.as_mut(),
+        );
         Ok(self)
+    }
+}
+
+/// Rehydrate only a successful result tied to the preview rebuilt from the current source.
+/// The store query uses that preview's source revision and hash, so stale jobs have no result
+/// to transform. Token mappings remain process-local and are never persisted or serialized.
+fn rehydrate_current_cloud_output(
+    state: &mut CloudDerivativeState,
+    session: &sjel_pseudonymize::PseudonymizerSession,
+    digest: Option<&mut content_item::Digest>,
+) {
+    if state.status != "staged" || state.dispatch_status != "succeeded" {
+        return;
+    }
+    let Some(result) = state.result.as_mut() else {
+        return;
+    };
+    if state.task.as_deref() == Some(crate::cloud_dispatch::DIGEST_TASK_VERSION) {
+        if let (Some(stored), Some(tokenized)) = (
+            digest.and_then(|row| row.text.as_mut()),
+            result.get("text").and_then(serde_json::Value::as_str),
+        ) {
+            if stored == tokenized {
+                *stored = session.rehydrate_text(tokenized);
+            }
+        }
+    }
+    session.rehydrate_json(result);
+}
+
+#[cfg(test)]
+mod cloud_result_tests {
+    use super::*;
+    use serde_json::json;
+
+    fn session_and_token() -> (sjel_pseudonymize::PseudonymizerSession, String) {
+        let registry = sjel_pseudonymize::EntityRegistry::builder()
+            .add_person("Alice Example")
+            .build();
+        let mut session = sjel_pseudonymize::PseudonymizerSession::new();
+        let token = session.tokenize_text("Alice Example", &registry);
+        (session, token)
+    }
+
+    fn digest(text: &str) -> content_item::Digest {
+        content_item::Digest {
+            text: Some(text.into()),
+            state: "generated".into(),
+            shape: "standard".into(),
+            depth: "standard".into(),
+            focus: Vec::new(),
+            producer: "cloud-test".into(),
+            source_chars: 1,
+            redactions: 1,
+            attempts: 0,
+            last_error: None,
+            diagram: None,
+            diagram_state: None,
+            diagram_error: None,
+            chart: None,
+            chart_state: None,
+            chart_error: None,
+            generated_at: String::new(),
+        }
+    }
+
+    #[test]
+    fn a_current_successful_cloud_result_is_rehydrated_for_the_reader() {
+        let (session, token) = session_and_token();
+        let mut state = CloudDerivativeState::not_prepared();
+        state.status = "staged".into();
+        state.dispatch_status = "succeeded".into();
+        state.task = Some(crate::cloud_dispatch::DIGEST_TASK_VERSION.into());
+        state.result = Some(json!({"text": format!("Welcome {token}")}));
+        let mut digest = digest(&format!("Welcome {token}"));
+
+        rehydrate_current_cloud_output(&mut state, &session, Some(&mut digest));
+
+        assert_eq!(digest.text.as_deref(), Some("Welcome Alice Example"));
+        assert_eq!(
+            state.result.as_ref().unwrap()["text"],
+            "Welcome Alice Example"
+        );
+    }
+
+    #[test]
+    fn stale_or_incomplete_cloud_results_remain_tokenized() {
+        let (session, token) = session_and_token();
+        let mut state = CloudDerivativeState::not_prepared();
+        state.status = "stale".into();
+        state.dispatch_status = "succeeded".into();
+        state.task = Some(crate::cloud_dispatch::DIGEST_TASK_VERSION.into());
+        state.result = Some(json!({"text": format!("Welcome {token}")}));
+        let mut digest = digest(&format!("Welcome {token}"));
+        let expected = format!("Welcome {token}");
+
+        rehydrate_current_cloud_output(&mut state, &session, Some(&mut digest));
+
+        assert_eq!(digest.text.as_deref(), Some(expected.as_str()));
+        assert_eq!(state.result.as_ref().unwrap()["text"], expected);
     }
 }

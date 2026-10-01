@@ -921,15 +921,15 @@ Routes:
   pass over items with no digest, a stale producer, or a retryable failure with attempts left.
   It never touches a row an operator refined.
 - `POST /content/:source/:id/cloud-preview` → builds a bounded local preview. `c0` content
-  is copied as-is; `c1` content receives local deterministic entity redaction for recognized
-  people — after a salutation or a self-introduction, named as being from an organisation, or
-  carried as a login handle — plus addresses, links, phone/account numbers and token-like
-  secrets. The
-  response lists the recognized entity types, names the limitations, and always reports zero
-  provider calls. **`c2` and `c3` content has no preview**: the request is refused with 400,
-  because a preview is a hashable, approvable object and producing one for content that may never
-  leave the machine means the refusal has to be remembered again at every later step. The store
-  agrees — `content_cloud_derivatives.original_data_class` accepts only `c0` and `c1`.
+  is copied as-is; `c1` content is pseudonymized locally into typed tokens, including names from
+  the operator's registry or contextual cues, addresses, links, phone/account numbers and
+  token-like secrets. The
+  token map stays local. The response lists the recognized entity types, names the limitations,
+  and always reports zero provider calls. **`c2` and `c3` content has no preview**: the request
+  is refused with 400, because a preview is a hashable, approvable object and producing one for
+  content that may never leave the machine means the refusal has to be remembered again at every
+  later step. The store agrees — `content_cloud_derivatives.original_data_class` accepts only
+  `c0` and `c1`.
 - `POST /content/:source/:id/cloud-approval` `{"preview_hash":"..."}` → regenerates the
   current preview, rejects a stale hash, and stages the exact reviewed derivative locally.
   It does not select or contact a cloud provider.
@@ -951,14 +951,16 @@ Routes:
   parked at the attempt cap against one rate-limited role while two healthy wider-tier roles were
   never offered the job. It runs the fixed
   `content-analysis-v1` task, validates and bounds the structured response, and persists the
-  result or a safe retryable error. Credentials, credit expiry, input-token upper bound and the
-  UTC daily request ceiling are revalidated immediately before every attempt. A policy-disabled
-  role causes zero provider requests. Every actual request records role, model, exact approved
-  derivative hash and bounded error/result provenance. Jobs never run automatically and stop
-  after five total provider calls. The original content is not loaded into the dispatch path.
-  A completed result still performs no Calendar write: each resolved date or dated action has a
-  separate reader action that creates or refreshes one non-blocking Calendar proposal through
-  Calendar's external-entry contract.
+  tokenized result or a safe retryable error. Credentials, credit expiry, input-token upper bound
+  and the UTC daily request ceiling are revalidated immediately before every attempt. A
+  policy-disabled role causes zero provider requests. Every actual request records role, model,
+  exact approved derivative hash and bounded error/result provenance. Jobs never run automatically
+  and stop after five total provider calls. The original content is not loaded into the dispatch
+  path. On the local content-reader response, a successful result is rehydrated only if its
+  approved preview still matches the current source revision; otherwise it remains tokenized.
+  The token map is rebuilt in memory and is never stored. A completed result still performs no
+  Calendar write: each resolved date or dated action has a separate reader action that creates or
+  refreshes one non-blocking Calendar proposal through Calendar's external-entry contract.
 - `GET /feed/evaluation/status` → configured local model names, cheap endpoint reachability,
   TELOS profile count, active semantic/lexical mode and persisted ledger counts; no secret or
   API-key value is returned

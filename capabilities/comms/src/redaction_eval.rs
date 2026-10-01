@@ -332,4 +332,27 @@ mod tests {
         assert_eq!(report.caught(), 5, "{:?}", report.leaks);
         assert!(report.passed());
     }
+
+    #[test]
+    fn pseudonymized_measurement_catches_decomposed_registry_names() {
+        let corpus: Corpus = serde_json::from_str(
+            r#"{
+              "acceptance": { "minimum_recall_percent": 100.0 },
+              "fixtures": [
+                { "id": "nfd-name", "language": "de", "data_class": "c1",
+                  "content": "Jörg schreibt an Jo\u0308rg Mu\u0308ller",
+                  "must_remove": [ { "type": "person", "value": "Jo\u0308rg Mu\u0308ller" } ] }
+              ]
+            }"#,
+        )
+        .unwrap();
+        let registry = sjel_pseudonymize::EntityRegistry::builder()
+            .add_person("Jörg Müller")
+            .build();
+        let report = evaluate(corpus, Mode::Pseudonymized, &registry).unwrap();
+
+        assert_eq!(report.total(), 1);
+        assert_eq!(report.caught(), 1, "{:?}", report.leaks);
+        assert!(report.passed());
+    }
 }

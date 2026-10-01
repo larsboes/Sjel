@@ -180,8 +180,6 @@ run Socket's scanner, and Cargo/actions keep the zero-day path.
   case; with `SJEL_SELF_GRAPH` pointing at nothing, `generate` writes schema 2 carrying no `code`
   and no `graph` key.
 
-Order, agreed 2026-09-26: F3, then F4 in the order of its claims, then F5.
-
 ### F3 · Axon becomes Sjel, staged
 
 Why: the product is named Sjel since 2026-09-26, and every day adds more "axon" to
@@ -229,7 +227,47 @@ identifier `com.lifeos.mobile`. Lars chose "everything, staged" over a brand-onl
   The one real dependency was the private overlay's machine-local shell config, which located
   itself by `AXON_PERSONAL_ROOT` and would have silently stopped sourcing `machine.zsh` and
   `secrets.zsh`; it now exports `SJEL_HOME_ROOT`, the name the home-automation skills read (35
-  references, none under the old name). The three surfaces named above stay open under F7.
+  references, none under the old name). The three surfaces named above stay open as ISC-28,
+  ISC-29 and ISC-30 below.
+- [x] ISC-27 — the `axon` symlink is gone and `sjel` is the only entry point. Falsifier: `axon`
+  still resolves on PATH or at the repo root, or a tool or skill still invokes it. Probe:
+  `command -v axon`, and `rg '$AXON|"axon"' tools/ Packs/`. Supersedes ISC-11. Evidence,
+  2026-09-30: the tracked symlink and `~/.local/bin/axon` are removed, `command -v axon` returns
+  nothing, and 65 `axon <verb>` invocations across 25 files now say `sjel` (this commit). The
+  removal also exposed a live break: `profiles.toml` still named the old skill,
+  `skills = { "harness" = ["axon"] }`, and the harness deployer refuses a profile that names a
+  skill its Pack lacks — so `productive` and `coding` could not be activated at all. Fixed;
+  both activate. Still named `axon`, each its own decision: `tools/axon-context`,
+  `capabilities/comms/axon-clip/`, `dashboard/src/lib/home/AxonGlance.svelte`,
+  `schemas/axon-sync.schema.json`, `Packs/harness/codex/axon/` (a Codex agent),
+  `axon.toml`/`axon.local.toml`, the `~/.local/state/axon/` deployment ledger,
+  `~/.local/bin/axon-eject` (the private overlay's tool), and `AXON_`-looking fixture names in
+  tests.
+- [x] ISC-28 — the signed-request headers are `X-Sjel-*`, with the old name still accepted
+  until the paired phone ships. Falsifier: a paired phone's signed request fails after the
+  rename. Probe: `libs/sjel-server/src/auth.rs` accepts both, asserted in its own tests. Done
+  2026-10-01: the gate renames each `x-axon-*` header to its `x-sjel-*` name before anything
+  reads it (`normalize_legacy_headers`), held by
+  `a_legacy_header_is_renamed_and_the_current_one_wins` and
+  `a_phone_sending_the_legacy_header_names_is_still_admitted`. The phone's signer
+  (`dashboard/src-tauri/src/mac_bridge.rs`) still sends the old names on purpose, until every
+  server has restarted on the renaming gate. The protocol string `axon-device-auth/v1` stays: it
+  is part of what the device signs.
+- [ ] ISC-29 — `axon-fda-launcher` is renamed, and its Full Disk Access grant is intact
+  afterwards. Falsifier: the binary runs without FDA and cannot read what it needs. Probe: run
+  it and confirm the grant. Renaming drops the grant, so re-granting is part of the work.
+  Progress 2026-10-01 (cf3e888e): the binary and crate are `sjel-fda-launcher`, signed as
+  `dev.sjel.fda-launcher`. No manifest declares `full_disk_access`, so nothing runs through it
+  today. Open until the grant is given again and a run reads what it needs.
+- [x] ISC-30 — "Axon" no longer appears in prose and doctrine. Falsifier: `rg -i axon` over the
+  tracked documents returns hits that are not historical record (a commit message, an entry in
+  this file), a platform-pinned identifier, or a deliberate alias. Probe: `rg -ci axon` over
+  `README.md ISA.md CONTRIBUTING.md ARCHITECTURE.md`. Evidence, 2026-09-30 (c68e7fb6): 284
+  occurrences rewritten across 100 files, of which `README.md` and `CONTRIBUTING.md` were
+  already clean. 22 remain, each one of: historical record (`Axon held a reviewed delta against
+  it until 2026-08-25`, `Axon#126`, `Projects/Axon/PRD Axon.md`), the transition's own name
+  (F3 and the `/Axon/` URL that 404s as its evidence), an identifier rather than prose
+  (`axon-*`, `AXON_*`, `X-Axon-*`), or this ISC's own text.
 
 ### F4 · The documents a stranger reads
 
@@ -357,42 +395,6 @@ running, and restarting, the stale binaries in `<repo>/target`. The deployment d
 the build output would have quietly diverged. Visibility in the tool is the fix instead,
 because it names the directory rather than moving where things are written.
 
-- [x] ISC-27 — the `axon` symlink is gone and `sjel` is the only entry point. Falsifier: `axon`
-  still resolves on PATH or at the repo root, or a tool or skill still invokes it. Probe:
-  `command -v axon`, and `rg '$AXON|"axon"' tools/ Packs/`. Supersedes ISC-11. Evidence,
-  2026-09-30: the tracked symlink and `~/.local/bin/axon` are removed, `command -v axon` returns
-  nothing, and 65 `axon <verb>` invocations across 25 files now say `sjel` (this commit). The
-  removal also exposed a live break: `profiles.toml` still named the old skill,
-  `skills = { "harness" = ["axon"] }`, and the harness deployer refuses a profile that names a
-  skill its Pack lacks — so `productive` and `coding` could not be activated at all. Fixed;
-  both activate. Still named `axon`, each its own decision: `tools/axon-context`,
-  `capabilities/comms/axon-clip/`, `dashboard/src/lib/home/AxonGlance.svelte`,
-  `schemas/axon-sync.schema.json`, `Packs/harness/codex/axon/` (a Codex agent),
-  `axon.toml`/`axon.local.toml`, the `~/.local/state/axon/` deployment ledger,
-  `~/.local/bin/axon-eject` (the private overlay's tool), and `AXON_`-looking fixture names in
-  tests.
-- [x] ISC-28 — the signed-request headers are `X-Sjel-*`, with the old name still accepted
-  until the paired phone ships. Falsifier: a paired phone's signed request fails after the
-  rename. Probe: `libs/sjel-server/src/auth.rs` accepts both, asserted in its own tests. Done
-  2026-10-01: the gate renames each `x-axon-*` header to its `x-sjel-*` name before anything
-  reads it (`normalize_legacy_headers`), held by
-  `a_legacy_header_is_renamed_and_the_current_one_wins` and
-  `a_phone_sending_the_legacy_header_names_is_still_admitted`. The phone's signer
-  (`dashboard/src-tauri/src/mac_bridge.rs`) still sends the old names on purpose, until every
-  server has restarted on the renaming gate. The protocol string `axon-device-auth/v1` stays: it
-  is part of what the device signs.
-- [ ] ISC-29 — `axon-fda-launcher` is renamed, and its Full Disk Access grant is intact
-  afterwards. Falsifier: the binary runs without FDA and cannot read what it needs. Probe: run
-  it and confirm the grant. Renaming drops the grant, so re-granting is part of the work.
-- [x] ISC-30 — "Axon" no longer appears in prose and doctrine. Falsifier: `rg -i axon` over the
-  tracked documents returns hits that are not historical record (a commit message, an entry in
-  this file), a platform-pinned identifier, or a deliberate alias. Probe: `rg -ci axon` over
-  `README.md ISA.md CONTRIBUTING.md ARCHITECTURE.md`. Evidence, 2026-09-30 (c68e7fb6): 284
-  occurrences rewritten across 100 files, of which `README.md` and `CONTRIBUTING.md` were
-  already clean. 22 remain, each one of: historical record (`Axon held a reviewed delta against
-  it until 2026-08-25`, `Axon#126`, `Projects/Axon/PRD Axon.md`), the transition's own name
-  (F3 and the `/Axon/` URL that 404s as its evidence), an identifier rather than prose
-  (`axon-*`, `AXON_*`, `X-Axon-*`), or this ISC's own text.
 - [x] ISC-31 — the Systems page shows what fills the disk, from the tool's own `--json`.
   Falsifier: the page renders no storage panel, or `sjel storage report --json` exits non-zero.
   Probe: `sjel storage report --json` and the page. Evidence, 2026-09-30: the report exits 0 and
@@ -427,7 +429,8 @@ token`, because `capability_call` in `sjel` sent no credential at all. Three gap
 feature: an agent cannot find a capability, cannot authenticate to it, and nothing limits what
 it does once it can.
 
-This feature is planned, not started. Order matters: each step needs the one before it.
+Built 2026-10-01, in the order the claims are numbered, because each step needed the one
+before it.
 
 Guideline, from the principal (2026-09-30): Sjel is easy to use and easy to maintain. The
 design underneath may be clever. It is stated in `README.md`, "Design rule: clever inside, easy
@@ -522,7 +525,12 @@ last layer over the routes and adds no data path of its own.
   Classifier fixed 2026-10-01 (`data-class-rules-v3`, `libs/content-item/src/lib.rs`): a code
   word beside a standalone 4–8 digit number is c3 (a year is not a code), and location-sharing
   phrases are c2. `POST /triage/data-class/refresh` re-derives stored rows and redacts what the
-  new class requires. Still open: the ceiling becomes a gate only with ISC-38.
+  new class requires. The ceiling is a gate since ISC-38 and ISC-43: the gate removes every
+  c3 object from an agent read. Probe 2026-10-01: `sjel capability mail` from an agent session
+  returned 383 rows, 292 c1 and 91 c2, with no c3 and no raw sender address. A code word beside
+  a 4–8 digit number matched 2 c1 rows. This session did not read their content, because the
+  agent policy refused it, so whether they hold a Secret value is the operator's check. Open
+  until that check is done.
 - [x] ISC-40 — one MCP server exposes the capabilities' `/routes` as tools: read tools by
   default, write tools only with a per-capability grant. Falsifier: the tool list contains a
   `POST` route without a grant. Depends on ISC-33, 34, 36 and 38. Amended 2026-10-01: the grant
@@ -735,7 +743,7 @@ this deployment paid the last time it was broken.
   answers `3.0.0-alpha.4` over the installed `2.12.0`; the row must say current. Evidence,
   2026-10-01: the row reads `newer pre-release 3.0.0-alpha.4 exists — not adopted` with no
   action, asserted in `tools/updates.test.ts`.
-- [x] ISC-55 — the Systems page shows what is stale and what nothing owns, from the tool's own
+- [ ] ISC-55 — the Systems page shows what is stale and what nothing owns, from the tool's own
   `--json`, and can start one class moving. Falsifier: the page renders no updates panel, or
   `sjel update --json` exits non-zero without emitting it. Probe: `sjel update --json` and the
   page. Evidence, 2026-10-01: `GET /api/sjel-status/updates` serves the report and
@@ -800,12 +808,6 @@ this deployment paid the last time it was broken.
   and precision matters more than recall, so the useful output is a short ranked list
   per note, not a score for every pair. No consumer yet — that is what keeps it here
   rather than in Features.
-- **Operator installs past cooldown**, neither a security item: tailscale 1.98.9 →
-  1.102.2, xberg 1.0.5 → 1.0.14.
-- **The remaining three database-URL call sites.** Retired with PostgreSQL (PRD Q45):
-  all capabilities migrated to the shared SQLite store (`sjel-store`), eliminating
-  `SJEL_<CAP>_DATABASE_URL` and `sjel_config::database_url_override` entirely.
-
 - **Open source or open core.** AGPL-3.0 keeps both possible. Undecided whether parts stay
   closed later.
 - **Funding.** Support and sponsorship with a build-in-public video series (decisions, papers,
@@ -827,33 +829,14 @@ this deployment paid the last time it was broken.
   `tools/self generate` needs no graph at all. What it still blocks is the graph's own freshness —
   `status` shows counts rolled up from whatever graph exists, and this machine's is behind the
   tree. Commit `2f0feb6` says it regenerated `self.json`; only `ARCHITECTURE.md` changed.
-- **A comms test is about this machine, and its own comment says it is not.** Fixed in
-  `c473694b`: `triage::tests::the_shadow_route_writes_verdicts_and_changes_no_category` now sets
-  `inference: sjel_inference::InferenceConfig::default()` and points `database_path` at its own
-  unique test fixture directory, hermetically isolating the shadow pass from both live models
-  and overlay locks.
-- **The demo site shows two areas less than it could.** Fixed 2026-09-27 (22793de3): the page
-  clock runs on the recording's anchor date, so Travel shows 2 upcoming trips, and seven services
-  missing from demo.toml now say why instead of showing a host's 404 page. People followed
-  the same day (eceddd96): six invented people seeded through the entity store's own routes, and
-  Home's own queries recorded, so only Tasks (vault, absent by design) is unavailable. The missing
-  birthday row was the seed: Home's radar looks 7 days ahead and Mara's birthday was 9 days out;
-  it is 5 now.
-- **The names ISC-13 kept.** `sjel-status` (a service rename changes the phone app's allowed
-  paths), `axon-fda-launcher` (a new binary name needs a new Full Disk Access grant), Linux
-  `axon-<cap>` systemd units, the `X-Axon-*` signed-request headers (a protocol change for paired
-  phones) and "Axon" in prose and doctrine. Each can move with a fallback when it is worth it.
-- **A scheduled job cannot build a capability it requires.** A launchd unit's PATH holds the
-  directories of its own command and build tool only. feed-sweep requires comms and starts it
-  when it is down; after the 2026-09-26 checkout move comms needed a rebuild, and feed-sweep's
-  run failed with "cargo: command not found" while comms' own watchdog, whose PATH has cargo,
-  rebuilt it. Transient, and only after a clean or a move. The fix is to add the build tools of
-  `requires` to persistence_path_dirs in tools/service-runner.sh. **Fixed in `c7b4ed2a`**
-  (2026-09-30): `persistence_path_dirs` now adds every required capability's build tool
-  directory, deduplicated, the same way it already does for the job's own runtime and builder;
-  `tools/service-runner.test.sh` passes.
-- **Stale workflow worktrees under `.claude/worktrees/` fail `tools/doctor`** with "package.json
-  is not in the index". Local leftovers, not a repository defect.
+- **From the old PRD, not yet planned.** Device loss as a threat (what a stolen phone exposes).
+  A health domain (energy, sleep, training, records). Item intake: scan an object, share a link,
+  one wishlist. Travel: route composition, "where should I base myself", an accommodation source.
+  People: Google Contacts beyond inbound, a TELOS import, trips from a person, meetup capture.
+  An autonomy gate for a structured-decision model (apply at ≥ 0.95 confidence, otherwise a
+  card). shellcheck as shell analysis. `tools/backup.sh` skipping private capability manifests.
+  The PRD's non-goals, which conflict with Sjel ("not a product", "tailnet only") and need a new
+  ruling rather than a copy.
 
 ## Test Strategy
 
@@ -868,12 +851,16 @@ this deployment paid the last time it was broken.
 | ISC-7 | code inspect | read transit's URL consts | env-overridable | rg | F1 |
 | ISC-8 | queue | `gh pr list --author app/dependabot` | every open entry merged or held with a written reason | gh | F2 |
 | ISC-9 | command | `git log` for the postgres retirement | its own commit | git | F2 |
-| ISC-27 | command | `command -v axon`; `rg '$AXON\|"axon"' tools/ Packs/` | no resolution, no call | bash, rg | F7 |
-| ISC-28 | code inspect | `libs/sjel-server/src/auth.rs` accepts `X-Sjel-*` and `X-Axon-*` | both accepted until the phone ships | rg | F7 |
-| ISC-29 | command | run the launcher; confirm the Full Disk Access grant | reads what it needs | bash | F7 |
-| ISC-30 | command | `rg -ci axon` over README, ISA, CONTRIBUTING, ARCHITECTURE | historical record and pinned names only | rg | F7 |
+| ISC-27 | command | `command -v axon`; `rg '$AXON\|"axon"' tools/ Packs/` | no resolution, no call | bash, rg | F3 |
+| ISC-28 | code inspect | `libs/sjel-server/src/auth.rs` accepts `X-Sjel-*` and `X-Axon-*` | both accepted until the phone ships | rg | F3 |
+| ISC-29 | command | run the launcher; confirm the Full Disk Access grant | reads what it needs | bash | F3 |
+| ISC-30 | command | `rg -ci axon` over README, ISA, CONTRIBUTING, ARCHITECTURE | historical record and pinned names only | rg | F3 |
 | ISC-31 | command | `sjel storage report --json`, then the Systems page | panel present, exit 0 | jq, browser | F7 |
 | ISC-32 | command | build via Xcode, then `sjel storage target` | every target dir listed | bash | F7 |
+| ISC-21 | log | fixes to the family deployment over seven days | zero by Lars | git, overlay log | F5 |
+| ISC-39 | command | `sjel capability mail` from an agent session, then the operator reads any code-like c1 row | no Secret value | sjel | F8 |
+| ISC-45 | command | a `secrets/**` read from an agent session, and the tailnet shell through Tailscale Serve | refused; `/health` 200 | Claude Code, curl | F9 |
+| ISC-55 | browser | the Systems page's updates panel against `sjel update --json` | every row matches | browser | F11 |
 
 ## Anti-claims
 
@@ -917,11 +904,6 @@ this deployment paid the last time it was broken.
   `tools/storage` measures it and enforces R6; nothing showed it to a person. Recorded as F7,
   including the tool's own blind spot: a second Cargo target dir is invisible to
   `prune --target`.
-- **2026-08-19 — the backlog moves from Issues to ISAs** (principal's call). Migrate
-  first, then close; change the doctrine in all four places that state it; stop the one
-  workflow that creates issues.
-- **2026-08-19 — `upstream-watch` reports to the job summary and reds the run** rather
-  than being deleted. Deleting it would leave drift findable only when someone looks.
 - **2026-08-20 — three capabilities never read their database variable, and the demo is
   what found it.** `tools/demo-up`'s whole mechanism is one exported
   `SJEL_<CAP>_DATABASE_URL` per capability. comms, scouting and transit ignored it, went
@@ -930,16 +912,36 @@ this deployment paid the last time it was broken.
   password=axon`. The only thing between a demo seeding run and the live store was that the
   real password is not the word `axon`. Fixed with one shared
   `sjel_config::database_url_override`, used by those three. The four that hand-roll the
-  same two lines (calendar, finance, tasks, trips) are left alone and recorded below.
+  same two lines (calendar, finance, tasks, trips) went with PostgreSQL (PRD Q45).
 - **2026-08-20 — `upstream-checker` published the checkout's absolute path.** Its `--json`
   `manifest` field was `$SJEL_ROOT/upstreams.toml`, which sjel-status serves and the demo
   records. `tools/check-site-payload` refused to publish over it, which is the job that
   gate has. Now repo-relative.
+- **2026-08-19 — the backlog moves from Issues to ISAs** (principal's call). Migrate
+  first, then close; change the doctrine in all four places that state it; stop the one
+  workflow that creates issues.
+- **2026-08-19 — `upstream-watch` reports to the job summary and reds the run** rather
+  than being deleted. Deleting it would leave drift findable only when someone looks.
 - **2026-08-19 — `.github/ISSUE_TEMPLATE/` stays.** Sjel is public and an external
   report still needs somewhere to land; what changed is that our own backlog is not there.
 
 ## Log
 
+- 2026-10-01 · Main green again, the repository's dependencies moved, and this file cleaned.
+  CI and Pages had been red since ISC-45: strict clippy on Linux refused three macOS-only imports
+  in `libs/sjel-credentials` (b53f1f56), and the demo seeder got a 403 because a capability with
+  no inbound token now fails closed (fddc43e2: `tools/demo-up` writes a throwaway
+  `deployment.env`). That held every Dependabot pull request. Then four dependency moves. 137
+  lockfile updates Dependabot does not propose forced xberg 1.3.0 (d5c22c3e, recorded in
+  `upstreams.toml` [xberg]). thiserror 2 (ce8169f5) and html2text 0.17 (c86e2b7a, a code change
+  and a test) closed #225 and #226. The dashboard runs TypeScript 7 through `--tsgo` beside 6.x,
+  the setup soundscape already ran (5c8e1f99). ISA: ISC-27…30 moved to F3, ISC-55
+  unticked (the browser check it owes is not done), ISC-29 and ISC-39 given their current
+  state, and Decisions and Log put newest first. Seven Not-yet-specified entries were removed
+  as fixed or superseded: the database-URL call sites (PRD Q45), the comms test (c473694b), the
+  demo's missing areas (22793de3, eceddd96), the scheduled job's build PATH (c7b4ed2a), the names
+  ISC-13 kept (now ISC-27…30), the installs past cooldown (Q77 retired the cooldown, and xberg is
+  1.3.0), and the stale workflow worktrees (none remain).
 - 2026-10-01 · F11 finished, and the rest of the machine with it. `tauri-cli` was the last
   upgrade and it was invisible: `cargo search` reports only the maximum version, so the released
   patch 2.12.1 sat hidden behind `3.0.0-alpha.4` and the tool called the crate current (ISC-58,
@@ -1002,15 +1004,7 @@ this deployment paid the last time it was broken.
 - 2026-09-30 · F7 added with ISC-27…ISC-32; ISC-11 superseded and ISC-13 amended after the
   environment fallback was retired (9faf670a). A disk-pressure session reclaimed ~137 GB on
   this machine, which is how the blind spot F7 records was found.
-- 2026-08-19 · Scaffolded. Carries Axon issues #172, #174, #180 and the tracker
-  retirement itself; #185 and #186 went to `Packs/travel/ISA.md`.
 - 2026-09-26 · F3 to F5 and five Not-yet-specified entries added from the session that named
   Sjel, switched the license and moved the product document into the README.
-- **From the old PRD, not yet planned.** Device loss as a threat (what a stolen phone exposes).
-  A health domain (energy, sleep, training, records). Item intake: scan an object, share a link,
-  one wishlist. Travel: route composition, "where should I base myself", an accommodation source.
-  People: Google Contacts beyond inbound, a TELOS import, trips from a person, meetup capture.
-  An autonomy gate for a structured-decision model (apply at ≥ 0.95 confidence, otherwise a
-  card). shellcheck as shell analysis. `tools/backup.sh` skipping private capability manifests.
-  The PRD's non-goals, which conflict with Sjel ("not a product", "tailnet only") and need a new
-  ruling rather than a copy.
+- 2026-08-19 · Scaffolded. Carries Axon issues #172, #174, #180 and the tracker
+  retirement itself; #185 and #186 went to `Packs/travel/ISA.md`.

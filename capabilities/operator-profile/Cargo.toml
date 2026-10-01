@@ -1,0 +1,38 @@
+[package]
+name = "operator-profile"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+description = "Private operator preferences and reviewed assistant-instruction projections."
+publish = false
+
+[lib]
+name = "operator_profile"
+path = "src/lib.rs"
+
+[[bin]]
+name = "operator-profile-server"
+path = "src/server.rs"
+
+[[bin]]
+name = "operator-profile"
+path = "src/cli.rs"
+
+[dependencies]
+axum.workspace = true
+route-manifest = { path = "../../libs/route-manifest" }
+schemars = "1.2.2"
+serde = { workspace = true, features = ["derive"] }
+serde_json.workspace = true
+rusqlite.workspace = true
+sjel-config = { path = "../../libs/sjel-config" }
+sjel-server = { path = "../../libs/sjel-server" }
+sjel-store = { path = "../../libs/sjel-store" }
+tokio = { workspace = true, features = ["macros", "rt-multi-thread", "net"] }
+
+[dev-dependencies]
+reqwest = { workspace = true, features = ["json"] }
+
+[lints]
+workspace = true

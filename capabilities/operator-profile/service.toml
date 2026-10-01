@@ -1,0 +1,10 @@
+# The canonical operator profile. Values live in the overlay-backed shared database;
+# assistant files are rendered outputs, not profile sources.
+kind        = "process"
+name        = "operator-profile"
+command     = ["target/release/operator-profile-server"]
+build       = ["cargo", "build", "--locked", "--release", "--bin", "operator-profile-server"]
+port        = "8099"
+health_path = "/health"
+ready_path  = "/ready"
+proxy_api_only = "true"

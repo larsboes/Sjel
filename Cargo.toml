@@ -15,6 +15,7 @@ members = [
     "capabilities/scouting",
     "capabilities/soundscape",
     "capabilities/traveler",
+    "capabilities/operator-profile",
     "capabilities/transit",
     "capabilities/trips",
     "capabilities/vault",

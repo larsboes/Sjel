@@ -11,6 +11,15 @@
       "kind": "capability"
     },
     {
+      "name": "assistant",
+      "kind": "capability",
+      "service": {
+        "kind": "process",
+        "requires": [],
+        "port": "8100"
+      }
+    },
+    {
       "name": "backup",
       "kind": "capability"
     },
@@ -257,6 +266,15 @@
       "kind": "capability"
     },
     {
+      "name": "operator-profile",
+      "kind": "capability",
+      "service": {
+        "kind": "process",
+        "requires": [],
+        "port": "8099"
+      }
+    },
+    {
       "name": "overlay",
       "kind": "lib"
     },
@@ -474,6 +492,46 @@
     }
   ],
   "coupling": [
+    {
+      "from": "assistant",
+      "to": "inference",
+      "kinds": [
+        "cargo-dep"
+      ],
+      "evidence": [
+        "capabilities/assistant/Cargo.toml"
+      ]
+    },
+    {
+      "from": "assistant",
+      "to": "route-manifest",
+      "kinds": [
+        "cargo-dep"
+      ],
+      "evidence": [
+        "capabilities/assistant/Cargo.toml"
+      ]
+    },
+    {
+      "from": "assistant",
+      "to": "sjel-config",
+      "kinds": [
+        "cargo-dep"
+      ],
+      "evidence": [
+        "capabilities/assistant/Cargo.toml"
+      ]
+    },
+    {
+      "from": "assistant",
+      "to": "sjel-server",
+      "kinds": [
+        "cargo-dep"
+      ],
+      "evidence": [
+        "capabilities/assistant/Cargo.toml"
+      ]
+    },
     {
       "from": "backup",
       "to": "sjel-config",
@@ -1005,6 +1063,46 @@
       ]
     },
     {
+      "from": "operator-profile",
+      "to": "route-manifest",
+      "kinds": [
+        "cargo-dep"
+      ],
+      "evidence": [
+        "capabilities/operator-profile/Cargo.toml"
+      ]
+    },
+    {
+      "from": "operator-profile",
+      "to": "sjel-config",
+      "kinds": [
+        "cargo-dep"
+      ],
+      "evidence": [
+        "capabilities/operator-profile/Cargo.toml"
+      ]
+    },
+    {
+      "from": "operator-profile",
+      "to": "sjel-server",
+      "kinds": [
+        "cargo-dep"
+      ],
+      "evidence": [
+        "capabilities/operator-profile/Cargo.toml"
+      ]
+    },
+    {
+      "from": "operator-profile",
+      "to": "sjel-store",
+      "kinds": [
+        "cargo-dep"
+      ],
+      "evidence": [
+        "capabilities/operator-profile/Cargo.toml"
+      ]
+    },
+    {
       "from": "places",
       "to": "candidate-fingerprint",
       "kinds": [
@@ -1226,6 +1324,16 @@
     },
     {
       "from": "sjel-server",
+      "to": "pseudonymize",
+      "kinds": [
+        "cargo-dep"
+      ],
+      "evidence": [
+        "libs/sjel-server/Cargo.toml"
+      ]
+    },
+    {
+      "from": "sjel-server",
       "to": "sjel-config",
       "kinds": [
         "cargo-dep"
@@ -1341,7 +1449,18 @@
         "cargo-dep"
       ],
       "evidence": [
+        "tools/capability-auth/Cargo.toml",
         "tools/storage/Cargo.toml"
+      ]
+    },
+    {
+      "from": "tools",
+      "to": "sjel-server",
+      "kinds": [
+        "cargo-dep"
+      ],
+      "evidence": [
+        "tools/capability-auth/Cargo.toml"
       ]
     },
     {
@@ -1695,6 +1814,10 @@
       "verdict": "adopt"
     },
     {
+      "name": "clm",
+      "verdict": "watch"
+    },
+    {
       "name": "colibri",
       "verdict": "inspiration"
     },
@@ -1745,6 +1868,10 @@
     {
       "name": "gitleaks",
       "verdict": "adopt"
+    },
+    {
+      "name": "gpui",
+      "verdict": "watch"
     },
     {
       "name": "graphify",
@@ -1837,6 +1964,10 @@
     {
       "name": "netbird",
       "verdict": "reject"
+    },
+    {
+      "name": "nimble",
+      "verdict": "watch"
     },
     {
       "name": "nominatim-api",

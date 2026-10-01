@@ -34,29 +34,106 @@ use status::*;
 const ROUTES: &[route_manifest::Route] = &[
     r("GET", "/health", "Liveness."),
     r("GET", "/routes", "This manifest."),
-    r("GET", "/api/sjel-status/health", "Aggregate health across enabled capabilities."),
-    r("GET", "/api/sjel-status/routes", "Every enabled capability's route manifest, in one map."),
-    r("GET", "/api/sjel-status/lan", "The local-network listener for paired devices: port, host and the certificate fingerprint a phone pins."),
-    r("GET", "/api/sjel-status/capabilities", "Enabled capabilities, their ports and whether each is up."),
-    r("GET", "/api/sjel-status/self", "This machine's resolved Axon model."),
-    r("GET", "/api/sjel-status/repos", "Sjel and overlay repo state."),
-    r("GET", "/api/sjel-status/links", "Operator-pinned links from the overlay's links.toml."),
-    r("GET", "/api/sjel-status/backups", "Every capability with a backup contract: last success, age, whether it is overdue, and what its last attempt did."),
-    r("GET", "/api/sjel-status/backup/targets", "The declared backup targets: kind, coordinates, presence, the verdict of the last rehearsal, and the interval an operator set."),
-    r("GET", "/api/sjel-status/backup/runs", "Every backup attempt, newest first, including the ones that failed. Optional ?limit=N (default 50, max 500)."),
-    r("POST", "/api/sjel-status/backup/policy", "Set a target's interval, or turn it off. Body: { target, interval_hours } where null means off and one hour is the minimum."),
-    r("POST", "/api/sjel-status/backup/verify", "Rehearse a target: hash its newest recorded archive and restore it in isolation under its own receipt. Body: { target }."),
-    r("GET", "/api/sjel-status/host-watch", "Open findings from the hourly host watch: a runaway process or a filling disk."),
-    r("GET", "/api/sjel-status/packs", "Every Pack skill against every agent harness: deployed, drifted, or unowned at the destination."),
-    r("GET", "/api/sjel-status/storage", "What fills the disk: the volume, every reclaimable class, and what the overlay's policy protects from reclaim. From tools/storage's own report --json."),
-    r("POST", "/api/sjel-status/capabilities/{name}/backup", "Request a backup of one capability. Accepts the run and returns; poll /backups for the outcome."),
+    r(
+        "GET",
+        "/api/sjel-status/health",
+        "Aggregate health across enabled capabilities.",
+    ),
+    r(
+        "GET",
+        "/api/sjel-status/routes",
+        "Every enabled capability's route manifest, in one map.",
+    ),
+    r(
+        "GET",
+        "/api/sjel-status/lan",
+        "The local-network listener for paired devices: port, host and the certificate fingerprint a phone pins.",
+    ),
+    r(
+        "GET",
+        "/api/sjel-status/capabilities",
+        "Enabled capabilities, their ports and whether each is up.",
+    ),
+    r(
+        "GET",
+        "/api/sjel-status/self",
+        "This machine's resolved Axon model.",
+    ),
+    r(
+        "GET",
+        "/api/sjel-status/repos",
+        "Sjel and overlay repo state.",
+    ),
+    r(
+        "GET",
+        "/api/sjel-status/links",
+        "Operator-pinned links from the overlay's links.toml.",
+    ),
+    r(
+        "GET",
+        "/api/sjel-status/backups",
+        "Every capability with a backup contract: last success, age, whether it is overdue, and what its last attempt did.",
+    ),
+    r(
+        "GET",
+        "/api/sjel-status/backup/targets",
+        "The declared backup targets: kind, coordinates, presence, the verdict of the last rehearsal, and the interval an operator set.",
+    ),
+    r(
+        "GET",
+        "/api/sjel-status/backup/runs",
+        "Every backup attempt, newest first, including the ones that failed. Optional ?limit=N (default 50, max 500).",
+    ),
+    r(
+        "POST",
+        "/api/sjel-status/backup/policy",
+        "Set a target's interval, or turn it off. Body: { target, interval_hours } where null means off and one hour is the minimum.",
+    ),
+    r(
+        "POST",
+        "/api/sjel-status/backup/verify",
+        "Rehearse a target: hash its newest recorded archive and restore it in isolation under its own receipt. Body: { target }.",
+    ),
+    r(
+        "GET",
+        "/api/sjel-status/host-watch",
+        "Open findings from the hourly host watch: a runaway process or a filling disk.",
+    ),
+    r(
+        "POST",
+        "/api/sjel-status/upstreams/watch",
+        "Append a `watch` row to upstreams.toml: noted, not audited, grants nothing. Body: { url, summary, name? }. 400 carries the refusal.",
+    ),
+    r(
+        "GET",
+        "/api/sjel-status/packs",
+        "Every Pack skill against every agent harness: deployed, drifted, or unowned at the destination.",
+    ),
+    r(
+        "GET",
+        "/api/sjel-status/storage",
+        "What fills the disk: the volume, every reclaimable class, and what the overlay's policy protects from reclaim. From tools/storage's own report --json.",
+    ),
+    r(
+        "POST",
+        "/api/sjel-status/capabilities/{name}/backup",
+        "Request a backup of one capability. Accepts the run and returns; poll /backups for the outcome.",
+    ),
     // Undeclared until 2026-08-31, and served the whole time. The dashboard's panel page
     // calls both; `/routes` denied they existed. The coverage test below did not catch it:
     // its detector required the path literal to sit immediately after the opening paren,
     // and these two are the only mounts in this file long enough for rustfmt to wrap. It
     // skips the whitespace now (PRD D19) — this pair is why.
-    r("POST", "/api/sjel-status/capabilities/{name}/start", "Start one capability and wait for it to answer. Idempotent: an already-running capability returns up=true."),
-    r("POST", "/api/sjel-status/capabilities/{name}/stop", "Stop one capability. Refuses to report success while its port still answers, because something outside the pid file holding it is the case worth seeing."),
+    r(
+        "POST",
+        "/api/sjel-status/capabilities/{name}/start",
+        "Start one capability and wait for it to answer. Idempotent: an already-running capability returns up=true.",
+    ),
+    r(
+        "POST",
+        "/api/sjel-status/capabilities/{name}/stop",
+        "Stop one capability. Refuses to report success while its port still answers, because something outside the pid file holding it is the case worth seeing.",
+    ),
 ];
 
 /// Shorthand so the table above reads as a table.
@@ -257,6 +334,10 @@ fn build_router(shell: proxy::Proxy) -> Router {
         )
         .route("/api/sjel-status/host-watch", get(host_watch_handler))
         .route("/api/sjel-status/packs", get(packs_handler))
+        .route(
+            "/api/sjel-status/upstreams/watch",
+            post(upstream_watch_handler),
+        )
         .route("/api/sjel-status/storage", get(storage_handler))
         .route(
             "/api/sjel-status/capabilities/{name}/backup",

@@ -1,7 +1,8 @@
 # Research
 
-Why this project exists, and the evidence for it. One file per question. The demo site renders
-every file here under `/research`.
+Why this project exists, and the evidence for it. One file per question. The dashboard renders
+every file here under `/research`, beside a Projects view built from `../systems.toml` and
+`../upstreams.toml`: the software Sjel runs next to, builds on, learned from, watches or declined.
 
 Each entry states its claim, cites a durable source for every fact it did not measure, and ends
 with what its sources do not show. An entry grows when new evidence arrives. It is corrected, not

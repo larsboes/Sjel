@@ -86,6 +86,7 @@ export const PRIMARY_NAV: NavItem[] = [
  */
 export const UTILITY_NAV: NavItem[] = [
   { href: "/projects", label: "Projects", icon: "graduation" },
+  { href: "/research", label: "Research", icon: "sparkles" },
   { href: "/systems", label: "Systems", icon: "server", capability: "sjel-status" },
   { href: "/capabilities", label: "Capabilities", icon: "boxes", capability: "sjel-status" },
   { href: "/backup", label: "Backup", icon: "database", capability: "sjel-status" },

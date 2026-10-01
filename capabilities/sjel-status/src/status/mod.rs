@@ -9,6 +9,7 @@ mod packs;
 mod reaper;
 mod registry;
 mod storage;
+mod upstreams;
 
 pub(crate) use backup::*;
 pub(crate) use health::*;
@@ -19,3 +20,4 @@ pub(crate) use packs::*;
 pub(crate) use reaper::*;
 pub(crate) use registry::*;
 pub(crate) use storage::*;
+pub(crate) use upstreams::*;

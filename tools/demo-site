@@ -79,8 +79,7 @@ echo "demo-site: reference pages"
 echo "demo-site: self-model page"
 "$_here/generate-site" --out "$OUT/docs" --name self-model.html
 
-echo "demo-site: research pages"
-bun "$_here/generate-research.ts" --out "$OUT/research"
+# /research is a dashboard route (dashboard/src/routes/research/), so it ships in the bundle above.
 
 # GitHub Pages serves this tree through Jekyll unless told not to, and Jekyll drops every
 # directory beginning with an underscore — which is where SvelteKit puts the entire bundle.

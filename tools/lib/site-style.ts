@@ -152,7 +152,7 @@ export function page(opts: PageOptions): string {
     ${link("", "Dashboard", "demo")}
     ${link("docs/index.html", "Reference", "docs")}
     ${link("docs/self-model.html", "Self-model", "overview")}
-    ${link("research/index.html", "Research", "research")}
+    ${link("research", "Research", "research")}
     <span class="sep"></span>
     <a href="https://github.com/larsboes/Sjel">Source</a>
   </nav>
@@ -164,7 +164,7 @@ ${opts.footer}
   ${link("", "Dashboard", "demo")}
   ${link("docs/index.html", "Reference", "docs")}
   ${link("docs/self-model.html", "Self-model", "overview")}
-  ${link("research/index.html", "Research", "research")}
+  ${link("research", "Research", "research")}
   <span class="sep"></span>
   <a href="https://github.com/larsboes/Sjel">Source</a>
 </p>

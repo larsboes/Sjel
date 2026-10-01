@@ -11,13 +11,32 @@
     | { kind: "table"; headers: InlinePart[][]; rows: InlinePart[][][] }
     | { kind: "rule" };
 
-  let { content, compact = false } = $props<{ content: string; compact?: boolean }>();
+  let {
+    content,
+    compact = false,
+    resolveLink,
+  } = $props<{
+    content: string;
+    compact?: boolean;
+    /**
+     * Turns a relative link into a real one. Without it a relative link renders as its text,
+     * which is right for mail and feed items: their relative links point at a site this app is
+     * not. research/ passes one, because its links point at each other and at this repository.
+     */
+    resolveLink?: (href: string) => string;
+  }>();
   const blocks = $derived(parseMarkdown(content));
 
   function inlineParts(value: string): InlinePart[] {
-    const readable = value.replace(/\[([^\]]+)]\((?!https?:\/\/)[^)]+\)/g, "$1");
+    const resolved = resolveLink
+      ? value.replace(/\[([^\]]+)]\(([^)\s]+)\)/g, (_, text: string, href: string) => `[${text}](${resolveLink(href)})`)
+      : value;
+    const unlinked = resolveLink ? /\[([^\]]+)]\((?!https?:\/\/|\/)[^)]+\)/g : /\[([^\]]+)]\((?!https?:\/\/)[^)]+\)/g;
+    const readable = resolved.replace(unlinked, "$1");
     const parts: InlinePart[] = [];
-    const pattern = /(\[([^\]]+)]\((https?:\/\/[^)\s]+)\)|`([^`]+)`|\*\*([^*]+)\*\*)/g;
+    // A root-relative href is kept only when resolveLink produced it; without a resolver,
+    // `unlinked` has already turned it into text.
+    const pattern = /(\[([^\]]+)]\((https?:\/\/[^)\s]+|\/[^)\s]*)\)|`([^`]+)`|\*\*([^*]+)\*\*)/g;
     let cursor = 0;
     for (const match of readable.matchAll(pattern)) {
       const start = match.index ?? 0;
@@ -164,7 +183,11 @@
 {#snippet inline(parts: InlinePart[])}
   {#each parts as part}
     {#if part.kind === "link"}
-      <a href={part.href} target="_blank" rel="noreferrer">{part.text}</a>
+      {#if part.href.startsWith("/")}
+        <a href={part.href}>{part.text}</a>
+      {:else}
+        <a href={part.href} target="_blank" rel="noreferrer">{part.text}</a>
+      {/if}
     {:else if part.kind === "code"}
       <code>{part.text}</code>
     {:else if part.kind === "strong"}

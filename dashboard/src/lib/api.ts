@@ -1876,6 +1876,16 @@ export const axonStatus = {
    *  nothing starts, so it has no port. Same reason as `hostWatch()` above. */
   packs: (signal?: AbortSignal) =>
     request<PacksView>('/sjel-status/api/sjel-status/packs', signal ? { signal } : undefined),
+  /** Append a `watch` row to upstreams.toml. A 400 carries the tool's one-line refusal. */
+  watchUpstream: (url: string, summary: string, name?: string) =>
+    request<{ name: string; url: string; verdict: string; license: string; summary: string }>(
+      '/sjel-status/api/sjel-status/upstreams/watch',
+      {
+        method: 'POST',
+        body: JSON.stringify({ url, summary, ...(name ? { name } : {}) }),
+        headers: { 'Content-Type': 'application/json' },
+      },
+    ),
   start: (name: string, signal?: AbortSignal) =>
     request<{ name: string; up: boolean; detail: string }>(
       `/sjel-status/api/sjel-status/capabilities/${encodeURIComponent(name)}/start`,

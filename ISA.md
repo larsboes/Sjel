@@ -250,7 +250,9 @@ curated place. The README is still 870 lines of doctrine below 230 of product.
   one sourced entry, and the demo site shows it. Falsifier: an entry without a source, or a
   claim its source does not support. Done 2026-09-27: `research/why-sjel.md` with four sourced
   claims and a list of what the sources do not show; `tools/generate-research.ts` renders it at
-  `/research` on the demo site.
+  `/research` on the demo site. Moved 2026-09-30: the dashboard renders `research/` as its own
+  `/research` routes (`dashboard/src/routes/research/`), with a Projects view built from
+  `systems.toml` and `upstreams.toml`, and `tools/generate-research.ts` is deleted.
 - [x] ISC-16 — the engineering doctrine lives in `CONTRIBUTING.md`, and no link points at a
   README anchor that no longer exists. About 208 links point into it today. Falsifier:
   `git grep "README.md#"` finds an anchor missing from `README.md`. Done 2026-09-27

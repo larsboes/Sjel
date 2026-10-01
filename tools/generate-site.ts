@@ -65,7 +65,7 @@ const KIND_BLURB: Record<string, string> = {
 };
 // Preference order from upstreams.toml's own header comment, so the page groups them the way the
 // manifest ranks them rather than alphabetically.
-const VERDICT_ORDER = ["adopt", "contribute", "overlay", "fork", "build", "inspiration", "quarry", "reject"];
+const VERDICT_ORDER = ["adopt", "contribute", "overlay", "fork", "build", "inspiration", "quarry", "reject", "watch"];
 
 function renderUnits(units: Unit[]): string {
   return KIND_ORDER.map((kind) => {

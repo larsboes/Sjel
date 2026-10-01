@@ -518,10 +518,11 @@ last layer over the routes and adds no data path of its own.
   new class requires. Still open: the ceiling becomes a gate only with ISC-38.
 - [ ] ISC-40 — one MCP server exposes the capabilities' `/routes` as tools: read tools by
   default, write tools only with a per-capability grant. Falsifier: the tool list contains a
-  `POST` route without a grant. Depends on ISC-33, 34, 36 and 38.
+  `POST` route without a grant. Depends on ISC-33, 34, 36 and 38. Amended 2026-10-01: the grant
+  is F10's per-capability mode, so a write tool is listed unless its capability is read-only.
 
-Not decided, and the principal's call: the form of a write grant, and whether each agent call
-is logged (who, which route, when).
+Decided 2026-10-01, see F10: the write grant is a per-capability mode, and each agent call is
+logged.
 
 ### F9 · One pseudonymizer, applied by the gate to every agent read
 
@@ -582,6 +583,45 @@ Design:
   trades the Keychain token for a single-use ticket, and the shell turns it into a session cookie
   (`capabilities/sjel-status/src/session.rs`). Still open: soundscape's panel loads from its own
   port (`panelUrl` in `dashboard/src/lib/api.ts`), so its browser requests carry no token.
+
+### F10 · An agent writes, under a mode the owner sets
+
+Why: F8 and F9 made agent access read-only. The principal ruled on 2026-10-01 that an agent
+writes too, "native" through MCP tools, under a mode chosen per capability: read-only, ask or
+auto. The default is auto. A small on-device model may later sort writes into safe and risky,
+and is not part of this feature.
+
+Rulings, principal, 2026-10-01:
+
+- One mode per capability, set on the Systems page. No file is edited by hand.
+- In ask mode the write waits for Allow or Deny in the menu-bar app (`apps/mac`), and the
+  dashboard lists it too.
+- The default is auto.
+- Pseudonym tokens in an agent's write are turned back into the real values before the write
+  reaches the capability, from the same session that issued them.
+- Every agent call is logged: time, capability, method, path, status and the gate's decision.
+  Never a body.
+
+Product Rule 5 still applies inside auto ([product rules](CONTRIBUTING.md#product-rules)): "A
+change that leaves Sjel, or cannot be undone, asks." A route that does either declares it in its
+manifest, and the gate asks for it whatever the mode.
+
+Placement: the gate stays in `libs/sjel-server`. sjel-status owns the policy, the approvals and
+the call log, because it already owns the Systems page. The MCP server is operator machinery in
+`tools/`. sjel-status itself never admits an agent: it starts and stops the machine's services.
+
+- [ ] ISC-46 — the mode is per capability, starts at auto, and is changed on the Systems page.
+  Falsifier: changing it needs a file edit, or an agent `POST` to a read-only capability reaches a
+  handler. Probe: gate tests, and the page.
+- [ ] ISC-47 — in auto mode an agent write reaches the handler, and a route declared `confirm`
+  asks anyway. Falsifier: an agent moves mail to Trash with no approval. Probe: gate tests.
+- [ ] ISC-48 — an approval is single-use and bound to the method, the path and a digest of the
+  body. Falsifier: one approval admits a second write, or a different body. Probe: unit tests.
+- [ ] ISC-49 — tokens in an agent's write body become the real values before the handler, and a
+  token the session never issued is refused. Falsifier: a handler receives `<PERSON_…>`. Probe:
+  gate tests.
+- [ ] ISC-50 — every agent call leaves one log row with no body, and the Systems page shows the
+  latest. Falsifier: an agent call with no row. Probe: gate tests and the page.
 
 ## Not yet specified
 

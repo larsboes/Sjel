@@ -17,6 +17,7 @@ interface ProxyRequestHeaders {
 
 interface ProxyRequest {
   method?: string;
+  headers?: IncomingHttpHeaders;
 }
 
 interface ProxyEvents {
@@ -131,7 +132,11 @@ export function installCommsProxyAuthorization(
   proxy: ProxyEvents,
   authorization: string,
 ): void {
-  proxy.on("proxyReq", (proxyRequest) => {
-    proxyRequest.setHeader("Authorization", authorization);
+  proxy.on("proxyReq", (proxyRequest, request) => {
+    // An agent credential must reach Comms unchanged; overwriting it with the shell credential
+    // would silently bypass Comms' read-only pseudonymization branch.
+    if (!request.headers?.authorization) {
+      proxyRequest.setHeader("Authorization", authorization);
+    }
   });
 }

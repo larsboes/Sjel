@@ -9,6 +9,7 @@ import {
   isMutation,
   loadCommsProxyCredential,
 } from "./vite/comms-proxy-auth.ts";
+import { authorizedProxy, loadInboundProxyCredential } from "./vite/inbound-proxy-auth.ts";
 
 const SJEL_ROOT = resolve(fileURLToPath(new URL(".", import.meta.url)), "..");
 const port = Number(process.env.SJEL_PORT ?? 47117);
@@ -227,6 +228,13 @@ function registry(): RegistryEntry[] {
 function buildProxy(): Record<string, ProxyOptions> {
   const proxy: Record<string, ProxyOptions> = {};
   const commsCredential = loadCommsProxyCredential(SJEL_ROOT);
+  const inboundCredential = loadInboundProxyCredential(SJEL_ROOT);
+
+  if (!inboundCredential.authorization) {
+    console.warn(
+      `[dashboard] shared inbound token is ${inboundCredential.reason}; protected capability APIs will fail closed.`,
+    );
+  }
 
   if (!commsCredential.authorization) {
     console.warn(
@@ -247,6 +255,7 @@ function buildProxy(): Record<string, ProxyOptions> {
       target,
       changeOrigin: true,
       rewrite: (path) => path.replace(new RegExp(`^/${svc.name}`), ""),
+      ...authorizedProxy(svc.name === "comms" ? null : inboundCredential.authorization),
     };
     if (svc.name === "comms" && commsCredential.authorization) {
       const authorization = commsCredential.authorization;
@@ -257,7 +266,11 @@ function buildProxy(): Record<string, ProxyOptions> {
     // Surfaces whose paths predate that rule (transit's /api, scouting's /discover)
     // pass through unstripped, declared per capability in its own manifest.
     for (const extra of svc.proxy_extra ?? []) {
-      proxy[extra] = { target, changeOrigin: true };
+      proxy[extra] = {
+        target,
+        changeOrigin: true,
+        ...authorizedProxy(svc.name === "comms" ? null : inboundCredential.authorization),
+      };
     }
   }
 
@@ -296,17 +309,17 @@ function topProcesses(_req: import("http").IncomingMessage, res: import("http").
   }
 }
 
-function guardCommsMutations(
+function guardProtectedMutations(
   req: import("http").IncomingMessage,
   res: import("http").ServerResponse,
   next: () => void,
 ) {
-  if (!req.url?.startsWith("/comms/") || !isMutation(req.method) || hasSameOrigin(req.headers)) {
+  if (!isMutation(req.method) || hasSameOrigin(req.headers)) {
     next();
     return;
   }
   res.writeHead(403, { "Content-Type": "application/json" });
-  res.end(JSON.stringify({ error: "cross-origin Comms mutations are not allowed" }));
+  res.end(JSON.stringify({ error: "cross-origin capability mutations are not allowed" }));
 }
 
 // A function, not an object, so the proxy table is built only when a server is
@@ -349,7 +362,7 @@ export default defineConfig(({ command }) => ({
   plugins: [sveltekit(), bundleGuard(), {
     name: "top-processes",
     configureServer(server) {
-      server.middlewares.use(guardCommsMutations);
+      server.middlewares.use(guardProtectedMutations);
       server.middlewares.use("/api/top-processes", topProcesses);
     },
   }],

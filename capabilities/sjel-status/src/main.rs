@@ -147,20 +147,35 @@ async fn main() {
             sjel_server::InboundAuth::from_deployment().with_device_verifier(verifier.clone())
         }
         None => sjel_server::InboundAuth::from_deployment(),
-    };
+    }
+    .require_credential();
     // The same router on the local network, for paired devices only, when the deployment
     // enabled it. Without the registry there is nothing to admit, so it does not start.
     if let Some(verifier) = verifier {
         lan::start(build_router(shell.clone()), verifier);
     }
-    sjel_server::serve(
+    let overlay = sjel_config::overlay_root().unwrap_or_else(|| {
+        eprintln!(
+            "sjel-status: no overlay is configured; cannot bind the protected tailnet socket"
+        );
+        std::process::exit(1);
+    });
+    let socket_path = overlay.join("secrets/sjel-status.sock");
+    let tailnet_auth = sjel_server::InboundAuth::from_deployment().tailnet_proxy_only();
+    let local = sjel_server::serve(
         "sjel-status",
         sjel_server::Reach::Loopback,
         port,
-        build_router(shell),
+        build_router(shell.clone()),
         auth,
-    )
-    .await;
+    );
+    let tailnet = sjel_server::serve_unix(
+        "sjel-status",
+        &socket_path,
+        build_router(shell),
+        tailnet_auth,
+    );
+    tokio::join!(local, tailnet);
 }
 
 /// The local-network listener, for the pairing screen: its port, host and the certificate

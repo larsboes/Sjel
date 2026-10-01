@@ -71,12 +71,8 @@ pub(crate) struct Route {
     ///
     /// `None` for a `proxy_extra` prefix, which passes through untouched.
     pub(crate) strip: Option<String>,
-    /// Comms is the only capability whose proxy adds a credential, and the flag is set from the
-    /// registry entry rather than re-derived at request time. An earlier draft of this file
-    /// decided it by comparing the target against a helper that returned an empty string, and
-    /// `ends_with("")` is true for every string — which would have put the comms bearer token on
-    /// every request to every capability. Carried as data on the route so there is one place it
-    /// can be true.
+    /// Comms uses its capability-specific credential. The shared deployment token is injected
+    /// for other capabilities; this flag prevents mixing the two secrets.
     pub(crate) inject_comms_auth: bool,
 }
 
@@ -90,10 +86,9 @@ pub(crate) struct Proxy {
     /// of the one that already existed. `None` stays fail-closed: comms answers 401 and the page
     /// says so, which is the honest outcome of an unconfigured credential.
     comms_authorization: Option<HeaderValue>,
-    /// The deployment token, sent upstream for a request the gate admitted on a device key.
-    /// A capability behind the shell gates on the tailnet identity or this token, and a device
-    /// arriving without the tailnet carries neither (PRD Q119).
-    device_authorization: Option<HeaderValue>,
+    /// Shared inbound token sent only from this server to protected capability APIs. The
+    /// browser never receives it; the shell injects it after its own listener admits the request.
+    deployment_authorization: Option<HeaderValue>,
     client: reqwest::Client,
     ui_dir: String,
 }
@@ -111,6 +106,14 @@ const HOP_BY_HOP: [&str; 8] = [
     "transfer-encoding",
     "upgrade",
 ];
+
+fn insert_authorization_if_absent(headers: &mut HeaderMap, auth: Option<&HeaderValue>) {
+    if !headers.contains_key(axum::http::header::AUTHORIZATION) {
+        if let Some(auth) = auth {
+            headers.insert(axum::http::header::AUTHORIZATION, auth.clone());
+        }
+    }
+}
 
 fn is_hop_by_hop(name: &HeaderName) -> bool {
     HOP_BY_HOP
@@ -175,7 +178,7 @@ impl Proxy {
         Self {
             routes: Arc::new(routes),
             comms_authorization: comms_authorization(),
-            device_authorization: sjel_server::InboundAuth::from_deployment()
+            deployment_authorization: sjel_server::InboundAuth::from_deployment()
                 .bearer_header()
                 .and_then(|value| HeaderValue::from_str(&value).ok()),
             client: reqwest::Client::new(),
@@ -358,21 +361,9 @@ async fn forward(proxy: &Proxy, route: Route, req: Request) -> Response {
         headers.insert(name.clone(), value.clone());
     }
     if route.inject_comms_auth {
-        if let Some(auth) = &proxy.comms_authorization {
-            headers.insert(axum::http::header::AUTHORIZATION, auth.clone());
-        }
-    } else if parts
-        .extensions
-        .get::<sjel_server::AdmittedDevice>()
-        .is_some()
-        || parts
-            .extensions
-            .get::<sjel_server::AdmittedPairingClaim>()
-            .is_some()
-    {
-        if let Some(auth) = &proxy.device_authorization {
-            headers.insert(axum::http::header::AUTHORIZATION, auth.clone());
-        }
+        insert_authorization_if_absent(&mut headers, proxy.comms_authorization.as_ref());
+    } else {
+        insert_authorization_if_absent(&mut headers, proxy.deployment_authorization.as_ref());
     }
 
     let upstream = proxy
@@ -392,7 +383,7 @@ async fn forward(proxy: &Proxy, route: Route, req: Request) -> Response {
                 StatusCode::BAD_GATEWAY,
                 format!("{} is not answering: {e}", route.target),
             )
-                .into_response()
+                .into_response();
         }
     };
 
@@ -597,11 +588,10 @@ mod tests {
         assert!(t.is_empty());
     }
 
-    /// Only comms gets a credential. An earlier draft decided this by comparing the target
-    /// against a helper returning "", and `ends_with("")` is true for everything — which would
-    /// have put the comms bearer token on every request to every capability.
+    /// Only comms gets its separate capability credential; other routes receive the deployment
+    /// token. The flag must remain tied to the registry entry, not a substring guess.
     #[test]
-    fn only_comms_carries_the_credential() {
+    fn only_comms_uses_the_capability_specific_credential() {
         let t = table(&[
             svc("comms", "8083", false, &[]),
             svc("places", "8093", false, &[]),
@@ -614,6 +604,28 @@ mod tests {
                 r.prefix
             );
         }
+    }
+
+    #[test]
+    fn shell_auth_injection_preserves_an_agent_token() {
+        let shared = HeaderValue::from_static("Bearer deployment-token");
+        let mut browser = HeaderMap::new();
+        insert_authorization_if_absent(&mut browser, Some(&shared));
+        assert_eq!(
+            browser[axum::http::header::AUTHORIZATION],
+            "Bearer deployment-token"
+        );
+
+        let mut agent = HeaderMap::new();
+        agent.insert(
+            axum::http::header::AUTHORIZATION,
+            HeaderValue::from_static("Bearer agent-token"),
+        );
+        insert_authorization_if_absent(&mut agent, Some(&shared));
+        assert_eq!(
+            agent[axum::http::header::AUTHORIZATION],
+            "Bearer agent-token"
+        );
     }
 
     /// Longest first, so a mount is considered before any shorter prefix that also matches.

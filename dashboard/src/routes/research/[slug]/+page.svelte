@@ -31,7 +31,7 @@
   .source {
     margin: 0 0 1rem;
     color: var(--text-secondary);
-    font-size: 0.85rem;
+    font-size: var(--text-sm);
   }
   .source {
     margin-top: 1rem;

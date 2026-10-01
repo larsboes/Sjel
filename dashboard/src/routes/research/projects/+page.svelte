@@ -158,7 +158,7 @@
     display: grid;
     gap: 0.25rem;
     color: var(--text-secondary);
-    font-size: 0.85rem;
+    font-size: var(--text-sm);
   }
   .add input {
     padding: 0.45rem 0.6rem;
@@ -171,7 +171,7 @@
   .optional,
   .counter {
     color: var(--text-secondary);
-    font-size: 0.75rem;
+    font-size: var(--text-xs);
   }
   .counter.over {
     color: var(--danger, #c0392b);
@@ -196,7 +196,7 @@
     align-items: center;
     gap: 0.4rem;
     margin: 0.6rem 0 0;
-    font-size: 0.85rem;
+    font-size: var(--text-sm);
   }
   .ok {
     color: var(--text-secondary);
@@ -229,7 +229,7 @@
   }
   h2 {
     margin: 0 0 0.25rem;
-    font-size: 1.05rem;
+    font-size: var(--text-md);
     color: var(--text-primary);
   }
   .count,
@@ -240,7 +240,7 @@
   }
   .blurb {
     margin: 0 0 0.75rem;
-    font-size: 0.88rem;
+    font-size: var(--text-base);
   }
   .rows {
     display: grid;
@@ -270,16 +270,16 @@
     border: 1px solid var(--card-border);
     border-radius: 999px;
     color: var(--text-secondary);
-    font-size: 0.72rem;
+    font-size: var(--text-xs);
   }
   .row p {
     margin: 0.35rem 0 0;
     color: var(--text-secondary);
-    font-size: 0.86rem;
+    font-size: var(--text-sm);
     line-height: 1.5;
   }
   .source {
-    font-size: 0.85rem;
+    font-size: var(--text-sm);
   }
   .source a {
     color: var(--primary);

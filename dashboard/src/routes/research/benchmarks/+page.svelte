@@ -96,12 +96,12 @@
     gap: 0.75rem;
     margin: 1rem 0 0.75rem;
     color: var(--text-primary);
-    font-size: 1.05rem;
+    font-size: var(--text-md);
   }
   .method,
   .empty {
     color: var(--text-secondary);
-    font-size: 0.85rem;
+    font-size: var(--text-sm);
     font-weight: 400;
   }
   .method {
@@ -114,7 +114,7 @@
   table {
     width: 100%;
     border-collapse: collapse;
-    font-size: 0.86rem;
+    font-size: var(--text-sm);
   }
   th,
   td {
@@ -150,7 +150,7 @@
   summary {
     margin-bottom: 0.5rem;
     color: var(--text-secondary);
-    font-size: 0.86rem;
+    font-size: var(--text-sm);
     cursor: pointer;
   }
 </style>

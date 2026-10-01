@@ -27,7 +27,9 @@ public final class NodeBridge: Sendable {
     public let baseURL: URL
     private let session: URLSession
 
-    public init(baseURL: URL = URL(string: "http://127.0.0.1:8080")!) {
+    /// sjel-status, the shell (`capabilities/sjel-status/service.toml`). This said 8080, where
+    /// nothing listens, so the menu showed "offline" whatever the shell's state.
+    public init(baseURL: URL = URL(string: "http://127.0.0.1:8082")!) {
         self.baseURL = baseURL
         let config = URLSessionConfiguration.ephemeral
         config.timeoutIntervalForRequest = 2.0
@@ -45,8 +47,9 @@ public final class NodeBridge: Sendable {
                 return SjelNodeStatus(isReachable: false, latencyMs: latency)
             }
 
+            // sjel-status answers `{"ok": true, "service": "sjel-status"}`.
             if let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
-               let status = json["status"] as? String, status == "ok" || status == "healthy" {
+               json["ok"] as? Bool == true {
                 let version = (json["version"] as? String) ?? "v0.0.1"
                 return SjelNodeStatus(isReachable: true, version: version, latencyMs: latency)
             }

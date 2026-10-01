@@ -76,8 +76,12 @@ else
   if [ "$HAS_KEYCHAIN" = 1 ]; then
     # Through `security -i` on stdin, so the value is never in an argument list. The same
     # method as `sjel agent enroll` (tools/capability-auth/src/main.rs).
-    printf 'add-generic-password -U -a %s -s %s -l "Sjel inbound token" -w %s\n' \
-      "$ACCOUNT" "$KEYCHAIN_SERVICE" "$(cat "$TOKEN_TMP")" | security -i >/dev/null
+    # `-T` lists who may read the item without a prompt: `security` itself, for the read-back
+    # below, and the menu-bar app (apps/mac/install), which trades the token for a browser login.
+    TRUSTED="-T /usr/bin/security"
+    [ -d "$HOME/Applications/Sjel.app" ] && TRUSTED="$TRUSTED -T $HOME/Applications/Sjel.app"
+    printf 'add-generic-password -U -a %s -s %s -l "Sjel inbound token" %s -w %s\n' \
+      "$ACCOUNT" "$KEYCHAIN_SERVICE" "$TRUSTED" "$(cat "$TOKEN_TMP")" | security -i >/dev/null
     # Read it back without printing it. A mismatch changes no runtime configuration.
     (umask 077; keychain_read > "$TOKEN_TMP.verify")
     if ! cmp -s "$TOKEN_TMP" "$TOKEN_TMP.verify"; then

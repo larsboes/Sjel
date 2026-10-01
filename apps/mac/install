@@ -1,0 +1,62 @@
+#!/usr/bin/env bash
+# apps/mac/install — build, sign and install the Sjel menu-bar app as ~/Applications/Sjel.app.
+#
+# The app is what a person without a terminal uses to open the dashboard (ISA ISC-45): one click
+# in the menu bar, and the browser arrives logged in. `swift build` makes a bare executable, and
+# both a login item (SMAppService) and a stable Keychain permission need a signed app bundle, so
+# this script assembles one.
+#
+# Signed with the first valid code-signing identity in the keychain, or SJEL_CODESIGN_IDENTITY,
+# the same rule as tools/fda-launcher/install. A Keychain item's permission follows the
+# signature, so re-installing with the same identity keeps it.
+set -euo pipefail
+[ "$(uname -s)" = Darwin ] || { echo "apps/mac/install: macOS only; nothing to do here"; exit 0; }
+
+APP_DIR="$(cd "$(dirname "$0")" && pwd)"
+DEST="${SJEL_MAC_APP_DEST:-$HOME/Applications/Sjel.app}"
+BUNDLE_ID="dev.sjel.mac"
+
+identity="${SJEL_CODESIGN_IDENTITY:-}"
+if [ -z "$identity" ]; then
+  identity="$(security find-identity -v -p codesigning | awk 'NR==1 && $2 ~ /^[0-9A-F]{40}$/ {print $2}')"
+fi
+[ -n "$identity" ] || { echo "apps/mac/install: no code-signing identity in the keychain" >&2; exit 1; }
+
+(cd "$APP_DIR" && swift build -c release --product SjelMacApp)
+binary="$(cd "$APP_DIR" && swift build -c release --show-bin-path)/SjelMacApp"
+
+staging="$(mktemp -d)"
+trap 'rm -rf "$staging"' EXIT
+bundle="$staging/Sjel.app"
+mkdir -p "$bundle/Contents/MacOS" "$bundle/Contents/Resources"
+cp "$binary" "$bundle/Contents/MacOS/Sjel"
+version="$(git -C "$APP_DIR" describe --tags --always 2>/dev/null || echo 0.0.0)"
+cat > "$bundle/Contents/Info.plist" <<PLIST
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+  <key>CFBundleIdentifier</key><string>$BUNDLE_ID</string>
+  <key>CFBundleName</key><string>Sjel</string>
+  <key>CFBundleDisplayName</key><string>Sjel</string>
+  <key>CFBundleExecutable</key><string>Sjel</string>
+  <key>CFBundlePackageType</key><string>APPL</string>
+  <key>CFBundleShortVersionString</key><string>$version</string>
+  <key>CFBundleVersion</key><string>$version</string>
+  <key>LSMinimumSystemVersion</key><string>14.0</string>
+  <!-- A menu-bar app: no Dock icon and no app menu. -->
+  <key>LSUIElement</key><true/>
+</dict>
+</plist>
+PLIST
+codesign --force --sign "$identity" --identifier "$BUNDLE_ID" --options runtime "$bundle"
+codesign --verify --strict "$bundle"
+
+# Quit a running copy before replacing it, then start the new one.
+osascript -e "tell application id \"$BUNDLE_ID\" to quit" >/dev/null 2>&1 || true
+mkdir -p "$(dirname "$DEST")"
+rm -rf "$DEST"
+mv "$bundle" "$DEST"
+open "$DEST"
+echo "apps/mac/install: installed and started $DEST"
+echo "Turn on 'Open at login' in its menu to keep it there after a restart."

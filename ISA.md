@@ -576,11 +576,12 @@ Design:
   path, starts the protected listener, applies `tools/setup-tailnet-shell.sh`, and verifies from
   an agent session that secret reads fail while Comms remains pseudonymized. No deployment
   credential or Tailscale Serve configuration was changed in this code session.
-  Two consequences of failing closed, measured 2026-10-01 and not yet answered: a browser on
-  this Mac at `127.0.0.1:8082` carries no token, so only the tailnet URL, the dev server and the
-  Mac app reach the dashboard (`apps/mac/Sources/SjelMacApp/SjelMacApp.swift:41` still opens
-  the loopback one); and soundscape's panel loads from its own port (`panelUrl` in
-  `dashboard/src/lib/api.ts`), so its browser requests carry no token either.
+  Two consequences of failing closed, measured 2026-10-01. A browser on this Mac at
+  `127.0.0.1:8082` carries no token: answered the same day by the principal's ruling (no command
+  line, a 30-day sliding session). The menu-bar app (`apps/mac/install`, `~/Applications/Sjel.app`)
+  trades the Keychain token for a single-use ticket, and the shell turns it into a session cookie
+  (`capabilities/sjel-status/src/session.rs`). Still open: soundscape's panel loads from its own
+  port (`panelUrl` in `dashboard/src/lib/api.ts`), so its browser requests carry no token.
 
 ## Not yet specified
 

@@ -1,3 +1,4 @@
+import ServiceManagement
 import SwiftUI
 import SjelRelay
 
@@ -16,11 +17,12 @@ struct SjelMacApp: App {
 @MainActor
 final class SjelMacViewModel: ObservableObject {
     @Published var nodeStatus: SjelNodeStatus = SjelNodeStatus(isReachable: false)
-    @Published var isRelayActive: Bool = true
-    @Published var lastRelaySync: Date? = nil
+    /// What the last "Open Dashboard" could not do, in words for the person who clicked it.
+    @Published var openProblem: String? = nil
+    @Published var launchesAtLogin: Bool = SMAppService.mainApp.status == .enabled
 
     private let bridge = NodeBridge()
-    private let relay = CloudKitRelay()
+    private let login = DashboardLogin()
 
     var statusImageName: String {
         nodeStatus.isReachable ? "circle.inset.filled" : "circle.dotted"
@@ -37,10 +39,37 @@ final class SjelMacViewModel: ObservableObject {
         self.nodeStatus = status
     }
 
+    /// Opens the dashboard logged in: a single-use ticket from the shell, then the browser
+    /// (ISA ISC-45). The shell's listener refuses a browser with no session.
     func openDashboard() {
-        if let url = URL(string: "http://127.0.0.1:8082") {
-            NSWorkspace.shared.open(url)
+        Task {
+            do throws(DashboardLogin.Failure) {
+                let url = try await login.loginURL()
+                openProblem = nil
+                NSWorkspace.shared.open(url)
+            } catch {
+                openProblem = switch error {
+                case .notSetUp: "Sjel is not set up on this Mac yet."
+                case .unreachable: "Sjel is not running on this Mac."
+                case .refused(let status): "Sjel refused the login (\(status))."
+                }
+            }
         }
+    }
+
+    /// Start this app when the user logs in. `SMAppService` works only from an app bundle,
+    /// which is what `apps/mac/install` builds.
+    func setLaunchesAtLogin(_ enabled: Bool) {
+        do {
+            if enabled {
+                try SMAppService.mainApp.register()
+            } else {
+                try SMAppService.mainApp.unregister()
+            }
+        } catch {
+            openProblem = "Could not change the login item: \(error.localizedDescription)"
+        }
+        launchesAtLogin = SMAppService.mainApp.status == .enabled
     }
 }
 
@@ -78,28 +107,22 @@ struct SjelMenuBarView: View {
                 }
             }
 
-            // CloudKit Relay Status
-            VStack(alignment: .leading, spacing: 4) {
-                HStack(spacing: 6) {
-                    Image(systemName: "lock.shield.fill")
-                        .font(.system(size: 10))
-                        .foregroundColor(.blue)
-                    Text("CloudKit E2EE Relay")
-                        .font(.system(size: 12, weight: .medium))
-                    Spacer()
-                    Text("ACTIVE")
-                        .font(.system(size: 9, weight: .bold, design: .monospaced))
-                        .padding(.horizontal, 4)
-                        .padding(.vertical, 2)
-                        .background(Color.blue.opacity(0.15))
-                        .cornerRadius(3)
-                        .foregroundColor(.blue)
-                }
-
-                Text("Product Rule 4: zero plaintext C2 leaves host")
-                    .font(.system(size: 10))
-                    .foregroundColor(.secondary)
+            if let problem = model.openProblem {
+                Text(problem)
+                    .font(.system(size: 11))
+                    .foregroundColor(.orange)
             }
+
+            Toggle(
+                "Open at login",
+                isOn: Binding(
+                    get: { model.launchesAtLogin },
+                    set: { model.setLaunchesAtLogin($0) }
+                )
+            )
+            .font(.system(size: 12))
+            .toggleStyle(.switch)
+            .controlSize(.small)
 
             Divider()
 

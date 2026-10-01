@@ -270,6 +270,7 @@
                   <span
                     class="rung-tag mono"
                     class:rung-device={msg.rung === 'on-device'}
+                    class:rung-local={msg.rung === 'local'}
                     class:rung-mac={msg.rung === 'mac'}
                     class:rung-rules={msg.rung === 'rules'}
                     title={msg.skippedRungs && msg.skippedRungs.length > 0
@@ -603,6 +604,12 @@
     background: color-mix(in srgb, var(--success) 12%, transparent);
     color: var(--success);
     border-color: color-mix(in srgb, var(--success) 30%, transparent);
+  }
+
+  .rung-tag.rung-local {
+    background: color-mix(in srgb, var(--primary) 12%, transparent);
+    color: var(--primary);
+    border-color: color-mix(in srgb, var(--primary) 30%, transparent);
   }
 
   .rung-tag.rung-mac {

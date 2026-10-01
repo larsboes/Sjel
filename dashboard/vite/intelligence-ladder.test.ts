@@ -13,16 +13,17 @@ const onDevice = (over: Partial<RungStatus> = {}): RungStatus => ({
   contextTokens: 4096,
   ...over,
 });
+const local = (over: Partial<RungStatus> = {}): RungStatus => ({ rung: 'local', available: true, contextTokens: 4096, ...over });
 const mac = (over: Partial<RungStatus> = {}): RungStatus => ({ rung: 'mac', available: true, contextTokens: 4096, ...over });
 
 describe('plan', () => {
-  test('tries the phone, then the Mac, then rules', () => {
-    expect(plan(task(100), [onDevice(), mac()]).tries).toEqual(['on-device', 'mac', 'rules']);
+  test('tries the phone, local assistant, Mac, then rules', () => {
+    expect(plan(task(100), [onDevice(), local(), mac()]).tries).toEqual(['on-device', 'local', 'mac', 'rules']);
   });
 
   test('an ineligible phone goes straight to the Mac and says why', () => {
-    const result = plan(task(100), [onDevice({ available: false, reason: 'deviceNotEligible' }), mac()]);
-    expect(result.tries).toEqual(['mac', 'rules']);
+    const result = plan(task(100), [onDevice({ available: false, reason: 'deviceNotEligible' }), local(), mac()]);
+    expect(result.tries).toEqual(['local', 'mac', 'rules']);
     expect(result.skipped).toEqual([{ rung: 'on-device', reason: 'deviceNotEligible' }]);
   });
 
@@ -31,9 +32,12 @@ describe('plan', () => {
   });
 
   test('a task too long for a 4,096 window skips that rung rather than truncating', () => {
-    const result = plan(task(12_000), [onDevice(), mac({ contextTokens: 32_000 })]);
+    const result = plan(task(12_000), [onDevice(), local(), mac({ contextTokens: 32_000 })]);
     expect(result.tries).toEqual(['mac', 'rules']);
-    expect(result.skipped[0]).toEqual({ rung: 'on-device', reason: 'too long for this model' });
+    expect(result.skipped).toEqual([
+      { rung: 'on-device', reason: 'too long for this model' },
+      { rung: 'local', reason: 'too long for this model' },
+    ]);
   });
 });
 

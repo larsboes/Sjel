@@ -1,0 +1,10 @@
+kind        = "process"
+name        = "assistant"
+command     = ["target/release/assistant-server"]
+build       = ["cargo", "build", "--locked", "--release", "--bin", "assistant-server"]
+port        = "8100"
+health_path = "/health"
+ready_path  = "/ready"
+
+# The dashboard shell proxies /assistant/* to this service. No cloud role is accepted here;
+# cloud assistance needs a separate reviewed preview/approval contract.

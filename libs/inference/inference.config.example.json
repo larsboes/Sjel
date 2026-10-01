@@ -51,6 +51,11 @@
         "ollama": { "model": "qwen3:8b" }
       }
     },
+    "assistant": {
+      "backend": "ollama",
+      "model": "qwen3:8b",
+      "max_input_tokens": 8192
+    },
     "cloud_summarization": {
       "backend": "hosted-example",
       "model": "replace-with-reviewed-model",

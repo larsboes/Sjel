@@ -9,16 +9,17 @@
  * Pure: no I/O, so the order and the window arithmetic are tested in `vite/intelligence-ladder.test.ts`.
  */
 
-export type Rung = 'on-device' | 'mac' | 'rules';
+export type Rung = 'on-device' | 'local' | 'mac' | 'rules';
 
 export const RUNG_LABEL: Record<Rung, string> = {
   'on-device': 'On this device',
+  local: 'Local assistant',
   mac: 'Mac',
   rules: 'Rules',
 };
 
 /** The order a task tries rungs in. `rules` is last and always available. */
-export const LADDER: readonly Rung[] = ['on-device', 'mac', 'rules'];
+export const LADDER: readonly Rung[] = ['on-device', 'local', 'mac', 'rules'];
 
 export interface RungStatus {
   rung: Rung;

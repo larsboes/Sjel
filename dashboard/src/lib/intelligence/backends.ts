@@ -8,6 +8,7 @@ import { inTauri, macRequest } from '$lib/mac-bridge';
 import {
   DEFAULT_REPLY_TOKENS,
   FALL_THROUGH_CODES,
+  CHARS_PER_TOKEN,
   plan,
   type ModelTask,
   type Rung,
@@ -41,6 +42,7 @@ export interface ModelResult {
 /** The model id apfel serves; see capabilities/foundation-models/README.md "Wiring it up". */
 const MAC_MODEL = 'apple-foundationmodel';
 /** Shell-proxied route to capabilities/foundation-models. */
+const LOCAL_BASE = '/assistant';
 const MAC_BASE = '/foundation-models';
 
 function isIosApp(): boolean {
@@ -104,9 +106,33 @@ async function probeMac(): Promise<RungStatus> {
   }
 }
 
+async function probeLocal(): Promise<RungStatus> {
+  try {
+    const res = await callMac(`${LOCAL_BASE}/ready`);
+    if (res.stale) return { rung: 'local', available: false, reason: 'Mac not reachable' };
+    if (res.status !== 200) return { rung: 'local', available: false, reason: `ready ${res.status}` };
+    const ready = JSON.parse(res.body) as { status?: string; model?: string; max_input_bytes?: number };
+    return ready.status === 'ready'
+      ? {
+          rung: 'local',
+          available: true,
+          contextTokens:
+            ready.max_input_bytes === undefined
+              ? undefined
+              : Math.floor(ready.max_input_bytes / CHARS_PER_TOKEN),
+        }
+      : { rung: 'local', available: false, reason: ready.status ?? 'model unavailable' };
+  } catch {
+    return { rung: 'local', available: false, reason: 'Local assistant not reachable' };
+  }
+}
+
 export async function probe(): Promise<Probe> {
-  const [device, mac] = await Promise.all([probeOnDevice(), probeMac()]);
-  return { statuses: [device.onDevice, mac, { rung: 'rules', available: true }], privateCloud: device.privateCloud };
+  const [device, local, mac] = await Promise.all([probeOnDevice(), probeLocal(), probeMac()]);
+  return {
+    statuses: [device.onDevice, local, mac, { rung: 'rules', available: true }],
+    privateCloud: device.privateCloud,
+  };
 }
 
 class RungError extends Error {
@@ -128,6 +154,28 @@ async function runOnDevice(task: ModelTask): Promise<string> {
     const message = typeof error === 'object' && error && 'message' in error ? String(error.message) : String(error);
     throw new RungError(code, message);
   }
+}
+
+async function runLocal(task: ModelTask): Promise<string> {
+  let res: MacReply;
+  try {
+    res = await callMac(`${LOCAL_BASE}/api/generate`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        prompt: task.prompt,
+        instructions: task.instructions ?? null,
+        max_tokens: task.maxResponseTokens ?? DEFAULT_REPLY_TOKENS,
+      }),
+    });
+  } catch {
+    throw new RungError('unavailable', 'Local assistant not reachable');
+  }
+  if (res.stale || res.status >= 500) throw new RungError('unavailable', 'Local assistant not reachable');
+  if (res.status === 413) throw new RungError('context_length_exceeded', 'too long for the local assistant');
+  if (res.status !== 200) throw new RungError('generation_failed', `Local assistant answered ${res.status}`);
+  const body = JSON.parse(res.body) as { text?: string };
+  return body.text ?? '';
 }
 
 async function runMac(task: ModelTask): Promise<string> {
@@ -166,7 +214,12 @@ export async function generate(task: ModelTask, probed?: Probe): Promise<ModelRe
   for (const rung of tries) {
     if (rung === 'rules') return { text: null, source: 'rules', skipped };
     try {
-      const text = rung === 'on-device' ? await runOnDevice(task) : await runMac(task);
+      const text =
+        rung === 'on-device'
+          ? await runOnDevice(task)
+          : rung === 'local'
+            ? await runLocal(task)
+            : await runMac(task);
       return { text, source: rung, skipped };
     } catch (error) {
       if (error instanceof RungError && FALL_THROUGH_CODES.has(error.code)) {

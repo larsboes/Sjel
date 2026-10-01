@@ -474,6 +474,22 @@ describe('assistant model ladder (ISC-18)', () => {
     expect(reply.content).toContain('Sjel Assistant');
   });
 
+  it('uses the dedicated local assistant role before the Mac rung', async () => {
+    mockFetch((url) => {
+      if (url.includes('/assistant/ready')) {
+        return json({ status: 'ready', model: 'qwen3:8b', max_input_bytes: 8192 });
+      }
+      if (url.includes('/assistant/api/generate')) {
+        return json({ text: 'The local role answered.' });
+      }
+      return json({});
+    });
+
+    const reply = await assistantEngine.processQuery('what is Sjel', general);
+    expect(reply.rung).toBe('local');
+    expect(reply.content).toBe('The local role answered.');
+  });
+
   it('uses mac rung when mac foundation model answers', async () => {
     mockFetch((url) => {
       if (url.includes('/foundation-models/health')) {

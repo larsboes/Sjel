@@ -87,10 +87,9 @@ use crate::sync::{self, LocalStore, Outgoing, Reply, SendError, SyncStatus, Tran
 /// it only if the shell has no token configured. This is Q94's exposure, not a
 /// new one.
 ///
-/// `/foundation-models/` is the Mac rung of the app's model ladder
-/// (`src/lib/intelligence/`), admitted 2026-09-25 so a phone without Apple
-/// Intelligence still reaches a model. It is the same exposure as the other
-/// mounts: the operator's tailnet identity plus this device's signed headers.
+/// `/assistant/` is the dedicated local inference rung; `/foundation-models/` is the Mac rung
+/// of the app's model ladder (`src/lib/intelligence/`). Both are reached through the shell, which
+/// injects the shared token server-to-server. The browser and bridge do not receive that token.
 ///
 /// Not listed: capabilities the shell proxies but the dashboard does not call
 /// (punctuality, soundscape) and scouting's `/discover`.
@@ -109,6 +108,7 @@ pub const ALLOWED_PATHS: &[&str] = &[
     "/scouting/",
     "/transit/",
     "/api/",
+    "/assistant/",
     "/traveler/api/",
     "/trips/api/",
     "/vault/",
@@ -1325,6 +1325,8 @@ mod tests {
             "/scouting/opportunities",
             "/transit/health",
             "/api/suggest?q=Berlin",
+            "/assistant/ready",
+            "/assistant/api/generate",
             "/traveler/api/profile",
             "/trips/api/plans",
             "/vault/api/tasks",
@@ -1351,6 +1353,7 @@ mod tests {
             "/interiorx/api",
             "/commsx/feed",
             "/apix/suggest",
+            "/assistantx/ready",
             // A bare prefix admits nothing: there must be a path below it.
             "/comms/",
             "/devices/",

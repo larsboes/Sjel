@@ -489,6 +489,22 @@ dependencies = [
 ]
 
 [[package]]
+name = "assistant"
+version = "0.1.0"
+dependencies = [
+ "axum",
+ "reqwest",
+ "route-manifest",
+ "schemars",
+ "serde",
+ "serde_json",
+ "sjel-config",
+ "sjel-inference",
+ "sjel-server",
+ "tokio",
+]
+
+[[package]]
 name = "astral-tl"
 version = "0.7.11"
 source = "registry+https://github.com/rust-lang/crates.io-index"

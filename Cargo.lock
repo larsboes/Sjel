@@ -4871,6 +4871,17 @@ name = "sjel-config"
 version = "0.1.0"
 
 [[package]]
+name = "sjel-credentials"
+version = "0.1.0"
+dependencies = [
+ "serde",
+ "serde_json",
+ "thiserror 1.0.69",
+ "toml",
+ "zeroize",
+]
+
+[[package]]
 name = "sjel-extraction"
 version = "0.1.0"
 dependencies = [

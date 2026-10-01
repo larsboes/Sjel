@@ -377,6 +377,10 @@
       "kind": "lib"
     },
     {
+      "name": "sjel-credentials",
+      "kind": "lib"
+    },
+    {
       "name": "sjel-http",
       "kind": "lib"
     },

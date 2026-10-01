@@ -21,6 +21,7 @@ members = [
     "capabilities/trips",
     "capabilities/vault",
     "libs/sjel-config",
+    "libs/sjel-credentials",
     "libs/sjel-http",
     "libs/sjel-server",
     "libs/sjel-store",
@@ -53,8 +54,8 @@ license = "AGPL-3.0-only"
 
 # Zero unsafe, enforced rather than asserted. This is a WORKSPACE lint, so on its own it does
 # nothing: cargo applies it only in a crate that writes `[lints] workspace = true`, which is
-# every member (33 manifests per `cargo metadata`, checked 2026-09-29 — `capabilities/`,
-# `libs/` and `tools/`, not the two directory names it looks like). Denied rather than warned
+# every member (`cargo metadata` verified 2026-10-01 — `capabilities/`, `libs/` and `tools/`,
+# not the two directory names it looks like). Denied rather than warned
 # because the invariant is the point — the first real `unsafe` block should have to argue for
 # itself in review instead of being a diagnostic a busy session scrolls past.
 #
@@ -124,6 +125,7 @@ sha2 = "0.11"
 thiserror = "1.0"
 tokio = "1"
 toml = "1.1"
+zeroize = "1.9"
 tower = "0.5"
 tower-http = "0.7"
 

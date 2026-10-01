@@ -395,12 +395,18 @@ because it names the directory rather than moving where things are written.
   reason plus `4 of these could not be read by the measuring user`. Every figure equals the
   tool's own text and JSON, and `used` moved between two loads (322.8 GB, then 326.0 GB), so the
   panel reads the disk rather than a fixture. It is read-only by decision.
-- [ ] ISC-32 — `tools/storage` sees a Cargo target dir that is not `CARGO_TARGET_DIR`.
+- [x] ISC-32 — `tools/storage` sees a Cargo target dir that is not `CARGO_TARGET_DIR`.
   Falsifier: after an Xcode-driven build, `sjel storage target` reports one path while a second
   target dir exists on disk. Probe: build via Xcode, then `sjel storage target`. The checkout's
   own `target/` is excluded from the answer on purpose: it holds the binaries the supervisor
   runs, and `tools/cargo-hermetic` refuses to point `CARGO_TARGET_DIR` inside the checkout for
   that reason. Only a *nested* workspace — `dashboard/src-tauri/target` — is an escapee.
+  Evidence, 2026-10-01: built in b8966e17 with three unit tests. Live probe against this
+  checkout: a 5 MB `dashboard/src-tauri/target` stamped with cargo's own `CACHEDIR.TAG`, then
+  `sjel storage target` printed `5 MB in 1 target dir cargo does not resolve to here` with the
+  `cargo clean --manifest-path` that removes it, and `--json` carried it under `secondary`. The
+  directory was planted, not produced by an Xcode build, so the falsifier's own setup is still
+  unexercised.
 
 ### F8 · An agent reaches what Sjel holds, and only what it should
 
@@ -448,8 +454,9 @@ last layer over the routes and adds no data path of its own.
   says why it does not. Falsifier: a capability in `sjel capability list` answers `/routes`
   with 404 and has no stated reason. Probe: loop over the list. `tools/doctor` runs it, so the
   rule is enforced where the tool reads it. Today: 15 of 20.
-- [ ] ISC-35 — every capability has a README. Falsifier: `ls capabilities/*/README.md` misses a
-  directory. Today: four miss.
+- [x] ISC-35 — every capability has a README. Falsifier: `ls capabilities/*/README.md` misses a
+  directory. Done 2026-10-01: `entities-sync`, `entities-google-sync`, `feed-sweep` and
+  `sparpreis-watch` each have one, in the shape of `capabilities/punctuality-ingest/README.md`.
 - [ ] ISC-36 — from an agent session, `sjel capability call comms get /triage` returns data
   without the token appearing in argv, the environment or the transcript. Falsifier: it returns
   401, or the token shows in `ps`. Evidence, partial: `tools/capability-auth` reads the

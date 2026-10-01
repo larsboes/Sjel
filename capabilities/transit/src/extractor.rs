@@ -171,6 +171,8 @@ pub(crate) fn extract_pdf_text(
     Ok(text)
 }
 
+const HTML_TEXT_WIDTH: usize = 10_000;
+
 pub(crate) fn extract_email_text(
     bytes: &[u8],
 ) -> Result<String, Box<dyn std::error::Error + Send + Sync>> {
@@ -192,7 +194,9 @@ pub(crate) fn extract_email_text(
 
     let body = if is_html {
         let html = parsed.get_body()?;
-        html2text::from_read(&mut html.as_bytes(), Default::default())
+        // Wide enough that no booking line wraps: the parsers below match a station pair or a
+        // date and time within one line. html2text 0.17 refuses the width 0 that 0.6 accepted.
+        html2text::from_read(html.as_bytes(), HTML_TEXT_WIDTH)?
     } else {
         parsed.get_body()?
     };
@@ -551,6 +555,19 @@ fn chrono_now_date() -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn an_html_booking_mail_keeps_each_line_whole() {
+        let eml = "Content-Type: text/html; charset=utf-8\r\nSubject: Ihre Buchung\r\n\r\n\
+            <html><body><p>ICE 123 von Berlin Hbf nach M&uuml;nchen Hbf</p>\
+            <p>am 15.07.2026 um 08:30, an 14:15</p></body></html>";
+        let text = extract_email_text(eml.as_bytes()).unwrap();
+        assert!(
+            text.contains("ICE 123 von Berlin Hbf nach München Hbf"),
+            "{text}"
+        );
+        assert!(text.contains("am 15.07.2026 um 08:30, an 14:15"), "{text}");
+    }
 
     #[test]
     fn parse_train_numbers() {

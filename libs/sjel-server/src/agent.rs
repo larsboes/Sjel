@@ -207,7 +207,7 @@ pub(crate) async fn admit_agent(
             match rebuilt.parse() {
                 Ok(uri) => *request.uri_mut() = uri,
                 Err(_) => {
-                    return refuse(StatusCode::BAD_REQUEST, "the query could not be restored")
+                    return refuse(StatusCode::BAD_REQUEST, "the query could not be restored");
                 }
             }
         }

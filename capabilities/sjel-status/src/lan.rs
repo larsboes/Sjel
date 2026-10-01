@@ -33,7 +33,9 @@ pub(crate) fn start(router: axum::Router, verifier: Arc<dyn DeviceVerifier>) {
         return;
     };
     let Some(dir) = sjel_config::overlay_data_dir("lan") else {
-        eprintln!("[sjel-status] SJEL_LAN_PORT is set but no overlay is; the LAN listener needs one for its key");
+        eprintln!(
+            "[sjel-status] SJEL_LAN_PORT is set but no overlay is; the LAN listener needs one for its key"
+        );
         return;
     };
     let host = local_host_name();

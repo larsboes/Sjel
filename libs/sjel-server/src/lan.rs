@@ -131,7 +131,9 @@ pub async fn serve_lan(
     identity: &LanIdentity,
 ) {
     if !auth.admits_devices() {
-        eprintln!("{name}: refusing the LAN listener without a device verifier; it admits paired devices only");
+        eprintln!(
+            "{name}: refusing the LAN listener without a device verifier; it admits paired devices only"
+        );
         std::process::exit(1);
     }
     let config = match identity.server_config() {

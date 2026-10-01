@@ -156,7 +156,13 @@ fn canonical(path: PathBuf) -> Option<PathBuf> {
 /// every `report`.
 const MAX_SCAN_DEPTH: usize = 8;
 
-fn scan(dir: &Path, primary: &Path, deployment: Option<&Path>, out: &mut Vec<SecondaryTarget>, depth: usize) {
+fn scan(
+    dir: &Path,
+    primary: &Path,
+    deployment: Option<&Path>,
+    out: &mut Vec<SecondaryTarget>,
+    depth: usize,
+) {
     if depth > MAX_SCAN_DEPTH {
         return;
     }
@@ -472,9 +478,15 @@ mod tests {
 
         let found = secondary_targets(&repo, &primary);
         assert_eq!(found.len(), 1, "found: {found:?}");
-        assert!(found[0].path.ends_with("dashboard/src-tauri/target"), "{}", found[0].path);
         assert!(
-            found[0].manifest.ends_with("dashboard/src-tauri/Cargo.toml"),
+            found[0].path.ends_with("dashboard/src-tauri/target"),
+            "{}",
+            found[0].path
+        );
+        assert!(
+            found[0]
+                .manifest
+                .ends_with("dashboard/src-tauri/Cargo.toml"),
             "{}",
             found[0].manifest
         );

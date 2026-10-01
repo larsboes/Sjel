@@ -641,7 +641,10 @@ mod db_tests {
             attempt_epoch + 60,
             false,
         );
-        assert!(immediate.is_empty(), "a fresh failure backs off rather than thrashing");
+        assert!(
+            immediate.is_empty(),
+            "a fresh failure backs off rather than thrashing"
+        );
 
         let due = crate::policy::due_runs(
             &policies,
@@ -651,7 +654,11 @@ mod db_tests {
             attempt_epoch + crate::policy::FAILURE_BACKOFF_SECS,
             false,
         );
-        assert_eq!(due.len(), 1, "a failed run leaves the target due after backoff");
+        assert_eq!(
+            due.len(),
+            1,
+            "a failed run leaves the target due after backoff"
+        );
     }
 
     #[test]

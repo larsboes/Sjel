@@ -198,7 +198,7 @@ url = "https://github.com/bitwarden/clients"
 verdict = "adopt"
 license = "GPL-3.0-only"
 summary = "Official Bitwarden CLI that Sjel's secret setup script uses to store and read vault items"
-why = "official CLI for the vaultwarden-protocol-compatible vault; setup-secret.sh scripts item create/read against self-hosted vaultwarden (bw config server) so Vaultwarden, not per-machine Keychain, is the canonical capability-secret store"
+why = "official CLI for the vaultwarden-protocol-compatible vault; setup-secret.sh scripts item create/read against self-hosted vaultwarden (bw config server) for the capabilities that keep a vault item. Since 2026-10-01 the canonical store is the OS keychain, set up per user, with Vaultwarden optional (ISA ISC-37): the agent and inbound tokens are written to the login Keychain, not here"
 
 [scout]
 url = "https://github.com/troyriverabusiness/scout"

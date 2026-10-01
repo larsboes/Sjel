@@ -1,8 +1,12 @@
 #!/bin/bash
-# Interactive, guided provisioning of one capability secret. Vaultwarden (via
-# the official `bw` CLI, upstreams.toml [bitwarden-cli]) is the canonical
-# store — not per-machine Keychain, so a secret survives a reinstall or a
-# second machine the same way any other vault item does. The capability's
+# Interactive, guided provisioning of one capability secret into Vaultwarden (via
+# the official `bw` CLI, upstreams.toml [bitwarden-cli]).
+#
+# Vaultwarden is no longer the canonical store. The principal ruled on 2026-10-01
+# that secrets live in the OS keychain, set up per user, with Vaultwarden optional
+# (ISA ISC-37). The agent token (`sjel agent enroll`) and the inbound token
+# (tools/setup-inbound-auth.sh) follow that rule. This tool still serves the
+# container capabilities that keep a vault item, until each one moves. The capability's
 # env file still gets the one required plaintext copy (containers read
 # plaintext env, not the vault), and axon-overlay/secrets/*.md gets a
 # pointer, never the value. Generalizes the manual dance vaultwarden's own

@@ -468,20 +468,27 @@ last layer over the routes and adds no data path of its own.
 - [x] ISC-35 — every capability has a README. Falsifier: `ls capabilities/*/README.md` misses a
   directory. Done 2026-10-01: `entities-sync`, `entities-google-sync`, `feed-sweep` and
   `sparpreis-watch` each have one, in the shape of `capabilities/punctuality-ingest/README.md`.
-- [ ] ISC-36 — from an agent session, `sjel capability call comms get /triage` returns data
+- [x] ISC-36 — from an agent session, `sjel capability call comms get /triage` returns data
   without the token appearing in argv, the environment or the transcript. Falsifier: it returns
   401, or the token shows in `ps`. Evidence, partial: `tools/capability-auth` reads the
   deployment token and `sjel` passes it through `curl -H @<(...)`, tested in
   `tools/capability-auth.test.sh`. Holds for comms since 2026-09-30 evening: `capability-auth
   comms` reads comms' own `api_secret_file` through `sjel_server::comms_config_token`, shared
   with sjel-status's proxy. It still uses the full comms token, which can trash mail (the
-  principal's call that day; ISC-38 replaces it). Not yet ticked, because ISC-37's Keychain
-  source is still missing.
-- [ ] ISC-37 — the token is read on demand from the user's own secret store (the macOS Keychain
+  principal's call that day; ISC-38 replaces it). Done 2026-10-01: the agent token is read from
+  the login Keychain (`tools/capability-auth --agent`) and reaches curl as `-H @<(...)`, a file
+  descriptor, so it is in neither argv nor the environment. `sjel capability mail` from this
+  agent session returned 377 rows (288 c1, 89 pseudonymized c2, no c3) with no raw sender
+  address, and a POST was refused: "the agent token is read-only".
+- [x] ISC-37 — the token is read on demand from the user's own secret store (the macOS Keychain
   on a Mac), set up per user, with no `deployment.env` edit and no exported variable. Falsifier:
   the client works only after the user edits a file, or exports a secret into the environment.
-  The principal's call, 2026-09-30. `tools/setup-secret.sh` and `upstreams.toml:173` still name
-  Vaultwarden as canonical and contradict it; they change with this criterion.
+  The principal's call, 2026-09-30. Done 2026-10-01: `sjel agent enroll` writes the agent token
+  to the login Keychain and only its hash to the overlay, and the client reads it on demand.
+  The principal confirmed the store that day for the inbound token too:
+  `tools/setup-inbound-auth.sh` now writes the login Keychain, not Vaultwarden, and
+  `tools/setup-secret.sh` and `upstreams.toml [bitwarden-cli]` no longer call Vaultwarden
+  canonical.
 - [ ] ISC-38 — an agent identity admits `GET` and `HEAD` only. Falsifier: a `POST` carrying it
   reaches a handler. Probe: a unit test in `libs/sjel-server/src/auth.rs`. This amends the
   one-token ruling at `auth.rs:48` and the module docs change with it. It depends on ISC-37.

@@ -23,6 +23,9 @@ SJEL_ROOT="$(cd -P "$(dirname "$SOURCE")" && pwd)"
 # is unrunnable in CI — but the tools index is testable on any checkout.
 # shellcheck source=tools/lib/tool-index.sh
 . "$SJEL_ROOT/tools/lib/tool-index.sh"
+# The capabilities half: a capability's README opening and its route manifest (ISA ISC-33).
+# shellcheck source=tools/lib/capability-index.sh
+. "$SJEL_ROOT/tools/lib/capability-index.sh"
 
 usage() {
   cat <<'EOF'
@@ -371,8 +374,11 @@ search() {
   search_tools "$query" && found=1 || true
   echo
   echo "Capabilities:"
+  # The overlay's own capabilities keep their README there. paths.sh resolves it, and a
+  # machine without an overlay still searches the public ones.
+  SJEL_OVERLAY_CAPS_DIR="$( (. "$SJEL_ROOT/tools/lib/paths.sh" && printf '%s' "$SJEL_OVERLAY_CAPS_DIR") 2>/dev/null || true)"
   "$SJEL_ROOT/tools/capability.sh" registry |
-    jq -r '.[] | [.name, (.kind // "")] | @tsv' | grep -iF -- "$query" && found=1 || true
+    jq -r '.[] | [.name, (.kind // "")] | @tsv' | search_capabilities "$query" && found=1 || true
   echo
   echo "Packs:"
   bun run "$SJEL_ROOT/tools/packs-opencode.ts" list | grep -iF -- "$query" && found=1 || true

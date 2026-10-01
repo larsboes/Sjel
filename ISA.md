@@ -447,9 +447,13 @@ client stay in `sjel` and `tools/` (operator machinery). The gate stays in `libs
 (shared code, several consumers). No new capability. Any agent-protocol wrapper (MCP) is a thin
 last layer over the routes and adds no data path of its own.
 
-- [ ] ISC-33 — `sjel search <word>` finds a registered capability by its README and by its
-  `/routes`. Falsifier: `sjel search mail` returns no `comms`. Probe: that command. Evidence
-  today: it returns an empty Capabilities list.
+- [x] ISC-33 — `sjel search <word>` finds a registered capability by its README and by its
+  `/routes`. Falsifier: `sjel search mail` returns no `comms`. Probe: that command. Done
+  2026-10-01: `tools/lib/capability-index.sh` matches the README's opening paragraph and the
+  route manifest, read from source because `/routes` needs the token and most capabilities are
+  off. `sjel search mail` returns `comms` with `GET /triage`; `sjel search trash` returns
+  `POST /triage/{id}/gmail`. Only the opening paragraph, because the whole README matched
+  `backup` in 16 capabilities. Held by `tools/capability-index.test.sh`.
 - [ ] ISC-34 — every registered HTTP capability serves `GET /routes`, or its registry entry
   says why it does not. Falsifier: a capability in `sjel capability list` answers `/routes`
   with 404 and has no stated reason. Probe: loop over the list. `tools/doctor` runs it, so the

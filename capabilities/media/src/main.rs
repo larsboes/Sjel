@@ -6,7 +6,7 @@ use media::{audit, index, verify_mirror, volume_uuid};
 
 fn usage() {
     eprintln!("media — exact-byte index, ingest gate and mirror verification\n\
-        usage:\n  media volume-id --root PATH\n  media index --root PATH --uuid UUID [--db PATH]\n  media audit --root PATH --uuid UUID --sample N [--db PATH]\n  media ingest --staging PATH --library PATH --uuid UUID [--apply] [--prune] [--db PATH]\n  media classify (--digest SHA256 | --digests-file PATH) [--db PATH]\n  media verify-mirror --left-root PATH --left-uuid UUID --right-root PATH --right-uuid UUID [--db PATH]\n  media status [--db PATH]\n  media duplicates --uuid UUID [--legacy PREFIX] [--resolve-inside PREFIX --root PATH --metadata] [--list PATH] [--db PATH]\n  media supersede --root PATH --uuid UUID --list PATH --quarantine PATH --journal PATH [--apply]\n  media relabel --from DIR --to DIR --uuid UUID --journal PATH [--apply] [--settled-for SECONDS]\n  media preview --structure FILE [--metadata]\n  media organize --structure FILE [--apply --journal PATH] [--settled-for SECONDS] [--only COLLECTION]\n\n\
+        usage:\n  media volume-id --root PATH\n  media index --root PATH --uuid UUID [--db PATH]\n  media audit --root PATH --uuid UUID --sample N [--db PATH]\n  media ingest --staging PATH --library PATH --uuid UUID [--apply] [--prune] [--db PATH]\n  media classify (--digest SHA256 | --digests-file PATH) [--db PATH]\n  media verify-mirror --left-root PATH --left-uuid UUID --right-root PATH --right-uuid UUID [--db PATH]\n  media status [--db PATH]\n  media duplicates --uuid UUID [--legacy PREFIX] [--resolve-inside PREFIX --root PATH --metadata] [--list PATH] [--db PATH]\n  media supersede --root PATH --uuid UUID --list PATH --quarantine PATH --journal PATH [--apply]\n  media relabel --from DIR --to DIR --uuid UUID --journal PATH [--apply] [--settled-for SECONDS] [--plan FILE]\n  media preview --structure FILE [--metadata]\n  media organize --structure FILE [--apply --journal PATH] [--settled-for SECONDS] [--only COLLECTION]\n\n\
         ingest is a dry run unless --apply is set. --prune additionally removes staging/originals\n\
         only after every new import verifies; neither verb deletes library content.");
 }
@@ -131,7 +131,14 @@ fn run(args: &[String]) -> Result<i32> {
             &["--metadata"],
         ),
         "relabel" => (
-            &["--from", "--to", "--uuid", "--journal", "--settled-for"],
+            &[
+                "--from",
+                "--to",
+                "--uuid",
+                "--journal",
+                "--settled-for",
+                "--plan",
+            ],
             &["--apply"],
         ),
         "supersede" => (
@@ -359,12 +366,14 @@ fn run(args: &[String]) -> Result<i32> {
             if settled_for < 0 {
                 return Err("--settled-for must not be negative".into());
             }
+            let plan = option(opts, "--plan")?.map(PathBuf::from);
             let report = media::relabel::relabel(
                 &from,
                 &to,
                 &journal,
                 opts.iter().any(|arg| arg == "--apply"),
                 settled_for,
+                plan.as_deref(),
             )?;
             let fail = !report.complete || report.refused > 0;
             println!("{}", serde_json::to_string(&report)?);

@@ -22,7 +22,7 @@
 
 use std::collections::BTreeMap;
 use std::fs::{self, OpenOptions};
-use std::io::Write;
+use std::io::{BufRead, Write};
 use std::path::{Path, PathBuf};
 use std::time::{SystemTime, UNIX_EPOCH};
 
@@ -72,6 +72,45 @@ const LIMITATIONS: [&str; 5] = [
     "A refusal is per file: one unplaceable file is reported and skipped, and the rest proceed. A missing source, an unusable destination or a symlink in the tree refuses the whole run.",
     "A move is not a duplicate verdict. Run `media duplicates` afterwards.",
 ];
+
+/// A path under `root` that must be a regular file, refusing traversal and a symlink anywhere.
+fn member(root: &Path, relative: &str) -> Result<PathBuf> {
+    if relative.is_empty()
+        || relative.starts_with('/')
+        || relative.contains(['\\', '\0'])
+        || relative.split('/').any(|s| matches!(s, "" | "." | ".."))
+    {
+        return Err(format!("unsafe path in the plan: {relative}").into());
+    }
+    let path = root.join(relative);
+    let meta = fs::symlink_metadata(&path).map_err(|error| format!("{relative}: {error}"))?;
+    if meta.file_type().is_symlink() || !meta.is_file() {
+        return Err(format!("not a regular file: {relative}").into());
+    }
+    Ok(path)
+}
+
+/// A path under `root` that must not exist yet, with every existing ancestor a real directory.
+fn member_free(root: &Path, relative: &str) -> Result<PathBuf> {
+    if relative.is_empty()
+        || relative.starts_with('/')
+        || relative.contains(['\\', '\0'])
+        || relative.split('/').any(|s| matches!(s, "" | "." | ".."))
+    {
+        return Err(format!("unsafe destination in the plan: {relative}").into());
+    }
+    let path = root.join(relative);
+    match fs::symlink_metadata(&path) {
+        Ok(_) => {
+            return Err(format!("destination already exists: {relative}").into());
+        }
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => {}
+        Err(error) => return Err(error.into()),
+    }
+    let parent = path.parent().ok_or("destination has no parent")?;
+    crate::preview::real_directory(parent)?;
+    Ok(path)
+}
 
 /// A resolved move: source, destination, size, the capture day and its field, and the ordinal the
 /// library's disambiguator settled on.
@@ -134,6 +173,7 @@ pub fn relabel(
     journal: &Path,
     apply: bool,
     settled_for: i64,
+    plan: Option<&Path>,
 ) -> Result<RelabelReport> {
     let from = from.canonicalize()?;
     let to = to.canonicalize()?;
@@ -143,7 +183,13 @@ pub fn relabel(
     crate::preview::real_directory(&from)?;
     crate::preview::real_directory(&to)?;
 
-    let files = walk(&from)?;
+    let files = match plan {
+        // Plan mode: the caller has already decided every destination, so nothing is walked and no
+        // date is read. The plan is an approved artefact, like a removal list, and a plan that does
+        // not describe the disk refuses the whole run rather than moving the rows that happen to fit.
+        Some(_) => Vec::new(),
+        None => walk(&from)?,
+    };
     let now = SystemTime::now()
         .duration_since(UNIX_EPOCH)
         .map_err(|error| error.to_string())?
@@ -186,11 +232,48 @@ pub fn relabel(
     }
 
     let relative: Vec<String> = files.iter().map(|(rel, _, _)| rel.clone()).collect();
-    let days = crate::preview::capture_days(&from, &relative)?;
+    let days = if plan.is_some() {
+        BTreeMap::new()
+    } else {
+        crate::preview::capture_days(&from, &relative)?
+    };
 
-    // Resolve every destination first, so a name taken twice within this same run is seen.
-    let mut taken: BTreeMap<PathBuf, ()> = BTreeMap::new();
     let mut plans: Vec<Planned> = Vec::new();
+    // Every destination resolved so far, so a name taken twice within this same run is seen.
+    let mut taken: BTreeMap<PathBuf, ()> = BTreeMap::new();
+    if let Some(path) = plan {
+        for (index, line) in std::io::BufReader::new(fs::File::open(path)?)
+            .lines()
+            .enumerate()
+        {
+            let line = line?;
+            if index == 0 {
+                if !line.starts_with("from\tto") {
+                    return Err("a relabel plan must start with its `from`/`to` header row".into());
+                }
+                continue;
+            }
+            if line.trim().is_empty() {
+                continue;
+            }
+            let fields: Vec<&str> = line.split('\t').collect();
+            if fields.len() != 2 {
+                return Err(format!("plan row {} needs exactly two fields", index + 1).into());
+            }
+            let (source_rel, target_rel) = (fields[0], fields[1]);
+            let source = member(&from, source_rel)?;
+            let target = member_free(&to, target_rel)?;
+            if taken.contains_key(&target) {
+                return Err(format!("two plan rows share the destination {target_rel}").into());
+            }
+            taken.insert(target.clone(), ());
+            let size = fs::metadata(&source)?.len();
+            plans.push((source, target, size, None, 1));
+        }
+        if plans.is_empty() {
+            return Err("the relabel plan has no rows".into());
+        }
+    }
     for (rel, path, size) in files {
         let original = Path::new(&rel)
             .file_name()
@@ -350,6 +433,7 @@ mod tests {
             &fixture.0.join("j.tsv"),
             true,
             0,
+            None,
         )
         .unwrap();
         assert_eq!(report.moved, 1);
@@ -369,6 +453,7 @@ mod tests {
             &fixture.0.join("j.tsv"),
             false,
             0,
+            None,
         )
         .unwrap();
         assert_eq!(report.considered, 2);
@@ -389,6 +474,7 @@ mod tests {
             &fixture.0.join("j.tsv"),
             true,
             3600,
+            None,
         )
         .unwrap();
         assert!(!report.complete);
@@ -409,10 +495,99 @@ mod tests {
             &fixture.0.join("j.tsv"),
             true,
             0,
+            None,
         )
         .unwrap_err()
         .to_string();
         assert!(error.contains("symlink"), "{error}");
+    }
+
+    #[test]
+    fn a_plan_names_every_destination_and_is_journalled() {
+        let fixture = Fixture::new();
+        fs::create_dir_all(fixture.target().join("Trips/2026/T")).unwrap();
+        fs::create_dir_all(fixture.target().join("To Sort")).unwrap();
+        fs::write(fixture.source().join("a.insv"), b"clip").unwrap();
+        fs::write(fixture.source().join("b.insv"), b"other").unwrap();
+        let plan = fixture.0.join("plan.tsv");
+        fs::write(
+            &plan,
+            "from\tto\na.insv\tTrips/2026/T/a.insv\nb.insv\tTo Sort/b.insv\n",
+        )
+        .unwrap();
+        let journal = fixture.0.join("j.tsv");
+        let report = relabel(
+            &fixture.source(),
+            &fixture.target(),
+            &journal,
+            true,
+            0,
+            Some(&plan),
+        )
+        .unwrap();
+        assert!(report.complete, "{:?}", report.issues);
+        assert_eq!(report.moved, 2);
+        assert!(fixture.target().join("Trips/2026/T/a.insv").exists());
+        assert!(fixture.target().join("To Sort/b.insv").exists());
+        assert!(!fixture.source().join("a.insv").exists());
+        let text = fs::read_to_string(&journal).unwrap();
+        assert!(text.contains("To Sort/b.insv"));
+        let _ = fs::remove_dir_all(&fixture.0);
+    }
+
+    #[test]
+    fn a_plan_row_that_does_not_describe_the_disk_refuses_the_whole_run() {
+        let fixture = Fixture::new();
+        fs::create_dir_all(fixture.target().join("T")).unwrap();
+        fs::write(fixture.source().join("present.insv"), b"here").unwrap();
+        let plan = fixture.0.join("plan.tsv");
+        fs::write(
+            &plan,
+            "from\tto\npresent.insv\tT/present.insv\nmissing.insv\tT/missing.insv\n",
+        )
+        .unwrap();
+        let error = relabel(
+            &fixture.source(),
+            &fixture.target(),
+            &fixture.0.join("j.tsv"),
+            true,
+            0,
+            Some(&plan),
+        )
+        .unwrap_err()
+        .to_string();
+        assert!(error.contains("missing.insv"), "{error}");
+        assert!(
+            fixture.source().join("present.insv").exists(),
+            "the row that fitted was not moved either"
+        );
+        let _ = fs::remove_dir_all(&fixture.0);
+    }
+
+    #[test]
+    fn a_plan_never_overwrites_an_existing_destination() {
+        let fixture = Fixture::new();
+        fs::create_dir_all(fixture.target().join("T")).unwrap();
+        fs::write(fixture.source().join("a.insv"), b"incoming").unwrap();
+        fs::write(fixture.target().join("T/a.insv"), b"already here").unwrap();
+        let plan = fixture.0.join("plan.tsv");
+        fs::write(&plan, "from\tto\na.insv\tT/a.insv\n").unwrap();
+        let error = relabel(
+            &fixture.source(),
+            &fixture.target(),
+            &fixture.0.join("j.tsv"),
+            true,
+            0,
+            Some(&plan),
+        )
+        .unwrap_err()
+        .to_string();
+        assert!(error.contains("already exists"), "{error}");
+        assert_eq!(
+            fs::read(fixture.target().join("T/a.insv")).unwrap(),
+            b"already here"
+        );
+        let _ = fs::remove_dir_all(&fixture.0);
     }
 
     #[test]
@@ -421,7 +596,7 @@ mod tests {
         fs::create_dir_all(fixture.source().join("nested")).unwrap();
         fs::write(fixture.source().join("nested/deep.MP4"), b"bytes").unwrap();
         let journal = fixture.0.join("j.tsv");
-        let report = relabel(&fixture.source(), &fixture.target(), &journal, true, 0).unwrap();
+        let report = relabel(&fixture.source(), &fixture.target(), &journal, true, 0, None).unwrap();
         assert_eq!(report.moved, 1);
         assert!(fixture.target().join("deep.MP4").exists());
         let text = fs::read_to_string(&journal).unwrap();

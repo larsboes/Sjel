@@ -4396,6 +4396,13 @@ dependencies = [
 ]
 
 [[package]]
+name = "sjel-claude-config"
+version = "0.1.0"
+dependencies = [
+ "serde_json",
+]
+
+[[package]]
 name = "sjel-config"
 version = "0.1.0"
 
@@ -4443,6 +4450,13 @@ dependencies = [
  "sjel-http",
  "thiserror",
  "toml",
+]
+
+[[package]]
+name = "sjel-mcp"
+version = "0.1.0"
+dependencies = [
+ "serde_json",
 ]
 
 [[package]]

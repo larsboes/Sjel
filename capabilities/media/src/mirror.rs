@@ -32,16 +32,15 @@
 //! per file instead of one read.
 
 use std::collections::BTreeMap;
-use std::fs::{self, File, FileTimes, OpenOptions};
-use std::io::{Read, Write};
+use std::fs::{self, FileTimes, OpenOptions};
+use std::io::Write;
 use std::path::{Path, PathBuf};
 use std::time::{Duration, UNIX_EPOCH};
 
 use serde::Serialize;
-use sha2::{Digest, Sha256};
 
 use crate::store::{Ledger, Location, Result};
-use crate::{files, hash, hex_digest, stamp};
+use crate::{copy_checked, files, hash, stamp};
 
 /// A destination path whose bytes may be *moved* into place rather than copied.
 ///
@@ -198,33 +197,26 @@ fn place_moved(from: &Path, to: &Path, row: &Location, journal: Option<&Path>) -
 
 /// Copy one file, checking the digest inside the write stream, and preserve the source's mtime so
 /// the next run can trust this row instead of reading the bytes again.
+///
+/// The copy itself is `copy_checked`, the same primitive `ingest` uses. What is added here is the
+/// mtime and the promotion: without the mtime the next run's size-and-mtime check would never match
+/// and every file would be re-read, which is the cost this verb exists to remove.
 fn place_copied(source: &Path, to: &Path, wanted: &Wanted) -> Result<()> {
     if let Some(parent) = to.parent() {
         fs::create_dir_all(parent)?;
     }
     let temp = PathBuf::from(format!("{}.part", to.display()));
-    let mut input = File::open(source)?;
-    let mut output = OpenOptions::new().write(true).create(true).truncate(true).open(&temp)?;
-    let mut digest = Sha256::new();
-    let mut buf = [0_u8; 1024 * 1024];
-    loop {
-        let n = input.read(&mut buf)?;
-        if n == 0 {
-            break;
-        }
-        output.write_all(&buf[..n])?;
-        digest.update(&buf[..n]);
-    }
-    output.sync_all()?;
-    if hex_digest(&digest.finalize()) != wanted.digest {
-        // The source moved under us. The bytes read are real but are not the bytes wanted, so the
-        // temporary file is left for inspection rather than promoted.
+    // A leftover `.part` means an interrupted run. Refusing names it; overwriting it would hide the
+    // interruption, and the previous tool's leftover `.part` files were exactly this.
+    if temp.exists() {
         return Err(format!(
-            "source changed while copying: {}",
-            source.display()
+            "{} exists from an interrupted run; remove it and retry",
+            temp.display()
         )
         .into());
     }
+    copy_checked(source, &temp, &wanted.digest)?;
+    let output = OpenOptions::new().write(true).open(&temp)?;
     output.set_times(FileTimes::new().set_modified(
         UNIX_EPOCH + Duration::from_nanos(u64::try_from(wanted.mtime_ns)?),
     ))?;

@@ -12,8 +12,8 @@ pub mod store;
 pub mod supersede;
 
 use std::collections::{BTreeMap, BTreeSet};
-use std::fs::{self, File};
-use std::io::{Read, Result as IoResult};
+use std::fs::{self, File, OpenOptions};
+use std::io::{Read, Result as IoResult, Write};
 use std::path::{Path, PathBuf};
 use std::process::Command;
 use std::time::UNIX_EPOCH;
@@ -43,6 +43,36 @@ pub(crate) fn hex_digest(bytes: &[u8]) -> String {
         write!(&mut hex, "{byte:02x}").expect("String writes cannot fail");
     }
     hex
+}
+
+/// Copy one file to a temporary path, checking the digest **inside the write stream**.
+///
+/// The check is what makes a copy evidence rather than a hope: the bytes read and the bytes written
+/// are hashed together, so a file that arrived at all arrived correct, and a source that changed
+/// mid-copy is caught rather than recorded as truth. `ingest` writes into a library and `mirror`
+/// writes across volumes; both need exactly this, and two implementations of it would be two things
+/// that can disagree about what "copied" means.
+///
+/// The caller owns the temporary path and its promotion. This never creates the final destination,
+/// so a copy that fails cannot leave behind a file that looks imported.
+pub fn copy_checked(source: &Path, temp: &Path, expected: &str) -> Result<()> {
+    let mut input = File::open(source)?;
+    let mut output = OpenOptions::new().write(true).create_new(true).open(temp)?;
+    let mut digest = Sha256::new();
+    let mut buf = [0_u8; 1024 * 1024];
+    loop {
+        let n = input.read(&mut buf)?;
+        if n == 0 {
+            break;
+        }
+        output.write_all(&buf[..n])?;
+        digest.update(&buf[..n]);
+    }
+    output.sync_all()?;
+    if hex_digest(&digest.finalize()) != expected {
+        return Err("source changed while copying".into());
+    }
+    Ok(())
 }
 
 /// macOS writes these beside the media without being asked: `.DS_Store` records a Finder window,
@@ -316,6 +346,28 @@ fn verify_by_path(
     if left_rows.is_empty() || right_rows.is_empty() {
         return Err("both mounted volumes must be indexed before mirror verification".into());
     }
+    // Both indexes must *describe* their volumes, not merely exist. A stale index makes this
+    // comparison answer a question about the past: a file added since the last `index` run is on
+    // disk and in neither row set, so two trees that differ would be reported as matching. The
+    // digest mode has the same exposure and is left as it was — this is a new mode, and refusing is
+    // cheaper than a wrong "they match".
+    for (root, rows) in [(left.0, &left_rows), (right.0, &right_rows)] {
+        let recorded: BTreeSet<&str> = rows.iter().map(|r| r.relpath.as_str()).collect();
+        let unindexed: Vec<String> = files(root)?
+            .into_iter()
+            .map(|(rel, _)| rel)
+            .filter(|rel| !recorded.contains(rel.as_str()))
+            .collect();
+        if !unindexed.is_empty() {
+            return Err(format!(
+                "{} has {} paths on disk that are not indexed (first: {}); run `media index` before comparing trees",
+                root.display(),
+                unindexed.len(),
+                unindexed[0]
+            )
+            .into());
+        }
+    }
     let left_map: BTreeMap<&str, &str> = left_rows
         .iter()
         .map(|r| (r.relpath.as_str(), r.digest.as_str()))
@@ -471,27 +523,40 @@ mod db_tests {
         fs::remove_dir_all(&dir).unwrap();
     }
 
-    /// A ledger holding the rows named, with both volumes registered.
+    /// A ledger and two trees that describe exactly the rows given: `left/<relpath>` for volume A,
+    /// `right/<relpath>` for volume B, with the digest computed from the bytes actually written. The
+    /// database lives outside both trees, because a file inside them would be an unindexed path and
+    /// the staleness guard would — correctly — refuse to compare anything.
     fn ledger_with(rows: &[(&str, &str, &str)]) -> (PathBuf, Ledger) {
         use std::sync::atomic::{AtomicU32, Ordering};
         static NEXT: AtomicU32 = AtomicU32::new(0);
         let id = NEXT.fetch_add(1, Ordering::Relaxed);
         let dir = std::env::temp_dir().join(format!("media-paths-{}-{id}", std::process::id()));
         let _ = fs::remove_dir_all(&dir);
-        fs::create_dir_all(&dir).unwrap();
+        fs::create_dir_all(dir.join("left")).unwrap();
+        fs::create_dir_all(dir.join("right")).unwrap();
         let db = Ledger::open(&dir.join("scratch.db")).unwrap();
-        for (uuid, relpath, digest) in rows {
+        for (uuid, relpath, body) in rows {
+            let side = if *uuid == "A" { "left" } else { "right" };
+            let path = dir.join(side).join(relpath);
+            fs::create_dir_all(path.parent().unwrap()).unwrap();
+            fs::write(&path, body.as_bytes()).unwrap();
+            let (size, mtime_ns) = stamp(&path).unwrap();
             db.register(uuid, "v").unwrap();
             db.record(&Location {
                 uuid: (*uuid).into(),
                 relpath: (*relpath).into(),
-                digest: (*digest).into(),
-                size: 1,
-                mtime_ns: 1,
+                digest: hash(&path).unwrap(),
+                size,
+                mtime_ns,
             })
             .unwrap();
         }
         (dir, db)
+    }
+
+    fn sides(dir: &Path) -> (PathBuf, PathBuf) {
+        (dir.join("left"), dir.join("right"))
     }
 
     #[test]
@@ -500,8 +565,12 @@ mod db_tests {
         // digest is on both volumes — which is exactly why `--paths` exists: it is the state INTENSO
         // was in after the library was reorganised, and the state a restore-from mirror must not be
         // in.
-        let (dir, db) = ledger_with(&[("A", "old/photo.jpg", "aa"), ("B", "new/photo.jpg", "aa")]);
-        let report = verify_by_path(&db, (&dir, "A"), (&dir, "B")).unwrap();
+        let (dir, db) = ledger_with(&[
+            ("A", "old/photo.jpg", "same bytes"),
+            ("B", "new/photo.jpg", "same bytes"),
+        ]);
+        let (left, right) = sides(&dir);
+        let report = verify_by_path(&db, (&left, "A"), (&right, "B")).unwrap();
         let comparison = report.by_path.unwrap();
         assert_eq!(comparison.left_only, 1);
         assert_eq!(comparison.right_only, 1);
@@ -516,20 +585,48 @@ mod db_tests {
     }
 
     #[test]
+    fn path_mode_refuses_a_stale_index() {
+        // A file on disk that no row describes. Comparing trees from a stale index answers a
+        // question about the past, and two trees that differ would read as matching.
+        let (dir, db) = ledger_with(&[
+            ("A", "same/photo.jpg", "x"),
+            ("B", "same/photo.jpg", "x"),
+        ]);
+        fs::write(dir.join("left/same/unindexed.jpg"), b"y").unwrap();
+        let (left, right) = sides(&dir);
+        let error = verify_by_path(&db, (&left, "A"), (&right, "B"))
+            .unwrap_err()
+            .to_string();
+        assert!(error.contains("not indexed"), "unexpected: {error}");
+        fs::remove_dir_all(&dir).unwrap();
+    }
+
+    #[test]
     fn path_mode_reports_matching_trees_as_clean() {
-        let (dir, db) = ledger_with(&[("A", "same/photo.jpg", "aa"), ("B", "same/photo.jpg", "aa")]);
-        let comparison = verify_by_path(&db, (&dir, "A"), (&dir, "B"))
+        let (dir, db) = ledger_with(&[
+            ("A", "same/photo.jpg", "x"),
+            ("B", "same/photo.jpg", "x"),
+        ]);
+        let (left, right) = sides(&dir);
+        let comparison = verify_by_path(&db, (&left, "A"), (&right, "B"))
             .unwrap()
             .by_path
             .unwrap();
-        assert_eq!((comparison.left_only, comparison.right_only, comparison.differing), (0, 0, 0));
+        assert_eq!(
+            (comparison.left_only, comparison.right_only, comparison.differing),
+            (0, 0, 0)
+        );
         fs::remove_dir_all(&dir).unwrap();
     }
 
     #[test]
     fn path_mode_catches_one_path_holding_different_bytes() {
-        let (dir, db) = ledger_with(&[("A", "same/photo.jpg", "aa"), ("B", "same/photo.jpg", "bb")]);
-        let comparison = verify_by_path(&db, (&dir, "A"), (&dir, "B"))
+        let (dir, db) = ledger_with(&[
+            ("A", "same/photo.jpg", "left bytes"),
+            ("B", "same/photo.jpg", "right bytes"),
+        ]);
+        let (left, right) = sides(&dir);
+        let comparison = verify_by_path(&db, (&left, "A"), (&right, "B"))
             .unwrap()
             .by_path
             .unwrap();

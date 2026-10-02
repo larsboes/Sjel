@@ -1,15 +1,14 @@
 use std::collections::{BTreeMap, BTreeSet};
 use std::fs::{self, OpenOptions};
-use std::io::{Read, Write};
+use std::io::Write;
 use std::path::{Path, PathBuf};
 use std::process::Command;
 use std::time::UNIX_EPOCH;
 
 use serde::Serialize;
-use sha2::{Digest, Sha256};
 
 use crate::store::{Ledger, Location, Outcome, Result};
-use crate::{files, hash, hex_digest, stamp};
+use crate::{copy_checked, files, hash, stamp};
 
 #[derive(Default, Debug, Serialize)]
 pub struct IngestReport {
@@ -248,26 +247,6 @@ fn staged_hashes(
     fs::rename(&temp, output)?;
     fs::File::open(parent)?.sync_all()?;
     result
-}
-
-fn copy_checked(source: &Path, temp: &Path, expected: &str) -> Result<()> {
-    let mut input = fs::File::open(source)?;
-    let mut output = OpenOptions::new().write(true).create_new(true).open(temp)?;
-    let mut digest = Sha256::new();
-    let mut buf = [0_u8; 1024 * 1024];
-    loop {
-        let n = input.read(&mut buf)?;
-        if n == 0 {
-            break;
-        }
-        output.write_all(&buf[..n])?;
-        digest.update(&buf[..n]);
-    }
-    output.sync_all()?;
-    if hex_digest(&digest.finalize()) != expected {
-        return Err("source changed while copying".into());
-    }
-    Ok(())
 }
 
 pub struct IngestOptions<'a> {

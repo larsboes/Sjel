@@ -270,7 +270,9 @@ leave two sharing blocks.
 **Named so it is not mistaken for done:**
 
 - **Retiring `mirror-manifest.tsv`** — the second ledger goes once `mirror` has run against both
-  volumes, not before.
+  volumes, not before. *(Condition met 2026-10-02: the F7 run above went against both. The file is
+  still in place — retiring it is a separate act, and the run's journal and receipts are what make
+  it safe.)*
 
 ## Not yet specified
 
@@ -283,6 +285,13 @@ leave two sharing blocks.
   `mirror-verify.tsv` is *not* an instance of this: it is `HANDOFF-media-2026-09-29.md`, a living
   document edited between the manifest build and the verify, which the mirror had copied faithfully
   both times. It predates the `HANDOFF-` skip that now prevents it, and is closed rather than open.
+  *(Instance, 2026-10-02 — unintended, and decisive anyway: `verify-mirror --paths` refused with
+  "`/Volumes/Extreme/Media/Library` has 57 paths on disk that are not indexed", naming
+  `Trips/2026/2026-01-New-York/IMG_0307.MP4`, while the digest mode had been running against the
+  same two volumes for twenty minutes and would have reported on the ledger's rows without
+  noticing that the library was growing under it. The probe's falsifier was met live rather than
+  staged: `--paths` refused, the digest mode answered from the rows. The arrival was an ingest
+  the operator had running, which is exactly the case `--exclude` exists for.)*
 
 - **Per-file pre-classification failures.** A symlink, unreadable byte stream, or non-UTF-8
   path currently refuses the entire preflight before an ingest run exists. Probe: stage one such
@@ -323,7 +332,7 @@ Acceptance scripts belong in `capabilities/media/acceptance/`, following
 `capabilities/vault/acceptance/`. Per the vault precedent, tests check counts by running a second
 implementation at the same moment rather than against a stored number.
 
-## Probe record (2026-09-29, updated 2026-09-30)
+## Probe record (2026-09-29, updated 2026-10-02)
 
 - **F0 live passes (2026-09-30):** Following verified `store` backup run 220, full live index
   ran on the operator's shared store (`axon.db`): 15,761 files under
@@ -341,7 +350,22 @@ implementation at the same moment rather than against a stored number.
   and boundary crash safety remain untested until staged.
 - **F2 partial:** unit probe and scratch CLI probe pass. Live absent mirror probe verified:
   `media verify-mirror` against absent INTENSO reports `availability: absent`, `checked: 0`, and
-  0 discrepancies with exit 0. Full 317 GB live mirror verification waits for INTENSO reconnection.
+  0 discrepancies with exit 0. Unmount-and-repeat on the real mirror is still not run.
+- **F2 live pass, tree mode (2026-10-02):** both volumes indexed, then compared as trees. INTENSO
+  indexed 16,238 locations across 15,964 digests (342.3 GiB) with `hashed: 16,238`, `pruned: 0`
+  and 0 discrepancies in one hour. `verify-mirror --paths` then reported `left_only: 0`,
+  `differing: 0`, `right_only: 271`, 0 discrepancies, in 5 seconds — the mode compares ledgers, it
+  does not re-read bytes. The 271 were the reorg's leftovers and `reclaim --apply` resolved them:
+  271 candidates, 271 survivable, **271 verified, 271 quarantined, 0 refused**, 29.39 GiB moved to
+  `INTENSO/Media/_quarantine` behind a 271-row journal. Nothing deleted.
+- **F7 live pass (2026-10-02):** `mirror --from Extreme --to INTENSO --consume by-date --apply`
+  over 17,215 wanted paths — 14,706 `already_verified`, **1,261 moved** (42.32 GiB of same-volume
+  renames out of the `by-date` leftovers), **1,248 copied** (210.60 GiB, digest checked inside the
+  write stream), 425 source paths hashed because the index did not cover them, 271
+  `destination_only`, **0 failures**. The read-only run an hour earlier predicted 1,261 and 1,248
+  exactly, and the ledger-level figures were reconciled independently against SQL and a disk walk
+  before the run: 14,510 same-path-same-digest rows + 196 unrecorded source paths = 14,706, and
+  2,280 ledger paths needing work + 425 unrecorded − 196 = 2,509.
 
 ## Anti-claims
 

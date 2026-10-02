@@ -17,8 +17,9 @@
 #                    A harness that cannot tell a local model from a cloud one must deny it
 #                    outright rather than claim a protection it cannot perform.
 #   no-model         secrets. No model reads these, local or otherwise. This is a floor, and
-#                    tools/claude-code-config's managed policy already carries a version of
-#                    it; declaring a path here can only add to that floor, never relax it.
+#                    the Claude Code baseline (tools/templates/claude-code/settings.base.json)
+#                    already carries a version of it; declaring a path here can only add to
+#                    that floor, never relax it.
 #
 # Verdicts per harness:  tools/protection-zones verdicts
 # Policy validity:       tools/protection-zones check
@@ -36,7 +37,7 @@ local_only = [
   "~/example-client-project",
 ]
 
-# Paths no model may read, ever. Additive to the managed policy's existing secret floor.
+# Paths no model may read, ever. Additive to the secret floor the Claude Code baseline carries.
 no_model = [
   "~/.example-credentials",
   "~/example-recovery-keys",

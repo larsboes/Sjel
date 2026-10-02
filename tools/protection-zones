@@ -2,9 +2,10 @@
 # tools/protection-zones — which coding assistants can actually protect what (Axon#147).
 #
 # The work deployment has a real protected-path class: material there must not be read by a
-# cloud-backed coding assistant. Axon's Claude managed policy protects one such location
-# today, but that is one harness, expressed as a hand-written deny list, with no statement
-# anywhere about what the other three harnesses do or cannot do.
+# cloud-backed coding assistant. Claude Code's deny policy protects one such location today,
+# from the user-level settings file `sjel claude` applies, but that is one harness,
+# expressed as a hand-written list, with no statement anywhere about what the other three
+# harnesses do or cannot do. Rendering the derived half is what this tool adds.
 #
 # The gap this closes is not "add more deny rules". It is that a harness which CANNOT enforce
 # a class currently says nothing, and silence reads as protection. Four harnesses are

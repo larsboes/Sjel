@@ -314,12 +314,18 @@ additive merge of a baseline Sjel owns, plus offers. Stated here because the dis
 implemented in three separate tools and written down in none, which is the shape a boundary erodes
 in.
 
-`tools/claude-code-config` is the one write that happens without being asked, on every install
+`tools/claude-code-config/claude-code-config` is the one write that happens without being asked, on every install
 including a non-interactive one. It merges the USER layer into `settings.json` with existing keys
 winning, so it can add a default and can never remove or overwrite one the operator set, and it
-refuses to touch a `settings.json` it cannot parse rather than replacing it. The MANAGED layer
-(`/Library/Application Support/ClaudeCode` on macOS, `/etc/claude-code` on Linux) *is* a full replace — and the installer never deploys it, only prints the sudo
-command, because a security policy that arrives unasked is not one anybody chose.
+refuses to touch a `settings.json` it cannot parse rather than replacing it. There is no MANAGED
+layer: the principal retired it on 2026-10-02, after asking what it bought against what it cost
+— sudo on every device for every change, and an MCP allowlist that had quietly blocked a server
+this machine had configured. The floor now lands in the same user-level file, which is why the
+merge rules above matter more than they did: they are what makes the write additive over a file
+that also holds the operator's own decisions. What the retirement gave up is that the floor is
+now editable by the agent sessions that run as that operator; `sjel claude check` reports drift
+instead, because a policy that arrives unasked is still not one anybody chose, but a policy
+nobody can re-read is not one they can maintain either.
 
 Nothing else writes unasked. The installer lists Packs and prints the activation command; it never
 links one. Agent-harness integrations are read for status, then installed only behind a TTY and an

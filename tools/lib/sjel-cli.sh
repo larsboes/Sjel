@@ -31,18 +31,31 @@ sjel_cli_exec() {
     fi
     bin="${CARGO_TARGET_DIR:-$SJEL_ROOT/target}/release/sjel-cli"
     if [ ! -x "$bin" ] || [ -n "$(find "$crate/src" "$crate/Cargo.toml" -newer "$bin" -print -quit 2>/dev/null)" ]; then
+      # A stale binary that still runs beats no answer. Daemons call these launchers too: the
+      # launchd watchdogs run tools/service-runner.sh, sjel-status runs tools/capability.sh.
+      # Their PATH may hold no cargo, and a crate mid-edit may not compile. Either way the last
+      # good binary answers and the rebuild is reported, rather than a supervisor or a
+      # registry read failing because somebody saved a source file.
       if ! command -v cargo >/dev/null 2>&1; then
-        local hint=""
-        case "$(uname -s)" in
-          Darwin) hint="$(toml_get_in cargo install_macos "$SJEL_ROOT/toolchain.toml")" ;;
-          *)      hint="$(toml_get_in cargo install_linux "$SJEL_ROOT/toolchain.toml")" ;;
-        esac
-        echo "$sub: cargo is not installed, and Sjel's tooling is built with it." >&2
-        echo "     install: $hint" >&2
-        exit 1
+        if [ -x "$bin" ]; then
+          echo "$sub: sjel-cli is older than its sources and cargo is not on PATH — running the existing binary" >&2
+        else
+          local hint=""
+          case "$(uname -s)" in
+            Darwin) hint="$(toml_get_in cargo install_macos "$SJEL_ROOT/toolchain.toml")" ;;
+            *)      hint="$(toml_get_in cargo install_linux "$SJEL_ROOT/toolchain.toml")" ;;
+          esac
+          echo "$sub: cargo is not installed, and Sjel's tooling is built with it." >&2
+          echo "     install: $hint" >&2
+          exit 1
+        fi
+      else
+        echo "$sub: building sjel-cli (release)..." >&2
+        if ! cargo build --locked --release -p sjel-cli --manifest-path "$crate/../../Cargo.toml" >&2; then
+          [ -x "$bin" ] || exit 2
+          echo "$sub: the sjel-cli build failed — running the existing, older binary" >&2
+        fi
       fi
-      echo "$sub: building sjel-cli (release)..." >&2
-      cargo build --locked --release -p sjel-cli --manifest-path "$crate/../../Cargo.toml" >&2 || exit 2
     fi
   fi
   exec "$bin" "$@"

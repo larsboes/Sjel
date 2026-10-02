@@ -60,3 +60,5 @@
 
 [test]
 pathIgnorePatterns = ["bazel-*/*", "Packs/*/pi-packages/**"]
+# Builds sjel-cli once before collection; tools/lib/sjel-cli-preload.ts says why.
+preload = ["./tools/lib/sjel-cli-preload.ts"]

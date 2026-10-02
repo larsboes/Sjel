@@ -238,6 +238,14 @@ already holds, and copies the rest with the digest checked inside the write stre
 - [x] MED-P12 — only a declared `--consume` path is moved, a move is journalled before it happens,
   and a destination path the source does not hold is reported and never removed. Falsifier: an
   undeclared path is consumed, or a mirror run deletes anything.
+- [x] MED-P13 — `reclaim` removes a destination path only when its digest is present at a source path
+  that is on disk right now, refuses `--apply` without an approved `--list`, and re-hashes every row
+  immediately before moving it. Falsifier: bytes that exist nowhere else are removed, or `--apply`
+  acts on the set the tool computed for itself. *(Measured 2026-10-02: `INTENSO` held 1,532 paths
+  whose bytes had all moved to a new name on `Extreme` — a complete mirror that was not a tidy one.)*
+- [x] MED-P14 — removal is quarantine, and the journal row is written *before* the move, so a run
+  reverses by swapping two paths and a re-run of an applied list moves nothing twice. Falsifier: a
+  file is deleted, or re-running an applied list quarantines a row a second time.
 
 **Two measurements decided the design, and both contradicted the obvious answer.**
 
@@ -256,9 +264,6 @@ leave two sharing blocks.
 
 **Named so they are not mistaken for done:**
 
-- **`media reclaim`** — the declared removal of a destination path the source no longer holds.
-  `mirror` reports those paths and removes nothing; reclaiming them is a separate act with its own
-  guard, on the same reasoning as `supersede`.
 - **`verify-mirror --paths`** — the structural check. `verify-mirror` groups by digest and answers
   "are these bytes on both volumes", not "do the trees match", so it reports a healthy mirror while
 the same bytes sit at different paths. That is exactly the state of `INTENSO` today, whose library

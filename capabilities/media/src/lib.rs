@@ -5,6 +5,7 @@ pub mod ingest;
 pub mod mirror;
 pub mod organize;
 pub mod preview;
+pub mod reclaim;
 pub mod reconcile;
 pub mod relabel;
 pub mod store;

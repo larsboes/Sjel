@@ -6,7 +6,7 @@ use media::{audit, index, verify_mirror, volume_uuid};
 
 fn usage() {
     eprintln!("media — exact-byte index, ingest gate and mirror verification\n\
-        usage:\n  media volume-id --root PATH\n  media index --root PATH --uuid UUID [--db PATH]\n  media audit --root PATH --uuid UUID --sample N [--db PATH]\n  media ingest --staging PATH --library PATH --uuid UUID [--apply] [--prune] [--db PATH]\n  media classify (--digest SHA256 | --digests-file PATH) [--db PATH]\n  media verify-mirror --left-root PATH --left-uuid UUID --right-root PATH --right-uuid UUID [--db PATH]\n  media status [--db PATH]\n  media duplicates --uuid UUID [--legacy PREFIX] [--resolve-inside PREFIX --root PATH --metadata] [--list PATH] [--db PATH]\n  media supersede --root PATH --uuid UUID --list PATH --quarantine PATH --journal PATH [--apply]\n  media reconcile --root PATH --uuid UUID [--apply] [--db PATH]\n  media relabel --from DIR --to DIR --uuid UUID --journal PATH [--library PATH] [--apply] [--settled-for SECONDS] [--plan FILE]\n  media preview --structure FILE [--metadata]\n  media organize --structure FILE [--apply --journal PATH] [--settled-for SECONDS] [--only COLLECTION]\n  media mirror --from PATH --from-uuid UUID --to PATH --to-uuid UUID [--path REL] [--exclude REL] [--consume PREFIX] [--journal PATH] [--apply]\n\n\
+        usage:\n  media volume-id --root PATH\n  media index --root PATH --uuid UUID [--db PATH]\n  media audit --root PATH --uuid UUID --sample N [--db PATH]\n  media ingest --staging PATH --library PATH --uuid UUID [--apply] [--prune] [--db PATH]\n  media classify (--digest SHA256 | --digests-file PATH) [--db PATH]\n  media verify-mirror --left-root PATH --left-uuid UUID --right-root PATH --right-uuid UUID [--db PATH]\n  media status [--db PATH]\n  media duplicates --uuid UUID [--legacy PREFIX] [--resolve-inside PREFIX --root PATH --metadata] [--list PATH] [--db PATH]\n  media supersede --root PATH --uuid UUID --list PATH --quarantine PATH --journal PATH [--apply]\n  media reconcile --root PATH --uuid UUID [--apply] [--db PATH]\n  media relabel --from DIR --to DIR --uuid UUID --journal PATH [--library PATH] [--apply] [--settled-for SECONDS] [--plan FILE]\n  media preview --structure FILE [--metadata]\n  media organize --structure FILE [--apply --journal PATH] [--settled-for SECONDS] [--only COLLECTION]\n  media mirror --from PATH --from-uuid UUID --to PATH --to-uuid UUID [--path REL] [--exclude REL] [--consume PREFIX] [--journal PATH] [--apply]\n  media reclaim --from PATH --from-uuid UUID --to PATH --to-uuid UUID [--path REL] [--exclude REL] [--list PATH] [--quarantine PATH] [--journal PATH] [--apply]\n\n\
         ingest is a dry run unless --apply is set. --prune additionally removes staging/originals\n\
         only after every new import verifies; neither verb deletes library content.");
 }
@@ -166,6 +166,21 @@ fn run(args: &[String]) -> Result<i32> {
             ],
             &["--apply"],
         ),
+        "reclaim" => (
+            &[
+                "--from",
+                "--from-uuid",
+                "--to",
+                "--to-uuid",
+                "--path",
+                "--exclude",
+                "--list",
+                "--quarantine",
+                "--journal",
+                "--db",
+            ],
+            &["--apply"],
+        ),
         "relabel" => (
             &[
                 "--from",
@@ -214,10 +229,10 @@ fn run(args: &[String]) -> Result<i32> {
         )?),
         _ => None,
     };
-    // A mirror names two volumes and both are checked before the store is opened, for the same
-    // reason as the single-volume verbs: a removed drive whose mount point is now an ordinary
-    // directory must not be registered as the host volume.
-    let mirror_mounts = if verb == "mirror" {
+    // A mirror or a reclaim names two volumes and both are checked before the store is opened, for
+    // the same reason as the single-volume verbs: a removed drive whose mount point is now an
+    // ordinary directory must not be registered as the host volume.
+    let pair_mounts = if matches!(verb.as_str(), "mirror" | "reclaim") {
         Some((
             mounted(&rooted(opts, "--from")?, &required(opts, "--from-uuid")?)?,
             mounted(&rooted(opts, "--to")?, &required(opts, "--to-uuid")?)?,
@@ -276,7 +291,7 @@ fn run(args: &[String]) -> Result<i32> {
             Ok(i32::from(pending))
         }
         "mirror" => {
-            let (from_uuid, to_uuid) = mirror_mounts.ok_or("mirror needs two mounted volumes")?;
+            let (from_uuid, to_uuid) = pair_mounts.ok_or("mirror needs two mounted volumes")?;
             let from = rooted(opts, "--from")?;
             let to = rooted(opts, "--to")?;
             let consume = repeated(opts, "--consume")?;
@@ -307,6 +322,52 @@ fn run(args: &[String]) -> Result<i32> {
                 },
             )?;
             let failed = !report.failures.is_empty();
+            println!("{}", serde_json::to_string(&report)?);
+            Ok(i32::from(failed))
+        }
+        "reclaim" => {
+            let (from_uuid, to_uuid) = pair_mounts.ok_or("reclaim needs two mounted volumes")?;
+            let from = rooted(opts, "--from")?;
+            let to = rooted(opts, "--to")?;
+            let paths = repeated(opts, "--path")?;
+            let exclude = repeated(opts, "--exclude")?;
+            let list = option(opts, "--list")?.map(PathBuf::from);
+            let apply = opts.iter().any(|s| s == "--apply");
+            // Acting on a removal needs all three: the approved list is the authorisation, and the
+            // quarantine and journal are what make the act reversible. A plan needs none of them.
+            let (quarantine, journal) = if apply {
+                (rooted(opts, "--quarantine")?, rooted(opts, "--journal")?)
+            } else {
+                (
+                    option(opts, "--quarantine")?
+                        .map(PathBuf::from)
+                        .unwrap_or_else(|| to.join("_quarantine")),
+                    option(opts, "--journal")?
+                        .map(PathBuf::from)
+                        .unwrap_or_else(|| to.join("reclaim-journal.tsv")),
+                )
+            };
+            let report = media::reclaim::reclaim(
+                &ledger,
+                &media::reclaim::ReclaimOptions {
+                    from: &from,
+                    from_uuid: &from_uuid,
+                    to: &to,
+                    to_uuid: &to_uuid,
+                    paths: &paths,
+                    exclude: &exclude,
+                    list: list.as_deref(),
+                    quarantine: &quarantine,
+                    journal: &journal,
+                    apply,
+                },
+            )?;
+            // A declared removal is not an absence: the index row goes with the file, and the
+            // journal is the record of why. An undeclared disappearance still shows up in audit.
+            for relpath in &report.quarantined_paths {
+                ledger.forget(&to_uuid, relpath)?;
+            }
+            let failed = !report.complete || report.refused > 0;
             println!("{}", serde_json::to_string(&report)?);
             Ok(i32::from(failed))
         }

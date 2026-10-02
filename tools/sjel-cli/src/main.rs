@@ -18,7 +18,11 @@ use std::process::{Command, ExitCode, ExitStatus};
 mod capability;
 mod help;
 mod paths;
+mod persist;
 mod registry;
+mod runargs;
+mod runner;
+mod schedule;
 mod search;
 mod toolchain;
 
@@ -32,6 +36,7 @@ fn main() -> ExitCode {
     match command {
         "toolchain-check" => return toolchain::run(rest),
         "capability.sh" => return registry::run(rest),
+        "service-runner.sh" => return runner::run(rest),
         _ => {}
     }
     let root = match std::env::var("SJEL_ROOT") {

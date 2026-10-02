@@ -1,0 +1,17 @@
+# tools/lib/schedule-cases.tsv — the cases both `schedule` parsers must agree on.
+# tools/lib/schedule.sh (read by tools/check-service-tomls.sh) and tools/sjel-cli/src/schedule.rs
+# (read by tools/service-runner.sh) are two copies of one rule since 2026-10-02. tools/schedule.test.sh
+# and the schedule.rs unit test both read this table, so a change to one parser that the other
+# does not share fails a test instead of drifting. Format: <spec><TAB><seconds | error:<text>>.
+30m	1800
+6h	21600
+2d	172800
+1m	60
+0010h	36000
+6 hours	error:expected <N>m, <N>h or <N>d
+6	error:expected <N>m, <N>h or <N>d
+h	error:is not a whole number
+-1h	error:is not a whole number
+1.5h	error:is not a whole number
+0m	error:must be greater than zero
+0008h	28800

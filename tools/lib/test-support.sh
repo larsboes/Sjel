@@ -82,6 +82,9 @@ isolate_axon_env() {
 # needs it: that root has no crate, so tools/lib/sjel-cli.sh cannot build there and refuses.
 # Built from the source checkout the test file lives in, never from the scratch root.
 sjel_cli_prebuilt() {
+  # An already-exported binary wins: CI can build once for every suite, and a suite run from a
+  # scratch copy of tools/ (which has no crate) can be pointed at one.
+  if [ -n "${SJEL_CLI_BIN:-}" ] && [ -x "$SJEL_CLI_BIN" ]; then export SJEL_CLI_BIN; return 0; fi
   local src
   src="$(cd "$(dirname "${BASH_SOURCE[0]:-$0}")/../.." && pwd)"
   cargo build --locked --release -q -p sjel-cli --manifest-path "$src/Cargo.toml" \

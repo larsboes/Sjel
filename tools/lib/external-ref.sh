@@ -80,9 +80,9 @@ external_capabilities() {
 # either nothing or, far worse, the wrong vault.
 #
 # Two copies since 2026-10-02: `Ctx::endpoint` and `Ctx::externals` in
-# tools/sjel-cli/src/registry.rs carry the provided_by half of this rule for the registry, which
-# moved to Rust. A change here is a change there, until backup.sh and service-runner.sh move too
-# and this file can go.
+# tools/sjel-cli/src/registry.rs carry the provided_by half of this rule, and `trusted_peers` in
+# tools/sjel-cli/src/runner.rs carries `trusted_peer_ids` below. A change here is a change there,
+# until backup.sh, setup-secret.sh and materialize-inference-key move too and this file can go.
 capability_endpoint() {  # <name> [ENV_KEY]
   local name="$1" env_key="${2:-}" provider url env_file systems
   provider="$(capability_provider "$name")"

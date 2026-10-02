@@ -27,6 +27,10 @@ schedule_seconds() {  # <spec>
   case "$n" in
     ''|*[!0-9]*) echo "schedule = \"$spec\" — '$n' is not a whole number"; return 1 ;;
   esac
+  # Base 10 explicitly: bash arithmetic reads a leading zero as octal, so "0010h" was 8 hours and
+  # "0008h" an arithmetic error. Found 2026-10-02 by tools/lib/schedule-cases.tsv, the table this
+  # parser and tools/sjel-cli/src/schedule.rs now share.
+  n=$((10#$n))
   [ "$n" -gt 0 ] || { echo "schedule = \"$spec\" — must be greater than zero"; return 1; }
   case "$unit" in
     m) echo "$((n * 60))" ;;

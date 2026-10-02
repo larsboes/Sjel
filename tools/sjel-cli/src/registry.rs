@@ -258,8 +258,8 @@ impl<'a> Ctx<'a> {
 
     /// The base URL of the host that provides `name`, from the overlay's
     /// config/systems.local.toml — the provided_by half of `capability_endpoint` in
-    /// tools/lib/external-ref.sh. backup.sh, service-runner.sh and setup-secret.sh still source
-    /// that file, so the rule has two copies until they move: change both.
+    /// tools/lib/external-ref.sh. backup.sh, setup-secret.sh and materialize-inference-key still
+    /// source that file, so the rule has two copies until they move: change both.
     fn endpoint(&self, name: &str, provider: &str) -> Result<String, Fail> {
         let systems = self
             .paths
@@ -380,6 +380,12 @@ impl<'a> Ctx<'a> {
         }
         Ok(out)
     }
+}
+
+/// The registry without external capabilities, in dependency order: what `registry --lines`
+/// prints and what the service runner's whole-machine fan-out walks.
+pub fn runner_rows(paths: &Paths) -> Result<Vec<Service>, Fail> {
+    Ctx::new(paths)?.registry(false)
 }
 
 /// The registry, for in-process callers (`sjel capability`, `sjel search`).

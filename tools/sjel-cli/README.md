@@ -15,6 +15,7 @@ Rust first, and the one-crate shape was decided on 2026-10-02.
 | `toolchain-check` | `tools/toolchain-check` | bash, 2026-10-02 |
 | `sjel` (dispatch, help, `capability`, `search`, `pack`) | `sjel` | bash and three `tools/lib` files, 2026-10-02 |
 | `capability.sh` (list, enable, disable, registry) | `tools/capability.sh` | bash, 2026-10-02 |
+| `service-runner.sh` (lifecycle, holds, drift, persistence units) | `tools/service-runner.sh` | bash and `tools/lib/runargs.sh`, 2026-10-02 |
 
 `toolchain-check` was compared with its bash version on this Mac before replacement. Text
 output, JSON (sorted keys) and exit codes were identical for 10 flag combinations, and
@@ -35,6 +36,17 @@ the overlay's manifests and machine.toml. Stdout, stderr, exit codes and the rew
 machine.toml were identical. Only `-h` differs, because its old text claimed every read went
 through tools/lib/toml.sh. `registry` takes 17 ms against 2.40 s (hyperfine, 5 runs), and
 `sjel capability health` and `sjel search` now call it in-process: 0.16 s and 0.05 s.
+
+`service-runner.sh` was checked three ways before the launcher replaced it. The suites that
+drive it with stub runtimes and supervisors (service-runner, persistence, container-refresh,
+backup, pipe) pass against the binary, and fail 17 and 52 checks against `/usr/bin/false`,
+so they exercise it. On this Mac, `status` and `persistence-status` for all 32 registry rows
+were identical to the bash version, including the 15 installed launchd units it re-renders
+and compares byte for byte. One on-demand capability went through start, held stop, refused
+start, resume and idle-stop, and ended as it began. This machine runs no container
+capability, so the container verbs are verified by the stub suites only. One change is
+deliberate: a scheduled job now stops the dependencies it started even when the job fails,
+where `set -e` used to exit first.
 
 ## Porting a script
 

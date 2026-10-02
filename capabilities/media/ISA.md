@@ -292,6 +292,11 @@ leave two sharing blocks.
   noticing that the library was growing under it. The probe's falsifier was met live rather than
   staged: `--paths` refused, the digest mode answered from the rows. The arrival was an ingest
   the operator had running, which is exactly the case `--exclude` exists for.)*
+  *(Second instance the same day, and closer to home: the digest mode's own run raced the
+  `reclaim` that a previous turn had authorised. `reclaim` moved 271 rows out from under a verify
+  already four minutes into its snapshot, and the verify reported 256 of them as missing files
+  while hashing 15 others successfully. Neither verb was wrong; the digest mode simply cannot see
+  that the tree moved, which is the whole reason `--paths` refuses instead.)*
 
 - **Per-file pre-classification failures.** A symlink, unreadable byte stream, or non-UTF-8
   path currently refuses the entire preflight before an ingest run exists. Probe: stage one such
@@ -358,6 +363,20 @@ implementation at the same moment rather than against a stored number.
   does not re-read bytes. The 271 were the reorg's leftovers and `reclaim --apply` resolved them:
   271 candidates, 271 survivable, **271 verified, 271 quarantined, 0 refused**, 29.39 GiB moved to
   `INTENSO/Media/_quarantine` behind a 271-row journal. Nothing deleted.
+- **F2 live pass, digest mode (2026-10-02):** hashed every indexed path on both volumes — 17,212
+  digest groups, 1h47m. **0 byte mismatches.** All 201 discrepancy lines are `No such file or
+  directory`; not one is `hashes to <other>`. Their 256 distinct paths are all rows `reclaim
+  --apply` had quarantined *while the verify was running*, and the remaining 15 of the 271 were
+  never reported at all — their groups sat early in the digest order and were hashed before the
+  move, which is what success looks like in a report that lists only problems. So the claim is
+  bounded and worth stating exactly: every path the run could read hashed to its recorded digest
+  on both volumes.
+- **A clean tree (2026-10-02):** an operator ingest added 163 files to the library mid-session;
+  `index` took them in (163 hashed, 0 discrepancies, 10s) and `mirror --apply` copied them (163
+  files, 8.16 GiB, 0 failures, 2m40s). `verify-mirror --paths` then reported **`left_only: 0`,
+  `right_only: 0`, `differing: 0`, 0 discrepancies** — the first time the two volumes have
+  compared as the same tree rather than as a mirror plus leftovers. The read-only run before it
+  predicted 163 and 8.16 GiB exactly, with `destination_only: 0` as the reclaim's proof.
 - **F7 live pass (2026-10-02):** `mirror --from Extreme --to INTENSO --consume by-date --apply`
   over 17,215 wanted paths — 14,706 `already_verified`, **1,261 moved** (42.32 GiB of same-volume
   renames out of the `by-date` leftovers), **1,248 copied** (210.60 GiB, digest checked inside the

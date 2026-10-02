@@ -189,7 +189,12 @@ mod tests {
         let ledger = fixture.ledger();
         std::fs::write(fixture.tree().join("renamed.jpg"), b"rename me").unwrap();
         std::fs::write(fixture.tree().join("deleted.jpg"), b"delete me").unwrap();
-        assert_eq!(crate::index(&ledger, &fixture.tree(), "V", "v").unwrap().hashed, 2);
+        assert_eq!(
+            crate::index(&ledger, &fixture.tree(), "V", "v")
+                .unwrap()
+                .hashed,
+            2
+        );
 
         std::fs::create_dir_all(fixture.tree().join("moved")).unwrap();
         std::fs::rename(
@@ -206,7 +211,12 @@ mod tests {
         assert_eq!(dry.dropped, 0);
         assert_eq!(ledger.counts().unwrap(), (2, 2));
 
-        assert_eq!(crate::index(&ledger, &fixture.tree(), "V", "v").unwrap().hashed, 1);
+        assert_eq!(
+            crate::index(&ledger, &fixture.tree(), "V", "v")
+                .unwrap()
+                .hashed,
+            1
+        );
 
         let dry = reconcile(&ledger, &fixture.tree(), "V", false).unwrap();
         assert!(dry.complete);
@@ -241,7 +251,11 @@ mod tests {
         std::fs::write(fixture.tree().join("a.jpg"), b"identical").unwrap();
         std::fs::write(fixture.tree().join("b.jpg"), b"identical").unwrap();
         crate::index(&ledger, &fixture.tree(), "V", "v").unwrap();
-        assert_eq!(ledger.counts().unwrap(), (1, 2), "one digest, two locations");
+        assert_eq!(
+            ledger.counts().unwrap(),
+            (1, 2),
+            "one digest, two locations"
+        );
 
         std::fs::remove_file(fixture.tree().join("a.jpg")).unwrap();
         std::fs::remove_file(fixture.tree().join("b.jpg")).unwrap();

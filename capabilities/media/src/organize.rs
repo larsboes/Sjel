@@ -131,7 +131,8 @@ fn inventory(root: &Path) -> Result<Inventory> {
             let nested = inventory(&entry.path())?;
             total.file_count += nested.file_count;
             total.bytes += nested.bytes;
-            total.newest_mtime_seconds = total.newest_mtime_seconds.max(nested.newest_mtime_seconds);
+            total.newest_mtime_seconds =
+                total.newest_mtime_seconds.max(nested.newest_mtime_seconds);
         } else if meta.is_file() {
             total.file_count += 1;
             total.bytes += meta.len();
@@ -309,9 +310,7 @@ fn run(
     if !only.is_empty() {
         for name in only {
             if !resolved.iter().any(|entry| &entry.collection == name) {
-                return Err(
-                    format!("--only {name} matches no collection the draft places").into(),
-                );
+                return Err(format!("--only {name} matches no collection the draft places").into());
             }
         }
     }
@@ -480,8 +479,9 @@ fn run(
         if apply {
             for (index, _) in &ready {
                 report.moves[*index].outcome = "refused";
-                report.moves[*index].reason =
-                    Some("not applied: another mapping conflicts, so the plan is not trustworthy".into());
+                report.moves[*index].reason = Some(
+                    "not applied: another mapping conflicts, so the plan is not trustworthy".into(),
+                );
             }
             report.fail(format!(
                 "{} conflicting mappings; nothing was moved",
@@ -624,12 +624,12 @@ mod tests {
         assert!(!report.applied);
         assert_eq!(report.moved, 0);
         assert_eq!(report.moves[0].outcome, "would-move");
-        assert_eq!(
-            report.moves[0].to,
-            archive.join("Trips/2018/2018-Finland")
-        );
+        assert_eq!(report.moves[0].to, archive.join("Trips/2018/2018-Finland"));
         assert!(source.join("2018-Finland").exists());
-        assert!(!archive.join("Trips").exists(), "dry run created a category");
+        assert!(
+            !archive.join("Trips").exists(),
+            "dry run created a category"
+        );
     }
 
     #[test]
@@ -645,7 +645,9 @@ mod tests {
         assert_eq!(report.moved, 2);
         assert_eq!(report.conflicts, 0);
         assert!(archive.join("Trips/2018/2018-Finland/file0.jpg").exists());
-        assert!(archive.join("Trips/2018/2018-03-Iceland/file2.jpg").exists());
+        assert!(archive
+            .join("Trips/2018/2018-03-Iceland/file2.jpg")
+            .exists());
         assert!(!source.join("2018-Finland").exists());
         let text = fs::read_to_string(&journal).unwrap();
         let lines: Vec<_> = text.lines().collect();
@@ -669,7 +671,10 @@ mod tests {
         assert_eq!(report.moved, 0);
         assert_eq!(report.conflicts, 1);
         assert!(source.join("2018-Finland").exists());
-        assert!(source.join("2018-03-Iceland").exists(), "an unrelated move went ahead");
+        assert!(
+            source.join("2018-03-Iceland").exists(),
+            "an unrelated move went ahead"
+        );
         let outcomes: BTreeSet<_> = report.moves.iter().map(|m| m.outcome).collect();
         assert_eq!(outcomes, BTreeSet::from(["conflict", "refused"]));
         assert!(!journal.exists(), "nothing moved but a journal was written");
@@ -798,10 +803,7 @@ mod tests {
         assert_eq!(second.moved, 0);
         assert_eq!(second.conflicts, 0);
         assert_eq!(second.already_moved, 2);
-        assert!(second
-            .moves
-            .iter()
-            .all(|m| m.outcome == "already-moved"));
+        assert!(second.moves.iter().all(|m| m.outcome == "already-moved"));
         // The journal did not grow a second time.
         assert_eq!(fs::read_to_string(&journal).unwrap().lines().count(), 3);
         let _ = fs::remove_dir_all(&fixture.0);

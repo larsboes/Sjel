@@ -103,7 +103,10 @@ mod tests {
     fn a_removed_key_is_reported_as_missing() {
         let deployed = json!({"permissions": {}});
         let baseline = json!({"permissions": {"deny": ["a"]}});
-        assert_eq!(drift(&deployed, &baseline).missing, vec!["permissions.deny"]);
+        assert_eq!(
+            drift(&deployed, &baseline).missing,
+            vec!["permissions.deny"]
+        );
     }
 
     #[test]

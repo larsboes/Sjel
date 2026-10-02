@@ -609,7 +609,10 @@ fn run_organize(opts: &[String]) -> Result<i32> {
         }
     }
     let only: Vec<String> = only_values(opts, "--only")?;
-    if only.iter().any(|name| name.is_empty() || name.contains('/')) {
+    if only
+        .iter()
+        .any(|name| name.is_empty() || name.contains('/'))
+    {
         return Err("--only takes a collection name, not a path".into());
     }
     if only.len() != only.iter().collect::<std::collections::BTreeSet<_>>().len() {
@@ -701,7 +704,14 @@ mod preview_tests {
         let db = scratch.to_string_lossy().to_string();
 
         let refused = run(&[
-            "reconcile", "--root", "/nonexistent", "--uuid", "V", "--library", "/lib", "--db",
+            "reconcile",
+            "--root",
+            "/nonexistent",
+            "--uuid",
+            "V",
+            "--library",
+            "/lib",
+            "--db",
             &db,
         ]
         .map(str::to_owned))

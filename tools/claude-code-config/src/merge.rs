@@ -198,7 +198,10 @@ mod tests {
         let baseline = json!({"permissions": {"deny": ["Read(~/.ssh/**)"]}});
         let mut changed = Vec::new();
         merge_force(&mut existing, &baseline, "", &mut changed);
-        assert_eq!(existing["model"], "mine", "a key the baseline omits is untouched");
+        assert_eq!(
+            existing["model"], "mine",
+            "a key the baseline omits is untouched"
+        );
         assert_eq!(existing["permissions"]["deny"], json!(["Read(~/.ssh/**)"]));
         assert_eq!(changed, vec!["permissions.deny"]);
     }
@@ -273,7 +276,11 @@ mod tests {
         let fragment = json!({"permissions": {"defaultMode": "plan"}});
         let merged = merge_over(&base, &fragment);
         assert_eq!(merged["permissions"]["defaultMode"], json!("plan"));
-        assert_eq!(merged["permissions"]["deny"], json!(["shared"]), "untouched keys survive");
+        assert_eq!(
+            merged["permissions"]["deny"],
+            json!(["shared"]),
+            "untouched keys survive"
+        );
     }
 
     #[test]

@@ -37,9 +37,9 @@
 
 use std::env;
 use std::fs;
+use std::io::Write;
 use std::path::{Path, PathBuf};
 use std::process::{Command, ExitCode, Stdio};
-use std::io::Write;
 
 use serde_json::{json, Map, Value};
 
@@ -65,7 +65,10 @@ fn home() -> PathBuf {
 /// The command and arguments that start the server.
 pub fn server_command() -> Vec<String> {
     vec![
-        home().join(".local/bin/sjel").to_string_lossy().into_owned(),
+        home()
+            .join(".local/bin/sjel")
+            .to_string_lossy()
+            .into_owned(),
         "mcp".to_string(),
     ]
 }
@@ -299,7 +302,10 @@ fn act(harness: &str, removing: bool) -> Outcome {
             ok: false,
             notes: vec![format!(
                 "not installed (no {})",
-                marker.as_ref().map(|p| p.display().to_string()).unwrap_or_default()
+                marker
+                    .as_ref()
+                    .map(|p| p.display().to_string())
+                    .unwrap_or_default()
             )],
         };
     }
@@ -337,7 +343,11 @@ fn act(harness: &str, removing: bool) -> Outcome {
                 Ok(()) => {
                     let what = if removing { "removed from" } else { "wrote" };
                     notes.push(format!("{what} {}", path.display()));
-                    Outcome { harness: harness.to_string(), ok: true, notes }
+                    Outcome {
+                        harness: harness.to_string(),
+                        ok: true,
+                        notes,
+                    }
                 }
                 Err(error) => Outcome {
                     harness: harness.to_string(),
@@ -371,13 +381,18 @@ fn act(harness: &str, removing: bool) -> Outcome {
                         } else {
                             combined.to_string()
                         });
-                        Outcome { harness: harness.to_string(), ok: true, notes }
+                        Outcome {
+                            harness: harness.to_string(),
+                            ok: true,
+                            notes,
+                        }
                     } else {
-                        notes.push(format!(
-                            "claude {} failed: {combined}",
-                            args[..3].join(" ")
-                        ));
-                        Outcome { harness: harness.to_string(), ok: false, notes }
+                        notes.push(format!("claude {} failed: {combined}", args[..3].join(" ")));
+                        Outcome {
+                            harness: harness.to_string(),
+                            ok: false,
+                            notes,
+                        }
                     }
                 }
             }
@@ -409,7 +424,9 @@ fn main() -> ExitCode {
         return ExitCode::SUCCESS;
     }
     let (verb, names) = match args.split_first() {
-        Some((verb, rest)) if verb == "register" || verb == "unregister" => (verb.clone(), rest.to_vec()),
+        Some((verb, rest)) if verb == "register" || verb == "unregister" => {
+            (verb.clone(), rest.to_vec())
+        }
         _ => {
             eprint!("{USAGE}");
             return ExitCode::from(1);
@@ -473,15 +490,16 @@ mod tests {
     #[test]
     fn the_entry_starts_the_command_this_tool_verifies() {
         let entry = pi_entry();
-        let from_entry: Vec<String> = std::iter::once(entry["command"].as_str().unwrap().to_string())
-            .chain(
-                entry["args"]
-                    .as_array()
-                    .unwrap()
-                    .iter()
-                    .map(|value| value.as_str().unwrap().to_string()),
-            )
-            .collect();
+        let from_entry: Vec<String> =
+            std::iter::once(entry["command"].as_str().unwrap().to_string())
+                .chain(
+                    entry["args"]
+                        .as_array()
+                        .unwrap()
+                        .iter()
+                        .map(|value| value.as_str().unwrap().to_string()),
+                )
+                .collect();
         assert_eq!(from_entry, server_command());
     }
 
@@ -495,7 +513,10 @@ mod tests {
         assert_eq!(after["autoEnableCodemode"], json!(false));
         assert!(after["mcpServers"]["other"].is_object());
         assert!(after["mcpServers"][SERVER_NAME].is_object());
-        assert!(before["mcpServers"][SERVER_NAME].is_null(), "input is untouched");
+        assert!(
+            before["mcpServers"][SERVER_NAME].is_null(),
+            "input is untouched"
+        );
     }
 
     #[test]
@@ -523,7 +544,10 @@ mod tests {
     fn claude_registration_names_the_server_scope_and_command() {
         let args = claude_add_args();
         assert_eq!(&args[..3], &["mcp", "add", SERVER_NAME]);
-        let separator = args.iter().position(|arg| arg == "--").expect("-- separator");
+        let separator = args
+            .iter()
+            .position(|arg| arg == "--")
+            .expect("-- separator");
         assert_eq!(&args[separator + 1..], server_command().as_slice());
         assert_eq!(
             claude_remove_args(),

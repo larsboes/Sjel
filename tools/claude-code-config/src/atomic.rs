@@ -14,7 +14,9 @@ use std::path::{Path, PathBuf};
 
 /// The mode of an existing file, so a write preserves what the file already carries.
 pub fn existing_mode(path: &Path) -> Option<u32> {
-    fs::metadata(path).ok().map(|meta| meta.permissions().mode() & 0o777)
+    fs::metadata(path)
+        .ok()
+        .map(|meta| meta.permissions().mode() & 0o777)
 }
 
 pub fn write_atomic(target: &Path, contents: &str, mode: u32) -> std::io::Result<()> {

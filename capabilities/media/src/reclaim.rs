@@ -128,10 +128,7 @@ struct SourceState {
 /// answer. Nothing here hashes the source: `index` is the verb that records digests, and a reclaim
 /// that re-hashed a 511 GiB library to plan a cleanup would be slower than the cleanup is worth.
 fn source_state(ledger: &Ledger, opts: &ReclaimOptions<'_>) -> Result<SourceState> {
-    let paths: BTreeSet<String> = files(opts.from)?
-        .into_iter()
-        .map(|(rel, _)| rel)
-        .collect();
+    let paths: BTreeSet<String> = files(opts.from)?.into_iter().map(|(rel, _)| rel).collect();
     let mut by_digest: SourceLocations = BTreeMap::new();
     for row in ledger.locations(opts.from_uuid)? {
         if !paths.contains(&row.relpath) {
@@ -218,7 +215,9 @@ fn read_list(path: &Path) -> Result<Vec<(String, i64, String, String)>> {
         }
         let fields: Vec<&str> = line.split('\t').collect();
         if fields.len() != 4 {
-            return Err(format!("reclaim list row {} has {} fields", index + 1, fields.len()).into());
+            return Err(
+                format!("reclaim list row {} has {} fields", index + 1, fields.len()).into(),
+            );
         }
         rows.push((
             fields[0].to_owned(),
@@ -306,9 +305,9 @@ pub fn reclaim(ledger: &Ledger, opts: &ReclaimOptions<'_>) -> Result<ReclaimRepo
                     Ok(actual) if actual == digest => report.verified += 1,
                     Ok(actual) => {
                         report.refused += 1;
-                        report.issues.push(format!(
-                            "{relpath}: bytes are {actual}, list says {digest}"
-                        ));
+                        report
+                            .issues
+                            .push(format!("{relpath}: bytes are {actual}, list says {digest}"));
                         continue;
                     }
                     Err(error) => {
@@ -391,7 +390,8 @@ mod tests {
     impl Fixture {
         fn new() -> Self {
             let id = NEXT.fetch_add(1, Ordering::Relaxed);
-            let root = std::env::temp_dir().join(format!("reclaim-test-{}-{id}", std::process::id()));
+            let root =
+                std::env::temp_dir().join(format!("reclaim-test-{}-{id}", std::process::id()));
             let _ = fs::remove_dir_all(&root);
             fs::create_dir_all(root.join("src")).unwrap();
             fs::create_dir_all(root.join("dst")).unwrap();
@@ -477,8 +477,13 @@ mod tests {
     fn apply_without_a_list_is_refused() {
         let f = Fixture::new();
         let ledger = f.ledger();
-        let error = reclaim(&ledger, &f.opts(None, true)).unwrap_err().to_string();
-        assert!(error.contains("--apply needs --list"), "unexpected: {error}");
+        let error = reclaim(&ledger, &f.opts(None, true))
+            .unwrap_err()
+            .to_string();
+        assert!(
+            error.contains("--apply needs --list"),
+            "unexpected: {error}"
+        );
     }
 
     #[test]

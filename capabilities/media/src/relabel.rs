@@ -350,10 +350,7 @@ pub fn relabel(
     }
     let mut log = OpenOptions::new().append(true).create(true).open(journal)?;
     if fresh {
-        writeln!(
-            log,
-            "moved_at\tfrom\tto\tsize\tday\tday_field"
-        )?;
+        writeln!(log, "moved_at\tfrom\tto\tsize\tday\tday_field")?;
     }
     for row in report.moves.iter().filter(|row| row.outcome == "moved") {
         writeln!(
@@ -402,13 +399,20 @@ mod tests {
 
     #[test]
     fn a_day_prefix_is_added_once_and_a_second_run_does_not_stack_it() {
-        assert_eq!(target_name("DJI_0062.MP4", Some("2019-06-12")), "2019-06-12_DJI_0062.MP4");
+        assert_eq!(
+            target_name("DJI_0062.MP4", Some("2019-06-12")),
+            "2019-06-12_DJI_0062.MP4"
+        );
         assert_eq!(
             target_name("2019-06-12_DJI_0062.MP4", Some("2019-06-12")),
             "2019-06-12_DJI_0062.MP4",
             "already prefixed"
         );
-        assert_eq!(target_name("DJI_0062.MP4", None), "DJI_0062.MP4", "no invented date");
+        assert_eq!(
+            target_name("DJI_0062.MP4", None),
+            "DJI_0062.MP4",
+            "no invented date"
+        );
     }
 
     #[test]
@@ -438,8 +442,15 @@ mod tests {
         .unwrap();
         assert_eq!(report.moved, 1);
         assert_eq!(report.disambiguated, 1);
-        assert_eq!(fs::read(&occupied).unwrap(), b"already here", "never overwritten");
-        assert_eq!(fs::read(fixture.target().join("clip~2.MP4")).unwrap(), b"incoming");
+        assert_eq!(
+            fs::read(&occupied).unwrap(),
+            b"already here",
+            "never overwritten"
+        );
+        assert_eq!(
+            fs::read(fixture.target().join("clip~2.MP4")).unwrap(),
+            b"incoming"
+        );
     }
 
     #[test]
@@ -596,10 +607,21 @@ mod tests {
         fs::create_dir_all(fixture.source().join("nested")).unwrap();
         fs::write(fixture.source().join("nested/deep.MP4"), b"bytes").unwrap();
         let journal = fixture.0.join("j.tsv");
-        let report = relabel(&fixture.source(), &fixture.target(), &journal, true, 0, None).unwrap();
+        let report = relabel(
+            &fixture.source(),
+            &fixture.target(),
+            &journal,
+            true,
+            0,
+            None,
+        )
+        .unwrap();
         assert_eq!(report.moved, 1);
         assert!(fixture.target().join("deep.MP4").exists());
         let text = fs::read_to_string(&journal).unwrap();
-        assert!(text.contains("nested/deep.MP4"), "the journal records where it came from");
+        assert!(
+            text.contains("nested/deep.MP4"),
+            "the journal records where it came from"
+        );
     }
 }

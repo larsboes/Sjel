@@ -191,7 +191,11 @@ fn resolve_group(
         (false, 0) => format!("kept {name}: the plainest name, with no export duplicate suffix"),
         (false, n) => format!("kept {name}: the plainest of the copies, which still carry {n} duplicate suffix(es)"),
     };
-    let gone: Vec<String> = locations.iter().filter(|rel| **rel != keep).cloned().collect();
+    let gone: Vec<String> = locations
+        .iter()
+        .filter(|rel| **rel != keep)
+        .cloned()
+        .collect();
     Ok(Some((keep, gone, why, matched)))
 }
 
@@ -257,9 +261,7 @@ pub fn duplicates(
                         }
                     }
                     Ok(None) => {}
-                    Err(error) => {
-                        resolve_issues.push(format!("group {}: {error}", &digest[..12]))
-                    }
+                    Err(error) => resolve_issues.push(format!("group {}: {error}", &digest[..12])),
                 }
             }
         }
@@ -383,14 +385,20 @@ mod tests {
         put(&db, "by-date/2018-03/IMG_7811.MOV", "aaa", 100);
         put(&db, "by-date/2016-01/only-copy.JPG", "bbb", 50);
         let report = duplicates(&db, "V", Path::new("/"), Some("by-date"), None, None).unwrap();
-        assert_eq!(report.duplicate_groups, 1, "only digest aaa has two locations");
+        assert_eq!(
+            report.duplicate_groups, 1,
+            "only digest aaa has two locations"
+        );
         // The Iceland pair: one copy superseded, one kept.
         let iceland = report
             .groups
             .iter()
             .find(|g| g.digest == "aaa")
             .expect("iceland group");
-        assert_eq!(iceland.kept, vec!["Trips/2018/2018-03-Iceland/IMG_7811.MOV"]);
+        assert_eq!(
+            iceland.kept,
+            vec!["Trips/2018/2018-03-Iceland/IMG_7811.MOV"]
+        );
         assert_eq!(iceland.superseded, vec!["by-date/2018-03/IMG_7811.MOV"]);
         assert_eq!(iceland.must_keep, None);
         assert!(iceland.removable);
@@ -433,7 +441,10 @@ mod tests {
         put(&db, "Trips/2019/2019-05/DJI_0639.MP4", "ddd", 20_000);
         put(&db, "by-date/2019-05/DJI_0639.MP4", "eee", 20_000);
         let report = duplicates(&db, "V", Path::new("/"), Some("by-date"), None, None).unwrap();
-        assert_eq!(report.duplicate_groups, 0, "different bytes is not a duplicate");
+        assert_eq!(
+            report.duplicate_groups, 0,
+            "different bytes is not a duplicate"
+        );
         assert_eq!(report.superseded_files, 0);
         assert_eq!(report.lookalike_groups, 1);
         assert_eq!(report.lookalike_locations, 2);
@@ -450,7 +461,8 @@ mod tests {
         put(&db, "Events/2019/x/clip.MOV", "fff", 7);
         put(&db, "by-date/2019-01/clip.MOV", "fff", 7);
         let list = dir.join("removal-list.tsv");
-        let report = duplicates(&db, "V", Path::new("/"), Some("by-date"), None, Some(&list)).unwrap();
+        let report =
+            duplicates(&db, "V", Path::new("/"), Some("by-date"), None, Some(&list)).unwrap();
         assert_eq!(report.superseded_files, 1);
         let text = std::fs::read_to_string(&list).unwrap();
         let mut lines = text.lines();

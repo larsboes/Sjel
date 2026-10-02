@@ -112,7 +112,9 @@ fn read_list(path: &Path) -> Result<Vec<Row>> {
         }
         let fields: Vec<&str> = line.split('\t').collect();
         if fields.len() != 4 {
-            return Err(format!("removal list row {} has {} fields", index + 1, fields.len()).into());
+            return Err(
+                format!("removal list row {} has {} fields", index + 1, fields.len()).into(),
+            );
         }
         rows.push(Row {
             digest: fields[0].to_owned(),
@@ -253,9 +255,7 @@ pub fn supersede(
             Err(error) => {
                 report.refused += 1;
                 report.complete = false;
-                report
-                    .issues
-                    .push(format!("{}: {error}", row.superseded));
+                report.issues.push(format!("{}: {error}", row.superseded));
                 continue;
             }
         };
@@ -264,10 +264,9 @@ pub fn supersede(
             Err(error) => {
                 report.refused += 1;
                 report.complete = false;
-                report.issues.push(format!(
-                    "{}: surviving copy unusable: {error}",
-                    row.kept
-                ));
+                report
+                    .issues
+                    .push(format!("{}: surviving copy unusable: {error}", row.kept));
                 continue;
             }
         };
@@ -353,10 +352,9 @@ pub fn supersede(
         let mut stays = stays;
         let mut renamed_from = String::new();
         if collision {
-            report.issues.push(format!(
-                "kept the suffixed name for {}",
-                stays.display()
-            ));
+            report
+                .issues
+                .push(format!("kept the suffixed name for {}", stays.display()));
         }
         if let Some(clean) = adopt {
             match fs::rename(&stays, &clean) {
@@ -427,10 +425,7 @@ mod tests {
         }
         fn pair(&self, name: &str, bytes: &[u8]) -> String {
             let gone = self.library().join("by-date/2018-03").join(name);
-            let stays = self
-                .library()
-                .join("Trips/2018/2018-03-Iceland")
-                .join(name);
+            let stays = self.library().join("Trips/2018/2018-03-Iceland").join(name);
             fs::write(&gone, bytes).unwrap();
             fs::write(&stays, bytes).unwrap();
             crate::hash(&stays).unwrap()
@@ -486,7 +481,9 @@ mod tests {
         assert_eq!(fs::read(&clean).unwrap(), b"same bytes");
         assert!(!stays.exists(), "the suffixed name is gone");
         assert!(!gone.exists(), "the twin is quarantined");
-        assert!(fs::read_to_string(&journal).unwrap().contains("DJI_0653 2.MP4"));
+        assert!(fs::read_to_string(&journal)
+            .unwrap()
+            .contains("DJI_0653 2.MP4"));
         let _ = fs::remove_dir_all(&fixture.0);
     }
 
@@ -520,8 +517,15 @@ mod tests {
         .unwrap();
         assert_eq!(report.names_normalised, 0);
         assert_eq!(report.name_collisions, 1);
-        assert_eq!(fs::read(&occupied).unwrap(), b"different bytes", "never overwritten");
-        assert!(stays.exists(), "the suffixed name is kept rather than forced");
+        assert_eq!(
+            fs::read(&occupied).unwrap(),
+            b"different bytes",
+            "never overwritten"
+        );
+        assert!(
+            stays.exists(),
+            "the suffixed name is kept rather than forced"
+        );
         assert_eq!(report.quarantined, 1, "the twin still goes");
         let _ = fs::remove_dir_all(&fixture.0);
     }
@@ -561,14 +565,24 @@ mod tests {
 
     #[test]
     fn the_suffix_stripper_handles_both_macos_forms_and_their_combination() {
-        assert_eq!(strip_one_suffix("DJI_1 2.MP4").as_deref(), Some("DJI_1.MP4"));
-        assert_eq!(strip_one_suffix("photo (1).JPG").as_deref(), Some("photo.JPG"));
+        assert_eq!(
+            strip_one_suffix("DJI_1 2.MP4").as_deref(),
+            Some("DJI_1.MP4")
+        );
+        assert_eq!(
+            strip_one_suffix("photo (1).JPG").as_deref(),
+            Some("photo.JPG")
+        );
         assert_eq!(
             strip_one_suffix("DJI_0609 (1) 2.MP4").as_deref(),
             Some("DJI_0609 (1).MP4")
         );
         assert_eq!(strip_one_suffix("no-suffix.MP4"), None);
-        assert_eq!(strip_one_suffix("2.MP4"), None, "a numeric stem is not an index");
+        assert_eq!(
+            strip_one_suffix("2.MP4"),
+            None,
+            "a numeric stem is not an index"
+        );
     }
 
     #[test]
@@ -582,18 +596,14 @@ mod tests {
         )]);
         let quarantine = fixture.0.join("quarantine");
         let journal = fixture.0.join("journal.tsv");
-        let report = supersede(
-            &fixture.library(),
-            &list,
-            &quarantine,
-            &journal,
-            true,
-        )
-        .unwrap();
+        let report = supersede(&fixture.library(), &list, &quarantine, &journal, true).unwrap();
         assert!(report.complete, "{:?}", report.issues);
         assert_eq!(report.quarantined, 1);
         assert_eq!(report.bytes_quarantined, 10);
-        assert!(!fixture.library().join("by-date/2018-03/IMG_7811.MOV").exists());
+        assert!(!fixture
+            .library()
+            .join("by-date/2018-03/IMG_7811.MOV")
+            .exists());
         assert!(fixture
             .library()
             .join("Trips/2018/2018-03-Iceland/IMG_7811.MOV")
@@ -629,8 +639,16 @@ mod tests {
         let other = fixture.pair("b.MOV", b"two");
         fs::remove_file(fixture.library().join("Trips/2018/2018-03-Iceland/b.MOV")).unwrap();
         let list = fixture.list(&[
-            (&digest, "by-date/2018-03/a.MOV", "Trips/2018/2018-03-Iceland/a.MOV"),
-            (&other, "by-date/2018-03/b.MOV", "Trips/2018/2018-03-Iceland/b.MOV"),
+            (
+                &digest,
+                "by-date/2018-03/a.MOV",
+                "Trips/2018/2018-03-Iceland/a.MOV",
+            ),
+            (
+                &other,
+                "by-date/2018-03/b.MOV",
+                "Trips/2018/2018-03-Iceland/b.MOV",
+            ),
         ]);
         let report = supersede(
             &fixture.library(),
@@ -641,7 +659,10 @@ mod tests {
         )
         .unwrap();
         assert!(!report.complete);
-        assert_eq!(report.quarantined, 0, "the row that passed was not moved either");
+        assert_eq!(
+            report.quarantined, 0,
+            "the row that passed was not moved either"
+        );
         assert!(fixture.library().join("by-date/2018-03/a.MOV").exists());
         assert_eq!(report.refused, 1);
         let _ = fs::remove_dir_all(&fixture.0);
@@ -668,7 +689,10 @@ mod tests {
         .unwrap();
         assert!(!report.complete);
         assert_eq!(report.quarantined, 0);
-        assert!(report.issues.iter().any(|i| i.contains("no longer matches")));
+        assert!(report
+            .issues
+            .iter()
+            .any(|i| i.contains("no longer matches")));
         assert_eq!(
             fs::read(fixture.library().join("by-date/2018-03/a.MOV")).unwrap(),
             b"tampered"
@@ -686,9 +710,14 @@ mod tests {
             "Trips/2018/2018-03-Iceland/a.MOV",
         )]);
         let quarantine = fixture.0.join("quarantine");
-        let report =
-            supersede(&fixture.library(), &list, &quarantine, &fixture.0.join("j.tsv"), false)
-                .unwrap();
+        let report = supersede(
+            &fixture.library(),
+            &list,
+            &quarantine,
+            &fixture.0.join("j.tsv"),
+            false,
+        )
+        .unwrap();
         assert_eq!(report.verified, 1);
         assert_eq!(report.quarantined, 0);
         assert!(fixture.library().join("by-date/2018-03/a.MOV").exists());
@@ -701,7 +730,7 @@ mod tests {
         let fixture = Fixture::new();
         let digest = fixture.pair("a.MOV", b"bytes");
         for bad in ["../../etc/passwd", "/etc/passwd", "by-date/../..//x"] {
-            let list = fixture.list(&[( &digest, bad, "Trips/2018/2018-03-Iceland/a.MOV")]);
+            let list = fixture.list(&[(&digest, bad, "Trips/2018/2018-03-Iceland/a.MOV")]);
             let report = supersede(
                 &fixture.library(),
                 &list,

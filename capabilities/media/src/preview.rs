@@ -183,7 +183,9 @@ impl Draft {
         }
         if let Some(rule) = &draft.organization.default_rule {
             if !categories.contains(rule.category.as_str()) {
-                return Err("default_rule category is not declared in organization.categories".into());
+                return Err(
+                    "default_rule category is not declared in organization.categories".into(),
+                );
             }
             if !rule.destination.contains("{collection}") {
                 return Err("default_rule destination must use {collection}".into());
@@ -953,7 +955,9 @@ pub(crate) fn capture_days(
         let Some(source) = row.get("SourceFile").and_then(Value::as_str) else {
             continue;
         };
-        let Some(object) = row.as_object() else { continue };
+        let Some(object) = row.as_object() else {
+            continue;
+        };
         let mut best: Option<(u8, String, String)> = None;
         for (key, value) in object {
             let Some(priority) = date_priority(key) else {
@@ -966,8 +970,13 @@ pub(crate) fn capture_days(
                 best = Some((priority, day, key.clone()));
             }
         }
-        let Some((_, day, field)) = best else { continue };
-        let Ok(path) = PathBuf::from(source).strip_prefix(root).map(Path::to_path_buf) else {
+        let Some((_, day, field)) = best else {
+            continue;
+        };
+        let Ok(path) = PathBuf::from(source)
+            .strip_prefix(root)
+            .map(Path::to_path_buf)
+        else {
             continue;
         };
         let Some(relative) = path.to_str() else {
@@ -1721,7 +1730,8 @@ mod tests {
     }
 
     #[test]
-    fn a_rule_reviewed_mapping_is_reported_as_a_rule_placement_not_as_unresolved_event_membership() {
+    fn a_rule_reviewed_mapping_is_reported_as_a_rule_placement_not_as_unresolved_event_membership()
+    {
         let fixture = Fixture::new();
         fixture.collection();
         let mut draft = fixture.draft();
@@ -1730,7 +1740,9 @@ mod tests {
         assert!(report.complete);
         assert_eq!(report.collections[0].status, "rule");
         assert_eq!(
-            report.collections[0].proposal_destination_relative.as_deref(),
+            report.collections[0]
+                .proposal_destination_relative
+                .as_deref(),
             Some("Trips/2016/2016-06 New York")
         );
         assert!(report.collections[0].issues.is_empty());

@@ -158,21 +158,21 @@ fn plan_source(
                 digest
             }
         };
-        wanted.insert(rel, Wanted {
-            digest,
-            size,
-            mtime_ns,
-        });
+        wanted.insert(
+            rel,
+            Wanted {
+                digest,
+                size,
+                mtime_ns,
+            },
+        );
     }
     Ok((wanted, hashed))
 }
 
 /// The destination's own files, grouped by digest, so a wanted digest can be satisfied by moving a
 /// file that is already on the volume instead of reading one across the wire.
-fn index_destination(
-    ledger: &Ledger,
-    to_uuid: &str,
-) -> Result<BTreeMap<String, Vec<Location>>> {
+fn index_destination(ledger: &Ledger, to_uuid: &str) -> Result<BTreeMap<String, Vec<Location>>> {
     let mut by_digest: BTreeMap<String, Vec<Location>> = BTreeMap::new();
     for row in ledger.locations(to_uuid)? {
         by_digest.entry(row.digest.clone()).or_default().push(row);
@@ -232,9 +232,10 @@ fn place_copied(source: &Path, to: &Path, wanted: &Wanted) -> Result<()> {
     }
     copy_checked(source, &temp, &wanted.digest)?;
     let output = OpenOptions::new().write(true).open(&temp)?;
-    output.set_times(FileTimes::new().set_modified(
-        UNIX_EPOCH + Duration::from_nanos(u64::try_from(wanted.mtime_ns)?),
-    ))?;
+    output.set_times(
+        FileTimes::new()
+            .set_modified(UNIX_EPOCH + Duration::from_nanos(u64::try_from(wanted.mtime_ns)?)),
+    )?;
     drop(output);
     fs::rename(&temp, to)?;
     Ok(())
@@ -245,7 +246,10 @@ pub fn mirror(ledger: &Ledger, opts: &MirrorOptions<'_>) -> Result<MirrorReport>
     // references `media_volumes(uuid)`, so an unregistered volume is a foreign-key failure rather
     // than a row — and a mirror is the first verb that writes to two volumes at once.
     for (root, uuid) in [(opts.from, opts.from_uuid), (opts.to, opts.to_uuid)] {
-        let label = root.file_name().and_then(|s| s.to_str()).unwrap_or("volume");
+        let label = root
+            .file_name()
+            .and_then(|s| s.to_str())
+            .unwrap_or("volume");
         ledger.register(uuid, label)?;
     }
     // A destination holding files but no ledger is an unknown tree, not a mirror to update. Every
@@ -332,14 +336,12 @@ pub fn mirror(ledger: &Ledger, opts: &MirrorOptions<'_>) -> Result<MirrorReport>
         // Move a file the destination volume already holds, when the operator has declared that
         // path expendable. Taking the first current candidate and dropping it from the map means
         // one file can satisfy exactly one wanted path.
-        let candidate = by_digest
-            .get_mut(&want.digest)
-            .and_then(|rows| {
-                let at = rows
-                    .iter()
-                    .position(|r| consumable(&r.relpath, opts.consume) && is_current(opts.to, r))?;
-                Some(rows.remove(at))
-            });
+        let candidate = by_digest.get_mut(&want.digest).and_then(|rows| {
+            let at = rows
+                .iter()
+                .position(|r| consumable(&r.relpath, opts.consume) && is_current(opts.to, r))?;
+            Some(rows.remove(at))
+        });
         if let Some(row) = candidate {
             if opts.apply {
                 match place_moved(&opts.to.join(&row.relpath), &to, &row, opts.journal) {
@@ -411,7 +413,8 @@ mod tests {
     impl Fixture {
         fn new() -> Self {
             let id = NEXT.fetch_add(1, Ordering::Relaxed);
-            let root = std::env::temp_dir().join(format!("mirror-test-{}-{id}", std::process::id()));
+            let root =
+                std::env::temp_dir().join(format!("mirror-test-{}-{id}", std::process::id()));
             let _ = fs::remove_dir_all(&root);
             fs::create_dir_all(root.join("src")).unwrap();
             fs::create_dir_all(root.join("dst")).unwrap();
@@ -467,11 +470,7 @@ mod tests {
         assert_eq!(report.bytes_copied, 6);
         assert!(!f.dst().join("a/x.jpg").exists(), "dry run wrote a file");
         let (files, locations) = ledger.counts().unwrap();
-        assert_eq!(
-            (files, locations),
-            (0, 0),
-            "dry run wrote to the ledger"
-        );
+        assert_eq!((files, locations), (0, 0), "dry run wrote to the ledger");
     }
 
     #[test]
@@ -495,7 +494,10 @@ mod tests {
         assert_eq!(again.copied, 0);
         assert_eq!(again.already_verified, 1);
         assert_eq!(again.rechecked, 0, "the record should have been trusted");
-        assert_eq!(again.source_hashed, 0, "the source should have been trusted");
+        assert_eq!(
+            again.source_hashed, 0,
+            "the source should have been trusted"
+        );
     }
 
     #[test]
@@ -559,7 +561,10 @@ mod tests {
         assert_eq!(report.copied, 0);
         assert_eq!(report.bytes_copied, 0, "a move must not write bytes");
         assert!(f.dst().join("Trips/x.jpg").exists());
-        assert!(!f.dst().join("Inbox/Trips/x.jpg").exists(), "the source stayed");
+        assert!(
+            !f.dst().join("Inbox/Trips/x.jpg").exists(),
+            "the source stayed"
+        );
     }
 
     #[test]
@@ -597,7 +602,10 @@ mod tests {
         f.write("dst", "whatever.jpg", "already here");
         let ledger = f.ledger();
         let error = mirror(&ledger, &f.opts(true, &[])).unwrap_err().to_string();
-        assert!(error.contains("is not indexed"), "unexpected error: {error}");
+        assert!(
+            error.contains("is not indexed"),
+            "unexpected error: {error}"
+        );
     }
 
     #[test]
@@ -620,7 +628,10 @@ mod tests {
         let again = mirror(&ledger, &f.opts(true, &[])).unwrap();
         assert_eq!(again.rechecked, 1);
         assert_eq!(again.copied, 1);
-        assert_eq!(fs::read_to_string(f.dst().join("a/x.jpg")).unwrap(), "correct");
+        assert_eq!(
+            fs::read_to_string(f.dst().join("a/x.jpg")).unwrap(),
+            "correct"
+        );
     }
 
     #[test]

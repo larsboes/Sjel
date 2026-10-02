@@ -470,7 +470,11 @@ mod db_tests {
         fs::write(dir.join("tree/nested/._photo.jpg"), b"apple double").unwrap();
         let db = Ledger::open(&dir.join("scratch.db")).unwrap();
         let first = index(&db, &dir.join("tree"), "V", "v").unwrap();
-        assert_eq!((first.hashed, first.pruned), (1, 0), "only the photo is media");
+        assert_eq!(
+            (first.hashed, first.pruned),
+            (1, 0),
+            "only the photo is media"
+        );
         // A row recorded before metadata was excluded must be dropped, not reported as an absence.
         db.record(&Location {
             uuid: "V".into(),
@@ -483,7 +487,11 @@ mod db_tests {
         assert_eq!(db.counts().unwrap(), (2, 2));
         let second = index(&db, &dir.join("tree"), "V", "v").unwrap();
         assert_eq!((second.hashed, second.pruned), (0, 1));
-        assert_eq!(db.counts().unwrap(), (1, 1), "the metadata row and its digest are gone");
+        assert_eq!(
+            db.counts().unwrap(),
+            (1, 1),
+            "the metadata row and its digest are gone"
+        );
         assert!(audit(&db, &dir.join("tree"), "V", 0)
             .unwrap()
             .disagreements
@@ -580,7 +588,11 @@ mod db_tests {
             0,
             "the digest mode's findings must not be invented here"
         );
-        assert_eq!(comparison.samples.len(), 2, "a count without a name is not a report");
+        assert_eq!(
+            comparison.samples.len(),
+            2,
+            "a count without a name is not a report"
+        );
         fs::remove_dir_all(&dir).unwrap();
     }
 
@@ -588,10 +600,7 @@ mod db_tests {
     fn path_mode_refuses_a_stale_index() {
         // A file on disk that no row describes. Comparing trees from a stale index answers a
         // question about the past, and two trees that differ would read as matching.
-        let (dir, db) = ledger_with(&[
-            ("A", "same/photo.jpg", "x"),
-            ("B", "same/photo.jpg", "x"),
-        ]);
+        let (dir, db) = ledger_with(&[("A", "same/photo.jpg", "x"), ("B", "same/photo.jpg", "x")]);
         fs::write(dir.join("left/same/unindexed.jpg"), b"y").unwrap();
         let (left, right) = sides(&dir);
         let error = verify_by_path(&db, (&left, "A"), (&right, "B"))
@@ -603,17 +612,18 @@ mod db_tests {
 
     #[test]
     fn path_mode_reports_matching_trees_as_clean() {
-        let (dir, db) = ledger_with(&[
-            ("A", "same/photo.jpg", "x"),
-            ("B", "same/photo.jpg", "x"),
-        ]);
+        let (dir, db) = ledger_with(&[("A", "same/photo.jpg", "x"), ("B", "same/photo.jpg", "x")]);
         let (left, right) = sides(&dir);
         let comparison = verify_by_path(&db, (&left, "A"), (&right, "B"))
             .unwrap()
             .by_path
             .unwrap();
         assert_eq!(
-            (comparison.left_only, comparison.right_only, comparison.differing),
+            (
+                comparison.left_only,
+                comparison.right_only,
+                comparison.differing
+            ),
             (0, 0, 0)
         );
         fs::remove_dir_all(&dir).unwrap();

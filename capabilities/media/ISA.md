@@ -274,6 +274,16 @@ leave two sharing blocks.
 
 ## Not yet specified
 
+- **`verify-mirror`'s digest mode does not check index freshness.** `--paths` refuses when either
+  volume holds paths that are not indexed, because comparing trees from a stale index answers a
+  question about the past. The digest mode has the same exposure and was left as it is: it predates
+  this session and its meaning is relied on elsewhere. Probe: index a volume, add a file, and run
+  both modes — `--paths` must refuse, and the digest mode must be shown to answer from the stale
+  rows before the stronger claim is made for it. The 2026-09-29 `size-mismatch` row in
+  `mirror-verify.tsv` is *not* an instance of this: it is `HANDOFF-media-2026-09-29.md`, a living
+  document edited between the manifest build and the verify, which the mirror had copied faithfully
+  both times. It predates the `HANDOFF-` skip that now prevents it, and is closed rather than open.
+
 - **Per-file pre-classification failures.** A symlink, unreadable byte stream, or non-UTF-8
   path currently refuses the entire preflight before an ingest run exists. Probe: stage one such
   input among regular files, apply, and inspect whether every path has a durable disposition;

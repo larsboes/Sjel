@@ -55,6 +55,21 @@ fn consumable(rel: &str, prefixes: &[String]) -> bool {
     prefixes.iter().any(|p| under(rel, p))
 }
 
+/// Drop the row that just satisfied `rel`, so a later wanted path holding the same digest cannot
+/// consume the file out of a path this run has already verified.
+///
+/// A digest can be wanted at more than one path. Without this, the second path's search still sees
+/// the first path's row in the map, moves it away, and the run finishes having removed a path it
+/// reported as verified — the report says one thing and the destination says another. Found by
+/// reading this loop, and pinned by a fixture rather than left to the next live run to discover.
+fn unclaim(by_digest: &mut BTreeMap<String, Vec<Location>>, digest: &str, rel: &str) {
+    if let Some(rows) = by_digest.get_mut(digest) {
+        if let Some(at) = rows.iter().position(|r| r.relpath == rel) {
+            rows.remove(at);
+        }
+    }
+}
+
 /// Whether a path is inside the run's scope. `--path` narrows it; `--exclude` defers it.
 ///
 /// Exclusion is applied to the walk rather than to the result, because the case that needs it most
@@ -280,6 +295,7 @@ pub fn mirror(ledger: &Ledger, opts: &MirrorOptions<'_>) -> Result<MirrorReport>
         if let Some(row) = &recorded {
             if row.digest == want.digest && is_current(opts.to, row) {
                 report.already_verified += 1;
+                unclaim(&mut by_digest, &want.digest, rel);
                 continue;
             }
         }
@@ -304,6 +320,7 @@ pub fn mirror(ledger: &Ledger, opts: &MirrorOptions<'_>) -> Result<MirrorReport>
                         })?;
                     }
                     report.already_verified += 1;
+                    unclaim(&mut by_digest, &want.digest, rel);
                     satisfied = true;
                 }
             }
@@ -479,6 +496,41 @@ mod tests {
         assert_eq!(again.already_verified, 1);
         assert_eq!(again.rechecked, 0, "the record should have been trusted");
         assert_eq!(again.source_hashed, 0, "the source should have been trusted");
+    }
+
+    #[test]
+    fn a_verified_path_is_not_consumed_for_another_path_holding_the_same_bytes() {
+        let f = Fixture::new();
+        // One payload at two source paths: `a/f.jpg`, which the destination already holds and will
+        // verify, and `b/g.jpg`, which it does not. The consumable prefix covers the verified path.
+        f.write("src", "a/f.jpg", "payload");
+        f.write("src", "b/g.jpg", "payload");
+        f.write("dst", "a/f.jpg", "payload");
+        let ledger = f.ledger();
+        let digest = hash(&f.dst().join("a/f.jpg")).unwrap();
+        let (size, mtime_ns) = stamp(&f.dst().join("a/f.jpg")).unwrap();
+        ledger.register("DST", "dst").unwrap();
+        ledger
+            .record(&Location {
+                uuid: "DST".into(),
+                relpath: "a/f.jpg".into(),
+                digest,
+                size,
+                mtime_ns,
+            })
+            .unwrap();
+
+        let consume = vec!["a".to_string()];
+        let report = mirror(&ledger, &f.opts(true, &consume)).unwrap();
+
+        assert_eq!(report.already_verified, 1, "a/f.jpg is already there");
+        assert_eq!(report.moved, 0, "a verified path must not be consumed");
+        assert_eq!(report.copied, 1, "b/g.jpg has to come from the source");
+        assert!(
+            f.dst().join("a/f.jpg").exists(),
+            "the run reported a/f.jpg verified and then moved it away"
+        );
+        assert!(f.dst().join("b/g.jpg").exists());
     }
 
     #[test]

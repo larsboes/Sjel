@@ -230,6 +230,75 @@ why = "headless LibreOffice is the only renderer the slide-deck skill can use, a
 install_macos = "brew install --cask libreoffice"
 install_linux = "apt-get install -y libreoffice"
 
+# ---- interactive terminal tools (this Mac's shell; absence warns) -----------------------
+#
+# These are the first entries in this file that NO Sjel script calls. They replace `cat`, `ls`
+# and git's default diff for the HUMAN at this Mac's shell, and the shell capability is their
+# consumer in the only sense that applies: capabilities/shell/init.zsh is what loads them into
+# an interactive shell, even though nothing execs a binary from a script.
+#
+# Declared 2026-10-01, on the decision that Sjel owns the interactive shell rather than leaving
+# it to whatever a machine happened to accumulate, with the standing intent to call these from
+# Sjel tooling as that tooling is rewritten. Absence stays a warning on purpose: this file
+# answers "is this machine what Sjel assumes", and a machine without eza runs Sjel completely.
+#
+# THE SCOPE, AND WHY THIS IS THE SHAPE. NO needed_by, core scope, narrowed by `os = "macos"`.
+# A new scope kind was considered for this and rejected on measurement, not on taste:
+# entry_scope in tools/toolchain-check resolves `workflow:<name>`, `capability-field:<field>`,
+# `capability:<id>` and bare `core`. An unrecognised token is deliberately reported as
+# `unknown scope '<s>'` and treated as out of scope, so `needed_by = ["operator:shell"]` would
+# print `n/a here — needed by operator:shell` on every run forever -- the dead-check shape this
+# file argues against at [visocr], [hledger] and [bazel]. `capability:shell` cannot fire either:
+# capabilities/shell/ has no service.toml, so it is absent from machine.toml's `capabilities`
+# array, which is precisely why [tailscale] carries no needed_by and writes that reasoning out.
+# When a Sjel script or capability starts calling one of these, its needed_by gains that
+# `capability:` or `workflow:` -- the existing kinds, which will fit it without a new one.
+#
+# `os = "macos"` because these are the interactive shell on the machine a human types at, and
+# core scope would print five optional warnings on every headless Linux host -- how a warning
+# channel stops being read. `required = "optional"` because the loss is one alias.
+#
+# NO min_version, deliberately. A floor is a measurement and none of these was measured; the
+# [tailscale] comment records what writing the build host's own release here costs, which is
+# that every slightly older but perfectly working install reports as `outdated`. The checker
+# computes a version only when BOTH min_version and version_cmd are present, so the pair is
+# omitted rather than half-written.
+
+[bat]
+required = "optional"
+os = "macos"
+why = "colourised file reading. `cat` is `bat --style=plain --paging=never` in the personal shell config, MANPAGER pipes man pages through it, and ~/.config/bat/config holds the theme and style. Axon calls it and builds nothing from it, so no `upstream` id, the [ollama] rule. Entirely cosmetic: without it `cat` is BSD cat and nothing else changes"
+install_macos = "brew install bat"
+
+[eza]
+required = "optional"
+os = "macos"
+why = "`ls`/`ll`/`la`/`lt`/`ltt` in the personal shell config, and the only reason those aliases exist. The maintained fork of exa, which was archived in 2021 -- exa is deliberately not offered as an alternative because its flags stopped moving and the aliases use --git and --time-style=long-iso. Absence costs the five aliases and nothing else"
+install_macos = "brew install eza"
+
+[git-delta]
+required = "optional"
+os = "macos"
+bin = "delta"
+# NOT tools/lib/delta.sh, which owns the word inside Axon and means the version-to-version
+# diff between two of Axon's own releases. This row is the diff COLOURISER for the git CLI.
+# Two different deltas, one word, and the collision is worth naming here rather than left for
+# the next reader to trip over.
+why = "git's pager for diff, log and blame, set once in ~/.gitconfig as `core.pager = delta` plus interactive.diffFilter, delta.navigate and delta.line-numbers. It is a git setting rather than a Sjel one, which is why nothing in the repository has to invoke it. Absence does not break the setting: git reports the pager failure and prints the diff unrendered"
+install_macos = "brew install git-delta"
+
+[zoxide]
+required = "optional"
+os = "macos"
+why = "`z` and `zi`, the frecent-directory jump, from `eval \"$(zoxide init zsh)\"` in the personal shell config. Adds exactly those two functions and leaves `cd` alone -- no Sjel script navigates by it, and `cd` behaves identically without it"
+install_macos = "brew install zoxide"
+
+[fzf]
+required = "optional"
+os = "macos"
+why = "`eval \"$(fzf --zsh)\"` in the personal shell config, which is what turns Ctrl-R into history search, Ctrl-T into file picking and **<Tab> into completion; it is also the selector zoxide's `zi` reaches for. Declared on the same reasoning as the four above: nothing in Axon calls it yet, and this row is where that changes the day a tool does"
+install_macos = "brew install fzf"
+
 # Core since 2026-10-02, no longer `workflow:build` only. Sjel's own tooling moves into the
 # sjel-cli crate one script at a time, and each moved script's launcher builds that binary on
 # demand (tools/lib/sjel-cli.sh). A host without cargo cannot run those scripts, starting with

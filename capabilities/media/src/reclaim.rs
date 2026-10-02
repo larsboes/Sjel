@@ -12,6 +12,16 @@
 //! source lost keeps holding it. That case is not hypothetical — it is the entire value of having a
 //! second copy, and a tool that reclaimed it would be destroying the backup it was pointed at.
 //!
+//! **The destination is walked, not read from the ledger.** Planning used to iterate
+//! `media_locations` rows for the destination volume, which made the verb blind to any tree the
+//! ledger did not describe — and silent about it. Measured 2026-10-02: `INTENSO/Inbox` (193 GB) and
+//! both `_quarantine` batches (33.7 GB) each answered `candidates: 0, complete: true, issues: []`
+//! while holding files, because the Inbox was never a library root and a quarantined path has its
+//! row dropped by design. The walk costs nothing where the ledger is current — a destination file
+//! whose recorded size and mtime still match is answered from that row without being read — and
+//! reads what the ledger cannot answer, which is the rule `mirror` already uses. `from_ledger` and
+//! `hashed` are reported so a run that had to read a large unindexed tree says so.
+//!
 //! Two further rules, both inherited rather than invented:
 //!
 //! * **The approved list is the gate.** `--apply` acts on a TSV an operator has read, never on the
@@ -101,6 +111,17 @@ pub struct ReclaimReport {
     pub quarantined_paths: Vec<String>,
     /// A bounded sample of the paths held back because their bytes are unique.
     pub kept_unique: Vec<String>,
+    /// How the plan learned each destination digest: `ledger` when every file was answered from a
+    /// current row, `disk` when none were, `mixed` otherwise.
+    pub planned_from: &'static str,
+    /// Destinations answered from a ledger row without being read.
+    pub from_ledger: usize,
+    /// Destinations read because the ledger had no current row for them.
+    pub hashed: usize,
+    /// Destinations that could not be read. Never candidates, and `complete` is false when any.
+    pub unreadable: usize,
+    /// A bounded sample of the unreadable paths.
+    pub unreadable_paths: Vec<String>,
     pub issues: Vec<String>,
 }
 
@@ -142,42 +163,91 @@ fn source_state(ledger: &Ledger, opts: &ReclaimOptions<'_>) -> Result<SourceStat
     Ok(SourceState { paths, by_digest })
 }
 
-fn plan(
-    ledger: &Ledger,
-    opts: &ReclaimOptions<'_>,
-) -> Result<(Vec<Candidate>, usize, Vec<String>)> {
+/// The candidate set and the evidence for how each digest was learned. `from_ledger` and `hashed`
+/// are the cost of the plan, reported so a large unindexed destination cannot look like a cheap run.
+struct Plan {
+    candidates: Vec<Candidate>,
+    unique: usize,
+    from_ledger: usize,
+    hashed: usize,
+    unreadable: usize,
+    unreadable_paths: Vec<String>,
+    kept_unique: Vec<String>,
+    issues: Vec<String>,
+}
+
+fn plan(ledger: &Ledger, opts: &ReclaimOptions<'_>) -> Result<Plan> {
     let source = source_state(ledger, opts)?;
-    let mut candidates = Vec::new();
-    let mut unique = 0;
-    let mut kept_unique = Vec::new();
+    let mut recorded: BTreeMap<String, (String, i64, i64)> = BTreeMap::new();
     for row in ledger.locations(opts.to_uuid)? {
-        if source.paths.contains(&row.relpath) || !scope(&row.relpath, opts.paths, opts.exclude) {
+        recorded.insert(row.relpath, (row.digest, row.size, row.mtime_ns));
+    }
+
+    let mut plan = Plan {
+        candidates: Vec::new(),
+        unique: 0,
+        from_ledger: 0,
+        hashed: 0,
+        unreadable: 0,
+        unreadable_paths: Vec::new(),
+        kept_unique: Vec::new(),
+        issues: Vec::new(),
+    };
+    // The destination is what the walk finds, never what the ledger says should be there. A tree
+    // with no rows is the case that used to return zero candidates and call itself complete.
+    for (relpath, path) in files(opts.to)? {
+        if source.paths.contains(&relpath) || !scope(&relpath, opts.paths, opts.exclude) {
             continue;
         }
+        let observed = stamp(&path)?;
+        let digest = match recorded.get(&relpath) {
+            // A recorded digest is trusted only while the row still describes the file, the same
+            // rule `mirror` uses. A stale row is a statement about a past read.
+            Some((digest, size, mtime_ns)) if (*size, *mtime_ns) == observed => {
+                plan.from_ledger += 1;
+                digest.clone()
+            }
+            _ => match hash(&path) {
+                Ok(digest) => {
+                    plan.hashed += 1;
+                    digest
+                }
+                // Unreadable is not a candidate and not a silence: the file is left alone and the
+                // run reports itself incomplete, so a partial plan cannot pass as a full one.
+                Err(error) => {
+                    plan.unreadable += 1;
+                    plan.issues.push(format!("{relpath}: unreadable ({error})"));
+                    if plan.unreadable_paths.len() < 20 {
+                        plan.unreadable_paths.push(relpath);
+                    }
+                    continue;
+                }
+            },
+        };
         // The survivor has to be on disk, not merely recorded. A row is a statement about a past
         // read; a removal may not rest on one.
-        let survivor = source.by_digest.get(&row.digest).and_then(|rows| {
+        let survivor = source.by_digest.get(&digest).and_then(|rows| {
             rows.iter()
                 .find(|(rel, size, mtime_ns)| current(opts.from, rel, *size, *mtime_ns))
                 .map(|(rel, _, _)| rel.clone())
         });
         match survivor {
-            Some(survivor) => candidates.push(Candidate {
-                relpath: row.relpath,
-                digest: row.digest,
-                size: row.size,
+            Some(survivor) => plan.candidates.push(Candidate {
+                relpath,
+                digest,
+                size: observed.0,
                 survivor,
             }),
             None => {
-                unique += 1;
-                if kept_unique.len() < 20 {
-                    kept_unique.push(row.relpath);
+                plan.unique += 1;
+                if plan.kept_unique.len() < 20 {
+                    plan.kept_unique.push(relpath);
                 }
             }
         }
     }
-    candidates.sort_by(|a, b| a.relpath.cmp(&b.relpath));
-    Ok((candidates, unique, kept_unique))
+    plan.candidates.sort_by(|a, b| a.relpath.cmp(&b.relpath));
+    Ok(plan)
 }
 
 fn write_list(path: &Path, candidates: &[Candidate]) -> Result<()> {
@@ -270,6 +340,11 @@ pub fn reclaim(ledger: &Ledger, opts: &ReclaimOptions<'_>) -> Result<ReclaimRepo
         refused: 0,
         quarantined_paths: Vec::new(),
         kept_unique: Vec::new(),
+        planned_from: "ledger",
+        from_ledger: 0,
+        hashed: 0,
+        unreadable: 0,
+        unreadable_paths: Vec::new(),
         issues: Vec::new(),
     };
 
@@ -362,17 +437,33 @@ pub fn reclaim(ledger: &Ledger, opts: &ReclaimOptions<'_>) -> Result<ReclaimRepo
         }
     }
 
-    let (candidates, unique, kept_unique) = plan(ledger, opts)?;
-    report.candidates = candidates.len();
-    report.survivable = candidates.len();
-    report.unique = unique;
-    report.kept_unique = kept_unique;
-    report.bytes = candidates
+    let planned = plan(ledger, opts)?;
+    report.candidates = planned.candidates.len();
+    report.survivable = planned.candidates.len();
+    report.unique = planned.unique;
+    report.kept_unique = planned.kept_unique;
+    report.from_ledger = planned.from_ledger;
+    report.hashed = planned.hashed;
+    report.unreadable = planned.unreadable;
+    report.unreadable_paths = planned.unreadable_paths;
+    report.planned_from = if planned.hashed == 0 {
+        "ledger"
+    } else if planned.from_ledger == 0 {
+        "disk"
+    } else {
+        "mixed"
+    };
+    // An unreadable destination file makes the plan partial, and a partial plan is not a complete
+    // answer about a tree. Nothing is removed on its account; the exit status says so instead.
+    report.complete = planned.unreadable == 0;
+    report.issues = planned.issues;
+    report.bytes = planned
+        .candidates
         .iter()
         .map(|c| u64::try_from(c.size).unwrap_or(0))
         .sum();
     if let Some(list) = opts.list {
-        write_list(list, &candidates)?;
+        write_list(list, &planned.candidates)?;
     }
     Ok(report)
 }
@@ -553,5 +644,57 @@ mod tests {
         let again = reclaim(&ledger, &f.opts(Some(&list), true)).unwrap();
         assert_eq!(again.quarantined, 0);
         assert_eq!(again.already_quarantined, 1);
+    }
+
+    /// The measured defect: a destination volume with ledger rows, holding a tree the ledger does
+    /// not describe. `INTENSO/Inbox` and both `_quarantine` batches each answered `candidates: 0,
+    /// complete: true` here, and 226 GB looked like nothing to do.
+    #[test]
+    fn a_tree_the_ledger_does_not_describe_is_read_from_disk() {
+        let f = Fixture::new();
+        f.write("src", "lib/x.jpg", "payload");
+        f.write("dst", "lib/x.jpg", "payload");
+        f.write("dst", "quarantine/leftover.jpg", "payload");
+        let ledger = f.ledger();
+        f.record(&ledger, "SRC", "src", "lib/x.jpg");
+        // The destination volume has rows — the shared path — and still does not describe the tree.
+        f.record(&ledger, "DST", "dst", "lib/x.jpg");
+        let report = reclaim(&ledger, &f.opts(None, false)).unwrap();
+        assert_eq!(report.candidates, 1, "{report:?}");
+        assert!(report.kept_unique.is_empty());
+        assert_eq!(report.hashed, 1);
+        assert_eq!(report.from_ledger, 0);
+        assert_eq!(report.planned_from, "disk");
+        assert!(report.complete);
+    }
+
+    #[test]
+    fn a_stale_destination_row_is_read_rather_than_trusted() {
+        let f = Fixture::new();
+        f.write("src", "new/x.jpg", "payload");
+        f.write("dst", "old/x.jpg", "payload");
+        let ledger = f.ledger();
+        f.record(&ledger, "SRC", "src", "new/x.jpg");
+        f.record(&ledger, "DST", "dst", "old/x.jpg");
+        // Same path, different bytes and length: the row now describes a past read, and a removal
+        // resting on it would remove a file whose bytes survive nowhere.
+        f.write("dst", "old/x.jpg", "different bytes entirely");
+        let report = reclaim(&ledger, &f.opts(None, false)).unwrap();
+        assert_eq!(report.candidates, 0);
+        assert_eq!(report.unique, 1);
+        assert_eq!(report.hashed, 1, "the stale row was trusted");
+    }
+
+    #[test]
+    fn a_destination_with_nothing_in_it_is_still_complete() {
+        let f = Fixture::new();
+        f.write("src", "new/x.jpg", "payload");
+        let ledger = f.ledger();
+        f.record(&ledger, "SRC", "src", "new/x.jpg");
+        let report = reclaim(&ledger, &f.opts(None, false)).unwrap();
+        assert_eq!(report.candidates, 0);
+        assert_eq!(report.unique, 0);
+        assert_eq!(report.unreadable, 0);
+        assert!(report.complete, "an empty destination is not a failure");
     }
 }

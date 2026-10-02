@@ -313,6 +313,21 @@ leave two sharing blocks.
   behind by an interrupted run still needs explicit cleanup. Sudden-power-loss durability was
   not measured by a scratch test.
 
+- **Periodic re-indexing.** A schedule is not needed now (see Decisions); if data freshness
+  becomes a measured requirement, decide the job boundary and interval before adding one. The
+  2026-10-02 export gave the measurement: **110 files arrived in the library unnoticed** between two
+  reads in one session, and the only reason it surfaced is that a dry run happened to be run. A
+  `mirror` dry run catches it (its `copied` count is the gap) but nothing runs one on a schedule.
+- **`reclaim`'s survivor must live under `--from`.** The destination is now read from disk, so any
+  unindexed or superseded tree can be judged — but a file whose only other copy is on a *third*
+  volume is reported `unique` and kept even when that third copy is mounted and verifiable. Retiring
+  a tree against a survivor volume is not expressible today; the workaround is to name the volume
+  holding the survivor as `--from`.
+- **No structure draft exists for `To Sort/`.** The two drafts in the private overlay target the
+  now-removed Inbox trees, so the 229 files / 53 GB in `Library/To Sort/` have no reviewed
+  destinations and `organize` cannot act on them. Naming categories is the principal's judgement, not
+  the tool's.
+
 ## Test Strategy
 
 **The 2026-09-29 run left labelled ground truth, and it should be the acceptance fixture.** This is
@@ -385,6 +400,28 @@ implementation at the same moment rather than against a stored number.
   exactly, and the ledger-level figures were reconciled independently against SQL and a disk walk
   before the run: 14,510 same-path-same-digest rows + 196 unrecorded source paths = 14,706, and
   2,280 ledger paths needing work + 425 unrecorded − 196 = 2,509.
+- **F7 reclaim blindness, found and closed (2026-10-02):** `reclaim` planned only from
+  `media_locations` rows for the destination volume and had no guard for an unindexed destination,
+  so it answered `candidates: 0, complete: true, issues: []` while holding files: `INTENSO/Inbox`
+  (193 GB, never a library root) and both `_quarantine` batches (33.7 GB, whose rows
+  `supersede`/`reclaim` drop by design). The plan pass now walks the destination and reads what the
+  ledger cannot answer — the rule `mirror` already uses (MED-P10): a destination file whose recorded
+  size and mtime still match is answered from its row, anything else is hashed. Re-measured on the
+  24-file `Extreme/_quarantine` batch: 0 → **24 candidates, 24 survivable, 5,055,128,152 bytes**,
+  `planned_from: "disk"`, `hashed: 24`, 0 unreadable, 18 s. 83 unit tests and strict all-target
+  clippy pass; `scratch.py`, `preview.py` and `labelled.py` all pass. The independent surrogate
+  proof for the two batches is already in hand: `classify` reports **24/24** and **271/271** of their
+  digests present in `media_locations`.
+- **`labelled.py` re-run (2026-10-02): 3/4 canonical targets accessible, and that is a stale path,
+  not a lost file.** `guard-exceptions.tsv` records `by-date/2019-05/DJI_0639.MP4`; the
+  reorganisation moved it to `Trips/2018/2018-Finland/DJI_0639.MP4`, where it is present. The probe
+  compares recorded paths, so it reports a relocation as inaccessible. Not a data finding — but the
+  exception ledger's paths need re-recording after a reorg before that number means anything again.
+- **The 2026-10-02 iCloud export bypassed the ingest contract.** `Photos.app` wrote directly into
+  `Trips/2026/2026-05-Oberstdorf` and `2026-05-Oberammergau` rather than into a staging directory
+  carrying `originals/`, `export-manifest.json` and `staging-hashes.tsv`. `index` took the arrivals
+  in (110 hashed, 0 discrepancies), so this batch has no `media_ingests` rows and the index is its
+  only record. Adopted rather than re-staged, by decision.
 
 ## Anti-claims
 

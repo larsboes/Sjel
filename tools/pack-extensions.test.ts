@@ -126,15 +126,29 @@ interface ExtensionFile {
   rel: string;
 }
 
-/** Discovered, never listed: a new `Packs/<pack>/extensions/*.ts` is gated by existing. */
+/**
+ * Discovered, never listed: a new `Packs/<pack>/extensions/*.ts`, or a new directory
+ * extension `<pack>/extensions/<name>/index.ts`, is gated by existing. Directory
+ * extensions are included because that is where an extension with sidecars lives
+ * (`inference-keys` keeps its vault helper and shell tools beside its entry), and a
+ * gate that only walked the top level would let the one file pi actually loads go
+ * unchecked. The sidecars themselves are not extensions and are not gated here.
+ */
 function packExtensions(): ExtensionFile[] {
   const found: ExtensionFile[] = [];
   for (const pack of readdirSync(join(SJEL_ROOT, "Packs")).sort()) {
     const dir = join(SJEL_ROOT, "Packs", pack, "extensions");
     if (!existsSync(dir)) continue;
-    for (const entry of readdirSync(dir).sort()) {
-      if (!entry.endsWith(".ts") || entry.endsWith(".test.ts")) continue;
-      found.push({ pack, path: join(dir, entry), rel: join("Packs", pack, "extensions", entry) });
+    for (const entry of readdirSync(dir, { withFileTypes: true }).sort((a, b) => a.name.localeCompare(b.name))) {
+      if (entry.isDirectory()) {
+        const entryPoint = join(dir, entry.name, "index.ts");
+        if (!existsSync(entryPoint)) continue;
+        found.push({ pack, path: entryPoint, rel: join("Packs", pack, "extensions", entry.name, "index.ts") });
+        continue;
+      }
+      const name = entry.name;
+      if (!name.endsWith(".ts") || name.endsWith(".test.ts")) continue;
+      found.push({ pack, path: join(dir, name), rel: join("Packs", pack, "extensions", name) });
     }
   }
   return found;

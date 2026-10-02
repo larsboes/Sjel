@@ -150,6 +150,42 @@ describe("deploying a pack with agent files", () => {
   });
 });
 
+describe("the two extension shapes", () => {
+  /**
+   * Extensions the security Pack carries, derived from disk: one flat `*.ts` and one
+   * directory with sidecars. Derived rather than listed for the reason the other counts
+   * are — a test that has to be edited whenever an extension lands is testing the list.
+   */
+  const extensionDir = join(SJEL_ROOT, "Packs", "security", "extensions");
+
+  test("a directory extension registers its index.ts, and nothing else from the directory", () => {
+    const result = pi("deploy", "security");
+    expect(result.code).toBe(0);
+    const settings = JSON.parse(readFileSync(paths().settings, "utf8"));
+    const registered: string[] = settings.extensions.filter((p: string) => p.includes("Packs/security/extensions"));
+    expect(registered).toContain(join(extensionDir, "secrets-guard.ts"));
+    expect(registered).toContain(join(extensionDir, "inference-keys", "index.ts"));
+    // The sidecars are reached by the entry, not loaded: registering bw-key.mjs would ask
+    // pi to load a vault helper as an extension.
+    expect(registered.filter((p) => !p.endsWith(".ts"))).toEqual([]);
+    expect(registered.filter((p) => p.includes("inference-keys")).length).toBe(1);
+  });
+
+  test("status names a directory extension by its own name, not by `index.ts`", () => {
+    pi("deploy", "security");
+    const result = pi("status", "security");
+    expect(result.out).toContain("security/extensions/inference-keys: current");
+    expect(result.out).not.toContain("inference-keys/index.ts");
+  });
+
+  test("removing the pack drops both shapes", () => {
+    pi("deploy", "security");
+    pi("remove", "security");
+    const settings = JSON.parse(readFileSync(paths().settings, "utf8"));
+    expect(settings.extensions.filter((p: string) => p.includes("inference-keys"))).toEqual([]);
+  });
+});
+
 describe("removing a pack", () => {
   test("deletes every agent file it owns", () => {
     pi("deploy", "deliberation");

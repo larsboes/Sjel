@@ -202,13 +202,30 @@ function pathsForPack(pack: string, subset?: Set<string>): string[] {
     });
 }
 
+/**
+ * Extensions a Pack carries, as paths pi can load.
+ *
+ * A top-level `*.ts` file is one extension. A DIRECTORY is one too, when it has an
+ * `index.ts`, and it exists for the case a flat directory cannot serve: an
+ * extension whose entry imports sidecars it must keep together — a helper script,
+ * a shell tool. Flat, those files are indistinguishable from another extension's,
+ * and pi would try to load each `*.ts` as its own extension. The entry is the
+ * directory's `index.ts`; the sidecar `.mjs` and `.sh` files are invisible to pi
+ * and are reached by the entry, not registered.
+ *
+ * Both shapes are returned as loadable paths, so nothing downstream needs to know
+ * which one it got. Sorted, so the settings ledger is stable across runs.
+ */
 function extensionsForPack(pack: string): string[] {
   const cfg = defaultPiDeployConfig();
   const names = new Set<string>();
   for (const root of cfg.packRoots ?? []) {
     const dir = join(root, pack, "extensions");
     if (!existsSync(dir)) continue;
-    for (const entry of readdirSync(dir)) if (entry.endsWith(".ts")) names.add(entry);
+    for (const entry of readdirSync(dir, { withFileTypes: true })) {
+      if (entry.isFile() && entry.name.endsWith(".ts")) names.add(entry.name);
+      else if (entry.isDirectory() && existsSync(join(dir, entry.name, "index.ts"))) names.add(join(entry.name, "index.ts"));
+    }
   }
   return [...names].sort().map((name) => {
     const matches = (cfg.packRoots ?? []).map((root) => join(root, pack, "extensions", name)).filter(existsSync);
@@ -312,6 +329,19 @@ export function activateProfileOnPi(profileName: string): void {
   );
 }
 
+/**
+ * An extension's own name for a status row: `foo.ts` for a flat file, `foo` for the
+ * directory extension whose entry is `foo/index.ts`. Without this a directory
+ * extension prints as `inference-keys/index.ts`, which reads as a file in a
+ * subdirectory rather than as one extension that happens to have sidecars.
+ */
+function extensionLabel(path: string): string {
+  const parts = path.split("/");
+  const base = parts[parts.length - 1];
+  const parent = parts[parts.length - 2];
+  return base === "index.ts" && parent !== "extensions" ? parent : base;
+}
+
 function status(packs: string[]): void {
   const selected = packs.length ? packs : availablePacks(defaultPiDeployConfig(), true);
   const settings = readSettings();
@@ -328,7 +358,7 @@ function status(packs: string[]): void {
     for (const path of extensionsForPack(pack)) {
       const selected = extensions.includes(path);
       const owned = state.extensions[pack]?.includes(path) ?? false;
-      console.log(`${pack}/extensions/${path.split("/").slice(-1)[0]}: ${selected ? (owned ? "current" : "selected-unmanaged") : "not-deployed"}`);
+      console.log(`${pack}/extensions/${extensionLabel(path)}: ${selected ? (owned ? "current" : "selected-unmanaged") : "not-deployed"}`);
     }
     for (const path of packagesForPack(pack)) {
       const selected = packages.includes(path);

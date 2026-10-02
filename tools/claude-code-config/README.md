@@ -58,9 +58,21 @@ rules again, and MCP servers load without an allowlist.
 ## Two behaviours worth knowing
 
 **A write re-serializes with sorted keys.** `serde_json`'s `Map` is a `BTreeMap` unless its
-`preserve_order` feature is on, and that feature unifies across the whole workspace — enabling
+`preserve_order` feature is on, and that feature unifies across a whole build graph — enabling
 it here would change ordering for all thirty-odd members to gain a cosmetic one here. So the
 first write sorts the keys of a file you may have ordered by hand. Values are untouched.
+
+Measured 2026-10-02, because the second half of that reasoning turned out not to hold. Something
+else already enables the feature: `libs/extraction` reaches `serde_json/preserve_order` through
+`xberg`, so under `cargo test --workspace` the map is an `IndexMap` and two literals with the same
+keys in a different order hash differently — `the_digest_is_key_order_independent` failed there
+while passing under `-p sjel-claude-config`. `digest` now sorts explicitly rather than trusting the
+map, so it answers the same under either build.
+
+The write path is unaffected in practice, and by accident rather than by design: the launcher
+builds `-p sjel-claude-config`, which resolves the feature off. Verified end to end — a file
+written `{"zebra": …, "alpha": …}` comes back with `alpha` first. Under a workspace build it would
+keep the caller's order instead, which is a latent difference rather than a live one.
 
 **`apply` never overwrites.** An edited value survives it by design, which is what makes
 re-running safe and also means an emptied `permissions.deny` is not restored by it. That is

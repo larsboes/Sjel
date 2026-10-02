@@ -58,12 +58,38 @@ fn walk(deployed: &Value, baseline: &Value, prefix: &str, found: &mut Drift) {
     }
 }
 
+/// The same document with every object's keys in sorted order, at every depth.
+///
+/// `digest` must not depend on key order, and `serde_json::Map` cannot be trusted to give it one.
+/// The map is a `BTreeMap` only while no crate in the build enables `preserve_order`; that feature
+/// is additive across the whole graph, and `libs/extraction` reaches it through `xberg`. So under
+/// `cargo test --workspace` the map is an `IndexMap`, two literals with the same keys in a
+/// different order hash differently, and `the_digest_is_key_order_independent` fails there while
+/// passing in `cargo test -p sjel-claude-config`. Sorting here makes the answer the same either
+/// way, and stops this tool depending on a feature flag it does not own.
+fn canonical(value: &Value) -> Value {
+    match value {
+        Value::Object(map) => {
+            let mut entries: Vec<(&String, &Value)> = map.iter().collect();
+            entries.sort_by(|left, right| left.0.cmp(right.0));
+            Value::Object(
+                entries
+                    .into_iter()
+                    .map(|(key, value)| (key.clone(), canonical(value)))
+                    .collect(),
+            )
+        }
+        Value::Array(items) => Value::Array(items.iter().map(canonical).collect()),
+        other => other.clone(),
+    }
+}
+
 /// FNV-1a, 64-bit, over the canonical serialization of a document.
 pub fn digest(value: &Value) -> u64 {
     const OFFSET_BASIS: u64 = 0xcbf2_9ce4_8422_2325;
     const PRIME: u64 = 0x0000_0100_0000_01b3;
     let mut hash = OFFSET_BASIS;
-    for byte in value.to_string().as_bytes() {
+    for byte in canonical(value).to_string().as_bytes() {
         hash ^= u64::from(*byte);
         hash = hash.wrapping_mul(PRIME);
     }
@@ -134,6 +160,15 @@ mod tests {
         let b = json!({"y": [1, 2], "x": 1});
         assert_eq!(digest(&a), digest(&b));
         assert_eq!(short_digest(&a).len(), 12);
+
+        // Nested, because the recursion is the part a fix is likely to leave half done, and
+        // because the feature that breaks this is enabled by another crate's dependency rather
+        // than by anything declared here. `preserve_order` reaches the whole workspace through
+        // `libs/extraction` -> `xberg`, so this passes under `-p sjel-claude-config` and fails
+        // under `cargo test --workspace` unless the sort happens at every depth.
+        let deep_a = json!({"outer": {"x": 1, "y": 2}, "list": [{"b": 1, "a": 2}]});
+        let deep_b = json!({"list": [{"a": 2, "b": 1}], "outer": {"y": 2, "x": 1}});
+        assert_eq!(digest(&deep_a), digest(&deep_b));
     }
 
     #[test]

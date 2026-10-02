@@ -254,8 +254,9 @@ function check(): number {
 }
 
 // Guarded, so tools/dashboard-basemap.test.ts can import `vendoredTarget` without a
-// bare import deleting fonts/ and re-fetching the planet. The precedent is
-// tools/doctor.ts, whose own test does the same thing.
+// bare import deleting fonts/ and re-fetching the planet. The precedent was
+// tools/doctor.ts, whose test imported it the same way until the doctor moved to Rust on
+// 2026-10-02.
 if (import.meta.main) {
   if (process.argv.includes("--check")) {
     process.exit(check());

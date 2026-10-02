@@ -403,8 +403,12 @@ its callers do not change. `tools/toolchain-check` was the first, then `sjel` it
 requirement in `toolchain.toml`, together with `rg` and `fd`.
 
 Any build layer above those two is argued per case, never assumed. Name what it buys and what
-toolchain cost it adds. `tools/doctor` stays an interpreted command because wrapping it would add
-machinery without improving correctness. The dashboard build was deliberately reopened when
+toolchain cost it adds. `tools/doctor` stayed an interpreted command until 2026-10-02, on the
+argument that wrapping it would add machinery without improving correctness. It moved into
+`tools/sjel-cli` with the rest of the tooling once that machinery existed for other reasons, and
+the move paid for itself on a measurement: the doctor spends its time waiting on the tools it
+delegates to, and the Rust version runs independent sections at once (26 s to 16 s on the build
+host, the same report line for line). The dashboard build was deliberately reopened when
 production began consuming capability-owned UI bundles; its README records that trigger.
 
 Build artifacts are not state. `sjel storage target` measures `target/` per profile and per

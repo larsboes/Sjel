@@ -129,7 +129,7 @@ if (!axonRoot) {
 const overlayRoot = process.env.SJEL_PERSONAL_ROOT;
 
 // One home for "which tags are release tags" — axon.toml [release] tag_glob, shared with
-// tools/lib/version.sh and tools/doctor.ts (CONTRIBUTING.md#the-release-line).
+// tools/lib/version.sh and tools/doctor (tools/sjel-cli/src/doctor/checks.rs, CONTRIBUTING.md#the-release-line).
 const releaseGlob = releaseTagGlob(axonRoot);
 
 const repos = [read(axonRoot, "spine", releaseGlob)];

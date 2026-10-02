@@ -135,7 +135,7 @@ interface DeclaredService {
  * `tools/generate-architecture.sh` never had this problem because it reads each service.toml
  * directly, which is why ARCHITECTURE.md has always been reproducible from a fresh clone. This is
  * the same choice, in the language self.ts is written in: Bun.TOML under the documented exception
- * tools/doctor.ts already takes, rather than a per-manifest shell-out to tools/lib/toml.sh.
+ * tools/lib/toml.sh documents, rather than a per-manifest shell-out to that file.
  *
  * Overlay capabilities are absent by construction now instead of by a scope filter: they live in
  * the overlay's own tree, which this never reads. A capability name is itself a fact about a

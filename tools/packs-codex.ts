@@ -42,7 +42,7 @@ import {
   type StatusRow,
 } from "./lib/pack-deploy.ts";
 
-// Re-exported because tools/doctor.ts, tools/packs-pi.ts, tools/packs-opencode.ts
+// Re-exported because tools/packs-pi.ts, tools/packs-opencode.ts
 // and the test suite import them from here. Keeping the surface intact is what
 // makes the 2026-08-09 extraction provably behaviour-preserving: the tests did
 // not move, so they still test the same entry points.

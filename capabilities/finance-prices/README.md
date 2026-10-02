@@ -76,7 +76,7 @@ exec a path that exists on no machine but the one where it was compiled by hand.
 schedule: advise at two missed runs, stale at four.
 
 This section said the opposite until that day — the keys were deliberately absent,
-because `tools/doctor.ts` answers a contract whose producer has never run with a
+because `tools/doctor` answers a contract whose producer has never run with a
 fault on the first run, and nothing is worth declaring until something has fed the
 table. Something has: a hand-run `finance-cli prices fetch` on 2026-09-07 wrote 13
 `ok` rows from `broker`, which `GET /finance/api/prices/status` still reports. The

@@ -80,8 +80,8 @@ done
 if [ ! -f "$_root/dashboard/service.toml" ]; then
   fail "dashboard/service.toml is gone — the spine exemption derives from it, so nothing is left to derive"
 fi
-if grep -qE '"macmon"' "$_root/tools/doctor.ts"; then
-  fail "tools/doctor.ts names macmon directly — the exemption must come from the manifest"
+if grep -rqE '"macmon"' "$_root/tools/sjel-cli/src/doctor/"; then
+  fail "the doctor (tools/sjel-cli/src/doctor/) names macmon directly — the exemption must come from the manifest"
 fi
 
 if [ "$fails" -gt 0 ]; then

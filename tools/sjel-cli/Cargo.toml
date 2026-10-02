@@ -21,6 +21,9 @@ path = "src/main.rs"
 serde = { workspace = true, features = ["derive"] }
 serde_json.workspace = true
 toml.workspace = true
+# tools/doctor's path, env and listener sweeps are two dozen patterns ported from doctor.ts.
+# Already in the workspace lock (1.13 through other members), so this resolves no new crate.
+regex.workspace = true
 
 # No clap, for the reason tools/storage/Cargo.toml states. Revisit when the subcommand count
 # makes the match statement harder to read than the dependency is to audit.

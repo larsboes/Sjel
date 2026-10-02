@@ -105,6 +105,6 @@ For isolated builds and tests, use `tools/cargo-hermetic test -p media --locked`
 
 ## Considered and declined
 
-- A `service.toml` for the multi-verb CLI: `tools/capability.sh` accepts a capability directory without a manifest; `tools/doctor.ts` checks enabled directories, and `tools/check-manifest-integrity.sh` checks only declared `requires`. `kind = "data"` requires its own backup contract, which this capability does not own. `kind = "process"` without a schedule needs a port; this CLI has neither. The vault CLI preceded its server manifest in the same way. F3 may add a server manifest later.
+- A `service.toml` for the multi-verb CLI: `tools/capability.sh` accepts a capability directory without a manifest; `tools/doctor` checks enabled directories, and `tools/check-manifest-integrity.sh` checks only declared `requires`. `kind = "data"` requires its own backup contract, which this capability does not own. `kind = "process"` without a schedule needs a port; this CLI has neither. The vault CLI preceded its server manifest in the same way. F3 may add a server manifest later.
 - A scheduled re-index: no justified cadence, and a manifest job needs a single command. Manual indexing and explicit audits are safer until that requirement is measured.
 - EXIF parsing in Rust and perceptual deduplication now: both duplicate already owned work, and neither decides byte equality. No new parser crate is introduced.

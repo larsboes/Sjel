@@ -16,6 +16,7 @@ use std::path::{Path, PathBuf};
 use std::process::{Command, ExitCode, ExitStatus};
 
 mod capability;
+mod doctor;
 mod help;
 mod paths;
 mod persist;
@@ -26,7 +27,29 @@ mod schedule;
 mod search;
 mod toolchain;
 
+/// A reader that closes the pipe early (`sjel help | head -1`) ends the command, as SIGPIPE ended
+/// the shell scripts this replaced. Rust ignores SIGPIPE and panics on the failed write
+/// instead; restoring the signal needs `unsafe`, which the workspace denies, so the one panic
+/// that means "the reader left" exits with 141, the status a shell reports for a SIGPIPE death.
+/// Every other panic still reaches the default hook.
+fn quiet_broken_pipe() {
+    let default = std::panic::take_hook();
+    std::panic::set_hook(Box::new(move |info| {
+        let payload = info.payload();
+        let msg = payload
+            .downcast_ref::<String>()
+            .map(String::as_str)
+            .or_else(|| payload.downcast_ref::<&str>().copied())
+            .unwrap_or("");
+        if msg.starts_with("failed printing to") && msg.contains("Broken pipe") {
+            std::process::exit(141);
+        }
+        default(info);
+    }));
+}
+
 fn main() -> ExitCode {
+    quiet_broken_pipe();
     let args: Vec<String> = std::env::args().skip(1).collect();
     let (command, rest) = match args.split_first() {
         Some((c, r)) => (c.as_str(), r),
@@ -60,7 +83,8 @@ fn sjel(root: &Path, command: &str, rest: &[String]) -> ExitCode {
             ExitCode::SUCCESS
         }
         "search" => search::run(root, rest),
-        "doctor" => exec(Command::new(tool("tools/doctor")).args(rest)),
+        // In-process since 2026-10-02: tools/doctor is a launcher for this same entry point.
+        "doctor" => doctor::run(rest),
         // stdio MCP server (ISA ISC-40), and its registration with each harness. The server is
         // still tools/sjel-mcp.ts; the registration half is Rust.
         "mcp" => match rest.first().map(String::as_str) {

@@ -16,6 +16,7 @@ Rust first, and the one-crate shape was decided on 2026-10-02.
 | `sjel` (dispatch, help, `capability`, `search`, `pack`) | `sjel` | bash and three `tools/lib` files, 2026-10-02 |
 | `capability.sh` (list, enable, disable, registry) | `tools/capability.sh` | bash, 2026-10-02 |
 | `service-runner.sh` (lifecycle, holds, drift, persistence units) | `tools/service-runner.sh` | bash and `tools/lib/runargs.sh`, 2026-10-02 |
+| `doctor` | `tools/doctor` | TypeScript (`doctor.ts`), 2026-10-02 |
 
 `toolchain-check` was compared with its bash version on this Mac before replacement. Text
 output, JSON (sorted keys) and exit codes were identical for 10 flag combinations, and
@@ -47,6 +48,13 @@ start, resume and idle-stop, and ended as it began. This machine runs no contain
 capability, so the container verbs are verified by the stub suites only. One change is
 deliberate: a scheduled job now stops the dependencies it started even when the job fails,
 where `set -e` used to exit first.
+
+`doctor` was compared with doctor.ts on this Mac, in both run orders: the same 264 lines and
+exit code, differing only in ages that ticked between the two runs. Every case of
+doctor.test.ts is a unit test in `src/doctor/pure.rs`. Pack deployment state still comes from
+TypeScript, through the `tools/doctor-packs.ts` sidecar, until tools/harnesses.ts is ported.
+Independent sections run at once and print in order: 26.6 s became 15.6 s, and
+`SJEL_DOCTOR_TIMING=1` shows that one `sjel-storage target` walk is now most of what remains.
 
 ## Porting a script
 

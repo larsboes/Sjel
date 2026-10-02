@@ -696,7 +696,8 @@ const HELP = `tools/harnesses — Packs across every agent harness at once.
 
 // Guarded, so tools/harnesses.test.ts can import `skillsLineWith` without running a
 // verb — console output and process.exit — as a side effect of the import. The
-// precedent is tools/doctor.ts, whose own test does the same thing.
+// precedent was tools/doctor.ts, whose test imported it the same way until the doctor moved
+// to Rust on 2026-10-02.
 if (import.meta.main) {
   try {
     switch (positional[0] ?? "list") {

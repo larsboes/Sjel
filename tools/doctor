@@ -1,7 +1,21 @@
-#!/usr/bin/env bash
-# Thin launcher: doctor's logic lives in doctor.ts. TypeScript runs through
-# bun (Axon rule 8) — doctor needs real TOML parsing (Bun.TOML, for
-# axon.toml's [[state_mount]] array-of-tables) that tools/lib/toml.sh's
-# grep/sed contract can't handle, so it's TS rather than bash.
-_here="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-exec bun run "$_here/doctor.ts" "$@"
+#!/bin/bash
+# tools/doctor — health checks for an already-set-up Sjel machine.
+#
+# Launcher only. The doctor moved from doctor.ts to tools/sjel-cli/src/doctor/ on 2026-10-02.
+# `tools/doctor -h` prints the usage.
+#
+# SJEL_ROOT is set here and tools/lib/paths.sh is NOT sourced. The doctor runs other tools, and
+# paths.sh treats an exported SJEL_OVERLAY_ROOT as a per-invocation override that skips
+# axon.local.toml's `machine =` line, so exporting its results would hand those tools a
+# different machine.toml than they resolve on their own. The doctor resolves the overlay itself
+# (tools/sjel-cli/src/doctor/overlay.rs), as doctor.ts did.
+# bash 3.2-safe (CONTRIBUTING.md#portable-shell).
+set -u
+
+SJEL_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]:-$0}")/.." && pwd)"
+export SJEL_ROOT
+# shellcheck source=tools/lib/toml.sh
+. "$SJEL_ROOT/tools/lib/toml.sh"       # toml_get_in, for the missing-cargo install hint
+# shellcheck source=tools/lib/sjel-cli.sh
+. "$SJEL_ROOT/tools/lib/sjel-cli.sh"
+sjel_cli_exec doctor "$@"

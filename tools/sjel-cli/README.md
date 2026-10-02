@@ -14,6 +14,7 @@ Rust first, and the one-crate shape was decided on 2026-10-02.
 |---|---|---|
 | `toolchain-check` | `tools/toolchain-check` | bash, 2026-10-02 |
 | `sjel` (dispatch, help, `capability`, `search`, `pack`) | `sjel` | bash and three `tools/lib` files, 2026-10-02 |
+| `capability.sh` (list, enable, disable, registry) | `tools/capability.sh` | bash, 2026-10-02 |
 
 `toolchain-check` was compared with its bash version on this Mac before replacement. Text
 output, JSON (sorted keys) and exit codes were identical for 10 flag combinations, and
@@ -25,8 +26,15 @@ verbs, including `capability health` against the live machine and five searches,
 identical stdout, stderr and exit codes. Two changes are deliberate. `sjel help search` prints
 `<words...>` instead of `search search`, and a capability registry that fails is now an error
 for `capability list`, which used to print nothing and exit 0. The verbs that read the
-registry are still about 2.5 s, because `tools/capability.sh registry` is bash and takes most
-of that.
+registry were still about 2.5 s at that point, because `tools/capability.sh registry` was bash.
+
+`capability.sh` was compared across 15 invocations: `registry`, `registry --lines` and `list`
+against the live overlay, and every `enable` and `disable` path (new, already enabled,
+unknown, a dependency chain, a still-required capability, a leaf) against a scratch copy of
+the overlay's manifests and machine.toml. Stdout, stderr, exit codes and the rewritten
+machine.toml were identical. Only `-h` differs, because its old text claimed every read went
+through tools/lib/toml.sh. `registry` takes 17 ms against 2.40 s (hyperfine, 5 runs), and
+`sjel capability health` and `sjel search` now call it in-process: 0.16 s and 0.05 s.
 
 ## Porting a script
 

@@ -11,6 +11,7 @@ use std::process::{Command, ExitCode, Stdio};
 
 use crate::capability;
 use crate::help::USAGE;
+use crate::paths::Paths;
 
 pub fn run(root: &Path, words: &[String]) -> ExitCode {
     if words.is_empty() {
@@ -33,9 +34,14 @@ pub fn run(root: &Path, words: &[String]) -> ExitCode {
     }
     println!("\nCapabilities:");
     // The registry hard-fails without a machine.toml. A checkout with none still searches the
-    // other three sections, as the bash pipeline's `|| true` let it.
-    let caps = capability::registry(root).unwrap_or_default();
-    let overlay_caps = overlay_caps_dir(root);
+    // other three sections. The overlay's own capabilities keep their README there; a machine
+    // without an overlay still searches the public ones.
+    let paths = Paths::from_shell(root).ok();
+    let caps = paths
+        .as_ref()
+        .and_then(|p| capability::registry_with(p).ok())
+        .unwrap_or_default();
+    let overlay_caps = paths.as_ref().and_then(|p| p.overlay_caps_dir.clone());
     for line in search_capabilities(root, overlay_caps.as_deref(), &caps, &needle) {
         println!("{line}");
         found = true;
@@ -56,23 +62,6 @@ pub fn run(root: &Path, words: &[String]) -> ExitCode {
         eprintln!("sjel: nothing matches '{query}' in commands, tools, capabilities or Packs.");
         ExitCode::from(1)
     }
-}
-
-/// The overlay's capability root, from tools/lib/paths.sh, which owns the axon.local.toml →
-/// axon.toml order. A machine without an overlay still searches the public capabilities.
-fn overlay_caps_dir(root: &Path) -> Option<PathBuf> {
-    let out = Command::new("bash")
-        .args([
-            "-c",
-            r#". "$1" && printf '%s' "$SJEL_OVERLAY_CAPS_DIR""#,
-            "_",
-        ])
-        .arg(root.join("tools/lib/paths.sh"))
-        .stderr(Stdio::null())
-        .output()
-        .ok()?;
-    let dir = String::from_utf8_lossy(&out.stdout).into_owned();
-    (out.status.success() && !dir.is_empty()).then(|| PathBuf::from(dir))
 }
 
 fn packs(root: &Path) -> String {

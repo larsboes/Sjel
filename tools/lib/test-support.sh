@@ -75,3 +75,17 @@ isolate_axon_env() {
     unset "SJEL_$v"
   done
 }
+
+# sjel_cli_prebuilt — build the sjel-cli binary once from THIS checkout and export SJEL_CLI_BIN.
+#
+# A test that copies a launcher (tools/toolchain-check, tools/capability.sh) into a scratch root
+# needs it: that root has no crate, so tools/lib/sjel-cli.sh cannot build there and refuses.
+# Built from the source checkout the test file lives in, never from the scratch root.
+sjel_cli_prebuilt() {
+  local src
+  src="$(cd "$(dirname "${BASH_SOURCE[0]:-$0}")/../.." && pwd)"
+  cargo build --locked --release -q -p sjel-cli --manifest-path "$src/Cargo.toml" \
+    || { echo "test-support: cannot build sjel-cli" >&2; exit 1; }
+  SJEL_CLI_BIN="${CARGO_TARGET_DIR:-$src/target}/release/sjel-cli"
+  export SJEL_CLI_BIN
+}

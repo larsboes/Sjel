@@ -78,6 +78,11 @@ external_capabilities() {
 # something specific and got it wrong, and quietly falling through to a local address
 # would point the caller at whatever answers on this host — which for a password vault is
 # either nothing or, far worse, the wrong vault.
+#
+# Two copies since 2026-10-02: `Ctx::endpoint` and `Ctx::externals` in
+# tools/sjel-cli/src/registry.rs carry the provided_by half of this rule for the registry, which
+# moved to Rust. A change here is a change there, until backup.sh and service-runner.sh move too
+# and this file can go.
 capability_endpoint() {  # <name> [ENV_KEY]
   local name="$1" env_key="${2:-}" provider url env_file systems
   provider="$(capability_provider "$name")"

@@ -41,12 +41,8 @@ mkdir -p "$ROOT/tools/lib" "$OVERLAY/config" "$STUB_BIN" "$ROOT/capabilities"
 cp "$SRC_TOOLS/toolchain-check" "$ROOT/tools/"
 cp "$SRC_TOOLS"/lib/*.sh "$ROOT/tools/lib/"
 
-# The logic lives in the sjel-cli crate since 2026-10-02, and the scratch root has no crate to
-# build. Build it once from the source checkout and hand the copied launcher that binary.
-cargo build --locked --release -q -p sjel-cli --manifest-path "$SRC_TOOLS/../Cargo.toml" \
-  || { echo "toolchain-scope: cannot build sjel-cli" >&2; exit 1; }
-SJEL_CLI_BIN="${CARGO_TARGET_DIR:-$SRC_TOOLS/../target}/release/sjel-cli"
-export SJEL_CLI_BIN
+# The logic lives in the sjel-cli crate since 2026-10-02, and the scratch root has no crate.
+sjel_cli_prebuilt
 printf 'overlay = "%s"\n' "$OVERLAY" > "$ROOT/axon.toml"
 
 # A toolchain manifest with one entry per scope class. Deliberately not a copy of the real one:

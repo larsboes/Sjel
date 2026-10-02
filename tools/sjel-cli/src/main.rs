@@ -18,6 +18,7 @@ use std::process::{Command, ExitCode, ExitStatus};
 mod capability;
 mod help;
 mod paths;
+mod registry;
 mod search;
 mod toolchain;
 
@@ -27,8 +28,11 @@ fn main() -> ExitCode {
         Some((c, r)) => (c.as_str(), r),
         None => ("help", &[][..]),
     };
-    if command == "toolchain-check" {
-        return toolchain::run(rest);
+    // Ported tools/ scripts, run by their launchers under the script's own name.
+    match command {
+        "toolchain-check" => return toolchain::run(rest),
+        "capability.sh" => return registry::run(rest),
+        _ => {}
     }
     let root = match std::env::var("SJEL_ROOT") {
         Ok(r) if !r.is_empty() => PathBuf::from(r),

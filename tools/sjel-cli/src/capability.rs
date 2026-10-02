@@ -1,7 +1,8 @@
 //! `sjel capability …` — find a capability's HTTP surface, probe it, and call it.
 //!
-//! Moved from the bash launcher and tools/lib/capability-probe.sh on 2026-10-02. The rows still
-//! come from `tools/capability.sh registry`, which owns manifest resolution, and HTTP still goes
+//! Moved from the bash launcher and tools/lib/capability-probe.sh on 2026-10-02. The rows come
+//! from the registry module in-process (the same code `tools/capability.sh registry` runs), and
+//! HTTP still goes
 //! through curl: the inbound token reaches curl on stdin (`-H @-`), so it is in no argv and `ps`
 //! cannot show it, the property the bash `-H @<(...)` gave.
 //!
@@ -14,9 +15,10 @@ use std::path::Path;
 use std::process::{Command, ExitCode, Stdio};
 
 use crate::exit_with;
+use crate::paths::Paths;
+use crate::registry::Service;
 
-/// One registry row, with every field the probe rules read. The registry emits strings, and an
-/// absent field reads as empty, which is how the bash `jq … // ""` read it.
+/// One registry row, with every field the probe rules read.
 #[derive(Debug, Default, Clone)]
 pub struct Row {
     pub name: String,
@@ -30,22 +32,16 @@ pub struct Row {
 }
 
 impl Row {
-    fn from_json(v: &serde_json::Value) -> Self {
-        let s = |k: &str| {
-            v.get(k)
-                .and_then(serde_json::Value::as_str)
-                .unwrap_or("")
-                .to_owned()
-        };
+    fn from_service(s: &Service) -> Self {
         Self {
-            name: s("name"),
-            kind: s("kind"),
-            scope: s("scope"),
-            port: s("port"),
-            endpoint: s("endpoint"),
-            health_path: s("health_path"),
-            ready_path: s("ready_path"),
-            autostart: s("autostart"),
+            name: s.name.clone(),
+            kind: s.kind.clone(),
+            scope: s.scope.clone(),
+            port: s.field("port").to_owned(),
+            endpoint: s.endpoint.clone(),
+            health_path: s.field("health_path").to_owned(),
+            ready_path: s.field("ready_path").to_owned(),
+            autostart: s.field("autostart").to_owned(),
         }
     }
 
@@ -113,21 +109,23 @@ impl Row {
     }
 }
 
-/// Every registry row. A registry that cannot be read is an error, not an empty machine: the
-/// bash version printed nothing and exited 0 for `list`, which said the same thing as a clean
-/// bill of health.
+/// Every registry row, built in-process (tools/sjel-cli/src/registry.rs) rather than by
+/// running tools/capability.sh, whose bash version took most of every verb's 2.5 s.
+///
+/// A registry that cannot be read is an error, not an empty machine: the bash version of
+/// `sjel` printed nothing and exited 0 for `list`, the same thing as a clean bill of health.
 pub fn registry(root: &Path) -> Result<Vec<Row>, String> {
-    let out = Command::new(root.join("tools/capability.sh"))
-        .arg("registry")
-        .stderr(Stdio::inherit())
-        .output()
-        .map_err(|e| format!("cannot run tools/capability.sh: {e}"))?;
-    if !out.status.success() {
-        return Err("tools/capability.sh registry failed".to_owned());
+    registry_with(&Paths::from_shell(root)?)
+}
+
+pub fn registry_with(paths: &Paths) -> Result<Vec<Row>, String> {
+    match crate::registry::services(paths) {
+        Ok(services) => Ok(services.iter().map(Row::from_service).collect()),
+        Err(f) => {
+            eprintln!("{}", f.msg);
+            Err("tools/capability.sh registry failed".to_owned())
+        }
     }
-    let rows: Vec<serde_json::Value> = serde_json::from_slice(&out.stdout)
-        .map_err(|e| format!("tools/capability.sh registry did not emit a JSON array: {e}"))?;
-    Ok(rows.iter().map(Row::from_json).collect())
 }
 
 /// Rows with an HTTP surface: a port here, or an endpoint elsewhere.
@@ -566,12 +564,24 @@ mod tests {
     }
 
     #[test]
-    fn an_empty_field_does_not_shift_the_row() {
-        // The bash suite guarded a tab-separator bug: an empty field collapsed and shifted
-        // `autostart` into `health_path`. JSON fields are keyed, so the case is a parse check.
-        let v = serde_json::json!({"name": "sjel-status", "scope": "capability", "port": "8082",
-            "endpoint": "", "health_path": "/health", "ready_path": "", "autostart": "true"});
-        let r = Row::from_json(&v);
+    fn a_service_maps_to_its_probe_fields() {
+        // The bash suite guarded a tab-separator bug that shifted `autostart` into
+        // `health_path` when a field was empty. Fields are named now; this checks the mapping.
+        let s = Service {
+            name: "sjel-status".into(),
+            kind: "process".into(),
+            scope: "capability".into(),
+            fields: vec![
+                ("port", "8082".into()),
+                ("health_path", "/health".into()),
+                ("ready_path", String::new()),
+                ("autostart", "true".into()),
+            ],
+            endpoint: String::new(),
+            proxy_extra: vec![],
+            requires: vec![],
+        };
+        let r = Row::from_service(&s);
         assert_eq!(
             (
                 r.endpoint.as_str(),

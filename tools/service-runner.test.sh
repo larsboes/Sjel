@@ -53,6 +53,9 @@ done
 # (tools/lib/test-support.sh#isolate_axon_env).
 source "$SRC_TOOLS/lib/test-support.sh"
 isolate_axon_env
+# tools/capability.sh is a launcher for the sjel-cli crate since 2026-10-02, and the scratch
+# root this suite copies it into has no crate to build.
+sjel_cli_prebuilt
 
 mkdir -p "$ROOT/tools/lib" "$OVERLAY/config"
 cp "$SRC_TOOLS/service-runner.sh" "$SRC_TOOLS/capability.sh" "$ROOT/tools/"

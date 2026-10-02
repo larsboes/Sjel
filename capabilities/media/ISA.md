@@ -251,6 +251,18 @@ already holds, and copies the rest with the digest checked inside the write stre
   widened. Falsifier: the digest mode's findings appear in a `--paths` report, or a tree whose every
   byte moved to a new path is reported as matching. *(Measured 2026-10-02: the digest mode calls that
   state a faithful mirror, which is why the question had to be added rather than assumed.)*
+- [x] MED-P16 — `media mirror --check` exits non-zero when copies/moves are pending, destination-only
+  paths remain, a source subtree is deferred, or an operation fails; its JSON reports both
+  directions and bounded path samples. Falsifier: a non-synced fixture exits zero, or the report
+  omits either side of drift.
+- [ ] MED-P17 — `media sync` enforces the manual order: validate both volume UUIDs, index both, apply
+  the mirror, then verify with `--paths`; it never removes destination-only paths and skips the final
+  verification when a source subtree is still active. Falsifier: it verifies before applying, or
+  reports success while paths differ or active subtrees are deferred. Implementation is present;
+  end-to-end sequence evidence remains to be added.
+- [x] MED-P18 — mirror check and sync defer source directories containing files modified within the
+  quiet window (default 300 seconds); `--exclude` can also defer a known active path. Falsifier: a
+  recent collection is hashed/copied, or a settled collection is deferred.
 
 **Two measurements decided the design, and both contradicted the obvious answer.**
 
@@ -276,13 +288,11 @@ leave two sharing blocks.
 
 ## Not yet specified
 
-- **`verify-mirror`'s digest mode does not check index freshness.** `--paths` refuses when either
-  volume holds paths that are not indexed, because comparing trees from a stale index answers a
-  question about the past. The digest mode has the same exposure and was left as it is: it predates
-  this session and its meaning is relied on elsewhere. Probe: index a volume, add a file, and run
-  both modes — `--paths` must refuse, and the digest mode must be shown to answer from the stale
-  rows before the stronger claim is made for it. The 2026-09-29 `size-mismatch` row in
-  `mirror-verify.tsv` is *not* an instance of this: it is `HANDOFF-media-2026-09-29.md`, a living
+- [x] **`verify-mirror`'s digest mode did not check index freshness.** `--paths` refused when either
+  volume held paths that were not indexed, because comparing trees from a stale index answers a
+  question about the past. The digest mode had the same exposure. Probe: index a volume, add a file,
+  and run both modes — both must refuse before comparing stale rows. The 2026-09-29 `size-mismatch`
+  row in `mirror-verify.tsv` is *not* an instance of this: it is `HANDOFF-media-2026-09-29.md`, a living
   document edited between the manifest build and the verify, which the mirror had copied faithfully
   both times. It predates the `HANDOFF-` skip that now prevents it, and is closed rather than open.
   *(Instance, 2026-10-02 — unintended, and decisive anyway: `verify-mirror --paths` refused with
@@ -297,13 +307,16 @@ leave two sharing blocks.
   already four minutes into its snapshot, and the verify reported 256 of them as missing files
   while hashing 15 others successfully. Neither verb was wrong; the digest mode simply cannot see
   that the tree moved, which is the whole reason `--paths` refuses instead.)*
+  **Closed for stale-at-start additions:** `verify_indexed` and `verify_by_path` now share a
+  filesystem walk that refuses any on-disk path absent from the index, with the instruction to run
+  `media index`. `digest_mode_refuses_a_stale_index` and `path_mode_refuses_a_stale_index` exercise
+  both modes. This is a preflight, not an atomic snapshot; a mutation after the walk can still race
+  verification, as the reclaim instance demonstrates.
 
 - **Per-file pre-classification failures.** A symlink, unreadable byte stream, or non-UTF-8
   path currently refuses the entire preflight before an ingest run exists. Probe: stage one such
   input among regular files, apply, and inspect whether every path has a durable disposition;
   it does not yet, so do not describe the stronger F1 claim as passing.
-- **Periodic re-indexing.** A schedule is not needed now (see Decisions); if data freshness
-  becomes a measured requirement, decide the job boundary and interval before adding one.
 - **Interrupted multi-file ingest and orphan handling.** A prior unverified final copy can be
   verified and resumed by staging path and digest. A crash between path reservation and link,
   or an orphan in `.media-incoming`, still needs manual inspection. Probe: kill the process at
@@ -313,11 +326,6 @@ leave two sharing blocks.
   behind by an interrupted run still needs explicit cleanup. Sudden-power-loss durability was
   not measured by a scratch test.
 
-- **Periodic re-indexing.** A schedule is not needed now (see Decisions); if data freshness
-  becomes a measured requirement, decide the job boundary and interval before adding one. The
-  2026-10-02 export gave the measurement: **110 files arrived in the library unnoticed** between two
-  reads in one session, and the only reason it surfaced is that a dry run happened to be run. A
-  `mirror` dry run catches it (its `copied` count is the gap) but nothing runs one on a schedule.
 - **`reclaim`'s survivor must live under `--from`.** The destination is now read from disk, so any
   unindexed or superseded tree can be judged — but a file whose only other copy is on a *third*
   volume is reported `unique` and kept even when that third copy is mounted and verifiable. Retiring
@@ -412,16 +420,42 @@ implementation at the same moment rather than against a stored number.
   clippy pass; `scratch.py`, `preview.py` and `labelled.py` all pass. The independent surrogate
   proof for the two batches is already in hand: `classify` reports **24/24** and **271/271** of their
   digests present in `media_locations`.
+- **F7 re-run on the export's arrivals (2026-10-02, 18:15):** the operator's `Photos.app` export wrote
+  into the library in bursts, so drift was measured three times in one hour — 98 → 110 → 142 files —
+  and then zero. The sequence is the workflow: `index Extreme` (32 hashed, 0 discrepancies),
+  `mirror --apply` (**142 copied, 7,886,595,720 bytes, 0 moved, 0 failures**, `source_hashed: 0`),
+  `index INTENSO`, `verify-mirror --paths` (**checked 17,520, left_only 0, right_only 0, differing
+  0**). `media status` then reads `{"files": 17505, "locations": 35040}` — exactly two locations per
+  wanted path, the first time the mirror is a 1:1 of the library rather than a mirror plus
+  leftovers. A dry run afterwards reports `copied: 0, destination_only: 0, failures: 0`. Note what
+  `mirror`'s exit status does *not* say: it fails on `failures` only, so "142 behind" and "in sync"
+  are both exit 0 and a scheduler cannot tell them apart. That is the missing check, not a defect in
+  the run.
+- **`reclaim` plans closed on all three targets (2026-10-02, 18:03):** `INTENSO/Inbox` **2,161
+  candidates, 2,161 survivable, 0 unique, 207,595,889,700 bytes**, `planned_from: "disk"`,
+  `hashed: 2,161`, 36m22s at 95 MB/s; `INTENSO/_quarantine` 271/271 survivable, 31.55 GB;
+  `Extreme/_quarantine` 24/24, 5.06 GB. **Zero unique across all three** — every byte of the 193 GiB
+  pre-sort snapshot and of both quarantine batches has a live twin in the library. Approved lists:
+  `retire-inbox-2026-10-02.tsv` and `retire-quarantine-2026-10-02.tsv` in
+  `INTENSO/Media/_audit-trail/`. The Inbox list is a proposal until `--apply` acts on it; nothing has
+  been moved.
 - **`labelled.py` re-run (2026-10-02): 3/4 canonical targets accessible, and that is a stale path,
   not a lost file.** `guard-exceptions.tsv` records `by-date/2019-05/DJI_0639.MP4`; the
   reorganisation moved it to `Trips/2018/2018-Finland/DJI_0639.MP4`, where it is present. The probe
   compares recorded paths, so it reports a relocation as inaccessible. Not a data finding — but the
   exception ledger's paths need re-recording after a reorg before that number means anything again.
+- **Manual export burst, reported by the concurrent session (2026-10-02):** the observed count
+  moved 98 → 110 → 142 in under an hour. The later operator clarification was that this was a manual
+  ingestion, not an unattended producer; the ruling is manual `media sync`, no periodic schedule.
+  `media mirror --check` supplies a repeatable drift verdict, and `media sync` performs the ordered
+  index/apply/verify path when the operator chooses to run it.
 - **The 2026-10-02 iCloud export bypassed the ingest contract.** `Photos.app` wrote directly into
   `Trips/2026/2026-05-Oberstdorf` and `2026-05-Oberammergau` rather than into a staging directory
   carrying `originals/`, `export-manifest.json` and `staging-hashes.tsv`. `index` took the arrivals
   in (110 hashed, 0 discrepancies), so this batch has no `media_ingests` rows and the index is its
-  only record. Adopted rather than re-staged, by decision.
+  only record. Adopted rather than re-staged, by decision. The principal's ruling is to keep both
+  routes available: direct exports can be adopted with `index`, and staged/manual `ingest` remains
+  available when per-file dispositions are needed. Adoption does not invent historical ingest rows.
 
 ## Anti-claims
 
@@ -473,9 +507,16 @@ already owns `backup_sqlite_online`. When F3 adds an HTTP process, that process 
 `media` has no registry collision: the registry derives names from capability directories and
 `capabilities/comms/src/media.rs` is an internal module, not a capability.
 
-**2026-09-29 — no periodic schedule yet.** Re-index cadence is not measured and a scheduled
-multi-verb CLI without a chosen subcommand cannot run. Manual `media index` and `media audit`
-are the contract until an interval and a job boundary are justified.
+**2026-10-02 — manual sync, no schedule.** The principal chose operator-invoked synchronization;
+the recent burst was a manual export, not an unattended producer. `media sync` is the explicit
+workflow boundary: validate both volumes, index both, apply mirror, then verify tree equality. The
+five-minute quiet window defers recently written source subtrees. `media mirror --check` is the
+read-only drift verdict for an operator or a future scheduler, but no periodic job is installed.
+
+**2026-10-02 — retain both intake routes.** Direct export into the library remains adoptable via
+`media index`; staged/manual `media ingest` remains available for producers that need durable
+per-file dispositions. An adopted export has only index evidence; do not synthesize its missing
+historical disposition rows.
 
 ## Schema sketch
 

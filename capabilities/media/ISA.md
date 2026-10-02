@@ -246,6 +246,11 @@ already holds, and copies the rest with the digest checked inside the write stre
 - [x] MED-P14 — removal is quarantine, and the journal row is written *before* the move, so a run
   reverses by swapping two paths and a re-run of an applied list moves nothing twice. Falsifier: a
   file is deleted, or re-running an applied list quarantines a row a second time.
+- [x] MED-P15 — `verify-mirror --paths` compares the two volumes as *trees* and reports a path that is
+  only on one side or holds different bytes there; the default mode keeps its meaning and is not
+  widened. Falsifier: the digest mode's findings appear in a `--paths` report, or a tree whose every
+  byte moved to a new path is reported as matching. *(Measured 2026-10-02: the digest mode calls that
+  state a faithful mirror, which is why the question had to be added rather than assumed.)*
 
 **Two measurements decided the design, and both contradicted the obvious answer.**
 
@@ -262,12 +267,8 @@ it, and `fs::rename` is strictly better for the case that matters: the bytes are
 destination volume at a path being retired, so moving the inode leaves one path where a clone would
 leave two sharing blocks.
 
-**Named so they are not mistaken for done:**
+**Named so it is not mistaken for done:**
 
-- **`verify-mirror --paths`** — the structural check. `verify-mirror` groups by digest and answers
-  "are these bytes on both volumes", not "do the trees match", so it reports a healthy mirror while
-the same bytes sit at different paths. That is exactly the state of `INTENSO` today, whose library
-mirror predates every move. The default meaning stays; `--paths` adds the question.
 - **Retiring `mirror-manifest.tsv`** — the second ledger goes once `mirror` has run against both
   volumes, not before.
 

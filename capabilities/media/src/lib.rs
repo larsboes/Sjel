@@ -256,16 +256,32 @@ pub fn audit(ledger: &Ledger, root: &Path, uuid: &str, sample: usize) -> Result<
 }
 
 #[derive(Debug, Serialize)]
+pub struct PathComparison {
+    pub left_only: usize,
+    pub right_only: usize,
+    pub differing: usize,
+    /// A bounded sample, so the report names what it found rather than only counting it.
+    pub samples: Vec<String>,
+}
+
+#[derive(Debug, Serialize)]
 pub struct MirrorReport {
     pub availability: String,
     pub checked: usize,
     pub discrepancies: Vec<String>,
+    /// Set only by `--paths`. The default mode compares two *sets of bytes* and answers "is every
+    /// digest on both volumes"; this compares two *trees* and answers "do they match". Those are
+    /// different questions, and the difference is load-bearing: measured 2026-10-02, the default
+    /// mode reports a healthy mirror while every byte sits at a different path on the other volume,
+    /// which is exactly the state INTENSO was in after the library was reorganised.
+    pub by_path: Option<PathComparison>,
 }
 
 pub fn verify_mirror(
     ledger: &Ledger,
     left: (&Path, &str),
     right: (&Path, &str),
+    by_path: bool,
 ) -> Result<MirrorReport> {
     let mut absent = Vec::new();
     for (root, expected) in [left, right] {
@@ -278,9 +294,70 @@ pub fn verify_mirror(
             availability: format!("absent: {}", absent.join(", ")),
             checked: 0,
             discrepancies: Vec::new(),
+            by_path: None,
         });
     }
-    verify_indexed(ledger, left, right)
+    if by_path {
+        verify_by_path(ledger, left, right)
+    } else {
+        verify_indexed(ledger, left, right)
+    }
+}
+
+/// The two trees compared as trees. Both volumes must be indexed, for the same reason the digest
+/// mode requires it: without an index there is nothing to compare that is not a full read.
+fn verify_by_path(
+    ledger: &Ledger,
+    left: (&Path, &str),
+    right: (&Path, &str),
+) -> Result<MirrorReport> {
+    let left_rows = ledger.locations(left.1)?;
+    let right_rows = ledger.locations(right.1)?;
+    if left_rows.is_empty() || right_rows.is_empty() {
+        return Err("both mounted volumes must be indexed before mirror verification".into());
+    }
+    let left_map: BTreeMap<&str, &str> = left_rows
+        .iter()
+        .map(|r| (r.relpath.as_str(), r.digest.as_str()))
+        .collect();
+    let right_map: BTreeMap<&str, &str> = right_rows
+        .iter()
+        .map(|r| (r.relpath.as_str(), r.digest.as_str()))
+        .collect();
+
+    let mut comparison = PathComparison {
+        left_only: 0,
+        right_only: 0,
+        differing: 0,
+        samples: Vec::new(),
+    };
+    let mut note = |line: String, counter: &mut usize| {
+        *counter += 1;
+        if comparison.samples.len() < 20 {
+            comparison.samples.push(line);
+        }
+    };
+    for (rel, digest) in &left_map {
+        match right_map.get(rel) {
+            None => note(format!("only on left: {rel}"), &mut comparison.left_only),
+            Some(other) if other != digest => {
+                note(format!("different bytes: {rel}"), &mut comparison.differing)
+            }
+            _ => {}
+        }
+    }
+    for rel in right_map.keys() {
+        if !left_map.contains_key(rel) {
+            note(format!("only on right: {rel}"), &mut comparison.right_only);
+        }
+    }
+    let checked = left_map.len().max(right_map.len());
+    Ok(MirrorReport {
+        availability: "mounted".into(),
+        checked,
+        discrepancies: Vec::new(),
+        by_path: Some(comparison),
+    })
 }
 
 fn verify_indexed(
@@ -324,6 +401,7 @@ fn verify_indexed(
         availability: "mounted".into(),
         checked: groups.len(),
         discrepancies,
+        by_path: None,
     })
 }
 
@@ -390,6 +468,73 @@ mod db_tests {
         fs::write(dir.join("b/photo.jpg"), b"bad!!").unwrap();
         let mirror = verify_indexed(&db, (&dir.join("a"), "A"), (&dir.join("b"), "B")).unwrap();
         assert_eq!(mirror.discrepancies.len(), 1);
+        fs::remove_dir_all(&dir).unwrap();
+    }
+
+    /// A ledger holding the rows named, with both volumes registered.
+    fn ledger_with(rows: &[(&str, &str, &str)]) -> (PathBuf, Ledger) {
+        use std::sync::atomic::{AtomicU32, Ordering};
+        static NEXT: AtomicU32 = AtomicU32::new(0);
+        let id = NEXT.fetch_add(1, Ordering::Relaxed);
+        let dir = std::env::temp_dir().join(format!("media-paths-{}-{id}", std::process::id()));
+        let _ = fs::remove_dir_all(&dir);
+        fs::create_dir_all(&dir).unwrap();
+        let db = Ledger::open(&dir.join("scratch.db")).unwrap();
+        for (uuid, relpath, digest) in rows {
+            db.register(uuid, "v").unwrap();
+            db.record(&Location {
+                uuid: (*uuid).into(),
+                relpath: (*relpath).into(),
+                digest: (*digest).into(),
+                size: 1,
+                mtime_ns: 1,
+            })
+            .unwrap();
+        }
+        (dir, db)
+    }
+
+    #[test]
+    fn path_mode_catches_a_tree_that_moved() {
+        // The same bytes at different paths. The digest mode calls this a faithful mirror — every
+        // digest is on both volumes — which is exactly why `--paths` exists: it is the state INTENSO
+        // was in after the library was reorganised, and the state a restore-from mirror must not be
+        // in.
+        let (dir, db) = ledger_with(&[("A", "old/photo.jpg", "aa"), ("B", "new/photo.jpg", "aa")]);
+        let report = verify_by_path(&db, (&dir, "A"), (&dir, "B")).unwrap();
+        let comparison = report.by_path.unwrap();
+        assert_eq!(comparison.left_only, 1);
+        assert_eq!(comparison.right_only, 1);
+        assert_eq!(comparison.differing, 0);
+        assert_eq!(
+            report.discrepancies.len(),
+            0,
+            "the digest mode's findings must not be invented here"
+        );
+        assert_eq!(comparison.samples.len(), 2, "a count without a name is not a report");
+        fs::remove_dir_all(&dir).unwrap();
+    }
+
+    #[test]
+    fn path_mode_reports_matching_trees_as_clean() {
+        let (dir, db) = ledger_with(&[("A", "same/photo.jpg", "aa"), ("B", "same/photo.jpg", "aa")]);
+        let comparison = verify_by_path(&db, (&dir, "A"), (&dir, "B"))
+            .unwrap()
+            .by_path
+            .unwrap();
+        assert_eq!((comparison.left_only, comparison.right_only, comparison.differing), (0, 0, 0));
+        fs::remove_dir_all(&dir).unwrap();
+    }
+
+    #[test]
+    fn path_mode_catches_one_path_holding_different_bytes() {
+        let (dir, db) = ledger_with(&[("A", "same/photo.jpg", "aa"), ("B", "same/photo.jpg", "bb")]);
+        let comparison = verify_by_path(&db, (&dir, "A"), (&dir, "B"))
+            .unwrap()
+            .by_path
+            .unwrap();
+        assert_eq!(comparison.differing, 1);
+        assert_eq!((comparison.left_only, comparison.right_only), (0, 0));
         fs::remove_dir_all(&dir).unwrap();
     }
 }

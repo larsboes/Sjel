@@ -1403,8 +1403,9 @@ const CHECKS: Check[] = [
         ctx.warn("sjel-claude-config not built — run `sjel claude check` to compare settings");
         return;
       }
-      const configDir = process.env.CLAUDE_CONFIG_DIR
-        ? expandHome(process.env.CLAUDE_CONFIG_DIR)
+      const configuredDir = process.env.CLAUDE_CONFIG_DIR;
+      const configDir = configuredDir
+        ? expandHome(configuredDir)
         : join(process.env.HOME ?? "", ".claude");
       const target = join(configDir, "settings.json");
       if (!existsSync(target)) {
@@ -1414,9 +1415,14 @@ const CHECKS: Check[] = [
       // Spawned directly rather than through the launcher, so pass what the launcher would
       // have resolved: SJEL_ROOT locates the baseline, SJEL_OVERLAY_ROOT locates this
       // deployment's fragment. Without the second, every fragment rule would read as drift.
+      // Only override it when this run actually resolved an overlay: ctx.overlayPath is empty
+      // when it did not, and an empty string would mean "an overlay with no fragment here"
+      // rather than "no overlay", which are different answers.
+      const env: Record<string, string | undefined> = { ...process.env, SJEL_ROOT: ctx.root };
+      if (ctx.overlayPath) env.SJEL_OVERLAY_ROOT = ctx.overlayPath;
       const proc = Bun.spawnSync({
         cmd: [bin, "check"],
-        env: { ...process.env, SJEL_ROOT: ctx.root, SJEL_OVERLAY_ROOT: ctx.overlayPath },
+        env,
         stdout: "pipe",
         stderr: "pipe",
       });

@@ -29,7 +29,9 @@ Use this mode to discover or operate running capabilities, feeds, APIs, and heal
 
 1. Read `references/with-discovery.md`.
 2. For reads, writes, ingestion, or operator actions, also read
-   `references/with-operations.md`.
+   `references/with-operations.md`. When the session exposes Sjel's MCP tools
+   (`mcp__sjel__*`), use them in preference to the shell and read that file's MCP section:
+   it carries the agent token, and a raw capability payload is far too large to return.
 3. Read `references/shared-data-boundaries.md` before handling personal, vault, or
    cross-capability data.
 

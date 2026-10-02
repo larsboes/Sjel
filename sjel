@@ -57,6 +57,7 @@ Operate capabilities:
   capability mail [status]       Read mail triage without Secret rows; pseudonymized for an agent
   agent enroll                   Create or rotate the agent token (Keychain) and its server hash
   mcp                            Serve the capabilities as MCP tools on stdio, under each one's agent mode
+  mcp register [harness]         Register that server with pi or Claude Code, then verify it answers
 
 Manage Packs:
   pack list [harness]            List available Packs, optionally for one harness
@@ -91,6 +92,23 @@ An external capability is polled at its resolved endpoint, not on loopback: it h
 port here because a port is a fact about the host that binds it. It is never `off`
 either — the registry blanks its autostart, because how another host runs a capability
 is that host's declaration to make, not a claim this machine may read as permission.
+EOF
+      ;;
+    mcp) cat <<'EOF'
+Usage: sjel mcp [register|unregister [<harness>...]]
+
+  (no arguments)              Serve the capabilities as MCP tools on stdio, one tool per route,
+                             under each capability's agent mode
+  register [<harness>...]     Write Sjel's server into pi, or drive `claude mcp add`, then speak
+                             MCP to it and report the tool count it answers with
+  unregister [<harness>...]   Remove it again
+
+Harnesses: claude and pi. Codex supports MCP but has no measured path in this repository, so
+it is reported rather than guessed at. The agent token stays in the login Keychain; no
+registration writes a secret.
+
+Claude Code is governed by a managed allowlist that filters MCP servers. When the deployed
+policy predates this server, `register claude` fails and names the deploy that fixes it.
 EOF
       ;;
     pack) cat <<'EOF'
@@ -414,8 +432,14 @@ case "${1:-help}" in
   -h|--help) usage ;;
   search) shift; search "$@" ;;
   doctor) shift; exec "$SJEL_ROOT/tools/doctor" "$@" ;;
-  # stdio MCP server (ISA ISC-40). Register once: claude mcp add sjel -- sjel mcp
-  mcp) shift; exec bun run "$SJEL_ROOT/tools/sjel-mcp.ts" "$@" ;;
+  # stdio MCP server (ISA ISC-40), and the registration of it with each harness.
+  mcp)
+    shift
+    case "${1:-}" in
+      register|unregister) exec bun run "$SJEL_ROOT/tools/sjel-mcp-register.ts" "$@" ;;
+      *) exec bun run "$SJEL_ROOT/tools/sjel-mcp.ts" "$@" ;;
+    esac
+    ;;
   context) shift; exec "$SJEL_ROOT/tools/axon-context" "$@" ;;
   # Same delegation as doctor: the launcher owns the overlay resolution and the lazy
   # release build, so there is one implementation of both.

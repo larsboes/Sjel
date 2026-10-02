@@ -1,7 +1,13 @@
 //! An exact-byte ingest gate. The shared store owns the database file; this crate owns media_ tables.
 
+pub mod duplicates;
 pub mod ingest;
+pub mod organize;
+pub mod preview;
+pub mod reconcile;
+pub mod relabel;
 pub mod store;
+pub mod supersede;
 
 use std::collections::{BTreeMap, BTreeSet};
 use std::fs::{self, File};
@@ -37,6 +43,23 @@ pub(crate) fn hex_digest(bytes: &[u8]) -> String {
     hex
 }
 
+/// macOS writes these beside the media without being asked: `.DS_Store` records a Finder window,
+/// `._*` is an AppleDouble resource fork, and the dotted directories are volume metadata. None is
+/// media, all of them change on their own, and indexing them makes `index` refuse forever on a file
+/// nobody put in the library.
+pub fn is_macos_metadata(name: &str) -> bool {
+    name == ".DS_Store"
+        || name.starts_with("._")
+        || matches!(
+            name,
+            ".Spotlight-V100"
+                | ".fseventsd"
+                | ".Trashes"
+                | ".DocumentRevisions-V100"
+                | ".TemporaryItems"
+        )
+}
+
 pub fn files(root: &Path) -> Result<Vec<(String, PathBuf)>> {
     let mut pending = vec![root.to_path_buf()];
     let mut found = Vec::new();
@@ -44,6 +67,9 @@ pub fn files(root: &Path) -> Result<Vec<(String, PathBuf)>> {
         for item in fs::read_dir(&dir)? {
             let item = item?;
             let path = item.path();
+            if is_macos_metadata(&item.file_name().to_string_lossy()) {
+                continue;
+            }
             let ty = item.file_type()?;
             if ty.is_symlink() {
                 return Err(format!("symlink in media tree: {}", path.display()).into());
@@ -132,10 +158,26 @@ pub fn volume_uuid(root: &Path) -> Result<String> {
     Ok(uuid)
 }
 
-pub fn index(ledger: &Ledger, root: &Path, uuid: &str, label: &str) -> Result<usize> {
+#[derive(Debug, Serialize)]
+pub struct IndexReport {
+    pub hashed: usize,
+    /// Locations dropped because the path is macOS metadata rather than media. Nonzero means an
+    /// earlier index admitted files it should not have.
+    pub pruned: usize,
+}
+
+pub fn index(ledger: &Ledger, root: &Path, uuid: &str, label: &str) -> Result<IndexReport> {
     let paths = files(root)?;
     ledger.register(uuid, label)?;
     let mut hashed = 0;
+    // Drop metadata rows recorded before `files` learned to skip them, so the location count still
+    // equals what the walk reports.
+    let mut pruned = 0;
+    for row in ledger.locations(uuid)? {
+        if row.relpath.split('/').any(is_macos_metadata) {
+            pruned += usize::from(ledger.forget(uuid, &row.relpath)?);
+        }
+    }
     for (rel, path) in paths {
         let (size, mtime_ns) = stamp(&path)?;
         let previous = ledger.location(uuid, &rel)?;
@@ -164,7 +206,7 @@ pub fn index(ledger: &Ledger, root: &Path, uuid: &str, label: &str) -> Result<us
         })?;
         hashed += 1;
     }
-    Ok(hashed)
+    Ok(IndexReport { hashed, pruned })
 }
 
 #[derive(Debug, Serialize)]
@@ -287,6 +329,37 @@ fn verify_indexed(
 mod db_tests {
     use super::*;
     #[test]
+    fn macos_metadata_is_not_media_and_a_recorded_row_is_pruned_rather_than_left_absent() {
+        let dir = std::env::temp_dir().join(format!("media-noise-{}", std::process::id()));
+        let _ = fs::remove_dir_all(&dir);
+        fs::create_dir_all(dir.join("tree/nested")).unwrap();
+        fs::write(dir.join("tree/photo.jpg"), b"media").unwrap();
+        fs::write(dir.join("tree/.DS_Store"), b"finder state").unwrap();
+        fs::write(dir.join("tree/nested/._photo.jpg"), b"apple double").unwrap();
+        let db = Ledger::open(&dir.join("scratch.db")).unwrap();
+        let first = index(&db, &dir.join("tree"), "V", "v").unwrap();
+        assert_eq!((first.hashed, first.pruned), (1, 0), "only the photo is media");
+        // A row recorded before metadata was excluded must be dropped, not reported as an absence.
+        db.record(&Location {
+            uuid: "V".into(),
+            relpath: ".DS_Store".into(),
+            digest: "0".repeat(64),
+            size: 12,
+            mtime_ns: 0,
+        })
+        .unwrap();
+        assert_eq!(db.counts().unwrap(), (2, 2));
+        let second = index(&db, &dir.join("tree"), "V", "v").unwrap();
+        assert_eq!((second.hashed, second.pruned), (0, 1));
+        assert_eq!(db.counts().unwrap(), (1, 1), "the metadata row and its digest are gone");
+        assert!(audit(&db, &dir.join("tree"), "V", 0)
+            .unwrap()
+            .disagreements
+            .is_empty());
+        let _ = fs::remove_dir_all(&dir);
+    }
+
+    #[test]
     fn two_volumes_one_digest_and_repeat_index() {
         let dir = std::env::temp_dir().join(format!("media-fixture-{}", std::process::id()));
         let _ = fs::remove_dir_all(&dir);
@@ -295,10 +368,10 @@ mod db_tests {
         fs::write(dir.join("a/photo.jpg"), b"bytes").unwrap();
         fs::write(dir.join("b/photo.jpg"), b"bytes").unwrap();
         let db = Ledger::open(&dir.join("scratch.db")).unwrap();
-        assert_eq!(index(&db, &dir.join("a"), "A", "a").unwrap(), 1);
-        assert_eq!(index(&db, &dir.join("b"), "B", "b").unwrap(), 1);
+        assert_eq!(index(&db, &dir.join("a"), "A", "a").unwrap().hashed, 1);
+        assert_eq!(index(&db, &dir.join("b"), "B", "b").unwrap().hashed, 1);
         assert_eq!(db.counts().unwrap(), (1, 2));
-        assert_eq!(index(&db, &dir.join("a"), "A", "a").unwrap(), 0);
+        assert_eq!(index(&db, &dir.join("a"), "A", "a").unwrap().hashed, 0);
         assert_eq!(db.counts().unwrap(), (1, 2));
         let audit = audit(&db, &dir.join("a"), "A", 1).unwrap();
         assert!(audit.disagreements.is_empty());

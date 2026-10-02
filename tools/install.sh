@@ -268,9 +268,10 @@ fi
 # Report-only: a fresh box legitimately installs tools as it goes, so a missing required
 # tool prints its install hint but never aborts the setup (the `|| true` is load-bearing
 # under `set -e`). Runs here because the container runtime is now known (freshly chosen
-# above, or already in machine.toml, which toolchain-check falls back to). Pure bash, so it
-# works during this bash-only bootstrap before bun is guaranteed on PATH — unlike doctor,
-# which runs the same tools/toolchain-check afterwards for the ongoing check.
+# above, or already in machine.toml, which toolchain-check falls back to). Needs cargo, not
+# bun: the checker is the sjel-cli crate since 2026-10-02, built on first run. Without cargo
+# its launcher prints the rustup install line instead (tools/lib/sjel-cli.sh), which is the
+# first thing a fresh box needs. doctor runs the same tools/toolchain-check afterwards.
 echo
 echo "Host toolchain (tools/toolchain-check):"
 RUNTIME_ARG=""

@@ -4403,6 +4403,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "sjel-cli"
+version = "0.1.0"
+dependencies = [
+ "serde",
+ "serde_json",
+ "toml",
+]
+
+[[package]]
 name = "sjel-config"
 version = "0.1.0"
 

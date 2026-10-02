@@ -230,12 +230,77 @@ why = "headless LibreOffice is the only renderer the slide-deck skill can use, a
 install_macos = "brew install --cask libreoffice"
 install_linux = "apt-get install -y libreoffice"
 
+# Core since 2026-10-02, no longer `workflow:build` only. Sjel's own tooling moves into the
+# sjel-cli crate one script at a time, and each moved script's launcher builds that binary on
+# demand (tools/lib/sjel-cli.sh). A host without cargo cannot run those scripts, starting with
+# this file's own checker. Prebuilt release binaries were considered and deferred: they need
+# release and download machinery before the first port could ship.
 [cargo]
-required = "optional"
-needed_by = ["workflow:build"]
-why = "the Rust toolchain, and the build path for every Rust capability: each service.toml declares `build = [\"cargo\", \"build\", ...]` and tools/service-runner.sh runs it before starting the binary (CONTRIBUTING.md#cargo-and-bun-are-the-build-path)"
+required = "yes"
+why = "the Rust toolchain. Builds sjel-cli, which tools/toolchain-check and every other ported tools/ script exec (tools/lib/sjel-cli.sh), and every Rust capability: each service.toml declares `build = [\"cargo\", \"build\", ...]` and tools/service-runner.sh runs it before starting the binary (CONTRIBUTING.md#cargo-and-bun-are-the-build-path)"
 install_macos = "brew install rustup && rustup default stable   # or: brew install rust"
 install_linux = "curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh"
+
+# ---- the Rust command-line baseline (decided 2026-10-02) --------------------------------
+#
+# Sjel standardises on the Rust replacements for grep and find on every host, and offers the
+# rest as optional. Required rows are core scope on both OSes, so scripts and agents can call
+# them without a fallback. Optional rows follow the interactive block above: `os = "macos"`,
+# no min_version, absence is a warning.
+#
+# Required is the floor, not a promise that every script already uses them. Today the shell
+# scripts still call grep and find; those calls go away as each script moves into sjel-cli, or
+# are rewritten when a script is next touched.
+
+[ripgrep]
+required = "yes"
+bin = "rg"
+why = "the search tool Sjel's agents and scripts use instead of grep (AGENTS.md, the sjel skill's orientation step). Respects .gitignore, so a search of the checkout skips target/ and node_modules/ by default"
+install_macos = "brew install ripgrep"
+install_linux = "apt-get install -y ripgrep"
+
+[fd]
+required = "yes"
+why = "the file finder Sjel uses instead of find. Respects .gitignore like rg, and its pattern syntax does not differ between BSD and GNU the way find's flags do"
+install_macos = "brew install fd"
+# Debian and Ubuntu ship the binary as `fdfind` because of a name clash with an older package.
+install_linux = "apt-get install -y fd-find && ln -sf \"$(command -v fdfind)\" ~/.local/bin/fd"
+
+[sd]
+required = "optional"
+os = "macos"
+why = "search and replace with one regex syntax on every OS, instead of sed, whose -i and -E behave differently under BSD and GNU (tools/lib/toml.sh works around exactly that). Nothing in Sjel calls it yet"
+install_macos = "brew install sd"
+
+[jaq]
+required = "optional"
+os = "macos"
+why = "a faster jq clone. [jq] stays the required JSON tool because jaq is not fully jq-compatible; this row is where scripts can try it. Nothing in Sjel calls it yet"
+install_macos = "brew install jaq"
+
+[hyperfine]
+required = "optional"
+os = "macos"
+why = "command benchmarks. Measures each script against its sjel-cli port before the port replaces it"
+install_macos = "brew install hyperfine"
+
+[tokei]
+required = "optional"
+os = "macos"
+why = "line counts per language. Tracks how much shell and TypeScript tooling is left to port into sjel-cli"
+install_macos = "brew install tokei"
+
+[dust]
+required = "optional"
+os = "macos"
+why = "disk usage as a tree, for the interactive shell. `sjel storage` stays the policy-aware answer; dust is the quick look"
+install_macos = "brew install dust"
+
+[procs]
+required = "optional"
+os = "macos"
+why = "process listing for the interactive shell, with ports and a tree view. Nothing in Sjel calls it"
+install_macos = "brew install procs"
 
 # ---- container runtimes (the checker validates only this machine's chosen one) ---------
 

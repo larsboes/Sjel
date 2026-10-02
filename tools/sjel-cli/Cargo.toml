@@ -1,0 +1,29 @@
+[package]
+name = "sjel-cli"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+description = "Sjel's operator tooling as one binary. Each subcommand replaces one interpreted tools/ script, one at a time; the script becomes a launcher that execs this."
+publish = false
+
+# sjel-cli, not sjel: ~/.local/bin/sjel is the bash launcher tools/install.sh links, and two
+# things called `sjel` on PATH is the collision the suffix avoids. The bash launcher retires
+# into this binary once enough subcommands live here (decided 2026-10-02: one crate, not one
+# crate per tool, so paths, overlay and manifest resolution are written once).
+[[bin]]
+name = "sjel-cli"
+path = "src/main.rs"
+
+[dependencies]
+# Already resolved in the workspace lock (tools/storage uses the same three), so this crate
+# adds no external crate.
+serde = { workspace = true, features = ["derive"] }
+serde_json.workspace = true
+toml.workspace = true
+
+# No clap, for the reason tools/storage/Cargo.toml states. Revisit when the subcommand count
+# makes the match statement harder to read than the dependency is to audit.
+
+[lints]
+workspace = true

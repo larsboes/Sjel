@@ -41,6 +41,7 @@ members = [
     "tools/capability-auth",
     "tools/claude-code-config",
     "tools/fda-launcher",
+    "tools/sjel-cli",
     "tools/sjel-mcp",
     "tools/storage",
 ]

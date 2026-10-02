@@ -10,19 +10,31 @@ cd "$ROOT"
 failed=0
 mac_home="/""Users/"
 linux_home="/""home/"
-home_path="(${mac_home}|${linux_home})[A-Za-z0-9._-]+/"
 
-# The repository's own lib/home/ directory is not a home directory.
+# The accounts whose home directories belong to THIS installation. A path under one of them is
+# a publication defect wherever it appears; a home path under any other account belongs to the
+# machine that produced it, which is evidence rather than a leak.
 #
-# Home's decision ladder lives under the dashboard's src/lib/home/, and giving it
-# subdirectories made every import specifier below it match the second marker above. The
-# exemption is that ONE shape and nothing else. Narrowing the marker instead -- demanding a
-# non-identifier character before the slash -- also stopped catching two real leaks, since
-# both begin after an identifier character: the a/ and b/ prefixed paths a committed diff
-# or patch file carries, and a workstation path written relative, ../../<marker><name>/.
-# The exemption applies to the verdict only; the candidate list below stays broad, so a
-# file is still opened and read whenever it matches at all.
-repo_home_dir="lib/${linux_home#/}"
+# Inverted on 2026-10-02, from "flag every home path, allow foreign ones by name". That
+# direction grows without limit: /home/agent and /home/runner were the first entries, the
+# kitinerary verdict in upstreams.toml -- which quotes KDE's own macOS builder -- was the next,
+# and /Users/builder or /Users/jenkins arrive the first time another project publishes a macOS
+# build path. This direction does not grow at all, and it makes the home half of this gate the
+# same kind of rule as the marker half below: name what is private to this installation, never
+# the shape of what is private.
+#
+# It also deletes two exemptions rather than adding one. The repository's own lib/home/ and the
+# container homes /home/agent/ and /home/runner/ matched the old marker and needed carve-outs;
+# under an inclusion list they cannot match at all. A rule that needs fewer exceptions as it
+# gets more precise is the sign it was pointed the right way.
+#
+# The cost, stated rather than discovered: an account name now appears in a tracked file. It is
+# the repository owner's, already public in the remote URL, and CI cannot check the paths that
+# matter without being told it -- CI has no overlay to read. An installation under another
+# account sets SJEL_PRIVATE_USERS, and the regression test injects one rather than depending on
+# this default.
+private_users="${SJEL_PRIVATE_USERS:-larsboes}"
+private_path="(${mac_home}|${linux_home})($(printf '%s' "${private_users}" | tr ' ' '|'))/"
 
 while IFS= read -r -d '' path; do
   case "$path" in
@@ -36,7 +48,7 @@ done < <(git ls-files -z)
 # Ask Git for the small candidate set first; opening every indexed blob separately made
 # Doctor pay one process launch per file. Inspect the indexed blob for each candidate so
 # the verdict still describes exactly what Git would publish. `strings` includes binary
-# metadata. Container and CI homes are portable public examples.
+# metadata.
 #
 # The blob goes to a file rather than into a pipe, and that is not tidiness. Apple's
 # `strings` answers differently on a pipe than on a path: `git show :file | strings` found
@@ -49,15 +61,11 @@ trap 'rm -f "$blob"' EXIT
 while IFS= read -r path; do
   [ -n "$path" ] || continue
   git show ":$path" >"$blob" 2>/dev/null || continue
-  home_hits="$(LC_ALL=C strings "$blob" \
-    | grep -E "${home_path}" \
-    | grep -Ev "${repo_home_dir}" \
-    | grep -Ev "${linux_home}(agent|runner)/" || true)"
-  if [ -n "$home_hits" ]; then
-    echo "publication hygiene: tracked blob contains a workstation home path: $path" >&2
+  if [ -n "$(LC_ALL=C strings "$blob" | grep -E "${private_path}" || true)" ]; then
+    echo "publication hygiene: tracked blob contains this installation's home path: $path" >&2
     failed=1
   fi
-done < <(git grep --cached -a -l -E "${home_path}" || true)
+done < <(git grep --cached -a -l -E "${private_path}" || true)
 
 legacy_tooling_path='~/Developer/'"Tooling"
 # Each marker must be followed by a non-identifier character or end of line, so a name that

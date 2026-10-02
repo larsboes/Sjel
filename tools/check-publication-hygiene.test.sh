@@ -8,6 +8,10 @@ CHECK="$(cd "$(dirname "${BASH_SOURCE[0]:-$0}")" && pwd)/check-publication-hygie
 SCRATCH="$(mktemp -d)"
 trap 'rm -rf "$SCRATCH"' EXIT
 export SJEL_PUBLICATION_ROOT="$SCRATCH"
+# The identity is injected rather than inherited, so these cases do not depend on whose account
+# the gate happens to default to. `private-user` is the fixture's operator; every home path in
+# this file is built around it.
+export SJEL_PRIVATE_USERS="private-user"
 
 git -C "$SCRATCH" init -q
 printf '%s\n' 'container example: /home/agent/config' > "$SCRATCH/safe.txt"
@@ -43,14 +47,28 @@ printf '%s\n' 'portable metadata' > "$SCRATCH/leak.bin"
 git -C "$SCRATCH" add leak.bin
 expect_pass "cleaned index"
 
+# A home path under an account that is not this installation's is evidence, not a leak. The
+# kitinerary verdict in upstreams.toml is the real instance: it quotes KDE's own macOS builder
+# because the dylibs' only LC_RPATH points into that builder's home, and the register's header
+# requires the record left as written. Before the list was inverted this turned the gate red on
+# every push, and the two available fixes were both bad -- add another foreign account name to
+# an allowlist, or edit a measurement record to satisfy a regex.
+printf '%s\n' 'builder path: /Users/''gitlab/workspace/builds/x/lib' > "$SCRATCH/foreign.txt"
+git -C "$SCRATCH" add foreign.txt
+expect_pass "a foreign build machine's home path, quoted as evidence"
+
+git -C "$SCRATCH" rm -q --cached foreign.txt
+rm -f "$SCRATCH/foreign.txt"
+
 # The dashboard's own lib/home/ is a directory in this repository, not a home directory.
-# Home's decision ladder lives there, so every import specifier below it matched the second
-# home marker and turned this gate red on a branch that leaked nothing.
+# Under the old marker every import specifier below it matched and this needed an exemption.
+# Under an inclusion list it cannot match, so the case is here to hold that property rather
+# than to hold a carve-out.
 printf '%s\n' 'import mail from "$lib/''home/kinds/mail.ts";' > "$SCRATCH/import.txt"
 git -C "$SCRATCH" add import.txt
 expect_pass "an import specifier under the repository's own lib/home/"
 
-# ...and the two shapes that exemption must not cost, both of which begin after an
+# ...and the two shapes the old exemption must not cost, both of which begin after an
 # identifier character: a committed diff's a/ and b/ prefixes, and a relative path.
 printf '%s\n' 'diff prefix: a/''Users/private-user/Developer/project/' > "$SCRATCH/diffish.txt"
 git -C "$SCRATCH" add diffish.txt

@@ -492,6 +492,18 @@ pub fn find_dangling_decision_refs(
     let mut out = Vec::new();
     let mut seen = BTreeSet::new();
     for (path, text) in files {
+        // A Rust `#[cfg(test)]` item is the same category as a `*.test.ts` file, which the
+        // caller already excludes: code that exists to exercise a rule must be free to name
+        // the thing the rule forbids. The caller cannot see this one, because it is content
+        // rather than a filename, and this check's own fixtures live in such an item -- which
+        // is why it used to fail on itself forever.
+        let stripped;
+        let text: &str = if path.ends_with(".rs") {
+            stripped = strip_rust_cfg_test_items(text);
+            &stripped
+        } else {
+            text.as_str()
+        };
         for c in r.captures_iter(text) {
             let at = c.get(0).map_or(0, |m| m.start());
             // 64 UTF-16 units before the match in doctor.ts; chars here, the same on ASCII.
@@ -504,6 +516,18 @@ pub fn find_dangling_decision_refs(
                 .rev()
                 .collect();
             if route.is_match(&before) || bench.is_match(&before) {
+                continue;
+            }
+            // Only a path-shaped reference is a citation. An English phrase that joins two
+            // nouns with a slash -- "decisions and groups", as the vendored keel-lite comment
+            // had it -- is not one, and writing the rule down in the files it governs would
+            // otherwise be impossible without tripping it. So a reference counts only when it
+            // is the head of a path (the slug is followed by a slash) or is a bare token the
+            // author wrapped in backticks to say that is what they meant.
+            let m = c.get(0).expect("whole match");
+            let followed_by_slash = text[m.end()..].starts_with('/');
+            let backticked = text[..at].ends_with('`');
+            if !followed_by_slash && !backticked {
                 continue;
             }
             let slug = c[1].to_owned();
@@ -1403,6 +1427,43 @@ mod tests {
         assert_eq!(
             dangling("tools/gen.sh", "echo \"See decisions/gone/README.md.\""),
             d("tools/gen.sh", "gone")
+        );
+        // Prose is not a citation. "decisions/groups" means "decisions and groups", and it is
+        // also how this rule has to be written down in the tree it governs -- so neither the
+        // vendored comment that first tripped it nor these three doc files may be flagged.
+        assert!(dangling(
+            "conductors/keel-lite.ts",
+            "\t/** Forget decisions/groups whose blocks or groups vanished. */"
+        )
+        .is_empty());
+        assert!(dangling("upstreams.toml", "reads \"decisions and groups\" where upstream wrote \"decisions/groups\": the sweep parses that").is_empty());
+        assert!(dangling(
+            "LICENSE",
+            "citations of decisions/groups, and of decisions/ especially"
+        )
+        .is_empty());
+        // A bare token the author backticked still is one: they meant the directory.
+        assert_eq!(
+            dangling(
+                "README.md",
+                "was recorded at `decisions/gone` before it dissolved"
+            ),
+            d("README.md", "gone")
+        );
+        // A Rust `#[cfg(test)]` fixture is blanked inside the scan, which is what clears this
+        // check on its own file rather than leaving it red forever -- and is why the exclusion
+        // has to live in the scan rather than in the caller's filename filter.
+        assert!(dangling(
+            "tools/x.rs",
+            "pub fn f() {}\n#[cfg(test)]\nmod tests {\n    const F: &str = \"decisions/gone/README.md\";\n}\n"
+        )
+        .is_empty());
+        assert_eq!(
+            dangling(
+                "tools/x.rs",
+                "pub fn f() { let p = \"decisions/gone/README.md\"; }\n#[cfg(test)]\nmod tests {}\n"
+            ),
+            d("tools/x.rs", "gone")
         );
     }
 

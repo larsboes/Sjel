@@ -6,8 +6,11 @@
 //!
 //! The policy, the approvals and the log are under `secrets/agent/`, because an agent must
 //! not be able to write them: an agent that could edit an approval would allow its own write.
-//! The managed Claude Code policy denies `secrets/**` to an agent session
-//! (`tools/templates/claude-code/managed-settings.json`).
+//! Sjel's Claude Code deny policy denies `secrets/**` to an agent session
+//! (`tools/templates/claude-code/settings.base.json`, applied by `sjel claude`). Until
+//! 2026-10-02 that denial came from a root-owned managed policy that no session could edit;
+//! it now lands in the user-level settings file, so what protects these paths is the rule
+//! being obeyed rather than a file the session cannot write.
 //!
 //! - `secrets/agent/policy.json`: one [`Mode`] per capability. Absent means [`Mode::Auto`], the
 //!   principal's default of 2026-10-01. Written only by sjel-status, never by hand.

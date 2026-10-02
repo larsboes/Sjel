@@ -558,33 +558,27 @@ last layer over the routes and adds no data path of its own.
   present, re-confirming ISC-43 and ISC-44 on a second day. Guidance and worked recipes are in
   `Packs/harness/skills/sjel/references/with-operations.md`, "Through MCP tools".
   Progress 2026-10-02, later: registration is no longer a command in a document. `sjel mcp
-  register [<harness>]` and `unregister` (tools/sjel-mcp-register.ts, held by
-  tools/sjel-mcp-register.test.ts) write pi's entry, drive `claude mcp add` for Claude Code, and
-  then speak MCP to the server they just registered, reporting the tool count; 87 answered. pi is
-  the one harness written directly rather than driven through its CLI, and the measurement is the
-  reason: `pi mcp add` rejects `--timeout` ("Unknown option"), and pi's 60 s per-request default
-  would cut off an ask-mode write that waits up to 120 s for the owner's Allow. Claude Code needed
-  no such setting, and an inference on the way there was wrong and is recorded so it is not made
-  twice: `MCP_TOOL_TIMEOUT` defaults to 100000000 ms, about 28 hours, so writing 180000 would have
-  cut a 28-hour budget to three minutes. The policy that blocked Claude Code is now fixed at its
-  source rather than worked around: `tools/templates/claude-code/managed-settings.json` declares
-  `allowedMcpServers: [{"serverCommand": ["${HOME}/.local/bin/sjel", "mcp"]}]`. It is pinned by
-  command and not by name because a `serverName` match stops counting the moment any
-  `serverCommand` entry exists, and commands match exactly — every argument, in order — so
-  registration and policy are one value with two readers and the test asserts them equal. The
-  staged policy differs from the deployed one by that entry and nothing else, verified by diff;
-  it awaits root, which this session does not have, and the tool prints the sudo install.
-  `sjel mcp register claude` reports the policy error with that command named, instead of a
-  mystery. Codex is reported and not touched: ~/.codex exists on this machine and no `codex`
-  binary does, so a writer for it could not be verified even once. Open: run the root deploy,
-  then `sjel mcp register claude` and the two checks `/docs/en/managed-mcp` gives — `claude mcp
-  list` shows only the managed set, and a throwaway `claude mcp add` fails with the enterprise
-  error. That pair also settles a conflict in the vendor's own documentation, which this session
-  could not resolve without deploying: the settings schema says `allowManagedMcpServersOnly: true`
-  makes servers in user or project settings be "ignored", while `/docs/en/managed-mcp`'s
-  "Approved catalog" pattern says users add servers and the managed allowlist filters them. If the
-  schema text is the true one, an allowlist entry alone will not admit a user-scope server and the
-  server definition has to move into a managed `managed-mcp.json` instead.
+  register [<harness>]` and `unregister` (tools/sjel-mcp/sjel-mcp, crate `sjel-mcp`, held by its
+  own tests) write pi's entry, drive `claude mcp add` for Claude Code, and then speak MCP to the
+  server they just registered, reporting the tool count; 87 answered. pi is the one harness written
+  directly rather than driven through its CLI, and the measurement is the reason: `pi mcp add`
+  rejects `--timeout` ("Unknown option"), and pi's 60 s per-request default would cut off an
+  ask-mode write that waits up to 120 s for the owner's Allow. Claude Code needed no such setting,
+  and an inference on the way there was wrong and is recorded so it is not made twice:
+  `MCP_TOOL_TIMEOUT` defaults to 100000000 ms, about 28 hours, so writing 180000 would have cut a
+  28-hour budget to three minutes. Codex is reported and not touched: ~/.codex exists on this
+  machine and no `codex` binary does, so a writer for it could not be verified even once, and
+  tools/lib/harness-registry.ts states the rule that a row moves in only on a verified format.
+  Superseded the same day, and recorded because it was acted on before it was: this note first
+  described a narrower fix — pinning the server into the managed policy's `allowedMcpServers` as
+  `{"serverCommand": ["${HOME}/.local/bin/sjel", "mcp"]}`, staged and awaiting a root deploy. The
+  principal asked instead whether that layer earned its cost, and the ruling below retired it. The
+  entry, the template that carried it and the test tying registration to it are deleted; MCP now
+  has no allowlist at all, `claude mcp add` is the whole story, and `sjel mcp register claude` has
+  no policy to satisfy. The vendor conflict this note left open — the settings schema saying
+  `allowManagedMcpServersOnly: true` makes user-scope servers "ignored", against
+  `/docs/en/managed-mcp`'s "Approved catalog" pattern saying the allowlist filters them — is moot
+  with the key gone, and is recorded only because it was never settled by measurement.
 
 Decided 2026-10-01, see F10: the write grant is a per-capability mode, and each agent call is
 logged.
@@ -680,6 +674,54 @@ Design:
   build. The open-source `tailscaled` is therefore not a fix for this. The tailnet shell stays
   unreachable until a socket path the extension may connect to is found; everything else on the
   tailnet is unaffected.
+  Ruling, principal, 2026-10-02: the managed policy layer is retired. Asked whether it earned its
+  cost, the principal's answer was no — it is hard to edit and grasp, it needed sudo on every
+  device for every change, and its MCP allowlist had silently blocked this machine's own graphify
+  server since 2026-08-02 without anything reporting it. The floor now lives in
+  `tools/templates/claude-code/settings.base.json` and lands in the user-level
+  `~/.claude/settings.json` via `sjel claude` (crate `sjel-claude-config`, in Rust under
+  `tools/claude-code-config/`), with no privileged step anywhere in the path. What this does to
+  this row's claim is a weakening and is recorded as one: the same reads are still refused, and
+  deny entries still merge across scopes so no other scope can lift one, but the file that holds
+  them is now writable by the agent sessions that run as this user. "An agent cannot go around the
+  gate" was true of Claude Code while the file was root-owned; it is now "an agent does not, and
+  `sjel claude check` reports drift with exit 3 if it did". That check is the replacement for the
+  guarantee, not a restoration of it. The row stays open, and its probe is unchanged.
+  What could not come along, verified against the settings schema rather than assumed: two keys
+  are managed-only and are now inert if written at user level. `disableSideloadFlags` is lost, so
+  `--mcp-config`, `--plugin-dir`, `--plugin-url` and `--agents` are accepted again;
+  `sandbox.enabledPlatforms` is lost too, which matters only where the sandbox is unsupported —
+  `failIfUnavailable: true` is in the floor, so a device that is not macOS or Linux would now fail
+  to start rather than ignore an inert config. `allowManagedPermissionRulesOnly`,
+  `allowManagedMcpServersOnly`, `allowedMcpServers` and `sandbox.filesystem.allowManagedReadPathsOnly`
+  went with the layer, and their removal is the point: user-level permission rules work again and
+  MCP servers load without an allowlist.
+  The deployment's own rules did not vanish with it. This machine's
+  `<overlay>/config/claude-code/managed-settings.fragment.json` still supplies 8 deny rules, 3 read
+  and 3 write sandbox paths, and 12 credential identifiers that are not this repository's to
+  publish; the tool reads the same file under the name `settings.fragment.json` and still accepts
+  the old name with a note, so a rename nobody made cannot drop a rule silently. A fragment that
+  names an array appends to it rather than replacing it, so naming `permissions.deny` cannot drop
+  the shared floor by omission. The guard that refused a fragment extending an allowlist is gone
+  with the allowlist it guarded, and the guard that refused a fragment relaxing the base is gone
+  too — it protected a policy the operator deployed, and the overlay owner can now edit the merged
+  result directly, so keeping it would have been theatre.
+  Deployment state on this Mac at the time of the ruling: the root-owned
+  `/Library/Application Support/ClaudeCode/managed-settings.json` was still installed and still
+  enforcing, so the move had not taken effect. It must be removed by the operator with sudo, and
+  the order matters — while it is present, `allowManagedPermissionRulesOnly: true` makes user-level
+  permission rules be ignored, so the new floor is inert and cannot be verified. Apply the user
+  file first (done in the same session), then remove the deployed file, then verify both halves: a
+  `secrets/**` read refused, and graphify loading again after `sjel mcp register claude`. The
+  vendor conflict ISC-40 recorded — schema text saying user-scope servers are "ignored" under
+  `allowManagedMcpServersOnly`, against the docs' "Approved catalog" pattern — is moot once the
+  key is gone, and was never settled by measurement.
+  Open, and deliberately not built: hooks. The principal's note on this ruling was that the
+  security half might belong in hooks instead. They are worth naming precisely, because they do not
+  restore what was given up: hooks run outside the sandbox, like MCP servers, and are referenced
+  from the same user-level file, so they extend what can be enforced dynamically — the case the
+  deny rules cannot express, a Bash command that reaches a protected file without naming the path —
+  but not tamper-resistance, which is what the root-owned layer actually provided.
 
 ### F10 · An agent writes, under a mode the owner sets
 

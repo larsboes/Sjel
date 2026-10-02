@@ -1,0 +1,27 @@
+{
+  "_comment": "Copy to settings.fragment.json to add THIS deployment's rules to Sjel's Claude Code settings. `sjel claude` merges it over tools/templates/claude-code/settings.base.json and writes the result into this device's ~/.claude/settings.json. Delete this file if the machine needs no additions — an absent fragment is the normal case, not an error. Until the managed layer retired on 2026-10-02 this was named managed-settings.fragment.json; the tool still reads that name and reports that it did.",
+  "_contract": "Arrays are appended, base entries first, so declaring permissions.deny here cannot drop the shared floor by omission. A scalar or an object the fragment declares wins. Keys prefixed with _ are documentation and are stripped before merging, so this block reaches nothing.",
+  "_why_here": "What belongs in a fragment is anything true of this deployment rather than of Sjel: the credential env vars that exist on this machine, paths only this boundary has, an employer's internal hosts. Sjel is public at every commit, so that inventory cannot live there. Names and paths only — never a secret VALUE.",
+  "_removing": "Delete the file and re-run `sjel claude`. apply is existing-wins, so removing a rule here does NOT remove it from the settings file. Use `sjel claude --force` for that, and `sjel claude check` first to see what still differs from the baseline.",
+
+  "permissions": {
+    "deny": [
+      "Read(~/Protected/**)",
+      "Edit(~/Protected/**)"
+    ]
+  },
+  "sandbox": {
+    "filesystem": {
+      "denyRead": ["~/Protected/**"],
+      "denyWrite": ["~/Protected/**"]
+    },
+    "credentials": {
+      "envVars": [
+        {
+          "name": "EXAMPLE_INTERNAL_API_KEY",
+          "mode": "deny"
+        }
+      ]
+    }
+  }
+}

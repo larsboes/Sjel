@@ -287,22 +287,23 @@ echo "Deploy for Codex:        tools/packs-codex deploy <name>"
 echo "Deploy for OpenCode:     tools/packs-opencode deploy <name>"
 echo "Deploy for Pi:           tools/packs-pi deploy <name>"
 
-# 6) Deploy Axon's baseline Claude Code harness settings (auto permission mode, etc.)
-# into ~/.claude/settings.json — a general default Axon delivers on every machine, not
-# just inside this repo. Merge-only, existing keys always win. Post-bootstrap: needs bun
-# (not guaranteed during the bash-only bootstrap above), so skip with a pointer rather
-# than failing setup if it isn't on PATH yet. Runs before the capability prompt so it
-# still happens on a non-TTY install (which exits early below).
+# 6) Deploy Sjel's baseline Claude Code harness settings (auto permission mode, the deny
+# policy, the sandbox configuration) into ~/.claude/settings.json — a general default Sjel
+# delivers on every machine, not just inside this repo. Merge-only, existing keys always win.
+# Post-bootstrap: needs cargo (not guaranteed during the bash-only bootstrap above), because
+# the tool is Rust (on-dependencies-and-build.md), so skip with a pointer rather than failing
+# setup if it isn't on PATH yet. Runs before the capability prompt so it still happens on a
+# non-TTY install (which exits early below).
+#
+# There is no root-owned managed policy any more: the principal's ruling of 2026-10-02 moved
+# the floor into this same user-level file, so the install has no privileged step to point at.
+# See tools/claude-code-config/README.md.
 echo
-if command -v bun >/dev/null 2>&1; then
-  "$TOOLS_DIR/claude-code-config" || echo "  (baseline settings step skipped — re-run: tools/claude-code-config)"
-  # The managed security policy (macOS: /Library/Application Support/ClaudeCode, Linux:
-  # /etc/claude-code) is opt-in and needs root, so it is a
-  # deliberate step rather than part of the guided install — just point at it.
-  echo "  Optional hardening: tools/claude-code-config --managed  (deploys the managed security policy; needs sudo)"
+if command -v cargo >/dev/null 2>&1; then
+  "$TOOLS_DIR/claude-code-config/claude-code-config" || echo "  (settings step skipped — re-run: tools/claude-code-config/claude-code-config)"
 else
-  echo "Claude Code baseline settings: skipped ('bun' not on PATH yet)."
-  echo "  Apply them later with: tools/claude-code-config"
+  echo "Claude Code settings: skipped ('cargo' not on PATH yet)."
+  echo "  Apply them later with: tools/claude-code-config/claude-code-config"
 fi
 
 # 6b) Agent-harness integrations shipped by adopted upstreams (graphify's skill + hook

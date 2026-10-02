@@ -1,0 +1,29 @@
+[package]
+name = "sjel-claude-config"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+description = "Apply and check Sjel's user-level Claude Code settings: merge the baseline into ~/.claude/settings.json, and report drift from it."
+publish = false
+
+# sjel-claude-config, not claude-code-config: tools/claude-code-config/claude-code-config is
+# the launcher that execs this, and two things called claude-code-config on PATH is the
+# collision the prefix avoids. Same reasoning as tools/storage's sjel-storage.
+[[bin]]
+name = "sjel-claude-config"
+path = "src/main.rs"
+
+[dependencies]
+# The floor is JSON, and serde_json was already resolved in the workspace lock
+# (capabilities/host-net and capabilities/interior both use it), so this tool resolves no new
+# external crate. One dependency, no clap: three verbs and three flags is a match statement,
+# and tools/storage/Cargo.toml already records that reasoning for the workspace.
+#
+# `preserve_order` is deliberately NOT enabled. It is a feature, so enabling it here would
+# unify across every workspace member and change serde_json::Map's ordering everywhere — a
+# workspace-wide behaviour change to gain a cosmetic one. What it costs is in README.md.
+serde_json.workspace = true
+
+[lints]
+workspace = true

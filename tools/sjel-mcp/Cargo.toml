@@ -1,0 +1,24 @@
+[package]
+name = "sjel-mcp"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+description = "Register Sjel's MCP server with the agent harnesses on this machine, and verify each registration by speaking MCP to it."
+publish = false
+
+# sjel-mcp, not mcp: tools/sjel-mcp/sjel-mcp is the launcher that execs this. The stdio server
+# itself is still tools/sjel-mcp.ts and migrates into this crate later; README.md says so, and
+# this bin is the registration half only.
+[[bin]]
+name = "sjel-mcp"
+path = "src/main.rs"
+
+[dependencies]
+# pi's config is JSON and serde_json is already in the workspace lock, so this resolves no new
+# external crate. Everything else here is std: spawning a harness CLI, and a JSON-RPC
+# handshake over the server's stdin/stdout.
+serde_json.workspace = true
+
+[lints]
+workspace = true

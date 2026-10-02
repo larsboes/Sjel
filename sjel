@@ -58,6 +58,7 @@ Operate capabilities:
   agent enroll                   Create or rotate the agent token (Keychain) and its server hash
   mcp                            Serve the capabilities as MCP tools on stdio, under each one's agent mode
   mcp register [harness]         Register that server with pi or Claude Code, then verify it answers
+  claude [apply|check]           Write or check THIS device's Claude Code settings
 
 Manage Packs:
   pack list [harness]            List available Packs, optionally for one harness
@@ -92,6 +93,25 @@ An external capability is polled at its resolved endpoint, not on loopback: it h
 port here because a port is a fact about the host that binds it. It is never `off`
 either — the registry blanks its autostart, because how another host runs a capability
 is that host's declaration to make, not a claim this machine may read as permission.
+EOF
+      ;;
+    claude) cat <<'EOF'
+Usage: sjel claude [apply|check] [--force] [--dry-run]
+
+  (no arguments)   Merge Sjel's baseline into this device's Claude Code settings file,
+                   existing-wins, so your own values always survive and re-running is safe
+  check            Report how the settings file has drifted from the baseline; exits 3 on drift
+  --force          Overwrite the values the baseline declares, to restore the floor
+  --dry-run        Say what would change and write nothing
+
+Target: $CLAUDE_CONFIG_DIR/settings.json, else ~/.claude/settings.json.
+Baseline: tools/templates/claude-code/settings.base.json, laid over with this deployment's own
+<overlay>/config/claude-code/settings.fragment.json when one exists.
+
+The security floor used to be a root-owned managed policy deployed with sudo. The principal's
+ruling of 2026-10-02 moved it here: one file, no root. What that gives up is that the file is
+writable by the agent sessions that run as you, which is why `check` exists — it is the only
+thing in this repository that would notice the floor being lifted.
 EOF
       ;;
     mcp) cat <<'EOF'
@@ -432,14 +452,18 @@ case "${1:-help}" in
   -h|--help) usage ;;
   search) shift; search "$@" ;;
   doctor) shift; exec "$SJEL_ROOT/tools/doctor" "$@" ;;
-  # stdio MCP server (ISA ISC-40), and the registration of it with each harness.
+  # stdio MCP server (ISA ISC-40), and the registration of it with each harness. The server is
+  # still tools/sjel-mcp.ts; the registration half is Rust (on-dependencies-and-build.md).
   mcp)
     shift
     case "${1:-}" in
-      register|unregister) exec bun run "$SJEL_ROOT/tools/sjel-mcp-register.ts" "$@" ;;
+      register|unregister) exec "$SJEL_ROOT/tools/sjel-mcp/sjel-mcp" "$@" ;;
       *) exec bun run "$SJEL_ROOT/tools/sjel-mcp.ts" "$@" ;;
     esac
     ;;
+  # This device's user-level Claude Code settings (ISA ISC-45). The managed policy this
+  # replaced retired on 2026-10-02: see tools/claude-code-config/README.md.
+  claude) shift; exec "$SJEL_ROOT/tools/claude-code-config/claude-code-config" "$@" ;;
   context) shift; exec "$SJEL_ROOT/tools/axon-context" "$@" ;;
   # Same delegation as doctor: the launcher owns the overlay resolution and the lazy
   # release build, so there is one implementation of both.

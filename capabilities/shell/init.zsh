@@ -79,7 +79,7 @@ export PATH
 # --- Claude Code ---
 # Env vars (agent teams, MCP CLI, telemetry-off, auto-compact) are NOT exported here.
 # They live in tools/templates/claude-code/settings.base.json's `env` block — the single
-# home claude-code-config.ts deploys to ~/.claude/settings.json on every machine (CONTRIBUTING.md#one-manifest-per-concern:
+# home `sjel claude` deploys to ~/.claude/settings.json on every machine (CONTRIBUTING.md#one-manifest-per-concern:
 # one concern, one manifest). settings.json is the right scope: these vars are Claude-Code-
 # only, so a shell-wide export bought nothing. Deployment-specific backend config (Vertex,
 # model IDs) is overlay shell config, never shipped public — see README's overlay note.

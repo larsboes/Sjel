@@ -1,0 +1,34 @@
+#!/usr/bin/env bash
+# Thin launcher: claude-code-config's logic lives in the sjel-claude-config crate beside this
+# file.
+#
+# It does two things the binary cannot do for itself. It sources tools/lib/paths.sh, which is
+# what resolves SJEL_ROOT and the active overlay — sjel-claude-config reads SJEL_ROOT and never
+# re-derives it. And it builds the release binary when it is missing or older than its sources,
+# so the command works on a fresh clone without a separate build step.
+#
+# Rust, not the TypeScript this replaced on 2026-10-02: see this directory's README.md, and
+# tools/storage/storage for the same move made on 2026-09-03.
+# bash 3.2-safe.
+set -u
+
+_here="$(cd "$(dirname "${BASH_SOURCE[0]:-$0}")" && pwd)"
+# shellcheck source=tools/lib/paths.sh
+. "$_here/../lib/paths.sh"   # SJEL_ROOT, SJEL_OVERLAY_ROOT, SJEL_PERSONAL_ROOT
+
+BIN="${CARGO_TARGET_DIR:-$SJEL_ROOT/target}/release/sjel-claude-config"
+
+# Rebuild when the binary is missing, or when any crate source is newer than it. `find -newer`
+# with -quit stops at the first hit, so this costs one stat walk over a small tree.
+_stale=""
+if [ ! -x "$BIN" ]; then
+  _stale="yes"
+elif [ -n "$(find "$_here/src" "$_here/Cargo.toml" -newer "$BIN" -print -quit 2>/dev/null)" ]; then
+  _stale="yes"
+fi
+if [ -n "$_stale" ]; then
+  echo "claude-code-config: building sjel-claude-config (release)..." >&2
+  cargo build --locked --release -p sjel-claude-config --manifest-path "$SJEL_ROOT/Cargo.toml" >&2 || exit 2
+fi
+
+exec "$BIN" "$@"

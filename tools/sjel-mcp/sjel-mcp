@@ -1,0 +1,30 @@
+#!/usr/bin/env bash
+# Thin launcher: the registration half of Sjel's MCP tooling lives in the sjel-mcp crate
+# beside this file. The stdio server itself is still tools/sjel-mcp.ts — see README.md.
+#
+# It sources tools/lib/paths.sh so the crate reads a resolved SJEL_ROOT, and builds the release
+# binary when it is missing or older than its sources, so `sjel mcp register` works on a fresh
+# clone without a separate build step.
+#
+# Rust, not the TypeScript this replaced on 2026-10-02: on-dependencies-and-build.md says new
+# backend logic is Rust. bash 3.2-safe.
+set -u
+
+_here="$(cd "$(dirname "${BASH_SOURCE[0]:-$0}")" && pwd)"
+# shellcheck source=tools/lib/paths.sh
+. "$_here/../lib/paths.sh"   # SJEL_ROOT, SJEL_OVERLAY_ROOT, SJEL_PERSONAL_ROOT
+
+BIN="${CARGO_TARGET_DIR:-$SJEL_ROOT/target}/release/sjel-mcp"
+
+_stale=""
+if [ ! -x "$BIN" ]; then
+  _stale="yes"
+elif [ -n "$(find "$_here/src" "$_here/Cargo.toml" -newer "$BIN" -print -quit 2>/dev/null)" ]; then
+  _stale="yes"
+fi
+if [ -n "$_stale" ]; then
+  echo "sjel-mcp: building sjel-mcp (release)..." >&2
+  cargo build --locked --release -p sjel-mcp --manifest-path "$SJEL_ROOT/Cargo.toml" >&2 || exit 2
+fi
+
+exec "$BIN" "$@"

@@ -12,7 +12,7 @@
 #
 #   tools/protection-zones verdicts         per-harness: supported | unsupported | separately-profiled
 #   tools/protection-zones check            the policy is present, parseable and non-contradictory
-#   tools/protection-zones claude-fragment  deny rules derived from the zones, for the managed fragment
+#   tools/protection-zones claude-fragment  deny rules derived from the zones, for the settings fragment
 #
 # Exit 0 = clean, 1 = violation, 2 = usage error. bash 3.2-safe (CONTRIBUTING.md#portable-shell).
 #
@@ -48,7 +48,7 @@ harness_roster() {
 harness_verdict() { # -> "<verdict>\t<mechanism-or-reason>"
   case "$1" in
     claude)
-      printf 'supported\tmanaged policy at /Library/Application Support/ClaudeCode/managed-settings.json (macOS) or /etc/claude-code/managed-settings.json (Linux) — highest precedence, permissions.deny + sandbox.filesystem.denyRead, additive-only from the overlay (tools/claude-code-config)' ;;
+      printf 'supported\tSjel deny policy in the user-level ~/.claude/settings.json (tools/templates/claude-code/settings.base.json, applied by `sjel claude`) — permissions.deny + sandbox.filesystem.denyRead, with this deployment adding its own from <overlay>/config/claude-code/settings.fragment.json. Since the principal'"'"'s ruling of 2026-10-02 it sits in a file an agent session can edit; `sjel claude check` is what reports drift' ;;
     pi)
       printf 'separately-profiled\tenforced inside the agentbox micro-VM, not on the host: capabilities/agentbox/profiles/pi/extensions/protected-paths blocks CONTAINER paths, and only /workspace is mounted. Says nothing about a host-installed pi' ;;
     codex|opencode)
@@ -164,13 +164,14 @@ cmd_check() {
 
 # --- claude fragment ---------------------------------------------------------
 #
-# The acceptance criterion is that Claude's managed settings are DERIVED from or CHECKED
-# AGAINST the declared protected paths, rather than being a parallel hand-written list that
-# happens to agree today. This renders the derived half.
+# The acceptance criterion is that Claude's deny rules are DERIVED from or CHECKED AGAINST the
+# declared protected paths, rather than being a parallel hand-written list that happens to agree
+# today. This renders the derived half.
 #
-# Output goes to stdout only. Writing it into the overlay fragment is left to the operator,
-# because that file is a security floor and deploying it is an explicit privileged action —
-# the same reason tools/claude-code-config prints a command instead of writing to /etc.
+# Output goes to stdout only. Writing it into the overlay fragment is left to the operator: that
+# file is the deployment's own half of the floor, and merging two hand-run halves is a decision
+# rather than a side effect. What this prints is then applied by `sjel claude` like any other
+# setting — there is no privileged deploy step since the managed layer retired on 2026-10-02.
 cmd_claude_fragment() {
   local p first=1
   cmd_check >/dev/null || die "policy is invalid — refusing to render a security fragment from it"

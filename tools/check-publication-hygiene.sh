@@ -37,10 +37,19 @@ done < <(git ls-files -z)
 # Doctor pay one process launch per file. Inspect the indexed blob for each candidate so
 # the verdict still describes exactly what Git would publish. `strings` includes binary
 # metadata. Container and CI homes are portable public examples.
+#
+# The blob goes to a file rather than into a pipe, and that is not tidiness. Apple's
+# `strings` answers differently on a pipe than on a path: `git show :file | strings` found
+# NONE of the one `/Users/...` occurrence in upstreams.toml, while `strings <file>` found it
+# and GNU `strings` in CI found it either way. So this gate was green on this workstation
+# and red on every push — the worst way for a gate to be wrong, because it teaches the
+# operator to trust the local run.
+blob="$(mktemp)"
+trap 'rm -f "$blob"' EXIT
 while IFS= read -r path; do
   [ -n "$path" ] || continue
-  home_hits="$({ git show ":$path" 2>/dev/null || true; } \
-    | LC_ALL=C strings \
+  git show ":$path" >"$blob" 2>/dev/null || continue
+  home_hits="$(LC_ALL=C strings "$blob" \
     | grep -E "${home_path}" \
     | grep -Ev "${repo_home_dir}" \
     | grep -Ev "${linux_home}(agent|runner)/" || true)"

@@ -1790,8 +1790,16 @@
       "verdict": "inspiration"
     },
     {
+      "name": "beancount",
+      "verdict": "watch"
+    },
+    {
       "name": "besser-bahn",
       "verdict": "inspiration"
+    },
+    {
+      "name": "beszel",
+      "verdict": "watch"
     },
     {
       "name": "betterbahn",
@@ -1824,6 +1832,10 @@
     {
       "name": "colibri",
       "verdict": "inspiration"
+    },
+    {
+      "name": "db-rest",
+      "verdict": "watch"
     },
     {
       "name": "debian",
@@ -1864,6 +1876,18 @@
     {
       "name": "exo",
       "verdict": "inspiration"
+    },
+    {
+      "name": "extism",
+      "verdict": "reject"
+    },
+    {
+      "name": "fastembed-rs",
+      "verdict": "watch"
+    },
+    {
+      "name": "firefly-iii",
+      "verdict": "watch"
     },
     {
       "name": "frankfurter-api",
@@ -1914,6 +1938,10 @@
       "verdict": "adopt"
     },
     {
+      "name": "kitinerary",
+      "verdict": "adopt"
+    },
+    {
       "name": "lifeos",
       "verdict": "inspiration"
     },
@@ -1956,6 +1984,10 @@
     {
       "name": "mosquitto",
       "verdict": "reject"
+    },
+    {
+      "name": "motis",
+      "verdict": "watch"
     },
     {
       "name": "multilingual-e5-base-mlx",
@@ -2058,6 +2090,10 @@
       "verdict": "adopt"
     },
     {
+      "name": "radicale",
+      "verdict": "watch"
+    },
+    {
       "name": "rcgen",
       "verdict": "adopt"
     },
@@ -2100,6 +2136,10 @@
     {
       "name": "slm-finetuning-talk",
       "verdict": "inspiration"
+    },
+    {
+      "name": "sqlite-vec",
+      "verdict": "watch"
     },
     {
       "name": "stevenblack-hosts",

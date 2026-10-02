@@ -35,6 +35,30 @@ project named here has a `watch` row in `../upstreams.toml`.
   menu-bar app. The talk that raised it measures render speed; whether Sjel's waits come from
   rendering or from its services is not measured. Source:
   [Conrad Irwin, EuroRust 2025](https://www.youtube.com/watch?v=sheIOOf-xRo).
+- Does a booking document need a reader of its own? `kitinerary` is read AND run: it installs on
+  the Linux runtime, takes stdin and emits schema.org JSON-LD, and it extracted a JSON-LD
+  `TrainReservation` from HTML intact, while a plain iCal `VEVENT` returned empty. macOS was
+  measured as the expensive half: no Homebrew formula, KDE's prebuilt macOS tarball does not run
+  (its only `LC_RPATH` is KDE's CI path), and the workable route is a Craft root from KDE's
+  prebuilt packages. What stays unmeasured is the part that decides adoption: a real `.pkpass`,
+  PDF or UIC barcode from this household. Watch rows: `db-rest`, `motis`.
+- Is reviewed CSV enough for a bank, or do the European export formats need a reader? The CSV path
+  exists and calls itself an edge format; `camt`, `ofx` and `mt940` appear nowhere. Which formats
+  this household's bank produces is not recorded, so the gap has no size. Watch rows: `beancount`,
+  `firefly-iii`.
+- Is a standard contacts and calendar surface wanted at all? No vCard, iCalendar or CalDAV code
+  exists and Google is reached through its own API. Ask what outside the phone app and the
+  dashboard would read these records before asking which server. Watch row: `radicale`.
+- Would an index beat the linear cosine? `capabilities/comms/src/relevance.rs` scores candidates
+  in process and no vector extension is loaded. The candidate-set size at retrieval time is the
+  missing number and it decides the row. Watch row: `sqlite-vec`.
+- Is an in-process ONNX encoder cheaper per call than the MLX role? `libs/inference` resolves
+  embeddings to MLX models chosen by `libs/extraction/eval`, and no row records why an in-process
+  runtime was not the comparison. This is a benchmark rather than a research question. Watch row:
+  `fastembed-rs`.
+- What can a host's history see that `host-watch` cannot? It watches cumulative CPU and disk and
+  stays silent otherwise by design. No list exists of the failures that leaves uncovered, and
+  installing an agent to find out is the wrong order. Watch row: `beszel`.
 
 ## To verify
 

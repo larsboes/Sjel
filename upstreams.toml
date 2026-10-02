@@ -865,3 +865,78 @@ verdict = "watch"
 license = "Apache-2.0"
 summary = "Contrastive model that scores supplied candidates; Sjel has an opt-in Pi adapter, no measured use"
 why = "noted 2026-09-30. CLM-v0.1-8B puts two projection heads on a frozen Qwen3-8B encoder and ranks candidates rather than generating text (https://contrastive-lm.notion.site/, https://huggingface.co/Contrastive-LM/CLM-v0.1-8B). Repository and model card both name Apache-2.0 via the GitHub and Hugging Face APIs on that date. Watch, not adopt: no CLM code is vendored. Packs/harness/extensions/clm-classifier.ts is a loopback client, off unless SJEL_CLM_ENABLE=1, and its tests use synthetic responses only. Nothing ran the encoder and heads on this Mac and no accuracy on a Sjel task is measured. The evidence and its gaps are in research/local-decision-models.md; the Ollama System One comparison is in research/README.md#ideas"
+
+# --- noted 2026-10-01 from the Sjel project roast (a vault clipping, Google AI Studio) ---
+# Ten projects that roast named and this register did not. Each row below records what Sjel has
+# in that slot TODAY, verified by grep on the date, and the question a reading would answer.
+# None of them was cloned, run or benchmarked. Paired with research/README.md#ideas.
+
+[kitinerary]
+url = "https://github.com/KDE/kitinerary"
+verdict = "adopt"
+license = "LGPL-2.0-or-later"
+summary = "KDE's kitinerary-extractor CLI: stdin in, schema.org JSON-LD out, measured on Debian arm64"
+why = "MEASURED 2026-10-02 on the Linux runtime (OrbStack, Debian 13.7 arm64) after the vault clipping Projects/Sjel/Sjel project roast and improvements.md named KDE Itinerary. THE ENGINE IS NOT THE APP: this repository is the extraction engine and the CLI, while the KDE Itinerary application is a separate project (KDE/itinerary). WHAT WAS RUN: apt install libkitinerary-bin, version 24.12.3-1, which pulls 142 MB of archives and 274 packages for 679 MB installed because it brings Qt6 and KF6; the binary lands at /usr/lib/aarch64-linux-gnu/libexec/kf6/kitinerary-extractor and is NOT on PATH, so integration needs that absolute path or a wrapper script. Its CLI takes --capabilities, --list-extractors, --context-date, --extractors, --no-validation and --output JsonLd or iCal, and reads stdin. TWO INPUTS WERE TRIED AND BOTH ARE RECORDED. (1) A plain iCal VEVENT with a train summary came back as an empty array -- generic iCal event extraction is off by default, which matches the README's note that it depends on ExtractGenericIcalEvents, so an .ics is not itself a way in. (2) schema.org JSON-LD embedded in HTML came back as clean schema.org JSON-LD: the TrainReservation with its reservationNumber, underName and reservationStatus survived, the nested TrainTrip came back with trainName, trainNumber, departureStation, arrivalStation, departureTime and arrivalTime, and departureDay was derived on top. stdout was clean JSON; stderr carried a Qt locale warning and a run of 'Ambigious currency symbol' lines, which is noise to filter rather than a failure. NOT MEASURED: a real .pkpass, a PDF ticket, a UIC 918.3 barcode, or any document belonging to this household -- the probe that names those needs a real ticket. MACOS WAS MEASURED TOO, AND IT IS THE EXPENSIVE HALF. There is no Homebrew formula (brew search kitinerary, 2026-10-02) and Homebrew has qt but none of kpkpass, kmime, kcalendarcore or kcontacts, so there is no package route. KDE publishes prebuilt macOS arm64 tarballs of kitinerary itself -- 26.08.1-136, 1.4 MB, built 2026-09-12 -- and one was downloaded and unpacked: IT DOES NOT RUN. The extractor is an .app bundle whose dylibs are absolute paths from KDE's CI machine (/Users/gitlab/workspace/builds/GZwHuM5xu/0/sysadmin/craft-ci/macos-arm-clang/lib), that path is its only LC_RPATH, and libKPim6PkPass, libKF6CalendarCore and libKF6Mime are not in the tarball, so it dies with 'Library not loaded' -- which was observed by running it, not inferred from otool. That tarball is one package in a layered tree, not a portable binary. THE WORKABLE MACOS ROUTE IS A KDE CRAFT ROOT: KDE publishes prebuilt macOS arm64 packages for the whole KF6 tier tree, including kcalendarcore 6.30.0 which matches the 6.30.0 the extractor links against, with kmime and kpkpass under kde/pim -- so the dependencies can be fetched rather than compiled, at the price of installing and maintaining Craft and relocating the bundle. The Mac is therefore not a host today, and making it one is a project rather than a step. Licence is LGPL-2.0-or-later from the SPDX identifiers in its source headers, not from the GitHub API, which reports NOASSERTION. Last push 2026-09-30, 46 stars, not archived. The verdict is adopt because the register has no pending-measurement verdict and this row has been read and run; it is scoped to a document reader inside capabilities/trips on the Linux runtime, which is where it is measured working, and the owner recorded the macOS port as a target and THIS FEATURE AS OPTIONAL AND NOT CORE on 2026-10-02 -- so nothing on the Mac is built, and the Mac half is recorded rather than started. Two notes that outlive the verdict: --output iCal means an emitted format exists for the calendar gap as well, and the README asks for donated sample data, which is a contribution Sjel could make instead of an integration."
+
+[db-rest]
+url = "https://github.com/derhuerst/db-rest"
+verdict = "watch"
+license = "ISC"
+summary = "REST wrapper over the Deutsche Bahn API; candidate to absorb churn Sjel currently patches itself"
+why = "noted 2026-10-01 from the same clipping, which names db-rest and hafas-client as the routing layer to use instead of a custom fetcher. NOT READ. Sjel fetches DB itself in capabilities/transit, holds [deutsche-bahn-data] adopted for the static half, and took [betterbahn] and [plan-bahn] as interaction references. [betterbahn]'s own why already records that DB API blocking and rate limits are what stopped that project hosting a calculator, which is the churn this row would answer. The question a reading answers: does a maintained wrapper absorb that churn, and what does it cost to run beside the existing fetchers rather than in place of them. Nothing here is a claim that the current fetchers are breaking."
+
+[motis]
+url = "https://github.com/motis-project/motis"
+verdict = "watch"
+license = "MIT"
+summary = "Multimodal routing engine over GTFS and NeTEx; a candidate source for Sjel's journey search"
+why = "noted 2026-10-01 from the same clipping. NOT READ. Sjel's journey search queries DB's own timetable API, and motis answers a different question over different inputs -- a routing graph built from GTFS and NeTEx, which is the class [deutsche-bahn-data] already covers for the static half. The question a reading answers: whether the transit capability wants a routing engine at all, or only the timetable lookup it has, and what a Europe-wide graph costs to hold and refresh beside the household's own trips. Nothing is measured and no journey Sjel serves today is known to be wrong."
+
+[beancount]
+url = "https://github.com/beancount/beancount"
+verdict = "watch"
+license = "GPL-2.0"
+summary = "Plain-text double-entry accounting; its bank importers are the reference for statement formats"
+why = "noted 2026-10-01 from the same clipping, which lists Beancount among the finance projects to integrate. NOT READ. Sjel's finance capability already imports reviewed CSV -- capabilities/finance/src/import.rs, whose header calls CSV an edge format -- into a plaintext journal that stays canonical after [hledger] was retired as a runtime. A grep over the whole tree finds no camt, ofx or mt940 anywhere, so a household whose bank exports XML has no path in at all; the gap is the format, not the engine. The question a reading answers: which importer upstream already covers CAMT.053, and whether adopting that reader beats writing one Sjel would own and maintain against the next bank format change."
+
+[firefly-iii]
+url = "https://github.com/firefly-iii/firefly-iii"
+verdict = "watch"
+license = "AGPL-3.0"
+summary = "Personal finance manager; read only for its bank importer catalogue, not as a second app"
+why = "noted 2026-10-01 from the same clipping. NOT READ. This row exists for one thing: Firefly III maintains bank importers across many countries and formats, and that list is the reference for which statement formats a household in Germany actually receives, which is the question [beancount]'s row and ISA.md#not-yet-specified both raise. Declined as a runtime on the same argument that retired [hledger]: the accounting engine is capabilities/finance/src/journal.rs, the journal is plaintext under git, and a second finance application would own money records Sjel already owns. Watch covers the catalogue only."
+
+[radicale]
+url = "https://github.com/Kozea/Radicale"
+verdict = "watch"
+license = "GPL-3.0"
+summary = "CalDAV and CardDAV server; the shape a standard calendar and contact sync would take"
+why = "noted 2026-10-01 from the same clipping, which recommends CardDAV and CalDAV so ordinary apps can read and write Sjel's people and calendar data. NOT READ. Sjel has no vCard (RFC 6350), iCalendar (RFC 5545), CalDAV or CardDAV code: grep over capabilities/calendar, people-registry and comms returns nothing, and capabilities/calendar reaches Google through Google's own API instead. ISA.md#not-yet-specified carries only 'Google Contacts beyond inbound'. The question a reading answers is not which server but whether the household wants a second surface at all: the phone app and the dashboard are the surfaces Sjel ships, so if nothing else will read these records, a CalDAV server is a dependency with no client. [vaultwarden] is the precedent for running a standard server rather than writing one, and it was adopted because clients already existed."
+
+[sqlite-vec]
+url = "https://github.com/asg017/sqlite-vec"
+verdict = "watch"
+license = "Apache-2.0"
+summary = "Vector search as a SQLite extension; would index embeddings inside the store Sjel already runs"
+why = "noted 2026-10-01 from the same clipping, which recommends keeping a vector index inside SQLite. NOT READ. Sjel ranks semantically with an in-process cosine over vectors -- capabilities/comms/src/relevance.rs:585, with the adopted BGE reranker ordering the final candidates -- and loads no vector extension in libs/sjel-store. The question a reading answers is a number rather than an opinion: how many candidates a retrieval pass actually scores on this deployment, and whether an index beats a linear scan over them. On per-profile feed sizes it may not, and that measurement decides this row rather than the extension's quality. Measure before watching, and delete the row if the scan already wins."
+
+[fastembed-rs]
+url = "https://github.com/Anush008/fastembed-rs"
+verdict = "watch"
+license = "Apache-2.0"
+summary = "In-process ONNX embeddings for Rust; would drop the Ollama process from the embedding path"
+why = "noted 2026-10-01 from the same clipping, which recommends in-process embeddings over running a server just to embed. NOT READ. Sjel resolves an embedding role through libs/inference against adopted MLX models ([multilingual-e5-base-mlx], [bge-reranker-v2-m3-mlx]) after libs/extraction/eval measured e5-base over the alternatives; [multilingual-e5-small-mlx] is a reject on that same eval. What no row records is why an in-process ONNX runtime was never the comparison, so the suggestion returns every time the dependency question is raised for embeddings. The question a reading answers: what the MLX role costs per call against an in-process ONNX encoder on this Mac, measured rather than argued. Note libs/inference's offline fallback is a hash embedding, so the process boundary is not the only alternative."
+
+[beszel]
+url = "https://github.com/henrygd/beszel"
+verdict = "watch"
+license = "MIT"
+summary = "Server monitoring with history; a candidate for what host-watch deliberately does not watch"
+why = "noted 2026-10-01 from the same clipping, which recommends Beszel or Glances for host monitoring. NOT READ. Sjel runs capabilities/host-watch, which checks cumulative CPU and disk hourly and prints one line and writes nothing unless a threshold is crossed -- its README states that silence is the product -- beside [macmon] and [bottom] adopted and a storage report. The overlap is real but the intent differs: host-watch watches two named failures that were invisible until they hurt, not a history of the host's health. The question a reading answers: which failures host-watch cannot see that a monitoring history would catch, named before any agent is installed. A watcher that pages a household about disk noise is the failure mode to weigh against it."
+
+[extism]
+url = "https://github.com/extism/extism"
+verdict = "reject"
+license = "BSD-3-Clause"
+summary = "WebAssembly extension host; declined because only first-party extensions run here"
+why = "noted and declined 2026-10-01 from the same clipping, which proposes WASM isolation so an extension can be written in any language without touching the core binary. Read against README.md:159 -- 'Only first-party extensions run. There is no extension store.' -- so a third-party extension host contradicts a stated product boundary rather than answering a missing feature, which is the same shape as the [stop-slop] and [mosquitto] declines. The rejection is on scope and not on Extism: nothing was built with it and nothing was measured. It becomes reconsiderable only if that boundary moves, which is an owner decision recorded nowhere else; if it ever moves, this row and that README line are what to re-read together."

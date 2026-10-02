@@ -540,6 +540,51 @@ last layer over the routes and adds no data path of its own.
   Live, from this agent session: 43 comms tools (31 writes, 10 marked as waiting for the owner),
   and `comms__get_triage` returned 382 rows with no raw sender address. Held by
   `tools/sjel-mcp.test.ts`. Other capabilities register their gates on their next restart.
+  Progress 2026-10-02: the registration above was never run and could not have been. `claude mcp
+  list` was empty, and `claude mcp add sjel` now answers "not allowed by enterprise policy":
+  the deployed managed policy sets `allowManagedMcpServersOnly: true` with `allowedMcpServers:
+  []`, and `mergeFragment` refuses to let an overlay fragment extend an allowlist
+  (`rejects expanding an allowlist even when the base declares the array`,
+  `tools/claude-code-config.test.ts`). The Claude Code half of this row's own text is
+  therefore unreachable until the principal decides whether `tools/templates/claude-code/
+  managed-settings.json` should name `sjel`, which is a source change plus a root redeploy,
+  not a config edit. Pi was registered instead, user-level at `~/.pi/agent/mcp.json`, exposure
+  `codemode` so no tool schema is declared, and `timeout: 180` because an ask-mode write may
+  wait 120 s for the owner while Pi's default is 60 s. `pi mcp list`: connected, 87 tools
+  (comms 43, calendar 34, devices 10). Measured the same day through the server, not the shell:
+  one `comms__get_triage` call returned 384 rows in 589 KB, about 147k tokens, and ignored a
+  `limit` query parameter, so no capability read may be returned to a model unfiltered; 0 of the
+  384 `from_addr` values held an `@`, all 384 matched `<TYPE_token>`, and no `c3` row was
+  present, re-confirming ISC-43 and ISC-44 on a second day. Guidance and worked recipes are in
+  `Packs/harness/skills/sjel/references/with-operations.md`, "Through MCP tools".
+  Progress 2026-10-02, later: registration is no longer a command in a document. `sjel mcp
+  register [<harness>]` and `unregister` (tools/sjel-mcp-register.ts, held by
+  tools/sjel-mcp-register.test.ts) write pi's entry, drive `claude mcp add` for Claude Code, and
+  then speak MCP to the server they just registered, reporting the tool count; 87 answered. pi is
+  the one harness written directly rather than driven through its CLI, and the measurement is the
+  reason: `pi mcp add` rejects `--timeout` ("Unknown option"), and pi's 60 s per-request default
+  would cut off an ask-mode write that waits up to 120 s for the owner's Allow. Claude Code needed
+  no such setting, and an inference on the way there was wrong and is recorded so it is not made
+  twice: `MCP_TOOL_TIMEOUT` defaults to 100000000 ms, about 28 hours, so writing 180000 would have
+  cut a 28-hour budget to three minutes. The policy that blocked Claude Code is now fixed at its
+  source rather than worked around: `tools/templates/claude-code/managed-settings.json` declares
+  `allowedMcpServers: [{"serverCommand": ["${HOME}/.local/bin/sjel", "mcp"]}]`. It is pinned by
+  command and not by name because a `serverName` match stops counting the moment any
+  `serverCommand` entry exists, and commands match exactly — every argument, in order — so
+  registration and policy are one value with two readers and the test asserts them equal. The
+  staged policy differs from the deployed one by that entry and nothing else, verified by diff;
+  it awaits root, which this session does not have, and the tool prints the sudo install.
+  `sjel mcp register claude` reports the policy error with that command named, instead of a
+  mystery. Codex is reported and not touched: ~/.codex exists on this machine and no `codex`
+  binary does, so a writer for it could not be verified even once. Open: run the root deploy,
+  then `sjel mcp register claude` and the two checks `/docs/en/managed-mcp` gives — `claude mcp
+  list` shows only the managed set, and a throwaway `claude mcp add` fails with the enterprise
+  error. That pair also settles a conflict in the vendor's own documentation, which this session
+  could not resolve without deploying: the settings schema says `allowManagedMcpServersOnly: true`
+  makes servers in user or project settings be "ignored", while `/docs/en/managed-mcp`'s
+  "Approved catalog" pattern says users add servers and the managed allowlist filters them. If the
+  schema text is the true one, an allowlist entry alone will not admit a user-scope server and the
+  server definition has to move into a managed `managed-mcp.json` instead.
 
 Decided 2026-10-01, see F10: the write grant is a per-capability mode, and each agent call is
 logged.
@@ -837,6 +882,58 @@ this deployment paid the last time it was broken.
   card). shellcheck as shell analysis. `tools/backup.sh` skipping private capability manifests.
   The PRD's non-goals, which conflict with Sjel ("not a product", "tailnet only") and need a new
   ruling rather than a copy.
+
+**Filed 2026-10-01 from the Sjel project roast.** Seven items the roast raised that nothing in this
+repo owned. Each states what exists in that slot today, read from the tree on that date; none is a
+claim yet, and the watch rows they name are in `upstreams.toml` with the questions attached.
+
+- **No booking document reaches a trip.** A `.pkpass`, a forwarded reservation mail and a UIC
+  barcode are all text in Sjel today: the Q63 ladder (Apple Vision through `tools/visocr`, xberg,
+  Docling) ends at text, and the only barcode path in the tree is `[tauri-plugin-barcode-scanner]`,
+  which scans the Mac's pairing QR code. Turning a reservation into a trip is manual.
+  `[kitinerary]` is read AND run: on the Linux runtime it installs from Debian as
+  `libkitinerary-bin`, reads stdin and writes schema.org JSON-LD, and extracted a JSON-LD
+  `TrainReservation` from HTML intact. A plain iCal `VEVENT` came back empty, so an `.ics` is not
+  a way in. It is still not adopted into a capability. macOS was measured as the expensive half:
+  Homebrew has Qt6 but none of `kpkpass`, `kmime`, `kcalendarcore` or `kcontacts`, and KDE's
+  prebuilt macOS arm64 tarball of the extractor downloads at 1.4 MB and **does not run** -- its
+  dylibs are absolute paths from KDE's CI machine and that path is its only `LC_RPATH` -- so the
+  workable route is a KDE Craft root built from KDE's prebuilt packages. The owner recorded the
+  macOS port as a target and this feature as **optional and not core** on 2026-10-02, so nothing
+  on the Mac is built; on the Linux runtime, where it is measured working, the install costs
+  679 MB. Still unmeasured: a real `.pkpass`, PDF or UIC barcode from this household. `[db-rest]`
+  and `[motis]` stay unread.
+- **Bank imports are CSV only.** `capabilities/finance/src/import.rs` reviews CSV into the
+  plaintext journal and calls CSV an edge format; that is the whole intake. `camt`, `ofx` and
+  `mt940` appear nowhere in the tree, so a bank that exports XML has no path in. Unmeasured, and
+  prior to any reader: which formats this household's own bank produces. Watched for their
+  importer catalogues: `[beancount]`, `[firefly-iii]`.
+- **Contacts and calendar speak Sjel's API, not a standard.** There is no vCard (RFC 6350),
+  iCalendar (RFC 5545) or CalDAV/CardDAV code, and `capabilities/calendar` reaches Google through
+  Google's own API. `[radicale]` is watched. The question that comes first is not which server but
+  whether anything outside the phone app and the dashboard would ever read these records;
+  `[vaultwarden]` was adopted because its clients already existed.
+- **Semantic retrieval is a linear cosine, and the number that would change it is missing.**
+  `capabilities/comms/src/relevance.rs` scores candidates in process and `libs/sjel-store` loads no
+  vector extension. What is absent is the candidate-set size at retrieval time, which decides
+  whether `[sqlite-vec]` is worth anything here. Measure, then delete or promote the row.
+- **Dependency vulnerability scanning is five adopted tools, not a missing one.** `[osv-scanner]`,
+  `[grype]`, `[trivy]`, `[gitleaks]` and `[semgrep]` are adopted and `osv-scanner.toml` is
+  configured; a scanner written here would be a sixth. What is genuinely absent is the hook --
+  nothing runs a scan on a schedule and surfaces a finding through the assistant, which is
+  `host-watch`-shaped if it is built at all.
+- **The pseudonymizer's 100% has a corpus boundary nothing states.** Recall reached 100.0% (48/48
+  labels) on the frozen 24-fixture corpus in `deterministic-entity-redaction-v3`, and the
+  `[presidio]` comparison is what set it. No document says what would falsify that next: a corpus
+  size, a language or a document class where the current rules should be expected to fail. Until
+  one does, 100% reads as a property of the redactor rather than of the corpus it was measured on.
+- **The dashboard has no written rules for what a reviewer checks by eye.** The UI material filed
+  beside the roast makes three points: the data's shape should drive the form (tabular figures,
+  right-aligned amounts, chips for closed enumerations), secondary actions belong behind
+  progressive disclosure, and most of a finished table is invisible (hover affordances, tooltips on
+  every icon, empty and error states). Progressive disclosure is already
+  `research/simplicity-and-adoption.md`; the other two have no home. Either they become a checklist
+  in `dashboard/README.md` or they stay folklore.
 
 ## Test Strategy
 

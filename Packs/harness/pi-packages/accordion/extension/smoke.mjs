@@ -35,6 +35,13 @@ process.env.ACCORDION_APP_PATH = path.join(HOME, "missing-accordion-app.exe");
 // door URL). The door itself is exercised by a dedicated, self-contained section at the end that flips
 // this env to a free port and races two fresh extension instances. `0` = door disabled.
 process.env.ACCORDION_DOOR_PORT = "0";
+// This repository's vendoring arms folding by default (the LOCAL DELTA in accordion.ts's
+// `session_start`), and upstream's file asserts the opt-in default from top to bottom:
+// snapshot.foldingEnabled false, the context hook passing messages through, session_start resetting
+// to off. So the whole upstream file runs with the delta switched off, and the two deltas get their
+// own section at the end, under their own settings. Without this line six upstream assertions fail
+// for a reason that has nothing to do with what they test.
+process.env.ACCORDION_FOLDING_DEFAULT = "off";
 // C1 regression seams (test-only): a FAST controller heartbeat and a SLOW poll. This makes the C1
 // clobber test deterministic — after a foreign extension writes controller.json directly, a heartbeat
 // is guaranteed to fire (before the slow poll could "rescue" a regressed heartbeat) so a heartbeat
@@ -801,11 +808,36 @@ if (unfoldTool && foldCodeStr) {
 // Folding is ARMED (true) here (Phase C step (0) restored it). A connected client (`a`) is attached
 // throughout this block — the whole point of the policy is that attachment alone must NOT suppress.
 {
-	// (1) folding ON + client attached → suppressed, with the "armed" notify.
+	// (1) folding ON + client attached + a conductor attached → suppressed, with the "armed" notify.
+	//     The conductor is attached first because this repository gates the cancel on one being
+	//     attached (the second LOCAL DELTA): a conductor that crashed or was never selected leaves
+	//     the session with pi's own safety net still in place. Upstream cancels on folding alone.
+	a.inbox.conductorState = [];
+	a.sendCmd({ kind: "selectConductor", id: "compaction-naive" });
+	await waitFor(() => (a.inbox.conductorState || []).some((m) => m.active?.id === "compaction-naive"), 2000, "conductor attached (compaction section)").catch(
+		() => fails.push("selectConductor(compaction-naive) did not attach before the compaction checks"),
+	);
 	notifications.length = 0;
 	const armedRet = await Promise.resolve(handlers.session_before_compact({ reason: "threshold" }, ctx));
-	if (!armedRet || armedRet.cancel !== true) fails.push("folding ON did not suppress native compaction (expected {cancel:true})");
+	if (!armedRet || armedRet.cancel !== true) fails.push("folding ON with a conductor attached did not suppress native compaction (expected {cancel:true})");
 	if (!notifications.some((n) => n.message.includes("suppressed"))) fails.push("folding-ON suppression did not notify");
+
+	// (1b) folding ON + client attached + NO conductor → NOT suppressed. This is the window the delta
+	//      closes: armed folding with nothing folding yet used to remove pi's safety net and replace
+	//      it with nothing, so the session grew until the provider rejected it.
+	notifications.length = 0;
+	// Clear the inbox first: an earlier detach in this file also broadcast `active:null`, so without
+	// this the wait below matches a stale message and returns before the detach has been processed.
+	a.inbox.conductorState = [];
+	a.sendCmd({ kind: "selectConductor", id: null });
+	await waitFor(() => (a.inbox.conductorState || []).some((m) => m.active === null), 2000, "conductor detached (compaction section)").catch(
+		() => fails.push("selectConductor(null) did not detach before the no-conductor compaction check"),
+	);
+	const noConductorRet = await Promise.resolve(handlers.session_before_compact({ reason: "threshold" }, ctx));
+	if (noConductorRet !== undefined)
+		fails.push("folding armed with NO conductor still cancelled native compaction (the escape valve is gone)");
+	if (notifications.some((n) => n.message.includes("suppressed")))
+		fails.push("the no-conductor path emitted the suppression notify");
 
 	// (2) folding OFF + client attached → NOT suppressed (owner policy: a viewer with folding off
 	//     leaves pi's own safety net intact) — pi runs its native compaction unhindered.
@@ -1558,6 +1590,249 @@ await new Promise((r) => setTimeout(r, 50));
 	await new Promise((resolve) => foreign.close(resolve));
 	process.env.ACCORDION_DOOR_PORT = "0";
 	await new Promise((r) => setTimeout(r, 200));
+}
+
+// ── v17: ACCORDION_COMPLETION_LOG records an out-of-band conductor completion's usage/cost ──
+// Self-contained: fresh extension instances with a MOCKED `dependencies.complete` (the same
+// injection seam `runCompletion` already exposes for tests — no real LLM/API calls happen here)
+// driving compaction-naive's REAL 90%-of-budget trigger, mirroring smoke-conductor.mjs's
+// synthetic-history + setProtect/setBudget/setFolding/selectConductor pattern, but in-process
+// (compaction-naive needs no spawn) so both the success- and failure-path JSONL lines land fast.
+{
+	const clogSleep = (ms) => new Promise((r) => setTimeout(r, ms));
+	function registryFilesNow() {
+		return fs.existsSync(SESSIONS_DIR) ? fs.readdirSync(SESSIONS_DIR).filter((f) => f.endsWith(".json")) : [];
+	}
+	function readJsonl(file) {
+		if (!fs.existsSync(file)) return [];
+		return fs
+			.readFileSync(file, "utf8")
+			.split("\n")
+			.map((l) => l.trim())
+			.filter(Boolean)
+			.map((l) => { try { return JSON.parse(l); } catch { return null; } })
+			.filter(Boolean);
+	}
+	// Spin up a fresh extension instance (own mock pi, own model/modelRegistry ctx) and wait for its
+	// OWN registry entry to appear — found by diffing the directory listing, since other sessions
+	// (the main one above, or leftover door-test ones) may already be registered.
+	async function spawnClogSession(dependencies) {
+		const before = registryFilesNow();
+		const h = {};
+		const mpi = {
+			on: (name, fn) => (h[name] = fn),
+			registerFlag: () => {},
+			getFlag: () => undefined,
+			registerCommand: () => {},
+			registerTool: () => {},
+			appendEntry: () => {},
+		};
+		accordionLive(mpi, dependencies);
+		const model = { id: "mock/clog-model", provider: "mock-provider", contextWindow: 200_000, maxTokens: 8000 };
+		const ctx = {
+			ui: { setStatus() {}, notify() {}, theme: { fg: (_c, s) => s } },
+			model,
+			modelRegistry: { getApiKeyAndHeaders: async () => ({ ok: true, apiKey: "test-key", headers: {} }) },
+			getContextUsage: () => ({ tokens: 0, contextWindow: model.contextWindow }),
+		};
+		h.session_start({ type: "session_start", reason: "startup" }, ctx);
+		await waitFor(() => registryFilesNow().length > before.length, 3000, "completion-log session registry entry");
+		const added = registryFilesNow().filter((f) => !before.includes(f));
+		if (added.length !== 1) throw new Error(`completion-log: expected exactly 1 new registry entry, found ${added.length}`);
+		const entry = JSON.parse(fs.readFileSync(path.join(SESSIONS_DIR, added[0]), "utf8"));
+		return { h, ctx, port: entry.port };
+	}
+	// Pump a large over-budget synthetic history (mirrors smoke-conductor.mjs's PAIRS/BIG shape) through
+	// a real WS GUI client, claim control, dial the budget/protect/folding knobs down, attach
+	// compaction-naive, then keep firing context hooks until its real 90%-trigger fires launchCompletion.
+	async function driveOverBudget(h, ctx, port) {
+		const T0 = Date.now();
+		const PAIRS = 12;
+		const BIG = (i) => `tool output ${i}: ` + `result line ${i} `.repeat(1400);
+		const messages = [];
+		for (let i = 0; i < PAIRS; i++) {
+			messages.push({ role: "assistant", content: [{ type: "toolCall", id: `call-${i}`, name: "shell", arguments: {} }], responseId: `resp-${i}`, timestamp: T0 + i * 2 });
+			messages.push({ role: "toolResult", toolCallId: `call-${i}`, toolName: "shell", content: BIG(i), isError: false, timestamp: T0 + i * 2 + 1 });
+		}
+		await Promise.resolve(h.context({ messages }, ctx));
+		// The controller lease is MACHINE-WIDE (shared controller.json under this run's HOME, not
+		// per-session) — a fresh, never-before-used surfaceId per call so this claim always writes and
+		// broadcasts, instead of racing/deduping against a still-fresh lease an earlier call in this
+		// same script already claimed under a reused surfaceId.
+		const surfaceId = `clog-gui-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+		const ws = new WebSocket(`ws://127.0.0.1:${port}/?surface=${surfaceId}&label=${encodeURIComponent("completion-log smoke")}`);
+		const inbox = { hello: [], controller: [] };
+		ws.on("message", (d) => {
+			let m;
+			try { m = JSON.parse(d.toString()); } catch { return; }
+			(inbox[m.type] ||= []).push(m);
+		});
+		let seq = 0;
+		const sendCmd = (cmd) => ws.send(JSON.stringify({ type: "command", seq: ++seq, cmd }));
+		await waitFor(() => inbox.hello.length > 0, 3000, "completion-log gui hello");
+		ws.send(JSON.stringify({ type: "claimController" }));
+		await waitFor(() => inbox.controller.some((c) => c.surfaceId === surfaceId), 3000, "completion-log gui becomes controller");
+		sendCmd({ kind: "setProtect", value: 300 });
+		sendCmd({ kind: "setBudget", value: 30000 });
+		sendCmd({ kind: "setFolding", value: true });
+		await clogSleep(150);
+		sendCmd({ kind: "selectConductor", id: "compaction-naive" });
+		await clogSleep(150);
+		const pumpDeadline = Date.now() + 6000;
+		while (Date.now() < pumpDeadline) {
+			await Promise.resolve(h.context({ messages }, ctx));
+			await clogSleep(150);
+		}
+		try { ws.close(); } catch { /* ignore */ }
+	}
+
+	// (a) success path: the mocked complete() resolves with real usage/cost → one success line.
+	const LOG_OK = path.join(HOME, "completions-ok.jsonl");
+	process.env.ACCORDION_COMPLETION_LOG = LOG_OK;
+	const mockUsage = { input: 111, output: 22, cacheRead: 3, cacheWrite: 0, totalTokens: 136, cost: { input: 0.0011, output: 0.0022, cacheRead: 0, cacheWrite: 0, total: 0.0033 } };
+	let mockCompleteOkCalls = 0;
+	const mockCompleteOk = async () => {
+		mockCompleteOkCalls++;
+		return { model: "mock/clog-model-result", content: [{ type: "text", text: "mock summary" }], usage: mockUsage };
+	};
+	const okSession = await spawnClogSession({ complete: mockCompleteOk });
+	await driveOverBudget(okSession.h, okSession.ctx, okSession.port);
+	if (mockCompleteOkCalls < 1) fails.push("completion-log: compaction-naive never called the mocked complete() (budget trigger did not fire)");
+	await waitFor(() => readJsonl(LOG_OK).some((r) => r.t === "complete"), 2000, "completion-log success line on disk").catch(() =>
+		fails.push(`completion-log: no line ever landed in ${LOG_OK}`),
+	);
+	{
+		const okLine = readJsonl(LOG_OK).find((r) => r.t === "complete" && typeof r.costUsd === "number");
+		if (!okLine) fails.push(`completion-log: no success line (t:"complete" with a numeric costUsd) in ${LOG_OK} (got ${JSON.stringify(readJsonl(LOG_OK))})`);
+		else {
+			if (okLine.conductor !== "compaction-naive") fails.push(`completion-log success: conductor expected "compaction-naive" (got ${JSON.stringify(okLine.conductor)})`);
+			if (okLine.provider !== "mock-provider") fails.push(`completion-log success: provider expected "mock-provider" (got ${JSON.stringify(okLine.provider)})`);
+			if (okLine.model !== "mock/clog-model-result") fails.push(`completion-log success: model expected the provider result's model (got ${JSON.stringify(okLine.model)})`);
+			if (okLine.input !== 111 || okLine.output !== 22 || okLine.cacheRead !== 3 || okLine.cacheWrite !== 0)
+				fails.push(`completion-log success: token fields did not match the mocked usage (got ${JSON.stringify(okLine)})`);
+			if (okLine.costUsd !== 0.0033) fails.push(`completion-log success: costUsd expected 0.0033 (got ${okLine.costUsd})`);
+			if (typeof okLine.at !== "number" || typeof okLine.ms !== "number" || okLine.ms < 0)
+				fails.push(`completion-log success: at/ms not sane numbers (got ${JSON.stringify(okLine)})`);
+			if ("error" in okLine) fails.push(`completion-log success: a success line must not carry an "error" field (got ${JSON.stringify(okLine)})`);
+		}
+	}
+	okSession.h.session_shutdown({}, okSession.ctx);
+
+	// (b) failure path: the mocked complete() rejects → one error line, no usage fields.
+	const LOG_ERR = path.join(HOME, "completions-err.jsonl");
+	process.env.ACCORDION_COMPLETION_LOG = LOG_ERR;
+	const mockCompleteFail = async () => {
+		throw new Error("mock provider failure");
+	};
+	const errSession = await spawnClogSession({ complete: mockCompleteFail });
+	await driveOverBudget(errSession.h, errSession.ctx, errSession.port);
+	await waitFor(() => readJsonl(LOG_ERR).some((r) => r.t === "complete"), 2000, "completion-log failure line on disk").catch(() =>
+		fails.push(`completion-log: no line ever landed in ${LOG_ERR}`),
+	);
+	{
+		const errLine = readJsonl(LOG_ERR).find((r) => r.t === "complete" && typeof r.error === "string");
+		if (!errLine) fails.push(`completion-log: no failure line (t:"complete" with a string error) in ${LOG_ERR} (got ${JSON.stringify(readJsonl(LOG_ERR))})`);
+		else {
+			if (errLine.conductor !== "compaction-naive") fails.push(`completion-log failure: conductor expected "compaction-naive" (got ${JSON.stringify(errLine.conductor)})`);
+			if (!errLine.error.includes("mock provider failure")) fails.push(`completion-log failure: error message did not include the thrown message (got ${JSON.stringify(errLine.error)})`);
+			if ("costUsd" in errLine || "input" in errLine || "output" in errLine)
+				fails.push(`completion-log failure: a failure line must not carry usage fields (got ${JSON.stringify(errLine)})`);
+			if (typeof errLine.at !== "number" || typeof errLine.ms !== "number")
+				fails.push(`completion-log failure: at/ms not sane numbers (got ${JSON.stringify(errLine)})`);
+		}
+	}
+	errSession.h.session_shutdown({}, errSession.ctx);
+
+	delete process.env.ACCORDION_COMPLETION_LOG;
+}
+
+// ── this repository's two deltas: the folding default and the compaction gate ───────────────────
+// The only coverage either patch has. The vitest suite never loads them (it is green with the deltas
+// in place and green with them switched off — see Packs/harness/README.md), so if this section is
+// deleted or skipped, a re-port that dropped a delta fails nothing anywhere.
+//
+// One case = one pair of settings, fresh extension instances every time, because both deltas are
+// read inside `session_start`. The observable is the compact hook's answer, which distinguishes the
+// three states without a client or the meta endpoint: it cancels only when folding is armed AND a
+// conductor is attached.
+{
+	// The conductor default as written, checked as source. A behavioural check would have to spawn
+	// triptych, which dials back over the socket — a peer of this file's timing, not of the setting.
+	// The folding default IS covered behaviourally, in case (1) below.
+	const source = fs.readFileSync(new URL("./accordion.ts", import.meta.url), "utf8");
+	if (!source.includes('process.env.ACCORDION_CONDUCTOR_DEFAULT ?? "triptych"'))
+		fails.push("delta: the conductor default is no longer triptych");
+
+	const makeDeltaCtx = (notes, statuses) => ({
+		ui: { setStatus: (_key, text) => statuses.push(text), notify: (message, type) => notes.push({ message, type }), theme: { fg: (_c, s) => s } },
+		model: { id: "delta/model", contextWindow: 1000 },
+		getContextUsage: () => ({ tokens: 0, contextWindow: 1000 }),
+	});
+	/** A fresh extension instance. */
+	const startInstance = () => {
+		const h = {};
+		const notes = [];
+		const statuses = [];
+		const mpi = {
+			on: (name, fn) => (h[name] = fn),
+			registerFlag: () => undefined,
+			getFlag: () => undefined,
+			registerCommand: () => {},
+			registerTool: () => {},
+			appendEntry: () => {},
+		};
+		accordionLive(mpi);
+		return { h, notes, statuses, ctx: makeDeltaCtx(notes, statuses) };
+	};
+	const ask = async (folding, conductor) => {
+		if (folding === undefined) delete process.env.ACCORDION_FOLDING_DEFAULT;
+		else process.env.ACCORDION_FOLDING_DEFAULT = folding;
+		if (conductor === undefined) delete process.env.ACCORDION_CONDUCTOR_DEFAULT;
+		else process.env.ACCORDION_CONDUCTOR_DEFAULT = conductor;
+		const inst = startInstance();
+		// The bad-id path warns through console.warn inside `session_start`, so the capture has to
+		// span the call rather than only the module load.
+		const warnings = [];
+		const originalWarn = console.warn;
+		console.warn = (...args) => warnings.push(args.join(" "));
+		let ret;
+		try {
+			inst.h.session_start({ type: "session_start", reason: "startup" }, inst.ctx);
+			ret = await Promise.resolve(inst.h.session_before_compact({ reason: "threshold" }, inst.ctx));
+		} finally {
+			console.warn = originalWarn;
+		}
+		inst.h.session_shutdown({}, inst.ctx);
+		return { ...inst, warnings, ret };
+	};
+
+	// (1) Nothing set at all: folding arms from its default and a catalog conductor attaches, so
+	//     native compaction is suppressed. This is the behaviour the deltas exist to produce, and it
+	//     is also what proves the folding default: the conductor only attaches while folding is armed,
+	//     so a cancel here cannot happen with folding off.
+	const defaults = await ask(undefined, "compaction-naive");
+	if (!defaults.ret || defaults.ret.cancel !== true)
+		fails.push("delta: with ACCORDION_FOLDING_DEFAULT unset (default on) and a conductor attached, native compaction was not suppressed");
+
+	// (2) Armed, no conductor: the escape valve. Upstream cancels whenever folding is armed.
+	const none = await ask("on", "none");
+	if (none.ret !== undefined)
+		fails.push("delta: folding armed with ACCORDION_CONDUCTOR_DEFAULT=none still cancelled native compaction (pi's safety net must survive the no-conductor window)");
+
+	// (3) Folding off, conductor named: it must not attach, because a conductor with folding off
+	//     proposes folds that are never applied.
+	const off = await ask("off", "compaction-naive");
+	if (off.ret !== undefined) fails.push("delta: with folding off the compact hook still cancelled");
+
+	// (4) A typo degrades to no conductor, warns, and does not break session_start.
+	const bogus = await ask("on", "not-a-real-conductor");
+	if (bogus.ret !== undefined) fails.push("delta: a bad ACCORDION_CONDUCTOR_DEFAULT did not degrade to no conductor");
+	if (!bogus.warnings.some((w) => w.includes("not-a-real-conductor")))
+		fails.push("delta: a bad ACCORDION_CONDUCTOR_DEFAULT warned nobody");
+
+	// Back to this file's upstream-semantics mode for whatever follows.
+	delete process.env.ACCORDION_CONDUCTOR_DEFAULT;
+	process.env.ACCORDION_FOLDING_DEFAULT = "off";
 }
 
 // shutdown must stop advertising (delete the registry entry)

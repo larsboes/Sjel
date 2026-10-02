@@ -223,13 +223,25 @@ The CLM v0.1 release is Apache-2.0 (checkpoint and code, <https://huggingface.co
 
 ### Accordion (vendored, detached)
 
-[a-Fig/Accordion](https://github.com/a-Fig/Accordion), MIT, revision `8427145`, version 0.1.2
-(2026-09-16). Full grant text in this Pack's [`LICENSE`](LICENSE).
+[a-Fig/Accordion](https://github.com/a-Fig/Accordion), MIT, revision `d34b5d0`, version 0.1.2
+(2026-09-29). Full grant text in this Pack's [`LICENSE`](LICENSE).
 
 A pi extension for context-window management: the Map, folding, and the conductors that decide
 what folds between turns. Vendored rather than installed because the two strongest conductors —
 thermocline and triptych — ship with the repository and are deliberately absent from the npm
 package, so an npm install could never have the part the README calls the proof.
+
+Re-ported 2026-10-01 from `8427145` (26 commits). The reason was a correctness fix, not freshness:
+upstream now marks a `thinking` block that a provider sealed with a signature (`Block.signed` in
+`core/types.ts`, `thinkingIsSigned` in `core/wire.ts`), because rewriting a signed block's text
+keeps the stale signature and the API may reject the replay — and rewriting block text is what a
+fold does. Two conductors arrived with it, `keel-lite` and `keel-note`, along with the
+`ACCORDION_COMPLETION_LOG` side-log that records a conductor's out-of-band spend, which protocol v22
+`CompletionResult` cannot carry.
+
+The committed browser client was **not** rebuilt and does not need to be: `PROTOCOL_VERSION` is
+still 22 and the new field is explicitly additive, so a client that does not know `signed` treats
+the block as unsigned. See the rebuild recipe below for the day that stops being true.
 
 | | |
 |---|---|
@@ -237,8 +249,8 @@ package, so an npm install could never have the part the README calls the proof.
 | Not copied | `app/` (the SvelteKit + Tauri desktop app) except that one module, `brand/` (24M), `docs/` (6.8M), `.github/` |
 | Not committed | `node_modules/`, and `accordion.js`. Upstream does not commit `accordion.js` either — it is built at `prepack` for the npm tarball, which excludes `core/` and `app/` |
 | Committed on purpose | `extension/dist/client/` — 2.3M, 54 files. This is the SvelteKit browser build the Map is served from, and it is the one generated artifact that IS committed, because it cannot be rebuilt from this tree: `build-client.mjs` copies `app/build`, and `app/` is not vendored. Upstream ships exactly this directory in its npm package (`files`) while never committing it to git |
-| Local deltas | FOUR, all reversible without touching upstream's structure. (1) A root `package.json` beside the vendored trees carrying `pi.extensions: ["./extension/accordion.ts"]`, so pi loads the TypeScript source directly and the extension needs no build — upstream points its manifest at the built `accordion.js`, which is only necessary when `core/` and the shared app module are absent from the tarball. (2) In `session_start`, folding is armed from `ACCORDION_FOLDING_DEFAULT` (default **on**) and a catalog-validated conductor is attached from `ACCORDION_CONDUCTOR_DEFAULT` (default **triptych**), where upstream hardcodes `setFolding(false)`. (3) `session_before_compact` cancels pi's native compaction only while a conductor is attached, where upstream cancels it whenever folding is armed. (4) The same wrapper `package.json` also carries `scripts.test` and a pinned `devDependencies.vitest`, so the byte-identical upstream suite runs under the runner it was written for — see below |
-| Owner | Sjel, **detached**: no `.git`, no remote, no re-sync path. Upstream was read once, at the revision above. Divergence is expected, not drift |
+| Local deltas | FIVE, all reversible without touching upstream's structure. (1) A root `package.json` beside the vendored trees carrying `pi.extensions: ["./extension/accordion.ts"]`, so pi loads the TypeScript source directly and the extension needs no build — upstream points its manifest at the built `accordion.js`, which is only necessary when `core/` and the shared app module are absent from the tarball. (2) In `session_start`, folding is armed from `ACCORDION_FOLDING_DEFAULT` (default **on**) and a catalog-validated conductor is attached from `ACCORDION_CONDUCTOR_DEFAULT` (default **triptych**), where upstream hardcodes `setFolding(false)`. (3) `session_before_compact` cancels pi's native compaction only while a conductor is attached, where upstream cancels it whenever folding is armed. (4) `conductors/ws/thermocline/probe/requirements.txt` moves the CUDA build from 12.1 to 12.6, keeps the torch version unqualified so pip's `cu126` index picks the wheel while `osv-scanner` can still resolve the release from PyPI, and pins `anyio`/`idna`/`sympy` ahead of the probe's own resolution. (5) A wrapper `package.json` carries `scripts.test` and a pinned `devDependencies.vitest`, so the upstream suite runs under the runner it was written for; the three pi peers read `>=0.87.0` rather than a caret so the floor is what 0.87.0 established while Pi 1.0.0 still satisfies it — see below |
+| Owner | Sjel, **detached**: no `.git`, no remote, no re-sync path. Upstream is read at the revision above and re-read only when a port is worth its cost — the two behavioural deltas have to be re-applied by hand each time, and the vendored suite is what proves the re-application landed. Divergence is expected, not drift |
 
 Rebuilding the browser client, if it ever needs to change — it needs a checkout of upstream,
 because `app/` is not vendored:
@@ -272,9 +284,25 @@ One command, from the package root:
 cd "$SJEL_ROOT/Packs/harness/pi-packages/accordion" && bun run test
 ```
 
-22 files, 459 tests, all green since 2026-09-17. This is not ceremony: deltas (2) and (3) are
-behavioural patches to `extension/accordion.ts`, and this suite is the only thing that covers
+24 files, 552 tests, all green since 2026-10-01. It covers **upstream's** code, including the two
+conductors and the signed-thinking flag this port brought in.
+
+The two deltas have their own step, and they need it. Measured 2026-10-01, by reverting each one in
+turn: with the compaction gate reverted the vitest suite still passes 552/552 while
+`extension/smoke.mjs` fails 4; with the folding default reverted, vitest still passes and smoke
+fails 1. The suite never loads either patch — no vitest file mentions `ACCORDION_FOLDING_DEFAULT`,
+`ACCORDION_CONDUCTOR_DEFAULT` or `session_before_compact` — so a green vitest run says nothing about
 them.
+
+`smoke.mjs` is the one harness that drives the real entry point: mock `pi`, a real WebSocket
+client, real `session_start` and compact hooks. It is upstream's file, and upstream expects folding
+OFF throughout, so it sets `ACCORDION_FOLDING_DEFAULT=off` for its own sections and covers the two
+deltas in a section of its own under their own settings — including the case where folding is armed
+with no conductor attached, which must leave pi's native compaction alone. CI runs it immediately
+after vitest, as `accordion smoke (the two vendoring deltas)`.
+
+Re-applying both deltas by hand is the whole cost of staying current. These are what now says a
+re-application landed intact.
 
 It runs under **vitest**, not `bun test`, and that is a deliberate split rather than an
 oversight. The upstream tests import `vi` from vitest, and Bun's compatibility shim does not

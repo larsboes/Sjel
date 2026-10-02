@@ -36,7 +36,10 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 
 ===============================================================================
-a-Fig/Accordion, revision 84271452ebd3650d0f63fbf77810693299b19ea9 (2026-09-16)
+a-Fig/Accordion, revision d34b5d09ebe9e06e8279516d169e773bed4b05da, branch devmain,
+  version 0.1.2 (2026-09-29). Re-ported 2026-10-01 from 84271452ebd3650d0f63fbf77810693299b19ea9
+  (branch main, 2026-09-16), 26 commits on. Note the branch: upstream's main was, and still is,
+  the older revision the first vendoring took, so a re-read of main shows nothing new.
   Covers: pi-packages/accordion/ — extension/, core/, conductors/, and the single
   shared module app/src/lib/live/registry.ts that the extension imports.
   Not copied from upstream: app/ (the SvelteKit + Tauri desktop app) except that one
@@ -47,12 +50,16 @@ a-Fig/Accordion, revision 84271452ebd3650d0f63fbf77810693299b19ea9 (2026-09-16)
   Map. Upstream ships it in the npm package and never commits it to git; it is
   committed here because it cannot be rebuilt from this tree, the client build
   needing app/.
-  LOCAL DELTAS, both inside extension/accordion.ts and both env-reversible rather
-  than literal flips: folding is armed from ACCORDION_FOLDING_DEFAULT and a
-  catalog-validated conductor attached from ACCORDION_CONDUCTOR_DEFAULT, where
-  upstream hardcodes setFolding(false); and native compaction is cancelled only
-  while a conductor is attached, where upstream cancels it whenever folding is
-  armed. Reasoning for both is in Packs/harness/README.md.
+  LOCAL DELTAS, FIVE of them, all listed in Packs/harness/README.md and all reversible
+  without touching upstream's structure. Two are behavioural, inside
+  extension/accordion.ts and both env-reversible rather than literal flips: folding is
+  armed from ACCORDION_FOLDING_DEFAULT and a catalog-validated conductor attached from
+  ACCORDION_CONDUCTOR_DEFAULT, where upstream hardcodes setFolding(false); and native
+  compaction is cancelled only while a conductor is attached, where upstream cancels it
+  whenever folding is armed. Two are packaging: this Pack's root package.json points pi
+  at extension/accordion.ts, and that same wrapper adds the vitest runner the upstream
+  suite was written for. The fifth moves the attention probe's CUDA build from 12.1 to
+  12.6.
   WRAPPER DELTA, outside the vendored trees: the root package.json beside them adds
   a pinned devDependency on vitest and a `test` script, so the upstream suite runs
   under the runner it was written for. Every *.test.ts under this directory is
@@ -60,9 +67,12 @@ a-Fig/Accordion, revision 84271452ebd3650d0f63fbf77810693299b19ea9 (2026-09-16)
   Bun's `vi` shim does not implement advanceTimersByTimeAsync, so `bun test` reported
   seven failures in code Axon did not write. bunfig.toml scopes `bun test` away from
   Packs/*/pi-packages/**, and the CI bun-tests job runs `bun run test` inside this
-  directory instead (22 files, 459 tests, green from 2026-09-17). The tests are kept
-  rather than dropped because they are the only coverage of the two behavioural
-  deltas above.
+  directory instead (24 files, 552 tests, green from 2026-10-01). The tests are kept
+  rather than dropped because they carry upstream's coverage of the two conductors and
+  the signed-thinking flag this re-port brought in. They are NOT coverage of the two
+  behavioural deltas above, and saying otherwise was measured false: reverting either
+  one in turn on 2026-10-01 leaves the suite passing 552/552 while extension/smoke.mjs
+  fails, which is why CI runs smoke as its own step.
   https://github.com/a-Fig/Accordion
 ===============================================================================
 

@@ -1,7 +1,7 @@
 {
   "name": "axon-vendored-accordion",
   "private": true,
-  "description": "Vendored, detached copy of a-Fig/Accordion (MIT). This wrapper is Axon's, not upstream's: it exists so the pi-packages convention (one directory under pi-packages/ whose package.json carries the pi manifest) holds for a repo whose own package root is extension/. Every upstream file below it is byte-identical to the vendored revision. It also carries the test runner: the upstream suite is written for vitest, which Bun's vi shim does not fully implement, so `bun run test` here runs the byte-identical tests under the runner they were written for.",
+  "description": "Vendored, detached copy of a-Fig/Accordion (MIT), taken as a starting point and edited in place since: Packs/harness/README.md lists the deltas and the revision this tree was last read at. This wrapper is Axon's, not upstream's: it exists so the pi-packages convention (one directory under pi-packages/ whose package.json carries the pi manifest) holds for a repo whose own package root is extension/. It also carries the test runner: the upstream suite is written for vitest, which Bun's vi shim does not fully implement, so `bun run test` here runs it under the runner it was written for.",
   "pi": {
     "extensions": [
       "./extension/accordion.ts"

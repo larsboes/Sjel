@@ -98,7 +98,7 @@ function getCommunities(nodes: FlatNode[]): number[] {
 // `GET /routes`, in the shape every Rust capability serves through
 // libs/route-manifest (`{capability, routes: [{method, path, summary}]}`), so an
 // agent and `sjel search` read this surface the way they read the others (ISA ISC-34).
-// Written as `r(...)` calls because tools/lib/capability-index.sh indexes that form.
+// Written as `r(...)` calls because `sjel search` indexes that form (tools/sjel-cli/src/search.rs).
 const r = (method: string, path: string, summary: string) => ({ method, path, summary });
 export const ROUTES = [
   r("GET", "/routes", "This manifest."),

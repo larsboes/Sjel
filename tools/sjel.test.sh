@@ -24,11 +24,9 @@ contains() { case "$1" in *"$2"*) ;; *) fail "expected '$2' in: $1" ;; esac; }
 out="$("$SJEL" help)"
 contains "$out" "capability list"
 contains "$out" "pack deploy"
-# tools is in the list because it is indexed. `sjel search` itself cannot run here — it
-# calls tools/capability.sh registry, which hard-fails without a machine.toml — so the index
-# is asserted by tools/tool-index.test.sh against the library both use.
+# tools is in the list because it is indexed. The index itself is asserted by the unit tests
+# in tools/sjel-cli/src/search.rs, which `cargo test --workspace` runs.
 contains "$out" "search <words...>              Search commands, tools, capabilities, and Packs"
-[ -r "$ROOT/tools/lib/tool-index.sh" ] || fail "tools/lib/tool-index.sh is missing"
 contains "$out" "storage <report|apply|target|prune>"
 contains "$out" "gates"
 contains "$out" "test"
@@ -54,7 +52,7 @@ contains "$out" "--print-env"
 for job in repo-gates bun-tests; do
   grep -q "^  $job:" "$ROOT/.github/workflows/ci.yml" ||
     fail "sjel dispatches to CI job '$job', which .github/workflows/ci.yml does not declare"
-  grep -q "run $job" "$SJEL" ||
+  grep -q "\"run\", \"$job\"" "$ROOT/tools/sjel-cli/src/main.rs" ||
     fail "sjel no longer dispatches to CI job '$job'"
 done
 
@@ -62,11 +60,10 @@ out="$("$SJEL" help capability)"
 contains "$out" "ingest <url>"
 # The four states are the contract `sjel capability health` publishes: a reader has to be
 # able to learn that `off` is not a fault without running it on a machine where something
-# is off. tools/capability-probe.test.sh asserts the rules themselves.
+# is off. The unit tests in tools/sjel-cli/src/capability.rs assert the rules themselves.
 contains "$out" "down     should be answering and did not"
 contains "$out" "off      this machine does not autostart it"
 contains "$out" "unknown  declares neither"
-[ -r "$ROOT/tools/lib/capability-probe.sh" ] || fail "tools/lib/capability-probe.sh is missing"
 
 out="$("$SJEL" help pack)"
 contains "$out" "opencode"

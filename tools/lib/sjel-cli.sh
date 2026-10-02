@@ -1,8 +1,10 @@
 #!/bin/bash
 # The launcher half of every tools/ script whose logic moved into the sjel-cli crate
-# (tools/sjel-cli). Source tools/lib/paths.sh first, then call
+# (tools/sjel-cli). Set SJEL_ROOT (tools/lib/paths.sh does) and source tools/lib/toml.sh,
+# then call
 #
-#   sjel_cli_exec <subcommand> "$@"
+#   sjel_cli_exec <subcommand> "$@"    # a ported tools/ script
+#   sjel_cli_exec "$@"                 # the sjel launcher: its arguments are the binary's
 #
 # It builds the release binary when it is missing or older than the crate's sources, then execs
 # it. The same on-demand build tools/storage/storage and tools/service-runner.sh do, written once
@@ -17,7 +19,8 @@
 # bash 3.2-safe (CONTRIBUTING.md#portable-shell).
 
 sjel_cli_exec() {
-  local sub="$1"; shift
+  local sub
+  sub="$(basename "$0")"
   local bin="${SJEL_CLI_BIN:-}"
   if [ -z "$bin" ]; then
     local crate
@@ -42,5 +45,5 @@ sjel_cli_exec() {
       cargo build --locked --release -p sjel-cli --manifest-path "$crate/../../Cargo.toml" >&2 || exit 2
     fi
   fi
-  exec "$bin" "$sub" "$@"
+  exec "$bin" "$@"
 }

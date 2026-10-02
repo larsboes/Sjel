@@ -465,7 +465,9 @@ last layer over the routes and adds no data path of its own.
   route manifest, read from source because `/routes` needs the token and most capabilities are
   off. `sjel search mail` returns `comms` with `GET /triage`; `sjel search trash` returns
   `POST /triage/{id}/gmail`. Only the opening paragraph, because the whole README matched
-  `backup` in 16 capabilities. Held by `tools/capability-index.test.sh`.
+  `backup` in 16 capabilities. Held by `tools/capability-index.test.sh` until 2026-10-02, when
+  the index moved into Rust; now held by `capability_index_finds_comms_for_mail` in
+  `tools/sjel-cli/src/search.rs`.
 - [x] ISC-34 — every registered HTTP capability serves `GET /routes`, or its registry entry
   says why it does not. Falsifier: a capability in `sjel capability list` answers `/routes`
   with 404 and has no stated reason. Probe: loop over the list. `tools/doctor` runs it, so the

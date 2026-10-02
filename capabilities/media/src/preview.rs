@@ -935,6 +935,15 @@ pub(crate) fn metadata_day(input: &str) -> Option<String> {
 /// The field precedence is the preview's, so no two verbs can disagree about what a capture date is.
 /// A file with no usable date is absent from the map; a caller treats that as unknown rather than
 /// inventing one, and reports how many it could not date.
+///
+/// A host without ExifTool gets that same empty map and a named line on stderr, never a bare
+/// ENOENT. ExifTool is the first rung of the ladder, not a precondition for it: `relabel` dates by
+/// filename and mtime exactly as a file with no EXIF would, counts what it could not date, and
+/// journals every move. `ingest::exif_dates` and `preview`'s own metadata pass already answer an
+/// absent ExifTool this way — this was the third caller and the only one that refused.
+///
+/// It is also a host tool CI does not install, so the refusal made three `relabel` tests depend on
+/// the machine they ran on. Their fixtures carry no EXIF and assert nothing about dates.
 pub(crate) fn capture_days(
     root: &Path,
     relpaths: &[String],
@@ -943,10 +952,21 @@ pub(crate) fn capture_days(
     if relpaths.is_empty() {
         return Ok(out);
     }
-    let output = Command::new("exiftool")
+    let output = match Command::new("exiftool")
         .args(EXIF_ARGS)
         .args(relpaths.iter().map(|rel| root.join(rel)))
-        .output()?;
+        .output()
+    {
+        Ok(output) => output,
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => {
+            eprintln!(
+                "media: exiftool is not on PATH; dating by filename and mtime. \
+                 Install exiftool for EXIF dates."
+            );
+            return Ok(out);
+        }
+        Err(error) => return Err(error.into()),
+    };
     if !output.status.success() {
         return Err("exiftool exited unsuccessfully; no capture dates were read".into());
     }

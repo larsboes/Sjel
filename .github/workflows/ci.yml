@@ -78,6 +78,16 @@ jobs:
       # covers it. The split existed because those suites needed a server — they
       # failed rather than skipped without one, which is what a `--skip` selector
       # and a `services: postgres` job were both paying for.
+
+      # ExifTool is `required = "optional"` in toolchain.toml and this image does not carry it,
+      # so without this step a run here never spawns it: every media verb that reads capture
+      # dates takes its absent-tool branch instead, and `relabel` and `duplicates` are the two
+      # that call `capture_days` for real. Installing it makes CI cover the path a normal host
+      # takes. It is not what makes these tests pass — that was a bare ENOENT in `capture_days`,
+      # fixed where it was raised — so a future image without it costs fidelity, not a red run.
+      - name: Install ExifTool
+        run: sudo apt-get update && sudo apt-get install -y libimage-exiftool-perl
+
       - name: cargo test
         run: cargo test --workspace --locked
 

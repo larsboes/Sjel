@@ -52,7 +52,8 @@ axum.workspace = true
 # would bump the other six. Both are version changes, which belong on a Dependabot commit.
 thiserror = "2.0"
 # Der eigentliche Hebel der Suche: die Kandidaten sind voneinander unabhaengig.
-rayon = "1"
+# Seit 2026-10-02 aus der Workspace-Tabelle: die Version gehoert dorthin, die Begruendung hier.
+rayon.workspace = true
 
 [dev-dependencies]
 # `ServiceExt::oneshot`, damit der Origin-Test den verdrahteten Router ohne Listener und

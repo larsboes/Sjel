@@ -324,20 +324,24 @@ door), `ACCORDION_APP_PATH` / `ACCORDION_APP_FLAG` to point at a built desktop a
 
 ### pi-web-access (vendored, detached)
 
-[nicobailon/pi-web-access](https://github.com/nicobailon/pi-web-access), MIT, revision `192ac18`,
-version 0.29.0 (2026-09-16). Full grant text in this Pack's [`LICENSE`](LICENSE).
+[nicobailon/pi-web-access](https://github.com/nicobailon/pi-web-access), MIT, revision `72c6e67`,
+version 0.35.0 (2026-10-01). Full grant text in this Pack's [`LICENSE`](LICENSE).
 
 The web search, page fetch, PDF extraction and video analysis every session uses, across roughly
-twenty provider adapters. It arrived here as `npm:pi-web-access`, an opaque version we could not
-patch when a provider changed shape.
+thirty provider adapters. It arrived here as `npm:pi-web-access`, an opaque version we could not
+patch when a provider changed shape. Re-vendored 2026-10-01 from 0.29.0 (`192ac18`); six releases
+landed in between, three of them on this machine's own defaults — OpenCode session headers without
+which `fetch_content` answer mode against `opencode-go` returns `400 MissingSessionID` (0.30.0,
+0.32.0), and `toolActivation: "auto"`, which stops turning web tools on from resending the
+conversation and missing the prompt cache on DeepSeek-class models (0.34.0).
 
 | | |
 |---|---|
-| Vendored | `pi-packages/pi-web-access/` — the root `*.ts` sources, `package.json`, `tsconfig.json`, `LICENSE` |
-| Not copied | `test/` (1.0M, 82 files), `pi-web-fetch-demo.mp4`, `banner.png`, `CHANGELOG.md`, `README.md`, `SECURITY.md`, and the upstream lockfile |
+| Vendored | `pi-packages/pi-web-access/` — the root `*.ts` sources (81 files), `package.json`, `tsconfig.json`, `LICENSE` |
+| Not copied | `dist/` (the 996K precompiled bundle), `test/` (1.0M, 82 files), `pi-web-fetch-demo.mp4`, `banner.png`, `CHANGELOG.md`, `README.md`, `SECURITY.md`, and the upstream lockfile |
 | Not committed | `node_modules/` (installed in place); the local `bun.lock` is committed |
-| Local deltas | two, in `package.json`: (1) `"overrides": { "undici": "^8.10.2" }`, added 2026-09-29 for GHSA-3wwx-pv8p-q78v / CVE-2026-85024: undici's WebSocket client kills the whole process on a malformed permessage-deflate block, fixed in 8.10.2. This tree's own `undici` range had already resolved to 8.10.2, but the nested dev copy of `@earendil-works/pi-coding-agent/undici` sat at 8.9.0. `bun install` dropped the nested entry and `osv-scanner` reports no issues. (2) Host-provided `typebox` moved from runtime dependencies to a `"*"` peer to follow Pi 0.99's extension-loader contract. Upstream's manifest already points pi at `./index.ts`, so it still loads with no build |
-| Owner | Sjel, **detached**: no `.git`, no remote. The npm package was removed from `settings.json` when this landed, so exactly one web-access extension loads |
+| Local deltas | FOUR, all in `package.json`. (1) `pi.extensions` is `["./index.ts"]`, not upstream's `["./dist"]`: since 0.30.0 the published package ships a precompiled bundle and points its manifest at it, while a source checkout loads the TypeScript directly — `prepublishOnly` rewrites the field to `./dist` and `postpublish` rewrites it back. This tree is a source checkout, so it keeps the source shape. (2) `"overrides": { "undici": "^8.11.2" }`, originally added 2026-09-29 for GHSA-3wwx-pv8p-q78v; upstream now depends on `^8.11.2` itself, but the vendored dev copy of `@earendil-works/pi-coding-agent` pins `undici` **exactly** (0.99.2 pins 8.10.2), so the override is what keeps one copy at 8.11.2. `osv-scanner scan --lockfile=bun.lock` reports no issues across 369 packages. (3) The three pi SDK devDependencies are pinned to `0.99.2` rather than `1.0.0`: the global 24h adoption hold in `~/.bunfig.toml` blocks 1.0.0 until 2026-10-02T19:15Z, and the point of the pin is to typecheck against the SDK we run. Bump it to 1.0.0 once the hold clears. (4) `typebox` stays a `"*"` peer with no devDependency, where upstream 0.35 lists `typebox@1.3.27` as one; adding it installs a second copy beside Pi's, which is what 0.32.0 changed to stop the duplicate-module startup warning. `tsconfig.json` is this tree's own, kept from the first vendoring so a customization can be typechecked before a restart |
+| Owner | Sjel, **detached**: no `.git`, no remote. Materialized as a source checkout, not an installed package, so the vendored devDependencies exist only for `bun run typecheck` |
 
 ## Why this shape: the flip conditions
 

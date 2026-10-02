@@ -16,11 +16,6 @@ interface WebSearchConfig {
 	exaBaseUrl?: unknown;
 }
 
-interface ExaAnswerResponse {
-	answer?: string;
-	citations?: Array<{ url?: string; title?: string; text?: string; publishedDate?: string }>;
-}
-
 interface ExaSearchResponse {
 	results?: Array<{
 		title?: string;
@@ -146,6 +141,16 @@ function normalizeHighlights(value: unknown): string[] {
 	return value.filter((item): item is string => typeof item === "string" && item.trim().length > 0);
 }
 
+function fallbackSourceLabel(url: string | undefined, index: number): string {
+	try {
+		const hostname = url ? new URL(url).hostname : "";
+		if (hostname) return hostname;
+	} catch {
+		// Invalid URLs use the generic label.
+	}
+	return `Source ${index + 1}`;
+}
+
 function buildAnswerFromSearchResults(results: ExaSearchResponse["results"]): string {
 	if (!results?.length) return "";
 	const parts: string[] = [];
@@ -157,20 +162,20 @@ function buildAnswerFromSearchResults(results: ExaSearchResponse["results"]): st
 			? highlights.join(" ")
 			: typeof item.text === "string" ? item.text.trim().slice(0, 1000) : "";
 		if (!content) continue;
-		const sourceTitle = item.title || `Source ${i + 1}`;
+		const sourceTitle = item.title || fallbackSourceLabel(item.url, i);
 		parts.push(`${content}\nSource: ${sourceTitle} (${item.url})`);
 	}
 	return parts.join("\n\n");
 }
 
-function mapResults(results: ExaSearchResponse["results"] | ExaAnswerResponse["citations"]): SearchResponse["results"] {
+function mapResults(results: ExaSearchResponse["results"]): SearchResponse["results"] {
 	if (!Array.isArray(results)) return [];
 	const mapped: SearchResponse["results"] = [];
 	for (let i = 0; i < results.length; i++) {
 		const item = results[i];
 		if (!item?.url) continue;
 		mapped.push({
-			title: item.title || `Source ${i + 1}`,
+			title: item.title || fallbackSourceLabel(item.url, i),
 			url: item.url,
 			snippet: "",
 		});
@@ -180,15 +185,9 @@ function mapResults(results: ExaSearchResponse["results"] | ExaAnswerResponse["c
 
 function mapInlineContent(results: ExaSearchResponse["results"]): ExtractedContent[] {
 	if (!results?.length) return [];
-	return results
-		.filter((r): r is NonNullable<ExaSearchResponse["results"]>[number] & { url: string; text: string } =>
-			!!r?.url && typeof r.text === "string" && r.text.length > 0)
-		.map(r => ({
-			url: r.url,
-			title: r.title || "",
-			content: r.text,
-			error: null,
-		}));
+	return results.flatMap((r, i) => r?.url && typeof r.text === "string" && r.text.length > 0
+		? [{ url: r.url, title: r.title || fallbackSourceLabel(r.url, i), content: r.text, error: null }]
+		: []);
 }
 
 function toSearchResponse(
@@ -318,21 +317,16 @@ function buildAnswerFromMcpResults(results: McpParsedResult[]): string {
 		const result = results[i];
 		const snippet = result.content.replace(/\s+/g, " ").trim().slice(0, 500);
 		if (!snippet) continue;
-		const sourceTitle = result.title || `Source ${i + 1}`;
+		const sourceTitle = result.title || fallbackSourceLabel(result.url, i);
 		parts.push(`${snippet}\nSource: ${sourceTitle} (${result.url})`);
 	}
 	return parts.join("\n\n");
 }
 
 function mapMcpInlineContent(results: McpParsedResult[]): ExtractedContent[] {
-	return results
-		.filter(result => result.content.length > 0)
-		.map(result => ({
-			url: result.url,
-			title: result.title,
-			content: result.content,
-			error: null,
-		}));
+	return results.flatMap((result, i) => result.content.length > 0
+		? [{ url: result.url, title: result.title || fallbackSourceLabel(result.url, i), content: result.content, error: null }]
+		: []);
 }
 
 function buildMcpQuery(query: string, options: ExaSearchOptions): string {
@@ -458,35 +452,9 @@ export async function searchWithExa(query: string, options: ExaSearchOptions = {
 	}
 
 	const apiBaseUrl = getApiBaseUrl();
-	const useSearch = options.includeContent
-		|| !!options.recencyFilter
-		|| !!options.domainFilter?.length
-		|| !!(options.numResults && options.numResults !== 5);
-
 	const activityId = activityMonitor.logStart({ type: "api", query });
 
 	try {
-		if (!useSearch) {
-			const response = await fetchWithCredentialRedirects(`${apiBaseUrl}/answer`, {
-				method: "POST",
-				headers: exaApiHeaders(apiKey),
-				body: JSON.stringify({ query }),
-				signal: requestSignal(options.signal),
-			}, ["x-api-key"]);
-
-			if (!response.ok) {
-				const errorText = redactCredential(await response.text(), apiKey);
-				throw new Error(`Exa API error ${response.status}: ${errorText.slice(0, 300)}`);
-			}
-
-			const data = await response.json() as ExaAnswerResponse;
-			activityMonitor.logComplete(activityId, response.status);
-			return {
-				answer: data.answer || "",
-				results: mapResults(data.citations),
-			};
-		}
-
 		const response = await fetchWithCredentialRedirects(`${apiBaseUrl}/search`, {
 			method: "POST",
 			headers: exaApiHeaders(apiKey),

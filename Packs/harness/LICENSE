@@ -89,12 +89,14 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 
 ===============================================================================
-nicobailon/pi-web-access, revision 192ac1875e3b8f88c78953dbc314949ec9fcaa27,
-  version 0.29.0 (2026-09-16)
+nicobailon/pi-web-access, revision 72c6e67787d67d8a7d01bf0abf30c072a6112de6
+  (tag v0.35.0, 2026-10-01). Re-vendored from
+  192ac1875e3b8f88c78953dbc314949ec9fcaa27, version 0.29.0 (2026-09-16).
   Covers: pi-packages/pi-web-access/ — the root *.ts sources, package.json,
   tsconfig.json, LICENSE.
-  Not copied from upstream: test/, pi-web-fetch-demo.mp4, banner.png, CHANGELOG.md,
-  README.md, SECURITY.md, and the upstream lockfile.
+  Not copied from upstream: dist/ (the precompiled bundle upstream's 0.30.0+ package
+  ships and points its own manifest at), test/, pi-web-fetch-demo.mp4, banner.png,
+  CHANGELOG.md, README.md, SECURITY.md, and the upstream lockfile.
   https://github.com/nicobailon/pi-web-access
 ===============================================================================
 

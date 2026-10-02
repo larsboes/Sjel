@@ -1,7 +1,7 @@
 {
   "name": "pi-web-access",
-  "version": "0.29.0",
-  "description": "Web search, URL fetching, GitHub repo cloning, PDF extraction, YouTube video understanding, and local video analysis for Pi coding agent. Supports OpenAI, Brave, Parallel, TinyFish, Search1API, Searchinfinity, Querit, Tavily, Firecrawl, Jina, SERPdive, Kagi, Ollama, AnySearch, Bright Data SERP, SerpBase, SerpApi, SearXNG, Exa, Perplexity, Gemini, Kimi, and Mistral.",
+  "version": "0.35.0",
+  "description": "Web search, URL fetching, GitHub repo cloning, PDF extraction, YouTube video understanding, and local video analysis for Pi coding agent. Supports OpenAI, Brave, Parallel, TinyFish, Search1API, Searchinfinity, Querit, Tavily, Firecrawl, Crawl4AI, Jina, SERPdive, Kagi, Ollama, AnySearch, Bright Data SERP, SerpBase, SerpApi, Serply, You.com, SearXNG, Exa, Perplexity, Gemini, Kimi, and Mistral.",
   "type": "module",
   "scripts": {
     "test": "node --test",
@@ -40,13 +40,17 @@
     "pi-web-fetch-demo.mp4"
   ],
   "devDependencies": {
+    "@earendil-works/pi-ai": "0.99.2",
+    "@earendil-works/pi-coding-agent": "0.99.2",
+    "@earendil-works/pi-tui": "0.99.2",
     "@types/turndown": "^5.0.6",
     "typescript": "^7.0.2"
   },
   "overrides": {
-    "undici": "^8.10.2"
+    "undici": "^8.11.2"
   },
   "dependencies": {
+    "@modelcontextprotocol/sdk": "1.27.1",
     "@mozilla/readability": "^0.6.0",
     "defuddle": "0.19.3",
     "linkedom": "^0.16.0",
@@ -54,7 +58,7 @@
     "promise.try": "^2.0.1",
     "turndown": "^7.2.0",
     "unpdf": "^1.6.2",
-    "undici": "^8.9.0"
+    "undici": "^8.11.2"
   },
   "peerDependencies": {
     "@earendil-works/pi-ai": "*",

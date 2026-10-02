@@ -1,5 +1,8 @@
 import { existsSync, readFileSync } from "node:fs";
 import { activityMonitor } from "./activity.ts";
+import { BraveRateLimitCoordinator } from "./brave-rate-limit.ts";
+import { normalizeDomain } from "./domain-filter-normalization.ts";
+import { normalizeSearchResultCount } from "./search-result-count-normalization.ts";
 import type { SearchOptions, SearchResult, SearchResponse } from "./perplexity.ts";
 import { hasCredentialSource, redactCredential, resolveCredential } from "./credential-source.ts";
 import { fetchWithCredentialRedirects, getWebSearchConfigPath, resolveApiBaseUrl } from "./utils.ts";
@@ -7,6 +10,7 @@ import { fetchWithCredentialRedirects, getWebSearchConfigPath, resolveApiBaseUrl
 const BRAVE_API_BASE_URL = "https://api.search.brave.com/res/v1";
 const CONFIG_PATH = getWebSearchConfigPath();
 const SEARCH_TIMEOUT_MS = 30_000;
+const braveRateLimit = new BraveRateLimitCoordinator();
 
 interface WebSearchConfig {
 	braveApiKey?: unknown;
@@ -54,26 +58,6 @@ function getApiUrl(): string {
 		environmentKey: "BRAVE_BASE_URL",
 		environmentValue: process.env.BRAVE_BASE_URL,
 	})}/web/search`;
-}
-
-function normalizeCount(value: number | undefined): number {
-	if (typeof value !== "number" || !Number.isFinite(value)) return 5;
-	return Math.max(1, Math.min(Math.floor(value), 20));
-}
-
-function normalizeDomain(value: string): string | null {
-	let input = value.trim().toLowerCase();
-	if (!input) return null;
-	if (input.startsWith("-")) input = input.slice(1).trim();
-	if (!input) return null;
-	try {
-		const parsed = input.includes("://") ? new URL(input) : new URL(`https://${input}`);
-		input = parsed.hostname;
-	} catch {
-		input = input.split("/")[0]?.split(":")[0] ?? "";
-	}
-	input = input.replace(/^\.+|\.+$/g, "");
-	return /^[a-z0-9][a-z0-9.-]*\.[a-z]{2,}$/i.test(input) ? input : null;
 }
 
 function normalizeDomainFilters(domainFilter: string[] | undefined): NormalizedDomainFilters {
@@ -151,7 +135,7 @@ export async function searchWithBrave(
 		);
 	}
 
-	const numResults = normalizeCount(options.numResults);
+	const numResults = normalizeSearchResultCount(options.numResults);
 	const domainFilters = normalizeDomainFilters(options.domainFilter);
 	const searchQuery = buildBraveQuery(query, options.domainFilter);
 	const activityId = activityMonitor.logStart({ type: "api", query: searchQuery });
@@ -172,17 +156,32 @@ export async function searchWithBrave(
 	}
 
 	try {
-		const response = await fetchWithCredentialRedirects(`${apiUrl}?${params.toString()}`, {
-			method: "GET",
-			headers: {
-				"X-Subscription-Token": apiKey,
-				"Accept": "application/json",
-				"Accept-Encoding": "gzip",
-			},
-			signal: options.signal
-				? AbortSignal.any([AbortSignal.timeout(SEARCH_TIMEOUT_MS), options.signal])
-				: AbortSignal.timeout(SEARCH_TIMEOUT_MS),
-		}, ["X-Subscription-Token"]);
+		const searchDeadline = AbortSignal.timeout(SEARCH_TIMEOUT_MS);
+		const searchSignal = options.signal
+			? AbortSignal.any([searchDeadline, options.signal])
+			: searchDeadline;
+		const response = await braveRateLimit.run(async () => {
+			for (let attempt = 0; attempt < 2; attempt++) {
+				const current = await fetchWithCredentialRedirects(`${apiUrl}?${params.toString()}`, {
+					method: "GET",
+					headers: {
+						"X-Subscription-Token": apiKey,
+						"Accept": "application/json",
+						"Accept-Encoding": "gzip",
+					},
+					signal: searchSignal,
+				}, ["X-Subscription-Token"]);
+
+				braveRateLimit.observe(current.headers);
+				if (current.status !== 429 || attempt === 1) return current;
+				const retryDelay = braveRateLimit.retryDelay(current.headers);
+				if (retryDelay === null) return current;
+				braveRateLimit.recordRetryDelay(retryDelay);
+				await current.body?.cancel().catch(() => undefined);
+				await braveRateLimit.waitForRecordedCooldown(searchSignal);
+			}
+			throw new Error("Brave Search retry loop exited unexpectedly");
+		}, searchSignal);
 
 		if (!response.ok) {
 			activityMonitor.logError(activityId, `HTTP ${response.status}`);

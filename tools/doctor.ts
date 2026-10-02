@@ -1382,6 +1382,65 @@ const CHECKS: Check[] = [
   // the tracked axon.toml. It now sits in the overlay, outside this repo, so
   // the machine-level checks belong to the machine-level tool. The gate keeps the
   // invariants that are intrinsic to the repo (every service.toml `requires =` resolves).
+  // The Claude Code floor used to be a root-owned managed policy that no session could edit,
+  // and a file nobody can edit needs no checker. Since the principal retired that layer on
+  // 2026-10-02 the floor lands in ~/.claude/settings.json, which a session *can* edit, so this
+  // is the only thing in the tree that would notice. Drift is a warn and never a bad: the
+  // baseline also carries personal defaults (permission mode, env), so a changed mode is drift
+  // and is not a security event — the message names the key paths so a lifted deny list can be
+  // told from a changed preference. A machine with no settings file yet is skipped rather than
+  // reported as total drift, which is what keeps this honest in CI, where HOME holds no harness
+  // config at all.
+  //
+  // The binary is used only if it is already built, for the reason the Build artifacts section
+  // gives: the fast local sweep must not pay for a release compile.
+  {
+    name: "Claude Code settings (sjel claude)",
+    run(ctx) {
+      const targetDir = process.env.CARGO_TARGET_DIR || join(ctx.root, "target");
+      const bin = join(targetDir, "release", "sjel-claude-config");
+      if (!existsSync(bin)) {
+        ctx.warn("sjel-claude-config not built — run `sjel claude check` to compare settings");
+        return;
+      }
+      const configDir = process.env.CLAUDE_CONFIG_DIR
+        ? expandHome(process.env.CLAUDE_CONFIG_DIR)
+        : join(process.env.HOME ?? "", ".claude");
+      const target = join(configDir, "settings.json");
+      if (!existsSync(target)) {
+        ctx.warn(`no ${target} yet — apply Sjel's baseline with: sjel claude`);
+        return;
+      }
+      // Spawned directly rather than through the launcher, so pass what the launcher would
+      // have resolved: SJEL_ROOT locates the baseline, SJEL_OVERLAY_ROOT locates this
+      // deployment's fragment. Without the second, every fragment rule would read as drift.
+      const proc = Bun.spawnSync({
+        cmd: [bin, "check"],
+        env: { ...process.env, SJEL_ROOT: ctx.root, SJEL_OVERLAY_ROOT: ctx.overlayPath },
+        stdout: "pipe",
+        stderr: "pipe",
+      });
+      const output = `${proc.stdout.toString()}${proc.stderr.toString()}`;
+      if (proc.exitCode === 0) {
+        const match = output.split("\n").find((line) => line.includes("matches the baseline"));
+        ctx.ok(match?.replace(/^claude-code-config:\s*/, "") ?? "matches the baseline");
+        return;
+      }
+      if (proc.exitCode !== 3) {
+        // 2 is a settings.json that is not valid JSON, which the tool refuses to compare rather
+        // than clobber; 1 is a missing baseline or a usage error. Neither is drift.
+        ctx.warn(`check did not run: ${output.split("\n").find(Boolean) ?? `exit ${proc.exitCode}`}`);
+        return;
+      }
+      const drift = output
+        .split("\n")
+        .filter((line) => /^\s+(changed|missing)\s{2}\S/.test(line))
+        .map((line) => line.trim());
+      ctx.warn(
+        `${target} has drifted from Sjel's baseline: ${drift.join("; ") || "unknown keys"} · restore: sjel claude --force`,
+      );
+    },
+  },
   {
     name: "Capabilities (enabled set)",
     async run(ctx) {

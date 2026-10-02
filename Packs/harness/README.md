@@ -137,6 +137,15 @@ cd "$SJEL_ROOT/Packs/harness/pi-packages/pi-subagents" && bun install
 
 ## Attribution
 
+**Upstreams here are provenance, not constraints.** The three vendored trees — accordion,
+pi-subagents, pi-web-access — were taken as starting points, not as forks to keep faithful or to
+feed back. Edit any of them in place. Nothing is held back for an upstream PR, no divergence needs
+an apology, and the sections below record the revision each tree was last read at so that a future
+re-read is a decision somebody makes with the origin in hand rather than an obligation. The
+`LOCAL DELTA` comments inside those trees are worth keeping for a different reason: they are the
+fastest way for a reader to see which lines are ours. A manifest or comment that still claims a
+vendored file is byte-identical to upstream is stale, and should be corrected on sight.
+
 Ported from Daniel Miessler's LifeOS, MIT: <https://github.com/danielmiessler/LifeOS>
 (`SuggestSkills` and `Trim`, read 2026-09-07). The register verdict for that upstream is
 `inspiration` — see the `[lifeos]` row in `upstreams.toml`. No code was vendored: both scripts here
@@ -170,6 +179,16 @@ manager and the web access every session uses.
 | Local deltas | THREE. (1) One doc comment in `src/output-file.ts`: its POSIX path example became a placeholder so it stops reading as a workstation path to `tools/check-publication-hygiene.sh`. No behavioural change. `tsconfig.json` is upstream's, added to the vendored set so a customization can be typechecked before a restart. (2) `"overrides": { "undici": "^8.10.2" }` in `package.json`, added 2026-09-29 for GHSA-3wwx-pv8p-q78v / CVE-2026-85024: undici's WebSocket client kills the whole process on a malformed permessage-deflate block, fixed in 8.10.2. An update cannot reach it, because the vendored dev version of `@earendil-works/pi-coding-agent` pins `"undici": "8.9.0"` **exactly** — so the resolution sat one patch below the fix. `bun install` resolved the lockfile to 8.11.2 and `osv-scanner` reports no issues. (3) Host-provided `@sinclair/typebox` and `typebox` moved from runtime dependencies to `"*"` peers; the three pi peers also use `"*"`. This follows Pi 0.99's extension-loader contract and removes duplicate-module warnings. |
 
 | Owner | Sjel. Upstream is a source to re-read, not a dependency that updates itself — `pi update` does not touch a local-path package |
+
+**Known drift, measured 2026-10-01.** The pi SDK devDependencies here pin `0.84.2`, the version
+upstream developed against, while this machine runs Pi `1.0.0`. Raising them to `0.99.2` makes
+`bun run typecheck` fail in `src/mention-clone.ts` — `ExtensionContext` is no longer assignable to
+`ExtensionToolContext` (missing `tools`, `executeTool`, line 128) and `systemPrompt` is read-only
+(line 178). The pins were left where upstream put them rather than carrying a local patch into the
+mention-clone path; the drift is written down so the next person decides with the measurement in
+hand instead of rediscovering it. Editing the tree is allowed — this is a choice, not a rule.
+`e955e29` is upstream HEAD, so there is nothing newer to take either. The mention-clone path is the
+one that may feel this at runtime, since the second error is a property Pi now marks read-only.
 
 This reverses, for these three packages, the convention every other Pack README states: that a
 third-party tool is "driven through its own install/update tooling, never vendored" (see

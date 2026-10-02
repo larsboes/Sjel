@@ -2,6 +2,7 @@
 
 pub mod duplicates;
 pub mod ingest;
+pub mod mirror;
 pub mod organize;
 pub mod preview;
 pub mod reconcile;

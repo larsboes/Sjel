@@ -6,7 +6,7 @@ use media::{audit, index, verify_mirror, volume_uuid};
 
 fn usage() {
     eprintln!("media — exact-byte index, ingest gate and mirror verification\n\
-        usage:\n  media volume-id --root PATH\n  media index --root PATH --uuid UUID [--db PATH]\n  media audit --root PATH --uuid UUID --sample N [--db PATH]\n  media ingest --staging PATH --library PATH --uuid UUID [--apply] [--prune] [--db PATH]\n  media classify (--digest SHA256 | --digests-file PATH) [--db PATH]\n  media verify-mirror --left-root PATH --left-uuid UUID --right-root PATH --right-uuid UUID [--db PATH]\n  media status [--db PATH]\n  media duplicates --uuid UUID [--legacy PREFIX] [--resolve-inside PREFIX --root PATH --metadata] [--list PATH] [--db PATH]\n  media supersede --root PATH --uuid UUID --list PATH --quarantine PATH --journal PATH [--apply]\n  media reconcile --root PATH --uuid UUID [--apply] [--db PATH]\n  media relabel --from DIR --to DIR --uuid UUID --journal PATH [--library PATH] [--apply] [--settled-for SECONDS] [--plan FILE]\n  media preview --structure FILE [--metadata]\n  media organize --structure FILE [--apply --journal PATH] [--settled-for SECONDS] [--only COLLECTION]\n\n\
+        usage:\n  media volume-id --root PATH\n  media index --root PATH --uuid UUID [--db PATH]\n  media audit --root PATH --uuid UUID --sample N [--db PATH]\n  media ingest --staging PATH --library PATH --uuid UUID [--apply] [--prune] [--db PATH]\n  media classify (--digest SHA256 | --digests-file PATH) [--db PATH]\n  media verify-mirror --left-root PATH --left-uuid UUID --right-root PATH --right-uuid UUID [--db PATH]\n  media status [--db PATH]\n  media duplicates --uuid UUID [--legacy PREFIX] [--resolve-inside PREFIX --root PATH --metadata] [--list PATH] [--db PATH]\n  media supersede --root PATH --uuid UUID --list PATH --quarantine PATH --journal PATH [--apply]\n  media reconcile --root PATH --uuid UUID [--apply] [--db PATH]\n  media relabel --from DIR --to DIR --uuid UUID --journal PATH [--library PATH] [--apply] [--settled-for SECONDS] [--plan FILE]\n  media preview --structure FILE [--metadata]\n  media organize --structure FILE [--apply --journal PATH] [--settled-for SECONDS] [--only COLLECTION]\n  media mirror --from PATH --from-uuid UUID --to PATH --to-uuid UUID [--path REL] [--exclude REL] [--consume PREFIX] [--journal PATH] [--apply]\n\n\
         ingest is a dry run unless --apply is set. --prune additionally removes staging/originals\n\
         only after every new import verifies; neither verb deletes library content.");
 }
@@ -34,6 +34,27 @@ fn option(args: &[String], key: &str) -> Result<Option<String>> {
 }
 fn required(args: &[String], key: &str) -> Result<String> {
     option(args, key)?.ok_or_else(|| format!("missing {key}").into())
+}
+
+/// Every occurrence of a key, in order. `--consume` names a set of paths being retired, and a
+/// single-valued reader would silently keep only the last of them.
+fn repeated(args: &[String], key: &str) -> Result<Vec<String>> {
+    let mut values = Vec::new();
+    let mut i = 0;
+    while i < args.len() {
+        if args[i] == key {
+            values.push(
+                args.get(i + 1)
+                    .filter(|s| !s.starts_with("--"))
+                    .ok_or_else(|| format!("{key} needs a value"))?
+                    .clone(),
+            );
+            i += 2;
+        } else {
+            i += 1;
+        }
+    }
+    Ok(values)
 }
 fn allowed(args: &[String], keys: &[&str], flags: &[&str]) -> Result<()> {
     let mut i = 0;
@@ -131,6 +152,20 @@ fn run(args: &[String]) -> Result<i32> {
             &["--metadata"],
         ),
         "reconcile" => (&["--root", "--uuid", "--db"], &["--apply"]),
+        "mirror" => (
+            &[
+                "--from",
+                "--from-uuid",
+                "--to",
+                "--to-uuid",
+                "--path",
+                "--exclude",
+                "--consume",
+                "--journal",
+                "--db",
+            ],
+            &["--apply"],
+        ),
         "relabel" => (
             &[
                 "--from",
@@ -178,6 +213,17 @@ fn run(args: &[String]) -> Result<i32> {
             &required(opts, "--uuid")?,
         )?),
         _ => None,
+    };
+    // A mirror names two volumes and both are checked before the store is opened, for the same
+    // reason as the single-volume verbs: a removed drive whose mount point is now an ordinary
+    // directory must not be registered as the host volume.
+    let mirror_mounts = if verb == "mirror" {
+        Some((
+            mounted(&rooted(opts, "--from")?, &required(opts, "--from-uuid")?)?,
+            mounted(&rooted(opts, "--to")?, &required(opts, "--to-uuid")?)?,
+        ))
+    } else {
+        None
     };
     let db = option(opts, "--db")?
         .map(PathBuf::from)
@@ -228,6 +274,41 @@ fn run(args: &[String]) -> Result<i32> {
             let pending = !report.complete || (!report.applied && !report.relocated.is_empty());
             println!("{}", serde_json::to_string(&report)?);
             Ok(i32::from(pending))
+        }
+        "mirror" => {
+            let (from_uuid, to_uuid) = mirror_mounts.ok_or("mirror needs two mounted volumes")?;
+            let from = rooted(opts, "--from")?;
+            let to = rooted(opts, "--to")?;
+            let consume = repeated(opts, "--consume")?;
+            let paths = repeated(opts, "--path")?;
+            let exclude = repeated(opts, "--exclude")?;
+            let apply = opts.iter().any(|s| s == "--apply");
+            let journal = option(opts, "--journal")?.map(PathBuf::from);
+            // A copy is recorded in the ledger, which is what makes it reversible; a *move* out of
+            // a retired path is not, so it needs its own record before it happens.
+            if apply && !consume.is_empty() && journal.is_none() {
+                return Err(
+                    "--apply with --consume needs --journal: a moved path is reversed by swapping two paths, and only the journal holds them"
+                        .into(),
+                );
+            }
+            let report = media::mirror::mirror(
+                &ledger,
+                &media::mirror::MirrorOptions {
+                    from: &from,
+                    from_uuid: &from_uuid,
+                    to: &to,
+                    to_uuid: &to_uuid,
+                    paths: &paths,
+                    exclude: &exclude,
+                    consume: &consume,
+                    journal: journal.as_deref(),
+                    apply,
+                },
+            )?;
+            let failed = !report.failures.is_empty();
+            println!("{}", serde_json::to_string(&report)?);
+            Ok(i32::from(failed))
         }
         "ingest" => {
             let apply = opts.iter().any(|s| s == "--apply");

@@ -43,8 +43,12 @@ authoritative answer to whether these bytes already exist.
 - **Any modification or deletion of library content.** The library is append-only under ingest.
 - **Perceptual similarity as a decision.** It produces review candidates only.
 - **Cloud model access to media.** No content leaves the machine; see Constraints.
-- **Backups.** This capability verifies a mirror. It does not create redundancy, and does not own
-  a backup contract — its state is in the shared store, which `store` owns.
+- **A backup contract.** Amended 2026-10-02: this capability now *creates* the mirror it verifies
+  (F7). The tool that did lived on a removable drive as an unversioned script, and the ledger it
+  needed was already here, so the boundary was buying nothing but a second place for the same
+  facts. What stays out is the contract — retention, scheduling, restore rehearsal, and the record
+  of what each attempt did belong to `capabilities/backup`, and `store` owns this capability's state
+  as before. A mirror is one destination for bytes, not a backup policy.
 
 ## Principles
 
@@ -210,6 +214,58 @@ F5 previews destinations; this slice acts on them, and the ledger is kept in ste
 
 **Corpus of record for this slice:** `relabel` moved 198 `Inbox-old` files (56.45 GB), `organize` moved 17 collections, and `supersede` applied five approved removal lists — 1,353 then 322 then 24 rows — each row re-hashed at the moment of removal with 0 refused.
 
+### F7 · Mirror construction
+
+F2 judges a mirror; this builds one. The verb that did lived outside the repo — a 412-line
+unversioned Python script *on the drive it mirrored* — which is the "another private repository for
+one physical instance" that `on-placement.md` names, and it kept a second digest ledger
+(`mirror-manifest.tsv`) describing the same bytes as `media_locations`.
+
+`media mirror --from PATH --from-uuid U --to PATH --to-uuid U [--path REL] [--exclude REL]
+[--consume PREFIX] [--journal PATH] [--apply]` plans from the ledger, moves what the destination
+already holds, and copies the rest with the digest checked inside the write stream.
+
+- [x] MED-P9 — a run without `--apply` writes nothing at all: no media, no moved path, and no ledger
+  row. Falsifier: a dry run changes any of the three. *(Found by review of this capability's own
+  first draft, which recorded destination digests while planning — the sentence said one thing and
+  the code did another.)*
+- [x] MED-P10 — a destination path the ledger records, whose size and mtime have not moved, is trusted
+  without being read; a destination path with no record is read rather than assumed equal.
+  Falsifier: a file whose bytes changed under an unchanged size and mtime is trusted, or an
+  unrecorded destination file is overwritten on the strength of its name.
+- [x] MED-P11 — a destination holding files but no index is refused, not read. Falsifier: a run
+  against an unindexed destination begins hashing it.
+- [x] MED-P12 — only a declared `--consume` path is moved, a move is journalled before it happens,
+  and a destination path the source does not hold is reported and never removed. Falsifier: an
+  undeclared path is consumed, or a mirror run deletes anything.
+
+**Two measurements decided the design, and both contradicted the obvious answer.**
+
+*Parallelism is not the fix.* The mirror's destination is a USB SSD that read **112.7 MB/s on one
+thread and 67.9 MB/s on eight** — device-capped, with concurrent readers contending. The internal
+volume gained only 1.3x (663.6 → 858.2 MB/s). The walk and the hashes are therefore serial on
+purpose. The reading that suggested otherwise — "12 cores, 5.4% CPU" — was a misreading: the CPU
+was idle because the drive could not feed it. Measured with `F_NOCACHE` on disjoint sets, because
+the page cache made two earlier attempts say 209 MB/s and 267 MB/s for the same device.
+
+*`clonefile(2)` is the wrong primitive here, and it is unavailable anyway.* It works intra-volume
+(256 MiB in 29 ms) and fails cross-volume with `EXDEV`. But `unsafe_code = "deny"` forbids calling
+it, and `fs::rename` is strictly better for the case that matters: the bytes are already on the
+destination volume at a path being retired, so moving the inode leaves one path where a clone would
+leave two sharing blocks.
+
+**Named so they are not mistaken for done:**
+
+- **`media reclaim`** — the declared removal of a destination path the source no longer holds.
+  `mirror` reports those paths and removes nothing; reclaiming them is a separate act with its own
+  guard, on the same reasoning as `supersede`.
+- **`verify-mirror --paths`** — the structural check. `verify-mirror` groups by digest and answers
+  "are these bytes on both volumes", not "do the trees match", so it reports a healthy mirror while
+the same bytes sit at different paths. That is exactly the state of `INTENSO` today, whose library
+mirror predates every move. The default meaning stays; `--paths` adds the question.
+- **Retiring `mirror-manifest.tsv`** — the second ledger goes once `mirror` has run against both
+  volumes, not before.
+
 ## Not yet specified
 
 - **Per-file pre-classification failures.** A symlink, unreadable byte stream, or non-UTF-8
@@ -282,6 +338,17 @@ implementation at the same moment rather than against a stored number.
   useful after Immich arrives, because it is what makes the Immich import idempotent.
 
 ## Decisions
+
+**2026-10-02 — mirror construction belongs in this capability, and a measurement settled it.** The
+original boundary gave mirror *verification* here and redundancy *creation* to nobody, which in
+practice meant a script on a removable drive with no tests, no history, and `.bak` files as its
+version control. Three facts decided the move: the ledger that script hand-rolled already existed
+here, `verify-mirror` already owned the two-volume model, and `tools/storage` establishes that
+operator machinery over disks is a Rust workspace member rather than a script. Parallel hashing was
+proposed for this and **dropped on measurement** — see F7, where the device is the wall and rayon
+would have been a regression on the slow side. What survives as the real win is the ledger itself:
+the previous tool re-read its whole destination every run, 317 GiB at 113 MB/s, before copying
+anything.
 
 **2026-09-30 — prepare organization through a read-only preview, not automatic sorting.** The principal chose explicit collection mappings and category-specific browsing: chronology inside Trips, meaningful collections elsewhere. Files and companion files remain together. Dates and GPS availability are evidence for review, not event identity or move permission. Rust provides the repeatable preview; local-model advice is a separate, unvalidated option. No model dependency or apply action is added to this slice.
 

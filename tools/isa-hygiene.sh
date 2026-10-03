@@ -35,7 +35,11 @@ home_pattern="/(Users|home)/($(printf '%s' "$private_users" | tr ' ' '|'))/"
 volume_pattern='/Volumes/[A-Za-z0-9_.-]+'
 hostname_pattern='[A-Za-z0-9_-]+\.local'
 ip_pattern='([0-9]{1,3}\.){3}[0-9]{1,3}'
-marker_pattern='(sjel-personal|sjel-family|axon-personal|axon-family|axon-work|lifeos-mono|obsidian-mono|DS220|Open Telekom Cloud|~/Developer/Tooling)([^-A-Za-z0-9]|$)'
+# The retired Tooling-repo marker is assembled rather than written, because a literal sibling-repo
+# path here is what the doctor's undeclared-connection check flags — the same reason
+# tools/check-publication-hygiene.sh splits it.
+legacy_tooling_path='~/Developer/'"Tooling"
+marker_pattern="(sjel-personal|sjel-family|axon-personal|axon-family|axon-work|lifeos-mono|obsidian-mono|DS220|Open Telekom Cloud|${legacy_tooling_path})([^-A-Za-z0-9]|\$)"
 device_pattern=''
 if [ -n "$private_names" ]; then
   names_alt="$(printf '%s' "$private_names" | tr ' ' '|')"

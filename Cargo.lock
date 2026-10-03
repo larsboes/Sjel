@@ -4406,9 +4406,11 @@ dependencies = [
 name = "sjel-cli"
 version = "0.1.0"
 dependencies = [
+ "civil-date",
  "regex",
  "serde",
  "serde_json",
+ "sha2 0.11.0",
  "toml",
 ]
 

@@ -111,8 +111,8 @@ export function defaultPiDeployConfig(): DeployConfig {
  * copying them.
  *
  * Kept separate from defaultPiDeployConfig rather than folded into it because
- * tools/harnesses.ts asks that one for the SKILL status view, and a config whose
- * packUnits() returns no skills would quietly empty that view out.
+ * the `tools/harnesses` status view asks that one for the SKILL channel, and a
+ * config whose packUnits() returns no skills would quietly empty that view out.
  */
 export function defaultPiAgentsDeployConfig(): DeployConfig {
   const cfg = defaultPiDeployConfig();

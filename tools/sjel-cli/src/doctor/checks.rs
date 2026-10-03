@@ -8,6 +8,10 @@ use std::process::Command;
 use regex::Regex;
 use serde_json::Value as Json;
 
+use crate::harnesses::engine::SkillStatus;
+use crate::harnesses::registry::{is_installed, Model, Registry};
+use crate::harnesses::statuses_for;
+
 use super::overlay::{resolve_machine_toml, resolve_overlay_root};
 use super::pure::{self, AgeState, Level, Outcome, Producer, Target};
 use super::{
@@ -17,8 +21,8 @@ use super::{
 
 type Check = fn(&mut Ctx);
 
-/// The report, in the order doctor.ts printed it. `Packs` stands for the sidecar's sections,
-/// however many installed harnesses it reports.
+/// The report, in the order doctor.ts printed it. `Packs` stands for the per-harness Pack
+/// sections, however many installed harnesses they report.
 enum Entry {
     One(&'static str, Check),
     Packs,
@@ -111,7 +115,7 @@ fn render(entry: &Entry, ctx: &mut Ctx) {
         }
         Entry::Packs => {
             pack_sections(ctx);
-            "Packs (sidecar)"
+            "Packs (per harness)"
         }
     };
     if std::env::var_os("SJEL_DOCTOR_TIMING").is_some() {
@@ -1965,48 +1969,209 @@ fn port_uniqueness(ctx: &mut Ctx) {
     }
 }
 
-/// Pack deployment state, from the tools/doctor-packs.ts sidecar: the ledger logic is
-/// TypeScript (tools/harnesses.ts) until its own port.
+/// Pack deployment state, read in-process from tools/sjel-cli/src/harnesses/.
+///
+/// The ledger and hashing logic is the same Rust reader `tools/harnesses status` uses, so the
+/// doctor's verdict and the tool's matrix cannot disagree. The tools/doctor-packs.ts sidecar
+/// existed from 2026-10-02 to the next commit, until this port landed.
 fn pack_sections(ctx: &mut Ctx) {
-    let o = capture(
-        Command::new("bun")
-            .arg("run")
-            .arg(tool(ctx, "doctor-packs.ts")),
-    );
-    let Some(sections) = serde_json::from_str::<Vec<Json>>(&o.stdout)
-        .ok()
-        .filter(|_| o.success())
-    else {
-        section(ctx, "Packs", |c| {
-            let why = o
-                .stderr
-                .trim()
-                .lines()
-                .last()
-                .unwrap_or("no output")
-                .to_owned();
-            c.bad(format!(
-                "Pack state unreadable: tools/doctor-packs.ts failed — {why}"
-            ));
-        });
-        return;
-    };
-    for s in sections {
-        section(ctx, &jtext(&s, "name"), |c| {
-            for l in s
-                .get("lines")
-                .and_then(Json::as_array)
-                .into_iter()
-                .flatten()
-            {
-                let msg = jtext(l, "message");
-                match jtext(l, "level").as_str() {
-                    "bad" => c.bad(msg),
-                    "warn" => c.warn(msg),
-                    _ => c.ok(msg),
+    match pack_state(&ctx.root) {
+        Ok(sections) => {
+            for (name, lines) in sections {
+                section(ctx, &name, |c| {
+                    for (level, message) in lines {
+                        emit(c, level, message);
+                    }
+                });
+            }
+        }
+        Err(e) => section(ctx, "Packs", |c| {
+            c.bad(format!("Pack state unreadable: {e}"))
+        }),
+    }
+}
+
+/// One named section and its verdict lines, as the TypeScript sidecar handed them over.
+type PackSection = (String, Vec<(Level, String)>);
+
+fn pack_state(root: &Path) -> Result<Vec<PackSection>, String> {
+    let registry = Registry::new(root);
+    let mut sections = Vec::new();
+
+    // One section per INSTALLED harness: which harnesses are here is the registry's answer,
+    // never a stale list (the 2026-09-07 scar — three Packs sat for an uninstalled Codex while
+    // the installed pi got zero rows).
+    for harness in &registry.harnesses {
+        if !is_installed(harness) {
+            continue;
+        }
+        let mut lines: Vec<(Level, String)> = Vec::new();
+        match statuses_for(harness, None) {
+            Ok(rows) if rows.is_empty() => {
+                lines.push((Level::Warn, "no Packs/*/pack.toml found".to_owned()));
+            }
+            Ok(rows) => {
+                let mut unselected: Vec<String> = Vec::new();
+                for row in &rows {
+                    let label = format!("{}/{}", row.pack, row.skill);
+                    let detail = row
+                        .detail
+                        .as_ref()
+                        .map(|d| format!(" — {d}"))
+                        .unwrap_or_default();
+                    let (deploy, sync) = pack_commands(harness.id, &row.pack);
+                    match row.status {
+                        SkillStatus::Current => lines.push((Level::Ok, format!("{label} current"))),
+                        SkillStatus::NotDeployed => {
+                            if harness.model == Model::Registry {
+                                unselected.push(row.pack.clone());
+                            } else {
+                                lines.push((
+                                    Level::Warn,
+                                    format!("{label} not deployed ({deploy})"),
+                                ));
+                            }
+                        }
+                        SkillStatus::Discovered => lines.push((
+                            Level::Ok,
+                            format!("{label} loaded by pi via discovery, not the ledger{detail}"),
+                        )),
+                        SkillStatus::Outdated => {
+                            lines.push((Level::Warn, format!("{label} outdated ({sync}){detail}")))
+                        }
+                        SkillStatus::Drifted => lines.push((
+                            Level::Bad,
+                            format!(
+                                "{label} has destination-side changes; sync/remove will refuse"
+                            ),
+                        )),
+                        SkillStatus::MigrationRequired => {
+                            let hint = if harness.id == "codex" {
+                                format!(
+                                    " (tools/packs-codex migrate-generated {} --accept-current)",
+                                    row.pack
+                                )
+                            } else {
+                                String::new()
+                            };
+                            lines.push((
+                                Level::Warn,
+                                format!(
+                                    "{label} needs generated-artifact ledger migration{hint}{detail}"
+                                ),
+                            ));
+                        }
+                        SkillStatus::Missing => lines.push((
+                            Level::Bad,
+                            format!("{label} is ledger-owned but missing{detail}"),
+                        )),
+                        SkillStatus::Collision => {
+                            let hint = if harness.id == "claude" {
+                                format!(
+                                    " (tools/packs-claude adopt {} if it is identical)",
+                                    row.pack
+                                )
+                            } else {
+                                String::new()
+                            };
+                            lines.push((
+                                Level::Bad,
+                                format!(
+                                    "{label} destination is occupied by an unowned skill{hint}"
+                                ),
+                            ));
+                        }
+                        SkillStatus::Invalid => {
+                            lines.push((Level::Bad, format!("{label} invalid{detail}")))
+                        }
+                    }
+                }
+                if harness.model == Model::Registry && !unselected.is_empty() {
+                    let packs: BTreeSet<&String> = unselected.iter().collect();
+                    let joined = packs
+                        .iter()
+                        .map(|p| p.as_str())
+                        .collect::<Vec<_>>()
+                        .join(", ");
+                    lines.push((
+                        Level::Ok,
+                        format!(
+                            "{} Pack(s) not selected for pi: {joined} (selection is the design — profiles decide)",
+                            packs.len()
+                        ),
+                    ));
                 }
             }
-        });
+            Err(e) => lines.push((
+                Level::Bad,
+                format!("{} Pack state unreadable: {e}", harness.label),
+            )),
+        }
+        sections.push((format!("Packs ({} deployed)", harness.label), lines));
+    }
+
+    // One warning per ABSENT harness that still holds deployed units.
+    for harness in &registry.harnesses {
+        if is_installed(harness) || harness.model != Model::Materialized {
+            continue;
+        }
+        let deployed: Vec<_> = statuses_for(harness, None)?
+            .into_iter()
+            .filter(|row| row.status != SkillStatus::NotDeployed)
+            .collect();
+        if deployed.is_empty() {
+            continue;
+        }
+        let packs: BTreeSet<String> = deployed.iter().map(|r| r.pack.clone()).collect();
+        let joined = packs.iter().cloned().collect::<Vec<_>>().join(" ");
+        let pi_reads = is_installed(registry.by_id("pi")?)
+            && harness.config.destination == PathBuf::from(home()).join(".agents").join("skills");
+        let base = format!(
+            "{} units from {} Pack(s) sit at {} for a {} that is not installed",
+            deployed.len(),
+            packs.len(),
+            harness.config.destination.display(),
+            harness.label
+        );
+        let message = if pi_reads {
+            format!(
+                "{base} — pi IS installed and discovers that directory, so pi is loading these right now. \
+                 Keep them in pi (tools/packs-pi deploy {joined}) before removing; otherwise they leave both harnesses."
+            )
+        } else {
+            format!(
+                "{base}; nothing reads them. Remove: {} remove {joined}",
+                harness.cli
+            )
+        };
+        sections.push((
+            format!("Packs ({} NOT installed)", harness.label),
+            vec![(Level::Warn, message)],
+        ));
+    }
+
+    Ok(sections)
+}
+
+/// The deploy and sync commands an operator is told to run for one harness.
+fn pack_commands(id: &str, pack: &str) -> (String, String) {
+    match id {
+        "claude" => (
+            format!("tools/packs.sh link {pack}"),
+            format!("tools/packs-claude sync {pack}"),
+        ),
+        "codex" => (
+            format!("tools/packs-codex deploy {pack}"),
+            format!("tools/packs-codex sync {pack}"),
+        ),
+        "opencode" => (
+            format!("tools/packs-opencode deploy {pack}"),
+            format!("tools/packs-opencode sync {pack}"),
+        ),
+        _ => (
+            format!("tools/packs-pi deploy {pack}"),
+            format!("tools/packs-pi sync {pack}"),
+        ),
     }
 }
 

@@ -38,8 +38,11 @@ at all.
   `tools/capability.sh registry`, `tools/repos`, `tools/backup.sh` and
   `tools/service-runner.sh`. A second server for a JSON passthrough would be a port and a
   process to keep alive for nothing.
-- **It holds no copy of the engine.** `tools/lib/pack-deploy.ts` is the one implementation.
-  A capability that re-implemented it in Rust would be a second engine and a migration of
+- **It holds no copy of the engine.** `tools/lib/pack-deploy.ts` owns the ledger format and
+  the mutating half — deploy, sync, remove, adopt, and the lock they hold — and
+  `tools/sjel-cli/src/harnesses/` reads the same ledger for `tools/harnesses list|status|drift`
+  and the doctor's Pack sections. One reader per verb, read verbs first (2026-10-02): a
+  capability that re-implemented either half would be a second engine and a migration of
   thirty-odd call sites toward an interface nobody has specified.
 
 ## Operating it

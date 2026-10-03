@@ -26,7 +26,7 @@ const home = process.env.HOME ?? "";
 /**
  * How a harness receives a Pack.
  *
- * This describes the SKILL channel, which is what `statusesFor` dispatches on and
+ * This describes the SKILL channel, which is what the status reader dispatches on and
  * what the `destination` and drift reporting below describe. A harness is not
  * required to use one model for every artifact it needs, and one does not:
  *
@@ -91,9 +91,9 @@ export const HARNESSES: Harness[] = [
     label: "pi",
     marker: join(home, ".pi", "agent", "settings.json"),
     // Registry for skills, materialized for agent files — see DeliveryModel. The
-    // field stays `registry` because statusesFor uses it to pick the settings-based
-    // reader for the skill rows, and pi's agent rows come from a second config
-    // (defaultPiAgentsDeployConfig) rather than from a different value here.
+    // field stays `registry` because the status reader uses it to pick the
+    // settings-based reader for the skill rows, and pi's agent rows come from a second
+    // config (defaultPiAgentsDeployConfig) rather than from a different value here.
     model: "registry",
     cli: "tools/packs-pi",
     config: defaultPiDeployConfig,

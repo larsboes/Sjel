@@ -1448,6 +1448,16 @@
     },
     {
       "from": "tools",
+      "to": "civil-date",
+      "kinds": [
+        "cargo-dep"
+      ],
+      "evidence": [
+        "tools/sjel-cli/Cargo.toml"
+      ]
+    },
+    {
+      "from": "tools",
       "to": "sjel-config",
       "kinds": [
         "cargo-dep"

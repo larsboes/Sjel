@@ -17,6 +17,7 @@ Rust first, and the one-crate shape was decided on 2026-10-02.
 | `capability.sh` (list, enable, disable, registry) | `tools/capability.sh` | bash, 2026-10-02 |
 | `service-runner.sh` (lifecycle, holds, drift, persistence units) | `tools/service-runner.sh` | bash and `tools/lib/runargs.sh`, 2026-10-02 |
 | `doctor` | `tools/doctor` | TypeScript (`doctor.ts`), 2026-10-02 |
+| `harnesses` (list, status, drift) | `tools/harnesses` | TypeScript (`harnesses.ts`), 2026-10-02 |
 
 `toolchain-check` was compared with its bash version on this Mac before replacement. Text
 output, JSON (sorted keys) and exit codes were identical for 10 flag combinations, and
@@ -51,10 +52,36 @@ where `set -e` used to exit first.
 
 `doctor` was compared with doctor.ts on this Mac, in both run orders: the same 264 lines and
 exit code, differing only in ages that ticked between the two runs. Every case of
-doctor.test.ts is a unit test in `src/doctor/pure.rs`. Pack deployment state still comes from
-TypeScript, through the `tools/doctor-packs.ts` sidecar, until tools/harnesses.ts is ported.
+doctor.test.ts is a unit test in `src/doctor/pure.rs`. Pack deployment state is read
+in-process by `src/harnesses/` since the same day — the `tools/doctor-packs.ts` sidecar
+existed for one commit and was deleted with the read half of `tools/harnesses.ts`.
 Independent sections run at once and print in order: 26.6 s became 15.6 s, and
 `SJEL_DOCTOR_TIMING=1` shows that one `sjel-storage target` walk is now most of what remains.
+
+`tools/harnesses` was ported read-verbs-first (decided 2026-10-02): `list`, `status` and
+`drift` are Rust, and `sync`, `use`, `promote` and `accept` still exec `tools/harnesses.ts`,
+which keeps the engine that owns the mutation lock and the atomic install. The read code was
+deleted from the TypeScript file rather than left beside the port, so each ledger has one
+reader. `list`, `status` and `drift` were compared against it across thirteen invocations on
+the live machine and three against a scratch claude destination — every per-harness `status`,
+`status <pack>`, `--all-harnesses`, `status --json`, `drift`, `drift <pack>` and
+`drift --diff` — where the scratch destination was deployed through the TypeScript engine,
+then edited to produce a drifted file, a missing file and an only-at-destination file. stdout,
+stderr and exit codes were identical, and `status --json` is byte-identical after dropping
+`measuredAt`. On this Mac `status` takes 33 ms against 63 ms for the TypeScript version (three
+runs each), and `status --json` 30 ms against 40 ms — the smaller number matters less than
+what it removes: the dashboard's Packs page, the doctor and the CLI now read one ledger without
+bun in the path.
+
+Three differences are deliberate, and each is the only one found:
+
+- Discovered pi entries and extensions print in name order, where readdir order was
+  filesystem-dependent. The set is identical; the order is now the same on every machine.
+- The per-file lines inside one `drift` unit print in sorted order for the same reason.
+- A pack.toml that will not parse reports the `toml` crate's message where `Bun.TOML`
+  reported its own, and a ledger that is malformed JSON reports one fixed sentence instead of
+  the parser's. Both are only reachable on a file that is already broken, and the doctor's
+  "Pack state unreadable" line is what an operator sees either way.
 
 ## Porting a script
 
@@ -73,3 +100,7 @@ Independent sections run at once and print in order: 26.6 s became 15.6 s, and
 4. Before you delete the old script, compare its output with the port's for every flag
    combination, and keep its tests green. A test that copies the launcher into a scratch root
    sets `SJEL_CLI_BIN` to a prebuilt binary (see `tools/toolchain-scope.test.sh`).
+5. When only part of a tool moves, name the split in both files and route the rest through
+   this binary's exec (`src/harnesses/mod.rs` forwards four verbs to `tools/harnesses.ts`).
+   Delete the moved code from the interpreted original — a second reader of one ledger is the
+   duplication this crate exists to remove.

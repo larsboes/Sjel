@@ -1,7 +1,21 @@
-#!/usr/bin/env bash
-# Thin launcher: the cross-harness deployment matrix is implemented in
-# harnesses.ts because it reads every adapter's ledger, parses JSON state and
-# hashes deployed trees — none of which bash does well. The launcher exists so
-# the command the docs print, `tools/harnesses`, is the thing that runs it.
-_here="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-exec bun run "$_here/harnesses.ts" "$@"
+#!/bin/bash
+# tools/harnesses — Packs across every agent harness at once.
+#
+# Launcher only. `list`, `status` and `drift` moved to tools/sjel-cli/src/harnesses/ on
+# 2026-10-02; `sync`, `use`, `promote` and `accept` still run tools/harnesses.ts through the
+# same binary, which execs bun for them (read verbs first — see tools/sjel-cli/README.md).
+# `tools/harnesses -h` prints the usage.
+#
+# SJEL_ROOT is set here and tools/lib/paths.sh is NOT sourced, for the reason tools/doctor's
+# launcher gives: paths.sh treats an exported SJEL_OVERLAY_ROOT as a per-invocation override
+# that skips axon.local.toml's `machine =` line. The Rust side resolves the overlay itself.
+# bash 3.2-safe (CONTRIBUTING.md#portable-shell).
+set -u
+
+SJEL_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]:-$0}")/.." && pwd)"
+export SJEL_ROOT
+# shellcheck source=tools/lib/toml.sh
+. "$SJEL_ROOT/tools/lib/toml.sh"       # toml_get_in, for the missing-cargo install hint
+# shellcheck source=tools/lib/sjel-cli.sh
+. "$SJEL_ROOT/tools/lib/sjel-cli.sh"
+sjel_cli_exec harnesses "$@"

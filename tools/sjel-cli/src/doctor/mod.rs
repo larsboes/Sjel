@@ -6,8 +6,9 @@
 //! line by line on this Mac before the launcher switched.
 //!
 //! Each rule stays with the tool that owns it: the host toolchain with toolchain-check, boot
-//! persistence with service-runner.sh, Pack deployment with tools/harnesses.ts (through the
-//! tools/doctor-packs.ts sidecar), local inference roles with tools/model-check.ts. Doctor reports.
+//! persistence with service-runner.sh, Pack deployment with tools/sjel-cli/src/harnesses/ (the
+//! same reader `tools/harnesses status` uses, in-process since 2026-10-02), local inference
+//! roles with tools/model-check.ts. Doctor reports.
 //!
 //!   tools/doctor            full report, offline (no GitHub calls)
 //!   tools/doctor --online   also probe declared systems and fetch origin/main
@@ -19,7 +20,7 @@ use std::path::{Path, PathBuf};
 use std::process::{Command, ExitCode, Stdio};
 
 mod checks;
-mod overlay;
+pub(crate) mod overlay;
 pub mod pure;
 
 const HELP: &str = "tools/doctor — health checks for an already-set-up Axon machine.

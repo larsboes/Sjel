@@ -24,9 +24,13 @@ use super::*;
 /// the deployed trees, the dashboard polls it on the slow beat, and a cache keyed on
 /// anything less than every source file under `Packs/` would report a stale matrix after
 /// exactly the edit a reader came to check.
+///
+/// `status --json` is Rust since 2026-10-02 (tools/sjel-cli/src/harnesses/), reached through
+/// the launcher like every other tool this process runs. It is the same reader the doctor and
+/// `tools/harnesses status` use, so the page, the doctor and the CLI cannot disagree.
 pub(crate) async fn packs_handler() -> Result<Json<Value>, (StatusCode, Json<Value>)> {
     let root = axon_root().map_err(bad_gateway)?;
-    let out = tokio::process::Command::new(root.join("tools/harnesses.ts"))
+    let out = tokio::process::Command::new(root.join("tools/harnesses"))
         .arg("status")
         .arg("--json")
         .current_dir(&root)

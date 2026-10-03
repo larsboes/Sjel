@@ -17,6 +17,7 @@ use std::process::{Command, ExitCode, ExitStatus};
 
 mod capability;
 mod doctor;
+mod harnesses;
 mod help;
 mod paths;
 mod persist;
@@ -60,6 +61,8 @@ fn main() -> ExitCode {
         "toolchain-check" => return toolchain::run(rest),
         "capability.sh" => return registry::run(rest),
         "service-runner.sh" => return runner::run(rest),
+        // Read verbs are Rust; sync/use/promote/accept forward to tools/harnesses.ts.
+        "harnesses" => return harnesses::run(rest),
         _ => {}
     }
     let root = match std::env::var("SJEL_ROOT") {

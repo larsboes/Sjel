@@ -255,11 +255,12 @@ already holds, and copies the rest with the digest checked inside the write stre
   paths remain, a source subtree is deferred, or an operation fails; its JSON reports both
   directions and bounded path samples. Falsifier: a non-synced fixture exits zero, or the report
   omits either side of drift.
-- [ ] MED-P17 — `media sync` enforces the manual order: validate both volume UUIDs, index both, apply
+- [x] MED-P17 — `media sync` enforces the manual order: validate both volume UUIDs, index both, apply
   the mirror, then verify with `--paths`; it never removes destination-only paths and skips the final
   verification when a source subtree is still active. Falsifier: it verifies before applying, or
-  reports success while paths differ or active subtrees are deferred. Implementation is present;
-  end-to-end sequence evidence remains to be added.
+  reports success while paths differ or active subtrees are deferred. The sequence now lives in
+  `media::sync`, called only after the CLI validates both mounts. Scratch-tree tests verify a complete
+  sync, idempotent rerun, destination-only retention, and deferral without verification.
 - [x] MED-P18 — mirror check and sync defer source directories containing files modified within the
   quiet window (default 300 seconds); `--exclude` can also defer a known active path. Falsifier: a
   recent collection is hashed/copied, or a settled collection is deferred.

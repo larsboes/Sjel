@@ -35,7 +35,7 @@ use std::collections::BTreeMap;
 use std::fs::{self, FileTimes, OpenOptions};
 use std::io::Write;
 use std::path::{Path, PathBuf};
-use std::time::{Duration, UNIX_EPOCH};
+use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
 use serde::Serialize;
 
@@ -92,6 +92,7 @@ pub struct MirrorOptions<'a> {
     pub consume: &'a [String],
     pub journal: Option<&'a Path>,
     pub apply: bool,
+    pub settled_for_seconds: u64,
 }
 
 #[derive(Debug, Serialize)]
@@ -115,8 +116,21 @@ pub struct MirrorReport {
     pub source_hashed: usize,
     /// Destination paths the source does not hold. Never removed here.
     pub destination_only: usize,
+    /// Bounded sample of destination-only paths.
+    pub destination_only_paths: Vec<String>,
+    /// Source subtrees with a file modified inside the configured quiet window.
     pub deferred: Vec<String>,
     pub failures: Vec<String>,
+}
+
+impl MirrorReport {
+    pub fn check_failed(&self) -> bool {
+        self.copied > 0
+            || self.moved > 0
+            || self.destination_only > 0
+            || !self.deferred.is_empty()
+            || !self.failures.is_empty()
+    }
 }
 
 struct Wanted {
@@ -134,6 +148,9 @@ fn plan_source(
     let mut hashed = 0;
     for (rel, path) in files(opts.from)? {
         if !selected(&rel, opts.paths, opts.exclude) {
+            continue;
+        }
+        if is_recent(&path, opts.settled_for_seconds)? {
             continue;
         }
         let (size, mtime_ns) = stamp(&path)?;
@@ -178,6 +195,16 @@ fn index_destination(ledger: &Ledger, to_uuid: &str) -> Result<BTreeMap<String, 
         by_digest.entry(row.digest.clone()).or_default().push(row);
     }
     Ok(by_digest)
+}
+
+fn is_recent(path: &Path, settled_for_seconds: u64) -> Result<bool> {
+    if settled_for_seconds == 0 {
+        return Ok(false);
+    }
+    let modified = fs::metadata(path)?.modified()?;
+    Ok(SystemTime::now()
+        .duration_since(modified)
+        .map_or(true, |age| age < Duration::from_secs(settled_for_seconds)))
 }
 
 fn is_current(root: &Path, row: &Location) -> bool {
@@ -245,12 +272,14 @@ pub fn mirror(ledger: &Ledger, opts: &MirrorOptions<'_>) -> Result<MirrorReport>
     // Both volumes are registered before any location row is written. `media_locations.uuid`
     // references `media_volumes(uuid)`, so an unregistered volume is a foreign-key failure rather
     // than a row — and a mirror is the first verb that writes to two volumes at once.
-    for (root, uuid) in [(opts.from, opts.from_uuid), (opts.to, opts.to_uuid)] {
-        let label = root
-            .file_name()
-            .and_then(|s| s.to_str())
-            .unwrap_or("volume");
-        ledger.register(uuid, label)?;
+    if opts.apply {
+        for (root, uuid) in [(opts.from, opts.from_uuid), (opts.to, opts.to_uuid)] {
+            let label = root
+                .file_name()
+                .and_then(|s| s.to_str())
+                .unwrap_or("volume");
+            ledger.register(uuid, label)?;
+        }
     }
     // A destination holding files but no ledger is an unknown tree, not a mirror to update. Every
     // path in it would have to be read before anything could be decided — measured at ~47 minutes
@@ -286,6 +315,7 @@ pub fn mirror(ledger: &Ledger, opts: &MirrorOptions<'_>) -> Result<MirrorReport>
         bytes_copied: 0,
         source_hashed,
         destination_only: 0,
+        destination_only_paths: Vec::new(),
         deferred: Vec::new(),
         failures: Vec::new(),
     };
@@ -388,13 +418,25 @@ pub fn mirror(ledger: &Ledger, opts: &MirrorOptions<'_>) -> Result<MirrorReport>
         report.bytes_copied += u64::try_from(want.size)?;
     }
 
-    for row in ledger.locations(opts.to_uuid)? {
-        if wanted.contains_key(&row.relpath) || !selected(&row.relpath, opts.paths, opts.exclude) {
+    let mut deferred = BTreeMap::new();
+    for (rel, path) in files(opts.from)? {
+        if selected(&rel, opts.paths, opts.exclude) && is_recent(&path, opts.settled_for_seconds)? {
+            let parent = Path::new(&rel)
+                .parent()
+                .filter(|parent| !parent.as_os_str().is_empty())
+                .map(|parent| parent.to_string_lossy().replace('\\', "/"))
+                .unwrap_or_else(|| rel.clone());
+            deferred.insert(parent, ());
+        }
+    }
+    report.deferred = deferred.into_keys().take(20).collect();
+    for (rel, _) in files(opts.to)? {
+        if wanted.contains_key(&rel) || !selected(&rel, opts.paths, opts.exclude) {
             continue;
         }
         report.destination_only += 1;
-        if report.deferred.len() < 20 {
-            report.deferred.push(row.relpath.clone());
+        if report.destination_only_paths.len() < 20 {
+            report.destination_only_paths.push(rel);
         }
     }
     Ok(report)
@@ -448,6 +490,7 @@ mod tests {
                 exclude: &[],
                 journal: None,
                 apply,
+                settled_for_seconds: 0,
             }
         }
     }
@@ -474,6 +517,38 @@ mod tests {
     }
 
     #[test]
+    fn check_counts_unindexed_destination_only_paths() {
+        let f = Fixture::new();
+        f.write("src", "same/photo.jpg", "same");
+        let ledger = f.ledger();
+        mirror(&ledger, &f.opts(true, &[])).unwrap();
+        f.write("dst", "old/export.jpg", "leftover");
+        let report = mirror(&ledger, &f.opts(false, &[])).unwrap();
+        assert_eq!(report.copied, 0);
+        assert_eq!(report.destination_only, 1);
+        assert_eq!(report.destination_only_paths, ["old/export.jpg"]);
+        assert!(report.check_failed());
+    }
+
+    #[test]
+    fn a_recently_written_collection_is_deferred_without_being_hashed_or_copied() {
+        let f = Fixture::new();
+        f.write("src", "Trips/2026/2026-05-Oberstdorf/photo.jpg", "recent");
+        let ledger = f.ledger();
+        let mut opts = f.opts(false, &[]);
+        opts.settled_for_seconds = 300;
+        let report = mirror(&ledger, &opts).unwrap();
+        assert_eq!(report.copied, 0);
+        assert_eq!(report.source_hashed, 0);
+        assert_eq!(report.deferred, ["Trips/2026/2026-05-Oberstdorf"]);
+        assert!(report.check_failed());
+        assert!(!f
+            .dst()
+            .join("Trips/2026/2026-05-Oberstdorf/photo.jpg")
+            .exists());
+    }
+
+    #[test]
     fn an_applied_run_copies_and_preserves_mtime() {
         let f = Fixture::new();
         f.write("src", "a/x.jpg", "one");
@@ -491,6 +566,7 @@ mod tests {
         let ledger = f.ledger();
         mirror(&ledger, &f.opts(true, &[])).unwrap();
         let again = mirror(&ledger, &f.opts(true, &[])).unwrap();
+        assert!(!again.check_failed());
         assert_eq!(again.copied, 0);
         assert_eq!(again.already_verified, 1);
         assert_eq!(again.rechecked, 0, "the record should have been trusted");

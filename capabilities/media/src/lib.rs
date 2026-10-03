@@ -334,6 +334,83 @@ pub fn verify_mirror(
     }
 }
 
+pub struct SyncOptions<'a> {
+    pub from: &'a Path,
+    pub from_uuid: &'a str,
+    pub to: &'a Path,
+    pub to_uuid: &'a str,
+    pub paths: &'a [String],
+    pub exclude: &'a [String],
+    pub consume: &'a [String],
+    pub journal: Option<&'a Path>,
+    pub settled_for_seconds: u64,
+}
+
+#[derive(Debug, Serialize)]
+pub struct SyncReport {
+    pub indexed_from: IndexReport,
+    pub indexed_to: IndexReport,
+    pub mirror: mirror::MirrorReport,
+    pub verification: Option<MirrorReport>,
+    pub verified: bool,
+}
+
+/// Run the ordered operator workflow. The caller validates both mounted volume UUIDs before calling:
+/// index each side, apply the mirror, then verify the paths as trees. This function deliberately
+/// does not reclaim destination-only paths.
+pub fn sync(ledger: &Ledger, opts: &SyncOptions<'_>) -> Result<SyncReport> {
+    let label = |root: &Path| {
+        root.file_name()
+            .and_then(|name| name.to_str())
+            .unwrap_or("library")
+            .to_owned()
+    };
+    let from_label = label(opts.from);
+    let to_label = label(opts.to);
+    let indexed_from = index(ledger, opts.from, opts.from_uuid, &from_label)?;
+    let indexed_to = index(ledger, opts.to, opts.to_uuid, &to_label)?;
+    let mirrored = mirror::mirror(
+        ledger,
+        &mirror::MirrorOptions {
+            from: opts.from,
+            from_uuid: opts.from_uuid,
+            to: opts.to,
+            to_uuid: opts.to_uuid,
+            paths: opts.paths,
+            exclude: opts.exclude,
+            consume: opts.consume,
+            journal: opts.journal,
+            apply: true,
+            settled_for_seconds: opts.settled_for_seconds,
+        },
+    )?;
+    let verification = if mirrored.deferred.is_empty() {
+        Some(verify_by_path(
+            ledger,
+            (opts.from, opts.from_uuid),
+            (opts.to, opts.to_uuid),
+        )?)
+    } else {
+        None
+    };
+    let verified = mirrored.failures.is_empty()
+        && mirrored.deferred.is_empty()
+        && mirrored.destination_only == 0
+        && verification.as_ref().is_some_and(|report| {
+            report.discrepancies.is_empty()
+                && report.by_path.as_ref().is_some_and(|paths| {
+                    paths.left_only == 0 && paths.right_only == 0 && paths.differing == 0
+                })
+        });
+    Ok(SyncReport {
+        indexed_from,
+        indexed_to,
+        mirror: mirrored,
+        verification,
+        verified,
+    })
+}
+
 /// The two trees compared as trees. Both volumes must be indexed, for the same reason the digest
 /// mode requires it: without an index there is nothing to compare that is not a full read.
 fn verify_by_path(
@@ -346,27 +423,8 @@ fn verify_by_path(
     if left_rows.is_empty() || right_rows.is_empty() {
         return Err("both mounted volumes must be indexed before mirror verification".into());
     }
-    // Both indexes must *describe* their volumes, not merely exist. A stale index makes this
-    // comparison answer a question about the past: a file added since the last `index` run is on
-    // disk and in neither row set, so two trees that differ would be reported as matching. The
-    // digest mode has the same exposure and is left as it was — this is a new mode, and refusing is
-    // cheaper than a wrong "they match".
     for (root, rows) in [(left.0, &left_rows), (right.0, &right_rows)] {
-        let recorded: BTreeSet<&str> = rows.iter().map(|r| r.relpath.as_str()).collect();
-        let unindexed: Vec<String> = files(root)?
-            .into_iter()
-            .map(|(rel, _)| rel)
-            .filter(|rel| !recorded.contains(rel.as_str()))
-            .collect();
-        if !unindexed.is_empty() {
-            return Err(format!(
-                "{} has {} paths on disk that are not indexed (first: {}); run `media index` before comparing trees",
-                root.display(),
-                unindexed.len(),
-                unindexed[0]
-            )
-            .into());
-        }
+        ensure_index_current(root, rows)?;
     }
     let left_map: BTreeMap<&str, &str> = left_rows
         .iter()
@@ -412,6 +470,28 @@ fn verify_by_path(
     })
 }
 
+/// Refuse comparisons when the filesystem contains a path the ledger cannot describe. Both mirror
+/// modes rely on the index; reporting from a stale snapshot can claim completeness while new files
+/// are already on disk.
+pub(crate) fn ensure_index_current(root: &Path, rows: &[Location]) -> Result<()> {
+    let recorded: BTreeSet<&str> = rows.iter().map(|r| r.relpath.as_str()).collect();
+    let unindexed: Vec<String> = files(root)?
+        .into_iter()
+        .map(|(rel, _)| rel)
+        .filter(|rel| !recorded.contains(rel.as_str()))
+        .collect();
+    if !unindexed.is_empty() {
+        return Err(format!(
+            "{} has {} paths on disk that are not indexed (first: {}); run `media index` before verifying the mirror",
+            root.display(),
+            unindexed.len(),
+            unindexed[0]
+        )
+        .into());
+    }
+    Ok(())
+}
+
 fn verify_indexed(
     ledger: &Ledger,
     left: (&Path, &str),
@@ -421,6 +501,9 @@ fn verify_indexed(
     let right_rows = ledger.locations(right.1)?;
     if left_rows.is_empty() || right_rows.is_empty() {
         return Err("both mounted volumes must be indexed before mirror verification".into());
+    }
+    for (root, rows) in [(left.0, &left_rows), (right.0, &right_rows)] {
+        ensure_index_current(root, rows)?;
     }
     let mut groups: BTreeMap<String, (Vec<String>, Vec<String>)> = BTreeMap::new();
     for r in left_rows {
@@ -567,6 +650,100 @@ mod db_tests {
         (dir.join("left"), dir.join("right"))
     }
 
+    fn sync_fixture() -> (PathBuf, Ledger) {
+        use std::sync::atomic::{AtomicU32, Ordering};
+        static NEXT: AtomicU32 = AtomicU32::new(0);
+        let id = NEXT.fetch_add(1, Ordering::Relaxed);
+        let dir = std::env::temp_dir().join(format!("media-sync-{}-{id}", std::process::id()));
+        let _ = fs::remove_dir_all(&dir);
+        fs::create_dir_all(dir.join("from")).unwrap();
+        fs::create_dir_all(dir.join("to")).unwrap();
+        let ledger = Ledger::open(&dir.join("scratch.db")).unwrap();
+        (dir, ledger)
+    }
+
+    fn sync_options<'a>(from: &'a Path, to: &'a Path, settled_for_seconds: u64) -> SyncOptions<'a> {
+        SyncOptions {
+            from,
+            from_uuid: "FROM",
+            to,
+            to_uuid: "TO",
+            paths: &[],
+            exclude: &[],
+            consume: &[],
+            journal: None,
+            settled_for_seconds,
+        }
+    }
+
+    #[test]
+    fn sync_indexes_applies_verifies_and_is_idempotent() {
+        let (dir, ledger) = sync_fixture();
+        let from = dir.join("from");
+        let to = dir.join("to");
+        fs::create_dir_all(from.join("Trips/2026")).unwrap();
+        fs::write(from.join("Trips/2026/photo.jpg"), b"photo bytes").unwrap();
+        let opts = sync_options(&from, &to, 0);
+
+        let first = sync(&ledger, &opts).unwrap();
+        assert_eq!(first.indexed_from.hashed, 1);
+        assert_eq!(first.indexed_to.hashed, 0);
+        assert_eq!(first.mirror.copied, 1);
+        assert!(first.verified);
+        assert_eq!(
+            fs::read(to.join("Trips/2026/photo.jpg")).unwrap(),
+            b"photo bytes"
+        );
+        assert_eq!(
+            first
+                .verification
+                .as_ref()
+                .unwrap()
+                .by_path
+                .as_ref()
+                .unwrap()
+                .left_only,
+            0
+        );
+
+        let second = sync(&ledger, &opts).unwrap();
+        assert_eq!(second.indexed_from.hashed, 0);
+        assert_eq!(second.mirror.copied, 0);
+        assert!(second.verified);
+        fs::remove_dir_all(&dir).unwrap();
+    }
+
+    #[test]
+    fn sync_reports_destination_only_without_removing_it() {
+        let (dir, ledger) = sync_fixture();
+        let from = dir.join("from");
+        let to = dir.join("to");
+        fs::write(from.join("wanted.jpg"), b"wanted").unwrap();
+        fs::write(to.join("old.jpg"), b"destination-only").unwrap();
+        let report = sync(&ledger, &sync_options(&from, &to, 0)).unwrap();
+        assert_eq!(report.mirror.destination_only, 1);
+        assert!(!report.verified);
+        assert!(report.verification.is_some());
+        assert_eq!(fs::read(to.join("old.jpg")).unwrap(), b"destination-only");
+        fs::remove_dir_all(&dir).unwrap();
+    }
+
+    #[test]
+    fn sync_defers_recent_source_subtrees_and_skips_final_verification() {
+        let (dir, ledger) = sync_fixture();
+        let from = dir.join("from");
+        let to = dir.join("to");
+        let collection = from.join("Trips/2026/2026-05-Trip");
+        fs::create_dir_all(&collection).unwrap();
+        fs::write(collection.join("photo.jpg"), b"recent export").unwrap();
+        let report = sync(&ledger, &sync_options(&from, &to, 300)).unwrap();
+        assert_eq!(report.mirror.deferred, ["Trips/2026/2026-05-Trip"]);
+        assert!(!report.verified);
+        assert!(report.verification.is_none());
+        assert!(!to.join("Trips/2026/2026-05-Trip/photo.jpg").exists());
+        fs::remove_dir_all(&dir).unwrap();
+    }
+
     #[test]
     fn path_mode_catches_a_tree_that_moved() {
         // The same bytes at different paths. The digest mode calls this a faithful mirror — every
@@ -604,6 +781,18 @@ mod db_tests {
         fs::write(dir.join("left/same/unindexed.jpg"), b"y").unwrap();
         let (left, right) = sides(&dir);
         let error = verify_by_path(&db, (&left, "A"), (&right, "B"))
+            .unwrap_err()
+            .to_string();
+        assert!(error.contains("not indexed"), "unexpected: {error}");
+        fs::remove_dir_all(&dir).unwrap();
+    }
+
+    #[test]
+    fn digest_mode_refuses_a_stale_index() {
+        let (dir, db) = ledger_with(&[("A", "same/photo.jpg", "x"), ("B", "same/photo.jpg", "x")]);
+        fs::write(dir.join("left/same/unindexed.jpg"), b"new bytes").unwrap();
+        let (left, right) = sides(&dir);
+        let error = verify_indexed(&db, (&left, "A"), (&right, "B"))
             .unwrap_err()
             .to_string();
         assert!(error.contains("not indexed"), "unexpected: {error}");

@@ -6,7 +6,8 @@ use media::{audit, index, verify_mirror, volume_uuid};
 
 fn usage() {
     eprintln!("media — exact-byte index, ingest gate and mirror verification\n\
-        usage:\n  media volume-id --root PATH\n  media index --root PATH --uuid UUID [--db PATH]\n  media audit --root PATH --uuid UUID --sample N [--db PATH]\n  media ingest --staging PATH --library PATH --uuid UUID [--apply] [--prune] [--db PATH]\n  media classify (--digest SHA256 | --digests-file PATH) [--db PATH]\n  media verify-mirror --left-root PATH --left-uuid UUID --right-root PATH --right-uuid UUID [--paths] [--db PATH]\n  media status [--db PATH]\n  media duplicates --uuid UUID [--legacy PREFIX] [--resolve-inside PREFIX --root PATH --metadata] [--list PATH] [--db PATH]\n  media supersede --root PATH --uuid UUID --list PATH --quarantine PATH --journal PATH [--apply]\n  media reconcile --root PATH --uuid UUID [--apply] [--db PATH]\n  media relabel --from DIR --to DIR --uuid UUID --journal PATH [--library PATH] [--apply] [--settled-for SECONDS] [--plan FILE]\n  media preview --structure FILE [--metadata]\n  media organize --structure FILE [--apply --journal PATH] [--settled-for SECONDS] [--only COLLECTION]\n  media mirror --from PATH --from-uuid UUID --to PATH --to-uuid UUID [--path REL] [--exclude REL] [--consume PREFIX] [--journal PATH] [--apply]\n  media reclaim --from PATH --from-uuid UUID --to PATH --to-uuid UUID [--path REL] [--exclude REL] [--list PATH] [--quarantine PATH] [--journal PATH] [--apply]\n\n\
+        usage:\n  media volume-id --root PATH\n  media index --root PATH --uuid UUID [--db PATH]\n  media audit --root PATH --uuid UUID --sample N [--db PATH]\n  media ingest --staging PATH --library PATH --uuid UUID [--apply] [--prune] [--db PATH]\n  media classify (--digest SHA256 | --digests-file PATH) [--db PATH]\n  media verify-mirror --left-root PATH --left-uuid UUID --right-root PATH --right-uuid UUID [--paths] [--db PATH]\n  media status [--db PATH]\n  media duplicates --uuid UUID [--legacy PREFIX] [--resolve-inside PREFIX --root PATH --metadata] [--list PATH] [--db PATH]\n  media supersede --root PATH --uuid UUID --list PATH --quarantine PATH --journal PATH [--apply]\n  media reconcile --root PATH --uuid UUID [--apply] [--db PATH]\n  media relabel --from DIR --to DIR --uuid UUID --journal PATH [--library PATH] [--apply] [--settled-for SECONDS] [--plan FILE]\n  media preview --structure FILE [--metadata]\n  media organize --structure FILE [--apply --journal PATH] [--settled-for SECONDS] [--only COLLECTION]\n  media mirror --from PATH --from-uuid UUID --to PATH --to-uuid UUID [--path REL] [--exclude REL] [--consume PREFIX] [--journal PATH] [--settled-for SECONDS] [--apply | --check]
+  media sync --from PATH --from-uuid UUID --to PATH --to-uuid UUID [--path REL] [--exclude REL] [--consume PREFIX] [--journal PATH] [--settled-for SECONDS]\n  media reclaim --from PATH --from-uuid UUID --to PATH --to-uuid UUID [--path REL] [--exclude REL] [--list PATH] [--quarantine PATH] [--journal PATH] [--apply]\n\n\
         ingest is a dry run unless --apply is set. --prune additionally removes staging/originals\n\
         only after every new import verifies; neither verb deletes library content.");
 }
@@ -152,7 +153,7 @@ fn run(args: &[String]) -> Result<i32> {
             &["--metadata"],
         ),
         "reconcile" => (&["--root", "--uuid", "--db"], &["--apply"]),
-        "mirror" => (
+        "mirror" | "sync" => (
             &[
                 "--from",
                 "--from-uuid",
@@ -162,9 +163,10 @@ fn run(args: &[String]) -> Result<i32> {
                 "--exclude",
                 "--consume",
                 "--journal",
+                "--settled-for",
                 "--db",
             ],
-            &["--apply"],
+            &["--apply", "--check"],
         ),
         "reclaim" => (
             &[
@@ -232,7 +234,7 @@ fn run(args: &[String]) -> Result<i32> {
     // A mirror or a reclaim names two volumes and both are checked before the store is opened, for
     // the same reason as the single-volume verbs: a removed drive whose mount point is now an
     // ordinary directory must not be registered as the host volume.
-    let pair_mounts = if matches!(verb.as_str(), "mirror" | "reclaim") {
+    let pair_mounts = if matches!(verb.as_str(), "mirror" | "sync" | "reclaim") {
         Some((
             mounted(&rooted(opts, "--from")?, &required(opts, "--from-uuid")?)?,
             mounted(&rooted(opts, "--to")?, &required(opts, "--to-uuid")?)?,
@@ -240,6 +242,11 @@ fn run(args: &[String]) -> Result<i32> {
     } else {
         None
     };
+    if matches!(verb.as_str(), "mirror" | "sync")
+        && pair_mounts.as_ref().is_some_and(|(from, to)| from == to)
+    {
+        return Err("mirror volumes must have different UUIDs".into());
+    }
     let db = option(opts, "--db")?
         .map(PathBuf::from)
         .unwrap_or_else(sjel_config::database_path);
@@ -298,6 +305,15 @@ fn run(args: &[String]) -> Result<i32> {
             let paths = repeated(opts, "--path")?;
             let exclude = repeated(opts, "--exclude")?;
             let apply = opts.iter().any(|s| s == "--apply");
+            let check = opts.iter().any(|s| s == "--check");
+            if apply && check {
+                return Err("--apply and --check cannot be used together".into());
+            }
+            let settled_for_seconds = option(opts, "--settled-for")?
+                .map(|value| value.parse::<u64>())
+                .transpose()
+                .map_err(|_| "--settled-for must be a whole number of seconds")?
+                .unwrap_or(300);
             let journal = option(opts, "--journal")?.map(PathBuf::from);
             // A copy is recorded in the ledger, which is what makes it reversible; a *move* out of
             // a retired path is not, so it needs its own record before it happens.
@@ -319,9 +335,64 @@ fn run(args: &[String]) -> Result<i32> {
                     consume: &consume,
                     journal: journal.as_deref(),
                     apply,
+                    settled_for_seconds,
                 },
             )?;
-            let failed = !report.failures.is_empty();
+            let failed = if check {
+                report.check_failed()
+            } else {
+                !report.failures.is_empty()
+            };
+            println!("{}", serde_json::to_string(&report)?);
+            Ok(i32::from(failed))
+        }
+        "sync" => {
+            let (from_uuid, to_uuid) = pair_mounts.ok_or("sync needs two mounted volumes")?;
+            if opts
+                .iter()
+                .any(|arg| matches!(arg.as_str(), "--apply" | "--check"))
+            {
+                return Err("sync always applies; --apply and --check are not valid here".into());
+            }
+            let from = rooted(opts, "--from")?;
+            let to = rooted(opts, "--to")?;
+            let settled_for_seconds = option(opts, "--settled-for")?
+                .map(|value| value.parse::<u64>())
+                .transpose()
+                .map_err(|_| "--settled-for must be a whole number of seconds")?
+                .unwrap_or(300);
+            let consume = repeated(opts, "--consume")?;
+            let paths = repeated(opts, "--path")?;
+            let exclude = repeated(opts, "--exclude")?;
+            let journal = option(opts, "--journal")?.map(PathBuf::from);
+            if !consume.is_empty() && journal.is_none() {
+                return Err("sync with --consume needs --journal".into());
+            }
+            let mut report = media::sync(
+                &ledger,
+                &media::SyncOptions {
+                    from: &from,
+                    from_uuid: &from_uuid,
+                    to: &to,
+                    to_uuid: &to_uuid,
+                    paths: &paths,
+                    exclude: &exclude,
+                    consume: &consume,
+                    journal: journal.as_deref(),
+                    settled_for_seconds,
+                },
+            )?;
+            // Recheck mount UUIDs after the long filesystem work. A volume can disappear or be
+            // replaced after the preflight; the final report must not validate a host mountpoint.
+            if report.mirror.deferred.is_empty() {
+                let final_verification =
+                    verify_mirror(&ledger, (&from, &from_uuid), (&to, &to_uuid), true)?;
+                report.verified &= final_verification.by_path.as_ref().is_some_and(|paths| {
+                    paths.left_only == 0 && paths.right_only == 0 && paths.differing == 0
+                }) && final_verification.discrepancies.is_empty();
+                report.verification = Some(final_verification);
+            }
+            let failed = !report.verified;
             println!("{}", serde_json::to_string(&report)?);
             Ok(i32::from(failed))
         }

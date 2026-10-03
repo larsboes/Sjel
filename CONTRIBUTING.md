@@ -41,6 +41,7 @@ are:
 cargo test --workspace --locked
 bun test
 tools/check-publication-hygiene.sh
+tools/isa-hygiene.sh
 ~~~
 
 Rust packages are members of the root `Cargo.toml` workspace and share the
@@ -306,6 +307,10 @@ here keeps the mechanism — how a service runs, how templates are filled, how u
 audited — while the selected overlay keeps the inventory of what a particular
 installation actually has. `tools/check-publication-hygiene.sh` catches repository names and
 workstation paths; it cannot see aggregation, which is why this is a rule rather than a gate.
+`tools/isa-hygiene.sh` is the advisory companion: it sweeps the tracked `ISA.md` files for
+volume names, hostnames, private addresses and uncommon path roots, and reports rather than
+fails, because an ISA is an evidence log and whether a given measurement may be published is
+the operator's judgement.
 
 ### What the installer owns in an agent harness
 

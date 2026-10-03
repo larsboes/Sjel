@@ -115,7 +115,7 @@ the latest receipt.
 The iCloud upload flag is the operating system's acknowledgement, not a cloud-side restore test.
 When the folder is not pinned with Finder's “Keep Downloaded”, macOS may offload old archives.
 The backup job will download the preceding one on demand; offline recovery from an offloaded
-archive is impossible. The removable Extreme copy is manual and outside this scheduled contract.
+archive is impossible. The removable external copy is manual and outside this scheduled contract.
 
 ## Gotchas
 

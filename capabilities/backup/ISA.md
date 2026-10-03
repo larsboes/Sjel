@@ -185,7 +185,7 @@ remove the feature. The manifest and its LaunchAgent were restored in the same s
 (`tools/service-runner.sh install-persistence backup`), and the schedule runs unchanged until step 4
 moves the interval into stored policy and gives the manifest its `port`.
 
-**2026-09-29 — v1 targets: the iCloud folder and the Extreme SSD, with the home server declared.**
+**2026-09-29 — v1 targets: the iCloud folder and the external SSD, with the home server declared.**
 The iCloud folder and the removable SSD are the two that exist here. The home server is listed as a
 placeholder so a real target can be added without redesign; it is not configured, and the earlier Pi
 copies were deleted at the operator's request.
@@ -278,8 +278,8 @@ mirror verification plus a real unmount (F5). Deliverable: the media ISA's live 
 
 Testing the surface used a scratch overlay whose `config/*.toml` were **symlinks** to the live
 overlay's. Editing "the scratch copy" therefore rewrote the live `machine.toml` (enabled set) and
-the live `systems.local.toml` (the backup target's path), which made `doctor` report a real archive
-as missing. Both were restored — `machine.toml` from git, the untracked `systems.local.toml` by
+the live backup-target config (untracked), which made `doctor` report a real archive
+as missing. Both were restored — `machine.toml` from git, the untracked backup-target config by
 hand — and the receipt a test run had overwritten was reconstructed from the archive it names.
 The lesson is specific and cheap to apply: a scratch overlay must **copy** the files it intends to
 edit, never symlink them.

@@ -310,7 +310,8 @@ workstation paths; it cannot see aggregation, which is why this is a rule rather
 `tools/isa-hygiene.sh` is the advisory companion: it sweeps the tracked `ISA.md` files for
 volume names, hostnames, private addresses and uncommon path roots, and reports rather than
 fails, because an ISA is an evidence log and whether a given measurement may be published is
-the operator's judgement.
+the operator's judgement. Set `SJEL_PRIVATE_NAMES` to this machine's volume and drive labels —
+the overlay owns them — so a bare backticked label is caught too.
 
 ### What the installer owns in an agent harness
 

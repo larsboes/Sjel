@@ -303,7 +303,7 @@ pub struct MirrorReport {
     /// digest on both volumes"; this compares two *trees* and answers "do they match". Those are
     /// different questions, and the difference is load-bearing: measured 2026-10-02, the default
     /// mode reports a healthy mirror while every byte sits at a different path on the other volume,
-    /// which is exactly the state INTENSO was in after the library was reorganised.
+    /// which is exactly the state the mirror was in after the library was reorganised.
     pub by_path: Option<PathComparison>,
 }
 
@@ -747,9 +747,9 @@ mod db_tests {
     #[test]
     fn path_mode_catches_a_tree_that_moved() {
         // The same bytes at different paths. The digest mode calls this a faithful mirror — every
-        // digest is on both volumes — which is exactly why `--paths` exists: it is the state INTENSO
-        // was in after the library was reorganised, and the state a restore-from mirror must not be
-        // in.
+        // digest is on both volumes — which is exactly why `--paths` exists: it is the state the
+        // mirror was in after the library was reorganised, and the state a restore-from mirror must
+        // not be in.
         let (dir, db) = ledger_with(&[
             ("A", "old/photo.jpg", "same bytes"),
             ("B", "new/photo.jpg", "same bytes"),

@@ -78,10 +78,12 @@ while IFS= read -r path; do
   [ -n "$path" ] || continue
   case "$path" in
     # A file whose job is to detect markers has to contain them. That is this script, its
-    # test, and since #168 the sibling gate that scans built site bytes for the same list.
-    # Nothing else earns an entry here: every other file assembles the string at run time.
+    # test, the sibling gate that scans built site bytes for the same list (#168), and the
+    # advisory ISA sweep with its test. Nothing else earns an entry here: every other file
+    # assembles the string at run time.
     tools/check-publication-hygiene.sh|tools/check-publication-hygiene.test.sh) continue ;;
     tools/check-site-payload.sh) continue ;;
+    tools/isa-hygiene.sh|tools/isa-hygiene.test.sh) continue ;;
   esac
   echo "publication hygiene: tracked blob contains a deployment-instance marker: $path" >&2
   failed=1

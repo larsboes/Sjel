@@ -4,7 +4,7 @@ Capability-local claims and their falsifiers. The repo-wide `ISA.md` does not ow
 
 ## Problem
 
-Photos and video live on two external volumes — `Extreme` (canonical) and `INTENSO` (mirror) — as
+Photos and video live on two external volumes — one canonical, one mirror — as
 a temporary NAS until a real one exists. Two facts are now measured rather than assumed:
 
 **Duplicate detection has no memory.** The 2026-09-29 merge hashed 390 GB at ~85 MB/s to check
@@ -59,7 +59,7 @@ authoritative answer to whether these bytes already exist.
 3. **An absent volume is not a volume whose files are gone.** Availability is not liveness — the
    same distinction `capabilities/vault` draws between `/health` and `/ready`.
 4. **Identity comes from an expected volume UUID, never the device node or the path alone.**
-   Measured 2026-09-29: erasing INTENSO renumbered it `/dev/disk10` → `/dev/disk11` in the same
+   Measured 2026-09-29: erasing the mirror volume renumbered it `/dev/disk10` → `/dev/disk11` in the same
    boot. An unmounted path can exist on the host filesystem, so index, audit and ingest require a
    previously recorded `--uuid` and reject a mismatch before opening the store.
 5. **A digest is not a location.** A mirror means one digest legitimately has two paths. Keying
@@ -241,8 +241,8 @@ already holds, and copies the rest with the digest checked inside the write stre
 - [x] MED-P13 — `reclaim` removes a destination path only when its digest is present at a source path
   that is on disk right now, refuses `--apply` without an approved `--list`, and re-hashes every row
   immediately before moving it. Falsifier: bytes that exist nowhere else are removed, or `--apply`
-  acts on the set the tool computed for itself. *(Measured 2026-10-02: `INTENSO` held 1,532 paths
-  whose bytes had all moved to a new name on `Extreme` — a complete mirror that was not a tidy one.)*
+  acts on the set the tool computed for itself. *(Measured 2026-10-02: `mirror` held 1,532 paths
+  whose bytes had all moved to a new name on `canonical` — a complete mirror that was not a tidy one.)*
 - [x] MED-P14 — removal is quarantine, and the journal row is written *before* the move, so a run
   reverses by swapping two paths and a re-run of an applied list moves nothing twice. Falsifier: a
   file is deleted, or re-running an applied list quarantines a row a second time.
@@ -297,7 +297,7 @@ leave two sharing blocks.
   document edited between the manifest build and the verify, which the mirror had copied faithfully
   both times. It predates the `HANDOFF-` skip that now prevents it, and is closed rather than open.
   *(Instance, 2026-10-02 — unintended, and decisive anyway: `verify-mirror --paths` refused with
-  "`/Volumes/Extreme/Media/Library` has 57 paths on disk that are not indexed", naming
+  "`/Volumes/<canonical>/Media/Library` has 57 paths on disk that are not indexed", naming
   `Trips/2026/2026-01-New-York/IMG_0307.MP4`, while the digest mode had been running against the
   same two volumes for twenty minutes and would have reported on the ledger's rows without
   noticing that the library was growing under it. The probe's falsifier was met live rather than
@@ -365,7 +365,7 @@ implementation at the same moment rather than against a stored number.
 
 - **F0 live passes (2026-09-30):** Following verified `store` backup run 220, full live index
   ran on the operator's shared store (`axon.db`): 15,761 files under
-  `/Volumes/Extreme/Media/Library` hashed and indexed into `media_locations` across 15,490
+  `/Volumes/<canonical>/Media/Library` hashed and indexed into `media_locations` across 15,490
   distinct `media_files` digests with 0 discrepancies (`{"uuid":"667F5744-21B3-43F3-8794-26365ABAB67B"}`).
   Idempotence verified: immediate second index pass ran in 0.5s with `hashed: 0`. Live sample
   audit (`media audit --sample 100`) re-read and hashed 100 stride-selected files with 0
@@ -373,20 +373,20 @@ implementation at the same moment rather than against a stored number.
 - **F1 passes:** scratch acceptance verifies regular file ingest, deduplication, disposition
   conservation, and failure injection resumption. `acceptance/labelled.py` verified all 4,943
   historical recovered rows absent against pre-merge cohort, all 4 corrupt pairs distinct, and
-  10 positive controls present. The live canonical comparison on `/Volumes/Extreme/Media/Library`
+  10 positive controls present. The live canonical comparison on `/Volumes/<canonical>/Media/Library`
   resolves all relocations and is **4/4 accessible and verified** (all four canonical target files
   exist and differ from the corrupt copies). Live iCloud ingest, true per-file preflight failures
   and boundary crash safety remain untested until staged.
 - **F2 partial:** unit probe and scratch CLI probe pass. Live absent mirror probe verified:
-  `media verify-mirror` against absent INTENSO reports `availability: absent`, `checked: 0`, and
+  `media verify-mirror` against the absent mirror reports `availability: absent`, `checked: 0`, and
   0 discrepancies with exit 0. Unmount-and-repeat on the real mirror is still not run.
-- **F2 live pass, tree mode (2026-10-02):** both volumes indexed, then compared as trees. INTENSO
-  indexed 16,238 locations across 15,964 digests (342.3 GiB) with `hashed: 16,238`, `pruned: 0`
+- **F2 live pass, tree mode (2026-10-02):** both volumes indexed, then compared as trees. The mirror
+  volume indexed 16,238 locations across 15,964 digests (342.3 GiB) with `hashed: 16,238`, `pruned: 0`
   and 0 discrepancies in one hour. `verify-mirror --paths` then reported `left_only: 0`,
   `differing: 0`, `right_only: 271`, 0 discrepancies, in 5 seconds — the mode compares ledgers, it
   does not re-read bytes. The 271 were the reorg's leftovers and `reclaim --apply` resolved them:
   271 candidates, 271 survivable, **271 verified, 271 quarantined, 0 refused**, 29.39 GiB moved to
-  `INTENSO/Media/_quarantine` behind a 271-row journal. Nothing deleted.
+  `mirror/Media/_quarantine` behind a 271-row journal. Nothing deleted.
 - **F2 live pass, digest mode (2026-10-02):** hashed every indexed path on both volumes — 17,212
   digest groups, 1h47m. **0 byte mismatches.** All 201 discrepancy lines are `No such file or
   directory`; not one is `hashes to <other>`. Their 256 distinct paths are all rows `reclaim
@@ -401,7 +401,7 @@ implementation at the same moment rather than against a stored number.
   `right_only: 0`, `differing: 0`, 0 discrepancies** — the first time the two volumes have
   compared as the same tree rather than as a mirror plus leftovers. The read-only run before it
   predicted 163 and 8.16 GiB exactly, with `destination_only: 0` as the reclaim's proof.
-- **F7 live pass (2026-10-02):** `mirror --from Extreme --to INTENSO --consume by-date --apply`
+- **F7 live pass (2026-10-02):** `mirror --from canonical --to mirror --consume by-date --apply`
   over 17,215 wanted paths — 14,706 `already_verified`, **1,261 moved** (42.32 GiB of same-volume
   renames out of the `by-date` leftovers), **1,248 copied** (210.60 GiB, digest checked inside the
   write stream), 425 source paths hashed because the index did not cover them, 271
@@ -411,34 +411,34 @@ implementation at the same moment rather than against a stored number.
   2,280 ledger paths needing work + 425 unrecorded − 196 = 2,509.
 - **F7 reclaim blindness, found and closed (2026-10-02):** `reclaim` planned only from
   `media_locations` rows for the destination volume and had no guard for an unindexed destination,
-  so it answered `candidates: 0, complete: true, issues: []` while holding files: `INTENSO/Inbox`
+  so it answered `candidates: 0, complete: true, issues: []` while holding files: `mirror/Inbox`
   (193 GB, never a library root) and both `_quarantine` batches (33.7 GB, whose rows
   `supersede`/`reclaim` drop by design). The plan pass now walks the destination and reads what the
   ledger cannot answer — the rule `mirror` already uses (MED-P10): a destination file whose recorded
   size and mtime still match is answered from its row, anything else is hashed. Re-measured on the
-  24-file `Extreme/_quarantine` batch: 0 → **24 candidates, 24 survivable, 5,055,128,152 bytes**,
+  24-file `canonical/_quarantine` batch: 0 → **24 candidates, 24 survivable, 5,055,128,152 bytes**,
   `planned_from: "disk"`, `hashed: 24`, 0 unreadable, 18 s. 83 unit tests and strict all-target
   clippy pass; `scratch.py`, `preview.py` and `labelled.py` all pass. The independent surrogate
   proof for the two batches is already in hand: `classify` reports **24/24** and **271/271** of their
   digests present in `media_locations`.
 - **F7 re-run on the export's arrivals (2026-10-02, 18:15):** the operator's `Photos.app` export wrote
   into the library in bursts, so drift was measured three times in one hour — 98 → 110 → 142 files —
-  and then zero. The sequence is the workflow: `index Extreme` (32 hashed, 0 discrepancies),
+  and then zero. The sequence is the workflow: `index canonical` (32 hashed, 0 discrepancies),
   `mirror --apply` (**142 copied, 7,886,595,720 bytes, 0 moved, 0 failures**, `source_hashed: 0`),
-  `index INTENSO`, `verify-mirror --paths` (**checked 17,520, left_only 0, right_only 0, differing
+  `index mirror`, `verify-mirror --paths` (**checked 17,520, left_only 0, right_only 0, differing
   0**). `media status` then reads `{"files": 17505, "locations": 35040}` — exactly two locations per
   wanted path, the first time the mirror is a 1:1 of the library rather than a mirror plus
   leftovers. A dry run afterwards reports `copied: 0, destination_only: 0, failures: 0`. Note what
   `mirror`'s exit status does *not* say: it fails on `failures` only, so "142 behind" and "in sync"
   are both exit 0 and a scheduler cannot tell them apart. That is the missing check, not a defect in
   the run.
-- **`reclaim` plans closed on all three targets (2026-10-02, 18:03):** `INTENSO/Inbox` **2,161
+- **`reclaim` plans closed on all three targets (2026-10-02, 18:03):** `mirror/Inbox` **2,161
   candidates, 2,161 survivable, 0 unique, 207,595,889,700 bytes**, `planned_from: "disk"`,
-  `hashed: 2,161`, 36m22s at 95 MB/s; `INTENSO/_quarantine` 271/271 survivable, 31.55 GB;
-  `Extreme/_quarantine` 24/24, 5.06 GB. **Zero unique across all three** — every byte of the 193 GiB
+  `hashed: 2,161`, 36m22s at 95 MB/s; `mirror/_quarantine` 271/271 survivable, 31.55 GB;
+  `canonical/_quarantine` 24/24, 5.06 GB. **Zero unique across all three** — every byte of the 193 GiB
   pre-sort snapshot and of both quarantine batches has a live twin in the library. Approved lists:
   `retire-inbox-2026-10-02.tsv` and `retire-quarantine-2026-10-02.tsv` in
-  `INTENSO/Media/_audit-trail/`. The Inbox list is a proposal until `--apply` acts on it; nothing has
+  `mirror/Media/_audit-trail/`. The Inbox list is a proposal until `--apply` acts on it; nothing has
   been moved.
 - **`labelled.py` re-run (2026-10-02): 3/4 canonical targets accessible, and that is a stale path,
   not a lost file.** `guard-exceptions.tsv` records `by-date/2019-05/DJI_0639.MP4`; the

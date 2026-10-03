@@ -3,8 +3,8 @@
 //!
 //! `mirror` reports these paths and removes nothing. This is the separate act, and it exists
 //! because "the mirror is faithful" and "the mirror is tidy" are different claims: a mirror can be
-//! complete and still carry every path a supersede or a rename left behind. On 2026-10-02 `INTENSO`
-//! held 1,532 such paths, 71.7 GiB, whose bytes had all moved to a new name on `Extreme`.
+//! complete and still carry every path a supersede or a rename left behind. On 2026-10-02 `mirror`
+//! held 1,532 such paths, 71.7 GiB, whose bytes had all moved to a new name on `canonical`.
 //!
 //! The guard is the one `supersede` already uses, and it is the whole reason this is not `rm`: a
 //! path is removed **only** when its digest is present at a source path that is on disk right now.
@@ -14,7 +14,7 @@
 //!
 //! **The destination is walked, not read from the ledger.** Planning used to iterate
 //! `media_locations` rows for the destination volume, which made the verb blind to any tree the
-//! ledger did not describe — and silent about it. Measured 2026-10-02: `INTENSO/Inbox` (193 GB) and
+//! ledger did not describe — and silent about it. Measured 2026-10-02: `mirror/Inbox` (193 GB) and
 //! both `_quarantine` batches (33.7 GB) each answered `candidates: 0, complete: true, issues: []`
 //! while holding files, because the Inbox was never a library root and a quarantined path has its
 //! row dropped by design. The walk costs nothing where the ledger is current — a destination file
@@ -647,7 +647,7 @@ mod tests {
     }
 
     /// The measured defect: a destination volume with ledger rows, holding a tree the ledger does
-    /// not describe. `INTENSO/Inbox` and both `_quarantine` batches each answered `candidates: 0,
+    /// not describe. `mirror/Inbox` and both `_quarantine` batches each answered `candidates: 0,
     /// complete: true` here, and 226 GB looked like nothing to do.
     #[test]
     fn a_tree_the_ledger_does_not_describe_is_read_from_disk() {

@@ -11,6 +11,8 @@ export SJEL_ISA_ROOT="$SCRATCH"
 # Injected rather than inherited, so these cases do not depend on whose account the tool
 # happens to default to.
 export SJEL_PRIVATE_USERS="private-user"
+# Injected too, so a machine name is a fixture here rather than the operator's hardware.
+export SJEL_PRIVATE_NAMES="Extreme INTENSO"
 
 git -C "$SCRATCH" init -q
 mkdir -p "$SCRATCH/capabilities/media"
@@ -55,8 +57,8 @@ safe
 expect_silent_about "a clean index reports nothing" "/Volumes/"
 expect_names "a clean index says so" "no machine-private strings found"
 
-plant "capabilities/media/ISA.md" 'measured on /Volumes/Extreme/Media/Library'
-expect_names "a volume path is named" "/Volumes/Extreme"
+plant "capabilities/media/ISA.md" 'measured on /Volumes/Scratch/Media/Library'
+expect_names "a volume path is named" "/Volumes/Scratch"
 expect_names "the volume path is labelled" "volume path"
 
 safe
@@ -79,21 +81,30 @@ plant "ISA.md" 'the overlay is sjel-personal'
 expect_names "an instance marker is named" "sjel-personal"
 
 safe
+plant "ISA.md" 'the `INTENSO` volume is the mirror'
+expect_names "a backticked machine name is named" "device name"
+expect_names "the machine name is quoted" "INTENSO"
+
+safe
+plant "ISA.md" 'an Extreme scale generator with no backticks'
+expect_silent_about "an unquoted common word is not a device name" "device name"
+
+safe
 plant "ISA.md" 'axon.local.toml is the overlay pointer; args.local is a known false positive'
 expect_silent_about "documented .local names are not hostnames" "hostname"
 expect_names "an allowlisted-only line reports clean" "no machine-private strings found"
 
 safe
-printf '%s\n' 'an export at /Volumes/Extreme/Media' > "$SCRATCH/README.md"
+printf '%s\n' 'an export at /Volumes/Scratch/Media' > "$SCRATCH/README.md"
 git -C "$SCRATCH" add README.md
-expect_silent_about "a non-ISA file is out of scope" "/Volumes/Extreme"
+expect_silent_about "a non-ISA file is out of scope" "/Volumes/Scratch"
 
 safe
 mkdir -p "$SCRATCH/sub"
-printf '%s\n' 'a leak at /Volumes/Extreme/Media' > "$SCRATCH/sub/ISA.md"
-expect_silent_about "an untracked ISA is out of scope" "/Volumes/Extreme"
+printf '%s\n' 'a leak at /Volumes/Scratch/Media' > "$SCRATCH/sub/ISA.md"
+expect_silent_about "an untracked ISA is out of scope" "/Volumes/Scratch"
 git -C "$SCRATCH" add sub/ISA.md
-expect_names "the same ISA once staged is in scope" "/Volumes/Extreme"
+expect_names "the same ISA once staged is in scope" "/Volumes/Scratch"
 
 if [ "$fails" -gt 0 ]; then
   echo "isa-hygiene: $fails check(s) failed"

@@ -14,12 +14,20 @@
 #
 # Usage: tools/isa-hygiene.sh                      # this repository's tracked ISA.md files
 #        SJEL_ISA_ROOT=<dir> tools/isa-hygiene.sh  # another checkout (used by the test)
+#        SJEL_PRIVATE_NAMES="Extreme INTENSO" ...  # machine names from the overlay
 set -uo pipefail
 
 ROOT="${SJEL_ISA_ROOT:-$(cd "$(dirname "${BASH_SOURCE[0]:-$0}")/.." && pwd)}"
 cd "$ROOT" || { echo "isa-hygiene: cannot enter $ROOT" >&2; exit 2; }
 
 private_users="${SJEL_PRIVATE_USERS:-larsboes}"
+
+# Machine names — volume labels, drive names, hostnames — that this installation uses and the
+# public repo must not. The overlay owns them (`config/machine.toml [external_volume] name`, the
+# media config's roots), so they arrive here as an env var rather than a committed list. A name is
+# matched only inside backticks, the shape these documents write a volume label in, so an English
+# "Extreme" in prose is not reported. A `/Volumes/<name>` path is already caught by the rule below.
+private_names="${SJEL_PRIVATE_NAMES:-}"
 
 # Each pattern names one shape of machine-private string. They are separate so the report can
 # say which shape matched, and so a new shape is one line to add.
@@ -28,6 +36,11 @@ volume_pattern='/Volumes/[A-Za-z0-9_.-]+'
 hostname_pattern='[A-Za-z0-9_-]+\.local'
 ip_pattern='([0-9]{1,3}\.){3}[0-9]{1,3}'
 marker_pattern='(sjel-personal|sjel-family|axon-personal|axon-family|axon-work|lifeos-mono|obsidian-mono|DS220|Open Telekom Cloud|~/Developer/Tooling)([^-A-Za-z0-9]|$)'
+device_pattern=''
+if [ -n "$private_names" ]; then
+  names_alt="$(printf '%s' "$private_names" | tr ' ' '|')"
+  device_pattern="\`(${names_alt})\`"
+fi
 
 # Strings that match a pattern above but are not private. A false-positive list, not a place to
 # hide a finding: every entry is justified. `axon.local.toml` is the documented overlay pointer
@@ -78,6 +91,7 @@ sweep "volume path"     "$volume_pattern"
 sweep "hostname"        "$hostname_pattern"
 sweep "private address" "$ip_pattern"
 sweep "instance marker" "$marker_pattern"
+[ -n "$device_pattern" ] && sweep "device name" "$device_pattern"
 
 echo
 if [ "$findings" -eq 0 ]; then

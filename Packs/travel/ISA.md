@@ -238,8 +238,8 @@ In scope, too dim to state as a claim yet.
 
 - **An open segment has no home in the plan model.** Found 2026-09-23 while planning
   a trip whose end is genuinely undecided: the operator is open to working remotely
-  for some days after Berlin and continuing somewhere else, with a fixed event on
-  16 October as the only anchor. Nothing in `trips` can say that. A **stage** names a
+  for some days after the first stop and continuing somewhere else, with one fixed
+  event as the only anchor. Nothing in `trips` can say that. A **stage** names a
   destination and a date, an **item** names a day, and the plan **status** is
   draft/saved/archived — three shapes that all assert, and none that says "this part
   is undecided, and here are the branches". The workaround was a `note`, which is
@@ -330,7 +330,8 @@ In scope, too dim to state as a claim yet.
 
 ## Log
 
-- 2026-09-23 · Berlin planning turned up a model gap rather than a feature request:
+- 2026-09-23 · Planning an open-ended trip turned up a model gap rather than a feature
+  request:
   a trip whose end is undecided has nowhere to live. Recorded in "Not yet specified"
   with the candidates and the one to avoid.
 - 2026-09-23 · F4 added. A live pending retrospective turned out to be for a trip

@@ -18,7 +18,7 @@
 use std::io::Write as _;
 use std::path::{Path, PathBuf};
 use std::process::{Command, ExitCode, Stdio};
-use std::time::Duration;
+use std::time::{Duration, SystemTime};
 
 use crate::paths::{duplicate_message, Manifest, Paths};
 use crate::persist;
@@ -565,11 +565,14 @@ impl<'a> Svc<'a> {
                 } else {
                     self.cap_root.join(&self.build_output)
                 };
-                if out.exists() {
+                if artifact_is_current(&self.build, &out, &self.cap_root) {
                     return Ok(());
                 }
-            } else if !self.command[0].starts_with('/') || Path::new(&self.command[0]).exists() {
-                // Built already, or a bare name on PATH with nothing declared to look for.
+            } else if !self.command[0].starts_with('/') {
+                // A bare name on PATH with nothing declared to look for.
+                return Ok(());
+            } else if artifact_is_current(&self.build, Path::new(&self.command[0]), &self.cap_root)
+            {
                 return Ok(());
             }
         }
@@ -1274,4 +1277,141 @@ fn trusted_peers(paths: &Paths) -> String {
         .collect();
     v.sort();
     v.into_iter().map(|(_, n)| n).collect::<Vec<_>>().join(",")
+}
+
+/// The newest modification time among the Rust sources under `root`. Cargo owns the dependency
+/// graph; this only decides whether to ask it, so a coarse "some source is newer" is enough — a
+/// cargo build with nothing to do is cheap. Build output and vendored trees are skipped.
+fn newest_rust_source(root: &Path) -> Option<SystemTime> {
+    let mut newest: Option<SystemTime> = None;
+    let mut stack = vec![root.to_path_buf()];
+    while let Some(dir) = stack.pop() {
+        let Ok(entries) = std::fs::read_dir(&dir) else {
+            continue;
+        };
+        for entry in entries.flatten() {
+            let Ok(kind) = entry.file_type() else {
+                continue;
+            };
+            if kind.is_dir() {
+                let name = entry.file_name();
+                let name = name.to_string_lossy();
+                if matches!(
+                    name.as_ref(),
+                    "target" | "node_modules" | ".git" | "graphify-out"
+                ) {
+                    continue;
+                }
+                stack.push(entry.path());
+            } else if kind.is_file() {
+                let name = entry.file_name();
+                let name = name.to_string_lossy();
+                if name.ends_with(".rs") || name == "Cargo.toml" || name == "Cargo.lock" {
+                    if let Ok(modified) = entry.metadata().and_then(|m| m.modified()) {
+                        if newest.is_none_or(|n| modified > n) {
+                            newest = Some(modified);
+                        }
+                    }
+                }
+            }
+        }
+    }
+    newest
+}
+
+/// Whether the artifact a manifest declares is already built from the sources it has.
+///
+/// A missing artifact is never current. For a cargo build the newest source under `root` decides,
+/// so a scheduled job picks up a change to a workspace crate it depends on instead of running a
+/// binary built before it — measured 2026-10-03: `entities-server` was built 2026-09-30, before
+/// the loopback-auth change in `libs/sjel-server`, and answered 401 for four runs. Any other build
+/// tool keeps the old "exists means built" rule, because re-running an arbitrary build on every
+/// tick is not something this can promise is cheap.
+fn artifact_is_current(build: &[String], artifact: &Path, root: &Path) -> bool {
+    let Ok(built) = std::fs::metadata(artifact).and_then(|m| m.modified()) else {
+        return false;
+    };
+    if build.first().map(String::as_str) != Some("cargo") {
+        return true;
+    }
+    newest_rust_source(root).is_none_or(|newest| newest <= built)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn write_at(path: &Path, when: SystemTime) {
+        if let Some(parent) = path.parent() {
+            std::fs::create_dir_all(parent).expect("parent dir");
+        }
+        std::fs::write(path, "x").expect("write");
+        std::fs::File::options()
+            .write(true)
+            .open(path)
+            .expect("open")
+            .set_modified(when)
+            .expect("set mtime");
+    }
+
+    fn scratch(name: &str) -> PathBuf {
+        let dir = std::env::temp_dir().join(format!("sjel-runner-{name}-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(&dir).expect("scratch dir");
+        dir
+    }
+
+    fn cargo_build() -> Vec<String> {
+        vec!["cargo".to_owned(), "build".to_owned()]
+    }
+
+    #[test]
+    fn a_cargo_artifact_older_than_its_sources_is_stale() {
+        let dir = scratch("stale");
+        let artifact = dir.join("target/release/tool");
+        let source = dir.join("libs/x/src/lib.rs");
+        let old = SystemTime::UNIX_EPOCH + Duration::from_secs(1_000_000);
+        let new = SystemTime::UNIX_EPOCH + Duration::from_secs(2_000_000);
+        write_at(&artifact, old);
+        write_at(&source, new);
+        assert!(!artifact_is_current(&cargo_build(), &artifact, &dir));
+        write_at(&artifact, new);
+        assert!(artifact_is_current(&cargo_build(), &artifact, &dir));
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn build_output_under_target_is_not_a_source() {
+        let dir = scratch("target");
+        let artifact = dir.join("target/release/tool");
+        let generated = dir.join("target/release/build/x/out.rs");
+        let old = SystemTime::UNIX_EPOCH + Duration::from_secs(1_000_000);
+        let new = SystemTime::UNIX_EPOCH + Duration::from_secs(2_000_000);
+        write_at(&artifact, old);
+        write_at(&generated, new);
+        assert!(artifact_is_current(&cargo_build(), &artifact, &dir));
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn a_non_cargo_build_keeps_exists_means_built() {
+        let dir = scratch("noncargo");
+        let artifact = dir.join("target/release/tool");
+        let source = dir.join("src/lib.rs");
+        let old = SystemTime::UNIX_EPOCH + Duration::from_secs(1_000_000);
+        let new = SystemTime::UNIX_EPOCH + Duration::from_secs(2_000_000);
+        write_at(&artifact, old);
+        write_at(&source, new);
+        let bun = vec!["bun".to_owned(), "run".to_owned()];
+        assert!(artifact_is_current(&bun, &artifact, &dir));
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn a_missing_artifact_is_never_current() {
+        let dir = scratch("missing");
+        let artifact = dir.join("target/release/tool");
+        assert!(!artifact_is_current(&cargo_build(), &artifact, &dir));
+        let _ = std::fs::remove_dir_all(&dir);
+    }
 }

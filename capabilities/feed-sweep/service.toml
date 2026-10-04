@@ -23,10 +23,15 @@
 # rate-limited, which is survivable while a human clicks a button and fatal on a timer.
 kind     = "process"
 name     = "feed-sweep"
-# `bun` first, not a launcher script that execs it. service-runner.sh builds the generated unit's
-# PATH from the interpreter it can see in command[0], and a launcher hides that: the first run
-# through launchd died on `exec: bun: not found`, exit 127.
-command  = ["bun", "run", "tools/feed-sweep.ts"]
+command  = ["target/release/sjel-cli", "feed-sweep"]
+# The built binary, not a launcher and no longer an interpreter, the shape host-watch carries.
+# service-runner.sh derives the generated unit's PATH from command[0] and from each `build` word,
+# so naming `cargo` here is what puts it on the job's PATH — a bare launcher would leave the
+# six-hourly job unable to rebuild a stale binary. `bun run tools/feed-sweep.ts` was what this
+# named until 2026-10-04, when the tool moved to tools/sjel-cli/src/feed_sweep.rs: the units
+# already installed need no reinstall, because launchd runs service-runner and the runner reads
+# this manifest.
+build    = ["cargo", "build", "--locked", "--release", "-p", "sjel-cli", "--bin", "sjel-cli"]
 
 # Six hours. Both live sources publish on a slower cycle than that — GitHub's trending page is
 # daily and the arXiv listing settles once a day — so this is already oversampling; the value is

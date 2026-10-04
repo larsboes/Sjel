@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
-# Thin launcher: UI-package discovery is implemented in discover-ui-packages.ts because it
-# parses package.json and emits JSON for CI to loop over, neither of which tools/lib/toml.sh
-# covers. Mirrors the tools/self and tools/packs-codex launcher pattern.
-_here="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-exec bun run "$_here/discover-ui-packages.ts" "$@"
+# Keep the CI entry point; package discovery lives in sjel-cli.
+set -u
+_here="$(cd "$(dirname "${BASH_SOURCE[0]:-$0}")" && pwd)"
+. "$_here/lib/paths.sh"
+. "$_here/lib/sjel-cli.sh"
+sjel_cli_exec discover-ui-packages "$@"

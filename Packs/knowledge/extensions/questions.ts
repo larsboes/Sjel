@@ -28,6 +28,7 @@ import {
 	Key,
 	matchesKey,
 	Text,
+	type TUI,
 	visibleWidth,
 	wrapTextWithAnsi,
 } from "@earendil-works/pi-tui";
@@ -58,6 +59,152 @@ function editorTheme(theme: Theme): EditorTheme {
 			noMatch: (t) => theme.fg("warning", t),
 		},
 	};
+}
+
+/* ────────────────────────── the scrolling window ────────────────────────── */
+
+function terminalRows(tui: TUI): number {
+	return tui.terminal?.rows ?? 24;
+}
+
+/**
+ * Rows one widget's whole frame may take before it crowds out the transcript it is asking about.
+ *
+ * Every screen in this file is taller than a terminal once a round carries a paragraph of context,
+ * a consequence per option and a preview block — and nothing in pi bounds a `ctx.ui.custom`
+ * component. It takes over the editor slot and is drawn at whatever height its `render()` returns,
+ * so unbounded content grows the dock until the screen is the widget. Seven tenths of the terminal
+ * leaves the widget readable and the transcript above it visible.
+ */
+function widgetRows(tui: TUI): number {
+	const rows = terminalRows(tui);
+	return Math.max(4, Math.min(rows - 1, Math.floor(rows * 0.7)));
+}
+
+/**
+ * Line cache for one screen, keyed by width and terminal rows.
+ *
+ * The TUI repaints on a resize without calling `invalidate()`, and a resize is exactly what the
+ * window is measured against — a cache that only knew about content changes would keep drawing the
+ * old window until the next keystroke.
+ */
+class ScreenCache {
+	private key = "";
+	private lines: string[] | undefined;
+
+	get(width: number, rows: number): string[] | undefined {
+		return this.lines !== undefined && this.key === `${width}x${rows}` ? this.lines : undefined;
+	}
+
+	set(width: number, rows: number, lines: string[]): void {
+		this.key = `${width}x${rows}`;
+		this.lines = lines;
+	}
+
+	clear(): void {
+		this.lines = undefined;
+	}
+}
+
+/**
+ * The scrollable body of one screen: the lines between the two border rows.
+ *
+ * pi's own `ScrollView` cannot help here — it is cropped by the TUI layout engine, and a component
+ * in the editor slot never passes through that. So each screen builds its full body and `cut()`
+ * returns the window of it that fits, with the head (topic line) and foot (hint, bottom border)
+ * left in place so the frame stays put while the body moves under it.
+ *
+ * `follow` keeps the focused block in view with the least movement: moving the focus sets it, and a
+ * hand scroll clears it, so the window stays where the reader put it until the focus moves again.
+ * A fresh question starts at the top instead — following its focus would scroll the prompt off
+ * before anyone had read it, and the recommended option is often the last of nine.
+ */
+class BodyWindow {
+	private top = 0;
+	/** First and last body line of whatever holds the focus. */
+	private anchor: [number, number] = [0, 0];
+	/** Height of the last cut, so a hand scroll knows how far a page is. */
+	private view = 0;
+	/** Consumed by the next cut: start at the top however the focus moved to get here. */
+	private startAtTop = true;
+	follow = false;
+
+	/** Where the focused block sits, recorded while the body is being built. */
+	focus(from: number, to: number = from) {
+		this.anchor = [from, Math.max(from, to)];
+	}
+
+	/** Open the next question, review or page at the top of its body. */
+	reset() {
+		this.startAtTop = true;
+	}
+
+	/**
+	 * Move the window. True when the key was a scroll key.
+	 *
+	 * Ctrl+U/Ctrl+D is the pair the hint advertises, because fullscreen — which is pi's default mode
+	 * — routes PageUp, PageDown, Home and End to the transcript viewport before a focused component
+	 * sees them (`tui.altScreen.pageUp`, `.top`, `.bottom`), and an inline widget in the editor slot
+	 * is not an overlay it defers to. The PageUp/PageDown pair is kept for regular mode, where
+	 * nothing intercepts it.
+	 */
+	scroll(data: string): boolean {
+		const page = Math.max(1, this.view - 1);
+		const half = Math.max(1, Math.floor(this.view / 2));
+		let next: number;
+		if (matchesKey(data, Key.pageUp)) next = this.top - page;
+		else if (matchesKey(data, Key.pageDown)) next = this.top + page;
+		else if (matchesKey(data, Key.ctrl("u"))) next = this.top - half;
+		else if (matchesKey(data, Key.ctrl("d"))) next = this.top + half;
+		else return false;
+		this.follow = false;
+		// Only the key's own movement is applied here; `cut` clamps against the body it is given, so
+		// there is one place that decides where the window may sit.
+		this.top = Math.max(0, next);
+		return true;
+	}
+
+	/** The body lines to draw, plus how many were hidden on each side. */
+	cut(body: string[], maxRows: number): { lines: string[]; above: number; below: number } {
+		const view = Math.max(1, Math.min(maxRows, body.length));
+		this.view = view;
+		if (this.startAtTop) {
+			this.startAtTop = false;
+			this.follow = false;
+			this.top = 0;
+		}
+		if (body.length <= view) {
+			this.top = 0;
+			return { lines: body, above: 0, below: 0 };
+		}
+		if (this.follow) {
+			// Show the focused block and as much as fits above it: lining the block up against the
+			// bottom edge keeps the preamble in view, and a block taller than the window keeps its
+			// first line rather than its last.
+			const [from, to] = this.anchor;
+			this.top = Math.max(0, Math.min(from, Math.max(0, to - view + 1)));
+		}
+		this.top = Math.max(0, Math.min(this.top, body.length - view));
+		return { lines: body.slice(this.top, this.top + view), above: this.top, below: body.length - this.top - view };
+	}
+}
+
+/** ` ▲ 4 · ▼ 9 · ^U/^D ` while lines are hidden, else "". */
+function hiddenLabel(view: { above: number; below: number }): string {
+	const parts: string[] = [];
+	if (view.above > 0) parts.push(`▲ ${view.above}`);
+	if (view.below > 0) parts.push(`▼ ${view.below}`);
+	return parts.length > 0 ? ` ${parts.join(" · ")} · ^U/^D ` : "";
+}
+
+/**
+ * The top border, carrying the scroll position when the body was cut. The border row is free
+ * space, so the marker costs no room and cannot reflow the hint underneath it.
+ */
+function topRule(width: number, view: { above: number; below: number }, theme: Theme): string {
+	const label = hiddenLabel(view);
+	if (label === "" || label.length + 2 >= width) return theme.fg("accent", "─".repeat(width));
+	return theme.fg("accent", `─${label}${"─".repeat(width - 1 - label.length)}`);
 }
 
 /** Both tools answer with this when there is no terminal to ask in. */
@@ -190,12 +337,20 @@ async function runAsk(
 		let qIndex = 0;
 		let optionIndex = questions[0].recommendedIndex ?? 0;
 		let phase: "options" | "note" | "free" = "options";
-		let cachedLines: string[] | undefined;
+		const cache = new ScreenCache();
 		const answers: AskAnswer[] = [];
 		const editor = new Editor(tui, editorTheme(theme));
+		const win = new BodyWindow();
 
 		function refresh() {
-			cachedLines = undefined;
+			cache.clear();
+			win.follow = true;
+			tui.requestRender();
+		}
+
+		/** Repaint without re-following the focus, for a hand scroll. */
+		function repaint() {
+			cache.clear();
 			tui.requestRender();
 		}
 
@@ -239,6 +394,7 @@ async function runAsk(
 			if (qIndex < questions.length - 1) {
 				qIndex++;
 				optionIndex = questions[qIndex].recommendedIndex ?? 0;
+				win.reset();
 				refresh();
 				return;
 			}
@@ -287,6 +443,12 @@ async function runAsk(
 				done({ topic, answers, cancelled: true });
 				return;
 			}
+			// Scrolling is a hand action, so it sits ahead of the option keys: every option key is
+			// a plain letter or digit, and none of the scroll keys is one.
+			if (win.scroll(data)) {
+				repaint();
+				return;
+			}
 
 			const q = questions[qIndex];
 			if (matchesKey(data, Key.up) || data === "k") {
@@ -329,65 +491,76 @@ async function runAsk(
 		}
 
 		function render(width: number): string[] {
-			if (cachedLines) return cachedLines;
+			const hit = cache.get(width, terminalRows(tui));
+			if (hit) return hit;
 			const w = Math.max(1, width);
-			const lines: string[] = [];
 			const q = questions[qIndex];
 			const chosen = phase === "note" ? optionIndex : null;
 
-			lines.push(theme.fg("accent", "─".repeat(w)));
+			// The head and the hint stay put; only the body scrolls, so the topic and the keys are
+			// never scrolled off the thing they belong to.
+			const head: string[] = [theme.fg("accent", "─".repeat(w))];
 			addPrefixed(
-				lines,
+				head,
 				w,
 				" ",
 				theme.fg("muted", `${topic} · ${qIndex + 1}/${questions.length}${q.title ? ` · ${q.title}` : ""}`),
 			);
-			lines.push("");
+			head.push("");
+
+			const body: string[] = [];
 			if (q.context) {
-				addPrefixed(lines, w, " ", theme.fg("dim", q.context));
-				lines.push("");
+				addPrefixed(body, w, " ", theme.fg("dim", q.context));
+				body.push("");
 			}
-			addPrefixed(lines, w, " ", theme.fg("text", theme.bold(q.prompt)));
-			lines.push("");
+			addPrefixed(body, w, " ", theme.fg("text", theme.bold(q.prompt)));
+			body.push("");
 
 			for (let i = 0; i < q.options.length; i++) {
 				const opt = q.options[i];
 				const focused = i === optionIndex;
+				const from = body.length;
 				let line = theme.fg(focused ? "accent" : "text", `${i + 1}. ${opt.label}`);
 				if (q.recommendedIndex === i) line += "  " + theme.fg("success", "★ recommended");
 				if (chosen === i) line += "  " + theme.fg("success", "◆ you chose this");
-				addPrefixed(lines, w, focused && phase === "options" ? theme.fg("accent", "> ") : "  ", line);
-				if (opt.consequence) addPrefixed(lines, w, "     ", theme.fg("muted", opt.consequence));
+				addPrefixed(body, w, focused && phase === "options" ? theme.fg("accent", "> ") : "  ", line);
+				if (opt.consequence) addPrefixed(body, w, "     ", theme.fg("muted", opt.consequence));
 				// Previews are long by nature, so only the option in front of the user carries one.
 				if (opt.preview && (focused || chosen === i)) {
 					for (const raw of opt.preview.split("\n")) {
-						addPrefixed(lines, w, "     │ ", theme.fg("dim", raw));
+						addPrefixed(body, w, "     │ ", theme.fg("dim", raw));
 					}
 				}
+				if (focused) win.focus(from, body.length - 1);
 			}
 
-			lines.push("");
+			body.push("");
+			let hint: string;
 			if (phase === "note") {
-				addPrefixed(lines, w, " ", theme.fg("text", "Note for this decision (optional):"));
-				for (const line of editor.render(Math.max(1, w - 1))) lines.push(` ${line}`);
-				lines.push("");
-				addPrefixed(lines, w, " ", theme.fg("dim", "Enter to record · an empty note is fine · Esc to change answer"));
+				const from = body.length;
+				addPrefixed(body, w, " ", theme.fg("text", "Note for this decision (optional):"));
+				for (const line of editor.render(Math.max(1, w - 1))) body.push(` ${line}`);
+				body.push("");
+				// The editor holds the focus here, so the window follows it rather than the option.
+				win.focus(from, body.length - 1);
+				hint = "Enter to record · an empty note is fine · Esc to change answer";
 			} else if (phase === "free") {
-				addPrefixed(lines, w, " ", theme.fg("text", "None of these — your own answer:"));
-				for (const line of editor.render(Math.max(1, w - 1))) lines.push(` ${line}`);
-				lines.push("");
-				addPrefixed(lines, w, " ", theme.fg("dim", "Enter to record it as this decision · Esc back to the options"));
+				const from = body.length;
+				addPrefixed(body, w, " ", theme.fg("text", "None of these — your own answer:"));
+				for (const line of editor.render(Math.max(1, w - 1))) body.push(` ${line}`);
+				body.push("");
+				win.focus(from, body.length - 1);
+				hint = "Enter to record it as this decision · Esc back to the options";
 			} else {
-				addPrefixed(
-					lines,
-					w,
-					" ",
-					theme.fg("dim", "↑↓ move · 1-9 focus · Enter choose · o none of these · s skip (stays open) · Esc end round"),
-				);
+				hint = "↑↓ move · 1-9 focus · Enter choose · o none of these · s skip (stays open) · Esc end round";
 			}
-			lines.push(theme.fg("accent", "─".repeat(w)));
 
-			cachedLines = lines;
+			const foot: string[] = [];
+			addPrefixed(foot, w, " ", theme.fg("dim", hint));
+			const view = win.cut(body, widgetRows(tui) - head.length - foot.length - 1);
+			head[0] = topRule(w, view, theme);
+			const lines = [...head, ...view.lines, ...foot, theme.fg("accent", "─".repeat(w))];
+			cache.set(width, terminalRows(tui), lines);
 			return lines;
 		}
 
@@ -400,7 +573,7 @@ async function runAsk(
 			},
 			render,
 			invalidate: () => {
-				cachedLines = undefined;
+				cache.clear();
 			},
 			handleInput,
 		};
@@ -564,14 +737,22 @@ async function runQuiz(
 		let revealed = false;
 		/** The reveal's second phase: the user is typing why they chose it. */
 		let notePhase = false;
-		let cachedLines: string[] | undefined;
+		const cache = new ScreenCache();
 		const answers: QuizAnswer[] = [];
 		const editor = new Editor(tui, editorTheme(theme));
+		const win = new BodyWindow();
 
 		const IDK = "I don't know";
 
 		function refresh() {
-			cachedLines = undefined;
+			cache.clear();
+			win.follow = true;
+			tui.requestRender();
+		}
+
+		/** Repaint without re-following the focus, for a hand scroll. */
+		function repaint() {
+			cache.clear();
 			tui.requestRender();
 		}
 
@@ -615,6 +796,7 @@ async function runQuiz(
 				qIndex++;
 				optionIndex = 0;
 				revealed = false;
+				win.reset();
 				refresh();
 			} else {
 				done({ topic: params.topic, answers, cancelled: false });
@@ -635,6 +817,12 @@ async function runQuiz(
 			}
 			if (matchesKey(data, Key.escape)) {
 				done({ topic: params.topic, answers, cancelled: true });
+				return;
+			}
+			// Nothing here collides with the answer keys: digits and plain letters never arrive as
+			// PageUp/PageDown or a ctrl combination.
+			if (win.scroll(data)) {
+				repaint();
 				return;
 			}
 			if (revealed) {
@@ -678,28 +866,31 @@ async function runQuiz(
 		}
 
 		function render(width: number): string[] {
-			if (cachedLines) return cachedLines;
-			const lines: string[] = [];
+			const hit = cache.get(width, terminalRows(tui));
+			if (hit) return hit;
 			const w = Math.max(1, width);
 			const q = questions[qIndex];
 			const opts = currentOptions();
 			const answer = answers[answers.length - 1];
 
-			lines.push(theme.fg("accent", "─".repeat(w)));
+			const head: string[] = [theme.fg("accent", "─".repeat(w))];
 			const score = answers.filter((a) => a.correct).length;
 			addPrefixed(
-				lines,
+				head,
 				w,
 				" ",
 				theme.fg("muted", `${params.topic} · question ${qIndex + 1}/${questions.length} · ${score} correct`),
 			);
-			lines.push("");
-			addPrefixed(lines, w, " ", theme.fg("text", theme.bold(q.prompt)));
-			lines.push("");
+			head.push("");
+
+			const body: string[] = [];
+			addPrefixed(body, w, " ", theme.fg("text", theme.bold(q.prompt)));
+			body.push("");
 
 			for (let i = 0; i < opts.length; i++) {
 				const isIdk = i === q.options.length;
 				const selected = i === optionIndex;
+				const from = body.length;
 				let prefix = selected && !revealed ? theme.fg("accent", "> ") : "  ";
 				let color: Parameters<Theme["fg"]>[0] = selected && !revealed ? "accent" : isIdk ? "muted" : "text";
 				let suffix = "";
@@ -718,54 +909,65 @@ async function runQuiz(
 					}
 					prefix = "  ";
 				}
-				addPrefixed(lines, w, prefix, theme.fg(color, `${i + 1}. ${opts[i]}${suffix}`));
+				addPrefixed(body, w, prefix, theme.fg(color, `${i + 1}. ${opts[i]}${suffix}`));
+				if (selected && !revealed) win.focus(from, body.length - 1);
 			}
 
-			lines.push("");
+			body.push("");
+			let hint: string;
 			if (revealed && answer) {
+				// Once the answer is out, the verdict is what the reader is looking at, not the list.
+				const from = body.length;
 				const verdict = answer.correct
 					? theme.fg("success", "✓ Correct")
 					: answer.idk
 						? theme.fg("warning", `— The answer: ${q.options[q.correctIndex]}`)
 						: theme.fg("error", `✗ Incorrect — correct: ${q.options[q.correctIndex]}`);
-				addPrefixed(lines, w, " ", verdict);
+				addPrefixed(body, w, " ", verdict);
 				if (q.explanation) {
-					lines.push("");
-					addPrefixed(lines, w, " ", theme.fg("muted", q.explanation));
+					body.push("");
+					addPrefixed(body, w, " ", theme.fg("muted", q.explanation));
 				}
-				lines.push("");
+				body.push("");
 				if (notePhase) {
-					addPrefixed(lines, w, " ", theme.fg("dim", "Why you chose it — Enter to save · Esc to cancel"));
-					for (const editorLine of editor.render(w)) lines.push(editorLine);
+					addPrefixed(body, w, " ", theme.fg("dim", "Why you chose it — Enter to save · Esc to cancel"));
+					for (const editorLine of editor.render(w)) body.push(editorLine);
+					hint = "";
 				} else {
 					if (answer.contested) {
-						addPrefixed(lines, w, " ", theme.fg("warning", "⚑ You have contested this grading"));
+						addPrefixed(body, w, " ", theme.fg("warning", "⚑ You have contested this grading"));
 					}
 					if (answer.note) {
 						addPrefixed(
-							lines,
+							body,
 							w,
 							" ",
 							theme.fg("dim", `your reason: ${answer.note.replace(/\s*\n\s*/g, " / ")}`),
 						);
 					}
-					const hint = answer.correct && !answer.contested
-						? "Enter/Space for next · n add a reason · Esc to stop"
-						: "Enter/Space for next · n add a reason · c contest · Esc to stop";
-					addPrefixed(lines, w, " ", theme.fg("dim", hint));
+					hint =
+						answer.correct && !answer.contested
+							? "Enter/Space for next · n add a reason · Esc to stop"
+							: "Enter/Space for next · n add a reason · c contest · Esc to stop";
 				}
+				win.focus(from, body.length - 1);
 			} else {
-				addPrefixed(lines, w, " ", theme.fg("dim", "↑↓ or 1-9 · Enter to answer · Esc to stop"));
+				hint = "↑↓ or 1-9 · Enter to answer · Esc to stop";
 			}
-			lines.push(theme.fg("accent", "─".repeat(w)));
-			cachedLines = lines;
+
+			const foot: string[] = [];
+			if (hint !== "") addPrefixed(foot, w, " ", theme.fg("dim", hint));
+			const view = win.cut(body, widgetRows(tui) - head.length - foot.length - 1);
+			head[0] = topRule(w, view, theme);
+			const lines = [...head, ...view.lines, ...foot, theme.fg("accent", "─".repeat(w))];
+			cache.set(width, terminalRows(tui), lines);
 			return lines;
 		}
 
 		return {
 			render,
 			invalidate: () => {
-				cachedLines = undefined;
+				cache.clear();
 			},
 			handleInput,
 		};
@@ -826,12 +1028,20 @@ async function runQuizReview(
 	const result = await ctx.ui.custom<QuizReviewResult>((tui, theme, _kb, done) => {
 		let index = 0;
 		let notePhase = false;
-		let cachedLines: string[] | undefined;
+		const cache = new ScreenCache();
 		const outcomes: QuizReviewOutcome[] = [];
 		const editor = new Editor(tui, editorTheme(theme));
+		const win = new BodyWindow();
 
 		function refresh() {
-			cachedLines = undefined;
+			cache.clear();
+			win.follow = true;
+			tui.requestRender();
+		}
+
+		/** Repaint without re-following the focus, for a hand scroll. */
+		function repaint() {
+			cache.clear();
 			tui.requestRender();
 		}
 
@@ -844,6 +1054,7 @@ async function runQuizReview(
 			notePhase = false;
 			if (index < reviews.length - 1) {
 				index++;
+				win.reset();
 				refresh();
 				return;
 			}
@@ -872,6 +1083,10 @@ async function runQuizReview(
 				done({ topic: params.topic, outcomes, cancelled: true });
 				return;
 			}
+			if (win.scroll(data)) {
+				repaint();
+				return;
+			}
 			if (matchesKey(data, Key.enter) || data === " ") {
 				record(true, null);
 				advance();
@@ -884,45 +1099,56 @@ async function runQuizReview(
 		}
 
 		function render(width: number): string[] {
-			if (cachedLines) return cachedLines;
-			const lines: string[] = [];
+			const hit = cache.get(width, terminalRows(tui));
+			if (hit) return hit;
 			const w = Math.max(1, width);
 			const review = reviews[index];
 
-			lines.push(theme.fg("accent", "─".repeat(w)));
+			const head: string[] = [theme.fg("accent", "─".repeat(w))];
 			addPrefixed(
-				lines,
+				head,
 				w,
 				" ",
 				theme.fg("muted", `${params.topic} · review ${index + 1}/${reviews.length}`),
 			);
-			lines.push("");
-			addPrefixed(lines, w, " ", theme.fg("text", theme.bold(review.prompt)));
-			lines.push("");
-			addPrefixed(lines, w, " ", theme.fg("dim", `you: ${review.chosen}`));
+			head.push("");
+
+			const body: string[] = [];
+			addPrefixed(body, w, " ", theme.fg("text", theme.bold(review.prompt)));
+			body.push("");
+			addPrefixed(body, w, " ", theme.fg("dim", `you: ${review.chosen}`));
 			if (review.accepted) {
-				addPrefixed(lines, w, " ", theme.fg("success", "model now: agrees — full marks"));
+				addPrefixed(body, w, " ", theme.fg("success", "model now: agrees — full marks"));
 			} else {
-				addPrefixed(lines, w, " ", theme.fg("warning", `model stands by: ${review.correct}`));
+				addPrefixed(body, w, " ", theme.fg("warning", `model stands by: ${review.correct}`));
 			}
-			lines.push("");
-			addPrefixed(lines, w, " ", theme.fg("muted", review.reason));
-			lines.push("");
+			body.push("");
+			addPrefixed(body, w, " ", theme.fg("muted", review.reason));
+			body.push("");
+			let hint = "Enter to accept · p to push back · Esc to stop";
 			if (notePhase) {
-				addPrefixed(lines, w, " ", theme.fg("dim", "Your reply — Enter to send · Esc to cancel"));
-				for (const editorLine of editor.render(w)) lines.push(editorLine);
-			} else {
-				addPrefixed(lines, w, " ", theme.fg("dim", "Enter to accept · p to push back · Esc to stop"));
+				// Only the reply is anchored: with nothing typed yet the verdict above is what the
+				// reader needs, and the window starts at the top of the body for that reason.
+				const from = body.length;
+				addPrefixed(body, w, " ", theme.fg("dim", "Your reply — Enter to send · Esc to cancel"));
+				for (const editorLine of editor.render(w)) body.push(editorLine);
+				win.focus(from, body.length - 1);
+				hint = "";
 			}
-			lines.push(theme.fg("accent", "─".repeat(w)));
-			cachedLines = lines;
+
+			const foot: string[] = [];
+			if (hint !== "") addPrefixed(foot, w, " ", theme.fg("dim", hint));
+			const view = win.cut(body, widgetRows(tui) - head.length - foot.length - 1);
+			head[0] = topRule(w, view, theme);
+			const lines = [...head, ...view.lines, ...foot, theme.fg("accent", "─".repeat(w))];
+			cache.set(width, terminalRows(tui), lines);
 			return lines;
 		}
 
 		return {
 			render,
 			invalidate: () => {
-				cachedLines = undefined;
+				cache.clear();
 			},
 			handleInput,
 		};
@@ -1081,13 +1307,21 @@ async function runNarrow(
 
 	const result = await ctx.ui.custom<NarrowResult>((tui, theme, _kb, done) => {
 		let index = 0;
-		let cachedLines: string[] | undefined;
+		const cache = new ScreenCache();
 		let reasonPhase = false;
 		let verdicts: NarrowVerdict[] = [];
 		const editor = new Editor(tui, editorTheme(theme));
+		const win = new BodyWindow();
 
 		function refresh() {
-			cachedLines = undefined;
+			cache.clear();
+			win.follow = true;
+			tui.requestRender();
+		}
+
+		/** Repaint without re-following the focus, for a hand scroll. */
+		function repaint() {
+			cache.clear();
 			tui.requestRender();
 		}
 
@@ -1145,6 +1379,11 @@ async function runNarrow(
 				done({ topic: params.topic, verdicts, cancelled: true });
 				return;
 			}
+			// A hand scroll outranks the movement keys: none of them is `j`, `k` or a verdict key.
+			if (win.scroll(data)) {
+				repaint();
+				return;
+			}
 			if (matchesKey(data, Key.up) || data === "k") return move(-1);
 			if (matchesKey(data, Key.down) || data === "j") return move(1);
 			// `matchesKey` first, with the raw byte as a fallback. Every other widget in this file
@@ -1182,15 +1421,15 @@ async function runNarrow(
 		}
 
 		function render(width: number): string[] {
-			if (cachedLines) return cachedLines;
-			const lines: string[] = [];
+			const hit = cache.get(width, terminalRows(tui));
+			if (hit) return hit;
 			const w = Math.max(1, width);
 			const keptCount = verdicts.filter((v) => v.kept).length;
 			const rejectedCount = verdicts.filter((v) => !v.kept).length;
 
-			lines.push(theme.fg("accent", "─".repeat(w)));
+			const head: string[] = [theme.fg("accent", "─".repeat(w))];
 			addPrefixed(
-				lines,
+				head,
 				w,
 				" ",
 				theme.fg(
@@ -1198,51 +1437,59 @@ async function runNarrow(
 					`${params.topic} · ${candidates.length} candidate(s) · ${keptCount} kept · ${rejectedCount} rejected · ${candidates.length - keptCount - rejectedCount} undecided`,
 				),
 			);
-			lines.push("");
+			head.push("");
 
+			const body: string[] = [];
 			for (let i = 0; i < candidates.length; i++) {
 				const c = candidates[i];
 				const focused = i === index;
 				const verdict = verdictOf(c.id);
+				const from = body.length;
 				const box = verdict ? (verdict.kept ? theme.fg("success", "[keep] ") : theme.fg("error", "[drop] ")) : "[    ] ";
 				let line = `${box}${theme.fg(focused ? "accent" : "text", c.oneLine)}`;
 				if (c.generator) line += "  " + theme.fg("dim", `(${c.generator})`);
-				addPrefixed(lines, w, focused ? theme.fg("accent", "> ") : "  ", line);
-				if (c.cost) addPrefixed(lines, w, "     ", theme.fg("muted", c.cost));
+				addPrefixed(body, w, focused ? theme.fg("accent", "> ") : "  ", line);
+				if (c.cost) addPrefixed(body, w, "     ", theme.fg("muted", c.cost));
 				if (verdict && !verdict.kept && verdict.why) {
-					addPrefixed(lines, w, "     ", theme.fg("muted", `rejected: ${verdict.why}`));
+					addPrefixed(body, w, "     ", theme.fg("muted", `rejected: ${verdict.why}`));
 				}
 				if (focused) {
-					if (c.firstTest) addPrefixed(lines, w, "     ", theme.fg("dim", `first test: ${c.firstTest}`));
+					if (c.firstTest) addPrefixed(body, w, "     ", theme.fg("dim", `first test: ${c.firstTest}`));
 					if (c.preview) {
-						for (const raw of c.preview.split("\n")) addPrefixed(lines, w, "     │ ", theme.fg("dim", raw));
+						for (const raw of c.preview.split("\n")) addPrefixed(body, w, "     │ ", theme.fg("dim", raw));
 					}
+					// A preview runs to many lines, so the window anchors the whole block: the focused
+					// candidate stays in view even when its detail does not fit beside it.
+					win.focus(from, body.length - 1);
 				}
 			}
 
-			lines.push("");
+			body.push("");
+			let hint: string;
 			if (reasonPhase) {
-				addPrefixed(lines, w, " ", theme.fg("text", `Why drop it? (${candidates[index].id})`));
-				for (const editorLine of editor.render(Math.max(1, w - 1))) lines.push(` ${editorLine}`);
-				lines.push("");
-				addPrefixed(lines, w, " ", theme.fg("dim", "Enter to record · an empty reason is fine · Esc to cancel"));
+				const from = body.length;
+				addPrefixed(body, w, " ", theme.fg("text", `Why drop it? (${candidates[index].id})`));
+				for (const editorLine of editor.render(Math.max(1, w - 1))) body.push(` ${editorLine}`);
+				body.push("");
+				win.focus(from, body.length - 1);
+				hint = "Enter to record · an empty reason is fine · Esc to cancel";
 			} else {
-				addPrefixed(
-					lines,
-					w,
-					" ",
-					theme.fg("dim", "↑↓ move · space/Enter keep → · s skip → · x drop → · u undecide · d finish · Esc stop"),
-				);
+				hint = "↑↓ move · space/Enter keep → · s skip → · x drop → · u undecide · d finish · Esc stop";
 			}
-			lines.push(theme.fg("accent", "─".repeat(w)));
-			cachedLines = lines;
+
+			const foot: string[] = [];
+			addPrefixed(foot, w, " ", theme.fg("dim", hint));
+			const view = win.cut(body, widgetRows(tui) - head.length - foot.length - 1);
+			head[0] = topRule(w, view, theme);
+			const lines = [...head, ...view.lines, ...foot, theme.fg("accent", "─".repeat(w))];
+			cache.set(width, terminalRows(tui), lines);
 			return lines;
 		}
 
 		return {
 			render,
 			invalidate: () => {
-				cachedLines = undefined;
+				cache.clear();
 			},
 			handleInput,
 		};

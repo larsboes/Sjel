@@ -29,8 +29,17 @@
 #
 # Reviewed 2026-10-04: 36 findings became 22 when two global npm packages were reinstalled and
 # their subtrees re-resolved (`@mariozechner/snap-happy`, `@modelcontextprotocol/server-github`,
-# 14 findings including both 9.8 simple-git entries outside npm's own tree). The 22 below are
-# what no install command on this machine could move.
+# 14 findings including both 9.8 simple-git entries outside npm's own tree). The entries below
+# are what no install command on this machine could move.
+#
+# Revised the same day, later: `@modelcontextprotocol/server-github` and
+# `@modelcontextprotocol/server-filesystem` were REMOVED from the global tree outright. Neither
+# was registered by any harness on this machine — `~/.pi/agent/mcp.json` holds only `sjel`, and
+# `~/.claude.json` only `graphify` — so nothing depended on them. That ended the one entry below
+# that no version could ever move, by removal rather than by a replacement: 23 entries became
+# 22. The one remaining use of `@modelcontextprotocol/*` is the SDK as a LIBRARY inside
+# `Packs/harness/pi-packages/pi-web-access` (`baizhi.ts`, `zai.ts`), which declares a range and
+# resolves well past the vulnerable version.
 
 # ── Inside npm's own dependency tree ─────────────────────────────────────────────
 #
@@ -114,18 +123,6 @@ reason = "simple-git 3.30.0, a second remote code execution advisory, fixed in 3
 id = "GHSA-jcxm-m3jx-f287"
 ignoreUntil = 2026-11-01
 reason = "simple-git 3.30.0, a third advisory, command execution via an option-parsing bypass, fixed in 3.32.0. Same reach and same end as GHSA-hffm-xvc3-vprc."
-
-# ── An EXACT pin in a package that is deprecated ─────────────────────────────────
-#
-# @modelcontextprotocol/server-github@2025.4.8 declares `@modelcontextprotocol/sdk: 1.0.1` with
-# no range at all, so re-resolving its tree cannot move the sdk: the dry run changes 46 packages
-# and leaves this one. npm also reports the parent as deprecated ("Package no longer supported"),
-# so upstream will not republish. The end of this entry is a decision, not a release: the package
-# is replaced or dropped.
-[[IgnoredVulns]]
-id = "GHSA-w48q-cv73-mx4w"
-ignoreUntil = 2026-12-01
-reason = "The MCP TypeScript SDK 1.0.1 does not enable DNS-rebinding protection by default, fixed in 1.24.0. Reach: `@modelcontextprotocol/server-github@2025.4.8` pins `@modelcontextprotocol/sdk` to exactly 1.0.1, so no re-resolve can move it, and npm reports that parent as deprecated and no longer supported — upstream will not release a version that relaxes the pin. The other two MCP servers installed here use the sdk through a range and now resolve 1.31.0, which is how the sibling copies of this finding disappeared on 2026-10-04. Ends when that server is replaced or removed; its exposure is a local MCP server reachable by DNS rebinding, and the remedy if it is used is to stop using it."
 
 # ── The repo config's informational exceptions, as this pass reaches them ────────
 #

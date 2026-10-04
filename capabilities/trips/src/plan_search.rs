@@ -1254,7 +1254,7 @@ pub fn haversine_km(a: (f64, f64), b: (f64, f64)) -> f64 {
 /// The one durable thing a search can produce: an `option_set` payload.
 ///
 /// Money is integer minor units, which is this writer's whole vocabulary. It is
-/// not the only writer of an `option_set` row: `tools/sparpreis-watch.ts` posts
+/// not the only writer of an `option_set` row: `tools/sparpreis-watch` posts
 /// one every 12 hours (`capabilities/sparpreis-watch/service.toml`) carrying the
 /// older float `total_price` and no `revision`, and rows in that shape already
 /// exist. `schemas/trip-plan.schema.json` describes both.
@@ -1738,7 +1738,7 @@ mod tests {
             );
         }
         assert_eq!(payload["query"]["to"], "(multiple)");
-        // Declared but not required, because the rows tools/sparpreis-watch.ts
+        // Declared but not required, because the rows tools/sparpreis-watch
         // has been writing since before this route carry none. This writer
         // always sets it.
         assert_eq!(payload["revision"], PLAN_SEARCH_REVISION);

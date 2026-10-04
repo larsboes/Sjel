@@ -2,7 +2,7 @@
  * inference-keys — drive pi's API-key providers from the Bitwarden vault.
  *
  * Every provider listed in CATALOG gets its `apiKey` pointed at
- * `bw-key.mjs <slug>`, so pi asks the vault for the key instead of reading an
+ * the `inference-keys key <slug>` Rust CLI, so pi asks the vault for the key instead of reading an
  * environment variable or `auth.json`. Nothing is copied into the environment,
  * and the key never appears in a tool call or in this file.
  *
@@ -19,7 +19,7 @@
  *                   non-builtin entries ever carry a model list.
  *
  * Eligibility is decided by the vault, not by this file: the extension asks
- * bw-key.mjs which `inference-<slug>-api-key` Secure Notes actually exist and
+ * the Rust CLI which `inference-<slug>-api-key` Secure Notes actually exist and
  * registers only those. Adding a key in Bitwarden is therefore the whole
  * installation step for a new provider — no edit here, no restart of anything
  * but pi.
@@ -407,7 +407,7 @@ const CATALOG: CatalogEntry[] = [
 
 const CONVENTIONAL_ITEM = (slug: string) => `inference-${slug}-api-key`;
 const vaultItemFor = (entry: CatalogEntry) => entry.vaultItem ?? CONVENTIONAL_ITEM(entry.slug);
-/** `slug` or `slug=Exact Item Name`, the form bw-key.mjs --manifest takes. */
+/** `slug` or `slug=Exact Item Name`, the form the inference-keys Rust CLI accepts. */
 const manifestSpec = (entry: CatalogEntry) =>
 	vaultItemFor(entry) === CONVENTIONAL_ITEM(entry.slug) ? entry.slug : `${entry.slug}=${vaultItemFor(entry)}`;
 
@@ -435,7 +435,7 @@ function inferredModel(id: string): ModelDef {
 }
 
 // ---------------------------------------------------------------------------
-// bw-key plumbing
+// Rust helper plumbing
 // ---------------------------------------------------------------------------
 
 const EXT_DIR = join(homedir(), ".pi", "agent", "extensions", "inference-keys");
@@ -449,7 +449,7 @@ const MANIFEST_TIMEOUT_MS = 60_000;
 const MANIFEST_FRESH_MS = 10 * 60_000;
 
 /**
- * Where bw-key.mjs lives. Resolved from this file's own URL so the extension
+ * Where the Rust CLI launcher lives. Resolved from this file's own URL so the extension
  * keeps working if it is moved — into a checkout, say — with the install-path
  * guess kept as a fallback for a host that does not expose import.meta.
  */
@@ -460,16 +460,19 @@ function helperPath(): string | undefined {
 	} catch {
 		ownDir = undefined;
 	}
-	const candidates = [process.env.PI_BW_KEY, ownDir && join(ownDir, "bw-key.mjs"), join(EXT_DIR, "bw-key.mjs")].filter(
-		Boolean,
-	) as string[];
+	const candidates = [
+		process.env.PI_BW_KEY,
+		ownDir && join(ownDir, "../../../../tools/inference-keys"),
+		process.env.SJEL_ROOT && join(process.env.SJEL_ROOT, "tools/inference-keys"),
+		join(EXT_DIR, "inference-keys"),
+	].filter(Boolean) as string[];
 	return candidates.find((candidate) => existsSync(candidate));
 }
 
 function runHelper(helper: string, args: string[], timeout: number): Promise<string> {
 	return new Promise((resolve, reject) => {
-		execFile(helper, args, { timeout, maxBuffer: 32 * 1024 * 1024 }, (error, stdout) => {
-			if (error) reject(error);
+		execFile(helper, args, { timeout, maxBuffer: 32 * 1024 * 1024 }, (error, stdout, stderr) => {
+			if (error) reject(new Error(stderr.trim() || error.message));
 			else resolve(stdout);
 		});
 	});
@@ -514,9 +517,9 @@ function readLastError(): { slug: string; message: string; at: string } | undefi
 }
 
 /**
- * Ask bw-key which catalog items exist.
+ * Ask the Rust CLI which catalog items exist.
  *
- * Only a listing that was actually read replaces the cache. bw-key exits
+ * Only a listing that was actually read replaces the cache. The CLI exits
  * non-zero when the vault could not be read, and that failure keeps the previous
  * inventory instead: caching an empty answer would present "this vault has no
  * keys" and empty the model picker until the cache expired.
@@ -528,7 +531,7 @@ async function loadManifest(helper: string | undefined, force: boolean): Promise
 		if (cached && Date.now() - Date.parse(cached.checkedAt) < MANIFEST_FRESH_MS) return cached;
 	}
 	try {
-		const stdout = await runHelper(helper, ["--manifest", ...CATALOG.map(manifestSpec)], MANIFEST_TIMEOUT_MS);
+		const stdout = await runHelper(helper, ["manifest", ...CATALOG.map(manifestSpec)], MANIFEST_TIMEOUT_MS);
 		const manifest = JSON.parse(stdout) as Manifest;
 		if (manifest.vault !== "unlocked") throw new Error(manifest.error ?? `vault is ${manifest.vault}`);
 		writeManifest(manifest);
@@ -674,7 +677,7 @@ function discover(entry: ServedEntry, helper: string) {
 
 		const headers: Record<string, string> = {};
 		if (entry.discover?.auth !== false) {
-			const key = await runHelper(helper, [manifestSpec(entry)], KEY_TIMEOUT_MS)
+			const key = await runHelper(helper, ["key", manifestSpec(entry)], KEY_TIMEOUT_MS)
 				.then((value) => value.trim())
 				.catch(() => "");
 			if (key) headers.Authorization = `Bearer ${key}`;
@@ -714,7 +717,7 @@ export default function (pi: ExtensionAPI) {
 	 */
 	function register(entry: CatalogEntry) {
 		if (state.registry.has(entry.id)) return;
-		const apiKey = `!${shellQuote(helper!)} ${shellQuote(manifestSpec(entry))}`;
+		const apiKey = `!${shellQuote(helper!)} key ${shellQuote(manifestSpec(entry))}`;
 		try {
 			if (entry.builtin) {
 				// Auth only. Supplying `models` here would replace pi's curated catalog
@@ -751,7 +754,7 @@ export default function (pi: ExtensionAPI) {
 
 	if (!helper) {
 		pi.on("session_start", (_event, ctx) => {
-			ctx.ui.notify(`inference-keys: bw-key.mjs not found (looked in ${EXT_DIR}); set PI_BW_KEY`, "error");
+			ctx.ui.notify(`inference-keys: Rust helper not found (set PI_BW_KEY or SJEL_ROOT)`, "error");
 		});
 		return;
 	}
@@ -818,7 +821,7 @@ export default function (pi: ExtensionAPI) {
 		handler: async (_args, ctx) => {
 			let status: Record<string, unknown> = {};
 			try {
-				status = JSON.parse(await runHelper(helper, ["--status"], KEY_TIMEOUT_MS));
+				status = JSON.parse(await runHelper(helper, ["status"], KEY_TIMEOUT_MS));
 			} catch (error) {
 				status = { error: error instanceof Error ? error.message : String(error) };
 			}
@@ -849,8 +852,8 @@ export default function (pi: ExtensionAPI) {
 		handler: async (_args, ctx) => {
 			ctx.ui.notify("Unlocking the vault — authorize the keychain prompt", "info");
 			try {
-				await runHelper(helper, ["--forget"], 5000);
-				const out = await runHelper(helper, ["--unlock"], 120_000);
+				await runHelper(helper, ["forget"], 5000);
+				const out = await runHelper(helper, ["unlock-status"], 120_000);
 				const status = JSON.parse(out) as { status?: string };
 				ctx.ui.notify(`Vault ${status.status ?? "?"}`, status.status === "unlocked" ? "info" : "warning");
 			} catch (error) {
@@ -873,7 +876,7 @@ export default function (pi: ExtensionAPI) {
 		description: "Drop cached keys, re-read the vault inventory, and re-discover provider models",
 		handler: async (_args, ctx) => {
 			ctx.ui.notify("Re-reading the vault and refreshing model lists", "info");
-			await runHelper(helper, ["--forget"], 5000).catch(() => "");
+			await runHelper(helper, ["forget"], 5000).catch(() => "");
 			const manifest = await loadManifest(helper, true);
 			const added: string[] = [];
 			for (const entry of CATALOG) {

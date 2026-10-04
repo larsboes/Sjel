@@ -1,10 +1,13 @@
 // tools/lib/inbound-auth.ts — the deployment's inbound token, read for a loopback caller.
 //
 // Every serve_local capability refuses a protected route without a credential (ISA ISC-45,
-// libs/sjel-server/src/lib.rs). A TypeScript caller on this machine reads the token here: the
-// dashboard's Vite proxy, soundscape's dev proxy, and scheduled jobs such as
-// tools/sparpreis-watch.ts. It lived in dashboard/vite/ until a tool needed it, and a tool
-// importing from the dashboard is a dependency pointing the wrong way.
+// libs/sjel-server/src/lib.rs). A TypeScript caller on this machine reads the token here, and
+// after 2026-10-04 those callers are the two Vite dev proxies that carry a browser request to a
+// capability — the dashboard's and soundscape's. The Rust callers do not come through this file:
+// they use `sjel_server::InboundAuth::with_loopback_auth`, which reads the same declaration and
+// is what `tools/feed-sweep` and `tools/sparpreis-watch` call since their ports. This lived in
+// dashboard/vite/ until a tool needed it, and a tool importing from the dashboard is a dependency
+// pointing the wrong way.
 //
 // The declaration is `SJEL_INBOUND_TOKEN_FILE` in <overlay>/config/deployment.env, and the
 // token is that file's contents. libs/sjel-server's `deployment_token` reads the same pair.

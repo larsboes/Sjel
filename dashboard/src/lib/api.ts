@@ -2735,6 +2735,7 @@ export interface TriageSweepResult {
   skipped: number;
   /** Threads whose subject or snippet was redacted before being stored. */
   redacted: number;
+  events: { considered: number; proposals: number; no_event: number; refused: number; failed: number };
   total_stored: number;
   next_cursor: string | null;
   exhausted: boolean;

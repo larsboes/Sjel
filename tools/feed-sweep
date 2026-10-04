@@ -1,0 +1,22 @@
+#!/bin/bash
+# tools/feed-sweep — one pass of the Feed source collector, then exit.
+#
+# Launcher only. The logic moved to tools/sjel-cli/src/feed_sweep.rs on 2026-10-04;
+# tools/feed-sweep.ts is deleted. `tools/feed-sweep -h` prints the usage.
+#
+# This is the human and test interface. The six-hourly SCHEDULED job does not run this file: its
+# service.toml names `target/release/sjel-cli feed-sweep` directly, the way every other Rust
+# capability names its binary, so a job under launchd never starts an interpreter or a build
+# wrapper. The two are the same binary either way.
+#
+# It sources tools/lib/paths.sh, because the comms port and the comms secret file are resolved
+# from it — and paths.sh is the one place that order is written.
+# bash 3.2-safe (CONTRIBUTING.md#portable-shell).
+set -u
+
+_here="$(cd "$(dirname "$0")" && pwd)"
+# shellcheck source=tools/lib/paths.sh
+. "$_here/lib/paths.sh"       # SJEL_ROOT, SJEL_PERSONAL_ROOT, SJEL_OVERLAY_ROOT
+# shellcheck source=tools/lib/sjel-cli.sh
+. "$_here/lib/sjel-cli.sh"
+sjel_cli_exec feed-sweep "$@"

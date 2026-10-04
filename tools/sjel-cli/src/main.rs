@@ -18,9 +18,11 @@ use std::process::{Command, ExitCode, ExitStatus};
 mod audit;
 mod capability;
 mod doctor;
+mod feed_sweep;
 mod harnesses;
 mod help;
 mod host_watch;
+mod inference_keys;
 mod pack_hook;
 mod packs;
 mod paths;
@@ -31,8 +33,10 @@ mod runner;
 mod schedule;
 mod search;
 mod self_model;
+mod sparpreis_watch;
 mod time;
 mod toolchain;
+mod ui_packages;
 mod updates;
 
 /// A reader that closes the pipe early (`sjel help | head -1`) ends the command, as SIGPIPE ended
@@ -67,6 +71,8 @@ fn main() -> ExitCode {
     match command {
         "audit" => return audit::run(rest),
         "host-watch" => return host_watch::run(rest),
+        "feed-sweep" => return feed_sweep::run(rest),
+        "sparpreis-watch" => return sparpreis_watch::run(rest),
         "toolchain-check" => return toolchain::run(rest),
         "capability.sh" => return registry::run(rest),
         "service-runner.sh" => return runner::run(rest),
@@ -77,6 +83,8 @@ fn main() -> ExitCode {
         "pack-drift-hook" => return pack_hook::run(),
         "self" => return self_model::run(rest),
         "updates" => return updates::run(rest),
+        "inference-keys" => return inference_keys::run(rest),
+        "discover-ui-packages" => return ui_packages::run(rest),
         _ => {}
     }
     let root = match std::env::var("SJEL_ROOT") {

@@ -1,0 +1,23 @@
+#!/bin/bash
+# tools/sparpreis-watch — one pass of the Sparpreis price watch, then exit.
+#
+# Launcher only. The logic moved to tools/sjel-cli/src/sparpreis_watch/ on 2026-10-04 (the pure
+# half in pure.rs, the HTTP calls in mod.rs); tools/sparpreis-watch.ts and its test are deleted.
+# `tools/sparpreis-watch -h` prints the usage.
+#
+# This is the human and test interface. The twelve-hourly SCHEDULED job does not run this file: its
+# service.toml names `target/release/sjel-cli sparpreis-watch` directly, the way every other Rust
+# capability names its binary, so a job under launchd never starts an interpreter or a build
+# wrapper. The two are the same binary either way.
+#
+# It sources tools/lib/paths.sh, because the trips and transit ports and the deployment inbound
+# token are resolved from it — and paths.sh is the one place that order is written.
+# bash 3.2-safe (CONTRIBUTING.md#portable-shell).
+set -u
+
+_here="$(cd "$(dirname "$0")" && pwd)"
+# shellcheck source=tools/lib/paths.sh
+. "$_here/lib/paths.sh"       # SJEL_ROOT, SJEL_PERSONAL_ROOT, SJEL_OVERLAY_ROOT
+# shellcheck source=tools/lib/sjel-cli.sh
+. "$_here/lib/sjel-cli.sh"
+sjel_cli_exec sparpreis-watch "$@"

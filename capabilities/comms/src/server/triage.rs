@@ -99,6 +99,11 @@ pub(super) struct SweepOutcome {
     /// distinguishable afterwards rather than only while somebody is watching.
     pub(super) people_registry: &'static str,
     pub(super) people_registry_names: usize,
+    pub(super) events: mail_events::ScanReport,
+    #[serde(skip)]
+    fetched_ids: Vec<String>,
+    #[serde(skip)]
+    pub(super) new_ids: Vec<String>,
     next_cursor: Option<String>,
 }
 
@@ -123,6 +128,9 @@ pub(super) fn run_inbox_sweep(
         redacted: 0,
         people_registry,
         people_registry_names,
+        events: mail_events::ScanReport::default(),
+        fetched_ids: Vec::with_capacity(page.threads.len()),
+        new_ids: Vec::new(),
         next_cursor: page.next_page_token.clone(),
     };
     for stub in &page.threads {
@@ -141,12 +149,15 @@ pub(super) fn run_inbox_sweep(
         // stored in the same transaction the row is. The model rung's
         // eligibility query reads it, and no later pass can re-derive it:
         // `rules::classify` reads `List-Unsubscribe`, which no column holds.
+        let id = intake.item.id.clone();
         if store
             .upsert_triage_with_rules(&intake.item, &intake.verdict())
             .map_err(|error| error.to_string())?
         {
             outcome.new_count += 1;
+            outcome.new_ids.push(id.clone());
         }
+        outcome.fetched_ids.push(id);
         outcome.fetched += 1;
     }
     Ok(outcome)
@@ -174,7 +185,8 @@ pub(super) async fn triage_sweep_handler(Json(body): Json<TriageSweepBody>) -> H
     let cursor = body.cursor.filter(|value| !value.trim().is_empty());
     let result = tokio::task::spawn_blocking(move || -> Result<Value, String> {
         let cfg = Config::load();
-        let outcome = run_inbox_sweep(&cfg, limit, cursor.as_deref())?;
+        let mut outcome = run_inbox_sweep(&cfg, limit, cursor.as_deref())?;
+        outcome.events = mail_events::analyze_batch(&cfg, &outcome.fetched_ids);
         let store = Store::open(&cfg.database_path).map_err(|error| error.to_string())?;
         let total_stored = store
             .list_triage(None)
@@ -185,6 +197,7 @@ pub(super) async fn triage_sweep_handler(Json(body): Json<TriageSweepBody>) -> H
             "new_count": outcome.new_count,
             "skipped": outcome.skipped,
             "redacted": outcome.redacted,
+            "events": outcome.events,
             "total_stored": total_stored,
             // Same shape and same words as the refresh receipt's, because the
             // question is the same one: did the c2 escalation run blind?

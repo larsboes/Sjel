@@ -4546,12 +4546,16 @@ version = "0.1.0"
 dependencies = [
  "civil-date",
  "regex",
+ "reqwest",
  "serde",
  "serde_json",
  "sha2 0.11.0",
  "sjel-config",
+ "sjel-http",
+ "sjel-server",
  "sjel-store",
  "toml",
+ "zeroize",
 ]
 
 [[package]]

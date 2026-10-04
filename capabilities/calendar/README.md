@@ -187,11 +187,12 @@ imported Google event lands as until the operator adopts it. See § Drafts.
 
 ### Reviewed Comms proposals
 
-A completed, explicitly run Comms analysis can hand one resolved date or dated action to
-Calendar through the existing external-entry upsert. The reader requires a separate click for
-each candidate. Calendar stores it with `source = comms`, `commitment = possible`, and a stable
-content-derived external id, so retries update rather than duplicate and the proposal blocks no
-time. Dated actions use the neutral `deadline` kind; extracted event dates use `event`.
+Comms can hand a grounded date to Calendar through the existing external-entry upsert. Reviewed
+content-analysis results still require a separate click per candidate; newly swept event/ticket
+mail may create its bounded proposals automatically after local extraction. Calendar stores each
+with `source = comms`, `commitment = possible`, and a stable external id, so retries update rather
+than duplicate and the proposal blocks no time. Dated actions use the neutral `deadline` kind;
+extracted mail event dates use `event`.
 
 The payload follows
 [`calendar-proposal-provenance-v1`](../../schemas/calendar-proposal-provenance.schema.json): it

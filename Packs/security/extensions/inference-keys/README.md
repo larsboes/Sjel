@@ -6,8 +6,8 @@ out of it yet — instead of from environment variables or `auth.json`.
 
 Nothing is exported into the environment, no key is written into this repo, and
 no key is ever printed by the extension. When pi needs to talk to a provider it
-runs `bw-key.mjs <slug>`, which reads the key — out of the login keychain, or out
-of the vault when the keychain has no entry for it — and hands it back on stdout.
+runs `tools/inference-keys key <slug>`, a Rust CLI that reads the key from the login
+keychain, or falls back to the vault, and hands it back on stdout.
 
 Lives in this Pack at `Packs/security/extensions/inference-keys/`, and is registered in
 `~/.pi/agent/settings.json` by `tools/packs-pi deploy security`. Nothing is copied into
@@ -16,10 +16,10 @@ file's own URL rather than from an install path, and why `keychain-migrate.sh` d
 the directory it is in.
 
 ```
-index.ts      the extension: catalog, registration, discovery, commands
-bw-key.mjs    the vault gateway: session handling, item lookup, resolution
-keychain-migrate.sh   move provider keys from the vault into the login keychain
-keychain-write.exp    the expect helper keychain-migrate.sh writes through
+index.ts                         pi integration: catalog, registration, discovery, commands
+tools/sjel-cli/src/inference_keys.rs  gateway, unlock, status, and keychain migration
+tools/inference-keys                  Rust CLI launcher
+keychain-migrate.sh               stable migration entry point
 ```
 
 ## How a provider becomes available
@@ -28,7 +28,7 @@ The catalog in `index.ts` lists 31 providers, but this file does not decide whic
 ones are enabled. The vault does.
 
 On startup the extension registers whatever the **cached inventory on disk**
-says exists, then asks `bw-key.mjs` in the background and registers anything new
+says exists, then asks the Rust CLI in the background and registers anything new
 that lands. Startup never waits on the vault: one read spawns `bw` five times
 over roughly nine seconds (a `sync` to a self-hosted server included), which
 would otherwise be a dead terminal on every launch. Two consequences worth
@@ -80,7 +80,7 @@ is not a token and will be reported as unusable rather than sent as one.
 
 ### Where a key is read from
 
-The login keychain first, the vault as the fallback. `bw-key.mjs <slug>` looks up
+The login keychain first, the vault as the fallback. `tools/inference-keys key <slug>` looks up
 the service `inference-<slug>-api-key` with `security find-generic-password -w`,
 and runs `bw` only when that misses. The keychain name is derived from the slug
 alone, so the three legacy vault names in the table above are not carried into
@@ -98,17 +98,11 @@ To migrate, with the vault unlocked:
 "$SJEL_ROOT"/Packs/security/extensions/inference-keys/keychain-migrate.sh
 ```
 
-It takes its own directory as the place to find the reader and the expect helper, so it runs
-from wherever this checkout is; `PI_INFERENCE_KEYS_DIR` overrides that if the files are split
-across two locations.
-
-It reads each key through this same gateway, writes it with
-`keychain-write.exp`, verifies the keychain value against the vault with `cmp`,
-then drops that slug's plaintext cache. The value travels over a pipe and is
-never an argv element, so it never appears in `ps`; `security
-add-generic-password -w` prompts twice on the TTY and ignores stdin, which is the
-only reason expect is involved. Re-runnable, and a slug already in the keychain
-is skipped.
+The launcher derives the checkout root from its own path. It reads each key through
+the Rust gateway, writes it to Keychain using `security -i` with hex data on stdin
+(the secret is not an argv value), reads it back for an in-memory equality check,
+then drops that slug's plaintext cache. Re-runnable; a slug already in Keychain is
+skipped. No separate expect helper or Node-based credential reader is needed.
 
 Nothing has to move at once. A slug with no keychain entry keeps working through
 the vault, so providers can be migrated one at a time and the vault remains the
@@ -143,12 +137,11 @@ is where the actual reason appears.
 |---|---|---|
 | `PI_BW_TTL` | `60` | Seconds a fetched key is cached on disk. `0` disables caching. |
 | `PI_BW_BIN` | `bw` | Bitwarden CLI binary. |
-| `PI_BW_TIMEOUT_MS` | `8000` | Per-`bw` timeout on the key path. pi kills an `apiKey` command at 10s, so stay under it. |
-| `PI_BW_ADMIN_TIMEOUT_MS` | `30000` | Per-`bw` timeout for `--manifest`/`--status`. Nothing waits on a 10s deadline there, and `bw` is slower under load. |
+| `PI_BW_TIMEOUT_MS` | `8000` | Total budget for a key lookup, including fallback `bw` calls. The extension kills the helper at 9s, so stay under it. |
+| `PI_BW_ADMIN_TIMEOUT_MS` | `30000` | Per-`bw` timeout for the Rust CLI's inventory and status commands. |
 | `PI_BW_FOLDER` | `Axon` | Folder preferred when a name is ambiguous. |
 | `PI_BW_CACHE_DIR` | `~/.cache/pi-inference-keys` | Manifest and key cache. Never holds anything else. |
-| `PI_BW_UNLOCK` | `$AXON_ROOT/tools/bw-unlock` | Unlock helper used by `--unlock`. |
-| `PI_BW_KEY` | alongside `index.ts` | Path to the gateway, if it has been moved. |
+| `PI_BW_KEY` | unset | Optional override path to the Rust CLI launcher. |
 | `PI_KEYCHAIN` | `1` | Set to `0` to skip the keychain read and use the vault only. Exists to compare the two paths. |
 | `PI_KEYCHAIN_BIN` | `/usr/bin/security` | Keychain CLI. |
 | `PI_KEYCHAIN_TIMEOUT_MS` | `5000` | Per-read timeout for the keychain. A miss is a normal answer, not an error. |
@@ -187,7 +180,7 @@ the vault's `huggingface.co` site login is *not* used as a Hugging Face token.
 
 **Duplicated vault items.** This vault holds two copies of several legacy items
 (two `Openrouter API Key`, two `Kimi K2 API Token`, both in a folder named
-`Personal` which itself appears twice). `bw-key.mjs` resolves these
+`Personal` which itself appears twice). The Rust gateway resolves these
 deterministically: the item in the `Axon` folder wins, otherwise the most
 recently revised copy. `/bw-status` flags them as ambiguous. Creating
 `inference-<slug>-api-key` items in `Axon` removes the guesswork, and is what
@@ -231,6 +224,12 @@ the path, and the account id is not a secret this extension has access to.
 allows 8000 tokens per minute while pi's system prompt alone is over 10000. Both
 are pi-catalog and plan limits rather than anything this extension controls; use
 `discover`-backed providers for agent work on free tiers.
+
+**`bwu` fails when the vault's server is unreachable.** The vault is self-hosted, so
+`bw unlock` needs its server before it will accept the master password at all: with
+Tailscale disconnected it reports `cannot reach the Bitwarden server at <url> — check
+the network (Tailscale), then run bwu` rather than blaming the password. Connect
+Tailscale and re-run `bwu`; the master password and the keychain entry are fine.
 
 **Free tiers churn.** Context windows and `reasoning` flags in the catalog were
 copied from freellm.net and `ollama.com/api/tags` in September 2026. They are the

@@ -30,6 +30,7 @@ use comms::evaluation::{self, EvaluationFactor, FeedEvaluation};
 use comms::google::{self, ThreadAction, ThreadLocation};
 use comms::intake;
 use comms::mail_evaluation;
+use comms::mail_events;
 use comms::mail_model::{self, Mode};
 use comms::media;
 use comms::people_registry;
@@ -204,7 +205,7 @@ const ROUTES: &[route_manifest::Route] = &[
         "/triage/bulk",
         "Apply one action across many mails.",
     ),
-    r("POST", "/triage/sweep", "Pull new mail from Gmail."),
+    r("POST", "/triage/sweep", "Pull one Gmail page and locally propose grounded dates from event/ticket mail."),
     r(
         "GET",
         "/triage/sweep/status",

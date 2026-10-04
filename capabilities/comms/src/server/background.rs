@@ -308,7 +308,8 @@ fn spawn_inbox_sweep(
                 }
 
                 match run_inbox_sweep(&cfg, max_threads, None) {
-                    Ok(outcome) => {
+                    Ok(mut outcome) => {
+                        outcome.events = mail_events::analyze_batch(&cfg, &outcome.new_ids);
                         store
                             .record_sweep_success(
                                 INBOX_SWEEP_SOURCE,
@@ -321,12 +322,14 @@ fn spawn_inbox_sweep(
                         // named-person rule escalates nothing, and the counts
                         // alone cannot tell that run from a quiet one.
                         Ok(Some(format!(
-                            "{} considered, {} new, {} redacted, {} skipped, \
-                             people registry {} ({} names)",
+                            "{} considered, {} new, {} redacted, {} skipped, {} event proposal(s), \
+                             {} event analysis failure(s), people registry {} ({} names)",
                             outcome.fetched,
                             outcome.new_count,
                             outcome.redacted,
                             outcome.skipped,
+                            outcome.events.proposals,
+                            outcome.events.failed,
                             outcome.people_registry,
                             outcome.people_registry_names
                         )))

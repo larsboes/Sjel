@@ -68,7 +68,7 @@ that has never fired manufactures alerts rather than information.
 It writes a row into `host_watch_findings` — its own table in the shared store
 (`capabilities/store`) — and nothing else. No new notification machinery: core Sjel has
 never had a notifier and does not grow one here; the precedent is stated in
-`tools/sparpreis-watch.ts`'s own header.
+`tools/sjel-cli/src/sparpreis_watch/mod.rs`'s own header.
 
 It filed a `tasks` record until PRD **Q48** (2026-08-27). That capability retired and the
 Action kind went back to the vault, which is the right ruling and the wrong home for

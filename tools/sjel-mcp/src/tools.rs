@@ -307,18 +307,24 @@ fn encode_query(query: Option<&Value>) -> String {
     let Some(Value::Object(map)) = query else {
         return String::new();
     };
-    let mut pairs = Vec::new();
-    for (key, value) in map {
-        if value.is_null() {
-            continue;
-        }
-        pairs.push(format!(
-            "{}={}",
-            form_encode(key),
-            form_encode(&value_as_text(value))
-        ));
-    }
-    pairs.join("&")
+    // Sorted by key, deliberately. `serde_json`'s map is an insertion-ordered `IndexMap`
+    // whenever any crate in the build enables `preserve_order`, and `libs/extraction` does —
+    // through `xberg`. Iterating it directly therefore made the URL depend on the order a
+    // caller happened to build its arguments object in, and made this a workspace-only
+    // difference: `-p sjel-mcp` was green while `cargo test --workspace --locked` was red
+    // (measured 2026-10-04). `tools/claude-code-config/src/check.rs` sorts its keys for the
+    // same reason and states the same trap.
+    let mut pairs: Vec<(&String, String)> = map
+        .iter()
+        .filter(|(_, value)| !value.is_null())
+        .map(|(key, value)| (key, value_as_text(value)))
+        .collect();
+    pairs.sort_by(|a, b| a.0.cmp(b.0));
+    pairs
+        .into_iter()
+        .map(|(key, value)| format!("{}={}", form_encode(key), form_encode(&value)))
+        .collect::<Vec<_>>()
+        .join("&")
 }
 
 fn form_encode(raw: &str) -> String {
@@ -475,6 +481,20 @@ mod tests {
         assert_eq!(
             call_url("http://x", "/t/{id}", args).unwrap(),
             "http://x/t/a%20b?keep=*-._&q=a+b"
+        );
+    }
+
+    /// The map is an `IndexMap` whenever any crate in the build enables `preserve_order`
+    /// (`libs/extraction` -> `xberg`), so the same arguments built in a different order must
+    /// still produce one URL. Without the sort this passes under `-p sjel-mcp` and fails under
+    /// `cargo test --workspace --locked`, which is how it was found on 2026-10-04.
+    #[test]
+    fn the_query_does_not_depend_on_the_order_the_arguments_were_built_in() {
+        let one = json!({"id": "x", "query": {"q": "a b", "keep": "*-._"}});
+        let other = json!({"id": "x", "query": {"keep": "*-._", "q": "a b"}});
+        assert_eq!(
+            call_url("http://x", "/t/{id}", one.as_object().unwrap()),
+            call_url("http://x", "/t/{id}", other.as_object().unwrap())
         );
     }
 }

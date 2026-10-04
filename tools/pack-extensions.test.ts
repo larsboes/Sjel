@@ -532,11 +532,18 @@ describe.skipIf(!piConfigured)("pack extensions", () => {
  * Each widget renders at the end of every drive, so a render-path crash fails the test too.
  */
 describe.skipIf(!piConfigured)("pack extensions > questions widgets", () => {
-  const theme = new Proxy({}, { get: () => (s: unknown) => s });
+  // Every theme helper is identity on its last argument, so `fg("accent", t)` renders `t` and a
+  // window asserted on below is the text the user would see rather than the colour name.
+  const theme = new Proxy({}, { get: () => (...args: unknown[]) => args[args.length - 1] });
   const tui = { requestRender() {}, terminal: { rows: 24, cols: 80 } };
 
-  /** A stub ctx that builds the widget and then feeds it `keys`, resolving with the tool result. */
-  function drive(keys: string[]): unknown {
+  /**
+   * A stub ctx that builds the widget and then feeds it `keys`, resolving with the tool result.
+   *
+   * `screens`, when given, collects what the widget drew after every keystroke — the windowing is
+   * only observable at fixed points in a key sequence, so the last screen is not enough.
+   */
+  function drive(keys: string[], screens?: string[][]): unknown {
     return {
       mode: "tui",
       ui: {
@@ -546,12 +553,22 @@ describe.skipIf(!piConfigured)("pack extensions > questions widgets", () => {
               handleInput: (d: string) => void;
               render: (w: number) => string[];
             };
-            for (const k of keys) widget.handleInput(k);
-            widget.render(80);
+            screens?.push(widget.render(80));
+            for (const k of keys) {
+              widget.handleInput(k);
+              screens?.push(widget.render(80));
+            }
           }),
       },
     };
   }
+
+  // Ctrl+U / Ctrl+D are the keys the widget advertises, and the ones a 
+  // fullscreen transcript viewport does not intercept.
+  const SCROLL_UP = "\x15";
+  const SCROLL_DOWN = "\x04";
+  /** A 24-row terminal, 70% of it, is the whole widget's budget — borders and hint included. */
+  const WIDGET_ROWS = 16;
 
   /** The questions extension's tools, loaded once against the fixture. */
   let toolDefs: Map<string, ToolDef> | undefined;
@@ -574,6 +591,78 @@ describe.skipIf(!piConfigured)("pack extensions > questions widgets", () => {
     };
   };
   const textOf = (r: { content: { text?: string }[] }) => r.content.map((c) => c.text ?? "").join("\n");
+
+  describe("the bounded window", () => {
+    /** Taller than any 24-row terminal: a paragraph of context, eight two-line options, a preview. */
+    const tall = {
+      topic: "t",
+      questions: [
+        {
+          id: "q1",
+          title: "Storage",
+          prompt: "Where should it live?",
+          context: "measured evidence ".repeat(12).trim(),
+          options: Array.from({ length: 8 }, (_, i) => ({
+            label: `choice ${i + 1}`,
+            consequence: `what choice ${i + 1} costs`,
+            preview: "first line\nsecond line\nthird line",
+          })),
+          recommendedIndex: 0,
+        },
+      ],
+    };
+
+    test("a tall question is cut to the terminal, and opens at its prompt", async () => {
+      const screens: string[][] = [];
+      await run("ask", tall, ["\r", "\r"], drive(["\r", "\r"], screens));
+      const first = screens[0];
+      // The bound itself: without it this screen was ~30 rows and took the whole terminal.
+      expect(first.length).toBeLessThanOrEqual(WIDGET_ROWS);
+      // The first screen is the top of the question, not the focused option eight rows below it.
+      expect(first.join("\n")).toContain("Where should it live?");
+      expect(first.join("\n")).toContain("choice 1");
+      // `▼` on the top border is how a cut body says there is more below it.
+      expect(first[0]).toContain("▼");
+    });
+
+    test("moving the focus scrolls it into view, and Ctrl+U/Ctrl+D move by hand", async () => {
+      const screens: string[][] = [];
+      // `8` focuses the last option without answering it; two scroll-ups walk back to the top;
+      // `s` skips the question and ends the round, which is the only way a widget that never calls
+      // `done` stops being awaited here.
+      const keys = ["8", SCROLL_UP, SCROLL_UP, SCROLL_UP, "s"];
+      await run("ask", tall, keys, drive(keys, screens));
+
+      // Focus moved to choice 8, seven options below the first screen, so it must have scrolled.
+      expect(screens[1].join("\n")).toContain("choice 8");
+      // Mid-document: lines above the window, so the border says so and the window is bounded.
+      expect(screens[2][0]).toContain("▲");
+      expect(screens[2][0]).toContain("^U/^D");
+      expect(screens[2].length).toBeLessThanOrEqual(WIDGET_ROWS);
+      // Scrolling down is a real move too: it takes the top border back out from under the focus.
+      const down = ["8", SCROLL_DOWN, "s"];
+      const moving: string[][] = [];
+      await run("ask", tall, down, drive(down, moving));
+      expect(moving[1][0]).toContain("▲");
+      // Three half-pages up is the top of the question, and nothing is above it any more.
+      expect(screens[4].join("\n")).toContain("Where should it live?");
+      expect(screens[4][0]).not.toContain("▲");
+      expect(screens.every((s) => s.length <= WIDGET_ROWS)).toBe(true);
+    });
+
+    test("a question that fits is not windowed at all", async () => {
+      const screens: string[][] = [];
+      const short = {
+        topic: "t",
+        questions: [{ id: "q", prompt: "Which?", options: [{ label: "a" }, { label: "b" }] }],
+      };
+      await run("ask", short, ["\r", "\r"], drive(["\r", "\r"], screens));
+      // No cut, so no marker: the border stays a plain rule rather than claiming hidden lines.
+      expect(screens[0][0]).not.toContain("▼");
+      expect(screens[0][0]).not.toContain("▲");
+      expect(screens[0].join("\n")).toContain("Which?");
+    });
+  });
 
   describe("ask free text", () => {
     const round = {

@@ -125,6 +125,68 @@ impl Paths {
     }
 }
 
+/// A capability's declared port, read from its own `service.toml`.
+///
+/// The port is interpolated straight into `http://127.0.0.1:${port}` by the scheduled jobs that
+/// call another capability over HTTP, so the one thing this reader must not return is something
+/// that is not a port. [`port_in_manifest`] is that check; this is the file lookup around it.
+///
+/// A name declared in both roots is an error rather than a guess, exactly as `manifest_for`
+/// treats it: the whole point of the two-root rule is that a duplicate is a person's mistake.
+pub fn manifest_port(paths: &Paths, capability: &str) -> Result<String, String> {
+    match paths.manifest(capability) {
+        Manifest::Found(path) => std::fs::read_to_string(&path)
+            .map_err(|e| format!("{}: {e}", path.display()))
+            .and_then(|body| port_in_manifest(&body).map_err(|e| format!("{} {e}", path.display()))),
+        Manifest::Duplicate(core, overlay) => Err(duplicate_message(capability, &core, &overlay)),
+        Manifest::None => Err(format!(
+            "no {}",
+            paths.caps_dir.join(capability).join("service.toml").display()
+        )),
+    }
+}
+
+/// The port a `service.toml` body declares, or the reason it declares none.
+///
+/// The digits check is what keeps `http://127.0.0.1:${port}` a loopback URL, and the bearer
+/// token a caller puts on that request a credential that never leaves this machine. Measured:
+/// `new URL("http://127.0.0.1:1@evil.example/x").host` is `evil.example`, because the last `@`
+/// before the path ends the userinfo — so a manifest whose port reads `1@evil.example` moves the
+/// host, and everything sent to it goes along. Ported from `portInManifest` in
+/// `tools/sparpreis-watch.ts` (the reader `tools/feed-sweep.ts` carried a copy of), whose test is
+/// the case list at the bottom of this file.
+pub fn port_in_manifest(body: &str) -> Result<String, String> {
+    let line = body
+        .split('\n')
+        .find(|line| is_port_assignment(line))
+        .ok_or_else(|| "declares no port".to_owned())?;
+    let port = first_quoted(line).unwrap_or("");
+    if port.is_empty() {
+        return Err("declares no port".to_owned());
+    }
+    let is_digits = port.len() <= 5 && port.bytes().all(|b| b.is_ascii_digit());
+    match port.parse::<u32>() {
+        Ok(n) if is_digits && (1..=65535).contains(&n) => Ok(port.to_owned()),
+        _ => Err(format!("declares a port that is not a TCP port: {port}")),
+    }
+}
+
+/// `^port\s*=` with no leading whitespace, as the TypeScript's regex anchors it.
+fn is_port_assignment(line: &str) -> bool {
+    match line.strip_prefix("port") {
+        Some(rest) => rest.trim_start().starts_with('='),
+        None => false,
+    }
+}
+
+/// The first `"..."` on a line, as `line.match(/"([^"]*)"/)` reads it.
+fn first_quoted(line: &str) -> Option<&str> {
+    let start = line.find('"')?;
+    let rest = &line[start + 1..];
+    let end = rest.find('"')?;
+    Some(&rest[..end])
+}
+
 /// The message `axon_manifest_for` prints for a name declared in both roots.
 pub fn duplicate_message(name: &str, core: &Path, overlay: &Path) -> String {
     format!(
@@ -136,4 +198,53 @@ pub fn duplicate_message(name: &str, core: &Path, overlay: &Path) -> String {
 
 fn non_empty_var(name: &str) -> Option<String> {
     std::env::var(name).ok().filter(|v| !v.is_empty())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn reads_the_port_a_manifest_declares() {
+        assert_eq!(
+            port_in_manifest("name = \"comms\"\nport = \"8099\"\n").unwrap(),
+            "8099"
+        );
+    }
+
+    #[test]
+    fn refuses_a_manifest_with_no_port_line() {
+        assert_eq!(
+            port_in_manifest("name = \"comms\"\n").unwrap_err(),
+            "declares no port"
+        );
+    }
+
+    /// Measured with bun: `new URL("http://127.0.0.1:1@evil.example/x").host === "evil.example"`.
+    /// The last `@` before the path ends the userinfo, so this value moves the host off loopback
+    /// and takes the Authorization header with it.
+    #[test]
+    fn refuses_a_port_that_would_move_the_host_off_loopback() {
+        assert_eq!(
+            port_in_manifest("port = \"1@evil.example\"\n").unwrap_err(),
+            "declares a port that is not a TCP port: 1@evil.example"
+        );
+        assert_eq!(
+            reqwest::Url::parse("http://127.0.0.1:1@evil.example/feed")
+                .unwrap()
+                .host_str()
+                .unwrap(),
+            "evil.example"
+        );
+    }
+
+    #[test]
+    fn refuses_a_port_carrying_a_path_a_space_or_a_scheme() {
+        for bad in ["8099/../x", "80 99", "https://evil.example", "-1", "80990"] {
+            assert_eq!(
+                port_in_manifest(&format!("port = \"{bad}\"\n")).unwrap_err(),
+                format!("declares a port that is not a TCP port: {bad}")
+            );
+        }
+    }
 }

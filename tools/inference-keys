@@ -1,0 +1,8 @@
+#!/bin/bash
+# Thin launcher for the inference-keys commands in tools/sjel-cli.
+# bash 3.2-safe; the Rust CLI owns credential handling.
+set -u
+_here="$(cd "$(dirname "${BASH_SOURCE[0]:-$0}")" && pwd)"
+. "$_here/lib/paths.sh"
+. "$_here/lib/sjel-cli.sh"
+sjel_cli_exec inference-keys "$@"

@@ -30,6 +30,7 @@ regex.workspace = true
 # so neither adds a crate to resolve.
 sha2.workspace = true
 civil-date = { path = "../../libs/civil-date" }
+zeroize.workspace = true
 # host-watch writes its findings into the one shared SQLite file, so it opens it the way every
 # capability does — `sjel-config` owns where that file is and `sjel-store` owns the pragmas,
 # the once-per-database migration and the write transaction. Both are already in the workspace
@@ -40,6 +41,21 @@ civil-date = { path = "../../libs/civil-date" }
 # compiler, which is already the linker cargo picks on both macOS and Linux.
 sjel-config = { path = "../../libs/sjel-config" }
 sjel-store = { path = "../../libs/sjel-store" }
+# The two scheduled jobs that call another capability over HTTP — feed-sweep to comms,
+# sparpreis-watch to trips and transit. `sjel-http` owns the blocking client, its user-agent, the
+# timeout no caller can forget and the redirect policy; `sjel-server` owns `InboundAuth`, which is
+# the one implementation of "put the deployment credential on a loopback request and nowhere else"
+# (used by capabilities/calendar, transit, comms, places and scouting the same way). Reimplementing
+# either here would be the second copy of a security rule this workspace keeps in one place.
+#
+# The cost, measured on this Mac: sjel-cli goes from 7.3 MB to 14.1 MB, because `sjel-server`
+# brings in axum, rustls, rcgen and hyper-util. All of them are already in the lock, already built
+# for the capabilities, and most of that tree (rustls, hyper, tokio, h2) is shared with the reqwest
+# `sjel-http` needs anyway, so this is mostly a link cost rather than a compile one. `reqwest` is
+# named only for the request, response and URL types those two hand back.
+sjel-http = { path = "../../libs/sjel-http" }
+sjel-server = { path = "../../libs/sjel-server" }
+reqwest = { workspace = true, features = ["blocking", "json"] }
 
 # No clap, for the reason tools/storage/Cargo.toml states. Revisit when the subcommand count
 # makes the match statement harder to read than the dependency is to audit.

@@ -255,10 +255,12 @@ impl NewEntry {
                             payload.get("importance").and_then(Value::as_str),
                             Some("low" | "medium" | "high")
                         )
-                        && payload
-                            .get("analysis_schema_version")
-                            .and_then(Value::as_str)
-                            == Some("cloud-content-analysis-v1")
+                        && matches!(
+                            payload
+                                .get("analysis_schema_version")
+                                .and_then(Value::as_str),
+                            Some("cloud-content-analysis-v1" | "local-mail-event-analysis-v1")
+                        )
                         && payload
                             .get("importance_rationale")
                             .and_then(Value::as_str)
@@ -280,13 +282,30 @@ impl NewEntry {
                             .get("item_id")
                             .and_then(Value::as_str)
                             .is_some_and(|value| !value.trim().is_empty())
-                        && origin
-                            .get("job_id")
-                            .and_then(Value::as_str)
-                            .is_some_and(|value| !value.trim().is_empty())
+                        && match (
+                            payload
+                                .get("analysis_schema_version")
+                                .and_then(Value::as_str),
+                            origin.get("job_id"),
+                        ) {
+                            (Some("local-mail-event-analysis-v1"), Some(Value::Null)) => true,
+                            (Some("cloud-content-analysis-v1"), Some(Value::String(value))) => {
+                                !value.trim().is_empty()
+                            }
+                            _ => false,
+                        }
                         && matches!(
-                            origin.get("field").and_then(Value::as_str),
-                            Some("important_dates" | "action_items")
+                            (
+                                payload
+                                    .get("analysis_schema_version")
+                                    .and_then(Value::as_str),
+                                origin.get("field").and_then(Value::as_str),
+                            ),
+                            (Some("local-mail-event-analysis-v1"), Some("mail_events"))
+                                | (
+                                    Some("cloud-content-analysis-v1"),
+                                    Some("important_dates" | "action_items")
+                                )
                         )
                         && origin
                             .get("index")
@@ -591,6 +610,17 @@ mod tests {
             "evidence": null
         });
         assert!(proposal.validate().is_ok());
+
+        proposal.payload["origin"]["job_id"] = Value::Null;
+        proposal.payload["origin"]["field"] = Value::String("mail_events".into());
+        proposal.payload["analysis_schema_version"] =
+            Value::String("local-mail-event-analysis-v1".into());
+        assert!(proposal.validate().is_ok());
+        proposal.payload["origin"]["field"] = Value::String("important_dates".into());
+        assert!(proposal.validate().is_err());
+        proposal.payload["origin"]["field"] = Value::String("mail_events".into());
+        proposal.payload["origin"]["job_id"] = Value::String("invented-job".into());
+        assert!(proposal.validate().is_err());
 
         proposal.commitment = Commitment::Planned;
         assert_eq!(

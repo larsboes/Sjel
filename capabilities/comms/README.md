@@ -182,6 +182,24 @@ separate, because a failing run still ran), last failure, the error class and
 the counts from the last pass; the mail board renders it, and reads visibly
 different when the schedule is failing.
 
+### Mail events into Calendar
+
+A stored inbox sweep also checks new mail for event/ticket terms in its subject and preview. Only a
+candidate's latest body is fetched, capped, and sent to the loopback `summarization_light` role;
+body text and model prompts are never stored. `c3` is refused before the body fetch. `c2` may be
+analyzed locally, but the title, location and evidence are redacted before they cross into
+Calendar. If no light local role is configured, or the message does not fit its window, no bigger
+or remote model is substituted.
+
+Dates become Calendar `event` proposals only when the model supplies a verbatim evidence quote
+that grounds the date in the fetched body; the quote is discarded after validation. Each proposal
+is an all-day, one-day `possible` entry with an idempotent source key. It does not mark a ticket as committed, write to Gmail, or export
+to Google Calendar. Calendar's existing trip-draft clustering can then suggest a trip; creating
+the Trips plan remains an explicit action. The existing `inbox_sweep_minutes` cadence controls
+both collection and event analysis: `0` is manual-only (the default), and a configured interval
+processes only newly stored threads. A manual sweep can re-check its page after a reported
+analysis failure.
+
 Category and TELOS relevance are deliberately separate axes. An explicit
 relevance refresh compares the stored sender, subject and Gmail snippet with
 the configured TELOS lenses through the existing embedding/reranking pipeline.
@@ -379,7 +397,7 @@ have all stopped must not be held green by a local model answering a drain.
 
 **A request that names no `offset` resumes the sweep; one that names an offset gets that page.**
 The receipt's cursor carries how far the chain in progress has come, and until 2026-09-08 nothing
-read it back: `tools/feed-sweep.ts` posts `{days: 3650, limit: 100}` nightly with no offset, so
+read it back: `tools/feed-sweep` posts `{days: 3650, limit: 100}` nightly with no offset, so
 every night re-scored the same newest hundred rows. The deployment's cursor stood at
 `@3650:100` with 175 of its 374 scored items still `lexical`, every one of them at offset 100 or
 beyond. A chain is resumed only at its own window, a narrower window may not take a wider chain
@@ -985,10 +1003,13 @@ Routes:
   collector; `{"source_id":null}` scans all. Returns per-source fetched/new/known counts and
   enriches only revision-stale items behind the response.
 - `GET /triage?status=proposed` → triage items
-- `POST /triage/sweep` `{"limit":100,"cursor":null}` → fetches one read-only inbox page,
-  stores new proposals, and returns the opaque cursor for the next page. The receipt reports the
-  people registry's state and name count, because this is the path that *persists* rows: a pass
-  run with the overlay unmounted raises nothing to `c2` and stores the verbatim metadata of mail
+- `POST /triage/sweep` `{"limit":100,"cursor":null}` → fetches one inbox page without Gmail
+  lifecycle mutations, stores proposals, and locally analyzes event/ticket candidates for grounded
+  Calendar proposals.
+  The receipt includes counts only, never extracted mail text, and returns the opaque cursor for the
+  next page. The receipt reports the people registry's state and name count, because this is the
+  path that *persists* rows: a pass run with the overlay unmounted raises nothing to `c2` and stores
+  the verbatim metadata of mail
   that names a vault-known person, and its counts look exactly like a pass that found nobody. The
   unattended schedule logs the same line
 - `POST /triage/relevance/refresh` `{"limit":200}` → scores stored pending mail against

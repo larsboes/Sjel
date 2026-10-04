@@ -2,7 +2,7 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://axon.local/schemas/calendar-proposal-provenance.schema.json",
   "title": "Axon Calendar Proposal Provenance",
-  "description": "Minimal evidence retained when one reviewed Comms analysis date is proposed to Calendar.",
+  "description": "Bounded evidence retained when a reviewed Comms analysis date or locally extracted mail event is proposed to Calendar.",
   "type": "object",
   "required": ["schema_version", "origin", "data_class", "analysis_schema_version", "importance", "importance_rationale", "evidence"],
   "properties": {
@@ -14,17 +14,27 @@
         "capability": { "const": "comms" },
         "source": { "enum": ["feed", "mail"] },
         "item_id": { "type": "string", "minLength": 1 },
-        "job_id": { "type": "string", "minLength": 1 },
-        "field": { "enum": ["important_dates", "action_items"] },
+        "job_id": { "type": ["string", "null"], "minLength": 1 },
+        "field": { "enum": ["important_dates", "action_items", "mail_events"] },
         "index": { "type": "integer", "minimum": 0, "maximum": 9 }
       },
       "additionalProperties": false
     },
     "data_class": { "enum": ["c0", "c1", "c2", "c3"] },
-    "analysis_schema_version": { "const": "cloud-content-analysis-v1" },
+    "analysis_schema_version": { "enum": ["cloud-content-analysis-v1", "local-mail-event-analysis-v1"] },
     "importance": { "enum": ["low", "medium", "high"] },
     "importance_rationale": { "type": "string", "minLength": 1, "maxLength": 600 },
     "evidence": { "type": ["string", "null"], "maxLength": 300 }
   },
+  "allOf": [
+    {
+      "if": { "properties": { "analysis_schema_version": { "const": "local-mail-event-analysis-v1" } } },
+      "then": { "properties": { "origin": { "properties": { "job_id": { "type": "null" }, "field": { "const": "mail_events" } } } } }
+    },
+    {
+      "if": { "properties": { "analysis_schema_version": { "const": "cloud-content-analysis-v1" } } },
+      "then": { "properties": { "origin": { "properties": { "job_id": { "type": "string", "minLength": 1 }, "field": { "enum": ["important_dates", "action_items"] } } } } }
+    }
+  ],
   "additionalProperties": false
 }

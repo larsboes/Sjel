@@ -1182,6 +1182,45 @@ claim yet, and the watch rows they name are in `upstreams.toml` with the questio
 
 ## Log
 
+- 2026-10-04 · The MCP server's query encoding no longer depends on the order its arguments were
+  built in, which was the one red gate in `cargo test --workspace --locked`. `tools/sjel-mcp`'s
+  `encode_query` iterated `serde_json`'s map, which is an insertion-ordered `IndexMap` whenever any
+  crate in the build enables `preserve_order` — `libs/extraction` does, through `xberg` — so
+  `a_query_space_is_a_plus_and_a_path_space_is_percent_20` passed under `-p sjel-mcp` and failed
+  under the workspace. Measured before the fix: 2717 passed, 1 failed, and `cargo test -p sjel-mcp
+  -p sjel-extraction` reproduced it with `sjel-cli` absent from the set, so it predated the two
+  scheduled-job ports it was found beside rather than being caused by them. Pairs are sorted by key
+  before encoding, the answer `tools/claude-code-config/src/check.rs` already gives for its digest
+  and states the same trap at. Held by a second case asserting that the same arguments in either
+  insertion order produce one URL, which is the part a fix that only sorts at one depth would miss.
+  After: 2719 passed, 0 failed.
+- 2026-10-04 · The two remaining scheduled bun jobs are Rust, and no timer in the repository starts
+  an interpreter any more. `tools/feed-sweep.ts` (comms, every 6 h) and `tools/sparpreis-watch.ts`
+  (trips and transit, every 12 h) move together, because they are one class of work — a timer that
+  starts an interpreter to make a handful of HTTP calls and exit — and because each needed the same
+  manifest change. `tools/sjel-cli/src/feed_sweep.rs` is the first; `sparpreis_watch/mod.rs` and
+  `pure.rs` are the second, the pure half carrying `tools/sparpreis-watch.test.ts`'s cases as Rust
+  unit tests. The manifest-port reader both tools carried a copy of becomes `paths::port_in_manifest`,
+  with that file's four port cases. `capabilities/feed-sweep/service.toml` and
+  `capabilities/sparpreis-watch/service.toml` now name `target/release/sjel-cli <verb>` with the
+  `build` line `host-watch` carries, so service-runner puts `cargo` on the job's PATH; launchd runs
+  service-runner and the runner reads the manifest, so no installed unit needs reinstalling.
+  Verified against the TypeScript before deletion with one stub server and both implementations
+  pointed at it through a scratch root, so nothing tracked was touched. `feed-sweep` ran in four
+  scenarios (a rich payload with an unreachable source; an empty body with no `sources` key; a 500;
+  a 200 whose body is not JSON) and matched byte for byte in stdout, stderr, exit code and request
+  sequence. `sparpreis-watch` ran over one plan carrying a stage, a legacy per-day item to fold and
+  a rail `option_set` to match, and matched in all four, its request sequence — both item writes and
+  the one delete included — equal once the two runs' wall-clock `observed_at` is normalized. Four
+  differences are deliberate: every request carries a timeout (300 s for the scan and for
+  sparpreis' calls, 600 s for the relevance page, matching the two `AbortSignal` budgets the
+  TypeScript already set and giving sparpreis the one it never had); the deployment credential goes
+  on with `sjel_server::InboundAuth::with_loopback_auth` rather than a second implementation of the
+  loopback rule; JSON object keys are sorted, as every port since `harnesses` has recorded; and
+  `-h` prints the usage, which neither TypeScript read. `self.json` was regenerated in the same
+  change — two `cargo-dep` evidence rows for the crate's two new dependencies. The cost is named in
+  the crate's `Cargo.toml`: `sjel-http` and `sjel-server` take the binary from 7.3 MB to 14.1 MB,
+  every crate of it already in the workspace lock and already built for the capabilities.
 - 2026-10-04 · `sjel update` can move an npm finding whose owner is current, which is the class the
   audit's installed pass had no verb for. Measured before the change: all five global npm owners
   reported `✓ current` while 29 findings sat in their subtrees, so the report was right about every
@@ -1204,6 +1243,20 @@ claim yet, and the watch rows they name are in `upstreams.toml` with the questio
   in both forms npm emits (an object at one location, an ARRAY of them at several, which the
   top-level parser silently drops), the owner read from the outermost `node_modules` pair — scoped
   owners are two path segments — and the plan, where a stale owner is installed once and not twice.
+- 2026-10-04 · The two global MCP servers were removed, which closed the one finding no version
+  could move. `@modelcontextprotocol/server-github`'s entry was an EXACT pin: it declares
+  `@modelcontextprotocol/sdk: 1.0.1` with no range, so re-resolving its tree cannot move the sdk,
+  and npm reports the parent deprecated, so upstream will not republish — its own comment said the
+  end was a decision, not a release. The decision was measured, not assumed: nothing on this
+  machine registered either server. `~/.pi/agent/mcp.json` holds only `sjel` (Sjel's own
+  capabilities, the one MCP surface actually in use), `~/.claude.json` only `graphify` per project,
+  `~/.codex/config.toml` only ChatGPT-app binaries, and a grep of `~/.pi`, `~/.agents`,
+  `~/.claude`, `~/.config` and `~/Library/LaunchAgents` found both package names only in old
+  session transcripts. `server-github` and `server-filesystem` came off with `npm -g rm` (149
+  packages) and the exception went with them: 23 entries became 22, the count the file's own
+  header had already claimed. The one real use of `@modelcontextprotocol/*` here is the SDK as a
+  LIBRARY inside `Packs/harness/pi-packages/pi-web-access` (`baizhi.ts`, `zai.ts`) — a range that
+  resolves past the vulnerable version, and not a server, so never the finding.
 - 2026-10-04 · The audit's installed-software pass accepts its findings with reasons, and the
   repository gate keeps its own rule. `tools/audit`'s second pass reports software installed
   outside this checkout, where a fix is frequently out of reach: `cargo install --locked`
@@ -1234,6 +1287,28 @@ claim yet, and the watch rows they name are in `upstreams.toml` with the questio
   move this class — every global npm package reports current while 15 findings sat in their
   subtrees, so the audit's own advice named no command that reaches them — and `xberg-cli`
   (1.3.0 -> 1.3.3) and `pnpm` (12.8.1 -> 12.9.1) are stale rows the tool owns and can move.
+- 2026-10-04 · The inference-key gateway, vault unlock and Keychain migration move into
+  `tools/sjel-cli/src/inference_keys.rs`. The pi-facing catalog stays TypeScript; `bw-key.mjs`,
+  the old `tools/bw-unlock` implementation and `keychain-write.exp` are deleted, while their
+  launchers keep the command paths. This keeps the secret-handling implementation in one Rust
+  process and removes Node, Expect and shell plumbing from those paths. Keychain migration sends
+  hex-encoded key material to `security -i` over stdin, never in argv, then verifies the stored
+  bytes and removes the plaintext cache. Compared with the old scripts in a scratch environment
+  with synthetic keys and stub `bw`/Keychain commands: keychain and vault reads, duplicate-name
+  selection, `--check`, `--manifest`, `bwu --status`, and unlock/session caching matched; the new
+  migration was exercised separately and verified the write and cache removal. JSON key order
+  differs; `status` omits `unlockHelper` and `failure`, which the extension does not read. The key
+  timeout is one total lookup budget, not a fresh allowance for each fallback call. The `zeroize`
+  crate was already in the workspace lock.
+- 2026-10-04 · `tools/discover-ui-packages` is Rust, with the CI and doctor call paths unchanged.
+  Its recursive package walk and classifier move to `tools/sjel-cli/src/ui_packages.rs`; the
+  launcher still answers both the human report and `--dirs`, and `SJEL_UI_DISCOVERY_ROOT` remains
+  the scratch-tree seam. Its 12 planted-tree TypeScript cases are covered by 12 Rust tests,
+  including a repository-root package path case. Compared against TypeScript on this checkout and on
+  scratch trees: default output, `--dirs`, stderr and exit codes matched, including refused UI
+  packages and a tree with no checkable package. Malformed `package.json` still fails closed, but
+  the diagnostic text differs between `serde_json` and `JSON.parse`. `serde_json` was already a
+  direct dependency, so this added no crate.
 - 2026-10-04 · `tools/host-watch` is Rust, and the hourly job stops starting an interpreter. It
   was the last `bun run` job whose readers are already Rust: `sjel-status` serves its rows at
   `/api/sjel-status/host-watch` and the dashboard ranks them at band 900, while `tools/storage

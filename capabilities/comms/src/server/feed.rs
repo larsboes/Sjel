@@ -627,7 +627,7 @@ impl PassCursor {
     /// An offset the caller NAMED is the page it gets: `comms relevance
     /// backfill` walks the corpus itself and means every number it sends. An
     /// ABSENT offset resumes the chain instead of restarting it, and that is
-    /// the whole of the nightly sweep's paging — `tools/feed-sweep.ts` posts
+    /// the whole of the nightly sweep's paging — `tools/feed-sweep` posts
     /// `{days: 3650, limit: 100}` with no offset, so before this it re-read the
     /// newest hundred rows every night for as long as the schedule has existed.
     /// The cursor already recorded how far the sweep had come; nothing read it
@@ -970,7 +970,7 @@ pub(super) async fn relevance_refresh_handler(Json(body): Json<RefreshBody>) -> 
             // the current relevance revision on the whole corpus; the 352 rows
             // whose matches came from the retired vector space then read as
             // current forever. Reproduced, and reachable: `comms relevance
-            // backfill` and `tools/feed-sweep.ts` both send a window, and a
+            // backfill` and `tools/feed-sweep` both send a window, and a
             // window that holds fewer rows than `limit` finishes immediately.
             cursor.advance(&relevance_revision, days, offset, considered, has_more);
         }
@@ -1358,7 +1358,7 @@ mod db_tests {
         (offset, items.into_iter().map(|item| item.id).collect())
     }
 
-    /// The bug this module was opened for. `tools/feed-sweep.ts` posts
+    /// The bug this module was opened for. `tools/feed-sweep` posts
     /// `{days: 3650, limit: 100}` every night and names no offset, so every
     /// night re-read the same newest hundred rows and nothing else was ever
     /// re-scored: on 2026-09-08 the deployment's cursor read

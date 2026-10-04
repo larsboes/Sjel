@@ -1,6 +1,6 @@
 // Local notifications for a new Sparpreis low.
 //
-// tools/sparpreis-watch.ts writes a `note` item, `sparpreis-low:<watch>:<day>`, when a
+// tools/sparpreis-watch writes a `note` item, `sparpreis-low:<watch>:<day>`, when a
 // fare falls below every earlier observation. That note is the durable alert (travel PRD
 // R4). This module turns an unseen one into a phone notification when the app opens or
 // returns to the foreground. It is local: no APNs and no push key (operator's choice,

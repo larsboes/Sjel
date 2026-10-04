@@ -723,7 +723,11 @@
       syncCursor = result.next_cursor;
       syncExhausted = result.exhausted;
       triage = await comms.triage();
-      syncNotice = `${result.fetched} inbox threads reviewed · ${result.new_count} new · ${result.total_stored} stored${result.exhausted ? " · inbox exhausted" : ""}.`;
+      const eventNotes = [
+        result.events.proposals > 0 ? `${result.events.proposals} Calendar proposal${result.events.proposals === 1 ? "" : "s"}` : "",
+        result.events.failed > 0 ? `${result.events.failed} event analysis issue${result.events.failed === 1 ? "" : "s"}` : ""
+      ].filter(Boolean).join(" · ");
+      syncNotice = `${result.fetched} inbox threads reviewed · ${result.new_count} new · ${result.total_stored} stored${eventNotes ? ` · ${eventNotes}` : ""}${result.exhausted ? " · inbox exhausted" : ""}.`;
     } catch (cause) {
       mailActionError = cause instanceof Error ? cause.message : "Inbox sync failed.";
     } finally {

@@ -25,6 +25,10 @@ Rust first, and the one-crate shape was decided on 2026-10-02.
 | `self` (generate, status, explain, coupling, check) | `tools/self` | TypeScript (`self.ts` + `lib/self-model.ts`), 2026-10-04 |
 | `audit` (no arguments) | `tools/audit` | bash, 2026-10-04 |
 | `host-watch` (check, `--dry-run`, `--json`) | `tools/host-watch` | TypeScript (`host-watch.ts` + `host-watch.test.ts`), 2026-10-04 |
+| `inference-keys` (key gateway, unlock, migration) | `tools/inference-keys`, `tools/bw-unlock`, Pack migration launcher | `bw-key.mjs`, `bw-unlock`, and `keychain-write.exp`, 2026-10-04 |
+| `discover-ui-packages` | `tools/discover-ui-packages` | TypeScript implementation and tests, 2026-10-04 |
+| `feed-sweep` | `tools/feed-sweep` | TypeScript (`feed-sweep.ts`), 2026-10-04 |
+| `sparpreis-watch` | `tools/sparpreis-watch` | TypeScript (`sparpreis-watch.ts` + `sparpreis-watch.test.ts`), 2026-10-04 |
 
 `toolchain-check` was compared with its bash version on this Mac before replacement. Text
 output, JSON (sorted keys) and exit codes were identical for 10 flag combinations, and
@@ -302,6 +306,76 @@ The same day, 36 findings became 22: reinstalling `@mariozechner/snap-happy` and
 already at its latest release. Splitting the config then exposed two informational advisories the
 installed pass had been inheriting from the shared file (`paste`, `ttf-parser`), which are
 repeated in the new one so the split did not become a new finding. `tools/audit` exits 0.
+
+`inference-keys` moved the secret-bearing process work out of Node and shell: the pi extension
+stays TypeScript, while key lookup, status, unlock, and keychain migration use the Rust CLI.
+`tools/bw-unlock` and the Pack's `keychain-migrate.sh` keep their existing entry points. The
+Node gateway, the expect writer, and the old unlock implementation are deleted; the writer now
+sends hex-encoded key material to `security -i` over stdin, never in argv.
+
+Compared with the old scripts in a scratch environment using synthetic keys and stub `bw` and
+Keychain commands: keychain and vault reads, duplicate-name selection, `--check`, `--manifest`,
+`bwu --status`, and unlock/session caching matched. The new migration was also exercised with
+stubs: the written key verified and its plaintext cache was removed. JSON object key order differs,
+and the new status payload omits the old `unlockHelper` and `failure` diagnostics; the extension
+reads neither field. The API-key timeout is now one total lookup budget rather than a fresh
+timeout for every fallback call, keeping the helper below pi's deadline.
+
+`discover-ui-packages` moves the CI package-tree walk and classifier into `src/ui_packages.rs`;
+CI and `tools/doctor` keep calling the same launcher, and the test-only root override remains
+`SJEL_UI_DISCOVERY_ROOT`. The 12 planted-tree TypeScript cases are covered by 12 Rust tests,
+including a repository-root package path case. On this checkout, the default report and `--dirs` output,
+stderr and exit codes matched; scratch trees
+with a UI missing its check script, and with no checkable package, also matched in both modes.
+Malformed `package.json` still fails closed, but the parser's diagnostic text differs between
+`serde_json` and `JSON.parse`. `serde_json` was already a direct dependency, so no crate was added.
+
+The two remaining scheduled jobs followed on 2026-10-04, and are the last two `bun run` jobs in
+the repository: `tools/feed-sweep.ts` (comms, every 6 h) and `tools/sparpreis-watch.ts` (trips and
+transit, every 12 h). They came together because they are one class — a timer that starts an
+interpreter to make a handful of HTTP calls and exit — and because each one's manifest needed the
+same shape change `host-watch`'s got. `src/feed_sweep.rs` is the first; `src/sparpreis_watch/` is
+the second, `mod.rs` for the HTTP calls and `pure.rs` for the identity, discovery and history
+helpers with `tools/sparpreis-watch.test.ts`'s cases as Rust unit tests.
+
+Verified against the TypeScript before deletion, both implementations pointed at one stub server
+so the comparison was deterministic: nothing tracked was touched — the stub's ports live in a
+scratch copy of the three `service.toml` files, and the TypeScript read that tree the same way the
+Rust binary did through `SJEL_ROOT`. `feed-sweep` was run in four scenarios (a rich response, a
+two-source payload with an unreachable source; an empty body with no `sources` key; a 500; and a
+200 whose body is not JSON), and stdout, stderr, exit code and the sequence of requests were
+identical in all four. `sparpreis-watch` was run over one plan carrying a stage, a legacy per-day
+item to fold and a rail `option_set` to match — identical stdout, stderr, exit code, and a request
+sequence equal once the two runs' wall-clock `observed_at` timestamps are normalized, including
+the JSON payloads of the two item writes and the one delete.
+
+Four differences are deliberate.
+
+- Every request carries a timeout here, where the TypeScript used `fetch`'s default, which is to
+  say none: 300 s for the scan and 600 s for the relevance page, matching the `AbortSignal`
+  budgets the TypeScript already set for those two, and 300 s for each of `sparpreis-watch`'s
+  calls, which had none at all. `sjel_http::client` refuses to build a client without one, and
+  that is where the user-agent and the redirect policy come from as well.
+- The deployment credential is put on a loopback request by
+  `sjel_server::InboundAuth::with_loopback_auth` — the same helper `capabilities/calendar`,
+  `transit`, `comms`, `places` and `scouting` use — rather than by the TypeScript's own
+  `authorizedLoopbackRequest`, so the "never off loopback" rule has one implementation. An
+  unconfigured credential is one refusal line rather than an unhandled rejection, and a failed item
+  write or delete is reported and the run continues where a network-level throw ended the
+  TypeScript's.
+- JSON object keys are sorted, `serde_json`'s default, where the TypeScript wrote insertion order
+  — the difference every port since `harnesses` has recorded. Every payload here is read by name.
+- `-h`/`--help` prints the usage. `feed-sweep` did not read its arguments at all, and
+  `sparpreis-watch` read only `import.meta.main`; every other ported tool answers `-h`, and a job
+  invoked by hand deserves the same.
+
+The Cargo.toml records the cost: `sjel-cli` gains `sjel-http` and `sjel-server`, and the binary
+nearly doubles — 7.3 MB to 14.1 MB measured on this Mac — because `sjel-server` brings axum,
+rustls, rcgen and hyper-util into the link. All of them are already in the workspace lock and
+already built for the capabilities, and most of that tree (rustls, hyper, tokio, h2) is shared
+with the reqwest `sjel-http` needs anyway, so a warm rebuild pays a link rather than a compile.
+The alternative was a second implementation of the deployment-token read and the loopback rule in
+this crate, which is the duplication this crate exists to remove.
 
 ## Porting a script
 

@@ -7,10 +7,15 @@
 # real bahn.de requests through transit's self-paced client, so the ceiling stays low.
 kind     = "process"
 name     = "sparpreis-watch"
-# `bun` first, not a launcher script that execs it. service-runner.sh builds the generated
-# unit's PATH from the interpreter it can see in command[0], and a launcher hides that: the
-# first scheduled manifest to get this wrong died on `exec: bun: not found`, exit 127.
-command  = ["bun", "run", "tools/sparpreis-watch.ts"]
+# The built binary, not a launcher and no longer an interpreter, the shape host-watch carries.
+# service-runner.sh derives the generated unit's PATH from command[0] and from each `build` word,
+# so naming `cargo` here is what puts it on the job's PATH — a bare launcher would leave the
+# twelve-hourly job unable to rebuild a stale binary. `bun run tools/sparpreis-watch.ts` was what
+# this named until 2026-10-04, when the tool moved to tools/sjel-cli/src/sparpreis_watch/: the
+# units already installed need no reinstall, because launchd runs service-runner and the runner
+# reads this manifest.
+command  = ["target/release/sjel-cli", "sparpreis-watch"]
+build    = ["cargo", "build", "--locked", "--release", "-p", "sjel-cli", "--bin", "sjel-cli"]
 schedule = "12h"
 
 # No `port`: this runs, observes, and exits. The contracts it calls, not the code it

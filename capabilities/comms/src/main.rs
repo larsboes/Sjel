@@ -17,6 +17,7 @@
 use std::collections::BTreeMap;
 
 use comms::config::Config;
+use comms::mail_events;
 use comms::mail_model::{self, Mode};
 use comms::store::Store;
 use comms::{google, intake, media, normalize};
@@ -162,6 +163,7 @@ fn cmd_sweep(args: &[String], cfg: &Config) {
     let mut grouped: BTreeMap<String, Vec<(String, String, String)>> = BTreeMap::new();
     let mut total = 0usize;
     let mut persisted_new = 0usize;
+    let mut fetched_ids = Vec::new();
     let mut redacted = 0usize;
 
     for stub in &stubs {
@@ -173,6 +175,7 @@ fn cmd_sweep(args: &[String], cfg: &Config) {
             }
         };
         let id = meta.id.clone();
+        fetched_ids.push(id.clone());
         let from = meta.from_addr.clone().unwrap_or_default();
         let intake = intake::from_thread(meta, &cfg.rules);
         total += 1;
@@ -204,12 +207,16 @@ fn cmd_sweep(args: &[String], cfg: &Config) {
         println!();
     }
 
+    let should_scan_events = store.is_some();
+    drop(store);
+    let events = should_scan_events.then(|| mail_events::analyze_batch(cfg, &fetched_ids));
+
     println!("total: {total} threads across {} streams", grouped.len());
     if redacted > 0 {
         println!("redacted: {redacted} c2/c3 thread(s) — subject and snippet stored with markers");
     }
-    if let Some(_st) = &store {
-        println!("persisted: {persisted_new} new proposals (existing decisions preserved)");
+    if let Some(events) = events {
+        println!("persisted: {persisted_new} new proposals; {} Calendar event proposal(s), {} event analysis issue(s)", events.proposals, events.failed);
     } else {
         println!("dry-run: nothing persisted");
     }
@@ -1220,7 +1227,7 @@ fn print_classify_report(cfg: &Config, store: &Store) {
 ///
 /// An HTTP client, deliberately not a store opener. `Store::open` runs the
 /// whole migration on every call and two openers on one SQLite file deadlock —
-/// `tools/feed-sweep.ts` records that reason, and comms is `autostart = true`,
+/// `tools/feed-sweep` records that reason, and comms is `autostart = true`,
 /// so a server answering is the expected state rather than a precondition this
 /// verb has to arrange.
 fn cmd_relevance(args: &[String], cfg: &Config) {

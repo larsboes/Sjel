@@ -707,7 +707,7 @@
                 "minLength": 1
               },
               "total_price": {
-                "description": "The older float form, in units of `currency`. tools/sparpreis-watch.ts writes it every 12 hours (capabilities/sparpreis-watch/service.toml) and rows in that shape already exist; plan search writes estimated_cost_cents in integer minor units instead. A reader has to accept both.",
+                "description": "The older float form, in units of `currency`. tools/sparpreis-watch writes it every 12 hours (capabilities/sparpreis-watch/service.toml) and rows in that shape already exist; plan search writes estimated_cost_cents in integer minor units instead. A reader has to accept both.",
                 "type": [
                   "number",
                   "null"
@@ -800,7 +800,7 @@
           ]
         },
         "revision": {
-          "description": "The scoring revision that produced these scores (capabilities/trips/src/plan_search.rs, PLAN_SEARCH_REVISION). Two option sets are comparable only at the same revision. Optional, not required: the plan-search writer always sets it, and the option_set rows that predate it -- every one tools/sparpreis-watch.ts has written -- carry none.",
+          "description": "The scoring revision that produced these scores (capabilities/trips/src/plan_search.rs, PLAN_SEARCH_REVISION). Two option sets are comparable only at the same revision. Optional, not required: the plan-search writer always sets it, and the option_set rows that predate it -- every one tools/sparpreis-watch has written -- carry none.",
           "type": "string",
           "minLength": 1
         },

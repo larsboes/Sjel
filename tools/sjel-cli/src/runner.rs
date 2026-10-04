@@ -853,7 +853,8 @@ impl<'a> Svc<'a> {
         }
 
         let mut cmd = Command::new(&self.command[0]);
-        cmd.args(&self.command[1..]).current_dir(self.workdir_path());
+        cmd.args(&self.command[1..])
+            .current_dir(self.workdir_path());
         for (k, v) in self.cap_env()? {
             cmd.env(k, v);
         }

@@ -1,5 +1,10 @@
 # Data Access, Performance & Idioms
 
+## 0. Measure Before Optimizing
+Treat performance changes as hypotheses. Start with a representative workload and a repeatable release-mode baseline, change one relevant thing, then measure again under the same conditions. Prefer an existing benchmark target; add a focused `cargo bench` benchmark when repeated measurement will help answer the question. Record the workload and result so a claimed improvement can be checked.
+
+Use profiling to locate CPU or allocation costs before introducing layout changes, custom allocators, SIMD, or unsafe code. Check which profiler or benchmark tools are actually available in the host toolchain rather than assuming one is installed. Do not add Criterion or another benchmark dependency just to satisfy a template; use the repository's existing setup or the smallest useful benchmark.
+
 ## 1. SQLite Discipline with `sjel-store`
 All persistent capabilities share one SQLite database file on disk, separated by table prefixes (`sjel-store` doctrine):
 * **One Connection Pool**: `sjel_store::pool_for(db_path)` maintains pooled connections with WAL mode, `busy_timeout = 5000`, and `foreign_keys = ON`.

@@ -58,6 +58,8 @@ Zero-context ground truth: verify with `cargo check --workspace` and `cargo test
 * Run fuzz testing (`cargo-fuzz`) on untrusted data boundaries.
 * Verify clean compiler and linter passes with `cargo clippy --workspace --tests` and `cargo check --workspace`.
 * Read [`references/verification-and-testing.md`](references/verification-and-testing.md).
+* Keep panics out of fallible input and runtime paths; use checked arithmetic when overflow is a meaningful failure. See [`references/error-architecture.md`](references/error-architecture.md).
+* Measure performance changes against a repeatable baseline before optimizing; profile to find the cost first. See [`references/data-and-performance.md`](references/data-and-performance.md).
 
 ## Reference Routing
 
@@ -70,3 +72,4 @@ Zero-context ground truth: verify with `cargo check --workspace` and `cargo test
 | Typestates, Newtypes, `Cow`, `#[serde(borrow)]` | [`references/type-state-and-modeling.md`](references/type-state-and-modeling.md) |
 | Domain errors, `thiserror`, Axum `IntoResponse` | [`references/error-architecture.md`](references/error-architecture.md) |
 | Property testing (`proptest`), `loom`, `cargo-fuzz`, verification | [`references/verification-and-testing.md`](references/verification-and-testing.md) |
+| Panics, checked arithmetic, performance measurement | [`references/error-architecture.md`](references/error-architecture.md) · [`references/data-and-performance.md`](references/data-and-performance.md) |

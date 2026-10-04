@@ -1,5 +1,12 @@
 # Error Architecture in Sjel
 
+## 0. Keep Panics Out of Fallible Boundaries
+Use `Result` for failures that can arise from external input, I/O, persistence, or ordinary runtime conditions. Do not use `.unwrap()`, `.expect()`, unchecked indexing, or arithmetic that can silently overflow to handle those paths; parse and validate at the boundary, then propagate a domain error.
+
+Panics are appropriate for tests and may be appropriate for an internal invariant that cannot fail by construction. In that case, prefer a specific `.expect("why this invariant must hold")` over an unexplained `.unwrap()`, and keep the invariant close to the assertion. Do not turn every index access into `get()` when the index is structurally guaranteed; make the guarantee explicit and use checked access where the index can be influenced by input.
+
+Use checked arithmetic (`checked_add`, `checked_mul`, and related methods) when overflow is a meaningful input or state failure. Choose saturating or wrapping arithmetic only when that behavior is part of the domain contract.
+
 ## 1. Domain Errors with `thiserror`
 Define domain errors as enums deriving `thiserror::Error`. Give each variant a descriptive, human-readable format string:
 

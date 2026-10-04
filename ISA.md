@@ -968,6 +968,35 @@ this deployment paid the last time it was broken.
 - **Funding.** Support and sponsorship with a build-in-public video series (decisions, papers,
   measurements, in the style of James Simo's city-builder devlog), hosting, or a company.
   Undecided.
+- **One Rust agent for the Sjel app and local coding.** Recorded 2026-10-03, principal's
+  decision: keep this as a candidate, no implementation yet. The intended destination is an
+  agent replacement usable both inside the app and as a local coding agent; a household-only
+  loop would not satisfy it. Pi is already adopted (`upstreams.toml [pi-coding-agent]`), so
+  replacing it must earn its maintenance cost rather than follow from the language choice.
+  Today `capabilities/assistant/src/main.rs` sends a system and user message to a local model
+  and reads text back; it has no tool-calling conversation loop. Discovery, capability policy,
+  approvals and pseudonymization already exist (F8–F10). `tools/sjel-mcp.ts` owns MCP dispatch;
+  the Rust `tools/sjel-mcp` crate owns registration and verification, not that dispatch.
+
+  Candidate design to evaluate: one headless engine for model exchanges, tool calls, bounded
+  context and session events, with separate household and coding tool profiles. Household
+  access must retain the declared capability contracts and their authentication, rewriting,
+  approvals and audit; importing domain stores into the engine would bypass that boundary.
+  The coding profile needs workspace file and command tools, with an explicit execution and
+  data-egress boundary. Coding access must not silently give the app, or household tool output,
+  unrestricted shell or filesystem access. Rust does not establish either boundary by itself.
+
+  Before promotion: name the Pi features the replacement must retain, including a decision
+  on sessions, context folding, skills, subagents, MCP, provider coverage and terminal UX.
+  Prove one useful multi-step household task and one local coding task against those needs,
+  with observed completion, latency, memory and operating cost compared with the existing
+  path. The probe must also exercise malformed tool calls, oversized results, budget limits,
+  injected tool text, cancellation and interrupted side effects; an uncertain write must not
+  be reported as safely aborted or blindly replayed. No claim of a tiny line count, automatic
+  process cancellation or zero disclosure is accepted from the proposal. The unresolved
+  privacy probes in ISC-39 and ISC-45 remain unresolved. Failure to meet either use case, or
+  replacement work that costs more than its measured benefit, is grounds to keep Pi and narrow
+  or retire the candidate. No new UI, storage migration or Pi retirement is authorized here.
 - **The pseudonymizer as its own library.** Grow the data classes and the reversible
   pseudonymizer into a standalone Rust crate with its own README. Performance work (unsafe Rust included)
   only after a benchmark says where the time goes.

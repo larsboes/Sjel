@@ -7,6 +7,10 @@
       "kind": "pack"
     },
     {
+      "name": "agent",
+      "kind": "lib"
+    },
+    {
       "name": "agentbox",
       "kind": "capability"
     },
@@ -496,6 +500,36 @@
     }
   ],
   "coupling": [
+    {
+      "from": "agent",
+      "to": "inference",
+      "kinds": [
+        "cargo-dep"
+      ],
+      "evidence": [
+        "libs/agent/Cargo.toml"
+      ]
+    },
+    {
+      "from": "agent",
+      "to": "sjel-config",
+      "kinds": [
+        "cargo-dep"
+      ],
+      "evidence": [
+        "libs/agent/Cargo.toml"
+      ]
+    },
+    {
+      "from": "agent",
+      "to": "sjel-http",
+      "kinds": [
+        "cargo-dep"
+      ],
+      "evidence": [
+        "libs/agent/Cargo.toml"
+      ]
+    },
     {
       "from": "assistant",
       "to": "inference",
@@ -2112,6 +2146,10 @@
       "verdict": "quarry"
     },
     {
+      "name": "ripgrep",
+      "verdict": "adopt"
+    },
+    {
       "name": "rules_rust",
       "verdict": "reject"
     },
@@ -2137,6 +2175,10 @@
     },
     {
       "name": "sha2",
+      "verdict": "adopt"
+    },
+    {
+      "name": "signal-hook",
       "verdict": "adopt"
     },
     {

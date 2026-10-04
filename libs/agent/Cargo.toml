@@ -1,0 +1,40 @@
+[package]
+name = "sjel-agent"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+description = "One agent loop: a resolved inference role, a list of tools, and the turns between them. The coding CLI and the assistant capability hand it different tools; the loop is the same."
+publish = false
+
+[lib]
+name = "sjel_agent"
+path = "src/lib.rs"
+
+# The coding agent, a minimal pi alternative. It lives beside the loop until a second front end
+# shows where a binary should go (on-placement.md has no row for "agent harness" yet).
+[[bin]]
+name = "sjel-agent"
+path = "src/main.rs"
+
+[dependencies]
+# Outbound HTTP goes through one factory (libs/sjel-http), and it is blocking: an async caller
+# such as capabilities/assistant runs the loop inside `spawn_blocking`.
+sjel-http = { path = "../sjel-http" }
+sjel-inference = { path = "../inference" }
+sjel-config = { path = "../sjel-config" }
+serde = { workspace = true, features = ["derive"] }
+serde_json.workspace = true
+reqwest = { workspace = true, features = ["json", "blocking"] }
+thiserror.workspace = true
+# ripgrep's own crates, in-process instead of spawning `rg` per call: the parallel
+# .gitignore-aware walker, and the line searcher with its regex matcher (upstreams.toml, [ripgrep]).
+ignore = "0.4"
+grep-searcher = "0.1"
+grep-regex = "0.1"
+# Ctrl-C ends a turn instead of the process. Handling a signal needs `unsafe`, which the
+# workspace denies; this crate wraps it, and its registry half is already in the lock via tokio.
+signal-hook = "0.4"
+
+[lints]
+workspace = true

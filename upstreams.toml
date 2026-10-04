@@ -940,3 +940,17 @@ verdict = "reject"
 license = "BSD-3-Clause"
 summary = "WebAssembly extension host; declined because only first-party extensions run here"
 why = "noted and declined 2026-10-01 from the same clipping, which proposes WASM isolation so an extension can be written in any language without touching the core binary. Read against README.md:159 -- 'Only first-party extensions run. There is no extension store.' -- so a third-party extension host contradicts a stated product boundary rather than answering a missing feature, which is the same shape as the [stop-slop] and [mosquitto] declines. The rejection is on scope and not on Extism: nothing was built with it and nothing was measured. It becomes reconsiderable only if that boundary moves, which is an owner decision recorded nowhere else; if it ever moves, this row and that README line are what to re-read together."
+
+[ripgrep]
+url = "https://github.com/BurntSushi/ripgrep"
+verdict = "adopt"
+license = "MIT OR Unlicense"
+summary = "ripgrep's crates (ignore, grep-searcher, grep-regex): the search behind libs/agent's grep and find"
+why = "adopted 2026-10-03 for libs/agent, the agent loop behind sjel-agent. The first version spawned `rg` once per tool call. The crates run the same search in-process: `ignore` is the parallel, .gitignore-aware walker, and `grep-searcher` with `grep-regex` is the line searcher. So a model turn that searches pays no process start, and the walk stops once the tool's 30 KB output budget is spent instead of after the whole tree. Same author and repository as the `rg` binary that toolchain.toml already requires on every host, so the behaviour a model sees matches the CLI the agents already use. Seven crates new to Cargo.lock: ignore, globset, grep-searcher, grep-regex, grep-matcher, bstr and encoding_rs_io. walkdir, memchr, memmap2, same-file, encoding_rs, regex and crossbeam-deque were already there. The speed gain over spawning `rg` is not measured."
+
+[signal-hook]
+url = "https://github.com/vorner/signal-hook"
+verdict = "adopt"
+license = "MIT OR Apache-2.0"
+summary = "Safe Unix signal registration; lets sjel-agent stop one turn on Ctrl-C instead of exiting"
+why = "adopted 2026-10-03 for libs/agent. The first Ctrl-C sets a flag that the stream reader, the bash tool and the tool dispatcher check, so a turn ends and the conversation stays. `flag::register_conditional_shutdown`, registered first, makes a second Ctrl-C exit with 130. Installing a signal handler needs `unsafe`, which the workspace denies (Cargo.toml, `unsafe_code`), so a reviewed crate holds it instead of this repository. One crate new to Cargo.lock: its `signal-hook-registry` half was already there through tokio."

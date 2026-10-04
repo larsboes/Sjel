@@ -93,20 +93,38 @@ function findPiInstall(): PiInstall | undefined {
     "/usr/local/lib/node_modules/@earendil-works/pi-coding-agent",
     "/usr/lib/node_modules/@earendil-works/pi-coding-agent",
   );
-  for (const candidate of candidates) {
-    const modulesDir = join(candidate, "node_modules");
-    // Both must be there: the manifest proves it is pi, the dependency proves we can
-    // resolve the packages the extensions import.
-    if (!existsSync(join(candidate, "package.json")) || !existsSync(join(modulesDir, "typebox"))) continue;
-    try {
-      const manifest = JSON.parse(readFileSync(join(candidate, "package.json"), "utf8")) as { name?: string };
-      if (manifest.name !== "@earendil-works/pi-coding-agent") continue;
-    } catch {
-      continue;
+
+  // pi's MANAGED install (`~/.pi/agent/install`, the layout `pi update` moved to in 1.0.x): the
+  // package and its dependencies are siblings under one release's node_modules, not a package
+  // with its own node_modules beside it, so the loop below cannot express it.
+  const managedRoot = process.env.PI_MANAGED_INSTALL_ROOT ?? join(homedir(), ".pi", "agent", "install");
+  const versionFile = join(managedRoot, "current-version");
+  if (existsSync(versionFile)) {
+    const version = readFileSync(versionFile, "utf8").trim();
+    if (version) {
+      const modulesDir = join(managedRoot, "releases", version, "node_modules");
+      const found = piInstallAt(join(modulesDir, "@earendil-works", "pi-coding-agent"), modulesDir);
+      if (found) return found;
     }
-    return { packageDir: candidate, modulesDir };
+  }
+
+  for (const candidate of candidates) {
+    const found = piInstallAt(candidate, join(candidate, "node_modules"));
+    if (found) return found;
   }
   return undefined;
+}
+
+/** Both must be there: the manifest proves it is pi, the dependency proves the extensions resolve. */
+function piInstallAt(packageDir: string, modulesDir: string): PiInstall | undefined {
+  if (!existsSync(join(packageDir, "package.json")) || !existsSync(join(modulesDir, "typebox"))) return undefined;
+  try {
+    const manifest = JSON.parse(readFileSync(join(packageDir, "package.json"), "utf8")) as { name?: string };
+    if (manifest.name !== "@earendil-works/pi-coding-agent") return undefined;
+  } catch {
+    return undefined;
+  }
+  return { packageDir, modulesDir };
 }
 
 /**

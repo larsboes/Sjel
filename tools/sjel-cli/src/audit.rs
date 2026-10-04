@@ -15,7 +15,10 @@
 //! `osv-scanner` twice. Once over every lockfile here, reading `osv-scanner.toml`'s dated
 //! exceptions. Then, in a second pass, over software installed OUTSIDE this checkout — every node
 //! in the global npm tree, and every `cargo install`ed crate with the transitive tree its own
-//! published `Cargo.lock` pins. That second pass exists because nothing else looks at that class:
+//! published `Cargo.lock` pins. That second pass reads `osv-scanner-installed.toml`, and the two
+//! files hold opposite policies on purpose: a known vulnerability stays blocking in this
+//! checkout, and installed software that no command here can move is accepted with a reason and
+//! a date. That second pass exists because nothing else looks at that class:
 //! osv-scanner's own `directory` plugin extracts nothing from installed software (measured
 //! 2026-10-03 on 2.6.0: 0 Extract calls, even against a valid dpkg status file), and Dependabot
 //! reads lockfiles in this repository only. The inventory is `tools/updates --json --offline
@@ -59,6 +62,13 @@ tools/audit — the one command, and the only two scanners Sjel still runs itsel
   osv-scanner  dependency CVEs over every lockfile here, reading osv-scanner.toml's dated
                exceptions. Dependabot alerts watch the same lockfiles continuously; this is
                the answer before a push rather than after it.
+
+               AND, in a second pass, the same CVEs against software installed OUTSIDE this
+               checkout: every node in the global npm tree, and every `cargo install`ed crate
+               with the transitive tree its own published Cargo.lock pins, read against
+               osv-scanner-installed.toml — where an accepted finding carries its reach and the
+               date the acceptance ends, because installed software often has no fix this
+               machine can reach.
 
                AND, in a second pass, the same CVEs against software installed OUTSIDE this
                checkout: every node in the global npm tree, and every `cargo install`ed crate
@@ -364,19 +374,27 @@ fn globals_osv_section(root: &Path, r: &mut Report) {
             // above, and each is named in the finding's SOURCE column, so a transitive hit says
             // which installed crate carries it.
             //
-            // `--verbosity error` deliberately silences osv-scanner.toml's "unused ignores"
-            // listing, which this pass would otherwise print directly under a repository pass
-            // that just used them — reading as an invitation to delete entries that are still
-            // load-bearing. The cost is stated rather than hidden: an exception that applied to
-            // an installed package would be swallowed instead of named. No current entry does
-            // (each reason names a repository path), and the remedy for an installed finding is
-            // `sjel update`, not an exception.
+            // `--verbosity error` deliberately silences the "unused ignores" listing, which this
+            // pass would otherwise print directly under a repository pass that had just used
+            // those entries — reading as an invitation to delete ones that are load-bearing.
+            //
+            // The cost is live as of 2026-10-04 and is stated in `osv-scanner-installed.toml`'s
+            // own header rather than hidden here: that file's entries DO cover installed
+            // packages, so an entry that stops applying — a crate rebuilt at a newer version, a
+            // tree npm re-resolved — is not announced. The header carries the by-hand command
+            // that lists which entries still apply.
+            //
+            // That file exists because the two passes have opposite policies. The repository
+            // scan keeps `osv-scanner.toml`, whose rule is that a known vulnerability stays
+            // blocking; installed software frequently has no fix this machine can reach, so
+            // accepting one there is a decision with a date and a reason. CI reads the
+            // repository config, so that rule is not weakened by anything here.
             let code = status_code(
                 Command::new("osv-scanner")
                     .args(["scan", "source", "-r", "-L"])
                     .arg(&bom_path)
                     .arg("--config")
-                    .arg(root.join("osv-scanner.toml"))
+                    .arg(root.join("osv-scanner-installed.toml"))
                     .args(["--verbosity", "error"])
                     .arg(&locks_dir)
                     .status(),

@@ -1,0 +1,183 @@
+# Exceptions for `tools/audit`'s SECOND osv-scanner pass — the one over software installed
+# outside this checkout. The repository scan, and CI's, read `osv-scanner.toml`, whose rule is
+# that a known vulnerability stays blocking and only informational advisories are excepted.
+#
+# This file is different on purpose, and the difference is the only reason it exists. A finding
+# in installed software frequently has no fix reachable from this machine:
+#
+#   * `cargo install --locked` resolves the Cargo.lock PUBLISHED inside the crate, so a
+#     transitive crate cannot be moved without the maintainer republishing. That is also why the
+#     audit's model of "installed" is accurate: it reads that same file.
+#   * a global npm tree is resolved by whoever published the package. A version range is
+#     re-resolved only by reinstalling the package that declares it, and an EXACT pin cannot be
+#     re-resolved at all.
+#   * a package installed here is not on any registry, so no install command can touch it.
+#
+# So an entry here accepts a known vulnerability, states the reach, and names what ends it. The
+# date is when the acceptance stops, not when a fix is expected.
+#
+# THE COST, stated rather than hidden: the second pass runs with `--verbosity error`, so
+# osv-scanner does not print its "unused ignores" listing for this file — an entry that stops
+# applying (the crate was rebuilt at a newer version, npm re-resolved the tree) is NOT announced.
+# To see which entries still apply, run the pass by hand without that flag:
+#
+#   osv-scanner scan source -r -L <sbom.json> --config osv-scanner-installed.toml <locks-dir>
+#
+# `--verbosity error` itself is not incidental: at the default verbosity this pass also lists the
+# REPOSITORY config's entries as unused, directly under a repository pass that had just used
+# them, which reads as an invitation to delete entries that are load-bearing.
+#
+# Reviewed 2026-10-04: 36 findings became 22 when two global npm packages were reinstalled and
+# their subtrees re-resolved (`@mariozechner/snap-happy`, `@modelcontextprotocol/server-github`,
+# 14 findings including both 9.8 simple-git entries outside npm's own tree). The 22 below are
+# what no install command on this machine could move.
+
+# ── Inside npm's own dependency tree ─────────────────────────────────────────────
+#
+# `npm@12.2.0` is the latest release, and these are dependencies of npm itself —
+# node-gyp, minimatch, make-fetch-happen, socks-proxy-agent. Nothing installs them
+# separately, so no command moves them: a newer npm is the only route, and there is none.
+# The reach is npm's own process. One of them has no fixed version at all.
+[[IgnoredVulns]]
+id = "GHSA-3wwx-pv8p-q78v"
+ignoreUntil = 2027-01-01
+reason = "undici 6.28.0 denial of service via an unhandled error in WebSocket permessage-deflate decompression, fixed in 6.28.1. Reach: `npm@12.2.0` (the latest release) > node-gyp > undici, in npm's own dependency tree. Nothing installs this copy separately, so the only fix is a newer npm, and 12.2.0 is current. Ends when npm ships an undici >= 6.28.1, which is npm's call and not this machine's."
+
+[[IgnoredVulns]]
+id = "GHSA-r53p-7pc4-xj5r"
+ignoreUntil = 2027-01-01
+reason = "undici 6.28.0 downstream response splitting via the retry interceptor, fixed in 6.28.1. Same reach and same end as GHSA-3wwx-pv8p-q78v: npm's own tree, through node-gyp."
+
+[[IgnoredVulns]]
+id = "GHSA-rfgv-xxqx-mfg5"
+ignoreUntil = 2027-01-01
+reason = "undici 6.28.0 denial of service via an unrequested WebSocket subprotocol, fixed in 6.28.1. Same reach and same end as GHSA-3wwx-pv8p-q78v. This third undici entry is the one worth revisiting first: it is the only one of the three that npm's registry traffic itself exercises."
+
+[[IgnoredVulns]]
+id = "GHSA-ch52-4w7c-c8xp"
+ignoreUntil = 2027-01-01
+reason = "http-cache-semantics 4.2.0 max-stale handling can disclose a cached response across users. NO FIXED VERSION EXISTS — osv names none — so there is no version to move to even if the parent could be changed. Reach: `npm@12.2.0` > make-fetch-happen > http-cache-semantics, in npm's own dependency tree. The exposure is a shared HTTP cache returning another user's entry; npm's registry fetches are its own, unauthenticated, and this machine's npm traffic does not pass through a shared cache it does not control. Ends when the package publishes a fix and npm adopts it, or when npm drops the dependency."
+
+[[IgnoredVulns]]
+id = "GHSA-6j4f-fj2g-mc7p"
+ignoreUntil = 2027-01-01
+reason = "brace-expansion 5.0.9 denial of service via uncontrolled recursion in parseCommaParts (stack exhaustion), fixed in 5.0.10. Reach: `npm@12.2.0` > minimatch > brace-expansion. The pattern being expanded would have to come from something npm globs, so the exposure is a pathological path or glob reaching the npm CLI. Ends when npm ships brace-expansion >= 5.0.10, or when `tools/updates` re-resolves npm itself, whichever comes first."
+
+[[IgnoredVulns]]
+id = "GHSA-q2hr-2g5m-vwhr"
+ignoreUntil = 2027-01-01
+reason = "brace-expansion 5.0.9, a second denial-of-service advisory against the same version, fixed in 5.0.12. Same reach and same end as GHSA-6j4f-fj2g-mc7p; kept as its own entry because its fixed version is later, so it stops applying at a different moment."
+
+[[IgnoredVulns]]
+id = "GHSA-qhr7-859c-m2p7"
+ignoreUntil = 2027-01-01
+reason = "brace-expansion 5.0.9, a third denial-of-service advisory against the same version, fixed in 5.0.11. Same reach and same end as GHSA-6j4f-fj2g-mc7p."
+
+[[IgnoredVulns]]
+id = "GHSA-2vr4-cq9g-pvrc"
+ignoreUntil = 2027-01-01
+reason = "ip-address 10.5.0 does not classify the NAT64 local-use range 64:ff9b:1::/48, allowing an SSRF and trust-boundary bypass, fixed in 10.5.1. Reach: `npm@12.2.0` > make-fetch-happen > @npmcli/agent > socks-proxy-agent > socks > ip-address, in npm's own dependency tree. The exposed path is a proxy decision npm makes for a registry request. Ends when npm ships ip-address >= 10.5.1."
+
+[[IgnoredVulns]]
+id = "GHSA-rpw4-54j3-4h4q"
+ignoreUntil = 2027-01-01
+reason = "ip-address 10.5.0, a second advisory against the same version, fixed in 10.5.1. Same reach and same end as GHSA-2vr4-cq9g-pvrc."
+
+[[IgnoredVulns]]
+id = "GHSA-h3mg-xc3c-68pw"
+ignoreUntil = 2027-01-01
+reason = "ip-address 10.5.0, a third advisory against the same version, fixed in 10.7.1. Same reach as GHSA-2vr4-cq9g-pvrc, and a later fixed version, so it stops applying on its own date. Watch for npm shipping 10.5.1 first: this entry would then be the only ip-address line still blocking, and the `--verbosity error` cost above is exactly why nothing would tell you."
+
+[[IgnoredVulns]]
+id = "GHSA-j6r3-76f7-8jcv"
+ignoreUntil = 2027-01-01
+reason = "ip-address 10.5.0, a fourth advisory against the same version, fixed in 10.7.1. Same reach and same end as GHSA-h3mg-xc3c-68pw."
+
+# ── A global npm package that is private ─────────────────────────────────────────
+#
+# simple-git 3.30.0 is pulled by a package installed outside any registry, so `npm update` cannot
+# reach it (npm answers 404 for the name) and reinstalling is not possible from here. The fix
+# DOES exist and the range allows it: that package declares `simple-git: ^3.28.0`, so rebuilding
+# it against the current registry resolves 3.36.0 and these three entries end. That is why these
+# carry the shortest date in this file: it is the one class here a person can close today.
+[[IgnoredVulns]]
+id = "GHSA-hffm-xvc3-vprc"
+ignoreUntil = 2026-11-01
+reason = "simple-git 3.30.0 remote code execution, fixed in 3.36.0. Reach: simple-git 3.30.0 is in the nested node_modules of a global package (version `0.0.27-PP`) that is not published to any registry, so no install command here can move it: `npm update -g` answers E404 for the name, and the tree has no global lockfile to re-resolve. The exposure is real and is command execution, bounded by what that tool is pointed at — it shells out to git, so untrusted input reaching it is the trigger. Ends when that package is rebuilt or reinstalled against `simple-git >= 3.36.0`, which its declared range already allows."
+
+[[IgnoredVulns]]
+id = "GHSA-r275-fr43-pm7q"
+ignoreUntil = 2026-11-01
+reason = "simple-git 3.30.0, a second remote code execution advisory, fixed in 3.32.3 — a blockUnsafeOperationsPlugin bypass through a case-insensitive `protocol.allow` config key. Same reach, same trigger, same end as GHSA-hffm-xvc3-vprc."
+
+[[IgnoredVulns]]
+id = "GHSA-jcxm-m3jx-f287"
+ignoreUntil = 2026-11-01
+reason = "simple-git 3.30.0, a third advisory, command execution via an option-parsing bypass, fixed in 3.32.0. Same reach and same end as GHSA-hffm-xvc3-vprc."
+
+# ── An EXACT pin in a package that is deprecated ─────────────────────────────────
+#
+# @modelcontextprotocol/server-github@2025.4.8 declares `@modelcontextprotocol/sdk: 1.0.1` with
+# no range at all, so re-resolving its tree cannot move the sdk: the dry run changes 46 packages
+# and leaves this one. npm also reports the parent as deprecated ("Package no longer supported"),
+# so upstream will not republish. The end of this entry is a decision, not a release: the package
+# is replaced or dropped.
+[[IgnoredVulns]]
+id = "GHSA-w48q-cv73-mx4w"
+ignoreUntil = 2026-12-01
+reason = "The MCP TypeScript SDK 1.0.1 does not enable DNS-rebinding protection by default, fixed in 1.24.0. Reach: `@modelcontextprotocol/server-github@2025.4.8` pins `@modelcontextprotocol/sdk` to exactly 1.0.1, so no re-resolve can move it, and npm reports that parent as deprecated and no longer supported — upstream will not release a version that relaxes the pin. The other two MCP servers installed here use the sdk through a range and now resolve 1.31.0, which is how the sibling copies of this finding disappeared on 2026-10-04. Ends when that server is replaced or removed; its exposure is a local MCP server reachable by DNS rebinding, and the remedy if it is used is to stop using it."
+
+# ── The repo config's informational exceptions, as this pass reaches them ────────
+#
+# These two also appear in `osv-scanner.toml`, and they are repeated here because the two
+# passes no longer share a file. Before 2026-10-04 they did, so this pass inherited them; a split
+# that quietly stopped applying them would have turned a split into a new finding. Each is an
+# unmaintained-crate advisory with no vulnerability and no fixed version, reached here through an
+# installed crate's published lock rather than through a repository lockfile.
+[[IgnoredVulns]]
+id = "RUSTSEC-2024-0436"
+ignoreUntil = 2026-11-01
+reason = "Unmaintained paste proc-macro 1.0.15, build-time only. No affected functions, CVSS or fixed version. Reach: the published locks of tauri-cli 2.12.1 and xberg-cli 1.3.0, both installed crates. Same advisory and same date as the entry in osv-scanner.toml; xberg-cli is also a stale install this machine can move (1.3.0 -> 1.3.3), after which this row may stop applying on its own."
+
+[[IgnoredVulns]]
+id = "RUSTSEC-2026-0192"
+ignoreUntil = 2026-11-01
+reason = "Unmaintained ttf-parser 0.25.1, non-optional and runtime-reachable in the crate that pulls it. No known vulnerability, no CVSS, no affected function and no fixed version. Reach here: the published lock of tauri-cli 2.12.1. The repository half of this advisory, its callers and what bounds them, is the longer entry in osv-scanner.toml; this row is the same crate arriving through an installed build tool."
+
+# ── In the PUBLISHED lock of a crate that is already at its latest release ───────
+#
+# `cargo install --locked` resolves the Cargo.lock the crate ships, so these are exactly what is
+# installed and no `cargo install` can move them: each crate below is already at its latest
+# release (`sjel update` reports every one of them current). Reinstalling without `--locked`
+# WOULD pull fixed transitives, and would also make this pass's model of "installed" wrong — it
+# reads that published lock — so the scan would keep reporting versions the binaries no longer
+# use. The doctrine wins over the finding: the fix belongs upstream.
+[[IgnoredVulns]]
+id = "RUSTSEC-2026-0253"
+ignoreUntil = 2027-01-01
+reason = "A potential use-after-free in lru 0.18.0's `LruCache::pop()` when a value's destructor panics, fixed in 0.18.2. Two installed crates carry it, both at their latest release: bottom 0.14.9 and macmon 0.8.2, and the audit reports one row per crate because each ships its own lock. macmon is a dependency of the `macmon` capability, so this one runs when that capability is asked for machine metrics; bottom is a terminal monitor. For either to be reached, a cached value's destructor has to panic inside those tools — nothing here hands them a payload. Ends when bottom or macmon republishes against lru >= 0.18.2, or when the tool is dropped."
+
+[[IgnoredVulns]]
+id = "RUSTSEC-2026-0285"
+ignoreUntil = 2027-01-01
+reason = "rustls 0.23.40 accepts TLS 1.3 handshake messages across encryption-level boundaries, fixed in 0.23.45. Reach: the published lock of cargo-deny 0.20.2, installed at its latest release, so no upgrade moves it. cargo-deny is referenced by nothing in this repository — it is not Sjel's, and the honest options are that its own upgrade brings a newer rustls or it is uninstalled. Ends when cargo-deny republishes, or when it is removed."
+
+[[IgnoredVulns]]
+id = "RUSTSEC-2020-0095"
+ignoreUntil = 2027-01-01
+reason = "The difference crate 2.0.0 is unmaintained. No vulnerability and no fixed version: an informational advisory. Reach: the published lock of tauri-cli 2.12.1, which is at its latest stable release (a 3.0.0 alpha exists and is not adopted). Ends when tauri-cli republishes or is dropped."
+
+[[IgnoredVulns]]
+id = "RUSTSEC-2023-0071"
+ignoreUntil = 2027-01-01
+reason = "The Marvin attack: potential RSA key recovery through timing sidechannels in rsa 0.9.10. No fixed version exists upstream. Reach: the published lock of tauri-cli 2.12.1, a build tool for the app, at its latest stable release. The exposure is on the app-signing path rather than on a server that answers network requests. Ends when tauri-cli republishes against a fixed rsa, which upstream has not provided, or when the tool is dropped. This is the one entry here whose fix does not exist at all rather than being out of reach."
+
+[[IgnoredVulns]]
+id = "RUSTSEC-2025-0134"
+ignoreUntil = 2027-01-01
+reason = "rustls-pemfile 2.2.0 is unmaintained. No vulnerability and no fixed version: an informational advisory. Reach: the published lock of tauri-cli 2.12.1, at its latest stable release. Ends when tauri-cli republishes or is dropped."
+
+[[IgnoredVulns]]
+id = "RUSTSEC-2026-0206"
+ignoreUntil = 2027-01-01
+reason = "rustybuzz 0.20.1 is unmaintained. No vulnerability and no fixed version: an informational advisory. Reach: the published lock of tauri-cli 2.12.1, at its latest stable release, where it is reached through text shaping. Ends when tauri-cli republishes or is dropped."

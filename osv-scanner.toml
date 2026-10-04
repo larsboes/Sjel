@@ -3,6 +3,12 @@
 # no longer honours under `unused ignores` — which is why Axon stopped carrying a clock of its
 # own on 2026-09-02 (Q74).
 #
+# THIS FILE IS THE REPOSITORY SCAN'S, and CI reads it. That is why the rule above holds here
+# unchanged: `tools/audit`'s second pass — over software installed outside this checkout, where
+# a fix is often unreachable — has its own file, `osv-scanner-installed.toml`, which accepts
+# KNOWN vulnerabilities with their reach and an end date. Widening this file to cover those
+# would have widened CI too (decided 2026-10-04).
+#
 # Neither replacement is tracked in an issue. retired-tracker#182 used to hold both, and what
 # it actually said was "review upstream-supported migration paths" with no consumer, no
 # deadline of its own, and nothing to do until an ecosystem moved. The exposure, the reason

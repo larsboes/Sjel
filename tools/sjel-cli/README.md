@@ -270,6 +270,24 @@ bundled SQLite now, 4.9 MB to 6.9 MB measured on this Mac, so the binary every l
 demand is no longer pure Rust. `libs/sjel-store` and `libs/sjel-config` were both already in the
 workspace lock, so this resolves no new crate.
 
+`osv-scanner-installed.toml` followed on 2026-10-04, and is the second osv-scanner pass's config
+rather than a widening of `osv-scanner.toml`. The two hold opposite policies on purpose: a known
+vulnerability stays blocking for this checkout, and CI reads that file, so accepting one there
+would loosen CI as well. Installed software is a different problem — `cargo install --locked`
+resolves the lock the crate published, a global npm tree is resolved by whoever published the
+package, an exact pin cannot be re-resolved at all, and one package on this machine is on no
+registry — so the second file accepts 22 findings with their reach, their fixed version if one
+exists, and the date the acceptance ends. Its header states the cost that comes with the split:
+the pass runs with `--verbosity error`, so an entry that stops applying is not announced, and the
+header carries the command that lists which still apply.
+
+The same day, 36 findings became 22: reinstalling `@mariozechner/snap-happy` and
+`@modelcontextprotocol/server-github` re-resolved their subtrees (14 findings, including both
+9.8 `simple-git` entries), even though every crate and every top-level npm package involved was
+already at its latest release. Splitting the config then exposed two informational advisories the
+installed pass had been inheriting from the shared file (`paste`, `ttf-parser`), which are
+repeated in the new one so the split did not become a new finding. `tools/audit` exits 0.
+
 ## Porting a script
 
 1. Add `src/<name>.rs` and a match arm in `src/main.rs`.

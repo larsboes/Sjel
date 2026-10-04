@@ -1182,6 +1182,36 @@ claim yet, and the watch rows they name are in `upstreams.toml` with the questio
 
 ## Log
 
+- 2026-10-04 · The audit's installed-software pass accepts its findings with reasons, and the
+  repository gate keeps its own rule. `tools/audit`'s second pass reports software installed
+  outside this checkout, where a fix is frequently out of reach: `cargo install --locked`
+  resolves the Cargo.lock the crate PUBLISHED — which is also why the scan's model of
+  "installed" is accurate — a global npm tree is resolved by whoever published the package, an
+  EXACT pin cannot be re-resolved at all, and one package on this machine is on no registry.
+  Measured first: 36 findings became 22 when two global npm packages were reinstalled and their
+  subtrees re-resolved (`@mariozechner/snap-happy` 12, `@modelcontextprotocol/server-github` 2),
+  even though every crate and every top-level npm package involved was already at its latest
+  release — those 14 came from dependency ranges re-resolving, not from upgrades. The remaining
+  22 are accepted in a NEW file, `osv-scanner-installed.toml`, read by that pass alone. The
+  fix is in the split, not in a wider policy: `osv-scanner.toml` keeps "known vulnerabilities
+  remain blocking", and CI reads it, so accepting one there would have loosened CI too. Each
+  entry names the reach, the fixed version when one exists, and what ends it — four classes:
+  inside `npm@12.2.0`'s own dependency tree (11 findings; only a newer npm moves them, and
+  `http-cache-semantics` has no fixed version at all), the published locks of crates already at
+  their latest (lru via bottom and macmon, rustls via cargo-deny, and tauri-cli's difference,
+  rsa, rustls-pemfile and rustybuzz), and three `simple-git` RCEs (9.8, 9.8, 8.1) inside a
+  private package whose declared range `^3.28.0` already allows the fix — those carry the
+  shortest date in the file, because rebuilding that package is the one class a person can close
+  today. The cost is stated in the new file's header rather than hidden: the pass runs with
+  `--verbosity error`, so an entry that stops applying is NOT announced, and the header carries
+  the by-hand command that lists which still apply. Splitting the config exposed two
+  informational advisories the installed pass had been inheriting from the shared file (`paste`,
+  `ttf-parser`); they are repeated in the new one so the split did not itself become a finding.
+  `tools/audit` exits 0 on this machine now, which is the point: an audit that always fails is
+  an audit nobody reads. Two things measured while doing it and left open: `sjel update` cannot
+  move this class — every global npm package reports current while 15 findings sat in their
+  subtrees, so the audit's own advice named no command that reaches them — and `xberg-cli`
+  (1.3.0 -> 1.3.3) and `pnpm` (12.8.1 -> 12.9.1) are stale rows the tool owns and can move.
 - 2026-10-04 · `tools/host-watch` is Rust, and the hourly job stops starting an interpreter. It
   was the last `bun run` job whose readers are already Rust: `sjel-status` serves its rows at
   `/api/sjel-status/host-watch` and the dashboard ranks them at band 900, while `tools/storage

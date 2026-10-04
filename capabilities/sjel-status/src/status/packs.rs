@@ -8,7 +8,7 @@ use super::*;
 /// cannot serve them and something that is always up has to. That is this process, for
 /// the same reason it publishes `host-watch`'s findings and `backup.sh`'s receipts — both
 /// written by things with no port. Ownership does not move with the surface: `packs` owns
-/// the ledgers, `tools/lib/pack-deploy.ts` owns their format, and this reads and never
+/// the ledgers, `tools/sjel-cli/src/harnesses/` owns their format, and this reads and never
 /// writes.
 ///
 /// ## Why it shells out

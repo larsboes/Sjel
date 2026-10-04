@@ -60,7 +60,7 @@ export interface DemoManifest {
 }
 
 export function loadManifest(path = join(SJEL_ROOT, "demo/demo.toml")): DemoManifest {
-  // Bun.TOML under the same documented exception tools/self.ts takes: tools/lib/toml.sh's
+  // Bun.TOML under the same documented exception tools/self takes: tools/lib/toml.sh's
   // single-line grep contract cannot express arrays of tables, and this manifest is one.
   const raw = Bun.TOML.parse(readFileSync(path, "utf8")) as Record<string, any>;
   const demo = raw.demo ?? {};

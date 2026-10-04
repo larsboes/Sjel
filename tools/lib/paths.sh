@@ -89,7 +89,7 @@ unset _machine_name _host
 # Capability manifests resolve from two roots. Public Axon holds reusable capabilities;
 # the active overlay holds deployment-specific ones, which is what keeps private services
 # out of a repository meant for publication. Overlay capabilities are runtime-visible
-# only: generators that write tracked artifacts (tools/self.ts, generate-architecture.sh)
+# only: generators that write tracked artifacts (tools/self, generate-architecture.sh)
 # deliberately scan SJEL_CAPS_DIR alone, because a capability name is itself a fact about
 # a private deployment.
 SJEL_CAPS_DIR="$SJEL_ROOT/capabilities"

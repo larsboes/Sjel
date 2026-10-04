@@ -1,6 +1,6 @@
 //! The two SKILL.md frontmatter keys the Pack engine reads, without a YAML crate.
 //!
-//! tools/lib/pack-deploy.ts parses frontmatter with `Bun.YAML.parse` and then reads
+//! tools/lib/pack-deploy.ts parsed frontmatter with `Bun.YAML.parse` and then read
 //! exactly two keys: `name`, which must equal the unit key, and `description`, which must be
 //! a non-empty string of at most 1024 characters. Everything else in the block is ignored.
 //! That is the whole contract, so this reads the block directly instead of pulling a YAML

@@ -7,7 +7,7 @@
 
 use std::fs;
 use std::path::{Path, PathBuf};
-use std::process::{Command, ExitCode, Stdio};
+use std::process::ExitCode;
 
 use crate::capability;
 use crate::help::USAGE;
@@ -65,14 +65,12 @@ pub fn run(root: &Path, words: &[String]) -> ExitCode {
 }
 
 fn packs(root: &Path) -> String {
-    Command::new("bun")
-        .arg("run")
-        .arg(root.join("tools/packs-opencode.ts"))
-        .arg("list")
-        .stderr(Stdio::inherit())
-        .output()
-        .map(|o| String::from_utf8_lossy(&o.stdout).into_owned())
-        .unwrap_or_default()
+    // In-process, and through the same reader the adapters use: this was `bun run
+    // tools/packs-opencode.ts list` until the adapters moved into this binary.
+    match crate::packs::all_packs(root) {
+        Ok(packs) => packs.into_iter().map(|pack| format!("{pack}\n")).collect(),
+        Err(_) => String::new(),
+    }
 }
 
 // ---- tools ----------------------------------------------------------------------------------

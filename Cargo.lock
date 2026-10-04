@@ -4606,7 +4606,11 @@ dependencies = [
 name = "sjel-mcp"
 version = "0.1.0"
 dependencies = [
+ "percent-encoding",
+ "reqwest",
+ "serde",
  "serde_json",
+ "sjel-http",
 ]
 
 [[package]]

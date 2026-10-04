@@ -570,7 +570,8 @@ last layer over the routes and adds no data path of its own.
   `MCP_TOOL_TIMEOUT` defaults to 100000000 ms, about 28 hours, so writing 180000 would have cut a
   28-hour budget to three minutes. Codex is reported and not touched: ~/.codex exists on this
   machine and no `codex` binary does, so a writer for it could not be verified even once, and
-  tools/lib/harness-registry.ts states the rule that a row moves in only on a verified format.
+  tools/sjel-cli/src/harnesses/registry.rs states the rule that a row moves in only on a verified
+  format.
   Superseded the same day, and recorded because it was acted on before it was: this note first
   described a narrower fix — pinning the server into the managed policy's `allowedMcpServers` as
   `{"serverCommand": ["${HOME}/.local/bin/sjel", "mcp"]}`, staged and awaiting a root deploy. The
@@ -581,6 +582,16 @@ last layer over the routes and adds no data path of its own.
   `allowManagedMcpServersOnly: true` makes user-scope servers "ignored", against
   `/docs/en/managed-mcp`'s "Approved catalog" pattern saying the allowlist filters them — is moot
   with the key gone, and is recorded only because it was never settled by measurement.
+  Progress 2026-10-04: the server is Rust. `tools/sjel-mcp.ts` and its test are deleted, and
+  `src/server.rs` (the JSON-RPC loop, the gate-backed tool list, the approval polling) and
+  `src/tools.rs` (mode to tool list, name and URL) hold both halves of the row in the `sjel-mcp`
+  crate. Held by 20 `cargo test -p sjel-mcp` cases, the tool-list cases the TypeScript test had
+  among them. Compared against the TypeScript before deletion on this machine across one request
+  stream — `initialize`, `tools/list`, `ping`, a notification, an unknown method, a malformed
+  line, a live `tools/call` and an unknown name — byte-identical reply for reply except the tool
+  order, the sorted JSON object keys and the pseudonym tokens, all three named in
+  `tools/sjel-mcp/README.md`. The live list was the same 92 tools as the TypeScript's, for the
+  same gates.
 
 Decided 2026-10-01, see F10: the write grant is a per-capability mode, and each agent call is
 logged.
@@ -983,8 +994,8 @@ this deployment paid the last time it was broken.
   replacing it must earn its maintenance cost rather than follow from the language choice.
   Today `capabilities/assistant/src/main.rs` sends a system and user message to a local model
   and reads text back; it has no tool-calling conversation loop. Discovery, capability policy,
-  approvals and pseudonymization already exist (F8–F10). `tools/sjel-mcp.ts` owns MCP dispatch;
-  the Rust `tools/sjel-mcp` crate owns registration and verification, not that dispatch.
+  approvals and pseudonymization already exist (F8–F10). MCP dispatch and its registration are
+  both in the Rust `tools/sjel-mcp` crate since 2026-10-04; there is no TypeScript in the MCP path.
 
   Candidate design to evaluate: one headless engine for model exchanges, tool calls, bounded
   context and session events, with separate household and coding tool profiles. Household
@@ -1171,6 +1182,71 @@ claim yet, and the watch rows they name are in `upstreams.toml` with the questio
 
 ## Log
 
+- 2026-10-04 · `tools/self` is Rust, and `tools/self.ts` with `tools/lib/self-model.ts` is deleted.
+  It moved for a measured reason: `tools/doctor` runs `tools/self check` on every invocation, so a
+  bun start-up sat inside a Rust tool's path, and agents run `self explain` and `self coupling` at
+  orientation. `src/self_model/mod.rs` holds the verb surface and all I/O; `src/self_model/model.rs`
+  holds the pure half — the five-way path classification, the graph rollup, and the `#[path]` and
+  Cargo-path coupling readers — with the cases `tools/self.test.ts` held as Rust unit tests.
+  `tools/self.test.sh` stays and now drives the launcher. Verified against the TypeScript on this
+  checkout: `generate` produced a byte-identical artifact except one deliberate line, and
+  `status`, `status --json`, `explain` (text and `--json`, known and unknown unit), `coupling`
+  (text and `--json`), `check` on a current artifact and on a stale one including the `diff -u`
+  rendering, and `-h` were identical in stdout, stderr and exit code. Three differences are
+  deliberate and named in `tools/sjel-cli/README.md`: the artifact's `generator` reads `tools/self`
+  where it read `tools/self.ts` (self.json was regenerated in the same change, and that one line is
+  the whole artifact diff), the help and status header now say `Sjel's self-model` where the
+  TypeScript still said `Axon's` (the repository-wide rename, ISA F3), and the rollup no longer
+  builds the `node id -> unit` map nothing read.
+- 2026-10-04 · The four `packs-*` adapters are Rust, and with them `tools/lib/pack-deploy.ts`,
+  `tools/lib/harness-registry.ts` and `tools/pack-drift-hook.ts` are deleted. This is the port the
+  earlier ones were building toward: `tools/harnesses` had moved `pack-deploy.ts`'s mutation half
+  into `src/harnesses/mutate.rs` on 2026-10-04, so the four adapters were the only thing keeping
+  1,320 lines of TypeScript alive as a second implementation of one ledger — the duplication the
+  crate exists to remove. `src/packs.rs` is their verb surface, four dispatchers over the engine
+  rather than a flag table, because the four CLIs differ in load-bearing ways: claude heads a
+  multi-pack write with the Pack name and codex does not, codex alone can `migrate-generated`, and
+  pi is a settings registry rather than a copy. New engine code is only what those verbs needed:
+  `migrate_generated_artifacts` (the one `pack-deploy.ts` function with no Rust half) and
+  `profile_active_packs`, plus pi's settings-ledger `status`/`deploy`/`remove` in
+  `pi_settings.rs`. The three non-adapter readers moved in the same change so that no ledger has
+  two readers: the drift hook became `src/pack_hook.rs` and runs in-process on every session start
+  and file change, `harness-registry.ts` was deleted with its last consumer keeping pi's marker
+  inline, and `tools/generate-marketplace.ts` reads a new `sjel packs list` verb — as does
+  `sjel search`, which used to shell `packs-opencode list` through bun. Verified against the
+  TypeScript on two identical scratch roots before deletion: 114 comparisons across every verb of
+  all four adapters, `-h` and unknown-verb paths, and `migrate-generated` in its refusal, positive
+  and already-migrated paths, all identical in stdout, stderr and exit code after normalizing the
+  scratch path. The deployed trees were identical except one file and the ledgers semantically
+  identical except the digests it moves. Three differences are deliberate and named in
+  `tools/sjel-cli/README.md`: the pi agent file's provenance comment now reads `Generated by Sjel
+  tools/sjel-cli`, JSON object keys are sorted, and the migration's messages follow sorted ledger
+  keys. `sjel pack <verb> <harness>` reaches the same four launchers it always did, and
+  `tools/packs.sh` is still the one bash shim mapping `link`/`unlink` onto them.
+- 2026-10-04 · Sjel's MCP server is Rust. `tools/sjel-mcp.ts` and its test are deleted, and the
+  `sjel-mcp` crate now holds both halves of ISC-40: `src/server.rs` is the stdio JSON-RPC loop,
+  the gate-backed tool list and the approval polling, and `src/tools.rs` is the pure half that
+  decides which tools a capability offers under the owner's mode, what an MCP-legal tool name is
+  and what URL a call becomes. The crate's own README had recorded this move as pending — "the
+  server migrates into this crate when it is next touched" — and it moved for two reasons: an
+  agent talks to this process for a whole session, so bun was in the runtime rather than only the
+  build, and the registration half beside it already spawned the server and spoke MCP to it. It
+  reuses one new thing and no new code: `libs/sjel-http`'s blocking client supplies the timeout and
+  user-agent, `tools/capability-auth --agent` supplies the token, and `tools/capability.sh
+  registry` supplies the ports — the same launcher the other tools call. One thread per request,
+  as the TypeScript's un-awaited `handle()` was, and the read loop joins them, so a `tools/list`
+  whose stdin has already closed still answers. Verified against the TypeScript before deletion on
+  this machine, one request stream through both — `initialize`, `tools/list`, `ping`, a
+  notification, an unknown method, a malformed line, a live `tools/call` and an unknown name —
+  with the same 92 tools and every reply byte-identical after normalizing the pseudonym tokens.
+  The tokens differed between the runs and are meant to: `X-Sjel-Agent-Session` is one random id
+  per process, so the same value returns the same token inside a conversation and a different one
+  across processes. Three differences are deliberate and named in `tools/sjel-mcp/README.md`: the
+  tool list is ordered by capability where the TypeScript took `readdir` order, JSON object keys
+  are sorted where the TypeScript wrote insertion order, and a `202` with no approval id answers
+  with its body where the TypeScript read the body twice and threw. Held by 20 cases in
+  `cargo test -p sjel-mcp`, and `sjel mcp`, `sjel mcp register` and `sjel mcp unregister` all exec
+  the one binary now.
 - 2026-10-04 · The browser session is a shared identity in the inbound gate, and the soundscape
   panel works. It was a table in the shared store that only the shell could read, so a capability
   serving its own panel — whose browser loads `:8088` directly and carries no token — answered

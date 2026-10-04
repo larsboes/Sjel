@@ -1,6 +1,7 @@
 //! Which agent harnesses exist, how to tell whether one is installed, and the DeployConfig
-//! that drives each — the Rust half of tools/lib/harness-registry.ts plus the four
-//! `default*DeployConfig` factories in tools/packs-*.ts.
+//! that drives each — the whole of `tools/lib/harness-registry.ts` plus the four
+//! `default*DeployConfig` factories from `tools/packs-*.ts`, both deleted 2026-10-04 when the
+//! adapters moved into `src/packs.rs`.
 //!
 //! Nothing derives a location twice. The overlay comes from `doctor::overlay`, the crate's one
 //! resolver (it is also the one that reports its source, which the doctor prints); the state

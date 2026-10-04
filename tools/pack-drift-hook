@@ -1,5 +1,20 @@
-#!/usr/bin/env bash
-# Thin launcher: the Pack-drift session hook is implemented in pack-drift-hook.ts
-# because it compares tree digests and prints JSON-shaped output.
-_here="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-exec bun run "$_here/pack-drift-hook.ts" "$@"
+#!/bin/bash
+# tools/pack-drift-hook — the Claude Code session hook that reports Pack drift.
+#
+# Launcher only. The hook moved to tools/sjel-cli/src/pack_hook.rs on 2026-10-04, so it runs on
+# every session start and every file change without a bun start-up in the path.
+# tools/pack-drift-hook.ts is deleted.
+#
+# SJEL_ROOT is set here and tools/lib/paths.sh is NOT sourced, for the reason tools/harnesses'
+# launcher gives: paths.sh treats an exported SJEL_OVERLAY_ROOT as a per-invocation override
+# that skips axon.local.toml's `machine =` line. The Rust side resolves the overlay itself.
+# bash 3.2-safe (CONTRIBUTING.md#portable-shell).
+set -u
+
+SJEL_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]:-$0}")/.." && pwd)"
+export SJEL_ROOT
+# shellcheck source=tools/lib/toml.sh
+. "$SJEL_ROOT/tools/lib/toml.sh"       # toml_get_in, for the missing-cargo install hint
+# shellcheck source=tools/lib/sjel-cli.sh
+. "$SJEL_ROOT/tools/lib/sjel-cli.sh"
+sjel_cli_exec pack-drift-hook "$@"

@@ -1,4 +1,5 @@
-//! The write half of `tools/lib/pack-deploy.ts`, ported 2026-10-04.
+//! The write half of `tools/lib/pack-deploy.ts`, ported 2026-10-04. That file is deleted:
+//! this and `engine.rs` are now the only implementation of the ledger's format and mutations.
 //!
 //! `sync`, `promote`, `accept`, `use` and `deployPack`/`removePack` all go through here. The
 //! engine copies a unit into a staging directory outside the harness's discovery root,
@@ -709,6 +710,161 @@ pub fn remove_pack(config: &DeployConfig, pack: &str) -> Result<Vec<String>, Str
     })
 }
 
+/// The digest-policy migration `tools/packs-codex migrate-generated` runs: remove the generated
+/// artifacts a legacy deployment copied in, then re-record the destination under the current
+/// policy. `--accept-current` is required because reading the destination before trusting it is
+/// the whole point of the verb.
+pub fn migrate_generated_artifacts(
+    config: &DeployConfig,
+    pack: &str,
+    accept_current: bool,
+) -> Result<Vec<String>, String> {
+    if !accept_current {
+        return Err(
+            "migration requires --accept-current after reviewing non-generated destination files"
+                .to_owned(),
+        );
+    }
+    with_state_lock(config, || {
+        let mut state = read_state(config)?;
+        if !state.packs.contains_key(pack) {
+            return Err(format!("{pack}: not deployed"));
+        }
+
+        // Every plan is built before the first file is removed, so a destination that has gone
+        // missing stops the migration instead of half-performing it.
+        let keys: Vec<String> = state.packs[pack].skills.keys().cloned().collect();
+        let mut plans: Vec<(String, GeneratedArtifacts)> = Vec::new();
+        for unit_key in keys {
+            let legacy =
+                state.packs[pack].skills[&unit_key].digest_policy.as_deref() != Some(DIGEST_POLICY);
+            if !legacy {
+                continue;
+            }
+            let destination = recorded_destination(config, pack, &unit_key);
+            if !destination.exists() {
+                return Err(format!("{unit_key}: owned destination is missing"));
+            }
+            plans.push((
+                unit_key.clone(),
+                known_generated_artifacts(&destination, &format!("{pack}/{unit_key}"))?,
+            ));
+        }
+
+        let mut messages = Vec::new();
+        for (unit_key, artifacts) in plans {
+            let destination = recorded_destination(config, pack, &unit_key);
+            for file in &artifacts.files {
+                let _ = fs::remove_file(file);
+            }
+            // Deepest first, so a cache directory that held only a cache is empty when its turn
+            // comes; one that holds anything else is left alone.
+            let mut directories = artifacts.directories.clone();
+            directories.sort_by_key(|dir| std::cmp::Reverse(dir.as_os_str().len()));
+            for directory in directories {
+                let empty = fs::read_dir(&directory)
+                    .map(|mut entries| entries.next().is_none())
+                    .unwrap_or(false);
+                if empty {
+                    let _ = fs::remove_dir(&directory);
+                }
+            }
+            let installed = digest_destination(config, &destination)?;
+            let record = state
+                .packs
+                .get_mut(pack)
+                .and_then(|p| p.skills.get_mut(&unit_key))
+                .ok_or_else(|| format!("{unit_key}: ledger row disappeared"))?;
+            record.installed_digest = installed;
+            record.digest_policy = Some(DIGEST_POLICY.to_owned());
+            messages.push(format!(
+                "✓ {unit_key} migrated ({} generated artifact(s) removed)",
+                artifacts.files.len()
+            ));
+        }
+        write_state(config, &state)?;
+        if messages.is_empty() {
+            messages.push(format!("= {pack} (digest policy already current)"));
+        }
+        Ok(messages)
+    })
+}
+
+/// What the migration removes, and the directories it may then find empty.
+struct GeneratedArtifacts {
+    files: Vec<PathBuf>,
+    directories: Vec<PathBuf>,
+}
+
+/// Walk a destination for the artifacts a legacy deployment copied in: anything under
+/// `__pycache__`, any `.py[cod]` file, and `.DS_Store` beside a cache.
+///
+/// Directory entries are read in name order where pack-deploy.ts took `readdirSync` order, so
+/// the message list is the same on every machine; the set removed is identical either way.
+fn known_generated_artifacts(root: &Path, label: &str) -> Result<GeneratedArtifacts, String> {
+    let mut found = GeneratedArtifacts {
+        files: Vec::new(),
+        directories: Vec::new(),
+    };
+    visit_generated(root, root, label, false, &mut found)?;
+    Ok(found)
+}
+
+fn visit_generated(
+    root: &Path,
+    dir: &Path,
+    label: &str,
+    inside_cache: bool,
+    found: &mut GeneratedArtifacts,
+) -> Result<(), String> {
+    let mut entries: Vec<PathBuf> = fs::read_dir(dir)
+        .map_err(|e| format!("{}: {e}", dir.display()))?
+        .filter_map(Result::ok)
+        .map(|entry| entry.path())
+        .collect();
+    entries.sort();
+    for path in entries {
+        let name = path
+            .file_name()
+            .map(|n| n.to_string_lossy().into_owned())
+            .unwrap_or_default();
+        let rel = path
+            .strip_prefix(root)
+            .map(|r| r.to_string_lossy().into_owned())
+            .unwrap_or_default();
+        let in_cache = inside_cache || name == "__pycache__";
+        let generated_file = engine::is_generated_artifact_name(&name);
+        let meta = fs::symlink_metadata(&path).map_err(|e| format!("{}: {e}", path.display()))?;
+        if in_cache {
+            if meta.file_type().is_symlink() {
+                return Err(format!(
+                    "{label}: generated-artifact migration refuses symlink {rel}"
+                ));
+            }
+            if meta.is_dir() {
+                found.directories.push(path.clone());
+                visit_generated(root, &path, label, true, found)?;
+            } else if meta.is_file() && (generated_file || name == ".DS_Store") {
+                found.files.push(path);
+            } else {
+                return Err(format!(
+                    "{label}: unknown content inside __pycache__: {rel}"
+                ));
+            }
+        } else if generated_file {
+            if !meta.is_file() {
+                return Err(format!(
+                    "{label}: generated-artifact migration refuses non-file {rel}"
+                ));
+            }
+            found.files.push(path);
+        } else if meta.is_dir() && !meta.file_type().is_symlink() {
+            visit_generated(root, &path, label, false, found)?;
+        }
+    }
+    Ok(())
+}
+
 // ---- profiles ------------------------------------------------------------------------------
 
 #[derive(Debug, Clone, Deserialize)]
@@ -903,6 +1059,24 @@ pub fn activate_profile(config: &DeployConfig, profile: &Profile) -> Result<Vec<
     })
 }
 
+/// Which of a profile's Packs are deployed right now — the `[active]` marker in the interactive
+/// picker `tools/packs-codex use` shows.
+pub fn profile_active_packs(
+    config: &DeployConfig,
+    profile: &Profile,
+) -> Result<Vec<String>, String> {
+    let target: BTreeSet<String> = resolve_profile_packs(config, profile)?
+        .into_iter()
+        .collect();
+    let state = read_state(config)?;
+    Ok(state
+        .packs
+        .keys()
+        .filter(|pack| target.contains(*pack))
+        .cloned()
+        .collect())
+}
+
 // ---- pure helpers from tools/harnesses.ts --------------------------------------------------
 
 /// Which packs `sync` should touch, given what the harness already knows about. `--all` is a
@@ -1010,5 +1184,85 @@ mod tests {
         );
         assert!(sync_targets(None, true, &[]).is_empty());
         assert!(sync_targets(None, false, &known).is_empty());
+    }
+
+    /// A migration removes the generated artifacts a legacy deployment copied in and re-records
+    /// the destination under the current policy; a second run has nothing left to do.
+    #[test]
+    fn a_legacy_deployment_migrates_once_and_then_says_so() {
+        let root =
+            std::env::temp_dir().join(format!("sjel-harnesses-migrate-{}", std::process::id()));
+        let _ = fs::remove_dir_all(&root);
+        let pack = root.join("repo/Packs/demo");
+        fs::create_dir_all(pack.join("skills/alpha")).unwrap();
+        fs::write(
+            pack.join("pack.toml"),
+            "name = \"demo\"\ndescription = \"test\"\nskills = [\"alpha\"]\n",
+        )
+        .unwrap();
+        fs::write(
+            pack.join("skills/alpha/SKILL.md"),
+            "---\nname: alpha\ndescription: does a thing\n---\n\nbody\n",
+        )
+        .unwrap();
+        let config = DeployConfig {
+            axon_root: root.join("repo"),
+            pack_roots: None,
+            destination: root.join("dest"),
+            state_file: root.join("state.json"),
+            adapter: "test".to_owned(),
+            state_env_var: None,
+            tree_convention: None,
+            flat_file_convention: None,
+            skip_manifest_skills: false,
+            validate_adapter_files: None,
+        };
+        deploy_pack(&config, "demo", None).unwrap();
+
+        // A legacy deployment: generated artifacts in the destination and no policy on the row.
+        let installed = config.destination.join("alpha");
+        fs::create_dir_all(installed.join("__pycache__")).unwrap();
+        fs::write(installed.join("__pycache__/mod.cpython-311.pyc"), "x").unwrap();
+        fs::write(installed.join("__pycache__/.DS_Store"), "x").unwrap();
+        fs::write(installed.join("stray.pyc"), "x").unwrap();
+        let mut state = read_state(&config).unwrap();
+        state
+            .packs
+            .get_mut("demo")
+            .unwrap()
+            .skills
+            .get_mut("alpha")
+            .unwrap()
+            .digest_policy = None;
+        write_state(&config, &state).unwrap();
+
+        assert!(migrate_generated_artifacts(&config, "demo", false).is_err());
+        let messages = migrate_generated_artifacts(&config, "demo", true).unwrap();
+        assert_eq!(messages.len(), 1);
+        assert!(
+            messages[0].contains("3 generated artifact(s) removed"),
+            "{messages:?}"
+        );
+        assert!(!installed.join("__pycache__").exists());
+        assert!(!installed.join("stray.pyc").exists());
+        assert!(
+            installed.join("SKILL.md").exists(),
+            "the skill itself stays"
+        );
+
+        let state = read_state(&config).unwrap();
+        let record = &state.packs["demo"].skills["alpha"];
+        assert_eq!(record.digest_policy.as_deref(), Some(DIGEST_POLICY));
+        assert_eq!(
+            record.installed_digest,
+            digest_destination(&config, &installed).unwrap()
+        );
+
+        let again = migrate_generated_artifacts(&config, "demo", true).unwrap();
+        assert_eq!(
+            again,
+            vec!["= demo (digest policy already current)".to_string()]
+        );
+        let _ = fs::remove_dir_all(&root);
     }
 }

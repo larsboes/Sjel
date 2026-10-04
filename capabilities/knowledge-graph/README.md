@@ -16,7 +16,7 @@ REST API over the Sjel code-dependency graph built by
 
 `/api/graph/unit/<name>` is the drill-down the dashboard uses. It maps a unit name
 onto the repo-relative prefixes that unit owns — the same mapping
-`tools/lib/self-model.ts` uses to name units in the first place, so the two cannot
+`tools/sjel-cli/src/self_model/model.rs` uses to name units in the first place, so the two cannot
 disagree about what `comms` means — then returns its nodes ranked by degree. The
 answer is capped and says so: `total`, `returned` and `truncated` are part of the
 body, because a capped answer that looked complete would read as the whole unit.

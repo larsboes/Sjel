@@ -1,7 +1,7 @@
 //! `tools/capability.sh` — which capabilities are enabled on this machine, and the registry.
 //!
 //! Ported from bash on 2026-10-02; the script path stays as the launcher, so every caller
-//! (service-runner.sh, sjel-status, dashboard/vite.config.ts, doctor, self.ts) is unchanged.
+//! (service-runner.sh, sjel-status, dashboard/vite.config.ts, doctor, self) is unchanged.
 //!
 //! The `capabilities = [...]` line in <overlay>/config/machine.toml is the single source of
 //! truth for the enabled set, and this is the one tool that writes it. `requires`
@@ -353,7 +353,7 @@ impl<'a> Ctx<'a> {
             let Manifest::Found(mf) = self.paths.manifest(&n) else {
                 continue;
             };
-            // scope names the root, so consumers do not re-derive it from a path. tools/self.ts
+            // scope names the root, so consumers do not re-derive it from a path. `tools/self`
             // uses it to keep overlay capabilities out of the tracked, public self.json.
             let scope = match &self.paths.overlay_caps_dir {
                 Some(o) if mf.starts_with(o) => "overlay-capability",

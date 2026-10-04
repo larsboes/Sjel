@@ -56,7 +56,7 @@ It exists because no adapter ever asked whether its harness was installed. On 20
 machine had three Packs materialized into `~/.agents/skills` for a Codex that is not installed,
 while pi — installed, and one of the three harnesses actually in use — carried one Pack of
 fourteen and had no row in `tools/doctor`. Deployment tracked adapters that exist rather than
-harnesses that are installed. `tools/lib/harness-registry.ts` is now the one place that knows the
+harnesses that are installed. `tools/sjel-cli/src/harnesses/registry.rs` is now the one place that knows the
 difference, and it also names what is NOT supported (Antigravity: no adapter, no verified skill
 format, nothing installed to measure against) so a report can say so instead of omitting it.
 
@@ -66,9 +66,9 @@ Two Claude Code hooks call `tools/pack-drift-hook` and report without ever block
 // ~/.claude/settings.json
 "hooks": {
   "SessionStart": [{ "matcher": "startup",
-    "hooks": [{ "type": "command", "command": "<bun> <axon>/tools/pack-drift-hook.ts", "timeout": 15 }] }],
+    "hooks": [{ "type": "command", "command": "<axon>/tools/pack-drift-hook", "timeout": 15 }] }],
   "FileChanged":  [{ "matcher": "SKILL.md",
-    "hooks": [{ "type": "command", "command": "<bun> <axon>/tools/pack-drift-hook.ts", "timeout": 15 }] }]
+    "hooks": [{ "type": "command", "command": "<axon>/tools/pack-drift-hook", "timeout": 15 }] }]
 }
 ```
 

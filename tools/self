@@ -1,7 +1,21 @@
-#!/usr/bin/env bash
-# Thin launcher: self-model logic lives in self.ts. TypeScript runs through bun
-# (CONTRIBUTING.md#language-tooling) — this parses upstreams.toml via Bun.TOML and does set arithmetic
-# over a multi-thousand-node graph, neither of which tools/lib/toml.sh can express.
-# Mirrors the tools/doctor and printctl launcher pattern.
-_here="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-exec bun run "$_here/self.ts" "$@"
+#!/bin/bash
+# tools/self — Sjel's self-model: structure, coupling, provenance, code size.
+#
+# Launcher only. The model moved to tools/sjel-cli/src/self_model/ on 2026-10-04 (pure half in
+# model.rs, I/O in mod.rs); tools/self.ts and tools/lib/self-model.ts are deleted. `tools/self -h`
+# prints the usage.
+#
+# SJEL_ROOT is set here and tools/lib/paths.sh is NOT sourced, for the reason tools/harnesses'
+# launcher gives: paths.sh treats an exported SJEL_OVERLAY_ROOT as a per-invocation override that
+# skips axon.local.toml's `machine =` line. This tool reads no overlay at all — that is the point
+# of the model — so the launcher resolves nothing for it.
+# bash 3.2-safe (CONTRIBUTING.md#portable-shell).
+set -u
+
+SJEL_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]:-$0}")/.." && pwd)"
+export SJEL_ROOT
+# shellcheck source=tools/lib/toml.sh
+. "$SJEL_ROOT/tools/lib/toml.sh"       # toml_get_in, for the missing-cargo install hint
+# shellcheck source=tools/lib/sjel-cli.sh
+. "$SJEL_ROOT/tools/lib/sjel-cli.sh"
+sjel_cli_exec self "$@"

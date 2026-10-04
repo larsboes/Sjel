@@ -15,28 +15,34 @@
 // committed public artifact, and an overlay Pack is private
 // (CONTRIBUTING.md#harness-neutral-packs). A pack whose manifest names a `deployer` is
 // owned by that tool alone and is skipped here too, matching every other generic
-// adapter (tools/lib/pack-deploy.ts).
+// adapter (tools/sjel-cli/src/harnesses/).
 //
 // Usage: tools/generate-marketplace.ts
 // Env: MARKETPLACE_OUT_ROOT — write under this root instead of the repo (the
 //   freshness check uses it to generate into a scratch dir and diff).
 
+import { spawnSync } from "node:child_process";
 import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join, resolve } from "node:path";
-import { availablePacks, type DeployConfig } from "./lib/pack-deploy.ts";
 
 const SJEL_ROOT = resolve(import.meta.dir, "..");
 const OUT_ROOT = resolve(process.env.MARKETPLACE_OUT_ROOT ?? SJEL_ROOT);
 
-// destination/stateFile are unused: this script only reads manifests, it never
-// deploys, so it needs no install target or ownership ledger.
-const config: DeployConfig = {
-  axonRoot: SJEL_ROOT,
-  packRoots: [join(SJEL_ROOT, "Packs")],
-  destination: "",
-  stateFile: "",
-  adapter: "marketplace",
-};
+/**
+ * The public Packs, from the one reader of that question.
+ *
+ * It was `availablePacks(config)` out of tools/lib/pack-deploy.ts, which the four `packs-*`
+ * adapters shared. That engine is Rust now (`tools/sjel-cli/src/harnesses/`), so the list comes
+ * from the same binary the adapters run rather than a second directory walk that could disagree
+ * about which Packs exist.
+ */
+function publicPacks(): string[] {
+  const result = spawnSync(join(SJEL_ROOT, "sjel"), ["packs", "list"], { encoding: "utf8" });
+  if (result.status !== 0) {
+    throw new Error(`sjel packs list failed: ${result.stderr?.trim() || `exit ${result.status}`}`);
+  }
+  return result.stdout.split("\n").map((line) => line.trim()).filter(Boolean);
+}
 
 // LICENSE's copyright line is the one tracked owner fact; every plugin.json's
 // author and the marketplace's owner point at it rather than inventing a
@@ -64,7 +70,7 @@ function writeJson(path: string, value: unknown): void {
 }
 
 function main(): void {
-  const packs = availablePacks(config).sort();
+  const packs = publicPacks().sort();
   if (packs.length === 0) throw new Error("no Packs found under Packs/ — nothing to generate");
 
   for (const pack of packs) {

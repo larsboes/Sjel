@@ -19,6 +19,8 @@ mod capability;
 mod doctor;
 mod harnesses;
 mod help;
+mod pack_hook;
+mod packs;
 mod paths;
 mod persist;
 mod registry;
@@ -26,6 +28,7 @@ mod runargs;
 mod runner;
 mod schedule;
 mod search;
+mod self_model;
 mod time;
 mod toolchain;
 mod updates;
@@ -64,6 +67,11 @@ fn main() -> ExitCode {
         "capability.sh" => return registry::run(rest),
         "service-runner.sh" => return runner::run(rest),
         "harnesses" => return harnesses::run(rest),
+        "packs-claude" | "packs-codex" | "packs-opencode" | "packs-pi" => {
+            return packs::run(command, rest)
+        }
+        "pack-drift-hook" => return pack_hook::run(),
+        "self" => return self_model::run(rest),
         "updates" => return updates::run(rest),
         _ => {}
     }
@@ -90,19 +98,9 @@ fn sjel(root: &Path, command: &str, rest: &[String]) -> ExitCode {
         "search" => search::run(root, rest),
         // In-process since 2026-10-02: tools/doctor is a launcher for this same entry point.
         "doctor" => doctor::run(rest),
-        // stdio MCP server (ISA ISC-40), and its registration with each harness. The server is
-        // still tools/sjel-mcp.ts; the registration half is Rust.
-        "mcp" => match rest.first().map(String::as_str) {
-            Some("register" | "unregister") => {
-                exec(Command::new(tool("tools/sjel-mcp/sjel-mcp")).args(rest))
-            }
-            _ => exec(
-                Command::new("bun")
-                    .arg("run")
-                    .arg(tool("tools/sjel-mcp.ts"))
-                    .args(rest),
-            ),
-        },
+        // stdio MCP server (ISA ISC-40), and its registration with each harness. Both halves are
+        // the sjel-mcp crate: tools/sjel-mcp.ts was the server until 2026-10-04.
+        "mcp" => exec(Command::new(tool("tools/sjel-mcp/sjel-mcp")).args(rest)),
         // This device's user-level Claude Code settings (ISA ISC-45).
         "claude" => {
             exec(Command::new(tool("tools/claude-code-config/claude-code-config")).args(rest))
@@ -133,6 +131,9 @@ fn sjel(root: &Path, command: &str, rest: &[String]) -> ExitCode {
             _ => fail("usage: sjel agent enroll"),
         },
         "pack" => pack(root, rest),
+        // The public Pack list the marketplace generator reads. No tools/ launcher: its only
+        // caller is a generator inside this repository.
+        "packs" => packs::list_public(root, rest),
         other => {
             eprintln!("sjel: unknown command '{other}'");
             eprintln!("Run 'sjel help'.");
@@ -161,34 +162,27 @@ fn help(topic: &str) -> ExitCode {
     ExitCode::SUCCESS
 }
 
-/// Harness adapters. claude, opencode and pi run under bun; codex has its own launcher.
+/// Harness adapters. All four are ported tools/ launchers now, so each keeps its own name and
+/// resolves its own destination; this only picks which one a `sjel pack` verb reaches.
 fn pack(root: &Path, args: &[String]) -> ExitCode {
     let command = args.first().map_or("", String::as_str);
     let harness = args.get(1).map_or("", String::as_str);
     let rest = args.get(2..).unwrap_or(&[]);
-    let bun = |script: &str| {
-        let mut c = Command::new("bun");
-        c.arg("run").arg(root.join("tools").join(script));
-        c
-    };
+    let adapter = |name: &str| Command::new(root.join("tools").join(name));
     match command {
         "list" => match harness {
-            "" | "opencode" => exec(bun("packs-opencode.ts").arg("list")),
-            "claude" => exec(bun("packs-claude.ts").arg("status")),
-            "codex" => exec(Command::new(root.join("tools/packs-codex")).args(["status", "--all"])),
-            "pi" => exec(bun("packs-pi.ts").arg("list")),
+            "" | "opencode" => exec(adapter("packs-opencode").arg("list")),
+            "claude" => exec(adapter("packs-claude").arg("status")),
+            "codex" => exec(adapter("packs-codex").args(["status", "--all"])),
+            "pi" => exec(adapter("packs-pi").arg("list")),
             _ => fail(&format!("sjel: unknown harness '{harness}'")),
         },
         "status" | "deploy" | "sync" | "remove" | "use" => match harness {
             "" => fail(&format!("usage: sjel pack {command} <harness> ...")),
-            "claude" => exec(bun("packs-claude.ts").arg(command).args(rest)),
-            "codex" => exec(
-                Command::new(root.join("tools/packs-codex"))
-                    .arg(command)
-                    .args(rest),
-            ),
-            "opencode" => exec(bun("packs-opencode.ts").arg(command).args(rest)),
-            "pi" => exec(bun("packs-pi.ts").arg(command).args(rest)),
+            "claude" => exec(adapter("packs-claude").arg(command).args(rest)),
+            "codex" => exec(adapter("packs-codex").arg(command).args(rest)),
+            "opencode" => exec(adapter("packs-opencode").arg(command).args(rest)),
+            "pi" => exec(adapter("packs-pi").arg(command).args(rest)),
             _ => fail(&format!("sjel: unknown harness '{harness}'")),
         },
         _ => fail("usage: sjel pack {list|status|deploy|sync|remove|use} ..."),

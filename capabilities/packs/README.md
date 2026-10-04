@@ -12,7 +12,7 @@ from, and the digest that was installed. It owns nothing else. The deployers sta
 
 The domain is bounded and it has state and external systems: four agent harnesses, each
 with its own skill root, its own install marker and its own idea of what a deployed skill
-is. `tools/lib/harness-registry.ts` enumerates them; `tools/harnesses` asks all of them
+is. `tools/sjel-cli/src/harnesses/registry.rs` enumerates them; `tools/harnesses` asks all of them
 the same question at once.
 
 What was actually missing was an owner. `schemas/service.toml.example` puts it plainly for
@@ -38,7 +38,7 @@ at all.
   `tools/capability.sh registry`, `tools/repos`, `tools/backup.sh` and
   `tools/service-runner.sh`. A second server for a JSON passthrough would be a port and a
   process to keep alive for nothing.
-- **It holds no copy of the engine.** `tools/lib/pack-deploy.ts` owns the ledger format and
+- **It holds no copy of the engine.** `tools/sjel-cli/src/harnesses/` owns the ledger format and
   the mutating half — deploy, sync, remove, adopt, and the lock they hold — and
   `tools/sjel-cli/src/harnesses/` reads the same ledger for `tools/harnesses list|status|drift`
   and the doctor's Pack sections. One reader per verb, read verbs first (2026-10-02): a
@@ -62,7 +62,7 @@ an edit made inside a harness is a decision.
 
 ## Concurrency
 
-Every mutating verb holds `<ledger>.lock` for its duration (`tools/lib/pack-deploy.ts`,
+Every mutating verb holds `<ledger>.lock` for its duration (`tools/sjel-cli/src/harnesses/mutate.rs`,
 `withStateLock`). `writeState` was always atomic — a temp file and a rename — but that was
 never the race: each mutator reads the whole ledger once and writes it back one or more
 times, so two overlapping runs each held a snapshot taken before the other's writes and

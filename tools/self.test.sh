@@ -1,9 +1,9 @@
 #!/bin/bash
 # End-to-end tests for tools/self's generate and its drift report.
 #
-# tools/self.test.ts covers the pure rollup. This covers the two things that only exist as
-# behaviour: what `generate` writes on a machine with no code graph, and `check` showing WHAT
-# differs rather than only that something does.
+# The pure rollup is covered by `cargo test -p sjel-cli` (self_model::model). This covers the two
+# things that only exist as behaviour: what `generate` writes on a machine with no code graph, and
+# `check` showing WHAT differs rather than only that something does.
 #
 # The graphless-generate case replaced two refusals on 2026-09-29. `generate` used to refuse when
 # graphify-out/ was absent, because writing would drop the per-unit `code` counts the committed

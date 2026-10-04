@@ -8,7 +8,7 @@
 # skill reads the real value at runtime from the overlay
 # ($SJEL_PERSONAL_ROOT/config/<pack>.*). Harness adapters activate the same
 # source: every adapter materializes COPIES — tools/packs-claude into Claude Code,
-# tools/packs-codex into Codex — over the shared engine in tools/lib/pack-deploy.ts.
+# tools/packs-codex into Codex — over the shared engine in tools/sjel-cli/src/harnesses/.
 
 name         = "example"                 # pack id, must match the dir name
 description  = "One line: what this pack lets an agent do."

@@ -24,8 +24,8 @@ toml.workspace = true
 # tools/doctor's path, env and listener sweeps are two dozen patterns ported from doctor.ts.
 # Already in the workspace lock (1.13 through other members), so this resolves no new crate.
 regex.workspace = true
-# The Pack ledger's digests are sha256 over a file set with modes (libs/pack-deploy's
-# `digestFiles`), and the timestamp in `tools/harnesses status --json` is a civil date. Both
+# The Pack ledger's digests are sha256 over a file set with modes (engine.rs's `digest_files`),
+# and the timestamp in `tools/harnesses status --json` is a civil date. Both
 # are already in the workspace lock (sha2 through libs/pseudonymize, civil-date is a member),
 # so neither adds a crate to resolve.
 sha2.workspace = true

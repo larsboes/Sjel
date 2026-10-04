@@ -1,5 +1,5 @@
-//! The pi settings registry and its agent channel — `tools/packs-pi.ts`'s activation half,
-//! ported 2026-10-04.
+//! The pi settings registry and its agent channel — the whole of `tools/packs-pi.ts`'s registry
+//! half, ported 2026-10-04 (that file is deleted; `src/packs.rs` is its verb surface).
 //!
 //! pi is a MIXED delivery model. Skills, extensions and vendored packages are REGISTERED: the
 //! Pack source stays where it is and `~/.pi/agent/settings.json` carries a path to it, so there
@@ -488,4 +488,320 @@ pub fn activate_profile_on_pi(
         }
     ));
     Ok(messages)
+}
+
+/// Registry-model profile activation, as the CLI's `use` verb drives it.
+pub fn activate_profile(skill_config: &DeployConfig, name: &str) -> Result<Vec<String>, String> {
+    activate_profile_on_pi(skill_config, name)
+}
+
+// ---- the CLI half --------------------------------------------------------------------------
+
+/// One settings array, validated the way `stringArraySetting` did: absent is empty, anything
+/// that is not an array of strings is an error rather than a silent skip.
+fn setting_strings(
+    settings: &serde_json::Map<String, serde_json::Value>,
+    key: &str,
+) -> Result<Vec<String>, String> {
+    let bad = || {
+        format!(
+            "{}: {key} must be an array of strings",
+            settings_path().display()
+        )
+    };
+    match settings.get(key) {
+        None => Ok(Vec::new()),
+        Some(serde_json::Value::Array(items)) => items
+            .iter()
+            .map(|item| item.as_str().map(str::to_owned).ok_or_else(bad))
+            .collect(),
+        Some(_) => Err(bad()),
+    }
+}
+
+fn last_segment(path: &str) -> String {
+    path.rsplit('/').next().unwrap_or(path).to_string()
+}
+
+/// An extension's name in a status row: a directory extension is its own name, not `index.ts`.
+fn extension_label(path: &str) -> String {
+    let parts: Vec<&str> = path.split('/').collect();
+    let base = parts.last().copied().unwrap_or(path);
+    let parent = parts
+        .len()
+        .checked_sub(2)
+        .map(|index| parts[index])
+        .unwrap_or_default();
+    if base == "index.ts" && parent != "extensions" {
+        parent.to_string()
+    } else {
+        base.to_string()
+    }
+}
+
+/// Add each path to a settings array, replacing an equivalent entry in place rather than
+/// appending a second spelling of it.
+fn register_into(target: &mut Vec<String>, paths: &[String]) {
+    for path in paths {
+        match target
+            .iter()
+            .position(|existing| canonical_path(existing) == canonical_path(path))
+        {
+            None => target.push(path.clone()),
+            Some(index) => {
+                if target[index] != *path {
+                    target[index] = path.clone();
+                }
+            }
+        }
+    }
+}
+
+/// Drop registration entries that point where this deployment owns but nothing exists. Both
+/// conditions are required: the path must be gone from disk AND sit under one of this
+/// deployment's Pack roots, so an npm source or an operator's own directory is never touched.
+fn prune_dead_owned_paths(paths: Vec<String>, config: &DeployConfig) -> Vec<String> {
+    let roots: Vec<String> = config
+        .pack_roots
+        .clone()
+        .unwrap_or_default()
+        .iter()
+        .map(|root| format!("{}/", engine::resolve(root).display()))
+        .collect();
+    paths
+        .into_iter()
+        .filter(|path| {
+            let absolute = engine::resolve(&expand_home(path));
+            let ours = roots
+                .iter()
+                .any(|root| absolute.display().to_string().starts_with(root));
+            !ours || absolute.exists()
+        })
+        .collect()
+}
+
+/// Every settings row, then every agent row — the shape `tools/packs-pi status` prints.
+pub fn status_lines(config: &DeployConfig, packs: &[String]) -> Result<Vec<String>, String> {
+    let selected: Vec<String> = if packs.is_empty() {
+        engine::available_packs(config, true)?
+    } else {
+        packs.to_vec()
+    };
+    let settings = read_settings()?;
+    let skills = setting_strings(&settings, "skills")?;
+    let extensions = setting_strings(&settings, "extensions")?;
+    let packages = setting_strings(&settings, "packages")?;
+    let state = read_pi_state()?;
+
+    let label = |registered: bool, owned: bool| {
+        if !registered {
+            "not-deployed"
+        } else if owned {
+            "current"
+        } else {
+            "selected-unmanaged"
+        }
+    };
+    let owned = |channel: &BTreeMap<String, Vec<String>>, pack: &str, path: &str| {
+        channel
+            .get(pack)
+            .is_some_and(|paths| paths.iter().any(|p| p == path))
+    };
+
+    let mut out = Vec::new();
+    for pack in &selected {
+        for path in paths_for_pack(config, pack, None)? {
+            out.push(format!(
+                "{pack}/{}: {}",
+                last_segment(&path),
+                label(skills.contains(&path), owned(&state.packs, pack, &path))
+            ));
+        }
+        for path in extensions_for_pack(config, pack)? {
+            out.push(format!(
+                "{pack}/extensions/{}: {}",
+                extension_label(&path),
+                label(
+                    extensions.contains(&path),
+                    owned(&state.extensions, pack, &path)
+                )
+            ));
+        }
+        for path in packages_for_pack(config, pack)? {
+            out.push(format!(
+                "{pack}/pi-packages/{}: {}",
+                last_segment(&path),
+                label(
+                    packages.contains(&path),
+                    owned(&state.packages, pack, &path)
+                )
+            ));
+        }
+    }
+    out.extend(agent_status_lines(config, &selected)?);
+    Ok(out)
+}
+
+/// Agent rows, in the same shape as the settings rows so one listing reads as one table. The
+/// two channels answer different questions: the settings rows ask "is this path registered",
+/// these ask "are the bytes at that flat destination the ones this Pack would write".
+fn agent_status_lines(config: &DeployConfig, packs: &[String]) -> Result<Vec<String>, String> {
+    let agents = agents_config(config);
+    let selected: Vec<String> = if packs.is_empty() {
+        engine::available_packs(&agents, true)?
+    } else {
+        packs.to_vec()
+    };
+    let mut out = Vec::new();
+    for pack in &selected {
+        if agent_units(&agents, pack)?.is_empty() && !agents_ledger_owns(&agents, pack) {
+            continue;
+        }
+        for row in engine::get_statuses(&agents, Some(pack))? {
+            let detail = row
+                .detail
+                .as_deref()
+                .map(|d| format!(" ({d})"))
+                .unwrap_or_default();
+            out.push(format!(
+                "{pack}/{}: {}{detail}",
+                row.skill,
+                row.status.as_str()
+            ));
+        }
+    }
+    Ok(out)
+}
+
+/// Register one or more Packs in `settings.json` and materialize their agent files.
+pub fn deploy_packs(config: &DeployConfig, packs: &[String]) -> Result<Vec<String>, String> {
+    if packs.is_empty() {
+        return Err("deploy needs one or more Pack names".to_owned());
+    }
+    let mut settings = read_settings()?;
+    let mut skills = setting_strings(&settings, "skills")?;
+    let mut extensions = setting_strings(&settings, "extensions")?;
+    let mut packages = setting_strings(&settings, "packages")?;
+    let mut state = read_pi_state()?;
+    let mut out = Vec::new();
+
+    for pack in packs {
+        let paths = paths_for_pack(config, pack, None)?;
+        let ext_paths = extensions_for_pack(config, pack)?;
+        let pkg_paths = packages_for_pack(config, pack)?;
+        register_into(&mut skills, &paths);
+        register_into(&mut extensions, &ext_paths);
+        register_into(&mut packages, &pkg_paths);
+        state.packs.insert(pack.clone(), paths.clone());
+        state.extensions.insert(pack.clone(), ext_paths.clone());
+        state.packages.insert(pack.clone(), pkg_paths.clone());
+        out.push(format!(
+            "✓ {pack}: {} skill(s), {} extension(s), {} package(s) selected for Pi",
+            paths.len(),
+            ext_paths.len(),
+            pkg_paths.len()
+        ));
+    }
+
+    // Pi treats equivalent absolute and ~/ paths as the same source, so one path is kept; the
+    // ledger is trimmed on the same terms so `remove` is never asked to remove what is gone.
+    skills = dedupe_canonical(prune_dead_owned_paths(skills, config));
+    extensions = dedupe_canonical(prune_dead_owned_paths(extensions, config));
+    packages = dedupe_canonical(prune_dead_owned_paths(packages, config));
+    for channel in [&mut state.packs, &mut state.extensions, &mut state.packages] {
+        for paths in channel.values_mut() {
+            *paths = prune_dead_owned_paths(paths.clone(), config);
+        }
+    }
+    settings.insert("skills".to_owned(), serde_json::json!(skills));
+    settings.insert("extensions".to_owned(), serde_json::json!(extensions));
+    settings.insert("packages".to_owned(), serde_json::json!(packages));
+    write_settings(&settings)?;
+    write_pi_state(&state)?;
+    out.extend(deploy_agents(config, packs)?);
+    Ok(out)
+}
+
+/// Materialize the agent files of the named Packs. A Pack with no `agents/` directory is skipped
+/// rather than reported, because that is the common case and not a fault.
+fn deploy_agents(config: &DeployConfig, packs: &[String]) -> Result<Vec<String>, String> {
+    let agents = agents_config(config);
+    let mut out = Vec::new();
+    for pack in packs {
+        if agent_units(&agents, pack)?.is_empty() {
+            if !agents_ledger_owns(&agents, pack) {
+                continue;
+            }
+            // The Pack dropped its agents/ directory; take the deployed copies with it.
+            let removed = remove_agents_for(&agents, pack)?;
+            out.push(format!(
+                "  {pack}: agents/ is gone from the Pack, removing {removed} file(s)"
+            ));
+            continue;
+        }
+        let deployed = agents_ledger_owns(&agents, pack);
+        let count = if deployed {
+            mutate::sync_pack(&agents, pack)?.len()
+        } else {
+            mutate::deploy_pack(&agents, pack, None)?.len()
+        };
+        out.push(format!(
+            "  {pack}: {count} agent file(s) at {}",
+            agents.destination.display()
+        ));
+    }
+    Ok(out)
+}
+
+/// Drop one or more Packs from `settings.json` and remove the agent files they own.
+pub fn remove_packs(config: &DeployConfig, packs: &[String]) -> Result<Vec<String>, String> {
+    if packs.is_empty() {
+        return Err("remove needs one or more Pack names".to_owned());
+    }
+    let mut settings = read_settings()?;
+    let mut state = read_pi_state()?;
+    let mut remove_paths: BTreeSet<String> = BTreeSet::new();
+    let mut remove_extensions: BTreeSet<String> = BTreeSet::new();
+    let mut remove_packages: BTreeSet<String> = BTreeSet::new();
+    let mut out = Vec::new();
+
+    for pack in packs {
+        let Some(paths) = state.packs.get(pack).cloned() else {
+            return Err(format!("{pack}: not owned by Axon Pi deployment"));
+        };
+        remove_paths.extend(paths);
+        remove_extensions.extend(state.extensions.get(pack).cloned().unwrap_or_default());
+        remove_packages.extend(state.packages.get(pack).cloned().unwrap_or_default());
+        state.packs.remove(pack);
+        state.extensions.remove(pack);
+        state.packages.remove(pack);
+        out.push(format!("✓ {pack}: removed from Pi selection"));
+    }
+
+    let keep = |paths: Vec<String>, drop: &BTreeSet<String>| -> Vec<String> {
+        paths
+            .into_iter()
+            .filter(|path| !drop.contains(path))
+            .collect()
+    };
+    let skills = keep(setting_strings(&settings, "skills")?, &remove_paths);
+    let extensions = keep(
+        setting_strings(&settings, "extensions")?,
+        &remove_extensions,
+    );
+    let packages = keep(setting_strings(&settings, "packages")?, &remove_packages);
+    settings.insert("skills".to_owned(), serde_json::json!(skills));
+    settings.insert("extensions".to_owned(), serde_json::json!(extensions));
+    settings.insert("packages".to_owned(), serde_json::json!(packages));
+    write_settings(&settings)?;
+    write_pi_state(&state)?;
+
+    let agents = agents_config(config);
+    for pack in packs {
+        let removed = remove_agents_for(&agents, pack)?;
+        if removed > 0 {
+            out.push(format!("  {pack}: {removed} agent file(s) removed"));
+        }
+    }
+    Ok(out)
 }

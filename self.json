@@ -1,6 +1,6 @@
 {
   "schema": 2,
-  "generator": "tools/self.ts",
+  "generator": "tools/self",
   "units": [
     {
       "name": "3d-printing",
@@ -1499,6 +1499,16 @@
       "evidence": [
         "tools/capability-auth/Cargo.toml",
         "tools/storage/Cargo.toml"
+      ]
+    },
+    {
+      "from": "tools",
+      "to": "sjel-http",
+      "kinds": [
+        "cargo-dep"
+      ],
+      "evidence": [
+        "tools/sjel-mcp/Cargo.toml"
       ]
     },
     {

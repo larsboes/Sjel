@@ -143,7 +143,7 @@ header lists what it blocks: secret paths on `read` and `edit`, secret patterns 
 
 ### F3 · Skills from `Packs/`
 
-- [ ] AGT-21 — sjel-agent is a harness in `tools/lib/harness-registry.ts` with the `registry`
+- [ ] AGT-21 — sjel-agent is a harness in `tools/sjel-cli/src/harnesses/registry.rs` with the `registry`
   model. Activating a profile writes its skill paths into `<overlay>/config/agent.toml`, and
   `tools/harnesses status` shows a sjel-agent row per skill (D7). Falsifier: a profile switch
   that leaves `agent.toml` unchanged. Probe: `sjel harnesses use <profile> --harness sjel-agent`,

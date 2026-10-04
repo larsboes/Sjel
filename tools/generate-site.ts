@@ -16,7 +16,7 @@
 //   units[].code   same reason: per-unit file and node counts come from that graph.
 //
 // Everything that remains traces to a tracked manifest: service.toml for kind/port/requires,
-// upstreams.toml for the verdict, and tools/self.ts's own coupling scan over Cargo.toml and
+// upstreams.toml for the verdict, and tools/self's own coupling scan over Cargo.toml and
 // source imports.
 //
 // Self-contained by requirement (#14) and by house rule: inline CSS, no script, no font, no image,

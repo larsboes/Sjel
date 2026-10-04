@@ -1,7 +1,8 @@
 // tools/lib/ci-workflow.ts — the pure half of tools/ci-local: what CI declares, and which
 // of it may be replayed on a machine that is not a disposable runner.
 //
-// Split out for the reason tools/lib/self-model.ts is: the launcher owns the I/O and the
+// Split out for the reason the self-model's pure half was (`tools/sjel-cli/src/self_model/
+// model.rs`): the launcher owns the I/O and the
 // process, this owns the decisions, and `bun test` can import this without the CLI running
 // itself on import.
 

@@ -51,10 +51,11 @@ import {
 import { homedir, tmpdir } from "node:os";
 import { dirname, join, relative, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
-import { harnessById, isInstalled } from "./lib/harness-registry.ts";
 
 const SJEL_ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "..");
-const PI = harnessById("pi");
+/** pi's install marker: the path `tools/lib/harness-registry.ts` used to carry, before its four
+ *  readers became one Rust registry (`tools/sjel-cli/src/harnesses/registry.rs`). */
+const PI_MARKER = join(homedir(), ".pi", "agent", "settings.json");
 
 /* ── where pi lives ──────────────────────────────────────────────────────── */
 
@@ -66,7 +67,7 @@ interface PiInstall {
 }
 
 /**
- * The marker in `harness-registry` decides whether to run (it is what CI lacks), and this
+ * pi's marker decides whether to run (it is what CI lacks), and this
  * finds the package that makes the check possible. Both are needed: the marker without a
  * package is a broken install and should be loud, not a skip.
  */
@@ -131,7 +132,7 @@ function piInstallAt(packageDir: string, modulesDir: string): PiInstall | undefi
  * pi is installed when its agent config exists. That is also the CI condition: the runner
  * has neither, so the gate skips there instead of failing on packages it cannot install.
  */
-const piConfigured = isInstalled(PI);
+const piConfigured = existsSync(PI_MARKER);
 const piInstall = piConfigured ? findPiInstall() : undefined;
 
 /* ── the extensions under test ───────────────────────────────────────────── */
@@ -376,7 +377,7 @@ const registered = registeredExtensions();
  */
 if (!piConfigured) {
   console.log(
-    `pack-extensions: not checked — ${PI.marker} does not exist, so pi's packages and types ` +
+    `pack-extensions: not checked — ${PI_MARKER} does not exist, so pi's packages and types ` +
       `are unavailable. This gate opens where pi is installed, which is the only place these ` +
       `extensions can run. No Packs/*/extensions/*.ts was type-checked or loaded in this run.`,
   );
@@ -392,7 +393,7 @@ describe.skipIf(!piConfigured)("pack extensions", () => {
       // The marker exists, so pi is configured on this machine: a package search that
       // comes up empty is a broken install and must not pass as "nothing to check".
       throw new Error(
-        `pi is configured (${PI.marker}) but its package was not found. Set it up so the ` +
+        `pi is configured (${PI_MARKER}) but its package was not found. Set it up so the ` +
           `extensions' imports resolve, or remove the config — this gate will not report a ` +
           `typecheck it could not run.`,
       );

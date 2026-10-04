@@ -407,7 +407,15 @@ script keeps its path as a launcher that calls `sjel_cli_exec` from `tools/lib/s
 its callers do not change. `tools/toolchain-check` was the first, then `sjel` itself,
 `tools/capability.sh`, `tools/service-runner.sh` and `tools/doctor`, and then `tools/harnesses`
 (the read verbs on 2026-10-02, `sync`/`use`/`promote`/`accept` with the pack-deploy mutation
-engine and pi's settings registry on 2026-10-04), and then `tools/updates` (2026-10-04).
+engine and pi's settings registry on 2026-10-04), and then `tools/updates` (2026-10-04), and
+then the four `packs-*` adapters with `tools/pack-drift-hook` (2026-10-04, which is what let
+`tools/lib/pack-deploy.ts` and `tools/lib/harness-registry.ts` be deleted — the engine had been
+Rust since 2026-10-02 and the adapters were its last reason to exist in two languages), and then
+`tools/self` with `tools/lib/self-model.ts` (2026-10-04, which the doctor runs on every
+invocation).
+`tools/sjel-mcp.ts` is the one exception and not a second crate: the `tools/sjel-mcp` crate
+already held its registration half, so the server moved in beside it on 2026-10-04 rather than
+into `sjel-cli` and a second MCP implementation.
 Because of this, `cargo` is a core host
 requirement in `toolchain.toml`, together with `rg` and `fd`.
 
@@ -509,7 +517,7 @@ is required — a verdict, a licence and an argument, before consumption — is 
 `upstreams.toml` is documentation, and only documentation. Nothing enforces its fields, and since
 Q77 no script reads one: `tools/agent-integrations.sh` drove an upstream's own installer at a
 recorded version and now takes its latest, `tools/sysmon` printed a recorded version in its
-install advice and now names none, and `tools/self.ts` publishes name and verdict into
+install advice and now names none, and `tools/self` publishes name and verdict into
 `self.json`. A human reads a verdict before adopting a dependency, which was always the actual
 rule.
 

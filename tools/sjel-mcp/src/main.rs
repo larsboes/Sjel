@@ -10,11 +10,11 @@
 // ## Two harnesses, and why the list is short
 //
 // This is a table of MEASURED MCP registration paths, not a harness registry.
-// tools/lib/harness-registry.ts stays the authority on which harnesses exist and which are
-// installed; what this file adds is the two whose MCP surface has actually been driven and
+// tools/sjel-cli/src/harnesses/registry.rs is the authority on which harnesses exist and which
+// are installed; what this file adds is the two whose MCP surface has actually been driven and
 // watched working. Codex is absent on purpose: it supports MCP, its config format is
 // documented elsewhere, and nothing here has run it — ~/.codex exists on the dev machine
-// while no `codex` binary does. harness-registry.ts states the rule, from the day three Packs
+// while no `codex` binary does. That registry states the rule, from the day three Packs
 // were deployed for a Codex that was not installed: a row moves in when someone verifies the
 // format, never on the strength of a guess.
 //
@@ -33,7 +33,10 @@
 // tools/claude-code-config/README.md), so there is no policy to satisfy and no allowlist for
 // this tool to stay in step with. `claude mcp add` is the whole story now.
 //
-// Usage: sjel mcp register [<harness>...] | sjel mcp unregister [<harness>...]
+// Usage: sjel mcp | sjel mcp register [<harness>...] | sjel mcp unregister [<harness>...]
+//
+// With no verb this process IS the server (`src/server.rs`); the verbs below are the
+// registration half, and they verify themselves by speaking MCP to it.
 
 use std::env;
 use std::fs;
@@ -42,6 +45,9 @@ use std::path::{Path, PathBuf};
 use std::process::{Command, ExitCode, Stdio};
 
 use serde_json::{json, Map, Value};
+
+mod server;
+mod tools;
 
 pub const SERVER_NAME: &str = "sjel";
 
@@ -145,9 +151,9 @@ pub fn claude_remove_args() -> Vec<String> {
 }
 
 /// Which harness's marker means it is installed here. Repeated from
-/// tools/lib/harness-registry.ts deliberately and only for the two harnesses this tool knows:
-/// a registry shared across two languages is a synchronisation problem, and the registry stays
-/// the authority for the full set.
+/// tools/sjel-cli/src/harnesses/registry.rs deliberately and only for the two harnesses this
+/// tool knows: a registry shared across two crates is a synchronisation problem, and that
+/// registry stays the authority for the full set.
 fn installed_marker(harness: &str) -> Option<PathBuf> {
     match harness {
         "pi" => Some(home().join(".pi/agent/settings.json")),
@@ -406,8 +412,9 @@ fn act(harness: &str, removing: bool) -> Outcome {
 }
 
 const USAGE: &str = "\
-tools/sjel-mcp — register Sjel's MCP server with the agent harnesses on this machine.
+tools/sjel-mcp — Sjel's capabilities as an MCP server, and its registration in a harness.
 
+  sjel mcp                                            the stdio MCP server itself
   tools/sjel-mcp/sjel-mcp register [<harness>...]     pi and Claude Code, or the named ones
   tools/sjel-mcp/sjel-mcp unregister [<harness>...]
 
@@ -423,14 +430,25 @@ fn main() -> ExitCode {
         print!("{USAGE}");
         return ExitCode::SUCCESS;
     }
-    let (verb, names) = match args.split_first() {
-        Some((verb, rest)) if verb == "register" || verb == "unregister" => {
-            (verb.clone(), rest.to_vec())
+    match args.first().map(String::as_str) {
+        // No verb is the server itself: `sjel mcp` from a harness, and the handshake this tool's
+        // registration performs below.
+        None | Some("serve") => {
+            server::serve();
+            ExitCode::SUCCESS
         }
-        _ => {
+        Some("register" | "unregister") => registration(&args),
+        Some(_) => {
             eprint!("{USAGE}");
-            return ExitCode::from(1);
+            ExitCode::from(1)
         }
+    }
+}
+
+fn registration(args: &[String]) -> ExitCode {
+    let (verb, names) = match args.split_first() {
+        Some((verb, rest)) => (verb.clone(), rest.to_vec()),
+        None => return ExitCode::from(1),
     };
     let removing = verb == "unregister";
 

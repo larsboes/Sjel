@@ -22,9 +22,9 @@ use std::process::{Command, ExitCode};
 mod agentfile;
 pub mod engine;
 mod frontmatter;
-mod mutate;
+pub(crate) mod mutate;
 pub(crate) mod pi;
-mod pi_settings;
+pub(crate) mod pi_settings;
 pub(crate) mod registry;
 
 use engine::{SkillStatus, StatusRow};

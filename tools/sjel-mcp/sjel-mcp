@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
-# Thin launcher: the registration half of Sjel's MCP tooling lives in the sjel-mcp crate
-# beside this file. The stdio server itself is still tools/sjel-mcp.ts — see README.md.
+# Thin launcher: Sjel's MCP tooling — the stdio server and its registration — lives in the
+# sjel-mcp crate beside this file. See README.md.
 #
 # It sources tools/lib/paths.sh so the crate reads a resolved SJEL_ROOT, and builds the release
 # binary when it is missing or older than its sources, so `sjel mcp register` works on a fresh

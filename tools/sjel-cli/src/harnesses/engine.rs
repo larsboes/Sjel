@@ -2,11 +2,9 @@
 //!
 //! `tools/harnesses list|status|drift` and the Pack sections of `tools/doctor` read the
 //! deployment ledgers, hash the deployed trees and compare them with each Pack's source. The
-//! mutating half — deploy, sync, remove, adopt, reconcile, the state lock — stays in
-//! TypeScript for now, by decision: read verbs first, write verbs after their parity is
-//! proven. So this file is a second reader of one format, not a second engine, and the two
-//! meet at the ledger on disk (`tools/lib/pack-deploy.ts` defines it, `DIGEST_POLICY` below
-//! names the same rule).
+//! mutating half lives beside this file in `mutate.rs`. Both halves are the only reader and the
+//! only writer of the ledger format now: `tools/lib/pack-deploy.ts` was deleted on 2026-10-04,
+//! when the four `packs-*` adapters moved into `src/packs.rs`.
 //!
 //! What is deliberately NOT here, and why:
 //!
@@ -474,9 +472,16 @@ fn read_dir_sorted(dir: &Path) -> Result<Vec<fs::DirEntry>, String> {
 fn is_generated_artifact_path(relative_path: &str) -> bool {
     let parts: Vec<&str> = relative_path.split('/').collect();
     parts.contains(&"__pycache__")
-        || parts.last().is_some_and(|last| {
-            last.ends_with(".pyc") || last.ends_with(".pyo") || last.ends_with(".pyd")
-        })
+        || parts
+            .last()
+            .is_some_and(|last| is_generated_artifact_name(last))
+}
+
+/// `/\.[pycod]+$/` as pack-deploy.ts wrote it: `.pyc`, `.pyo`, `.pyd` — a Python bytecode or
+/// debug artifact, never a source file. Named separately because the migration walks a tree and
+/// asks about the basename while `collect_files` asks about the whole relative path.
+pub(crate) fn is_generated_artifact_name(name: &str) -> bool {
+    name.ends_with(".pyc") || name.ends_with(".pyo") || name.ends_with(".pyd")
 }
 
 fn collect_files(

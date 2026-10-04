@@ -24,7 +24,7 @@
 set -e
 
 _here="$(cd "$(dirname "${BASH_SOURCE[0]:-$0}")" && pwd)"
-_claude() { exec bun "$_here/packs-claude.ts" "$@"; }
+_claude() { exec "$_here/packs-claude" "$@"; }
 
 case "${1:-list}" in
   list)   _claude status;;

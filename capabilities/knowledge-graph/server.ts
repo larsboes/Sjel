@@ -264,7 +264,7 @@ const UNIT_NODE_CAP = 400;
 /**
  * Repo-relative path prefixes a unit owns.
  *
- * Mirrors `unitForPath` in tools/lib/self-model.ts, which is what named these
+ * Mirrors `unitForPath` in tools/sjel-cli/src/self_model/model.rs, which is what named these
  * units in the first place -- the two must agree or a unit on the self-model
  * page drills into nothing. Spine directories ARE the unit and have no
  * `<name>` segment; the three nouns each nest one level down

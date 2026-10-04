@@ -1,6 +1,20 @@
-#!/usr/bin/env bash
-# Thin launcher: materialized Codex Pack deployment is implemented in
-# packs-codex.ts because safe tree hashing, atomic replacement, and JSON state
-# handling are substantially clearer there than in bash.
-_here="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-exec bun run "$_here/packs-codex.ts" "$@"
+#!/bin/bash
+# tools/packs-codex — materialize Sjel Packs into this harness's destination.
+#
+# Launcher only. The verb surface moved to tools/sjel-cli/src/packs.rs on 2026-10-04, over the
+# deployment engine that was already Rust (tools/sjel-cli/src/harnesses/). tools/packs-codex.ts is
+# deleted. `tools/packs-codex -h` prints the usage where the adapter had one.
+#
+# SJEL_ROOT is set here and tools/lib/paths.sh is NOT sourced, for the reason tools/harnesses'
+# launcher gives: paths.sh treats an exported SJEL_OVERLAY_ROOT as a per-invocation override
+# that skips axon.local.toml's `machine =` line. The Rust side resolves the overlay itself.
+# bash 3.2-safe (CONTRIBUTING.md#portable-shell).
+set -u
+
+SJEL_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]:-$0}")/.." && pwd)"
+export SJEL_ROOT
+# shellcheck source=tools/lib/toml.sh
+. "$SJEL_ROOT/tools/lib/toml.sh"       # toml_get_in, for the missing-cargo install hint
+# shellcheck source=tools/lib/sjel-cli.sh
+. "$SJEL_ROOT/tools/lib/sjel-cli.sh"
+sjel_cli_exec packs-codex "$@"

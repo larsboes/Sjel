@@ -140,6 +140,12 @@ const HELP: &str = "sjel update — every piece of software installed outside th
   sjel update apply --only cargo --re-resolve <crate,...>
                                 reinstall the named crates WITHOUT --locked, for a crate whose
                                 published lockfile pins a dependency the audit has flagged
+  sjel update apply --only npm --re-resolve <package,...>
+                                reinstall the named global npm packages, which is what makes npm
+                                resolve their dependency ranges again. For an owner whose own
+                                version is current and whose tree is behind: `sjel update`
+                                reports those owners as current rows naming what is behind them,
+                                and tools/audit's second pass reports the CVE-bearing ones
   sjel update -h
 
 Classes for --only:
@@ -340,10 +346,14 @@ fn apply(opts: &Options, ctx: &Ctx, report: &report::Report) -> ExitCode {
             }
         );
     }
-    // A crate named on the command line that nothing plans to move is said out loud, so a typo
-    // does not read as "it re-resolved and it was fine".
+    // A crate or npm package named on the command line that nothing plans to move is said out
+    // loud, so a typo does not read as "it re-resolved and it was fine". Both shapes count:
+    // cargo's re-resolve keeps the verb's own label, npm's is the plan's only (re-resolve) step.
     for name in &opts.re_resolve {
-        if !steps.iter().any(|s| s.label == format!("cargo: {name}")) {
+        let planned = steps.iter().any(|s| {
+            s.label == format!("cargo: {name}") || s.label == format!("npm: {name} (re-resolve)")
+        });
+        if !planned {
             println!("  · --re-resolve named {name}, which this plan does not move");
         }
     }

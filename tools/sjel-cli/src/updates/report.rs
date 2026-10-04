@@ -9,6 +9,7 @@ use super::Ctx;
 use crate::time;
 use crate::updates::parse::*;
 use serde::Serialize;
+use std::collections::BTreeMap;
 use std::path::Path;
 
 // ── the surfaces and their owners ─────────────────────────────────────────────
@@ -873,6 +874,84 @@ pub fn gather_npm(ctx: &Ctx, brew_formulae: &std::collections::BTreeSet<String>)
         .collect()
 }
 
+/// The top-level global package a nested node belongs to, read from the `location` npm prints.
+///
+/// The path is `<global root>/<owner>/node_modules/<pkg>` for a direct dependency and deeper for
+/// a nested one, so the owner is the OUTERMOST known top-level name bracketed by `node_modules`
+/// — `min_by_key` on the index, because a package can sit under another package that is itself
+/// a global. Matching against the known owners rather than splitting the path is what keeps a
+/// scoped owner (`@scope/name`, two path segments) from being read as one.
+fn npm_owner_of(location: &str, owners: &[String]) -> Option<String> {
+    owners
+        .iter()
+        .filter_map(|o| {
+            location
+                .find(&format!("/node_modules/{o}/node_modules/"))
+                .map(|i| (i, o.clone()))
+        })
+        .min_by_key(|(i, _)| *i)
+        .map(|(_, o)| o)
+}
+
+/// The nested nodes of every global npm tree that are behind, as one row per owning package.
+///
+/// The rows above cannot see these. `npm outdated -g` asks about the top level, and a global
+/// package at its latest release can still be carrying a dependency it resolved a year ago —
+/// which is where every installed npm CVE on this machine lived on 2026-10-04, while the same
+/// report called all eleven packages current.
+///
+/// It reports them as Current and never as Stale, deliberately, and that is the whole judgement
+/// in this function. Every nested node of every global tree is behind *someone's* latest, because
+/// a parent pins what it was published against; marking the owner stale would make the report
+/// red forever on every machine that has a global install, and planning a reinstall every run.
+/// A gate nobody can clear is a gate nobody reads — the same rule `tools/audit`'s installed pass
+/// now follows. What was actually missing was not a flag but the command, and the note carries
+/// it: `--re-resolve` names one of these owners and lands as a step.
+fn npm_subtrees_behind(ctx: &Ctx, owners: &[String]) -> Vec<Row> {
+    // A registry question, and an offline run asks none.
+    if owners.is_empty() || ctx.offline || ctx.have("npm").is_none() {
+        return Vec::new();
+    }
+    let nested = parse_npm_outdated_all(
+        &ctx.run(&["npm", "outdated", "-g", "--all", "--json"])
+            .stdout,
+    );
+    let mut by_owner: BTreeMap<String, Vec<NpmNestedOutdated>> = BTreeMap::new();
+    for n in nested {
+        // `npm outdated` lists a package whose installed version is AHEAD of the registry's
+        // `latest` tag too — a major line the publisher has not tagged, or an alpha ahead of the
+        // release. Without this filter the report says "accepts 2.0.0 → 1.3.8", which reads as a
+        // downgrade nobody should make, and it is one of the first examples a reader would hit.
+        // `version_newer` is the crate's own comparison and treats a pre-release as older than
+        // its release, which is the same rule the cargo surface already uses.
+        if !version_newer(&n.latest, &n.current) {
+            continue;
+        }
+        if let Some(owner) = npm_owner_of(&n.location, owners) {
+            by_owner.entry(owner).or_default().push(n);
+        }
+    }
+    by_owner
+        .into_iter()
+        .map(|(owner, behind)| {
+            // Sorted so the example named is the same on two runs of the same machine.
+            let mut examples: Vec<&NpmNestedOutdated> = behind.iter().collect();
+            examples.sort_by(|a, b| a.name.cmp(&b.name));
+            let first = examples[0];
+            Row::new("npm", Status::Current)
+                .name(owner.clone())
+                .note(format!(
+                    "{} nested package(s) behind latest ({} {} → {}) — `sjel update apply --only npm --re-resolve {owner}` re-resolves its tree",
+                    behind.len(),
+                    first.name,
+                    first.current,
+                    first.latest
+                ))
+                .action(format!("npm install -g {owner}@latest"))
+        })
+        .collect()
+}
+
 /// Apps that update themselves. Named so the table is complete rather than silently partial.
 pub fn gather_vendor(ctx: &Ctx) -> Vec<Row> {
     let mut out = Vec::new();
@@ -954,7 +1033,12 @@ pub fn build_report(ctx: &Ctx) -> Report {
     rows.extend(gather_integrations(ctx));
     rows.extend(gather_checkout(ctx));
     rows.extend(gather_cargo(ctx));
-    rows.extend(gather_npm(ctx, &brew_formulae));
+    let npm_rows = gather_npm(ctx, &brew_formulae);
+    // The owners the subtree scan attributes to. Taken from the rows just gathered rather than
+    // asked of npm again, so the two halves cannot disagree about what is installed at the top.
+    let npm_owners: Vec<String> = npm_rows.iter().map(|r| r.name.clone()).collect();
+    rows.extend(npm_rows);
+    rows.extend(npm_subtrees_behind(ctx, &npm_owners));
     rows.extend(gather_vendor(ctx));
     Report {
         rows,
@@ -1261,6 +1345,38 @@ pub fn plan_apply(rows: &[Row], only: &[String], ctx: &Ctx, opts: &PlanOpts) -> 
                     note: None,
                 });
             }
+        }
+    }
+
+    // A NAMED npm re-resolve, for an owner whose own version is current and whose tree is not.
+    // It is not in `stale` above, so it is named rather than planned — the same reason
+    // `tools/audit`'s installed pass accepts rather than blocks. Cargo's half drops `--locked`;
+    // npm has no lock to drop, and reinstalling the package is what makes npm resolve its ranges
+    // again, so the argv is the ordinary one and the note says why it was asked for. An owner
+    // that is already stale is skipped here: the loop above already installed it, which
+    // re-resolves its tree as a side effect.
+    if wanted("npm") {
+        for name in &opts.re_resolve {
+            let known = rows.iter().any(|r| r.surface == "npm" && &r.name == name);
+            let already = stale.iter().any(|r| r.surface == "npm" && &r.name == name);
+            if !known || already {
+                continue;
+            }
+            steps.push(Step {
+                surface_id: "npm".to_owned(),
+                label: format!("npm: {name} (re-resolve)"),
+                argv: vec![
+                    "npm".into(),
+                    "install".into(),
+                    "-g".into(),
+                    format!("{name}@latest"),
+                ],
+                slow: false,
+                note: Some(
+                    "re-resolving — its own version is current, its tree is behind; named because the audit flagged a dependency inside it"
+                        .to_owned(),
+                ),
+            });
         }
     }
     steps
@@ -1749,6 +1865,78 @@ mod tests {
             .clone()
             .unwrap()
             .contains("--locked dropped"));
+    }
+
+    #[test]
+    fn re_resolve_moves_a_current_npm_owner_and_never_doubles_a_stale_one() {
+        // bobshell is the case this exists for: its own version is current, its tree is behind,
+        // so it is not a stale row and nothing above would have planned it. pnpm is stale, so the
+        // ordinary loop already installs it — which re-resolves its tree as a side effect, and a
+        // second step for it would install the same package twice.
+        let fake = Fake::new(&[]);
+        let rows = vec![
+            Row::new("npm", Status::Current).name("bobshell"),
+            Row::new("npm", Status::Stale)
+                .name("pnpm")
+                .action("npm install -g pnpm@latest"),
+        ];
+        let opts = PlanOpts {
+            prune: false,
+            re_resolve: vec![
+                "bobshell".to_owned(),
+                "pnpm".to_owned(),
+                "absent".to_owned(),
+            ],
+        };
+        let steps = plan_apply(&rows, &["npm".to_owned()], &plan_ctx(&fake), &opts);
+        assert_eq!(
+            steps.iter().map(|s| s.argv.clone()).collect::<Vec<_>>(),
+            vec![
+                vec!["npm", "install", "-g", "pnpm@latest"],
+                vec!["npm", "install", "-g", "bobshell@latest"],
+            ],
+            "the stale row once, the current owner once, and a name in no row at all never"
+        );
+        let re = steps
+            .iter()
+            .find(|s| s.label == "npm: bobshell (re-resolve)")
+            .expect("the re-resolve step");
+        assert!(re.note.as_deref().unwrap_or("").contains("tree is behind"));
+    }
+
+    #[test]
+    fn a_nested_location_names_its_outermost_global_owner() {
+        let owners = vec![
+            "npm".to_owned(),
+            "@scope/a".to_owned(),
+            "bobshell".to_owned(),
+        ];
+        let root = "/opt/homebrew/lib/node_modules";
+        assert_eq!(
+            npm_owner_of(&format!("{root}/bobshell/node_modules/simple-git"), &owners),
+            Some("bobshell".to_owned())
+        );
+        // A scoped owner is two path segments, which is why this matches whole names rather than
+        // splitting on `/`.
+        assert_eq!(
+            npm_owner_of(&format!("{root}/@scope/a/node_modules/ip-address"), &owners),
+            Some("@scope/a".to_owned())
+        );
+        // Deeper: the OUTERMOST owner wins, because that is the install that moves the tree. A
+        // nested `npm` must not claim a package that lives inside bobshell.
+        assert_eq!(
+            npm_owner_of(
+                &format!("{root}/bobshell/node_modules/x/node_modules/npm/node_modules/y"),
+                &owners
+            ),
+            Some("bobshell".to_owned())
+        );
+        // A top-level package is not nested, and an unknown global root is not guessed at.
+        assert_eq!(npm_owner_of(&format!("{root}/pnpm"), &owners), None);
+        assert_eq!(
+            npm_owner_of(&format!("{root}/other/node_modules/x"), &owners),
+            None
+        );
     }
 
     #[test]

@@ -145,6 +145,59 @@ pub fn parse_npm_outdated(json: &str) -> Vec<NpmOutdated> {
         .collect()
 }
 
+/// One entry of `npm outdated -g --all --json`: the same shape as [`NpmOutdated`], plus where on
+/// disk it sits, which is the only thing that says whose tree it belongs to.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct NpmNestedOutdated {
+    pub name: String,
+    pub current: String,
+    pub latest: String,
+    pub location: String,
+}
+
+/// `npm outdated -g --all --json` — the NESTED nodes the top-level command hides.
+///
+/// Two shapes have to be read here and not one: npm reports a package present at a single
+/// location as an object, and the same package present at several as an ARRAY of those objects.
+/// The array case is not an edge — it is the ordinary one for a package that two global trees
+/// both depend on, and reading only the object form silently drops exactly the copies that
+/// matter.
+///
+/// An entry with no `location` is skipped rather than guessed at: that is the top-level form,
+/// whose staleness the rows above already report.
+pub fn parse_npm_outdated_all(json: &str) -> Vec<NpmNestedOutdated> {
+    let Ok(entries) = serde_json::from_str::<OrderedMap<Value>>(json) else {
+        return Vec::new();
+    };
+    let mut out = Vec::new();
+    for (name, val) in entries.iter() {
+        let objects: Vec<&serde_json::Map<String, Value>> = match val {
+            Value::Array(list) => list.iter().filter_map(Value::as_object).collect(),
+            Value::Object(o) => vec![o],
+            _ => continue,
+        };
+        for o in objects {
+            let (Some(latest), Some(location)) = (
+                o.get("latest").and_then(Value::as_str),
+                o.get("location").and_then(Value::as_str),
+            ) else {
+                continue;
+            };
+            out.push(NpmNestedOutdated {
+                name: name.to_owned(),
+                current: o
+                    .get("current")
+                    .and_then(Value::as_str)
+                    .unwrap_or("?")
+                    .to_owned(),
+                latest: latest.to_owned(),
+                location: location.to_owned(),
+            });
+        }
+    }
+    out
+}
+
 /// `npm view <pkg> deprecated` → the deprecation message, or `None` when the package is live.
 pub fn parse_npm_deprecated(text: &str) -> Option<String> {
     let line = text.trim().split('\n').next().unwrap_or("").trim();
@@ -643,6 +696,49 @@ mod tests {
         );
         assert_eq!(parse_crates_io_versions("<html>403</html>"), (None, None));
         assert_eq!(parse_crates_io_versions(&versions("")), (None, None));
+    }
+
+    #[test]
+    fn npm_outdated_all_reads_the_nested_shape_and_the_array_one() {
+        // Real output from `npm outdated -g --all --json` on 2026-10-04, trimmed to three
+        // entries: one at a single location, one present at TWO (an array, which the top-level
+        // parser drops), and one top-level package with no `location` at all.
+        let json = r#"{
+          "brace-expansion": {"current":"5.0.9","wanted":"5.0.12","latest":"5.0.12","dependent":"global","location":"/opt/homebrew/lib/node_modules/npm/node_modules/brace-expansion"},
+          "ip-address": [
+            {"current":"10.5.0","latest":"10.7.3","location":"/opt/homebrew/lib/node_modules/npm/node_modules/ip-address"},
+            {"current":"10.7.2","latest":"10.7.3","location":"/opt/homebrew/lib/node_modules/@scope/a/node_modules/ip-address"}
+          ],
+          "pnpm": {"current":"12.8.1","wanted":"12.9.1","latest":"12.9.1","dependent":"global"}
+        }"#;
+        let got = parse_npm_outdated_all(json);
+        assert_eq!(
+            got.len(),
+            3,
+            "both ip-address copies and no location-less entry"
+        );
+        assert_eq!(got[0].name, "brace-expansion");
+        assert_eq!(got[0].current, "5.0.9");
+        assert_eq!(got[0].latest, "5.0.12");
+        assert!(got[0]
+            .location
+            .ends_with("npm/node_modules/brace-expansion"));
+        assert_eq!(got[1].current, "10.5.0");
+        assert_eq!(got[2].current, "10.7.2");
+        assert!(
+            !got.iter().any(|e| e.name == "pnpm"),
+            "a top-level row is not nested"
+        );
+    }
+
+    #[test]
+    fn npm_outdated_all_is_empty_rather_than_wrong_on_junk() {
+        assert_eq!(parse_npm_outdated_all(""), Vec::new());
+        assert_eq!(parse_npm_outdated_all("npm warn something\n"), Vec::new());
+        assert_eq!(
+            parse_npm_outdated_all(r#"{"a":"not an object"}"#),
+            Vec::new()
+        );
     }
 
     #[test]

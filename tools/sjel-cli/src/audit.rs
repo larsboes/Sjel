@@ -403,6 +403,12 @@ fn globals_osv_section(root: &Path, r: &mut Report) {
                 0 => println!("  ✓ clean"),
                 1 => {
                     println!("  ✗ vulnerabilities found above");
+                    // The one command that can move an npm finding whose OWNER is current: npm
+                    // re-resolves a tree when the package is reinstalled, and `sjel update`'s
+                    // report names the owners whose trees are behind. Named here rather than left
+                    // as "run tools/audit", which was this pass's advice for a class no command
+                    // reached (2026-10-04).
+                    println!("  · an npm finding here may be movable: `sjel update apply --only npm --re-resolve <package>`");
                     r.fail = true;
                 }
                 _ => {

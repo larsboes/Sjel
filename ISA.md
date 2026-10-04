@@ -1182,6 +1182,28 @@ claim yet, and the watch rows they name are in `upstreams.toml` with the questio
 
 ## Log
 
+- 2026-10-04 · `sjel update` can move an npm finding whose owner is current, which is the class the
+  audit's installed pass had no verb for. Measured before the change: all five global npm owners
+  reported `✓ current` while 29 findings sat in their subtrees, so the report was right about every
+  row and wrong about the machine, and `tools/audit`'s advice (`run tools/audit`, `sjel update`)
+  named nothing that reached them. `npm outdated -g` asks the top level; `--all` asks every nested
+  node and each entry carries the `location` that says whose tree it is in, so a row per owner now
+  names what is behind it — as CURRENT and never as stale, which is the judgement here: every
+  nested node of every global tree is behind someone's latest, because a parent pins what it was
+  published against, and marking owners stale would make the report red forever on every machine
+  with a global install. What was missing was the command, not a flag:
+  `sjel update apply --only npm --re-resolve <package>` reinstalls the owner, which is what makes
+  npm resolve its ranges again (cargo's half drops `--locked`; npm has no lock to drop). The row's
+  note carries it, and `tools/audit`'s installed pass now prints it whenever it finds something.
+  Two defects were found and fixed while writing it rather than recorded: the first version called
+  a package behind when it was AHEAD of the registry's `latest` tag, naming `accepts 2.0.0 → 1.3.8`
+  as its example — a downgrade nobody should make — so the entries are filtered by the crate's own
+  `version_newer`, which is the rule the cargo surface already uses; and the existing "named on the
+  command line but nothing plans to move it" warning was cargo-only, so it would have called a
+  perfectly planned npm name a typo. Held by four `cargo test -p sjel-cli` cases: the nested shape
+  in both forms npm emits (an object at one location, an ARRAY of them at several, which the
+  top-level parser silently drops), the owner read from the outermost `node_modules` pair — scoped
+  owners are two path segments — and the plan, where a stale owner is installed once and not twice.
 - 2026-10-04 · The audit's installed-software pass accepts its findings with reasons, and the
   repository gate keeps its own rule. `tools/audit`'s second pass reports software installed
   outside this checkout, where a fix is frequently out of reach: `cargo install --locked`

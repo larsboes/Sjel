@@ -122,6 +122,21 @@ map for the npm parsers, which restores npm's order without turning on
 `serde_json/preserve_order` — that feature is additive across the whole build and would change
 `serde_json::Map` for every crate in the workspace.
 
+`updates` grew an npm half on 2026-10-04, after the audit's installed pass showed the gap: all
+five global npm owners reported current while 29 findings sat in their subtrees, so the report was
+not wrong about any row and was wrong about the machine, and the audit's advice named a command
+that could not reach any of them. `npm outdated -g` asks about the top level; `--all` asks about
+every nested node, and each entry carries the `location` that says whose tree it is in. A row per
+owner now names what is behind it — reported as CURRENT and never as stale, which is the judgement
+in the change: every nested node of every global tree is behind someone's latest, because a parent
+pins what it was published against, so marking owners stale would make the report red forever on
+every machine with a global install. What was missing was not a flag but the command, and
+`apply --only npm --re-resolve <package>` is it: npm has no lock to drop, so reinstalling the owner
+is what makes it resolve its ranges again. The row's note carries that command, and the entry is
+filtered by the crate's own `version_newer` so a package installed AHEAD of the registry's `latest`
+tag — a major line the publisher never tagged, an alpha ahead of the release — is not reported as
+being behind.
+
 The four `packs-*` adapters followed on 2026-10-04, and with them `tools/lib/pack-deploy.ts`,
 `tools/lib/harness-registry.ts` and `tools/pack-drift-hook.ts`. This was the port the engine was
 waiting for: `harnesses` had already moved `pack-deploy.ts`'s mutation half into

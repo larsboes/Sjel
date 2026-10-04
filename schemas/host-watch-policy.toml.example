@@ -1,6 +1,6 @@
 # host-watch-policy.toml — what "a process misbehaving" means on THIS machine.
 #
-# The overlay half of Axon#177. Core Axon's tools/host-watch.ts owns the parsing, the
+# The overlay half of Axon#177. Core Axon's tools/host-watch owns the parsing, the
 # ratio arithmetic and the task hand-off, and knows no process name; every number and
 # name below is machine-specific and therefore lives in the active overlay
 # (CONTRIBUTING.md#public-core-and-private-overlays).

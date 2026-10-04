@@ -12,10 +12,15 @@
 # written the postmortem.
 kind     = "process"
 name     = "host-watch"
-# `bun` first, not the tools/host-watch launcher: service-runner.sh derives the generated
-# unit's PATH from command[0], and a launcher script would hide the interpreter (the same
-# reason sparpreis-watch spells out the interpreter here).
-command  = ["bun", "run", "tools/host-watch.ts"]
+# The built binary, not a launcher and no longer an interpreter. This shape is the one the
+# other Rust capabilities use (sjel-status, punctuality): service-runner.sh derives the generated
+# unit's PATH from command[0] and from each `build` word, so naming `cargo` here is what puts it
+# on the job's PATH — a bare launcher would leave the hour-long job unable to rebuild a stale
+# binary, and `bun run` would start an interpreter every hour for four lines of `ps`. The same
+# rule the tool applies to its own dependency: an hourly job must not be the thing that starts a
+# build it cannot finish.
+command  = ["target/release/sjel-cli", "host-watch"]
+build    = ["cargo", "build", "--locked", "--release", "-p", "sjel-cli", "--bin", "sjel-cli"]
 schedule = "1h"
 
 # No `port`: it runs, observes, and exits. `schedule` and `autostart` are mutually

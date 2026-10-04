@@ -24,6 +24,7 @@ Rust first, and the one-crate shape was decided on 2026-10-02.
 | `pack-drift-hook` | `tools/pack-drift-hook` | TypeScript (`pack-drift-hook.ts`), 2026-10-04 |
 | `self` (generate, status, explain, coupling, check) | `tools/self` | TypeScript (`self.ts` + `lib/self-model.ts`), 2026-10-04 |
 | `audit` (no arguments) | `tools/audit` | bash, 2026-10-04 |
+| `host-watch` (check, `--dry-run`, `--json`) | `tools/host-watch` | TypeScript (`host-watch.ts` + `host-watch.test.ts`), 2026-10-04 |
 
 `toolchain-check` was compared with its bash version on this Mac before replacement. Text
 output, JSON (sorted keys) and exit codes were identical for 10 flag combinations, and
@@ -211,6 +212,63 @@ Three differences are deliberate.
 - `tools/audit -h` prints the whole header comment with its `#` markers stripped, where the script
   printed only its first nineteen lines and cut off mid-sentence. Same deliberate fix the
   `toolchain-check` port recorded.
+
+`tools/host-watch` followed on 2026-10-04, and is the first tool in this crate to open the
+shared store. It was the last `bun run` job whose READERS are already Rust: `sjel-status` serves
+its rows at `/api/sjel-status/host-watch` and the dashboard ranks them at band 900, while
+`tools/storage report --json` and `host-net check --json` stay invoked rather than reimplemented,
+because each owns a policy file and a parsing rule that a second copy here would fork.
+
+`mod.rs` is the verb surface, the policy read, the three probes and the store write; `pure.rs`
+is the pure half — the two `ps` parsers, the runaway rule, the storage and net folds, and the emission
+and resolution decisions — with `tools/host-watch.test.ts`'s 34 cases as Rust unit tests (31 of them;
+the storage and net fixtures are built from JSON now, which exercises the deserialization too).
+The store is `sjel-store`'s, opened the way every capability opens it: `sjel_config::database_path`
+for the file, `sjel_store::open_pool` for the pragmas and the once-per-database migration, and
+`sjel_store::write_transaction` for the one transaction a run writes. No second declaration of
+where the database is or how it is opened.
+
+Verified against the TypeScript before it was deleted, with a fake `ps` first on PATH so both
+implementations saw one frozen process list and the comparison was deterministic. `-h`, `--dry-run`
+and the three write verbs were byte-identical in stdout, stderr and exit code — the create,
+the refresh and the clear, each printing its own line — and the `host_watch_findings` rows left
+behind were identical after all three. The `--json` payloads are equal once parsed, with the key
+order difference below. A run with no policy exits 2 from both, naming
+`schemas/host-watch-policy.toml.example`. Then the real paths: `tools/service-runner.sh start
+host-watch` — what launchd invokes hourly — rebuilt the binary through the new `build` line and
+reported `808 processes, disk ok — nothing to report`, and `sjel-status`'s
+`/api/sjel-status/host-watch` served `{"findings":[]}` from the table this writer maintains.
+
+The capability's `service.toml` changed shape, not just argv: it named `bun run tools/host-watch.ts`
+and now names `target/release/sjel-cli host-watch` with a `build` line, the same shape
+`sjel-status` and `punctuality` use. That is deliberate and load-bearing — `service-runner.sh`
+derives the unit's PATH from `command[0]` and from each `build` word, so naming `cargo` is what
+puts it on the job's PATH and lets an hourly run rebuild a stale binary. A launcher would have
+left that job unable to build anything. The scheduled argv itself did not change: launchd runs
+`tools/service-runner.sh start host-watch` and the runner reads the manifest, so no installed unit
+needs reinstalling. `tools/host-watch` stays as the human and test interface.
+
+Three differences are deliberate.
+
+- `--json` object keys come out sorted, where the TypeScript wrote the object literal's order —
+  the same `serde_json` map behaviour the `harnesses`, `updates` and `packs-*` ports recorded. The
+  parsed payloads are equal. The one camelCase field (`cpuSeconds`) is kept, so the payload's
+  field names are the ones a reader of the old output already had.
+- The overlay is resolved by `sjel-config`, as it is for every capability, rather than by
+  `tools/lib/overlay.ts`. That reader takes `SJEL_PERSONAL_ROOT`; the TypeScript preferred
+  `SJEL_OVERLAY_ROOT`. Both are the same value in every supported invocation — `tools/lib/paths.sh`
+  sets the second from the first, which is what keeps the documented per-invocation override
+  working — but a shell that exports only `SJEL_OVERLAY_ROOT` and runs the binary directly would
+  now resolve nothing.
+- `host-net-cli` is looked for under `CARGO_TARGET_DIR` when that is set, and under
+  `<root>/target/release` otherwise, which is how `tools/lib/sjel-cli.sh` already resolves the
+  same directory. The TypeScript always looked in `<root>/target/release`, so with a custom target
+  directory it reported "not built" while the binary existed.
+
+The Cargo.toml records the one cost this port has that no earlier one did: `sjel-cli` links
+bundled SQLite now, 4.9 MB to 6.9 MB measured on this Mac, so the binary every launcher builds on
+demand is no longer pure Rust. `libs/sjel-store` and `libs/sjel-config` were both already in the
+workspace lock, so this resolves no new crate.
 
 ## Porting a script
 

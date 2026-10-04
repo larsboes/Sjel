@@ -1498,6 +1498,7 @@
       ],
       "evidence": [
         "tools/capability-auth/Cargo.toml",
+        "tools/sjel-cli/Cargo.toml",
         "tools/storage/Cargo.toml"
       ]
     },
@@ -1519,6 +1520,16 @@
       ],
       "evidence": [
         "tools/capability-auth/Cargo.toml"
+      ]
+    },
+    {
+      "from": "tools",
+      "to": "sjel-store",
+      "kinds": [
+        "cargo-dep"
+      ],
+      "evidence": [
+        "tools/sjel-cli/Cargo.toml"
       ]
     },
     {

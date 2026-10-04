@@ -29,7 +29,7 @@ sustained-core ratio (`min_cpu_ratio`, so merely being old is not a finding eith
 Ranking by raw CPU time is the obvious rule and it is wrong. On the day this was written
 WindowServer had **more** cumulative CPU than the stuck extension — 168 minutes against
 148 — and was perfectly healthy. It had simply been alive four times longer. That pair is
-frozen as a fixture in `tools/host-watch.test.ts`, because it is the one comparison that
+frozen as a fixture in `tools/sjel-cli/src/host_watch/pure.rs`, because it is the one comparison that
 tells a working implementation from a plausible one.
 
 **Free space.** Delegated whole to `sjel storage report --json`; this reads its verdict and
@@ -55,8 +55,9 @@ one step further.
 A non-zero exit from `host-net` is data, not a failure: exit 1 is how it reports an unexpected
 listener and exit 2 is how it reports that it could not check. If the binary has never been
 built, this prints one stderr line and files nothing rather than reporting a clean host. It
-calls `target/release/host-net-cli` directly and never the launcher, so an hourly job can never
-trigger a `cargo build`.
+calls `target/release/host-net-cli` directly and never the launcher: this tool builds nobody
+else's crate, and the one build an hourly run can start is its own, which `service.toml`
+declares in the open.
 
 Memory and thermals are not checked. Both measured healthy at the incident (pressure
 normal, zero swap, no thermal warning recorded in 26h) and adding a check for a condition
@@ -110,6 +111,11 @@ tools/host-watch              check, record findings
 tools/host-watch --dry-run    check and print; write nothing
 tools/host-watch --json       machine-readable findings
 ```
+
+Rust since 2026-10-04, in `tools/sjel-cli/src/host_watch/`: the policy read, the three probes and
+the store in `mod.rs`, the rules and their fixtures in `pure.rs`. The scheduled job runs the
+built binary — `command = ["target/release/sjel-cli", "host-watch"]` — rather than a launcher, so
+an hourly run starts no interpreter; `tools/host-watch` is the path a person and the tests use.
 
 ## Why it is a manifest and not a LaunchAgent
 

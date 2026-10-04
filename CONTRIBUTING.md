@@ -413,7 +413,11 @@ then the four `packs-*` adapters with `tools/pack-drift-hook` (2026-10-04, which
 Rust since 2026-10-02 and the adapters were its last reason to exist in two languages), and then
 `tools/self` with `tools/lib/self-model.ts` (2026-10-04, which the doctor runs on every
 invocation), and then `tools/audit` (2026-10-04 — `sjel update apply` runs it, and `tools/doctor`
-reads the verdict its exit code leaves in the host-patch receipt).
+reads the verdict its exit code leaves in the host-patch receipt), and then `tools/host-watch`
+with its test (2026-10-04, which is what let the hourly job stop starting an interpreter. It is
+also the first tool in this crate to open the shared store, so that crate now links
+`libs/sjel-store` — and `libs/sjel-config` with it, because the database path has one owner and
+it is not this one).
 `tools/sjel-mcp.ts` is the one exception and not a second crate: the `tools/sjel-mcp` crate
 already held its registration half, so the server moved in beside it on 2026-10-04 rather than
 into `sjel-cli` and a second MCP implementation.

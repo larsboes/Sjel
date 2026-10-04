@@ -1182,6 +1182,31 @@ claim yet, and the watch rows they name are in `upstreams.toml` with the questio
 
 ## Log
 
+- 2026-10-04 · `tools/host-watch` is Rust, and the hourly job stops starting an interpreter. It
+  was the last `bun run` job whose readers are already Rust: `sjel-status` serves its rows at
+  `/api/sjel-status/host-watch` and the dashboard ranks them at band 900, while `tools/storage
+  report --json` and `host-net check --json` stay invoked rather than reimplemented. `src/host_watch/
+  mod.rs` holds the verb surface, the policy read, the three probes and the store write; `pure.rs`
+  holds the two `ps` parsers, the runaway rule, the storage and net folds and the emission and
+  resolution decisions, with the TypeScript test's 34 cases as 31 Rust unit tests. It is also the
+  first tool in `tools/sjel-cli` to open the shared store, through `sjel_config::database_path` and
+  `sjel_store::{open_pool, write_transaction}` rather than a second declaration of where the file
+  is; the crate links bundled SQLite from here on (4.9 MB to 6.9 MB measured, both already in the
+  workspace lock). Verified against the TypeScript before deletion with a fake `ps` first on PATH,
+  so both saw one frozen process list: `-h`, `--dry-run` and the create/refresh/clear runs were
+  byte-identical in stdout, stderr and exit code, the `host_watch_findings` rows left behind were
+  identical after all three, a run with no policy exited 2 from both, and `--json` is equal once
+  parsed. Then the real paths: `tools/service-runner.sh start host-watch` rebuilt through the new
+  `build` line and reported `808 processes, disk ok — nothing to report`, and `sjel-status` served
+  `{"findings":[]}` from the table this writer maintains. `capabilities/host-watch/service.toml`
+  now names `target/release/sjel-cli host-watch` with a `build` line, the shape `sjel-status` and
+  `punctuality` use — that is what puts `cargo` on the job's PATH, which a launcher would have
+  hidden — and the installed unit needs no reinstall because launchd runs service-runner and the
+  runner reads the manifest. Three differences are deliberate and named in tools/sjel-cli/README.md:
+  `--json` keys are sorted (parsed payloads equal, and the camelCase field name is kept), the
+  overlay is resolved by `sjel-config` (`SJEL_PERSONAL_ROOT`) rather than by `tools/lib/overlay.ts`
+  (which preferred `SJEL_OVERLAY_ROOT`; paths.sh keeps the two equal), and `host-net-cli` is looked
+  for under `CARGO_TARGET_DIR` when set, where the TypeScript always looked in `<root>/target`.
 - 2026-10-04 · `tools/audit` is Rust, and the audit path no longer needs `bash` or `jq`. It
   closes the loop the `updates` port opened: `sjel update apply` runs it as its final step
   (`updates/report.rs`'s `run_audit`) and `tools/doctor` reads the verdict its exit code put into

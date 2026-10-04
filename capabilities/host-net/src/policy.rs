@@ -87,7 +87,7 @@ pub fn unexpected(listeners: &[Listener], policy: &Policy) -> Vec<Exposure> {
 
 /// The code `check` answers with for this finding list.
 ///
-/// `check`'s answer is a number before it is a sentence: `tools/host-watch.ts` branches on the
+/// `check`'s answer is a number before it is a sentence: `tools/host-watch` branches on the
 /// exit code and never parses the text. The mapping lives here, next to the rule it reports on,
 /// so a test can reach it — inline in `main`'s dispatch nothing could.
 pub fn verdict(found: &[Exposure]) -> u8 {
@@ -208,7 +208,7 @@ reason = "an operator-accepted daemon"
         assert_eq!(rapportd[0].describe(), "rapportd on *:59039 (tcp4+tcp6)");
     }
 
-    /// The three exit codes are the contract `tools/host-watch.ts` consumes, so they are pinned
+    /// The three exit codes are the contract `tools/host-watch` consumes, so they are pinned
     /// as numbers rather than as names. Renaming a constant is free; renumbering one silently
     /// turns "something is exposed" into "checked and clean" at the only caller that reads it.
     #[test]

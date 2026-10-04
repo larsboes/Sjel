@@ -32,7 +32,7 @@ pub fn fmt_bytes(b: u64) -> String {
 }
 
 /// The volume a cleanup actually changes a number on. Field order is the JSON contract
-/// `tools/host-watch.ts` and the dashboard already read.
+/// `tools/host-watch` and the dashboard already read.
 #[derive(Debug, Clone, Serialize)]
 pub struct Disk {
     pub total: u64,

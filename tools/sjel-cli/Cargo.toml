@@ -30,6 +30,16 @@ regex.workspace = true
 # so neither adds a crate to resolve.
 sha2.workspace = true
 civil-date = { path = "../../libs/civil-date" }
+# host-watch writes its findings into the one shared SQLite file, so it opens it the way every
+# capability does — `sjel-config` owns where that file is and `sjel-store` owns the pragmas,
+# the once-per-database migration and the write transaction. Both are already in the workspace
+# lock (the capabilities resolve them), so neither adds a crate to resolve; `pool_for`'s
+# `min_idle(0)` is there for exactly this shape, a job that opens one connection, writes and
+# exits. First tool in this crate to link SQLite: measured 4.9 MB -> 6.9 MB on this Mac, and a
+# single `cargo build -p sjel-cli` no longer links only pure-Rust code — bundled SQLite needs a C
+# compiler, which is already the linker cargo picks on both macOS and Linux.
+sjel-config = { path = "../../libs/sjel-config" }
+sjel-store = { path = "../../libs/sjel-store" }
 
 # No clap, for the reason tools/storage/Cargo.toml states. Revisit when the subcommand count
 # makes the match statement harder to read than the dependency is to audit.

@@ -7,7 +7,7 @@ use super::*;
 /// `tools/storage` is operator machinery with no server: it measures, prints and exits.
 /// The dashboard's Systems page is where a person asks "what is filling me", and
 /// something always up has to answer, which is this process — the same arrangement
-/// `/packs` and `/host-watch` already have, and `tools/host-watch.ts` reads this very
+/// `/packs` and `/host-watch` already have, and `tools/host-watch` reads this very
 /// tool the same way. The measurement stays with the tool: re-deriving the `du` walks
 /// here would be a second answer to a question that already has one, and the two would
 /// disagree the first time a class was added to the overlay's policy.
@@ -18,7 +18,7 @@ use super::*;
 /// loudest thing it can say, not a failure — refusing the answer here would blank the
 /// panel on exactly the machine that most needs to see it. So stdout is parsed first and
 /// the exit code is only consulted when there is nothing to parse, which is the same rule
-/// `tools/host-watch.ts` applies when it runs this tool.
+/// `tools/host-watch` applies when it runs this tool.
 ///
 /// The launcher, not the binary: `tools/storage/storage` sources `tools/lib/paths.sh`,
 /// which is what resolves the overlay the policy lives in, and builds the release binary

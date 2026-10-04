@@ -1765,7 +1765,8 @@ export interface StorageProtected {
  *  Served by sjel-status rather than by `tools/storage`, which is operator machinery with
  *  no server — it measures, prints and exits. `state` is `ok`, `warn` or `critical`, and
  *  it is the volume's state, never a class being large: a class over the flag on a machine
- *  with free space is not a fault (the tool's own rule, tested in tools/host-watch.test.ts). */
+ *  with free space is not a fault (the tool's own rule, tested in
+ *  tools/sjel-cli/src/host_watch/pure.rs). */
 /** What an agent may do on one capability (ISA F10). */
 export type AgentMode = 'off' | 'read-only' | 'ask' | 'auto';
 

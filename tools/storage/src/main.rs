@@ -191,7 +191,7 @@ fn cmd_report(json: bool, do_apply: bool) -> Result<u8, String> {
     let over_critical = (disk.free as f64) < crit_gb * GB as f64;
 
     if json {
-        // Field names and nesting are the contract tools/host-watch.ts already reads, kept
+        // Field names and nesting are the contract tools/host-watch already reads, kept
         // byte-compatible with what tools/storage.ts emitted. `expected_service` is the one
         // addition: the text report always printed it, and a JSON reader had no way to see
         // it. Additive, so an existing consumer is unaffected.

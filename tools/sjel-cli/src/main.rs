@@ -20,6 +20,7 @@ mod capability;
 mod doctor;
 mod harnesses;
 mod help;
+mod host_watch;
 mod pack_hook;
 mod packs;
 mod paths;
@@ -65,6 +66,7 @@ fn main() -> ExitCode {
     // Ported tools/ scripts, run by their launchers under the script's own name.
     match command {
         "audit" => return audit::run(rest),
+        "host-watch" => return host_watch::run(rest),
         "toolchain-check" => return toolchain::run(rest),
         "capability.sh" => return registry::run(rest),
         "service-runner.sh" => return runner::run(rest),

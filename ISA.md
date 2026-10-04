@@ -1182,6 +1182,30 @@ claim yet, and the watch rows they name are in `upstreams.toml` with the questio
 
 ## Log
 
+- 2026-10-04 · `tools/model-check` is Rust, and `tools/doctor` no longer starts an interpreter to
+  check this machine's inference roles. That leg ran `bun tools/model-check.ts --local --json`
+  unconditionally and measured 6.9 s of the doctor's 20.6 s; the doctor now calls
+  `src/model_check/` in-process and reads the payload it read before, field for field, so the
+  section is unchanged and the whole run fell to 11.8 s. It was the last place a Rust tool started
+  an interpreter to do work it could do itself, and the readers were already Rust: `libs/inference`
+  owns the registry, and `is_loopback_url`, `resolve_key_file` and `api_key_from_file` now come from
+  there rather than from copies — the first two made public for this caller, `resolve_key_file`
+  extracted from the resolver that already lived there. Verified against the TypeScript before
+  deletion, both implementations pointed at one stub provider through a scratch overlay written for
+  the comparison, so nothing real was touched: five runs — `--local`, `--local --json`, `--json`,
+  `--probe --json` and `--probe` — matched byte for byte in stdout, stderr and exit code for every
+  text output, and the JSON payloads are equal once parsed, entry for entry and in the same order.
+  Two differences are deliberate: JSON object keys are sorted, as every port since `harnesses`
+  records, while the `entries` ARRAY keeps the file's order through a local `OrderedMap`, because
+  `serde_json`'s map is a `BTreeMap` here and `preserve_order` would change it for every consumer of
+  this binary (the same reason `updates/parse.rs` carries its own); and the credential is read the
+  way `libs/inference` reads it, which changes behaviour for a backend whose key file names a `~/`
+  path or a JSON settings file — the TypeScript joined `~/.omlx/settings.json` onto the config
+  directory, found nothing, and reported the role unprovisioned without ever dialling it. No
+  loopback role on this machine declares one, so nothing it reported changed. A role's declaration
+  is still read leniently rather than through `InferenceConfig`, which requires `backend` and
+  `model` on every role and degrades the whole config to empty when one is missing — that would be a
+  broken declaration reading as doctor's `ok`, which is the one outcome this tool must not produce.
 - 2026-10-04 · The MCP server's query encoding no longer depends on the order its arguments were
   built in, which was the one red gate in `cargo test --workspace --locked`. `tools/sjel-mcp`'s
   `encode_query` iterated `serde_json`'s map, which is an insertion-ordered `IndexMap` whenever any

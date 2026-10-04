@@ -41,6 +41,11 @@ zeroize.workspace = true
 # compiler, which is already the linker cargo picks on both macOS and Linux.
 sjel-config = { path = "../../libs/sjel-config" }
 sjel-store = { path = "../../libs/sjel-store" }
+# `tools/model-check` asks the registry the same questions every capability asks it: is this
+# backend on loopback, and is this backend's credential present. Both rules live in
+# `libs/inference` (`is_loopback_url`, `resolve_key_file` + `api_key_from_file`) and are reused
+# rather than re-derived, which is also why the doctor can run the sweep in-process.
+sjel-inference = { path = "../../libs/inference" }
 # The two scheduled jobs that call another capability over HTTP — feed-sweep to comms,
 # sparpreis-watch to trips and transit. `sjel-http` owns the blocking client, its user-agent, the
 # timeout no caller can forget and the redirect policy; `sjel-server` owns `InboundAuth`, which is

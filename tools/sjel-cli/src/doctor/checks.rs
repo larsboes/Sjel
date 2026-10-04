@@ -502,22 +502,24 @@ fn bun_policy(ctx: &mut Ctx) {
     }
 }
 
+/// In-process since 2026-10-04. This ran `bun tools/model-check.ts --local --json` on every
+/// invocation, and that leg measured 6.9 s of the doctor's 20.6 s. The payload read below is the
+/// one the tool printed, field for field, so nothing after it changed.
 fn inference_roles(ctx: &mut Ctx) {
-    let checker = tool(ctx, "model-check.ts");
-    if !checker.exists() {
-        ctx.warn(format!("missing {}", checker.display()));
-        return;
-    }
-    let o = capture(
-        Command::new("bun")
-            .arg(&checker)
-            .args(["--local", "--json"]),
-    );
-    let Ok(data) = serde_json::from_str::<Json>(&o.stdout) else {
-        ctx.warn(
-            "model-check did not emit JSON — run 'bun tools/model-check.ts --local' for detail",
-        );
-        return;
+    let opts = crate::model_check::Options {
+        probe: false,
+        local_only: true,
+        json: true,
+    };
+    let overlay = overlay_dir(ctx);
+    let data = match crate::model_check::report(&opts, &overlay) {
+        Ok(outcome) => outcome.payload(),
+        Err(e) => {
+            ctx.warn(format!(
+                "model-check could not run — {e}; run 'tools/model-check --local' for detail"
+            ));
+            return;
+        }
     };
     let entries: Vec<Json> = data
         .get("entries")

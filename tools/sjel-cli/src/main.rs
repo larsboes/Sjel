@@ -23,6 +23,7 @@ mod harnesses;
 mod help;
 mod host_watch;
 mod inference_keys;
+mod model_check;
 mod pack_hook;
 mod packs;
 mod paths;
@@ -73,6 +74,7 @@ fn main() -> ExitCode {
         "host-watch" => return host_watch::run(rest),
         "feed-sweep" => return feed_sweep::run(rest),
         "sparpreis-watch" => return sparpreis_watch::run(rest),
+        "model-check" => return model_check::run(rest),
         "toolchain-check" => return toolchain::run(rest),
         "capability.sh" => return registry::run(rest),
         "service-runner.sh" => return runner::run(rest),

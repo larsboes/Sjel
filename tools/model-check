@@ -1,0 +1,22 @@
+#!/bin/bash
+# tools/model-check — is every model this machine names still real, still served, and still the
+# newest of its line?
+#
+# Launcher only. The logic moved to tools/sjel-cli/src/model_check/ on 2026-10-04 (the pure half in
+# pure.rs, the HTTP calls in mod.rs); tools/model-check.ts is deleted. `tools/model-check -h` prints
+# the usage.
+#
+# This is the human and test interface. `tools/doctor` no longer runs it at all: it calls the same
+# crate in-process, which is why the sweep is no longer a `bun` start-up on every doctor run.
+#
+# It sources tools/lib/paths.sh, because the overlay is where inference.json lives — and paths.sh
+# is the one place that order is written.
+# bash 3.2-safe (CONTRIBUTING.md#portable-shell).
+set -u
+
+_here="$(cd "$(dirname "$0")" && pwd)"
+# shellcheck source=tools/lib/paths.sh
+. "$_here/lib/paths.sh"       # SJEL_ROOT, SJEL_PERSONAL_ROOT, SJEL_OVERLAY_ROOT
+# shellcheck source=tools/lib/sjel-cli.sh
+. "$_here/lib/sjel-cli.sh"
+sjel_cli_exec model-check "$@"

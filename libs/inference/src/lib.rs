@@ -328,7 +328,11 @@ fn model_ids_match(configured: &str, installed: &str) -> bool {
 /// Whether a base URL addresses this machine. Backend-level rather than
 /// role-level because the machine override has to ask it of a declared backend
 /// before any role is resolved against it.
-fn is_loopback_url(base_url: &str) -> bool {
+///
+/// Public because `tools/model-check` asks the same question of the same declaration when it
+/// decides whether a backend is in scope for its `--local` sweep, and a second copy of the rule
+/// is how a local backend gets dialled as though it were remote, or the reverse.
+pub fn is_loopback_url(base_url: &str) -> bool {
     let address = base_url.trim().to_ascii_lowercase();
     let authority = address
         .strip_prefix("http://")
@@ -480,13 +484,9 @@ impl InferenceConfig {
             let Some(raw) = backend.api_key_file.as_deref() else {
                 continue;
             };
-            if raw.starts_with("~/") || Path::new(raw).is_absolute() {
-                continue;
-            }
-            backend.api_key_file = Some(config_directory.join(raw).to_string_lossy().into_owned());
+            backend.api_key_file = Some(resolve_key_file(config_directory, raw));
         }
     }
-
     /// Looks a role up and resolves its backend, applying the machine
     /// override. `None` means this machine has no way to do that job, which is
     /// a normal state a caller degrades from, not a crash.
@@ -1078,6 +1078,21 @@ fn rerank_scores_in_input_order(
         .enumerate()
         .map(|(index, score)| score.ok_or_else(|| format!("missing rerank result index {index}")))
         .collect()
+}
+
+/// Resolves a declared `api_key_file` against the directory its config lives in.
+///
+/// An absolute or `~/` path is already a location and is left alone; anything else is relative to
+/// that directory, never to whatever the process' working directory happens to be. Public because
+/// `tools/model-check` reads the same declaration to answer the same question — is this backend's
+/// credential present — and a second copy of this rule is how a present credential gets reported
+/// as missing, which is what it did on 2026-08-30.
+pub fn resolve_key_file(config_directory: &Path, raw: &str) -> String {
+    if raw.starts_with("~/") || Path::new(raw).is_absolute() {
+        raw.to_owned()
+    } else {
+        config_directory.join(raw).to_string_lossy().into_owned()
+    }
 }
 
 /// Reads a bearer key out of a file. JSON content yields `.auth.api_key` so

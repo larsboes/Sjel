@@ -420,7 +420,10 @@ also the first tool in this crate to open the shared store, so that crate now li
 it is not this one), and then `tools/feed-sweep` and `tools/sparpreis-watch` (2026-10-04, the last
 two `bun run` jobs in the repository: both manifests now name the built binary with a `build`
 line, so no timer starts an interpreter — which is also what took `sjel-http` and `sjel-server`
-into this crate, the one client factory and the one inbound-credential helper).
+into this crate, the one client factory and the one inbound-credential helper), and then
+`tools/model-check` (2026-10-04, which is what stopped `tools/doctor` starting an interpreter: it
+ran `bun tools/model-check.ts --local --json` on every invocation and that leg was 6.9 s of the
+doctor's 20.6 s, which fell to 11.8 s once the doctor called the same crate in-process).
 `tools/sjel-mcp.ts` is the one exception and not a second crate: the `tools/sjel-mcp` crate
 already held its registration half, so the server moved in beside it on 2026-10-04 rather than
 into `sjel-cli` and a second MCP implementation.

@@ -8,7 +8,7 @@
 //! Each rule stays with the tool that owns it: the host toolchain with toolchain-check, boot
 //! persistence with service-runner.sh, Pack deployment with tools/sjel-cli/src/harnesses/ (the
 //! same reader `tools/harnesses status` uses, in-process since 2026-10-02), local inference
-//! roles with tools/model-check.ts. Doctor reports.
+//! roles with tools/model-check (in-process since 2026-10-04). Doctor reports.
 //!
 //!   tools/doctor            full report, offline (no GitHub calls)
 //!   tools/doctor --online   also probe declared systems and fetch origin/main

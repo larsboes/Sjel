@@ -4552,6 +4552,7 @@ dependencies = [
  "sha2 0.11.0",
  "sjel-config",
  "sjel-http",
+ "sjel-inference",
  "sjel-server",
  "sjel-store",
  "toml",

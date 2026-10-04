@@ -29,6 +29,7 @@ Rust first, and the one-crate shape was decided on 2026-10-02.
 | `discover-ui-packages` | `tools/discover-ui-packages` | TypeScript implementation and tests, 2026-10-04 |
 | `feed-sweep` | `tools/feed-sweep` | TypeScript (`feed-sweep.ts`), 2026-10-04 |
 | `sparpreis-watch` | `tools/sparpreis-watch` | TypeScript (`sparpreis-watch.ts` + `sparpreis-watch.test.ts`), 2026-10-04 |
+| `model-check` | `tools/model-check` | TypeScript (`model-check.ts`), 2026-10-04 |
 
 `toolchain-check` was compared with its bash version on this Mac before replacement. Text
 output, JSON (sorted keys) and exit codes were identical for 10 flag combinations, and
@@ -376,6 +377,45 @@ already built for the capabilities, and most of that tree (rustls, hyper, tokio,
 with the reqwest `sjel-http` needs anyway, so a warm rebuild pays a link rather than a compile.
 The alternative was a second implementation of the deployment-token read and the loopback rule in
 this crate, which is the duplication this crate exists to remove.
+
+`tools/model-check` followed on 2026-10-04, and is the last place a Rust tool started an
+interpreter to do work it could do itself: `tools/doctor` ran `bun tools/model-check.ts --local
+--json` unconditionally, and that leg measured 6.9 s of the doctor's 20.6 s. The doctor now calls
+`src/model_check/` in-process and reads the payload it read before, field for field. `mod.rs` is
+the config read, the two HTTP calls and the loop; `pure.rs` is the family and version comparison,
+the catalogue and refusal parsing and the status decisions, with the cases the TypeScript never had
+as Rust unit tests — it had no test file at all.
+
+Verified against the TypeScript before deletion, both implementations pointed at one stub provider
+through a scratch overlay written for the comparison, so nothing real was touched. Five runs
+(`--local`, `--local --json`, `--json`, `--probe --json`, `--probe`) matched byte for byte in
+stdout, stderr and exit code for every text output, and the JSON payloads are equal once parsed —
+entry for entry, in the same order. Then the real path: `sjel doctor` reports
+`✓ 3/3 local role(s) answering` from the payload this module builds, and went from 20.6 s to
+11.8 s.
+
+Three differences are deliberate.
+
+- JSON object keys come out sorted, where the TypeScript wrote insertion order — the difference
+  every port since `harnesses` has recorded. The `entries` ARRAY keeps the file's own order, which
+  needed `pure::OrderedMap`: `serde_json`'s map is a `BTreeMap` here, and turning on
+  `preserve_order` would change it for every consumer of this binary, which is the same reason
+  `updates/parse.rs` carries its own order-preserving map.
+- Two rules come from `libs/inference` now instead of from a second copy: `is_loopback_url` decides
+  which backends `--local` sweeps — broader than the TypeScript's three-name list, since it also
+  reads `127.*` and `0.0.0.0` and strips userinfo, so `http://127.0.0.1:1@evil.example` is not
+  loopback — and `resolve_key_file` plus `api_key_from_file` read the credential. That second pair
+  is a real behaviour change for a backend whose `api_key_file` names a `~/` path or a JSON
+  settings file: the TypeScript joined `~/.omlx/settings.json` onto the config directory, found
+  nothing, and reported the role `credential unavailable` without ever dialling it. No loopback
+  role on this machine declares one, so nothing it reports changed.
+- A role's declaration is read leniently rather than through `InferenceConfig`, which requires
+  `backend` and `model` on every role and degrades the WHOLE config to empty when one is missing —
+  which would turn a broken declaration into doctor's `ok`. The one thing that must never happen
+  here is a config fault reading as health.
+
+The Cargo.toml records the cost: `sjel-inference` takes the binary from 14.1 MB to 14.3 MB, and
+resolves no crate — its own dependencies were already in the link.
 
 ## Porting a script
 

@@ -529,6 +529,41 @@ impl<'a> Svc<'a> {
         Ok(())
     }
 
+    /// The machine's `[capability.<cap>] env` from machine.toml, as KEY=VALUE pairs.
+    ///
+    /// One reader for every path that needs it: the launchd/systemd unit (`persist::env_block`
+    /// renders these) and the on-demand start below. It reached only the unit until 2026-10-04,
+    /// so the SAME capability ran with a different environment depending on who started it —
+    /// and a capability with `autostart = "false"` never gets a unit at all, so a machine-local
+    /// PATH could not reach it by any route. Measured that day: ytalbum's panel and
+    /// knowledge-graph both died at start under launchd's PATH (`ytalbum: missing required tool
+    /// 'yt-dlp'`, `nohup: bun: No such file or directory`) while the identical command from a
+    /// login shell succeeded.
+    ///
+    /// Process-kind only, deliberately: a container takes its environment from `--env-file`,
+    /// and `docker run` inherits nothing, so an entry here would be silently inert for one.
+    pub fn cap_env(&self) -> R<Vec<(String, String)>> {
+        let entries = self
+            .platform
+            .cap_section(&self.cap)
+            .map(|t| get_array(t, "env"))
+            .unwrap_or_default();
+        let mut out = Vec::with_capacity(entries.len());
+        for line in entries {
+            let Some((k, v)) = line.split_once('=') else {
+                return fail(
+                    1,
+                    format!(
+                        "service-runner.sh: [capability.{}] env entry '{line}' has no '=' — expected KEY=VALUE",
+                        self.cap
+                    ),
+                );
+            };
+            out.push((k.to_owned(), v.to_owned()));
+        }
+        Ok(out)
+    }
+
     fn health_url(&self) -> Option<String> {
         (!self.port.is_empty() && !self.health_path.is_empty())
             .then(|| format!("http://127.0.0.1:{}{}", self.port, self.health_path))
@@ -708,9 +743,14 @@ impl<'a> Svc<'a> {
         // nohup, as the script ran it: it ignores SIGHUP and execs the command, so the pid
         // recorded is the service's own.
         let mut c = Command::new("nohup");
-        c.args(&self.command)
-            .current_dir(self.workdir_path())
-            .env("SJEL_SHELL_PORT", self.shell_port())
+        c.args(&self.command).current_dir(self.workdir_path());
+        // The machine's entries first, so the two keys the runner owns below keep the last
+        // word — the precedence the unit path already has, where launchd sets the declared
+        // environment and this process then overwrites them.
+        for (k, v) in self.cap_env()? {
+            c.env(k, v);
+        }
+        c.env("SJEL_SHELL_PORT", self.shell_port())
             .stdin(Stdio::null())
             .stdout(out)
             .stderr(err);
@@ -812,12 +852,13 @@ impl<'a> Svc<'a> {
             }
         }
 
-        let code = status_of(
-            Command::new(&self.command[0])
-                .args(&self.command[1..])
-                .current_dir(self.workdir_path())
-                .env("SJEL_SHELL_PORT", self.shell_port()),
-        );
+        let mut cmd = Command::new(&self.command[0]);
+        cmd.args(&self.command[1..]).current_dir(self.workdir_path());
+        for (k, v) in self.cap_env()? {
+            cmd.env(k, v);
+        }
+        cmd.env("SJEL_SHELL_PORT", self.shell_port());
+        let code = status_of(&mut cmd);
         for d in &started {
             println!(
                 "service-runner.sh: {} started {d} for this run — stopping it",

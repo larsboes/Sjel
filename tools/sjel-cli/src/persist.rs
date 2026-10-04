@@ -145,27 +145,22 @@ fn path_dirs(s: &mut Svc) -> R<String> {
 
 /// Machine-local env from `[capability.<cap>] env = ["K=V", ...]`, rendered for the unit:
 /// XML-escaped `<key>`/`<string>` pairs on macOS, `Environment="K=V"` lines on Linux.
+///
+/// The parsing is `Svc::cap_env`, shared with the on-demand start so the two cannot disagree
+/// about what this machine declared.
 fn env_block(s: &Svc) -> R<String> {
-    let entries = s
-        .platform
-        .cap_section(&s.cap)
-        .map(|t| get_array(t, "env"))
-        .unwrap_or_default();
     let esc = |v: &str| {
         v.replace('&', "&amp;")
             .replace('<', "&lt;")
             .replace('>', "&gt;")
     };
     let mut out = String::new();
-    for line in entries {
-        let Some((k, v)) = line.split_once('=') else {
-            return fail(1, format!("service-runner.sh: [capability.{}] env entry '{line}' has no '=' — expected KEY=VALUE", s.cap));
-        };
+    for (k, v) in s.cap_env()? {
         match s.platform.os.as_str() {
             "macos" => out.push_str(&format!(
                 "    <key>{}</key>\n    <string>{}</string>\n",
-                esc(k),
-                esc(v)
+                esc(&k),
+                esc(&v)
             )),
             "linux" => out.push_str(&format!("Environment=\"{k}={v}\"\n")),
             _ => {}

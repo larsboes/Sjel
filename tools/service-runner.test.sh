@@ -3,6 +3,9 @@
 #   * `stop` cannot report success while the capability's declared port is still held
 #   * `down` followed by `up` brings services back, while an explicit `stop` still keeps one down
 #   * machine.toml's `[inference] backend` reaches the started process, and only when declared
+#   * machine.toml's `[capability.X] env` reaches the process started ON DEMAND, and only when
+#     declared — it used to render into a launchd/systemd unit and nowhere else, so a capability
+#     with `autostart = "false"` (which never gets a unit) could not be given a PATH at all
 #
 # The case is real and was hit by hand on 2026-07-30: a panel capability's dev server survived
 # `stop`. `bun run dev` supervises its own child; when the supervisor exits first the child is
@@ -35,6 +38,8 @@ cleanup() {
   rm -f /tmp/axon-porthog.pid /tmp/axon-porthog.maintenance
   rm -f /tmp/axon-inferhog.pid /tmp/axon-inferhog.maintenance
   rm -f /tmp/axon-inferhog.log /tmp/axon-inferhog.err
+  rm -f /tmp/axon-envhog.pid /tmp/axon-envhog.maintenance
+  rm -f /tmp/axon-envhog.log /tmp/axon-envhog.err
   rm -f /tmp/axon-dockhog.maintenance
 }
 trap cleanup EXIT
@@ -239,6 +244,54 @@ printf 'os = "linux"\ncontainer_runtime = "docker"\ncapabilities = ["inferhog"]\
 seen="$(inference_backend_seen)"
 [ "$seen" = "<unset>" ] \
   || fail "a machine declaring no [inference] backend still exported one (saw '$seen')"
+
+# `[capability.X] env` must reach the process started ON DEMAND, not only the launchd/systemd
+# unit it was rendered into until 2026-10-04. It reached only the unit, and a capability with
+# `autostart = "false"` never gets one, so nothing on the machine could give it a PATH: the
+# Sjel UI's start of ytalbum died on "missing required tool 'yt-dlp'" and of knowledge-graph on
+# "nohup: bun: No such file or directory", while the identical command from a login shell
+# worked. Asserted through a marker rather than through PATH so the check does not depend on
+# which host tools happen to be installed.
+mkdir -p "$INF_ROOT/capabilities/envhog"
+MARKER_DUMP="$SCRATCH/envhog-marker-seen"
+cat > "$INF_ROOT/capabilities/envhog/service.toml" <<'TOML'
+kind = "process"
+name = "envhog"
+command = ["capabilities/envhog/dump-env"]
+TOML
+cat > "$INF_ROOT/capabilities/envhog/dump-env" <<SH
+#!/bin/bash
+printf '%s' "\${SJEL_TEST_MARKER:-<unset>}" > "$MARKER_DUMP"
+SH
+chmod +x "$INF_ROOT/capabilities/envhog/dump-env"
+
+marker_seen() {  # start envhog and echo what it was handed
+  rm -f "$MARKER_DUMP" /tmp/axon-envhog.pid
+  "$INF_SR" start envhog >/dev/null 2>&1
+  local waited=0
+  while [ "$waited" -lt 40 ] && [ ! -s "$MARKER_DUMP" ]; do sleep 0.25; waited=$((waited + 1)); done
+  cat "$MARKER_DUMP" 2>/dev/null || true
+}
+
+cat > "$INF_OVERLAY/config/machine.toml" <<'TOML'
+os = "linux"
+container_runtime = "docker"
+capabilities = ["inferhog", "envhog"]
+
+[capability.envhog]
+env = ["SJEL_TEST_MARKER=reached"]
+TOML
+seen="$(marker_seen)"
+[ "$seen" = "reached" ] \
+  || fail "[capability.envhog] env never reached the on-demand process (saw '$seen')"
+
+# The control, as with [inference] above: a machine that declares nothing must not have a
+# value invented for it, or the assertion above would pass for the wrong reason.
+printf 'os = "linux"\ncontainer_runtime = "docker"\ncapabilities = ["inferhog", "envhog"]\n' \
+  > "$INF_OVERLAY/config/machine.toml"
+seen="$(marker_seen)"
+[ "$seen" = "<unset>" ] \
+  || fail "a machine declaring no [capability.envhog] env still exported one (saw '$seen')"
 
 # A restart builds into the root's target/, whatever CARGO_TARGET_DIR the caller exported.
 # Every manifest runs `target/release/<bin>`; a build that honoured the caller's directory

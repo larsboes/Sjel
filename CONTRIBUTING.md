@@ -412,7 +412,8 @@ then the four `packs-*` adapters with `tools/pack-drift-hook` (2026-10-04, which
 `tools/lib/pack-deploy.ts` and `tools/lib/harness-registry.ts` be deleted — the engine had been
 Rust since 2026-10-02 and the adapters were its last reason to exist in two languages), and then
 `tools/self` with `tools/lib/self-model.ts` (2026-10-04, which the doctor runs on every
-invocation).
+invocation), and then `tools/audit` (2026-10-04 — `sjel update apply` runs it, and `tools/doctor`
+reads the verdict its exit code leaves in the host-patch receipt).
 `tools/sjel-mcp.ts` is the one exception and not a second crate: the `tools/sjel-mcp` crate
 already held its registration half, so the server moved in beside it on 2026-10-04 rather than
 into `sjel-cli` and a second MCP implementation.

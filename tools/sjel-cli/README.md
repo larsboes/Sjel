@@ -23,6 +23,7 @@ Rust first, and the one-crate shape was decided on 2026-10-02.
 | `packs-claude`, `packs-codex`, `packs-opencode`, `packs-pi` | `tools/packs-*` | TypeScript (`packs-*.ts`), 2026-10-04 |
 | `pack-drift-hook` | `tools/pack-drift-hook` | TypeScript (`pack-drift-hook.ts`), 2026-10-04 |
 | `self` (generate, status, explain, coupling, check) | `tools/self` | TypeScript (`self.ts` + `lib/self-model.ts`), 2026-10-04 |
+| `audit` (no arguments) | `tools/audit` | bash, 2026-10-04 |
 
 `toolchain-check` was compared with its bash version on this Mac before replacement. Text
 output, JSON (sorted keys) and exit codes were identical for 10 flag combinations, and
@@ -180,6 +181,37 @@ and `-h` were identical in stdout, stderr and exit code. Three differences are d
   attribution" and nothing read it — the coupling layer comes from `#[path]` attributes and Cargo
   path dependencies, never from the graph. A graph node is no longer deserialized with an id.
 
+`tools/audit` followed on 2026-10-04, and closes the loop the `updates` port opened: `sjel update
+apply` runs it as its final step (`updates/report.rs`'s `run_audit`) and `tools/doctor` reads the
+verdict its exit code put into the host-patch receipt, so the exit contract 0/1/2 already had two
+Rust readers — which is why it was the natural next one. `tools/host-patch.sh` is the other
+interpreted tool `sjel update apply` runs, delegated to because it owns brew, uv and rustup, and
+it stays bash.
+
+Verified against the script before it was replaced, on this Mac. The live run was identical — 345
+installed packages, 5 crate lockfiles, and the same 36 findings across 19 globally installed
+packages, exit 1 in both — as were `-h`, no argument, and an unknown argument, after normalizing
+the timestamp, the per-run temporary directory's name, osv-scanner's own inode and elapsed
+counters, and the table width osv-scanner derives from that temporary name. `tools/audit.test.sh`
+keeps its assertions and its fixture shape, and still drives every branch through the launcher: a
+linked worktree, a non-repository overlay, an unreachable one, an unconfigured one, a leak, a
+gitleaks error, the SBOM's two ecosystems and its exclusion of a third, a finding in the installed
+half, an unreadable inventory, a missing scanner, and a finding beside one. Five `cargo test -p
+sjel-cli` cases cover what the script proved by running it: purl encoding, which rows reach the
+SBOM, what counts as an inventory, and the exit precedence.
+
+Three differences are deliberate.
+
+- The SBOM handed to the second osv-scanner pass is built here instead of by `jq`, so this tool no
+  longer needs `jq` — and a missing `jq` can no longer read as an unscanned surface. `jq` keeps
+  its toolchain row: `tools/graphify.sh`, `tools/restore.sh`, the secret setup, `tools/agentbox.test.sh`
+  and `.github/workflows/security.yml` still pipe JSON through it.
+- JSON object keys are sorted, where `jq` wrote them in the order the filter named them. The
+  `components` array keeps the inventory's own order, which is what osv-scanner reads.
+- `tools/audit -h` prints the whole header comment with its `#` markers stripped, where the script
+  printed only its first nineteen lines and cut off mid-sentence. Same deliberate fix the
+  `toolchain-check` port recorded.
+
 ## Porting a script
 
 1. Add `src/<name>.rs` and a match arm in `src/main.rs`.
@@ -196,7 +228,8 @@ and `-h` were identical in stdout, stderr and exit code. Three differences are d
 
 4. Before you delete the old script, compare its output with the port's for every flag
    combination, and keep its tests green. A test that copies the launcher into a scratch root
-   sets `SJEL_CLI_BIN` to a prebuilt binary (see `tools/toolchain-scope.test.sh`).
+   sets `SJEL_CLI_BIN` to a prebuilt binary (`sjel_cli_prebuilt` in `tools/lib/test-support.sh`, as
+   the audit, persistence and service-runner suites do).
 5. When only part of a tool moves, name the split in both files and route the rest through
    this binary's exec (the harnesses read verbs did this until the write verbs followed on
    2026-10-04). Delete the moved code from the interpreted original — a second reader of one

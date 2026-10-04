@@ -67,7 +67,7 @@ install_linux = "preinstalled"
 
 [jq]
 required = "yes"
-why = "JSON in shell — dashboards, service-runner, audit report parsing"
+why = "JSON in shell — tools/graphify.sh, tools/restore.sh, the secret setup and the security workflow; tools/audit built its own SBOM in Rust from 2026-10-04 and stopped needing it"
 install_macos = "brew install jq"
 install_linux = "apt-get install -y jq"
 

@@ -2,9 +2,17 @@
 # Proves tools/audit's exit contract and how it decides what a repository is.
 # 0 clean · 1 a finding · 2 a scanner is not installed, and a finding outranks a missing
 # scanner. Bash 3.2-safe.
+#
+# The tool is Rust since 2026-10-04, so this drives the launcher in a scratch root: the fixture
+# carries tools/lib/sjel-cli.sh and SJEL_CLI_BIN points at a binary built from THIS checkout
+# (tools/lib/test-support.sh). Everything else is unchanged — the fixture's paths.sh stub is still
+# what hands the run its SJEL_ROOT and SJEL_PERSONAL_ROOT.
 set -u
 
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
+# shellcheck source=tools/lib/test-support.sh
+. "$ROOT/tools/lib/test-support.sh"
+sjel_cli_prebuilt
 SCRATCH="$(mktemp -d)"
 trap 'rm -rf "$SCRATCH"' EXIT
 MOCK_BIN="$SCRATCH/bin"
@@ -12,7 +20,7 @@ GITLEAKS_ONLY_BIN="$SCRATCH/bin-gitleaks-only"
 mkdir -p "$MOCK_BIN" "$GITLEAKS_ONLY_BIN"
 
 # Repository detection must use Git plumbing: linked worktrees have a .git file,
-# not a directory. Run the real audit script against isolated repositories with
+# not a directory. Run the real audit against isolated repositories with
 # a deterministic gitleaks mock and an osv-scanner stub that always reports clean,
 # so a non-zero exit can only have come from the half under test.
 PRIMARY="$SCRATCH/primary"
@@ -58,6 +66,7 @@ git -C "$PRIMARY" -c user.name=Axon -c user.email=axon@example.invalid \
 git -C "$PRIMARY" worktree add -q -b audit-linked "$LINKED"
 
 cp "$ROOT/tools/audit" "$AUDIT_FIXTURE/tools/audit"
+cp "$ROOT/tools/lib/sjel-cli.sh" "$AUDIT_FIXTURE/tools/lib/sjel-cli.sh"
 cat > "$AUDIT_FIXTURE/tools/lib/paths.sh" <<'PATHS'
 SJEL_ROOT="$SJEL_AUDIT_TEST_ROOT"
 SJEL_PERSONAL_ROOT="${SJEL_AUDIT_TEST_OVERLAY:-}"

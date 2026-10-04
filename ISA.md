@@ -1182,6 +1182,26 @@ claim yet, and the watch rows they name are in `upstreams.toml` with the questio
 
 ## Log
 
+- 2026-10-04 · `tools/audit` is Rust, and the audit path no longer needs `bash` or `jq`. It
+  closes the loop the `updates` port opened: `sjel update apply` runs it as its final step
+  (`updates/report.rs`'s `run_audit`) and `tools/doctor` reads the verdict its exit code put into
+  the host-patch receipt, so the 0/1/2 contract already had two Rust readers — which is why it was
+  the natural next one. `src/audit.rs` holds the verb surface, the two repository scans and the
+  installed-software pass, plus the pure half — purl encoding, which rows reach the SBOM, what
+  counts as an inventory, and the exit precedence. `tools/audit.test.sh` keeps its assertions and
+  its fixture shape and now drives the launcher. `tools/host-patch.sh` is the other interpreted
+  tool `sjel update apply` runs, delegated to because it owns brew, uv and rustup, and it stays
+  bash. Verified against the script on this Mac:
+  the live run was identical — 345 installed packages, 5 crate lockfiles, the same 36 findings
+  across 19 globally installed packages, exit 1 in both — as were `-h`, no argument and an unknown
+  argument, after normalizing the timestamp, the per-run temporary directory's name, osv-scanner's
+  own inode and elapsed counters, and the table width osv-scanner derives from that name. Three
+  differences are deliberate and named in `tools/sjel-cli/README.md`: the second pass's CycloneDX
+  SBOM is built in the binary rather than by `jq` (so a missing `jq` can no longer read as an
+  unscanned surface), JSON object keys are sorted where `jq` wrote them in filter order, and `-h`
+  prints the whole header comment with its `#` markers stripped where the script printed only its
+  first nineteen lines and cut off mid-sentence. `toolchain.toml`'s `[jq]` row stays — its `why` no
+  longer claims the audit reads JSON, which is the only thing that changed about it.
 - 2026-10-04 · `tools/self` is Rust, and `tools/self.ts` with `tools/lib/self-model.ts` is deleted.
   It moved for a measured reason: `tools/doctor` runs `tools/self check` on every invocation, so a
   bun start-up sat inside a Rust tool's path, and agents run `self explain` and `self coupling` at

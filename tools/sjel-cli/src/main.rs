@@ -15,6 +15,7 @@ use std::os::unix::process::CommandExt as _;
 use std::path::{Path, PathBuf};
 use std::process::{Command, ExitCode, ExitStatus};
 
+mod audit;
 mod capability;
 mod doctor;
 mod harnesses;
@@ -63,6 +64,7 @@ fn main() -> ExitCode {
     };
     // Ported tools/ scripts, run by their launchers under the script's own name.
     match command {
+        "audit" => return audit::run(rest),
         "toolchain-check" => return toolchain::run(rest),
         "capability.sh" => return registry::run(rest),
         "service-runner.sh" => return runner::run(rest),

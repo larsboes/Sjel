@@ -62,11 +62,25 @@ export function resolveModel(
   const normalize = (s: string) => s.toLowerCase().replace(/\./g, "-");
   const query = normalize(input);
 
+  // A "provider/modelId" input resolves within THAT provider. Some catalogues put
+  // the upstream provider in the model id — OpenRouter serves
+  // id "anthropic/claude-haiku-4.5" — and normalizing dots to dashes makes that
+  // id identical to the query "anthropic/claude-haiku-4-5". Left unscoped, that
+  // exact hit outscores every real candidate and silently routes a config pin to
+  // a gateway the config never named; the request then fails on THAT account's
+  // balance, which reads as "the model is broken" rather than "the pin is
+  // unreachable". Scoping here restores the sane reading: no match under the
+  // named provider, so step 3 tries the bare id across every provider (the same
+  // model elsewhere beats falling back to the parent) and step 4 reports it.
+  // An OpenRouter id is still addressable as "openrouter/anthropic/claude-haiku-4.5".
+  const namedProvider = slashIdx === -1 ? undefined : input.slice(0, slashIdx).toLowerCase();
+
   // Score each model: prefer exact id match > id contains > name contains > provider+id contains
   let bestMatch: ModelEntry | undefined;
   let bestScore = 0;
 
   for (const m of all) {
+    if (namedProvider !== undefined && m.provider.toLowerCase() !== namedProvider) continue;
     const id = normalize(m.id);
     const name = normalize(m.name);
     const full = normalize(`${m.provider}/${m.id}`);

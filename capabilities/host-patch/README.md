@@ -44,7 +44,7 @@ upstream's installer last wrote them. `sjel update` is that surface: it reports 
 its owner named, and `apply` moves only what nothing else moves — `cargo install`ed crates and
 `npm -g` packages — while sending brew, uv and rustup straight back through this script. It
 deliberately does not reimplement a step below, for the one-owner reason this file states twice
-already. See `tools/updates.ts` and ISA.md F11.
+already. See `tools/sjel-cli/src/updates/` and ISA.md F11.
 
 ## The cadence, honestly
 

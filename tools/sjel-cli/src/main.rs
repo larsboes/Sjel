@@ -26,7 +26,9 @@ mod runargs;
 mod runner;
 mod schedule;
 mod search;
+mod time;
 mod toolchain;
+mod updates;
 
 /// A reader that closes the pipe early (`sjel help | head -1`) ends the command, as SIGPIPE ended
 /// the shell scripts this replaced. Rust ignores SIGPIPE and panics on the failed write
@@ -63,6 +65,7 @@ fn main() -> ExitCode {
         "service-runner.sh" => return runner::run(rest),
         // Read verbs are Rust; sync/use/promote/accept forward to tools/harnesses.ts.
         "harnesses" => return harnesses::run(rest),
+        "updates" => return updates::run(rest),
         _ => {}
     }
     let root = match std::env::var("SJEL_ROOT") {

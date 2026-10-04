@@ -18,6 +18,7 @@ Rust first, and the one-crate shape was decided on 2026-10-02.
 | `service-runner.sh` (lifecycle, holds, drift, persistence units) | `tools/service-runner.sh` | bash and `tools/lib/runargs.sh`, 2026-10-02 |
 | `doctor` | `tools/doctor` | TypeScript (`doctor.ts`), 2026-10-02 |
 | `harnesses` (list, status, drift) | `tools/harnesses` | TypeScript (`harnesses.ts`), 2026-10-02 |
+| `updates` (report and apply) | `tools/updates` | TypeScript (`updates.ts`), 2026-10-04 |
 
 `toolchain-check` was compared with its bash version on this Mac before replacement. Text
 output, JSON (sorted keys) and exit codes were identical for 10 flag combinations, and
@@ -82,6 +83,22 @@ Three differences are deliberate, and each is the only one found:
   reported its own, and a ledger that is malformed JSON reports one fixed sentence instead of
   the parser's. Both are only reachable on a file that is already broken, and the doctor's
   "Pack state unreadable" line is what an operator sees either way.
+
+`tools/updates` was ported whole — the report half and the apply half together, because `apply`
+re-reads the report after its steps and a split would have left two readers of the same rows.
+`tools/updates.ts` and its 76-case `updates.test.ts` are deleted; the parsers, gatherers and plan
+are 137 `cargo test -p sjel-cli` cases with the same fixtures. Compared against `updates.ts` at
+HEAD across every flag combination — `-h`, `--offline`, `--json`, `--json --offline --inventory`,
+five refusal paths, the live report and `--json`, and four `apply` plans refused on a non-TTY —
+stdout, stderr and exit codes were identical after normalizing `generatedAt` and the ages that
+tick between two runs.
+
+One difference was found and fixed rather than recorded. `serde_json`'s default map sorts keys,
+and npm's nested dependency order is not sorted, so the `inventory` array `tools/audit` scans came
+out in a different order (the set was identical). `updates/parse.rs` carries an order-preserving
+map for the npm parsers, which restores npm's order without turning on
+`serde_json/preserve_order` — that feature is additive across the whole build and would change
+`serde_json::Map` for every crate in the workspace.
 
 ## Porting a script
 

@@ -813,8 +813,8 @@ this deployment paid the last time it was broken.
   exits 1 when anything is stale. Falsifier: a class of installed software that no row names, or
   a stale row with no owner. Probe: `sjel update`, and `sjel update --json` against the table.
   Evidence, 2026-10-01: ten classes, 15 stale rows on this host, every one carrying the command
-  that moves it. The row set is `SURFACES` in `tools/updates.ts`, and a unit test asserts every
-  row groups under a known surface so the renderer cannot drop one silently.
+  that moves it. The row set is `SURFACES` in `tools/sjel-cli/src/updates/report.rs`, and a unit
+  test asserts every row groups under a known surface so the renderer cannot drop one silently.
 - [x] ISC-52 — `apply` moves only what nothing else owns, and delegates the rest to its owner.
   Falsifier: `apply` runs a package manager whose binaries already have an owner. Probe: unit
   test over the plan, asserting no step's argv contains `brew upgrade`, `uv tool` or
@@ -831,7 +831,7 @@ this deployment paid the last time it was broken.
   `apply` installs an `-alpha`/`-beta` over a stable release. Probe: `cargo search tauri-cli`
   answers `3.0.0-alpha.4` over the installed `2.12.0`; the row must say current. Evidence,
   2026-10-01: the row reads `newer pre-release 3.0.0-alpha.4 exists — not adopted` with no
-  action, asserted in `tools/updates.test.ts`.
+  action, asserted in the updates module's own tests.
 - [ ] ISC-55 — the Systems page shows what is stale and what nothing owns, from the tool's own
   `--json`, and can start one class moving. Falsifier: the page renders no updates panel, or
   `sjel update --json` exits non-zero without emitting it. Probe: `sjel update --json` and the
@@ -1163,6 +1163,20 @@ claim yet, and the watch rows they name are in `upstreams.toml` with the questio
 
 ## Log
 
+- 2026-10-04 · `tools/updates` is Rust, and `tools/updates.ts` and `tools/updates.test.ts` are
+  deleted. The report half and the apply half moved together, because `apply` re-reads the report
+  after its steps and splitting them would have left two readers of the same rows. The launcher
+  keeps its path and execs `tools/sjel-cli/src/updates/`, so `sjel update`, `tools/audit` and the
+  dashboard are unchanged, and the audit's `--json --offline --inventory` no longer needs bun.
+  Compared against `updates.ts` at HEAD before it was deleted: every flag combination — `-h`,
+  `--offline`, `--json`, `--json --offline --inventory`, the five refusal paths, the live report
+  and `--json`, and the four `apply` plans refused on a non-TTY — with identical stdout, stderr
+  and exit codes after normalizing `generatedAt` and the ages that tick between two runs. One
+  difference was found and fixed rather than recorded: `serde_json`'s default map sorts keys, and
+  npm's NESTED dependency order is not sorted, so the `inventory` array came out in a different
+  order. An order-preserving map in `updates/parse.rs` restores npm's order without turning on
+  `serde_json/preserve_order`, which would change `Map` for every crate in the build. The parsers
+  and gatherers are 137 `cargo test -p sjel-cli` cases, the fixtures the TypeScript suite used.
 - 2026-10-03 · The audit now reaches this machine's own software, and the claims that said it
   already did are corrected. Nothing scanned what `sjel update` is uniquely responsible for
   moving: `tools/audit`'s `osv-scanner` read this repository's lockfiles, Dependabot read the

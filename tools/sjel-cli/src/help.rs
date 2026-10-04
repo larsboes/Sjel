@@ -119,7 +119,7 @@ Classes for --only:
   brew uv rustup containers graphify interceptor checkout cargo npm vendor
 
 Report exits 1 when something is stale. Apply exits 1 when there was nothing to do.
-The --json payload is the stable surface a UI reads; see tools/updates.ts."#;
+The --json payload is the stable surface a UI reads; see src/updates/ in this crate."#;
 
 pub const GATES: &str = r#"Usage: sjel gates | sjel test
 

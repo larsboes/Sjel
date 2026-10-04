@@ -722,23 +722,9 @@ fn relative(root: &str, path: &Path) -> String {
 
 // ---- timestamps ----------------------------------------------------------------------------
 
-/// `new Date().toISOString()`: UTC, millisecond precision, `Z`.
-fn now_iso() -> String {
-    let d = std::time::SystemTime::now()
-        .duration_since(std::time::UNIX_EPOCH)
-        .unwrap_or_default();
-    let secs = d.as_secs() as i64;
-    let millis = d.subsec_millis();
-    let days = secs.div_euclid(86_400);
-    let sod = secs.rem_euclid(86_400);
-    let (y, m, day) = civil_date::unix_day_to_ymd(days);
-    format!(
-        "{y:04}-{m:02}-{day:02}T{:02}:{:02}:{:02}.{millis:03}Z",
-        sod / 3600,
-        (sod % 3600) / 60,
-        sod % 60
-    )
-}
+// `now_iso` lives in `crate::time` since tools/updates needed the same string; `use super::*`
+// below still reaches it.
+use crate::time::now_iso;
 
 #[cfg(test)]
 mod tests {

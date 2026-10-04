@@ -7,8 +7,8 @@
 //! Systems page is where a person asks "is anything stale". The measurement stays with the tool:
 //! re-deriving the `cargo install --list` parse or the brew registry query here would be a second
 //! answer to a question that already has one, and the two would disagree the first time a class
-//! was added to `SURFACES` in `tools/updates.ts`. `storage.rs` states the same rule for the same
-//! reason.
+//! was added to `SURFACES` in `tools/sjel-cli/src/updates/report.rs`. `storage.rs` states the
+//! same rule for the same reason.
 //!
 //! ## Why the apply route answers before the work is done
 //!
@@ -46,7 +46,7 @@ use super::*;
 
 /// The classes a caller may ask `apply` to move.
 ///
-/// Every entry is an id `tools/updates.ts` knows, and the list is narrower than `SURFACES` on
+/// Every entry is an id `tools/updates` knows, and the list is narrower than `SURFACES` on
 /// purpose: `containers` belongs to `capabilities/container-refresh`, `checkout` to
 /// `tools/update.sh`, and `vendor` to the vendor. Offering them here would put a second mover
 /// behind a button for something that already has one — the two-owners failure `tools/host-patch.sh`

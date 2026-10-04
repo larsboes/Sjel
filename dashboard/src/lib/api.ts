@@ -1821,7 +1821,7 @@ export type UpdateOwner = 'scheduled' | 'manual' | 'unowned' | 'self';
  *  than a soft "current" — a `--offline` report says so on every row it did not check. */
 export type UpdateStatus = 'current' | 'stale' | 'unknown' | 'n/a';
 
-/** One class of installed software and who moves it, as `tools/updates.ts` `SURFACES`
+/** One class of installed software and who moves it, as `tools/sjel-cli/src/updates/report.rs`'s `SURFACES`
  *  declares it. Sent with the report so the panel renders the tool's reasoning rather
  *  than a second copy of the ownership table. */
 export interface UpdateSurface {

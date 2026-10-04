@@ -17,6 +17,11 @@
 #   sjel update --offline       receipts and installed versions only; no registry is asked
 #   sjel update apply [--only <class>...]
 #                               move what this tool owns, and delegate the rest
+#   sjel update apply --prune   ALSO remove leftovers nothing requires. The only destructive
+#                               mode: it lists them first and never touches a pinned package
+#   sjel update apply --only cargo --re-resolve <crate,...>
+#                               reinstall the named crates without --locked, for a crate whose
+#                               published lockfile pins something the audit has flagged
 # bash 3.2-safe.
 set -euo pipefail
 

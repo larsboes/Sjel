@@ -115,6 +115,27 @@ export function applySummary(view: UpdatesView, now: number = Date.now()): strin
   const when = sinceLabel(last.at, now);
   return (
     `${last.class} — ${failed > 0 ? `${failed} of ${steps} failed` : `${steps} step${steps === 1 ? "" : "s"} applied`}` +
-    `${still > 0 ? `, ${still} still stale` : ""}${when ? ` · ${when}` : ""}`
+    `${still > 0 ? `, ${still} still stale` : ""}` +
+    `${auditLabel(last.audit)}${when ? ` · ${when}` : ""}`
   );
+}
+
+/**
+ * The audit verdict as the summary line says it, or nothing when the receipt predates the
+ * field. Every verdict is shown, `clean` included: the point of the line is to prove the audit
+ * ran at all, so a silent clean would make a missing audit and a passing one look identical.
+ *
+ * A verdict this file has never heard of is printed as itself. Only `clean` is treated as
+ * good news, so a fifth verdict arriving from the tool reads as something to look at rather
+ * than as a clean bill of health the panel invented.
+ */
+export function auditLabel(verdict: string | undefined): string {
+  if (!verdict) return "";
+  return ` · audit ${verdict}${verdict === "clean" ? "" : " — run tools/audit"}`;
+}
+
+/** True when the last apply's audit found something, or could not run. Drives the summary
+ *  line's warning treatment; `clean` and an absent field both leave it false. */
+export function auditNeedsAttention(verdict: string | undefined): boolean {
+  return Boolean(verdict) && verdict !== "clean";
 }

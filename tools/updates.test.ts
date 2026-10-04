@@ -18,6 +18,9 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import {
   applyReceiptPath,
+  AUDIT_ADVICE,
+  auditVerdict,
+  buildInventory,
   buildReport,
   gatherCargo,
   gatherNpm,
@@ -35,11 +38,14 @@ import {
   parseReceipt,
   parseRustupCheck,
   planApply,
+  planPrune,
   readApplyReceipt,
   receiptNote,
   renderJson,
   renderTable,
+  runAudit,
   surface,
+  main,
   SURFACES,
   versionNewer,
   writeApplyReceipt,
@@ -178,6 +184,40 @@ describe("npm parsers", () => {
       "@earendil-works/pi-coding-agent",
       "uv",
     ]);
+  });
+
+  // `installed` is the actionable view and stops at the top level. `tree` is the CVE inventory
+  // and must not: on this host that is 13 against 541 distinct name@version pairs, and the
+  // nested 528 are where most advisories live. Measured 2026-10-03 — the first version of this
+  // pass scanned only the top level and reported this machine clean while 23 packages in its
+  // own installed trees carried 46 known advisories.
+  test("tree reaches the nested nodes that installed stops short of", () => {
+    const json = JSON.stringify({
+      dependencies: {
+        "@marckrenn/pi-sub-bar": {
+          version: "1.5.0",
+          dependencies: { ghost: { version: "1.0.0", dependencies: { deep: { version: "2.0.0" } } } },
+        },
+        uv: { version: "1.4.0" },
+      },
+    });
+    expect(parseNpmGlobalTree(json).installed.map((p) => p.name)).toEqual(["@marckrenn/pi-sub-bar", "uv"]);
+    // Membership, not iteration order: nothing reads this list in a particular sequence.
+    expect(parseNpmGlobalTree(json).tree.map((p) => `${p.name}@${p.version}`).sort()).toEqual(
+      ["@marckrenn/pi-sub-bar@1.5.0", "deep@2.0.0", "ghost@1.0.0", "uv@1.4.0"].sort(),
+    );
+    // A node with no version is not a thing a registry can be asked about, and a node reached
+    // twice is one package: the same name@version is never emitted twice.
+    const dupes = JSON.stringify({
+      dependencies: {
+        a: { version: "1.0.0", dependencies: { shared: { version: "3.0.0" }, nonode: {} } },
+        b: { version: "1.0.0", dependencies: { shared: { version: "3.0.0" } } },
+      },
+    });
+    expect(parseNpmGlobalTree(dupes).tree.filter((p) => p.name === "shared")).toEqual([
+      { name: "shared", version: "3.0.0" },
+    ]);
+    expect(parseNpmGlobalTree(dupes).tree.map((p) => p.name)).not.toContain("nonode");
   });
 
   test("a flat tree constrains nothing", () => {
@@ -561,6 +601,70 @@ describe("planApply — the one-owner rule", () => {
   });
 });
 
+describe("--prune and --re-resolve", () => {
+  // `--prune` is the only destructive mode in this tool, so the property worth asserting is the
+  // set it is ALLOWED to touch rather than the one it does. A pinned copy is load-bearing:
+  // deleting it breaks the package that named it, and it is the row most likely to be mistaken
+  // for a leftover because it is stale and carries no action.
+  const rows = [
+    { surface: "npm", name: "dead-scope", owner: "unowned" as const, ownerDetail: "", status: "stale" as const, removable: true, note: "deprecated — use @earendil-works" },
+    { surface: "npm", name: "unused-dup", owner: "unowned" as const, ownerDetail: "", status: "stale" as const, removable: true, note: "unused duplicate — x bundles its own 2.0.0" },
+    { surface: "npm", name: "pinned-copy", owner: "unowned" as const, ownerDetail: "", status: "stale" as const, note: "pinned by y — upgrade those instead" },
+    { surface: "npm", name: "normal", owner: "unowned" as const, ownerDetail: "", status: "stale" as const, action: "npm install -g normal@latest" },
+  ];
+  const ctx = { run: () => ({ code: 0, stdout: "", stderr: "" }), have: () => null, root: "/repo", overlay: "/overlay", offline: false };
+
+  test("only leftovers nothing requires are prunable", () => {
+    expect(planPrune(rows).map((r) => r.name)).toEqual(["dead-scope", "unused-dup"]);
+    expect(planPrune(rows).map((r) => r.name)).not.toContain("pinned-copy");
+  });
+
+  test("without the flag a leftover is reported and never removed", () => {
+    const steps = planApply(rows, [], ctx);
+    expect(steps.some((s) => s.argv.includes("uninstall"))).toBe(false);
+    // and the one row with a real upgrade still gets it
+    expect(steps.find((s) => s.label === "npm: normal")!.argv).toEqual(["npm", "install", "-g", "normal@latest"]);
+  });
+
+  test("with it, each removal is its own npm uninstall of that exact name", () => {
+    const steps = planApply(rows, [], ctx, { prune: true });
+    expect(steps.filter((s) => s.argv[1] === "uninstall").map((s) => s.argv)).toEqual([
+      ["npm", "uninstall", "-g", "dead-scope"],
+      ["npm", "uninstall", "-g", "unused-dup"],
+    ]);
+    // The pinned copy is still not touched, and it is still not upgraded either — the advice on
+    // that row is to move its parent, and this tool must not invent a command for it.
+    expect(steps.some((s) => s.label === "pinned-copy" || s.argv.includes("pinned-copy"))).toBe(false);
+  });
+
+  test("removals come first, so a name is free before anything arrives under it", () => {
+    const steps = planApply(rows, [], ctx, { prune: true });
+    expect(steps[0].argv[1]).toBe("uninstall");
+  });
+
+  // The re-resolve path is per-crate on purpose. `--locked` is what makes an install
+  // reproducible, and it is dropped only where the operator has read a finding naming that
+  // crate — not as a policy that silently re-resolves everything.
+  test("--re-resolve drops --locked for the crate named and no other", () => {
+    const two = [
+      { surface: "cargo", name: "bottom", owner: "unowned" as const, ownerDetail: "", status: "stale" as const, action: "cargo install bottom --locked --force" },
+      { surface: "cargo", name: "macmon", owner: "unowned" as const, ownerDetail: "", status: "stale" as const, action: "cargo install macmon --locked --force" },
+    ];
+    const steps = planApply(two, [], ctx, { reResolve: ["bottom"] });
+    expect(steps.find((s) => s.label === "cargo: bottom")!.argv).toEqual(["cargo", "install", "bottom", "--force"]);
+    expect(steps.find((s) => s.label === "cargo: macmon")!.argv).toEqual(["cargo", "install", "macmon", "--locked", "--force"]);
+    expect(steps.find((s) => s.label === "cargo: bottom")!.note).toContain("--locked dropped");
+  });
+
+  test("the flags parse, and are refused where they would do nothing", async () => {
+    expect(parseArgs(["apply", "--prune"]).prune).toBe(true);
+    expect(parseArgs(["apply", "--prune"]).reResolve).toEqual([]);
+    expect(parseArgs(["apply", "--re-resolve", "a,b"]).reResolve).toEqual(["a", "b"]);
+    expect(await main(["report", "--prune"])).toBe(2);
+    expect(await main(["report", "--re-resolve", "bottom"])).toBe(2);
+  });
+});
+
 describe("parseArgs", () => {
   test("a leading flag is the default verb, not a verb named --offline", () => {
     expect(parseArgs(["--offline"]).verb).toBe("report");
@@ -591,6 +695,49 @@ describe("makeCtx", () => {
     const ctx = makeCtx({ SJEL_ROOT: "/r", SJEL_OVERLAY_ROOT: "/o" }, () => ({ code: 0, stdout: "", stderr: "" }), () => null);
     expect(ctx.root).toBe("/r");
     expect(ctx.overlay).toBe("/o");
+  });
+});
+
+describe("the inventory tools/audit scans", () => {
+  const NPM_ALL = JSON.stringify({
+    dependencies: {
+      top: { version: "1.0.0", dependencies: { nested: { version: "2.0.0" } } },
+    },
+  });
+
+  test("names the OSV ecosystem, not this tool's own class ids", () => {
+    const { ctx } = ctxWith(
+      { "npm ls -g --json --all": NPM_ALL, "cargo install --list": "macmon v0.8.2:\n    macmon\n" },
+      { offline: true },
+    );
+    expect(buildInventory(ctx)).toEqual([
+      { ecosystem: "npm", name: "top", version: "1.0.0" },
+      { ecosystem: "npm", name: "nested", version: "2.0.0" },
+      { ecosystem: "crates.io", name: "macmon", version: "0.8.2" },
+    ]);
+  });
+
+  test("a manager that is not installed contributes nothing rather than throwing", () => {
+    const { ctx } = ctxWith({ "npm ls -g --json --all": NPM_ALL }, { offline: true });
+    expect(buildInventory(ctx).every((e) => e.ecosystem === "npm")).toBe(true);
+  });
+
+  // The payload a dashboard polls gains nothing from 541 entries it will never draw, so the
+  // flag is what decides. Absent is absent — not an empty array, which a reader could take for
+  // "nothing is installed".
+  test("only --json --inventory carries it", () => {
+    const { ctx } = ctxWith({ "git -C /repo rev-list": "0\n", "git -C /repo status": "" }, { offline: true });
+    const { rows, generatedAt } = buildReport(ctx);
+    expect(JSON.parse(renderJson(rows, generatedAt, true)).inventory).toBeUndefined();
+    expect(JSON.parse(renderJson(rows, generatedAt, true, null, []))).toEqual(
+      expect.objectContaining({ inventory: [] }),
+    );
+  });
+
+  test("--inventory parses, and is refused without --json rather than silently doing nothing", async () => {
+    expect(parseArgs(["--json", "--inventory"]).inventory).toBe(true);
+    expect(parseArgs(["--json"]).inventory).toBe(false);
+    expect(await main(["--inventory"])).toBe(2);
   });
 });
 
@@ -643,6 +790,84 @@ describe("the apply receipt", () => {
     expect(renderTable(rows, false, { at: "2026-10-01T00:00:00Z", class: "npm", state: "done", steps: 11, failed: 1 })).toContain(
       "last apply: npm done · 11 step(s), 1 failed",
     );
+  });
+});
+
+describe("the audit that closes an apply", () => {
+  // Why this exists at all: `apply --only cargo` and `--only npm` install software that no scan
+  // had ever looked at. The scheduled job audits, but only when brew, uv or rustup happened to
+  // be stale in the same run, so the two classes this tool is solely responsible for were the
+  // two it moved without anything checking the result. These assert the two halves of the fix:
+  // the verdict is read from tools/audit's own exit contract, and it is reported without ever
+  // becoming the caller's exit code (Q77's shape for the image scan).
+  test("the verdict is tools/audit's exit contract, and an unrecognised code is not clean", () => {
+    expect(auditVerdict(0)).toBe("clean");
+    expect(auditVerdict(1)).toBe("finding(s)");
+    expect(auditVerdict(2)).toBe("scanner-missing");
+    // 127 is the shell's "command not found" — the exact code that once made this repository
+    // report fabricated findings, and the reason tools/audit separates setup from a finding.
+    expect(auditVerdict(127)).toBe("could not run");
+    expect(auditVerdict(-1)).toBe("could not run");
+  });
+
+  test("no verdict passes silently except clean", () => {
+    expect(AUDIT_ADVICE.clean).toBe("");
+    for (const v of ["finding(s)", "scanner-missing", "could not run"] as const) {
+      expect(AUDIT_ADVICE[v].length).toBeGreaterThan(5);
+    }
+  });
+
+  test("it runs the repository's own audit, at the root it was given", () => {
+    const seen: string[][] = [];
+    const run: Runner = (argv) => {
+      seen.push(argv);
+      return { code: 1, stdout: "", stderr: "" };
+    };
+    const ctx: Ctx = { run, have: () => "/usr/bin/x", root: "/repo", overlay: "/overlay", offline: false };
+    expect(runAudit(ctx)).toBe("finding(s)");
+    expect(seen).toEqual([["/repo/tools/audit"]]);
+  });
+
+  test("the verdict survives the receipt round trip and reaches the table", () => {
+    const overlay = mkdtempSync(join(tmpdir(), "updates-audit-"));
+    try {
+      writeApplyReceipt(overlay, {
+        at: "2026-10-03T00:00:00Z",
+        class: "cargo",
+        steps: 1,
+        failed: 0,
+        stillStale: 0,
+        state: "done",
+        audit: "finding(s)",
+      });
+      expect(readApplyReceipt(overlay)?.audit).toBe("finding(s)");
+    } finally {
+      rmSync(overlay, { recursive: true, force: true });
+    }
+
+    const { ctx } = ctxWith({ "git -C /repo rev-list": "0\n", "git -C /repo status": "" }, { offline: true });
+    const { rows } = buildReport(ctx);
+    const table = renderTable(rows, false, {
+      at: "2026-10-03T00:00:00Z",
+      class: "cargo",
+      state: "done",
+      steps: 1,
+      audit: "scanner-missing",
+    });
+    expect(table).toContain("audit scanner-missing");
+  });
+
+  test("a receipt written before the field existed still renders", () => {
+    const { ctx } = ctxWith({ "git -C /repo rev-list": "0\n", "git -C /repo status": "" }, { offline: true });
+    const { rows } = buildReport(ctx);
+    const table = renderTable(rows, false, {
+      at: "2026-10-01T00:00:00Z",
+      class: "npm",
+      state: "done",
+      steps: 2,
+    });
+    expect(table).toContain("last apply: npm done · 2 step(s)");
+    expect(table).not.toContain("audit");
   });
 });
 

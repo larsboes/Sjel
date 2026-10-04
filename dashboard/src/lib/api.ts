@@ -1861,6 +1861,11 @@ export interface UpdateApply {
   failed?: number;
   stillStale?: number;
   state?: 'running' | 'done' | 'failed';
+  /** tools/audit's verdict, taken immediately after the apply: `clean` · `finding(s)` ·
+   *  `scanner-missing` · `could not run`. A plain string rather than a union on purpose —
+   *  a fifth verdict the tool grows must be shown, not dropped. Absent on a receipt written
+   *  before the field existed. */
+  audit?: string;
 }
 
 /** `sjel update --json`, passed through verbatim.

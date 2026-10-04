@@ -217,8 +217,13 @@ export type Row = {
   installed?: string;
   latest?: string;
   status: Status;
-  /** The command that moves it. This is the owner's entry point, never a reimplementation. */
+  /** The command that moves it. The owner's entry point, never a reimplementation. */
   action?: string;
+  /** True only when this row is a leftover nothing requires: a deprecated package, or a
+   *  duplicate whose parents bundle their own copy. It is exactly what `--prune` removes.
+   *  A row PINNED by a parent is deliberately never marked — that copy is load-bearing, and
+   *  removing it breaks the package that named it. */
+  removable?: boolean;
   note?: string;
 };
 
@@ -233,6 +238,7 @@ function mk(surfaceId: string, p: Partial<Row> & { status: Status }): Row {
     installed: p.installed,
     latest: p.latest,
     action: p.action,
+    removable: p.removable,
     note: p.note,
   };
 }
@@ -335,6 +341,10 @@ export function parseNpmDeprecated(text: string): string | null {
  */
 export function parseNpmGlobalTree(json: string): {
   installed: { name: string; version: string }[];
+  /** Every node in the tree, not just the top level — the CVE inventory [`buildInventory`]
+   *  scans. Deduped by name@version, so two copies of one package at different versions both
+   *  appear while a package required by five parents appears once. */
+  tree: { name: string; version: string }[];
   /** For each top-level package, the parents that carry it in their subtree — with the version
    *  that parent resolved it to, which is what separates a pin from a leftover. */
   requiredBy: Map<string, { parent: string; version: string }[]>;
@@ -343,21 +353,34 @@ export function parseNpmGlobalTree(json: string): {
   try {
     parsed = JSON.parse(json);
   } catch {
-    return { installed: [], requiredBy: new Map() };
+    return { installed: [], tree: [], requiredBy: new Map() };
   }
   const root = parsed?.dependencies ?? {};
   const installed = Object.entries(root)
     .filter(([, v]) => v && v.version)
     .map(([name, v]) => ({ name, version: v.version as string }));
 
+  const treeSeen = new Set<string>();
+  const tree: { name: string; version: string }[] = [];
+  const note = (name: string, version: unknown) => {
+    const v = typeof version === "string" ? version : "";
+    if (!v) return;
+    const key = `${name}@${v}`;
+    if (treeSeen.has(key)) return;
+    treeSeen.add(key);
+    tree.push({ name, version: v });
+  };
+
   const names = Object.keys(root);
   const collect = (node: any, out: Map<string, string>) => {
     for (const [name, child] of Object.entries<any>(node?.dependencies ?? {})) {
       // First writer wins: a parent that resolves a name twice is a tree npm does not build.
       if (!out.has(name)) out.set(name, String(child?.version ?? "?"));
+      note(name, child?.version);
       collect(child, out);
     }
   };
+  for (const [name, v] of Object.entries<any>(root)) note(name, (v as any)?.version);
 
   const requiredBy = new Map<string, { parent: string; version: string }[]>();
   for (const [parent, node] of Object.entries(root)) {
@@ -370,10 +393,45 @@ export function parseNpmGlobalTree(json: string): {
   }
   return {
     installed,
+    tree,
     requiredBy: new Map(
       [...requiredBy].map(([k, v]) => [k, v.sort((a, b) => a.parent.localeCompare(b.parent))]),
     ),
   };
+}
+
+/** One installed thing, as `tools/audit` needs it. `ecosystem` is the OSV ecosystem string. */
+export type InventoryEntry = { ecosystem: "npm" | "crates.io"; name: string; version: string };
+
+/**
+ * Everything installed outside this checkout, as name+version pairs — the input `tools/audit`
+ * scans for CVEs.
+ *
+ * Deliberately NOT `rows`. A row is the actionable view: one per package the operator can move,
+ * and for npm that is the top level only. A CVE does not stop at the top level. On this host
+ * `npm ls -g --all` yields 13 top-level packages and 1825 nodes in total, and the nested 1812
+ * are exactly what a lockfile scan would have covered if npm kept a lockfile for globals.
+ *
+ * crates.io entries are top-level too, because that is all `cargo install --list` reports; an
+ * installed crate's own transitive tree is its published `Cargo.lock`, which `tools/audit`
+ * reads from the registry rather than reconstructing here.
+ *
+ * The two managers are re-read rather than threaded through `buildReport`, because the parsers
+ * are the same ones and the flag is opt-in — `--inventory` is what `tools/audit` asks for, and
+ * the dashboard's payload should not carry 1800 entries every four seconds.
+ */
+export function buildInventory(ctx: Ctx): InventoryEntry[] {
+  const out: InventoryEntry[] = [];
+  if (ctx.have("npm")) {
+    const { tree } = parseNpmGlobalTree(ctx.run(["npm", "ls", "-g", "--json", "--all"]).stdout);
+    for (const p of tree) out.push({ ecosystem: "npm", name: p.name, version: p.version });
+  }
+  if (ctx.have("cargo")) {
+    for (const c of parseCargoInstallList(ctx.run(["cargo", "install", "--list"]).stdout)) {
+      out.push({ ecosystem: "crates.io", name: c.name, version: c.version });
+    }
+  }
+  return out;
 }
 
 /** `brew outdated --json=v2`. */
@@ -443,7 +501,52 @@ export type ApplyReceipt = {
   failed?: number;
   stillStale?: number;
   state?: "running" | "done" | "failed";
+  /** tools/audit's verdict, taken immediately after the steps above. Absent on a receipt
+   *  written before this field existed, which is why it is optional rather than defaulted. */
+  audit?: AuditVerdict;
 };
+
+/**
+ * tools/audit's own exit contract, restated as a value: 0 clean · 1 a finding · 2 a scanner is
+ * not installed. Anything else is the audit failing to run at all, which is a third thing and
+ * must not be folded into either of the first two — an audit that did not run is not evidence
+ * that the machine is clean.
+ */
+export type AuditVerdict = "clean" | "finding(s)" | "scanner-missing" | "could not run";
+
+export function auditVerdict(code: number): AuditVerdict {
+  if (code === 0) return "clean";
+  if (code === 1) return "finding(s)";
+  if (code === 2) return "scanner-missing";
+  return "could not run";
+}
+
+/** What to do about a verdict, in the one line a receipt can carry. */
+export const AUDIT_ADVICE: Record<AuditVerdict, string> = {
+  clean: "",
+  "finding(s)": " — run tools/audit for the detail",
+  "scanner-missing": " — a scanner is not installed, so nothing was scanned",
+  "could not run": " — tools/audit did not run",
+};
+
+/**
+ * The audit that closes an apply.
+ *
+ * It runs on EVERY apply, including one whose plan already delegated to host-patch — and that
+ * duplication is chosen rather than overlooked. host-patch audits too, but it writes its
+ * verdict into its own receipt; reading that back here would make this field mean "whatever
+ * ran last, wherever" and would need a third branch for a missing or stale receipt. One extra
+ * read-only pass over a machine that is already minutes into an install is cheaper than a
+ * field nobody can define, and it makes `audit` on this receipt mean exactly one thing: the
+ * verdict taken immediately after these steps finished.
+ *
+ * Report-only. The caller's exit code stays a statement about the install, because an audit
+ * finding is a fact about the machine and not about whether the upgrade worked. That is the
+ * same shape Q77 gave the image scan in .github/workflows/security.yml.
+ */
+export function runAudit(ctx: Ctx): AuditVerdict {
+  return auditVerdict(ctx.run([join(ctx.root, "tools", "audit")]).code);
+}
 
 export function applyReceiptPath(overlay: string): string {
   return join(overlay, "data", "updates", "last-apply.json");
@@ -866,6 +969,7 @@ export function gatherNpm(ctx: Ctx, brewFormulae: Set<string>): Row[] {
         status: "stale",
         installed: o.current,
         latest: o.latest,
+        removable: true,
         note: [`deprecated — ${deprecation}`, shadowNote].filter(Boolean).join(" · "),
       });
     }
@@ -879,6 +983,7 @@ export function gatherNpm(ctx: Ctx, brewFormulae: Set<string>): Row[] {
         status: "stale",
         installed: o.current,
         latest: o.latest,
+        removable: true,
         note: [
           `unused duplicate — ${bundled.map((b) => `${b.parent} bundles its own ${b.version}`).join(", ")}`,
           shadowNote,
@@ -983,7 +1088,8 @@ export function renderTable(rows: Row[], offline: boolean, lastApply: ApplyRecei
   } else if (lastApply?.at) {
     out.push(
       `last apply: ${lastApply.class} ${lastApply.state ?? "done"} · ${lastApply.steps ?? 0} step(s)` +
-        `${lastApply.failed ? `, ${lastApply.failed} failed` : ""}`,
+        `${lastApply.failed ? `, ${lastApply.failed} failed` : ""}` +
+        `${lastApply.audit ? ` · audit ${lastApply.audit}` : ""}`,
     );
   }
   if (stale.length === 0) {
@@ -995,8 +1101,20 @@ export function renderTable(rows: Row[], offline: boolean, lastApply: ApplyRecei
   return out.join("\n");
 }
 
-export function renderJson(rows: Row[], generatedAt: string, offline: boolean, lastApply: ApplyReceipt | null = null): string {
-  return JSON.stringify({ generatedAt, offline, lastApply, surfaces: SURFACES, rows }, null, 2);
+export function renderJson(
+  rows: Row[],
+  generatedAt: string,
+  offline: boolean,
+  lastApply: ApplyReceipt | null = null,
+  inventory?: InventoryEntry[],
+): string {
+  // `inventory` is present only when it was asked for: it is two orders of magnitude larger
+  // than `rows`, and the dashboard reads this payload every four seconds while an apply runs.
+  return JSON.stringify(
+    { generatedAt, offline, lastApply, surfaces: SURFACES, rows, ...(inventory ? { inventory } : {}) },
+    null,
+    2,
+  );
 }
 
 // ── apply ─────────────────────────────────────────────────────────────────────
@@ -1004,12 +1122,43 @@ export function renderJson(rows: Row[], generatedAt: string, offline: boolean, l
 // the steps for the two classes nothing owns. Keeping the lists apart is what stops this file
 // growing a second `brew upgrade`.
 
-export type Step = { surfaceId: string; label: string; argv: string[]; slow?: boolean };
+export type Step = { surfaceId: string; label: string; argv: string[]; slow?: boolean; note?: string };
 
-export function planApply(rows: Row[], only: string[], ctx: Ctx): Step[] {
+/**
+ * Rows `--prune` removes: leftovers nothing requires, and only those.
+ *
+ * Narrow on purpose, and the narrowness is the safety property. A row marked `removable` is
+ * either deprecated by the registry or a duplicate the parents that mention it replace with
+ * their own copy. A row a parent PINS is never here, whatever its status — that copy exists to
+ * satisfy someone, and deleting it breaks its parent. Anything this list gets wrong is a
+ * package somebody wanted, deleted, so `apply` prints the whole list before running and still
+ * needs `--yes` when it is not on a terminal.
+ */
+export function planPrune(rows: Row[]): Row[] {
+  return rows.filter((r) => r.removable === true);
+}
+
+export function planApply(
+  rows: Row[],
+  only: string[],
+  ctx: Ctx,
+  opts: { prune?: boolean; reResolve?: string[] } = {},
+): Step[] {
   const stale = rows.filter((r) => r.status === "stale");
   const wanted = (id: string) => only.length === 0 || only.includes(id);
   const steps: Step[] = [];
+
+  // Removals first: a leftover going out frees the name before anything new arrives under it.
+  if (opts.prune && wanted("npm")) {
+    for (const r of planPrune(rows)) {
+      steps.push({
+        surfaceId: "npm",
+        label: `prune: ${r.name}`,
+        argv: ["npm", "uninstall", "-g", r.name],
+        note: r.note,
+      });
+    }
+  }
 
   // Delegated. The host-patch job is one job covering three managers, so one step runs it and
   // one step calls the owner, not three.
@@ -1034,9 +1183,23 @@ export function planApply(rows: Row[], only: string[], ctx: Ctx): Step[] {
   }
 
   // Direct: the two classes nothing else owns.
+  const reResolve = opts.reResolve ?? [];
   for (const r of stale) {
     if (r.surface === "cargo" && wanted("cargo") && r.action) {
-      steps.push({ surfaceId: "cargo", label: `cargo: ${r.name}`, argv: r.action.split(" "), slow: true });
+      // `--locked` is the default because the published lockfile is what makes an install
+      // reproducible. The one case where that costs more than it buys is a crate whose
+      // published lockfile ALREADY pins a flagged dependency: reinstalling with --locked
+      // reproduces the very tree the audit just named. So the exception is per-crate and the
+      // operator's — they read the finding, they name the crate — rather than a policy that
+      // silently re-resolves everything.
+      const dropping = reResolve.includes(r.name);
+      steps.push({
+        surfaceId: "cargo",
+        label: `cargo: ${r.name}`,
+        argv: dropping ? ["cargo", "install", r.name, "--force"] : r.action.split(" "),
+        note: dropping ? "re-resolving — --locked dropped, its published lockfile pins a flagged dependency" : undefined,
+        slow: true,
+      });
     }
     if (r.surface === "npm" && wanted("npm") && r.action) {
       steps.push({ surfaceId: "npm", label: `npm: ${r.name}`, argv: r.action.split(" ") });
@@ -1052,8 +1215,20 @@ const HELP = `sjel update — every piece of software installed outside this che
   sjel update                   report: who owns moving each class, and what is stale
   sjel update --json            the same, machine-readable (surfaces + rows)
   sjel update --offline         receipts and installed versions only; no registry is asked
+  sjel update --json --inventory
+                                add an 'inventory' array: every installed npm node and cargo
+                                crate, not just the actionable rows. This is what tools/audit
+                                scans, and it is why the flag exists — a CVE does not stop at
+                                the top level, and 'rows' is the top level only
   sjel update apply [--only <class>...] [--yes]
                                 move what this tool owns, and delegate the rest
+  sjel update apply --prune     also REMOVE leftovers nothing requires: packages the registry
+                                has deprecated and duplicates whose parents bundle their own
+                                copy. The list is printed first; a package a parent pins is
+                                never included. This is the only destructive mode
+  sjel update apply --only cargo --re-resolve <crate,...>
+                                reinstall the named crates WITHOUT --locked, for a crate whose
+                                published lockfile pins a dependency the audit has flagged
   sjel update -h
 
 Classes for --only:
@@ -1062,7 +1237,16 @@ Classes for --only:
 Report exits 1 when something is stale, 0 when nothing is. Apply exits 1 when there was
 nothing to do (or you declined), 2 when a step failed.`;
 
-export type Options = { verb: string; json: boolean; offline: boolean; yes: boolean; only: string[] };
+export type Options = {
+  verb: string;
+  json: boolean;
+  offline: boolean;
+  yes: boolean;
+  only: string[];
+  inventory: boolean;
+  prune: boolean;
+  reResolve: string[];
+};
 
 export function parseArgs(argv: string[]): Options {
   // A leading flag means the default verb, not a verb named '--offline': `sjel update --offline`
@@ -1071,13 +1255,19 @@ export function parseArgs(argv: string[]): Options {
   const hasVerb = rest.length > 0 && !rest[0].startsWith("-");
   const verb = hasVerb ? rest[0] : "report";
   const tail = hasVerb ? rest.slice(1) : rest;
-  const out: Options = { verb, json: false, offline: false, yes: false, only: [] };
+  const out: Options = { verb, json: false, offline: false, yes: false, only: [], inventory: false, prune: false, reResolve: [] };
   for (let i = 0; i < tail.length; i++) {
     const a = tail[i];
     if (a === "--json") out.json = true;
     else if (a === "--offline") out.offline = true;
+    else if (a === "--inventory") out.inventory = true;
     else if (a === "--yes" || a === "-y") out.yes = true;
-    else if (a === "--only") {
+    else if (a === "--prune") out.prune = true;
+    else if (a === "--re-resolve") {
+      const next = tail[++i];
+      if (!next) throw new Error("--re-resolve needs a crate name");
+      out.reResolve.push(...next.split(",").filter(Boolean));
+    } else if (a === "--only") {
       const next = tail[++i];
       if (!next) throw new Error("--only needs a class id");
       out.only.push(...next.split(",").filter(Boolean));
@@ -1121,6 +1311,20 @@ export async function main(argv: string[], env: NodeJS.ProcessEnv = process.env)
       return 2;
     }
   }
+  // A flag that silently does nothing is a lie about what the caller asked for.
+  if (opts.inventory && !opts.json) {
+    console.error("sjel update: --inventory only means something with --json, where it is the audit's input");
+    return 2;
+  }
+  for (const [flag, on] of [
+    ["--prune", opts.prune],
+    ["--re-resolve", opts.reResolve.length > 0],
+  ] as const) {
+    if (on && opts.verb !== "apply") {
+      console.error(`sjel update: ${flag} only means something with 'apply'`);
+      return 2;
+    }
+  }
 
   let ctx: Ctx;
   try {
@@ -1133,17 +1337,41 @@ export async function main(argv: string[], env: NodeJS.ProcessEnv = process.env)
   const { rows, generatedAt, lastApply } = buildReport(ctx);
 
   if (opts.verb === "report") {
-    console.log(opts.json ? renderJson(rows, generatedAt, opts.offline, lastApply) : renderTable(rows, opts.offline, lastApply));
+    if (opts.json) {
+      console.log(renderJson(rows, generatedAt, opts.offline, lastApply, opts.inventory ? buildInventory(ctx) : undefined));
+    } else {
+      console.log(renderTable(rows, opts.offline, lastApply));
+    }
     return rows.some((r) => r.status === "stale") ? 1 : 0;
   }
 
-  const steps = planApply(rows, opts.only, ctx);
+  const steps = planApply(rows, opts.only, ctx, { prune: opts.prune, reResolve: opts.reResolve });
   if (steps.length === 0) {
     console.log("sjel update: nothing to do — everything this tool can move is current");
     return 1;
   }
   console.log(`sjel update apply — ${steps.length} step(s)`);
-  for (const s of steps) console.log(`  · ${s.label}${s.slow ? "  (slow — this one compiles or pulls)" : ""}`);
+  // The removals are printed as their own block before anything runs. `--prune` deletes, and
+  // this list plus the confirmation below is the whole of what stands between the flag and a
+  // package somebody wanted.
+  const removals = steps.filter((s) => s.argv[0] === "npm" && s.argv[1] === "uninstall");
+  if (removals.length > 0) {
+    console.log(`  REMOVING ${removals.length} package(s) nothing requires:`);
+    for (const s of removals) {
+      console.log(`    ✗ ${s.label.replace(/^prune: /, "")}${s.note ? ` — ${s.note}` : ""}`);
+    }
+  }
+  for (const s of steps) {
+    if (removals.includes(s)) continue;
+    console.log(`  · ${s.label}${s.note ? ` — ${s.note}` : ""}${s.slow ? "  (slow — this one compiles or pulls)" : ""}`);
+  }
+  // A crate named on the command line that nothing plans to move is said out loud, so a typo
+  // does not read as "it re-resolved and it was fine".
+  for (const name of opts.reResolve) {
+    if (!steps.some((s) => s.label === `cargo: ${name}`)) {
+      console.log(`  · --re-resolve named ${name}, which this plan does not move`);
+    }
+  }
   // Deliberately unlike tools/update.sh, which pulls straight through when stdin is not a TTY.
   // That tool fast-forwards a git checkout; this one installs software, and on this host the
   // plan can include two npm major versions. An unattended run therefore has to say --yes out
@@ -1180,6 +1408,13 @@ export async function main(argv: string[], env: NodeJS.ProcessEnv = process.env)
   // package managers do, and the second read is what makes this a report and not a claim.
   const after = buildReport(ctx);
   const stillStale = after.rows.filter((r) => r.status === "stale");
+
+  // Last, over the machine the steps above just changed. This is the seam that was missing:
+  // `apply --only cargo` and `--only npm` install software that no scan had ever looked at,
+  // and the scheduled job's audit only ran when brew, uv or rustup happened to be stale too.
+  console.log("\n▸ audit (tools/audit)");
+  const audit = runAudit(ctx);
+
   writeApplyReceipt(ctx.overlay, {
     at: new Date().toISOString(),
     class: scope,
@@ -1187,8 +1422,10 @@ export async function main(argv: string[], env: NodeJS.ProcessEnv = process.env)
     failed,
     stillStale: stillStale.length,
     state: failed > 0 ? "failed" : "done",
+    audit,
   });
   console.log(`\n── applied ${steps.length - failed}/${steps.length}; ${stillStale.length} still stale ──`);
+  console.log(`── audit: ${audit}${AUDIT_ADVICE[audit]} ──`);
   for (const r of stillStale) {
     console.log(`  still stale: ${r.surface}${r.name ? ` ${r.name}` : ""}${r.installed ? ` ${r.installed}` : ""}`);
   }

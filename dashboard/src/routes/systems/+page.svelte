@@ -5,7 +5,7 @@
   import { axonStatus, macmon, type MacmonSample, type StorageReport, type UpdatesReport } from "$lib/api";
   import { formatBytes, storageView } from "$lib/systems/storage";
   import AgentPanel from "$lib/systems/AgentPanel.svelte";
-  import { applySummary, updatesView, versionLabel } from "$lib/systems/updates";
+  import { applySummary, auditNeedsAttention, updatesView, versionLabel } from "$lib/systems/updates";
 
   let macmonState = $state<"checking" | "up" | "down">("checking");
   let sample = $state<MacmonSample | null>(null);
@@ -414,7 +414,11 @@
     <p class="loading"><Icon name="loader" size={14} /> asking three registries…</p>
   {:else}
     {#if updSummary}
-      <p class="upd-summary" class:running={updView.busy}>
+      <p
+        class="upd-summary"
+        class:running={updView.busy}
+        class:warn={auditNeedsAttention(updView.lastApply?.audit)}
+      >
         {#if updView.busy}<Icon name="loader" size={12} />{/if}
         {updSummary}
       </p>
@@ -963,6 +967,13 @@
 
   .upd-summary.running {
     color: var(--text-primary);
+  }
+
+  /* The last apply's audit found something, or could not run. It colours the line that already
+     carries the verdict rather than adding a second element, so a bad verdict is read in the
+     same glance as what the apply did. */
+  .upd-summary.warn {
+    color: var(--warning-ink);
   }
 
   .upd-group {

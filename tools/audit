@@ -11,6 +11,18 @@
 #                exceptions. Dependabot alerts watch the same lockfiles continuously; this is
 #                the answer before a push rather than after it.
 #
+#                AND, in a second pass, the same CVEs against software installed OUTSIDE this
+#                checkout: every node in the global npm tree, and every `cargo install`ed crate
+#                with the transitive tree its own published Cargo.lock pins. That pass exists
+#                because nothing else looks at them. osv-scanner's own `directory` plugin
+#                cannot (measured 2026-10-03 on 2.6.0: 0 Extract calls, 1 dir visited, even
+#                against a valid dpkg status file), and Dependabot reads lockfiles in this
+#                repository only — so the class `tools/updates` is solely responsible for
+#                moving was the class no scanner covered. The inventory comes from
+#                `tools/updates --json --offline --inventory`, which reads `cargo install
+#                --list` and `npm ls -g --json --all` for the report already; this adds no
+#                second reader of either.
+#
 # NOT here: container images (.github/workflows/security.yml runs `grype registry:` against
 # every image a service.toml declares, weekly and on push, whether or not this Mac is awake --
 # report-only since Q77, with the Critical/High counts in that run's summary) and Axon's own
@@ -95,6 +107,102 @@ else
     1) echo "  ✗ vulnerabilities found above"; fail=1 ;;
     *) echo "  ? osv-scanner errored (exit $rc)"; fail=1 ;;
   esac
+fi
+
+# ---- osv-scanner: dependency CVEs over globally installed software ----
+# The second surface, and the one nothing else covers. The scan is the same binary and the
+# same osv-scanner.toml, fed a CycloneDX SBOM built from the inventory `tools/updates` already
+# keeps — a fourth scanner would be a fourth thing to keep current, and a second reader of
+# `cargo install --list` would be the two-owners failure this repository has already paid for.
+#
+# Every branch that cannot scan says so and sets `setup`, never `fail`: an inventory that
+# could not be read is not evidence that the software on this machine is clean.
+echo
+echo "▸ osv-scanner · globally installed (cargo install, npm -g)"
+if ! command -v osv-scanner >/dev/null 2>&1; then
+  echo "  ⚠ osv-scanner not installed — this surface was not scanned"
+  setup=1
+elif [ ! -x "$SJEL_ROOT/tools/updates" ]; then
+  echo "  ⚠ tools/updates not reachable — this surface was not scanned"
+  setup=1
+elif ! command -v jq >/dev/null 2>&1; then
+  echo "  ⚠ jq not installed — this surface was not scanned"
+  setup=1
+else
+  # --offline asks for the INSTALLED versions, which is this pass's whole question. What is
+  # newer than them is `sjel update`'s question, and asking a registry here would make the
+  # audit depend on three of them.
+  #
+  # --inventory, not the default payload, and that is the difference between a gesture and a
+  # scan: `rows` is the actionable view, and for npm it is the top level only. Measured on this
+  # host, that is 13 packages against 1825 nodes in the tree, and a CVE does not stop at the
+  # top level. The whole inventory is what this pass scans.
+  globals_inv="$("$SJEL_ROOT/tools/updates" --json --offline --inventory 2>/dev/null || true)"
+
+  globals_dir="$(mktemp -d "${TMPDIR:-/tmp}/sjel-globals.XXXXXX")"
+  printf '%s' "$globals_inv" > "$globals_dir/inventory.json"
+  globals_bom="$globals_dir/globals.cdx.json"
+  jq -c '{
+      bomFormat: "CycloneDX", specVersion: "1.5", version: 1,
+      components: [ .inventory[]?
+        | select(.ecosystem == "npm" or .ecosystem == "crates.io")
+        | select(.name != "" and .version != "")
+        | { type: "library", name: .name, version: .version,
+            purl: (if .ecosystem == "crates.io"
+                   then "pkg:cargo/\(.name)@\(.version)"
+                   else "pkg:npm/\(.name | gsub("@"; "%40"))@\(.version)" end) }
+      ] }' "$globals_dir/inventory.json" > "$globals_bom" 2>/dev/null
+  globals_n="$(jq '.components | length' "$globals_bom" 2>/dev/null || echo 0)"
+
+  # An installed crate's transitive tree is the Cargo.lock published inside it, because
+  # `cargo install --locked` — the command `tools/updates` plans — resolves exactly that file.
+  # Read rather than re-resolved, so what is scanned is what is installed. Copied into one
+  # directory per crate because osv-scanner identifies a lockfile by its NAME, and each copy
+  # is its own half of the scan.
+  mkdir -p "$globals_dir/locks"
+  jq -r '.inventory[]? | select(.ecosystem == "crates.io") | "\(.name)-\(.version)"' \
+    "$globals_dir/inventory.json" 2>/dev/null | while read -r crate; do
+    [ -n "$crate" ] || continue
+    for lf in "${CARGO_HOME:-$HOME/.cargo}"/registry/src/*/"$crate"/Cargo.lock; do
+      [ -f "$lf" ] || continue
+      mkdir -p "$globals_dir/locks/$crate"
+      cp "$lf" "$globals_dir/locks/$crate/Cargo.lock"
+    done
+  done
+  globals_locks="$(find "$globals_dir/locks" -name Cargo.lock 2>/dev/null | wc -l | tr -d ' ')"
+
+  if ! jq -e '.inventory | type == "array"' "$globals_dir/inventory.json" >/dev/null 2>&1; then
+    echo "  ⚠ tools/updates returned no inventory — this surface was not scanned"
+    setup=1
+  elif [ "${globals_n:-0}" = "0" ]; then
+    # A real state, not a failure: nothing was installed by either manager. Reported as such
+    # rather than as "clean", because an empty SBOM proves nothing about the machine.
+    echo "  · nothing installed by cargo or npm — nothing to scan"
+  else
+    echo "  · ${globals_n} installed package(s) and ${globals_locks} crate lockfile(s)"
+    # -L, not --sbom: 2.6.0 deprecates --sbom in favour of -L and accepts a CycloneDX file
+    # under either name (measured 2026-10-03). -r over the lockfile directory walks only the
+    # copies made above, and each lockfile is named in the finding's SOURCE column so a
+    # transitive hit says which installed crate carries it.
+    #
+    # --verbosity error, and the trade is real: at the default verbosity this pass also lists
+    # osv-scanner.toml's entries as "unused ignores", because the crates they cover are in the
+    # repository's build graph and not among this machine's installed ones. That listing
+    # appears directly under a repository pass that just used them, and it reads as an
+    # invitation to delete them. The cost of silencing it is that an exception applying to an
+    # installed package would be swallowed rather than named — no current entry does (each
+    # reason names a repository path), and the remedy for an installed finding is `sjel update`
+    # rather than an exception. The finding table and the exit code are unaffected either way.
+    osv-scanner scan source -r -L "$globals_bom" --config "$SJEL_ROOT/osv-scanner.toml" \
+      --verbosity error "$globals_dir/locks"
+    rc=$?
+    case "$rc" in
+      0) echo "  ✓ clean" ;;
+      1) echo "  ✗ vulnerabilities found above"; fail=1 ;;
+      *) echo "  ? osv-scanner errored (exit $rc)"; fail=1 ;;
+    esac
+  fi
+  rm -rf "$globals_dir"
 fi
 
 echo

@@ -421,7 +421,7 @@ required = "optional"
 needed_by = ["workflow:audit"]
 bin = "osv-scanner"
 upstream = "osv-scanner"
-why = "dependency-CVE scan over every lockfile — tools/audit"
+why = "dependency-CVE scan over every lockfile AND this machine's globally installed packages — tools/audit"
 install_macos = "brew install osv-scanner"
 install_linux = "go install github.com/google/osv-scanner/cmd/osv-scanner@latest"
 

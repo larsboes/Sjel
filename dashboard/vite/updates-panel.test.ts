@@ -2,6 +2,8 @@ import { describe, expect, test } from "bun:test";
 import type { UpdateRow, UpdateSurface, UpdatesReport } from "../src/lib/api";
 import {
   applySummary,
+  auditLabel,
+  auditNeedsAttention,
   OWNER_ORDER,
   sinceLabel,
   statusOf,
@@ -198,5 +200,48 @@ describe("applySummary", () => {
 
   test("no receipt is no line", () => {
     expect(applySummary(updatesView(report()), now)).toBe("");
+  });
+});
+
+describe("the audit verdict on the summary line", () => {
+  const now = Date.parse("2026-10-01T12:05:00Z");
+  const applied = (audit?: string) =>
+    updatesView(
+      report({ lastApply: { at: "2026-10-01T12:00:00Z", class: "cargo", steps: 1, state: "done", audit } }),
+    );
+
+  // The point of printing `clean` rather than staying silent: a missing audit and a passing one
+  // must not look the same, because the seam this closes is `apply --only cargo` installing
+  // software that nothing used to check.
+  test("a clean verdict is shown, not swallowed", () => {
+    expect(applySummary(applied("clean"), now)).toContain("audit clean");
+  });
+
+  test("a verdict that needs attention says what to run", () => {
+    for (const verdict of ["finding(s)", "scanner-missing", "could not run"]) {
+      const line = applySummary(applied(verdict), now);
+      expect(line).toContain(`audit ${verdict}`);
+      expect(line).toContain("run tools/audit");
+    }
+  });
+
+  test("a verdict this file has never heard of reads as something to look at", () => {
+    expect(auditLabel("something-new")).toBe(" · audit something-new — run tools/audit");
+    expect(applySummary(applied("something-new"), now)).toContain("audit something-new");
+  });
+
+  test("a receipt written before the field existed says nothing about an audit", () => {
+    expect(applySummary(applied(undefined), now)).not.toContain("audit");
+    expect(auditLabel(undefined)).toBe("");
+  });
+
+  // Only `clean` is good news. This drives the summary line's warning colour, so an unknown
+  // verdict must colour it rather than pass as a clean bill of health.
+  test("only clean is treated as fine, and an absent field is not a warning", () => {
+    expect(auditNeedsAttention("clean")).toBe(false);
+    expect(auditNeedsAttention(undefined)).toBe(false);
+    expect(auditNeedsAttention("finding(s)")).toBe(true);
+    expect(auditNeedsAttention("scanner-missing")).toBe(true);
+    expect(auditNeedsAttention("something-new")).toBe(true);
   });
 });

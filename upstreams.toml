@@ -162,8 +162,8 @@ why = "signature-based secret-sprawl scan over Sjel and selected private-overlay
 url = "https://github.com/google/osv-scanner"
 verdict = "adopt"
 license = "Apache-2.0"
-summary = "Dependency vulnerability scanner Sjel runs over its lockfiles, with SARIF and a failing exit code"
-why = "dependency CVE scan (Google OSV DB) over bun/uv/npm/Cargo lockfiles; lean, SARIF, --fail-on-vuln exit code. Complements trivy: osv = lockfiles, trivy = images/OS — not redundant"
+summary = "Dependency vulnerability scanner over Sjel's lockfiles and the machine's installed software"
+why = "dependency CVE scan (Google OSV DB) over bun/uv/npm/Cargo lockfiles, and since 2026-10-03 a second pass in tools/audit over software installed outside the checkout: the full global npm tree plus each `cargo install`ed crate's own published Cargo.lock, which nothing had ever scanned. Lean, --fail-on-vuln exit code, and one osv-scanner.toml carries the dated exceptions for both surfaces. The image half is [grype]'s and not this entry's — [trivy] was rejected 2026-09-02, and the sentence that used to point at it from here outlived it"
 
 [grype]
 url = "https://github.com/anchore/grype"

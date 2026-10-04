@@ -1,7 +1,8 @@
 # host-patch
 
-The daily upgrade of this machine's tools, and the audit that runs over the machine it just
-patched. Axon held a new release for seven to fourteen days before adopting it; Q74 removed
+The daily upgrade of this machine's tools, and the audit that follows it — over this repository,
+the private overlay, and the software those tools installed outside the checkout. Axon held a new
+release for seven to fourteen days before adopting it; Q74 removed
 that hold on 2026-09-02 (CONTRIBUTING.md#patch-first), and this is what stands in its place. Nothing
 waits any more, so something has to move: `brew`, `uv` and `rustup` run every 24 hours, then
 `tools/audit`, then a receipt that says what happened.

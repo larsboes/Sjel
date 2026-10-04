@@ -885,6 +885,72 @@ this deployment paid the last time it was broken.
   is still named on the row so the reader sees both facts. `cargo search` remains the fallback
   when crates.io does not answer.
 
+- [x] ISC-59 — the audit reaches software installed outside this checkout, and every apply
+  records what it found. Falsifier: an installed package no scan covers, or an `apply --only
+  cargo` / `--only npm` whose receipt carries no verdict. Probe: plant a known-vulnerable global
+  package and run `tools/audit`; then `sjel update apply --only npm --yes` and read
+  `<overlay>/data/updates/last-apply.json`. Evidence, 2026-10-03: measured first that
+  `osv-scanner` cannot do this itself — its `directory` plugin walked 1 dir and made 0 Extract
+  calls on 2.6.0, against `/opt/homebrew/lib/node_modules`, against `/opt/homebrew/Cellar`, and
+  against a hand-built `var/lib/dpkg/status` holding one package. A CycloneDX SBOM fed through
+  `-L` works instead: a three-component fixture returned lodash 4.17.15's advisories and exit 1,
+  the same fixture without it returned 0, and percent-encoded scoped names
+  (`pkg:npm/%40sinclair/typebox@0.34.52`) resolve. The inventory is `tools/updates --json
+  --offline --inventory`, whose two managers the report already reads — no second reader of
+  `cargo install --list` or `npm ls -g --json --all` is added. `--inventory` had to be added to
+  that tool, and not the default `rows`, because `rows` is the actionable view and stops at the
+  top level: on this host 13 packages against 541 distinct name@version pairs (4 crates.io, 537
+  npm), the nested 528 being where advisories mostly live. Coverage is therefore the full npm
+  tree as a CycloneDX SBOM, plus, per installed crate, the `Cargo.lock` **published inside it**
+  — copied from `$CARGO_HOME/registry/src` and matched by `name-version`, so an uninstalled
+  cached version is not scanned. That lockfile is the resolution `cargo install --locked
+  --force` uses, which is the command `tools/updates` plans; it is a claim about what a
+  reinstall would produce, and may differ from what is on disk if the crate was installed
+  without `--locked`. npm's half is the resolved tree actually present.
+
+  **The first honest run found things.** 23 packages carrying 46 advisories — 3 Critical, 16
+  High, 15 Medium, 7 Low, 5 Unknown, 36 fixable — none of which any scanner had seen, and
+  `tools/audit` now exits 1 where the same run reported clean minutes earlier. `host-patch`
+  therefore exits 1 too, which its own contract already means (`1 = the audit found something`,
+  distinct from `2 = a step failed`). Nothing about this change blocks an install or an apply:
+  the verdict is report-only, and this ISC is about reaching the surface, not about what to do
+  with what it found — which is a decision this change deliberately leaves open.
+  `apply` ends in `tools/audit` and writes the verdict to the receipt. Deliberate: the pass runs
+  even when the plan already delegated to host-patch, because reading host-patch's receipt back
+  would make the field mean "whatever ran last" and need a third branch for a missing one.
+  `--verbosity error` silences osv-scanner listing `osv-scanner.toml`'s four entries as "unused
+  ignores" on this pass, which otherwise appears directly under a repository pass that just used
+  all four and reads as an invitation to delete them; the cost is that an exception applying to
+  an installed package would be swallowed, and no current entry does. NOT verified: `--only
+  cargo` or `--only npm` end to end through a real apply, because nothing on this host was stale
+  at the time.
+
+- [x] ISC-60 — `apply` can remove a leftover and can re-resolve a crate, and neither happens
+  without the operator naming it. Falsifier: `--prune` removes a package a parent pins, or
+  `--re-resolve` drops `--locked` for a crate not named. Probe: unit tests over `planPrune` and
+  `planApply`; `sjel update report --prune` and `report --re-resolve x` refused with exit 2.
+  Evidence, 2026-10-03: `Row.removable` is set on exactly two branches of `gatherNpm` — a
+  registry-deprecated package and an unused duplicate — and never on a pinned copy, because that
+  copy exists to satisfy its parent; the test asserts the pinned row is absent from `planPrune`
+  and never appears in a removal argv. `apply --prune` prints the removals as their own block
+  before the plan and before the existing `--yes` gate, removals are ordered first so a name is
+  free before anything arrives under it, and `--re-resolve <crate,...>` drops `--locked` only for
+  the crates named, printing the reason beside each and saying so out loud when a name matches
+  nothing the plan moves. NOT verified: a live prune, because this host has nothing removable
+  (`sjel update --json | jq '[.rows[]|select(.removable)]'` returns `[]` after the two add-ons
+  came off), and a live re-resolve, because no crate was stale.
+
+  The same change removed `@marckrenn/pi-sub-bar` and `claude-agent-sdk-pi`, and that was
+  measured rather than assumed: both nested copies of `pi-coding-agent` were the bundled peer
+  of one of them (`peerDependencies: "@mariozechner/pi-coding-agent": "*"` — the deprecated
+  scope, with no successor package on npm — and `"@earendil-works/pi-coding-agent": "^0.74.0"`
+  against an installed `1.0.0`), both parents were already at their latest release, and neither
+  name appeared anywhere in this repository, the overlay, pi's `settings.json` or `mcp.json`,
+  `~/.claude.json`, or `~/.codex/config.toml`. Removing them took 399 packages and 11 of the 46
+  advisories with them: 541 installed packages became 439, 23 affected became 18. The other six
+  globals nothing references were left alone on the operator's ruling, because `playwright/cli`
+  and `bobshell` are plausibly invoked by hand and no configuration would show that.
+
 ## Not yet specified
 
 - **knowledge-graph link prediction over the vault.** `knowledge-graph` serves the code
@@ -1068,6 +1134,50 @@ claim yet, and the watch rows they name are in `upstreams.toml` with the questio
 
 ## Log
 
+- 2026-10-03 · The audit now reaches this machine's own software, and the claims that said it
+  already did are corrected. Nothing scanned what `sjel update` is uniquely responsible for
+  moving: `tools/audit`'s `osv-scanner` read this repository's lockfiles, Dependabot read the
+  same ones, and a globally installed crate or npm package was outside both — while
+  `ARCHITECTURE.md` and `capabilities/host-patch/README.md` described the audit as running "over
+  the machine it just patched". `tools/audit` gains a second `osv-scanner` pass over the whole
+  installed inventory — a CycloneDX SBOM of the full npm tree plus each installed crate's own
+  published `Cargo.lock` — and `sjel update apply` ends in `tools/audit` with the verdict on its
+  receipt, so `apply --only cargo` and `--only npm` no longer install software nothing checks.
+  ISC-59. Measured rather than assumed: osv-scanner 2.6.0's `directory` plugin extracts nothing
+  from installed software (0 Extract calls on three different targets, including a valid
+  `var/lib/dpkg/status`), so the SBOM is the mechanism that works. Also corrected in this change:
+  CONTRIBUTING.md's coverage table said "Nothing asks" about a host package being behind, and
+  had no row at all for this surface. The panel shows every verdict including `clean` — a silent
+  clean would make a missing audit indistinguishable from a passing one — and colours a non-clean
+  one in the summary line it already renders, so ISC-55's still-owed browser check now covers a
+  verdict too.
+- 2026-10-03 · Two add-ons off, and `apply` learned to remove and to re-resolve. The first
+  honest audit run named Sjel's own harness trees, and neither turned out to be fixable by
+  anything here: `@marckrenn/pi-sub-bar@1.5.0` peer-locks the deprecated `@mariozechner` scope
+  and has no successor on npm (404 on `@earendil-works/pi-sub-bar`), and
+  `claude-agent-sdk-pi@1.0.22` — the latest release — asks for
+  `@earendil-works/pi-coding-agent: ^0.74.0` against an installed `1.0.0`, so npm nests an old
+  copy. Both were already at their latest, so no upgrade was the fix; both names were unreferenced
+  in this repository, the overlay, pi's `settings.json` and `mcp.json`, `~/.claude.json` and
+  `~/.codex/config.toml`; so both came off. 399 packages and 11 advisories went with them (541
+  installed → 439, 23 affected → 18). The other six unreferenced globals stayed, because
+  `playwright/cli` and `bobshell` may be invoked by hand and no config would show it. ISC-60
+  covers the two new flags: `--prune` removes only rows the report marks `removable`, which a
+  pinned copy never is, and prints them before the `--yes` gate; `--re-resolve <crate,...>` drops
+  `--locked` for the crates named and no others, so a crate whose published lockfile pins a
+  flagged dependency can be reinstalled without giving up reproducibility everywhere. Neither
+  was exercised live — nothing on this host is removable and no crate was stale — which ISC-60
+  records rather than leaves implied.
+
+  **The measurement is the point, and it is not comfortable.** 541 installed packages scanned:
+  23 affected by 46 advisories, 3 Critical and 16 High, 36 fixable. The narrower first cut of
+  this pass read only the top level — 13 npm packages and 4 crates — and reported this machine
+  clean; the nested npm nodes and the crates' transitive trees are where the advisories were. So
+  `tools/audit` exits 1 as of this change and `host-patch` with it, which its contract already
+  means (`1 = the audit found something`, not `2 = a step failed`). Nothing this change ships
+  silences that: an `osv-scanner.toml` exception is the repository's mechanism for a dated
+  verdict, and whether these get fixed, excepted or scoped is the operator's next decision, not
+  a default baked in here.
 - 2026-10-01 · Main green again, the repository's dependencies moved, and this file cleaned.
   CI and Pages had been red since ISC-45: strict clippy on Linux refused three macOS-only imports
   in `libs/sjel-credentials` (b53f1f56), and the demo seeder got a 403 because a capability with

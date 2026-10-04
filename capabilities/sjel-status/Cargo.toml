@@ -27,7 +27,8 @@ devices = { path = "../devices" }
 # records and this file owns the surface -- the same split as `devices` above.
 backup = { path = "../backup" }
 route-manifest = { path = "../../libs/route-manifest" }
-# The browser login (src/session.rs): a random ticket and session, and the digest the store keeps.
+# The browser login (src/session.rs): a random single-use ticket, and the digest kept for it
+# in memory. The session itself is signed by sjel-server, so nothing here is stored.
 getrandom.workspace = true
 sha2.workspace = true
 axum.workspace = true

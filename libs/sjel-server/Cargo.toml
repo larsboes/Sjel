@@ -31,6 +31,9 @@ tokio-rustls = "0.26"
 rcgen = "0.14"
 hyper-util = { version = "0.1", features = ["server-auto", "tokio", "service"] }
 sha2.workspace = true
+# HMAC-SHA256 over the deployment token (src/session.rs): the signed browser session every
+# capability verifies. Pairs with the workspace's sha2 0.11, so it resolves no second digest.
+hmac = "0.13"
 # The agent view (ISA F9): the gate rewrites every agent response through this crate.
 sjel-pseudonymize = { path = "../pseudonymize" }
 

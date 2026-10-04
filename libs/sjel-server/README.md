@@ -10,7 +10,7 @@ backtrace.
 
 | Listener policy | `/health`, `/ready`, CORS preflight | Every other route | Reach beyond loopback |
 |---|---|---|---|
-| `serve_local` (credential-required) | served | `401` without a credential; `403` if no token is configured | loopback only |
+| `serve_local` (credential-required) | served | `401` without a credential (token, tailnet identity, or browser session); `403` if no token is configured | loopback only |
 | explicit compatibility `serve` | served | served unless another policy closes it | **refused at bind** without a token |
 | tailnet proxy-only Unix socket | liveness served | declared operator identity only | socket access is restricted |
 
@@ -68,6 +68,31 @@ raw TCP forward and no identity header is injected, every tailnet request become
 indistinguishable from a loopback one, and this gate silently stops gating with every
 process healthy and every test green. doctor's **Tailnet identity gate** section fails on
 exactly that shape, and on funnel being on at all (PRD N3).
+
+### The browser session
+
+A browser on this Mac can carry neither the deployment token nor a tailnet identity. The shell
+mints it a session instead: the menu-bar app trades the Keychain token for a single-use ticket,
+opens `GET /session/open?ticket=…`, and leaves with a cookie (ISA ISC-45; the handlers are in
+`capabilities/sjel-status/src/session.rs`).
+
+The session is a **signed token**, `HMAC-SHA256(deployment token, payload)` with a 30-day
+expiry, verified by `session::SignedSessions` — which `InboundAuth::resolve` installs for every
+capability. So a capability that serves its own panel (soundscape's browser loads `:8088`
+directly and carries no token) admits the operator's browser with no store to read and no proxy
+in the path. The cookie is `HttpOnly` and `SameSite=Strict`; it is not `Secure`, because the
+listener is plain HTTP on loopback. A session slides on use: whichever capability the browser
+reached re-issues the cookie, which is why the scheme needs no state.
+
+Only the shell calls `with_session_open()`, which lets `SESSION_OPEN_PATH` reach its handler
+without a credential — the browser arriving with a ticket holds none yet. Every capability
+verifies sessions; only the shell exempts that route.
+
+**The trade.** Any holder of the deployment token can mint a session, which is not a new
+privilege (it already holds the master credential) but is why that token stays out of the
+browser and out of logs. Statelessness costs per-session revocation: `logout` clears the cookie
+and an already-stolen copy stays valid until it expires, so rotating the deployment token is the
+revocation that exists.
 
 ### Token sourcing: one token for the deployment
 

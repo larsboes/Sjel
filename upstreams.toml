@@ -277,6 +277,13 @@ license = "MIT OR Apache-2.0"
 summary = "Rust SHA-256 library the media ingest gate uses to detect exact duplicate files"
 why = "SHA-256 for the media ingest gate and index, already a workspace dependency. Exact bytes, not filenames or perceptual similarity, decide duplicate admission; the digest is stored once and verified on import. Adopts the hashing implementation, not a content upload service."
 
+[hmac]
+url = "https://github.com/RustCrypto/MACs"
+verdict = "adopt"
+license = "MIT OR Apache-2.0"
+summary = "HMAC-SHA256, the signature on the browser session every capability verifies"
+why = "adopted 2026-10-04 for libs/sjel-server/src/session.rs. The local browser session (ISA ISC-45) was a table in the shared store that only the shell could read, so a capability serving its own panel answered 401 to the browser that loaded it. It is now HMAC-SHA256 over the deployment token: no second secret, verifiable from the request alone by any capability, and rotating that token revokes every session. The same author as the `sha2` already in the workspace, and hmac 0.13 pairs with sha2 0.11, so it resolves no second digest. Its `verify_slice` is the constant-time comparison, which is why the check is not hand-written here."
+
 [exiftool]
 url = "https://exiftool.org/"
 verdict = "adopt"

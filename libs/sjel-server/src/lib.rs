@@ -31,6 +31,8 @@ mod auth;
 pub mod lan;
 /// The browser-origin refusal two capabilities apply to C2 surfaces.
 pub mod origin;
+/// Signed browser sessions: minted by the shell, verified by every capability.
+pub mod session;
 /// The identity `tailscale serve` proves, for the caller that cannot hold a secret.
 pub mod tailnet;
 
@@ -40,6 +42,7 @@ pub use auth::{
     InboundAuth, SessionVerifier, DEVICE_SIGNATURE_HEADER, LEGACY_HEADERS, PAIRING_CLAIM_PATH,
     SESSION_COOKIE, SESSION_OPEN_PATH,
 };
+pub use session::{session_cookie_header, SignedSessions, SESSION_TTL_SECONDS};
 
 // Re-exported so a server binary that depends only on sjel-server still gets the
 // port contract.
@@ -312,7 +315,8 @@ mod http_tests {
     async fn session_server() -> String {
         let auth = InboundAuth::with_token(Some("full".into()))
             .require_credential()
-            .with_session_verifier(std::sync::Arc::new(OneSession));
+            .with_session_verifier(std::sync::Arc::new(OneSession))
+            .with_session_open();
         let router = axum::Router::new()
             .route("/api/thing", get(|| async { "{}" }))
             .route(SESSION_OPEN_PATH, get(|| async { "opened" }));
@@ -378,6 +382,25 @@ mod http_tests {
             .await
             .unwrap();
         assert_eq!(gated.status().as_u16(), 401);
+
+        // A verifier without `with_session_open` still gates the path: every capability verifies
+        // the session, and only the shell exempts the ticket route.
+        let verifier_only = InboundAuth::with_token(Some("full".into()))
+            .require_credential()
+            .with_session_verifier(std::sync::Arc::new(OneSession));
+        let router = axum::Router::new().route(SESSION_OPEN_PATH, get(|| async { "opened" }));
+        let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let addr = listener.local_addr().unwrap();
+        let app = authenticated(router, verifier_only);
+        tokio::spawn(async move {
+            let _ = axum::serve(listener, app).await;
+        });
+        let not_shell = client
+            .get(format!("http://{addr}{SESSION_OPEN_PATH}"))
+            .send()
+            .await
+            .unwrap();
+        assert_eq!(not_shell.status().as_u16(), 401);
     }
 
     // --- the agent identity (ISA F9, ISC-43) ---------------------------------------------

@@ -646,18 +646,26 @@ Design:
   address. Still open: `tools/setup-tailnet-shell.sh`, and a probe of the `secrets/**` deny from
   a session started after the policy was installed. The session that installed it was not
   refused, which fits a policy read at startup (not verified).
+  Progress 2026-10-04: the local browser session is now a shared identity in the gate
+  (`libs/sjel-server/src/session.rs`), verified by every capability. It does not widen the agent
+  path: a session is minted only behind the deployment token (`POST
+  /api/sjel-status/session/ticket` is gated, and the shell's listener calls `require_credential`),
+  an agent bearer is not a session, and a `refuse_without_token` route still refuses one.
   Two consequences of failing closed, measured 2026-10-01. A browser on this Mac at
   `127.0.0.1:8082` carries no token: answered the same day by the principal's ruling (no command
   line, a 30-day sliding session). The menu-bar app (`apps/mac/install`, `~/Applications/Sjel.app`)
   trades the Keychain token for a single-use ticket, and the shell turns it into a session cookie
-  (`capabilities/sjel-status/src/session.rs`). Still open: soundscape's panel loads from its own
-  port (`panelUrl` in `dashboard/src/lib/api.ts`), so its browser requests carry no token.
+  (`capabilities/sjel-status/src/session.rs`). **Closed 2026-10-04:** soundscape's panel loads
+  from its own port (`panelUrl` in `dashboard/src/lib/api.ts`), so its browser requests carry no
+  token — and until this date nothing on that port could verify the shell's session, because the
+  session was a table only the shell could read. The session is now a signed token
+  (`libs/sjel-server/src/session.rs`) that `InboundAuth::resolve` verifies for every capability,
+  so the panel and its API answer `200` to the browser's cookie and `401` without it.
   Progress 2026-10-01, later: a session started after the policy was installed refuses a
   `secrets/**` read. `Read` of a missing file under the overlay's `secrets/` returned "denied by
   your permission settings" instead of "not found", and `cat` of the same path was denied
   before it ran. The session's sandbox also lists the overlay `secrets/` paths as read-denied.
-  This confirms the startup-read explanation above. Still open: `tools/setup-tailnet-shell.sh`
-  and the soundscape panel.
+  This confirms the startup-read explanation above. Still open: `tools/setup-tailnet-shell.sh`.
   Ruling, principal, 2026-10-01: the Bash sandbox is chosen per launch and is off by default.
   It blocked `git push`, the interceptor daemon, local ports and the Tailscale CLI. The managed
   policy no longer sets `sandbox.enabled`, and `tools/claude-sandboxed` turns it on. Without it,
@@ -1163,6 +1171,22 @@ claim yet, and the watch rows they name are in `upstreams.toml` with the questio
 
 ## Log
 
+- 2026-10-04 · The browser session is a shared identity in the inbound gate, and the soundscape
+  panel works. It was a table in the shared store that only the shell could read, so a capability
+  serving its own panel — whose browser loads `:8088` directly and carries no token — answered
+  `401` to the panel and to every request it made (ISA ISC-45's last open item). It is now
+  `HMAC-SHA256(deployment token, payload)` with a 30-day expiry (`libs/sjel-server/src/session.rs`),
+  which `InboundAuth::resolve` installs as a `SessionVerifier` for every capability: no store to
+  read, no proxy in the path, no second secret, and rotating the deployment token revokes every
+  session. The cookie slides on use, because whichever capability the browser reached re-issues
+  it — that is what keeps a sliding session stateless. `SESSION_OPEN_PATH` is exempt only where
+  the shell calls `with_session_open()`, so a capability does not exempt a route it does not
+  serve. `sjel-status/src/session.rs` keeps the ticket and the handlers and drops its table;
+  `hmac` is a new upstream row, pairing with the workspace's existing `sha2`. Verified live: no
+  cookie `401`, a session minted through the shell `200` on the panel, its API and the shell
+  itself, a bogus cookie `401` on both, and a reused ticket `401`. The trade is stated rather
+  than hidden: a single session cannot be revoked on its own, because a stolen token stays valid
+  until it expires.
 - 2026-10-04 · `tools/harnesses` is wholly Rust. The write verbs — `sync`, `use`, `promote`,
   `accept` — move to `tools/sjel-cli/src/harnesses/` with `tools/lib/pack-deploy.ts`'s mutation
   half (the state lock, the atomic install, the digest policy, the ledger writes, profiles) and

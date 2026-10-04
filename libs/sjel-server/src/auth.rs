@@ -36,6 +36,11 @@
 //! | yes | the operator | served, without a token |
 //! | yes | anyone else | `401` |
 //!
+//! A third identity is the local browser session ([`crate::session`]): the shell mints a signed
+//! cookie after the menu-bar app trades the Keychain token for a ticket, and every capability
+//! verifies it from the request alone. That is what lets a capability's own panel — loaded by the
+//! browser from the capability's port, carrying no token — reach its own API.
+//!
 //! `require_credential` refuses direct loopback requests, including requests that forge a
 //! tailnet identity header. `tailnet_proxy_only` is reserved for a Unix-socket listener that
 //! only Tailscale Serve can reach; the managed agent sandbox denies that socket path.
@@ -149,6 +154,13 @@ pub const SESSION_OPEN_PATH: &str = "/session/open";
 pub trait SessionVerifier: Send + Sync {
     /// `true` when `session` names a live session. An implementation may extend its expiry.
     fn verify(&self, session: &str) -> bool;
+
+    /// A refreshed cookie value when a live session should slide its expiry, or `None` when it
+    /// is fresh enough. The gate writes the `Set-Cookie` for whichever capability the browser
+    /// reached, which is what keeps a sliding session stateless.
+    fn renew(&self, _session: &str) -> Option<String> {
+        None
+    }
 }
 
 /// Checks one `axon-device-auth/v1` signed request against the device registry.
@@ -241,8 +253,14 @@ pub struct InboundAuth {
     lan_devices_only: bool,
     /// Set by [`InboundAuth::admit_agents`] when the deployment enrolled an agent (ISA F9).
     agent: Option<Arc<crate::agent::AgentAccess>>,
-    /// The shell's browser sessions, on the one listener a local browser reaches.
+    /// The browser sessions every capability can verify, keyed by the deployment token
+    /// ([`crate::session`]). Installed by [`InboundAuth::resolve`].
     session_verifier: Option<Arc<dyn SessionVerifier>>,
+    /// Whether [`SESSION_OPEN_PATH`] reaches its handler without a credential. Set only on the
+    /// shell, which is the only listener that has that route: the browser arriving with a ticket
+    /// holds no credential yet, and a capability exempting a path it does not serve would be an
+    /// unauthenticated route for nothing.
+    session_open_exempt: bool,
 }
 
 /// Redacts the token. A capability that logs its own config must not turn this
@@ -262,6 +280,7 @@ impl std::fmt::Debug for InboundAuth {
             .field("lan_devices_only", &self.lan_devices_only)
             .field("admits_agents", &self.agent.is_some())
             .field("session_verifier", &self.session_verifier.is_some())
+            .field("session_open_exempt", &self.session_open_exempt)
             .finish()
     }
 }
@@ -296,7 +315,12 @@ impl InboundAuth {
             device_verifier: None,
             lan_devices_only: false,
             agent: None,
-            session_verifier: None,
+            // Every capability verifies the browser session the shell minted, keyed by the
+            // deployment token. No I/O past the token read `resolve` already did, so this is
+            // the gate admitting a third identity rather than a second gate.
+            session_verifier: crate::session::SignedSessions::from_deployment()
+                .map(|s| Arc::new(s) as Arc<dyn SessionVerifier>),
+            session_open_exempt: false,
         }
     }
 
@@ -315,6 +339,7 @@ impl InboundAuth {
             lan_devices_only: false,
             agent: None,
             session_verifier: None,
+            session_open_exempt: false,
         }
     }
 
@@ -341,10 +366,18 @@ impl InboundAuth {
         self
     }
 
-    /// Admit a browser that presents a live [`SESSION_COOKIE`], and let [`SESSION_OPEN_PATH`]
-    /// reach its handler without a credential. For the shell's local listener only.
+    /// Admit a browser that presents a live [`SESSION_COOKIE`]. [`InboundAuth::resolve`] already
+    /// installs the signed-session verifier; this replaces it, for tests and for a caller that
+    /// resolved its own.
     pub fn with_session_verifier(mut self, verifier: Arc<dyn SessionVerifier>) -> Self {
         self.session_verifier = Some(verifier);
+        self
+    }
+
+    /// Let [`SESSION_OPEN_PATH`] reach its handler without a credential, because the browser
+    /// arriving with a single-use ticket holds none yet. For the shell's listener only.
+    pub fn with_session_open(mut self) -> Self {
+        self.session_open_exempt = true;
         self
     }
 
@@ -631,11 +664,34 @@ async fn gate(State(auth): State<InboundAuth>, mut request: Request, next: Next)
     // that wants the secret itself still wants it.
     if let Some(sessions) = auth.session_verifier.as_ref() {
         if !auth.refuse_without_token {
-            if request.method() == Method::GET && request.uri().path() == SESSION_OPEN_PATH {
+            if auth.session_open_exempt
+                && request.method() == Method::GET
+                && request.uri().path() == SESSION_OPEN_PATH
+            {
                 return next.run(request).await;
             }
-            if !exempt && session_cookie(request.headers()).is_some_and(|s| sessions.verify(s)) {
-                return next.run(request).await;
+            let presented = (!exempt)
+                .then(|| session_cookie(request.headers()).map(str::to_owned))
+                .flatten();
+            if let Some(presented) = presented {
+                if sessions.verify(&presented) {
+                    let mut response = next.run(request).await;
+                    // A session slides on use, and the capability the browser happened to reach
+                    // is what writes the new cookie — so no store is needed for that either.
+                    if let Some(fresh) = sessions.renew(&presented) {
+                        if let Ok(value) = axum::http::HeaderValue::from_str(
+                            &crate::session::session_cookie_header(
+                                &fresh,
+                                crate::session::SESSION_TTL_SECONDS,
+                            ),
+                        ) {
+                            response
+                                .headers_mut()
+                                .insert(axum::http::header::SET_COOKIE, value);
+                        }
+                    }
+                    return response;
+                }
             }
         }
     }
@@ -737,7 +793,7 @@ pub(crate) fn constant_time_eq(a: &[u8], b: &[u8]) -> bool {
 
 /// `SJEL_INBOUND_TOKEN_FILE` (or `SJEL_INBOUND_TOKEN_FILE`) from `<overlay>/config/deployment.env`, then that
 /// file's contents.
-fn deployment_token() -> Option<String> {
+pub(crate) fn deployment_token() -> Option<String> {
     let body = std::fs::read_to_string(sjel_config::overlay_config("deployment.env")?).ok()?;
     let reference = sjel_config::deployment_value(&body, "SJEL_INBOUND_TOKEN_FILE")?;
     token_from_file(&sjel_config::expand_tilde(&reference))

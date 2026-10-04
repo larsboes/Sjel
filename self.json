@@ -1958,6 +1958,10 @@
       "verdict": "reject"
     },
     {
+      "name": "hmac",
+      "verdict": "adopt"
+    },
+    {
       "name": "home-assistant",
       "verdict": "adopt"
     },

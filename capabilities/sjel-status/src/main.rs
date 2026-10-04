@@ -268,11 +268,10 @@ async fn main() {
     }
     .require_credential();
     // A browser on this Mac logs in through the menu-bar app (ISA ISC-45, src/session.rs).
-    // Only this listener: the LAN admits paired devices and the socket admits the tailnet.
-    let auth = match session::sessions() {
-        Some(sessions) => auth.with_session_verifier(sessions),
-        None => auth,
-    };
+    // Only this listener exempts the ticket route: the LAN admits paired devices and the socket
+    // admits the tailnet, and the session verifier itself is installed by `from_deployment` for
+    // every capability (sjel_server::session).
+    let auth = auth.with_session_open();
     // The same router on the local network, for paired devices only, when the deployment
     // enabled it. Without the registry there is nothing to admit, so it does not start.
     if let Some(verifier) = verifier {

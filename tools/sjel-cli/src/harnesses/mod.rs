@@ -1,29 +1,30 @@
-//! `tools/harnesses` — Packs across every agent harness at once, reads half.
+//! `tools/harnesses` — Packs across every agent harness at once.
 //!
 //! Each `packs-<harness>` adapter owns one destination and answers about it alone. Nothing
 //! answered the question an operator actually has: what is deployed WHERE, what has drifted,
 //! and what is sitting in a harness Sjel does not know about. This asks every harness the same
 //! question and prints one answer.
 //!
-//! Ported from tools/harnesses.ts on 2026-10-02, read verbs first (decided 2026-10-02): `list`,
-//! `status` and `drift` are Rust, and `sync`, `use`, `promote` and `accept` still run the
-//! TypeScript implementation through this same launcher. The split is temporary and named: the
-//! write verbs keep the engine that owns the mutation lock and the atomic install, and they
-//! move when their parity is proven. The read half they used to share is gone from the
-//! TypeScript file rather than left as a second reader of the same ledger.
+//! Ported from tools/harnesses.ts: the read verbs (`list`, `status`, `drift`) on 2026-10-02,
+//! the write verbs (`sync`, `use`, `promote`, `accept`) on 2026-10-04 with the pack-deploy
+//! mutation engine and pi's settings registry. The TypeScript file and its test are deleted,
+//! so this is the only reader and the only writer of every ledger it touches.
 //!
 //! Direction: Sjel is the source and `sync` is one-way, Sjel -> harness. The one move in the
 //! other direction is `promote`, which is manual on purpose: a skill written inside a harness
 //! is brought into a Pack only when a human decides it is worth sharing system-wide.
 
 use std::collections::{BTreeMap, BTreeSet};
-use std::os::unix::process::CommandExt as _;
+use std::fs;
 use std::path::{Path, PathBuf};
 use std::process::{Command, ExitCode};
 
+mod agentfile;
 pub mod engine;
 mod frontmatter;
+mod mutate;
 pub(crate) mod pi;
+mod pi_settings;
 pub(crate) mod registry;
 
 use engine::{SkillStatus, StatusRow};
@@ -43,67 +44,289 @@ const HELP: &str = "tools/harnesses — Packs across every agent harness at once
   --all-harnesses    include harnesses that are not installed
 ";
 
-/// Verbs that still run the TypeScript engine: the ones that write.
-const WRITE_VERBS: [&str; 4] = ["sync", "use", "promote", "accept"];
-
 pub fn run(args: &[String]) -> ExitCode {
     let positional = positional(args);
     let verb = positional.first().map_or("list", String::as_str);
     match verb {
-        "list" | "status" | "drift" => match read(verb, args) {
-            Ok(()) => ExitCode::SUCCESS,
-            Err(e) => {
-                eprintln!("harnesses: {e}");
-                ExitCode::from(1)
-            }
-        },
         "help" | "-h" | "--help" => {
             println!("{HELP}");
-            ExitCode::SUCCESS
+            return ExitCode::SUCCESS;
         }
-        v if WRITE_VERBS.contains(&v) => forward(args),
+        "list" | "status" | "drift" | "sync" | "use" | "promote" | "accept" => {}
         other => {
             eprintln!("{HELP}");
             eprintln!("harnesses: unknown verb '{other}'");
+            return ExitCode::from(1);
+        }
+    }
+    let root = match std::env::var("SJEL_ROOT").ok().filter(|r| !r.is_empty()) {
+        Some(r) => PathBuf::from(r),
+        None => {
+            eprintln!("harnesses: SJEL_ROOT is unset — run tools/harnesses, which sets it");
+            return ExitCode::from(2);
+        }
+    };
+    let registry = Registry::new(&root);
+    let result = match verb {
+        "list" => list(&registry),
+        "status" => status(&registry, args),
+        "drift" => drift(&registry, args),
+        "sync" => sync(&registry, args),
+        "use" => use_profile(&registry, &root, args),
+        "promote" => promote(&registry, &root, args),
+        "accept" => accept(&registry, &root, args),
+        _ => unreachable!(),
+    };
+    match result {
+        Ok(()) => ExitCode::SUCCESS,
+        Err(e) => {
+            eprintln!("harnesses: {e}");
             ExitCode::from(1)
         }
     }
 }
 
-/// Hand a write verb to the TypeScript implementation, argv unchanged.
-fn forward(args: &[String]) -> ExitCode {
-    let root = match std::env::var("SJEL_ROOT") {
-        Ok(r) if !r.is_empty() => PathBuf::from(r),
-        _ => {
-            eprintln!("harnesses: SJEL_ROOT is unset — run tools/harnesses, which sets it");
-            return ExitCode::from(2);
+// ---- the write verbs (tools/harnesses.ts, ported 2026-10-04) --------------------------------
+
+/// One-way Sjel -> harness. `--all` is a flag, not a positional value, so the argv filter that
+/// strips `--`-prefixed arguments can never swallow it.
+fn sync(registry: &Registry, args: &[String]) -> Result<(), String> {
+    let positional = positional(args);
+    let pack = positional.get(1).map(String::as_str);
+    let all = has(args, "all");
+    if pack.is_some() && all {
+        return Err("tools/harnesses sync: give a pack or --all, not both".to_owned());
+    }
+    if pack.is_none() && !all {
+        return Err("usage: tools/harnesses sync <pack>|--all [--harness <id>]".to_owned());
+    }
+    for harness in selected_harnesses(registry, args)? {
+        println!("{}:", harness.label);
+        if harness.model == Model::Registry {
+            // A registry harness deploys one pack per invocation, so this line is a hint to run
+            // per pack rather than a loop this command could perform.
+            println!(
+                "  registry harness — run: {} deploy {}",
+                harness.cli,
+                if all { "<pack>" } else { pack.unwrap_or("") }
+            );
+            continue;
         }
-    };
-    let mut cmd = Command::new("bun");
-    cmd.arg("run")
-        .arg(root.join("tools/harnesses.ts"))
-        .args(args);
-    let err = cmd.exec();
-    eprintln!(
-        "harnesses: cannot run {}: {err}",
-        cmd.get_program().to_string_lossy()
-    );
-    ExitCode::from(127)
+        let config = &harness.config;
+        let known: Vec<String> = engine::read_state(config)?.packs.keys().cloned().collect();
+        for target in mutate::sync_targets(pack, all, &known) {
+            match mutate::sync_pack(config, &target) {
+                Ok(lines) => lines.iter().for_each(|l| println!("  {l}")),
+                Err(e) => println!("  ✗ {target}: {e}"),
+            }
+        }
+    }
+    Ok(())
 }
 
-fn read(verb: &str, args: &[String]) -> Result<(), String> {
-    let root = std::env::var("SJEL_ROOT")
-        .ok()
-        .filter(|r| !r.is_empty())
-        .map(PathBuf::from)
-        .ok_or("SJEL_ROOT is unset — run tools/harnesses, which sets it")?;
-    let registry = Registry::new(&root);
-    match verb {
-        "list" => list(&registry),
-        "status" => status(&registry, args),
-        "drift" => drift(&registry, args),
-        _ => unreachable!("read() is only called for the three read verbs"),
+/// Activate a profile on every selected harness through the registry: pi rewrites settings.json
+/// (skills AND extensions); materialized harnesses go through the shared engine, honouring
+/// per-Pack skill subsets.
+fn use_profile(registry: &Registry, root: &Path, args: &[String]) -> Result<(), String> {
+    let positional = positional(args);
+    let Some(name) = positional.get(1) else {
+        return Err("usage: tools/harnesses use <profile> [--harness <id>]".to_owned());
+    };
+    let profiles = mutate::read_profiles_at(root)?;
+    let Some(profile) = profiles.iter().find(|p| p.name == *name) else {
+        return Err(format!("no such profile: '{name}'"));
+    };
+    for harness in selected_harnesses(registry, args)? {
+        println!("── {}", harness.label);
+        if harness.model == Model::Registry {
+            for line in pi_settings::activate_profile_on_pi(&harness.config, name)? {
+                println!("{line}");
+            }
+        } else {
+            for line in mutate::activate_profile(&harness.config, profile)? {
+                println!("  {line}");
+            }
+        }
     }
+    Ok(())
+}
+
+fn is_skills_line(line: &str) -> bool {
+    let trimmed = line.trim_start();
+    match trimmed.strip_prefix("skills") {
+        Some(rest) => rest.trim_start().starts_with('='),
+        None => false,
+    }
+}
+
+/// The one harness -> Sjel move. Manual by design: a skill written inside a harness is brought
+/// into a Pack only when a human decides it is worth sharing system-wide, and promote then claims
+/// the live copy rather than replacing it.
+fn promote(registry: &Registry, root: &Path, args: &[String]) -> Result<(), String> {
+    let positional = positional(args);
+    let usage = "usage: tools/harnesses promote <skill> --pack <pack> [--from <harness>]";
+    let skill = positional.get(1).ok_or(usage)?;
+    let pack = flag(args, "pack").ok_or(usage)?;
+    let from = flag(args, "from").unwrap_or("claude");
+    let harness = registry.by_id(from)?;
+    if harness.model != Model::Materialized {
+        return Err(format!(
+            "{from} registers Pack paths in place; there is nothing to promote from it"
+        ));
+    }
+    let config = &harness.config;
+    let source = config.destination.join(skill);
+    if !source.exists() {
+        return Err(format!("{} does not exist", source.display()));
+    }
+    if fs::symlink_metadata(&source).is_ok_and(|m| m.file_type().is_symlink()) {
+        return Err(format!(
+            "{} is a symlink: another installer owns that skill and a copy here would silently pin it",
+            source.display()
+        ));
+    }
+    let state = engine::read_state(config)?;
+    if let Some((owner, _)) = state
+        .packs
+        .iter()
+        .find(|(_, record)| record.skills.contains_key(skill))
+    {
+        return Err(format!(
+            "{skill} is already owned by Pack '{owner}'; nothing to promote"
+        ));
+    }
+
+    let pack_dir = root.join("Packs").join(pack);
+    let manifest = pack_dir.join("pack.toml");
+    // Read the manifest rather than asking `exists` here and reading it after the copy: two
+    // answers to the same question, taken from two instants, and the second one is what gets
+    // written back. Every refusal below now happens before a single file is copied.
+    let body = fs::read_to_string(&manifest)
+        .map_err(|_| format!("no Pack at {}", relative(root, &pack_dir)))?;
+    let Some(line) = body.split('\n').find(|l| is_skills_line(l)) else {
+        return Err(format!(
+            "{} has no skills = [...] line",
+            relative(root, &manifest)
+        ));
+    };
+    let updated = mutate::skills_line_with(line, skill)
+        .map_err(|e| format!("{}: {e}", relative(root, &manifest)))?;
+    let target = pack_dir.join("skills").join(skill);
+    if target.exists() {
+        return Err(format!("{} already exists", relative(root, &target)));
+    }
+
+    let mut files = Vec::new();
+    walk(&source, "", &mut files)?;
+    for rel in &files {
+        let to = target.join(rel);
+        if let Some(parent) = to.parent() {
+            fs::create_dir_all(parent).map_err(|e| format!("{}: {e}", parent.display()))?;
+        }
+        fs::copy(source.join(rel), &to).map_err(|e| format!("{}: {e}", to.display()))?;
+    }
+    // A splice, not a replacement pattern: a `$&` in the skill name would expand inside a
+    // `String.replace` replacement and rewrite the line it was inserted into.
+    fs::write(&manifest, body.replacen(line, &updated, 1))
+        .map_err(|e| format!("{}: {e}", manifest.display()))?;
+
+    println!("✓ copied {skill} → {}", relative(root, &target));
+    println!("✓ added to {}", relative(root, &manifest));
+    for message in mutate::adopt_pack(config, pack)? {
+        println!("  {message}");
+    }
+    println!("\nThe live copy is now claimed, not replaced. Next: review the files, then");
+    println!("deploy the Pack to the other harnesses that should carry it.");
+    Ok(())
+}
+
+/// The second harness -> Sjel move: destination edits to a skill Sjel ALREADY owns. `sync` would
+/// silently destroy such an edit, which is why this direction exists.
+fn accept(registry: &Registry, root: &Path, args: &[String]) -> Result<(), String> {
+    let positional = positional(args);
+    let usage = "usage: tools/harnesses accept <pack> <skill> [--from <harness>]";
+    let pack = positional.get(1).ok_or(usage)?;
+    let skill = positional.get(2).ok_or(usage)?;
+    let from = flag(args, "from").unwrap_or("claude");
+    let harness = registry.by_id(from)?;
+    if harness.model != Model::Materialized {
+        return Err(format!(
+            "{from} reads the Pack source in place; it has no copy to accept"
+        ));
+    }
+    let config = &harness.config;
+    let unit = engine::pack_units(config, pack)?
+        .into_iter()
+        .find(|u| u.key == *skill)
+        .ok_or_else(|| format!("{pack} does not carry {skill}"))?;
+    let deployed = engine::read_state(config)?
+        .packs
+        .get(pack)
+        .is_some_and(|r| r.skills.contains_key(skill));
+    if !deployed {
+        return Err(format!(
+            "{pack}/{skill} is not deployed to {from}; nothing to accept"
+        ));
+    }
+    if !unit.destination.exists() {
+        return Err(format!("{} does not exist", unit.destination.display()));
+    }
+
+    // Refuse to bury uncommitted work in the Pack source. The destination copy is about to
+    // overwrite it, and git is the only undo this move has.
+    let source_rel = relative(root, &unit.source_root);
+    let dirty = Command::new("git")
+        .args([
+            "-C",
+            &root.display().to_string(),
+            "status",
+            "--porcelain",
+            "--",
+            &source_rel,
+        ])
+        .output()
+        .map_err(|e| format!("git: {e}"))?;
+    let pending = String::from_utf8_lossy(&dirty.stdout).trim().to_owned();
+    if !pending.is_empty() && !has(args, "force") {
+        return Err(format!(
+            "{source_rel} has uncommitted changes:\n{pending}\ncommit or stash them first, or pass --force to overwrite"
+        ));
+    }
+
+    let mut incoming = Vec::new();
+    walk(&unit.destination, "", &mut incoming)?;
+    let mut existing = Vec::new();
+    walk(&unit.source_root, "", &mut existing)?;
+    for rel in &incoming {
+        let to = unit.source_root.join(rel);
+        if let Some(parent) = to.parent() {
+            fs::create_dir_all(parent).map_err(|e| format!("{}: {e}", parent.display()))?;
+        }
+        fs::copy(unit.destination.join(rel), &to).map_err(|e| format!("{}: {e}", to.display()))?;
+    }
+    let removed: Vec<&String> = existing.iter().filter(|r| !incoming.contains(r)).collect();
+    for rel in &removed {
+        fs::remove_file(unit.source_root.join(rel))
+            .map_err(|e| format!("{}: {e}", unit.source_root.join(rel).display()))?;
+    }
+
+    println!(
+        "✓ {} files copied into {}",
+        incoming.len(),
+        relative(root, &unit.source_root)
+    );
+    for rel in &removed {
+        println!("  removed (absent at the destination): {rel}");
+    }
+    // The ledger still holds the pre-edit digest and would keep reporting drift that no longer
+    // exists, so re-record it now that the two agree.
+    println!("  {}", mutate::reconcile_unit(config, pack, &unit)?);
+    println!(
+        "\nReview before committing:  git -C {} diff -- {source_rel}",
+        root.display()
+    );
+    println!("Then deploy the Pack to the other harnesses that carry it.");
+    Ok(())
 }
 
 // ---- argv ----------------------------------------------------------------------------------
@@ -713,8 +936,8 @@ fn drift(registry: &Registry, args: &[String]) -> Result<(), String> {
     Ok(())
 }
 
-fn relative(root: &str, path: &Path) -> String {
-    match path.strip_prefix(root) {
+fn relative(root: impl AsRef<Path>, path: &Path) -> String {
+    match path.strip_prefix(root.as_ref()) {
         Ok(rel) => rel.display().to_string(),
         Err(_) => path.display().to_string(),
     }

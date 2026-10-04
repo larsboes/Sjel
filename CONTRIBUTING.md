@@ -405,9 +405,10 @@ Existing scripts move into one crate, `tools/sjel-cli`, rather than one crate ea
 repository, overlay and manifest resolution are written once (decided 2026-10-02). A moved
 script keeps its path as a launcher that calls `sjel_cli_exec` from `tools/lib/sjel-cli.sh`, so
 its callers do not change. `tools/toolchain-check` was the first, then `sjel` itself,
-`tools/capability.sh`, `tools/service-runner.sh` and `tools/doctor`, and then the read verbs of
-`tools/harnesses` (`list`, `status`, `drift` — its four write verbs still run TypeScript, and
-`tools/sjel-cli/src/harnesses/mod.rs` says so). Because of this, `cargo` is a core host
+`tools/capability.sh`, `tools/service-runner.sh` and `tools/doctor`, and then `tools/harnesses`
+(the read verbs on 2026-10-02, `sync`/`use`/`promote`/`accept` with the pack-deploy mutation
+engine and pi's settings registry on 2026-10-04), and then `tools/updates` (2026-10-04).
+Because of this, `cargo` is a core host
 requirement in `toolchain.toml`, together with `rg` and `fd`.
 
 Any build layer above those two is argued per case, never assumed. Name what it buys and what

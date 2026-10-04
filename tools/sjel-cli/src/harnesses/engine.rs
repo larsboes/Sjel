@@ -25,7 +25,7 @@ use std::fs;
 use std::os::unix::fs::MetadataExt as _;
 use std::path::{Component, Path, PathBuf};
 
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
 use sha2::{Digest as _, Sha256};
 
 use super::frontmatter;
@@ -37,6 +37,9 @@ pub type Files = BTreeMap<String, DesiredFile>;
 
 /// An adapter's extra validation of an assembled unit: codex checks `agents/openai.yaml`.
 pub type AdapterValidator = fn(&Files, &str) -> Result<(), String>;
+
+/// A flat-file unit's byte rewrite on the way out: pi's agent-file translation.
+pub type Transform = fn(&str, &str) -> Result<String, String>;
 
 #[derive(Debug, Clone)]
 pub struct DesiredFile {
@@ -57,6 +60,10 @@ pub struct TreeConvention {
 pub struct FlatFileConvention {
     pub source_dir: String,
     pub destination_root: PathBuf,
+    /// Runs on each file's bytes on the way out, because pi's agent files are not
+    /// byte-compatible with Claude Code's (`tools/lib/pi-agent-file.ts`). The digest is taken
+    /// over the TRANSFORMED bytes, so a transform is never drift.
+    pub transform: Option<Transform>,
 }
 
 #[derive(Debug, Clone)]
@@ -122,7 +129,7 @@ pub struct Unit {
     pub only_file: Option<String>,
 }
 
-#[derive(Debug, Default, Deserialize)]
+#[derive(Debug, Clone, Default, Deserialize, Serialize)]
 pub struct State {
     #[serde(default)]
     pub version: u32,
@@ -132,18 +139,32 @@ pub struct State {
     pub packs: BTreeMap<String, PackRecord>,
 }
 
-#[derive(Debug, Default, Deserialize)]
+#[derive(Debug, Clone, Default, Deserialize, Serialize)]
 pub struct PackRecord {
     #[serde(default)]
     pub skills: BTreeMap<String, SkillRecord>,
 }
 
-#[derive(Debug, Default, Deserialize)]
+/// One ledger row. The field order IS the JSON key order `write_state` emits, so it matches
+/// `recordUnit` in pack-deploy.ts; the map keys around it are sorted here and insertion-ordered
+/// there, which is the one deliberate difference the write half records (a ledger is read by
+/// name, never by order).
+#[derive(Debug, Clone, Default, Deserialize, Serialize)]
 pub struct SkillRecord {
+    #[serde(default)]
+    pub source: String,
+    #[serde(default, rename = "desiredDigest")]
+    pub desired_digest: String,
     #[serde(default, rename = "installedDigest")]
     pub installed_digest: String,
-    #[serde(default, rename = "digestPolicy")]
+    #[serde(
+        default,
+        rename = "digestPolicy",
+        skip_serializing_if = "Option::is_none"
+    )]
     pub digest_policy: Option<String>,
+    #[serde(default, rename = "deployedAt")]
+    pub deployed_at: String,
 }
 
 // ---- paths ---------------------------------------------------------------------------------
@@ -187,7 +208,7 @@ pub fn pack_roots(config: &DeployConfig) -> Vec<PathBuf> {
     }
 }
 
-fn pack_dir(config: &DeployConfig, pack: &str) -> Result<PathBuf, String> {
+pub(crate) fn pack_dir(config: &DeployConfig, pack: &str) -> Result<PathBuf, String> {
     assert_simple_name(pack, "pack")?;
     let roots = pack_roots(config);
     let matches: Vec<&PathBuf> = roots
@@ -210,7 +231,7 @@ fn pack_dir(config: &DeployConfig, pack: &str) -> Result<PathBuf, String> {
     }
 }
 
-fn assert_simple_name(value: &str, label: &str) -> Result<(), String> {
+pub(crate) fn assert_simple_name(value: &str, label: &str) -> Result<(), String> {
     let simple = !value.is_empty()
         && value.split('-').all(|part| {
             !part.is_empty()
@@ -581,8 +602,19 @@ pub fn desired_files(config: &DeployConfig, pack: &str, unit: &Unit) -> Result<F
                 unit.source_root.display()
             ));
         };
-        // A flat unit's transform runs in the TypeScript engine; no read path here reaches a
-        // config that sets one, so the source bytes are the deployed bytes.
+        // The transform runs here, on the way out, so every consumer downstream — digest_files,
+        // materialize_stage, get_statuses — sees the bytes the harness will actually read.
+        // Hashing the source instead would report permanent drift.
+        let mut file = file;
+        if let Some(transform) = config
+            .flat_file_convention
+            .as_ref()
+            .and_then(|f| f.transform)
+        {
+            let text = fs::read_to_string(&file.absolute_path)
+                .map_err(|e| format!("{}: {e}", file.absolute_path.display()))?;
+            file.content = Some(transform(&text, &format!("{pack}/{}", unit.key))?.into_bytes());
+        }
         return Ok(Files::from([(file.relative_path.clone(), file)]));
     }
 
@@ -636,17 +668,20 @@ pub fn digest_files(files: &Files) -> String {
     sha256_of(files)
 }
 
-fn digest_tree(config: &DeployConfig, root: &Path) -> Result<String, String> {
+pub(crate) fn digest_tree(config: &DeployConfig, root: &Path) -> Result<String, String> {
     let label = root.display().to_string();
     Ok(sha256_of(&collect_files(config, root, &label, false)?))
 }
 
-fn legacy_digest_tree(config: &DeployConfig, root: &Path) -> Result<String, String> {
+pub(crate) fn legacy_digest_tree(config: &DeployConfig, root: &Path) -> Result<String, String> {
     let label = root.display().to_string();
     Ok(sha256_of(&collect_files(config, root, &label, true)?))
 }
 
-fn digest_destination(config: &DeployConfig, destination: &Path) -> Result<String, String> {
+pub(crate) fn digest_destination(
+    config: &DeployConfig,
+    destination: &Path,
+) -> Result<String, String> {
     // `metadata`, not `symlink_metadata`, because pack-deploy.ts uses statSync: a symlink at
     // the destination is followed here and refused by collectFiles, which is where the
     // "must be materialized" rule lives.
@@ -657,7 +692,10 @@ fn digest_destination(config: &DeployConfig, destination: &Path) -> Result<Strin
     Ok(digest_one_file(destination, stat.mode() & 0o777))
 }
 
-fn legacy_digest_destination(config: &DeployConfig, destination: &Path) -> Result<String, String> {
+pub(crate) fn legacy_digest_destination(
+    config: &DeployConfig,
+    destination: &Path,
+) -> Result<String, String> {
     let stat = fs::metadata(destination).map_err(|e| format!("{}: {e}", destination.display()))?;
     if stat.is_dir() {
         return legacy_digest_tree(config, destination);

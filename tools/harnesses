@@ -1,10 +1,9 @@
 #!/bin/bash
 # tools/harnesses — Packs across every agent harness at once.
 #
-# Launcher only. `list`, `status` and `drift` moved to tools/sjel-cli/src/harnesses/ on
-# 2026-10-02; `sync`, `use`, `promote` and `accept` still run tools/harnesses.ts through the
-# same binary, which execs bun for them (read verbs first — see tools/sjel-cli/README.md).
-# `tools/harnesses -h` prints the usage.
+# Launcher only. The whole tool moved to tools/sjel-cli/src/harnesses/ — `list`, `status` and
+# `drift` on 2026-10-02, `sync`, `use`, `promote` and `accept` on 2026-10-04. `tools/harnesses.ts`
+# is deleted. `tools/harnesses -h` prints the usage.
 #
 # SJEL_ROOT is set here and tools/lib/paths.sh is NOT sourced, for the reason tools/doctor's
 # launcher gives: paths.sh treats an exported SJEL_OVERLAY_ROOT as a per-invocation override

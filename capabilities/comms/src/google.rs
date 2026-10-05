@@ -14,6 +14,7 @@
 //! values are never logged.
 
 use std::collections::BTreeSet;
+use std::io::Read;
 use std::path::Path;
 use std::sync::{Mutex, OnceLock};
 use std::time::{SystemTime, UNIX_EPOCH};
@@ -205,6 +206,48 @@ struct ThreadListEntry {
     id: String,
 }
 
+#[derive(Deserialize)]
+struct GoogleErrorBody {
+    error: Option<GoogleError>,
+}
+
+#[derive(Deserialize)]
+struct GoogleError {
+    #[serde(default)]
+    errors: Vec<GoogleErrorReason>,
+}
+
+#[derive(Deserialize)]
+struct GoogleErrorReason {
+    reason: Option<String>,
+}
+
+fn safe_google_error_reason(body: &[u8]) -> Option<&'static str> {
+    let parsed: GoogleErrorBody = serde_json::from_slice(body).ok()?;
+    let reason = parsed
+        .error?
+        .errors
+        .into_iter()
+        .find_map(|error| error.reason)?;
+    match reason.as_str() {
+        "rateLimitExceeded" | "userRateLimitExceeded" | "dailyLimitExceeded" | "quotaExceeded" => {
+            Some("quota")
+        }
+        "authError" | "insufficientPermissions" => Some("permissions"),
+        "accessNotConfigured" => Some("api_disabled"),
+        "domainPolicy" => Some("domain_policy"),
+        _ => None,
+    }
+}
+
+fn safe_google_error_reason_from_response(
+    response: reqwest::blocking::Response,
+) -> Option<&'static str> {
+    let mut body = Vec::with_capacity(1024);
+    response.take(8 * 1024).read_to_end(&mut body).ok()?;
+    safe_google_error_reason(&body)
+}
+
 /// Lists inbox threads (read-only, `q=in:inbox`), paging until `limit` ids are
 /// collected or the inbox is exhausted.
 pub fn list_inbox_threads(token: &str, limit: usize) -> Result<Vec<ThreadStub>> {
@@ -249,9 +292,14 @@ pub fn list_inbox_threads_page(
         .query(&query)
         .send()?;
     if !response.status().is_success() {
+        let status = response.status();
+        let reason = (status == reqwest::StatusCode::FORBIDDEN)
+            .then(|| safe_google_error_reason_from_response(response))
+            .flatten()
+            .map(|reason| format!(" ({reason})"))
+            .unwrap_or_default();
         return Err(CommsError::Other(format!(
-            "thread list failed with HTTP {}",
-            response.status()
+            "thread list failed with HTTP {status}{reason}"
         )));
     }
     let parsed: ThreadListResponse = response.json()?;
@@ -686,6 +734,15 @@ mod tests {
             Some("<mailto:x>")
         );
         assert_eq!(find_header(&headers, "Subject"), None);
+    }
+
+    #[test]
+    fn google_error_reason_is_allowlisted_and_discards_provider_message() {
+        let quota = br#"{"error":{"errors":[{"reason":"userRateLimitExceeded","message":"private content"}]}}"#;
+        assert_eq!(safe_google_error_reason(quota), Some("quota"));
+        let unknown =
+            br#"{"error":{"errors":[{"reason":"newProviderReason","message":"private content"}]}}"#;
+        assert_eq!(safe_google_error_reason(unknown), None);
     }
 
     #[test]

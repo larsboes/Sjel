@@ -7,6 +7,7 @@
 use candidate_fingerprint::CandidateKey;
 use csv::StringRecord;
 use serde::{Deserialize, Serialize};
+use sha2::{Digest, Sha256};
 use std::collections::{HashMap, HashSet};
 use std::path::Path;
 
@@ -467,11 +468,97 @@ pub fn prepare_csv(bytes: &[u8], mapping: &CsvMapping) -> ImportResult<PreparedC
     })
 }
 
+pub const MAIL_SOURCE_ACCOUNT_REQUIRED: &str = "review:source-account-required";
+
+/// Build one idempotent candidate from a paid-receipt mail extraction.
+pub fn mail_candidate(
+    source_id: &str,
+    booked_at: &str,
+    description: &str,
+    amount: &str,
+    decimal_separator: char,
+    currency: &str,
+    source_account: &str,
+) -> ImportResult<TransactionCandidate> {
+    if source_id.is_empty()
+        || source_id.len() > 128
+        || !source_id.bytes().all(|byte| byte.is_ascii_hexdigit())
+    {
+        return Err(ImportError("invalid Gmail source id".into()));
+    }
+    let booked_at = normalize_date(booked_at)?;
+    let description = sanitize_description(description);
+    if description.is_empty() || description.chars().count() > 200 {
+        return Err(ImportError(
+            "description must contain 1 to 200 characters".into(),
+        ));
+    }
+    if description.chars().any(char::is_control) {
+        return Err(ImportError(
+            "description contains a control character".into(),
+        ));
+    }
+    if amount.len() > 32 {
+        return Err(ImportError("amount is too long".into()));
+    }
+    if amount.contains(['.', ',']) && decimal_separator != mail_decimal_separator(amount) {
+        return Err(ImportError(
+            "amount decimal separator does not match the extracted amount".into(),
+        ));
+    }
+    let cents = parse_decimal_cents(amount, decimal_separator)?;
+    if cents <= 0 {
+        return Err(ImportError("paid receipt amount must be positive".into()));
+    }
+    let currency = currency.trim().to_ascii_uppercase();
+    if currency.len() != 3 || !currency.bytes().all(|byte| byte.is_ascii_uppercase()) {
+        return Err(ImportError("currency must be a three-letter code".into()));
+    }
+    if source_account != MAIL_SOURCE_ACCOUNT_REQUIRED {
+        validate_account(source_account)?;
+        if !is_balance_account(source_account) {
+            return Err(ImportError(
+                "source account must be an asset or liability account".into(),
+            ));
+        }
+    }
+    let digest = Sha256::digest(format!("gmail-thread:{source_id}").as_bytes());
+    let fingerprint: String = digest.iter().map(|byte| format!("{byte:02x}")).collect();
+    Ok(TransactionCandidate {
+        id: format!("candidate_{fingerprint}"),
+        fingerprint,
+        booked_at,
+        description,
+        amount_cents: -cents,
+        currency,
+        source_account: source_account.into(),
+        source_reference: Some(format!("gmail:{source_id}")),
+        proposed_account: "expenses:uncategorized".into(),
+        confidence_basis_points: 0,
+        state: CandidateState::Pending,
+        location_street: None,
+        location_postal_code: None,
+        location_city: None,
+        location_country: None,
+    })
+}
+
 pub fn render_journal_entry(
     candidate: &TransactionCandidate,
     account: &str,
 ) -> ImportResult<String> {
     validate_account(&candidate.source_account)?;
+    if candidate
+        .source_reference
+        .as_deref()
+        .is_some_and(|reference| reference.starts_with("gmail:"))
+        && (candidate.source_account == MAIL_SOURCE_ACCOUNT_REQUIRED
+            || !is_balance_account(&candidate.source_account))
+    {
+        return Err(ImportError(
+            "mail candidates require a reviewed asset or liability source account".into(),
+        ));
+    }
     validate_account(account)?;
     if matches!(
         candidate.state,
@@ -814,9 +901,28 @@ fn row_error(row: usize, error: ImportError) -> ImportError {
     ImportError(format!("CSV row {row}: {}", error.0))
 }
 
-#[cfg(test)]
-fn parse_decimal_cents(value: &str, decimal_separator: char) -> ImportResult<i64> {
+pub fn parse_decimal_cents(value: &str, decimal_separator: char) -> ImportResult<i64> {
     parse_decimal_cents_with_rounding(value, decimal_separator, AmountRounding::Reject)
+}
+
+fn mail_decimal_separator(amount: &str) -> char {
+    let marks: Vec<_> = amount
+        .char_indices()
+        .filter(|(_, character)| matches!(character, '.' | ','))
+        .collect();
+    let Some((index, mark)) = marks.last().copied() else {
+        return '.';
+    };
+    let other = if mark == ',' { '.' } else { ',' };
+    let trailing_digits = amount[index + mark.len_utf8()..]
+        .chars()
+        .filter(char::is_ascii_digit)
+        .count();
+    if marks.iter().all(|(_, character)| *character == mark) && trailing_digits == 3 {
+        other
+    } else {
+        mark
+    }
 }
 
 fn parse_decimal_cents_with_rounding(
@@ -955,6 +1061,63 @@ mod tests {
             row_policy: CsvRowPolicy::Strict,
             location_columns: None,
         }
+    }
+
+    #[test]
+    fn a_paid_mail_candidate_is_negative_and_idempotent_by_gmail_thread() {
+        let one = mail_candidate(
+            "deadbeef",
+            "2026-08-10",
+            "Cafe receipt",
+            "12,50",
+            ',',
+            "eur",
+            "assets:bank:checking",
+        )
+        .unwrap();
+        let two = mail_candidate(
+            "deadbeef",
+            "2026-08-10",
+            "Different extracted merchant",
+            "99,00",
+            ',',
+            "EUR",
+            MAIL_SOURCE_ACCOUNT_REQUIRED,
+        )
+        .unwrap();
+        assert_eq!(one.id, two.id);
+        assert_eq!(one.fingerprint, two.fingerprint);
+        assert_eq!(one.amount_cents, -1_250);
+        assert_eq!(one.source_reference.as_deref(), Some("gmail:deadbeef"));
+        assert_eq!(one.proposed_account, "expenses:uncategorized");
+    }
+
+    #[test]
+    fn a_paid_mail_candidate_rejects_invalid_money_and_accounts() {
+        assert_eq!(mail_decimal_separator("12,50"), ',');
+        assert_eq!(mail_decimal_separator("1.234,56"), ',');
+        assert_eq!(mail_decimal_separator("1,234.56"), '.');
+        assert_eq!(mail_decimal_separator("1,234"), '.');
+        assert!(mail_candidate(
+            "deadbeef",
+            "2026-08-10",
+            "Cafe",
+            "12,500",
+            ',',
+            "EUR",
+            "assets:bank:checking"
+        )
+        .is_err());
+        assert!(mail_candidate(
+            "deadbeef",
+            "2026-08-10",
+            "Cafe",
+            "12,50",
+            ',',
+            "EUR",
+            "expenses:food"
+        )
+        .is_err());
     }
 
     #[test]

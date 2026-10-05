@@ -310,6 +310,7 @@ fn spawn_inbox_sweep(
                 match run_inbox_sweep(&cfg, max_threads, None) {
                     Ok(mut outcome) => {
                         outcome.events = mail_events::analyze_batch(&cfg, &outcome.new_ids);
+                        outcome.receipts = mail_receipts::analyze_batch(&cfg, &outcome.new_ids);
                         store
                             .record_sweep_success(
                                 INBOX_SWEEP_SOURCE,
@@ -323,13 +324,15 @@ fn spawn_inbox_sweep(
                         // alone cannot tell that run from a quiet one.
                         Ok(Some(format!(
                             "{} considered, {} new, {} redacted, {} skipped, {} event proposal(s), \
-                             {} event analysis failure(s), people registry {} ({} names)",
+                             {} paid-receipt candidate(s), {} event failure(s), receipt failures {:?}, people registry {} ({} names)",
                             outcome.fetched,
                             outcome.new_count,
                             outcome.redacted,
                             outcome.skipped,
                             outcome.events.proposals,
+                            outcome.receipts.candidates,
                             outcome.events.failed,
+                            outcome.receipts.failure_stages,
                             outcome.people_registry,
                             outcome.people_registry_names
                         )))

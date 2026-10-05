@@ -200,6 +200,24 @@ both collection and event analysis: `0` is manual-only (the default), and a conf
 processes only newly stored threads. A manual sweep can re-check its page after a reported
 analysis failure.
 
+### Paid receipts into Finance
+
+The same bounded sweep checks receipt/payment-confirmation metadata, then fetches only a matching
+thread's latest body for the loopback light model. It extracts one completed purchase paid by the
+recipient; invoices, quotes, orders and refunds are not transaction candidates. `c3` is refused
+before the body fetch. The body and evidence quote are discarded; Finance receives only the date,
+merchant, amount, currency, opaque Gmail thread reference and a source-account suggestion. The
+suggestion must match one of Finance's configured import accounts or Finance stages it as
+unresolved. The Finance review surface lets the operator edit both source and expense accounts.
+Sweep results expose only bounded failure-stage counts (for example `local_model` or
+`finance_handoff`), never provider messages, email text or evidence. Nothing reaches the journal
+without that existing explicit confirmation.
+
+Finance owns candidate validation and idempotency. A retry for the same Gmail thread cannot create a
+second candidate. Manual sweeps can retry the page; the optional scheduled path analyzes newly
+stored threads using the existing `inbox_sweep_minutes` cadence. That cadence remains `0` by
+default, so unattended mailbox reads and body analysis still require an explicit machine setting.
+
 Category and TELOS relevance are deliberately separate axes. An explicit
 relevance refresh compares the stored sender, subject and Gmail snippet with
 the configured TELOS lenses through the existing embedding/reranking pipeline.

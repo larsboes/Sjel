@@ -46,6 +46,9 @@ math remains unbuilt, which is now stated as the absence it is.
   transaction projection. A retry cannot duplicate the posting. Confirmed
   uncategorized expenses can later be grouped locally by description and explicitly
   batch-reclassified; the selected journal postings are validated and replaced once.
+  Comms can also stage a paid-receipt candidate, keyed by its Gmail thread id; the
+  message body is not retained, and the review surface requires an editable source
+  account before that candidate can be confirmed.
 - A confirmed expense can then receive a reviewed purpose and personal/shared split.
   The personal share remains on the expense account; money fronted for others posts
   to `assets:receivable:shared`. A linked repayment settles that receivable and is
@@ -198,6 +201,8 @@ On the manifest-declared port. `GET /routes` serves the full manifest.
 - `POST /api/writeback`
 - `GET /api/import/csv/mappings`
 - `POST /api/import/csv/preview` · `POST /api/import/csv` · `GET /api/import/candidates`
+- `GET /api/import/mail-source-accounts` · `POST /api/import/mail-candidate` — Comms' local
+  receipt-analysis contract; staging is idempotent and never writes the journal
 - `GET /api/import/investments/mappings` · `POST /api/import/investments/preview`
 - `POST /api/import/investments/confirm`
 - `POST /api/import/candidates/:id/review`

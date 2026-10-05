@@ -33,6 +33,7 @@ pub mod mail_evaluation;
 pub mod mail_events;
 pub mod mail_model;
 pub mod mail_model_eval;
+pub mod mail_receipts;
 pub mod media;
 pub mod normalize;
 pub mod people_registry;

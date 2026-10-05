@@ -637,6 +637,26 @@ impl FinanceStore {
         )? == 1)
     }
 
+    pub fn review_candidate_with_source_account(
+        &self,
+        id: &str,
+        state: CandidateState,
+        account: &str,
+        source_account: &str,
+        today: &str,
+    ) -> Fallible<bool> {
+        let prefix = &self.prefix;
+        let conn = self.conn()?;
+        Ok(conn.execute(
+            &format!(
+                "UPDATE {prefix}_transaction_candidates
+                 SET state = ?2, proposed_account = ?3, source_account = ?4, reviewed_at = ?5
+                 WHERE id = ?1"
+            ),
+            params![&id, state.as_str(), &account, &source_account, &today],
+        )? == 1)
+    }
+
     pub fn review_transfer_pair(
         &self,
         canonical_id: &str,

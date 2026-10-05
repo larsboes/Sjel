@@ -65,6 +65,12 @@
     "timeout_ms": 2000
   },
 
+  "_comment_finance_context": "Finance owns mail-derived transaction candidates. Comms sends only normalized fields over this loopback contract; source-account choices come from Finance's configured import profiles.",
+  "finance_context": {
+    "base_url": "http://127.0.0.1:8090",
+    "timeout_ms": 2000
+  },
+
   "_comment_vault_link_sources": "Explicit Markdown files that may supply Feed links. Never point this at the vault root. heading limits a messy note such as Scratchpad.md to one deliberate section and stops at the next heading of the same or higher level. A missing heading returns zero candidates. Fenced code, frontmatter and credential-looking URLs are ignored.",
   "vault_link_sources": [
     {

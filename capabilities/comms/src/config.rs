@@ -91,6 +91,23 @@ impl Default for CalendarContextConfig {
 
 #[derive(Debug, Clone, Deserialize)]
 #[serde(default)]
+pub struct FinanceContextConfig {
+    /// Finance owns receipt candidates and exposes this bounded loopback contract.
+    pub base_url: String,
+    pub timeout_ms: u64,
+}
+
+impl Default for FinanceContextConfig {
+    fn default() -> Self {
+        Self {
+            base_url: "http://127.0.0.1:8090".into(),
+            timeout_ms: 2_000,
+        }
+    }
+}
+
+#[derive(Debug, Clone, Deserialize)]
+#[serde(default)]
 pub struct VaultLinkSourceConfig {
     /// Stable provenance id, for example `scratchpad-to-read`.
     pub id: String,
@@ -235,6 +252,7 @@ struct FileConfig {
     relevance: Option<RelevanceConfig>,
     travel_context: Option<TravelContextConfig>,
     calendar_context: Option<CalendarContextConfig>,
+    finance_context: Option<FinanceContextConfig>,
     #[serde(default)]
     vault_link_sources: Vec<VaultLinkSourceConfig>,
     feed_sources: Option<Vec<FeedSourceConfig>>,
@@ -366,6 +384,7 @@ pub struct Config {
     pub relevance: RelevanceConfig,
     pub travel_context: TravelContextConfig,
     pub calendar_context: CalendarContextConfig,
+    pub finance_context: FinanceContextConfig,
     /// Explicit Markdown link sources. This is intentionally not a vault root:
     /// Scratchpad and other notes can contain credentials and admin URLs.
     pub vault_link_sources: Vec<VaultLinkSourceConfig>,
@@ -550,6 +569,7 @@ impl Config {
             .collect();
         let travel_context = file.travel_context.unwrap_or_default();
         let calendar_context = file.calendar_context.unwrap_or_default();
+        let finance_context = file.finance_context.unwrap_or_default();
         let quality_flags = file.quality_flags.unwrap_or_default();
         // Deliberately not `unwrap_or_default()`: "the operator has not decided"
         // and "the operator decided no" have to stay distinguishable, because
@@ -576,6 +596,7 @@ impl Config {
             relevance,
             travel_context,
             calendar_context,
+            finance_context,
             vault_link_sources,
             feed_sources,
             quality_flags,

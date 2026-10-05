@@ -100,6 +100,7 @@ pub(super) struct SweepOutcome {
     pub(super) people_registry: &'static str,
     pub(super) people_registry_names: usize,
     pub(super) events: mail_events::ScanReport,
+    pub(super) receipts: mail_receipts::ScanReport,
     #[serde(skip)]
     fetched_ids: Vec<String>,
     #[serde(skip)]
@@ -129,6 +130,7 @@ pub(super) fn run_inbox_sweep(
         people_registry,
         people_registry_names,
         events: mail_events::ScanReport::default(),
+        receipts: mail_receipts::ScanReport::default(),
         fetched_ids: Vec::with_capacity(page.threads.len()),
         new_ids: Vec::new(),
         next_cursor: page.next_page_token.clone(),
@@ -168,10 +170,14 @@ pub(super) fn run_inbox_sweep(
 /// message can quote a request URL or a subject line and is only ever logged.
 pub(super) fn sweep_error_class(error: &str) -> &'static str {
     let lowered = error.to_ascii_lowercase();
-    if lowered.contains("401") || lowered.contains("403") || lowered.contains("auth") {
-        "auth"
-    } else if lowered.contains("429") || lowered.contains("quota") || lowered.contains("rate") {
+    if lowered.contains("429") || lowered.contains("quota") || lowered.contains("rate") {
         "quota"
+    } else if lowered.contains("401")
+        || lowered.contains("403")
+        || lowered.contains("auth")
+        || lowered.contains("permission")
+    {
+        "auth"
     } else if lowered.contains("timeout") || lowered.contains("connect") || lowered.contains("dns")
     {
         "network"
@@ -187,6 +193,7 @@ pub(super) async fn triage_sweep_handler(Json(body): Json<TriageSweepBody>) -> H
         let cfg = Config::load();
         let mut outcome = run_inbox_sweep(&cfg, limit, cursor.as_deref())?;
         outcome.events = mail_events::analyze_batch(&cfg, &outcome.fetched_ids);
+        outcome.receipts = mail_receipts::analyze_batch(&cfg, &outcome.fetched_ids);
         let store = Store::open(&cfg.database_path).map_err(|error| error.to_string())?;
         let total_stored = store
             .list_triage(None)
@@ -198,6 +205,7 @@ pub(super) async fn triage_sweep_handler(Json(body): Json<TriageSweepBody>) -> H
             "skipped": outcome.skipped,
             "redacted": outcome.redacted,
             "events": outcome.events,
+            "finance_receipts": outcome.receipts,
             "total_stored": total_stored,
             // Same shape and same words as the refresh receipt's, because the
             // question is the same one: did the c2 escalation run blind?

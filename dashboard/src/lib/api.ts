@@ -4179,10 +4179,15 @@ export const finance = {
         expected_preview_id: expectedPreviewId,
       }),
     ),
-  reviewCandidate: (id: string, decision: 'confirm' | 'reject', account?: string) =>
+  reviewCandidate: (
+    id: string,
+    decision: 'confirm' | 'reject',
+    account?: string,
+    sourceAccount?: string,
+  ) =>
     request<{ ok: boolean; id: string; state: CandidateState; journal_written: boolean }>(
       `/finance/api/import/candidates/${encodeURIComponent(id)}/review`,
-      jsonInit('POST', { decision, account }),
+      jsonInit('POST', { decision, account, source_account: sourceAccount }),
     ),
   confirmCandidates: (items: { id: string; account: string }[]) =>
     request<{ ok: boolean; confirmed: number; journal_writes: number }>(

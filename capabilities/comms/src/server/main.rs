@@ -32,6 +32,7 @@ use comms::intake;
 use comms::mail_evaluation;
 use comms::mail_events;
 use comms::mail_model::{self, Mode};
+use comms::mail_receipts;
 use comms::media;
 use comms::people_registry;
 use comms::provenance::StageProvenance;
@@ -205,7 +206,7 @@ const ROUTES: &[route_manifest::Route] = &[
         "/triage/bulk",
         "Apply one action across many mails.",
     ),
-    r("POST", "/triage/sweep", "Pull one Gmail page and locally propose grounded dates from event/ticket mail."),
+    r("POST", "/triage/sweep", "Pull one Gmail page; locally propose grounded calendar events and paid-receipt Finance candidates."),
     r(
         "GET",
         "/triage/sweep/status",
@@ -579,6 +580,11 @@ mod tests {
         assert_eq!(sweep_error_class("token refresh failed: auth"), "auth");
         assert_eq!(sweep_error_class("HTTP 429 Too Many Requests"), "quota");
         assert_eq!(sweep_error_class("userRateLimitExceeded"), "quota");
+        assert_eq!(sweep_error_class("HTTP 403 Forbidden (quota)"), "quota");
+        assert_eq!(
+            sweep_error_class("HTTP 403 Forbidden (permissions)"),
+            "auth"
+        );
         assert_eq!(sweep_error_class("connect timeout"), "network");
         assert_eq!(sweep_error_class("dns failure"), "network");
         assert_eq!(sweep_error_class("something else entirely"), "unknown");

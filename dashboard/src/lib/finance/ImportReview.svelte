@@ -18,6 +18,7 @@
   let error = $state<string | null>(null);
   let notice = $state<string | null>(null);
   let accounts = $state<Record<string, string>>({});
+  let sourceAccounts = $state<Record<string, string>>({});
   let mappingProfiles = $state<CsvMappingProfile[]>([]);
   let selectedProfile = $state("");
   let preview = $state<CsvImportPreview | null>(null);
@@ -55,6 +56,12 @@
         candidate.id,
         accounts[candidate.id] ?? candidate.proposed_account,
       ]));
+      sourceAccounts = Object.fromEntries(nextCandidates.map((candidate) => [
+        candidate.id,
+        sourceAccounts[candidate.id] ?? (
+          candidate.source_account === "review:source-account-required" ? "" : candidate.source_account
+        ),
+      ]));
       error = null;
     } catch (cause) {
       error = cause instanceof Error ? cause.message : String(cause);
@@ -83,6 +90,19 @@
 
   function selectDateFormat(event: Event) {
     mapping.date_formats = [(event.currentTarget as HTMLSelectElement).value as CsvDateFormat];
+  }
+
+  function isMailCandidate(candidate: TransactionCandidate): boolean {
+    return candidate.source_reference?.startsWith("gmail:") ?? false;
+  }
+
+  function gmailUrl(candidate: TransactionCandidate): string | null {
+    const id = candidate.source_reference?.startsWith("gmail:")
+      ? candidate.source_reference.slice("gmail:".length)
+      : "";
+    return /^[a-f0-9]{1,128}$/i.test(id)
+      ? `https://mail.google.com/mail/u/0/#all/${encodeURIComponent(id)}`
+      : null;
   }
 
   function normalizedMapping(): CsvMapping {
@@ -146,6 +166,9 @@
         candidate.id,
         decision,
         decision === "confirm" ? accounts[candidate.id] : undefined,
+        decision === "confirm" && isMailCandidate(candidate)
+          ? sourceAccounts[candidate.id]
+          : undefined,
       );
       notice = result.state === "confirmed"
         ? result.journal_written
@@ -188,7 +211,7 @@
   <div class="heading">
     <div>
       <h2>Import and review</h2>
-      <p>Choose an export locally, map its columns, then review every candidate. Nothing confirms itself.</p>
+      <p>Choose an export locally, map its columns, then review source and expense accounts. Nothing confirms itself.</p>
     </div>
     <label class="file">
       <Icon name="plus" size={14} /> {filename || "Choose CSV"}
@@ -202,7 +225,7 @@
         <label class="profile">Mapping profile
           <select value={selectedProfile} onchange={selectMapping}>
             <option value="">Manual entry</option>
-            {#each mappingProfiles as profile, index}
+            {#each mappingProfiles as profile, index (index)}
               <option value={index}>{profile.label}</option>
             {/each}
           </select>
@@ -261,6 +284,7 @@
           <div class="candidate-main">
             <time>{candidate.booked_at}</time>
             <strong>{candidate.description}</strong>
+            {#if gmailUrl(candidate)}<a class="source-mail" href={gmailUrl(candidate)!} target="_blank" rel="noreferrer">Open email</a>{/if}
             <span class:outflow={candidate.amount_cents < 0} class="amount">
               {new Intl.NumberFormat("de-DE", { style: "currency", currency: candidate.currency }).format(candidate.amount_cents / 100)}
             </span>
@@ -275,8 +299,11 @@
             {:else}
               <div class="decision">
                 {#if candidate.transfer_match_ids.length > 1}<span class="ambiguous">{candidate.transfer_match_ids.length} possible transfer matches</span>{/if}
-                <input aria-label="Reviewed account" bind:value={accounts[candidate.id]} />
-                <button disabled={busy || !accounts[candidate.id]?.trim()} onclick={() => review(candidate, "confirm")}>
+                <input aria-label="Expense account" bind:value={accounts[candidate.id]} />
+                {#if isMailCandidate(candidate)}
+                  <input aria-label="Source account" bind:value={sourceAccounts[candidate.id]} />
+                {/if}
+                <button disabled={busy || !accounts[candidate.id]?.trim() || (isMailCandidate(candidate) && !sourceAccounts[candidate.id]?.trim())} onclick={() => review(candidate, "confirm")}>
                   <Icon name="check" size={14} /> Confirm
                 </button>
                 <button class="reject" disabled={busy} onclick={() => review(candidate, "reject")}>Reject</button>
@@ -314,10 +341,11 @@
   .candidate-main { min-width: 0; flex: 1 1 auto; overflow: hidden; }
   time, .state { color: var(--muted, #888); font-size: .72rem; }
   strong { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: .82rem; }
+  .source-mail { color: var(--muted, #888); font-size: .7rem; white-space: nowrap; }
   .amount { margin-left: auto; font-variant-numeric: tabular-nums; font-size: .82rem; color: var(--primary); }
   .amount.outflow { color: inherit; }
-  .decision { flex: 0 1 28rem; min-width: 0; flex-wrap: wrap; justify-content: flex-end; }
-  .decision input { width: 14rem; }
+  .decision { flex: 0 1 32rem; min-width: 0; flex-wrap: wrap; justify-content: flex-end; }
+  .decision input { width: 12rem; }
   .transfer-match span, .ambiguous { color: var(--warning, #a76b2c); font-size: .7rem; }
   button.reject { border-color: transparent; color: var(--muted, #888); }
   button:disabled { opacity: .45; cursor: default; }

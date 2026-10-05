@@ -87,6 +87,16 @@ const ROUTES: &[route_manifest::Route] = &[
     ),
     r(
         "GET",
+        "/api/import/mail-source-accounts",
+        "Source-account choices for local mail extraction, derived from configured CSV profiles.",
+    ),
+    r(
+        "POST",
+        "/api/import/mail-candidate",
+        "Stage one paid-receipt mail extraction as a pending candidate. Idempotent by Gmail thread; never writes the journal.",
+    ),
+    r(
+        "GET",
         "/api/import/csv/mappings",
         "Named CSV mapping profiles loaded from the private overlay.",
     ),
@@ -312,6 +322,84 @@ struct CsvPreviewRequest {
     mapping: CsvMapping,
 }
 
+#[derive(Debug, Deserialize)]
+struct MailCandidateRequest {
+    source_id: String,
+    booked_at: String,
+    description: String,
+    amount: String,
+    decimal_separator: char,
+    currency: String,
+    source_account: String,
+}
+
+async fn mail_source_accounts(State(state): State<AppState>) -> Json<Vec<String>> {
+    let mut accounts: Vec<_> = state
+        .csv_mappings
+        .iter()
+        .map(|profile| profile.mapping.source_account.clone())
+        .filter(|account| {
+            import::validate_account(account).is_ok()
+                && (account.starts_with("assets:") || account.starts_with("liabilities:"))
+        })
+        .collect();
+    accounts.sort();
+    accounts.dedup();
+    Json(accounts)
+}
+
+async fn stage_mail_candidate(
+    State(state): State<AppState>,
+    Json(request): Json<MailCandidateRequest>,
+) -> ApiResponse {
+    let allowed_accounts: Vec<_> = state
+        .csv_mappings
+        .iter()
+        .map(|profile| profile.mapping.source_account.as_str())
+        .collect();
+    if request.source_account != import::MAIL_SOURCE_ACCOUNT_REQUIRED
+        && !allowed_accounts.contains(&request.source_account.as_str())
+    {
+        return response(
+            StatusCode::BAD_REQUEST,
+            json!({ "error": "source account is not a configured Finance account" }),
+        );
+    }
+    let candidate = match import::mail_candidate(
+        &request.source_id,
+        &request.booked_at,
+        &request.description,
+        &request.amount,
+        request.decimal_separator,
+        &request.currency,
+        &request.source_account,
+    ) {
+        Ok(candidate) => candidate,
+        Err(error) => {
+            return response(
+                StatusCode::BAD_REQUEST,
+                json!({ "error": error.to_string() }),
+            )
+        }
+    };
+    let database_path = state.database_path.clone();
+    let now = today();
+    match tokio::task::spawn_blocking(move || {
+        FinanceStore::open(&database_path)
+            .and_then(|store| store.stage_candidates(&[candidate], &now))
+            .map_err(|error| error.to_string())
+    })
+    .await
+    {
+        Ok(Ok((created, already_present))) => response(
+            StatusCode::OK,
+            json!({ "ok": true, "created": created, "already_present": already_present }),
+        ),
+        Ok(Err(error)) => failed(error),
+        Err(_) => failed("task panicked".into()),
+    }
+}
+
 async fn preview_csv(Json(request): Json<CsvPreviewRequest>) -> ApiResponse {
     match import::preview_csv(request.content.as_bytes(), &request.mapping) {
         Ok(preview) => response(StatusCode::OK, preview),
@@ -498,6 +586,7 @@ enum ReviewDecision {
 struct ReviewRequest {
     decision: ReviewDecision,
     account: Option<String>,
+    source_account: Option<String>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -986,6 +1075,25 @@ async fn review_candidate(
                 if candidate.state == CandidateState::Rejected {
                     return Err("a rejected candidate must be restaged before confirmation".into());
                 }
+                let source_account = request
+                    .source_account
+                    .as_deref()
+                    .unwrap_or(&candidate.source_account);
+                if candidate
+                    .source_reference
+                    .as_deref()
+                    .is_some_and(|reference| reference.starts_with("gmail:"))
+                    && (source_account == import::MAIL_SOURCE_ACCOUNT_REQUIRED
+                        || !source_account.starts_with("assets:")
+                            && !source_account.starts_with("liabilities:"))
+                {
+                    return Err("select an asset or liability source account before confirming this mail candidate".into());
+                }
+                if candidate.state == CandidateState::Confirmed
+                    && source_account != candidate.source_account
+                {
+                    return Err("a confirmed candidate's source account cannot be changed here".into());
+                }
                 let account = if candidate.state == CandidateState::Confirmed {
                     request
                         .account
@@ -1003,25 +1111,33 @@ async fn review_candidate(
                     .map_err(|_| "journal writer lock is unavailable".to_string())?;
                 let reclassified = candidate.state == CandidateState::Confirmed
                     && account != candidate.proposed_account;
+                let mut journal_candidate = candidate.clone();
+                journal_candidate.source_account = source_account.to_string();
                 let journal_written = if reclassified {
                     let current = std::fs::read_to_string(&journal)
                         .map_err(|error| format!("journal could not be read: {error}"))?;
                     let (updated, changed) =
-                        import::rewrite_confirmed_account(&current, &candidate, account)
+                        import::rewrite_confirmed_account(&current, &journal_candidate, account)
                             .map_err(|error| error.to_string())?;
                     if changed {
                         replace_journal_atomically(&journal, &updated)?;
                     }
                     changed
                 } else {
-                    let entry = import::render_journal_entry(&candidate, account)
+                    let entry = import::render_journal_entry(&journal_candidate, account)
                         .map_err(|error| error.to_string())?;
                     validate_journal_append(&journal, &entry)?;
-                    import::append_confirmed(&journal, &candidate, account)
+                    import::append_confirmed(&journal, &journal_candidate, account)
                         .map_err(|error| error.to_string())?
                 };
                 store
-                    .review_candidate(&id, CandidateState::Confirmed, account, &now)
+                    .review_candidate_with_source_account(
+                        &id,
+                        CandidateState::Confirmed,
+                        account,
+                        source_account,
+                        &now,
+                    )
                     .map_err(|error| error.to_string())?;
                 let _projection_guard = projection_write
                     .lock()
@@ -2541,6 +2657,11 @@ fn build_router(state: AppState) -> Router {
         .route("/api/writeback", post(writeback))
         .route("/api/import/csv/preview", post(preview_csv))
         .route("/api/import/csv", post(import_csv))
+        .route(
+            "/api/import/mail-source-accounts",
+            get(mail_source_accounts),
+        )
+        .route("/api/import/mail-candidate", post(stage_mail_candidate))
         .route("/api/import/csv/mappings", get(list_csv_mappings))
         .route(
             "/api/import/investments/mappings",
@@ -2623,6 +2744,66 @@ mod tests {
             row_policy: CsvRowPolicy::Strict,
             location_columns: None,
         }
+    }
+
+    #[tokio::test]
+    async fn mail_receipts_stage_idempotently_and_only_with_configured_accounts() {
+        let database = scratch_database("mail-candidate");
+        let state = state_on(database.clone());
+        let body = || MailCandidateRequest {
+            source_id: "deadbeef".into(),
+            booked_at: "2026-08-10".into(),
+            description: "Cafe receipt".into(),
+            amount: "12,50".into(),
+            decimal_separator: ',',
+            currency: "EUR".into(),
+            source_account: import::MAIL_SOURCE_ACCOUNT_REQUIRED.into(),
+        };
+        let first = stage_mail_candidate(State(state.clone()), Json(body())).await;
+        assert_eq!(first.0, StatusCode::OK);
+        assert_eq!(first.1 .0["created"], 1);
+        let second = stage_mail_candidate(State(state), Json(body())).await;
+        assert_eq!(second.0, StatusCode::OK);
+        assert_eq!(second.1 .0["already_present"], 1);
+        let candidate = FinanceStore::open(&database)
+            .unwrap()
+            .candidate(&format!(
+                "candidate_{}",
+                import::mail_candidate(
+                    "deadbeef",
+                    "2026-08-10",
+                    "Cafe",
+                    "12,50",
+                    ',',
+                    "EUR",
+                    import::MAIL_SOURCE_ACCOUNT_REQUIRED
+                )
+                .unwrap()
+                .fingerprint
+            ))
+            .unwrap()
+            .unwrap();
+        assert_eq!(candidate.state, CandidateState::Pending);
+        assert_eq!(candidate.amount_cents, -1_250);
+        assert!(import::render_journal_entry(&candidate, "expenses:food").is_err());
+    }
+
+    #[tokio::test]
+    async fn mail_candidate_rejects_an_unconfigured_inferred_account() {
+        let response = stage_mail_candidate(
+            State(state_on(scratch_database("mail-account-refused"))),
+            Json(MailCandidateRequest {
+                source_id: "deadbeef".into(),
+                booked_at: "2026-08-10".into(),
+                description: "Cafe receipt".into(),
+                amount: "12,50".into(),
+                decimal_separator: ',',
+                currency: "EUR".into(),
+                source_account: "assets:bank:checking".into(),
+            }),
+        )
+        .await;
+        assert_eq!(response.0, StatusCode::BAD_REQUEST);
     }
 
     #[test]

@@ -84,6 +84,11 @@ column from 7,184 to 1,499 px on a seven-day trip with 70 entries. Its cards flo
 select and remove button over the trailing edge on hover or focus, because in a 15 rem
 column they had taken all the width the title needed.
 
+The form follows the data. A trip or a multi-day entry is one bar across the month row,
+stacked into lanes by `weekSpans` in `src/lib/calendar/types.ts`, where it used to be a chip
+repeated and cut off in every day it covered. A bar that runs into the next week meets the
+row's edge with a square end.
+
 Motion reads `--motion-fast`, `--motion-base` or `--motion-slow` and `--ease-out`, and animates
 `transform` and `opacity`. A live bar (RAM, CPU, disk) is `scaleX` on a clipping track, not a
 width, because it refreshes every few seconds. Rows arrive through `@starting-style`, so a band that opens fades its

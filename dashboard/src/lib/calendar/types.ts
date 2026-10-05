@@ -29,7 +29,7 @@ export type {
   CalendarFeasibleWindow,
   CalendarWindows,
 } from "$lib/api";
-import type { CalendarContext, CalendarEntry } from "$lib/api";
+import type { CalendarContext, CalendarEntry, TripPlan } from "$lib/api";
 
 /** A single day in a grid — derived from entries + rhythms. */
 export interface CalendarDay {
@@ -324,14 +324,82 @@ export function timedSpan(entry: CalendarEntry, date: string): Span | null {
  * indices. The stored end is already exclusive; an entry reaching past either
  * edge of the window is clamped to it. */
 export function allDaySpan(entry: CalendarEntry, dates: string[]): Span | null {
-  if (!entry.all_day || dates.length === 0) return null;
-  const first = entry.starts_at.slice(0, 10);
-  const last = entry.ends_at.slice(0, 10);
-  if (last <= dates[0] || first > dates[dates.length - 1]) return null;
+  if (!entry.all_day) return null;
+  return rangeSpan(entry.starts_at.slice(0, 10), entry.ends_at.slice(0, 10), dates);
+}
+
+/** Columns the day range [first, endExclusive) covers inside `dates`, clamped to it. */
+function rangeSpan(first: string, endExclusive: string, dates: string[]): Span | null {
+  if (dates.length === 0) return null;
+  if (endExclusive <= dates[0] || first > dates[dates.length - 1]) return null;
   const start = Math.max(dates.indexOf(first), 0);
-  const found = dates.indexOf(last);
+  const found = dates.indexOf(endExclusive);
   const end = found < 0 ? dates.length : found;
   return end > start ? { start, end } : null;
+}
+
+/** An all-day entry that covers more than one day. The month grid draws it as one bar
+ *  across the week rather than a chip repeated in every cell it touches. */
+export function isMultiDay(entry: CalendarEntry): boolean {
+  return entry.all_day && shiftDayKey(entry.starts_at.slice(0, 10), 1) < entry.ends_at.slice(0, 10);
+}
+
+/** One bar in a month row, clamped to the week. `continuesBefore` and `continuesAfter`
+ *  say the range runs past the row's edge, so the bar's end is drawn open, not rounded. */
+export type WeekSpan = Span &
+  Lane & {
+    key: string;
+    label: string;
+    continuesBefore: boolean;
+    continuesAfter: boolean;
+  } & ({ entry: CalendarEntry; trip?: never } | { trip: TripPlan; entry?: never });
+
+/** The bars of one week row and how many lanes they stack into. Trips and multi-day
+ *  entries were a chip in every cell until 2026-10-05: "Berlin-Urlaub mit Luc…" seven
+ *  times in a row, cut off each time, for one range. A range is one bar now. */
+export function weekSpans(
+  dates: string[],
+  entries: CalendarEntry[],
+  trips: TripPlan[],
+): { spans: WeekSpan[]; lanes: number } {
+  const last = dates[dates.length - 1];
+  const after = last ? shiftDayKey(last, 1) : "";
+  const items: Array<Omit<WeekSpan, "lane" | "lanes">> = [];
+
+  for (const trip of trips) {
+    if (!trip.date_start || !trip.date_end) continue;
+    // A trip's end date is inclusive; a span's end is not.
+    const end = shiftDayKey(trip.date_end, 1);
+    const span = rangeSpan(trip.date_start, end, dates);
+    if (!span) continue;
+    items.push({
+      ...span,
+      key: `trip:${trip.id}`,
+      trip,
+      label: trip.destinations?.[0]?.name ?? trip.title,
+      continuesBefore: trip.date_start < dates[0],
+      continuesAfter: end > after,
+    });
+  }
+
+  for (const entry of entries) {
+    if (!isMultiDay(entry)) continue;
+    const span = allDaySpan(entry, dates);
+    if (!span) continue;
+    items.push({
+      ...span,
+      key: entry.id,
+      entry,
+      label: entry.title,
+      continuesBefore: entry.starts_at.slice(0, 10) < dates[0],
+      continuesAfter: entry.ends_at.slice(0, 10) > after,
+    });
+  }
+
+  // ponytail: no lane cap. A week with many overlapping ranges grows taller; fold the
+  // overflow into "+N" if a real month ever needs it.
+  const spans = packLanes(items) as WeekSpan[];
+  return { spans, lanes: spans.reduce((most, span) => Math.max(most, span.lane + 1), 0) };
 }
 
 /** Does the entry touch this day at all? All-day blocks cover their exclusive

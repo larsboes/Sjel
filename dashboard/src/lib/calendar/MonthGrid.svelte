@@ -2,9 +2,12 @@
   import { tip } from "$lib/tip";
   import {
     commitmentConfig,
+    isMultiDay,
     isRecommended,
     kindConfig,
     nextCommitment,
+    weekSpans,
+    type WeekSpan,
     type CalendarDay,
     type CalendarEntry,
     type Commitment,
@@ -34,10 +37,48 @@
     freeDays?: ReadonlySet<string>;
   } = $props();
 
-  function tripFor(date: string): TripPlan | undefined {
-    return trips.find(
-      (t) => t.date_start && t.date_end && date >= t.date_start && date <= t.date_end,
-    );
+  /** The month as week rows, each with the bars that cross it. A multi-day entry sits in
+   *  every day it covers, so the row collects it once by id. */
+  const weeks = $derived.by(() => {
+    const rows = [];
+    for (let i = 0; i < days.length; i += 7) {
+      const week = days.slice(i, i + 7);
+      const ranged = new Map<string, CalendarEntry>();
+      for (const day of week) for (const e of day.entries) if (isMultiDay(e)) ranged.set(e.id, e);
+      rows.push({
+        days: week,
+        ...weekSpans(week.map((d) => d.date), [...ranged.values()], trips),
+      });
+    }
+    return rows;
+  });
+
+  /** What a cell lists itself: everything a bar does not already draw. */
+  function singles(day: CalendarDay): CalendarEntry[] {
+    return day.entries.filter((entry) => !isMultiDay(entry));
+  }
+
+  function openSpan(span: WeekSpan, week: CalendarDay[]) {
+    if (span.trip) {
+      const trip = span.trip;
+      inspectorStore.inspectTrip({
+        id: trip.id,
+        title: trip.title,
+        destination: trip.destinations?.[0]?.name ?? trip.title,
+        dates: `${trip.date_start} – ${trip.date_end}`,
+      });
+    } else {
+      onSelectEntry?.(span.entry, week[span.start]);
+    }
+  }
+
+  /** A bar lies over the cells, so a drag that crosses it is told the column here. */
+  function extendAcross(event: PointerEvent, week: CalendarDay[]) {
+    if (!dragStart) return;
+    const row = (event.currentTarget as HTMLElement).closest(".week")!.getBoundingClientRect();
+    const column = Math.floor(((event.clientX - row.left) / row.width) * 7);
+    const day = week[Math.min(6, Math.max(0, column))];
+    if (day) extendDrag(day);
   }
 
   const DAY_HEADERS = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
@@ -93,89 +134,109 @@
 <svelte:window onpointerup={finishDrag} onpointercancel={cancelDrag} />
 
 <div class="grid">
-  {#each DAY_HEADERS as header}
-    <div class="header">{header}</div>
-  {/each}
+  <div class="row">
+    {#each DAY_HEADERS as header}
+      <div class="header">{header}</div>
+    {/each}
+  </div>
 
-  {#each days as day (day.date)}
-    <div
-      class="cell"
-      class:other={!day.isCurrentMonth}
-      class:today={day.isToday}
-      class:has-entries={day.entries.length > 0}
-      class:painting={isInDragRange(day.date)}
-      role="group"
-      aria-label={day.date}
-      onpointerdown={(event) => startDrag(day, event)}
-      onpointerenter={() => extendDrag(day)}
-      onpointermove={() => extendDrag(day)}
-    >
-      <button
-        class="date"
-        aria-label={`${day.date}: create entry`}
-        onclick={() => onSelectDay?.(day)}
-        onpointerdown={(event) => event.stopPropagation()}
-      >
-        {day.day}
-      </button>
-
-      {#if tripFor(day.date)}
-        {@const trip = tripFor(day.date)!}
-        <button
-          type="button"
-          class="trip-ribbon"
-          onclick={(e) => {
-            e.stopPropagation();
-            inspectorStore.inspectTrip({
-              id: trip.id,
-              title: trip.title,
-              destination: trip.destinations?.[0]?.name ?? trip.title,
-              dates: `${trip.date_start} – ${trip.date_end}`,
-            });
-          }}
-          use:tip={`Trip: ${trip.title} (${trip.destinations?.[0]?.name ?? ""})`}
-          onpointerdown={(event) => event.stopPropagation()}
+  {#each weeks as week (week.days[0].date)}
+    <div class="row week" style:--lanes={week.lanes}>
+      {#each week.days as day (day.date)}
+        {@const own = singles(day)}
+        <div
+          class="cell"
+          class:other={!day.isCurrentMonth}
+          class:today={day.isToday}
+          class:has-entries={day.entries.length > 0}
+          class:painting={isInDragRange(day.date)}
+          role="group"
+          aria-label={day.date}
+          onpointerdown={(event) => startDrag(day, event)}
+          onpointerenter={() => extendDrag(day)}
+          onpointermove={() => extendDrag(day)}
         >
-          <span class="trip-ribbon-dot"></span>
-          <span class="trip-ribbon-text">{trip.destinations?.[0]?.name ?? trip.title}</span>
-        </button>
-      {/if}
+          <button
+            class="date"
+            aria-label={`${day.date}: create entry`}
+            onclick={() => onSelectDay?.(day)}
+            onpointerdown={(event) => event.stopPropagation()}
+          >
+            {day.day}
+          </button>
 
-      <div class="entries">
-        {#each day.entries.slice(0, 2) as entry (entry.id)}
-          <!-- Two buttons, not one: the dot changes how binding the entry is,
-               the chip opens it. Nesting them would be invalid markup and
-               would cost the commitment its own keyboard target. -->
-          <div class="entry-row" style={`--entry-color: ${kindConfig(entry.kind).color}`}>
-            <button
-              class="entry-dot commitment-{entry.commitment}"
-              use:tip={`${commitmentConfig(entry.commitment).label} — ${commitmentConfig(entry.commitment).hint}`}
-              aria-label={`${entry.title}: ${commitmentConfig(entry.commitment).label}, click to change`}
-              onclick={() => onCycleCommitment?.(entry, nextCommitment(entry.commitment))}
-              onpointerdown={(event) => event.stopPropagation()}
-            ></button>
-            <button
-              class="entry"
-              class:proposal={entry.commitment === "possible"}
-              use:tip={entry.title}
-              aria-label={`Inspect ${entry.title}`}
-              onclick={() => onSelectEntry?.(entry, day)}
-              onpointerdown={(event) => event.stopPropagation()}
-            >
-              {#if timeLabel(entry)}
-                <span class="entry-time">{timeLabel(entry)}</span>
-              {/if}
-              <span class="entry-title">{entry.title}</span>
-              {#if isRecommended(entry, freeDays)}
-                <span class="recommended" use:tip={"Still open, and the day is free"}>★</span>
-              {/if}
-            </button>
+          <div class="entries">
+            {#each own.slice(0, 2) as entry (entry.id)}
+              <!-- Two buttons, not one: the dot changes how binding the entry is,
+                   the chip opens it. Nesting them would be invalid markup and
+                   would cost the commitment its own keyboard target. -->
+              <div class="entry-row" style={`--entry-color: ${kindConfig(entry.kind).color}`}>
+                <button
+                  class="entry-dot commitment-{entry.commitment}"
+                  use:tip={`${commitmentConfig(entry.commitment).label} — ${commitmentConfig(entry.commitment).hint}`}
+                  aria-label={`${entry.title}: ${commitmentConfig(entry.commitment).label}, click to change`}
+                  onclick={() => onCycleCommitment?.(entry, nextCommitment(entry.commitment))}
+                  onpointerdown={(event) => event.stopPropagation()}
+                ></button>
+                <button
+                  class="entry"
+                  class:proposal={entry.commitment === "possible"}
+                  use:tip={entry.title}
+                  aria-label={`Inspect ${entry.title}`}
+                  onclick={() => onSelectEntry?.(entry, day)}
+                  onpointerdown={(event) => event.stopPropagation()}
+                >
+                  {#if timeLabel(entry)}
+                    <span class="entry-time">{timeLabel(entry)}</span>
+                  {/if}
+                  <span class="entry-title">{entry.title}</span>
+                  {#if isRecommended(entry, freeDays)}
+                    <span class="recommended" use:tip={"Still open, and the day is free"}>★</span>
+                  {/if}
+                </button>
+              </div>
+            {/each}
+            {#if own.length > 2}
+              <span class="more">+{own.length - 2} more</span>
+            {/if}
           </div>
-        {/each}
-        {#if day.entries.length > 2}
-          <span class="more">+{day.entries.length - 2} more</span>
-        {/if}
-      </div>
+        </div>
+      {/each}
+
+      {#if week.spans.length > 0}
+        <!-- Over the cells, on the same seven columns. A bar's commitment is shown, not
+             cycled: the dot-as-button needs its own target, and a bar is one button.
+             Opening the entry is where a multi-day commitment changes. -->
+        <div class="spans">
+          {#each week.spans as span (span.key)}
+            <button
+              type="button"
+              class="span"
+              class:trip={span.trip}
+              class:proposal={span.entry?.commitment === "possible"}
+              class:open-start={span.continuesBefore}
+              class:open-end={span.continuesAfter}
+              style:grid-column="{span.start + 1} / {span.end + 1}"
+              style:grid-row={span.lane + 1}
+              style:--entry-color={span.entry ? kindConfig(span.entry.kind).color : null}
+              use:tip={span.trip
+                ? `Trip: ${span.trip.title}`
+                : `${span.label} · ${commitmentConfig(span.entry.commitment).label}`}
+              aria-label={span.trip ? `Inspect trip ${span.trip.title}` : `Inspect ${span.label}`}
+              onclick={() => openSpan(span, week.days)}
+              onpointerdown={(event) => event.stopPropagation()}
+              onpointermove={(event) => extendAcross(event, week.days)}
+            >
+              {#if span.entry}
+                <span class="entry-dot commitment-{span.entry.commitment}" aria-hidden="true"></span>
+              {:else}
+                <span class="trip-ribbon-dot" aria-hidden="true"></span>
+              {/if}
+              <span class="span-label">{span.label}</span>
+            </button>
+          {/each}
+        </div>
+      {/if}
     </div>
   {/each}
 </div>
@@ -192,14 +253,29 @@
 
 <style>
   .grid {
-    display: grid;
-    grid-template-columns: repeat(7, minmax(0, 1fr));
+    display: flex;
+    flex-direction: column;
     gap: 2px;
     padding: 4px;
     background: var(--card-border);
     border-radius: 8px;
     user-select: none;
     touch-action: pan-y;
+  }
+
+  .row {
+    display: grid;
+    grid-template-columns: repeat(7, minmax(0, 1fr));
+    gap: 2px;
+  }
+
+  /* The bars' lanes sit between the date and the cell's own chips. Every cell in the
+     row reserves the same height, so a chip never starts under a bar. */
+  .week {
+    --cell-pad: 6px;
+    --lane-h: 1.375rem;
+    --lane-gap: 3px;
+    position: relative;
   }
 
   .header {
@@ -218,7 +294,7 @@
     flex-direction: column;
     align-items: stretch;
     gap: 5px;
-    padding: 6px;
+    padding: var(--cell-pad);
     min-height: 92px;
     background: var(--card-bg);
     transition: background var(--motion-fast), box-shadow var(--motion-fast);
@@ -268,30 +344,82 @@
     color: #fff;
   }
 
-  .trip-ribbon {
+  .spans {
+    position: absolute;
+    top: calc(var(--cell-pad) + 26px + 5px);
+    left: 0;
+    right: 0;
+    display: grid;
+    grid-template-columns: repeat(7, minmax(0, 1fr));
+    grid-auto-rows: var(--lane-h);
+    column-gap: 2px;
+    row-gap: var(--lane-gap);
+    pointer-events: none;
+  }
+
+  .span {
     display: flex;
+    min-width: 0;
     align-items: center;
     gap: 0.35rem;
-    padding: 0.2rem 0.45rem;
-    margin-bottom: 0.25rem;
+    margin-inline: var(--cell-pad);
+    padding: 0 0.45rem;
+    border: 0;
     border-radius: var(--radius-sm);
-    background: var(--primary-soft);
-    color: var(--primary);
-    border: 1px solid transparent;
+    background: color-mix(in srgb, var(--entry-color) 16%, var(--card-bg));
+    color: var(--text-primary);
     font: inherit;
     font-size: var(--text-2xs);
-    font-weight: 600;
-    cursor: pointer;
+    font-weight: 500;
     text-align: left;
-    width: 100%;
-    overflow: hidden;
     white-space: nowrap;
+    cursor: pointer;
+    pointer-events: auto;
     transition: background-color var(--motion-fast) ease, color var(--motion-fast) ease;
   }
 
-  .trip-ribbon:hover {
+  .span.trip {
+    background: var(--primary-soft);
+    color: var(--primary);
+    font-weight: 600;
+  }
+
+  .span:hover,
+  .span:focus-visible {
+    background: color-mix(in srgb, var(--entry-color) 30%, var(--card-bg));
+  }
+
+  .span.trip:hover,
+  .span.trip:focus-visible {
     background: var(--primary);
     color: var(--text-inverse);
+  }
+
+  /* Same rule as a proposal chip: on the radar, not on the calendar. */
+  .span.proposal {
+    background: transparent;
+    box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--entry-color) 45%, transparent);
+    color: var(--text-secondary);
+  }
+
+  /* A range that runs on past the row meets the row's edge with a square end, so the
+     eye reads it as continuing into the next week rather than stopping. */
+  .span.open-start {
+    margin-left: 0;
+    border-top-left-radius: 0;
+    border-bottom-left-radius: 0;
+  }
+
+  .span.open-end {
+    margin-right: 0;
+    border-top-right-radius: 0;
+    border-bottom-right-radius: 0;
+  }
+
+  .span-label {
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
   }
 
   .trip-ribbon-dot {
@@ -302,16 +430,13 @@
     flex-shrink: 0;
   }
 
-  .trip-ribbon-text {
-    overflow: hidden;
-    text-overflow: ellipsis;
-  }
 
   .entries {
     display: flex;
     min-width: 0;
     flex-direction: column;
     gap: 3px;
+    margin-top: calc(var(--lanes) * (var(--lane-h) + var(--lane-gap)));
   }
 
   .entry {
@@ -447,9 +572,12 @@
   }
 
   @media (max-width: 700px) {
+    .week {
+      --cell-pad: 4px;
+    }
+
     .cell {
       min-height: 70px;
-      padding: 4px;
     }
 
     .entry {

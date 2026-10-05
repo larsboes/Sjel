@@ -849,7 +849,22 @@ a.row-title:hover {
   }
 }
 
+/* View transitions ride the same tokens as everything else. The browser's default is a
+ * 250ms linear-ish crossfade; a row leaving the queue should land like a popover does. */
+::view-transition-group(*),
+::view-transition-old(*),
+::view-transition-new(*) {
+  animation-duration: var(--motion-base);
+  animation-timing-function: var(--ease-out);
+}
+
 @media (prefers-reduced-motion: reduce) {
+  ::view-transition-group(*),
+  ::view-transition-old(*),
+  ::view-transition-new(*) {
+    animation: none !important;
+  }
+
   *,
   *::before,
   *::after {

@@ -97,10 +97,17 @@ rows in without moving the rows below them.
 `tools/dashboard-disclosure.test.ts` holds the line. No file may carry a `title` hint, a
 literal duration or `transition: all`; on 2026-10-05 there were 96, 80 and 20. The one
 exception is `routes/interior/+page.svelte`, still owed its eight hints, and the test keeps
-that list from growing. Not done yet: exit motion for a row that
-leaves the queue (a keyed `animate:flip` needs an element the parent's each block owns), and
-a long-press tip for touch. Whether WebKit delivers `pointerenter` to a disabled button is
-not measured; the feed's export button relies on its tip to say why it is blocked.
+that list from growing.
+
+A row that leaves Home's queue does so inside a view transition: ListRow carries its id as its
+`view-transition-name`, so the browser fades it out and slides the rest into place from
+snapshots. Ids must therefore be unique and valid identifiers.
+
+A tip never carries the only reason a control is disabled: some browsers send no pointer
+events to a disabled button, and no tip reaches touch. The reason is printed beside it, as the
+feed's export note is. For the same reason there is no long-press tip on touch: anything a
+touch reader needs is already on the page or in the accessibility tree, and a long-press would
+fight the platform's own menu on links.
 
 ### Home's decision ladder
 

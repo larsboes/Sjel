@@ -999,7 +999,7 @@
             class:kept={googleExported}
             type="button"
             disabled={updatingExport || savingField || Boolean(exportBlocked)}
-            use:tip={exportBlocked ?? "Approve this entry for the next Google export run"}
+            use:tip={"Approve this entry for the next Google export run"}
             onclick={() => void toggleGoogleExport()}
           >
             {#if updatingExport}

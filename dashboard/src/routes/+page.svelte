@@ -1,7 +1,7 @@
 <script lang="ts">
   import { link } from "$lib/nav";
   import { goto } from "$app/navigation";
-  import { onMount } from "svelte";
+  import { onMount, tick } from "svelte";
   import Icon from "$lib/Icon.svelte";
   import { tip } from "$lib/tip";
   import { createBandDisclosure } from "$lib/home/band-disclosure.svelte";
@@ -365,6 +365,23 @@
   /// ladder is not the only reading of these rows: Locations lists every new opportunity,
   /// Sources counts them, and the horizon reads every dated calendar entry. Patching the
   /// source too is what the base page did by hand in each of its three action handlers.
+  /**
+   * A decided row leaves rather than vanishes. Each ListRow carries its id as a
+   * view-transition-name, so the browser fades the row out and slides the ones below
+   * into its place, from snapshots: nothing here measures or animates layout. Without the
+   * API, or with reduced motion asked for, the change simply applies.
+   */
+  function leave(apply: () => void): void {
+    if (!document.startViewTransition || matchMedia("(prefers-reduced-motion: reduce)").matches) {
+      apply();
+      return;
+    }
+    document.startViewTransition(async () => {
+      apply();
+      await tick();
+    });
+  }
+
   function act(
     kindKey: string,
     key: string,
@@ -375,7 +392,7 @@
     busy = key;
     actionError = null;
     void run()
-      .then(() => {
+      .then(() => leave(() => {
         const patch = options?.patch;
         const state = sources[kindKey];
         if (patch && state) {
@@ -392,7 +409,7 @@
         // not intercept Set methods, so `dismissed.add(key)` would leave the derived
         // ladder unrecomputed and the buttons would look inert.
         dismissed = new Set(dismissed).add(key);
-      })
+      }))
       .catch((caught: unknown) => {
         actionError = caught instanceof Error ? caught.message : String(caught);
       })

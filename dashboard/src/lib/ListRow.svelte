@@ -25,7 +25,9 @@
     secondary,
     meta,
   }: {
-    /** Stable DOM id, so a cursor can find the element to focus. */
+    /** Stable DOM id, so a cursor can find the element to focus. Also the row's
+     *  view-transition-name, so a page that removes it inside a view transition gets the
+     *  exit and the reflow animated; it must therefore be unique and a valid identifier. */
     id?: string;
     role?: "listitem" | "article";
     /** The keyboard cursor is on this row. Announced as `aria-current`, not selected. */
@@ -54,6 +56,7 @@
   {id}
   {role}
   class="row tone-{tone}"
+  style:view-transition-name={id}
   class:current
   class:dimmed
   class:linked={href !== undefined}

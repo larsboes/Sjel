@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { tip } from "$lib/tip";
   import {
     MINUTES_PER_DAY,
     allDaySpan,
@@ -181,7 +182,7 @@
         class="chip band-chip"
         class:rhythm={item.entry.rhythm_id !== null}
         style={bandStyle(item)}
-        title={item.entry.title}
+        use:tip={item.entry.title}
         aria-label={entryLabel(item.entry)}
         onclick={() => onSelectEntry?.(item.entry, dayOf(dates[item.start]))}
       >
@@ -218,7 +219,7 @@
               class="chip timed"
               class:rhythm={item.entry.rhythm_id !== null}
               style={chipStyle(item)}
-              title={item.entry.title}
+              use:tip={item.entry.title}
               aria-label={entryLabel(item.entry)}
               onclick={() => onSelectEntry?.(item.entry, day)}
             >
@@ -547,7 +548,7 @@
     font-size: 1.5rem;
     cursor: pointer;
     box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
-    transition: transform 0.15s, box-shadow 0.15s;
+    transition: transform var(--motion-fast), box-shadow var(--motion-fast);
   }
 
   .add-btn:hover {

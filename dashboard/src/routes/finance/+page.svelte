@@ -714,7 +714,7 @@
     border: 1px solid var(--rule);
     color: var(--text-secondary);
     cursor: pointer;
-    transition: all 120ms ease;
+    transition: background-color var(--motion-fast) ease, border-color var(--motion-fast) ease, color var(--motion-fast) ease;
   }
 
   .pillar-pill:hover {

@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { tip } from "$lib/tip";
   import { onMount } from "svelte";
   import Icon from "$lib/Icon.svelte";
   import ImportReview from "$lib/finance/ImportReview.svelte";
@@ -195,8 +196,8 @@
             <div class="trend-row">
               <time>{point.month}</time>
               <div class="bars">
-                <span class="income" style:width={`${Math.max(1, (flowView === "personal" ? point.income_cents : point.external_cash_inflow_cents) / trendMax * 100)}%`} title={`${flowView === "personal" ? "Income" : "External inflow"} ${money(flowView === "personal" ? point.income_cents : point.external_cash_inflow_cents)}`}></span>
-                <span class="expense" style:width={`${Math.max(1, (flowView === "personal" ? point.personal_spending_cents : point.gross_cash_outflow_cents) / trendMax * 100)}%`} title={`${flowView === "personal" ? "Personal spending" : "Gross payments"} ${money(flowView === "personal" ? point.personal_spending_cents : point.gross_cash_outflow_cents)}`}></span>
+                <span class="income" style:width={`${Math.max(1, (flowView === "personal" ? point.income_cents : point.external_cash_inflow_cents) / trendMax * 100)}%`} use:tip={`${flowView === "personal" ? "Income" : "External inflow"} ${money(flowView === "personal" ? point.income_cents : point.external_cash_inflow_cents)}`}></span>
+                <span class="expense" style:width={`${Math.max(1, (flowView === "personal" ? point.personal_spending_cents : point.gross_cash_outflow_cents) / trendMax * 100)}%`} use:tip={`${flowView === "personal" ? "Personal spending" : "Gross payments"} ${money(flowView === "personal" ? point.personal_spending_cents : point.gross_cash_outflow_cents)}`}></span>
               </div>
               <strong class:negative={(flowView === "personal" ? point.personal_result_cents : point.external_cash_movement_cents) < 0}>{money(flowView === "personal" ? point.personal_result_cents : point.external_cash_movement_cents)}</strong>
             </div>
@@ -291,7 +292,7 @@
   .legend { display: flex; align-items: center; gap: .35rem; }
   .legend i { width: .55rem; height: .35rem; display: inline-block; }
   svg { width: 100%; min-height: 17rem; overflow: visible; }
-  svg path { fill: none; stroke: var(--primary); opacity: .28; transition: opacity .12s; cursor: pointer; }
+  svg path { fill: none; stroke: var(--primary); opacity: .28; transition: opacity var(--motion-fast); cursor: pointer; }
   svg path:hover, svg path.active { opacity: .85; }
   svg text { fill: currentColor; font-size: 14px; dominant-baseline: middle; pointer-events: none; }
   .flow { margin-bottom: .75rem; }

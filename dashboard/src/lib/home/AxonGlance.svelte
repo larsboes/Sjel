@@ -1,5 +1,6 @@
 <script lang="ts">
   import { onMount } from 'svelte';
+  import { tip } from '$lib/tip';
   import Icon from '$lib/Icon.svelte';
   import { link } from '$lib/nav';
   import {
@@ -142,7 +143,7 @@
         type="button"
         class="ask-chip"
         onclick={() => assistantStore.openDrawer()}
-        title="Ask Sjel Assistant"
+        use:tip={"Ask Sjel Assistant"}
       >
         <Icon name="sparkles" size={13} />
         <span>Ask Sjel</span>
@@ -152,7 +153,7 @@
         type="button"
         class="search-chip"
         onclick={() => omniStore.open()}
-        title="Search across Sjel (⌘K)"
+        use:tip={"Search across Sjel (⌘K)"}
       >
         <Icon name="search" size={13} />
         <kbd class="kbd-hint">⌘K</kbd>
@@ -352,7 +353,10 @@
     border-radius: var(--radius-full);
     border: 1px solid transparent;
     cursor: pointer;
-    transition: all 0.15s cubic-bezier(0.16, 1, 0.3, 1);
+    transition:
+      background-color var(--motion-fast) var(--ease-out),
+      color var(--motion-fast) var(--ease-out),
+      transform var(--motion-fast) var(--ease-out);
   }
 
   .ask-chip:hover {
@@ -376,7 +380,7 @@
     border-radius: var(--radius-full);
     border: 1px solid var(--card-border);
     cursor: pointer;
-    transition: all 0.15s ease;
+    transition: border-color var(--motion-fast) ease, color var(--motion-fast) ease;
   }
 
   .search-chip:hover {
@@ -408,7 +412,11 @@
     text-decoration: none;
     text-align: left;
     cursor: pointer;
-    transition: all 0.18s cubic-bezier(0.16, 1, 0.3, 1);
+    transition:
+      background-color var(--motion-base) var(--ease-out),
+      border-color var(--motion-base) var(--ease-out),
+      transform var(--motion-base) var(--ease-out),
+      box-shadow var(--motion-base) var(--ease-out);
   }
 
   .synapse-card:hover {
@@ -502,7 +510,7 @@
     gap: 0.3rem;
     color: var(--text-tertiary);
     text-decoration: none;
-    transition: color 0.15s ease;
+    transition: color var(--motion-fast) ease;
   }
 
   .system-link:hover, .context-link:hover {

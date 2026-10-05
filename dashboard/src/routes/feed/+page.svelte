@@ -1,5 +1,6 @@
 <script lang="ts">
   import { link } from "$lib/nav";
+  import { tip } from "$lib/tip";
   import { page } from "$app/state";
   import DiscoverView from "$lib/feed/DiscoverView.svelte";
   import EvaluationBreakdown from "$lib/feed/EvaluationBreakdown.svelte";
@@ -1162,7 +1163,7 @@
     <button
       class:active={order === "relevance"}
       onclick={() => (order = "relevance")}
-      title={forYouHint}
+      use:tip={forYouHint}
     >
       For you
       {#if modelStatus?.feedback_model && !modelStatus.feedback_model.active}

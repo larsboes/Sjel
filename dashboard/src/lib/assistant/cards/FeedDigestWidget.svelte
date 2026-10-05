@@ -102,7 +102,7 @@
     flex-direction: column;
     gap: 0.2rem;
     text-decoration: none;
-    transition: background-color 0.15s ease, border-color 0.15s ease;
+    transition: background-color var(--motion-fast) ease, border-color var(--motion-fast) ease;
   }
 
   .item-card:hover {
@@ -173,7 +173,7 @@
     text-decoration: none;
     padding: 0.25rem 0.5rem;
     border-radius: var(--radius-sm);
-    transition: background-color 0.15s ease;
+    transition: background-color var(--motion-fast) ease;
   }
 
   .view-feed-btn:hover {

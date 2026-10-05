@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { tip } from "$lib/tip";
   import { onMount, tick } from 'svelte';
   import { base } from '$app/paths';
   import { page } from '$app/state';
@@ -174,7 +175,7 @@
       class="assistant-edge-open"
       onclick={() => assistantStore.openDrawer()}
       aria-label="Open Sjel Assistant (Cmd+K)"
-      title="Sjel Assistant (Cmd+K)"
+      use:tip={"Sjel Assistant (Cmd+K)"}
     >
       <Icon name="sparkles" size={14} />
       <span>Ask</span>
@@ -184,7 +185,7 @@
       class="assistant-edge-hide"
       onclick={(event) => { event.stopPropagation(); assistantStore.hideFloating(); }}
       aria-label="Hide floating Assistant"
-      title="Hide floating Assistant"
+      use:tip={"Hide floating Assistant"}
     >
       ×
     </button>
@@ -222,7 +223,7 @@
           <Icon name="sparkles" size={16} />
           <span>Sjel Assistant</span>
         </div>
-        <div class="context-pill" title={currentContext.contextSummary}>
+        <div class="context-pill" use:tip={currentContext.contextSummary}>
           <span class="context-dot"></span>
           <span class="context-text">{currentContext.label}</span>
         </div>
@@ -233,7 +234,7 @@
           class="btn-icon"
           onclick={() => assistantStore.clearHistory()}
           aria-label="Clear conversation"
-          title="Clear history"
+          use:tip={"Clear history"}
         >
           <Icon name="refresh" size={14} />
         </button>
@@ -241,7 +242,7 @@
           class="btn-icon"
           onclick={() => assistantStore.toggleMinimize()}
           aria-label={assistantStore.isMinimized ? 'Expand drawer' : 'Minimize drawer'}
-          title={assistantStore.isMinimized ? 'Expand' : 'Minimize'}
+          use:tip={assistantStore.isMinimized ? 'Expand' : 'Minimize'}
         >
           <Icon name={assistantStore.isMinimized ? 'plus' : 'square'} size={12} />
         </button>
@@ -249,7 +250,7 @@
           class="btn-icon close-btn"
           onclick={() => assistantStore.closeDrawer()}
           aria-label="Close assistant"
-          title="Close (Esc)"
+          use:tip={"Close (Esc)"}
         >
           <Icon name="close" size={16} />
         </button>
@@ -264,7 +265,7 @@
             {#if msg.role === 'assistant'}
               <div class="msg-meta-bar">
                 {#if msg.routing}
-                  <span class="route-tag" title={msg.routing.reason}>{msg.routing.domain}</span>
+                  <span class="route-tag" use:tip={msg.routing.reason}>{msg.routing.domain}</span>
                 {/if}
                 {#if msg.rung}
                   <span
@@ -273,7 +274,7 @@
                     class:rung-local={msg.rung === 'local'}
                     class:rung-mac={msg.rung === 'mac'}
                     class:rung-rules={msg.rung === 'rules'}
-                    title={msg.skippedRungs && msg.skippedRungs.length > 0
+                    use:tip={msg.skippedRungs && msg.skippedRungs.length > 0
                       ? `Rung: ${RUNG_LABEL[msg.rung]} (skipped: ${msg.skippedRungs.map((s) => `${s.rung}: ${s.reason}`).join(', ')})`
                       : `Rung: ${RUNG_LABEL[msg.rung]}`}
                   >
@@ -534,8 +535,8 @@
     display: grid;
     place-items: center;
     transition:
-      color 0.15s ease,
-      background-color 0.15s ease;
+      color var(--motion-fast) ease,
+      background-color var(--motion-fast) ease;
   }
 
   .btn-icon:hover {
@@ -732,9 +733,9 @@
     color: var(--text-secondary);
     cursor: pointer;
     transition:
-      background-color 0.15s ease,
-      border-color 0.15s ease,
-      color 0.15s ease;
+      background-color var(--motion-fast) ease,
+      border-color var(--motion-fast) ease,
+      color var(--motion-fast) ease;
   }
 
   .chip-btn:hover {
@@ -790,7 +791,7 @@
     font: inherit;
     text-align: left;
     width: 100%;
-    transition: background-color 0.1s ease;
+    transition: background-color var(--motion-fast) ease;
   }
 
   .command-item-btn.active,
@@ -837,7 +838,7 @@
     border-radius: var(--radius);
     padding: 0.45rem 0.75rem;
     gap: 0.5rem;
-    transition: border-color 0.15s ease, box-shadow 0.15s ease;
+    transition: border-color var(--motion-fast) ease, box-shadow var(--motion-fast) ease;
   }
 
   .input-container:focus-within {
@@ -867,7 +868,7 @@
     cursor: pointer;
     display: grid;
     place-items: center;
-    transition: opacity 0.15s ease, transform 0.15s ease, background-color 0.15s ease;
+    transition: opacity var(--motion-fast) ease, transform var(--motion-fast) ease, background-color var(--motion-fast) ease;
   }
 
   .send-btn:hover:not(:disabled) {
@@ -912,7 +913,7 @@
       border-left: none;
       border-top: 1px solid var(--card-border);
       border-radius: var(--radius-xl) var(--radius-xl) 0 0;
-      transition: transform 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+      transition: transform var(--motion-base) var(--ease-out);
       overscroll-behavior: contain;
     }
 

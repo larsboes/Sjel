@@ -376,7 +376,7 @@
     box-shadow: var(--card-shadow-hover);
     overflow: hidden;
     outline: none;
-    animation: omni-fade-in 0.15s ease-out;
+    animation: omni-fade-in var(--motion-fast) ease-out;
   }
 
   @keyframes omni-fade-in {
@@ -456,7 +456,7 @@
     text-decoration: none;
     color: inherit;
     border: 1px solid transparent;
-    transition: background-color 0.1s ease;
+    transition: background-color var(--motion-fast) ease;
   }
 
   .omni-item:hover,

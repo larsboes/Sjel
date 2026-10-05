@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { tip } from "$lib/tip";
   import { link } from "$lib/nav";
   import { onMount } from "svelte";
   import Icon from "$lib/Icon.svelte";
@@ -146,7 +147,7 @@
 
         <div class="actions">
           {#if b}
-            <span class="backup {b.state}" title={b.contents ? `contents: ${b.contents}` : undefined}>
+            <span class="backup {b.state}" use:tip={b.contents ? `contents: ${b.contents}` : undefined}>
               {backupLabel(b)}
             </span>
             {#if b.run?.state === "running"}

@@ -113,7 +113,7 @@
     bottom: 0;
     height: var(--soundscape-dock-height, 56px);
     z-index: 40;
-    transition: height 0.24s cubic-bezier(0.4, 0, 0.2, 1);
+    transition: height var(--motion-slow) cubic-bezier(0.4, 0, 0.2, 1);
   }
 
   .dock.peek {

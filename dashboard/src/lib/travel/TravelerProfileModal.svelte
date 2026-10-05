@@ -687,7 +687,7 @@
     font-size: var(--text-xs);
     font-weight: 600;
     cursor: pointer;
-    transition: all 0.15s ease;
+    transition: background-color var(--motion-fast) ease, color var(--motion-fast) ease;
   }
 
   .tabs button:hover {

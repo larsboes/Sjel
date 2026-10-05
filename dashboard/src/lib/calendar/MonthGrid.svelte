@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { tip } from "$lib/tip";
   import {
     commitmentConfig,
     isRecommended,
@@ -132,7 +133,7 @@
               dates: `${trip.date_start} – ${trip.date_end}`,
             });
           }}
-          title={`Trip: ${trip.title} (${trip.destinations?.[0]?.name ?? ""})`}
+          use:tip={`Trip: ${trip.title} (${trip.destinations?.[0]?.name ?? ""})`}
           onpointerdown={(event) => event.stopPropagation()}
         >
           <span class="trip-ribbon-dot"></span>
@@ -148,7 +149,7 @@
           <div class="entry-row" style={`--entry-color: ${kindConfig(entry.kind).color}`}>
             <button
               class="entry-dot commitment-{entry.commitment}"
-              title={`${commitmentConfig(entry.commitment).label} — ${commitmentConfig(entry.commitment).hint}`}
+              use:tip={`${commitmentConfig(entry.commitment).label} — ${commitmentConfig(entry.commitment).hint}`}
               aria-label={`${entry.title}: ${commitmentConfig(entry.commitment).label}, click to change`}
               onclick={() => onCycleCommitment?.(entry, nextCommitment(entry.commitment))}
               onpointerdown={(event) => event.stopPropagation()}
@@ -156,7 +157,7 @@
             <button
               class="entry"
               class:proposal={entry.commitment === "possible"}
-              title={entry.title}
+              use:tip={entry.title}
               aria-label={`Inspect ${entry.title}`}
               onclick={() => onSelectEntry?.(entry, day)}
               onpointerdown={(event) => event.stopPropagation()}
@@ -166,7 +167,7 @@
               {/if}
               <span class="entry-title">{entry.title}</span>
               {#if isRecommended(entry, freeDays)}
-                <span class="recommended" title="Still open, and the day is free">★</span>
+                <span class="recommended" use:tip={"Still open, and the day is free"}>★</span>
               {/if}
             </button>
           </div>
@@ -220,7 +221,7 @@
     padding: 6px;
     min-height: 92px;
     background: var(--card-bg);
-    transition: background 0.12s, box-shadow 0.12s;
+    transition: background var(--motion-fast), box-shadow var(--motion-fast);
     position: relative;
   }
 
@@ -285,7 +286,7 @@
     width: 100%;
     overflow: hidden;
     white-space: nowrap;
-    transition: all 0.15s ease;
+    transition: background-color var(--motion-fast) ease, color var(--motion-fast) ease;
   }
 
   .trip-ribbon:hover {
@@ -437,7 +438,7 @@
     font-size: 1.5rem;
     cursor: pointer;
     box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
-    transition: transform 0.15s, box-shadow 0.15s;
+    transition: transform var(--motion-fast), box-shadow var(--motion-fast);
   }
 
   .add-btn:hover {

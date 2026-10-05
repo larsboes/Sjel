@@ -76,7 +76,7 @@
   .chevron {
     display: flex;
     color: var(--text-tertiary);
-    transition: transform 0.15s ease;
+    transition: transform var(--motion-fast) ease;
   }
 
   [open] > summary .chevron {

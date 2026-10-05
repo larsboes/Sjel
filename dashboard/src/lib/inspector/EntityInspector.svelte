@@ -366,7 +366,7 @@
     display: flex;
     justify-content: flex-end;
     align-items: stretch;
-    animation: fade-in 0.18s cubic-bezier(0.16, 1, 0.3, 1);
+    animation: fade-in var(--motion-base) var(--ease-out);
   }
 
   @keyframes fade-in {
@@ -396,7 +396,7 @@
     display: flex;
     flex-direction: column;
     overflow: hidden;
-    animation: slide-in 0.24s cubic-bezier(0.16, 1, 0.3, 1);
+    animation: slide-in var(--motion-slow) var(--ease-out);
   }
 
   @keyframes slide-in {
@@ -452,7 +452,7 @@
     background: transparent;
     color: var(--text-tertiary);
     cursor: pointer;
-    transition: background 0.15s ease, color 0.15s ease;
+    transition: background var(--motion-fast) ease, color var(--motion-fast) ease;
   }
 
   .btn-close:hover {
@@ -573,7 +573,7 @@
     font-weight: 500;
     text-decoration: none;
     cursor: pointer;
-    transition: all 0.15s ease;
+    transition: border-color var(--motion-fast) ease, color var(--motion-fast) ease, transform var(--motion-fast) ease;
   }
 
   .synapse-chip:hover {
@@ -676,7 +676,7 @@
     font-size: var(--text-sm);
     font-weight: 600;
     cursor: pointer;
-    transition: all 0.15s cubic-bezier(0.16, 1, 0.3, 1);
+    transition: background-color var(--motion-fast) var(--ease-out), color var(--motion-fast) var(--ease-out), transform var(--motion-fast) var(--ease-out);
   }
 
   .assistant-trigger-btn:hover {
@@ -704,7 +704,7 @@
       border-radius: var(--radius-lg) var(--radius-lg) 0 0;
       border-left: none;
       border-top: 1px solid var(--card-border);
-      animation: sheet-up 0.22s cubic-bezier(0.16, 1, 0.3, 1);
+      animation: sheet-up var(--motion-slow) var(--ease-out);
     }
 
     @keyframes sheet-up {

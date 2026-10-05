@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { tip } from "$lib/tip";
   import { onMount } from "svelte";
   import Icon from "$lib/Icon.svelte";
   import PageHeader from "$lib/PageHeader.svelte";
@@ -223,7 +224,7 @@
               class="btn btn-outline btn-sm"
               disabled={verifying[target.id]}
               onclick={() => handleVerifyTarget(target.id)}
-              title="Run rehearsal verification"
+              use:tip={"Run rehearsal verification"}
             >
               {#if verifying[target.id]}
                 <Icon name="loader" size={13} /> Verifying…
@@ -356,7 +357,7 @@
                 <span class="cap-name">{b.capability}</span>
                 <span class="badge {stateBadgeClass(b.state)}">{b.state}</span>
                 {#if b.holds_service}
-                  <span class="tag mono holds-tag" title="Requires stopping service for cold copy">holds-service</span>
+                  <span class="tag mono holds-tag" use:tip={"Requires stopping service for cold copy"}>holds-service</span>
                 {/if}
               </div>
 
@@ -516,7 +517,7 @@
               </td>
               <td class="mono">
                 {#if run.archive}
-                  <span class="archive-name" title="SHA-256: {run.archive.sha256}">
+                  <span class="archive-name" use:tip={"SHA-256: {run.archive.sha256}"}>
                     {run.archive.name}
                     <span class="dim">({formatBytes(run.archive.bytes)})</span>
                   </span>
@@ -526,12 +527,12 @@
               </td>
               <td class="detail-col">
                 {#if run.detail}
-                  <span class="detail-msg mono" class:err-msg={!isSuccess} title={run.detail}>
+                  <span class="detail-msg mono" class:err-msg={!isSuccess} use:tip={run.detail}>
                     {run.detail}
                   </span>
                 {/if}
                 {#if run.log_path}
-                  <span class="log-cell mono" title={run.log_path}>
+                  <span class="log-cell mono" use:tip={run.log_path}>
                     {run.log_path.split("/").slice(-1)[0]}
                   </span>
                 {/if}

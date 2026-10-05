@@ -1,5 +1,6 @@
 <script lang="ts">
   import { link } from "$lib/nav";
+  import { tip } from "$lib/tip";
   import { onMount } from "svelte";
   import { goto } from "$app/navigation";
   import { page } from "$app/state";
@@ -998,7 +999,7 @@
             class:kept={googleExported}
             type="button"
             disabled={updatingExport || savingField || Boolean(exportBlocked)}
-            title={exportBlocked ?? "Approve this entry for the next Google export run"}
+            use:tip={exportBlocked ?? "Approve this entry for the next Google export run"}
             onclick={() => void toggleGoogleExport()}
           >
             {#if updatingExport}
@@ -1182,7 +1183,7 @@
                 class="btn"
                 disabled={digestBusy !== null}
                 onclick={() => runDigest("standard")}
-                title="Regenerate at the rung this source's length earns"
+                use:tip={"Regenerate at the rung this source's length earns"}
               >
                 {digestBusy === "standard" ? "Digesting…" : "Regenerate"}
               </button>
@@ -1190,7 +1191,7 @@
                 class="btn btn-primary"
                 disabled={digestBusy !== null}
                 onclick={() => runDigest("detailed")}
-                title="One rung further up the same ladder"
+                use:tip={"One rung further up the same ladder"}
               >
                 {digestBusy === "detailed" ? "Digesting…" : "More detail"}
               </button>
@@ -1198,7 +1199,7 @@
                 class="btn"
                 disabled={digestBusy !== null}
                 onclick={runDiagram}
-                title="Draw this item as a Mermaid diagram"
+                use:tip={"Draw this item as a Mermaid diagram"}
               >
                 {digestBusy === "diagram" ? "Drawing…" : "Diagram"}
               </button>
@@ -1206,7 +1207,7 @@
                 class="btn"
                 disabled={digestBusy !== null}
                 onclick={runChart}
-                title="Pull the item's numbers out and plot them"
+                use:tip={"Pull the item's numbers out and plot them"}
               >
                 {digestBusy === "chart" ? "Reading…" : "Chart"}
               </button>
@@ -1679,7 +1680,7 @@
                   <dt>{STAGE_LABEL[stage.stage] ?? stage.stage}</dt>
                   <dd>
                     <span>{stage.tier}</span>
-                    <span class="mono" title={stage.revision}>{stage.revision}</span>
+                    <span class="mono" use:tip={stage.revision}>{stage.revision}</span>
                   </dd>
                 </div>
               {/each}

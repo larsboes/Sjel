@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { tip } from "$lib/tip";
   import { onMount } from "svelte";
   import Overlay from "$lib/Overlay.svelte";
   import Icon from "$lib/Icon.svelte";
@@ -210,7 +211,7 @@
           type="button"
           class="kind-btn commitment-btn"
           class:selected={option.value === commitment}
-          title={option.hint}
+          use:tip={option.hint}
           onclick={() => (commitment = option.value)}
         >
           {option.label}

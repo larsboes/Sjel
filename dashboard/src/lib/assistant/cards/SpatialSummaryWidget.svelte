@@ -136,7 +136,7 @@
     padding: 0.3rem 0.6rem;
     border-radius: var(--radius-sm);
     background-color: var(--primary-soft);
-    transition: transform 0.15s ease, background-color 0.15s ease;
+    transition: transform var(--motion-fast) ease, background-color var(--motion-fast) ease;
   }
 
   .view-3d-btn:hover {

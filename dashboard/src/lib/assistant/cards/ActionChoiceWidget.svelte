@@ -91,9 +91,9 @@
     cursor: pointer;
     font: inherit;
     transition:
-      background-color 0.15s ease,
-      border-color 0.15s ease,
-      transform 0.15s ease;
+      background-color var(--motion-fast) ease,
+      border-color var(--motion-fast) ease,
+      transform var(--motion-fast) ease;
   }
 
   .choice-btn:hover {

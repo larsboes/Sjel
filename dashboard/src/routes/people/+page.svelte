@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { tip } from "$lib/tip";
   /**
    * People: the entity core's person kind (capabilities/entities, PRD Q117).
    *
@@ -433,7 +434,7 @@
     <a
       class="chip master-map-link"
       href={placeGroup ? link(`/map?city=${encodeURIComponent(placeGroup.place)}`) : link("/map")}
-      title="Open Master Life Map"
+      use:tip={"Open Master Life Map"}
     >
       <Icon name="globe" size={12} />
       <span>{placeGroup ? `Explore ${placeGroup.place} on Master Map` : "Master Life Map"}</span>
@@ -883,7 +884,7 @@
   .master-map-link {
     margin-left: auto;
     text-decoration: none;
-    transition: background-color 0.15s ease, color 0.15s ease;
+    transition: background-color var(--motion-fast) ease, color var(--motion-fast) ease;
   }
 
   .master-map-link:hover {
@@ -1090,7 +1091,7 @@
     text-decoration: none;
     color: inherit;
     font-size: var(--text-xs);
-    transition: background-color 0.12s ease;
+    transition: background-color var(--motion-fast) ease;
   }
 
   .context-list-item:hover {

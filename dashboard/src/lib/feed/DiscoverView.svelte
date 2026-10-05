@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { tip } from "$lib/tip";
   import { link } from "$lib/nav";
   import { onMount } from "svelte";
   import EntryForm from "$lib/calendar/EntryForm.svelte";
@@ -442,7 +443,7 @@
               {#if routeLabel(opportunity)}
                 <span
                   class="route {opportunity.event_route?.route} mono"
-                  title={opportunity.event_route?.reason}
+                  use:tip={opportunity.event_route?.reason}
                 >
                   {routeLabel(opportunity)}
                 </span>
@@ -454,7 +455,7 @@
           <span
             class="score mono"
             class:positive={opportunity.score >= 0.35}
-            title="Uncalibrated similarity to the interest profile"
+            use:tip={"Uncalibrated similarity to the interest profile"}
           >
             Match {Math.round(opportunity.score * 100)}
           </span>
@@ -474,14 +475,14 @@
             <span
               class="availability {verdict.verdict}"
               class:adopted={verdict.already_in_calendar}
-              title={verdictExplanation(verdict)}
+              use:tip={verdictExplanation(verdict)}
             >
               {verdictLabel(verdict)}
             </span>
           {/if}
           <div class="actions">
             {#if opportunity.vault_link}
-              <span class="vault" title={opportunity.vault_link}>
+              <span class="vault" use:tip={opportunity.vault_link}>
                 <Icon name="database" size={12} /> Obsidian
               </span>
             {/if}

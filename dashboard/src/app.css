@@ -10,10 +10,11 @@
  * than the framework slate, a small radius scale instead of pill-shaped everything,
  * system fonts, and motion that respects prefers-reduced-motion.
  *
- * Primitives: .card, .tag, .btn (+ -primary, -soft, -outline, -danger), .input, .table.
+ * Primitives: .card, .tag, .btn (+ -primary, -soft, -outline, -danger), .input, .table,
+ * .popover.
  * Components: ListRow, RowMeta, StateLine, FactorBars, PageTabs, PageHeader — a component
  * owns anything a class cannot express once. Behaviour that is neither is an action:
- * $lib/modal.ts.
+ * $lib/modal.ts, $lib/tip.ts.
  *
  * Every class declared here has a consumer, and `tools/dashboard-tokens.test.ts` keeps it
  * that way in both directions — nothing reads a property that is not declared, and nothing
@@ -296,8 +297,14 @@
   /* Replaces a literal that was hardcoded into the Home stylesheet. */
   --kind-event: #be185d;
 
+  /* Motion. Three durations and one curve, and only transform and opacity ride them:
+   * anything that moves layout repaints the page under it. fast is hover and press,
+   * base is a state change, slow is something arriving — a popover, a row. The curve
+   * decelerates hard, so a thing lands rather than drifts. */
   --motion-fast: 120ms;
   --motion-base: 180ms;
+  --motion-slow: 240ms;
+  --ease-out: cubic-bezier(0.16, 1, 0.3, 1);
 
   /* Two rings: the inner one punches the ring away from the control so it reads on a
      coloured button as well as on the page. */
@@ -643,9 +650,9 @@ a.row-title:hover {
   color: var(--text-secondary);
   cursor: pointer;
   transition:
-    background-color 0.15s ease,
-    color 0.15s ease,
-    transform 0.12s cubic-bezier(0.2, 0.8, 0.2, 1);
+    background-color var(--motion-fast) ease,
+    color var(--motion-fast) ease,
+    transform var(--motion-fast) cubic-bezier(0.2, 0.8, 0.2, 1);
 }
 
 .btn:hover {
@@ -725,7 +732,7 @@ a.row-title:hover {
   font: inherit;
   font-size: 0.875rem;
   color: var(--text-primary);
-  transition: border-color 0.15s ease;
+  transition: border-color var(--motion-fast) ease;
 }
 
 /* The border stays on `:focus`, so it marks the active field for a mouse user too; the
@@ -751,6 +758,74 @@ a.row-title:hover {
 ::-webkit-scrollbar-thumb {
   background: var(--card-border);
   border-radius: 999px;
+}
+
+/* PROGRESSIVE DISCLOSURE, the floating half. `ListRow` discloses in place; these two
+ * disclose over the page, so opening one moves nothing under it.
+ *
+ * .popover rides the native `popover` attribute: top layer, light dismiss, Escape and
+ * focus return come from the browser, so no script tracks open state. It is placed with
+ * CSS anchor positioning — the trigger sets `anchor-name`, the sheet `position-anchor` —
+ * and flips to the other side when the preferred one would leave the viewport. A browser
+ * without anchor positioning centres it instead, the UA default, which is still usable.
+ *
+ * The entrance is @starting-style plus `allow-discrete` on display and overlay, so the
+ * sheet fades out too instead of vanishing on the frame it closes. */
+.popover {
+  margin: 0;
+  inset: auto;
+  position-area: block-end span-inline-start;
+  position-try-fallbacks: flip-block, flip-inline;
+  margin-block: var(--space-2);
+  max-width: min(22rem, calc(100vw - 2 * var(--space-4)));
+  padding: var(--space-4);
+  border: 1px solid var(--card-border);
+  border-radius: var(--radius-lg);
+  background-color: var(--card-bg);
+  box-shadow: var(--card-shadow-hover);
+  color: var(--text-primary);
+  opacity: 0;
+  transform: translateY(-4px) scale(0.98);
+  transition:
+    opacity var(--motion-base) var(--ease-out),
+    transform var(--motion-base) var(--ease-out),
+    display var(--motion-base) allow-discrete,
+    overlay var(--motion-base) allow-discrete;
+}
+
+.popover:popover-open {
+  opacity: 1;
+  transform: none;
+}
+
+@starting-style {
+  .popover:popover-open {
+    opacity: 0;
+    transform: translateY(-4px) scale(0.98);
+  }
+}
+
+/* The one tooltip element, created and placed by $lib/tip.ts. Selected by id because no
+ * markup ever names it, so a class would read as dead to tools/dashboard-tokens.test.ts. */
+#sjel-tip {
+  margin: 0;
+  inset: auto;
+  max-width: 18rem;
+  padding: var(--space-1) var(--space-3);
+  border: 0;
+  border-radius: var(--radius-sm);
+  background-color: var(--text-primary);
+  color: var(--page-bg);
+  font: 500 var(--text-2xs) / var(--leading-tight) var(--font-sans);
+  pointer-events: none;
+  opacity: 1;
+  transition: opacity var(--motion-fast) var(--ease-out);
+}
+
+@starting-style {
+  #sjel-tip:popover-open {
+    opacity: 0;
+  }
 }
 
 @keyframes fade-up {

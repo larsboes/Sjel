@@ -117,7 +117,7 @@
 
   .chevron {
     color: var(--text-tertiary);
-    transition: transform 140ms ease;
+    transition: transform var(--motion-fast) ease;
   }
 
   details[open] .chevron {

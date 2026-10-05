@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { tip } from "$lib/tip";
   import { onMount } from "svelte";
   import Icon from "$lib/Icon.svelte";
   import PageHeader from "$lib/PageHeader.svelte";
@@ -390,7 +391,7 @@
             onclick={() => toggle(u)}
           >
             <td>
-              <span class="dot {upClass(u.name)}" title={upLabel(u.name)}></span>
+              <span class="dot {upClass(u.name)}" use:tip={upLabel(u.name)}></span>
             </td>
             <td class="mono name">{u.name}</td>
             <td><span class="kind">{u.kind}</span></td>

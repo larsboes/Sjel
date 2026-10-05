@@ -10,6 +10,7 @@
    * Read-only — see RepoStatus in $lib/api.
    */
   import { onMount } from "svelte";
+  import { tip } from "$lib/tip";
   import Icon from "$lib/Icon.svelte";
   import { axonStatus, type RepoStatus } from "$lib/api";
 
@@ -104,7 +105,7 @@
                 target="_blank"
                 rel="noreferrer"
                 aria-label={`Open ${repo.name} on GitHub`}
-                title="Open on GitHub"
+                use:tip={"Open on GitHub"}
               >
                 <Icon name="external" size={13} />
               </a>

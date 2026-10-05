@@ -18,6 +18,7 @@
   import { link } from "../nav";
   import Icon from "../Icon.svelte";
   import ListRow from "../ListRow.svelte";
+  import { tip } from "../tip";
   import RowMeta from "../RowMeta.svelte";
   import FactorBars, { type Factor } from "../FactorBars.svelte";
 
@@ -168,13 +169,20 @@
         {#if busy}<Icon name="loader" size={13} />{:else if entry.status === "keeper"}Kept{:else}Keep{/if}
       </button>
     {/if}
+    {/if}
+  {/snippet}
+
+  <!-- The source link and Dismiss are the rare asks: Read and Keep are what a triage pass
+       does. A decided row offers only Undo. -->
+  {#snippet secondary()}
+    {#if !decided}
     <a
       class="btn"
       href={entry.url}
       target="_blank"
       rel="noreferrer"
       aria-label="Original"
-      title="Original"
+      use:tip={"Open the original"}
       onclick={() => onexternal?.()}
     >
       <Icon name="external" size={13} />
@@ -185,7 +193,7 @@
         type="button"
         disabled={busy}
         aria-label="Dismiss feed entry"
-        title="Dismiss"
+        use:tip={"Dismiss"}
         onclick={() => ondismiss()}
       >
         <Icon name="close" size={13} />

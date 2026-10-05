@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { tip } from "$lib/tip";
   import { link } from "$lib/nav";
   import Icon from "$lib/Icon.svelte";
   import PageHeader from "$lib/PageHeader.svelte";
@@ -295,7 +296,7 @@
             <button
               class:active={!journeyPriority && !journeyPhrase.trim()}
               type="button"
-              title="the weights stored on your profile"
+              use:tip={"the weights stored on your profile"}
               onclick={() => {
                 journeyPriority = "";
                 journeyPhrase = "";
@@ -308,7 +309,7 @@
               <button
                 class:active={journeyPriority === preset.id && !journeyPhrase.trim()}
                 type="button"
-                title={preset.hint}
+                use:tip={preset.hint}
                 onclick={() => {
                   journeyPriority = preset.id;
                   journeyPhrase = "";
@@ -352,7 +353,7 @@
           <p class="sub">The same journey split into separately purchased sections.</p>
         </div>
         {#if split.savings === null}
-          <span class="tag mono" title="No direct fare came back, so there is nothing to compare against.">
+          <span class="tag mono" use:tip={"No direct fare came back, so there is nothing to compare against."}>
             No direct fare to compare
           </span>
         {:else if split.savings > 0.01}
@@ -401,7 +402,7 @@
               <p
                 class="seg-match"
                 class:severe={seg.train_match === "different"}
-                title={seg.expected_trains.length
+                use:tip={seg.expected_trains.length
                   ? `This journey uses ${seg.expected_trains.join(", ")}.`
                   : "The direct journey carried no train number to compare against."}
               >
@@ -451,7 +452,7 @@
     font-size: var(--text-xs);
     font-weight: 600;
     cursor: pointer;
-    transition: all 0.15s ease;
+    transition: background-color var(--motion-fast) ease, color var(--motion-fast) ease;
   }
 
   .travel-nav a:hover,
@@ -552,8 +553,8 @@
     color: var(--text-secondary);
     cursor: pointer;
     transition:
-      color 0.15s ease,
-      border-color 0.15s ease;
+      color var(--motion-fast) ease,
+      border-color var(--motion-fast) ease;
   }
 
   .tab:hover {
@@ -606,7 +607,7 @@
     font: inherit;
     font-size: var(--text-xs);
     cursor: pointer;
-    transition: all 0.15s ease;
+    transition: background-color var(--motion-fast) ease, box-shadow var(--motion-fast) ease, color var(--motion-fast) ease;
   }
 
   .journey-sort button:hover {
@@ -653,7 +654,7 @@
     font-size: var(--text-xs);
     font-weight: 500;
     cursor: pointer;
-    transition: all 0.15s ease;
+    transition: background-color var(--motion-fast) ease, box-shadow var(--motion-fast) ease, color var(--motion-fast) ease;
   }
 
   .sort-options button:hover {
@@ -688,7 +689,7 @@
 
   .panel {
     padding: 1.25rem;
-    animation: fade-up 0.3s ease-out both;
+    animation: fade-up var(--motion-slow) var(--ease-out) both;
   }
 
   .panel header {

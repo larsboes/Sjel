@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { tip } from "$lib/tip";
   import { onMount } from "svelte";
   import { checkFareAlerts } from "$lib/travel/fare-alerts";
   import { base } from "$app/paths";
@@ -205,7 +206,7 @@
           class="btn omni-mobile-btn"
           onclick={() => omniStore.toggle()}
           aria-label="Search capabilities and views"
-          title="Search (⌘K)"
+          use:tip={"Search (⌘K)"}
         >
           <Icon name="search" size={14} />
         </button>
@@ -214,7 +215,7 @@
           class="btn ask-btn"
           onclick={() => { assistantStore.restoreFloating(); assistantStore.toggle(); }}
           aria-label="Ask Sjel Assistant"
-          title="Ask Sjel Assistant"
+          use:tip={"Ask Sjel Assistant"}
         >
           <Icon name="sparkles" size={14} />
           <span class="ask-btn-text">Ask</span>
@@ -515,7 +516,7 @@
     color: var(--text-tertiary);
     font-size: var(--text-xs);
     cursor: pointer;
-    transition: border-color 0.15s ease, color 0.15s ease, background-color 0.15s ease;
+    transition: border-color var(--motion-fast) ease, color var(--motion-fast) ease, background-color var(--motion-fast) ease;
     max-width: 17rem;
     width: 100%;
   }
@@ -630,10 +631,10 @@
     border-radius: var(--radius-full);
     color: var(--nav-inactive);
     transition:
-      color 0.15s ease,
-      background-color 0.15s ease,
-      transform 0.12s cubic-bezier(0.16, 1, 0.3, 1),
-      box-shadow 0.15s ease;
+      color var(--motion-fast) ease,
+      background-color var(--motion-fast) ease,
+      transform var(--motion-fast) var(--ease-out),
+      box-shadow var(--motion-fast) ease;
   }
 
   .nav-link:hover {
@@ -717,7 +718,7 @@
     inset: calc(var(--header-h) + env(safe-area-inset-top, 0px)) 0 0;
     z-index: 40;
     background-color: rgb(0 0 0 / 40%);
-    animation: fade-in 0.15s ease-out;
+    animation: fade-in var(--motion-fast) ease-out;
   }
 
   nav.mobile {
@@ -739,7 +740,7 @@
     overflow-y: auto;
     -webkit-overflow-scrolling: touch;
     overscroll-behavior: contain;
-    animation: drawer-slide 0.22s cubic-bezier(0.16, 1, 0.3, 1);
+    animation: drawer-slide var(--motion-slow) var(--ease-out);
   }
 
   @keyframes drawer-slide {
@@ -768,7 +769,7 @@
     border: none;
     cursor: pointer;
     border-radius: var(--radius-sm);
-    transition: color 0.15s ease;
+    transition: color var(--motion-fast) ease;
   }
 
   .mobile-drawer-system :global(button.link:hover),
@@ -903,7 +904,7 @@
       -webkit-user-select: none;
       user-select: none;
       -webkit-touch-callout: none;
-      transition: color 0.15s ease, transform 0.12s cubic-bezier(0.2, 0.8, 0.2, 1);
+      transition: color var(--motion-fast) ease, transform var(--motion-fast) cubic-bezier(0.2, 0.8, 0.2, 1);
     }
 
     .tab-link:hover,
@@ -923,7 +924,7 @@
       border-radius: var(--radius-md);
       background-color: var(--primary-soft);
       color: var(--primary);
-      transition: transform 0.15s ease, background-color 0.15s ease;
+      transition: transform var(--motion-fast) ease, background-color var(--motion-fast) ease;
     }
 
     .tab-action:active .tab-action-icon {

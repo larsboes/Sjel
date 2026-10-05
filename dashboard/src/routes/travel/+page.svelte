@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { tip } from "$lib/tip";
   import { link } from "$lib/nav";
   import { page } from "$app/state";
   import { onMount } from "svelte";
@@ -1444,7 +1445,7 @@
           <div class="board-layout">
             <div class="overview-map">
               <div class="map-top-bar">
-                <a class="map-link-btn" href={link("/map")} title="Explore in Master Life Map">
+                <a class="map-link-btn" href={link("/map")} use:tip={"Explore in Master Life Map"}>
                   <Icon name="globe" size={12} />
                   <span>Master Life Map</span>
                 </a>
@@ -1556,7 +1557,7 @@
                   <a class="candidate-title" href={candidate.opportunity.url} target="_blank" rel="noreferrer">
                     {candidate.opportunity.title}
                   </a>
-                  <small title={candidate.reason}>{candidate.reason}</small>
+                  <small use:tip={candidate.reason}>{candidate.reason}</small>
                   <div class="candidate-actions">
                     {#if candidate.plan_match}
                       <button
@@ -2033,7 +2034,7 @@
             href={activePlan && activePlan.destinations.length > 0
               ? link(`/map?city=${encodeURIComponent(placeName(activePlan.destinations[0]))}`)
               : link("/map")}
-            title="Explore destination in Master Life Map"
+            use:tip={"Explore destination in Master Life Map"}
           >
             <Icon name="globe" size={12} />
             <span>Master Life Map</span>
@@ -2203,7 +2204,7 @@
                 href={activePlan && activePlan.destinations.length > 0
                   ? link(`/map?city=${encodeURIComponent(placeName(activePlan.destinations[0]))}`)
                   : link("/map")}
-                title="Explore destination in Master Life Map"
+                use:tip={"Explore destination in Master Life Map"}
               >
                 <Icon name="globe" size={12} />
                 <span>Master Life Map</span>
@@ -2268,7 +2269,7 @@
                   <button
                     class:active={!journeyPriority && !journeyPhrase.trim()}
                     type="button"
-                    title="the weights stored on your profile"
+                    use:tip={"the weights stored on your profile"}
                     onclick={() => {
                       journeyPriority = "";
                       journeyPhrase = "";
@@ -2280,7 +2281,7 @@
                     <button
                       class:active={journeyPriority === preset.id && !journeyPhrase.trim()}
                       type="button"
-                      title={preset.hint}
+                      use:tip={preset.hint}
                       onclick={() => {
                         journeyPriority = preset.id;
                         journeyPhrase = "";
@@ -2411,7 +2412,7 @@
             class="view-pill"
             class:active={itineraryView === "timeline"}
             onclick={() => (itineraryView = "timeline")}
-            title="Timeline view"
+            use:tip={"Timeline view"}
           >
             <Icon name="calendar" size={12} />
             <span>Timeline</span>
@@ -2421,7 +2422,7 @@
             class="view-pill"
             class:active={itineraryView === "list"}
             onclick={() => (itineraryView = "list")}
-            title="List view"
+            use:tip={"List view"}
           >
             <Icon name="layout" size={12} />
             <span>List</span>
@@ -2530,7 +2531,7 @@
     font-size: var(--text-xs);
     font-weight: 600;
     cursor: pointer;
-    transition: all 0.15s ease;
+    transition: background-color var(--motion-fast) ease, color var(--motion-fast) ease;
   }
 
   .travel-nav a:hover,
@@ -2892,7 +2893,7 @@
     font-weight: 600;
     text-decoration: none;
     box-shadow: 0 1px 4px rgb(0 0 0 / 12%);
-    transition: background-color 0.15s ease, border-color 0.15s ease;
+    transition: background-color var(--motion-fast) ease, border-color var(--motion-fast) ease;
   }
 
   .map-link-btn:hover {
@@ -4102,7 +4103,7 @@
     padding: 0.2rem 0.5rem;
     border-radius: var(--radius-full, 9999px);
     cursor: pointer;
-    transition: all 0.15s ease;
+    transition: background-color var(--motion-fast) ease, box-shadow var(--motion-fast) ease, color var(--motion-fast) ease;
   }
 
   .view-pill:hover {

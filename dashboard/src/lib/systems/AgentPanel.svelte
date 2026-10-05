@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { tip } from "$lib/tip";
   // The agent's reach on this machine (ISA F10): one mode per capability, the writes that
   // wait for the owner, and the latest calls. The gate in each capability reads the same
   // policy on its next request, so a change here needs no restart.
@@ -108,7 +109,7 @@
             <span class="what">
               <span class="mono">{cap.capability}</span>
               {#if cap.confirm.length > 0}
-                <span class="dim" title={cap.confirm.join("\n")}>
+                <span class="dim" use:tip={cap.confirm.join("\n")}>
                   {cap.confirm.length} action{cap.confirm.length === 1 ? "" : "s"} always ask
                 </span>
               {/if}

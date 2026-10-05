@@ -1,5 +1,6 @@
 <script lang="ts">
   import type { DataClass } from "./home/decisions";
+  import { tip } from "$lib/tip";
 
   /**
    * The one place a row states why it is here and where its rank came from.
@@ -79,7 +80,7 @@
 
 <p class="why">
   {#if whyHere}<span class="text">{whyHere}</span>{/if}
-  {#if method}<span class="method mono" title="What ranked this row">{method}</span>{/if}
+  {#if method}<span class="method mono" use:tip={"What ranked this row"}>{method}</span>{/if}
   {#if label}
     <!-- Visible, and with no effect on rank: the ranking policy states plainly that the
          data class does not move a score. It says where the row may be processed. -->

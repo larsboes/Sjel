@@ -58,6 +58,45 @@ non-text fills and borders. `tools/dashboard-contrast.test.ts` asserts the separ
 VoiceOver or full visual audit: a focused row's announcement and the sticky rail at both bar
 heights still need in-browser verification.
 
+### Disclosure and motion
+
+Ruled 2026-10-05. A surface shows what the reader acts on and keeps the rest one ask away.
+Each way of asking has one primitive:
+
+| Ask | Primitive |
+|---|---|
+| Hover or focus a control for its meaning | `use:tip={"…"}` (`src/lib/tip.ts`), never `title` |
+| Open a sheet without leaving the page | native `popover` with `.popover` (`src/app.css`) |
+| Reach a row's rare action (dismiss, snooze) | ListRow's `secondary` snippet |
+| Read why a row is here | ListRow's `meta`, opened by hover, focus or the cursor |
+
+`title` waits about a second, never shows on keyboard focus and never shows on touch. The tip
+shows after 400 ms, at once if another tip just closed, and on `:focus-visible`. A popover
+uses CSS anchor positioning and the browser's own light dismiss, Escape and focus return, so
+it tracks no state in script. Home's machine-status line was the first popover: as a
+`<details>` at the foot of the sticky rail, it opened below the viewport. The systems page's
+"Largest users" was the second: it opened on `:hover` and `:focus-within` in a card with
+nothing focusable, so no keyboard or touch reader could open it.
+
+A long list folds by its own structure. Home's ladder opens its leading band; a trip's
+itinerary opens the day that is next and states the count of the others, which took the
+column from 7,184 to 1,499 px on a seven-day trip with 70 entries. Its cards float the day
+select and remove button over the trailing edge on hover or focus, because in a 15 rem
+column they had taken all the width the title needed.
+
+Motion reads `--motion-fast`, `--motion-base` or `--motion-slow` and `--ease-out`, and animates
+`transform` and `opacity`. A live bar (RAM, CPU, disk) is `scaleX` on a clipping track, not a
+width, because it refreshes every few seconds. Rows arrive through `@starting-style`, so a band that opens fades its
+rows in without moving the rows below them.
+
+`tools/dashboard-disclosure.test.ts` holds the line. No file may carry a `title` hint, a
+literal duration or `transition: all`; on 2026-10-05 there were 96, 80 and 20. The one
+exception is `routes/interior/+page.svelte`, still owed its eight hints, and the test keeps
+that list from growing. Not done yet: exit motion for a row that
+leaves the queue (a keyed `animate:flip` needs an element the parent's each block owns), and
+a long-press tip for touch. Whether WebKit delivers `pointerenter` to a disabled button is
+not measured; the feed's export button relies on its tip to say why it is blocked.
+
 ### Home's decision ladder
 
 A registry (PRD Q86, 2026-09-05): a kind is one file under `src/lib/home/kinds/` and its row

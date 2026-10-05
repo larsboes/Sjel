@@ -6,6 +6,7 @@
   import { dateLabel, metaParts } from "../format";
   import type { DecisionRowProps } from "../decisions";
   import type { OpportunitySource } from "../kinds/opportunity";
+  import { tip } from "../../tip";
 
   let {
     row,
@@ -59,12 +60,15 @@
     >
       {#if busy}<Icon name="loader" size={13} />{:else}Save{/if}
     </button>
+  {/snippet}
+
+  {#snippet secondary()}
     <button
       class="btn"
       type="button"
       disabled={busy}
       aria-label="Dismiss opportunity"
-      title="Dismiss"
+      use:tip={"Dismiss"}
       onclick={decide("dismissed")}
     >
       <Icon name="close" size={13} />

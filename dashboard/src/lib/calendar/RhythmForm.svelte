@@ -190,7 +190,7 @@
     border: 0;
     background: rgba(0,0,0,0.48);
     cursor: default;
-    animation: fadeIn 0.15s ease-out;
+    animation: fadeIn var(--motion-fast) ease-out;
   }
 
   .sheet {
@@ -233,7 +233,7 @@
     font-size: var(--text-sm);
     font-weight: 600;
     cursor: pointer;
-    transition: all 0.12s;
+    transition: background-color var(--motion-fast), border-color var(--motion-fast), color var(--motion-fast);
   }
 
   .wd-btn.selected { background: var(--primary); color: #fff; border-color: var(--primary); }
@@ -251,7 +251,7 @@
     border: none;
     font-size: 0.875rem;
     cursor: pointer;
-    transition: opacity 0.12s;
+    transition: opacity var(--motion-fast);
   }
   .btn:disabled { opacity: 0.5; }
   .primary { background: var(--primary); color: #fff; }

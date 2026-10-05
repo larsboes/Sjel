@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { tip } from "$lib/tip";
   import { link } from "$lib/nav";
   import type { FeedEvaluation } from "$lib/api";
 
@@ -36,7 +37,7 @@
 
   <div class="factors">
     {#each evaluation.factors as factor (factor.key)}
-      <div class:travel={factor.key === "travel" && factor.score > 0} class="factor" title={factor.rationale}>
+      <div class:travel={factor.key === "travel" && factor.score > 0} class="factor" use:tip={factor.rationale}>
         <div class="factor-label">
           <span>{factor.label}</span>
           <span class="mono">{Math.round(factor.score * 100)}</span>

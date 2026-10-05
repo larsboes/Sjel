@@ -1,6 +1,8 @@
 <script lang="ts">
+  import { tip } from "$lib/tip";
   import Icon from "$lib/Icon.svelte";
   import { bridgedSrc } from "$lib/bridged-url";
+  import { localDateKey } from "$lib/home/format";
   import type { CalendarEntry, PlanItem, TripPlan, TripStage } from "$lib/api";
 
   let {
@@ -18,6 +20,14 @@
   } = $props();
 
   let selectedDayFilter = $state<string | null>(null);
+
+  // Which days are unfolded. A trip carries seventy-odd entries, and drawn all at once the
+  // column was 6,000px of cards at one weight (measured 2026-10-05). The day that is next
+  // opens; the rest state their count and wait — the same rule as Home's bands, kept in
+  // memory rather than localStorage because it is a per-trip view, not a habit.
+  // `null` is the untouched default, so a trip that rolls into its next day follows it.
+  let unfolded = $state<Set<string> | null>(null);
+  const UNSCHEDULED = "unscheduled";
 
   interface DayBucket {
     dayIso: string;
@@ -163,6 +173,23 @@
     return items.filter((it) => !it.day || !daySet.has(it.day));
   });
 
+  const leadDay = $derived(
+    daysTimeline.find((d) => d.dayIso >= localDateKey(new Date()))?.dayIso ?? daysTimeline[0]?.dayIso,
+  );
+
+  /** A day picked in the navigator is always open: picking it is the ask. */
+  function isOpen(key: string): boolean {
+    if (selectedDayFilter !== null) return true;
+    return unfolded ? unfolded.has(key) : key === leadDay;
+  }
+
+  function toggle(key: string) {
+    const next = new Set(unfolded ?? (leadDay ? [leadDay] : []));
+    if (next.has(key)) next.delete(key);
+    else next.add(key);
+    unfolded = next;
+  }
+
   const displayedDays = $derived.by<DayBucket[]>(() => {
     if (!selectedDayFilter) return daysTimeline;
     return daysTimeline.filter((d) => d.dayIso === selectedDayFilter);
@@ -206,22 +233,32 @@
           <div class="day-marker">
             <span class="day-number">D{bucket.dayIndex}</span>
           </div>
-          <div class="day-titles">
+          <button
+            type="button"
+            class="day-titles"
+            aria-expanded={isOpen(bucket.dayIso)}
+            aria-controls="day-{bucket.dayIso}"
+            onclick={() => toggle(bucket.dayIso)}
+          >
             <h4>{bucket.weekday}, {bucket.shortDate}</h4>
             <span class="day-meta">
               {bucket.items.length + bucket.stages.length}
               {bucket.items.length + bucket.stages.length === 1 ? "entry" : "entries"}
             </span>
-          </div>
+            <span class="day-chevron" class:open={isOpen(bucket.dayIso)} aria-hidden="true">
+              <Icon name="chevron" size={11} />
+            </span>
+          </button>
         </header>
 
-        <div class="day-content">
+        {#if isOpen(bucket.dayIso)}
+        <div class="day-content" id="day-{bucket.dayIso}">
           <!-- Calendar commitments on this day -->
           {#if bucket.commitments.length > 0}
             <div class="calendar-commitments">
               <span class="commitments-label">Calendar:</span>
               {#each bucket.commitments as entry (entry.id)}
-                <div class="commitment-pill commitment-{entry.commitment}" title={entry.notes ?? entry.title}>
+                <div class="commitment-pill commitment-{entry.commitment}" use:tip={entry.notes ?? entry.title}>
                   <Icon name="calendar" size={11} />
                   <span class="commitment-title">{entry.title}</span>
                   {#if entry.starts_at && entry.starts_at.includes("T")}
@@ -298,7 +335,7 @@
                     aria-label="Day for {item.title}"
                     value={item.day ?? ""}
                     onchange={(e) => void onUpdateItemDay?.(item, e.currentTarget.value || null)}
-                    title="Change day or unschedule"
+                    use:tip={"Change day or unschedule"}
                   >
                     <option value="">Unschedule</option>
                     {#each daysTimeline as d (d.dayIso)}
@@ -311,7 +348,7 @@
                   class="remove-btn"
                   onclick={() => void onRemoveItem(item)}
                   aria-label={`Remove ${item.title}`}
-                  title="Remove from itinerary"
+                  use:tip={"Remove from itinerary"}
                 >
                   <Icon name="close" size={13} />
                 </button>
@@ -327,6 +364,7 @@
             </div>
           {/if}
         </div>
+        {/if}
       </section>
     {/each}
 
@@ -337,13 +375,23 @@
           <div class="day-marker unscheduled-marker">
             <Icon name="layout" size={13} />
           </div>
-          <div class="day-titles">
+          <button
+            type="button"
+            class="day-titles"
+            aria-expanded={isOpen(UNSCHEDULED)}
+            aria-controls="day-unscheduled"
+            onclick={() => toggle(UNSCHEDULED)}
+          >
             <h4>Unscheduled & Notes</h4>
             <span class="day-meta">{unscheduledItems.length} items</span>
-          </div>
+            <span class="day-chevron" class:open={isOpen(UNSCHEDULED)} aria-hidden="true">
+              <Icon name="chevron" size={11} />
+            </span>
+          </button>
         </header>
 
-        <div class="day-content">
+        {#if isOpen(UNSCHEDULED)}
+        <div class="day-content" id="day-unscheduled">
           {#each unscheduledItems as item (item.id)}
             {@const badge = itemTypeBadge(item.item_type)}
             {@const img = itemImage(item)}
@@ -371,7 +419,7 @@
                     aria-label="Schedule {item.title} to a day"
                     value=""
                     onchange={(e) => void onUpdateItemDay?.(item, e.currentTarget.value || null)}
-                    title="Schedule to day"
+                    use:tip={"Schedule to day"}
                   >
                     <option value="" disabled selected>+ Schedule to day</option>
                     {#each daysTimeline as d (d.dayIso)}
@@ -391,6 +439,7 @@
             </div>
           {/each}
         </div>
+        {/if}
       </section>
     {/if}
   </div>
@@ -424,7 +473,7 @@
     font-size: var(--text-xs);
     cursor: pointer;
     white-space: nowrap;
-    transition: all 0.15s ease;
+    transition: background-color var(--motion-fast) ease, border-color var(--motion-fast) ease, color var(--motion-fast) ease;
   }
 
   .pill:hover {
@@ -510,6 +559,28 @@
     display: flex;
     align-items: baseline;
     gap: 0.5rem;
+    padding: 0;
+    border: 0;
+    background: none;
+    color: inherit;
+    font: inherit;
+    text-align: left;
+    cursor: pointer;
+  }
+
+  .day-titles:hover h4 {
+    color: var(--primary);
+  }
+
+  .day-chevron {
+    display: flex;
+    align-self: center;
+    color: var(--text-tertiary);
+    transition: transform var(--motion-base) var(--ease-out);
+  }
+
+  .day-chevron.open {
+    transform: rotate(90deg);
   }
 
   .day-titles h4 {
@@ -528,9 +599,21 @@
     display: flex;
     flex-direction: column;
     gap: 0.5rem;
+    transition:
+      opacity var(--motion-slow) var(--ease-out),
+      transform var(--motion-slow) var(--ease-out);
+  }
+
+  /* A day that unfolds arrives like a row does: no reflow beyond its own height. */
+  @starting-style {
+    .day-content {
+      opacity: 0;
+      transform: translateY(-4px);
+    }
   }
 
   .timeline-card {
+    position: relative;
     display: flex;
     align-items: center;
     gap: 0.65rem;
@@ -538,7 +621,7 @@
     background: var(--card-bg);
     border: 1px solid var(--card-border);
     border-radius: var(--radius-md);
-    transition: border-color 0.15s ease;
+    transition: border-color var(--motion-fast) ease;
   }
 
   .timeline-card:hover {
@@ -641,12 +724,16 @@
     font-size: var(--text-sm);
   }
 
+  /* Two lines, not one: this column is about 15rem wide, and a single ellipsised line
+     showed "Mercedes-Benz or…" for most entries. */
   .item-title {
+    display: -webkit-box;
+    -webkit-box-orient: vertical;
+    -webkit-line-clamp: 2;
+    line-clamp: 2;
+    overflow: hidden;
     font-size: var(--text-sm);
     color: var(--text-primary);
-    white-space: nowrap;
-    overflow: hidden;
-    text-overflow: ellipsis;
   }
 
   .item-time {
@@ -675,7 +762,7 @@
     align-items: center;
     justify-content: center;
     opacity: 0.6;
-    transition: opacity 0.15s ease, color 0.15s ease;
+    transition: opacity var(--motion-fast) ease, color var(--motion-fast) ease;
   }
 
   .remove-btn:hover {
@@ -770,10 +857,45 @@
     color: #f59e0b;
   }
 
+  /* Moving an entry to another day is the rare ask; reading the plan is the common one.
+     Until 2026-10-05 the day select and the remove button sat in every card, and in this
+     column they took the width the title needed: an entry read "ACTIVITY" and nothing.
+     With a fine pointer they now float over the card's trailing edge on hover or focus —
+     Tab still reaches them, and focus is one of the asks. A touch reader has no hover,
+     so there they stay visible on a line of their own under the title. */
   .card-actions {
     display: flex;
     align-items: center;
     gap: 0.35rem;
+  }
+
+  @media (pointer: fine) {
+    .item-card .card-actions {
+      position: absolute;
+      inset-block: 0;
+      right: 0;
+      padding: 0 0.6rem 0 1.5rem;
+      border-radius: inherit;
+      background: linear-gradient(to right, transparent, var(--card-bg) 1.25rem);
+      opacity: 0;
+      transition: opacity var(--motion-fast) ease;
+    }
+
+    .item-card:hover .card-actions,
+    .item-card:focus-within .card-actions {
+      opacity: 1;
+    }
+  }
+
+  @media not (pointer: fine) {
+    .item-card {
+      flex-wrap: wrap;
+    }
+
+    .item-card .card-actions {
+      width: 100%;
+      justify-content: flex-end;
+    }
   }
 
   .day-assign-select {
@@ -785,7 +907,7 @@
     font-size: var(--text-2xs);
     cursor: pointer;
     outline: none;
-    transition: all 0.15s ease;
+    transition: border-color var(--motion-fast) ease, color var(--motion-fast) ease;
   }
 
   .day-assign-select:hover {

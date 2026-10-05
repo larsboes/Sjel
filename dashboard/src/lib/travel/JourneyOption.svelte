@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { tip } from "$lib/tip";
   import Icon from "$lib/Icon.svelte";
   import SparpreisSparkline, { type Observation } from "$lib/travel/SparpreisSparkline.svelte";
   import type { Journey, ConnectionLeg } from "$lib/api";
@@ -89,9 +90,9 @@
       <span class="trains-line">
         <strong>{journey.legs.map((leg) => leg.train_name || leg.train_number).join(" · ")}</strong>
         {#if allRegional}
-          <span class="d-ticket-pill full" title="All regional legs — fully covered by Deutschlandticket">D-Ticket</span>
+          <span class="d-ticket-pill full" use:tip={"All regional legs — fully covered by Deutschlandticket"}>D-Ticket</span>
         {:else if hasRegional}
-          <span class="d-ticket-pill part" title="Includes regional legs eligible for Deutschlandticket">Part D-Ticket</span>
+          <span class="d-ticket-pill part" use:tip={"Includes regional legs eligible for Deutschlandticket"}>Part D-Ticket</span>
         {/if}
       </span>
       <span>
@@ -114,7 +115,7 @@
     {#if journey.ranking}
       <span
         class="rank"
-        title={`ranked by your ${journey.ranking.source === "request" ? "request" : "profile"} weights`}
+        use:tip={`ranked by your ${journey.ranking.source === "request" ? "request" : "profile"} weights`}
       >
         #{journey.ranking.rank}
       </span>
@@ -301,7 +302,7 @@
 
   .journey-open :global(svg) {
     color: var(--text-tertiary);
-    transition: transform 140ms ease;
+    transition: transform var(--motion-fast) ease;
   }
 
   .journey-open[aria-expanded="true"] :global(svg) {

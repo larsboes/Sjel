@@ -1191,7 +1191,7 @@
 
   .chev {
     display: flex;
-    transition: transform 0.15s ease;
+    transition: transform var(--motion-fast) ease;
   }
 
   .chev.open {

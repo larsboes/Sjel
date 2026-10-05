@@ -113,7 +113,7 @@
 
   .interactive-row {
     cursor: pointer;
-    transition: background-color 140ms cubic-bezier(0.16, 1, 0.3, 1);
+    transition: background-color var(--motion-fast) var(--ease-out);
   }
 
   .interactive-row:hover {

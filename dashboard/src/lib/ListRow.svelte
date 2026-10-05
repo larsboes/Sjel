@@ -22,6 +22,7 @@
     mark,
     children,
     actions,
+    secondary,
     meta,
   }: {
     /** Stable DOM id, so a cursor can find the element to focus. */
@@ -41,6 +42,9 @@
     mark?: Snippet;
     children: Snippet;
     actions?: Snippet;
+    /** Actions a reader rarely takes — dismiss, snooze. They wait for the same three asks
+     *  that open the meta line, and are always shown where there is no hover. */
+    secondary?: Snippet;
     meta?: Snippet;
   } = $props();
 </script>
@@ -69,7 +73,12 @@
     {#if meta}<div class="meta">{@render meta()}</div>{/if}
   </div>
 
-  {#if actions}<div class="actions">{@render actions()}</div>{/if}
+  {#if actions || secondary}
+    <div class="actions">
+      {#if actions}{@render actions()}{/if}
+      {#if secondary}<span class="secondary">{@render secondary()}</span>{/if}
+    </div>
+  {/if}
 </svelte:element>
 
 <style>
@@ -86,7 +95,19 @@
     padding: var(--space-4) var(--space-5) var(--space-4) var(--space-4);
     border-bottom: 1px solid var(--card-border);
     list-style: none;
-    transition: background-color var(--motion-fast) ease;
+    transition:
+      background-color var(--motion-fast) ease,
+      opacity var(--motion-slow) var(--ease-out),
+      transform var(--motion-slow) var(--ease-out);
+  }
+
+  /* A row arrives rather than appears: on first paint, when a band opens, when the queue
+     gains an item. Transform and opacity only, so the rows below do not reflow. */
+  @starting-style {
+    .row {
+      opacity: 0;
+      transform: translateY(4px);
+    }
   }
 
   .row:last-child {
@@ -204,6 +225,26 @@
     display: flex;
     align-items: center;
     gap: var(--space-2);
+  }
+
+  .secondary {
+    display: contents;
+  }
+
+  /* The secondary actions disclose on the same three asks as the meta line. Opacity, not
+     display: the space stays reserved, so the primary action never jumps sideways, and
+     the buttons stay in the tab order — focus-within is one of the asks. */
+  @media (pointer: fine) {
+    .secondary > :global(*) {
+      opacity: 0;
+      transition: opacity var(--motion-fast) ease;
+    }
+
+    .row:hover .secondary > :global(*),
+    .row:focus-within .secondary > :global(*),
+    .row.current .secondary > :global(*) {
+      opacity: 1;
+    }
   }
 
   /* Below the tablet step the actions wrap under the body rather than squeezing the

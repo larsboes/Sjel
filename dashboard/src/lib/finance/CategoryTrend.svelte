@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { tip } from "$lib/tip";
   import type { FinanceDashboard } from "$lib/api";
 
   let { data }: { data: FinanceDashboard } = $props();
@@ -86,13 +87,13 @@
       {#each months as month, monthIndex (month)}
         <div class="composition-row">
           <time>{month}</time>
-          <div class="stack" style:width={`${Math.max(2, monthTotals[monthIndex] / maximumMonthTotal * 100)}%`} title={`${month}: ${money(monthTotals[monthIndex])}`}>
+          <div class="stack" style:width={`${Math.max(2, monthTotals[monthIndex] / maximumMonthTotal * 100)}%`} use:tip={`${month}: ${money(monthTotals[monthIndex])}`}>
             {#each categorySeries as item (item.id)}
               {#if item.values[monthIndex] > 0}
                 <span
                   style:background={item.color}
                   style:width={`${item.values[monthIndex] / Math.max(1, monthTotals[monthIndex]) * 100}%`}
-                  title={`${item.label}: ${money(item.values[monthIndex])}`}
+                  use:tip={`${item.label}: ${money(item.values[monthIndex])}`}
                 ></span>
               {/if}
             {/each}

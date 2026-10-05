@@ -105,7 +105,7 @@
     border: 0;
     background: rgba(0, 0, 0, 0.48);
     cursor: default;
-    animation: fade-in 0.15s ease-out;
+    animation: fade-in var(--motion-fast) ease-out;
   }
 
   .sheet {
@@ -121,7 +121,7 @@
     border-radius: 14px;
     background: var(--card-bg);
     box-shadow: 0 16px 48px rgba(0, 0, 0, 0.35);
-    transition: transform 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+    transition: transform var(--motion-base) var(--ease-out);
   }
 
   .mobile-drag-pill-wrap {

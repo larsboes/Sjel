@@ -17,6 +17,7 @@
 
 <script lang="ts">
   import type { Snippet } from "svelte";
+  import { tip } from "$lib/tip";
   import Icon from "./Icon.svelte";
 
   /**
@@ -57,7 +58,7 @@
 
 <div class="factors" class:compact>
   {#each factors as factor (factor.key)}
-    <div class="factor" title={factor.rationale ?? describe(factor)}>
+    <div class="factor" use:tip={factor.rationale ?? describe(factor)}>
       <div class="label">
         <span class="name">
           {#if factor.mark}<Icon name={factor.mark as never} size={11} />{/if}

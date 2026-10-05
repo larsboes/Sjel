@@ -44,7 +44,7 @@
               class:fill-good={metric.tone === 'good'}
               class:fill-warn={metric.tone === 'warn'}
               class:fill-alarm={metric.tone === 'alarm'}
-              style={`width: ${Math.min(100, Math.max(0, metric.percent))}%`}
+              style={`transform: scaleX(${Math.min(100, Math.max(0, metric.percent)) / 100})`}
             ></div>
           </div>
         {/if}
@@ -195,8 +195,8 @@
   .meter-fill {
     height: 100%;
     background-color: var(--primary);
-    border-radius: 9999px;
-    transition: width 0.3s ease;
+    transform-origin: left;
+    transition: transform var(--motion-slow) var(--ease-out);
   }
 
   .meter-fill.fill-good {
@@ -230,7 +230,7 @@
     font-size: var(--text-xs);
     font-weight: 600;
     text-decoration: none;
-    transition: background-color 0.15s ease, border-color 0.15s ease, color 0.15s ease;
+    transition: background-color var(--motion-fast) ease, border-color var(--motion-fast) ease, color var(--motion-fast) ease;
   }
 
   .action-chip:hover {

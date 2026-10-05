@@ -3,6 +3,7 @@
   import { goto } from "$app/navigation";
   import { onMount } from "svelte";
   import Icon from "$lib/Icon.svelte";
+  import { tip } from "$lib/tip";
   import { createBandDisclosure } from "$lib/home/band-disclosure.svelte";
   import StateLine from "$lib/StateLine.svelte";
   import {
@@ -778,7 +779,7 @@
                     target="_blank"
                     rel="noreferrer"
                     aria-label={`Open ${projectTitle(project)}`}
-                    title="Open"
+                    use:tip={"Open in a new window"}
                   >
                     <Icon name="external" size={13} />
                   </a>
@@ -806,10 +807,14 @@
 
       <!-- Machine status, not work. It stays one line until asked: health,
            temperature and memory are things you check, not things you do, and
-           three sections of them outweighed the queue they sat beside. A
-           <details> keeps the disclosure in CSS with no state to track. -->
-      <details class="status">
-        <summary>
+           three sections of them outweighed the queue they sat beside.
+
+           A native popover rather than the <details> it was until 2026-10-05: this line
+           sits at the foot of a sticky rail, so a <details> grew the rail past the bottom
+           of the viewport and the body opened where nobody could read it. The popover
+           opens upward over the page, moves nothing, and still tracks no state. -->
+      <div class="status">
+        <button type="button" class="status-summary" popovertarget="home-status">
           <span class="status-dot" class:ok={health?.ok} class:problem={health !== null && !health.ok}></span>
           <span class="status-line">
             {health === null ? "Status unknown" : health.ok ? "Systems healthy" : "Needs attention"}
@@ -821,9 +826,9 @@
             {/if}
           </span>
           <Icon name="chevron" size={12} />
-        </summary>
+        </button>
 
-        <div class="status-body">
+        <div id="home-status" class="popover status-body" popover>
           {#if macmonErr}
             <p class="mc-offline">
               <Icon name="alert" size={12} />
@@ -843,7 +848,7 @@
               <div class="mc-mem">
                 <span class="mc-mem-label">RAM</span>
                 <div class="mc-bar">
-                  <div class="mc-fill" style="width:{(macmonSample.memory.ram_usage / macmonSample.memory.ram_total * 100).toFixed(0)}%"></div>
+                  <div class="mc-fill" style="transform: scaleX({(macmonSample.memory.ram_usage / macmonSample.memory.ram_total).toFixed(3)})"></div>
                 </div>
                 <span class="mc-mem-num mono">{(macmonSample.memory.ram_usage / 1073741824).toFixed(1)} GB</span>
               </div>
@@ -857,14 +862,14 @@
             Capabilities
           </a>
         </div>
-      </details>
+      </div>
     </aside>
   </div>
 </div>
 
 <style>
   .home {
-    animation: fade-up 0.2s ease-out both;
+    animation: fade-up var(--motion-base) var(--ease-out) both;
   }
 
   .briefing {
@@ -964,7 +969,7 @@
     color: var(--text-tertiary);
     font: 600 var(--text-2xs) var(--font-sans);
     cursor: pointer;
-    transition: all 0.15s cubic-bezier(0.16, 1, 0.3, 1);
+    transition: color var(--motion-fast) var(--ease-out), background-color var(--motion-fast) var(--ease-out);
   }
 
   .home-views button:hover {
@@ -1011,7 +1016,7 @@
     border: 1px solid var(--rule);
     color: var(--text-secondary);
     cursor: pointer;
-    transition: all 120ms ease;
+    transition: color var(--motion-fast) ease, border-color var(--motion-fast) ease;
   }
 
   .lens-pill:hover {
@@ -1467,7 +1472,10 @@
     height: 100%;
     border-radius: 999px;
     background: var(--primary);
-    transition: width 0.5s ease;
+    /* scaleX, not width: the bar refreshes with every macmon sample, and a width
+       transition re-lays-out the rail each time. */
+    transform-origin: left;
+    transition: transform var(--motion-slow) var(--ease-out);
   }
 
   .mc-mem-num {
@@ -1512,18 +1520,19 @@
     border-top: 1px solid var(--card-border);
   }
 
-  .status summary {
+  .status-summary {
     display: flex;
     align-items: center;
     gap: 0.45rem;
+    width: 100%;
+    padding: 0;
+    border: 0;
+    background: none;
     color: var(--text-tertiary);
     font-size: var(--text-2xs);
+    text-align: left;
     cursor: pointer;
-    list-style: none;
-  }
-
-  .status summary::-webkit-details-marker {
-    display: none;
+    anchor-name: --home-status;
   }
 
   .status-line {
@@ -1536,18 +1545,27 @@
     font-size: 0.625rem;
   }
 
-  .status summary > :global(svg) {
-    transition: transform 0.15s ease;
+  .status-summary > :global(svg) {
+    transform: rotate(-90deg);
+    transition: transform var(--motion-base) var(--ease-out);
   }
 
-  .status[open] summary > :global(svg) {
+  .status:has(.status-body:popover-open) .status-summary > :global(svg) {
     transform: rotate(90deg);
   }
 
+  /* Above the line and as wide as the rail: the line is the rail's last thing, so below
+     it is off the page. flip-block, from .popover, still covers a rail scrolled short. */
   .status-body {
+    position-anchor: --home-status;
+    position-area: block-start;
+    width: anchor-size(width);
+    max-width: none;
+  }
+
+  .status-body:popover-open {
     display: grid;
     gap: 0.6rem;
-    padding-top: 0.6rem;
   }
 
   .capabilities-link {

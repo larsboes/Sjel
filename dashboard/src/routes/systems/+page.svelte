@@ -1,6 +1,7 @@
 <script lang="ts">
   import { onDestroy, onMount } from "svelte";
   import Icon from "$lib/Icon.svelte";
+  import { tip } from "$lib/tip";
   import PageHeader from "$lib/PageHeader.svelte";
   import { axonStatus, macmon, type MacmonSample, type StorageReport, type UpdatesReport } from "$lib/api";
   import { formatBytes, storageView } from "$lib/systems/storage";
@@ -187,10 +188,10 @@
       <div class="metric-body watts">
         <div class="watts-total">{watts(sample.all_power)}</div>
         <div class="watts-breakdown">
-          <span title="CPU">CPU {watts(sample.cpu_power)}</span>
-          <span title="GPU">GPU {watts(sample.gpu_power)}</span>
-          <span title="RAM">RAM {watts(sample.ram_power)}</span>
-          <span title="System (remainder)">Sys {watts(sample.sys_power)}</span>
+          <span use:tip={"CPU"}>CPU {watts(sample.cpu_power)}</span>
+          <span use:tip={"GPU"}>GPU {watts(sample.gpu_power)}</span>
+          <span use:tip={"RAM"}>RAM {watts(sample.ram_power)}</span>
+          <span use:tip={"System (remainder)"}>Sys {watts(sample.sys_power)}</span>
         </div>
       </div>
     </div>
@@ -207,7 +208,7 @@
           <span class="usage-label">total</span>
         </div>
         <div class="bar-track">
-          <div class="bar-fill" style="width: {sample.cpu_usage_pct * 100}%"></div>
+          <div class="bar-fill" style="transform: scaleX({sample.cpu_usage_pct})"></div>
         </div>
         <div class="core-row">
           <span>P-Cores <b>{sample.pcpu_usage[0]} MHz</b> {pct(sample.pcpu_usage[1])}</span>
@@ -221,7 +222,7 @@
       <span class="metric-head">
         <Icon name="database" size={14} />
         Memory
-        <span class="mem-pressure" title="Swap use as an indicator of memory pressure">
+        <span class="mem-pressure" use:tip={"Swap use as an indicator of memory pressure"}>
           {#if sample.memory.swap_usage > sample.memory.swap_total * 0.5}
             <Icon name="alert" size={11} />
           {/if}
@@ -233,19 +234,26 @@
           <span class="mono">{bytes(sample.memory.ram_usage)} / {bytes(sample.memory.ram_total)}</span>
         </div>
         <div class="bar-track">
-          <div class="bar-fill mem" style="width: {sample.memory.ram_usage / sample.memory.ram_total * 100}%"></div>
+          <div class="bar-fill mem" style="transform: scaleX({sample.memory.ram_usage / sample.memory.ram_total})"></div>
         </div>
         <div class="mem-row swap">
           <span>Swap</span>
           <span class="mono">{bytes(sample.memory.swap_usage)} / {bytes(sample.memory.swap_total)}</span>
         </div>
         <div class="bar-track">
-          <div class="bar-fill swap" style="width: {sample.memory.swap_usage / sample.memory.swap_total * 100}%"></div>
+          <div class="bar-fill swap" style="transform: scaleX({sample.memory.swap_usage / sample.memory.swap_total || 0})"></div>
         </div>
       </div>
 
-      <!-- Hover popover: what is consuming memory. -->
-      <div class="mem-hover">
+      <!-- What is consuming memory, one press away. It opened on :hover and :focus-within
+           until 2026-10-05, and nothing in this card takes focus, so a keyboard or touch
+           reader could never open it. A native popover answers all three. -->
+      <button type="button" class="mem-detail" popovertarget="mem-top">
+        Largest users
+        <Icon name="chevron" size={11} />
+      </button>
+
+      <div id="mem-top" class="popover mem-hover" popover>
         <div class="mem-hover-head">
           <strong>Largest RAM users</strong>
           <span class="mono">{topRssTotal} MB across the largest processes</span>
@@ -260,7 +268,7 @@
               <li>
                 <span class="proc-name">{p.name}</span>
                 <span class="proc-bar-wrap">
-                  <span class="proc-bar" style="width:{Math.min(100, p.rss_mb / 8)}%"></span>
+                  <span class="proc-bar" style="transform: scaleX({p.rss_mb / topProcs[0].rss_mb})"></span>
                 </span>
                 <span class="proc-rss mono">{p.rss_mb} MB</span>
               </li>
@@ -320,7 +328,7 @@
           class="bar-fill"
           class:warn={view.state === "warn"}
           class:crit={view.state === "critical"}
-          style="width: {view.usedPct}%"
+          style="transform: scaleX({view.usedPct / 100})"
         ></div>
       </div>
       <p class="vol-line">
@@ -342,7 +350,7 @@
                   <!-- title because the column is a fraction of the row and a class name is the
                        row's key: the tool knows headless-browser-payloads and
                        chrome-on-device-models, both longer than it holds. -->
-                  <span class="mono" title={row.name}>{row.name}</span>
+                  <span class="mono" use:tip={row.name}>{row.name}</span>
                   {#if !row.applicable}<span class="tag">report-only</span>{/if}
                   {#if row.flagged}<span class="tag warn">over flag</span>{/if}
                 </span>
@@ -368,7 +376,7 @@
         <ul class="stor-list">
           {#each view.protected as row (row.path)}
             <li class="stor-row protected">
-              <span class="stor-name mono" title={row.path}>{row.path}</span>
+              <span class="stor-name mono" use:tip={row.path}>{row.path}</span>
               <span class="stor-bytes mono">{formatBytes(row.bytes)}</span>
               <span class="stor-reason">{row.reason}</span>
             </li>
@@ -430,7 +438,7 @@
     {#each updView.groups as group (group.surface.id)}
       <div class="upd-group">
         <h3 class="col-head">
-          <span title={group.surface.why}>{group.surface.title}</span>
+          <span use:tip={group.surface.why}>{group.surface.title}</span>
           <span class="dim mono">{group.surface.ownerDetail}</span>
           {#if group.actionable > 0 && !updView.busy}
             <button class="btn btn-soft" onclick={() => applyClass(group.surface.id)}>
@@ -453,7 +461,7 @@
                   <span class="mono">·</span>
                 {/if}
               </span>
-              <span class="upd-name mono" title={row.name}>{row.name}</span>
+              <span class="upd-name mono" use:tip={row.name}>{row.name}</span>
               <span class="upd-vers mono dim">{versionLabel(row)}</span>
               <span class="upd-note dim">{row.note}</span>
             </li>
@@ -633,7 +641,10 @@
     height: 100%;
     border-radius: 999px;
     background-color: var(--primary);
-    transition: width 0.5s ease;
+    /* scaleX, not width: macmon refreshes every 3 s, and a width transition re-lays-out
+       the card each time. The track clips, so the scaled radius never shows. */
+    transform-origin: left;
+    transition: transform var(--motion-slow) var(--ease-out);
   }
 
   .bar-fill.mem {
@@ -668,29 +679,30 @@
     margin-top: 0.2rem;
   }
 
-  /* ── Hover popover: who is eating memory ───────────────────── */
+  /* ── Popover: who is eating memory ─────────────────────────── */
+  .mem-detail {
+    display: inline-flex;
+    align-items: center;
+    gap: var(--space-1);
+    margin-top: var(--space-3);
+    padding: 0;
+    border: 0;
+    background: none;
+    color: var(--text-tertiary);
+    font: inherit;
+    font-size: var(--text-xs);
+    cursor: pointer;
+    anchor-name: --mem-top;
+  }
+
+  .mem-detail:hover {
+    color: var(--primary);
+  }
+
   .mem-hover {
-    display: none;
-    position: absolute;
-    top: calc(100% + 0.5rem);
-    left: 0;
-    right: 0;
-    z-index: 20;
-    padding: 0.85rem 1rem;
-    background: var(--card-bg);
-    border: 1px solid var(--card-border);
-    border-radius: var(--radius);
-    box-shadow: var(--card-shadow-hover);
-  }
-
-  .mem-card:hover .mem-hover,
-  .mem-card:focus-within .mem-hover {
-    display: block;
-  }
-
-  /* Keep hover stable: don't disappear when cursor moves from card to popover */
-  .mem-card:hover .mem-hover:hover {
-    display: block;
+    position-anchor: --mem-top;
+    width: min(26rem, calc(100vw - 2 * var(--space-4)));
+    max-width: none;
   }
 
   .mem-hover-head {
@@ -740,10 +752,13 @@
     overflow: hidden;
   }
 
+  /* Relative to the largest process, so the ranking reads at a glance. It was an inline
+     span with a width until 2026-10-05, which rendered at 0x0: no bar ever showed. */
   .proc-bar {
+    display: block;
     height: 100%;
-    border-radius: 999px;
-    background: var(--primary-soft);
+    background: var(--primary);
+    transform-origin: left;
   }
 
   .proc-rss {

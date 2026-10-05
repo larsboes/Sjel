@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { tip } from "$lib/tip";
   /**
    * Who you know near each leg, where you could stay, and the plan's meetups.
    *
@@ -133,7 +134,7 @@
                 type="button"
                 class="person-chip-btn"
                 onclick={() => inspectPersonByName(p)}
-                title={`Inspect ${p}`}
+                use:tip={`Inspect ${p}`}
               >
                 {p}
               </button>
@@ -170,7 +171,7 @@
               type="button"
               class="person-chip-btn"
               onclick={() => inspectPersonByName(p.person)}
-              title={`Inspect ${p.person}`}
+              use:tip={`Inspect ${p.person}`}
             >
               {p.person}
             </button>
@@ -181,7 +182,7 @@
                 href={link(
                   `/calendar?date=${encodeURIComponent(leg.stage.date)}&title=${encodeURIComponent(`Meetup with ${p.person}`)}&location=${encodeURIComponent(leg.stage.destination.name)}`,
                 )}
-                title="Schedule calendar meetup"
+                use:tip={"Schedule calendar meetup"}
               >
                 + Meetup
               </a>
@@ -198,7 +199,7 @@
               type="button"
               class="person-chip-btn"
               onclick={() => inspectPersonByName(h.person)}
-              title={`Inspect host ${h.person}`}
+              use:tip={`Inspect host ${h.person}`}
             >
               {h.person}
             </button>
@@ -222,8 +223,12 @@
   </ol>
 {/if}
 
+<!-- An occasional write beside a list that is read on every visit. Folded since 2026-10-05:
+     open, the four fields were the tallest thing in the section. -->
+<details class="state-add">
+<summary>Where is someone?</summary>
 <form class="state-form" onsubmit={statePlace}>
-  <p class="rail-hint">Where is someone? With dates it is an away period; without, their home base.</p>
+  <p class="rail-hint">With dates it is an away period; without, their home base.</p>
   <input aria-label="Person" placeholder="Person" list="people-names" bind:value={formPerson} required />
   <datalist id="people-names">
     {#each people as person (person.id)}
@@ -240,6 +245,7 @@
   </button>
   {#if formMessage}<p class="meta" aria-live="polite">{formMessage}</p>{/if}
 </form>
+</details>
 
 <a class="btn btn-outline rail-action" href={link("/people")}>
   <Icon name="users" size={13} /> All people
@@ -315,6 +321,20 @@
     color: var(--text-secondary);
   }
 
+  .state-add {
+    margin-top: 0.6rem;
+  }
+
+  .state-add summary {
+    color: var(--text-secondary);
+    font-size: var(--text-xs);
+    cursor: pointer;
+  }
+
+  .state-add summary:hover {
+    color: var(--primary);
+  }
+
   .state-form {
     display: flex;
     flex-direction: column;
@@ -383,7 +403,7 @@
     font-size: var(--text-2xs);
     font-weight: 600;
     text-decoration: none;
-    transition: opacity 120ms ease;
+    transition: opacity var(--motion-fast) ease;
   }
 
   .meetup-action-link:hover {

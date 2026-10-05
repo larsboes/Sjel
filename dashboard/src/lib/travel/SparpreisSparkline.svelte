@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { tip } from "$lib/tip";
   export interface Observation {
     day: string;
     prices: number[];
@@ -67,7 +68,7 @@
 </script>
 
 {#if dailyMins.length >= 2}
-  <div class="sparkline-wrap" title={`Price history: ${dailyMins.length} checks, low €${minPrice?.toFixed(2)}, current €${currentPrice?.toFixed(2)}`}>
+  <div class="sparkline-wrap" use:tip={`Price history: ${dailyMins.length} checks, low €${minPrice?.toFixed(2)}, current €${currentPrice?.toFixed(2)}`}>
     <svg {width} {height} viewBox={`0 0 ${width} ${height}`} class="sparkline-svg">
       <polyline
         fill="none"

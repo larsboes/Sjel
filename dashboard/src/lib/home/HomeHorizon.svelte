@@ -1,6 +1,7 @@
 <script lang="ts">
   import { onMount } from "svelte";
   import { link } from "$lib/nav";
+  import { tip } from "$lib/tip";
   import Icon from "$lib/Icon.svelte";
   import { contextLink, entryReaderLink, kindConfig } from "$lib/calendar/types";
   import type { CalendarContext, CalendarEntry } from "$lib/api";
@@ -87,7 +88,7 @@
                 location: entry.location ?? undefined,
                 commitment: entry.commitment,
               })}
-              title="Inspect event details"
+              use:tip={"Inspect event details"}
             >
               <time>{shortDate(entry.starts_at)}</time>
               <i
@@ -116,7 +117,7 @@
     {#if contexts.length > 0}
       <p class="contexts">
         {#each contexts as context, index (context.id)}
-          <a href={contextLink(context)} title={context.details || context.title}>
+          <a href={contextLink(context)} use:tip={context.details || context.title}>
             {context.title}<span>{span(context)}</span>
           </a>
         {/each}
@@ -156,7 +157,7 @@
     text-align: left;
     cursor: pointer;
     border-radius: var(--radius-sm);
-    transition: background 0.15s ease;
+    transition: background-color var(--motion-fast) ease;
   }
 
   .entries .entry-row-action:hover {

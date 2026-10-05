@@ -6,6 +6,7 @@
   import { metaParts, relativeDate } from "../format";
   import type { MailRow } from "../kinds/mail";
   import type { DecisionRowProps } from "../decisions";
+  import { tip } from "../../tip";
 
   let {
     row,
@@ -52,6 +53,9 @@
 
   {#snippet actions()}
     <a class="btn" {href}>Open</a>
+  {/snippet}
+
+  {#snippet secondary()}
     <!-- Local only. Dismissing drops the proposal from this list and changes nothing in
          Gmail: the archive and trash actions live on the entry page, behind their own
          confirmation, because they leave Sjel. -->
@@ -60,7 +64,7 @@
       type="button"
       disabled={busy}
       aria-label="Dismiss mail proposal"
-      title="Dismiss"
+      use:tip={"Dismiss"}
       onclick={dismiss}
     >
       {#if busy}<Icon name="loader" size={13} />{:else}<Icon name="close" size={13} />{/if}

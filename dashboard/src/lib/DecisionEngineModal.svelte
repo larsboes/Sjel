@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { tip } from "$lib/tip";
   import { onMount } from 'svelte';
   import Overlay from './Overlay.svelte';
   import { decisionEngine } from './models/decision-engine.svelte';
@@ -27,7 +28,7 @@
   class="decision-pill"
   class:active={decisionEngine.isMechanism2Active}
   onclick={openSheet}
-  title="Configure Sjel Decision Engine & System-1 Models"
+  use:tip={"Configure Sjel Decision Engine & System-1 Models"}
 >
   {#if decisionEngine.isMechanism2Active}
     <span class="dot active">●</span>
@@ -182,7 +183,7 @@
     font-size: var(--text-xs);
     font-weight: 500;
     cursor: pointer;
-    transition: all 0.15s ease;
+    transition: border-color var(--motion-fast) ease, background-color var(--motion-fast) ease;
   }
 
   .decision-pill:hover {
@@ -267,7 +268,7 @@
     border: 1px solid var(--card-border, #e5e5ea);
     border-radius: 10px;
     cursor: pointer;
-    transition: all 0.15s ease;
+    transition: border-color var(--motion-fast) ease, background-color var(--motion-fast) ease;
     background: var(--surface, #ffffff);
   }
 
@@ -357,7 +358,7 @@
     font-weight: 500;
     font-size: var(--text-sm);
     cursor: pointer;
-    transition: opacity 0.15s ease;
+    transition: opacity var(--motion-fast) ease;
   }
 
   .primary-btn:hover:not(:disabled) {
@@ -385,7 +386,7 @@
   .progress-fill {
     height: 100%;
     background: var(--accent, #007aff);
-    transition: width 0.2s ease;
+    transition: width var(--motion-base) ease;
   }
 
   .progress-text {

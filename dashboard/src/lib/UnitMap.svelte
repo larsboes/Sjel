@@ -479,7 +479,7 @@
   .edge {
     stroke: var(--card-border-hover);
     stroke-width: 1.1;
-    transition: opacity 0.15s ease;
+    transition: opacity var(--motion-fast) ease;
   }
   .edge.faded {
     opacity: 0.15;
@@ -487,7 +487,7 @@
 
   .node {
     cursor: pointer;
-    transition: opacity 0.15s ease;
+    transition: opacity var(--motion-fast) ease;
   }
   .node.faded {
     opacity: 0.18;

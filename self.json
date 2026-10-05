@@ -1023,17 +1023,7 @@
     },
     {
       "from": "interior",
-      "to": "devices",
-      "kinds": [
-        "cargo-dep"
-      ],
-      "evidence": [
-        "capabilities/interior/Cargo.toml"
-      ]
-    },
-    {
-      "from": "interior",
-      "to": "markdown-root",
+      "to": "inventory",
       "kinds": [
         "cargo-dep"
       ],
@@ -1054,16 +1044,6 @@
     {
       "from": "interior",
       "to": "sjel-config",
-      "kinds": [
-        "cargo-dep"
-      ],
-      "evidence": [
-        "capabilities/interior/Cargo.toml"
-      ]
-    },
-    {
-      "from": "interior",
-      "to": "sjel-http",
       "kinds": [
         "cargo-dep"
       ],

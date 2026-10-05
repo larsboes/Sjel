@@ -6,12 +6,11 @@
 // what it moves. Measured 2026-10-05 at 3e1a132a, before the first slice landed on Home:
 // 96 `title=` attributes on HTML elements, 80 transition or animation declarations with a
 // literal duration, and 20 `transition: all`. Four slices the same day took all three to
-// zero outside one file.
+// zero, and interior's hints followed once that work landed.
 //
-// So these are rules, not ceilings: no file may carry one. The escape list names the one
-// file still owed and why, and a test keeps it from growing. Infinite loops (a pulse, a
-// shimmer) are exempt from the duration rule — their cadence is the design, not a
-// transition between states.
+// So these are rules, not ceilings: no file may carry one. The escape list is empty, and a
+// test keeps it from growing. Infinite loops (a pulse, a shimmer) are exempt from the
+// duration rule — their cadence is the design, not a transition between states.
 //
 // Not gated: transitions on layout properties. ListRow's meta line animates
 // `grid-template-rows` on purpose (dashboard-row-disclosure.test.ts) and there is no
@@ -25,10 +24,7 @@ import { placeTip } from "../dashboard/src/lib/tip.ts";
 const SRC = join(import.meta.dir, "../dashboard/src");
 
 /** Files allowed to carry `title` hints, with the reason. Shrinks; never grows. */
-const KNOWN: Record<string, string> = {
-  "routes/interior/+page.svelte":
-    "another session had it open on 2026-10-05; migrate once that work lands",
-};
+const KNOWN: Record<string, string> = {};
 
 function sources(dir: string): string[] {
   return readdirSync(dir).flatMap((name) => {

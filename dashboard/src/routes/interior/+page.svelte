@@ -12,6 +12,7 @@
   import { onMount, tick } from "svelte";
   import Icon from "$lib/Icon.svelte";
   import PageHeader from "$lib/PageHeader.svelte";
+  import { tip } from "$lib/tip";
   import {
     axonStatus,
     interior,
@@ -1400,7 +1401,7 @@
                 {/if}
                 {#if it.raumtrenner}<span class="needs mono">raumtrenner</span>{/if}
                 {#if it.unsicher.length > 0}
-                  <span class="guess" title="measured? no.">~ {it.unsicher.join(", ")}</span>
+                  <span class="guess" use:tip={"measured? no."}>~ {it.unsicher.join(", ")}</span>
                 {/if}
               {:else}
                 <span class="of">no inventory row — the plan draws it from its own size</span>
@@ -1591,7 +1592,7 @@
                         <td
                           class:night={h.hoehe_grad <= 0}
                           class:hit={h.getroffen.length > 0}
-                          title={`${h.stunde_lokal}:00 · ${h.hoehe_grad.toFixed(0)}° up, ${h.azimut_grad.toFixed(0)}° · ${h.getroffen.join(", ") || "nothing in the sun"}`}
+                          use:tip={`${h.stunde_lokal}:00 · ${h.hoehe_grad.toFixed(0)}° up, ${h.azimut_grad.toFixed(0)}° · ${h.getroffen.join(", ") || "nothing in the sun"}`}
                         >
                           {h.hoehe_grad <= 0 ? "·" : h.getroffen.length || "–"}
                         </td>
@@ -1876,8 +1877,8 @@
             <span class="label">{i.label}</span>
             {#if i.prioritaet}<span class="tag">{i.prioritaet}</span>{/if}
             {#if i.kind === "slot"}<span class="tag slot">slot</span>{/if}
-            {#if pendingIds.has(i.id)}<span class="tag pending" title="Saved on this device; not on the canonical node yet.">not synced</span>{/if}
-            {#if conflictIds.has(i.id)}<span class="tag conflict" title="The canonical node changed this item too. Review it in the sync line at the top.">conflict</span>{/if}
+            {#if pendingIds.has(i.id)}<span class="tag pending" use:tip={"Saved on this device; not on the canonical node yet."}>not synced</span>{/if}
+            {#if conflictIds.has(i.id)}<span class="tag conflict" use:tip={"The canonical node changed this item too. Review it in the sync line at the top."}>conflict</span>{/if}
           </div>
           {#if i.bild}
             <img class="shot" use:bridgedSrc={interior.mediaUrl(i.bild)} alt={i.label} loading="lazy" />
@@ -1898,7 +1899,7 @@
               </span>
             {/if}
             {#if i.unsicher.length > 0}
-              <span class="guess" title="measured? no.">~ {i.unsicher.join(", ")}</span>
+              <span class="guess" use:tip={"measured? no."}>~ {i.unsicher.join(", ")}</span>
             {/if}
           </p>
           {#if i.ziel}
@@ -1933,8 +1934,8 @@
         <div class="head">
           <span class="label">{i.label}</span>
           {#if i.mitnahme}<span class="tag">{i.mitnahme}</span>{/if}
-          {#if pendingIds.has(i.id)}<span class="tag pending" title="Saved on this device; not on the canonical node yet.">not synced</span>{/if}
-          {#if conflictIds.has(i.id)}<span class="tag conflict" title="The canonical node changed this item too. Review it in the sync line at the top.">conflict</span>{/if}
+          {#if pendingIds.has(i.id)}<span class="tag pending" use:tip={"Saved on this device; not on the canonical node yet."}>not synced</span>{/if}
+          {#if conflictIds.has(i.id)}<span class="tag conflict" use:tip={"The canonical node changed this item too. Review it in the sync line at the top."}>conflict</span>{/if}
         </div>
         {#if i.bild}
           <img class="shot" use:bridgedSrc={interior.mediaUrl(i.bild)} alt={i.label} loading="lazy" />
@@ -1943,14 +1944,14 @@
           <p class="meta">
             {#if knownSize(i)}<span class="dims mono">{knownSize(i)}</span>{/if}
             {#if i.unsicher.length > 0}
-              <span class="guess" title="measured? no.">~ {i.unsicher.join(", ")}</span>
+              <span class="guess" use:tip={"measured? no."}>~ {i.unsicher.join(", ")}</span>
             {:else if i.gemessen_am}
               <span class="measured mono">measured {i.gemessen_am.slice(0, 10)}</span>
             {/if}
           </p>
         {/if}
         {#if declares(i)}
-          <span class="declares mono" title="This piece states what it needs, so the name heuristic does not run for it (PRD Q61).">
+          <span class="declares mono" use:tip={"This piece states what it needs, so the name heuristic does not run for it (PRD Q61)."}>
             declares {declares(i)}
           </span>
         {/if}

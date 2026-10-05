@@ -1508,11 +1508,19 @@ struct PackQuery {
     stage: Option<String>,
 }
 
-/// Where interior serves its inventory. Same hardcoded-sibling-port shape, and
-/// the same caveat, as `calendar_base_url` above.
+/// Where the inventory serves its rows. Same hardcoded-sibling-port shape, and the
+/// same caveat, as `calendar_base_url` above — but this one moved on 2026-10-05: it
+/// pointed at `interior` (8092), which is on-demand, so a pack list lost every weight
+/// after a restart until somebody opened the floor plan (ISA F13).
 fn interior_base_url() -> String {
-    sjel_config::env_var("SJEL_INTERIOR_URL")
-        .unwrap_or_else(|_| "http://127.0.0.1:8092".to_string())
+    for name in ["SJEL_INVENTORY_URL", "SJEL_INTERIOR_URL"] {
+        if let Ok(url) = sjel_config::env_var(name) {
+            if !url.trim().is_empty() {
+                return url;
+            }
+        }
+    }
+    "http://127.0.0.1:8101".to_string()
 }
 
 /// `item_ref` -> the item, or `None` when interior could not be reached.

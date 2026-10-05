@@ -24,14 +24,10 @@ sjel-server = { path = "../../libs/sjel-server" }
 sjel-config = { path = "../../libs/sjel-config" }
 # `/routes` neben `/health`, wie jede andere Capability mit HTTP-Oberflaeche.
 route-manifest = { path = "../../libs/route-manifest" }
-# Das Inventar sind Zeilen (PRD Q58/B25). Eine Datei fuer alle Capabilities, `interior_`
-# als Praefix — libs/sjel-store/README.md hat das Warum.
+# Die Zeilen sind eine Tabelle, die `capabilities/inventory` besitzt (ISA F13), und diese
+# Capability liest sie aus derselben Datei — ohne sie ist kein Layout zu rechnen. Der eigene
+# Praefix traegt nur noch `interior_placement`. libs/sjel-store/README.md hat das Warum.
 sjel-store = { path = "../../libs/sjel-store" }
-# Shared Ed25519 device verification for the authenticated sync ingress.
-devices = { path = "../devices" }
-# Die eine Art, eine Datei aus einer erklaerten Vault-Wurzel zu holen, plus die markierte
-# Region. Null Abhaengigkeiten, und die Konflikterkennung liegt in der Datei selbst.
-markdown-root = { path = "../../libs/markdown-root" }
 # Der Tag, an dem ein Entwurf entsteht. Vier Capabilities hatten diese zwoelf Zeilen
 # abgeschrieben, statt eine zu teilen — libs/civil-date/README begruendet, warum das
 # Teilen keinen Datumsabhaengigkeit kostet, und genau darum geht es hier.
@@ -59,6 +55,14 @@ rayon.workspace = true
 # `ServiceExt::oneshot`, damit der Origin-Test den verdrahteten Router ohne Listener und
 # ohne Port fahren kann. Dasselbe Muster nutzt capabilities/sjel-status bereits.
 tower = { workspace = true, features = ["util"] }
+# **Nur fuer die Fixture, und das ist keine Service-Kopplung.** Neun Tests hier brauchen die
+# Zeilen der Musterwohnung in einer Temp-Datei, und die Zeilen gehoeren `capabilities/inventory`
+# (ISA F13). `tests/engine.rs` begruendet, warum sie den echten Importeur nehmen und keinen
+# zweiten Seed daneben: eine zweite Art, Zeilen anzulegen, ist eine zweite Art, sie falsch
+# anzulegen. Diese Zeile ist der Preis dafuer. Gelesen wird ueber die geteilte Datei, nicht
+# ueber HTTP — `interior` laeuft in Tests ohne Dienst, und ein geteilter Store ist laut
+# `capabilities/inventory/src/lib.rs` ausdruecklich kein geteilter Lesevertrag.
+inventory = { path = "../inventory" }
 
 [lints]
 workspace = true

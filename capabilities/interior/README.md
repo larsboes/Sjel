@@ -15,6 +15,7 @@ interior search <layout> --move a,b [--step 20] [--limit 6] [--band id=x0,x1,y0,
 interior compose --pieces a,b,c    eine Wohnung von Grund auf stellen (Strahlsuche)
 interior plan [layout...] --out f  Pläne als HTML mit Verdikt
 interior inventory                 was da ist, was fehlt, und was das Fehlende kostet
+interior wunsch <url>              einen Link als Wunsch eintragen
 interior import                    inventory/*.toml in die Tabellen (wiederholbar)
 interior serve                     HTTP-API, Port aus service.toml
 ```
@@ -459,6 +460,107 @@ Kein Budget, keine Empfehlung. Die Zeitachse kommt aus derselben Messung wie B29
 des Monatssaldos —, und ist er nicht positiv, gibt es keine Monatszahl. „Nicht gemessen" und
 „daraus lässt sich nichts ansparen" sind dabei zwei verschiedene Sätze und bekommen zwei
 verschiedene Wörter.
+
+## Wie ein Link zu einer Zeile wird
+
+`interior wunsch <url>` ist der Intake. Ein Link wird eine Zeile in derselben Tabelle wie
+jedes Moebel, mit Zustand `wanted` — also dort, wo `GET /api/wishlist` sie schon gegen den
+Monatssaldo rechnet (B29). Der Aufruf braucht keine Wohnung: was noch nicht da ist, steht auch
+noch nirgends.
+
+```bash
+interior wunsch https://beispiel.example/hemd-weiss \
+  --category kleidung --groesse M --farbe weiss --saison winter,uebergang
+```
+
+Gelesen wird, **was die Seite ueber sich selbst deklariert**: `og:title` vor `<title>`, und ein
+Preis ausschliesslich aus `og:price:amount`, `product:price:amount` oder `itemprop="price"`.
+Ein Preis, der irgendwo im Fliesstext zwischen zwei Zahlen steht, ist keiner.
+
+Die Richtung, in die ein Fehler hier faellt, ist der Grund: `preis_cent` summiert sich in die
+Wunschsumme und in `interior kaufen`. Eine Zeile **ohne** Preis wird als `posten_ohne_preis`
+gezaehlt und gesagt; eine Zeile mit einem geratenen Preis nicht. Deshalb gilt:
+
+| | |
+|---|---|
+| `ab 79` | **kein** Preis. Der erste Versuch schnitt das `ab` ab und machte daraus 79,00 € — in einer Spalte, die sich summiert |
+| `79.90 - 129.00` | keine Spanne, kein Preis |
+| `79.90 USD` | abgelehnt. Der Kurs steht in keiner Spalte dieser Datenbank, und eine Zahl daraus waere eine ohne Herkunft |
+| `79.90`, `79,90`, `79,9`, `EUR 79.90` | gelesen, und das Tag, das sie deklariert hat, steht im Bericht |
+
+Ein Link, der nicht antwortet, verhindert die Zeile nicht — der Link ist der Punkt und der
+Titel die Zugabe. Dann braucht es `--label`. Eine **abgelehnte** URL (`file://`, oder eine
+Adresse in diesem Netz) beendet den Aufruf dagegen mit Exit 2: die beiden Wachen aus
+`sjel_http::guard` sind eine Entscheidung und keine Warnung. Ohne Titel und ohne `--label`
+entsteht **keine** Zeile — eine, die `00` heisst, weil die URL so endet, findet niemand wieder.
+
+Zwei Dinge, die an einem echten Laden gemessen wurden (2026-10-05, eine Produktseite):
+
+**Der Abruf identifiziert sich als Browser.** Derselbe Laden lieferte dem Sjel-User-Agent
+ueber HTTP/2 `stream 1 was not closed cleanly: INTERNAL_ERROR` und ueber HTTP/1.1 einen
+Timeout; mit einem Browser-Agenten 200 und 1,1 MB. Der Agent ist damit die Bedingung dafuer,
+dass dieser Befehl ueberhaupt liest — benannt und begruendet an der Konstante in `wunsch.rs`,
+wie in `scouting/adapters/meetup.rs` und `transit/hafas.rs`.
+
+**Der Preis fehlt bei manchen Laeden, und das bleibt so.** Diese Seite deklariert keinen —
+ihr Preis steht in ihrem eigenen App-Zustand (`"prices":{"base":{"currency":{"code":"EUR"`),
+und dieselbe Datei fuehrt mindestens vier verschiedene Betraege. Einen davon zu greifen waere
+ein Rateversuch in der Spalte, die sich in die Wunschsumme summiert. Dort gehoert `--preis`
+hin.
+
+Eine belegte Kennung wird nicht ueberschrieben. Ein zweites Hemd ist ein zweiter Eintrag
+(`hemd-weiss-2`), dieselbe Regel wie bei `interior_item_state`: ein Kauf ueberschreibt keine
+Zeile.
+
+## Kleidung ist eine Zeile wie jede andere
+
+Ein Hemd braucht keine eigene Tabelle. PRD Q58 hat die Frage am 2026-08-30 entschieden —
+*"a tent and a wardrobe are the same row shape"* — und die Ausruestungsspalten aus B51 haben
+sie seither belegt. Drei Felder kamen am 2026-10-05 dazu, alle freiwillig:
+
+```toml
+category = "kleidung"     # wozu es gehoert; frei, weil keine Regel darauf laeuft
+groesse  = "M"            # wie es im Etikett steht — keine erfundene Skala S..XXL
+farbe    = "weiss"        # frei
+saison   = ["winter"]     # Liste wie `trip_types`: ein Mantel ist Winter UND Uebergang
+```
+
+Die `kind` bleibt `piece`. `gear` heisst *was mitreist statt zu stehen* und zieht die
+Packlistenfelder aus `trips` mit; ein Kleidungsstueck zu Hause ist ein Ding, das mir gehoert.
+
+Das Formular in `/interior` kann alle fuenf setzen — beim Anlegen **und** beim Bearbeiten, denn
+der zweite Weg ist der, auf dem ein falsch gelesener Titel oder Preis korrigiert wird.
+`PATCH /api/items/{id}` nimmt sie ohne Aenderung entgegen: `merge_patch` prueft gegen `Item`,
+nicht gegen eine zweite Liste von Feldnamen.
+
+`inventory/*.toml` fuehrt keines der Felder. Diese Dateien beschreiben Moebel, und ein
+`groesse` darin ist deshalb ein **Fehler** und keine stille Verwerfung (`deny_unknown_fields`).
+
+### Die Zweige stehen in den Zeilen
+
+`category` ist der Zweig — `kleidung`, `schlafen`, `kochen`, `elektronik` — und frei, weil keine
+Regel darauf rechnet. Frei heisst aber nicht beliebig: `kleidung` und `Kleidung` sind zwei
+Zweige, und niemand hat das entschieden.
+
+Die Liste wird deshalb **gelesen und nicht deklariert**, dieselbe Regel wie
+`budget::BEKANNTE_PRIORITAETEN` und aus demselben Grund: eine im Quelltext abgeschriebene Liste
+ist eine zweite Wahrheit ueber dieselbe Sache, und die erste, die jemand beim naechsten Zweig
+vergisst.
+
+| | |
+|---|---|
+| `interior inventory` | druckt die Zweige mit ihren Zahlen |
+| zwei Schreibweisen | werden **genannt** (`Kleidung  |  kleidung`) und nicht stillschweigend zusammengelegt. Das Feld ist frei, also entscheidet es ein Mensch |
+| das Formular | baut seine Vorschlaege aus denselben Zeilen, nicht aus einer Liste in Svelte |
+
+Weissraum wird dabei nicht gemeldet, sondern in der Abfrage getrimmt: ` kleidung ` und
+`kleidung` sind schon derselbe Zweig, und eine Meldung fuer etwas, das die Anzeige selbst
+zusammenzieht, waere Laerm. Gross- und Kleinschreibung wird **nicht** korrigiert — ein stilles
+Kleinschreiben waere eine Aenderung an dem, was jemand getippt hat.
+
+`kind` bleibt dabei die **Rolle** und nicht die Taxonomie: `piece` ist ein Ding, das mir gehoert
+(oder ein konkretes Produkt), `slot` ein Bedarf mit Zielmassen, `gear` was mitreist statt zu
+stehen. Ein Hemd ist `piece`; `gear` wuerde es zum Packlisten-Kandidaten fuer Reisen machen.
 
 ## Wie weit das Inventar der Maschine hinterherhängt
 

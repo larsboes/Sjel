@@ -56,11 +56,13 @@ fn usage() -> ! {
                                  [--step 20] [--limit 6] [--band id=x0,x1,y0,y1]
                                  [--out <name>]  besten Treffer als Layout schreiben
   {plan} [layout...] [--out f]   Plaene als HTML mit Verdikt; ohne Layouts: alle
-  {inventory}                    was da ist und was fehlt, mit Zustand und Preis
   {deklaration} [--json]         wer noch am Namen gemessen wird, und was es kostet
   {kaufen} [--json]              welcher Bedarf zuerst, und wann er erreicht ist
-  {import}                       inventory/*.toml in die Tabellen (wiederholbar)
   {serve}                        HTTP-API fuer die Oberflaeche
+
+Was da ist und was fehlt, steht nicht mehr hier: die Zeilen sind `capabilities/inventory`
+(ISA F13). `inventory inventory`, `inventory wunsch`, `inventory import` und
+`inventory vault-writeback` sind dieselben Verben unter ihrem neuen Namen.
 "#,
         t = bold("interior"),
         model = bold("model"),
@@ -68,10 +70,8 @@ fn usage() -> ! {
         placements = bold("placements"),
         layouts = bold("layouts"),
         plan = bold("plan"),
-        inventory = bold("inventory"),
         deklaration = bold("deklaration"),
         kaufen = bold("kaufen"),
-        import = bold("import"),
         check = bold("check"),
         toleranz = bold("toleranz"),
         einbringung = bold("einbringung"),
@@ -167,16 +167,6 @@ async fn main() {
     if cmd == "serve" {
         interior_serve().await;
         return;
-    }
-
-    // Diese drei brauchen keine Wohnung: das Inventar ueberlebt jede.
-    if cmd == "import" || cmd == "inventory" || cmd == "vault-writeback" {
-        let code = match cmd {
-            "import" => inventory_import(&argv),
-            "vault-writeback" => vault_writeback(),
-            _ => inventory_show(),
-        };
-        std::process::exit(code);
     }
 
     let flat = match flag(&argv, "flat").map(Ok).unwrap_or_else(default_flat) {
@@ -657,209 +647,6 @@ fn cmd_compose(model: &Model, argv: &[String]) -> i32 {
             }
         }
     }
-    0
-}
-
-/// `inventory/*.toml` in die Tabellen. Der Bericht sagt, was passiert ist — ein Import, der
-/// "ok" meldet und nichts geschrieben hat, ist die stille Variante des Fehlers, gegen den er
-/// existiert.
-///
-/// **Seit PRD Q64 (2026-08-31) verweigert er sich, sobald Zeilen da sind.** Bis dahin war er
-/// wiederholbar, und das war richtig, solange die Dateien die einzige Quelle waren. Sobald die
-/// Oberflaeche schreibt, ist Wiederholbarkeit das Gegenteil: derselbe Befehl, der gestern nichts
-/// kaputt machte, setzt heute jede Eingabe auf den Stand der Dateien zurueck — still, mit
-/// Exit-Code 0 und einer Erfolgsmeldung. `--force` macht daraus eine Entscheidung.
-fn inventory_import(argv: &[String]) -> i32 {
-    let dir = match interior::model::data_dir() {
-        Ok(d) => d.join("inventory"),
-        Err(e) => {
-            eprintln!("{}", red(&e.to_string()));
-            return 2;
-        }
-    };
-    let store = match interior::store::Store::open(&sjel_config::database_path()) {
-        Ok(s) => s,
-        Err(e) => {
-            eprintln!("{}", red(&format!("Datenbank nicht erreichbar: {e}")));
-            return 2;
-        }
-    };
-    let force = argv.iter().any(|a| a == "--force");
-    match store.item_count() {
-        Ok(n) if n > 0 && !force => {
-            eprintln!(
-                "\n  {}\n\n  Die Tabellen sind seit PRD Q64 die Wahrheit, nicht `inventory/*.toml`.\n  \
-                 Ein Import wuerde jede Aenderung aus der Oberflaeche auf den Stand der Dateien\n  \
-                 zuruecksetzen.\n\n  {}\n",
-                red(&format!("{n} Eintraege stehen schon in der Datenbank.")),
-                dim("Wenn genau das gemeint ist: interior import --force")
-            );
-            return 2;
-        }
-        Err(e) => {
-            eprintln!("{}", red(&format!("Datenbank nicht lesbar: {e}")));
-            return 2;
-        }
-        _ => {}
-    }
-    if force {
-        eprintln!(
-            "  {}",
-            dim("--force: die Dateien ueberschreiben die Tabellen")
-        );
-    }
-    match interior::import::inventory(&store, &dir) {
-        Ok(b) => {
-            println!(
-                "\n  {} {} Stuecke, {} Bedarfe, {} Zustandswechsel\n  {}\n",
-                green("importiert:"),
-                b.pieces,
-                b.slots,
-                b.zustandswechsel,
-                dim(&format!("aus {}", dir.display()))
-            );
-            0
-        }
-        Err(e) => {
-            eprintln!("{}", red(&format!("Import fehlgeschlagen: {e}")));
-            2
-        }
-    }
-}
-
-/// Was da ist, was fehlt, und was das Fehlende kostet.
-/// `interior vault-writeback` — die Reparaturhaelfte der Bruecke.
-///
-/// Existiert aus dem Grund, den `comms export-sources` fuer sich nennt: ein Vault, der nicht
-/// eingehaengt war, oder ein iCloud-Ordner, der noch nicht heruntergeladen war, hinterlaesst
-/// stillen Verzug, und beides ist mit einem Lauf hiervon behoben — **mit gestopptem Server**,
-/// was der Zustand ist, in dem ein Vault-Problem ueblicherweise bearbeitet wird.
-///
-/// Der Befehl existiert ausserdem, weil `trips` denselben in seiner Fehlermeldung nennt und
-/// nicht baut: `service.toml` erzeugt dort nur `--bin trips-server`, und `which trips` findet
-/// nichts. Ein Reparaturweg, den die Fehlermeldung nennt und die Maschine nicht hat, ist keiner.
-fn vault_writeback() -> i32 {
-    let st = match interior::store::Store::open(&sjel_config::database_path()) {
-        Ok(s) => s,
-        Err(e) => {
-            eprintln!("{}", red(&format!("Datenbank nicht erreichbar: {e}")));
-            return 2;
-        }
-    };
-    let rows = match st.catalogue() {
-        Ok(r) => r,
-        Err(e) => {
-            eprintln!("{}", red(&format!("Katalog laedt nicht: {e}")));
-            return 2;
-        }
-    };
-    let Some(ergebnis) = interior::obsidian::writeback(&rows) else {
-        eprintln!(
-            "{}",
-            red("keine Vault-Wurzel erklaert: obsidian.root in <overlay>/config/interior.json setzen")
-        );
-        return 2;
-    };
-    let report = match ergebnis {
-        Ok(r) => r,
-        Err(e) => {
-            eprintln!("{}", red(&e.to_string()));
-            return 1;
-        }
-    };
-    for pfad in &report.seeded {
-        println!("  {} {pfad}", green("angelegt:"));
-    }
-    for pfad in &report.written {
-        println!("  {} {pfad}", green("Region neu:"));
-    }
-    if !report.unchanged.is_empty() {
-        println!(
-            "  {}",
-            dim(&format!("{} unveraendert", report.unchanged.len()))
-        );
-    }
-    for pfad in &report.conflicts {
-        eprintln!(
-            "  {} {pfad}",
-            yellow("von Hand geaendert, nichts geschrieben:")
-        );
-    }
-    // Ein Konflikt ist kein Fehlschlag des Laufs, aber er ist auch nicht "fertig": er verlangt
-    // eine menschliche Entscheidung, und ein Exit 0 wuerde das einem Scheduler verschweigen.
-    if report.conflicts.is_empty() {
-        0
-    } else {
-        1
-    }
-}
-
-fn inventory_show() -> i32 {
-    use interior::store::State;
-    let store = match interior::store::Store::open(&sjel_config::database_path()) {
-        Ok(s) => s,
-        Err(e) => {
-            eprintln!("{}", red(&format!("Datenbank nicht erreichbar: {e}")));
-            return 2;
-        }
-    };
-    let rows = match store.catalogue() {
-        Ok(r) => r,
-        Err(e) => {
-            eprintln!("{}", red(&e.to_string()));
-            return 2;
-        }
-    };
-    if rows.is_empty() {
-        println!(
-            "\n  {}\n",
-            yellow("leer — `interior import` fuellt die Tabellen")
-        );
-        return 0;
-    }
-    let mut summe: i64 = 0;
-    for state in [State::Owned, State::Wanted, State::Gone] {
-        let gruppe: Vec<_> = rows
-            .values()
-            .filter(|(_, s)| *s == Some(state))
-            .map(|(i, _)| i)
-            .collect();
-        if gruppe.is_empty() {
-            continue;
-        }
-        println!(
-            "\n{}",
-            bold(&format!("  {} ({})", state.as_str(), gruppe.len()))
-        );
-        for i in gruppe {
-            let masse = match (i.b, i.t) {
-                (Some(b), Some(t)) => format!("{b}×{t}"),
-                _ => "—".into(),
-            };
-            if state == State::Wanted {
-                summe += i.preis_cent.or(i.kosten_min_cent).unwrap_or(0);
-            }
-            let geld = match (i.preis_cent, i.kosten_min_cent, i.kosten_max_cent) {
-                (Some(p), _, _) => format!("{:.2} €", p as f64 / 100.0),
-                (None, Some(lo), Some(hi)) => {
-                    format!("{:.0}–{:.0} €", lo as f64 / 100.0, hi as f64 / 100.0)
-                }
-                _ => String::new(),
-            };
-            let flag = if i.is_uncertain() {
-                yellow("~")
-            } else {
-                " ".into()
-            };
-            println!("    {flag} {:<34} {:>9}  {}", i.id, masse, dim(&geld));
-        }
-    }
-    println!(
-        "\n  {} {:.2} €\n  {}\n",
-        bold("offener Bedarf:"),
-        summe as f64 / 100.0,
-        dim("untere Kante: Produktpreis, sonst das Minimum der Schaetzung. `~` = Masse geraten.")
-    );
     0
 }
 

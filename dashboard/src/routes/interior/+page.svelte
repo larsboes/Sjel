@@ -617,11 +617,17 @@
     access_clear: string | number;
     raumtrenner: boolean;
     bild: string;
+    category: string;
+    link: string;
+    groesse: string;
+    farbe: string;
+    saison: string;
   };
   let draft = $state<Draft>({
     label: "", b: "", t: "", h: "", preis_cent: "", prioritaet: "", hinweis: "",
     begruendung: "", opens: "", open_clear: "", wall_ok: "", access_sides: "",
-    access_clear: "", raumtrenner: false, bild: "",
+    access_clear: "", raumtrenner: false, bild: "", category: "", link: "",
+    groesse: "", farbe: "", saison: "",
   });
   let impact = $state<InteriorImpact | null>(null);
   let impactBusy = $state(false);
@@ -633,9 +639,34 @@
   let conflict = $state<{ patch: Record<string, unknown>; current: InteriorItem | null } | null>(null);
   let history = $state<{ state: InteriorState; since: string; note: string | null }[]>([]);
   let creating = $state(false);
-  let draftNew = $state({ id: "", label: "", kind: "piece" as "piece" | "slot", state: "wanted" as InteriorState, b: "", t: "", h: "", preis: "" });
+  let draftNew = $state({
+    id: "",
+    label: "",
+    kind: "piece" as "piece" | "slot",
+    state: "wanted" as InteriorState,
+    b: "",
+    t: "",
+    h: "",
+    preis: "",
+    category: "",
+    link: "",
+    groesse: "",
+    farbe: "",
+    saison: "",
+  });
 
   const byId = $derived(new Map(inventory.map((r) => [r.item.id, r])));
+  /**
+   * The branches that exist, from the rows themselves.
+   *
+   * A list written here would be a second truth about the same thing and the first one somebody
+   * forgets when a branch appears — the same rule `budget::BEKANNTE_PRIORITAETEN` follows by
+   * reading the inventory instead of declaring the words. `interior inventory` prints the same
+   * set, and names two spellings of one branch when they have drifted apart.
+   */
+  const kategorien = $derived(
+    [...new Set(inventory.map((r) => r.item.category).filter((c): c is string => !!c))].sort(),
+  );
   /**
    * Items whose shown values include an edit that has not reached the Mac, and items whose
    * queued edit the Mac refused as stale. Both are set only in the app, by the device's
@@ -689,6 +720,13 @@
       access_clear: i.access_clear ?? "",
       raumtrenner: i.raumtrenner ?? false,
       bild: i.bild ?? "",
+      category: i.category ?? "",
+      link: i.link ?? "",
+      groesse: i.groesse ?? "",
+      farbe: i.farbe ?? "",
+      // A list in the row, one comma-separated field in the form. The row keeps the list.
+      // `?? []` because the app can talk to an interior build older than this field.
+      saison: (i.saison ?? []).join(", "),
     };
     history = [];
     await tick();
@@ -757,6 +795,18 @@
     put("access_clear", num(draft.access_clear), i.access_clear);
     put("raumtrenner", draft.raumtrenner ? true : null, i.raumtrenner);
     put("bild", String(draft.bild ?? "").trim() || null, i.bild);
+    put("category", String(draft.category ?? "").trim() || null, i.category);
+    put("link", String(draft.link ?? "").trim() || null, i.link);
+    put("groesse", String(draft.groesse ?? "").trim() || null, i.groesse);
+    put("farbe", String(draft.farbe ?? "").trim() || null, i.farbe);
+    put(
+      "saison",
+      String(draft.saison ?? "")
+        .split(",")
+        .map((s) => s.trim())
+        .filter(Boolean),
+      i.saison,
+    );
     return out;
   }
 
@@ -843,9 +893,32 @@
         t: num(draftNew.t),
         h: num(draftNew.h),
         preis_cent: num(draftNew.preis),
+        // Blank means blank: `""` would store an empty string that looks like a value.
+        category: draftNew.category.trim() || null,
+        link: draftNew.link.trim() || null,
+        groesse: draftNew.groesse.trim() || null,
+        farbe: draftNew.farbe.trim() || null,
+        saison: draftNew.saison
+          .split(",")
+          .map((s) => s.trim())
+          .filter(Boolean),
       });
       creating = false;
-      draftNew = { id: "", label: "", kind: "piece", state: "wanted", b: "", t: "", h: "", preis: "" };
+      draftNew = {
+        id: "",
+        label: "",
+        kind: "piece",
+        state: "wanted",
+        b: "",
+        t: "",
+        h: "",
+        preis: "",
+        category: "",
+        link: "",
+        groesse: "",
+        farbe: "",
+        saison: "",
+      };
       await load();
     } catch (caught) {
       saveError = caught instanceof Error ? caught.message : String(caught);
@@ -1922,6 +1995,11 @@
       <label class="f-third">height cm <input bind:value={draft.h} inputmode="numeric" /></label>
       <label class="f-half">price ct <input bind:value={draft.preis_cent} inputmode="numeric" /></label>
       <label class="f-half">priority <input bind:value={draft.prioritaet} /></label>
+      <label class="f-half">category <input bind:value={draft.category} placeholder="kleidung" list="interior-categories" /></label>
+      <label class="f-half">size <input bind:value={draft.groesse} placeholder="M" /></label>
+      <label class="f-half">colour <input bind:value={draft.farbe} placeholder="weiss" /></label>
+      <label class="f-half">season <input bind:value={draft.saison} placeholder="winter, uebergang" /></label>
+      <label class="f-full">link <input bind:value={draft.link} placeholder="https://…" inputmode="url" /></label>
     </div>
 
     <label class="wide">
@@ -2103,10 +2181,25 @@
         <label class="f-third">depth cm <input bind:value={draftNew.t} inputmode="numeric" /></label>
         <label class="f-third">height cm <input bind:value={draftNew.h} inputmode="numeric" /></label>
         <label>price ct <input bind:value={draftNew.preis} inputmode="numeric" /></label>
+        <label>
+          category
+          <input bind:value={draftNew.category} placeholder="kleidung" list="interior-categories" />
+        </label>
+        <datalist id="interior-categories">
+          {#each kategorien as c}<option value={c}></option>{/each}
+        </datalist>
+        <label class="f-third">size <input bind:value={draftNew.groesse} placeholder="M" /></label>
+        <label class="f-third">colour <input bind:value={draftNew.farbe} placeholder="weiss" /></label>
+        <label class="f-third">season <input bind:value={draftNew.saison} placeholder="winter, uebergang" /></label>
+        <label class="f-full">
+          link
+          <input bind:value={draftNew.link} placeholder="https://…" inputmode="url" />
+        </label>
       </div>
       <p class="note">
         State is required, not a default — an entry with no state joins to nothing and would
-        never appear in any list.
+        never appear in any list. <code>interior wunsch &lt;url&gt;</code> fills the same row
+        from a shared link: title from the page, price only if the page declares one.
       </p>
       <div class="actions">
         <button type="submit" disabled={saving || !draftNew.id.trim() || !draftNew.label.trim()}>

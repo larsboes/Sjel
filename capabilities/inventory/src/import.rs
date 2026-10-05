@@ -94,7 +94,7 @@ struct Roh {
     // Was das Stueck an Platz verlangt (PRD Q61). Optional: ohne diese Felder entscheidet
     // weiterhin der Name, und der Name ist die Fassung, die abgeloest wird.
     #[serde(default)]
-    opens: Option<crate::model::Seite>,
+    opens: Option<crate::store::Seite>,
     #[serde(default)]
     open_clear: Option<i32>,
     #[serde(default)]
@@ -119,7 +119,7 @@ struct Roh {
 #[derive(Debug, Deserialize)]
 #[serde(deny_unknown_fields)]
 struct Expands {
-    dir: crate::model::Seite,
+    dir: crate::store::Seite,
     to: i32,
 }
 
@@ -202,6 +202,13 @@ impl Roh {
             quick_dry: None,
             pack_location: None,
             trip_types: Vec::new(),
+            // Kleidung kommt ueber `interior wunsch` und das Formular herein, nicht aus diesen
+            // Dateien: `inventory/*.toml` beschreibt Moebel. Ein `groesse` in einer dieser
+            // Dateien ist deshalb ein FEHLER und keine stille Verwerfung — die Richtung, die
+            // der Kopf dieser Datei begruendet.
+            groesse: None,
+            farbe: None,
+            saison: Vec::new(),
             // Der Server vergibt sie beim Schreiben; ein Wert hier wuerde nie geschrieben.
             revision: 0,
         }

@@ -324,17 +324,41 @@ pub fn write_all(
 ///
 /// `None` heisst: keine Bruecke, und das ist die richtige Antwort fuer einen Host ohne Vault —
 /// kein Vault, keine Schreibvorgaenge, und die Zeilen bleiben trotzdem der Bestand.
+///
+/// **Zwei Konfigurationsnamen, in dieser Reihenfolge.** `inventory.json` ist der eigene Name
+/// seit 2026-10-05; `interior.json` bleibt der Rueckfall, weil die Wurzel dort auf jeder
+/// bestehenden Maschine schon steht und ein Umzug, der eine Konfigurationsdatei umbenennt,
+/// nichts gewinnt. Dasselbe fuer die Umgebungsvariable.
 pub fn vault_root() -> Option<PathBuf> {
-    if let Ok(p) = sjel_config::env_var("SJEL_INTERIOR_OBSIDIAN_ROOT") {
-        if !p.trim().is_empty() {
-            return Some(sjel_config::expand_tilde(&p));
+    for name in [
+        "SJEL_INVENTORY_OBSIDIAN_ROOT",
+        "SJEL_INTERIOR_OBSIDIAN_ROOT",
+    ] {
+        if let Ok(p) = sjel_config::env_var(name) {
+            if !p.trim().is_empty() {
+                return Some(sjel_config::expand_tilde(&p));
+            }
         }
     }
-    let pfad = sjel_config::overlay_config("interior.json")?;
-    let text = std::fs::read_to_string(pfad).ok()?;
-    let wert: serde_json::Value = serde_json::from_str(&text).ok()?;
-    let root = wert.get("obsidian")?.get("root")?.as_str()?;
-    Some(sjel_config::expand_tilde(root))
+    for datei in ["inventory.json", "interior.json"] {
+        let Some(pfad) = sjel_config::overlay_config(datei) else {
+            continue;
+        };
+        let Some(text) = std::fs::read_to_string(pfad).ok() else {
+            continue;
+        };
+        let Some(wert) = serde_json::from_str::<serde_json::Value>(&text).ok() else {
+            continue;
+        };
+        if let Some(root) = wert
+            .get("obsidian")
+            .and_then(|o| o.get("root"))
+            .and_then(|r| r.as_str())
+        {
+            return Some(sjel_config::expand_tilde(root));
+        }
+    }
+    None
 }
 
 /// `write_all` gegen die erklaerte Wurzel, oder `None`, wenn keine erklaert ist.

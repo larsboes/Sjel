@@ -13,12 +13,25 @@ use std::time::Duration;
 
 use serde::Serialize;
 
-/// Where interior listens. `capabilities/interior/service.toml` declares 8092. The fourth
-/// capability to hardcode a sibling's port, which is the same argument `finance_client`
-/// already records for the spine mechanism that would end it.
+/// Where the inventory listens. `capabilities/inventory/service.toml` declares 8101.
+///
+/// Bis 2026-10-05 zeigte das auf `interior` (8092), und das war der Defekt: `interior`
+/// ist on-demand, weil es einen Grundriss und private Fotos ausliefert, also verlor
+/// nach jedem Neustart jede Packliste ihre Gewichte, bis jemand den Grundriss oeffnete
+/// (ISA F13). `inventory` ist `autostart = true`.
+///
+/// Der alte Name der Umgebungsvariable bleibt gueltig: eine Maschine, die ihn gesetzt
+/// hat, zeigt damit weiter auf denselben Dienst, statt still auf den Standard
+/// zurueckzufallen.
 pub fn interior_base_url() -> String {
-    sjel_config::env_var("SJEL_INTERIOR_URL")
-        .unwrap_or_else(|_| "http://127.0.0.1:8092".to_string())
+    for name in ["SJEL_INVENTORY_URL", "SJEL_INTERIOR_URL"] {
+        if let Ok(url) = sjel_config::env_var(name) {
+            if !url.trim().is_empty() {
+                return url;
+            }
+        }
+    }
+    "http://127.0.0.1:8101".to_string()
 }
 
 /// Long enough for a loopback write, short enough that a stopped interior fails the import

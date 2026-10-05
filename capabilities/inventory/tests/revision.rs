@@ -5,13 +5,13 @@
 //! Geprueft gegen eine echte SQLite-Datei, weil die Eigenschaft, um die es geht — Vergleich
 //! und Schreiben in einem Statement — in einem Mock nicht vorkommt.
 
-use interior::store::{Item, Kind, Schreibergebnis, Store};
+use inventory::store::{Item, Kind, Schreibergebnis, Store};
 use std::path::PathBuf;
 use std::sync::{Arc, Barrier};
 
 fn tempdatei(name: &str) -> PathBuf {
     let pfad = std::env::temp_dir().join(format!(
-        "interior-revision-{name}-{}.db",
+        "inventory-revision-{name}-{}.db",
         std::process::id()
     ));
     let _ = std::fs::remove_file(&pfad);

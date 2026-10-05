@@ -23,66 +23,10 @@
 //! spaeter mit `finance` verbindet.
 
 use crate::model::Seite;
-use rusqlite::{params, Connection, OptionalExtension};
+use rusqlite::{params, Connection};
 use serde::{Deserialize, Serialize};
 use std::collections::BTreeMap;
 use std::path::Path;
-
-/// Jede Spalte von `{prefix}_item`, in der Reihenfolge, in der `widen_kind_check` sie neu
-/// anlegt. Ausgeschrieben, damit ein spaeteres Feld beim Umbau auffaellt: `SELECT *` haette
-/// die Zeilen still in die falschen Spalten kopiert, sobald sich eine Reihenfolge aendert.
-const ITEM_COLUMNS: [&str; 50] = [
-    "id",
-    "kind",
-    "label",
-    "b",
-    "t",
-    "h",
-    "h_min",
-    "b_aufgeklappt",
-    "t_ausgeklappt",
-    "laenge",
-    "anzahl",
-    "zustaende",
-    "unsicher",
-    "platzbedarf_zone",
-    "platzbedarf_block",
-    "preis_cent",
-    "kosten_min_cent",
-    "kosten_max_cent",
-    "link",
-    "artikelnummer",
-    "quelle",
-    "gemessen_am",
-    "mitnahme",
-    "prioritaet",
-    "basiert_auf",
-    "ersetzt",
-    "varianten",
-    "ziel",
-    "hinweis",
-    "begruendung",
-    "entscheidung_offen",
-    "opens",
-    "open_clear",
-    "wall_ok",
-    "expands_dir",
-    "expands_to",
-    "access_sides",
-    "access_clear",
-    "raumtrenner",
-    "zerlegbar",
-    "bild",
-    "weight_g",
-    "category",
-    "packable",
-    "waterproof",
-    "quick_dry",
-    "pack_location",
-    "trip_types",
-    "created_at",
-    "updated_at",
-];
 
 /// Alles, was ein Ding ausmacht — ob es schon da ist oder erst gewuenscht.
 ///
@@ -240,6 +184,25 @@ pub struct Item {
     #[serde(default)]
     pub trip_types: Vec<String>,
 
+    // --- Kleidung (2026-10-05) ---
+    //
+    // Drei Felder, und die Entscheidung dahinter ist dieselbe wie bei der Ausruestung: sie
+    // stehen hier und nicht in einer zweiten Tabelle, weil Q58 genau diese Frage entschieden
+    // hat — eine Gegenstandstabelle fuer alles, was mir gehoert. Ein Hemd ist eine Zeile mit
+    // einer Groesse, kein eigenes Schema.
+    //
+    // Alle drei sind freiwillig. Ein Kleidungsstueck ohne Groesse ist keine kaputte Zeile:
+    // eine Groesse, die niemand nachgeschlagen hat, waere schlimmer als keine.
+    /// Wie es im Etikett steht — `M`, `42`, `60x60`. Freier Text und keine Aufzaehlung: eine
+    /// erfundene Skala (`S..XXL`) waere die naechste Marke, die nicht hineinpasst.
+    pub groesse: Option<String>,
+    /// Was es beschreibt — `weiss`, `dunkelblau`, `gestreift`. Frei, aus demselben Grund.
+    pub farbe: Option<String>,
+    /// Wann es getragen wird, z. B. `["ganzjahr"]`, `["winter"]`. Liste wie `trip_types`:
+    /// ein Mantel ist nicht Winter ODER Uebergang, er ist beides.
+    #[serde(default)]
+    pub saison: Vec<String>,
+
     /// Wie oft diese Zeile geschrieben wurde; bestehende Zeilen beginnen bei 1 (PRD §10 A5).
     ///
     /// Gehoert dem Server. Jedes Schreiben erhoeht sie im selben Statement, und ein Wert im
@@ -270,13 +233,6 @@ pub enum Kind {
 }
 
 impl Kind {
-    fn as_str(self) -> &'static str {
-        match self {
-            Kind::Piece => "piece",
-            Kind::Slot => "slot",
-            Kind::Gear => "gear",
-        }
-    }
     fn parse(s: &str) -> Kind {
         match s {
             "slot" => Kind::Slot,
@@ -330,127 +286,13 @@ pub struct Placement {
     pub rot: i32,
 }
 
-/// Die Spalten, die ein Schreiben aus einem `Item` setzt, in der Reihenfolge der Parameter
-/// `?1` bis `?48` von [`write_params`]. `id` steht vorn und wird nie ueberschrieben.
+/// Der Praefix der Item-Tabellen.
 ///
-/// Nicht dabei: `revision`, `created_at`, `updated_at`. Die drei setzt der Server, nie der
-/// Rumpf — ein Client, der seine gelesene Revision zurueckschickt, darf damit nichts setzen.
-const WRITE_COLUMNS: [&str; 48] = [
-    "id",
-    "kind",
-    "label",
-    "b",
-    "t",
-    "h",
-    "h_min",
-    "b_aufgeklappt",
-    "t_ausgeklappt",
-    "laenge",
-    "anzahl",
-    "zustaende",
-    "unsicher",
-    "platzbedarf_zone",
-    "platzbedarf_block",
-    "preis_cent",
-    "kosten_min_cent",
-    "kosten_max_cent",
-    "link",
-    "artikelnummer",
-    "quelle",
-    "gemessen_am",
-    "mitnahme",
-    "prioritaet",
-    "basiert_auf",
-    "ersetzt",
-    "varianten",
-    "ziel",
-    "hinweis",
-    "begruendung",
-    "entscheidung_offen",
-    "opens",
-    "open_clear",
-    "wall_ok",
-    "expands_dir",
-    "expands_to",
-    "access_sides",
-    "access_clear",
-    "raumtrenner",
-    "bild",
-    "zerlegbar",
-    "weight_g",
-    "category",
-    "packable",
-    "waterproof",
-    "quick_dry",
-    "pack_location",
-    "trip_types",
-];
-
-/// Die Werte zu [`WRITE_COLUMNS`], Stelle fuer Stelle.
-fn write_params(it: &Item) -> Result<Vec<Box<dyn rusqlite::ToSql>>, Fehler> {
-    Ok(vec![
-        Box::new(it.id.clone()),
-        Box::new(it.kind.as_str()),
-        Box::new(it.label.clone()),
-        Box::new(it.b),
-        Box::new(it.t),
-        Box::new(it.h),
-        Box::new(it.h_min),
-        Box::new(it.b_aufgeklappt),
-        Box::new(it.t_ausgeklappt),
-        Box::new(it.laenge),
-        Box::new(it.anzahl),
-        Box::new(serde_json::to_string(&it.zustaende)?),
-        Box::new(serde_json::to_string(&it.unsicher)?),
-        Box::new(it.platzbedarf_zone),
-        Box::new(it.platzbedarf_block),
-        Box::new(it.preis_cent),
-        Box::new(it.kosten_min_cent),
-        Box::new(it.kosten_max_cent),
-        Box::new(it.link.clone()),
-        Box::new(it.artikelnummer.clone()),
-        Box::new(it.quelle.clone()),
-        Box::new(it.gemessen_am.clone()),
-        Box::new(it.mitnahme.clone()),
-        Box::new(it.prioritaet.clone()),
-        Box::new(it.basiert_auf.clone()),
-        Box::new(serde_json::to_string(&it.ersetzt)?),
-        Box::new(serde_json::to_string(&it.varianten)?),
-        Box::new(it.ziel.clone()),
-        Box::new(it.hinweis.clone()),
-        Box::new(it.begruendung.clone()),
-        Box::new(it.entscheidung_offen.clone()),
-        Box::new(it.opens.map(|s| s.as_str())),
-        Box::new(it.open_clear),
-        Box::new(it.wall_ok),
-        Box::new(it.expands_dir.map(|s| s.as_str())),
-        Box::new(it.expands_to),
-        Box::new(it.access_sides),
-        Box::new(it.access_clear),
-        Box::new(it.raumtrenner),
-        Box::new(it.bild.clone()),
-        Box::new(it.zerlegbar),
-        Box::new(it.weight_g),
-        Box::new(it.category.clone()),
-        Box::new(it.packable),
-        Box::new(it.waterproof),
-        Box::new(it.quick_dry),
-        Box::new(it.pack_location.clone()),
-        Box::new(serde_json::to_string(&it.trip_types)?),
-    ])
-}
-
-/// Was ein Schreiben mit erwarteter Revision ergab.
-#[derive(Debug)]
-pub enum Schreibergebnis {
-    /// Geschrieben; die Zeile traegt jetzt diese Revision.
-    Geschrieben(i64),
-    /// Den Eintrag gibt es nicht.
-    Fehlt,
-    /// Jemand hat inzwischen geschrieben. Der aktuelle Stand, damit der Aufrufer ihn zeigen
-    /// kann statt ihn zu ueberschreiben.
-    Veraltet(Box<Item>, Option<State>),
-}
+/// Sie gehoeren `capabilities/inventory` (ISA F13) und werden dort angelegt und migriert;
+/// diese Capability liest und schreibt sie ueber die geteilte Datei, weil sie ohne sie
+/// keinen Plan rechnen kann. Der eigene Praefix dieser Capability traegt nur noch
+/// `interior_placement`.
+const ITEM_PREFIX: &str = "inventory";
 
 pub struct Store {
     pool: sjel_store::Pool,
@@ -503,10 +345,35 @@ impl Store {
 
     /// Die Tabellen, wie sie sind — nicht die Geschichte, die zu ihnen gefuehrt hat. Die Datei
     /// beginnt leer, also gibt es keine ALTER-Kette zu bewahren (libs/sjel-store/README.md).
+    /// Nur noch die **eigene** Tabelle.
+    ///
+    /// `inventory_item` und `inventory_item_state` gehoeren `capabilities/inventory` und werden
+    /// dort angelegt und migriert (ISA F13). Eine zweite DDL hier waere eine zweite Wahrheit
+    /// ueber dieselben Spalten — und die vergisst man beim naechsten Feld, weil nichts sie
+    /// meldet.
+    ///
+    /// `item_id` traegt **keinen** Fremdschluessel mehr. Die Zeilen gehoeren einer anderen
+    /// Capability, und ein FK ueber zwei Praefixe liesse jeden Loeschvorgang der einen an einer
+    /// Zeile der anderen scheitern. `trips/src/pack.rs` begruendet dieselbe Entscheidung fuer
+    /// seinen `item_ref`.
     fn run_migration(conn: &Connection, prefix: &str) -> Result<(), Fehler> {
+        // Die Item-Tabellen, falls sie fehlen.
+        //
+        // **Ein Bootstrap und keine zweite Wahrheit.** Sie gehoeren `capabilities/inventory`
+        // und werden dort angelegt und migriert — samt der ALTER-Kette fuer Dateien, die vor
+        // B51 oder vor den Kleidungsspalten geschrieben wurden. Hier steht nur das Anlegen mit
+        // dem heutigen Stand, und zwar aus einem Grund: `interior` wird als CLI benutzt
+        // (`interior check` ist ein Gate) und in Tests, und beide laufen auf einer Datei, in
+        // der `inventory` noch nie geoeffnet wurde. Eine zweite ALTER-Kette hier waere die
+        // Drift; ein `CREATE TABLE IF NOT EXISTS` ist es nicht — auf jeder Datei, die
+        // `inventory` kennt, tut es nichts.
+        //
+        // Was die beiden verbindet, sind die **Spaltennamen**, und die stehen in
+        // `catalogue()` ausgeschrieben. Eine umbenannte oder entfernte Spalte faellt dort
+        // sofort um; eine neue in `inventory` stoert hier nichts.
         conn.execute_batch(&format!(
             "
-            CREATE TABLE IF NOT EXISTS {prefix}_item (
+            CREATE TABLE IF NOT EXISTS {item}_item (
                 id                 TEXT PRIMARY KEY,
                 kind               TEXT NOT NULL CHECK (kind IN ('piece','slot','gear')),
                 label              TEXT NOT NULL,
@@ -555,20 +422,30 @@ impl Store {
                 quick_dry          INTEGER,
                 pack_location      TEXT,
                 trip_types         TEXT NOT NULL DEFAULT '[]',
+                groesse            TEXT,
+                farbe              TEXT,
+                saison             TEXT NOT NULL DEFAULT '[]',
                 created_at         TEXT NOT NULL,
                 updated_at         TEXT NOT NULL,
                 revision           INTEGER NOT NULL DEFAULT 1
             );
-            CREATE TABLE IF NOT EXISTS {prefix}_item_state (
+            CREATE TABLE IF NOT EXISTS {item}_item_state (
                 id      INTEGER PRIMARY KEY AUTOINCREMENT,
-                item_id TEXT NOT NULL REFERENCES {prefix}_item(id) ON DELETE CASCADE,
+                item_id TEXT NOT NULL REFERENCES {item}_item(id) ON DELETE CASCADE,
                 state   TEXT NOT NULL CHECK (state IN ('owned','wanted','gone')),
                 since   TEXT NOT NULL,
                 note    TEXT
             );
+            CREATE INDEX IF NOT EXISTS {item}_idx_state_item
+                ON {item}_item_state(item_id, since DESC);
+            ",
+            item = ITEM_PREFIX
+        ))?;
+        conn.execute_batch(&format!(
+            "
             CREATE TABLE IF NOT EXISTS {prefix}_placement (
                 id      INTEGER PRIMARY KEY AUTOINCREMENT,
-                item_id TEXT NOT NULL REFERENCES {prefix}_item(id) ON DELETE CASCADE,
+                item_id TEXT NOT NULL,
                 flat    TEXT NOT NULL,
                 x       INTEGER NOT NULL,
                 y       INTEGER NOT NULL,
@@ -576,163 +453,10 @@ impl Store {
                 since   TEXT NOT NULL,
                 UNIQUE (item_id, flat)
             );
-            CREATE INDEX IF NOT EXISTS {prefix}_idx_state_item
-                ON {prefix}_item_state(item_id, since DESC);
             CREATE INDEX IF NOT EXISTS {prefix}_idx_placement_flat
                 ON {prefix}_placement(flat);
-            CREATE TABLE IF NOT EXISTS {prefix}_sync_operation (
-                operation_id TEXT PRIMARY KEY,
-                revision INTEGER NOT NULL,
-                processed_at TEXT NOT NULL
-            );
             ",
             prefix = prefix
-        ))?;
-        Self::add_column_if_missing(conn, prefix, "raumtrenner", "INTEGER")?;
-        Self::add_column_if_missing(conn, prefix, "zerlegbar", "INTEGER")?;
-        Self::add_column_if_missing(conn, prefix, "bild", "TEXT")?;
-        // Ausruestung (B51). Die sieben Spalten zuerst, dann der CHECK — der Umbau kopiert sie
-        // mit, also muessen sie vorher da sein.
-        Self::add_column_if_missing(conn, prefix, "weight_g", "INTEGER")?;
-        Self::add_column_if_missing(conn, prefix, "category", "TEXT")?;
-        Self::add_column_if_missing(conn, prefix, "packable", "INTEGER")?;
-        Self::add_column_if_missing(conn, prefix, "waterproof", "INTEGER")?;
-        Self::add_column_if_missing(conn, prefix, "quick_dry", "INTEGER")?;
-        Self::add_column_if_missing(conn, prefix, "pack_location", "TEXT")?;
-        Self::add_column_if_missing(conn, prefix, "trip_types", "TEXT NOT NULL DEFAULT '[]'")?;
-        Self::widen_kind_check(conn, prefix)?;
-        // Nach dem Umbau und nicht davor: `widen_kind_check` kopiert nur `ITEM_COLUMNS`, und
-        // eine Datei, die den Umbau noch braucht, hat diese Spalte ohnehin nicht. `DEFAULT 1`
-        // gibt jeder bestehenden Zeile die Revision 1 (PRD §10 A5).
-        Self::add_column_if_missing(conn, prefix, "revision", "INTEGER NOT NULL DEFAULT 1")?;
-        Ok(())
-    }
-
-    /// `ALTER TABLE ... ADD COLUMN`, idempotent, weil SQLite kein `IF NOT EXISTS` dafuer hat.
-    ///
-    /// Der Kommentar ueber `run_migration` sagt, eine Datei beginne leer und es gebe keine
-    /// ALTER-Kette zu bewahren. Das galt bis 2026-08-31 und gilt seit B25 nicht mehr: die
-    /// Tabelle traegt importierte Zeilen, und `CREATE TABLE IF NOT EXISTS` erreicht eine
-    /// bestehende Tabelle nicht. Die Zeilen einfach neu zu importieren waere kein Ausweg —
-    /// `{prefix}_item_state` haelt die Zustandsgeschichte, und die ist der Grund, aus dem
-    /// B25 sie als eigene Tabelle angelegt hat.
-    ///
-    /// `pragma_table_info` ist die Sonde, die `capabilities/places/src/backfill.rs:396` fuer
-    /// dieselbe Frage benutzt.
-    fn add_column_if_missing(
-        conn: &Connection,
-        prefix: &str,
-        column: &str,
-        typ: &str,
-    ) -> Result<(), Fehler> {
-        let vorhanden: i64 = conn.query_row(
-            "SELECT COUNT(*) FROM pragma_table_info(?1) WHERE name = ?2",
-            params![format!("{prefix}_item"), column],
-            |row| row.get(0),
-        )?;
-        if vorhanden == 0 {
-            conn.execute_batch(&format!(
-                "ALTER TABLE {prefix}_item ADD COLUMN {column} {typ};"
-            ))?;
-        }
-        Ok(())
-    }
-
-    /// Den `kind`-CHECK auf `gear` erweitern, indem die Tabelle neu gebaut wird.
-    ///
-    /// SQLite haelt einen CHECK im gespeicherten DDL-Text; `ALTER TABLE` kann ihn nicht
-    /// anfassen. Der Zwoelf-Schritte-Weg aus der SQLite-Dokumentation ist der einzige: neue
-    /// Tabelle, Zeilen kopieren, alte fallen lassen, umbenennen. Er laeuft nur, wenn der
-    /// gespeicherte Text `gear` noch nicht nennt — eine leere oder frische Datei hat den
-    /// weiten CHECK schon aus `CREATE TABLE` oben, und ein zweiter Lauf faende nichts zu tun.
-    ///
-    /// **Die Kinder werden gesichert und zurueckgeschrieben, und das ist der Kern.**
-    /// `{prefix}_item_state` und `{prefix}_placement` zeigen mit `ON DELETE CASCADE` auf
-    /// `{prefix}_item(id)`; ein DROP der Elterntabelle loescht sie deshalb mit. Der uebliche
-    /// Ausweg — `PRAGMA foreign_keys = off` vor dem `BEGIN` — steht hier nicht offen: dieser
-    /// Code laeuft in der Transaktion, die `sjel_store::migrate_once` schon geoeffnet hat, und
-    /// die Pragma ist innerhalb einer Transaktion wirkungslos (libs/sjel-store/src/lib.rs:328).
-    /// Also werden beide Tabellen vorher kopiert und hinterher wieder gefuellt, im selben
-    /// Umlauf: faellt irgendetwas davon aus, nimmt der Rollback alles mit.
-    ///
-    /// Die Spaltenliste ist ausgeschrieben und nicht `SELECT *`, damit ein spaeteres Feld hier
-    /// auffaellt statt still in der falschen Spalte zu landen.
-    fn widen_kind_check(conn: &Connection, prefix: &str) -> Result<(), Fehler> {
-        let ddl: Option<String> = conn
-            .query_row(
-                "SELECT sql FROM sqlite_master WHERE type = 'table' AND name = ?1",
-                params![format!("{prefix}_item")],
-                |row| row.get(0),
-            )
-            .optional()?;
-        let Some(ddl) = ddl else { return Ok(()) };
-        if ddl.contains("'gear'") {
-            return Ok(());
-        }
-        let columns = ITEM_COLUMNS.join(", ");
-        conn.execute_batch(&format!(
-            "CREATE TABLE {prefix}_item_neu (
-                id                 TEXT PRIMARY KEY,
-                kind               TEXT NOT NULL CHECK (kind IN ('piece','slot','gear')),
-                label              TEXT NOT NULL,
-                b                  INTEGER,
-                t                  INTEGER,
-                h                  INTEGER,
-                h_min              INTEGER,
-                b_aufgeklappt      INTEGER,
-                t_ausgeklappt      INTEGER,
-                laenge             INTEGER,
-                anzahl             INTEGER,
-                zustaende          TEXT NOT NULL DEFAULT '[]',
-                unsicher           TEXT NOT NULL DEFAULT '[]',
-                platzbedarf_zone   INTEGER,
-                platzbedarf_block  INTEGER,
-                preis_cent         INTEGER,
-                kosten_min_cent    INTEGER,
-                kosten_max_cent    INTEGER,
-                link               TEXT,
-                artikelnummer      TEXT,
-                quelle             TEXT,
-                gemessen_am        TEXT,
-                mitnahme           TEXT,
-                prioritaet         TEXT,
-                basiert_auf        TEXT,
-                ersetzt            TEXT NOT NULL DEFAULT '[]',
-                varianten          TEXT NOT NULL DEFAULT '[]',
-                ziel               TEXT,
-                hinweis            TEXT,
-                begruendung        TEXT,
-                entscheidung_offen TEXT,
-                opens              TEXT,
-                open_clear         INTEGER,
-                wall_ok            INTEGER,
-                expands_dir        TEXT,
-                expands_to         INTEGER,
-                access_sides       INTEGER,
-                access_clear       INTEGER,
-                raumtrenner        INTEGER,
-                zerlegbar          INTEGER,
-                bild               TEXT,
-                weight_g           INTEGER,
-                category           TEXT,
-                packable           INTEGER,
-                waterproof         INTEGER,
-                quick_dry          INTEGER,
-                pack_location      TEXT,
-                trip_types         TEXT NOT NULL DEFAULT '[]',
-                created_at         TEXT NOT NULL,
-                updated_at         TEXT NOT NULL
-             );
-             INSERT INTO {prefix}_item_neu ({columns})
-                 SELECT {columns} FROM {prefix}_item;
-             CREATE TABLE {prefix}_state_sicherung AS SELECT * FROM {prefix}_item_state;
-             CREATE TABLE {prefix}_placement_sicherung AS SELECT * FROM {prefix}_placement;
-             DROP TABLE {prefix}_item;
-             ALTER TABLE {prefix}_item_neu RENAME TO {prefix}_item;
-             INSERT INTO {prefix}_item_state SELECT * FROM {prefix}_state_sicherung;
-             INSERT INTO {prefix}_placement SELECT * FROM {prefix}_placement_sicherung;
-             DROP TABLE {prefix}_state_sicherung;
-             DROP TABLE {prefix}_placement_sicherung;"
         ))?;
         Ok(())
     }
@@ -741,209 +465,6 @@ impl Store {
         let conn = self.conn()?;
         conn.query_row("SELECT 1", [], |row| row.get::<_, i64>(0))?;
         Ok(())
-    }
-
-    /// Anlegen oder aktualisieren. `created_at` ueberlebt ein Update — wann eine Zeile
-    /// entstanden ist, ist eine andere Tatsache als wann sie zuletzt stimmte.
-    ///
-    /// Bedingungslos: der spaetere Schreiber gewinnt. Das ist der Weg fuer den Import und fuer
-    /// jeden Aufrufer, der keine Revision nennt. Die Revision steigt trotzdem, im selben
-    /// Statement, damit ein Client mit einer aelteren Revision danach sicher abgewiesen wird.
-    /// Zurueck kommt die Revision, die die Zeile jetzt traegt.
-    pub fn upsert_item(&self, it: &Item) -> Result<i64, Fehler> {
-        let p = &self.prefix;
-        let now = sjel_store::now_offset("'+0 seconds'");
-        let spalten = WRITE_COLUMNS.join(", ");
-        let platzhalter = (1..=WRITE_COLUMNS.len())
-            .map(|i| format!("?{i}"))
-            .collect::<Vec<_>>()
-            .join(", ");
-        let uebernehmen = WRITE_COLUMNS[1..]
-            .iter()
-            .map(|c| format!("{c}=excluded.{c}"))
-            .collect::<Vec<_>>()
-            .join(", ");
-        let conn = self.conn()?;
-        let revision = conn.query_row(
-            &format!(
-                "INSERT INTO {p}_item ({spalten}, revision, created_at, updated_at)
-                 VALUES ({platzhalter}, 1, {now}, {now})
-                 ON CONFLICT(id) DO UPDATE SET {uebernehmen},
-                    revision = {p}_item.revision + 1, updated_at = {now}
-                 RETURNING revision"
-            ),
-            rusqlite::params_from_iter(write_params(it)?.iter()),
-            |row| row.get(0),
-        )?;
-        Ok(revision)
-    }
-
-    /// Ueberschreiben, aber nur, wenn die Zeile noch die Revision traegt, die der Aufrufer
-    /// gelesen hat (PRD §10 A5, Q110: Telefon und Mac bearbeiten dieselben Eintraege).
-    ///
-    /// Vergleich und Schreiben sind EIN Statement: `UPDATE ... WHERE id = ? AND revision = ?`.
-    /// Ein Lesen vorher und ein Schreiben danach waere genau das Fenster, in dem der zweite
-    /// Schreiber still gewinnt. Ein einzelnes Statement im Autocommit nimmt die Schreibsperre
-    /// schon beim Start, bevor es liest; das Upgrade-Problem der verzoegerten Transaktion
-    /// (`sjel_store::write_transaction`, PRD 0.19) entsteht erst mit einem zweiten Statement
-    /// davor und tritt hier nicht auf.
-    ///
-    /// Trifft das Statement keine Zeile, sagt erst das Lesen danach, warum: gibt es den Eintrag
-    /// nicht, oder traegt er eine andere Revision. Dieses Lesen schreibt nichts und braucht
-    /// deshalb keine Transaktion; es liefert den Stand, den der Aufrufer sehen muss.
-    pub fn update_item_if_revision(
-        &self,
-        it: &Item,
-        erwartet: i64,
-    ) -> Result<Schreibergebnis, Fehler> {
-        let p = &self.prefix;
-        let now = sjel_store::now_offset("'+0 seconds'");
-        let setzen = WRITE_COLUMNS
-            .iter()
-            .enumerate()
-            .skip(1)
-            .map(|(i, c)| format!("{c} = ?{}", i + 1))
-            .collect::<Vec<_>>()
-            .join(", ");
-        let mut werte = write_params(it)?;
-        werte.push(Box::new(erwartet));
-        let conn = self.conn()?;
-        let neu: Option<i64> = conn
-            .query_row(
-                &format!(
-                    "UPDATE {p}_item SET {setzen}, revision = revision + 1, updated_at = {now}
-                     WHERE id = ?1 AND revision = ?{n}
-                     RETURNING revision",
-                    n = WRITE_COLUMNS.len() + 1
-                ),
-                rusqlite::params_from_iter(werte.iter()),
-                |row| row.get(0),
-            )
-            .optional()?;
-        drop(conn);
-        if let Some(revision) = neu {
-            return Ok(Schreibergebnis::Geschrieben(revision));
-        }
-        Ok(match self.item(&it.id)? {
-            Some((aktuell, zustand)) => Schreibergebnis::Veraltet(Box::new(aktuell), zustand),
-            None => Schreibergebnis::Fehlt,
-        })
-    }
-
-    /// Einen Zustandswechsel festhalten. Schreibt NICHT, wenn der aktuelle Zustand schon
-    /// derselbe ist: ein wiederholter Import darf keine Geschichte erfinden.
-    pub fn record_state(
-        &self,
-        item_id: &str,
-        state: State,
-        note: Option<&str>,
-    ) -> Result<bool, Fehler> {
-        if self.current_state(item_id)? == Some(state) {
-            return Ok(false);
-        }
-        let p = &self.prefix;
-        let conn = self.conn()?;
-        conn.execute(
-            &format!(
-                "INSERT INTO {p}_item_state (item_id, state, since, note)
-                 VALUES (?1, ?2, {now}, ?3)",
-                p = p,
-                now = sjel_store::now_offset("'+0 seconds'")
-            ),
-            params![item_id, state.as_str(), note],
-        )?;
-        Ok(true)
-    }
-
-    /// Wie viele Eintraege es gibt. Die Frage, an der `interior import` entscheidet, ob es
-    /// eine Migration ist oder ein Ueberschreiben (PRD Q64).
-    /// Returns the canonical revision recorded for a previously applied sync operation.
-    pub fn sync_operation_revision(&self, operation_id: &str) -> Result<Option<i64>, Fehler> {
-        let conn = self.conn()?;
-        Ok(conn
-            .query_row(
-                &format!(
-                    "SELECT revision FROM {}_sync_operation WHERE operation_id = ?1",
-                    self.prefix
-                ),
-                params![operation_id],
-                |row| row.get(0),
-            )
-            .optional()?)
-    }
-
-    /// Records an applied operation. The primary key makes a retry visible instead of applying
-    /// the same mutation twice.
-    pub fn record_sync_operation(&self, operation_id: &str, revision: i64) -> Result<(), Fehler> {
-        let conn = self.conn()?;
-        conn.execute(
-            &format!(
-                "INSERT INTO {}_sync_operation (operation_id, revision, processed_at)
-                 VALUES (?1, ?2, strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))",
-                self.prefix
-            ),
-            params![operation_id, revision],
-        )?;
-        Ok(())
-    }
-
-    pub fn item_count(&self) -> Result<i64, Fehler> {
-        let p = &self.prefix;
-        let conn = self.conn()?;
-        Ok(conn.query_row(&format!("SELECT COUNT(*) FROM {p}_item"), [], |r| r.get(0))?)
-    }
-
-    /// Ein einzelner Eintrag mit seinem aktuellen Zustand.
-    pub fn item(&self, id: &str) -> Result<Option<(Item, Option<State>)>, Fehler> {
-        Ok(self.catalogue()?.remove(id))
-    }
-
-    /// Die ganze Zustandsgeschichte eines Eintrags, aelteste zuerst.
-    ///
-    /// Die Oberflaeche zeigt sie, weil sie der Grund ist, warum `interior_item_state` eine
-    /// Tabelle ist und keine Spalte: „gekauft" ist eine Zeile mehr und kein ueberschriebenes
-    /// Feld, und wer das nicht sieht, haelt die Trennung fuer Umstaendlichkeit.
-    pub fn state_history(
-        &self,
-        item_id: &str,
-    ) -> Result<Vec<(State, String, Option<String>)>, Fehler> {
-        let p = &self.prefix;
-        let conn = self.conn()?;
-        let mut stmt = conn.prepare(&format!(
-            "SELECT state, since, note FROM {p}_item_state
-             WHERE item_id = ?1 ORDER BY since ASC, id ASC"
-        ))?;
-        let rows = stmt.query_map(params![item_id], |row| {
-            Ok((
-                row.get::<_, String>(0)?,
-                row.get::<_, String>(1)?,
-                row.get::<_, Option<String>>(2)?,
-            ))
-        })?;
-        let mut out = Vec::new();
-        for r in rows {
-            let (s, since, note) = r?;
-            if let Some(st) = State::parse(&s) {
-                out.push((st, since, note));
-            }
-        }
-        Ok(out)
-    }
-
-    pub fn current_state(&self, item_id: &str) -> Result<Option<State>, Fehler> {
-        let p = &self.prefix;
-        let conn = self.conn()?;
-        let raw: Option<String> = conn
-            .query_row(
-                &format!(
-                    "SELECT state FROM {p}_item_state WHERE item_id = ?1
-                     ORDER BY since DESC, id DESC LIMIT 1"
-                ),
-                params![item_id],
-                |row| row.get(0),
-            )
-            .optional()?;
-        Ok(raw.as_deref().and_then(State::parse))
     }
 
     pub fn place(&self, pl: &Placement) -> Result<(), Fehler> {
@@ -983,7 +504,7 @@ impl Store {
 
     /// Jedes Item mit seinem aktuellen Zustand. Der Katalog, den die Pruefung liest.
     pub fn catalogue(&self) -> Result<BTreeMap<String, (Item, Option<State>)>, Fehler> {
-        let p = &self.prefix;
+        let p = ITEM_PREFIX;
         let conn = self.conn()?;
         let mut stmt = conn.prepare(&format!(
             "SELECT i.id, i.kind, i.label, i.b, i.t, i.h, i.h_min, i.b_aufgeklappt,
@@ -995,7 +516,7 @@ impl Store {
                     i.opens, i.open_clear, i.wall_ok, i.expands_dir, i.expands_to,
                     i.access_sides, i.access_clear, i.raumtrenner, i.bild, i.zerlegbar,
                     i.weight_g, i.category, i.packable, i.waterproof, i.quick_dry,
-                    i.pack_location, i.trip_types, i.revision,
+                    i.pack_location, i.trip_types, i.groesse, i.farbe, i.saison, i.revision,
                     (SELECT s.state FROM {p}_item_state s
                       WHERE s.item_id = i.id ORDER BY s.since DESC, s.id DESC LIMIT 1)
              FROM {p}_item i ORDER BY i.id"
@@ -1008,7 +529,7 @@ impl Store {
                     .as_deref()
                     .and_then(Seite::parse))
             };
-            let state: Option<String> = row.get(49)?;
+            let state: Option<String> = row.get(52)?;
             Ok((
                 Item {
                     id: row.get(0)?,
@@ -1059,7 +580,10 @@ impl Store {
                     quick_dry: row.get(45)?,
                     pack_location: row.get(46)?,
                     trip_types: sjel_store::json_column(row, 47)?,
-                    revision: row.get(48)?,
+                    groesse: row.get(48)?,
+                    farbe: row.get(49)?,
+                    saison: sjel_store::json_column(row, 50)?,
+                    revision: row.get(51)?,
                 },
                 state.as_deref().and_then(State::parse),
             ))

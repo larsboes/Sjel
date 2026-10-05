@@ -1,0 +1,57 @@
+[package]
+name = "inventory"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+description = "Was ich besitze: Zeilen, Preise, Zustand — und was noch fehlt."
+publish = false
+
+[[bin]]
+name = "inventory"
+path = "src/main.rs"
+
+[lib]
+name = "inventory"
+path = "src/lib.rs"
+
+[dependencies]
+# Pflicht, kein Komfort: doctors "Server bind policy" weist jede Capability zurueck, die sich
+# einen eigenen Listener baut.
+sjel-server = { path = "../../libs/sjel-server" }
+# Loest SJEL_PERSONAL_ROOT und den Datenbankpfad auf. Die Zeilen liegen in der einen geteilten
+# Datei unter `inventory_`; hier steht keine einzige Zahl eines Haushalts.
+sjel-config = { path = "../../libs/sjel-config" }
+# `/routes` neben `/health`, wie jede andere Capability mit HTTP-Oberflaeche.
+route-manifest = { path = "../../libs/route-manifest" }
+# Das Inventar sind Zeilen (PRD Q58/B25). Eine Datei fuer alle Capabilities, `inventory_` als
+# Praefix — libs/sjel-store/README.md hat das Warum.
+sjel-store = { path = "../../libs/sjel-store" }
+# `inventory wunsch <url>` holt eine Produktseite. Nicht `reqwest` direkt: der geteilte Client
+# traegt den User-Agent, die Zeitgrenze, die Redirect-Policy — und die beiden Wachen gegen
+# `file://` und gegen eine Adresse in diesem Netz (libs/sjel-http/README.md).
+sjel-http = { path = "../../libs/sjel-http" }
+# Shared Ed25519 device verification for the authenticated sync ingress, which carries
+# `interior.item` mutations from the phone.
+devices = { path = "../devices" }
+# Die eine Art, eine Datei aus einer erklaerten Vault-Wurzel zu holen, plus die markierte
+# Region. Null Abhaengigkeiten, und die Konflikterkennung liegt in der Datei selbst.
+markdown-root = { path = "../../libs/markdown-root" }
+rusqlite.workspace = true
+serde = { workspace = true, features = ["derive"] }
+serde_json.workspace = true
+toml.workspace = true
+# Not `full`: these are the drivers this crate reaches for, verified with a lone
+# `cargo check -p <crate> --all-targets`, which is the only build where a missing
+# tokio feature is visible (a workspace build unifies them away).
+tokio = { workspace = true, features = ["macros", "rt-multi-thread", "fs"] }
+axum.workspace = true
+thiserror = "2.0"
+
+[dev-dependencies]
+# `ServiceExt::oneshot`, damit `revision_tests` den verdrahteten Router ohne Listener und
+# ohne Port fahren kann — dasselbe Muster wie in `capabilities/interior` und `sjel-status`.
+tower = { workspace = true, features = ["util"] }
+
+[lints]
+workspace = true

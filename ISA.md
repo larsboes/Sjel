@@ -970,6 +970,170 @@ this deployment paid the last time it was broken.
   globals nothing references were left alone on the operator's ruling, because `playwright/cli`
   and `bobshell` are plausibly invoked by hand and no configuration would show that.
 
+### F12 · A shared link becomes a row, and a garment is a row like any other
+
+Why: the Home domain was written as **one table for everything the household owns** — *"a tent
+and a wardrobe are the same row shape"*, Q58, 2026-08-30 — and `interior_item` has carried the
+equipment columns since B51. What it never had was an **intake**. A row entered by one of two
+doors: `interior import` from `inventory/*.toml`, which describes furniture and fills none of
+the seven gear fields, or the dashboard's create form, which offers `piece`/`slot`, five numbers
+and a price. So "put this in my wardrobe" meant retyping a shop page by hand, and the old PRD's
+own backlog said so: *"Item intake: scan an object, share a link, one wishlist."* This builds
+the link half, and the three fields a garment needs beyond furniture.
+
+Placement: no new table, no new capability and no new route. Three columns on `interior_item`
+and one CLI verb, because Q58 already answered where the row goes and the answer was *there*.
+
+- [x] ISC-61 — `interior wunsch <url>` creates a `wanted` row in the same table with the link on
+  it, the title from the page, and a price **only where the page declares one**. Falsifier: a row
+  carrying a price the page never declared, a non-EUR amount carried as though it were EUR, or a
+  fetch that reaches `file://` or a loopback address. Probe: `cargo test -p interior wunsch`, then
+  `interior wunsch <url>` against a live page and `interior inventory`. Evidence, 2026-10-05:
+  12 unit tests in `capabilities/interior/src/wunsch.rs` — a number in prose is not a price, a
+  declared price is read *and named*, `itemprop` is the third door, both attribute orders parse,
+  a non-EUR currency is refused, and `ab 79` is not a price. Live: `interior wunsch
+  https://example.com --category kleidung --groesse M` created `example-domain` with the title
+  from `<title>`, reported the missing price, and a second run made `example-domain-2` rather
+  than overwriting. `file:///etc/passwd` and `http://127.0.0.1:8092/api/inventory` exit 2 with
+  the guard's own words and write nothing. The first version of `betrag_cent` failed this
+  claim's own falsifier — `trim_start_matches(is_alphabetic)` turned `ab 79` into 79,00 € in a
+  column that sums into the wishlist total — and the module header asserted the opposite while
+  every test passed, because none named `ab 79`. **Live, against a real shop** (2026-10-05, a
+  Uniqlō product page): the first run fetched nothing and still wrote a row labelled `00`,
+  because the fetch failure was a warning and the URL's last path segment became the name — the
+  fallback is gone and a row now needs a title or `--label`. The same run showed *why* it fetched
+  nothing: that shop answers the Sjel user-agent with `HTTP/2 stream 1 was not closed cleanly:
+  INTERNAL_ERROR` and a timeout over HTTP/1.1, and 200 with 1,1 MB to a browser agent. `wunsch`
+  now sends one, named and reasoned at the constant, as `scouting/adapters/meetup.rs` and
+  `transit/hafas.rs` already do. After the fix the same URL produced
+  `ultra-stretch-hose-fur-herren-uniqlo-de` with the title from `og:title`. NOT verified: a
+  shop page that declares a price — that page declares none (its price sits in embedded app
+  state beside four other amounts, which is a guess in the column that sums into the wishlist
+  total), so the declared-price path is still covered by unit tests alone.
+- [x] ISC-62 — a garment is a row in `interior_item` with `category`, `groesse`, `farbe` and
+  `saison`, and a file that predates the columns gains them without losing a row, a state or a
+  placement. Falsifier: the columns cannot be set or corrected from `/interior`, or an existing
+  `interior_item` loses a row, a state change or a placement when the migration runs. Probe:
+  `cargo test -p interior --test kleidung`, then the create and edit forms. Evidence, 2026-10-05:
+  three tests in `capabilities/interior/tests/kleidung.rs` build a file in the shape that was on
+  disk before the change (wide `kind` CHECK, no clothing columns), assert the row, its state and
+  its placement survive, that a garment round-trips, and that a second start does not rebuild the
+  table and blank the columns. `dashboard/src/lib/api.ts` and `routes/interior/+page.svelte`
+  carry the five fields in **both** forms, because the edit form is where a wrongly read title or
+  price gets corrected; `svelte-check` reports 0 errors. `PATCH /api/items/:id` needed no change:
+  `merge_patch` validates against `Item`, not a second list of names. The live overlay's own file
+  opened with the columns and kept its 47 rows (29 `piece`, 18 `slot`). NOT verified: the forms
+  clicked in a browser, because every route here needs the operator's credential and an agent
+  session is refused one by design (the same gap ISC-55 records).
+- [x] ISC-63 — the branch a row belongs to is a word the data uses, not a list declared in code,
+  and two spellings of one branch are named instead of merged. Falsifier: a hardcoded branch list
+  in the dashboard, a category silently lowercased or rewritten on write, or two spellings of one
+  branch that nothing reports. Probe: `cargo test -p interior --lib`, then `interior inventory`
+  against a database holding `kleidung` and `Kleidung`. Evidence, 2026-10-05: `store::kategorien`
+  reads the distinct branches with their counts and `store::kollisionen` groups the ones that
+  differ only in case or whitespace, with three unit tests in `store.rs` (two spellings reported,
+  a unique branch not, `Kochen`/`kochen` a collision while `kochen`/`kochen-und-backen` is not).
+  Measured: a scratch database with `Kleidung`, `kleidung` and `wohnzimmer` printed both branches
+  and the group `Kleidung | kleidung`, while a ` kleidung ` written beside a `kleidung` collapsed
+  into one row — the query trims, and the function reports only what trimming does not already
+  merge. The dashboard's suggestion list is `$derived` from the loaded rows; the five-word list
+  written into Svelte in the first version is gone, because it was the second truth this claim is
+  about. NOT verified: a branch collision in the live overlay. It has 47 rows and **no**
+  `category` on any of them, so the branch list is empty today and the first word is the
+  principal's to type.
+
+### F13 · The inventory stops living behind the floor plan
+
+Why: measured 2026-10-05. `interior` holds two domains in one process — the geometry of a flat
+and the things the household owns — and only one of them may run at boot, because the other
+serves a floor plan and photographs of a home. So `interior` is the only capability in this
+repository that is `autostart = false` **and** consumed by another: `capabilities/trips` reads
+`GET /api/inventory` over HTTP on a 3 s timeout (`trips/src/server.rs:1528`) and answers
+`interior_reachable: false` when nothing is listening, while `trips/service.toml` declares no
+`requires` for it. The consequence is not theoretical: after a restart, until somebody opens
+`/interior`, every pack list loses the weight and every equipment attribute of every item on it.
+Two tests in `trips/src/pack.rs` cover that degraded path, which is how it stayed invisible —
+the behaviour was tested, the *coupling* was not declared.
+
+The doctrine already names the fix. *"Capability owns a bounded domain, external system or data
+store"* — and a data store is not a `libs/` crate, because libs own no domain. Q58 named it
+earlier still: *"when gear lands, rename it then, do not fork it"*, and gear landed at B51.
+`requires` is not a substitute: `up` filters on `autostart == "true"`
+(`tools/sjel-cli/src/runner.rs:198`), so declaring it orders the enabled set and pulls a
+dependency in on `enable` — it starts nothing.
+
+**The split, and the line is "does it need a room".**
+
+| stays in `interior` | moves to `inventory` |
+|---|---|
+| `room.toml`, `rules.toml`, `layouts/*` | `inventory_item`, `inventory_item_state` |
+| `interior_placement` — where a thing stands | `import` (`inventory/*.toml` is the migration source) |
+| clearance, search, compose, plan, einbringung, sonne, toleranz | `wunsch` — the link intake |
+| `deklaration`, `kaufen` — both need the layouts | the item HTTP surface, the wishlist, `kategorien` |
+| the floor plan, `roomplan`, `media` | `obsidian` vault writeback |
+
+`budget.rs` splits with it: `monatssaldo` (reads finance) goes, `kaufreihenfolge` stays because
+it asks which layouts already build on a need. `interior` keeps reading the items from the
+**shared file** rather than over HTTP, the named exception `budget::monatssaldo` already
+establishes for `finance_transaction_projection` — because `interior check` is used as a gate
+and must keep working with no service running at all.
+
+- [x] ISC-64 — `inventory` is a capability of its own, `autostart = true`, owning the item tables
+  under its own prefix; `interior` reads them from the shared file and keeps serving the floor
+  plan on demand. Falsifier: after a restart with nothing opened, a pack list still reports
+  `interior_reachable: false`; or `interior check` needs a running service. Probe: restart the
+  host, then `trips`' pack endpoint and `interior check <layout>` with nothing else started.
+  Evidence, 2026-10-05: `capabilities/inventory` on port 8101, `autostart = true`, its own
+  persistence unit installed (`tools/service-runner.sh persistence` → `installed`), and the only
+  writer of `inventory_item`. Measured: with `interior` **stopped**, `GET /api/inventory` on
+  8101 still answers with all 47 rows, while 8092 answers nothing — which is the defect this
+  feature exists for, inverted. `trips` points at 8101 in both call sites
+  (`src/server.rs`, `src/interior_client.rs`) and declares `requires = ["inventory"]`, so `up`
+  starts the dependency first. `interior` reads the rows through the shared file under a second,
+  named prefix (`ITEM_PREFIX`), so `interior check` still runs with no service at all. NOT
+  verified: the host actually rebooted. The claim rests on the launch unit being installed and on
+  `up` ordering, not on an observed restart.
+- [ ] ISC-65 — the item surface answers on inventory's port, `trips` names it and declares
+  `requires`, and no second capability writes `inventory_item`. Falsifier: two writers of one
+  table, or an item route still mounted by `interior`. Probe: `rg 'api/items' capabilities/`, and
+  `interior`'s own `ROUTES` manifest (the coverage test refuses an undeclared route both ways).
+  **Half done, and this is the honest state.** The surface answers on 8101 and `trips` names it.
+  `interior` still mounts `POST /api/items`, `PUT`/`PATCH /api/items/:id` and
+  `POST /api/items/:id/state` — they write the **same** table, so nothing diverges, but there are
+  two writers of one store and the falsifier still fires. What is left is a deletion: those three
+  routes, `api_inventory`, `api_wishlist`, `api_vault_writeback`, the `import`/`inventory`/
+  `wunsch`/`vault-writeback` verbs, and `interior/src/{import,wunsch,obsidian}.rs` — all of which
+  now exist, working and tested, in `capabilities/inventory`. `interior/src/store.rs` also keeps
+  its write half (`upsert_item`, `record_state`, `update_item_if_revision`, `sync_operation_*`)
+  only for those routes. Removing them is the next landing and touches no data.
+- [x] ISC-66 — the live rows move without loss, and the move is a migration rather than a
+  re-import. Falsifier: a row, a state change or a placement missing after the move, or a state
+  history invented by it. Probe: `cargo test -p inventory --test umzug`, which builds a file in
+  the pre-move shape and asserts every row, every `since` and every placement survives; then
+  `interior inventory` against the live overlay, which held 47 rows (29 `piece`, 18 `slot`) on
+  2026-10-05. Evidence, 2026-10-05: five tests in `capabilities/inventory/tests/umzug.rs` — rows,
+  two state changes in order, the placement, the revision, and that the old table is **gone**
+  (`interior_item` and `interior_item_state` no longer exist) while `interior_placement` keeps its
+  rows with **no** foreign key left. Run against a copy of the live file: 47 items → 47, 48 states
+  → 48, 0 placements → 0, revisions 1..2 preserved, and the open need read **582.96 €** on both
+  sides of the move — the same number `interior inventory` prints from the unmigrated file.
+  The move also runs on a real start: the live database was migrated by the capability's first
+  boot, and `interior` reads it from then on. `gear_migration.rs` and `kleidung.rs` were interior's
+  tests of that migration and are succeeded by `umzug.rs`; the case they covered that is *not*
+  obvious — a file older than B51, with a narrow `kind` CHECK — is `eine_aeltere_datei_verliert_
+  durch_den_umzug_nichts`, which copies only the columns both tables have.
+
+**Still open after this landing, and deliberately not hidden:** `interior` mounts the item routes
+it should have given up (ISC-65), the dashboard's item surface still lives on `/interior` with
+`/inventory` as a redirect stub, and `/api/sync` and `/api/media` — the phone's mutation path and
+the item images — were left in `interior` because moving a signed, device-authenticated ingress
+without verifying it is how a silent loss happens.
+
+Sequencing, because a half-moved store is the failure this repository has already paid for once
+(B51 was reverted in `815750c` rather than land half a form in a live file): the migration and
+the switch-over are **one** landing, since a copied table and a live table are two truths about
+the same thing. Started and landed 2026-10-05 in the order the file records.
+
 ## Not yet specified
 
 - **knowledge-graph link prediction over the vault.** `knowledge-graph` serves the code
@@ -1033,13 +1197,15 @@ this deployment paid the last time it was broken.
   `status` shows counts rolled up from whatever graph exists, and this machine's is behind the
   tree. Commit `2f0feb6` says it regenerated `self.json`; only `ARCHITECTURE.md` changed.
 - **From the old PRD, not yet planned.** Device loss as a threat (what a stolen phone exposes).
-  A health domain (energy, sleep, training, records). Item intake: scan an object, share a link,
-  one wishlist. Travel: route composition, "where should I base myself", an accommodation source.
-  People: Google Contacts beyond inbound, a TELOS import, trips from a person, meetup capture.
-  An autonomy gate for a structured-decision model (apply at ≥ 0.95 confidence, otherwise a
-  card). shellcheck as shell analysis. `tools/backup.sh` skipping private capability manifests.
-  The PRD's non-goals, which conflict with Sjel ("not a product", "tailnet only") and need a new
-  ruling rather than a copy.
+  A health domain (energy, sleep, training, records). Item intake: **the link half is built**
+  (F12, 2026-10-05) — what remains is *scan an object*, which needs the Q63 ladder to end at
+  something better than text, and a barcode path, which is `[tauri-plugin-barcode-scanner]`
+  today and reads the Mac's pairing QR code. Travel: route composition, "where should I base
+  myself", an accommodation source. People: Google Contacts beyond inbound, a TELOS import,
+  trips from a person, meetup capture. An autonomy gate for a structured-decision model (apply
+  at ≥ 0.95 confidence, otherwise a card). shellcheck as shell analysis. `tools/backup.sh`
+  skipping private capability manifests. The PRD's non-goals, which conflict with Sjel ("not a
+  product", "tailnet only") and need a new ruling rather than a copy.
 
 **Filed 2026-10-01 from the Sjel project roast.** Seven items the roast raised that nothing in this
 repo owned. Each states what exists in that slot today, read from the tree on that date; none is a
@@ -1116,6 +1282,12 @@ claim yet, and the watch rows they name are in `upstreams.toml` with the questio
 | ISC-39 | command | `sjel capability mail` from an agent session, then the operator reads any code-like c1 row | no Secret value | sjel | F8 |
 | ISC-45 | command | a `secrets/**` read from an agent session, and the tailnet shell through Tailscale Serve | refused; `/health` 200 | Claude Code, curl | F9 |
 | ISC-55 | browser | the Systems page's updates panel against `sjel update --json` | every row matches | browser | F11 |
+| ISC-61 | command | `cargo test -p interior wunsch`; `interior wunsch <url>` then `interior inventory` | a `wanted` row, no undeclared price | cargo, bash | F12 |
+| ISC-62 | command | `cargo test -p interior --test kleidung`; the create and edit forms | rows, state and placement survive | cargo, browser | F12 |
+| ISC-63 | command | `cargo test -p interior --lib`; `interior inventory` on a database holding `kleidung` and `Kleidung` | both named, none merged | cargo, bash | F12 |
+| ISC-64 | command | restart the host; then trips' pack endpoint and `interior check` | pack list resolves items, check runs with nothing started | bash | F13 |
+| ISC-65 | code inspect | `rg 'api/items' capabilities/` and `interior`'s `ROUTES` | one writer, no item route in interior | rg | F13 |
+| ISC-66 | command | `cargo test -p inventory --test umzug`, then `interior inventory` on the live overlay | every row, state and placement survives | cargo | F13 |
 
 ## Anti-claims
 
@@ -1128,6 +1300,39 @@ claim yet, and the watch rows they name are in `upstreams.toml` with the questio
   `.github/ISSUE_TEMPLATE/` is deleted or issues are disabled repo-wide.
 
 ## Decisions
+
+- **2026-10-05 — clothing is a row, and a link is an intake** (principal's call, overruling the
+  recommendation twice). Two questions, both answered against the smaller option. First: the
+  three fields a garment needs (`category`, `groesse`, `farbe`, `saison`) go **on the same
+  `interior_item` table** rather than into a wardrobe capability — the recommendation was to ship
+  only `kind = gear` + `category = kleidung` and see whether the fields were missed, and the
+  principal's answer was to add them now. Second: **both** intake paths, the link verb and the
+  form — the recommendation was the link alone, and the form was argued for as the correction
+  path, which is why it carries the fields in the *edit* form and not only the create form.
+  Q58 was not reopened: it already said *"a tent and a wardrobe are the same row shape … do not
+  fork it"*, so the only open question was which fields and which door. What the price reader
+  refuses is part of the decision and not an implementation detail: `preis_cent` sums into the
+  wishlist total that joins to `finance` (B29), so a guessed price moves a purchase decision
+  while a missing one is counted and said out loud. A non-EUR price is refused rather than
+  converted, because no exchange rate exists in this database.
+- **2026-10-05 — the umbrella keeps its name, and the branch is read from the data**
+  (principal's call, all three recommendations accepted). Asked because the principal reached for
+  *"gear as an over-category"*: `gear` is not a taxonomy in this codebase but a **role** — `kind`
+  is `piece` / `slot` / `gear`, and `gear` means *what travels instead of standing*, which is why
+  the seven pack-list columns hang off it. So the umbrella stays the table Q58 already decided on,
+  `interior_item`, and the name stays `interior` even though it is a misnomer the file header has
+  admitted since B51: renaming it changes a table, a route and every bookmark and gains no
+  behaviour, which is the one thing a rename has to earn. A garment is `kind = piece` — a thing
+  that belongs to me — and **not** `gear`, because the first is true of a shirt in a wardrobe and
+  the second would silently make every shirt a packing candidate the day `trips` builds *select
+  gear for a trip*. The branch is the free-text `category`, and what it needed was not a schema
+  but a **known list**: the words are read from the rows (`store::kategorien`), the form's
+  suggestions are built from the same rows rather than a list written in Svelte, and two spellings
+  of one branch (`kleidung` / `Kleidung`) are **named** by `store::kollisionen` and printed by
+  `interior inventory` rather than silently merged. That is `budget::BEKANNTE_PRIORITAETEN`'s rule
+  applied to a second free field: a list declared in code is a second truth about the same thing,
+  and the first one somebody forgets. The fetch stays in the CLI and the form stays the correction
+  path, so no route was added and the server still never fetches a URL a client chose.
 
 - **2026-10-01 — the software nothing owns gets a report and a front door** (principal's call).
   `sjel update` reports every class of installed software with its owner, and `apply` moves what
@@ -1181,6 +1386,69 @@ claim yet, and the watch rows they name are in `upstreams.toml` with the questio
   report still needs somewhere to land; what changed is that our own backlog is not there.
 
 ## Log
+
+- 2026-10-05 · **`inventory` is its own capability, and the item rows left the floor plan's
+  process** (F13). Landed in one pass because a copied table beside a live one is two truths
+  about the same thing: `capabilities/inventory` (port 8101, `autostart = true`, persistence unit
+  installed) now owns `inventory_item`, `inventory_item_state`, the item surface, `import`,
+  `wunsch` and the vault writeback; `interior` reads the rows through the shared file under a
+  second named prefix and keeps the geometry, the rules, the layouts and `interior_placement`.
+  Four things were found by running it rather than by reading it. **(1)** The migration had to
+  rebuild `interior_placement` before dropping the item table: it carries `ON DELETE CASCADE`,
+  and `DROP TABLE interior_item` would have taken every placement with it — the same trap
+  `widen_kind_check` documents. The new table has **no** foreign key, because the rows now belong
+  to another capability and a cross-prefix FK would make one capability's deletes fail on the
+  other's rows. **(2)** Placements are not inventory's at all: the copied store created
+  `inventory_placement` and read from it, so the migration test found zero placements — they
+  belong to `interior`, and inventory touches them exactly once, in the move. **(3)** `interior`
+  queries `catalogue()` through a prefix constant, and that one function was the one I forgot:
+  every route answered `no such table: interior_item` until it was switched too. **(4)** Deleting
+  the item DDL from `interior`'s migration left its CLI and its tests with no table at all, so
+  `interior` keeps a `CREATE TABLE IF NOT EXISTS` bootstrap with the current column set and no
+  ALTER chain — inventory owns the chain. Measured: against a copy of the live file, 47 items →
+  47, 48 states → 48, revisions preserved, old tables gone, and the open need read **582.96 €**
+  on both sides of the move; with `interior` stopped, `GET /api/inventory` on 8101 still answers
+  and 8092 answers nothing. NOT verified: the host rebooted, and the phone's `/api/sync` and the
+  item images, which stayed in `interior` on purpose. NOT finished: `interior` still mounts the
+  item routes it should have given up (ISC-65), so there are two writers of one table — the same
+  table, so nothing diverges, but it is a deletion left for the next landing.
+
+- 2026-10-05 · `interior wunsch <url>` and three clothing columns, recorded as F12. A shared link
+  becomes a `wanted` row in `interior_item` — the same table a sofa lives in, per Q58 — with the
+  title from the page and a price only where the page declares one (`og:price:amount`,
+  `product:price:amount`, `itemprop="price"`). Three things were found by running it rather than
+  by reading it. **(1)** The first run panicked: `sjel_http::client` is blocking, `main` is
+  `#[tokio::main]`, and a blocking reqwest client dropped on a runtime worker panics at
+  `tokio/src/runtime/blocking/shutdown.rs:51` — `libs/sjel-http/README.md` says so in its own
+  heading, and the fetch now goes through `tokio::task::spawn_blocking`. **(2)** A *refused* URL
+  still wrote a row: `file:///etc/passwd` produced an entry named `passwd`, because the fetch
+  failure was a warning and the URL's last path segment became the label. A guard refusal is a
+  decision and a timeout is a circumstance, so `wunsch::Abruf` now separates them and only the
+  second is survivable. **(3)** `betrag_cent` turned `ab 79` into 79,00 € —
+  `trim_start_matches(is_alphabetic)` cut the `ab` — in the one column that sums into the
+  wishlist total that joins to `finance`. The module header asserted the opposite and every test
+  passed, because none of them named `ab 79`; the reader is now strict about what may sit beside
+  the digits, and four tests name the case. **(4)** Run against a real shop the next day, the
+  first attempt wrote a row named `00`: the page could not be fetched, the failure was a
+  warning, and the URL's last path segment became the label. Two things came out of that one
+  observation — the fallback is gone (a row needs a title or `--label`), and the reason the
+  fetch failed is that the shop refuses a self-identifying client at the HTTP/2 layer while
+  answering a browser agent with 200 and 1,1 MB. `wunsch` now sends a browser agent, the third
+  such case in this repo after `scouting/adapters/meetup.rs` and `transit/hafas.rs`, named and
+  reasoned at the constant rather than left as a mystery in a header map. A third round of
+  questions settled what the first two had left open, and all three recommendations were
+  accepted: the umbrella keeps its (mis)name and the branch is read from the data, a garment is
+  `kind = piece` and not `gear`, and the fetch stays in the CLI. The branch half was the only one
+  that needed code: `store::kategorien` and `store::kollisionen`, printed by `interior inventory`,
+  and the dashboard's suggestion list derived from the loaded rows instead of the five words the
+  first version had written into Svelte — the same second-truth mistake this change is about, made
+  by me, one file away from the fix. Verified: 18 test binaries green, 78 lib tests
+  (12 new in `wunsch.rs`, 3 in `store.rs`), 3 new in `tests/kleidung.rs`, `svelte-check` 0 errors,
+  `cargo clippy -D warnings` clean, `sjel gates` 17/17, `sjel test` 5/5, and the live overlay's
+  file migrated to the columns with its 47 rows intact. NOT verified: a shop page that declares a
+  price, the forms clicked in a browser (the credential boundary ISC-55 already records), and a
+  branch collision in the live data — it has 47 rows and no `category` on any of them, so the
+  branch list is empty and the first word is the principal's to type.
 
 - 2026-10-04 · `tools/model-check` is Rust, and `tools/doctor` no longer starts an interpreter to
   check this machine's inference roles. That leg ran `bun tools/model-check.ts --local --json`

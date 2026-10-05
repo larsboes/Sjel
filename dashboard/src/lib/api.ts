@@ -886,6 +886,25 @@ export interface InteriorItem {
    * sit in a public repository is that the bundle carries no photograph.
    */
   bild: string | null;
+
+  /**
+   * What the piece is FOR — `kleidung`, `schlafen`, `kochen`, `elektronik`. Free text: the list
+   * comes from the notes and no rule runs on it. This is what makes a garment a garment; the
+   * `kind` stays `piece`, because a shirt is a thing you own and not a need with target sizes.
+   */
+  category: string | null;
+  /**
+   * Clothing, as the label writes it — `M`, `42`, `60x60`. Free text on purpose: an invented
+   * scale (`S..XXL`) would be the next shop that does not fit it.
+   */
+  groesse: string | null;
+  /** `weiss`, `dunkelblau`, `gestreift`. Free, for the same reason. */
+  farbe: string | null;
+  /**
+   * When it is worn — `["ganzjahr"]`, `["winter"]`, `["uebergang"]`. A list, because a coat
+   * is winter AND transition, not one or the other.
+   */
+  saison: string[];
   /**
    * How often the row was written; the server owns it (PRD §10 A5). Send the value you read as
    * `revision` to `saveItem`/`patchItem`, and a write that raced another device fails with
@@ -939,10 +958,10 @@ function ifMatch(init: RequestInit, revision: number | undefined): RequestInit {
 /** One conditional item write. A 409 becomes `InteriorConflict`; it is never retried. */
 async function writeItem(id: string, init: RequestInit, revision: number | undefined): Promise<InteriorWriteResult> {
   try {
-    return await request<InteriorWriteResult>(`/interior/api/items/${encodeURIComponent(id)}`, ifMatch(init, revision));
+    return await request<InteriorWriteResult>(`/inventory/api/items/${encodeURIComponent(id)}`, ifMatch(init, revision));
   } catch (caught) {
     if (!(caught instanceof ApiError) || caught.status !== 409) throw caught;
-    const current = await request<{ item: InteriorItem; state: InteriorState | null }[]>('/interior/api/inventory')
+    const current = await request<{ item: InteriorItem; state: InteriorState | null }[]>('/inventory/api/inventory')
       .then((rows) => rows.find((row) => row.item.id === id) ?? null)
       .catch(() => null);
     throw new InteriorConflict(caught.message, current);
@@ -1268,8 +1287,8 @@ export const interior = {
   layouts: () => request<InteriorLayoutSummary[]>('/interior/api/layouts'),
   layout: (name: string) =>
     request<InteriorLayoutDetail>(`/interior/api/layouts/${encodeURIComponent(name)}`),
-  inventory: () => request<InteriorInventoryRow[]>('/interior/api/inventory'),
-  wishlist: () => request<InteriorWishlist>('/interior/api/wishlist'),
+  inventory: () => request<InteriorInventoryRow[]>('/inventory/api/inventory'),
+  wishlist: () => request<InteriorWishlist>('/inventory/api/wishlist'),
   /**
    * Replace an entry. Pass the `revision` you read: a stale one throws `InteriorConflict`.
    * Without it the later write wins, which a client that can be offline must not rely on.
@@ -1294,7 +1313,7 @@ export const interior = {
   /** Create an entry. `state` is required: without it the row joins to nothing and is invisible. */
   createItem: (item: Partial<InteriorItem> & { id: string; kind: 'piece' | 'slot'; label: string; state: InteriorState; note?: string }) =>
     request<{ id: string; state: InteriorState; ok: boolean }>(
-      '/interior/api/items',
+      '/inventory/api/items',
       jsonInit('POST', item),
     ),
 
@@ -1306,13 +1325,13 @@ export const interior = {
    */
   setState: (id: string, state: InteriorState, note?: string) =>
     request<{ id: string; state: InteriorState; changed: boolean }>(
-      `/interior/api/items/${encodeURIComponent(id)}/state`,
+      `/inventory/api/items/${encodeURIComponent(id)}/state`,
       jsonInit('POST', { state, note }),
     ),
 
   stateHistory: (id: string) =>
     request<{ state: InteriorState; since: string; note: string | null }[]>(
-      `/interior/api/items/${encodeURIComponent(id)}/state`,
+      `/inventory/api/items/${encodeURIComponent(id)}/state`,
     ),
 
   /**

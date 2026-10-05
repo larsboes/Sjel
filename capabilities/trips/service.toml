@@ -14,5 +14,14 @@ ready_path  = "/ready"   # availability is judged on this, not on liveness (#126
 # (dashboard/src/lib/api.ts), and every server route already lives under `/api`.
 proxy_api_only = "true"
 
-# No `requires`: the store is a file this process opens, not a service to wait
-# for (PRD Q45).
+# No `requires` for the store: it is a file this process opens, not a service to wait for
+# (PRD Q45).
+#
+# **`inventory` is a service, and this process calls it.** `src/server.rs` reads
+# `GET /api/inventory` over HTTP on a 3 s timeout to resolve every pack-list item, and
+# `src/interior_client.rs` POSTs gear proposals to `POST /api/items`. Until 2026-10-05 both
+# pointed at `interior` (8092), which is on demand — so after a restart, until somebody opened
+# `/interior`, every list lost its weights and equipment fields, and the dependency was not
+# declared anywhere. That is what this line fixes, and it is a real fix now: `inventory` is
+# `autostart = true`, so `up` starts it before this process (ISA F13).
+requires = ["inventory"]

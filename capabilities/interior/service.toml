@@ -5,9 +5,19 @@
 # er war seit 2026-08-20 fuer diese Capability vergeben und ist in capabilities/vault und
 # capabilities/places als belegt vermerkt.
 #
-# autostart = false und idle_timeout: die Seite zeigt Grundriss und private Fotos einer Wohnung.
-# Ein Prozess, der das den ganzen Tag ausliefert, ist keine gute Idee — das Dashboard startet ihn,
-# wenn die Oberflaeche geoeffnet wird.
+# `autostart = false`: die Seite zeigt Grundriss und private Fotos einer Wohnung, und ein Prozess,
+# der das ab dem Boot ausliefert, ist keine gute Idee. Das Dashboard startet ihn, wenn `/interior`
+# geoeffnet wird — und danach **bleibt er stehen**: er hat kein `panel_port`, und ohne das ist
+# `idle_timeout` wirkungslos (`sjel_status::status::registry::idle_timeout_secs` gibt `None`
+# zurueck, sobald `panel_port` leer ist). Hier stand bis 2026-10-05 `idle_timeout = "300"`, und
+# das war eine Zeile, die nichts tat und einen Entwurf beschrieb, den B27 am 2026-08-31 beendet
+# hat. Wer diese Capability wirklich abschalten will, tut es mit `service-runner.sh idle-stop`.
+#
+# **Was das fuer andere kostet:** `capabilities/trips` liest `GET /api/inventory` ueber HTTP
+# (`trips/src/server.rs`, 3 s Timeout) und meldet `interior_reachable: false`, wenn hier nichts
+# laeuft. Nach einem Neustart verliert damit jede Packliste ihre Gewichte und Ausruestungsfelder,
+# bis jemand den Grundriss oeffnet. Das ist eine Kopplung, die in `trips/service.toml` **nicht**
+# als `requires` steht.
 #
 # Die Seite wird bei JEDER Anfrage aus dem Modell erzeugt, nicht beim Start gebaut. Ein
 # vorgebauter Plan waere ein Plan, der den Zahlen widerspricht, aus denen er zu stammen
@@ -20,7 +30,6 @@ build        = ["cargo", "build", "--locked", "--release", "--bin", "interior"]
 port         = "8092"
 health_path  = "/health"
 autostart    = "false"
-idle_timeout = "300"
 
 # Ein Ziel in der Shell, kein Panel. Bis zum 2026-08-31 stand hier `panel_port`, und das war
 # die Aussage "diese Capability liefert ihre eigene Oberflaeche aus, haengt sie in einen

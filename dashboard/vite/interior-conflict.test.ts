@@ -37,7 +37,7 @@ const current = { id: 'schrank', kind: 'piece', label: 'vom Mac', b: 120, revisi
 describe('interior item writes', () => {
   test('a 409 surfaces as InteriorConflict with the current values and is not retried', async () => {
     const calls = serve({
-      'PATCH /interior/api/items/schrank': () =>
+      'PATCH /inventory/api/items/schrank': () =>
         new Response(
           JSON.stringify({
             error: '`schrank` wurde inzwischen geaendert: erwartet Revision 1, aktuell 2',
@@ -45,7 +45,7 @@ describe('interior item writes', () => {
           }),
           { status: 409 },
         ),
-      'GET /interior/api/inventory': () =>
+      'GET /inventory/api/inventory': () =>
         new Response(JSON.stringify([{ item: current, state: 'owned' }]), { status: 200 }),
     });
 
@@ -63,19 +63,19 @@ describe('interior item writes', () => {
 
   test('a matching write sends the revision it read and returns the next one', async () => {
     const calls = serve({
-      'PUT /interior/api/items/schrank': () =>
+      'PUT /inventory/api/items/schrank': () =>
         new Response(JSON.stringify({ id: 'schrank', ok: true, revision: 3 }), { status: 200 }),
     });
 
     const result = await interior.saveItem('schrank', current as never, 2);
 
     expect(result.revision).toBe(3);
-    expect(calls).toEqual([{ method: 'PUT', path: '/interior/api/items/schrank', ifMatch: '"2"' }]);
+    expect(calls).toEqual([{ method: 'PUT', path: '/inventory/api/items/schrank', ifMatch: '"2"' }]);
   });
 
   test('without a revision no If-Match is sent, as before A5', async () => {
     const calls = serve({
-      'PATCH /interior/api/items/schrank': () =>
+      'PATCH /inventory/api/items/schrank': () =>
         new Response(JSON.stringify({ id: 'schrank', ok: true, revision: 4 }), { status: 200 }),
     });
 

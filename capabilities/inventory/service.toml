@@ -1,0 +1,25 @@
+# inventory — was ich besitze. Shape: schemas/service.toml.example.
+#
+# **`autostart = "true"`, und das ist der ganze Grund fuer diese Capability.** Bis 2026-10-05
+# lagen diese Zeilen in `interior`, und `interior` ist absichtlich on-demand: es liefert einen
+# Grundriss und private Fotos einer Wohnung aus, und ein Prozess, der das ab dem Boot tut, ist
+# keine gute Idee. Nur hing an ihm auch das Inventar — `capabilities/trips` liest
+# `GET /api/inventory` ueber HTTP (3 s Timeout) und meldet `interior_reachable: false`, wenn
+# nichts lauscht. Nach einem Neustart verlor damit jede Packliste ihre Gewichte, bis jemand den
+# Grundriss oeffnete. Zwei Domaenen, ein Lebenszyklus, und der falsche hat gewonnen (ISA F13).
+#
+# Was hier liegt, braucht keinen Grundriss: die Zeilen, ihr Zustand ueber die Zeit, die
+# Wunschliste, der Link-Intake. Was einen braucht, bleibt in `interior`.
+kind         = "process"
+name         = "inventory"
+command      = ["target/release/inventory", "serve"]
+build        = ["cargo", "build", "--locked", "--release", "--bin", "inventory"]
+port         = "8101"
+health_path  = "/health"
+autostart    = "true"
+
+# `/inventory` ist eine Dashboard-Route, also wird nur `/inventory/api` an diesen Prozess
+# weitergereicht. Ohne das faengt die einheitliche Regel in vite.config.ts den ganzen Praefix ab
+# und die SvelteKit-Seite wird unerreichbar. Dieselbe Zeile und derselbe Grund wie in
+# `capabilities/trips`, `calendar`, `finance` und `interior`.
+proxy_api_only = "true"

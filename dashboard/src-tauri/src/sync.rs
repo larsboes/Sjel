@@ -12,7 +12,7 @@
 //!   plans that have not ended, read-only, so an itinerary with its booking references is
 //!   readable on a train with no signal. See [`is_trip_offline`]. Media and the RoomPlan USDZ are cached too, under the caps
 //!   [`MAX_SNAPSHOT_ENTRY_BYTES`] and [`MAX_MEDIA_TOTAL_BYTES`] (least recently used goes first).
-//! - **Outbox**: a `PUT`/`PATCH /interior/api/items/:id` that could not reach the Mac. It is
+//! - **Outbox**: a `PUT`/`PATCH /inventory/api/items/:id` that could not reach the Mac. It is
 //!   queued only with `If-Match`: without a revision the Mac cannot refuse a stale write, and a
 //!   conflict would be overwritten instead of shown. A `409` becomes a visible conflict and is
 //!   never retried on its own.
@@ -40,7 +40,7 @@ pub const DB_FILE: &str = "axon-local.db";
 
 /// The paths whose GET answers are kept for offline reads. These are bounded read projections,
 /// not full offline parity: edits still require the canonical node.
-pub const C1_PREFIXES: &[&str] = &["/interior/api/"];
+pub const C1_PREFIXES: &[&str] = &["/interior/api/", "/inventory/api/"];
 pub const OFFLINE_PROJECTION_PATHS: &[&str] = &[
     "/vault/api/tasks",
     "/vault/api/people",
@@ -63,9 +63,9 @@ pub const STALE_BYTES_STATUS: u16 = 203;
 /// The status of a write that went into the outbox instead of to the Mac.
 pub const QUEUED_STATUS: u16 = 202;
 
-const ITEM_PREFIX: &str = "/interior/api/items/";
-const INVENTORY_PATH: &str = "/interior/api/inventory";
-const WISHLIST_PATH: &str = "/interior/api/wishlist";
+const ITEM_PREFIX: &str = "/inventory/api/items/";
+const INVENTORY_PATH: &str = "/inventory/api/inventory";
+const WISHLIST_PATH: &str = "/inventory/api/wishlist";
 
 /// Each entry runs once, in order, inside one transaction. Never edit a shipped entry; add one.
 pub const MIGRATIONS: &[&str] = &[
@@ -251,8 +251,10 @@ fn percent_decode(s: &str) -> Option<String> {
     String::from_utf8(out).ok()
 }
 
-/// The item id in `/interior/api/items/<id>`, or `None` for any other path (a sub-route such as
-/// `/state` or `/impact`, or a query string).
+/// The item id in `/inventory/api/items/<id>`, or `None` for any other path (a sub-route such
+/// as `/state`, or a query string). `capabilities/inventory` owns both the item routes and
+/// this shape; the one item route left in `interior` — `/interior/api/items/<id>/impact` —
+/// never reaches this function, because its prefix is a different one.
 pub fn item_id_of(path: &str) -> Option<String> {
     if path.contains('?') {
         return None;
@@ -1427,7 +1429,7 @@ pub async fn flush_protocol<T: Transport>(
     });
     let request = Outgoing {
         method: "POST".into(),
-        path: "/interior/api/sync".into(),
+        path: "/inventory/api/sync".into(),
         headers: vec![("content-type".into(), "application/json".into())],
         body: Some(body.to_string()),
     };
@@ -1786,7 +1788,7 @@ mod tests {
             s.enqueue(
                 "a",
                 "PATCH",
-                "/interior/api/items/a",
+                "/inventory/api/items/a",
                 Map::new(),
                 "\"1\"",
                 1,
@@ -1891,8 +1893,9 @@ mod tests {
                 "{path}"
             );
         }
-        assert!(is_c1("/interior/api/items?x=1"));
+        assert!(is_c1("/inventory/api/items?x=1"));
         assert!(!is_c1("/interior/api/"));
+        assert!(!is_c1("/inventory/api/"));
         assert!(!is_c1("/interiorx/api/items"));
     }
 
@@ -2008,7 +2011,7 @@ mod tests {
         // Other writes offline fail as before and queue nothing.
         let post = Outgoing {
             method: "POST".into(),
-            path: "/interior/api/items".into(),
+            path: "/inventory/api/items".into(),
             headers: vec![("If-Match".into(), "\"1\"".into())],
             body: Some("{}".into()),
         };
@@ -2212,8 +2215,8 @@ mod tests {
             .iter()
             .all(|(_, o)| matches!(o, Outcome::Sent { revision: Some(10) })));
         let calls = ok.calls();
-        assert_eq!(calls[0].path, "/interior/api/items/b-second");
-        assert_eq!(calls[1].path, "/interior/api/items/a-third");
+        assert_eq!(calls[0].path, "/inventory/api/items/b-second");
+        assert_eq!(calls[1].path, "/inventory/api/items/a-third");
         assert_eq!(calls[2].method, "GET");
         assert_eq!(calls[2].path, INVENTORY_PATH);
         assert_eq!(header(&calls[0].headers, "if-match"), Some("\"3\""));
@@ -2393,7 +2396,7 @@ mod tests {
             .enqueue(
                 "x",
                 "PATCH",
-                "/interior/api/items/x",
+                "/inventory/api/items/x",
                 Map::new(),
                 "\"1\"",
                 5,
@@ -2491,17 +2494,17 @@ mod tests {
     #[test]
     fn item_ids_are_read_from_the_item_path_only() {
         assert_eq!(
-            item_id_of("/interior/api/items/schrank").as_deref(),
+            item_id_of("/inventory/api/items/schrank").as_deref(),
             Some("schrank")
         );
         assert_eq!(
-            item_id_of("/interior/api/items/k%C3%BCche").as_deref(),
+            item_id_of("/inventory/api/items/k%C3%BCche").as_deref(),
             Some("küche")
         );
-        assert_eq!(item_id_of("/interior/api/items/a/state"), None);
-        assert_eq!(item_id_of("/interior/api/items/"), None);
-        assert_eq!(item_id_of("/interior/api/items/a?x=1"), None);
-        assert_eq!(item_id_of("/interior/api/items/%ZZ"), None);
+        assert_eq!(item_id_of("/inventory/api/items/a/state"), None);
+        assert_eq!(item_id_of("/inventory/api/items/"), None);
+        assert_eq!(item_id_of("/inventory/api/items/a?x=1"), None);
+        assert_eq!(item_id_of("/inventory/api/items/%ZZ"), None);
         assert_eq!(item_id_of("/finance/api/items/a"), None);
     }
 

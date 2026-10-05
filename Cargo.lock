@@ -2451,8 +2451,7 @@ version = "0.1.0"
 dependencies = [
  "axum",
  "civil-date",
- "devices",
- "markdown-root",
+ "inventory",
  "rayon",
  "route-manifest",
  "rusqlite",
@@ -2477,6 +2476,27 @@ dependencies = [
  "proc-macro2",
  "quote",
  "syn 2.0.119",
+]
+
+[[package]]
+name = "inventory"
+version = "0.1.0"
+dependencies = [
+ "axum",
+ "devices",
+ "markdown-root",
+ "route-manifest",
+ "rusqlite",
+ "serde",
+ "serde_json",
+ "sjel-config",
+ "sjel-http",
+ "sjel-server",
+ "sjel-store",
+ "thiserror",
+ "tokio",
+ "toml",
+ "tower",
 ]
 
 [[package]]

@@ -10,24 +10,18 @@
 use crate::clearance::check_layout;
 use crate::model::Model;
 use crate::plan;
-#[path = "sync.rs"]
-mod sync;
-use axum::body::{to_bytes, Body};
-use axum::extract::{Extension, Path, Request, State};
-use axum::http::{header, HeaderMap, StatusCode};
-use axum::middleware;
-use axum::response::{Html, IntoResponse, Response};
+use axum::extract::{Path, State};
+use axum::http::StatusCode;
+use axum::response::{Html, IntoResponse};
 use axum::routing::{get, post, put};
 use axum::{Json, Router};
 use serde::{Deserialize, Serialize};
-use serde_json::Value;
 use sha2::{Digest, Sha256};
 use std::path::PathBuf;
 use std::sync::Arc;
 
 struct AppState {
     flat: String,
-    device_store: devices::store::DevicesStore,
     /// Die SQLite-Datei, einmal beim Start aufgeloest. Ein Feld und kein Aufruf je Anfrage,
     /// damit ein Test den verdrahteten Router gegen eine Temp-Datei fahren kann statt gegen
     /// die Datenbank der Installation.
@@ -126,26 +120,6 @@ const ROUTES: &[route_manifest::Route] = &[
     ),
     r(
         "POST",
-        "/api/items",
-        "Einen Eintrag anlegen. Zustand ist Pflicht, sonst taucht er in keiner Liste auf.",
-    ),
-    r(
-        "PATCH",
-        "/api/items/{id}",
-        "Genannte Felder aendern, ungenannte stehen lassen. Ausdrueckliches null loescht eines.",
-    ),
-    r(
-        "GET",
-        "/api/items/{id}/state",
-        "Die Zustandsgeschichte eines Eintrags, aelteste zuerst.",
-    ),
-    r(
-        "POST",
-        "/api/items/{id}/state",
-        "Einen Zustandswechsel anhaengen: owned, wanted oder gone. Haengt an, setzt nicht.",
-    ),
-    r(
-        "POST",
         "/api/items/{id}/impact",
         "Was ein Feld mit den Verdikten machen wuerde, ohne es zu schreiben.",
     ),
@@ -217,33 +191,8 @@ const ROUTES: &[route_manifest::Route] = &[
     ),
     r(
         "GET",
-        "/api/inventory",
-        "Jedes Stueck und jeder Bedarf, mit Zustand (owned/wanted/gone).",
-    ),
-    r(
-        "POST",
-        "/api/sync",
-        "Authenticated axon-sync/v1 mutations for paired devices.",
-    ),
-    r(
-        "GET",
-        "/api/wishlist",
-        "Was noch fehlt, was es kostet, und wie viele Monatssalden das sind.",
-    ),
-    r(
-        "GET",
         "/api/placements/{flat}",
         "Wo die Stuecke in dieser Wohnung tatsaechlich stehen.",
-    ),
-    r(
-        "PUT",
-        "/api/items/{id}",
-        "Ein Stueck aendern. Nimmt die Item-Form, die /api/inventory liefert.",
-    ),
-    r(
-        "POST",
-        "/api/vault/writeback",
-        "Jeden Slot als Notiz im Vault fuehren: einmal saeen, danach nur die Axon-Region.",
     ),
     r(
         "PUT",
@@ -352,435 +301,11 @@ async fn api_flats(
     Ok(Json(serde_json::json!({ "flats": alle, "aktiv": s.flat })))
 }
 
-fn node_id() -> String {
-    sjel_config::env_var("SJEL_NODE_ID").unwrap_or_else(|_| "node_mac".to_string())
-}
-
-async fn signed_sync_auth(
-    State(state): State<Arc<AppState>>,
-    request: Request,
-    next: middleware::Next,
-) -> Response {
-    let signed = match devices::auth::SignedRequest::from_headers(request.headers()) {
-        Ok(signed) => signed,
-        Err(error) => {
-            return (
-                StatusCode::UNAUTHORIZED,
-                Json(serde_json::json!({ "error": error })),
-            )
-                .into_response()
-        }
-    };
-    let method = request.method().as_str().to_string();
-    let path_and_query = request.uri().path_and_query().map_or_else(
-        || request.uri().path().to_string(),
-        |value| value.as_str().to_string(),
-    );
-    let (parts, body) = request.into_parts();
-    let body = match to_bytes(body, 8 * 1024 * 1024).await {
-        Ok(body) => body,
-        Err(_) => return (StatusCode::PAYLOAD_TOO_LARGE, "request body too large").into_response(),
-    };
-    let result = tokio::task::spawn_blocking({
-        let state = Arc::clone(&state);
-        let body = body.to_vec();
-        move || {
-            state
-                .device_store
-                .authenticate(&signed, &method, &path_and_query, &body)
-        }
-    })
-    .await;
-    let device = match result {
-        Ok(Ok(device)) => device,
-        Ok(Err(error)) => {
-            return (
-                StatusCode::UNAUTHORIZED,
-                Json(serde_json::json!({ "error": error.to_string() })),
-            )
-                .into_response()
-        }
-        Err(error) => {
-            return (
-                StatusCode::INTERNAL_SERVER_ERROR,
-                Json(serde_json::json!({ "error": error.to_string() })),
-            )
-                .into_response()
-        }
-    };
-    let mut request = Request::from_parts(parts, Body::from(body));
-    request.extensions_mut().insert(device);
-    next.run(request).await
-}
-
-async fn api_sync(
-    State(state): State<Arc<AppState>>,
-    Extension(device): Extension<devices::store::Device>,
-    Json(envelope): Json<sync::Envelope>,
-) -> Result<impl IntoResponse, (StatusCode, String)> {
-    let now = std::time::SystemTime::now()
-        .duration_since(std::time::UNIX_EPOCH)
-        .map_or(0, |duration| duration.as_secs() as i64);
-    if envelope.protocol_version != "axon-sync/v1" {
-        return Err((
-            StatusCode::BAD_REQUEST,
-            "unsupported sync protocol version".into(),
-        ));
-    }
-    if envelope.target_node_id != node_id() {
-        return Err((
-            StatusCode::BAD_REQUEST,
-            "sync envelope targets a different node".into(),
-        ));
-    }
-    if envelope.actor_device_id != device.id {
-        return Err((
-            StatusCode::UNAUTHORIZED,
-            "envelope actor does not match the signed device".into(),
-        ));
-    }
-    let st = store(&state)?;
-    let mut response = sync::empty_response(&envelope, now);
-    for mutation in envelope.mutations {
-        let operation_id = mutation.operation_id.clone();
-        let processed_at = now;
-        if let Some(revision) = st.sync_operation_revision(&operation_id).map_err(boom)? {
-            response.acknowledgements.push(sync::Acknowledgement {
-                operation_id,
-                status: "duplicate",
-                revision: Some(revision.to_string()),
-                processed_at,
-                error: None,
-            });
-            continue;
-        }
-        if mutation.actor_device_id != device.id {
-            response.acknowledgements.push(sync::Acknowledgement {
-                operation_id,
-                status: "rejected",
-                revision: None,
-                processed_at,
-                error: Some("mutation actor does not match the signed device".into()),
-            });
-            continue;
-        }
-        if mutation.entity_type != "interior.item"
-            || !matches!(mutation.action.as_str(), "patch" | "upsert")
-        {
-            response.acknowledgements.push(sync::Acknowledgement {
-                operation_id,
-                status: "rejected",
-                revision: None,
-                processed_at,
-                error: Some(
-                    "initial sync supports only interior.item patch or upsert mutations".into(),
-                ),
-            });
-            continue;
-        }
-        let Some(base_revision) = mutation.base_revision.as_deref() else {
-            response.acknowledgements.push(sync::Acknowledgement {
-                operation_id,
-                status: "rejected",
-                revision: None,
-                processed_at,
-                error: Some("base_revision is required for an offline mutation".into()),
-            });
-            continue;
-        };
-        let expected = match base_revision.parse::<i64>() {
-            Ok(value) => value,
-            Err(_) => {
-                response.acknowledgements.push(sync::Acknowledgement {
-                    operation_id,
-                    status: "rejected",
-                    revision: None,
-                    processed_at,
-                    error: Some("base_revision must be a decimal revision".into()),
-                });
-                continue;
-            }
-        };
-        let current = st.item(&mutation.entity_id).map_err(boom)?.ok_or_else(|| {
-            (
-                StatusCode::NOT_FOUND,
-                format!("no item `{}`", mutation.entity_id),
-            )
-        })?;
-        let mut merged = merge_patch(&current.0, Value::Object(mutation.fields.clone()))?;
-        merged.id = mutation.entity_id.clone();
-        match st
-            .update_item_if_revision(&merged, expected)
-            .map_err(boom)?
-        {
-            crate::store::Schreibergebnis::Geschrieben(revision) => {
-                st.record_sync_operation(&mutation.operation_id, revision)
-                    .map_err(boom)?;
-                response.acknowledgements.push(sync::Acknowledgement {
-                    operation_id,
-                    status: "accepted",
-                    revision: Some(revision.to_string()),
-                    processed_at,
-                    error: None,
-                });
-            }
-            crate::store::Schreibergebnis::Fehlt => {
-                response.acknowledgements.push(sync::Acknowledgement {
-                    operation_id,
-                    status: "rejected",
-                    revision: None,
-                    processed_at,
-                    error: Some("item does not exist".into()),
-                })
-            }
-            crate::store::Schreibergebnis::Veraltet(actual, state) => {
-                let canonical = serde_json::to_value(&*actual).unwrap_or(Value::Null);
-                response.conflicts.push(serde_json::json!({
-                    "conflict_id": mutation.operation_id,
-                    "operation_id": mutation.operation_id,
-                    "entity_type": mutation.entity_type,
-                    "entity_id": mutation.entity_id,
-                    "base_revision": mutation.base_revision,
-                    "canonical_revision": actual.revision.to_string(),
-                    "local_fields": mutation.fields,
-                    "canonical_fields": canonical,
-                    "detected_at": processed_at,
-                    "state": "open"
-                }));
-                response.acknowledgements.push(sync::Acknowledgement {
-                    operation_id,
-                    status: "conflict",
-                    revision: Some(actual.revision.to_string()),
-                    processed_at,
-                    error: Some(format!("canonical revision is {}", actual.revision)),
-                });
-                let _ = state;
-            }
-        }
-    }
-    Ok(Json(response))
-}
-
-async fn api_inventory(
-    State(s): State<Arc<AppState>>,
-) -> Result<impl IntoResponse, (StatusCode, String)> {
-    let rows = store(&s)?.catalogue().map_err(boom)?;
-    let out: Vec<_> = rows
-        .into_values()
-        .map(
-            |(item, state)| serde_json::json!({ "item": item, "state": state.map(|s| s.as_str()) }),
-        )
-        .collect();
-    Ok(Json(out))
-}
-
-/// Jeden Slot in den Vault schreiben.
-///
-/// Antwortet 200 auch dann, wenn ein Konflikt aufgetreten ist: ein Konflikt heisst, dass ein
-/// Mensch die Region angefasst hat, und das ist ein Zustand des Vaults, kein Fehler dieses
-/// Aufrufs. Er steht namentlich im Ergebnis, damit der Aufrufer ihn sieht, ohne im Log zu suchen.
-///
-/// 501 statt 500, wenn keine Vault-Wurzel erklaert ist: ein Host ohne Vault hat nichts falsch
-/// gemacht, er kann diesen Weg nur nicht gehen.
-async fn api_vault_writeback(
-    State(s): State<Arc<AppState>>,
-) -> Result<impl IntoResponse, (StatusCode, String)> {
-    let rows = store(&s)?.catalogue().map_err(boom)?;
-    let Some(ergebnis) = crate::obsidian::writeback(&rows) else {
-        return Err((
-            StatusCode::NOT_IMPLEMENTED,
-            "keine Vault-Wurzel erklaert: obsidian.root in <overlay>/config/interior.json setzen"
-                .to_string(),
-        ));
-    };
-    let report = ergebnis.map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
-    Ok(Json(serde_json::json!({
-        "ok": report.conflicts.is_empty(),
-        "seeded": report.seeded,
-        "written": report.written,
-        "unchanged": report.unchanged,
-        "conflicts": report.conflicts,
-    })))
-}
-
-/// Der offene Bedarf, und was er in Monatssalden kostet — die Naht zwischen `interior` und
-/// `finance` (PRD B29). Beide Zahlen kommen aus derselben Datei und keine ueber HTTP.
-///
-/// Zwei Summen statt einer, weil die Daten zwei Arten von Preis kennen: ein Produkt hat einen,
-/// ein Slot hat eine Schaetzspanne. Sie in eine Zahl zu falten hiesse, eine Spanne als Preis
-/// auszugeben, und das ist die Praezision, die sie nicht hat.
-async fn api_wishlist(
-    State(s): State<Arc<AppState>>,
-) -> Result<impl IntoResponse, (StatusCode, String)> {
-    let st = store(&s)?;
-    let rows = st.catalogue().map_err(boom)?;
-    let offen: Vec<_> = rows
-        .values()
-        .filter(|(_, s)| *s == Some(crate::store::State::Wanted))
-        .map(|(i, _)| i)
-        .collect();
-
-    let untere: i64 = offen
-        .iter()
-        .map(|i| i.preis_cent.or(i.kosten_min_cent).unwrap_or(0))
-        .sum();
-    let obere: i64 = offen
-        .iter()
-        .map(|i| i.preis_cent.or(i.kosten_max_cent).unwrap_or(0))
-        .sum();
-    let ohne_preis = offen
-        .iter()
-        .filter(|i| i.preis_cent.is_none() && i.kosten_min_cent.is_none())
-        .count();
-
-    let conn = st.borrow_connection().map_err(boom)?;
-    let saldo = crate::budget::monatssaldo(&conn).map_err(boom)?;
-    let monate = saldo
-        .as_ref()
-        .and_then(|s| crate::budget::monate_bis_bezahlt(untere, s));
-
-    Ok(Json(serde_json::json!({
-        "items": offen,
-        "summe_untere_kante_cent": untere,
-        "summe_obere_kante_cent": obere,
-        // Ein Posten ohne Preis zaehlt mit 0 in die Summe. Die Summe waere sonst still zu
-        // klein, und diese Zahl ist die Warnung davor.
-        "posten_ohne_preis": ohne_preis,
-        "monatssaldo": saldo,
-        "monate_bis_bezahlt": monate,
-    })))
-}
-
 async fn api_placements(
     State(s): State<Arc<AppState>>,
     Path(flat): Path<String>,
 ) -> Result<impl IntoResponse, (StatusCode, String)> {
     Ok(Json(store(&s)?.placements(&flat).map_err(boom)?))
-}
-
-/// Die Revision, gegen die ein Schreiben laufen soll (PRD §10 A5, Q110).
-///
-/// Primaer der Header `If-Match`, mit der Revision als Wert, in Anfuehrungszeichen oder ohne
-/// (`If-Match: "3"` wie ein ETag, `If-Match: 3` von Hand). Ersatzweise das Rumpffeld
-/// `expected_revision`, fuer einen Client, der keine Header setzen kann; es wird aus dem Rumpf
-/// genommen, bevor der Rumpf ein Eintrag wird. Nennen beide eine Zahl und nicht dieselbe, ist
-/// die Anfrage widerspruechlich und wird abgewiesen, statt eine davon still zu bevorzugen.
-///
-/// `None` heisst: keine Bedingung, der spaetere Schreiber gewinnt wie vor A5. Ein Client, der
-/// offline sein kann, MUSS eine Revision schicken — sonst ueberschreibt er beim Wiederverbinden
-/// alles, was inzwischen auf einem anderen Geraet geschah.
-fn erwartete_revision(
-    headers: &HeaderMap,
-    rumpf: &mut serde_json::Value,
-) -> Result<Option<i64>, (StatusCode, String)> {
-    let aus_header = match headers.get(header::IF_MATCH) {
-        None => None,
-        Some(wert) => {
-            let text = wert.to_str().unwrap_or("").trim();
-            let zahl = text
-                .strip_prefix('"')
-                .and_then(|t| t.strip_suffix('"'))
-                .unwrap_or(text);
-            Some(zahl.parse::<i64>().map_err(|_| {
-                (
-                    StatusCode::BAD_REQUEST,
-                    format!("If-Match `{text}` ist keine Revision (erwartet: eine Zahl wie \"3\")"),
-                )
-            })?)
-        }
-    };
-    let aus_rumpf = match rumpf
-        .as_object_mut()
-        .and_then(|o| o.remove("expected_revision"))
-    {
-        None | Some(serde_json::Value::Null) => None,
-        Some(v) => Some(v.as_i64().ok_or((
-            StatusCode::BAD_REQUEST,
-            "`expected_revision` ist keine ganze Zahl".to_string(),
-        ))?),
-    };
-    match (aus_header, aus_rumpf) {
-        (Some(h), Some(r)) if h != r => Err((
-            StatusCode::BAD_REQUEST,
-            format!("If-Match nennt Revision {h}, `expected_revision` nennt {r}"),
-        )),
-        (h, r) => Ok(h.or(r)),
-    }
-}
-
-/// Die Antwort auf ein gelungenes Schreiben: die neue Revision im Rumpf und als `ETag`, damit
-/// der naechste Schreibversuch sie ohne erneutes Lesen als `If-Match` schicken kann.
-fn geschrieben(id: &str, revision: i64) -> Response {
-    (
-        [(header::ETAG, format!("\"{revision}\""))],
-        Json(serde_json::json!({ "id": id, "ok": true, "revision": revision })),
-    )
-        .into_response()
-}
-
-/// Ein Schreiben mit erwarteter Revision ausfuehren und das Ergebnis in HTTP uebersetzen.
-///
-/// 409 traegt den aktuellen Stand, nicht nur die Meldung: der Client soll zeigen, was jetzt
-/// gilt, und der Mensch entscheidet, statt dass ein Wiederholen still ueberschreibt.
-fn bedingt_schreiben(
-    st: &crate::store::Store,
-    item: &crate::store::Item,
-    erwartet: i64,
-) -> Result<Response, (StatusCode, String)> {
-    use crate::store::Schreibergebnis;
-    match st.update_item_if_revision(item, erwartet).map_err(boom)? {
-        Schreibergebnis::Geschrieben(revision) => Ok(geschrieben(&item.id, revision)),
-        Schreibergebnis::Fehlt => {
-            Err((StatusCode::NOT_FOUND, format!("kein Eintrag `{}`", item.id)))
-        }
-        Schreibergebnis::Veraltet(aktuell, zustand) => Ok((
-            StatusCode::CONFLICT,
-            Json(serde_json::json!({
-                "error": format!(
-                    "`{}` wurde inzwischen geaendert: erwartet Revision {erwartet}, aktuell {} — \
-                     neu laden und die Aenderung auf den aktuellen Stand anwenden",
-                    item.id, aktuell.revision
-                ),
-                "current": {
-                    "item": aktuell,
-                    "state": zustand.map(|s| s.as_str()),
-                },
-            })),
-        )
-            .into_response()),
-    }
-}
-
-/// Einen Eintrag ganz ersetzen, oder anlegen, wenn es ihn nicht gibt.
-///
-/// Mit erwarteter Revision (`If-Match` oder `expected_revision`, siehe
-/// [`erwartete_revision`]) nur, wenn die Zeile sie noch traegt; sonst 409 mit dem aktuellen
-/// Stand. Mit erwarteter Revision wird nichts angelegt: eine Revision fuer eine Zeile, die es
-/// nicht gibt, ist 404. Ohne Bedingung bleibt es das alte Verhalten.
-async fn api_put_item(
-    State(s): State<Arc<AppState>>,
-    Path(id): Path<String>,
-    headers: HeaderMap,
-    Json(mut rumpf): Json<serde_json::Value>,
-) -> Result<Response, (StatusCode, String)> {
-    let erwartet = erwartete_revision(&headers, &mut rumpf)?;
-    let mut item: crate::store::Item = serde_json::from_value(rumpf).map_err(|e| {
-        (
-            StatusCode::UNPROCESSABLE_ENTITY,
-            format!("Rumpf passt nicht auf einen Eintrag: {e}"),
-        )
-    })?;
-    // Der Pfad gewinnt gegen den Rumpf. Ein Formular, das eine andere Id schickt als die URL,
-    // wuerde sonst still eine zweite Zeile anlegen statt die gemeinte zu aendern.
-    item.id = id;
-    let st = store(&s)?;
-    match erwartet {
-        Some(e) => bedingt_schreiben(&st, &item, e),
-        None => {
-            let revision = st.upsert_item(&item).map_err(boom)?;
-            Ok(geschrieben(&item.id, revision))
-        }
-    }
 }
 
 /// Einen Rumpf ueber einen bestehenden Eintrag legen.
@@ -818,128 +343,6 @@ fn merge_patch(
             format!("Rumpf passt nicht auf einen Eintrag: {e}"),
         )
     })
-}
-
-/// Genannte Felder aendern, ungenannte in Ruhe lassen.
-///
-/// `PUT` daneben ersetzt den ganzen Eintrag und ist damit fuer ein Formular die falsche Form:
-/// `Item` fuehrt 40 Felder, eine Maske zeigt sechs, und was sie nicht schickt, waere weg. Das
-/// ist derselbe stille Verlust, den `deny_unknown_fields` beim Import verhindert — nur in die
-/// andere Richtung.
-///
-/// Zusammengefuehrt wird auf JSON-Ebene und nicht ueber eine zweite Struktur mit lauter
-/// `Option<Option<_>>`: die Zeile ist die Wahrheit, also wird sie gelesen, mit dem Rumpf
-/// ueberschrieben und zurueckgeschrieben. Ein ausdrueckliches `null` loescht ein Feld, ein
-/// fehlender Schluessel laesst es stehen — der Unterschied, den ein Formular braucht.
-async fn api_patch_item(
-    State(s): State<Arc<AppState>>,
-    Path(id): Path<String>,
-    headers: HeaderMap,
-    Json(mut patch): Json<serde_json::Value>,
-) -> Result<Response, (StatusCode, String)> {
-    let erwartet = erwartete_revision(&headers, &mut patch)?;
-    let st = store(&s)?;
-    let (item, _) = st
-        .item(&id)
-        .map_err(boom)?
-        .ok_or((StatusCode::NOT_FOUND, format!("kein Eintrag `{id}`")))?;
-
-    let mut item = merge_patch(&item, patch)?;
-    item.id = id;
-    match erwartet {
-        // Zusammengefuehrt wurde gegen den eben gelesenen Stand; hat den inzwischen jemand
-        // geaendert, faellt das Schreiben an der Revision durch und nichts geht verloren.
-        Some(e) => bedingt_schreiben(&st, &item, e),
-        None => {
-            let revision = st.upsert_item(&item).map_err(boom)?;
-            Ok(geschrieben(&item.id, revision))
-        }
-    }
-}
-
-#[derive(serde::Deserialize)]
-struct NewItem {
-    #[serde(flatten)]
-    item: crate::store::Item,
-    /// Pflicht, und deshalb kein `Option`: ein Eintrag ohne Zustand taucht in keiner Liste auf,
-    /// weil jede Abfrage auf den letzten Zustand joint. Ihn beim Anlegen zu vergessen hiesse,
-    /// eine Zeile zu schreiben, die niemand je sieht.
-    state: crate::store::State,
-    #[serde(default)]
-    note: Option<String>,
-}
-
-async fn api_post_item(
-    State(s): State<Arc<AppState>>,
-    Json(body): Json<NewItem>,
-) -> Result<impl IntoResponse, (StatusCode, String)> {
-    let st = store(&s)?;
-    if body.item.id.trim().is_empty() {
-        return Err((StatusCode::BAD_REQUEST, "`id` fehlt".into()));
-    }
-    if st.item(&body.item.id).map_err(boom)?.is_some() {
-        return Err((
-            StatusCode::CONFLICT,
-            format!("`{}` gibt es schon — PATCH aendert ihn", body.item.id),
-        ));
-    }
-    let revision = st.upsert_item(&body.item).map_err(boom)?;
-    st.record_state(
-        &body.item.id,
-        body.state,
-        body.note.as_deref().or(Some("in der Oberflaeche angelegt")),
-    )
-    .map_err(boom)?;
-    Ok((
-        StatusCode::CREATED,
-        Json(serde_json::json!({
-            "id": body.item.id, "state": body.state.as_str(), "ok": true, "revision": revision
-        })),
-    ))
-}
-
-#[derive(serde::Deserialize)]
-struct StateBody {
-    state: crate::store::State,
-    #[serde(default)]
-    note: Option<String>,
-}
-
-/// Einen Zustandswechsel anhaengen.
-///
-/// Anhaengen und nicht setzen: ein Wunsch, der gekauft wird, ist eine Zeile mehr und kein
-/// ueberschriebenes Feld (PRD B25). Genau diese Spanne verbindet die Wunschliste spaeter mit
-/// `finance`, und ein `UPDATE` haette sie gekostet.
-///
-/// `changed: false` heisst, der Zustand galt schon — kein Fehler, aber auch keine erfundene
-/// zweite Zeile.
-async fn api_post_state(
-    State(s): State<Arc<AppState>>,
-    Path(id): Path<String>,
-    Json(body): Json<StateBody>,
-) -> Result<impl IntoResponse, (StatusCode, String)> {
-    let st = store(&s)?;
-    if st.item(&id).map_err(boom)?.is_none() {
-        return Err((StatusCode::NOT_FOUND, format!("kein Eintrag `{id}`")));
-    }
-    let changed = st
-        .record_state(&id, body.state, body.note.as_deref())
-        .map_err(boom)?;
-    Ok(Json(serde_json::json!({
-        "id": id, "state": body.state.as_str(), "changed": changed
-    })))
-}
-
-async fn api_state_history(
-    State(s): State<Arc<AppState>>,
-    Path(id): Path<String>,
-) -> Result<impl IntoResponse, (StatusCode, String)> {
-    let rows = store(&s)?.state_history(&id).map_err(boom)?;
-    let out: Vec<_> = rows
-        .into_iter()
-        .map(|(s, since, note)| serde_json::json!({ "state": s.as_str(), "since": since, "note": note }))
-        .collect();
-    Ok(Json(out))
 }
 
 /// Was eine Aenderung mit den Verdikten machen WUERDE, ohne sie zu schreiben.
@@ -1587,13 +990,9 @@ async fn index(State(s): State<Arc<AppState>>) -> Result<Html<String>, (StatusCo
 }
 
 pub async fn serve(flat: &str, port: u16) {
-    let database = sjel_config::database_path();
-    let device_store = devices::store::DevicesStore::open(&database)
-        .unwrap_or_else(|error| panic!("interior: cannot open device registry: {error}"));
     let state = Arc::new(AppState {
         flat: flat.to_string(),
-        device_store,
-        database,
+        database: sjel_config::database_path(),
     });
     sjel_server::serve_local("interior", port, build_router(state)).await;
 }
@@ -1605,23 +1004,19 @@ const CAPABILITY: &str = "interior";
 /// Der verdrahtete Router, damit ein Test das echte Ding fahren kann statt einen Handler.
 ///
 /// Diese Capability traegt keine CORS-Schicht, also kann eine fremde Seite die Antwort
-/// nicht lesen — und genau das hat die Luecke verdeckt. `POST /api/vault/writeback` nimmt
-/// keinen Request-Body, ist damit eine *einfache* Anfrage im Sinne von CORS, laeuft ohne
-/// Preflight und schreibt in die Obsidian-Vault. Ob der Browser die Antwort danach
-/// weiterreicht, ist fuer einen Schreibvorgang gleichgueltig; er ist schon passiert. Die
-/// Sperre weist die Anfrage zurueck, bevor der Handler laeuft, und schliesst das.
+/// nicht lesen — und genau das hat eine Luecke verdeckt, die bis 2026-10-05 hier stand:
+/// `POST /api/vault/writeback` nahm keinen Request-Body, war damit eine *einfache* Anfrage
+/// im Sinne von CORS, lief ohne Preflight und schrieb in die Obsidian-Vault. Ob der Browser
+/// die Antwort danach weiterreicht, ist fuer einen Schreibvorgang gleichgueltig; er ist
+/// schon passiert. Diese Route ist mit der Item-Oberflaeche nach `capabilities/inventory`
+/// gezogen — und hat ihre Sperre mitgenommen. Hier bleibt sie, weil jeder Handler dieser
+/// Capability privates liefert: einen fremden Ursprung gar nicht erst bis zum Handler zu
+/// lassen ist die billigere Antwort als eine, die nur keinen Header zurueckschickt.
 ///
 /// Die Sperre liegt absichtlich unter allen Routen: axum umhuellt nur die Routen, die VOR
 /// einem `.layer()`-Aufruf registriert wurden (axum 0.7 `src/docs/routing/layer.md`), eine
 /// darunter angehaengte Route verloere sie stillschweigend.
 fn build_router(state: Arc<AppState>) -> Router {
-    let signed_sync =
-        Router::new()
-            .route("/api/sync", post(api_sync))
-            .layer(middleware::from_fn_with_state(
-                Arc::clone(&state),
-                signed_sync_auth,
-            ));
     Router::new()
         .route("/", get(index))
         .route("/health", get(health))
@@ -1640,8 +1035,6 @@ fn build_router(state: Arc<AppState>) -> Router {
         .route("/api/placements/preview", post(api_preview_placements))
         .route("/api/placements/allowed", post(api_placements_allowed))
         .route("/api/flats", get(api_flats))
-        .route("/api/inventory", get(api_inventory))
-        .merge(signed_sync)
         .route("/api/media/{*pfad}", get(api_media))
         .route("/api/roomplan/reference", get(api_roomplan_reference))
         .route("/api/roomplan/asset", get(api_roomplan_asset))
@@ -1650,15 +1043,11 @@ fn build_router(state: Arc<AppState>) -> Router {
             "/api/roomplan/revisions/{revision_id}/review",
             post(api_roomplan_review),
         )
-        .route("/api/wishlist", get(api_wishlist))
         .route("/api/placements/{flat}", get(api_placements))
-        .route("/api/items", post(api_post_item))
-        .route("/api/vault/writeback", post(api_vault_writeback))
-        .route("/api/items/{id}", put(api_put_item).patch(api_patch_item))
-        .route(
-            "/api/items/{id}/state",
-            get(api_state_history).post(api_post_state),
-        )
+        // Die Item-Oberflaeche liegt in `capabilities/inventory` (ISA F13). Hier bleibt
+        // genau eine Item-Route: die Vorschau, was eine Aenderung mit den Verdikten machen
+        // wuerde. Die rechnet gegen Raeumungsregeln und Layouts, also gehoert sie hierher —
+        // und sie schreibt nichts.
         .route("/api/items/{id}/impact", post(api_item_impact))
         .route("/api/placements/{flat}/{item}", put(api_put_placement))
         .route("/api/layouts/{name}/toleranz", get(api_toleranz))
@@ -1715,11 +1104,9 @@ mod origin_tests {
         if let Some(origin) = origin {
             anfrage = anfrage.header("origin", origin);
         }
-        let database = sjel_config::database_path();
         build_router(Arc::new(AppState {
             flat: "wohnung".to_string(),
-            device_store: devices::store::DevicesStore::open(&database).unwrap(),
-            database,
+            database: sjel_config::database_path(),
         }))
         .oneshot(anfrage.body(Body::empty()).unwrap())
         .await
@@ -1727,17 +1114,17 @@ mod origin_tests {
         .status()
     }
 
-    /// `POST /api/vault/writeback` nimmt keinen Body und ist damit als einfache Anfrage
-    /// ohne Preflight erreichbar. Genau deshalb weist die Sperre die Anfrage zurueck,
-    /// statt nur einen Antwort-Header wegzulassen.
+    /// Jeder Datenhandler hier liefert privates — einen Grundriss, private Fotos, die
+    /// Verdikte einer Wohnung. Genau deshalb weist die Sperre die Anfrage zurueck, statt nur
+    /// einen Antwort-Header wegzulassen.
     #[tokio::test]
-    async fn eine_fremde_seite_erreicht_weder_das_inventar_noch_die_vault() {
+    async fn eine_fremde_seite_erreicht_keinen_datenhandler() {
         for (methode, pfad) in [
-            ("GET", "/api/inventory"),
-            ("GET", "/api/wishlist"),
             ("GET", "/api/model"),
-            ("POST", "/api/vault/writeback"),
-            ("POST", "/api/items"),
+            ("GET", "/api/layouts"),
+            ("GET", "/api/deklaration"),
+            ("POST", "/api/search"),
+            ("POST", "/api/items/schrank/impact"),
         ] {
             assert_eq!(
                 antwort(methode, pfad, Some("https://evil.example")).await,
@@ -2236,191 +1623,4 @@ async fn api_kaufen(
 
 fn nicht_gefunden(e: crate::model::ModelError) -> (StatusCode, String) {
     (StatusCode::NOT_FOUND, e.to_string())
-}
-
-/// Der HTTP-Vertrag von PRD §10 A5 am verdrahteten Router, gegen eine Temp-Datei.
-///
-/// Die Rennbedingung selbst prueft `tests/revision.rs` mit echten Faeden; hier geht es darum,
-/// was ein Client sieht: welcher Status, welcher Rumpf, welcher Header.
-#[cfg(test)]
-mod revision_tests {
-    use super::*;
-    use axum::body::Body;
-    use axum::http::Request;
-    use serde_json::{json, Value};
-    use tower::ServiceExt;
-
-    fn router(name: &str) -> (Router, PathBuf) {
-        let pfad = std::env::temp_dir().join(format!(
-            "interior-api-revision-{name}-{}.db",
-            std::process::id()
-        ));
-        let _ = std::fs::remove_file(&pfad);
-        let device_store = devices::store::DevicesStore::open(&pfad).unwrap();
-        let r = build_router(Arc::new(AppState {
-            flat: "wohnung".to_string(),
-            device_store,
-            database: pfad.clone(),
-        }));
-        (r, pfad)
-    }
-
-    async fn senden(
-        r: &Router,
-        methode: &str,
-        pfad: &str,
-        if_match: Option<&str>,
-        rumpf: Value,
-    ) -> (StatusCode, HeaderMap, Value) {
-        let mut anfrage = Request::builder()
-            .method(methode)
-            .uri(pfad)
-            .header("content-type", "application/json");
-        if let Some(v) = if_match {
-            anfrage = anfrage.header("if-match", v);
-        }
-        let antwort = r
-            .clone()
-            .oneshot(anfrage.body(Body::from(rumpf.to_string())).unwrap())
-            .await
-            .expect("der Router antwortet");
-        let status = antwort.status();
-        let headers = antwort.headers().clone();
-        let bytes = axum::body::to_bytes(antwort.into_body(), usize::MAX)
-            .await
-            .unwrap();
-        let wert = serde_json::from_slice(&bytes)
-            .unwrap_or_else(|_| Value::String(String::from_utf8_lossy(&bytes).into_owned()));
-        (status, headers, wert)
-    }
-
-    fn schrank(label: &str) -> Value {
-        json!({ "id": "schrank", "kind": "piece", "label": label, "b": 100 })
-    }
-
-    #[tokio::test]
-    async fn ohne_bedingung_bleibt_alles_wie_vorher_und_die_revision_steht_in_jeder_antwort() {
-        let (r, pfad) = router("ohne");
-        let (s, h, v) = senden(&r, "PUT", "/api/items/schrank", None, schrank("a")).await;
-        assert_eq!(s, StatusCode::OK);
-        assert_eq!(v["revision"], 1);
-        assert_eq!(h[header::ETAG], "\"1\"");
-
-        let (s, _, v) = senden(&r, "PATCH", "/api/items/schrank", None, json!({"b": 120})).await;
-        assert_eq!(s, StatusCode::OK);
-        assert_eq!(v["revision"], 2);
-
-        let (s, _, v) = senden(&r, "GET", "/api/inventory", None, Value::Null).await;
-        assert_eq!(s, StatusCode::OK);
-        assert_eq!(v[0]["item"]["revision"], 2, "{v}");
-        let _ = std::fs::remove_file(&pfad);
-    }
-
-    #[tokio::test]
-    async fn eine_passende_revision_schreibt_und_erhoeht_um_eins() {
-        let (r, pfad) = router("passt");
-        senden(&r, "PUT", "/api/items/schrank", None, schrank("a")).await;
-
-        // Wie ein ETag, in Anfuehrungszeichen.
-        let (s, h, v) = senden(&r, "PUT", "/api/items/schrank", Some("\"1\""), schrank("b")).await;
-        assert_eq!(s, StatusCode::OK, "{v}");
-        assert_eq!(v["revision"], 2);
-        assert_eq!(h[header::ETAG], "\"2\"");
-
-        // Und ohne, von Hand.
-        let (s, _, v) = senden(
-            &r,
-            "PATCH",
-            "/api/items/schrank",
-            Some("2"),
-            json!({"b": 90}),
-        )
-        .await;
-        assert_eq!(s, StatusCode::OK, "{v}");
-        assert_eq!(v["revision"], 3);
-
-        // Das Rumpffeld ist der Ersatzweg und wird nicht als Eintragsfeld abgewiesen.
-        let (s, _, v) = senden(
-            &r,
-            "PATCH",
-            "/api/items/schrank",
-            None,
-            json!({"b": 80, "expected_revision": 3}),
-        )
-        .await;
-        assert_eq!(s, StatusCode::OK, "{v}");
-        assert_eq!(v["revision"], 4);
-        let _ = std::fs::remove_file(&pfad);
-    }
-
-    #[tokio::test]
-    async fn eine_veraltete_revision_bekommt_409_mit_dem_aktuellen_stand() {
-        let (r, pfad) = router("veraltet");
-        senden(&r, "PUT", "/api/items/schrank", None, schrank("a")).await;
-        senden(
-            &r,
-            "PUT",
-            "/api/items/schrank",
-            Some("1"),
-            schrank("vom Mac"),
-        )
-        .await;
-
-        for (methode, rumpf) in [
-            ("PUT", schrank("vom Telefon")),
-            ("PATCH", json!({"label": "vom Telefon"})),
-        ] {
-            let (s, _, v) = senden(&r, methode, "/api/items/schrank", Some("\"1\""), rumpf).await;
-            assert_eq!(s, StatusCode::CONFLICT, "{methode}: {v}");
-            assert_eq!(v["current"]["item"]["label"], "vom Mac");
-            assert_eq!(v["current"]["item"]["revision"], 2);
-            let fehler = v["error"].as_str().expect("error ist ein Text");
-            assert!(fehler.contains("inzwischen geaendert"), "{fehler}");
-        }
-        // Dasselbe ueber das Rumpffeld.
-        let (s, _, v) = senden(
-            &r,
-            "PATCH",
-            "/api/items/schrank",
-            None,
-            json!({"label": "x", "expected_revision": 1}),
-        )
-        .await;
-        assert_eq!(s, StatusCode::CONFLICT, "{v}");
-
-        let (_, _, v) = senden(&r, "GET", "/api/inventory", None, Value::Null).await;
-        assert_eq!(
-            v[0]["item"]["label"], "vom Mac",
-            "nichts wurde ueberschrieben"
-        );
-        let _ = std::fs::remove_file(&pfad);
-    }
-
-    #[tokio::test]
-    async fn ein_fehlender_eintrag_bleibt_404() {
-        let (r, pfad) = router("fehlt");
-        let (s, _, _) = senden(&r, "PATCH", "/api/items/nichts", None, json!({"b": 1})).await;
-        assert_eq!(s, StatusCode::NOT_FOUND);
-        let (s, _, _) = senden(&r, "PATCH", "/api/items/nichts", Some("1"), json!({"b": 1})).await;
-        assert_eq!(s, StatusCode::NOT_FOUND);
-        // PUT mit Bedingung legt nichts an: eine Revision fuer eine Zeile, die es nicht gibt.
-        let (s, _, _) = senden(&r, "PUT", "/api/items/schrank", Some("1"), schrank("a")).await;
-        assert_eq!(s, StatusCode::NOT_FOUND);
-        let (_, _, v) = senden(&r, "GET", "/api/inventory", None, Value::Null).await;
-        assert_eq!(v, json!([]));
-        let _ = std::fs::remove_file(&pfad);
-    }
-
-    #[tokio::test]
-    async fn eine_unlesbare_oder_widerspruechliche_bedingung_wird_abgewiesen() {
-        let (r, pfad) = router("unlesbar");
-        senden(&r, "PUT", "/api/items/schrank", None, schrank("a")).await;
-        let (s, _, _) = senden(&r, "PUT", "/api/items/schrank", Some("*"), schrank("b")).await;
-        assert_eq!(s, StatusCode::BAD_REQUEST);
-        let mut rumpf = schrank("b");
-        rumpf["expected_revision"] = json!(2);
-        let (s, _, _) = senden(&r, "PUT", "/api/items/schrank", Some("1"), rumpf).await;
-        assert_eq!(s, StatusCode::BAD_REQUEST);
-        let _ = std::fs::remove_file(&pfad);
-    }
 }

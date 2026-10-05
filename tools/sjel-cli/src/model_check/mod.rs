@@ -263,7 +263,11 @@ fn read_config(overlay: &Path) -> Result<(HashMap<String, BackendDecl>, Vec<Role
                 .and_then(Value::as_str)
                 .unwrap_or("")
                 .to_owned(),
-            model: r.get("model").and_then(Value::as_str).unwrap_or("").to_owned(),
+            model: r
+                .get("model")
+                .and_then(Value::as_str)
+                .unwrap_or("")
+                .to_owned(),
             max_requests_per_day: r
                 .get("max_requests_per_day")
                 .map(js_number)
@@ -282,14 +286,14 @@ pub fn report(opts: &Options, overlay: &Path) -> Result<Outcome, String> {
             if !opts.local_only {
                 return true;
             }
-            backends
-                .get(&role.backend)
-                .is_some_and(|b| sjel_inference::is_loopback_url(b.base_url.as_deref().unwrap_or("")))
+            backends.get(&role.backend).is_some_and(|b| {
+                sjel_inference::is_loopback_url(b.base_url.as_deref().unwrap_or(""))
+            })
         })
         .collect();
 
-    let catalogue_client =
-        sjel_http::client(Purpose::new("model-check"), CATALOGUE_TIMEOUT).map_err(|e| e.to_string())?;
+    let catalogue_client = sjel_http::client(Purpose::new("model-check"), CATALOGUE_TIMEOUT)
+        .map_err(|e| e.to_string())?;
     let probe_client =
         sjel_http::client(Purpose::new("model-check"), PROBE_TIMEOUT).map_err(|e| e.to_string())?;
 
@@ -384,7 +388,10 @@ pub fn report(opts: &Options, overlay: &Path) -> Result<Outcome, String> {
                 } else {
                     format!("{note}, but {reply}")
                 };
-                checker.say(&format!("{}: {model} on {backend_name} — {detail}", role.name));
+                checker.say(&format!(
+                    "{}: {model} on {backend_name} — {detail}",
+                    role.name
+                ));
                 entries.push(Entry {
                     role: role.name.clone(),
                     backend: backend_name.to_owned(),
@@ -397,9 +404,11 @@ pub fn report(opts: &Options, overlay: &Path) -> Result<Outcome, String> {
                 });
             }
             Ok(ids) => {
-                let present = ids
-                    .iter()
-                    .any(|id| declared_as(backend.is_ollama, id).iter().any(|d| d == model));
+                let present = ids.iter().any(|id| {
+                    declared_as(backend.is_ollama, id)
+                        .iter()
+                        .any(|d| d == model)
+                });
                 let mut candidates: Vec<&String> = ids
                     .iter()
                     .filter(|id| family(id) == family(model) && newer(id, model))
@@ -430,7 +439,10 @@ pub fn report(opts: &Options, overlay: &Path) -> Result<Outcome, String> {
                     } else {
                         format!(
                             " — same family: {}",
-                            near.iter().map(|s| s.as_str()).collect::<Vec<_>>().join(", ")
+                            near.iter()
+                                .map(|s| s.as_str())
+                                .collect::<Vec<_>>()
+                                .join(", ")
                         )
                     };
                     checker.say(&format!(
@@ -590,14 +602,17 @@ impl Checker<'_> {
         } else {
             "/chat/completions"
         };
-        let mut request = self.probe_client.post(format!("{base}{path}")).json(&json!({
-            "model": model,
-            "messages": [{ "role": "user", "content": "Reply with one word: OK" }],
-            // Generous, because a reasoning model spends its budget thinking and a stingy cap
-            // comes back as `finish_reason: length` — which would make a healthy model look
-            // broken here, the mirror of the bug that put 15 chains of thought in the Feed.
-            "max_tokens": 2000,
-        }));
+        let mut request = self
+            .probe_client
+            .post(format!("{base}{path}"))
+            .json(&json!({
+                "model": model,
+                "messages": [{ "role": "user", "content": "Reply with one word: OK" }],
+                // Generous, because a reasoning model spends its budget thinking and a stingy cap
+                // comes back as `finish_reason: length` — which would make a healthy model look
+                // broken here, the mirror of the bug that put 15 chains of thought in the Feed.
+                "max_tokens": 2000,
+            }));
         if let Some(key) = key {
             request = request.bearer_auth(key);
         }

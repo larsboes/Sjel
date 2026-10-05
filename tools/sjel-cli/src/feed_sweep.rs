@@ -101,11 +101,7 @@ pub fn run(argv: &[String]) -> ExitCode {
         // comms being down is the expected failure: it is an on-demand capability and this job
         // runs on a timer that knows nothing about that. Reported and non-zero, never swallowed:
         // a schedule that silently does nothing is indistinguishable from one that is working.
-        Err(e) => {
-            return fail(&format!(
-                "comms is not answering on 127.0.0.1:{port} — {e}"
-            ))
-        }
+        Err(e) => return fail(&format!("comms is not answering on 127.0.0.1:{port} — {e}")),
     };
 
     let status = response.status();
@@ -154,7 +150,11 @@ pub fn run(argv: &[String]) -> ExitCode {
             eprintln!("feed-sweep: {source_id} FAILED — {error}");
             continue;
         }
-        let count = |key: &str| row.get(key).and_then(serde_json::Value::as_i64).unwrap_or(0);
+        let count = |key: &str| {
+            row.get(key)
+                .and_then(serde_json::Value::as_i64)
+                .unwrap_or(0)
+        };
         let failed = row
             .get("failed")
             .and_then(serde_json::Value::as_array)
@@ -231,7 +231,11 @@ fn relevance_page(port: &str, token: &str) {
         Err(e) => return skipped(e.to_string()),
     };
 
-    let number = |key: &str| page.get(key).and_then(serde_json::Value::as_i64).unwrap_or(0);
+    let number = |key: &str| {
+        page.get(key)
+            .and_then(serde_json::Value::as_i64)
+            .unwrap_or(0)
+    };
     let embedding = page.get("embedding");
     let mode = embedding
         .and_then(|e| e.get("mode"))
@@ -334,7 +338,8 @@ mod tests {
     /// from a message that quoted the secret.
     #[test]
     fn an_unreadable_secret_file_never_names_its_contents() {
-        let dir = std::env::temp_dir().join(format!("feed-sweep-test-missing-{}", std::process::id()));
+        let dir =
+            std::env::temp_dir().join(format!("feed-sweep-test-missing-{}", std::process::id()));
         std::fs::create_dir_all(dir.join("config")).unwrap();
         std::fs::write(
             dir.join("config").join("comms.json"),

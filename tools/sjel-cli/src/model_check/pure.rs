@@ -78,7 +78,9 @@ pub fn catalogue_ids(body: &Value) -> Result<Vec<String>, String> {
             .iter()
             .map(|m| {
                 let raw = js_string(m.get("id").unwrap_or(&Value::Null));
-                raw.strip_prefix("models/").map(str::to_owned).unwrap_or(raw)
+                raw.strip_prefix("models/")
+                    .map(str::to_owned)
+                    .unwrap_or(raw)
             })
             .collect());
     }
@@ -107,7 +109,10 @@ pub fn refusal_detail(body: &str) -> (String, Option<f64>) {
             .cloned()
             .unwrap_or(parsed);
         let error = root.get("error");
-        if let Some(details) = error.and_then(|e| e.get("details")).and_then(Value::as_array) {
+        if let Some(details) = error
+            .and_then(|e| e.get("details"))
+            .and_then(Value::as_array)
+        {
             for detail in details {
                 let Some(violations) = detail.get("violations").and_then(Value::as_array) else {
                     continue;
@@ -135,7 +140,7 @@ pub fn refusal_detail(body: &str) -> (String, Option<f64>) {
             return (slice_chars(message, 120), None);
         }
     }
-    (slice_chars(&squeeze_whitespace(body).trim().to_string(), 120), None)
+    (slice_chars(squeeze_whitespace(body).trim(), 120), None)
 }
 
 /// Whether a probe's reply counts as the model answering. A probe that came back as an HTTP status
@@ -310,8 +315,10 @@ mod tests {
     #[test]
     fn a_catalogue_is_read_from_data_then_models() {
         assert_eq!(
-            catalogue_ids(&json!({"data": [{"id": "gemini-3.7-flash"}, {"id": "models/gemini-3.6-flash"}]}))
-                .unwrap(),
+            catalogue_ids(
+                &json!({"data": [{"id": "gemini-3.7-flash"}, {"id": "models/gemini-3.6-flash"}]})
+            )
+            .unwrap(),
             vec!["gemini-3.7-flash".to_owned(), "gemini-3.6-flash".to_owned()]
         );
         assert_eq!(
@@ -358,8 +365,9 @@ mod tests {
     /// A JSON null counts as stated, and `Number(null)` is 0 — the TypeScript's own reading.
     #[test]
     fn a_null_quota_value_is_still_a_stated_quota() {
-        let (text, quota) =
-            refusal_detail(&json!({"error": {"details": [{"violations": [{"quotaValue": null}]}]}}).to_string());
+        let (text, quota) = refusal_detail(
+            &json!({"error": {"details": [{"violations": [{"quotaValue": null}]}]}}).to_string(),
+        );
         assert_eq!(text, "provider states a quota of null");
         assert_eq!(quota, Some(0.0));
     }

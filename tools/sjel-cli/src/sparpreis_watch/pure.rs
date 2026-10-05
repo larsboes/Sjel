@@ -146,7 +146,10 @@ pub fn rail_watches_of(plan_id: &str, items: &[Value]) -> Vec<RailWatch> {
         if item.get("item_type").and_then(Value::as_str) != Some("option_set") {
             continue;
         }
-        let external_id = item.get("external_id").and_then(Value::as_str).unwrap_or("");
+        let external_id = item
+            .get("external_id")
+            .and_then(Value::as_str)
+            .unwrap_or("");
         // This job's own observations are option_sets too; re-watching them would multiply the
         // watch list every run.
         if external_id.starts_with("sparpreis-watch:") {
@@ -260,7 +263,10 @@ pub fn legacy_observations(items: &[Value]) -> Vec<(String, Vec<LegacyObservatio
         if item.get("item_type").and_then(Value::as_str) != Some("option_set") {
             continue;
         }
-        let external_id = item.get("external_id").and_then(Value::as_str).unwrap_or("");
+        let external_id = item
+            .get("external_id")
+            .and_then(Value::as_str)
+            .unwrap_or("");
         let Some((key, day)) = split_legacy_id(external_id) else {
             continue;
         };
@@ -349,10 +355,7 @@ pub fn dropped(previous_low: Option<f64>, current: f64) -> bool {
 
 /// Today's observation replaces an earlier one from the same day.
 pub fn with_observation(history: Vec<Observation>, today: Observation) -> Vec<Observation> {
-    let mut out: Vec<Observation> = history
-        .into_iter()
-        .filter(|o| o.day != today.day)
-        .collect();
+    let mut out: Vec<Observation> = history.into_iter().filter(|o| o.day != today.day).collect();
     out.push(today);
     out.sort_by(|a, b| a.day.cmp(&b.day));
     out
@@ -500,7 +503,10 @@ mod tests {
 
     #[test]
     fn per_day_items_group_under_their_watch_key() {
-        let groups = legacy_observations(&[legacy("2026-08-10", &[json!(29.99)]), legacy("2026-08-11", &[json!(35.99)])]);
+        let groups = legacy_observations(&[
+            legacy("2026-08-10", &[json!(29.99)]),
+            legacy("2026-08-11", &[json!(35.99)]),
+        ]);
         assert_eq!(groups.len(), 1);
         assert_eq!(groups[0].0, KEY);
         let days: Vec<&str> = groups[0].1.iter().map(|o| o.day.as_str()).collect();

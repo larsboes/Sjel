@@ -228,7 +228,9 @@ impl Watcher {
                 self.observe(&plan.id, &plan.title, &items, &watch)?;
             }
             if self.watched >= CAP {
-                println!("sparpreis-watch: cap of {CAP} reached, remaining watches skipped this run");
+                println!(
+                    "sparpreis-watch: cap of {CAP} reached, remaining watches skipped this run"
+                );
                 break;
             }
         }
@@ -380,10 +382,7 @@ impl Watcher {
 
     fn load_items(&self, plan_id: &str) -> Result<(Vec<Value>, Vec<Stage>), String> {
         let url = format!("{}/api/plans/{}", self.trips, encode_component(plan_id));
-        let details: Value = self
-            .get(&url)?
-            .json()
-            .map_err(|e| format!("{url}: {e}"))?;
+        let details: Value = self.get(&url)?.json().map_err(|e| format!("{url}: {e}"))?;
         let items = details
             .get("items")
             .and_then(Value::as_array)
@@ -451,7 +450,11 @@ impl Watcher {
     }
 
     fn post_item(&self, plan_id: &str, body: Value) -> bool {
-        let url = format!("{}/api/plans/{}/items", self.trips, encode_component(plan_id));
+        let url = format!(
+            "{}/api/plans/{}/items",
+            self.trips,
+            encode_component(plan_id)
+        );
         let text = match serde_json::to_string(&body) {
             Ok(t) => t,
             Err(e) => {
@@ -519,7 +522,10 @@ fn encode_component(value: &str) -> String {
     let mut out = String::with_capacity(value.len());
     for byte in value.bytes() {
         if byte.is_ascii_alphanumeric()
-            || matches!(byte, b'-' | b'_' | b'.' | b'!' | b'~' | b'*' | b'\'' | b'(' | b')')
+            || matches!(
+                byte,
+                b'-' | b'_' | b'.' | b'!' | b'~' | b'*' | b'\'' | b'(' | b')'
+            )
         {
             out.push(byte as char);
         } else {

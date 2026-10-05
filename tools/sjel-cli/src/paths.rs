@@ -137,11 +137,17 @@ pub fn manifest_port(paths: &Paths, capability: &str) -> Result<String, String> 
     match paths.manifest(capability) {
         Manifest::Found(path) => std::fs::read_to_string(&path)
             .map_err(|e| format!("{}: {e}", path.display()))
-            .and_then(|body| port_in_manifest(&body).map_err(|e| format!("{} {e}", path.display()))),
+            .and_then(|body| {
+                port_in_manifest(&body).map_err(|e| format!("{} {e}", path.display()))
+            }),
         Manifest::Duplicate(core, overlay) => Err(duplicate_message(capability, &core, &overlay)),
         Manifest::None => Err(format!(
             "no {}",
-            paths.caps_dir.join(capability).join("service.toml").display()
+            paths
+                .caps_dir
+                .join(capability)
+                .join("service.toml")
+                .display()
         )),
     }
 }

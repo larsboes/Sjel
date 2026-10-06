@@ -63,6 +63,8 @@ content-item = { path = "../../libs/content-item" }
 # the ownership check.
 markdown-root = { path = "../../libs/markdown-root" }
 route-manifest = { path = "../../libs/route-manifest" }
+# The `/api/links` body every capability answers alike (libs/links/ISA.md).
+sjel-links = { path = "../../libs/links" }
 serde = { workspace = true, features = ["derive"] }
 serde_json.workspace = true
 reqwest = { workspace = true, features = ["json", "gzip", "blocking", "query", "form"] }

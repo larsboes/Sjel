@@ -4359,6 +4359,7 @@ dependencies = [
  "sjel-extraction",
  "sjel-http",
  "sjel-inference",
+ "sjel-links",
  "sjel-pseudonymize",
  "sjel-server",
  "sjel-store",

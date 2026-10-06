@@ -81,6 +81,12 @@ const ROUTES: &[route_manifest::Route] = &[
     r("GET", "/routes", "This manifest."),
     r(
         "GET",
+        "/api/links",
+        "Mail from a person: triage rows whose sender is one of their emails in entities. \
+         Required: to=ent:<id> (libs/links/ISA.md D10).",
+    ),
+    r(
+        "GET",
         "/content/{source}/{id}",
         "An item as content-item-v2. :source is feed or mail.",
     ),
@@ -288,6 +294,44 @@ const fn r(
     route_manifest::get(method, path, summary)
 }
 
+#[derive(Debug, Deserialize)]
+struct LinksParams {
+    to: Option<String>,
+}
+
+/// `GET /api/links?to=ent:…`: mail from that person's addresses. Entities not answering is a 502
+/// that names it, never an empty list.
+async fn links_handler(Query(params): Query<LinksParams>) -> (StatusCode, Json<Value>) {
+    let to = params.to.unwrap_or_default();
+    match sjel_links::target(Some(&to)) {
+        Ok(t) if comms::links::LINKS_TO.contains(&t.kind) => {}
+        Ok(t) => {
+            let reason = format!("comms holds no references to `{}`", t.kind);
+            return (StatusCode::BAD_REQUEST, Json(json!({ "error": reason })));
+        }
+        Err(reason) => return (StatusCode::BAD_REQUEST, Json(json!({ "error": reason }))),
+    }
+    let result = tokio::task::spawn_blocking(move || -> Result<Value, (StatusCode, String)> {
+        let emails = comms::links::emails_of(&to).map_err(|e| (StatusCode::BAD_GATEWAY, e))?;
+        let store = Store::open(&Config::load().database_path)
+            .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
+        let items = store
+            .list_triage(None)
+            .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
+        serde_json::to_value(comms::links::mail_from(&to, &items, &emails))
+            .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))
+    })
+    .await;
+    match result {
+        Ok(Ok(answer)) => (StatusCode::OK, Json(answer)),
+        Ok(Err((status, error))) => (status, Json(json!({ "error": error }))),
+        Err(_) => (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            Json(json!({ "error": "task panicked" })),
+        ),
+    }
+}
+
 async fn routes() -> Json<Value> {
     Json(route_manifest::manifest("comms", ROUTES))
 }
@@ -321,6 +365,7 @@ fn build_router(dashboard_origin: &str) -> Router {
     // was the whole boundary.
     let read_routes = Router::new()
         .route("/routes", get(routes))
+        .route("/api/links", get(links_handler))
         .route("/health", get(health_handler))
         .route("/ready", get(ready_handler))
         .route("/feed", get(feed_handler))

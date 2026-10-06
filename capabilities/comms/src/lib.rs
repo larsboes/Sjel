@@ -28,6 +28,7 @@ pub mod feedback;
 pub mod google;
 pub mod grounding;
 pub mod intake;
+pub mod links;
 pub mod local_gate;
 pub mod mail_evaluation;
 pub mod mail_events;

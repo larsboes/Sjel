@@ -4,6 +4,9 @@ name        = "comms"
 command     = ["target/release/comms-server"]
 build       = ["cargo", "build", "--locked", "--release", "--bin", "comms-server"]
 port        = "8083"
+# A person's mail is the triage rows from their emails, as entities holds them; `GET /api/links?to=ent:…`
+# answers it and stores nothing (libs/links/ISA.md D10). src/links.rs holds the same list.
+links_to = ["ent"]
 health_path = "/health"
 ready_path  = "/ready"   # availability is judged on this, not on liveness (#126)
 

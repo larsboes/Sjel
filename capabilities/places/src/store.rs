@@ -322,6 +322,52 @@ impl PlacesStore {
                 ON {prefix}_climate_normals(fetched_at);
             "
         ))?;
+        Self::type_ids(conn, prefix)
+    }
+
+    /// Renames `place_<hex>`, `pp_<hex>` and `visit_<hex>` to `<kind>:<hex>` (libs/links/ISA.md D3,
+    /// LNK-12). The hex is unchanged, so a backfill that re-derives an id lands on the renamed row.
+    ///
+    /// Four tables reference `places.id` and foreign keys are on for every connection
+    /// (`libs/sjel-store`), so the check is deferred to the commit of the migration transaction:
+    /// parent and children change together or not at all. Each statement matches only the old
+    /// shape at its exact length, so a second run changes nothing.
+    fn type_ids(conn: &Connection, prefix: &str) -> Fallible<()> {
+        let place = "GLOB 'place_[0-9a-f]*' AND length({col}) = 22";
+        let rename = |table: &str, col: &str, old: &str, kind: &str, guard: &str| {
+            format!(
+                "UPDATE {prefix}_{table} SET {col} = '{kind}:' || substr({col}, {cut}) \
+                 WHERE {col} {guard};\n",
+                cut = old.len() + 1,
+                guard = guard.replace("{col}", col),
+            )
+        };
+        let mut batch = String::from("PRAGMA defer_foreign_keys = ON;\n");
+        batch += &rename("places", "id", "place_", "place", place);
+        for table in [
+            "geocode_cache",
+            "transaction_places",
+            "person_places",
+            "climate_normals",
+            "place_visits",
+        ] {
+            batch += &rename(table, "place_id", "place_", "place", place);
+        }
+        batch += &rename(
+            "person_places",
+            "id",
+            "pp_",
+            "pp",
+            "GLOB 'pp_[0-9a-f]*' AND length({col}) = 19",
+        );
+        batch += &rename(
+            "place_visits",
+            "id",
+            "visit_",
+            "visit",
+            "GLOB 'visit_[0-9a-f]*' AND length({col}) = 22",
+        );
+        conn.execute_batch(&batch)?;
         Ok(())
     }
 
@@ -698,6 +744,25 @@ impl PlacesStore {
         Ok(inserted == 1)
     }
 
+    /// The places linked to one finance transaction, with the link's precision (`venue` or
+    /// `city`). `source_id` is finance's fingerprint, the same value finance's typed id
+    /// `fin:tx:<source_id>` carries (libs/links/ISA.md D3).
+    pub fn places_for_transaction(&self, source_id: &str) -> Fallible<Vec<(Place, String)>> {
+        let prefix = &self.prefix;
+        let conn = self.conn()?;
+        Ok(conn.query_all(
+            &format!(
+                "SELECT p.id, p.name, p.kind, p.address, p.city, p.country_code, p.latitude,
+                        p.longitude, p.source, p.external_ref, t.precision
+                 FROM {prefix}_transaction_places t
+                 JOIN {prefix}_places p ON p.id = t.place_id
+                 WHERE t.source_id = ?1"
+            ),
+            params![source_id],
+            |row| Ok((row_to_place(row)?, row.get(10)?)),
+        )?)
+    }
+
     pub fn linked_source_ids(&self) -> Fallible<std::collections::HashSet<String>> {
         let prefix = &self.prefix;
         let conn = self.conn()?;
@@ -1007,17 +1072,11 @@ fn row_to_normal(row: &Row) -> rusqlite::Result<MonthlyNormal> {
 /// A stable id from a stable source identity, so a re-run of any backfill on
 /// any machine lands on the row it made before. Same purpose as finance's
 /// path-derived subscription ids.
+///
+/// Typed `<kind>:<hex>` since 2026-10-06 (libs/links/ISA.md D3); it was `<kind>_<hex>` with the
+/// same hex, and `run_migration` renames the stored ones.
 pub fn stable_id(prefix: &str, identity: &str) -> String {
-    use sha2::{Digest, Sha256};
-    let mut hash = Sha256::new();
-    hash.update(identity.as_bytes());
-    let digest = hash.finalize();
-    let mut encoded = String::with_capacity(16);
-    for byte in &digest[..8] {
-        use std::fmt::Write;
-        write!(&mut encoded, "{byte:02x}").expect("writing to a String cannot fail");
-    }
-    format!("{prefix}_{encoded}")
+    sjel_links::stable_id(prefix, identity)
 }
 
 #[cfg(test)]
@@ -1043,7 +1102,7 @@ mod tests {
             stable_id("place", "eva:8000207"),
             stable_id("place", "eva:1234567")
         );
-        assert!(stable_id("place", "eva:8000207").starts_with("place_"));
+        assert!(stable_id("place", "eva:8000207").starts_with("place:"));
     }
 }
 
@@ -1093,6 +1152,45 @@ pub(crate) mod db_tests {
             source: "takeout".into(),
             external_ref: Some(format!("takeout:review:{id}")),
         }
+    }
+
+    #[test]
+    fn old_ids_are_renamed_once_with_their_references() {
+        let (store, _path) = open_test_store("type_ids");
+        let old = "place_32b1af1b5a9b8869";
+        let mut conn = store.conn().unwrap();
+        conn.execute_batch(&format!(
+            "INSERT INTO places_places (id, name, kind, source, created_at)
+                 VALUES ('{old}', 'Bonn Hbf', 'station', 'test', '2026-10-06');
+             INSERT INTO places_transaction_places
+                 (source_id, place_id, precision, confidence_bp, source, created_at)
+                 VALUES ('abc', '{old}', 'city', 9000, 'test', '2026-10-06');
+             INSERT INTO places_place_visits (id, place_id, source, created_at)
+                 VALUES ('visit_0123456789abcdef', '{old}', 'test', '2026-10-06');"
+        ))
+        .unwrap();
+
+        for _ in 0..2 {
+            let tx = conn.transaction().unwrap();
+            PlacesStore::type_ids(&tx, "places").unwrap();
+            tx.commit().unwrap();
+        }
+
+        let new = "place:32b1af1b5a9b8869";
+        assert_eq!(new, stable_id("place", "eva:8000207"));
+        let one = |sql: &str| conn.query_row(sql, [], |r| r.get::<_, String>(0)).unwrap();
+        assert_eq!(one("SELECT id FROM places_places"), new);
+        assert_eq!(one("SELECT place_id FROM places_transaction_places"), new);
+        assert_eq!(
+            one("SELECT id FROM places_place_visits"),
+            "visit:0123456789abcdef"
+        );
+        let broken: i64 = conn
+            .query_row("SELECT count(*) FROM pragma_foreign_key_check", [], |r| {
+                r.get(0)
+            })
+            .unwrap();
+        assert_eq!(broken, 0);
     }
 
     #[test]

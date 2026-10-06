@@ -2,7 +2,7 @@
 project: sjel-links
 type: isa
 phase: climbing
-progress: 60
+progress: 95
 principal_stated_goal: "our connection is the outstanding point … so our system is interchangeable"
 ---
 
@@ -20,9 +20,17 @@ and a capability replaced by another tool loses its joins.
 
 Measured 2026-10-06:
 
-- Four references cross a capability boundary: finance `trip_id` → trips, calendar
-  `payload.plan_id` → trips (entries trips wrote, `source = "trips"`), trips `place_id` →
-  places, inventory `entity_id` → entities. Trip travellers are names, not entity ids.
+- Three stored references cross a capability boundary: finance's `axon-trip-id` tag → trips,
+  calendar `payload.plan_id` → trips (entries trips wrote, `source = "trips"`), and places'
+  `transaction_places.source_id` → finance (456 rows). Trip travellers and places'
+  `person_places.person` are names, not entity ids.
+
+  Correction, 2026-10-06: this list first named trips `place_id` → places and inventory
+  `entity_id` → entities. Both came from a census of struct fields, not of stored data. Trips
+  stores no place id: its destinations carry its own namespace (`obsidian-place:…`), and
+  `place_id` exists only in a computed response (`capabilities/trips/src/bases.rs`).
+  Inventory's `entity_id` is its own item id inside a sync mutation. Places → finance was
+  missing; a count of stored columns found it.
 - Most ids carry their type: `trip:plan:…`, `cal:entry:…`, `ent:…`, `evt:…`. Two do not.
   Places mints `place_<16 hex>` from `stable_id` (`capabilities/places/src/store.rs:1010`).
   Finance serves `transaction_{index}_{posting}_{currency}`
@@ -61,8 +69,8 @@ Measured 2026-10-06:
 > [!done] D3 — answered 2026-10-06: **every linkable id is typed `<kind>:<rest>`, and the two
 > that are not get migrated.**
 > Places: `place_<hex>` becomes `place:<hex>`. `stable_id` changes its separator, and a
-> migration rewrites places' own tables and trips' `place_id` columns once, idempotently,
-> through `sjel_store::migrate_once`. The hash is unchanged, so a re-derived id matches a
+> migration rewrites places' own tables once, idempotently, through `sjel_store::migrate_once`.
+> Trips was named here too; it stores no place id (Problem, correction). The hash is unchanged, so a re-derived id matches a
 > migrated one.
 >
 > Finance: a transaction's linkable id is `fin:tx:<source_id>`. A row without `source_id` has
@@ -120,14 +128,15 @@ in the shell. The same holds for a place, an entity and a calendar entry.
 - [x] LNK-7 — finance answers `to=trip:plan:…` with `fin:tx:<source_id>` rows; `unlinkable`
       counts tagged rows without `source_id`.
 - [x] LNK-8 — calendar answers `to=trip:plan:…` from `payload.plan_id`.
-- [ ] LNK-9 — trips answers `to=place:…` from `place_id`.
-- [ ] LNK-10 — inventory answers `to=ent:…` from `entity_id`.
+- [x] LNK-9 — places answers `to=fin:tx:…` from `transaction_places.source_id`. Replaces "trips
+      answers `to=place:…`", which had no stored reference to answer from.
+- [ ] LNK-10 — withdrawn 2026-10-06: inventory holds no reference to entities (see Problem).
 
 ### F3 · Migration
 
-- [ ] LNK-11 — places' `stable_id` returns `place:<hex>`; the same identity hashes to the same
+- [x] LNK-11 — places' `stable_id` returns `place:<hex>`; the same identity hashes to the same
       hex as before.
-- [ ] LNK-12 — the migration rewrites `place_` ids in places and trips once; a second run
+- [x] LNK-12 — the migration rewrites `place_` ids in places once; a second run
       changes nothing; a backup of the shared store precedes the first run on a real machine.
 
 ### F4 · Shell
@@ -148,11 +157,22 @@ in the shell. The same holds for a place, an entity and a calendar entry.
 - In the inspector, the trip lists its legs under "Calendar" and the manual entry under "Same days"
   (inferred). A leg lists its trip as a reference, and the trip is not repeated as an inference.
 
+The places migration ran on 2026-10-06 after `tools/backup.sh store` wrote
+`store-20261006T061313Z.tar.gz` (integrity check ok, upload confirmed). It renamed 989 values in
+eight columns: `place_` in `places.id` and the five `place_id` columns (966), `pp_` (19) and `visit_`
+(4). `pp` and `visit` rename too because they mint through the same `stable_id`. Afterwards no
+value has the old shape and `pragma_foreign_key_check` returns nothing. `GET /places/api/places`
+and the spend layer still answer. A ledger transaction at Phantasialand now shows its place in the
+inspector, through `GET /places/api/links?to=fin:tx:<source_id>`.
+
 LNK-8 has one consequence for calendar: `Entry::payload` was inert evidence for every provider.
 `payload.plan_id` is now read on rows with `source = 'trips'`, and on no others.
 
 ## Out of scope
 
-- People by name. Trip travellers are strings; turning them into `ent:` ids is the entities
-  capability's decision, not this contract's.
+- People by name. Trip travellers and `person_places.person` are strings; turning them into
+  `ent:` ids is the entities capability's decision, not this contract's.
+- Trips' own place namespace. A destination's `obsidian-place:…` id does not resolve to the
+  places registry, so a place cannot list the trips that went there. Resolving it is a trips
+  decision.
 - Import and export formats. They are a separate contract, in the same note's direction section.

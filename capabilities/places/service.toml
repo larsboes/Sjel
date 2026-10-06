@@ -4,6 +4,9 @@ name        = "places"
 command     = ["target/release/places-server"]
 build       = ["cargo", "build", "--locked", "--release", "--bin", "places-server"]
 port        = "8093"
+# Venue and city links reference finance transactions by fingerprint; `GET /api/links?to=fin:tx:…`
+# answers them (libs/links/ISA.md D1). src/links.rs holds the same list and a test keeps them equal.
+links_to = ["fin:tx"]
 health_path = "/health"
 ready_path  = "/ready"
 

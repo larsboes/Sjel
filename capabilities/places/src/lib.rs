@@ -10,6 +10,7 @@ pub mod climate;
 pub mod config;
 pub mod geocode;
 pub mod layers;
+pub mod links;
 pub mod store;
 
 /// Today as an ISO date from the wall clock, UTC.

@@ -30,6 +30,8 @@ sjel-store = { path = "../../libs/sjel-store" }
 # capability's crate, and the shape belongs to neither of them alone.
 candidate-fingerprint = { path = "../../libs/candidate-fingerprint" }
 route-manifest = { path = "../../libs/route-manifest" }
+# The typed-id minter, shared so a place id is `place:<hex>` like every other (libs/links/ISA.md).
+sjel-links = { path = "../../libs/links" }
 serde = { workspace = true, features = ["derive"] }
 serde_json.workspace = true
 # The database, after PRD Q45 retired Postgres. Bundled so the deployment does not

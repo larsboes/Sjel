@@ -1,6 +1,7 @@
 <script lang="ts">
   import type { FinanceTransaction } from "$lib/api";
   import { inspectorStore } from "$lib/inspector/inspector.svelte";
+  import { transactionItem } from "$lib/inspector/connections";
 
   let { rows }: { rows: FinanceTransaction[] } = $props();
 
@@ -8,6 +9,15 @@
     new Intl.NumberFormat("de-DE", { style: "currency", currency }).format(cents / 100);
 
   const short = (account: string) => account.split(":").slice(1).join(" · ") || account;
+
+  // Through `transactionItem`, so the inspector gets the linkable `fin:tx:` id and every
+  // capability that references this transaction can answer for it (libs/links/ISA.md D3).
+  function inspect(row: FinanceTransaction) {
+    inspectorStore.open({
+      ...transactionItem(row),
+      notes: row.purpose ? `Purpose: ${row.purpose.replaceAll("_", " ")}` : undefined,
+    });
+  }
 </script>
 
 <div class="table-wrap">
@@ -30,28 +40,12 @@
           role="button"
           aria-label={`Transaction: ${row.description}, ${money(row.amount_cents, row.currency)}`}
           onclick={() => {
-            inspectorStore.inspectTransaction({
-              id: row.id,
-              merchant: row.description,
-              amount: `${row.kind === "expense" ? "−" : row.kind === "income" ? "+" : ""}${money(row.amount_cents, row.currency)}`,
-              date: row.date,
-              category: short(row.category),
-              trip: row.trip_id ?? undefined,
-              notes: row.purpose ? `Purpose: ${row.purpose.replaceAll("_", " ")}` : undefined,
-            });
+            inspect(row);
           }}
           onkeydown={(e) => {
             if (e.key === "Enter" || e.key === " ") {
               e.preventDefault();
-              inspectorStore.inspectTransaction({
-                id: row.id,
-                merchant: row.description,
-                amount: `${row.kind === "expense" ? "−" : row.kind === "income" ? "+" : ""}${money(row.amount_cents, row.currency)}`,
-                date: row.date,
-                category: short(row.category),
-                trip: row.trip_id ?? undefined,
-                notes: row.purpose ? `Purpose: ${row.purpose.replaceAll("_", " ")}` : undefined,
-              });
+              inspect(row);
             }
           }}
         >

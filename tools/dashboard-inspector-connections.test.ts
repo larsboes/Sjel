@@ -74,6 +74,12 @@ describe("deepLink", () => {
     );
   });
 
+  test("a place link opens the map on that place", () => {
+    expect(deepLink({ type: "link", id: "place:5f49", kind: "place", title: "Phantasialand", via: "x" })).toBe(
+      "/map?q=Phantasialand",
+    );
+  });
+
   test("an event without an id still opens its day", () => {
     expect(deepLink({ type: "event", title: "", startsAt: "2026-10-06" })).toBe("/calendar?date=2026-10-06");
   });

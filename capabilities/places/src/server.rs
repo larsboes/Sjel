@@ -36,6 +36,11 @@ const ROUTES: &[route_manifest::Route] = &[
     r("GET", "/routes", "This manifest."),
     r(
         "GET",
+        "/api/links",
+        "Places linked to a typed id. Required: to=<id>, such as to=fin:tx:<source_id> (libs/links/ISA.md).",
+    ),
+    r(
+        "GET",
         "/api/places",
         "List/search the place registry. Optional ?q= substring and ?kind= venue|city|station|address|region. \
          A shared registry: it holds no opinion about whether anyone liked a place.",
@@ -131,6 +136,38 @@ const fn r(
 
 async fn routes() -> Json<Value> {
     Json(route_manifest::manifest("places", ROUTES))
+}
+
+#[derive(Debug, serde::Deserialize)]
+struct LinksQuery {
+    to: Option<String>,
+}
+
+/// `GET /api/links?to=<typed id>`: the places linked to it.
+async fn links(State(state): State<AppState>, Query(query): Query<LinksQuery>) -> ApiResponse {
+    let to = query.to.unwrap_or_default();
+    // A bad `to` or a kind places does not hold is the caller's error, never an empty answer.
+    if let Err(reason) =
+        sjel_links::target(Some(&to)).and_then(|t| places::links::source_id(&t).map(drop))
+    {
+        return respond(StatusCode::BAD_REQUEST, json!({ "error": reason }));
+    }
+    let database_path = state.database_path.clone();
+    match tokio::task::spawn_blocking(move || {
+        let target = sjel_links::TypedId::parse(&to)?;
+        let source_id = places::links::source_id(&target)?;
+        let found = PlacesStore::open(&database_path)
+            .and_then(|store| store.places_for_transaction(source_id))
+            .map_err(|error| error.to_string())?;
+        serde_json::to_value(places::links::links(&target, found))
+            .map_err(|error| error.to_string())
+    })
+    .await
+    {
+        Ok(Ok(answer)) => respond(StatusCode::OK, answer),
+        Ok(Err(error)) => failed(error),
+        Err(_) => failed("task panicked".into()),
+    }
 }
 
 #[derive(Clone)]
@@ -917,6 +954,7 @@ const CAPABILITY: &str = "places";
 fn build_router(state: AppState) -> Router {
     Router::new()
         .route("/routes", get(routes))
+        .route("/api/links", get(links))
         .route("/health", get(health))
         .route("/ready", get(ready))
         .route("/api/places", get(list_places))

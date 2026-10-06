@@ -41,7 +41,7 @@ export interface ConnectionGroup {
   capability: string;
   basis: Basis;
   label: string;
-  icon: 'calendar' | 'wallet' | 'train' | 'boxes';
+  icon: 'calendar' | 'wallet' | 'train' | 'map-pin' | 'boxes';
   items: Related[];
   /** Rows that reference the item but have no linkable id of their own. */
   unlinkable?: number;
@@ -63,7 +63,10 @@ export function deepLink(item: InspectableItem): string | null {
     case 'layout':
       return link('/interior');
     case 'link':
-      return item.kind === 'fin:tx' ? link('/finance?view=transactions') : null;
+      if (item.kind === 'fin:tx') return link('/finance?view=transactions');
+      // The map searches its registry by name (`routes/map/+page.svelte` reads `q`).
+      if (item.kind === 'place') return link(`/map?q=${encodeURIComponent(item.title)}`);
+      return null;
   }
 }
 
@@ -168,7 +171,7 @@ function asRelated(item: InspectableItem): Related {
   }
 }
 
-const ICON: Record<string, ConnectionGroup['icon']> = { calendar: 'calendar', finance: 'wallet', trips: 'train' };
+const ICON: Record<string, ConnectionGroup['icon']> = { calendar: 'calendar', finance: 'wallet', trips: 'train', places: 'map-pin' };
 
 function failure(capability: string, err: unknown): string {
   return `${capability} did not answer: ${err instanceof Error ? err.message : String(err)}`;

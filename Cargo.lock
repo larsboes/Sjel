@@ -4601,6 +4601,7 @@ dependencies = [
  "sha2 0.11.0",
  "sjel-config",
  "sjel-http",
+ "sjel-links",
  "sjel-server",
  "sjel-store",
  "tokio",

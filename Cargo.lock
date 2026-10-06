@@ -2451,7 +2451,6 @@ version = "0.1.0"
 dependencies = [
  "axum",
  "civil-date",
- "inventory",
  "rayon",
  "route-manifest",
  "rusqlite",
@@ -2459,6 +2458,7 @@ dependencies = [
  "serde_json",
  "sha2 0.11.0",
  "sjel-config",
+ "sjel-inventory",
  "sjel-server",
  "sjel-store",
  "thiserror",
@@ -2476,27 +2476,6 @@ dependencies = [
  "proc-macro2",
  "quote",
  "syn 2.0.119",
-]
-
-[[package]]
-name = "inventory"
-version = "0.1.0"
-dependencies = [
- "axum",
- "devices",
- "markdown-root",
- "route-manifest",
- "rusqlite",
- "serde",
- "serde_json",
- "sjel-config",
- "sjel-http",
- "sjel-server",
- "sjel-store",
- "thiserror",
- "tokio",
- "toml",
- "tower",
 ]
 
 [[package]]
@@ -4627,6 +4606,27 @@ dependencies = [
  "sjel-http",
  "thiserror",
  "toml",
+]
+
+[[package]]
+name = "sjel-inventory"
+version = "0.1.0"
+dependencies = [
+ "axum",
+ "devices",
+ "markdown-root",
+ "route-manifest",
+ "rusqlite",
+ "serde",
+ "serde_json",
+ "sjel-config",
+ "sjel-http",
+ "sjel-server",
+ "sjel-store",
+ "thiserror",
+ "tokio",
+ "toml",
+ "tower",
 ]
 
 [[package]]

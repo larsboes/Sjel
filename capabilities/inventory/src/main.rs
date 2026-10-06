@@ -8,7 +8,7 @@
 //! diese Zeilen in `interior`, und `interior` ist absichtlich on-demand. Ein Neustart nahm
 //! damit jeder Packliste ihre Gewichte, bis jemand den Grundriss oeffnete (ISA F13).
 
-use inventory::store::{State, Store};
+use sjel_inventory::store::{State, Store};
 
 fn bold(s: &str) -> String {
     format!("\x1b[1m{s}\x1b[0m")
@@ -86,7 +86,7 @@ async fn main() {
 
     let code = match cmd {
         "serve" => {
-            inventory::api::serve().await;
+            sjel_inventory::api::serve().await;
             return;
         }
         "import" => inventory_import(&argv),
@@ -138,7 +138,7 @@ fn inventory_import(argv: &[String]) -> i32 {
             dim("--force: die Dateien ueberschreiben die Tabellen")
         );
     }
-    match inventory::import::inventory(&store, &dir) {
+    match sjel_inventory::import::inventory(&store, &dir) {
         Ok(b) => {
             println!(
                 "\n  {} {} Stuecke, {} Bedarfe, {} Zustandswechsel\n  {}\n",
@@ -253,7 +253,7 @@ fn zweige(store: &Store) -> Vec<(String, i64)> {
     for (name, anzahl) in &zweige {
         println!("    {name:<26} {anzahl:>4}");
     }
-    let kollisionen = inventory::store::kollisionen(&zweige);
+    let kollisionen = sjel_inventory::store::kollisionen(&zweige);
     if !kollisionen.is_empty() {
         println!("\n  {}", yellow(&bold("  zwei Schreibweisen, ein Zweig")));
         for gruppe in &kollisionen {
@@ -285,25 +285,25 @@ async fn wunsch(argv: &[String]) -> i32 {
     // `spawn_blocking` und nicht `block_in_place`: die Threads, die `spawn_blocking` faehrt,
     // sind keine Runtime-Worker, und dort darf der blockierende Client stehen.
     let abruf = url.clone();
-    let gelesen = match tokio::task::spawn_blocking(move || inventory::wunsch::holen(&abruf)).await
-    {
-        Ok(Ok(g)) => g,
-        // Eine abgelehnte URL beendet den Aufruf. Sie ist eine Entscheidung und kein Umstand:
-        // `file://` und eine Adresse in diesem Netz werden nicht "trotzdem" eingetragen, sonst
-        // waere die Wache eine Warnung.
-        Ok(Err(abruf @ inventory::wunsch::Abruf::Abgelehnt(_))) => {
-            eprintln!("{}", red(&format!("abgelehnt: {abruf}")));
-            return 2;
-        }
-        Ok(Err(nicht_erreicht)) => {
-            eprintln!("  {}", yellow(&format!("nicht geholt: {nicht_erreicht}")));
-            inventory::wunsch::Gelesen::default()
-        }
-        Err(e) => {
-            eprintln!("  {}", yellow(&format!("nicht geholt: {e}")));
-            inventory::wunsch::Gelesen::default()
-        }
-    };
+    let gelesen =
+        match tokio::task::spawn_blocking(move || sjel_inventory::wunsch::holen(&abruf)).await {
+            Ok(Ok(g)) => g,
+            // Eine abgelehnte URL beendet den Aufruf. Sie ist eine Entscheidung und kein Umstand:
+            // `file://` und eine Adresse in diesem Netz werden nicht "trotzdem" eingetragen, sonst
+            // waere die Wache eine Warnung.
+            Ok(Err(abruf @ sjel_inventory::wunsch::Abruf::Abgelehnt(_))) => {
+                eprintln!("{}", red(&format!("abgelehnt: {abruf}")));
+                return 2;
+            }
+            Ok(Err(nicht_erreicht)) => {
+                eprintln!("  {}", yellow(&format!("nicht geholt: {nicht_erreicht}")));
+                sjel_inventory::wunsch::Gelesen::default()
+            }
+            Err(e) => {
+                eprintln!("  {}", yellow(&format!("nicht geholt: {e}")));
+                sjel_inventory::wunsch::Gelesen::default()
+            }
+        };
 
     let label = flag(argv, "label").or_else(|| gelesen.titel.clone());
     let Some(label) = label else {
@@ -315,9 +315,9 @@ async fn wunsch(argv: &[String]) -> i32 {
     };
 
     let art = match flag(argv, "kind").as_deref() {
-        None | Some("piece") => inventory::store::Kind::Piece,
-        Some("slot") => inventory::store::Kind::Slot,
-        Some("gear") => inventory::store::Kind::Gear,
+        None | Some("piece") => sjel_inventory::store::Kind::Piece,
+        Some("slot") => sjel_inventory::store::Kind::Slot,
+        Some("gear") => sjel_inventory::store::Kind::Gear,
         Some(andere) => {
             eprintln!(
                 "{}",
@@ -331,7 +331,7 @@ async fn wunsch(argv: &[String]) -> i32 {
     // Ein unlesbarer Betrag ist ein Fehler und keine Null — dieselbe Regel wie in `wunsch.rs`.
     let preis_flag = flag(argv, "preis");
     let preis_cent = match &preis_flag {
-        Some(roh) => match inventory::wunsch::betrag_cent(roh) {
+        Some(roh) => match sjel_inventory::wunsch::betrag_cent(roh) {
             Some(c) => Some(c),
             None => {
                 eprintln!(
@@ -382,9 +382,11 @@ async fn wunsch(argv: &[String]) -> i32 {
             }
             id
         }
-        None => inventory::wunsch::freie_kennung(&inventory::wunsch::kennung(&label), |k| {
-            katalog.contains_key(k)
-        }),
+        None => {
+            sjel_inventory::wunsch::freie_kennung(&sjel_inventory::wunsch::kennung(&label), |k| {
+                katalog.contains_key(k)
+            })
+        }
     };
 
     let category = flag(argv, "category");
@@ -392,7 +394,7 @@ async fn wunsch(argv: &[String]) -> i32 {
     let farbe = flag(argv, "farbe");
     // Die Zeile wird hier gebaut und nicht in `wunsch.rs`: das Modul liest einen Link, diese
     // Funktion schreibt eine Zeile.
-    let item = inventory::store::Item {
+    let item = sjel_inventory::store::Item {
         id: kennung.clone(),
         kind: art,
         label: label.clone(),
@@ -481,7 +483,7 @@ fn vault_writeback() -> i32 {
             return 2;
         }
     };
-    let Some(ergebnis) = inventory::obsidian::writeback(&rows) else {
+    let Some(ergebnis) = sjel_inventory::obsidian::writeback(&rows) else {
         eprintln!(
             "{}",
             red("keine Vault-Wurzel erklaert: obsidian.root in <overlay>/config/inventory.json setzen")

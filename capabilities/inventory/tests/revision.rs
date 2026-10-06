@@ -5,7 +5,7 @@
 //! Geprueft gegen eine echte SQLite-Datei, weil die Eigenschaft, um die es geht — Vergleich
 //! und Schreiben in einem Statement — in einem Mock nicht vorkommt.
 
-use inventory::store::{Item, Kind, Schreibergebnis, Store};
+use sjel_inventory::store::{Item, Kind, Schreibergebnis, Store};
 use std::path::PathBuf;
 use std::sync::{Arc, Barrier};
 

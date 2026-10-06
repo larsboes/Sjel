@@ -18,8 +18,8 @@ fn eine_layoutpruefung_kostet_wenige_millisekunden() {
     let _ = std::fs::remove_file(&db);
     std::env::set_var("SJEL_PERSONAL_ROOT", &fixture);
     std::env::set_var("SJEL_DB_PATH", &db);
-    let store = inventory::store::Store::open(&db).unwrap();
-    inventory::import::inventory(&store, &fixture.join("data/interior/inventory")).unwrap();
+    let store = sjel_inventory::store::Store::open(&db).unwrap();
+    sjel_inventory::import::inventory(&store, &fixture.join("data/interior/inventory")).unwrap();
     let model = Model::load("muster").unwrap();
     let layout = model.load_layout("a-frei").unwrap();
 

@@ -62,7 +62,7 @@ tower = { workspace = true, features = ["util"] }
 # anzulegen. Diese Zeile ist der Preis dafuer. Gelesen wird ueber die geteilte Datei, nicht
 # ueber HTTP — `interior` laeuft in Tests ohne Dienst, und ein geteilter Store ist laut
 # `capabilities/inventory/src/lib.rs` ausdruecklich kein geteilter Lesevertrag.
-inventory = { path = "../inventory" }
+sjel-inventory = { path = "../inventory" }
 
 [lints]
 workspace = true

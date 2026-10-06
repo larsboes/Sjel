@@ -1,5 +1,5 @@
 [package]
-name = "inventory"
+name = "sjel-inventory"
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true
@@ -12,7 +12,7 @@ name = "inventory"
 path = "src/main.rs"
 
 [lib]
-name = "inventory"
+name = "sjel_inventory"
 path = "src/lib.rs"
 
 [dependencies]

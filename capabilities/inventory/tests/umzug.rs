@@ -10,8 +10,8 @@
 //! Kindtabelle deshalb vorher ohne Fremdschluessel neu. Ohne diesen Test waere der Verlust
 //! still: die Zeilen sind weg, und niemand hat eine Zahl, gegen die er es merkt.
 
-use inventory::store::{Item, Kind, State, Store};
 use rusqlite::Connection;
+use sjel_inventory::store::{Item, Kind, State, Store};
 use std::path::Path;
 
 /// Die Form, in der die Tabelle bis 2026-10-05 auf der Platte lag: unter `interior_item`, mit

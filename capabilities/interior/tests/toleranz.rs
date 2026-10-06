@@ -28,8 +28,8 @@ fn fixture_overlay() {
         std::env::set_var("SJEL_PERSONAL_ROOT", &fixture);
         std::env::set_var("SJEL_DB_PATH", &db);
         std::env::remove_var("SJEL_INTERIOR_FLAT");
-        let store = inventory::store::Store::open(&db).expect("die Testdatenbank oeffnet");
-        inventory::import::inventory(&store, &fixture.join("data/interior/inventory"))
+        let store = sjel_inventory::store::Store::open(&db).expect("die Testdatenbank oeffnet");
+        sjel_inventory::import::inventory(&store, &fixture.join("data/interior/inventory"))
             .expect("das Musterinventar importiert");
     });
 }

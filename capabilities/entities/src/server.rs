@@ -117,6 +117,14 @@ const ROUTES: &[route_manifest::Route] = &[
                   facts and Google/Obsidian links move; other is deleted. Returns the kept entity.",
         request_schema: Some(route_manifest::schema_of::<MergeRequest>),
     },
+    route_manifest::Route {
+        method: "POST",
+        path: "/api/resolve",
+        summary: "Which person each of { names, emails } means. A name is exact, first, ambiguous \
+                  or none, with candidates; only exact carries an entity_id. An email carries one \
+                  when exactly one person has it (libs/links/ISA.md D8). Writes nothing.",
+        request_schema: Some(route_manifest::schema_of::<entities::resolve::ResolveRequest>),
+    },
     route_manifest::get(
         "GET",
         "/api/located",
@@ -411,6 +419,21 @@ async fn delete_fact(
     }
 }
 
+/// `POST /api/resolve`: read-only matching for capabilities that store people as text.
+async fn resolve(
+    State(state): State<Arc<AppState>>,
+    Json(body): Json<entities::resolve::ResolveRequest>,
+) -> Reply {
+    let answer = blocking(&state, move |s| {
+        Ok(entities::resolve::resolve(
+            &s.store.list(Some("person"), None)?,
+            &body,
+        ))
+    })
+    .await?;
+    Ok(to_json(answer))
+}
+
 async fn duplicates(State(state): State<Arc<AppState>>, Query(q): Query<DuplicatesQuery>) -> Reply {
     let limit = q.limit.unwrap_or(10).clamp(1, 50);
     let judge = q.judge.unwrap_or(false);
@@ -580,6 +603,7 @@ fn router(state: Arc<AppState>) -> Router {
         .route("/api/located", get(located))
         .route("/api/entities/{id}/sources", get(entity_sources))
         .route("/api/duplicates", get(duplicates))
+        .route("/api/resolve", post(resolve))
         .route("/api/duplicates/distinct", post(mark_distinct))
         .route("/api/entities/{id}/merge", post(merge_entity))
         // Below every route: `layer` wraps only what is registered before it

@@ -46,11 +46,10 @@ pub fn pair(a: &str, b: &str) -> (String, String) {
     }
 }
 
-fn norm_name(name: &str) -> String {
-    name.split_whitespace()
-        .collect::<Vec<_>>()
-        .join(" ")
-        .to_lowercase()
+/// The shared key (`sjel_links::name_key`), so trips and places key their decisions by the
+/// same rule this file matches by.
+pub(crate) fn norm_name(name: &str) -> String {
+    sjel_links::name_key(name)
 }
 
 /// The last nine digits: `+49 228 1234567`, `0228 1234567` and `02281234567` agree. Shorter
@@ -60,7 +59,7 @@ fn norm_phone(phone: &str) -> Option<String> {
     (digits.len() >= 7).then(|| digits[digits.len().saturating_sub(9)..].to_string())
 }
 
-fn strings(entity: &Entity, key: &str) -> Vec<String> {
+pub(crate) fn strings(entity: &Entity, key: &str) -> Vec<String> {
     entity
         .values
         .get(key)

@@ -4,7 +4,7 @@ version.workspace = true
 edition.workspace = true
 rust-version.workspace = true
 license.workspace = true
-description = "Typed ids and the back-reference contract one capability answers about another's rows."
+description = "Typed ids, the back-reference contract, and the people-by-name contract between capabilities."
 publish = false
 
 [lib]
@@ -13,6 +13,8 @@ path = "src/lib.rs"
 
 [dependencies]
 serde = { workspace = true, features = ["derive"] }
+# Request schemas for `/routes`, as every capability derives them (libs/route-manifest).
+schemars = "1.2.2"
 sha2.workspace = true
 
 [dev-dependencies]

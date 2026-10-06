@@ -99,6 +99,57 @@ Measured 2026-10-06:
 > the places migration needs it. `new_id(kind)` is added with the first capability that moves its
 > minter. No forced sweep.
 
+### People (asked 2026-10-06)
+
+Measured 2026-10-06, distinct values, counts only. Entities holds 293 people. Four columns
+elsewhere name a person as text:
+
+| Column | Values | Exact name, one person | First name, one person | First name, several | No match |
+|---|---|---|---|---|---|
+| `trips_plans.travelers` | 17 | 5 | 6 | 3 | 3 |
+| `places_person_places.person` | 15 | 3 | 5 | 3 | 4 |
+| `comms_triage_items.from_addr` | 215 | — | — | — | 4 match a person's email |
+| `comms_feed_items.author` | 672 | 0 | 0 | 0 | all |
+
+Feed authors are writers of what the operator reads, not people the operator knows. They are
+out of scope.
+
+> [!done] D7 — answered 2026-10-06: **the id sits beside the name.**
+> Trips keeps `travelers` as written and adds `traveler_ids`, a JSON map from a name to an
+> `ent:` id, or to `null` for "not a person". A name with no key is undecided. Places keeps
+> `person` and adds `entity_id` and `entity_state` (`open`, `linked`, `not_person`). No caller
+> of `travelers` changes: about 100 uses read it as text. Rejected: aliases in entities (every
+> answer would need entities up) and replacing names with ids (every caller and a migration).
+>
+> Refined 2026-10-06 while building, same choice: the id lives in a per-name table in each
+> capability (`trips_people`, `places_people`: `name_key`, `entity_id`, `decided_at`), not in a
+> column on every row. D11 rules one decision per name, and a table keyed by name enforces it;
+> a map on each plan would let two plans disagree about the same "Lucia". The plans and
+> `person_places` tables do not change. `entity_id` null records "not a person"; no row means
+> undecided. The key is `sjel_links::name_key`, which entities' duplicate finder now uses too.
+
+> [!done] D8 — answered 2026-10-06: **exact matches link without asking; the rest wait.**
+> An exact full name with one match, or an exact email, links at once. A first-name or
+> ambiguous match goes to the review list. The name rules are entities' own
+> (`capabilities/entities/src/duplicates.rs`, `norm_name` and the first-name rule), served as
+> `POST /entities/api/resolve`. No capability matches names itself.
+
+> [!done] D9 — answered 2026-10-06: **a name with no person is offered, never created.**
+> The review list shows "Create person" and "Not a person". Nothing becomes an entity on its
+> own, so a typo or a group ("family") does not become a person.
+
+> [!done] D10 — answered 2026-10-06: **mail joins by exact email, and stores nothing.**
+> Comms declares `links_to = ["ent"]` and answers by asking entities for the person's emails,
+> then matching `from_addr`. Mail is never on the review list: an email matches or it does not.
+
+> [!done] D11 — decided 2026-10-06 without a question: **the owner writes, and no new
+> vocabulary.** Each capability links its own exact matches, at startup and after its own
+> writes. If entities does not answer, the names stay undecided and nothing fails. A
+> capability that declares `ent` in `links_to` and stores names also serves
+> `GET /api/people/open` and `POST /api/people/decide`; the shell finds them through
+> `links_to`, as it finds `/api/links`. One decision covers every row of that name in that
+> capability, and the list shows how many rows that is.
+
 ## Goal
 
 Opening a trip in the inspector shows the transactions and calendar entries that reference it,
@@ -143,6 +194,17 @@ in the shell. The same holds for a place, an entity and a calendar entry.
 
 - [x] LNK-13 — `connections.ts` holds no capability pair; exact links come from `/api/links`, and
       the date-range groups are labelled as coincidence.
+
+### F5 · People
+
+- [x] LNK-14 — `POST /entities/api/resolve` answers each name with `exact`, `first`,
+      `ambiguous` or `none` and its candidates, and each email with the person it belongs to.
+- [ ] LNK-15 — trips stores `traveler_ids`, links exact matches itself, serves
+      `/api/people/open`, `/api/people/decide`, and answers `/api/links?to=ent:…`.
+- [ ] LNK-16 — places does the same on `person_places`.
+- [ ] LNK-17 — comms answers `/api/links?to=ent:…` from `from_addr` and the person's emails.
+- [ ] LNK-18 — `/people` lists the open names across capabilities, with create, link and
+      not-a-person; a person in the inspector lists the trips, places and mail that reference it.
 
 ## Verified
 

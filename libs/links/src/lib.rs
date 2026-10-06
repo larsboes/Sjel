@@ -7,7 +7,7 @@
 //!
 //! No axum here on purpose (ISA D4): each capability writes its own handler around [`target`].
 
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 
 /// A typed id and its kind. The kind is every segment but the last: `trip:plan:18c7` is kind
 /// `trip:plan`, which is the string trips' rows carry and the one `links_to` declares.
@@ -89,6 +89,119 @@ pub fn stable_id(kind: &str, identity: &str) -> String {
     id
 }
 
+// ---- people by name (libs/links/ISA.md D7-D11) -----------------------------------------------
+
+/// The key a person's name is compared by: whitespace collapsed, lower case. Entities resolves
+/// with it and every capability that stores names keys its decisions by it, so "Lucia" and
+/// " lucia " are one decision.
+pub fn name_key(name: &str) -> String {
+    name.split_whitespace()
+        .collect::<Vec<_>>()
+        .join(" ")
+        .to_lowercase()
+}
+
+/// The body of `POST /entities/api/resolve`.
+#[derive(Debug, Default, Clone, Serialize, Deserialize, schemars::JsonSchema)]
+pub struct ResolveRequest {
+    #[serde(default)]
+    pub names: Vec<String>,
+    #[serde(default)]
+    pub emails: Vec<String>,
+}
+
+/// How a name resolved. Only `Exact` may be linked without asking the operator (D8).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum Match {
+    /// The full name matches one person.
+    Exact,
+    /// One word that begins exactly one person's name. A guess.
+    First,
+    /// More than one person fits.
+    Ambiguous,
+    /// Nobody fits.
+    None,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct Candidate {
+    pub id: String,
+    pub name: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct NameAnswer {
+    pub name: String,
+    pub status: Match,
+    /// Set only when `status` is `Exact`.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub entity_id: Option<String>,
+    #[serde(default)]
+    pub candidates: Vec<Candidate>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct EmailAnswer {
+    pub email: String,
+    /// Set only when exactly one person carries the address.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub entity_id: Option<String>,
+}
+
+/// The body `POST /entities/api/resolve` answers.
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+pub struct ResolveAnswer {
+    pub names: Vec<NameAnswer>,
+    pub emails: Vec<EmailAnswer>,
+}
+
+/// One undecided name, as `GET /api/people/open` lists it.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct OpenName {
+    /// The name as the capability stored it (the first spelling seen).
+    pub name: String,
+    /// How many of the capability's rows one decision for this name covers.
+    pub rows: usize,
+    /// What entities said. Absent when entities did not answer; see `OpenNames::error`.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub status: Option<Match>,
+    #[serde(default)]
+    pub candidates: Vec<Candidate>,
+}
+
+/// The body of `GET /api/people/open`.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct OpenNames {
+    pub capability: String,
+    pub names: Vec<OpenName>,
+    /// Why there are no statuses: entities did not answer. The names are still listed.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub error: Option<String>,
+}
+
+/// The body of `POST /api/people/decide`. `entity_id: null` records "not a person".
+#[derive(Debug, Clone, Serialize, Deserialize, schemars::JsonSchema)]
+pub struct Decision {
+    pub name: String,
+    pub entity_id: Option<String>,
+}
+
+impl Decision {
+    /// A decision names an `ent:` id or none; anything else is refused before it is stored.
+    pub fn check(&self) -> Result<(), String> {
+        if name_key(&self.name).is_empty() {
+            return Err("`name` is empty".into());
+        }
+        match self.entity_id.as_deref().map(TypedId::parse) {
+            None => Ok(()),
+            Some(Ok(id)) if id.kind == "ent" => Ok(()),
+            Some(Ok(id)) => Err(format!("`{}` is a {}, not a person id", id.id, id.kind)),
+            Some(Err(reason)) => Err(reason),
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -127,6 +240,30 @@ mod tests {
         let json = serde_json::to_value(&link).unwrap();
         assert!(json.get("at").is_none() && json.get("meta").is_none());
         assert_eq!(json["via"], "payload.plan_id");
+    }
+
+    #[test]
+    fn a_name_key_ignores_case_and_spacing() {
+        assert_eq!(name_key("  Lucia   García "), "lucia garcía");
+        assert_eq!(name_key(""), "");
+    }
+
+    #[test]
+    fn a_decision_names_a_person_or_nobody() {
+        let d = |id: Option<&str>| Decision {
+            name: "Lucia".into(),
+            entity_id: id.map(Into::into),
+        };
+        assert!(d(None).check().is_ok());
+        assert!(d(Some("ent:18d8")).check().is_ok());
+        assert!(d(Some("trip:plan:1")).check().is_err());
+        assert!(d(Some("lucia")).check().is_err());
+        assert!(Decision {
+            name: " ".into(),
+            entity_id: None
+        }
+        .check()
+        .is_err());
     }
 
     #[test]

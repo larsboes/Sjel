@@ -10,5 +10,6 @@ pub mod google;
 pub mod model;
 pub mod obsidian;
 pub mod places;
+pub mod resolve;
 pub mod store;
 pub mod sync;

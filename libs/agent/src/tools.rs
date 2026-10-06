@@ -296,10 +296,13 @@ fn drain(pipe: Option<impl Read + Send + 'static>) -> std::thread::JoinHandle<St
 
 fn kill_group(child: &mut Child) {
     // A negative pid addresses the process group. Sending a signal to a group needs libc, which
-    // means `unsafe`; the workspace denies it, so this goes through kill(1).
-    let _ = Command::new("kill")
-        .arg("-KILL")
-        .arg(format!("-{}", child.id()))
+    // means `unsafe`, and the workspace denies it, so this goes through a shell. The shell's
+    // builtin `kill` is used rather than a `kill` binary: the CI runner's PATH does not resolve
+    // one, and a missing binary here left the backgrounded child holding the pipes for its full
+    // sleep, which the timeout test catches.
+    let _ = Command::new("sh")
+        .arg("-c")
+        .arg(format!("kill -KILL -{}", child.id()))
         .status();
     let _ = child.kill();
     let _ = child.wait();

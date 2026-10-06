@@ -44,3 +44,14 @@ reason = "glib 0.18.5 VariantStrIter unsoundness (RUSTSEC-2024-0429; osv reports
 id = "RUSTSEC-2024-0370"
 ignoreUntil = 2026-12-01
 reason = "Unmaintained proc-macro-error 1.0.4, build-time only, via glib-macros 0.18 <- glib <- gtk 0.18, the same Linux-only Tauri path as GHSA-wrw7-89jp-8q8g. No affected functions and no fixed version."
+
+# KaTeX arrives only through mermaid, whose newest release (12.1.0) still requires `katex
+# ^0.16.47`, so the fixed version (0.18.2) sits outside every range mermaid declares. The
+# advisory is a read-side prototype-pollution gadget: it needs `Object.prototype` already
+# polluted, or an attacker who can set the renderer options' prototype. The dashboard renders
+# mermaid from markdown the operator writes, so neither precondition holds. Revisit when mermaid
+# widens its range.
+[[IgnoredVulns]]
+id = "GHSA-238p-pmpm-9mq7"
+ignoreUntil = 2026-12-01
+reason = "katex 0.16.47 via mermaid 12.x, whose range (^0.16.47) excludes the fix (0.18.2); newest mermaid 12.1.0 still pins ^0.16.47. Read-side prototype-pollution gadget needing an already-polluted Object.prototype or attacker-set renderer options; the dashboard renders operator-authored mermaid, so neither holds. Revisit when mermaid widens the range."

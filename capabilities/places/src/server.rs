@@ -37,8 +37,22 @@ const ROUTES: &[route_manifest::Route] = &[
     r(
         "GET",
         "/api/links",
-        "Places linked to a typed id. Required: to=<id>, such as to=fin:tx:<source_id> (libs/links/ISA.md).",
+        "Places linked to a typed id. Required: to=<id>: fin:tx:<source_id> for a transaction, \
+         ent:<id> for a person (libs/links/ISA.md).",
     ),
+    r(
+        "GET",
+        "/api/people/open",
+        "Person-place names not yet decided, with entities' match for each and how many rows one \
+         decision covers. Lists the names even when entities does not answer.",
+    ),
+    route_manifest::Route {
+        method: "POST",
+        path: "/api/people/decide",
+        summary: "Record what a person-place name means: { name, entity_id }, where null is 'not \
+                  a person'. Covers every row that names it.",
+        request_schema: Some(route_manifest::schema_of::<sjel_links::Decision>),
+    },
     r(
         "GET",
         "/api/places",
@@ -147,20 +161,34 @@ struct LinksQuery {
 async fn links(State(state): State<AppState>, Query(query): Query<LinksQuery>) -> ApiResponse {
     let to = query.to.unwrap_or_default();
     // A bad `to` or a kind places does not hold is the caller's error, never an empty answer.
-    if let Err(reason) =
-        sjel_links::target(Some(&to)).and_then(|t| places::links::source_id(&t).map(drop))
-    {
-        return respond(StatusCode::BAD_REQUEST, json!({ "error": reason }));
+    match sjel_links::target(Some(&to)) {
+        Ok(t) if places::links::LINKS_TO.contains(&t.kind) => {}
+        Ok(t) => {
+            let reason = format!(
+                "places holds no references to `{}`; it answers {:?}",
+                t.kind,
+                places::links::LINKS_TO
+            );
+            return respond(StatusCode::BAD_REQUEST, json!({ "error": reason }));
+        }
+        Err(reason) => return respond(StatusCode::BAD_REQUEST, json!({ "error": reason })),
     }
     let database_path = state.database_path.clone();
     match tokio::task::spawn_blocking(move || {
         let target = sjel_links::TypedId::parse(&to)?;
-        let source_id = places::links::source_id(&target)?;
-        let found = PlacesStore::open(&database_path)
-            .and_then(|store| store.places_for_transaction(source_id))
-            .map_err(|error| error.to_string())?;
-        serde_json::to_value(places::links::links(&target, found))
-            .map_err(|error| error.to_string())
+        let store = PlacesStore::open(&database_path).map_err(|error| error.to_string())?;
+        let answer = if target.kind == "ent" {
+            let rows = places::people::rows(&store).map_err(|error| error.to_string())?;
+            let decided = places::people::decisions(&store).map_err(|error| error.to_string())?;
+            places::people::places_of(&rows, &decided, target.id)
+        } else {
+            let source_id = places::links::source_id(&target)?;
+            let found = store
+                .places_for_transaction(source_id)
+                .map_err(|error| error.to_string())?;
+            places::links::links(&target, found)
+        };
+        serde_json::to_value(answer).map_err(|error| error.to_string())
     })
     .await
     {
@@ -168,6 +196,63 @@ async fn links(State(state): State<AppState>, Query(query): Query<LinksQuery>) -
         Ok(Err(error)) => failed(error),
         Err(_) => failed("task panicked".into()),
     }
+}
+
+/// `GET /api/people/open`: undecided person-place names, with entities' answer where it gave one.
+async fn people_open(State(state): State<AppState>) -> ApiResponse {
+    let database_path = state.database_path.clone();
+    match tokio::task::spawn_blocking(move || {
+        let store = PlacesStore::open(&database_path).map_err(|error| error.to_string())?;
+        let rows = places::people::rows(&store).map_err(|error| error.to_string())?;
+        let decided = places::people::decisions(&store).map_err(|error| error.to_string())?;
+        let names = places::people::undecided(&rows, &decided);
+        let wanted: Vec<String> = names.iter().map(|(name, _)| name.clone()).collect();
+        let open = sjel_links::open_names("places", names, places::people::resolve(&wanted));
+        serde_json::to_value(open).map_err(|error| error.to_string())
+    })
+    .await
+    {
+        Ok(Ok(open)) => respond(StatusCode::OK, open),
+        Ok(Err(error)) => failed(error),
+        Err(_) => failed("task panicked".into()),
+    }
+}
+
+/// `POST /api/people/decide`: the operator's answer for one name.
+async fn people_decide(
+    State(state): State<AppState>,
+    Json(decision): Json<sjel_links::Decision>,
+) -> ApiResponse {
+    if let Err(reason) = decision.check() {
+        return respond(StatusCode::BAD_REQUEST, json!({ "error": reason }));
+    }
+    let database_path = state.database_path.clone();
+    match tokio::task::spawn_blocking(move || {
+        PlacesStore::open(&database_path)
+            .and_then(|store| {
+                places::people::decide(&store, &decision.name, decision.entity_id.as_deref())
+            })
+            .map_err(|error| error.to_string())
+    })
+    .await
+    {
+        Ok(Ok(())) => respond(StatusCode::OK, json!({ "ok": true })),
+        Ok(Err(error)) => failed(error),
+        Err(_) => failed("task panicked".into()),
+    }
+}
+
+/// Links the person-place names entities matches exactly (D11). A failure is logged and changes
+/// nothing: the names stay on the open list.
+fn link_exact_later(database_path: Arc<PathBuf>) {
+    tokio::task::spawn_blocking(move || {
+        match PlacesStore::open(&database_path).and_then(|store| places::people::link_exact(&store))
+        {
+            Ok(0) => {}
+            Ok(n) => eprintln!("places: linked {n} person name(s) to people"),
+            Err(error) => eprintln!("places: person names not linked: {error}"),
+        }
+    });
 }
 
 #[derive(Clone)]
@@ -955,6 +1040,8 @@ fn build_router(state: AppState) -> Router {
     Router::new()
         .route("/routes", get(routes))
         .route("/api/links", get(links))
+        .route("/api/people/open", get(people_open))
+        .route("/api/people/decide", post(people_decide))
         .route("/health", get(health))
         .route("/ready", get(ready))
         .route("/api/places", get(list_places))
@@ -985,6 +1072,8 @@ pub async fn serve() {
     let state = AppState {
         database_path: Arc::new(config.database_path),
     };
+    // Names a backfill wrote while entities was down get their exact matches now (D11).
+    link_exact_later(state.database_path.clone());
     sjel_server::serve_local("places", config.port, build_router(state)).await;
 }
 

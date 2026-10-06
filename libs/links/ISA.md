@@ -201,7 +201,8 @@ in the shell. The same holds for a place, an entity and a calendar entry.
       `ambiguous` or `none` and its candidates, and each email with the person it belongs to.
 - [x] LNK-15 — trips stores `traveler_ids`, links exact matches itself, serves
       `/api/people/open`, `/api/people/decide`, and answers `/api/links?to=ent:…`.
-- [ ] LNK-16 — places does the same on `person_places`.
+- [x] LNK-16 — places does the same on `person_places`. A dismissed row is neither a link nor
+      open (ISA PLC-7); proposed and confirmed rows are linked and say which.
 - [ ] LNK-17 — comms answers `/api/links?to=ent:…` from `from_addr` and the person's emails.
 - [ ] LNK-18 — `/people` lists the open names across capabilities, with create, link and
       not-a-person; a person in the inspector lists the trips, places and mail that reference it.

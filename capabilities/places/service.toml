@@ -4,9 +4,10 @@ name        = "places"
 command     = ["target/release/places-server"]
 build       = ["cargo", "build", "--locked", "--release", "--bin", "places-server"]
 port        = "8093"
-# Venue and city links reference finance transactions by fingerprint; `GET /api/links?to=fin:tx:…`
-# answers them (libs/links/ISA.md D1). src/links.rs holds the same list and a test keeps them equal.
-links_to = ["fin:tx"]
+# Venue and city links reference finance transactions by fingerprint, and person-place names
+# decided as people reference entities; `GET /api/links?to=…` answers both, and undecided names
+# are listed at `/api/people/open` (libs/links/ISA.md D1, D11). src/links.rs holds the same list.
+links_to = ["fin:tx", "ent"]
 health_path = "/health"
 ready_path  = "/ready"
 

@@ -322,6 +322,7 @@ impl PlacesStore {
                 ON {prefix}_climate_normals(fetched_at);
             "
         ))?;
+        conn.execute_batch(&crate::people::DDL.replace("{prefix}", prefix))?;
         Self::type_ids(conn, prefix)
     }
 

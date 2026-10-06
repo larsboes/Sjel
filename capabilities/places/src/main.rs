@@ -112,6 +112,13 @@ fn main() {
                 eprintln!("places backfill failed: {error}");
                 std::process::exit(1);
             }
+            // A backfill may have written new person names; link the exact ones (D11). Best
+            // effort: with entities down they stay open, and the server retries at start.
+            match places::people::link_exact(&store) {
+                Ok(0) => {}
+                Ok(n) => eprintln!("places: linked {n} person name(s) to people"),
+                Err(error) => eprintln!("places: person names not linked: {error}"),
+            }
         }
         Some("climate") => {
             if let Err(error) = climate(&args[1..]) {

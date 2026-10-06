@@ -4,6 +4,26 @@
   import { modal } from "$lib/modal";
   import { inspectorStore, type InspectableItem } from "./inspector.svelte";
   import { assistantStore } from "$lib/assistant/assistant.svelte";
+  import { page } from "$app/state";
+  import { tip } from "$lib/tip";
+  import { connectionsFor, deepLink, type ConnectionGroup } from "./connections";
+
+  let groups = $state<ConnectionGroup[] | null>(null);
+
+  // Read the connections each time the panel shows a different item. A slower answer for an
+  // item already left behind is dropped, so the list never shows another item's links.
+  $effect(() => {
+    const current = inspectorStore.item;
+    groups = null;
+    if (!current) return;
+    let live = true;
+    void connectionsFor(current).then((found) => {
+      if (live) groups = found;
+    });
+    return () => {
+      live = false;
+    };
+  });
 
   let touchStartY = 0;
   let touchDeltaY = $state(0);
@@ -46,7 +66,7 @@
     inspectorStore.close();
     assistantStore.openDrawer();
     if (prompt) {
-      void assistantStore.send(prompt, "/");
+      void assistantStore.send(prompt, page.url.pathname);
     }
   }
 </script>
@@ -83,6 +103,17 @@
 
       <!-- Header -->
       <div class="panel-header">
+        {#if inspectorStore.trail.length > 0}
+          <button
+            type="button"
+            class="btn-close"
+            onclick={() => inspectorStore.back()}
+            aria-label="Back to the previous item"
+            use:tip={"Back"}
+          >
+            <Icon name="arrow-left" size={14} />
+          </button>
+        {/if}
         <div class="header-type-pill">
           <Icon
             name={item.type === "event"
@@ -143,7 +174,7 @@
                 {/each}
               {/if}
               {#if item.tripId}
-                <a class="synapse-chip" href={link("/travel")}>
+                <a class="synapse-chip" href={link(`/travel?plan=${encodeURIComponent(item.tripId)}`)}>
                   <Icon name="train" size={12} />
                   <span>Linked Trip</span>
                 </a>
@@ -162,7 +193,7 @@
                   <span>Edit in Full Form</span>
                 </button>
               {/if}
-              <a class="synapse-chip" href={link("/calendar")}>
+              <a class="synapse-chip" href={deepLink(item)}>
                 <Icon name="calendar" size={12} />
                 <span>Open in Calendar</span>
               </a>
@@ -254,12 +285,12 @@
                 {/each}
               {/if}
               {#if item.budget}
-                <a class="synapse-chip" href={link("/finance")}>
+                <span class="synapse-chip static">
                   <Icon name="wallet" size={12} />
                   <span>Budget: {item.budget}</span>
-                </a>
+                </span>
               {/if}
-              <a class="synapse-chip" href={link("/travel")}>
+              <a class="synapse-chip" href={deepLink(item)}>
                 <Icon name="train" size={12} />
                 <span>Open Itinerary</span>
               </a>
@@ -298,13 +329,7 @@
           <div class="connected-section">
             <span class="section-kicker">Connected Life</span>
             <div class="connected-chips">
-              {#if item.trip}
-                <a class="synapse-chip" href={link("/travel")}>
-                  <Icon name="train" size={12} />
-                  <span>Trip: {item.trip}</span>
-                </a>
-              {/if}
-              <a class="synapse-chip" href={link("/finance")}>
+              <a class="synapse-chip" href={deepLink(item)}>
                 <Icon name="wallet" size={12} />
                 <span>Open in Ledger</span>
               </a>
@@ -340,6 +365,36 @@
               </a>
             </div>
           </div>
+        {/if}
+
+        {#if groups === null}
+          <p class="connections-state">Reading what this touches…</p>
+        {:else}
+          {#each groups as g (g.capability + g.label)}
+            {#if g.error || g.items.length > 0}
+              <section class="detail-box" aria-label={g.label}>
+                <span class="box-kicker">
+                  <Icon name={g.icon} size={11} />
+                  {g.label}
+                  {#if !g.error}<span class="mono count">{g.items.length}</span>{/if}
+                </span>
+                {#if g.error}
+                  <p class="connections-state">{g.error}</p>
+                {:else}
+                  <ul class="linked-list">
+                    {#each g.items as r (r.key)}
+                      <li>
+                        <button type="button" class="linked-row" onclick={() => inspectorStore.follow(r.item)}>
+                          <span class="linked-title">{r.title}</span>
+                          <span class="linked-date mono">{r.meta}</span>
+                        </button>
+                      </li>
+                    {/each}
+                  </ul>
+                {/if}
+              </section>
+            {/if}
+          {/each}
         {/if}
 
         <!-- Persistent Assistant Quick Action -->
@@ -617,6 +672,64 @@
 
   .linked-date {
     color: var(--text-tertiary);
+    font-variant-numeric: tabular-nums;
+    flex-shrink: 0;
+  }
+
+  .linked-row {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: var(--space-3);
+    width: 100%;
+    padding: var(--space-1) var(--space-2);
+    margin: 0 calc(-1 * var(--space-2));
+    border: none;
+    border-radius: var(--radius-sm);
+    background: transparent;
+    font: inherit;
+    text-align: left;
+    cursor: pointer;
+    transition: background-color var(--motion-fast) var(--ease-out);
+  }
+
+  .linked-row:hover,
+  .linked-row:focus-visible {
+    background: var(--surface);
+  }
+
+  .linked-row .linked-title {
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .box-kicker {
+    display: inline-flex;
+    align-items: center;
+    gap: var(--space-1);
+  }
+
+  .count {
+    margin-left: auto;
+    color: var(--text-secondary);
+  }
+
+  .connections-state {
+    margin: 0;
+    font-size: var(--text-xs);
+    color: var(--text-tertiary);
+  }
+
+  .synapse-chip.static {
+    cursor: default;
+  }
+
+  .synapse-chip.static:hover {
+    border-color: var(--card-border);
+    color: var(--text-primary);
+    transform: none;
   }
 
   .linked-title {

@@ -73,15 +73,29 @@ export type InspectableItem =
 class InspectorStore {
   isOpen = $state(false);
   item = $state<InspectableItem | null>(null);
+  /** Items passed through on the way here, so following a connection can be undone. */
+  trail = $state<InspectableItem[]>([]);
 
   open(item: InspectableItem): void {
     this.item = item;
+    this.trail = [];
     this.isOpen = true;
+  }
+
+  /** Follow a connection without leaving the panel. */
+  follow(item: InspectableItem): void {
+    if (this.item) this.trail.push(this.item);
+    this.item = item;
+  }
+
+  back(): void {
+    this.item = this.trail.pop() ?? this.item;
   }
 
   close(): void {
     this.isOpen = false;
     this.item = null;
+    this.trail = [];
   }
 
   inspectEvent(event: Omit<InspectableEvent, "type">): void {

@@ -213,9 +213,9 @@
         <button
           type="button"
           class="btn ask-btn"
-          onclick={() => { assistantStore.restoreFloating(); assistantStore.toggle(); }}
-          aria-label="Ask Sjel Assistant"
-          use:tip={"Ask Sjel Assistant"}
+          onclick={() => assistantStore.toggle()}
+          aria-label="Ask Sjel Assistant (⌘J)"
+          use:tip={"Ask Sjel Assistant (⌘J)"}
         >
           <Icon name="sparkles" size={14} />
           <span class="ask-btn-text">Ask</span>
@@ -391,7 +391,7 @@
     <button
       type="button"
       class="tab-link tab-action"
-      onclick={() => { assistantStore.restoreFloating(); assistantStore.toggle(); }}
+      onclick={() => assistantStore.toggle()}
       aria-label="Ask Sjel Assistant"
     >
       <span class="tab-action-icon">

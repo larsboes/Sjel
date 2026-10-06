@@ -101,8 +101,9 @@
   }
 
   function handleKeyDown(event: KeyboardEvent) {
-    // Global Cmd+K / Ctrl+K shortcut to toggle drawer
-    if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === 'k') {
+    // ⌘J / Ctrl+J toggles the drawer. ⌘K belongs to search (routes/+layout.svelte), and
+    // binding both here made one press open search and the drawer at once.
+    if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === 'j') {
       event.preventDefault();
       assistantStore.toggle();
       if (assistantStore.isOpen) {
@@ -162,34 +163,23 @@
   });
 
   onMount(() => {
-    assistantStore.loadFloatingVisibility();
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
   });
 </script>
 
-<!-- Small edge trigger. The × hides it until the primary Ask control is used. -->
-{#if !assistantStore.isOpen && assistantStore.floatingVisible}
-  <div class="assistant-edge-tab">
-    <button
-      class="assistant-edge-open"
-      onclick={() => assistantStore.openDrawer()}
-      aria-label="Open Sjel Assistant (Cmd+K)"
-      use:tip={"Sjel Assistant (Cmd+K)"}
-    >
-      <Icon name="sparkles" size={14} />
-      <span>Ask</span>
-      <kbd>⌘K</kbd>
-    </button>
-    <button
-      class="assistant-edge-hide"
-      onclick={(event) => { event.stopPropagation(); assistantStore.hideFloating(); }}
-      aria-label="Hide floating Assistant"
-      use:tip={"Hide floating Assistant"}
-    >
-      ×
-    </button>
-  </div>
+<!-- Edge grip: a sliver at rest, slid out on hover or focus. The header's Ask and ⌘J are
+     the primary ways in; this one only waits where the drawer will appear. -->
+{#if !assistantStore.isOpen}
+  <button
+    class="assistant-edge-tab"
+    onclick={() => assistantStore.openDrawer()}
+    aria-label="Open Sjel Assistant (⌘J)"
+  >
+    <Icon name="sparkles" size={14} />
+    <span>Ask</span>
+    <kbd>⌘J</kbd>
+  </button>
 {/if}
 
 <!-- Assistant Drawer Overlay / Sheet -->
@@ -381,60 +371,43 @@
 {/if}
 
 <style>
+  /* At rest only 0.4rem shows; hover or keyboard focus slides the rest in. */
   .assistant-edge-tab {
     position: fixed;
     top: 50%;
     right: 0;
     z-index: 60;
     display: flex;
-    align-items: stretch;
-    transform: translateY(-50%);
+    align-items: center;
+    gap: 0.35rem;
+    padding: 0.55rem 0.65rem 0.55rem 0.75rem;
     border: 1px solid var(--card-border);
     border-right: 0;
     border-radius: var(--radius-md) 0 0 var(--radius-md);
     background: var(--card-bg);
-    box-shadow: -4px 4px 16px rgb(0 0 0 / 18%);
-    overflow: hidden;
-  }
-
-  .assistant-edge-open,
-  .assistant-edge-hide {
-    border: 0;
-    color: var(--text-primary);
-    background: transparent;
-    cursor: pointer;
-  }
-
-  .assistant-edge-open {
-    display: flex;
-    align-items: center;
-    gap: 0.35rem;
-    padding: 0.55rem 0.65rem;
     color: var(--primary);
     font: inherit;
     font-size: var(--text-xs);
     font-weight: 600;
+    cursor: pointer;
+    transform: translate(calc(100% - 0.4rem), -50%);
+    opacity: 0.55;
+    transition: transform var(--motion-base) var(--ease-out), opacity var(--motion-base) var(--ease-out);
   }
 
-  .assistant-edge-open:hover,
-  .assistant-edge-hide:hover {
-    background: var(--primary-soft);
+  .assistant-edge-tab:hover,
+  .assistant-edge-tab:focus-visible {
+    transform: translate(0, -50%);
+    opacity: 1;
   }
 
-  .assistant-edge-open kbd {
+  .assistant-edge-tab kbd {
     padding: 0.05rem 0.25rem;
     border: 1px solid var(--card-border);
     border-radius: var(--radius-sm);
     color: var(--text-tertiary);
     font: inherit;
     font-size: var(--text-2xs);
-  }
-
-  .assistant-edge-hide {
-    padding: 0 0.45rem;
-    border-left: 1px solid var(--card-border);
-    color: var(--text-tertiary);
-    font-size: 1rem;
   }
 
   /* Scrim */
@@ -461,6 +434,12 @@
     display: flex;
     flex-direction: column;
     overflow: hidden;
+    animation: drawer-in var(--motion-slow) var(--ease-out);
+  }
+
+  @keyframes drawer-in {
+    from { transform: translateX(100%); }
+    to { transform: translateX(0); }
   }
 
   .assistant-drawer.minimized {
@@ -915,6 +894,20 @@
       border-radius: var(--radius-xl) var(--radius-xl) 0 0;
       transition: transform var(--motion-base) var(--ease-out);
       overscroll-behavior: contain;
+    }
+
+    /* The tab bar carries Ask on a phone; the sheet rises from below instead. */
+    .assistant-drawer {
+      animation-name: sheet-in;
+    }
+
+    .assistant-edge-tab {
+      display: none;
+    }
+
+    @keyframes sheet-in {
+      from { transform: translateY(100%); }
+      to { transform: translateY(0); }
     }
 
     .drawer-footer {

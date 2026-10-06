@@ -109,6 +109,23 @@ feed's export note is. For the same reason there is no long-press tip on touch: 
 touch reader needs is already on the page or in the accessibility tree, and a long-press would
 fight the platform's own menu on links.
 
+### The inspector follows connections
+
+Ruled 2026-10-06: the joins between capabilities are the reason Sjel is one shell and not
+five apps, so the inspector shows them. `src/lib/inspector/connections.ts` reads them live
+when an item opens, from joins the capabilities already publish: finance's `trip_id` on a
+transaction, a trip's date range, a calendar entry's day. A trip lists its calendar entries
+and its spend; an event lists the trip around it and that day's spend; a transaction lists
+its trip and that day's entries. A row opens inside the panel, and the back arrow returns, so
+following a connection never leaves the page. A capability that does not answer is named in
+its group, not hidden.
+
+"Open in …" goes to the item, not to the section: `/travel?plan=`, `/calendar?date=&entry=`.
+Finance has no per-transaction route yet, so a transaction opens the transactions tab.
+
+The assistant has one shortcut, ⌘J; ⌘K is search. Its edge tab sits off-screen with a
+sliver showing and slides in on hover or focus.
+
 ### Home's decision ladder
 
 A registry (PRD Q86, 2026-09-05): a kind is one file under `src/lib/home/kinds/` and its row

@@ -1,0 +1,22 @@
+[package]
+name = "sjel-links"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+description = "Typed ids and the back-reference contract one capability answers about another's rows."
+publish = false
+
+[lib]
+name = "sjel_links"
+path = "src/lib.rs"
+
+[dependencies]
+serde = { workspace = true, features = ["derive"] }
+sha2.workspace = true
+
+[dev-dependencies]
+serde_json.workspace = true
+
+[lints]
+workspace = true

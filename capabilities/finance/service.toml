@@ -20,6 +20,9 @@ autostart   = "false"
 # Without this the uniform rule in vite.config.ts claims the whole `/finance` prefix and
 # the page becomes unreachable — the same trap trips documented (#136).
 proxy_api_only = "true"
+# Transactions reference trips by the `axon-trip-id` tag; `GET /api/links?to=trip:plan:…`
+# answers them (libs/links/ISA.md D1). src/links.rs holds the same list and a test keeps them equal.
+links_to = ["trip:plan"]
 
 # `ledger = "hledger"` stood here until 2026-08-28. It selected the separately
 # installed accounting engine and carried the toolchain scope that made hosts

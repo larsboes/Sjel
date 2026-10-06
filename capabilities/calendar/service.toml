@@ -18,6 +18,9 @@ autostart   = "true"
 # `/calendar` is the dashboard workspace, so only `/calendar/api` is proxied
 # to this process (with `/calendar` stripped).
 proxy_api_only = "true"
+# Entries trips wrote carry `payload.plan_id`; `GET /api/links?to=trip:plan:…` answers them
+# (libs/links/ISA.md D1). src/links.rs holds the same list and a test keeps them equal.
+links_to = ["trip:plan"]
 
 # No `requires`: entries, rhythms and contexts live in the shared SQLite file this
 # process opens itself, so there is no database service to start first (PRD Q45).

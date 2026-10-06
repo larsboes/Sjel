@@ -4297,6 +4297,7 @@ dependencies = [
  "serde_json",
  "sjel-config",
  "sjel-http",
+ "sjel-links",
  "sjel-server",
  "sjel-store",
  "tokio",
@@ -4454,6 +4455,7 @@ dependencies = [
  "sha2 0.11.0",
  "sjel-config",
  "sjel-http",
+ "sjel-links",
  "sjel-server",
  "sjel-store",
  "tokio",
@@ -4531,6 +4533,15 @@ dependencies = [
  "tokio",
  "toml",
  "tower",
+]
+
+[[package]]
+name = "sjel-links"
+version = "0.1.0"
+dependencies = [
+ "serde",
+ "serde_json",
+ "sha2 0.11.0",
 ]
 
 [[package]]

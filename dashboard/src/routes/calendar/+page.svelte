@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { eventItem } from "$lib/inspector/connections";
   import { page } from "$app/state";
   import PageHeader from "$lib/PageHeader.svelte";
   import MonthGrid from "$lib/calendar/MonthGrid.svelte";
@@ -286,16 +287,7 @@
   /// other kind of item, so a calendar entry goes there too and keeps `Edit`
   /// one click away (`?entry=` still opens this form, which is how it gets back).
   function onSelectEntry(entry: CalendarEntry, day: CalendarDay) {
-    inspectorStore.inspectEvent({
-      id: entry.id,
-      title: entry.title,
-      startsAt: entry.starts_at,
-      endsAt: entry.ends_at,
-      allDay: entry.all_day,
-      location: entry.location ?? undefined,
-      commitment: entry.commitment,
-      onEdit: () => openForm(day, { entry }),
-    });
+    inspectorStore.open({ ...eventItem(entry), onEdit: () => openForm(day, { entry }) });
   }
 
   function onSelectRange(startDate: string, endDate: string) {

@@ -87,6 +87,9 @@ pub struct Service {
     pub endpoint: String,
     pub proxy_extra: Vec<String>,
     pub requires: Vec<String>,
+    /// Id kinds this capability answers `GET /api/links` for (libs/links/ISA.md D1). Kept for an
+    /// external capability too: its deployment answers the same route at its endpoint.
+    pub links_to: Vec<String>,
 }
 
 impl Service {
@@ -338,6 +341,7 @@ impl<'a> Ctx<'a> {
             endpoint: endpoint.to_owned(),
             proxy_extra,
             requires,
+            links_to: get_array(&table, "links_to"),
         }
     }
 
@@ -721,10 +725,11 @@ fn json(services: &[Service]) -> Result<String, Fail> {
         }
         let _ = write!(
             r,
-            ", \"endpoint\": {}, \"proxy_extra\": {}, \"requires\": {}}}",
+            ", \"endpoint\": {}, \"proxy_extra\": {}, \"requires\": {}, \"links_to\": {}}}",
             json_str(&s.endpoint)?,
             json_array(&s.proxy_extra)?,
-            json_array(&s.requires)?
+            json_array(&s.requires)?,
+            json_array(&s.links_to)?
         );
         rows.push(r);
     }
@@ -778,6 +783,7 @@ mod tests {
             endpoint: String::new(),
             proxy_extra: vec![],
             requires: vec![],
+            links_to: vec![],
         };
         assert_eq!(lines(&[s]), "a process capability false\n");
     }

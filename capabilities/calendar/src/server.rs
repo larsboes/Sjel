@@ -55,6 +55,11 @@ const ROUTES: &[route_manifest::Route] = &[
     r("GET", "/routes", "This manifest."),
     r(
         "GET",
+        "/api/links",
+        "Entries that reference a typed id. Required: to=<id>, such as to=trip:plan:… (libs/links/ISA.md).",
+    ),
+    r(
+        "GET",
         "/api/entries",
         "Entries overlapping a day window. Requires from, to; optional kind (CSV).",
     ),
@@ -195,6 +200,39 @@ const fn r(
 
 async fn routes() -> Json<Value> {
     Json(route_manifest::manifest("calendar", ROUTES))
+}
+
+#[derive(Debug, serde::Deserialize)]
+struct LinksQuery {
+    to: Option<String>,
+}
+
+/// `GET /api/links?to=<typed id>`: the entries that reference it.
+async fn links(State(state): State<AppState>, Query(query): Query<LinksQuery>) -> ApiResponse {
+    let to = query.to.unwrap_or_default();
+    // A bad `to` or a kind calendar does not hold is the caller's error, never an empty answer.
+    if let Err(reason) =
+        sjel_links::target(Some(&to)).and_then(|target| calendar::links::check(&target))
+    {
+        return response(StatusCode::BAD_REQUEST, json!({ "error": reason }));
+    }
+    let database_path = state.database_path.clone();
+    match tokio::task::spawn_blocking(move || {
+        let entries = CalendarStore::open(&database_path)
+            .and_then(|store| store.entries_for_plan(&to))
+            .map_err(|error| error.to_string())?;
+        let target = sjel_links::TypedId::parse(&to)?;
+        Ok::<_, String>(calendar::links::links(&target, entries))
+    })
+    .await
+    {
+        Ok(Ok(answer)) => response(StatusCode::OK, answer),
+        Ok(Err(error)) => response(StatusCode::INTERNAL_SERVER_ERROR, json!({ "error": error })),
+        Err(error) => response(
+            StatusCode::INTERNAL_SERVER_ERROR,
+            json!({ "error": error.to_string() }),
+        ),
+    }
 }
 
 async fn health() -> Json<Value> {
@@ -1606,6 +1644,7 @@ fn build_router(state: AppState) -> Router {
         .route("/health", get(health))
         .route("/ready", get(ready))
         .route("/routes", get(routes))
+        .route("/api/links", get(links))
         .route("/api/entries", get(list_entries).post(create_entry))
         .route("/api/google/drafts", get(list_google_drafts))
         .route("/api/proposals", get(list_external_proposals))

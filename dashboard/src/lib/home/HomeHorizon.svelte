@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { eventItem } from "$lib/inspector/connections";
   import { onMount } from "svelte";
   import { link } from "$lib/nav";
   import { tip } from "$lib/tip";
@@ -79,15 +80,7 @@
             <button
               type="button"
               class="entry-row-action"
-              onclick={() => inspectorStore.inspectEvent({
-                id: entry.id,
-                title: entry.title,
-                startsAt: entry.starts_at,
-                endsAt: entry.ends_at,
-                allDay: entry.all_day,
-                location: entry.location ?? undefined,
-                commitment: entry.commitment,
-              })}
+              onclick={() => inspectorStore.open(eventItem(entry))}
               use:tip={"Inspect event details"}
             >
               <time>{shortDate(entry.starts_at)}</time>

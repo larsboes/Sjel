@@ -113,12 +113,18 @@ fight the platform's own menu on links.
 
 Ruled 2026-10-06: the joins between capabilities are the reason Sjel is one shell and not
 five apps, so the inspector shows them. `src/lib/inspector/connections.ts` reads them live
-when an item opens, from joins the capabilities already publish: finance's `trip_id` on a
-transaction, a trip's date range, a calendar entry's day. A trip lists its calendar entries
-and its spend; an event lists the trip around it and that day's spend; a transaction lists
-its trip and that day's entries. A row opens inside the panel, and the back arrow returns, so
-following a connection never leaves the page. A capability that does not answer is named in
-its group, not hidden.
+when an item opens, in two kinds that stay apart (`libs/links/ISA.md`, D1 and D2):
+
+- **References.** The shell takes the kind from the item's typed id and asks
+  `GET /<capability>/api/links?to=<id>` of every capability whose `links_to` declares that kind.
+  It names no pair of capabilities. An item's own reference, such as a trips-written entry's plan,
+  is read forwards.
+- **Coincidences.** Rows that share the item's days, marked "inferred" with a dashed edge. A
+  row already listed as a reference does not appear here again.
+
+A row opens inside the panel, and the back arrow returns, so following a connection never
+leaves the page. A capability that does not answer is named in its group, not hidden. Every
+event the shell inspects is built by `eventItem`, so the plan-id rule lives in one place.
 
 "Open in …" goes to the item, not to the section: `/travel?plan=`, `/calendar?date=&entry=`.
 Finance has no per-transaction route yet, so a transaction opens the transactions tab.

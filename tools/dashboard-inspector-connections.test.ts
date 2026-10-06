@@ -7,12 +7,61 @@
 
 import { describe, expect, test } from "bun:test";
 import {
+  answering,
   deepLink,
+  kindOf,
+  merge,
+  planOf,
   transactionItem,
   tripItem,
   withinDays,
+  type ConnectionGroup,
 } from "../dashboard/src/lib/inspector/connections.ts";
-import type { FinanceTransaction, TripPlan } from "../dashboard/src/lib/api.ts";
+import type { CapabilityView, FinanceTransaction, TripPlan } from "../dashboard/src/lib/api.ts";
+
+// The shell asks only the capabilities that declare an id's kind (libs/links/ISA.md D1), and a
+// row it already lists as a reference is never repeated as an inference (D2).
+describe("discovery", () => {
+  test("the kind is every segment but the last, and an untyped id has none", () => {
+    expect(kindOf("trip:plan:18c7")).toBe("trip:plan");
+    expect(kindOf("ent:18d8")).toBe("ent");
+    for (const bad of ["place_0bd5", "transaction_16_1_eur", ":x", "a::b", "trip:", undefined]) {
+      expect(kindOf(bad)).toBeNull();
+    }
+  });
+
+  test("only declaring capabilities are asked, and a registry without links_to asks none", () => {
+    const registry = [
+      { name: "finance", links_to: ["trip:plan"] },
+      { name: "calendar", links_to: ["trip:plan"] },
+      { name: "inventory", links_to: ["ent"] },
+      { name: "old-status-build" },
+    ] as unknown as CapabilityView[];
+    expect(answering(registry, "trip:plan:1").map((c) => c.name)).toEqual(["finance", "calendar"]);
+    expect(answering(registry, "place_1")).toEqual([]);
+  });
+
+  test("a referenced row is not repeated under an inference, and references come first", () => {
+    const row = (key: string) => ({ key, title: key, meta: "", item: { type: "link", id: key, kind: "cal:entry", title: key, via: "x" } as const });
+    const groups: ConnectionGroup[] = [
+      { capability: "calendar", basis: "coincidence", label: "Same days", icon: "calendar", items: [row("cal:entry:1"), row("cal:entry:2")] },
+      { capability: "calendar", basis: "reference", label: "Calendar", icon: "calendar", items: [row("cal:entry:1")] },
+    ];
+    const merged = merge(groups);
+    expect(merged.map((g) => g.basis)).toEqual(["reference", "coincidence"]);
+    expect(merged[1].items.map((r) => r.key)).toEqual(["cal:entry:2"]);
+  });
+});
+
+describe("planOf", () => {
+  test("reads payload.plan_id only on entries trips wrote", () => {
+    const payload = { plan_id: "trip:plan:1" };
+    expect(planOf({ source: "trips", payload })).toBe("trip:plan:1");
+    expect(planOf({ source: "manual", payload })).toBeUndefined();
+    expect(planOf({ source: "trips", payload: null })).toBeUndefined();
+    expect(planOf({ source: "trips", payload: { plan_id: 7 } })).toBeUndefined();
+  });
+});
 
 describe("deepLink", () => {
   test("a trip opens its own plan", () => {
@@ -45,8 +94,9 @@ describe("mapping", () => {
       account: "assets:bank", category: "expenses:travel:rail", amount_cents: 4990, currency: "EUR",
       trip_id: "p1",
     } as FinanceTransaction;
-    const item = transactionItem(row);
-    expect(item).toMatchObject({ type: "transaction", trip: "p1", amount: "−49.90 EUR", category: "travel · rail" });
+    expect(transactionItem(row)).toMatchObject({ type: "transaction", id: "t1", trip: "p1", amount: "−49.90 EUR", category: "travel · rail" });
+    // With a source_id the id is the linkable one (libs/links D3), not the journal position.
+    expect(transactionItem({ ...row, source_id: "abc" })).toMatchObject({ id: "fin:tx:abc" });
   });
 
   test("a trip without a budget states none rather than zero", () => {

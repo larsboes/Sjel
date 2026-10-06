@@ -4,6 +4,7 @@ pub mod correlate;
 pub mod date;
 pub mod google;
 pub mod google_sync;
+pub mod links;
 pub mod markdown_import;
 pub mod model;
 pub mod rhythm;

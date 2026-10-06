@@ -19,6 +19,7 @@ pub mod decision;
 pub mod import;
 pub mod investment;
 pub mod journal;
+pub mod links;
 pub mod money;
 pub mod obsidian;
 pub mod planning;

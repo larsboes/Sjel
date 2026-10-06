@@ -468,6 +468,7 @@ mod backup_tests {
             proxy_api_only: String::new(),
             proxy_extra: Vec::new(),
             requires: Vec::new(),
+            links_to: Vec::new(),
         }
     }
 

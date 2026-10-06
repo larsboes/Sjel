@@ -580,6 +580,7 @@ mod tests {
             endpoint: String::new(),
             proxy_extra: vec![],
             requires: vec![],
+            links_to: vec![],
         };
         let r = Row::from_service(&s);
         assert_eq!(

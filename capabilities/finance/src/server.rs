@@ -42,6 +42,11 @@ const ROUTES: &[route_manifest::Route] = &[
     r("GET", "/routes", "This manifest."),
     r(
         "GET",
+        "/api/links",
+        "Transactions that reference a typed id. Required: to=<id>, such as to=trip:plan:… (libs/links/ISA.md).",
+    ),
+    r(
+        "GET",
         "/api/subscriptions",
         "Every subscription with its full price and state history.",
     ),
@@ -217,6 +222,36 @@ const fn r(
 
 async fn routes() -> Json<Value> {
     Json(route_manifest::manifest("finance", ROUTES))
+}
+
+#[derive(Debug, Deserialize)]
+struct LinksQuery {
+    to: Option<String>,
+}
+
+/// `GET /api/links?to=<typed id>`: the transactions that reference it, in every currency.
+async fn links(State(state): State<AppState>, Query(query): Query<LinksQuery>) -> ApiResponse {
+    let to = query.to.unwrap_or_default();
+    // Refused before the store opens: a bad `to` is the caller's error, never an empty answer.
+    if let Err(reason) = sjel_links::target(Some(&to)) {
+        return response(StatusCode::BAD_REQUEST, json!({ "error": reason }));
+    }
+    let database_path = state.database_path.clone();
+    // Outer error: the store failed (500). Inner error: finance holds no such kind (400).
+    match tokio::task::spawn_blocking(move || {
+        let rows = FinanceStore::open(&database_path)
+            .and_then(|store| store.transaction_projection())
+            .map_err(|error| error.to_string())?;
+        let target = sjel_links::TypedId::parse(&to)?;
+        Ok::<_, String>(finance::links::links(&rows, &target))
+    })
+    .await
+    {
+        Ok(Ok(Ok(answer))) => response(StatusCode::OK, answer),
+        Ok(Ok(Err(reason))) => response(StatusCode::BAD_REQUEST, json!({ "error": reason })),
+        Ok(Err(reason)) => failed(reason),
+        Err(_) => failed("task panicked".into()),
+    }
 }
 
 /// The reporting currency when nothing narrows it, matching
@@ -2646,6 +2681,7 @@ fn state_from(config: Config) -> AppState {
 fn build_router(state: AppState) -> Router {
     Router::new()
         .route("/routes", get(routes))
+        .route("/api/links", get(links))
         .route("/health", get(health))
         .route("/ready", get(ready))
         .route("/api/subscriptions", get(list_subscriptions))

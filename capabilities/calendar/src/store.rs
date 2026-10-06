@@ -201,6 +201,25 @@ impl CalendarStore {
 
     // ---- entries ----------------------------------------------------------
 
+    /// Entries trips wrote for one plan: `source = 'trips'` and `payload.plan_id = plan_id`.
+    ///
+    /// A payload is inert provider evidence (`model.rs`, `Entry::payload`). This reads one key of
+    /// it, and only on rows trips itself wrote, because that key is the one reference to a plan an
+    /// entry carries (libs/links/ISA.md, LNK-8). Every other provider's payload stays inert.
+    pub fn entries_for_plan(&self, plan_id: &str) -> StoreResult<Vec<Entry>> {
+        let conn = self.conn()?;
+        Ok(conn.query_all(
+            &format!(
+                "SELECT * FROM {prefix}_entries \
+                 WHERE source = 'trips' AND json_extract(payload, '$.plan_id') = ?1 \
+                 ORDER BY starts_at",
+                prefix = self.prefix
+            ),
+            params![plan_id],
+            entry_from_row,
+        )?)
+    }
+
     /// Entries overlapping the day window [from, to) — both "YYYY-MM-DD",
     /// from inclusive, to exclusive. Day granularity is what the correlation
     /// layer asks in ("is 14 Aug feasible?"); finer slicing is presentation.
@@ -1242,6 +1261,27 @@ mod db_tests {
             rhythm_id: None,
             payload: Value::Null,
         }
+    }
+
+    #[test]
+    fn entries_for_plan_reads_only_what_trips_wrote() {
+        let store = open_test_store("entries_for_plan");
+        let mut leg = an_entry("Bonn → Stuttgart", "2026-10-07", "away");
+        leg.source = "trips".into();
+        leg.payload = serde_json::json!({ "plan_id": "trip:plan:1" });
+        store.create_entry(&leg).expect("a trips leg");
+        // Same key, another provider: its payload stays inert and is not read.
+        let mut foreign = an_entry("Imported", "2026-10-07", "away");
+        foreign.payload = serde_json::json!({ "plan_id": "trip:plan:1" });
+        store.create_entry(&foreign).expect("a manual entry");
+        let mut other = an_entry("Other trip", "2026-10-08", "away");
+        other.source = "trips".into();
+        other.payload = serde_json::json!({ "plan_id": "trip:plan:2" });
+        store.create_entry(&other).expect("another plan's leg");
+
+        let found = store.entries_for_plan("trip:plan:1").expect("a query");
+        let titles: Vec<_> = found.iter().map(|e| e.title.as_str()).collect();
+        assert_eq!(titles, ["Bonn → Stuttgart"]);
     }
 
     #[test]

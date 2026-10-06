@@ -1563,10 +1563,38 @@ export interface CapabilityView {
   panel_path: string;
   autostart: string;
   requires: string[];
+  /** Id kinds this capability answers `GET /api/links` for (libs/links/ISA.md D1). Optional
+   *  because a sjel-status built before 2026-10-06 does not send it. */
+  links_to?: string[];
   /** null when the capability declares no health surface — unknown, not down. */
   up: boolean | null;
   health_url: string | null;
 }
+
+/** One row of another capability that references a typed id (libs/links, `Link`). */
+export interface Link {
+  id: string;
+  kind: string;
+  title: string;
+  at?: string;
+  meta?: string;
+  /** The field that holds the reference, such as `trip_id`. */
+  via: string;
+}
+
+/** The body of `GET /<capability>/api/links?to=<id>`. */
+export interface Links {
+  to: string;
+  links: Link[];
+  /** Rows that reference the id but have no linkable id of their own. */
+  unlinkable: number;
+}
+
+export const links = {
+  /** Every capability is proxied at `/<name>`, and `/api` passes even where `proxy_api_only`. */
+  find: (capability: string, to: string) =>
+    request<Links>(`/${encodeURIComponent(capability)}/api/links?to=${encodeURIComponent(to)}`),
+};
 
 /** A capability that serves its own UI (CONTRIBUTING.md#three-architectural-nouns) declares a panel port. */
 export const hasPanel = (c: CapabilityView): boolean => c.panel_port !== '';

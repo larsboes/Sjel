@@ -37,6 +37,8 @@ sjel-store = { path = "../../libs/sjel-store" }
 candidate-fingerprint = { path = "../../libs/candidate-fingerprint" }
 markdown-root = { path = "../../libs/markdown-root" }
 route-manifest = { path = "../../libs/route-manifest" }
+# Typed ids and the `/api/links` body every capability answers alike (libs/links/ISA.md).
+sjel-links = { path = "../../libs/links" }
 serde = { workspace = true, features = ["derive"] }
 serde_json.workspace = true
 # The database, after PRD Q45 retired Postgres. Bundled so the deployment does not

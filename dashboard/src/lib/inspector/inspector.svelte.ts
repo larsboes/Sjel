@@ -1,4 +1,4 @@
-export type InspectableType = "event" | "person" | "trip" | "transaction" | "layout";
+export type InspectableType = "event" | "person" | "trip" | "transaction" | "layout" | "link";
 
 export interface InspectableEvent {
   type: "event";
@@ -63,12 +63,26 @@ export interface InspectableLayout {
   totalCost?: string;
 }
 
+/** A row another capability answered on `/api/links`, shown the same for every kind
+ *  (libs/links/ISA.md D5). */
+export interface InspectableLink {
+  type: "link";
+  id: string;
+  kind: string;
+  title: string;
+  at?: string;
+  meta?: string;
+  /** The field that holds the reference, such as `trip_id`. */
+  via: string;
+}
+
 export type InspectableItem =
   | InspectableEvent
   | InspectablePerson
   | InspectableTrip
   | InspectableTransaction
-  | InspectableLayout;
+  | InspectableLayout
+  | InspectableLink;
 
 class InspectorStore {
   isOpen = $state(false);

@@ -34,6 +34,7 @@ members = [
     "libs/inference",
     "libs/markdown-root",
     "libs/pseudonymize",
+    "libs/links",
     "libs/route-manifest",
     "libs/roomplan-contract",
     "libs/station-time",

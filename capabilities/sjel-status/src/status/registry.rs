@@ -70,6 +70,10 @@ pub(crate) struct Service {
     pub(crate) proxy_extra: Vec<String>,
     #[serde(default)]
     pub(crate) requires: Vec<String>,
+    /// Id kinds this capability answers `GET /api/links` for (libs/links/ISA.md D1). The shell
+    /// asks only these, so it carries no code per pair of capabilities.
+    #[serde(default)]
+    pub(crate) links_to: Vec<String>,
 }
 
 impl Service {

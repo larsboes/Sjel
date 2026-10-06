@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { eventItem } from "$lib/inspector/connections";
   import { onMount } from 'svelte';
   import { tip } from '$lib/tip';
   import Icon from '$lib/Icon.svelte';
@@ -96,14 +97,7 @@
 
   function handleInspectNextEvent() {
     if (!nextEntry) return;
-    inspectorStore.inspectEvent({
-      id: nextEntry.id,
-      title: nextEntry.title,
-      startsAt: nextEntry.starts_at,
-      endsAt: nextEntry.ends_at,
-      allDay: nextEntry.all_day,
-      commitment: nextEntry.commitment,
-    });
+    inspectorStore.open(eventItem(nextEntry));
   }
 
   function handleInspectTrip() {

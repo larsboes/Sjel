@@ -32,6 +32,24 @@ const ROUTES: &[route_manifest::Route] = &[
         "Readiness: liveness plus a reachable database.",
     ),
     r("GET", "/routes", "This manifest."),
+    r(
+        "GET",
+        "/api/links",
+        "Plans whose travellers are a person. Required: to=ent:<id> (libs/links/ISA.md D11).",
+    ),
+    r(
+        "GET",
+        "/api/people/open",
+        "Traveller names not yet decided, with entities' match for each and how many plans one \
+         decision covers. Lists the names even when entities does not answer.",
+    ),
+    route_manifest::Route {
+        method: "POST",
+        path: "/api/people/decide",
+        summary: "Record what a traveller name means: { name, entity_id }, where null is 'not a \
+                  person'. Covers every plan that names it.",
+        request_schema: Some(route_manifest::schema_of::<sjel_links::Decision>),
+    },
     r("GET", "/api/plans", "Every trip plan."),
     route_manifest::Route {
         method: "POST",
@@ -431,7 +449,10 @@ async fn create_plan(State(state): State<AppState>, Json(input): Json<CreatePlan
     })
     .await
     {
-        Ok(plan) => response(StatusCode::CREATED, plan),
+        Ok(plan) => {
+            link_exact_later(&state);
+            response(StatusCode::CREATED, plan)
+        }
         Err(error) => response(StatusCode::BAD_REQUEST, json!({ "error": error })),
     }
 }
@@ -449,12 +470,105 @@ async fn update_plan(
     })
     .await
     {
-        Ok(Some(plan)) => response(StatusCode::OK, plan),
+        Ok(Some(plan)) => {
+            link_exact_later(&state);
+            response(StatusCode::OK, plan)
+        }
         Ok(None) => response(
             StatusCode::NOT_FOUND,
             json!({ "error": "trip plan not found" }),
         ),
         Err(error) => write_conflict_or_bad_request(error),
+    }
+}
+
+/// Links the traveller names entities matches exactly, after the response (D11). A failure is
+/// logged and changes nothing: the names stay on the open list.
+fn link_exact_later(state: &AppState) {
+    let database_path = state.database_path.clone();
+    tokio::task::spawn_blocking(move || {
+        match TripsStore::open(&database_path).and_then(|store| trips::people::link_exact(&store)) {
+            Ok(0) => {}
+            Ok(n) => eprintln!("trips: linked {n} traveller name(s) to people"),
+            Err(error) => eprintln!("trips: traveller names not linked: {error}"),
+        }
+    });
+}
+
+#[derive(Debug, serde::Deserialize)]
+struct LinksQuery {
+    to: Option<String>,
+}
+
+/// `GET /api/links?to=ent:…`: the plans whose travellers are that person.
+async fn links(State(state): State<AppState>, Query(query): Query<LinksQuery>) -> ApiResponse {
+    let to = query.to.unwrap_or_default();
+    match sjel_links::target(Some(&to)) {
+        Ok(target) if trips::people::LINKS_TO.contains(&target.kind) => {}
+        Ok(target) => {
+            return response(
+                StatusCode::BAD_REQUEST,
+                json!({ "error": format!("trips holds no references to `{}`", target.kind) }),
+            )
+        }
+        Err(reason) => return response(StatusCode::BAD_REQUEST, json!({ "error": reason })),
+    }
+    let database_path = state.database_path.clone();
+    match blocking(move || {
+        let store = TripsStore::open(&database_path).map_err(|error| error.to_string())?;
+        let plans = store.list_plans().map_err(|error| error.to_string())?;
+        let decided = trips::people::decisions(&store).map_err(|error| error.to_string())?;
+        Ok::<_, String>(trips::people::plans_with(&plans, &decided, &to))
+    })
+    .await
+    {
+        Ok(answer) => response(StatusCode::OK, answer),
+        Err(error) => response(StatusCode::INTERNAL_SERVER_ERROR, json!({ "error": error })),
+    }
+}
+
+/// `GET /api/people/open`: undecided traveller names, with entities' answer where it gave one.
+async fn people_open(State(state): State<AppState>) -> ApiResponse {
+    let database_path = state.database_path.clone();
+    match blocking(move || {
+        let store = TripsStore::open(&database_path).map_err(|error| error.to_string())?;
+        let plans = store.list_plans().map_err(|error| error.to_string())?;
+        let decided = trips::people::decisions(&store).map_err(|error| error.to_string())?;
+        let names = trips::people::undecided(&plans, &decided);
+        let wanted: Vec<String> = names.iter().map(|(name, _)| name.clone()).collect();
+        Ok::<_, String>(sjel_links::open_names(
+            "trips",
+            names,
+            trips::people::resolve(&wanted),
+        ))
+    })
+    .await
+    {
+        Ok(open) => response(StatusCode::OK, open),
+        Err(error) => response(StatusCode::INTERNAL_SERVER_ERROR, json!({ "error": error })),
+    }
+}
+
+/// `POST /api/people/decide`: the operator's answer for one name.
+async fn people_decide(
+    State(state): State<AppState>,
+    Json(decision): Json<sjel_links::Decision>,
+) -> ApiResponse {
+    if let Err(reason) = decision.check() {
+        return response(StatusCode::BAD_REQUEST, json!({ "error": reason }));
+    }
+    let database_path = state.database_path.clone();
+    match blocking(move || {
+        TripsStore::open(&database_path)
+            .and_then(|store| {
+                trips::people::decide(&store, &decision.name, decision.entity_id.as_deref())
+            })
+            .map_err(|error| error.to_string())
+    })
+    .await
+    {
+        Ok(()) => response(StatusCode::OK, json!({ "ok": true })),
+        Err(error) => response(StatusCode::INTERNAL_SERVER_ERROR, json!({ "error": error })),
     }
 }
 
@@ -1723,6 +1837,9 @@ fn build_router(state: AppState) -> Router {
         .route("/health", get(health))
         .route("/ready", get(ready))
         .route("/api/plans", get(list_plans).post(create_plan))
+        .route("/api/links", get(links))
+        .route("/api/people/open", get(people_open))
+        .route("/api/people/decide", post(people_decide))
         .route(
             "/api/plans/{id}",
             get(get_plan).patch(update_plan).delete(delete_plan),
@@ -1778,6 +1895,8 @@ async fn main() {
         travel: Arc::new(config.travel),
         export_lock: Arc::new(tokio::sync::Mutex::new(())),
     };
+    // Names written while entities was down get their exact matches now (D11).
+    link_exact_later(&state);
     // Loopback via sjel_server; the old 0.0.0.0 bind here was never a
     // documented decision and is retired with it.
     sjel_server::serve_local("trips", config.port, build_router(state)).await;

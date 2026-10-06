@@ -199,7 +199,7 @@ in the shell. The same holds for a place, an entity and a calendar entry.
 
 - [x] LNK-14 — `POST /entities/api/resolve` answers each name with `exact`, `first`,
       `ambiguous` or `none` and its candidates, and each email with the person it belongs to.
-- [ ] LNK-15 — trips stores `traveler_ids`, links exact matches itself, serves
+- [x] LNK-15 — trips stores `traveler_ids`, links exact matches itself, serves
       `/api/people/open`, `/api/people/decide`, and answers `/api/links?to=ent:…`.
 - [ ] LNK-16 — places does the same on `person_places`.
 - [ ] LNK-17 — comms answers `/api/links?to=ent:…` from `from_addr` and the person's emails.

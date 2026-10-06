@@ -4810,6 +4810,7 @@ dependencies = [
  "serde_json",
  "sjel-config",
  "sjel-http",
+ "sjel-links",
  "sjel-pseudonymize",
  "sjel-server",
  "sjel-store",

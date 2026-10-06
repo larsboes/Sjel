@@ -180,6 +180,37 @@ pub struct OpenNames {
     pub error: Option<String>,
 }
 
+/// The open list a capability serves: its undecided names with their row counts, and entities'
+/// answer for each where it gave one. Entities not answering still lists every name.
+pub fn open_names(
+    capability: &str,
+    names: Vec<(String, usize)>,
+    answer: Result<ResolveAnswer, String>,
+) -> OpenNames {
+    let (answers, error) = match answer {
+        Ok(answer) => (answer.names, None),
+        Err(reason) => (Vec::new(), Some(reason)),
+    };
+    let by_key: std::collections::HashMap<String, &NameAnswer> =
+        answers.iter().map(|a| (name_key(&a.name), a)).collect();
+    OpenNames {
+        capability: capability.into(),
+        names: names
+            .into_iter()
+            .map(|(name, rows)| {
+                let found = by_key.get(&name_key(&name));
+                OpenName {
+                    status: found.map(|a| a.status),
+                    candidates: found.map(|a| a.candidates.clone()).unwrap_or_default(),
+                    name,
+                    rows,
+                }
+            })
+            .collect(),
+        error,
+    }
+}
+
 /// The body of `POST /api/people/decide`. `entity_id: null` records "not a person".
 #[derive(Debug, Clone, Serialize, Deserialize, schemars::JsonSchema)]
 pub struct Decision {

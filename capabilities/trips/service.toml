@@ -13,6 +13,9 @@ ready_path  = "/ready"   # availability is judged on this, not on liveness (#126
 # instead of the redirect. Every dashboard call already targets `/trips/api/…`
 # (dashboard/src/lib/api.ts), and every server route already lives under `/api`.
 proxy_api_only = "true"
+# Traveller names decided as people answer `GET /api/links?to=ent:…`, and the undecided ones are
+# listed at `/api/people/open` (libs/links/ISA.md D11). src/people.rs holds the same list.
+links_to = ["ent"]
 
 # No `requires` for the store: it is a file this process opens, not a service to wait for
 # (PRD Q45).

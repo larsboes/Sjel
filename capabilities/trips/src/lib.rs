@@ -9,6 +9,7 @@ pub mod jobs;
 pub mod kiwi;
 pub mod obsidian;
 pub mod pack;
+pub mod people;
 pub mod plan_search;
 pub mod projection;
 pub mod retrospective;

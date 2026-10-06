@@ -196,6 +196,47 @@ const MAX_PER_GROUP = 8;
 const cap = <T>(rows: T[]) => rows.slice(0, MAX_PER_GROUP);
 const only = (items: InspectableItem[]) => ({ items });
 
+/** Calendar entries that name the person in their title or notes: the full name, or a first
+ *  name of three letters or more as a whole word. Text, so an inference, never a reference. */
+export function namedIn(entries: CalendarEntry[], name: string): CalendarEntry[] {
+  const full = name.trim().toLowerCase();
+  if (!full) return [];
+  const first = full.split(/\s+/)[0];
+  const word = first.length > 2 ? new RegExp(`(^|[^\\p{L}])${first.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}($|[^\\p{L}])`, 'u') : null;
+  return entries.filter((e) => {
+    const text = `${e.title} ${e.notes ?? ''}`.toLowerCase();
+    return text.includes(full) || (word?.test(text) ?? false);
+  });
+}
+
+/** Trips whose destinations share a name with a place the person lives or stays. */
+export function tripsToPlaces(plans: TripPlan[], places: string[]): TripPlan[] {
+  const wanted = places.map((p) => p.trim().toLowerCase()).filter(Boolean);
+  if (!wanted.length) return [];
+  return plans.filter((t) =>
+    t.destinations.some((d) => {
+      const dest = d.name.toLowerCase();
+      return wanted.some((p) => dest.includes(p) || p.includes(dest));
+    }),
+  );
+}
+
+/** A linked row opens as its full item where the shell has one: a calendar entry or a trip,
+ *  with its own connections. Any other kind, or a failed read, stays the row it was. */
+export async function expand(item: InspectableItem): Promise<InspectableItem> {
+  if (item.type !== 'link') return item;
+  try {
+    if (item.kind === 'cal:entry') return eventItem(await calendar.entries.get(item.id));
+    if (item.kind === 'trip:plan') return tripItem(await trips.get(item.id));
+  } catch {
+    // The row already says what it is.
+  }
+  return item;
+}
+
+const DAY_MS = 86_400_000;
+const isoDay = (ms: number) => new Date(ms).toISOString().slice(0, 10);
+
 /** What the item itself points at, and what shares its days. */
 function readAround(item: InspectableItem): Promise<ConnectionGroup>[] {
   switch (item.type) {
@@ -226,6 +267,21 @@ function readAround(item: InspectableItem): Promise<ConnectionGroup>[] {
         group('finance', 'coincidence', 'Same day', async () =>
           only(cap((await finance.dashboard({ start: day, end: day })).transactions).map(transactionItem))),
       ];
+    }
+    case 'person': {
+      const groups = [
+        group('calendar', 'coincidence', 'Named in', async () => {
+          const now = Date.now();
+          const entries = await calendar.entries.list(isoDay(now - 30 * DAY_MS), isoDay(now + 120 * DAY_MS));
+          return only(cap(namedIn(entries, item.name)).map(eventItem));
+        }),
+      ];
+      if (item.places?.length) {
+        const places = item.places;
+        groups.push(group('trips', 'coincidence', 'Trips to their places', async () =>
+          only(cap(tripsToPlaces(await trips.list(), places)).map(tripItem))));
+      }
+      return groups;
     }
     default:
       return [];

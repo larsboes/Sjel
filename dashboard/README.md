@@ -129,6 +129,19 @@ event the shell inspects is built by `eventItem`, so the plan-id rule lives in o
 "Open in …" goes to the item, not to the section: `/travel?plan=`, `/calendar?date=&entry=`.
 Finance has no per-transaction route yet, so a transaction opens the transactions tab.
 
+People join the same way. Trips and places store people as names; each decides once per name
+whether it means a person in entities, links exact matches itself, and lists the rest at
+`/api/people/open`. `src/lib/people/NameReview.svelte` collects those lists on `/people` from
+every capability whose `links_to` declares `ent`, behind one collapsed line, and offers a
+suggested person, any person, "Create person" or "Not a person". A person's own panel shows
+`ConnectionGroups`, the same component the inspector uses. The text matches it used to present
+as "Related Trips" and "Shared Schedule" are kept, marked inferred.
+
+An effect that asks capabilities reads `capabilities.linksKey`, a derived string over the
+`links_to` declarations. On a direct page load the first registry poll has not arrived when the
+effect first runs; reading the key makes it run again once it has, and not on a poll that
+changes nothing.
+
 The assistant has one shortcut, ⌘J; ⌘K is search. Its edge tab sits off-screen with a
 sliver showing and slides in on hover or focus.
 

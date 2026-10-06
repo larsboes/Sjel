@@ -27,6 +27,9 @@ export interface InspectablePerson {
   notes?: string;
   trips?: { id: string; title: string; dates: string }[];
   events?: { id: string; title: string; date: string }[];
+  /** Where the person lives or stays, as their facts name it. Feeds the inferred
+   *  "trips to their places" group; never a reference. */
+  places?: string[];
 }
 
 export interface InspectableTrip {

@@ -1590,6 +1590,33 @@ export interface Links {
   unlinkable: number;
 }
 
+/** How entities matched a name (libs/links, `Match`). Only `exact` links without asking. */
+export type NameMatch = 'exact' | 'first' | 'ambiguous' | 'none';
+
+/** One undecided name a capability stores as text (libs/links, `OpenName`). */
+export interface OpenName {
+  name: string;
+  /** How many of the capability's rows one decision for this name covers. */
+  rows: number;
+  /** Absent when entities did not answer; `OpenNames.error` says why. */
+  status?: NameMatch;
+  candidates: { id: string; name: string }[];
+}
+
+/** The body of `GET /<capability>/api/people/open`. */
+export interface OpenNames {
+  capability: string;
+  names: OpenName[];
+  error?: string;
+}
+
+export const people = {
+  open: (capability: string) => request<OpenNames>(`/${encodeURIComponent(capability)}/api/people/open`),
+  /** `entityId: null` records "not a person" for every row of that name in that capability. */
+  decide: (capability: string, name: string, entityId: string | null) =>
+    request<{ ok: boolean }>(`/${encodeURIComponent(capability)}/api/people/decide`, jsonInit('POST', { name, entity_id: entityId })),
+};
+
 export const links = {
   /** Every capability is proxied at `/<name>`, and `/api` passes even where `proxy_api_only`. */
   find: (capability: string, to: string) =>

@@ -7,9 +7,9 @@
   import { page } from "$app/state";
   import { tip } from "$lib/tip";
   import { untrack } from "svelte";
-  import { calendar, trips } from "$lib/api";
   import { capabilities } from "$lib/capabilities.svelte";
-  import { connectionsFor, deepLink, eventItem, tripItem, type ConnectionGroup } from "./connections";
+  import ConnectionGroups from "./ConnectionGroups.svelte";
+  import { connectionsFor, deepLink, expand, type ConnectionGroup } from "./connections";
 
   let groups = $state<ConnectionGroup[] | null>(null);
 
@@ -17,6 +17,7 @@
   // item already left behind is dropped, so the list never shows another item's links.
   $effect(() => {
     const current = inspectorStore.item;
+    void capabilities.linksKey;
     groups = null;
     if (!current) return;
     let live = true;
@@ -55,18 +56,8 @@
     touchDeltaY = 0;
   }
 
-  /** A calendar entry or a trip opens as itself, with its own connections. Any other kind
-   *  stays the row it was answered as. A failed read keeps that row rather than an error. */
   async function follow(next: InspectableItem) {
-    if (next.type === "link") {
-      try {
-        if (next.kind === "cal:entry") next = eventItem(await calendar.entries.get(next.id));
-        else if (next.kind === "trip:plan") next = tripItem(await trips.get(next.id));
-      } catch {
-        // The row already says what it is; the inspector shows that.
-      }
-    }
-    inspectorStore.follow(next);
+    inspectorStore.follow(await expand(next));
   }
 
   function askAssistantAbout(item: InspectableItem) {
@@ -409,44 +400,7 @@
           </div>
         {/if}
 
-        {#if groups === null}
-          <p class="connections-state">Reading what this touches…</p>
-        {:else}
-          {#each groups as g (g.capability + g.label)}
-            {#if g.error || g.items.length > 0}
-              <section class="detail-box" class:coincidence={g.basis === "coincidence"} aria-label={g.label}>
-                <span class="box-kicker">
-                  <Icon name={g.icon} size={11} />
-                  {g.label}
-                  {#if g.basis === "coincidence"}
-                    <span class="basis" use:tip={"Shares the dates. Holds no reference to this item."}>inferred</span>
-                  {/if}
-                  {#if !g.error}<span class="mono count">{g.items.length}</span>{/if}
-                </span>
-                {#if g.error}
-                  <p class="connections-state">{g.error}</p>
-                {:else}
-                  <ul class="linked-list">
-                    {#each g.items as r (r.key)}
-                      <li>
-                        <button type="button" class="linked-row" onclick={() => void follow(r.item)}>
-                          <span class="linked-title">{r.title}</span>
-                          <span class="linked-date mono">{r.meta}</span>
-                        </button>
-                      </li>
-                    {/each}
-                  </ul>
-                  {#if g.unlinkable}
-                    <p class="connections-state">
-                      {g.unlinkable} more {g.unlinkable === 1 ? "row references" : "rows reference"} this
-                      without an id that can be opened.
-                    </p>
-                  {/if}
-                {/if}
-              </section>
-            {/if}
-          {/each}
-        {/if}
+        <ConnectionGroups {groups} onfollow={(next) => void follow(next)} />
 
         <!-- Persistent Assistant Quick Action -->
         <div class="assistant-bar">
@@ -727,64 +681,10 @@
     flex-shrink: 0;
   }
 
-  .linked-row {
-    display: flex;
-    align-items: baseline;
-    justify-content: space-between;
-    gap: var(--space-3);
-    width: 100%;
-    padding: var(--space-1) var(--space-2);
-    margin: 0 calc(-1 * var(--space-2));
-    border: none;
-    border-radius: var(--radius-sm);
-    background: transparent;
-    font: inherit;
-    text-align: left;
-    cursor: pointer;
-    transition: background-color var(--motion-fast) var(--ease-out);
-  }
-
-  .linked-row:hover,
-  .linked-row:focus-visible {
-    background: var(--surface);
-  }
-
-  .linked-row .linked-title {
-    min-width: 0;
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
-  }
-
   .box-kicker {
     display: inline-flex;
     align-items: center;
     gap: var(--space-1);
-  }
-
-  .count {
-    margin-left: auto;
-    color: var(--text-secondary);
-  }
-
-  /* An inferred group reads quieter than a referenced one: dashed edge, no fill. */
-  .detail-box.coincidence {
-    background: transparent;
-    border-style: dashed;
-  }
-
-  .basis {
-    font-weight: 500;
-    text-transform: none;
-    letter-spacing: 0;
-    color: var(--text-tertiary);
-    cursor: help;
-  }
-
-  .connections-state {
-    margin: 0;
-    font-size: var(--text-xs);
-    color: var(--text-tertiary);
   }
 
   .synapse-chip.static {

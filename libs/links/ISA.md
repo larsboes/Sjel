@@ -144,10 +144,11 @@ out of scope.
 
 > [!done] D11 — decided 2026-10-06 without a question: **the owner writes, and no new
 > vocabulary.** Each capability links its own exact matches, at startup and after its own
-> writes. If entities does not answer, the names stay undecided and nothing fails. A
-> capability that declares `ent` in `links_to` and stores names also serves
-> `GET /api/people/open` and `POST /api/people/decide`; the shell finds them through
-> `links_to`, as it finds `/api/links`. One decision covers every row of that name in that
+> writes. If entities does not answer, the names stay undecided and nothing fails. Every
+> capability that declares `ent` in `links_to` serves `GET /api/people/open`, and one that
+> stores names also serves `POST /api/people/decide`; the shell finds them through `links_to`, as
+> it finds `/api/links`. Comms answers the open list with no names, because mail joins by exact
+> email: the shell then never has to read a 404 as "nothing to review". One decision covers every row of that name in that
 > capability, and the list shows how many rows that is.
 
 ## Goal
@@ -204,7 +205,7 @@ in the shell. The same holds for a place, an entity and a calendar entry.
 - [x] LNK-16 — places does the same on `person_places`. A dismissed row is neither a link nor
       open (ISA PLC-7); proposed and confirmed rows are linked and say which.
 - [x] LNK-17 — comms answers `/api/links?to=ent:…` from `from_addr` and the person's emails.
-- [ ] LNK-18 — `/people` lists the open names across capabilities, with create, link and
+- [x] LNK-18 — `/people` lists the open names across capabilities, with create, link and
       not-a-person; a person in the inspector lists the trips, places and mail that reference it.
 
 ## Verified
@@ -230,6 +231,17 @@ inspector, through `GET /places/api/links?to=fin:tx:<source_id>`.
 
 LNK-8 has one consequence for calendar: `Entry::payload` was inert evidence for every provider.
 `payload.plan_id` is now read on rows with `source = 'trips'`, and on no others.
+
+People, verified 2026-10-06 on live data: trips linked its 5 exact names at start and places its
+3, each the same count the read-only measurement gave. `/people` lists the 24 open names (12 from
+each) behind one collapsed line. A linked person shows "Trips" and "Places" as references, from two
+capabilities, through `/api/links`. Bad decisions are refused before anything is stored. No name was
+decided during the build: that is the operator's call.
+
+Known limits: `decide` checks that an id is shaped like a person id, not that the person exists;
+the review UI only offers real ids. A trip's companion chips still open a person by name, because
+the trip plan does not carry the decisions; following the trip's travellers to a person needs
+trips to expose them.
 
 ## Out of scope
 

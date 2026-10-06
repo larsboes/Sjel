@@ -9,6 +9,10 @@ import { axonStatus, hasPanel, type CapabilityView } from "./api";
  */
 class CapabilityStore {
   items = $state<CapabilityView[]>([]);
+  /** Who answers `/api/links` for which kinds. A derived string, so an effect that reads it
+   *  reruns when the declarations change (the first poll arriving, a capability enabled) and
+   *  not on every poll that returns the same registry. */
+  linksKey = $derived(this.items.map((c) => `${c.name}=${(c.links_to ?? []).join("|")}`).join(","));
   offline = $state(false);
   loading = $state(true);
   #timer: ReturnType<typeof setInterval> | undefined;

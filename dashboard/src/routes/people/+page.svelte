@@ -13,14 +13,10 @@
   import { link } from "$lib/nav";
   import {
     entities,
-    calendar,
-    trips,
     type Entity,
     type EntityField,
     type EntitySource,
     type LocatedPerson,
-    type CalendarEntry,
-    type TripPlan,
   } from "$lib/api";
   import MapSurface from "$lib/map/MapSurface.svelte";
   import {
@@ -31,14 +27,18 @@
     peopleSources,
   } from "$lib/people/people-layers";
   import { assistantStore } from "$lib/assistant/assistant.svelte";
+  import { untrack } from "svelte";
+  import { capabilities } from "$lib/capabilities.svelte";
+  import ConnectionGroups from "$lib/inspector/ConnectionGroups.svelte";
+  import { connectionsFor, expand, type ConnectionGroup } from "$lib/inspector/connections";
+  import { inspectorStore } from "$lib/inspector/inspector.svelte";
+  import NameReview from "$lib/people/NameReview.svelte";
   import { page } from "$app/state";
 
   let people = $state<Entity[]>([]);
   let fields = $state<EntityField[]>([]);
   let query = $state("");
   let selectedId = $state<string | null>(page.url.searchParams.get("id"));
-  let allEntries = $state<CalendarEntry[]>([]);
-  let allTrips = $state<TripPlan[]>([]);
   let error = $state<string | null>(null);
   let notice = $state<string | null>(null);
   let busy = $state(false);
@@ -97,48 +97,26 @@
     return fact ? (fact.predicate === "away" ? `in ${fact.place}` : fact.place) : null;
   }
 
-  async function loadConnectedContext(): Promise<void> {
-    try {
-      const now = new Date();
-      const fromStr = new Date(now.getFullYear(), now.getMonth() - 1, 1).toISOString().slice(0, 10);
-      const toStr = new Date(now.getFullYear(), now.getMonth() + 3, 1).toISOString().slice(0, 10);
-      const [calRes, tripRes] = await Promise.allSettled([
-        calendar.entries.list(fromStr, toStr),
-        trips.list(),
-      ]);
-      if (calRes.status === "fulfilled") allEntries = calRes.value;
-      if (tripRes.status === "fulfilled") allTrips = tripRes.value;
-    } catch {
-      // Graceful fallback
-    }
-  }
-
-  const personCalendarEntries = $derived.by(() => {
-    if (!selected) return [];
-    const nameLower = selected.name.toLowerCase();
-    const firstName = nameLower.split(/\s+/)[0];
-    return allEntries.filter((e) => {
-      const titleLower = e.title.toLowerCase();
-      const notesLower = (e.notes ?? "").toLowerCase();
-      return (
-        titleLower.includes(nameLower) ||
-        notesLower.includes(nameLower) ||
-        (firstName && firstName.length > 2 && (titleLower.includes(` ${firstName} `) || titleLower.endsWith(` ${firstName}`) || titleLower.startsWith(`${firstName} `)))
-      );
+  // What the selected person touches elsewhere: references from every capability that declares
+  // `ent`, then the text and place matches, labelled inferred (libs/links/ISA.md D2).
+  let connections = $state<ConnectionGroup[] | null>(null);
+  // Bumped when a name is decided below, so the person's links are read again.
+  let decided = $state(0);
+  $effect(() => {
+    void decided;
+    void capabilities.linksKey;
+    const person = selected;
+    connections = null;
+    if (!person) return;
+    let live = true;
+    const places = [...new Set(person.facts.map((f) => f.place).filter(Boolean))];
+    const registry = untrack(() => capabilities.items);
+    void connectionsFor({ type: "person", id: person.id, name: person.name, places }, registry).then((found) => {
+      if (live) connections = found;
     });
-  });
-
-  const personTrips = $derived.by(() => {
-    if (!selected) return [];
-    const nameLower = selected.name.toLowerCase();
-    const personPlaces = selected.facts.map((f) => f.place.toLowerCase());
-    return allTrips.filter((t) => {
-      const titleLower = t.title.toLowerCase();
-      const destinations = t.destinations?.map((d) => d.name.toLowerCase()) ?? [];
-      const matchesPlace = personPlaces.some((p) => destinations.some((d) => d.includes(p) || p.includes(d)));
-      const matchesTitle = titleLower.includes(nameLower);
-      return matchesTitle || matchesPlace;
-    });
+    return () => {
+      live = false;
+    };
   });
 
   const selectedBirthdayInfo = $derived.by(() => {
@@ -170,7 +148,6 @@
     try {
       [people, fields] = await Promise.all([entities.list("person"), entities.fields("person")]);
       error = null;
-      void loadConnectedContext();
     } catch (caught) {
       error = caught instanceof Error ? caught.message : String(caught);
     }
@@ -417,6 +394,8 @@
 </p>
 
 {#if error}<p class="error"><Icon name="alert" size={15} /> {error}</p>{/if}
+
+<NameReview roster={people} onchange={() => (decided += 1)} />
 {#if notice}<p class="notice" aria-live="polite">{notice}</p>{/if}
 
 <section class="map-card" aria-label="Map of people">
@@ -530,50 +509,7 @@
           </div>
         {/if}
 
-        <div class="context-section">
-          <div class="context-section-title">
-            <Icon name="calendar" size={12} />
-            <span>Shared Schedule ({personCalendarEntries.length})</span>
-            <a class="context-action-link" href={link('/calendar')}>+ Schedule Event</a>
-          </div>
-          {#if personCalendarEntries.length === 0}
-            <p class="context-empty">No calendar entries referencing {selected.name}.</p>
-          {:else}
-            <ul class="context-list">
-              {#each personCalendarEntries.slice(0, 4) as entry (entry.id)}
-                <li>
-                  <a class="context-list-item" href={link('/calendar')}>
-                    <span class="item-time mono">{entry.starts_at.slice(0, 10)}</span>
-                    <span class="item-name">{entry.title}</span>
-                    {#if entry.location}<span class="item-meta">· {entry.location}</span>{/if}
-                  </a>
-                </li>
-              {/each}
-            </ul>
-          {/if}
-        </div>
-
-        {#if personTrips.length > 0}
-          <div class="context-section">
-            <div class="context-section-title">
-              <Icon name="train" size={12} />
-              <span>Related Trips ({personTrips.length})</span>
-            </div>
-            <ul class="context-list">
-              {#each personTrips.slice(0, 3) as trip (trip.id)}
-                <li>
-                  <a class="context-list-item" href={link('/travel')}>
-                    <span class="item-time mono">{trip.date_start}</span>
-                    <span class="item-name">{trip.title}</span>
-                    {#if trip.destinations && trip.destinations.length > 0}
-                      <span class="item-meta">→ {trip.destinations.map(d => d.name).join(', ')}</span>
-                    {/if}
-                  </a>
-                </li>
-              {/each}
-            </ul>
-          </div>
-        {/if}
+        <ConnectionGroups groups={connections} onfollow={(item) => void expand(item).then((full) => inspectorStore.open(full))} />
       </div>
 
       {#if sources}
@@ -1039,80 +975,4 @@
     font-size: var(--text-2xs);
   }
 
-  .context-section {
-    display: flex;
-    flex-direction: column;
-    gap: var(--space-1);
-    padding-top: var(--space-2);
-    border-top: 1px solid var(--card-border);
-  }
-
-  .context-section-title {
-    display: flex;
-    align-items: center;
-    gap: 0.35rem;
-    font-size: var(--text-2xs);
-    font-weight: 600;
-    color: var(--text-tertiary);
-  }
-
-  .context-action-link {
-    margin-left: auto;
-    font-size: var(--text-2xs);
-    color: var(--primary);
-    text-decoration: none;
-  }
-
-  .context-action-link:hover {
-    text-decoration: underline;
-  }
-
-  .context-empty {
-    font-size: var(--text-2xs);
-    color: var(--text-tertiary);
-    margin: 0;
-  }
-
-  .context-list {
-    list-style: none;
-    padding: 0;
-    margin: 0;
-    display: flex;
-    flex-direction: column;
-    gap: 0.2rem;
-  }
-
-  .context-list-item {
-    display: flex;
-    align-items: center;
-    gap: var(--space-2);
-    padding: 0.2rem 0.4rem;
-    border-radius: var(--radius-sm);
-    text-decoration: none;
-    color: inherit;
-    font-size: var(--text-xs);
-    transition: background-color var(--motion-fast) ease;
-  }
-
-  .context-list-item:hover {
-    background-color: var(--card-bg);
-  }
-
-  .item-time {
-    font-size: var(--text-2xs);
-    color: var(--text-tertiary);
-  }
-
-  .item-name {
-    font-weight: 500;
-    color: var(--text-primary);
-  }
-
-  .item-meta {
-    font-size: var(--text-2xs);
-    color: var(--text-tertiary);
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
-  }
 </style>

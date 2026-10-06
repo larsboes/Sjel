@@ -87,6 +87,12 @@ const ROUTES: &[route_manifest::Route] = &[
     ),
     r(
         "GET",
+        "/api/people/open",
+        "Names waiting for review: always none here, because mail joins people by exact email \
+         (libs/links/ISA.md D10, D11).",
+    ),
+    r(
+        "GET",
         "/content/{source}/{id}",
         "An item as content-item-v2. :source is feed or mail.",
     ),
@@ -366,6 +372,16 @@ fn build_router(dashboard_origin: &str) -> Router {
     let read_routes = Router::new()
         .route("/routes", get(routes))
         .route("/api/links", get(links_handler))
+        .route(
+            "/api/people/open",
+            get(|| async {
+                Json(sjel_links::open_names(
+                    "comms",
+                    vec![],
+                    Ok(Default::default()),
+                ))
+            }),
+        )
         .route("/health", get(health_handler))
         .route("/ready", get(ready_handler))
         .route("/feed", get(feed_handler))

@@ -11,13 +11,15 @@ import {
   deepLink,
   kindOf,
   merge,
+  namedIn,
   planOf,
+  tripsToPlaces,
   transactionItem,
   tripItem,
   withinDays,
   type ConnectionGroup,
 } from "../dashboard/src/lib/inspector/connections.ts";
-import type { CapabilityView, FinanceTransaction, TripPlan } from "../dashboard/src/lib/api.ts";
+import type { CalendarEntry, CapabilityView, FinanceTransaction, TripPlan } from "../dashboard/src/lib/api.ts";
 
 // The shell asks only the capabilities that declare an id's kind (libs/links/ISA.md D1), and a
 // row it already lists as a reference is never repeated as an inference (D2).
@@ -50,6 +52,28 @@ describe("discovery", () => {
     const merged = merge(groups);
     expect(merged.map((g) => g.basis)).toEqual(["reference", "coincidence"]);
     expect(merged[1].items.map((r) => r.key)).toEqual(["cal:entry:2"]);
+  });
+});
+
+// A person's text and place matches are inferences, so they must not over-match: a first name
+// inside another word is not a mention, and a short first name is not used at all.
+describe("person inferences", () => {
+  const entry = (title: string, notes: string | null = null) => ({ id: title, title, notes }) as CalendarEntry;
+
+  test("a full name or a whole first word is a mention, a substring is not", () => {
+    const entries = [entry("Dinner with Lucia García"), entry("Call lucia"), entry("Luciano visits"), entry("x", "bring Lucia's book")];
+    expect(namedIn(entries, "Lucia García").map((e) => e.title)).toEqual(["Dinner with Lucia García", "Call lucia", "x"]);
+  });
+
+  test("a first name of two letters is never matched alone", () => {
+    expect(namedIn([entry("Jo and Tom")], "Jo Weber")).toEqual([]);
+  });
+
+  test("a trip to a place the person lives is found either way round", () => {
+    const plan = (name: string) => ({ id: name, destinations: [{ name }] }) as unknown as TripPlan;
+    const found = tripsToPlaces([plan("Berlin, Germany"), plan("Rome")], ["berlin"]);
+    expect(found.map((t) => t.id)).toEqual(["Berlin, Germany"]);
+    expect(tripsToPlaces([plan("Rome")], [])).toEqual([]);
   });
 });
 

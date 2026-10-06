@@ -33,7 +33,7 @@ sjel-store = { path = "../../libs/sjel-store" }
 sjel-http = { path = "../../libs/sjel-http" }
 # Shared Ed25519 device verification for the authenticated sync ingress, which carries
 # `interior.item` mutations from the phone.
-devices = { path = "../devices" }
+devices = { package = "sjel-devices", path = "../devices" }
 # Die eine Art, eine Datei aus einer erklaerten Vault-Wurzel zu holen, plus die markierte
 # Region. Null Abhaengigkeiten, und die Konflikterkennung liegt in der Datei selbst.
 markdown-root = { path = "../../libs/markdown-root" }

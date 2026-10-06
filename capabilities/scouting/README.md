@@ -105,8 +105,8 @@ main.rs                  ── CLI binary ("scout"), one lib crate "scouting"
                                see Verdict)
 ```
 
-`cargo` builds and tests this, as it does every Rust capability: `cargo build -p scouting` /
-`cargo test -p scouting`. It is a member of the root workspace and resolves through the one
+`cargo` builds and tests this, as it does every Rust capability: `cargo build -p sjel-scouting` /
+`cargo test -p sjel-scouting`. It is a member of the root workspace and resolves through the one
 root `Cargo.lock`, while this package's manifest owns its own direct dependencies. That is
 the same shape a second Rust capability joins with — `transit` landed next and needed no
 build wiring of its own. Between 2026-07 and 2026-08-25 a Bazel graph ran alongside cargo as
@@ -551,7 +551,7 @@ is the test that proves this; it's the test that matters most in this file.
 
 `cargo test` needs nothing running. `store`'s tests are real database tests — they were the
 reason this line used to name a server — and since PRD Q45 (2026-08-27) each one opens its own
-temp SQLite file. `cargo test -p scouting db_tests::` runs that half alone.
+temp SQLite file. `cargo test -p sjel-scouting db_tests::` runs that half alone.
 
 ```bash
 cargo build                                                    # single "scout" binary
@@ -574,7 +574,7 @@ scout --promote-calendar --timezone Europe/Berlin --dry-run     # what would lan
 scout --promote-calendar --timezone Europe/Berlin               # saved luma events -> calendar
 
 cargo build --locked --release --bin scout                      # what service-runner builds
-cargo test -p scouting db_tests::                                # the store suite alone
+cargo test -p sjel-scouting db_tests::                                # the store suite alone
 
 cargo run --bin scout-server                                    # HTTP API: health, sources, scan, backlog, status
 cargo build --locked --release --bin scout-server               # what service-runner builds

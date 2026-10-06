@@ -1,5 +1,5 @@
 [package]
-name = "interior"
+name = "sjel-interior"
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true

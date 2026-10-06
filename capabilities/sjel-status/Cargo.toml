@@ -21,11 +21,11 @@ sjel-store = { path = "../../libs/sjel-store" }
 sjel-server = { path = "../../libs/sjel-server" }
 # The device registry, for one call: the shell admits a paired device on its signature
 # (src/device_gate.rs, PRD Q119). The protocol stays owned by capabilities/devices.
-devices = { path = "../devices" }
+devices = { package = "sjel-devices", path = "../devices" }
 # The backup tables, the runner and the timing policy. A library, not a process: this
 # surface already lists backup age and already triggers one, so the capability owns the
 # records and this file owns the surface -- the same split as `devices` above.
-backup = { path = "../backup" }
+backup = { package = "sjel-backup", path = "../backup" }
 route-manifest = { path = "../../libs/route-manifest" }
 # The browser login (src/session.rs): a random single-use ticket, and the digest kept for it
 # in memory. The session itself is signed by sjel-server, so nothing here is stored.

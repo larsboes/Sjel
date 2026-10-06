@@ -433,22 +433,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "assistant"
-version = "0.1.0"
-dependencies = [
- "axum",
- "reqwest",
- "route-manifest",
- "schemars",
- "serde",
- "serde_json",
- "sjel-config",
- "sjel-inference",
- "sjel-server",
- "tokio",
-]
-
-[[package]]
 name = "astral-tl"
 version = "0.8.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -617,19 +601,6 @@ dependencies = [
  "tower-layer",
  "tower-service",
  "tracing",
-]
-
-[[package]]
-name = "backup"
-version = "0.1.0"
-dependencies = [
- "rusqlite",
- "serde",
- "serde_json",
- "sha2 0.11.0",
- "sjel-config",
- "sjel-store",
- "tokio",
 ]
 
 [[package]]
@@ -841,28 +812,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "calendar"
-version = "0.1.0"
-dependencies = [
- "axum",
- "civil-date",
- "content-item",
- "markdown-root",
- "reqwest",
- "route-manifest",
- "rusqlite",
- "serde",
- "serde_json",
- "sjel-config",
- "sjel-http",
- "sjel-server",
- "sjel-store",
- "tokio",
- "tower",
- "tower-http 0.7.1",
-]
-
-[[package]]
 name = "candidate-fingerprint"
 version = "0.1.0"
 dependencies = [
@@ -1046,33 +995,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "comms"
-version = "0.1.0"
-dependencies = [
- "axum",
- "base64 0.23.1",
- "content-item",
- "markdown-root",
- "reqwest",
- "route-manifest",
- "rusqlite",
- "serde",
- "serde_json",
- "sha2 0.11.0",
- "sjel-config",
- "sjel-extraction",
- "sjel-http",
- "sjel-inference",
- "sjel-pseudonymize",
- "sjel-server",
- "sjel-store",
- "sjel-summarize",
- "thiserror",
- "tokio",
- "tower-http 0.7.1",
-]
-
-[[package]]
 name = "compression-codecs"
 version = "0.4.45"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1096,7 +1018,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "daa3d1ea6b01ce72405fa3f826768f51c7a44917527c89b37856ffdd17ee57e4"
 dependencies = [
  "caseless",
- "entities 1.0.1",
+ "entities",
  "finl_unicode",
  "jetscii",
  "phf 0.13.1",
@@ -1347,25 +1269,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "7cd812cc2bc1d69d4764bd80df88b4317eaef9e773c75226407d9bc0876b211c"
 
 [[package]]
-name = "devices"
-version = "0.1.0"
-dependencies = [
- "axum",
- "getrandom 0.4.3",
- "ring",
- "route-manifest",
- "rusqlite",
- "schemars",
- "serde",
- "serde_json",
- "sha2 0.11.0",
- "sjel-config",
- "sjel-server",
- "sjel-store",
- "tokio",
-]
-
-[[package]]
 name = "digest"
 version = "0.10.7"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1489,25 +1392,6 @@ dependencies = [
 
 [[package]]
 name = "entities"
-version = "0.1.0"
-dependencies = [
- "axum",
- "civil-date",
- "reqwest",
- "route-manifest",
- "rusqlite",
- "schemars",
- "serde",
- "serde_json",
- "sjel-config",
- "sjel-http",
- "sjel-server",
- "sjel-store",
- "tokio",
-]
-
-[[package]]
-name = "entities"
 version = "1.0.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "b5320ae4c3782150d900b79807611a59a99fc9a1d61d686faafc24b93fc8d7ca"
@@ -1623,31 +1507,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "1e6853b52649d4ac5c0bd02320cddc5ba956bdb407c4b75a2c6b75bf51500f8c"
 dependencies = [
  "simd-adler32",
-]
-
-[[package]]
-name = "finance"
-version = "0.1.0"
-dependencies = [
- "axum",
- "candidate-fingerprint",
- "civil-date",
- "content-item",
- "csv",
- "markdown-root",
- "reqwest",
- "route-manifest",
- "rusqlite",
- "serde",
- "serde_json",
- "sha2 0.11.0",
- "sjel-config",
- "sjel-http",
- "sjel-server",
- "sjel-store",
- "tokio",
- "tower",
- "tower-http 0.7.1",
 ]
 
 [[package]]
@@ -2026,16 +1885,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "6303bc9732ae41b04cb554b844a762b4115a61bfaa81e3e83050991eeb56863f"
 dependencies = [
  "digest 0.11.3",
-]
-
-[[package]]
-name = "host-net"
-version = "0.1.0"
-dependencies = [
- "serde",
- "serde_json",
- "sjel-config",
- "toml",
 ]
 
 [[package]]
@@ -2443,28 +2292,6 @@ checksum = "4250ce6452e92010fdf7268ccc5d14faa80bb12fc741938534c58f16804e03c7"
 dependencies = [
  "block-padding 0.4.2",
  "hybrid-array",
-]
-
-[[package]]
-name = "interior"
-version = "0.1.0"
-dependencies = [
- "axum",
- "civil-date",
- "rayon",
- "route-manifest",
- "rusqlite",
- "serde",
- "serde_json",
- "sha2 0.11.0",
- "sjel-config",
- "sjel-inventory",
- "sjel-server",
- "sjel-store",
- "thiserror",
- "tokio",
- "toml",
- "tower",
 ]
 
 [[package]]
@@ -2877,19 +2704,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "media"
-version = "0.1.0"
-dependencies = [
- "civil-date",
- "rusqlite",
- "serde",
- "serde_json",
- "sha2 0.11.0",
- "sjel-config",
- "sjel-store",
-]
-
-[[package]]
 name = "memchr"
 version = "2.8.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -3120,23 +2934,6 @@ name = "openssl-probe"
 version = "0.2.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "7c87def4c32ab89d880effc9e097653c8da5d6ef28e6b539d313baaacfbafcbe"
-
-[[package]]
-name = "operator-profile"
-version = "0.1.0"
-dependencies = [
- "axum",
- "reqwest",
- "route-manifest",
- "rusqlite",
- "schemars",
- "serde",
- "serde_json",
- "sjel-config",
- "sjel-server",
- "sjel-store",
- "tokio",
-]
 
 [[package]]
 name = "option-ext"
@@ -3372,27 +3169,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "f6b464fbc74e149a392436b17d523f769e057cb6877f6a5c4618bc6f11800548"
 
 [[package]]
-name = "places"
-version = "0.1.0"
-dependencies = [
- "axum",
- "candidate-fingerprint",
- "civil-date",
- "csv",
- "reqwest",
- "route-manifest",
- "rusqlite",
- "serde",
- "serde_json",
- "sha2 0.11.0",
- "sjel-config",
- "sjel-http",
- "sjel-server",
- "sjel-store",
- "tokio",
-]
-
-[[package]]
 name = "png"
 version = "0.18.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -3532,27 +3308,6 @@ name = "pulp-wasm-simd-flag"
 version = "0.1.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "1d8f70e07b9c3962945a74e59ca1c511bba65b6419468acc217c457d93f3c740"
-
-[[package]]
-name = "punctuality"
-version = "0.1.0"
-dependencies = [
- "arrow",
- "axum",
- "parquet",
- "reqwest",
- "route-manifest",
- "rusqlite",
- "serde",
- "serde_json",
- "sjel-config",
- "sjel-http",
- "sjel-server",
- "sjel-store",
- "thiserror",
- "tokio",
- "tower-http 0.7.1",
-]
 
 [[package]]
 name = "pxfm"
@@ -4237,30 +3992,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "94143f37725109f92c262ed2cf5e59bce7498c01bcc1502d7b9afe439a4e9f49"
 
 [[package]]
-name = "scouting"
-version = "0.1.0"
-dependencies = [
- "axum",
- "content-item",
- "markdown-root",
- "reqwest",
- "route-manifest",
- "rusqlite",
- "serde",
- "serde_json",
- "sjel-config",
- "sjel-http",
- "sjel-inference",
- "sjel-server",
- "sjel-store",
- "thiserror",
- "tokio",
- "tower",
- "tower-http 0.7.1",
- "transit",
-]
-
-[[package]]
 name = "security-framework"
 version = "3.7.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -4523,6 +4254,57 @@ dependencies = [
 ]
 
 [[package]]
+name = "sjel-assistant"
+version = "0.1.0"
+dependencies = [
+ "axum",
+ "reqwest",
+ "route-manifest",
+ "schemars",
+ "serde",
+ "serde_json",
+ "sjel-config",
+ "sjel-inference",
+ "sjel-server",
+ "tokio",
+]
+
+[[package]]
+name = "sjel-backup"
+version = "0.1.0"
+dependencies = [
+ "rusqlite",
+ "serde",
+ "serde_json",
+ "sha2 0.11.0",
+ "sjel-config",
+ "sjel-store",
+ "tokio",
+]
+
+[[package]]
+name = "sjel-calendar"
+version = "0.1.0"
+dependencies = [
+ "axum",
+ "civil-date",
+ "content-item",
+ "markdown-root",
+ "reqwest",
+ "route-manifest",
+ "rusqlite",
+ "serde",
+ "serde_json",
+ "sjel-config",
+ "sjel-http",
+ "sjel-server",
+ "sjel-store",
+ "tokio",
+ "tower",
+ "tower-http 0.7.1",
+]
+
+[[package]]
 name = "sjel-capability-auth"
 version = "0.1.0"
 dependencies = [
@@ -4559,6 +4341,33 @@ dependencies = [
 ]
 
 [[package]]
+name = "sjel-comms"
+version = "0.1.0"
+dependencies = [
+ "axum",
+ "base64 0.23.1",
+ "content-item",
+ "markdown-root",
+ "reqwest",
+ "route-manifest",
+ "rusqlite",
+ "serde",
+ "serde_json",
+ "sha2 0.11.0",
+ "sjel-config",
+ "sjel-extraction",
+ "sjel-http",
+ "sjel-inference",
+ "sjel-pseudonymize",
+ "sjel-server",
+ "sjel-store",
+ "sjel-summarize",
+ "thiserror",
+ "tokio",
+ "tower-http 0.7.1",
+]
+
+[[package]]
 name = "sjel-config"
 version = "0.1.0"
 
@@ -4571,6 +4380,44 @@ dependencies = [
  "thiserror",
  "toml",
  "zeroize",
+]
+
+[[package]]
+name = "sjel-devices"
+version = "0.1.0"
+dependencies = [
+ "axum",
+ "getrandom 0.4.3",
+ "ring",
+ "route-manifest",
+ "rusqlite",
+ "schemars",
+ "serde",
+ "serde_json",
+ "sha2 0.11.0",
+ "sjel-config",
+ "sjel-server",
+ "sjel-store",
+ "tokio",
+]
+
+[[package]]
+name = "sjel-entities"
+version = "0.1.0"
+dependencies = [
+ "axum",
+ "civil-date",
+ "reqwest",
+ "route-manifest",
+ "rusqlite",
+ "schemars",
+ "serde",
+ "serde_json",
+ "sjel-config",
+ "sjel-http",
+ "sjel-server",
+ "sjel-store",
+ "tokio",
 ]
 
 [[package]]
@@ -4588,6 +4435,41 @@ dependencies = [
 [[package]]
 name = "sjel-fda-launcher"
 version = "0.1.0"
+
+[[package]]
+name = "sjel-finance"
+version = "0.1.0"
+dependencies = [
+ "axum",
+ "candidate-fingerprint",
+ "civil-date",
+ "content-item",
+ "csv",
+ "markdown-root",
+ "reqwest",
+ "route-manifest",
+ "rusqlite",
+ "serde",
+ "serde_json",
+ "sha2 0.11.0",
+ "sjel-config",
+ "sjel-http",
+ "sjel-server",
+ "sjel-store",
+ "tokio",
+ "tower",
+ "tower-http 0.7.1",
+]
+
+[[package]]
+name = "sjel-host-net"
+version = "0.1.0"
+dependencies = [
+ "serde",
+ "serde_json",
+ "sjel-config",
+ "toml",
+]
 
 [[package]]
 name = "sjel-http"
@@ -4609,17 +4491,39 @@ dependencies = [
 ]
 
 [[package]]
+name = "sjel-interior"
+version = "0.1.0"
+dependencies = [
+ "axum",
+ "civil-date",
+ "rayon",
+ "route-manifest",
+ "rusqlite",
+ "serde",
+ "serde_json",
+ "sha2 0.11.0",
+ "sjel-config",
+ "sjel-inventory",
+ "sjel-server",
+ "sjel-store",
+ "thiserror",
+ "tokio",
+ "toml",
+ "tower",
+]
+
+[[package]]
 name = "sjel-inventory"
 version = "0.1.0"
 dependencies = [
  "axum",
- "devices",
  "markdown-root",
  "route-manifest",
  "rusqlite",
  "serde",
  "serde_json",
  "sjel-config",
+ "sjel-devices",
  "sjel-http",
  "sjel-server",
  "sjel-store",
@@ -4641,6 +4545,57 @@ dependencies = [
 ]
 
 [[package]]
+name = "sjel-media"
+version = "0.1.0"
+dependencies = [
+ "civil-date",
+ "rusqlite",
+ "serde",
+ "serde_json",
+ "sha2 0.11.0",
+ "sjel-config",
+ "sjel-store",
+]
+
+[[package]]
+name = "sjel-operator-profile"
+version = "0.1.0"
+dependencies = [
+ "axum",
+ "reqwest",
+ "route-manifest",
+ "rusqlite",
+ "schemars",
+ "serde",
+ "serde_json",
+ "sjel-config",
+ "sjel-server",
+ "sjel-store",
+ "tokio",
+]
+
+[[package]]
+name = "sjel-places"
+version = "0.1.0"
+dependencies = [
+ "axum",
+ "candidate-fingerprint",
+ "civil-date",
+ "csv",
+ "reqwest",
+ "route-manifest",
+ "rusqlite",
+ "serde",
+ "serde_json",
+ "sha2 0.11.0",
+ "sjel-config",
+ "sjel-http",
+ "sjel-server",
+ "sjel-store",
+ "tokio",
+]
+
+[[package]]
 name = "sjel-pseudonymize"
 version = "0.1.0"
 dependencies = [
@@ -4649,6 +4604,51 @@ dependencies = [
  "serde_json",
  "sha2 0.11.0",
  "sjel-extraction",
+]
+
+[[package]]
+name = "sjel-punctuality"
+version = "0.1.0"
+dependencies = [
+ "arrow",
+ "axum",
+ "parquet",
+ "reqwest",
+ "route-manifest",
+ "rusqlite",
+ "serde",
+ "serde_json",
+ "sjel-config",
+ "sjel-http",
+ "sjel-server",
+ "sjel-store",
+ "thiserror",
+ "tokio",
+ "tower-http 0.7.1",
+]
+
+[[package]]
+name = "sjel-scouting"
+version = "0.1.0"
+dependencies = [
+ "axum",
+ "content-item",
+ "markdown-root",
+ "reqwest",
+ "route-manifest",
+ "rusqlite",
+ "serde",
+ "serde_json",
+ "sjel-config",
+ "sjel-http",
+ "sjel-inference",
+ "sjel-server",
+ "sjel-store",
+ "sjel-transit",
+ "thiserror",
+ "tokio",
+ "tower",
+ "tower-http 0.7.1",
 ]
 
 [[package]]
@@ -4671,12 +4671,25 @@ dependencies = [
 ]
 
 [[package]]
+name = "sjel-soundscape"
+version = "0.1.0"
+dependencies = [
+ "axum",
+ "route-manifest",
+ "serde",
+ "serde_json",
+ "sjel-config",
+ "sjel-server",
+ "tokio",
+ "tokio-stream",
+ "tower-http 0.7.1",
+]
+
+[[package]]
 name = "sjel-status"
 version = "0.1.0"
 dependencies = [
  "axum",
- "backup",
- "devices",
  "getrandom 0.4.3",
  "reqwest",
  "ring",
@@ -4684,7 +4697,9 @@ dependencies = [
  "serde",
  "serde_json",
  "sha2 0.11.0",
+ "sjel-backup",
  "sjel-config",
+ "sjel-devices",
  "sjel-server",
  "sjel-store",
  "tokio",
@@ -4720,6 +4735,94 @@ dependencies = [
  "reqwest",
  "serde_json",
  "sjel-http",
+]
+
+[[package]]
+name = "sjel-transit"
+version = "0.1.0"
+dependencies = [
+ "axum",
+ "html2text",
+ "mailparse",
+ "pdf-extract",
+ "regex",
+ "reqwest",
+ "route-manifest",
+ "rusqlite",
+ "serde",
+ "serde_json",
+ "sjel-config",
+ "sjel-extraction",
+ "sjel-http",
+ "sjel-server",
+ "sjel-store",
+ "station-time",
+ "thiserror",
+ "tokio",
+ "tower",
+ "tower-http 0.7.1",
+]
+
+[[package]]
+name = "sjel-traveler"
+version = "0.1.0"
+dependencies = [
+ "axum",
+ "civil-date",
+ "reqwest",
+ "route-manifest",
+ "rusqlite",
+ "schemars",
+ "serde",
+ "serde_json",
+ "sjel-config",
+ "sjel-server",
+ "sjel-store",
+ "tokio",
+]
+
+[[package]]
+name = "sjel-trips"
+version = "0.1.0"
+dependencies = [
+ "axum",
+ "civil-date",
+ "markdown-root",
+ "reqwest",
+ "route-manifest",
+ "rusqlite",
+ "schemars",
+ "serde",
+ "serde_json",
+ "sjel-config",
+ "sjel-http",
+ "sjel-pseudonymize",
+ "sjel-server",
+ "sjel-store",
+ "station-time",
+ "thiserror",
+ "tokio",
+ "tower-http 0.7.1",
+]
+
+[[package]]
+name = "sjel-vault"
+version = "0.1.0"
+dependencies = [
+ "axum",
+ "civil-date",
+ "content-item",
+ "markdown-root",
+ "reqwest",
+ "route-manifest",
+ "serde",
+ "serde_json",
+ "sjel-config",
+ "sjel-http",
+ "sjel-server",
+ "tokio",
+ "tower",
+ "tower-http 0.7.1",
 ]
 
 [[package]]
@@ -4768,21 +4871,6 @@ checksum = "c3d1e2c7f27f8d4cb10542a02c49005dbd6e93095799d6f3be745fae9f8fedd4"
 dependencies = [
  "libc",
  "windows-sys 0.61.2",
-]
-
-[[package]]
-name = "soundscape"
-version = "0.1.0"
-dependencies = [
- "axum",
- "route-manifest",
- "serde",
- "serde_json",
- "sjel-config",
- "sjel-server",
- "tokio",
- "tokio-stream",
- "tower-http 0.7.1",
 ]
 
 [[package]]
@@ -5327,74 +5415,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "transit"
-version = "0.1.0"
-dependencies = [
- "axum",
- "html2text",
- "mailparse",
- "pdf-extract",
- "regex",
- "reqwest",
- "route-manifest",
- "rusqlite",
- "serde",
- "serde_json",
- "sjel-config",
- "sjel-extraction",
- "sjel-http",
- "sjel-server",
- "sjel-store",
- "station-time",
- "thiserror",
- "tokio",
- "tower",
- "tower-http 0.7.1",
-]
-
-[[package]]
-name = "traveler"
-version = "0.1.0"
-dependencies = [
- "axum",
- "civil-date",
- "reqwest",
- "route-manifest",
- "rusqlite",
- "schemars",
- "serde",
- "serde_json",
- "sjel-config",
- "sjel-server",
- "sjel-store",
- "tokio",
-]
-
-[[package]]
-name = "trips"
-version = "0.1.0"
-dependencies = [
- "axum",
- "civil-date",
- "markdown-root",
- "reqwest",
- "route-manifest",
- "rusqlite",
- "schemars",
- "serde",
- "serde_json",
- "sjel-config",
- "sjel-http",
- "sjel-pseudonymize",
- "sjel-server",
- "sjel-store",
- "station-time",
- "thiserror",
- "tokio",
- "tower-http 0.7.1",
-]
-
-[[package]]
 name = "try-lock"
 version = "0.2.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -5544,26 +5564,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "befb3d53c9e3ec641417685896cbc8cc5bd264d6a2e190c56aaef1af24740d99"
 dependencies = [
  "v_escape-base",
-]
-
-[[package]]
-name = "vault"
-version = "0.1.0"
-dependencies = [
- "axum",
- "civil-date",
- "content-item",
- "markdown-root",
- "reqwest",
- "route-manifest",
- "serde",
- "serde_json",
- "sjel-config",
- "sjel-http",
- "sjel-server",
- "tokio",
- "tower",
- "tower-http 0.7.1",
 ]
 
 [[package]]

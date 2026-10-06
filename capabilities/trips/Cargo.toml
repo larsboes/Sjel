@@ -1,5 +1,5 @@
 [package]
-name = "trips"
+name = "sjel-trips"
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true

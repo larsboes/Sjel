@@ -175,7 +175,7 @@ search by it, which is the first search result in this system that depends on wh
 is asking.
 
 - [x] TRV-16 — transit ranks journeys by the stated journey weights and says why,
-  over HTTP and without linking this crate. Evidence: `cargo test -p transit
+  over HTTP and without linking this crate. Evidence: `cargo test -p sjel-transit
   ranking::` (9 cases), and a live search that put the cheapest *and* direct
   journey first where the backend had it third, with a factor per reason.
   Falsifier: a ranked order with no `factors`, or a rank that is not the array
@@ -250,14 +250,14 @@ In scope, too dim to state as a claim yet.
 
 | isc | type | check | threshold | tool | anchors_to |
 | --- | --- | --- | --- | --- | --- |
-| TRV-1 | command | `cargo test -p traveler`; read `/api/profile` with no row | `stored:false`, `revision:0`, weights `None` | cargo + curl | F1 |
-| TRV-2 | command | `cargo test -p traveler model::` | every omission and invention refused | cargo | F1 |
-| TRV-3 | command | `cargo test -p traveler route_manifest_tests::` | zero undeclared, zero schema-less bodies | cargo | F1 |
+| TRV-1 | command | `cargo test -p sjel-traveler`; read `/api/profile` with no row | `stored:false`, `revision:0`, weights `None` | cargo + curl | F1 |
+| TRV-2 | command | `cargo test -p sjel-traveler model::` | every omission and invention refused | cargo | F1 |
+| TRV-3 | command | `cargo test -p sjel-traveler route_manifest_tests::` | zero undeclared, zero schema-less bodies | cargo | F1 |
 | TRV-4 | command | PUT with weights summing to 1.7 | 400 naming the sum; nothing written | curl + jq | F1 |
 | TRV-5 | command | PUT twice, second with a wrong `expected_revision` | 409, `current_revision` correct | curl + jq | F1 |
 | TRV-6 | command | GET with a foreign `Origin` on the wired router | 403, and 200 without one | cargo | F2 |
 | TRV-7 | command | PUT then GET against the running process | every field survives | curl + jq | F2 |
-| TRV-8 | command | `cargo test -p traveler derive::`; read `/api/profile/derived` | `basis` non-empty, `notes` complete | cargo + curl | F3 |
+| TRV-8 | command | `cargo test -p sjel-traveler derive::`; read `/api/profile/derived` | `basis` non-empty, `notes` complete | cargo + curl | F3 |
 | TRV-9 | command | derive a history whose rows postdate their trips | lead time absent or positive, never negative | cargo | F3 |
 | TRV-10 | command | derive against a database with no trips tables | 200, absences not zeros | cargo + curl | F3 |
 | TRV-11 | command | grep the live derived body for a traveller name | 0 hits | curl | F3 |
@@ -265,7 +265,7 @@ In scope, too dim to state as a claim yet.
 | TRV-13 | red-then-green | add the column to a hand-built old-shape table | row preserved, defaults readable | cargo | F4 |
 | TRV-14 | command | GET `/api/profile` then PUT the same body back | 2xx, not 400 | curl | F4 |
 | TRV-15 | command | read a row whose journey basis is absent | `stated_journey_weights()` is `None` | cargo | F4 |
-| TRV-16 | command | `cargo test -p transit ranking::`; a live `/api/search` | ranked order with factors | cargo + curl | F5 |
+| TRV-16 | command | `cargo test -p sjel-transit ranking::`; a live `/api/search` | ranked order with factors | cargo + curl | F5 |
 | TRV-17 | command | rank with `punctuality` down | the reliability factor absent, rest re-normalised | curl | F5 |
 | TRV-18 | command | search with the journey block unstated | no `ranking` field, backend order | curl | F5 |
 | TRV-19 | command | rename a declared field, then GET and PUT | 2xx, stale basis key gone | cargo + curl | F4 |

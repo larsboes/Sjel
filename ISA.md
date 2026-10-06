@@ -987,7 +987,7 @@ and one CLI verb, because Q58 already answered where the row goes and the answer
 - [x] ISC-61 — `interior wunsch <url>` creates a `wanted` row in the same table with the link on
   it, the title from the page, and a price **only where the page declares one**. Falsifier: a row
   carrying a price the page never declared, a non-EUR amount carried as though it were EUR, or a
-  fetch that reaches `file://` or a loopback address. Probe: `cargo test -p interior wunsch`, then
+  fetch that reaches `file://` or a loopback address. Probe: `cargo test -p sjel-interior wunsch`, then
   `interior wunsch <url>` against a live page and `interior inventory`. Evidence, 2026-10-05:
   12 unit tests in `capabilities/interior/src/wunsch.rs` — a number in prose is not a price, a
   declared price is read *and named*, `itemprop` is the third door, both attribute orders parse,
@@ -1014,7 +1014,7 @@ and one CLI verb, because Q58 already answered where the row goes and the answer
   `saison`, and a file that predates the columns gains them without losing a row, a state or a
   placement. Falsifier: the columns cannot be set or corrected from `/interior`, or an existing
   `interior_item` loses a row, a state change or a placement when the migration runs. Probe:
-  `cargo test -p interior --test kleidung`, then the create and edit forms. Evidence, 2026-10-05:
+  `cargo test -p sjel-interior --test kleidung`, then the create and edit forms. Evidence, 2026-10-05:
   three tests in `capabilities/interior/tests/kleidung.rs` build a file in the shape that was on
   disk before the change (wide `kind` CHECK, no clothing columns), assert the row, its state and
   its placement survive, that a garment round-trips, and that a second start does not rebuild the
@@ -1028,7 +1028,7 @@ and one CLI verb, because Q58 already answered where the row goes and the answer
 - [x] ISC-63 — the branch a row belongs to is a word the data uses, not a list declared in code,
   and two spellings of one branch are named instead of merged. Falsifier: a hardcoded branch list
   in the dashboard, a category silently lowercased or rewritten on write, or two spellings of one
-  branch that nothing reports. Probe: `cargo test -p interior --lib`, then `interior inventory`
+  branch that nothing reports. Probe: `cargo test -p sjel-interior --lib`, then `interior inventory`
   against a database holding `kleidung` and `Kleidung`. Evidence, 2026-10-05: `store::kategorien`
   reads the distinct branches with their counts and `store::kollisionen` groups the ones that
   differ only in case or whitespace, with three unit tests in `store.rs` (two spellings reported,
@@ -1282,9 +1282,9 @@ claim yet, and the watch rows they name are in `upstreams.toml` with the questio
 | ISC-39 | command | `sjel capability mail` from an agent session, then the operator reads any code-like c1 row | no Secret value | sjel | F8 |
 | ISC-45 | command | a `secrets/**` read from an agent session, and the tailnet shell through Tailscale Serve | refused; `/health` 200 | Claude Code, curl | F9 |
 | ISC-55 | browser | the Systems page's updates panel against `sjel update --json` | every row matches | browser | F11 |
-| ISC-61 | command | `cargo test -p interior wunsch`; `interior wunsch <url>` then `interior inventory` | a `wanted` row, no undeclared price | cargo, bash | F12 |
-| ISC-62 | command | `cargo test -p interior --test kleidung`; the create and edit forms | rows, state and placement survive | cargo, browser | F12 |
-| ISC-63 | command | `cargo test -p interior --lib`; `interior inventory` on a database holding `kleidung` and `Kleidung` | both named, none merged | cargo, bash | F12 |
+| ISC-61 | command | `cargo test -p sjel-interior wunsch`; `interior wunsch <url>` then `interior inventory` | a `wanted` row, no undeclared price | cargo, bash | F12 |
+| ISC-62 | command | `cargo test -p sjel-interior --test kleidung`; the create and edit forms | rows, state and placement survive | cargo, browser | F12 |
+| ISC-63 | command | `cargo test -p sjel-interior --lib`; `interior inventory` on a database holding `kleidung` and `Kleidung` | both named, none merged | cargo, bash | F12 |
 | ISC-64 | command | restart the host; then trips' pack endpoint and `interior check` | pack list resolves items, check runs with nothing started | bash | F13 |
 | ISC-65 | code inspect | `rg 'api/items' capabilities/` and `interior`'s `ROUTES` | one writer, no item route in interior | rg | F13 |
 | ISC-66 | command | `cargo test -p inventory --test umzug`, then `interior inventory` on the live overlay | every row, state and placement survives | cargo | F13 |

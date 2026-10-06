@@ -470,6 +470,6 @@ the authoritative writing surface for human notes.
 ## Build
 
 ```bash
-cargo test -p trips
+cargo test -p sjel-trips
 cargo build --locked --release --bin trips-server
 ```

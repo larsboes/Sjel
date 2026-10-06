@@ -1,5 +1,5 @@
 [package]
-name = "devices"
+name = "sjel-devices"
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true
@@ -10,6 +10,12 @@ publish = false
 [[bin]]
 name = "devices-server"
 path = "src/server.rs"
+
+# The lib keeps its bare name: the package is `sjel-devices` (no registry collision), but the
+# binary and every `devices::` path stay as they were.
+[lib]
+name = "devices"
+path = "src/lib.rs"
 
 [dependencies]
 sjel-config = { path = "../../libs/sjel-config" }

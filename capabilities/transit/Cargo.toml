@@ -1,5 +1,5 @@
 [package]
-name = "transit"
+name = "sjel-transit"
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true

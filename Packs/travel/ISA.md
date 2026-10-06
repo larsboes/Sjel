@@ -266,14 +266,14 @@ In scope, too dim to state as a claim yet.
 | ISC-3 | file | read the table's evidence column | every entry cites an observed pair | Read | Principles |
 | ISC-4 | command | same query both backends | both non-null, within tolerance | curl + jq | Goal |
 | ISC-5 | command | `rg dbnav_split_unsupported` | zero hits | rg | "improve" |
-| ISC-6 | command | `cargo test -p punctuality` | fixture test green | cargo | Goal |
+| ISC-6 | command | `cargo test -p sjel-punctuality` | fixture test green | cargo | Goal |
 | ISC-7 | red-then-green | drop a column from the fixture | `MissingColumn`, then green on revert | cargo | Goal |
 | ISC-8 | command | fold the fixture, assert bucket counts | canceled/skipped exact | cargo | Goal |
 | ISC-9 | command | fold the fixture, assert cell key | hour + weekend exact | cargo | Goal |
-| ISC-10 | command | `cargo test -p trips retrospective::`; grep the body for a traveler name | 0 names | cargo | F3 |
-| ISC-11 | command | `cargo test -p trips cost::`; assert every actuals figure | null, never 0 | cargo | F3 |
-| ISC-12 | command | `cargo test -p trips cost::`; grep the body for a cross-currency sum | 0 hits | cargo | F3 |
-| ISC-13 | command | `cargo test -p trips retrospective::`; read `/api/retrospectives/summary` after a `not_taken` row | destination absent, `basis` cites no not-taken plan | cargo + curl | F4 |
+| ISC-10 | command | `cargo test -p sjel-trips retrospective::`; grep the body for a traveler name | 0 names | cargo | F3 |
+| ISC-11 | command | `cargo test -p sjel-trips cost::`; assert every actuals figure | null, never 0 | cargo | F3 |
+| ISC-12 | command | `cargo test -p sjel-trips cost::`; grep the body for a cross-currency sum | 0 hits | cargo | F3 |
+| ISC-13 | command | `cargo test -p sjel-trips retrospective::`; read `/api/retrospectives/summary` after a `not_taken` row | destination absent, `basis` cites no not-taken plan | cargo + curl | F4 |
 | ISC-14 | red-then-green | widen a hand-built old-shape table | row preserved, `not_taken` admitted, no leftover table | cargo | F4 |
 
 ## Anti-claims

@@ -1,5 +1,5 @@
 [package]
-name = "operator-profile"
+name = "sjel-operator-profile"
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true

@@ -61,8 +61,8 @@ compiled dependency instances.
 ## Commands
 
 ```bash
-cargo build -p transit && cargo test -p transit                 # no server needed; a temp file per test
-cargo test -p transit db_tests::                                # the store suite alone
+cargo build -p sjel-transit && cargo test -p sjel-transit                 # no server needed; a temp file per test
+cargo test -p sjel-transit db_tests::                                # the store suite alone
 
 transit suggest --query "Bonn"                                  # station name -> EVA candidates
 transit search  --from 8000044 --to 8000207 --time 2026-08-15T09:00:00

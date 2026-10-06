@@ -147,7 +147,7 @@ home path, and a real `--listapps` dump on this machine is full of them.
 
 ## Verification
 
-`cargo test -p host-net` — 26 parser tests over the fixtures. The one that matters most is
+`cargo test -p sjel-host-net` — 26 parser tests over the fixtures. The one that matters most is
 `a_root_owned_listener_survives_the_join`: swap the implementation back to unprivileged `lsof`
 and that row disappears, which is the whole reason this capability reads `netstat`.
 `tools/sjel-cli/src/host_watch/pure.rs` covers the folding of `check --json` into a single finding.

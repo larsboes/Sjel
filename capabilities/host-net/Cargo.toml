@@ -1,5 +1,5 @@
 [package]
-name = "host-net"
+name = "sjel-host-net"
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true

@@ -127,7 +127,7 @@ Each number names the command that reproduces it.
 
 | What | Result | Reproduce |
 |---|---|---|
-| Pseudonymizer recall, reversible path | 48/48 (100.0%), gate ≥ 91.7%, measured 2026-09-27 | `cargo run -p comms --bin comms-redaction-eval -- --pseudonymized <corpus>` |
+| Pseudonymizer recall, reversible path | 48/48 (100.0%), gate ≥ 91.7%, measured 2026-09-27 | `cargo run -p sjel-comms --bin comms-redaction-eval -- --pseudonymized <corpus>` |
 | Redaction recall, destructive path | 48/48 (100.0%), gate ≥ 91.7%, measured 2026-09-27 | the same command without `--pseudonymized` |
 | Feed ranking (bge-m3) | 0.941 pairwise, 0.994 mean nDCG, 6/6 useful top-1 | `bun capabilities/comms/eval/run-relevance.ts`, result in `capabilities/comms/eval/results/2026-08-30-bge-m3-ollama.md` |
 | Tests | 829 TypeScript tests and 107 Rust test binaries, CI green | `sjel test` and `cargo test --workspace` |

@@ -24,7 +24,7 @@ source "$TOOLS_DIR/lib/paths.sh"
 _TARGET_DIR="${CARGO_TARGET_DIR:-$SJEL_ROOT/target}"
 BIN="$_TARGET_DIR/debug/vault"
 [ -x "$BIN" ] || BIN="$_TARGET_DIR/release/vault"
-[ -x "$BIN" ] || { echo "vault binary not built: cargo build -p vault" >&2; exit 1; }
+[ -x "$BIN" ] || { echo "vault binary not built: cargo build -p sjel-vault" >&2; exit 1; }
 
 OUT_DIR="$SJEL_PERSONAL_ROOT/data/vault"
 OUT="$OUT_DIR/people-registry.json"

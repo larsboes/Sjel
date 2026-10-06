@@ -1,5 +1,5 @@
 [package]
-name = "traveler"
+name = "sjel-traveler"
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true
@@ -35,7 +35,7 @@ serde_json.workspace = true
 rusqlite.workspace = true
 # Not `full`: `rt-multi-thread` for the explicit `Runtime::new()` in the binary,
 # `net` for the `TcpListener` the server tests bind, `macros` for `#[tokio::test]`.
-# Verified with a lone `cargo check -p traveler --all-targets`, which is the only
+# Verified with a lone `cargo check -p sjel-traveler --all-targets`, which is the only
 # build where a missing feature is visible (a workspace build unifies them away).
 tokio = { workspace = true, features = ["macros", "rt-multi-thread", "net"] }
 axum.workspace = true

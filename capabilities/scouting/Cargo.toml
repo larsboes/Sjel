@@ -1,5 +1,5 @@
 [package]
-name = "scouting"
+name = "sjel-scouting"
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true
@@ -50,7 +50,7 @@ rusqlite.workspace = true
 # main.rs" extension pattern every other adapter already follows (see
 # README's "Extending it"), just sourced from a sibling capability's crate
 # instead of a new HTTP client written inline.
-transit = { version = "0.1.0", path = "../transit" }
+transit = { package = "sjel-transit", version = "0.1.0", path = "../transit" }
 # Not `full`: these are the drivers this crate reaches for, verified with a lone
 # `cargo check -p <crate> --all-targets`, which is the only build where a missing
 # tokio feature is visible (a workspace build unifies them away).

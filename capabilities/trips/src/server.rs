@@ -263,6 +263,19 @@ const ROUTES: &[route_manifest::Route] = &[
                   item_ref holds an interior_item.id as a soft reference with no foreign key.",
         request_schema: Some(route_manifest::schema_of::<trips::pack::PutPackItems>),
     },
+    r(
+        "GET",
+        "/api/plans/{id}/outfits",
+        "Outfits for a plan, ordered by day (unbound last). Each names the pieces no pack \
+         list on this plan carries, in not_on_pack_list.",
+    ),
+    route_manifest::Route {
+        method: "PUT",
+        path: "/api/plans/{id}/outfits",
+        summary: "Replace a plan's outfits. Body: {outfits:[{name, day?, pieces:[item_ref], \
+                  note?}]}. day is YYYY-MM-DD or null; pieces are inventory item ids.",
+        request_schema: Some(route_manifest::schema_of::<trips::outfit::PutOutfits>),
+    },
     route_manifest::Route {
         method: "POST",
         path: "/api/intent/draft",
@@ -1789,6 +1802,54 @@ async fn put_pack_items(
     }
 }
 
+async fn list_outfits(State(state): State<AppState>, Path(id): Path<String>) -> ApiResponse {
+    let database_path = state.database_path.clone();
+    match blocking(move || -> Result<Value, String> {
+        let store = TripsStore::open(&database_path).map_err(|error| error.to_string())?;
+        store
+            .get_plan(&id)
+            .map_err(|error| error.to_string())?
+            .ok_or_else(|| format!("no plan {id}"))?;
+        let outfits =
+            trips::outfit::outfits_for_plan(&store, &id).map_err(|error| error.to_string())?;
+        let lists = trips::pack::lists_for_plan(&store, &id).map_err(|error| error.to_string())?;
+        Ok(trips::outfit::render(&outfits, &lists))
+    })
+    .await
+    {
+        Ok(body) => response(StatusCode::OK, body),
+        Err(error) => response(StatusCode::NOT_FOUND, json!({ "error": error })),
+    }
+}
+
+async fn put_outfits(
+    State(state): State<AppState>,
+    Path(id): Path<String>,
+    Json(input): Json<trips::outfit::PutOutfits>,
+) -> ApiResponse {
+    let database_path = state.database_path.clone();
+    let count = input.outfits.len();
+    match blocking(move || -> Result<bool, String> {
+        let store = TripsStore::open(&database_path).map_err(|error| error.to_string())?;
+        if store
+            .get_plan(&id)
+            .map_err(|error| error.to_string())?
+            .is_none()
+        {
+            return Ok(false);
+        }
+        trips::outfit::replace_outfits(&store, &id, &input.outfits)
+            .map_err(|error| error.to_string())?;
+        Ok(true)
+    })
+    .await
+    {
+        Ok(true) => response(StatusCode::OK, json!({ "ok": true, "count": count })),
+        Ok(false) => response(StatusCode::NOT_FOUND, json!({ "error": "no such plan" })),
+        Err(error) => response(StatusCode::BAD_REQUEST, json!({ "error": error })),
+    }
+}
+
 /// A draft persists nothing (`trips::intent`), so its 200 carries `NotAWrite`.
 async fn draft_intent(
     Json(body): Json<trips::intent::IntentDraftRequest>,
@@ -1872,6 +1933,10 @@ fn build_router(state: AppState) -> Router {
         )
         .route("/api/plans/{id}/pack/{list_id}", delete(delete_pack_list))
         .route("/api/plans/{id}/pack/{list_id}/items", put(put_pack_items))
+        .route(
+            "/api/plans/{id}/outfits",
+            get(list_outfits).put(put_outfits),
+        )
         .route("/api/intent/draft", post(draft_intent))
         // ADD NEW ROUTES ABOVE THIS LINE. Below it they lose the origin guard.
         .layer(axum::middleware::from_fn_with_state(

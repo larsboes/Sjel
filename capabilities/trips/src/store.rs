@@ -504,6 +504,7 @@ impl TripsStore {
         // Its own statement rather than more text inside the batch above, so
         // two streams editing this file touch two hunks that merge cleanly.
         conn.execute_batch(&crate::pack::DDL.replace("{prefix}", prefix))?;
+        conn.execute_batch(&crate::outfit::DDL.replace("{prefix}", prefix))?;
         conn.execute_batch(&crate::people::DDL.replace("{prefix}", prefix))?;
         Self::widen_again_vocabulary(conn, prefix)?;
         Ok(())

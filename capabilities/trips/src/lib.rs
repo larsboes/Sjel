@@ -8,6 +8,7 @@ pub mod interior_client;
 pub mod jobs;
 pub mod kiwi;
 pub mod obsidian;
+pub mod outfit;
 pub mod pack;
 pub mod people;
 pub mod plan_search;

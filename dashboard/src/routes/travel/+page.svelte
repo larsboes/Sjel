@@ -20,6 +20,7 @@
   import BaseFinderPanel from "$lib/travel/BaseFinderPanel.svelte";
   import TravelerProfileModal from "$lib/travel/TravelerProfileModal.svelte";
   import ItineraryTimeline from "$lib/travel/ItineraryTimeline.svelte";
+  import TripItinerary from "$lib/travel/TripItinerary.svelte";
   import MapSurface from "$lib/map/MapSurface.svelte";
   import {
     TRIP_LAYERS,
@@ -1937,76 +1938,26 @@
     </div>
   </section>
 
-  <section class="stage-strip" aria-label="Trip legs">
-    {#each activePlan.stages as stage, index (stage.id)}
-      <details>
-        <summary>
-          <span class="stage-number">{String(index + 1).padStart(2, "0")}</span>
-          <span class="stage-summary">
-            <strong>{placeName(stage.origin)} → {placeName(stage.destination)}</strong>
-            <small>{shortDate(stage.date ?? activePlan.date_start)} · {stageStatusLabel(stage.status)}</small>
-          </span>
-          <span class="stage-edit">Leg</span>
-        </summary>
-        <div class="stage-body">
-          <div class="stage-fields">
-            <label>
-              <span>Day</span>
-              <input
-                class="input"
-                type="date"
-                value={stage.date ?? activePlan.date_start}
-                onchange={(event) => void updateStage(stage.id, { date: event.currentTarget.value })}
-              />
-            </label>
-            <label>
-              <span>Status</span>
-              <select
-                class="input"
-                value={stage.status}
-                onchange={(event) =>
-                  void updateStage(stage.id, {
-                    status: event.currentTarget.value as TripPlan["stages"][number]["status"],
-                  })}
-              >
-                <option value="planning">Review options</option>
-                <option value="option_selected">Option selected</option>
-                <option value="booked">Booked</option>
-                <option value="completed">Completed</option>
-              </select>
-            </label>
-            <label class="stage-travelers">
-              <span>Travellers</span>
-              <input
-                class="input"
-                value={stage.travelers.join(", ")}
-                placeholder="Only for this leg"
-                onchange={(event) =>
-                  void updateStage(stage.id, {
-                    travelers: event.currentTarget.value
-                      .split(",")
-                      .map((traveler) => traveler.trim())
-                      .filter(Boolean),
-                  })}
-              />
-            </label>
-          </div>
-          <div class="stage-modes" aria-label={`Transport modes from ${stage.origin.name} to ${stage.destination.name}`}>
-            {#each MODE_OPTIONS as option (option.id)}
-              <button
-                type="button"
-                class:active={stage.transport_modes.includes(option.id)}
-                aria-pressed={stage.transport_modes.includes(option.id)}
-                onclick={() => toggleStageMode(stage.id, option.id)}
-              >
-                {option.label}
-              </button>
-            {/each}
-          </div>
-        </div>
-      </details>
-    {/each}
-  </section>
+  <TripItinerary
+    plan={activePlan}
+    {items}
+    modes={MODE_OPTIONS}
+    stageLabel={stageStatusLabel}
+    onItemChanged={(updated) => (items = items.map((it) => (it.id === updated.id ? updated : it)))}
+    onRemoveItem={(item) => void removeItem(item)}
+    onUpdateStage={(id, patch) => void updateStage(id, patch)}
+    onToggleMode={toggleStageMode}
+  >
+    {#snippet timeline()}
+      <ItineraryTimeline
+        plan={activePlan!}
+        {items}
+        calendarEntries={planCalendarEntries}
+        onRemoveItem={removeItem}
+        onUpdateItemDay={updateItemDay}
+      />
+    {/snippet}
+  </TripItinerary>
 
   {#if planCostRollup}
     <CostCard cost={planCostRollup} />
@@ -3498,101 +3449,6 @@
     font-size: var(--text-xs);
   }
 
-  .stage-strip {
-    display: grid;
-    gap: 0.5rem;
-    margin-bottom: 0.65rem;
-  }
-
-  .stage-strip details {
-    border: 1px solid var(--card-border);
-    border-radius: var(--radius-md);
-    background: var(--card-bg);
-  }
-
-  .stage-strip summary {
-    display: grid;
-    grid-template-columns: 2rem minmax(0, 1fr) auto;
-    gap: 0.6rem;
-    align-items: center;
-    padding: 0.65rem 0.75rem;
-    cursor: pointer;
-    list-style: none;
-  }
-
-  .stage-strip summary::-webkit-details-marker {
-    display: none;
-  }
-
-  .stage-number {
-    color: var(--primary);
-    font-family: var(--font-mono);
-    font-size: 0.625rem;
-    font-weight: 700;
-  }
-
-  .stage-summary strong,
-  .stage-summary small {
-    display: block;
-  }
-
-  .stage-summary strong {
-    font-size: var(--text-xs);
-  }
-
-  .stage-summary small,
-  .stage-edit {
-    color: var(--text-tertiary);
-    font-size: 0.625rem;
-  }
-
-  .stage-edit {
-    text-transform: uppercase;
-    letter-spacing: 0.05em;
-  }
-
-  .stage-body {
-    padding: 0 0.75rem 0.75rem 2.75rem;
-    border-top: 1px solid var(--card-border);
-  }
-
-  .stage-fields {
-    display: grid;
-    gap: 0.45rem;
-    margin-top: 0.65rem;
-  }
-
-  .stage-fields input,
-  .stage-fields select {
-    min-height: 2.15rem;
-    padding: 0.4rem 0.5rem;
-    font-size: var(--text-2xs);
-  }
-
-  .stage-modes {
-    display: flex;
-    flex-wrap: wrap;
-    gap: 0.25rem;
-    margin-top: 0.55rem;
-  }
-
-  .stage-modes button {
-    padding: 0.25rem 0.4rem;
-    border: 1px solid var(--card-border);
-    border-radius: var(--radius-sm);
-    background: transparent;
-    color: var(--text-tertiary);
-    font: inherit;
-    font-size: 0.625rem;
-    cursor: pointer;
-  }
-
-  .stage-modes button.active {
-    border-color: var(--primary);
-    background: var(--primary-soft);
-    color: var(--primary);
-  }
-
   .past-view {
     display: grid;
     gap: 1.5rem;
@@ -4253,14 +4109,6 @@
     .mode-field,
     .travelers-field {
       grid-column: span 2;
-    }
-
-    .stage-fields {
-      grid-template-columns: repeat(2, minmax(0, 1fr));
-    }
-
-    .stage-travelers {
-      grid-column: 1 / -1;
     }
 
     .planner-context,

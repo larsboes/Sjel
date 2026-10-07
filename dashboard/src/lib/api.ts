@@ -644,6 +644,12 @@ export const trips = {
       `/trips/api/plans/${encodeURIComponent(planId)}/items/${encodeURIComponent(itemId)}`,
       jsonInit('PATCH', { day }),
     ),
+  /** Rename and/or merge payload keys; a null value removes the key (trips `edit_item`). */
+  editItem: (planId: string, itemId: string, edit: { title?: string; payload?: Record<string, unknown> }) =>
+    request<PlanItem>(
+      `/trips/api/plans/${encodeURIComponent(planId)}/items/${encodeURIComponent(itemId)}/fields`,
+      jsonInit('PATCH', edit),
+    ),
   draftIntent: (sentence: string) =>
     request<IntentDraft>('/trips/api/intent/draft', jsonInit('POST', { sentence })),
   pack: (planId: string) =>

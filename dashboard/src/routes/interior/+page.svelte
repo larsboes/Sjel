@@ -9,7 +9,7 @@
    *
    * The one arithmetic below is cents to euros for display.
    */
-  import { onMount, tick } from "svelte";
+  import { onMount, tick, untrack } from "svelte";
   import Icon from "$lib/Icon.svelte";
   import PageHeader from "$lib/PageHeader.svelte";
   import { tip } from "$lib/tip";
@@ -47,7 +47,11 @@
 
   type View = "plans" | "inventory" | "solve" | "buy";
 
-  let view = $state<View>("plans");
+  // `/inventory` renders this page opened on its inventory view: one list and one editor for
+  // the rows, not a second read-only copy beside them (the 2026-10-05 stub's warning).
+  let { initialView = "plans" }: { initialView?: View } = $props();
+
+  let view = $state<View>(untrack(() => initialView));
   let loading = $state(true);
   let error = $state<string | null>(null);
   let phoneOnly = $state(false);
@@ -126,7 +130,17 @@
   /** The lower edge: a product's own price, otherwise the bottom of its estimate. */
   const floorPrice = (i: InteriorItem): number | null => i.preis_cent ?? i.kosten_min_cent;
 
-  const owned = $derived(inventory.filter((r) => r.state === "owned"));
+  // A garment carries its own `category`; furniture predates the field and is told by `kind`.
+  const groupOf = (i: InteriorItem): string =>
+    i.category ?? (i.kind === "slot" ? "bedarf" : i.kind === "gear" ? "ausruestung" : "moebel");
+  let group = $state("alle");
+  const allOwned = $derived(inventory.filter((r) => r.state === "owned"));
+  const ownedGroups = $derived.by(() => {
+    const counts = new Map<string, number>();
+    for (const r of allOwned) counts.set(groupOf(r.item), (counts.get(groupOf(r.item)) ?? 0) + 1);
+    return [...counts.entries()].sort(([a], [b]) => a.localeCompare(b));
+  });
+  const owned = $derived(group === "alle" ? allOwned : allOwned.filter((r) => groupOf(r.item) === group));
   const gone = $derived(inventory.filter((r) => r.state === "gone"));
 
   // ─── Dragging on the plan ──────────────────────────────────────────────────
@@ -1200,11 +1214,19 @@
 
 <svelte:window onkeydown={onKey} />
 
-<PageHeader
-  badge="Interior"
-  title="Rooms and what stands in them"
-  desc="Layouts judged against the flat's own clearance rules, and an inventory that outlives the flat."
-/>
+{#if initialView === "inventory"}
+  <PageHeader
+    badge="Household"
+    title="Inventory"
+    desc="Everything you own or need, from furniture to the clothes a packing list draws on."
+  />
+{:else}
+  <PageHeader
+    badge="Interior"
+    title="Rooms and what stands in them"
+    desc="Layouts judged against the flat's own clearance rules, and an inventory that outlives the flat."
+  />
+{/if}
 
 <RoomCapturePanel />
 
@@ -1666,7 +1688,7 @@
       the answer is computed and reproducible — not proven optimal.
     </p>
     <div class="picks">
-      {#each owned as row (row.item.id)}
+      {#each allOwned as row (row.item.id)}
         <label>
           <input
             type="checkbox"
@@ -1928,6 +1950,16 @@
   {/if}
 
   <h3 class="group">Owned <span class="count">{owned.length}</span></h3>
+  <div class="group-chips" role="group" aria-label="Filter owned by group">
+    <button type="button" class:active={group === "alle"} onclick={() => (group = "alle")}>
+      All <span class="count">{allOwned.length}</span>
+    </button>
+    {#each ownedGroups as [g, n] (g)}
+      <button type="button" class:active={group === g} onclick={() => (group = g)}>
+        {g} <span class="count">{n}</span>
+      </button>
+    {/each}
+  </div>
   <ul class="items">
     {#each owned as { item: i } (i.id)}
       <li class="card item" class:has-shot={!!i.bild}>
@@ -1955,8 +1987,14 @@
             declares {declares(i)}
           </span>
         {/if}
+        {#if i.category || i.farbe || i.groesse}
+          <p class="meta">{[i.category, i.farbe, i.groesse].filter(Boolean).join(" · ")}</p>
+        {/if}
         <div class="actions">
           <button class="ghost" data-edit={i.id} onclick={() => openEditor(i.id)}>Edit</button>
+          {#if i.link}
+            <a class="ghost" href={i.link} target="_blank" rel="noreferrer">Product page</a>
+          {/if}
           <button class="ghost" disabled={saving} onclick={() => move(i.id, "gone")}>
             Given away
           </button>
@@ -2239,6 +2277,26 @@
     padding: 0.4rem 0.85rem;
   }
   .views button.active {
+    border-color: var(--primary);
+    color: var(--text-primary);
+  }
+  .group-chips {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.35rem;
+    margin: 0 0 0.75rem;
+  }
+  .group-chips button {
+    background: var(--card-bg);
+    border: 1px solid var(--card-border);
+    border-radius: 999px;
+    color: var(--text-secondary);
+    cursor: pointer;
+    font-size: var(--text-xs, 0.8rem);
+    padding: 0.25rem 0.65rem;
+    text-transform: capitalize;
+  }
+  .group-chips button.active {
     border-color: var(--primary);
     color: var(--text-primary);
   }

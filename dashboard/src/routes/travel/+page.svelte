@@ -29,6 +29,7 @@
   } from "$lib/travel/trip-layers";
   import ClimateStrip from "$lib/travel/ClimateStrip.svelte";
   import CostCard from "$lib/travel/CostCard.svelte";
+  import PackingPanel from "$lib/travel/PackingPanel.svelte";
   import RetrospectiveForm from "$lib/travel/RetrospectiveForm.svelte";
   import {
     climateFor,
@@ -2022,6 +2023,11 @@
         notice={peopleNotice}
         onChanged={() => activePlan && void loadWhoIsAround(activePlan)}
       />
+    </section>
+
+    <section class="who-around" aria-labelledby="packing-heading">
+      <h3 id="packing-heading">Packing</h3>
+      <PackingPanel planId={activePlan.id} />
     </section>
   {/if}
 

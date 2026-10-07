@@ -646,7 +646,47 @@ export const trips = {
     ),
   draftIntent: (sentence: string) =>
     request<IntentDraft>('/trips/api/intent/draft', jsonInit('POST', { sentence })),
+  pack: (planId: string) =>
+    request<PackView>(`/trips/api/plans/${encodeURIComponent(planId)}/pack`),
+  createPackList: (planId: string, name: string) =>
+    request<PackList>(
+      `/trips/api/plans/${encodeURIComponent(planId)}/pack`,
+      jsonInit('POST', { name }),
+    ),
+  /** Replaces the list's whole item set; send every row, not a delta. */
+  putPackItems: (planId: string, listId: string, items: PackItemInput[]) =>
+    request<{ ok: boolean; count: number }>(
+      `/trips/api/plans/${encodeURIComponent(planId)}/pack/${encodeURIComponent(listId)}/items`,
+      jsonInit('PUT', { items }),
+    ),
 };
+
+/** `capabilities/trips/src/pack.rs` — one row of a list, resolved against inventory. */
+export interface PackItem {
+  item_ref: string;
+  label: string | null;
+  packed: boolean;
+  note: string | null;
+  resolved: boolean;
+  category: string | null;
+  weight_g: number | null;
+}
+
+export interface PackItemInput {
+  item_ref: string;
+  packed: boolean;
+  note: string | null;
+}
+
+export interface PackList {
+  id: string;
+  name: string;
+  items?: PackItem[];
+}
+
+export interface PackView {
+  lists: (PackList & { items: PackItem[]; total_weight_g?: number; weights_missing?: number })[];
+}
 
 export const traveler = {
   profile: () => request<TravelProfileResponse>('/traveler/api/profile'),
@@ -838,7 +878,7 @@ export interface ConnectionLeg {
 /** One measured or wanted thing. Mirrors `capabilities/interior/src/store.rs::Item`. */
 export interface InteriorItem {
   id: string;
-  kind: 'piece' | 'slot';
+  kind: 'piece' | 'slot' | 'gear';
   label: string;
   b: number | null;
   t: number | null;

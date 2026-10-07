@@ -73,9 +73,10 @@ export const PRIMARY_NAV: NavItem[] = [
   { href: "/travel", label: "Travel", icon: "map-pin", capability: "transit", starts: ["transit", "trips"], warmsMap: true },
   { href: "/map", label: "Map", icon: "globe", capability: "places", warmsMap: true },
   { href: "/finance", label: "Finance", icon: "database", capability: "finance" },
-  // Ein Ziel in der Shell und nicht nur ein Panel: das ist der Unterschied, den PRD Q59
-  // ausdruecklich nennt, und der Grund, aus dem die Capability nach core Sjel gezogen ist.
-  { href: "/interior", label: "Interior", icon: "layout", capability: "interior" },
+  // What the household owns is the daily destination (b10e5260 made inventory its own
+  // capability); the floor plan is one view of it and moves to More. Interior still serves
+  // the photos, so it starts alongside.
+  { href: "/inventory", label: "Inventory", icon: "boxes", capability: "inventory", starts: ["inventory", "interior"] },
   // PRD Q117: Sjel is the system of record for people; the page edits capabilities/entities.
   { href: "/people", label: "People", icon: "users", capability: "entities" },
 ];
@@ -85,6 +86,8 @@ export const PRIMARY_NAV: NavItem[] = [
  * Capability-owned sites are discovered on /projects rather than growing the main bar.
  */
 export const UTILITY_NAV: NavItem[] = [
+  // Ein Ziel in der Shell und nicht nur ein Panel (PRD Q59) — jetzt eine Ansicht des Inventars.
+  { href: "/interior", label: "Interior", icon: "layout", capability: "interior" },
   { href: "/projects", label: "Projects", icon: "graduation" },
   { href: "/research", label: "Research", icon: "sparkles" },
   { href: "/systems", label: "Systems", icon: "server", capability: "sjel-status" },

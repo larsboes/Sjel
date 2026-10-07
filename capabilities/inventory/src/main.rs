@@ -404,6 +404,7 @@ async fn wunsch(argv: &[String]) -> i32 {
         groesse: groesse.clone(),
         farbe: farbe.clone(),
         saison: saison.clone(),
+        traits: Vec::new(),
         // Die Herkunft steht in derselben Spalte wie bei einer Schaetzung: wer die Zeile
         // spaeter liest, soll sehen, dass die Zahl von einer Seite kommt und nicht von einem
         // Bandmass.

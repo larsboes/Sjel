@@ -67,7 +67,7 @@ impl Seite {
 /// Jede Spalte von `{prefix}_item`, in der Reihenfolge, in der `widen_kind_check` sie neu
 /// anlegt. Ausgeschrieben, damit ein spaeteres Feld beim Umbau auffaellt: `SELECT *` haette
 /// die Zeilen still in die falschen Spalten kopiert, sobald sich eine Reihenfolge aendert.
-const ITEM_COLUMNS: [&str; 53] = [
+const ITEM_COLUMNS: [&str; 54] = [
     "id",
     "kind",
     "label",
@@ -119,6 +119,7 @@ const ITEM_COLUMNS: [&str; 53] = [
     "groesse",
     "farbe",
     "saison",
+    "traits",
     "created_at",
     "updated_at",
 ];
@@ -297,6 +298,11 @@ pub struct Item {
     /// ein Mantel ist nicht Winter ODER Uebergang, er ist beides.
     #[serde(default)]
     pub saison: Vec<String>,
+    /// Was es auf einer Reise leistet — `style`, `comfort`, `warm`, `rain`, `odor-resistant`.
+    /// Frei wie `trip_types`: die Packliste zeigt die Woerter, keine Regel rechnet darauf.
+    /// Englisch wie die Ausruestungsfelder, weil die Packliste in diesem Vokabular spricht.
+    #[serde(default)]
+    pub traits: Vec<String>,
 
     /// Wie oft diese Zeile geschrieben wurde; bestehende Zeilen beginnen bei 1 (PRD §10 A5).
     ///
@@ -378,7 +384,7 @@ impl State {
 ///
 /// Nicht dabei: `revision`, `created_at`, `updated_at`. Die drei setzt der Server, nie der
 /// Rumpf — ein Client, der seine gelesene Revision zurueckschickt, darf damit nichts setzen.
-const WRITE_COLUMNS: [&str; 51] = [
+const WRITE_COLUMNS: [&str; 52] = [
     "id",
     "kind",
     "label",
@@ -430,6 +436,7 @@ const WRITE_COLUMNS: [&str; 51] = [
     "groesse",
     "farbe",
     "saison",
+    "traits",
 ];
 
 /// Die Werte zu [`WRITE_COLUMNS`], Stelle fuer Stelle.
@@ -486,6 +493,7 @@ fn write_params(it: &Item) -> Result<Vec<Box<dyn rusqlite::ToSql>>, Fehler> {
         Box::new(it.groesse.clone()),
         Box::new(it.farbe.clone()),
         Box::new(serde_json::to_string(&it.saison)?),
+        Box::new(serde_json::to_string(&it.traits)?),
     ])
 }
 
@@ -610,6 +618,7 @@ impl Store {
                 groesse            TEXT,
                 farbe              TEXT,
                 saison             TEXT NOT NULL DEFAULT '[]',
+                traits             TEXT NOT NULL DEFAULT '[]',
                 created_at         TEXT NOT NULL,
                 updated_at         TEXT NOT NULL,
                 revision           INTEGER NOT NULL DEFAULT 1
@@ -650,6 +659,8 @@ impl Store {
         Self::add_column_if_missing(conn, prefix, "groesse", "TEXT")?;
         Self::add_column_if_missing(conn, prefix, "farbe", "TEXT")?;
         Self::add_column_if_missing(conn, prefix, "saison", "TEXT NOT NULL DEFAULT '[]'")?;
+        // Was ein Stueck auf einer Reise leistet (2026-10-07), vor dem CHECK aus demselben Grund.
+        Self::add_column_if_missing(conn, prefix, "traits", "TEXT NOT NULL DEFAULT '[]'")?;
         Self::widen_kind_check(conn, prefix)?;
         // Nach dem Umbau und nicht davor: `widen_kind_check` kopiert nur `ITEM_COLUMNS`, und
         // eine Datei, die den Umbau noch braucht, hat diese Spalte ohnehin nicht. `DEFAULT 1`
@@ -877,6 +888,7 @@ impl Store {
                 groesse            TEXT,
                 farbe              TEXT,
                 saison             TEXT NOT NULL DEFAULT '[]',
+                traits             TEXT NOT NULL DEFAULT '[]',
                 created_at         TEXT NOT NULL,
                 updated_at         TEXT NOT NULL
              );
@@ -1114,7 +1126,7 @@ impl Store {
                     i.opens, i.open_clear, i.wall_ok, i.expands_dir, i.expands_to,
                     i.access_sides, i.access_clear, i.raumtrenner, i.bild, i.zerlegbar,
                     i.weight_g, i.category, i.packable, i.waterproof, i.quick_dry,
-                    i.pack_location, i.trip_types, i.groesse, i.farbe, i.saison, i.revision,
+                    i.pack_location, i.trip_types, i.groesse, i.farbe, i.saison, i.traits, i.revision,
                     (SELECT s.state FROM {p}_item_state s
                       WHERE s.item_id = i.id ORDER BY s.since DESC, s.id DESC LIMIT 1)
              FROM {p}_item i ORDER BY i.id"
@@ -1127,7 +1139,7 @@ impl Store {
                     .as_deref()
                     .and_then(Seite::parse))
             };
-            let state: Option<String> = row.get(52)?;
+            let state: Option<String> = row.get(53)?;
             Ok((
                 Item {
                     id: row.get(0)?,
@@ -1181,7 +1193,8 @@ impl Store {
                     groesse: row.get(48)?,
                     farbe: row.get(49)?,
                     saison: sjel_store::json_column(row, 50)?,
-                    revision: row.get(51)?,
+                    traits: sjel_store::json_column(row, 51)?,
+                    revision: row.get(52)?,
                 },
                 state.as_deref().and_then(State::parse),
             ))

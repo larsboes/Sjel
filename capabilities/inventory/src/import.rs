@@ -209,6 +209,7 @@ impl Roh {
             groesse: None,
             farbe: None,
             saison: Vec::new(),
+            traits: Vec::new(),
             // Der Server vergibt sie beim Schreiben; ein Wert hier wuerde nie geschrieben.
             revision: 0,
         }

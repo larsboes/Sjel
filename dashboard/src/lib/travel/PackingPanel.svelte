@@ -240,9 +240,9 @@
             <div class="card-main">
               <input
                 type="checkbox"
+                aria-label={`Packed: ${row.label}`}
                 checked={row.packed}
                 onchange={() => update(row.item_ref, { packed: !row.packed })}
-                aria-label={`Packed: ${row.label}`}
               />
               <button
                 type="button"

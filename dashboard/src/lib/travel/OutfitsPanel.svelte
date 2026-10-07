@@ -1,6 +1,7 @@
 <script lang="ts">
   import Icon from "$lib/Icon.svelte";
   import { bridgedSrc } from "$lib/bridged-url";
+  import { tip } from "$lib/tip";
   import { interior, trips, type InteriorItem, type Outfit, type OutfitInput } from "$lib/api";
 
   let { planId, dateStart, dateEnd }: { planId: string; dateStart: string; dateEnd: string } =
@@ -94,9 +95,9 @@
 
 {#snippet thumb(item: InteriorItem | undefined, ref: string, size: string)}
   {#if item?.bild}
-    <img use:bridgedSrc={interior.mediaUrl(item.bild)} alt={item.label} title={item.label} loading="lazy" style:width={size} style:height={size} />
+    <img use:bridgedSrc={interior.mediaUrl(item.bild)} alt={item.label} use:tip={item.label} loading="lazy" style:width={size} style:height={size} />
   {:else}
-    <span class="thumb" title={item?.label ?? ref} style:width={size} style:height={size}><Icon name="boxes" size={14} /></span>
+    <span class="thumb" use:tip={item?.label ?? ref} style:width={size} style:height={size}><Icon name="boxes" size={14} /></span>
   {/if}
 {/snippet}
 
@@ -187,6 +188,7 @@
       {#if isEditing}
         <textarea
           rows="2"
+          aria-label="Why this outfit"
           placeholder="Why this, for this day"
           value={outfit.note ?? ""}
           onchange={(e) => change(index, { note: e.currentTarget.value.trim() || null })}

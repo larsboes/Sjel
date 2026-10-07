@@ -30,7 +30,8 @@ pub const DDL: &str = "
         day         TEXT,
         pieces      TEXT NOT NULL DEFAULT '[]',
         note        TEXT,
-        created_at  TEXT NOT NULL
+        created_at  TEXT NOT NULL,
+        proposed    INTEGER NOT NULL DEFAULT 0
     );
     CREATE INDEX IF NOT EXISTS {prefix}_idx_outfits_plan ON {prefix}_outfits(plan_id);
 ";
@@ -46,6 +47,10 @@ pub struct OutfitInput {
     pub pieces: Vec<String>,
     #[serde(default)]
     pub note: Option<String>,
+    /// Suggested by an agent and not yet accepted by the traveler (2026-10-08). The page marks
+    /// it and offers Accept or Discard; accepting is the same PUT with this set to false.
+    #[serde(default)]
+    pub proposed: bool,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, schemars::JsonSchema)]
@@ -53,12 +58,28 @@ pub struct PutOutfits {
     pub outfits: Vec<OutfitInput>,
 }
 
+/// `proposed` came a day after the table, which machines had already created, so the
+/// `CREATE TABLE` above cannot add it to them.
+pub fn migrate(conn: &rusqlite::Connection, prefix: &str) -> rusqlite::Result<()> {
+    let present: i64 = conn.query_row(
+        "SELECT COUNT(*) FROM pragma_table_info(?1) WHERE name = 'proposed'",
+        params![format!("{prefix}_outfits")],
+        |row| row.get(0),
+    )?;
+    if present == 0 {
+        conn.execute_batch(&format!(
+            "ALTER TABLE {prefix}_outfits ADD COLUMN proposed INTEGER NOT NULL DEFAULT 0;"
+        ))?;
+    }
+    Ok(())
+}
+
 pub fn outfits_for_plan(store: &TripsStore, plan_id: &str) -> Fallible<Vec<OutfitInput>> {
     let prefix = store.prefix();
     let conn = store.borrow_connection()?;
     let rows = conn.query_all(
         &format!(
-            "SELECT name, day, pieces, note FROM {prefix}_outfits
+            "SELECT name, day, pieces, note, proposed FROM {prefix}_outfits
              WHERE plan_id = ?1 ORDER BY day IS NULL, day, position"
         ),
         params![&plan_id],
@@ -68,6 +89,7 @@ pub fn outfits_for_plan(store: &TripsStore, plan_id: &str) -> Fallible<Vec<Outfi
                 day: row.get(1)?,
                 pieces: sjel_store::json_column(row, 2)?,
                 note: row.get(3)?,
+                proposed: row.get(4)?,
             })
         },
     )?;
@@ -114,8 +136,8 @@ pub fn replace_outfits(store: &TripsStore, plan_id: &str, outfits: &[OutfitInput
         transaction.execute(
             &format!(
                 "INSERT INTO {prefix}_outfits
-                    (id, plan_id, position, name, day, pieces, note, created_at)
-                 VALUES (?1,?2,?3,?4,?5,?6,?7,?8)"
+                    (id, plan_id, position, name, day, pieces, note, created_at, proposed)
+                 VALUES (?1,?2,?3,?4,?5,?6,?7,?8,?9)"
             ),
             params![
                 &crate::store::new_id("trip:outfit"),
@@ -126,6 +148,7 @@ pub fn replace_outfits(store: &TripsStore, plan_id: &str, outfits: &[OutfitInput
                 serde_json::to_string(&pieces)?,
                 &outfit.note,
                 &now,
+                outfit.proposed,
             ],
         )?;
     }
@@ -149,6 +172,7 @@ pub fn render(outfits: &[OutfitInput], lists: &[PackListRow]) -> Value {
                 "day": o.day,
                 "pieces": o.pieces,
                 "note": o.note,
+                "proposed": o.proposed,
                 "not_on_pack_list": missing,
             })
         }).collect::<Vec<_>>(),
@@ -166,6 +190,7 @@ mod tests {
             day: day.map(Into::into),
             pieces: pieces.iter().map(|p| p.to_string()).collect(),
             note: None,
+            proposed: false,
         }
     }
 
@@ -225,7 +250,7 @@ mod tests {
             &store,
             &plan,
             &[
-                outfit("Sat", Some("2026-10-10"), &["a"]),
+                OutfitInput { proposed: true, ..outfit("Sat", Some("2026-10-10"), &["a"]) },
                 outfit("Any evening", None, &["b"]),
                 outfit("Fri", Some("2026-10-09"), &["a", " ", "c"]),
             ],
@@ -235,6 +260,7 @@ mod tests {
         let names: Vec<&str> = read.iter().map(|o| o.name.as_str()).collect();
         assert_eq!(names, ["Fri", "Sat", "Any evening"]);
         assert_eq!(read[0].pieces, ["a", "c"]);
+        assert!(read[1].proposed && !read[0].proposed);
 
         assert!(replace_outfits(&store, &plan, &[outfit("Bad", Some("9.10."), &[])]).is_err());
         let _ = std::fs::remove_dir_all(&dir);

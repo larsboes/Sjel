@@ -273,7 +273,8 @@ const ROUTES: &[route_manifest::Route] = &[
         method: "PUT",
         path: "/api/plans/{id}/outfits",
         summary: "Replace a plan's outfits. Body: {outfits:[{name, day?, pieces:[item_ref], \
-                  note?}]}. day is YYYY-MM-DD or null; pieces are inventory item ids.",
+                  note?, proposed?}]}. day is YYYY-MM-DD or null; pieces are inventory item ids; \
+                  proposed=true marks an agent's suggestion that the traveler has not accepted.",
         request_schema: Some(route_manifest::schema_of::<trips::outfit::PutOutfits>),
     },
     route_manifest::Route {

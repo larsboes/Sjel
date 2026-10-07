@@ -309,7 +309,13 @@ pub fn analyze_batch(cfg: &Config, ids: &[String]) -> ScanReport {
             }
         };
         let target = crate::digest::to_target(cfg, &role);
-        let request = prompt(&body);
+        // A rail or hotel confirmation runs past a 4,096-token light window, and refusing it
+        // dropped every Deutsche Bahn and Booking.com confirmation in the inbox. They put the
+        // itinerary at the top, so keep the head. Grounding below still checks each quote
+        // against the full body, so the cut can lose an event but cannot invent a date.
+        let room = summarize::window_chars(REPLY_TOKENS, role.max_input_tokens.unwrap_or_default())
+            .saturating_sub(prompt("").chars().count());
+        let request = prompt(&body.chars().take(room).collect::<String>());
         if !summarize::fits_window(
             request.chars().count(),
             REPLY_TOKENS,

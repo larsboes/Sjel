@@ -198,6 +198,15 @@ pub fn fits_window(source_chars: usize, reply_tokens: u32, context_tokens: u32) 
     needed <= context_tokens as u64
 }
 
+/// The longest source, in characters, that [`fits_window`] accepts: its inverse, for a caller
+/// that can shorten its input instead of refusing it. One arithmetic, read both ways.
+pub fn window_chars(reply_tokens: u32, context_tokens: u32) -> usize {
+    (context_tokens as usize)
+        .saturating_sub(PROMPT_OVERHEAD_TOKENS as usize + reply_tokens as usize)
+        .saturating_mul(CHARS_PER_TOKEN)
+        .min(INPUT_CAP)
+}
+
 /// Whether this run is the automatic pass or an operator asking for more.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub enum Depth {
@@ -1387,5 +1396,23 @@ mod tests {
         assert_eq!(Depth::parse("detailed"), Some(Depth::Detailed));
         assert_eq!(Depth::parse("deeper"), None);
         assert_eq!(Depth::parse(""), None);
+    }
+
+    #[test]
+    fn window_chars_is_the_longest_source_fits_window_accepts() {
+        for (reply, context) in [(700, 4_096), (800, 8_192), (700, 1_000), (700, 0)] {
+            let room = window_chars(reply, context);
+            if room > 0 {
+                assert!(fits_window(room, reply, context), "{reply}/{context}");
+            }
+            // fits_window clamps a source to INPUT_CAP, so past the cap anything longer "fits".
+            if room < INPUT_CAP {
+                assert!(
+                    !fits_window(room + CHARS_PER_TOKEN, reply, context),
+                    "{reply}/{context}"
+                );
+            }
+        }
+        assert_eq!(window_chars(700, 4_096), 8_988);
     }
 }

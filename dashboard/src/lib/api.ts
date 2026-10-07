@@ -945,6 +945,13 @@ export interface InteriorItem {
    * is winter AND transition, not one or the other.
    */
   saison: string[];
+  /** What it does on a trip — `style`, `comfort`, `warm`, `rain`. Free words, shown not ruled. */
+  traits?: string[];
+  /** Equipment fields (B51); optional because rows older than that never set them. */
+  weight_g?: number | null;
+  waterproof?: boolean | null;
+  quick_dry?: boolean | null;
+  pack_location?: string | null;
   /**
    * How often the row was written; the server owns it (PRD §10 A5). Send the value you read as
    * `revision` to `saveItem`/`patchItem`, and a write that raced another device fails with

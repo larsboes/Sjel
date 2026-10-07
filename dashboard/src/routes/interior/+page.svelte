@@ -142,6 +142,14 @@
   });
   const owned = $derived(group === "alle" ? allOwned : allOwned.filter((r) => groupOf(r.item) === group));
   const gone = $derived(inventory.filter((r) => r.state === "gone"));
+  /** Owned id → label of the wanted item that names it in `ersetzt`. */
+  const replacedBy = $derived(
+    new Map(
+      inventory
+        .filter((r) => r.state === "wanted")
+        .flatMap((r) => (r.item.ersetzt ?? []).map((id) => [id, r.item.label] as const)),
+    ),
+  );
 
   // ─── Dragging on the plan ──────────────────────────────────────────────────
   //
@@ -1966,6 +1974,7 @@
         <div class="head">
           <span class="label">{i.label}</span>
           {#if i.mitnahme}<span class="tag">{i.mitnahme}</span>{/if}
+          {#if replacedBy.has(i.id)}<span class="tag" use:tip={`On the wishlist: ${replacedBy.get(i.id)}`}>replacement wanted</span>{/if}
           {#if pendingIds.has(i.id)}<span class="tag pending" use:tip={"Saved on this device; not on the canonical node yet."}>not synced</span>{/if}
           {#if conflictIds.has(i.id)}<span class="tag conflict" use:tip={"The canonical node changed this item too. Review it in the sync line at the top."}>conflict</span>{/if}
         </div>

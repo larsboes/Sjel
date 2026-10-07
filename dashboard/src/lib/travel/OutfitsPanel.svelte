@@ -61,7 +61,7 @@
     try {
       await trips.putOutfits(
         planId,
-        next.map(({ name, day, pieces, note }) => ({ name, day, pieces, note })),
+        next.map(({ name, day, pieces, note, proposed }) => ({ name, day, pieces, note, proposed })),
       );
       // Re-read: which pieces are missing from the pack list is the server's answer.
       outfits = (await trips.outfits(planId)).outfits;
@@ -129,6 +129,7 @@
         {:else}
           <span class="day">{dayLabel(outfit.day)}</span>
           <strong>{outfit.name}</strong>
+          {#if outfit.proposed}<span class="proposed">Proposed</span>{/if}
         {/if}
         <button
           type="button"
@@ -168,6 +169,13 @@
           </li>
         {/if}
       </ul>
+
+      {#if outfit.proposed && !isEditing}
+        <div class="decide">
+          <button type="button" class="link accept" onclick={() => change(index, { proposed: false })}>Accept</button>
+          <button type="button" class="link danger" onclick={() => removeOutfit(index)}>Discard</button>
+        </div>
+      {/if}
 
       {#if outfit.not_on_pack_list.length}
         <p class="warn">
@@ -225,6 +233,23 @@
 
   .outfit.editing {
     border-color: var(--accent);
+  }
+
+  .proposed {
+    font-size: var(--text-2xs);
+    color: var(--text-secondary);
+    border: 1px dashed var(--card-border);
+    border-radius: 999px;
+    padding: 0 0.4rem;
+  }
+
+  .decide {
+    display: flex;
+    gap: 0.8rem;
+  }
+
+  .link.accept:hover {
+    color: var(--accent);
   }
 
   .head {

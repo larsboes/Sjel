@@ -675,6 +675,8 @@ export interface OutfitInput {
   day: string | null;
   pieces: string[];
   note: string | null;
+  /** An agent's suggestion the traveler has not accepted yet. */
+  proposed?: boolean;
 }
 
 export interface Outfit extends OutfitInput {
@@ -920,6 +922,8 @@ export interface InteriorItem {
   ziel: string | null;
   hinweis: string | null;
   begruendung: string | null;
+  /** Ids of the items this one makes redundant: a wanted phone names the owned phone it replaces. */
+  ersetzt: string[];
 
   /**
    * What this piece states it needs (PRD Q61 / B26).

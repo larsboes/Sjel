@@ -5,7 +5,7 @@ use axum::{
     extract::{Path, Query, State},
     http::StatusCode,
     response::Json,
-    routing::{delete, get, post, put},
+    routing::{delete, get, patch, post, put},
     Router,
 };
 use serde::Serialize;
@@ -83,6 +83,12 @@ const ROUTES: &[route_manifest::Route] = &[
                   schemas/trip-plan.schema.json.",
         request_schema: Some(route_manifest::schema_of::<CreatePlanItem>),
     },
+    r(
+        "PATCH",
+        "/api/plans/{plan_id}/items/{item_id}/fields",
+        "Edit one item in place. Body is {title?, payload?: {key: value|null}}: payload keys are \
+         merged, null removes a key. The result is validated like a new item of its type.",
+    ),
     r(
         "PATCH",
         "/api/plans/{plan_id}/items/{item_id}",
@@ -615,6 +621,35 @@ async fn set_item_day(
     match blocking(move || {
         TripsStore::open(&database_path)
             .and_then(|store| store.set_item_day(&plan_id, &item_id, input.day.as_deref()))
+            .map_err(|error| error.to_string())
+    })
+    .await
+    {
+        Ok(Some(item)) => response(StatusCode::OK, item),
+        Ok(None) => response(StatusCode::NOT_FOUND, json!({ "error": "item not found" })),
+        Err(error) => response(StatusCode::BAD_REQUEST, json!({ "error": error })),
+    }
+}
+
+#[derive(serde::Deserialize)]
+struct EditItem {
+    #[serde(default)]
+    title: Option<String>,
+    #[serde(default)]
+    payload: serde_json::Map<String, Value>,
+}
+
+async fn edit_item(
+    State(state): State<AppState>,
+    Path((plan_id, item_id)): Path<(String, String)>,
+    Json(input): Json<EditItem>,
+) -> ApiResponse {
+    let database_path = state.database_path.clone();
+    match blocking(move || {
+        TripsStore::open(&database_path)
+            .and_then(|store| {
+                store.edit_item(&plan_id, &item_id, input.title.as_deref(), &input.payload)
+            })
             .map_err(|error| error.to_string())
     })
     .await
@@ -1910,6 +1945,10 @@ fn build_router(state: AppState) -> Router {
         .route(
             "/api/plans/{plan_id}/items/{item_id}",
             delete(delete_item).patch(set_item_day),
+        )
+        .route(
+            "/api/plans/{plan_id}/items/{item_id}/fields",
+            patch(edit_item),
         )
         .route("/api/places", get(list_places))
         .route("/api/flights/search", get(search_flights))

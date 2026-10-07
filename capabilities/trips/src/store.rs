@@ -1051,6 +1051,57 @@ impl TripsStore {
         Ok(item)
     }
 
+    /// Renames an item and/or merges fields into its payload: a key set to null is removed,
+    /// every other key is replaced (RFC 7396, top level only). The merged payload passes the
+    /// same `validate_payload` as `add_item`, so an inline edit cannot strip a booking of the
+    /// fields its type promises. The page edits one property at a time (2026-10-07).
+    pub fn edit_item(
+        &self,
+        plan_id: &str,
+        item_id: &str,
+        title: Option<&str>,
+        patch: &serde_json::Map<String, serde_json::Value>,
+    ) -> Result<Option<PlanItem>, Box<dyn std::error::Error>> {
+        if title.is_some_and(|t| t.trim().is_empty()) {
+            return Err("title must not be empty".into());
+        }
+        let conn = self.conn()?;
+        let prefix = &self.prefix;
+        let Some(item) = conn
+            .query_row(
+                &format!("SELECT {ITEM_COLUMNS} FROM {prefix}_plan_items WHERE plan_id = ?1 AND id = ?2"),
+                params![&plan_id, &item_id],
+                row_to_item,
+            )
+            .optional()?
+        else {
+            return Ok(None);
+        };
+        let mut payload = match item.payload {
+            serde_json::Value::Object(map) => map,
+            _ => serde_json::Map::new(),
+        };
+        for (key, value) in patch {
+            if value.is_null() {
+                payload.remove(key);
+            } else {
+                payload.insert(key.clone(), value.clone());
+            }
+        }
+        let payload = serde_json::Value::Object(payload);
+        validate_payload(&item.item_type, &payload)?;
+        let title = title.map(str::trim).unwrap_or(&item.title);
+        let updated = conn.query_row(
+            &format!(
+                "UPDATE {prefix}_plan_items SET title = ?3, payload = ?4
+                 WHERE plan_id = ?1 AND id = ?2 RETURNING {ITEM_COLUMNS}"
+            ),
+            params![&plan_id, &item_id, title, serde_json::to_string(&payload)?],
+            row_to_item,
+        )?;
+        Ok(Some(updated))
+    }
+
     /// Records how a stage actually went, against the intent it was chosen under.
     ///
     /// `StageStatus::Completed` has existed since the start and nothing anywhere
@@ -2153,6 +2204,20 @@ mod db_tests {
         assert!(store
             .set_item_day(&plan.id, &second.id, Some("02.09.2026"))
             .is_err());
+
+        // An inline edit merges, removes on null, and cannot strip a declared field.
+        let patch = |v: Value| v.as_object().unwrap().clone();
+        let edited = store
+            .edit_item(&plan.id, &second.id, Some("ICE to Valencia"), &patch(json!({ "time": "07:14", "mode": null })))
+            .unwrap_err();
+        assert!(edited.to_string().contains("mode"), "got: {edited}");
+        let edited = store
+            .edit_item(&plan.id, &second.id, Some("ICE to Valencia"), &patch(json!({ "time": "07:14" })))
+            .unwrap()
+            .expect("the item exists");
+        assert_eq!(edited.title, "ICE to Valencia");
+        assert_eq!(edited.payload["time"], "07:14");
+        assert_eq!(edited.payload["journey"]["id"], "j:2");
     }
 
     /// `ON DELETE CASCADE` is enforced only when `PRAGMA foreign_keys` is on,

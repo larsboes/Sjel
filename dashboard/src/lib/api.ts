@@ -653,6 +653,14 @@ export const trips = {
       `/trips/api/plans/${encodeURIComponent(planId)}/pack`,
       jsonInit('POST', { name }),
     ),
+  outfits: (planId: string) =>
+    request<{ outfits: Outfit[] }>(`/trips/api/plans/${encodeURIComponent(planId)}/outfits`),
+  /** Replaces every outfit on the plan; send them all, not a delta. */
+  putOutfits: (planId: string, outfits: OutfitInput[]) =>
+    request<{ ok: boolean; count: number }>(
+      `/trips/api/plans/${encodeURIComponent(planId)}/outfits`,
+      jsonInit('PUT', { outfits }),
+    ),
   /** Replaces the list's whole item set; send every row, not a delta. */
   putPackItems: (planId: string, listId: string, items: PackItemInput[]) =>
     request<{ ok: boolean; count: number }>(
@@ -660,6 +668,19 @@ export const trips = {
       jsonInit('PUT', { items }),
     ),
 };
+
+/** `capabilities/trips/src/outfit.rs` — pieces worn together, optionally on one day. */
+export interface OutfitInput {
+  name: string;
+  day: string | null;
+  pieces: string[];
+  note: string | null;
+}
+
+export interface Outfit extends OutfitInput {
+  /** Pieces no pack list on the plan carries; computed by trips. */
+  not_on_pack_list: string[];
+}
 
 /** `capabilities/trips/src/pack.rs` — one row of a list, resolved against inventory. */
 export interface PackItem {

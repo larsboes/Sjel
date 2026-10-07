@@ -30,6 +30,7 @@
   import ClimateStrip from "$lib/travel/ClimateStrip.svelte";
   import CostCard from "$lib/travel/CostCard.svelte";
   import PackingPanel from "$lib/travel/PackingPanel.svelte";
+  import OutfitsPanel from "$lib/travel/OutfitsPanel.svelte";
   import RetrospectiveForm from "$lib/travel/RetrospectiveForm.svelte";
   import {
     climateFor,
@@ -2028,6 +2029,11 @@
     <section class="who-around" aria-labelledby="packing-heading">
       <h3 id="packing-heading">Packing</h3>
       <PackingPanel planId={activePlan.id} />
+    </section>
+
+    <section class="who-around" aria-labelledby="outfits-heading">
+      <h3 id="outfits-heading">Outfits</h3>
+      <OutfitsPanel planId={activePlan.id} dateStart={activePlan.date_start} dateEnd={activePlan.date_end} />
     </section>
   {/if}
 

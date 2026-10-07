@@ -24,6 +24,7 @@ use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
 use tower::Layer;
 
+mod dashboard_freshness;
 mod device_gate;
 mod lan;
 mod proxy;
@@ -249,6 +250,7 @@ async fn main() {
             "[sjel-status] no dashboard bundle at {ui_dir} — API routes work, pages will 404. Build it: cd dashboard && bun run build"
         );
     }
+    dashboard_freshness::spawn(std::path::PathBuf::from(&ui_dir));
     let shell = proxy::Proxy::new(&services, &port.to_string(), ui_dir);
     eprintln!(
         "[sjel-status] shell: {} capability route(s)",

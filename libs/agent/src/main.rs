@@ -259,9 +259,10 @@ fn chosen_extensions(
 }
 
 /// The extensions this binary carries (D1: first-party crates, compiled in, no store). Wave 1
-/// fills this list — the guard is here (F2) and skills (F3); `mcp` (F4), `compaction` (F5) and
-/// `rust` (F6) are next. It is only used to name what exists when a name does not.
-const BUILT_IN: &[&str] = &[ext::guard::NAME, ext::skills::NAME];
+/// fills this list — the guard (F2), skills (F3) and rust diagnostics (F6) are here; `mcp`
+/// (F4) and `compaction` (F5) are next. It is only used to name what exists when a name does
+/// not.
+const BUILT_IN: &[&str] = &[ext::guard::NAME, ext::skills::NAME, ext::rust::NAME];
 
 /// The extension a name resolves to, or `None` when this build does not carry it. `stop` is
 /// handed in because an extension can carry a tool that runs a command, and that command has to
@@ -270,6 +271,7 @@ const BUILT_IN: &[&str] = &[ext::guard::NAME, ext::skills::NAME];
 fn built_in(name: &str, config: &AgentFile, stop: &Arc<AtomicBool>) -> Option<Box<dyn Extension>> {
     match name {
         ext::guard::NAME => Some(Box::new(ext::guard::Guard::new(stop))),
+        ext::rust::NAME => Some(Box::new(ext::rust::Rust::new(stop))),
         ext::skills::NAME => {
             let (skills, problems) = ext::skills::Skills::load(&config.skills.paths);
             // A skill whose frontmatter does not parse is named and skipped, and the run goes

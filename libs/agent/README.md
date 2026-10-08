@@ -101,7 +101,24 @@ tool with that name, which is the point: twenty skills cost twenty lines, not tw
 path that will not read, or whose frontmatter the Pack engine would refuse, is named at startup
 and skipped, and the run goes on.
 
-Everything else in wave 1 — MCP, compaction, Rust diagnostics — is still to come.
+## Rust diagnostics
+
+The `rust` extension carries a `cargo` tool, not on by default.
+
+```toml
+[agent]
+extensions = ["guard", "skills", "rust"]
+```
+
+It runs `cargo check`, `clippy` or `test` with `--message-format=json` and returns one line per
+diagnostic — `path:line:col level[code] message — span label`, with the compiler's notes under
+it — instead of the rendered output. Same information, about a third of the bytes on a small
+build, and it carries the span label, which is the part that says what to change. Pass
+`manifest_path` to build another crate, `package` to limit it to one, `all_targets` to include
+tests and examples. `cargo deny` is not offered: it does not speak the compiler's JSON, and
+this repository has no `deny.toml`.
+
+Everything else in wave 1 — MCP and compaction — is still to come.
 
 ## Run it
 
@@ -137,9 +154,10 @@ Add a `coding` role to the overlay's `config/inference.json` first:
 ## Not here yet
 
 The extension contract is in place (F1), the guard uses all of it including the fifth hook (F2,
-D9), and skills run on it (F3). Next: MCP, compaction and Rust diagnostics. What is not done is
-letting a profile switch fill `[skills] paths` for you (AGT-21, in `tools/sjel-cli`). Line
-editing, a full-screen TUI and subagents are named in [`ISA.md`](ISA.md) as wave 2, not decided.
+D9), and skills (F3) and Rust diagnostics (F6) run on it. Next: MCP and compaction. Not done:
+letting a profile switch fill `[skills] paths` for you (AGT-21, in `tools/sjel-cli`), and the
+property test over the stream fold (AGT-22, whose tooling is an open decision). Line editing, a
+full-screen TUI and subagents are named in [`ISA.md`](ISA.md) as wave 2, not decided.
 
 A Ctrl-C while the model reads a long prompt and streams nothing takes effect at the first
 chunk. Press it twice to exit instead.

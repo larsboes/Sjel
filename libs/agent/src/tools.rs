@@ -224,22 +224,60 @@ impl Tool for Bash {
     }
 }
 
-/// Runs `command` with a deadline and returns its exit code and output.
+/// What a child process did. Kept apart from its rendering because one caller needs the two
+/// streams separately: the `cargo` tool reads cargo's JSON on stdout, and the shape below is
+/// what a model reads.
+pub struct Ran {
+    /// `Some` when it exited on its own, `None` when a signal ended it.
+    pub code: Option<i32>,
+    /// Why the deadline or `stop` ended it, when either did. Then it said nothing of its own.
+    pub killed: Option<String>,
+    pub stdout: String,
+    pub stderr: String,
+}
+
+impl Ran {
+    /// The one-line summary a result starts with.
+    pub fn summary(&self) -> String {
+        match (&self.killed, self.code) {
+            (Some(why), _) => why.clone(),
+            (None, Some(code)) => format!("exit code {code}"),
+            (None, None) => "killed by a signal".to_owned(),
+        }
+    }
+
+    /// That summary, then each stream under a heading.
+    pub fn reported(&self) -> String {
+        let mut out = self.summary();
+        if !self.stdout.is_empty() {
+            out.push_str("\n--- stdout\n");
+            out.push_str(&self.stdout);
+        }
+        if !self.stderr.is_empty() {
+            out.push_str("\n--- stderr\n");
+            out.push_str(&self.stderr);
+        }
+        out
+    }
+}
+
+/// Runs `command` with a deadline and returns what it did.
 ///
 /// Public because it is where the kill semantics live, and there is one set of them: the `bash`
-/// tool and the guard's `vault_exec` both need a child that dies as a group, is drained on both
-/// pipes, and stops with the turn. A second copy in the extension is how the two drift.
+/// tool, the guard's `vault_exec` and the `cargo` tool all need a child that dies as a group, is
+/// drained on both pipes, and stops with the turn. A second copy in an extension is how the two
+/// drift.
 ///
 /// The child leads its own process group, so the timeout or `stop` kills the whole pipeline it
 /// started. The group also keeps the terminal's Ctrl-C away from the child: the agent decides
 /// what a Ctrl-C stops, and it reaches the child only through `stop`.
 /// Killing only the shell would leave a grandchild holding the output pipes open, and the
 /// readers below would wait for it forever.
-pub fn run_bounded(
+pub fn run_captured(
     mut command: Command,
     timeout: Duration,
     stop: &AtomicBool,
-) -> Result<String, String> {
+) -> Result<Ran, String> {
     use std::os::unix::process::CommandExt as _;
     let mut child = command
         .process_group(0)
@@ -252,40 +290,46 @@ pub fn run_bounded(
     let stdout = drain(child.stdout.take());
     let stderr = drain(child.stderr.take());
     let deadline = Instant::now() + timeout;
-    let status = loop {
+    let mut killed = None;
+    let mut code = None;
+    loop {
         match child.try_wait() {
-            Ok(Some(status)) => break Ok(status),
+            Ok(Some(status)) => {
+                code = status.code();
+                break;
+            }
             // Relaxed: the flag carries no data, only "stop", and the poll rereads it.
             Ok(None) if stop.load(Ordering::Relaxed) => {
                 kill_group(&mut child);
-                break Err("stopped by the user".to_owned());
+                killed = Some("stopped by the user".to_owned());
+                break;
             }
             Ok(None) if Instant::now() >= deadline => {
                 kill_group(&mut child);
-                break Err(format!("killed after {} s", timeout.as_secs()));
+                killed = Some(format!("killed after {} s", timeout.as_secs()));
+                break;
             }
             // ponytail: 20 ms poll, a pidfd/kqueue wait if a tool call ever needs lower latency
             Ok(None) => std::thread::sleep(Duration::from_millis(20)),
             Err(e) => return Err(format!("could not wait for the command: {e}")),
         }
-    };
-    let stdout = stdout.join().unwrap_or_default();
-    let stderr = stderr.join().unwrap_or_default();
-    let head = match status.map(|s| s.code()) {
-        Ok(Some(code)) => format!("exit code {code}"),
-        Ok(None) => "killed by a signal".to_owned(),
-        Err(why) => why,
-    };
-    let mut out = head;
-    if !stdout.is_empty() {
-        out.push_str("\n--- stdout\n");
-        out.push_str(&stdout);
     }
-    if !stderr.is_empty() {
-        out.push_str("\n--- stderr\n");
-        out.push_str(&stderr);
-    }
-    Ok(cap(&out, OUTPUT_LIMIT))
+    Ok(Ran {
+        code,
+        killed,
+        stdout: stdout.join().unwrap_or_default(),
+        stderr: stderr.join().unwrap_or_default(),
+    })
+}
+
+/// [`run_captured`], rendered as the one text a model reads.
+pub fn run_bounded(
+    command: Command,
+    timeout: Duration,
+    stop: &AtomicBool,
+) -> Result<String, String> {
+    let ran = run_captured(command, timeout, stop)?;
+    Ok(cap(&ran.reported(), OUTPUT_LIMIT))
 }
 
 fn drain(pipe: Option<impl Read + Send + 'static>) -> std::thread::JoinHandle<String> {

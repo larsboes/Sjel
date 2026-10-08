@@ -2,7 +2,7 @@
 project: sjel-agent
 type: isa
 phase: climbing
-progress: 68
+progress: 75
 principal_stated_goal: "pi agent inspiration rust implementation of slim core and official extensions from start but opt in"
 ---
 
@@ -295,15 +295,43 @@ agent reaches Sjel's data with no data path of its own.
 
 ### F6 · Rust diagnostics
 
-- [ ] AGT-19 — a `cargo` tool runs `check`, `clippy`, `test` or `deny` with `--message-format=json` and
+The `rust` extension carries one `cargo` tool. `deny` is not in it: cargo-deny speaks its own
+format rather than the compiler's JSON, and D8 makes it this tool's business "once a `deny.toml`
+exists" — there is none in this repository, so asking for it says so instead of returning output
+nobody can read as diagnostics.
+
+- [x] AGT-19 — a `cargo` tool runs `check`, `clippy`, `test` with `--message-format=json` and
   returns one line per diagnostic, `path:line:col level[code] message`, instead of rendered
-  compiler output. Falsifier: a diagnostic in the JSON that the tool result omits. Probe: a fixture
-  crate with one known error and one known warning.
+  compiler output. Evidence: `every_diagnostic_cargo_reported_is_a_line` (`src/ext/rust.rs`) asks
+  cargo itself for the same JSON and holds the tool to every `compiler-message` in it, so a
+  diagnostic it drops fails the test; `a_child_note_is_kept_under_its_diagnostic` holds the notes
+  and helps to arriving once each. Falsifier: a diagnostic in the JSON that the tool result omits.
+  Probe: a fixture crate with one known error and one known warning.
+
+  Found while writing those tests, and the tests did not catch it: the part a model needs most is
+  the primary span's *label*, not the message — `mismatched types` is the message, and
+  `expected `i32`, found `&str`` is a label. The first version of the format printed the message
+  only, and comparing against cargo's JSON could not notice, because a label is not a separate
+  diagnostic. The label is on the line now, and a child that repeats it is dropped rather than
+  said twice.
+- [x] AGT-20 — the tool result is smaller than the rendered output for the same build. Evidence:
+  `the_result_is_smaller_than_the_rendered_output`, measured on both fixtures: one error with one
+  warning is 619–673 bytes against 838–1100 rendered, and ten warnings are 1489 against 2233.
+  About a third, not the order of magnitude the shape suggests, and the reason is worth writing
+  down: cargo's own framing — `Checking fixture v0.1.0 …`, `error: could not compile …` — is in
+  both, and on a small build it is most of the text. Falsifier: a fixture where it is not. Probe:
+  that test.
 - [ ] AGT-22 — `stream::fold` holds under `proptest`: for any split of a valid event stream into
   chunks, and for arbitrary bytes, it returns a message or an error and never panics (D8).
   Falsifier: a shrunk input that panics or folds two chunkings differently.
-- [ ] AGT-20 — the tool result is smaller than the rendered output for the same build.
-  Falsifier: a fixture where it is not. The size is measured on the fixture, not assumed.
+
+  Open for one reason, and it is a tooling decision rather than doubt about the code: `proptest`
+  is in no manifest in this workspace today, so taking D8 up on it means an `upstreams.toml` row,
+  a new subtree in Cargo.lock — the file a concurrent session is regenerating this hour — and a
+  dev-dependency tree every machine then carries. A deterministic test that feeds one already
+  built stream through every chunk boundary, and a few hundred pseudo-random byte strings through
+  the same fold, covers this claim's falsifier today with no new crate. Left open rather than
+  chosen quietly.
 
 ## Not yet specified
 
@@ -347,6 +375,7 @@ agent reaches Sjel's data with no data path of its own.
 | AGT-21 | command | switch profile, read `agent.toml` and `tools/harnesses status` | paths match profile | bun, cargo | F3, D7 |
 | AGT-22 | command | `cargo test -p sjel-agent stream` with proptest | no panic, chunking-invariant | cargo | F6, D8 |
 | AGT-20 | command | bytes of tool result vs rendered output | smaller | cargo | F6 |
+| AGT-19b | command | the primary span label of an E0308 | on the line | cargo | F6 |
 
 ## Anti-claims
 
@@ -402,6 +431,18 @@ agent reaches Sjel's data with no data path of its own.
 
 ## Log
 
+- 2026-10-08 · F6, Rust diagnostics. The `rust` extension's `cargo` tool returns one line per
+  diagnostic from `--message-format=json` instead of the rendered output: `path:line:col
+  level[code] message — span label`, with the compiler's notes and helps under it, once each. Two
+  finds while testing. The first: the span *label* is the part a model acts on — `mismatched
+  types` says nothing, `expected `i32`, found `&str`` says everything — and comparing against
+  cargo's own JSON cannot catch dropping it, because a label is not a separate diagnostic. The
+  second: the saving is about a third rather than the order of magnitude the shape suggests,
+  because cargo's framing is in both and dominates a small build; measured 619–673 against
+  838–1100, and 1489 against 2233 for ten warnings. A third, in the tests themselves: four fixture
+  crates in one target dir must not share a package name, or they overwrite each other's artifacts
+  and report each other's diagnostics. AGT-22 is left open with its tooling fork written down
+  rather than chosen quietly.
 - 2026-10-08 · F3, skills. The `skills` extension puts each enabled skill's name and description
   in the system prompt and returns the document through a `skill` tool only when the model asks:
   twenty skills cost twenty lines, not twenty documents. The frontmatter parser moved from

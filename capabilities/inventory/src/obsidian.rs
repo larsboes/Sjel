@@ -14,9 +14,9 @@
 //! braucht, bleibt eine Datei in Axon"*. Der Slot-Text ist der erste Fall, die Masse sind der
 //! zweite, und genau an dieser Naht schneidet dieses Modul.
 //!
-//! ## Warum `Atlas/`, und nicht `Resources/Axon/`
+//! ## Warum `Atlas/`, und nicht `Resources/Sjel/`
 //!
-//! Q31 (2026-08-23) gibt Muster B genau ein Zuhause: `Resources/Axon/`. Dieses Modul schreibt
+//! Q31 (2026-08-23) gibt Muster B genau ein Zuhause: `Resources/Sjel/`. Dieses Modul schreibt
 //! nach `Atlas/Interior/`, und das ist **kein** Verstoss, weil es kein Muster B ist. Lars hat am
 //! 2026-09-07 entschieden, dass eine Wohnungseinrichtung dauerhaft ist statt temporaer und
 //! deshalb in den Atlas gehoert — und Q31s eigene Regel lautet *"prefer C"*: sobald eine
@@ -504,7 +504,7 @@ mod tests {
 
     /// Eine vom Menschen geaenderte Region wird nicht ueberschrieben, und die Prosa daneben
     /// ueberlebt jeden Lauf. Das ist die Zusage, unter der diese Notizen im Atlas stehen
-    /// duerfen statt in `Resources/Axon/`.
+    /// duerfen statt in `Resources/Sjel/`.
     #[test]
     fn menschliche_prosa_und_eine_beruehrte_region_ueberleben() {
         let dir = std::env::temp_dir().join(format!("axon-interior-3-{}", std::process::id()));

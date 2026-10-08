@@ -559,7 +559,8 @@ fn cycle_word(cycle: BillingCycle) -> &'static str {
 ///
 /// Vault-relative, not configurable — a second declaration of where machine output goes
 /// is how two hosts write to two folders and neither notices.
-pub const PROJECTION_DIR: &str = "Resources/Axon/Subscriptions";
+// `Resources/Axon/Subscriptions` until 2026-10-08, when the vault folder took the product name.
+pub const PROJECTION_DIR: &str = "Resources/Sjel/Subscriptions";
 
 /// One subscription as a whole file, for the case where no note exists to hold a region.
 ///
@@ -1002,7 +1003,7 @@ mod tests {
 
         let first = export_projections(&root, &subs, &[], "2026-08-28", &[]).unwrap();
         assert_eq!((first.created, first.unchanged), (1, 0));
-        let file = dir.join("Resources/Axon/Subscriptions/Claude Max.md");
+        let file = dir.join("Resources/Sjel/Subscriptions/Claude Max.md");
         let body = std::fs::read_to_string(&file).unwrap();
         assert!(
             body.contains("| 2026-02-01 | 20.00 EUR | month |"),
@@ -1016,7 +1017,7 @@ mod tests {
         let third = export_projections(&root, &subs, &owned, "2026-08-28", &[]).unwrap();
         assert_eq!(
             third.removed,
-            vec!["Resources/Axon/Subscriptions/Claude Max.md"]
+            vec!["Resources/Sjel/Subscriptions/Claude Max.md"]
         );
         assert!(!file.exists(), "the note's region owns the figures now");
 

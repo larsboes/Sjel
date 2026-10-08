@@ -4,7 +4,7 @@
 //! human note about the subject already exists, the machine writes a marked region
 //! into it and the derived figures land where the human already writes. This module
 //! covers the case that rule leaves open — *there is no human note* — which PRD Q31
-//! (2026-08-23) named pattern B and gave one home: `Resources/Axon/`.
+//! (2026-08-23) named pattern B and gave one home: `Resources/Sjel/`.
 //!
 //! Two subjects genuinely need it, and Q31 names both: a trip export, and a monthly
 //! figure whose review note was never written. Neither has a note to write into, and
@@ -81,8 +81,8 @@ pub enum ProjectionOutcome {
 /// there and when the file is not a projection at all.
 ///
 /// Ownership used to be one bit — "does the file contain the header" — and that was
-/// enough while every projection had a folder to itself (`Resources/Axon/Trips/`,
-/// `Resources/Axon/Subscriptions/`). PRD Q49's Sources bridge is the first projection
+/// enough while every projection had a folder to itself (`Resources/Sjel/Trips/`,
+/// `Resources/Sjel/Subscriptions/`). PRD Q49's Sources bridge is the first projection
 /// into a folder that two owners can share with each other and with a human, and there
 /// one bit is wrong in a specific direction: a sweep would delete another capability's
 /// projection because it recognised *a* header. The owner is already written into the
@@ -131,7 +131,7 @@ pub fn document(spec: &RegionSpec, rendered: &str) -> String {
 impl MarkdownRoot {
     /// Write one projection, relative to the root.
     ///
-    /// Missing parent directories are created — `Resources/Axon/Trips/` does not exist
+    /// Missing parent directories are created — `Resources/Sjel/Trips/` does not exist
     /// until the first export, and failing on that would make the first run of every
     /// projection a manual `mkdir`.
     pub fn write_projection(
@@ -337,17 +337,17 @@ mod tests {
         let (dir, root) = temp_root();
         let body = "---\nid: p1\n---\n\n# One\n";
         assert_eq!(
-            root.write_projection("Resources/Axon/Trips/One.md", &spec(), body)
+            root.write_projection("Resources/Sjel/Trips/One.md", &spec(), body)
                 .unwrap(),
             ProjectionOutcome::Created
         );
         assert_eq!(
-            root.write_projection("Resources/Axon/Trips/One.md", &spec(), body)
+            root.write_projection("Resources/Sjel/Trips/One.md", &spec(), body)
                 .unwrap(),
             ProjectionOutcome::Unchanged
         );
         assert_eq!(
-            root.write_projection("Resources/Axon/Trips/One.md", &spec(), "# Two\n")
+            root.write_projection("Resources/Sjel/Trips/One.md", &spec(), "# Two\n")
                 .unwrap(),
             ProjectionOutcome::Updated
         );
@@ -357,12 +357,12 @@ mod tests {
     #[test]
     fn a_human_note_at_the_path_is_refused_rather_than_overwritten() {
         let (dir, root) = temp_root();
-        std::fs::create_dir_all(dir.join("Resources/Axon/Trips")).unwrap();
-        let human = dir.join("Resources/Axon/Trips/One.md");
+        std::fs::create_dir_all(dir.join("Resources/Sjel/Trips")).unwrap();
+        let human = dir.join("Resources/Sjel/Trips/One.md");
         std::fs::write(&human, "# My trip, in my words\n").unwrap();
 
         assert_eq!(
-            root.write_projection("Resources/Axon/Trips/One.md", &spec(), "# generated\n")
+            root.write_projection("Resources/Sjel/Trips/One.md", &spec(), "# generated\n")
                 .unwrap(),
             ProjectionOutcome::NotOurs
         );
@@ -371,7 +371,7 @@ mod tests {
             "# My trip, in my words\n"
         );
         assert!(!root
-            .remove_projection("Resources/Axon/Trips/One.md", &spec())
+            .remove_projection("Resources/Sjel/Trips/One.md", &spec())
             .unwrap());
         assert!(human.exists(), "a refused path is never deleted either");
         std::fs::remove_dir_all(dir).unwrap();
@@ -381,15 +381,15 @@ mod tests {
     fn removing_a_projection_reports_whether_there_was_one() {
         let (dir, root) = temp_root();
         assert!(!root
-            .remove_projection("Resources/Axon/Trips/Gone.md", &spec())
+            .remove_projection("Resources/Sjel/Trips/Gone.md", &spec())
             .unwrap());
-        root.write_projection("Resources/Axon/Trips/Gone.md", &spec(), "# x\n")
+        root.write_projection("Resources/Sjel/Trips/Gone.md", &spec(), "# x\n")
             .unwrap();
         assert!(root
-            .remove_projection("Resources/Axon/Trips/Gone.md", &spec())
+            .remove_projection("Resources/Sjel/Trips/Gone.md", &spec())
             .unwrap());
         assert!(!root
-            .remove_projection("Resources/Axon/Trips/Gone.md", &spec())
+            .remove_projection("Resources/Sjel/Trips/Gone.md", &spec())
             .unwrap());
         std::fs::remove_dir_all(dir).unwrap();
     }
@@ -445,7 +445,7 @@ mod tests {
             Err(RootError::PatternEscapes(_))
         ));
         assert!(matches!(
-            root.write_projection("Resources/Axon/Trips/One.txt", &spec(), "x"),
+            root.write_projection("Resources/Sjel/Trips/One.txt", &spec(), "x"),
             Err(RootError::NotMarkdown(_))
         ));
         std::fs::remove_dir_all(dir).unwrap();
@@ -460,10 +460,10 @@ mod tests {
             .join(format!("axon-projection-outside-{}", std::process::id()));
         std::fs::create_dir_all(&outside).unwrap();
         std::fs::create_dir_all(dir.join("Resources")).unwrap();
-        std::os::unix::fs::symlink(&outside, dir.join("Resources/Axon")).unwrap();
+        std::os::unix::fs::symlink(&outside, dir.join("Resources/Sjel")).unwrap();
 
         assert!(matches!(
-            root.write_projection("Resources/Axon/One.md", &spec(), "x"),
+            root.write_projection("Resources/Sjel/One.md", &spec(), "x"),
             Err(RootError::Escapes { .. })
         ));
         std::fs::remove_dir_all(&dir).unwrap();

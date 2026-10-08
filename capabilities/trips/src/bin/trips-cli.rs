@@ -28,7 +28,7 @@ draft-intent prints a CreatePlan-shaped draft plus what it could not resolve.
 Persists nothing and resolves no station: every destination comes back as a
 place slug with null coordinates, exactly as typed text does.
 
-export-vault writes one Markdown file per plan under Resources/Axon/Trips/ in
+export-vault writes one Markdown file per plan under Resources/Sjel/Trips/ in
 the vault named by <overlay>/config/trips.json, each carrying every plan item's
 payload verbatim. The server does the same after every write; this is the copy
 you can take by hand.

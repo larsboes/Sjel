@@ -8,7 +8,7 @@
 //!
 //! ## Why this folder is different from every projection before it
 //!
-//! `Resources/Axon/Trips/` and `Resources/Axon/Subscriptions/` are machine rooms: a
+//! `Resources/Sjel/Trips/` and `Resources/Sjel/Subscriptions/` are machine rooms: a
 //! human never edits there, so the only question a write has to answer is "is this
 //! file mine". `Resources/Sources/` is a human-facing folder. Q49's own words are that
 //! this bridge "finally executes the Sources consolidation" — the seven source homes
@@ -468,7 +468,7 @@ mod tests {
         std::fs::remove_dir_all(dir).unwrap();
     }
 
-    /// The guard this folder needs and `Resources/Axon/` never did.
+    /// The guard this folder needs and `Resources/Sjel/` never did.
     #[test]
     fn a_human_note_holding_the_name_is_refused_and_never_deleted() {
         let (dir, root) = temp_root();

@@ -101,7 +101,7 @@ fn saving_writes_a_note_unsaving_removes_it_and_a_human_note_survives_both() {
         (0, 0, 2)
     );
 
-    // A human writes their own note in the folder — the case Resources/Axon never
+    // A human writes their own note in the folder — the case Resources/Sjel never
     // had. It must survive the sweep untouched.
     let human = vault.join("Resources/Sources/Why SQLite is the one I trust.md");
     let human_bytes = "---\ntype: source\n---\n\nBecause of the test suite.\n";

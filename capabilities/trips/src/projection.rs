@@ -9,7 +9,7 @@
 //! `capabilities/trips/README.md` had already specified the shape a month earlier
 //! and nothing implemented it: one file per plan in a configured vault folder,
 //! carrying the trip id, the schema and the revision in frontmatter. Q31 (2026-08-23)
-//! then supplied the folder — `Resources/Axon/` — and Q49 (2026-08-27) supplied the
+//! then supplied the folder — `Resources/Sjel/` — and Q49 (2026-08-27) supplied the
 //! mechanism, which is why the writing happens in `markdown_root::projection` and only
 //! the *shape* is here.
 //!
@@ -47,11 +47,12 @@ pub const VERSION: u32 = 3;
 /// Q31's home for a projection, plus one folder for this capability. Vault-relative
 /// and not configurable: a second declaration of where machine output goes is how two
 /// hosts end up writing to two different folders and neither notices.
-pub const DIR: &str = "Resources/Axon/Trips";
+// `Resources/Axon/Trips` until 2026-10-08, when the vault folder took the product name.
+pub const DIR: &str = "Resources/Sjel/Trips";
 
 /// One plan's file name and body, ready to write.
 pub struct Projection {
-    /// Vault-relative, `Resources/Axon/Trips/<name>.md`.
+    /// Vault-relative, `Resources/Sjel/Trips/<name>.md`.
     pub path: String,
     pub body: String,
 }
@@ -558,7 +559,7 @@ mod tests {
         );
         assert_eq!(
             render_all(std::slice::from_ref(&details))[0].path,
-            "Resources/Axon/Trips/St. Gallen- 17–21.md"
+            "Resources/Sjel/Trips/St. Gallen- 17–21.md"
         );
     }
 
@@ -572,8 +573,8 @@ mod tests {
         assert_eq!(
             paths,
             vec![
-                "Resources/Axon/Trips/Berlin (77580006).md",
-                "Resources/Axon/Trips/Berlin (ac680000).md",
+                "Resources/Sjel/Trips/Berlin (77580006).md",
+                "Resources/Sjel/Trips/Berlin (ac680000).md",
             ],
             "both sides of a collision are renamed, so neither name depends on order"
         );
@@ -606,7 +607,7 @@ mod tests {
 
         let first = export_all(&root, &plans).unwrap();
         assert_eq!((first.created, first.updated, first.unchanged), (2, 0, 0));
-        let berlin = dir.join("Resources/Axon/Trips/Berlin.md");
+        let berlin = dir.join("Resources/Sjel/Trips/Berlin.md");
         assert!(berlin.exists());
         assert!(
             std::fs::read_to_string(&berlin).unwrap().contains("3999"),
@@ -623,10 +624,10 @@ mod tests {
         let third = export_all(&root, &plans[..1]).unwrap();
         assert_eq!(
             third.removed,
-            vec!["Resources/Axon/Trips/Salzburg.md"],
+            vec!["Resources/Sjel/Trips/Salzburg.md"],
             "a stale safety copy is the one somebody would restore from"
         );
-        assert!(!dir.join("Resources/Axon/Trips/Salzburg.md").exists());
+        assert!(!dir.join("Resources/Sjel/Trips/Salzburg.md").exists());
         assert!(berlin.exists());
 
         std::fs::remove_dir_all(dir).unwrap();
@@ -636,7 +637,7 @@ mod tests {
     fn the_sweep_leaves_a_human_note_in_the_folder_alone() {
         let (dir, root) = temp_root();
         export_all(&root, &[details("trip:plan:aaaa1111", "Berlin", vec![])]).unwrap();
-        let human = dir.join("Resources/Axon/Trips/Why I go to Berlin.md");
+        let human = dir.join("Resources/Sjel/Trips/Why I go to Berlin.md");
         std::fs::write(&human, "# Because\n").unwrap();
 
         let report = export_all(&root, &[details("trip:plan:aaaa1111", "Berlin", vec![])]).unwrap();
@@ -662,7 +663,7 @@ mod tests {
         let details = details("trip:plan:18c72d1ebb4aac680000", "  ...  ", vec![]);
         assert_eq!(
             render_all(&[details])[0].path,
-            "Resources/Axon/Trips/ac680000.md"
+            "Resources/Sjel/Trips/ac680000.md"
         );
     }
 }

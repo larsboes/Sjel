@@ -105,7 +105,7 @@ function resolveCapability(registry, name) {
  */
 const ADAPTERS = [
   { id: "people", label: "People", folder: "Atlas/People/", capability: "vault" },
-  { id: "trips", label: "Trip projection", folder: "Resources/Axon/Trips/", capability: "trips" },
+  { id: "trips", label: "Trip projection", folder: "Resources/Sjel/Trips/", capability: "trips" },
 ];
 
 function adapterFor(path) {

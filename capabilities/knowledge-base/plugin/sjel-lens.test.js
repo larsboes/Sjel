@@ -129,7 +129,7 @@ describe("resolveCapability", () => {
 describe("adapterFor", () => {
   test("routes the two folders it knows", () => {
     expect(lens.adapterFor("Atlas/People/Erika Mustermann.md").id).toBe("people");
-    expect(lens.adapterFor("Resources/Axon/Trips/Berlin.md").id).toBe("trips");
+    expect(lens.adapterFor("Resources/Sjel/Trips/Berlin.md").id).toBe("trips");
   });
 
   test("everything else is nobody's note", () => {
@@ -265,7 +265,7 @@ describe("peopleReading", () => {
 /* --------------------------------------------------------------------- trips */
 
 // Trimmed from GET :8086/api/plans, 2026-09-09, beside the frontmatter the projection
-// wrote into Resources/Axon/Trips/Berlin.md.
+// wrote into Resources/Sjel/Trips/Berlin.md.
 const PLANS = [
   { id: "trip:plan:18c72d1ebb4aac680000", title: "Berlin", updated_at: "1788965111" },
   { id: "trip:plan:18c72d21c85f5a900001", title: "DevFest Hamburg 2026", updated_at: "1787911108" },

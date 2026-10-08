@@ -43,6 +43,17 @@ pub trait Extension: Send + Sync {
     fn tool_call(&self, _call: &ToolCall) -> Verdict {
         Verdict::Allow
     }
+
+    /// Runs on a tool's result before it becomes the message the model reads, and may rewrite
+    /// it. This is the copy that matters: it is what the model sees, what the session file
+    /// holds, and what a resumed conversation sends again. The front end's own event keeps the
+    /// raw text, because that trace goes to the operator's terminal and hiding their own
+    /// command's output from them helps nobody.
+    ///
+    /// The fifth hook, added 2026-10-08 (ISA.md, D9). It exists because a gate that reads a
+    /// call cannot see what a command prints: `curl -H "Authorization: Bearer $TOKEN"` names no
+    /// secret path, and the response may echo the token.
+    fn tool_result(&self, _call: &ToolCall, _content: &mut String) {}
 }
 
 /// The extensions a run names, in the order they run: the config list first, then the `--ext`

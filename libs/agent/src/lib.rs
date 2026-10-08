@@ -250,6 +250,12 @@ impl Agent {
                     call,
                     content: &content,
                 });
+                // The model's copy is the one an extension may rewrite: the event above is the
+                // operator's own terminal, and the session file holds what is pushed here.
+                let mut content = content;
+                for extension in &self.extensions {
+                    extension.tool_result(call, &mut content);
+                }
                 messages.push(Message::Tool {
                     tool_call_id: call.id.clone(),
                     content,
@@ -645,6 +651,56 @@ mod tests {
                 _ => Verdict::Allow,
             }
         }
+    }
+
+    #[test]
+    fn a_tool_result_hook_rewrites_the_model_copy_and_not_the_trace() {
+        /// Replaces one word in every `echo` result (AGT-27).
+        struct Redactor;
+        impl Extension for Redactor {
+            fn name(&self) -> &'static str {
+                "redactor"
+            }
+            fn tool_result(&self, call: &ToolCall, content: &mut String) {
+                if call.function.name == "echo" {
+                    *content = content.replace("secret", "****");
+                }
+            }
+        }
+        let echo = json!({ "tool_calls": [{ "index": 0, "id": "c1", "function": {
+            "name": "echo", "arguments": "{\"text\":\"the secret value\"}" } }] });
+        let (port, _requests) = serve(vec![
+            vec![delta(echo)],
+            vec![delta(json!({ "content": "done" }))],
+        ]);
+        let agent = Agent::new(
+            role(port),
+            vec![Box::new(Echo)],
+            [Box::new(Redactor) as Box<dyn Extension>],
+            Arc::default(),
+        )
+        .unwrap();
+        let mut messages = vec![Message::User {
+            content: "go".into(),
+        }];
+        let mut traced: Vec<String> = Vec::new();
+        agent
+            .run(&mut messages, |event| {
+                if let Event::ToolResult { content, .. } = event {
+                    traced.push(content.to_owned());
+                }
+            })
+            .unwrap();
+
+        assert_eq!(
+            messages[2],
+            Message::Tool {
+                tool_call_id: "c1".into(),
+                content: "the **** value".into()
+            },
+            "the model's copy was not rewritten"
+        );
+        assert_eq!(traced, ["the secret value"], "the trace is the operator's");
     }
 
     #[test]

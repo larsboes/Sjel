@@ -56,6 +56,20 @@ impl Extension for Guard {
         ]
     }
 
+    /// The third part of the ported file, and the one hook the guard needed that the contract did
+    /// not have (D9): what a tool printed is scrubbed before it becomes the model's message. A
+    /// gate reads the call, and a call that says `curl -H "Authorization: Bearer $TOKEN"` names
+    /// no secret path while the response may echo the token.
+    ///
+    /// Wider than the ported list by one tool: that file scrubs `bash` and `read`, and `grep`
+    /// prints matching lines out of files, which is the same class of output. `find` prints
+    /// paths, `write` and `edit` print a sentence, and none of those carries a value.
+    fn tool_result(&self, call: &ToolCall, content: &mut String) {
+        if matches!(call.function.name.as_str(), "bash" | "read" | "grep") {
+            *content = scrub(content, &[]);
+        }
+    }
+
     fn tool_call(&self, call: &ToolCall) -> Verdict {
         // A call whose arguments are not JSON never reaches a tool: the loop answers it with the
         // parse error before `run` is consulted. There is nothing to block, so pass it and let
@@ -895,6 +909,40 @@ mod tests {
             .run(&json!({ "cmd": "printf 'PLAIN=%s\\n' some-literal-value-here" }))
             .unwrap();
         assert!(out.contains("PLAIN=some-literal-value-here"), "{out}");
+    }
+
+    #[test]
+    fn the_guard_scrubs_what_a_tool_printed() {
+        let printed = "MISSING=1\nDEMO_TOKEN=demo-token-value-1234567890\ntail\n";
+        let bash = ToolCall {
+            id: "c".into(),
+            kind: "function".into(),
+            function: FunctionCall {
+                name: "bash".into(),
+                arguments: "{}".into(),
+            },
+        };
+        let mut content = printed.to_owned();
+        guard().tool_result(&bash, &mut content);
+        assert!(content.contains("DEMO_TOKEN=****"), "{content}");
+        assert!(!content.contains("demo-token-value"), "{content}");
+        assert!(
+            content.contains("tail"),
+            "the rest of the output was lost: {content}"
+        );
+
+        // A tool that prints no value is left alone, so the hook is a list and not a blanket.
+        let mut written = "edited src/lib.rs".to_owned();
+        let write = ToolCall {
+            id: "c".into(),
+            kind: "function".into(),
+            function: FunctionCall {
+                name: "write".into(),
+                arguments: "{}".into(),
+            },
+        };
+        guard().tool_result(&write, &mut written);
+        assert_eq!(written, "edited src/lib.rs");
     }
 
     #[test]

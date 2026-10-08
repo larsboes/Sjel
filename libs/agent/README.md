@@ -41,9 +41,11 @@ tools.
 ## Extensions
 
 The core is one tool set. Everything beyond it is an official extension: a first-party Rust
-crate compiled into this binary, doing nothing until it is named. The contract is four hooks in
+crate compiled into this binary, doing nothing until it is named. The contract is five hooks in
 [`src/extension.rs`](src/extension.rs) — the tools it adds, the system prompt, the request
-context, and the gate in front of every tool call.
+context, the gate in front of every tool call, and the rewrite applied to what a tool returned
+before the model reads it. That last one touches the model's copy only: the trace on your own
+terminal keeps the raw text.
 
 `<overlay>/config/agent.toml` names the set a run starts with, and `--ext` changes it for one
 run, in the order the flags are given:
@@ -61,20 +63,24 @@ sjel-agent --ext -guard "..."     # remove one
 
 A name without a sign is an error rather than a guess, and a name this binary does not carry
 stops the run at startup: a session quietly missing the extension the operator asked for is worse
-than one that does not start. The guard is compiled in and on by default — the one exception to "off until named", because its
+than one that does not start.
+
+The guard is compiled in and on by default — the one exception to "off until named", because its
 absence is what puts a credential in a request. `--ext -guard`, `--ext none`, or an `agent.toml`
 that names a set without it, removes it, and the startup line says so when it is gone. It refuses
 secret paths on `read`, `edit`, `grep` and `find`, and any `bash` command that names one unless
 it is an allowlisted shape (`source .env && …`, `export VAR=…`, `bw unlock`, writing a reference).
-Everything else in wave 1 — skills, MCP, compaction, Rust diagnostics — is still to come.
+It also scrubs what `bash`, `read` and `grep` returned before the model reads it.
 
-The guard also carries the two tools that make a refusal actionable, because a guard that only
-says no leaves a run with no way to do legitimate work: `vault_exec` runs a command with an env
-file loaded and replaces every value it loaded with `****` in the result — by value, by shape and
-by length — and `vault_keys` lists the names in such a file without the values. Pass `keys` to
-`vault_exec` to put only the variables the command needs into its environment; without it the
-whole environment and every variable in the file are inherited, which is the risky default and
-what the tool's description says.
+It carries the two tools that make a refusal actionable, because a guard that only says no leaves
+a run with no way to do legitimate work: `vault_exec` runs a command with an env file loaded and
+replaces every value it loaded with `****` in the result — by value, by shape and by length — and
+`vault_keys` lists the names in such a file without the values. Pass `keys` to `vault_exec` to put
+only the variables the command needs into its environment; without it the whole environment and
+every variable in the file are inherited, which is the risky default and what the tool's own
+description says.
+
+Everything else in wave 1 — skills, MCP, compaction, Rust diagnostics — is still to come.
 
 ## Run it
 
@@ -109,9 +115,8 @@ Add a `coding` role to the overlay's `config/inference.json` first:
 
 ## Not here yet
 
-The extension contract is in place (F1) and the guard uses it (F2). Next: skills, MCP, compaction
-and Rust diagnostics, and one decision that is still open — the `tool_result` hook, which that
-file's output sanitizer needs and `bash` does not have. Line editing, a full-screen TUI and
+The extension contract is in place (F1) and the guard uses all of it, including the fifth hook
+(F2, D9). Next: skills, MCP, compaction and Rust diagnostics. Line editing, a full-screen TUI and
 subagents are named in [`ISA.md`](ISA.md) as wave 2, not decided.
 
 A Ctrl-C while the model reads a long prompt and streams nothing takes effect at the first

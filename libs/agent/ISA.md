@@ -2,7 +2,7 @@
 project: sjel-agent
 type: isa
 phase: climbing
-progress: 58
+progress: 60
 principal_stated_goal: "pi agent inspiration rust implementation of slim core and official extensions from start but opt in"
 ---
 
@@ -128,6 +128,12 @@ and commands are not copied.
   extension denies one call of two in the same turn, its tool's counter stays at 0, the other
   call runs, `system` fired once and `before_request` twice for two requests. Falsifier: a denied
   call whose tool `run` executes. Probe: a test extension that denies `echo` and counts runs.
+- [x] AGT-27 — `tool_result` runs on a tool's result before it becomes the model's message, and
+  may rewrite it; the front end's own event keeps the raw text. Evidence:
+  `a_tool_result_hook_rewrites_the_model_copy_and_not_the_trace` (`src/lib.rs`) — an extension
+  replaces a word, the message holds the replacement, and the event the front end saw holds the
+  original. Falsifier: a rewritten message whose event was rewritten with it, or a hook that never
+  fired.
 - [x] AGT-7 — a bare run is the F0 core. With no extensions named, the request body and the tool
   list equal F0's. Evidence: `a_bare_run_sends_the_core_request_body` (`src/lib.rs`) pins the whole
   body — `model`, `messages`, `stream`, and the one tool's name, description and schema — so an
@@ -204,6 +210,14 @@ hooks, so they needed nothing the core had not got.
   file. Falsifier: a fixture whose value survives into the result.
 - [x] AGT-26 — `vault_keys` lists the names in an env file and never a value. Evidence:
   `vault_keys_lists_names_and_never_values`. Falsifier: a value in the result.
+- [x] AGT-28 — the guard scrubs what `bash`, `read` and `grep` returned, with the same three
+  passes `vault_exec` uses, before the model reads it (D9). Evidence:
+  `the_guard_scrubs_what_a_tool_printed` (`src/ext/guard.rs`), and live 2026-10-08: a run told to
+  `cat` a file whose only line was a token reported `DEMO_TOKEN=****`, with the value in no part
+  of the model's copy — stdout zero, session file zero — and in the operator's stderr trace by
+  design. Wider than the ported file by one tool: it scrubs `bash` and `read`, and `grep` prints
+  matching lines out of files, which is the same class of output. Falsifier: a value from a tool
+  result in the model's message.
 
 One divergence from the ported file, and it was writing those tests that found it: the ported
 name list for the shape pass has no `BW_` entry, and this operator's shell environment carries
@@ -270,14 +284,6 @@ agent reaches Sjel's data with no data path of its own.
 
 ## Not yet specified
 
-- **A tool-result hook.** `secrets-guard.ts` also rewrites `tool_result` content, stripping
-  secret-shaped lines and long random strings before the model sees them. The extension contract
-  has four hooks and this is not one of them (F1's principle: a new hook is a core change and a
-  decision here first). The case for it: the guard checks what a command *names*, and
-  `source .env && curl -H "Authorization: $TOKEN" …` is allowed, so a response that echoes the
-  token reaches the transcript — `vault_exec` scrubs its own output, but the `bash` tool does not.
-  The case against: every hook the core grows is one pi's release cadence cannot break but this
-  file can.
 - **MCP client: `rmcp` or hand-written.** The official Rust SDK is async. The core is blocking
   (C3). Measure `rmcp`'s dependency count against the size of `initialize` + `tools/list` +
   `tools/call` over stdio before choosing.
@@ -302,6 +308,8 @@ agent reaches Sjel's data with no data path of its own.
 | AGT-10 | command | table test over the `secrets-guard.ts` header cases | all equal | cargo | F2 |
 | AGT-11 | command | run with `--ext -guard`, read startup line | says off | cargo | F2, D3 |
 | AGT-10b | command | every guarded-name core tool, from its own schema | none missing | cargo | F2 |
+| AGT-27 | command | a `tool_result` extension over a canned call | message rewritten, trace not | cargo | F1, D9 |
+| AGT-28 | command | a tool result holding a secret line | model's copy scrubbed | cargo | F2, D9 |
 | AGT-24 | command | scoped run reads an off-scope variable | absent | cargo | F2b |
 | AGT-25 | command | a value printed on its own, and a value the file loaded | stripped | cargo | F2b |
 | AGT-26 | command | `vault_keys` over a fixture file | names, no values | cargo | F2b |
@@ -357,12 +365,26 @@ agent reaches Sjel's data with no data path of its own.
 - **2026-10-03 — D7: sjel-agent is the fifth harness, registry model** (PRD Q8). AGT-21.
 - **2026-10-03 — D8: F6 uses installed tools plus `proptest`** (PRD Q9). `check`, `clippy`,
   `test`, and `cargo deny` once a `deny.toml` exists. No `toolchain.toml` change. AGT-22.
+- **2026-10-08 — D9: the contract gains `tool_result`, a fifth hook.** The guard's two halves
+  close the file read and the credential substitution it names, and leave one thing open: nothing
+  reads a tool's *output*, so `curl -H "Authorization: Bearer $TOKEN"` — allowed by the gate, and
+  naming no secret path — puts the token in the transcript when a response echoes it. Chosen over
+  scrubbing inside the `bash` tool, because `read` and `grep` print file content too and wave 2
+  will add more tools that do, so that would be one implementation per tool. Chosen over a gate on
+  the command's text, because the value is not in the text. The cost, stated: one more hook for
+  the core to keep working.
 - **2026-10-03 — this plan lives here, not in the Axon PRD.** `PRD Axon.md` in the vault was frozen
   2026-09-26: "Open work lives in the repo's `ISA.md` files. Nothing new is recorded here." The idea got
   its own vault PRD the same day (header), because an ISA records claims, not why they exist.
 
 ## Log
 
+- 2026-10-08 · D9 and the fifth hook. `Extension::tool_result` rewrites a tool's result before it
+  becomes the model's message, and the front end's event keeps the raw text: that trace goes to
+  the operator's own terminal, and hiding their own command's output from them helps nobody. The
+  guard uses it to run the ported sanitizer over `bash`, `read` and `grep` results — the last third
+  of `secrets-guard.ts`, and the one part of that file ported wider than it was written. 41 tests,
+  clippy clean.
 - 2026-10-08 · F2b, the guard's other half. `vault_exec` and `vault_keys` as `Extension::tools`,
   so a refusal now has a way through: a command gets the credential in its environment and the
   result comes back with every value the call loaded replaced by `****` — by value, by shape and

@@ -99,4 +99,20 @@ public final class NodeBridge: Sendable {
         request.timeoutInterval = 60
         return request
     }
+
+    /// Today's and tomorrow's calendar entries through the shell's proxy, or nil when the
+    /// calendar did not answer.
+    public func calendarToday(now: Date = Date()) async -> [CalendarEntry]? {
+        guard let bearer = token.get() else { return nil }
+        let range = Today.range(now: now)
+        var parts = URLComponents(url: baseURL.appendingPathComponent("calendar/api/entries"), resolvingAgainstBaseURL: false)
+        parts?.queryItems = [URLQueryItem(name: "from", value: range.from), URLQueryItem(name: "to", value: range.to)]
+        guard let url = parts?.url else { return nil }
+        var request = URLRequest(url: url)
+        request.setValue("Bearer \(bearer)", forHTTPHeaderField: "Authorization")
+        guard let (data, response) = try? await session.data(for: request),
+              (response as? HTTPURLResponse)?.statusCode == 200
+        else { return nil }
+        return try? JSONDecoder().decode([CalendarEntry].self, from: data)
+    }
 }

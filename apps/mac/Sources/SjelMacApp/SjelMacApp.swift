@@ -30,6 +30,8 @@ final class SjelMacViewModel: ObservableObject {
     @Published var pendingWrites: [AgentApproval] = []
     /// The agents' recent calls through the gate, newest first.
     @Published var agentCalls: [AgentCallRecord] = []
+    /// Today's and tomorrow's calendar entries still ahead; nil when the calendar did not answer.
+    @Published var today: [CalendarEntry]? = nil
     /// Capabilities with a start or stop in flight, so their buttons wait.
     @Published var busy: Set<String> = []
 
@@ -97,6 +99,7 @@ final class SjelMacViewModel: ObservableObject {
     func refreshStatus() async {
         status = await bridge.status()
         checkedAt = Date()
+        today = await bridge.calendarToday().map { Today.ahead($0, now: Date()) }
     }
 
     /// Starts or stops capabilities one after the other, then reads the health again.
@@ -224,6 +227,11 @@ struct SjelMenuBarView: View {
             if !model.pendingWrites.isEmpty {
                 Divider()
                 approvals
+            }
+
+            if let today = model.today {
+                Divider()
+                todaySection(today)
             }
 
             Divider()
@@ -357,6 +365,44 @@ struct SjelMenuBarView: View {
             Text("Checked \(checked, style: .relative) ago")
                 .font(.system(size: 10))
                 .foregroundStyle(.secondary)
+        }
+    }
+
+    /// The calendar for today and tomorrow. An entry still marked possible carries a dot:
+    /// Home ranks it as a decision. A click opens the calendar.
+    private func todaySection(_ entries: [CalendarEntry]) -> some View {
+        VStack(alignment: .leading, spacing: 4) {
+            Text("Today").font(.system(size: 11, weight: .semibold))
+            if entries.isEmpty {
+                Text("Nothing on the calendar until tomorrow night.")
+                    .font(.system(size: 11))
+                    .foregroundStyle(.secondary)
+            }
+            ForEach(entries.prefix(4)) { entry in
+                Button {
+                    model.openDashboard(next: "/calendar")
+                } label: {
+                    HStack(spacing: 6) {
+                        Circle()
+                            .fill(entry.isPossible ? Color.orange : Color.clear)
+                            .frame(width: 6, height: 6)
+                        Text(entry.title).lineLimit(1).truncationMode(.tail)
+                        Spacer()
+                        Text(Today.when(entry, now: Date()))
+                            .font(.system(size: 10, design: .monospaced))
+                            .foregroundStyle(.secondary)
+                    }
+                    .contentShape(Rectangle())
+                }
+                .buttonStyle(.plain)
+                .font(.system(size: 11))
+                .help(entry.isPossible ? "\(entry.title). Still possible: decide in the calendar." : entry.title)
+            }
+            if entries.count > 4 {
+                Text("and \(entries.count - 4) more")
+                    .font(.system(size: 10))
+                    .foregroundStyle(.secondary)
+            }
         }
     }
 

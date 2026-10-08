@@ -108,3 +108,38 @@ import Testing
         #expect(bridge.lifecycleRequest("", true) == nil)
     }
 }
+
+@Suite struct TodayTests {
+    func entry(_ id: String, _ start: String, _ end: String, allDay: Bool) -> CalendarEntry {
+        let json = #"{"id":"\#(id)","title":"\#(id)","starts_at":"\#(start)","ends_at":"\#(end)","all_day":\#(allDay),"commitment":"planned"}"#
+        return try! JSONDecoder().decode(CalendarEntry.self, from: Data(json.utf8))
+    }
+
+    let now = Today.time.date(from: "2026-10-08T09:30:00")!
+
+    @Test func finishedEntriesDropAndAllDayLeads() {
+        let entries = [
+            entry("standup", "2026-10-08T09:00:00", "2026-10-08T09:15:00", allDay: false),
+            entry("lunch", "2026-10-08T12:00:00", "2026-10-08T13:00:00", allDay: false),
+            entry("berlin", "2026-10-07", "2026-10-14", allDay: true),
+        ]
+        #expect(Today.ahead(entries, now: now).map(\.id) == ["berlin", "lunch"])
+    }
+
+    @Test func aMultiDayEntryNamesItsLastDay() {
+        let berlin = entry("berlin", "2026-10-07", "2026-10-14", allDay: true)
+        #expect(Today.when(berlin, now: now).hasPrefix("until "))
+        #expect(Today.when(berlin, now: now).contains("13"))
+    }
+
+    @Test func aTimedEntryOnTheNextDaySaysTomorrow() {
+        let train = entry("train", "2026-10-09T07:10:00", "2026-10-09T12:00:00", allDay: false)
+        #expect(Today.when(train, now: now).hasPrefix("tomorrow "))
+    }
+
+    @Test func theRangeIsTodayAndTomorrow() {
+        let range = Today.range(now: now)
+        #expect(range.from == "2026-10-08")
+        #expect(range.to == "2026-10-09")
+    }
+}

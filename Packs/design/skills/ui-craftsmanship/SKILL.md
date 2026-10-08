@@ -1,55 +1,116 @@
 ---
 name: ui-craftsmanship
-description: Guides design, layout, styling, and visual review of Sjel user interfaces (Dashboard, capability UIs, components) per anti-vibe-coding doctrine, high-density operational principles, and mechanical sympathy in CSS. Use when designing new UI components, reviewing visual layouts, refactoring CSS/Tailwind styles, fixing spacing/typography drift, or auditing interfaces for generic AI/SaaS design tells. Do not use for backend Rust APIs, non-visual scripts, or prose writing.
+description: Guides design, layout, styling and visual review of Sjel interfaces (the dashboard, capability UIs, components). Covers three rules — the data picks the form, the explicitness ladder for progressive disclosure, and the state inventory of UI the reader does not see at first — plus a speed budget, anti-vibe-coding tells and mechanical sympathy. Use when designing or reviewing a page, table, panel or component, when moving a page onto the shared UI kit, when deciding where an action goes or whether a feature needs its own page, or when auditing an interface for generic AI or SaaS design tells. Do not use for backend Rust APIs, non-visual scripts or prose writing.
 allowed-tools: Read, Write, Edit, Bash
 ---
 
 # UI Craftsmanship
 
-Design and build dense, glanceable, and mechanically sound user interfaces for Sjel.
-Reject generic AI/SaaS landing page tropes in favor of intentional, high-utility operational views.
+Sjel is a workstation that one person reads many times a day. A good view answers the reader's
+question at a glance, keeps every other action one step away, and never makes the reader wait.
 
-## Core Invariants
+The rules below are written in terms of intent, not a framework, so they hold if the dashboard
+moves from Svelte to GPUI (decision of 2026-10-08). The Svelte implementation of each rule —
+kit primitives, tokens and the tests that enforce them — is in
+[`references/sjel-dashboard.md`](references/sjel-dashboard.md). Read it before you edit
+`dashboard/`.
 
-1. **Reject the 12 Vibe-Coded AI Tells**: Never default to the generic AI looks (the cream background + serif display + sage accent; purple/indigo hero gradients; over-rounded `rounded-2xl` corners on everything; neon glow in dark mode; emoji icons).
-2. **Operational Density & Glanceability**: Sjel is an operational workstation, not a marketing website. Prioritize information density, clear visual hierarchy, scannable lists, and tabular figures for numerical data.
-3. **Mechanical Sympathy in CSS**:
-   * **Zero Cumulative Layout Shift (CLS)**: Always reserve aspect ratio or dimensions for dynamic images, charts, and lazy content.
-   * **Hardware-Accelerated Motion**: Animate *only* `transform` and `opacity`. Never animate `width`, `height`, `margin`, or `padding` which trigger layout reflow.
-   * Respect `prefers-reduced-motion`.
-4. **Sjel Typography & Identity**:
-   * Font stack: `IBM Plex Sans` for UI copy; `IBM Plex Mono` for code, timestamps, and metrics (with `font-variant-numeric: tabular-nums`).
-   * Color tokens: derive from the active overlay or theme system, never hardcode random hex values.
+Source for rules 1–3: Kole Jain, "The 3 dashboard UI flaws that give away you've never built
+one" (https://www.youtube.com/watch?v=Ksx9C2-3yMo), adapted to Sjel.
+
+## Rule 1: the data picks the form
+
+Before you choose a layout, name the shape of the data. Then use the form that shape asks for.
+
+| The data is | Show it as | Not as |
+|---|---|---|
+| A value from a fixed set (status, category, kind) | A chip with a tone | Free text in a column |
+| A number, an amount, a date, a count | Right-aligned, monospace, tabular figures | Left-aligned proportional text |
+| Long free text in a dense row | One line, truncated, full text in a tip or the detail | A row that wraps to three lines |
+| A row the reader cannot act on (cancelled, spent, zero) | Dimmed, still in place | Hidden, or styled like the live rows |
+| Records ordered by time | A timeline or a list grouped by day | A table sorted by a timestamp column |
+| Many records with the same fields | A table, with a board or timeline view of the same set | A grid of cards |
+| One record with many fields | A property list in a side panel | A wide table with one row |
+| A total that changes over time | A small chart next to the list it summarizes | Only the list |
+
+Colour comes from the data. A tone says what a value means (settled, needs a decision, broken,
+chosen, not active). Decorative colour is a defect. One urgent item in red reads instantly; ten
+coloured items read as noise.
+
+## Rule 2: the explicitness ladder
+
+Every action has a place on a ladder from most to least visible. Put each action on the lowest
+rung that its use still allows.
+
+| Rung | Form | Use for |
+|---|---|---|
+| 1 | Labelled control, always visible | The one primary action of the view |
+| 2 | Icon control, always visible, with a tip | Frequent actions where space is tight |
+| 3 | Shown on hover and on keyboard focus | Secondary per-row actions (remove, copy, open externally) |
+| 4 | Inside a popover, menu or side panel | Rare actions and editors (share, change a price, history) |
+| 5 | Keyboard shortcut or command palette only | Power actions that already have a visible path elsewhere |
+
+Rules for placing an action:
+
+1. Rank by frequency first, then by cost of a mistake. A destructive action never sits on
+   rung 1 or 2 next to the primary action.
+2. A new feature goes into a side panel or popover on the page that owns its data. Give it a
+   page of its own only when it has its own dataset and its own primary action.
+3. Rung 3 must work without a mouse. An action that shows on hover also shows on focus, and is
+   always visible on a device with no hover.
+4. Hiding is sequencing, not deleting. A disclosed detail stays in the accessibility tree.
+5. Lower rungs cost less to render. Content on rung 4 renders when it opens, not with the page.
+
+## Rule 3: the state inventory
+
+Most of a finished interface is the UI the reader does not see at first. Before a component is
+done, check each state below. Write "not applicable" for a state only when you know why.
+
+| State | Requirement |
+|---|---|
+| Hover | Rows and controls that react to a click show that they react |
+| Focus | Every control is reachable by keyboard and shows a visible focus ring |
+| Tip | Every icon-only control and every ambiguous label has a tip. The tip is also its accessible name |
+| Empty | Say nothing when quiet is normal. Say what to do next when the reader expected data |
+| Loading | Only for remote data. Reserve the final size so nothing shifts when data arrives |
+| Error | Say what failed and offer retry where retry can work |
+| Stale | Data older than its refresh interval shows its age |
+| Disabled | A disabled control says why in its tip |
+| Inactive | Spent or cancelled records are dimmed, not removed |
+| Overflow | Long text truncates, and the full text is one hover or one click away |
+
+## Speed budget
+
+Speed is a feature of the design, not a later optimisation.
+
+- A click or keypress shows a visible response in under 100 ms. Local data shows with no
+  spinner.
+- Every primary action has a keyboard path. Lists move with J/K and open with Enter.
+- Motion animates only transform and opacity, and stays at or below the motion tokens
+  (100–300 ms). Respect reduced motion.
+- Prefer a native platform feature to a script: a native popover, a `<dialog>`, a `<details>`.
+  In GPUI, prefer the framework's own element.
+- Do not render what the reader cannot see (rule 2, item 5). Long lists render in pages or
+  virtualize.
 
 ## Workflow
 
-### 1. Identify the View Persona
-* Determine the layout's purpose:
-  * **Operational Dashboard** (e.g. `SjelGlance`, `HomeHorizon`): High density, tabular alignment, glanceable metric tiles, low visual noise.
-  * **Interactive Explorer** (e.g. `TransactionTable`, `OmniSearch`, `MonthGrid`): Clear keyboard navigation, fixed column widths, sticky headers, instant feedback.
-  * **Inspector / Modal** (e.g. `AssistantDrawer`, `DecisionEngineModal`): Focused task surface, escape-to-close, trap focus cleanly.
+1. **Name the view's question.** A view answers one question ("what needs me today", "where did
+   the money go"). The answer goes first. Everything else moves down the ladder.
+2. **Shape the data** with rule 1. Use a kit primitive. Add a primitive to the kit only when a
+   page needs one that does not exist.
+3. **Place every action** with rule 2.
+4. **Walk the state inventory** with rule 3.
+5. **Check the tells and the budget.** Read
+   [`references/anti-slop-tells.md`](references/anti-slop-tells.md) and
+   [`references/mechanical-sympathy-in-ui.md`](references/mechanical-sympathy-in-ui.md).
+6. **Run the dashboard tests** listed in [`references/sjel-dashboard.md`](references/sjel-dashboard.md).
 
-### 2. Audit Against Vibe-Coded Tells
-Before committing any UI markup or styling, check against the catalog:
-* Are buttons or cards using oversized border radiuses (`rounded-3xl` / `rounded-full`) for rectangular content? -> Use subtle, disciplined radii (`rounded` / `rounded-md` / 4-6px).
-* Is text using gradient fills (`bg-clip-text text-transparent bg-gradient-to-r...`)? -> Use solid, high-contrast text.
-* Are emojis used as icons? -> Use clean SVG vector icons (`Icon.svelte`).
-* Read [`references/anti-slop-tells.md`](references/anti-slop-tells.md).
-
-### 3. Establish Typographic & Spacing Rhythm
-* Use a consistent 4px/8px spacing scale (`p-1`, `p-2`, `p-4`, `gap-3`).
-* Use `tabular-nums` for timestamps, currency, and quantities so numbers don't jump during live updates.
-* Read [`references/visual-hierarchy-and-typography.md`](references/visual-hierarchy-and-typography.md).
-
-### 4. Verify Mechanical Sympathy & Performance
-* Verify that hover and entrance transitions run at 60fps without repaints.
-* Check contrast ratios for both light and dark themes using WCAG AA standards (minimum 4.5:1 for body text).
-* Read [`references/mechanical-sympathy-in-ui.md`](references/mechanical-sympathy-in-ui.md).
-
-## Reference Routing
+## Reference routing
 
 | Topic | Reference |
-| --- | --- |
-| The 12 AI design tells, code signatures, and fixes | [`references/anti-slop-tells.md`](references/anti-slop-tells.md) |
-| IBM Plex typography, tabular numbers, spacing grid | [`references/visual-hierarchy-and-typography.md`](references/visual-hierarchy-and-typography.md) |
-| Zero CLS, 60fps CSS transitions, contrast, reduced motion | [`references/mechanical-sympathy-in-ui.md`](references/mechanical-sympathy-in-ui.md) |
+|---|---|
+| Svelte kit primitives, tokens, enforcing tests, how each rule is built today | [`references/sjel-dashboard.md`](references/sjel-dashboard.md) |
+| The AI design tells, their code signatures and fixes | [`references/anti-slop-tells.md`](references/anti-slop-tells.md) |
+| Typography, number alignment, spacing, density, semantic colour | [`references/visual-hierarchy-and-typography.md`](references/visual-hierarchy-and-typography.md) |
+| Zero layout shift, compositor-only motion, contrast, reduced motion | [`references/mechanical-sympathy-in-ui.md`](references/mechanical-sympathy-in-ui.md) |

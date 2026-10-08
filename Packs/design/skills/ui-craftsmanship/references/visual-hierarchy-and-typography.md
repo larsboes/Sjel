@@ -1,39 +1,40 @@
-# Visual Hierarchy, Typography & Density
+# Visual hierarchy, typography and density
 
-Operational tools like Sjel require clear visual hierarchy to communicate state quickly without fatiguing the operator.
+Sjel is read many times a day. Hierarchy tells the reader where to look first. Density lets
+them compare without scrolling. Token names below are the dashboard's (`dashboard/src/app.css`).
 
-## 1. Typography Discipline (IBM Plex)
-* **Body & UI**: `font-family: 'IBM Plex Sans', -apple-system, sans-serif;`
-  - Clean, legible, distinct letterforms (e.g. clear distinction between `l`, `1`, and `I`).
-* **Data, Code & Metrics**: `font-family: 'IBM Plex Mono', monospace;`
-  - Always activate tabular numbers: `font-variant-numeric: tabular-nums;`
-  - Right-align numbers in tables so decimal places and digit magnitudes align visually.
-* **Typographic Scale**:
-  - `text-xs` (11–12px): Metadata, secondary badges, table footers.
-  - `text-sm` (13–14px): Standard UI body, table cell text, form labels.
-  - `text-base` (15–16px): Section leads, primary interactive elements.
-  - `text-lg` / `text-xl` (18–20px): Panel titles, metric summaries.
-  - Avoid giant marketing headings (`text-6xl`) in workstation views.
+## Typography
 
-## 2. Spacing Scale (4px/8px Grid)
-* Build layouts using a strict modular scale:
-  - `4px` (`gap-1`, `p-1`): Inner icon-to-label spacing, compact tag padding.
-  - `8px` (`gap-2`, `p-2`): List item spacing, button internal padding.
-  - `12px` (`gap-3`): Card internal element separation.
-  - `16px` (`gap-4`, `p-4`): Panel padding, grid gutter.
-  - `24px` (`gap-6`, `p-6`): Primary section boundary.
-* Avoid arbitrary, unconstrained spacing (`p-[17px]`, `gap-[23px]`).
+- **UI text**: IBM Plex Sans (`--font-sans`).
+- **Data, code, timestamps, amounts**: IBM Plex Mono (`--font-mono`) with
+  `font-variant-numeric: tabular-nums`, so digits do not shift when values change.
+- **Numbers in a column are right-aligned**, so digits line up by place value.
+- **Scale**: use the type tokens (`--text-2xs` to `--text-2xl`). Metadata and table headers sit
+  at the bottom of the scale, panel titles near the middle. Workstation views have no
+  marketing-size headings.
 
-## 3. High Information Density
-* Operators scan across multiple data dimensions simultaneously:
-  - Keep row heights consistent (e.g. `36px` to `40px` for compact tables).
-  - Use muted text colors (`text-zinc-500` / `text-neutral-400`) for labels and units, leaving high-contrast text (`text-zinc-900` / `text-zinc-100`) for the actual data value.
-  - Collapse secondary controls into contextual menus or hover actions to keep primary views scannable.
+## Spacing
 
-## 4. Semantic Color Tokens
-* Colors must communicate meaning, not decoration:
-  - **Neutral**: Foundation surfaces, borders, and text hierarchy.
-  - **Live / Active / Healthy**: Emerald/Green (`text-emerald-500`).
-  - **Warning / Degraded**: Amber/Yellow (`text-amber-500`).
-  - **Critical / Refused / Failed**: Rose/Red (`text-rose-500`).
-  - **Informational / Primary**: Blue/Cyan (`text-sky-500`).
+- Use the spacing tokens (`--space-1` to `--space-8`) on a 4 px base. No arbitrary values.
+- Tight spacing groups related items. A larger gap separates groups. Do not use a border where
+  a gap already separates.
+
+## Density
+
+- Keep row heights equal inside a table. Compact rows are about 28–36 px.
+- Labels and units use secondary or tertiary text. The value uses primary text.
+- Move secondary controls down the explicitness ladder (`SKILL.md`, rule 2). Do not shrink them
+  to fit.
+
+## Semantic colour
+
+Colour says what a value means. Use the tone tokens, never a raw hue.
+
+| Meaning | Tone |
+|---|---|
+| Settled, healthy, done | success |
+| Needs a decision, degraded | warning |
+| Broken, failed, refused | danger |
+| Chosen, primary, link | accent / primary |
+| Not active | muted (tertiary text, no fill) |
+| Everything else | neutral |

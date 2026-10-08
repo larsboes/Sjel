@@ -1,49 +1,45 @@
-# Mechanical Sympathy in UI (CSS Performance & Accessibility)
+# Mechanical sympathy in UI
 
-Just as systems Rust code respects memory and cache lines, frontend interfaces must respect browser layout engines, GPU compositing, and user accessibility.
+The interface respects the renderer the way systems code respects the cache. These rules hold
+in a browser and in a GPU-native toolkit such as GPUI. Browser specifics are marked.
 
-## 1. Zero Cumulative Layout Shift (CLS)
-Unexpected layout shifts during live data polling or asset loading destroy operator trust:
-* **Reserve Aspect Ratios**: Always set `aspect-ratio` or explicit `width`/`height` on images, chart containers, and maps:
-  ```svelte
-  <div class="aspect-video w-full rounded bg-zinc-900/50">
-      <Chart data={data} />
-  </div>
-  ```
-* **Fixed Dimensions for Skeletons**: Skeleton loaders must match the exact pixel height and margin of the final content they replace.
-* **Scrollbar Stability**: Use `scrollbar-gutter: stable;` on main containers to prevent content jumping when scrollbars appear or disappear.
+## No layout shift
 
-## 2. 60 FPS Transitions & GPU Compositing
-* **The Golden Rule**: Animate *only* `transform` and `opacity`.
-  - Properties like `top`, `left`, `width`, `height`, `margin`, and `padding` trigger full layout reflows (recalculating the position of every sibling element on the page).
-  - `transform: translate3d(x, y, 0)` and `opacity` are handled directly on the compositor thread on the GPU without repainting the document.
-* **Keep Transitions Snappy**:
-  - Micro-interactions (hover, active, focus): `100ms–150ms cubic-bezier(0.4, 0, 0.2, 1)`.
-  - Dialog / Drawer entry: `200ms–250ms ease-out`.
-  - Never add transitions longer than 300ms for everyday operational actions.
+A shift during a live update breaks the reader's trust in what they see.
 
-## 3. Accessible Contrast & Theme Discipline
-* **Contrast Ratios**:
-  - Normal text (< 18px): minimum 4.5:1 against its background.
-  - Large text (>= 18px): minimum 3:1.
-  - Interactive component boundaries and icons: minimum 3:1.
-* **Dark Mode Depth Without Neon**:
-  - Never use pure black (`#000000`) for all surfaces. Use subtle elevations:
-    - Base canvas: `#0d0e11` or `#121316`
-    - Card surface: `#18191d`
-    - Modal / Popover: `#202227`
-  - Separate surfaces with subtle 1px border lines (`border-zinc-800/80`) rather than aggressive drop shadows.
+- Reserve the final size of charts, maps, images and lazy content before the data arrives.
+- A placeholder has the size of the content it replaces.
+- Browser: set `scrollbar-gutter: stable` on scroll containers, so content does not jump when a
+  scrollbar appears.
 
-## 4. Respect User Preferences
-Always support `prefers-reduced-motion`:
-```css
-@media (prefers-reduced-motion: reduce) {
-  *, ::before, ::after {
-    animation-duration: 0.01ms !important;
-    animation-iteration-count: 1 !important;
-    transition-duration: 0.01ms !important;
-    scroll-behavior: auto !important;
-  }
-}
-```
-In Tailwind: use the `motion-reduce:` and `motion-safe:` variants.
+## Motion
+
+- Animate only transform and opacity. Width, height, margin, padding, top and left force a new
+  layout of every sibling.
+- Durations come from the motion tokens (`--motion-fast`, `--motion-base`, `--motion-slow`).
+  Hover and focus feedback uses the fast token. Panels use the base token. Nothing everyday
+  goes past 300 ms.
+- Name the property you transition. `transition: all` is a defect
+  (`tools/dashboard-disclosure.test.ts` blocks it).
+- Respect reduced motion. Browser: a `@media (prefers-reduced-motion: reduce)` block that
+  removes the animation.
+
+## Contrast
+
+- Body text: at least 4.5:1 against its surface. Large text (18 px and up): at least 3:1.
+- Control borders, icons and focus rings: at least 3:1.
+- `tools/dashboard-contrast.test.ts` checks the text and tone tokens. A colour outside the
+  tokens is not checked, which is one more reason not to use one.
+
+## Depth in the dark theme
+
+- Show elevation with a lighter surface and a 1 px rule, not a coloured glow.
+- Use the surface tokens (`--page-bg`, `--surface`, `--card-bg`) for the steps. Never pure black
+  for every layer.
+
+## Render less
+
+- Content that is not visible does not render: closed panels, collapsed sections and popovers
+  build their content when they open.
+- Long lists render in pages or virtualize.
+- Prefer a native platform element to a script that rebuilds it.

@@ -13,7 +13,7 @@ Derived from empirical audits of AI-generated web interfaces (`JCarterJohnson/vi
 
 ## 2. The AI Purple / Indigo Gradient
 * **Code Signature**: Primary buttons and headers bathed in violet/indigo (`#6366f1`, `#8b5cf6`, `from-purple-600 to-indigo-600`).
-* **Fix**: Use purposeful, functional accent colors (e.g. amber for warnings, emerald for live status, cyan/blue for primary actions) rather than decorative purple gradients.
+* **Fix**: Use the tone tokens, each for its meaning (warning, success, danger, accent). No decorative gradients.
 
 ## 3. Gradient Text & Glowing Borders
 * **Code Signature**: `bg-clip-text text-transparent bg-gradient-to-r`, pseudo-elements with `blur-xl bg-gradient-to-r`.
@@ -25,7 +25,7 @@ Derived from empirical audits of AI-generated web interfaces (`JCarterJohnson/vi
 
 ## 5. Over-Rounded Corners
 * **Code Signature**: `rounded-3xl` or `rounded-full` applied to data cards, modals, or rectangular content containers.
-* **Fix**: Subtle, disciplined radius: 4px–8px (`rounded` or `rounded-md`). Reserve pills (`rounded-full`) strictly for compact status badges.
+* **Fix**: Subtle, disciplined radius from the tokens (`--radius-sm`, `--radius-md`). Reserve `--radius-full` for compact chips and pills.
 
 ## 6. Neon Glow in Dark Mode
 * **Code Signature**: Dark background `#09090b` with neon colored drop shadows (`shadow-[0_0_20px_rgba(59,130,246,0.5)]`).

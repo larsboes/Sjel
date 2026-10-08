@@ -82,3 +82,29 @@ import Testing
         #expect(health.down == ["dashboard", "transit"])
     }
 }
+
+@Suite struct AgentViewTests {
+    @Test func callsAreReadNewestFirstAndReadsAreMarked() {
+        let data = Data(#"{"pending":[],"calls":[{"at":20,"capability":"comms","method":"POST","path":"/triage","status":200,"decision":"allowed"},{"at":10,"capability":"vault","method":"GET","path":"/routes","status":200,"decision":"read"}]}"#.utf8)
+        let view = AgentView.decode(data)
+        #expect(view.calls.count == 2)
+        #expect(view.calls[0].isRead == false)
+        #expect(view.calls[1].isRead)
+    }
+}
+
+@Suite struct LifecycleRequestTests {
+    let bridge = NodeBridge(token: CachedToken(read: { .token("t") }))
+
+    @Test func aCapabilityNameBecomesOnePathSegment() throws {
+        let request = try #require(bridge.lifecycleRequest("knowledge-graph", false))
+        #expect(request.httpMethod == "POST")
+        #expect(request.url?.path == "/api/sjel-status/capabilities/knowledge-graph/stop")
+        #expect(request.value(forHTTPHeaderField: "Authorization") == "Bearer t")
+    }
+
+    @Test func aNameThatCouldBuildAPathIsRefused() {
+        #expect(bridge.lifecycleRequest("../agent/mode", true) == nil)
+        #expect(bridge.lifecycleRequest("", true) == nil)
+    }
+}

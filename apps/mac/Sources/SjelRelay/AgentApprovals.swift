@@ -20,6 +20,42 @@ public struct AgentApproval: Sendable, Equatable, Identifiable, Decodable {
     public var summary: String { "\(capability): \(method) \(path)" }
 }
 
+/// One call an agent made through the gate (`AgentCall` in `libs/sjel-server/src/agent_policy.rs`).
+public struct AgentCallRecord: Sendable, Equatable, Decodable, Identifiable {
+    public let at: Int
+    public let capability: String
+    public let method: String
+    public let path: String
+    public let status: Int
+    /// "read" for a plain read. Anything else (a write, a refusal) is worth a look.
+    public let decision: String
+
+    public var id: String { "\(at)\(capability)\(method)\(path)" }
+    public var date: Date { Date(timeIntervalSince1970: TimeInterval(at)) }
+    public var isRead: Bool { decision == "read" }
+}
+
+/// The parts of `GET /api/sjel-status/agent` the menu bar shows.
+public struct AgentView: Sendable, Equatable {
+    public var pending: [AgentApproval] = []
+    /// Newest first, at most 50 (`recent_calls(50)` in `capabilities/sjel-status/src/status/agent.rs`).
+    public var calls: [AgentCallRecord] = []
+
+    public init(pending: [AgentApproval] = [], calls: [AgentCallRecord] = []) {
+        self.pending = pending
+        self.calls = calls
+    }
+
+    public static func decode(_ data: Data) -> AgentView {
+        struct Wire: Decodable {
+            let pending: [AgentApproval]?
+            let calls: [AgentCallRecord]?
+        }
+        let wire = try? JSONDecoder().decode(Wire.self, from: data)
+        return AgentView(pending: wire?.pending ?? [], calls: wire?.calls ?? [])
+    }
+}
+
 /// Reads the waiting writes from the shell and sends the owner's decision
 /// (`GET /api/sjel-status/agent`, `POST /api/sjel-status/agent/approvals/{id}`).
 /// Authenticated with the deployment token from the login Keychain, like `DashboardLogin`.
@@ -70,20 +106,20 @@ public struct AgentApprovals: Sendable {
 
     /// The `pending` list of the agent view; empty when the answer has none.
     public static func pending(fromAgentView data: Data) -> [AgentApproval] {
-        struct View: Decodable { let pending: [AgentApproval]? }
-        return (try? JSONDecoder().decode(View.self, from: data))?.pending ?? []
+        AgentView.decode(data).pending
     }
 
-    /// The waiting writes, or an empty list when the shell or the token is not there.
-    public func pending(session: URLSession = .shared) async -> [AgentApproval] {
+    /// The waiting writes and the recent calls, or an empty view when the shell or the token
+    /// is not there.
+    public func view(session: URLSession = .shared) async -> AgentView {
         guard let request = pendingRequest(),
               let (data, response) = try? await session.data(for: request)
-        else { return [] }
+        else { return AgentView() }
         let status = (response as? HTTPURLResponse)?.statusCode
         // A 401 means the kept token is no longer the deployment's: read it again next poll.
         if status == 401 { forgetToken() }
-        guard status == 200 else { return [] }
-        return Self.pending(fromAgentView: data)
+        guard status == 200 else { return AgentView() }
+        return AgentView.decode(data)
     }
 
     /// `true` when the shell recorded the decision.

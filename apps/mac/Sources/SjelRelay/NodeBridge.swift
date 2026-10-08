@@ -70,4 +70,33 @@ public final class NodeBridge: Sendable {
         guard http.statusCode == 200 else { return nil }
         return try? JSONDecoder().decode(NodeHealth.self, from: data)
     }
+
+    /// Starts or stops one capability through the shell
+    /// (`capabilities/sjel-status/src/status/lifecycle.rs`). Start is `resume`, so it also
+    /// clears the hold a stop leaves. Returns nil on success, or the words to show.
+    public func setRunning(_ name: String, _ running: Bool) async -> String? {
+        guard let request = lifecycleRequest(name, running) else { return "Sjel has no token on this Mac." }
+        guard let (data, response) = try? await session.data(for: request) else {
+            return "Sjel did not answer."
+        }
+        let status = (response as? HTTPURLResponse)?.statusCode ?? 0
+        if status == 401 { token.forget() }
+        if status == 200 { return nil }
+        let error = (try? JSONSerialization.jsonObject(with: data) as? [String: Any])?["error"] as? String
+        return error ?? "\(running ? "Start" : "Stop") \(name) failed (\(status))."
+    }
+
+    /// Only a registry name reaches the shell: letters, digits and dashes, nothing a path
+    /// could be built from.
+    func lifecycleRequest(_ name: String, _ running: Bool) -> URLRequest? {
+        let safe = !name.isEmpty && name.allSatisfy { $0.isLetter || $0.isNumber || $0 == "-" }
+        guard safe, let bearer = token.get() else { return nil }
+        let action = running ? "start" : "stop"
+        var request = URLRequest(url: baseURL.appendingPathComponent("api/sjel-status/capabilities/\(name)/\(action)"))
+        request.httpMethod = "POST"
+        request.setValue("Bearer \(bearer)", forHTTPHeaderField: "Authorization")
+        // A start waits for the service to come up.
+        request.timeoutInterval = 60
+        return request
+    }
 }

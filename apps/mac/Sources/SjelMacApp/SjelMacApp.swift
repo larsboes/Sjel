@@ -28,6 +28,10 @@ final class SjelMacViewModel: ObservableObject {
 
     /// Agent writes that wait for the owner in ask mode (ISA F10).
     @Published var pendingWrites: [AgentApproval] = []
+    /// The agents' recent calls through the gate, newest first.
+    @Published var agentCalls: [AgentCallRecord] = []
+    /// Capabilities with a start or stop in flight, so their buttons wait.
+    @Published var busy: Set<String> = []
 
     /// One Keychain read shared by every poll (see `CachedToken`).
     private let token = CachedToken()
@@ -72,8 +76,10 @@ final class SjelMacViewModel: ObservableObject {
     }
 
     func refreshPending() async {
-        let pending = await approvals.pending()
+        let view = await approvals.view()
+        let pending = view.pending
         pendingWrites = pending
+        agentCalls = view.calls
         for approval in pending where !announced.contains(approval.id) {
             announced.insert(approval.id)
             notifications.announce(approval)
@@ -89,6 +95,19 @@ final class SjelMacViewModel: ObservableObject {
     func refreshStatus() async {
         status = await bridge.status()
         checkedAt = Date()
+    }
+
+    /// Starts or stops capabilities one after the other, then reads the health again.
+    func setRunning(_ names: [String], _ running: Bool) {
+        let names = names.filter { !busy.contains($0) }
+        busy.formUnion(names)
+        Task {
+            for name in names {
+                if let problem = await bridge.setRunning(name, running) { openProblem = problem }
+                busy.remove(name)
+            }
+            await refreshStatus()
+        }
     }
 
     /// Opens the dashboard logged in: a single-use ticket from the shell, then the browser
@@ -197,6 +216,11 @@ struct SjelMenuBarView: View {
             Divider()
             statusSection
 
+            if !model.agentCalls.isEmpty {
+                Divider()
+                agentActivity
+            }
+
             if let problem = model.openProblem {
                 Text(problem)
                     .font(.system(size: 11))
@@ -284,26 +308,89 @@ struct SjelMenuBarView: View {
             if down.isEmpty {
                 line(color: .green, "All \(total) capabilities up")
             } else {
-                line(color: .orange, "\(down.count) of \(total) capabilities down")
+                HStack {
+                    line(color: .orange, "\(down.count) of \(total) capabilities down")
+                    Spacer()
+                    if down.count > 1 {
+                        Button("Start all") { model.setRunning(down, true) }
+                            .controlSize(.small)
+                            .help("Start every capability that is down")
+                    }
+                }
                 VStack(alignment: .leading, spacing: 2) {
                     ForEach(down.prefix(downShown), id: \.self) { name in
-                        Text(name)
+                        CapabilityRow(name: name, up: false, busy: model.busy.contains(name)) {
+                            model.setRunning([name], true)
+                        }
                     }
                     if down.count > downShown {
                         Text("and \(down.count - downShown) more")
+                            .font(.system(size: 11, design: .monospaced))
+                            .foregroundStyle(.secondary)
                             .help(down.dropFirst(downShown).joined(separator: ", "))
                     }
                 }
-                .font(.system(size: 11, design: .monospaced))
-                .foregroundStyle(.secondary)
                 .padding(.leading, 14)
             }
+            allCapabilities(health)
         }
         // Stale: the poll runs every 30 s, so anything older means it stopped.
         if let checked = model.checkedAt, Date().timeIntervalSince(checked) > 90 {
             Text("Checked \(checked, style: .relative) ago")
                 .font(.system(size: 10))
                 .foregroundStyle(.secondary)
+        }
+    }
+
+    /// Every capability, folded away: stopping one is rare, so it sits a click down.
+    private func allCapabilities(_ health: NodeHealth) -> some View {
+        DisclosureGroup("All capabilities") {
+            VStack(alignment: .leading, spacing: 2) {
+                ForEach(health.capabilities.keys.sorted(), id: \.self) { name in
+                    let up = health.capabilities[name]?.up ?? false
+                    // Stopping the shell would take this panel's own source with it.
+                    CapabilityRow(name: name, up: up, busy: model.busy.contains(name), canStop: name != "sjel-status") {
+                        model.setRunning([name], !up)
+                    }
+                }
+            }
+            .padding(.top, 4)
+        }
+        .font(.system(size: 11))
+        .foregroundStyle(.secondary)
+    }
+
+    /// Reads are most of the log and say little, so they are a count. Anything else (a
+    /// write, a refusal) is listed.
+    private var agentActivity: some View {
+        let hourAgo = Date().addingTimeInterval(-3600)
+        let lastHour = model.agentCalls.filter { $0.date > hourAgo }
+        let reads = lastHour.filter(\.isRead).count
+        let notable = model.agentCalls.filter { !$0.isRead }.prefix(3)
+        return VStack(alignment: .leading, spacing: 4) {
+            HStack(alignment: .firstTextBaseline) {
+                Text("Agents").font(.system(size: 11, weight: .semibold))
+                Spacer()
+                if let last = model.agentCalls.first {
+                    Text("last call \(last.date, style: .relative) ago")
+                        .font(.system(size: 10))
+                        .foregroundStyle(.secondary)
+                }
+            }
+            Text("This hour: \(reads) reads, \(lastHour.count - reads) other")
+                .font(.system(size: 11))
+                .foregroundStyle(.secondary)
+            ForEach(Array(notable)) { call in
+                HStack {
+                    Text("\(call.capability) \(call.method) \(call.path)")
+                        .lineLimit(1)
+                        .truncationMode(.middle)
+                    Spacer()
+                    Text(call.decision).foregroundStyle(call.status >= 400 ? .orange : .secondary)
+                }
+                .font(.system(size: 10, design: .monospaced))
+                .help("\(call.capability) \(call.method) \(call.path) → \(call.status), \(call.decision), \(call.date.formatted(date: .omitted, time: .shortened))")
+            }
         }
     }
 
@@ -320,6 +407,33 @@ struct SjelMenuBarView: View {
         let hours = minutes / 60
         if hours < 48 { return "\(hours)h" }
         return "\(hours / 24)d"
+    }
+}
+
+/// One capability: its name, and the one action that changes its state. The list that holds
+/// up capabilities is folded away already, so Stop needs no second hiding.
+struct CapabilityRow: View {
+    let name: String
+    let up: Bool
+    let busy: Bool
+    var canStop = true
+    let action: () -> Void
+
+    var body: some View {
+        HStack(spacing: 6) {
+            Circle().fill(up ? Color.green : Color.orange).frame(width: 6, height: 6)
+            Text(name).font(.system(size: 11, design: .monospaced))
+            Spacer()
+            if busy {
+                ProgressView().controlSize(.mini)
+            } else if !up || canStop {
+                Button(up ? "Stop" : "Start", action: action)
+                    .buttonStyle(.borderless)
+                    .font(.system(size: 11))
+                    .help(up ? "Stop \(name). It stays stopped until you start it." : "Start \(name)")
+            }
+        }
+        .frame(height: 18)
     }
 }
 

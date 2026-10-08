@@ -14,20 +14,46 @@
 //! refused unless the command is one of the allowlisted shapes below. Over-extraction costs a
 //! blocked command with a reason the caller can act on; under-extraction costs the secret.
 
-use std::sync::LazyLock;
+use std::path::{Path, PathBuf};
+use std::process::Command;
+use std::sync::atomic::AtomicBool;
+use std::sync::{Arc, LazyLock};
+use std::time::Duration;
 
-use regex::Regex;
-use serde_json::Value;
-use sjel_agent::{Extension, ToolCall, Verdict};
+use regex::{Captures, Regex};
+use serde_json::{json, Value};
+use sjel_agent::{Extension, Tool, ToolCall, Verdict};
 
 /// The name `agent.toml` and `--ext` use. `main.rs` puts this one in the default set.
 pub const NAME: &str = "guard";
 
-pub struct Guard;
+pub struct Guard {
+    stop: Arc<AtomicBool>,
+}
+
+impl Guard {
+    /// `stop` reaches the tools this extension carries, so a Ctrl-C ends a `vault_exec` the way
+    /// it ends a `bash` call.
+    pub fn new(stop: &Arc<AtomicBool>) -> Self {
+        Self {
+            stop: Arc::clone(stop),
+        }
+    }
+}
 
 impl Extension for Guard {
     fn name(&self) -> &'static str {
         NAME
+    }
+
+    /// The other half of the ported file: the two tools that make a refusal actionable, because
+    /// a guard that only says no leaves a run with no way to do legitimate work that needs a
+    /// credential. Being tools rather than hooks, they need nothing the core has not got.
+    fn tools(&self) -> Vec<Box<dyn Tool>> {
+        vec![
+            Box::new(VaultExec(Arc::clone(&self.stop))),
+            Box::new(VaultKeys),
+        ]
     }
 
     fn tool_call(&self, call: &ToolCall) -> Verdict {
@@ -198,6 +224,264 @@ fn command_gate(command: &str) -> Verdict {
     }
 }
 
+// ---- the tools ----------------------------------------------------------
+
+const VAULT_TIMEOUT: u64 = 30;
+const VAULT_MAX_TIMEOUT: u64 = 600;
+
+/// Run a command with an env file loaded, and keep the values out of the result.
+struct VaultExec(Arc<AtomicBool>);
+
+impl Tool for VaultExec {
+    fn name(&self) -> &'static str {
+        "vault_exec"
+    }
+    fn description(&self) -> &'static str {
+        "Run a shell command with an env file sourced. The file is read here, not by the model, \
+         and every value it loaded is replaced with **** in the result. Pass `keys` to put only \
+         the variables the command needs into its environment: without it the whole environment \
+         and every variable in the file are inherited. Use it for curl, API calls, or any command \
+         that needs a credential — the command can use the value, and neither you nor the \
+         transcript ever hold it."
+    }
+    fn parameters(&self) -> Value {
+        json!({ "type": "object", "required": ["cmd"], "properties": {
+            "cmd": { "type": "string", "description": "The shell command to run, e.g. curl -s https://api.example.com/endpoint" },
+            "env_file": { "type": "string", "description": "Env file to source first, e.g. .env or config/secrets.env. Read here; the model never sees the values." },
+            "keys": { "type": "array", "items": { "type": "string" }, "description": "Only these variables, plus PATH and HOME, exist in the command's environment, so it has nothing else to leak. Prefer setting it." },
+            "timeout": { "type": "integer", "description": "Seconds. Default 30, maximum 600." }
+        }})
+    }
+    fn run(&self, args: &Value) -> Result<String, String> {
+        let cmd = str_arg(args, "cmd")?;
+        let timeout = args
+            .get("timeout")
+            .and_then(Value::as_u64)
+            .unwrap_or(VAULT_TIMEOUT)
+            .clamp(1, VAULT_MAX_TIMEOUT);
+        let env_file = args
+            .get("env_file")
+            .and_then(Value::as_str)
+            .filter(|s| !s.is_empty());
+        // An empty `keys` is not a scope of zero variables, it is no scope at all — the reading
+        // the ported file takes of the same argument.
+        let wanted: Option<Vec<String>> = args
+            .get("keys")
+            .and_then(Value::as_array)
+            .map(|list| {
+                list.iter()
+                    .filter_map(Value::as_str)
+                    .map(str::to_owned)
+                    .collect()
+            })
+            .filter(|keys: &Vec<String>| !keys.is_empty());
+
+        let mut command = Command::new("bash");
+        command.arg("-c").arg(cmd);
+        if wanted.is_some() {
+            // Nothing but what was asked for. One `printenv | base64` is then enough to defeat
+            // the literal stripping below, so the environment is what has to be small.
+            command.env_clear();
+            for name in ["PATH", "HOME"] {
+                if let Some(value) = std::env::var_os(name) {
+                    command.env(name, value);
+                }
+            }
+        }
+
+        let mut exposed: Vec<String> = Vec::new();
+        if let Some(file) = env_file {
+            let vars = load_env_file(file)?;
+            let has = |key: &str| vars.iter().any(|(name, _)| name == key);
+            if let Some(keys) = &wanted {
+                let absent: Vec<&str> = keys
+                    .iter()
+                    .map(String::as_str)
+                    .filter(|key| !has(key))
+                    .collect();
+                if !absent.is_empty() {
+                    let found: Vec<&str> = keys
+                        .iter()
+                        .map(String::as_str)
+                        .filter(|key| has(key))
+                        .collect();
+                    return Err(format!(
+                        "vault_exec: {} not present in {file}{}",
+                        absent.join(", "),
+                        if found.is_empty() {
+                            String::new()
+                        } else {
+                            format!(" (found: {})", found.join(", "))
+                        }
+                    ));
+                }
+            }
+            for (name, value) in &vars {
+                if wanted.as_ref().is_some_and(|keys| !keys.contains(name)) {
+                    continue;
+                }
+                command.env(name, value);
+                exposed.push(value.clone());
+            }
+        }
+
+        let out = sjel_agent::tools::run_bounded(command, Duration::from_secs(timeout), &self.0)?;
+        Ok(scrub(&out, &exposed))
+    }
+}
+
+/// List the names in an env file, never the values.
+struct VaultKeys;
+
+impl Tool for VaultKeys {
+    fn name(&self) -> &'static str {
+        "vault_keys"
+    }
+    fn description(&self) -> &'static str {
+        "List the variable names in an env file — never the values — so a command can be written \
+         for the ones that exist without any of them being exposed."
+    }
+    fn parameters(&self) -> Value {
+        json!({ "type": "object", "required": ["env_file"], "properties": {
+            "env_file": { "type": "string", "description": "Path to the env file, e.g. .env or config/secrets.env" }
+        }})
+    }
+    fn run(&self, args: &Value) -> Result<String, String> {
+        let file = str_arg(args, "env_file")?;
+        let vars = load_env_file(file)?;
+        let mut names: Vec<&str> = vars.iter().map(|(name, _)| name.as_str()).collect();
+        names.sort_unstable();
+        let listed: Vec<String> = names.iter().map(|name| format!("  {name}")).collect();
+        Ok(format!(
+            "Keys in {file} ({} vars):\n{}",
+            names.len(),
+            listed.join("\n")
+        ))
+    }
+}
+
+fn str_arg<'a>(args: &'a Value, key: &str) -> Result<&'a str, String> {
+    args.get(key)
+        .and_then(Value::as_str)
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
+        .ok_or_else(|| format!("`{key}` is required"))
+}
+
+/// A relative env file is relative to the working directory, as every other path in a tool call
+/// is.
+fn resolve_env_path(cwd: &Path, given: &str) -> PathBuf {
+    let path = Path::new(given);
+    if path.is_absolute() {
+        path.to_path_buf()
+    } else {
+        cwd.join(path)
+    }
+}
+
+/// The `KEY=value` pairs in an env file. Values leave this function only into the environment of
+/// the command that asked for them.
+fn load_env_file(given: &str) -> Result<Vec<(String, String)>, String> {
+    let cwd = std::env::current_dir().map_err(|e| format!("no working directory: {e}"))?;
+    let path = resolve_env_path(&cwd, given);
+    let body = std::fs::read_to_string(&path)
+        .map_err(|_| format!("env file not found: {}", path.display()))?;
+    let mut vars = Vec::new();
+    for line in body.lines() {
+        let trimmed = line.trim();
+        if trimmed.is_empty() || trimmed.starts_with('#') {
+            continue;
+        }
+        let Some((name, value)) = trimmed.split_once('=') else {
+            continue;
+        };
+        let name = name.trim();
+        if name.is_empty() {
+            continue;
+        }
+        // `KEY="x"` and `KEY='x'` mean `x`, not the quotes.
+        let value = value.trim();
+        let value = value
+            .strip_prefix('"')
+            .and_then(|inner| inner.strip_suffix('"'))
+            .or_else(|| {
+                value
+                    .strip_prefix('\'')
+                    .and_then(|inner| inner.strip_suffix('\''))
+            })
+            .unwrap_or(value);
+        vars.push((name.to_owned(), value.to_owned()));
+    }
+    Ok(vars)
+}
+
+/// Three passes, because each one alone has a hole: the shape of a `KEY=value` line, a long
+/// random string, and the values this call actually put into the environment — the last one is
+/// what catches a value printed on its own, which no shape check can see.
+fn scrub(text: &str, exposed: &[String]) -> String {
+    let mut out = ASSIGNMENT
+        .replace_all(text, |caps: &Captures<'_>| {
+            let name = &caps[2];
+            if SECRET_VAR_PATTERNS.iter().any(|p| p.is_match(name)) {
+                // A group that did not participate has no match, and indexing it panics —
+                // `export` is optional, so it is absent most of the time.
+                let export = caps.get(1).map_or("", |m| m.as_str());
+                format!("{export}{name}=****")
+            } else {
+                caps[0].to_owned()
+            }
+        })
+        .into_owned();
+    if LONG_RANDOM.is_match(&out) {
+        out = LONG_RANDOM.replace_all(&out, "****").into_owned();
+    }
+    for value in exposed.iter().filter(|value| value.len() >= 8) {
+        if out.contains(value.as_str()) {
+            out = out.replace(value.as_str(), "****");
+        }
+    }
+    out
+}
+
+/// A whole line that assigns a long value, so the value can be replaced without touching the
+/// name it belongs to.
+static ASSIGNMENT: LazyLock<Regex> = LazyLock::new(|| {
+    Regex::new(r#"(?m)^(export\s+)?([A-Za-z_][A-Za-z0-9_]*)=['"]?[^\s'"]{8,}['"]?$"#)
+        .expect("literal pattern")
+});
+
+/// Env-var names that hold secrets, for the shape pass above. A name alone is weaker evidence
+/// than a value, which is why the by-value pass exists as well.
+///
+/// The first ten are the ported file's list, kept as it is; the last three are added here, and
+/// this is a divergence from that file rather than a port. On 2026-10-08 this operator's own
+/// shell environment carried `BW_SESSION`, a live Bitwarden session token, and none of the
+/// ported patterns matches that name — a `printenv` through an unscoped `vault_exec`, or
+/// `echo $BW_SESSION` in bash, reached the transcript with the token intact. The Bitwarden CLI
+/// sets its own `BW_` namespace, and a session token is exactly the kind of value this list is
+/// for.
+static SECRET_VAR_PATTERNS: LazyLock<Vec<Regex>> = LazyLock::new(|| {
+    compile(&[
+        r"(?i)TOKEN",
+        r"(?i)SECRET",
+        r"(?i)PASSWORD",
+        r"(?i)PASS(_|$)",
+        r"(?i)API_KEY",
+        r"(?i)APIKEY",
+        r"(?i)CREDENTIAL",
+        r"(?i)AUTH",
+        r"(?i)_KEY$",
+        r"(?i)_ID$",
+        r"(?i)^BW_",
+        r"(?i)_SESSION$",
+        r"(?i)PASSPHRASE",
+    ])
+});
+
+/// OAuth refresh tokens and the like: long enough that nothing else in a shell transcript is.
+static LONG_RANDOM: LazyLock<Regex> =
+    LazyLock::new(|| Regex::new(r"[A-Za-z0-9_-]{300,}={0,2}").expect("literal pattern"));
+
 /// File path patterns that contain secrets — blocked from `read` and `edit`, and anywhere a
 /// command names one.
 static SECRET_FILE_PATTERNS: LazyLock<Vec<Regex>> = LazyLock::new(|| {
@@ -234,7 +518,7 @@ static BASH_PATTERNS: LazyLock<Vec<Regex>> = LazyLock::new(|| {
         r"\bbw\s+list\b",
         r"\bbw\s+sync\b",
         r"\bbw\s+export\b",
-        r"\becho\s+\$[A-Z_]*(?:TOKEN|SECRET|KEY|PASSWORD|PASS|CREDENTIAL|API_KEY|SECRET_)\w*",
+        r"\becho\s+\$[A-Z_]*(?:TOKEN|SECRET|KEY|PASSWORD|PASS|CREDENTIAL|API_KEY|SECRET_|SESSION|PASSPHRASE)\w*",
         r"\bprintenv\b",
         // A bare `env` dump: `env` at a command position, optionally with flags, then a pipe, a
         // redirect, a separator or the end. Anchored this way the word "env" inside
@@ -280,7 +564,7 @@ mod tests {
     use sjel_agent::FunctionCall;
 
     fn verdict(tool: &str, arguments: Value) -> Verdict {
-        Guard.tool_call(&ToolCall {
+        guard().tool_call(&ToolCall {
             id: "c".into(),
             kind: "function".into(),
             function: FunctionCall {
@@ -395,6 +679,15 @@ mod tests {
             }),
             ("echo $GITHUB_SECRET", true, "bash", || {
                 json_cmd("echo $GITHUB_SECRET")
+            }),
+            // Not cases in the ported file: its `echo` looks for TOKEN, SECRET, KEY, PASSWORD and
+            // CREDENTIAL, and this operator's shell carries a live session token under a name
+            // with none of them. See SECRET_VAR_PATTERNS for the same find on the shape pass.
+            ("echo $BW_SESSION", true, "bash", || {
+                json_cmd("echo $BW_SESSION")
+            }),
+            ("echo $SSH_PASSPHRASE", true, "bash", || {
+                json_cmd("echo $SSH_PASSPHRASE")
             }),
             // bash — dumping the environment
             ("env", true, "bash", || json_cmd("env")),
@@ -525,5 +818,176 @@ mod tests {
 
     fn json_cmd(command: &str) -> Value {
         json!({ "command": command })
+    }
+
+    fn guard() -> Guard {
+        Guard::new(&std::sync::Arc::new(AtomicBool::new(false)))
+    }
+
+    fn tool(name: &str) -> Box<dyn Tool> {
+        guard()
+            .tools()
+            .into_iter()
+            .find(|tool| tool.name() == name)
+            .unwrap_or_else(|| panic!("the guard does not carry `{name}`"))
+    }
+
+    /// An env file in a directory of its own, so the tests in one process do not collide.
+    fn fixture(name: &str) -> String {
+        let dir =
+            std::env::temp_dir().join(format!("sjel-agent-vault-{}-{name}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let path = dir.join("secrets.env");
+        std::fs::write(
+            &path,
+            "DEMO_TOKEN=demo-token-value-1234567890\n\
+             OTHER_SECRET=other-secret-value-0987654321\n\
+             PLAIN=plain-value-long-enough\n",
+        )
+        .unwrap();
+        path.to_string_lossy().into_owned()
+    }
+
+    // ---- vault_exec and vault_keys (F2b) --------------------------------
+
+    #[test]
+    fn a_scoped_run_gets_only_the_named_variables() {
+        let out = tool("vault_exec")
+            .run(&json!({
+                "cmd": "printenv | sort",
+                "env_file": fixture("scoped"),
+                "keys": ["DEMO_TOKEN"],
+            }))
+            .unwrap();
+        assert!(out.contains("DEMO_TOKEN="), "{out}");
+        assert!(
+            !out.contains("demo-token-value"),
+            "the value survived: {out}"
+        );
+        assert!(
+            !out.contains("OTHER_SECRET"),
+            "a variable outside the scope was in the environment: {out}"
+        );
+        assert!(out.contains("PATH="), "no usable environment: {out}");
+    }
+
+    #[test]
+    fn an_unscoped_run_inherits_the_whole_file() {
+        // `printenv NAME` alone would print a bare value, and a bare value is stripped by value —
+        // so the assignment shape is what shows the variable was in the environment at all.
+        // An unscoped run also inherits this process's environment, which is why no test here
+        // dumps `printenv` wholesale: that is how a test log ends up holding a live token out of
+        // the operator's shell.
+        let out = tool("vault_exec")
+            .run(&json!({
+                "cmd": "printf 'OTHER_SECRET=%s\\n' \"$OTHER_SECRET\"",
+                "env_file": fixture("unscoped"),
+            }))
+            .unwrap();
+        assert!(out.contains("OTHER_SECRET=****"), "{out}");
+    }
+
+    #[test]
+    fn a_benign_name_keeps_its_value() {
+        // The shape pass is a name list, not "redact everything": a long value under a name that
+        // is not secret-shaped and did not come from an env file stays readable.
+        let out = tool("vault_exec")
+            .run(&json!({ "cmd": "printf 'PLAIN=%s\\n' some-literal-value-here" }))
+            .unwrap();
+        assert!(out.contains("PLAIN=some-literal-value-here"), "{out}");
+    }
+
+    #[test]
+    fn a_session_token_is_stripped_even_though_the_ported_list_does_not_name_it() {
+        // Found on 2026-10-08 in this operator's own shell: the inherited environment holds
+        // `BW_SESSION`, a live Bitwarden session token, and the ported name list matches none of
+        // it. `echo $BW_SESSION` in bash passes the gate too — the gate's `echo` pattern looks
+        // for TOKEN, SECRET, KEY, PASSWORD, CREDENTIAL, none of which is in that name.
+        let stripped = scrub(
+            "BW_SESSION=06XyuSxTMwmdxWLOouAY+IGhVRvo9ayozoNofOM5gR4z7E1PfC4oSbo6\n",
+            &[],
+        );
+        assert!(!stripped.contains("06Xyu"), "{stripped}");
+        assert!(stripped.contains("BW_SESSION=****"), "{stripped}");
+        let passphrase = scrub("SSH_PASSPHRASE=correct-horse-battery-staple\n", &[]);
+        assert!(passphrase.contains("SSH_PASSPHRASE=****"), "{passphrase}");
+    }
+
+    #[test]
+    fn a_value_printed_on_its_own_is_still_stripped() {
+        let out = tool("vault_exec")
+            .run(&json!({ "cmd": "printenv DEMO_TOKEN", "env_file": fixture("bare") }))
+            .unwrap();
+        assert!(!out.contains("demo-token-value"), "{out}");
+        assert!(out.contains("****"), "{out}");
+    }
+
+    #[test]
+    fn a_missing_key_is_named_with_the_ones_that_are_there() {
+        // "found" is the shortlist among the keys that were asked for, as in the ported file:
+        // what a caller needs is which of the names it asked for are there, not a directory.
+        let err = tool("vault_exec")
+            .run(&json!({
+                "cmd": "true",
+                "env_file": fixture("absent"),
+                "keys": ["DEMO_TOKEN", "ABSENT_TOKEN"],
+            }))
+            .unwrap_err();
+        assert!(err.contains("ABSENT_TOKEN not present in"), "{err}");
+        assert!(err.contains("found: DEMO_TOKEN"), "{err}");
+    }
+
+    #[test]
+    fn a_missing_env_file_is_named() {
+        let err = tool("vault_exec")
+            .run(&json!({ "cmd": "true", "env_file": "/nonexistent/nope.env" }))
+            .unwrap_err();
+        assert!(err.contains("env file not found"), "{err}");
+        assert!(err.contains("/nonexistent/nope.env"), "{err}");
+    }
+
+    #[test]
+    fn the_timeout_kills_the_command() {
+        let start = std::time::Instant::now();
+        let out = tool("vault_exec")
+            .run(&json!({ "cmd": "sleep 30", "timeout": 1 }))
+            .unwrap();
+        assert!(out.contains("killed after 1 s"), "{out}");
+        assert!(
+            start.elapsed() < Duration::from_secs(10),
+            "the timeout did not fire: {:?}",
+            start.elapsed()
+        );
+    }
+
+    #[test]
+    fn vault_keys_lists_names_and_never_values() {
+        let out = tool("vault_keys")
+            .run(&json!({ "env_file": fixture("keys") }))
+            .unwrap();
+        for name in ["DEMO_TOKEN", "OTHER_SECRET", "PLAIN"] {
+            assert!(out.contains(name), "{name} is missing from: {out}");
+        }
+        for value in ["demo-token-value", "other-secret-value", "plain-value"] {
+            assert!(!out.contains(value), "a value reached the result: {out}");
+        }
+        assert!(out.contains("3 vars"), "{out}");
+    }
+
+    #[test]
+    fn a_relative_env_path_resolves_against_the_working_directory() {
+        let cwd = Path::new("/tmp/somewhere");
+        assert_eq!(
+            resolve_env_path(cwd, ".env"),
+            PathBuf::from("/tmp/somewhere/.env")
+        );
+        assert_eq!(
+            resolve_env_path(cwd, "config/secrets.env"),
+            PathBuf::from("/tmp/somewhere/config/secrets.env")
+        );
+        assert_eq!(
+            resolve_env_path(cwd, "/etc/x.env"),
+            PathBuf::from("/etc/x.env")
+        );
     }
 }

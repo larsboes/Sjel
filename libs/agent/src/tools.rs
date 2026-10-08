@@ -226,12 +226,16 @@ impl Tool for Bash {
 
 /// Runs `command` with a deadline and returns its exit code and output.
 ///
+/// Public because it is where the kill semantics live, and there is one set of them: the `bash`
+/// tool and the guard's `vault_exec` both need a child that dies as a group, is drained on both
+/// pipes, and stops with the turn. A second copy in the extension is how the two drift.
+///
 /// The child leads its own process group, so the timeout or `stop` kills the whole pipeline it
 /// started. The group also keeps the terminal's Ctrl-C away from the child: the agent decides
 /// what a Ctrl-C stops, and it reaches the child only through `stop`.
 /// Killing only the shell would leave a grandchild holding the output pipes open, and the
 /// readers below would wait for it forever.
-fn run_bounded(
+pub fn run_bounded(
     mut command: Command,
     timeout: Duration,
     stop: &AtomicBool,

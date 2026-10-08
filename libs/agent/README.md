@@ -68,6 +68,14 @@ secret paths on `read`, `edit`, `grep` and `find`, and any `bash` command that n
 it is an allowlisted shape (`source .env && …`, `export VAR=…`, `bw unlock`, writing a reference).
 Everything else in wave 1 — skills, MCP, compaction, Rust diagnostics — is still to come.
 
+The guard also carries the two tools that make a refusal actionable, because a guard that only
+says no leaves a run with no way to do legitimate work: `vault_exec` runs a command with an env
+file loaded and replaces every value it loaded with `****` in the result — by value, by shape and
+by length — and `vault_keys` lists the names in such a file without the values. Pass `keys` to
+`vault_exec` to put only the variables the command needs into its environment; without it the
+whole environment and every variable in the file are inherited, which is the risky default and
+what the tool's description says.
+
 ## Run it
 
 ```bash
@@ -101,10 +109,10 @@ Add a `coding` role to the overlay's `config/inference.json` first:
 
 ## Not here yet
 
-The extension contract is in place (F1) and the guard uses it (F2). Next: the two tools that make
-the guard's advice actionable (`vault_exec`, `vault_keys`), then skills, MCP, compaction and Rust
-diagnostics. Line editing, a full-screen TUI and subagents are named in [`ISA.md`](ISA.md) as
-wave 2, not decided.
+The extension contract is in place (F1) and the guard uses it (F2). Next: skills, MCP, compaction
+and Rust diagnostics, and one decision that is still open — the `tool_result` hook, which that
+file's output sanitizer needs and `bash` does not have. Line editing, a full-screen TUI and
+subagents are named in [`ISA.md`](ISA.md) as wave 2, not decided.
 
 A Ctrl-C while the model reads a long prompt and streams nothing takes effect at the first
 chunk. Press it twice to exit instead.

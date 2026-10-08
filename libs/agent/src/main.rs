@@ -101,9 +101,21 @@ fn main() -> ExitCode {
 }
 
 fn run(args: Args) -> Result<ExitCode, String> {
-    // Extensions resolve before anything else, so a name this build does not carry fails at
+    // The stop flag goes first, because an extension can carry a tool that runs a command
+    // (`vault_exec`) and that tool has to end with the turn like every other one.
+    let stop = Arc::new(AtomicBool::new(false));
+    let sigint = signal_hook::consts::SIGINT;
+    signal_hook::flag::register_conditional_shutdown(
+        sigint,
+        i32::from(INTERRUPTED),
+        Arc::clone(&stop),
+    )
+    .and_then(|_| signal_hook::flag::register(sigint, Arc::clone(&stop)))
+    .map_err(|e| format!("could not handle Ctrl-C: {e}"))?;
+
+    // Extensions resolve before the inference role, so a name this build does not carry fails at
     // startup with nothing else to wait for (AGT-8).
-    let chosen = chosen_extensions(&args.ext)?;
+    let chosen = chosen_extensions(&args.ext, &stop)?;
     eprintln!("{DIM}{}{RESET}", extension_line(&chosen.names));
     let role = sjel_inference::InferenceConfig::load(sjel_config::overlay_config)
         .role(&args.role)
@@ -115,18 +127,6 @@ fn run(args: Args) -> Result<ExitCode, String> {
             )
         })?;
     let cwd = std::env::current_dir().map_err(|e| format!("no working directory: {e}"))?;
-
-    // The shutdown goes first: it exits only when the flag is already set, so the first
-    // Ctrl-C sets the flag and stops the turn, and the second one exits.
-    let stop = Arc::new(AtomicBool::new(false));
-    let sigint = signal_hook::consts::SIGINT;
-    signal_hook::flag::register_conditional_shutdown(
-        sigint,
-        i32::from(INTERRUPTED),
-        Arc::clone(&stop),
-    )
-    .and_then(|_| signal_hook::flag::register(sigint, Arc::clone(&stop)))
-    .map_err(|e| format!("could not handle Ctrl-C: {e}"))?;
 
     let agent = Agent::new(
         role,
@@ -232,12 +232,12 @@ struct Chosen {
 
 /// The extension set for this run (AGT-8): `agent.toml` first, then the `--ext` flags in the
 /// order they were given, each name resolved against what this binary carries.
-fn chosen_extensions(flags: &[String]) -> Result<Chosen, String> {
+fn chosen_extensions(flags: &[String], stop: &Arc<AtomicBool>) -> Result<Chosen, String> {
     let names = extension::select(&configured_extensions()?, flags)?;
     let known: Vec<&str> = BUILT_IN.iter().map(|(name, _)| *name).collect();
     let mut extensions: Vec<Box<dyn Extension>> = Vec::with_capacity(names.len());
     for name in &names {
-        let Some(extension) = built_in(name) else {
+        let Some(extension) = built_in(name, stop) else {
             return Err(if known.is_empty() {
                 format!("unknown extension `{name}`: this build carries none yet")
             } else {
@@ -252,21 +252,23 @@ fn chosen_extensions(flags: &[String]) -> Result<Chosen, String> {
     Ok(Chosen { names, extensions })
 }
 
-/// An extension this binary carries: its name, and how to build one.
-type BuiltIn = (&'static str, fn() -> Box<dyn Extension>);
+/// An extension this binary carries: its name, and how to build one. The stop flag is handed in
+/// because an extension can carry a tool that runs a command, and that command has to end with
+/// the turn.
+type BuiltIn = (&'static str, fn(&Arc<AtomicBool>) -> Box<dyn Extension>);
 
 /// The extensions this binary carries (D1: first-party crates, compiled in, no store). Wave 1
 /// fills this table — the guard is here (F2), `skills` (F3), `mcp` (F4), `compaction` (F5) and
 /// `rust` (F6) are next.
-const BUILT_IN: &[BuiltIn] = &[(ext::guard::NAME, || {
-    Box::new(ext::guard::Guard) as Box<dyn Extension>
+const BUILT_IN: &[BuiltIn] = &[(ext::guard::NAME, |stop| {
+    Box::new(ext::guard::Guard::new(stop)) as Box<dyn Extension>
 })];
 
-fn built_in(name: &str) -> Option<Box<dyn Extension>> {
+fn built_in(name: &str, stop: &Arc<AtomicBool>) -> Option<Box<dyn Extension>> {
     BUILT_IN
         .iter()
         .find(|(known, _)| *known == name)
-        .map(|(_, make)| make())
+        .map(|(_, make)| make(stop))
 }
 
 /// The startup line (AGT-11): what runs, and — because the guard is the one extension that is on

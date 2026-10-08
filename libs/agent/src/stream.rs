@@ -220,10 +220,13 @@ mod tests {
         let (message, text, thinking) = run(sse);
         assert_eq!(thinking, "hm");
         assert_eq!(text, "pong");
-        assert_eq!(message.unwrap(), Message::Assistant {
-            content: Some("pong".into()),
-            tool_calls: None
-        });
+        assert_eq!(
+            message.unwrap(),
+            Message::Assistant {
+                content: Some("pong".into()),
+                tool_calls: None
+            }
+        );
     }
 
     #[test]

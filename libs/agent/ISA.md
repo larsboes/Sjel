@@ -96,6 +96,12 @@ Built 2026-10-03. The baseline every later claim is measured against.
 - [x] AGT-5 — sessions append one message per line, mode 0600, without the system prompt.
   Evidence: `append_then_load_round_trips_without_the_system_prompt` (`src/session.rs`).
   Falsifier: a session file readable by group or other.
+- [x] AGT-23 — thinking reaches the front end from either field name: Ollama's `/v1` shim sends
+  it as `reasoning`, DeepSeek, vLLM and DashScope send `reasoning_content`. Neither ever reaches
+  the answer. Evidence: `ollama_names_thinking_reasoning` (`src/stream.rs`), and a live qwen3:4b
+  run on 2026-10-08 whose thinking streamed to stderr while only the answer went to stdout.
+  Falsifier: a turn that ends with no answer because the model thought in a field the fold
+  ignores — which is what three turns did before this, on the day the `coding` role was added.
 
 ### F1 · The extension contract
 
@@ -208,6 +214,7 @@ agent reaches Sjel's data with no data path of its own.
 | AGT-3 | command | `cargo test -p sjel-agent grep_and_find` | pass | cargo | F0 |
 | AGT-4 | command | `cargo test -p sjel-agent stop` | pass | cargo | F0 |
 | AGT-5 | command | `cargo test -p sjel-agent append_then_load` | mode 0600 | cargo | F0, C4 |
+| AGT-23 | command | `cargo test -p sjel-agent ollama_names_thinking_reasoning` | thinking out of the answer | cargo | F0 |
 | AGT-6 | command | deny extension, count `run` calls | 0 | cargo | F1 |
 | AGT-7 | command | bare request body vs F0 request body | equal | cargo | F1 |
 | AGT-8 | command | start with `--ext typo` | non-zero exit | cargo | F1 |
@@ -272,6 +279,16 @@ agent reaches Sjel's data with no data path of its own.
 
 ## Log
 
+- 2026-10-08 · Made the agent run on this machine, the first time since the core was built. Two
+  things were missing. The overlay had no `coding` role, so every run exited at startup; it now
+  points at ollama/qwen3:4b, the only local model that declares `tools` (`ollama /api/show`;
+  `nimble:latest` and `tev1:latest` are decision-only, and no omlx backend exists on this Mac).
+  And the fold knew one name for thinking, `reasoning_content`, where Ollama sends `reasoning` —
+  so a turn whose model thought before answering arrived as no message at all. AGT-23. Live
+  run: `grep`, `read`, `edit` against a failing test, `cargo test` green in 93 s.
+  Tried and rejected the same day: `request_overrides: {"reasoning_effort": "none"}` on the
+  role suppresses the thinking *channel*, so the same monologue lands in the answer, no tool
+  call is made, and the turn takes 108 s instead of 93 s.
 - 2026-10-03 · Built the slim core: loop, six tools, streaming, parallel read-only calls,
   sessions, Ctrl-C. 13 tests, clippy clean, three live runs against qwen3:4b on Ollama.
 - 2026-10-03 · Planned F1–F6 in a crystallize round. D1–D4 recorded above.

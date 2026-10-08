@@ -35,8 +35,8 @@ pub fn spawn(dist: PathBuf) {
     let Some(root) = dist.parent().map(Path::to_path_buf) else {
         return;
     };
-    // launchd hands this job a PATH without /opt/homebrew/bin (sjel-personal machine.toml,
-    // [capability.backup]), so a bare `bun` is the last resort, not the first.
+    // launchd hands this job a PATH without /opt/homebrew/bin (the machine's
+    // [capability.backup] block), so a bare `bun` is the last resort, not the first.
     let bun = sjel_config::env_var("SJEL_BUN").unwrap_or_else(|_| {
         let home = std::env::var("HOME").unwrap_or_default();
         [

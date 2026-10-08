@@ -35,9 +35,13 @@ struct Choice<'a> {
 struct Delta<'a> {
     #[serde(default, borrow)]
     content: Option<Cow<'a, str>>,
-    /// DeepSeek and Qwen 3 stream their thinking here, apart from the answer.
+    /// The model's thinking, apart from the answer. Two names for one field: DeepSeek, vLLM
+    /// and DashScope send `reasoning_content`, Ollama's `/v1` shim sends `reasoning`. A stream
+    /// that carries only one of them is not a stream with no thinking.
     #[serde(default, borrow)]
     reasoning_content: Option<Cow<'a, str>>,
+    #[serde(default, borrow)]
+    reasoning: Option<Cow<'a, str>>,
     #[serde(default, borrow)]
     tool_calls: Option<Vec<CallDelta<'a>>>,
 }
@@ -95,7 +99,12 @@ pub fn fold(
         let Some(delta) = chunk.choices.into_iter().next().map(|c| c.delta) else {
             continue;
         };
-        if let Some(text) = delta.reasoning_content.as_deref().filter(|t| !t.is_empty()) {
+        if let Some(text) = delta
+            .reasoning_content
+            .as_deref()
+            .or(delta.reasoning.as_deref())
+            .filter(|t| !t.is_empty())
+        {
             on(Event::Reasoning(text));
         }
         if let Some(text) = delta.content.as_deref().filter(|t| !t.is_empty()) {
@@ -198,6 +207,23 @@ mod tests {
         };
         assert_eq!(calls.len(), 2);
         assert_eq!(calls[1].id, "call_1");
+    }
+
+    #[test]
+    fn ollama_names_thinking_reasoning() {
+        let sse = concat!(
+            "data: {\"choices\":[{\"delta\":{\"content\":\"\",\"reasoning\":\"hm\"}}]}\n",
+            "data: {\"choices\":[{\"delta\":{\"content\":\"pong\"}}]}\n",
+            "data: {\"choices\":[{\"delta\":{},\"finish_reason\":\"stop\"}]}\n",
+            "data: [DONE]\n",
+        );
+        let (message, text, thinking) = run(sse);
+        assert_eq!(thinking, "hm");
+        assert_eq!(text, "pong");
+        assert_eq!(message.unwrap(), Message::Assistant {
+            content: Some("pong".into()),
+            tool_calls: None
+        });
     }
 
     #[test]

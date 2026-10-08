@@ -1,63 +1,73 @@
 import Foundation
 
-public struct SjelNodeStatus: Sendable, Equatable {
-    public let isReachable: Bool
-    public let nodeName: String
-    public let version: String
-    public let latencyMs: Double
-    public let lastChecked: Date
-
-    public init(
-        isReachable: Bool,
-        nodeName: String = "Sjel Local Node",
-        version: String = "v0.0.1",
-        latencyMs: Double = 0.0,
-        lastChecked: Date = Date()
-    ) {
-        self.isReachable = isReachable
-        self.nodeName = nodeName
-        self.version = version
-        self.latencyMs = latencyMs
-        self.lastChecked = lastChecked
+/// What the shell says about itself and every capability with a health surface
+/// (`GET /api/sjel-status/health`, `AxonStatusHealth` in
+/// `capabilities/sjel-status/src/status/registry.rs`).
+public struct NodeHealth: Sendable, Equatable, Decodable {
+    public struct Capability: Sendable, Equatable, Decodable {
+        public let up: Bool
     }
+
+    public let ok: Bool
+    public let version: String
+    public let uptimeSeconds: UInt64
+    public let capabilities: [String: Capability]
+
+    enum CodingKeys: String, CodingKey {
+        case ok, version, capabilities
+        case uptimeSeconds = "uptime_seconds"
+    }
+
+    /// Names of the capabilities that did not answer, sorted so the list does not reorder
+    /// between polls.
+    public var down: [String] { capabilities.filter { !$0.value.up }.map(\.key).sorted() }
+}
+
+public enum NodeStatus: Sendable, Equatable {
+    /// Nothing answered on the shell's port.
+    case offline
+    /// The shell answered, but this Mac holds no token, or the shell refused it, so only
+    /// "alive" is known.
+    case alive
+    case known(NodeHealth)
 }
 
 /// Bridge connecting the native macOS companion to the local Sjel daemon.
 public final class NodeBridge: Sendable {
     public let baseURL: URL
     private let session: URLSession
+    private let token: CachedToken
 
     /// sjel-status, the shell (`capabilities/sjel-status/service.toml`). This said 8080, where
     /// nothing listens, so the menu showed "offline" whatever the shell's state.
-    public init(baseURL: URL = URL(string: "http://127.0.0.1:8082")!) {
+    public init(baseURL: URL = URL(string: "http://127.0.0.1:8082")!, token: CachedToken = CachedToken()) {
         self.baseURL = baseURL
+        self.token = token
         let config = URLSessionConfiguration.ephemeral
-        config.timeoutIntervalForRequest = 2.0
+        // The authenticated health polls every capability, so it is slower than `/health`.
+        config.timeoutIntervalForRequest = 10.0
         self.session = URLSession(configuration: config)
     }
 
-    /// Checks the health of the local Sjel server.
-    public func checkHealth() async -> SjelNodeStatus {
-        let healthURL = baseURL.appendingPathComponent("health")
-        let start = CFAbsoluteTimeGetCurrent()
-        do {
-            let (data, response) = try await session.data(from: healthURL)
-            let latency = (CFAbsoluteTimeGetCurrent() - start) * 1000.0
-            guard let httpResponse = response as? HTTPURLResponse, httpResponse.statusCode == 200 else {
-                return SjelNodeStatus(isReachable: false, latencyMs: latency)
-            }
+    /// The open `/health` only proves the shell process is alive: it answered `ok` while nine
+    /// of 22 capabilities were down (2026-10-08). The authenticated health says which.
+    public func status() async -> NodeStatus {
+        if let health = await authenticatedHealth() { return .known(health) }
+        guard let (_, response) = try? await session.data(from: baseURL.appendingPathComponent("health")),
+              (response as? HTTPURLResponse)?.statusCode == 200
+        else { return .offline }
+        return .alive
+    }
 
-            // sjel-status answers `{"ok": true, "service": "sjel-status"}`.
-            if let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
-               json["ok"] as? Bool == true {
-                let version = (json["version"] as? String) ?? "v0.0.1"
-                return SjelNodeStatus(isReachable: true, version: version, latencyMs: latency)
-            }
-
-            return SjelNodeStatus(isReachable: true, latencyMs: latency)
-        } catch {
-            let latency = (CFAbsoluteTimeGetCurrent() - start) * 1000.0
-            return SjelNodeStatus(isReachable: false, latencyMs: latency)
-        }
+    private func authenticatedHealth() async -> NodeHealth? {
+        guard let bearer = token.get() else { return nil }
+        var request = URLRequest(url: baseURL.appendingPathComponent("api/sjel-status/health"))
+        request.setValue("Bearer \(bearer)", forHTTPHeaderField: "Authorization")
+        guard let (data, response) = try? await session.data(for: request),
+              let http = response as? HTTPURLResponse
+        else { return nil }
+        if http.statusCode == 401 { token.forget() }
+        guard http.statusCode == 200 else { return nil }
+        return try? JSONDecoder().decode(NodeHealth.self, from: data)
     }
 }

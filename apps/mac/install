@@ -30,6 +30,9 @@ trap 'rm -rf "$staging"' EXIT
 bundle="$staging/Sjel.app"
 mkdir -p "$bundle/Contents/MacOS" "$bundle/Contents/Resources"
 cp "$binary" "$bundle/Contents/MacOS/Sjel"
+# The menu bar hedgehog: brand/sjel-hedgehog.svg with the background dropped and the mark
+# filled black, so macOS can use it as a template image (Resources/README.md).
+cp "$APP_DIR/Resources/MenuBarIcon.pdf" "$bundle/Contents/Resources/"
 version="$(git -C "$APP_DIR" describe --tags --always 2>/dev/null || echo 0.0.0)"
 cat > "$bundle/Contents/Info.plist" <<PLIST
 <?xml version="1.0" encoding="UTF-8"?>

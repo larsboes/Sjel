@@ -72,3 +72,13 @@ import Testing
         #expect(reads.count == 2)
     }
 }
+
+@Suite struct NodeHealthTests {
+    @Test func theShellsHealthSaysWhichCapabilitiesAreDown() throws {
+        let data = Data(#"{"ok":false,"version":"0.1.0","uptime_seconds":2816,"capabilities":{"transit":{"up":false,"url":"u"},"finance":{"up":true,"url":"u"},"dashboard":{"up":false,"url":"u"}}}"#.utf8)
+        let health = try JSONDecoder().decode(NodeHealth.self, from: data)
+        #expect(health.version == "0.1.0")
+        #expect(health.uptimeSeconds == 2816)
+        #expect(health.down == ["dashboard", "transit"])
+    }
+}

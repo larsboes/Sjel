@@ -961,3 +961,10 @@ verdict = "adopt"
 license = "MIT OR Apache-2.0"
 summary = "Safe Unix signal registration; lets sjel-agent stop one turn on Ctrl-C instead of exiting"
 why = "adopted 2026-10-03 for libs/agent. The first Ctrl-C sets a flag that the stream reader, the bash tool and the tool dispatcher check, so a turn ends and the conversation stays. `flag::register_conditional_shutdown`, registered first, makes a second Ctrl-C exit with 130. Installing a signal handler needs `unsafe`, which the workspace denies (Cargo.toml, `unsafe_code`), so a reviewed crate holds it instead of this repository. One crate new to Cargo.lock: its `signal-hook-registry` half was already there through tokio."
+
+[proptest]
+url = "https://github.com/proptest-rs/proptest"
+verdict = "adopt"
+license = "MIT OR Apache-2.0"
+summary = "Property-based testing; shows the agent's stream fold survives any cut of a valid stream"
+why = "adopted 2026-10-08 for libs/agent, on D8 in libs/agent/ISA.md. AGT-22 claims `stream::fold` returns a message or an error and never panics, for any split of a valid event stream into chunks and for arbitrary bytes. That is a statement about every input, which is what this generates and what an example-based test cannot state; its second value is shrinking, so a failure arrives as a minimised input rather than a byte string nobody can read. Dev-dependency only, so nothing ships it: `cargo test -p sjel-agent` builds it and a release build does not. Cost: about ten crates in the dev tree, on every machine, and no host is asked to install anything. The alternative considered and declined was a deterministic test over every chunk boundary plus pseudo-random bytes, which covers the same falsifier without the shrinking."

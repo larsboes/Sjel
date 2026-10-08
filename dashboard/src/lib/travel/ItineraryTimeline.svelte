@@ -95,7 +95,7 @@
       const match = p.starts_at.match(/T(\d{2}:\d{2})/);
       if (match) return match[1];
     }
-    return null;
+    return typeof p.time === "string" ? p.time : null;
   }
 
   function itemTypeBadge(type: PlanItem["item_type"]): { label: string; icon: "train" | "ticket" | "compass" | "home" | "layout" | "activity" } {
@@ -194,9 +194,24 @@
     if (!selectedDayFilter) return daysTimeline;
     return daysTimeline.filter((d) => d.dayIso === selectedDayFilter);
   });
+
+  const routeStages = $derived(
+    [...(plan.stages ?? [])].sort((a, b) => a.sequence - b.sequence),
+  );
 </script>
 
 <div class="timeline-container">
+  {#if routeStages.length > 0}
+    <nav class="route-summary" aria-label="Trip destinations in order">
+      <span class="route-label">Stops</span>
+      <ol>
+        {#each routeStages as stage (stage.id)}
+          <li><span>Leg {stage.sequence + 1}</span><strong>{stage.destination.name}</strong></li>
+        {/each}
+      </ol>
+    </nav>
+  {/if}
+
   <!-- Day Navigator Pills -->
   {#if daysTimeline.length > 1}
     <div class="day-pills-bar" role="tablist" aria-label="Timeline days">
@@ -450,6 +465,56 @@
     display: flex;
     flex-direction: column;
     gap: 1rem;
+  }
+
+  .route-summary {
+    display: flex;
+    align-items: baseline;
+    gap: 0.75rem;
+    min-width: 0;
+    padding-bottom: 0.65rem;
+    border-bottom: 1px solid var(--card-border);
+  }
+
+  .route-label,
+  .route-summary li span {
+    color: var(--text-secondary);
+    font-size: var(--text-2xs);
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+  }
+
+  .route-summary ol {
+    display: flex;
+    align-items: baseline;
+    gap: 1.2rem;
+    min-width: 0;
+    margin: 0;
+    padding: 0;
+    overflow-x: auto;
+    list-style: none;
+  }
+
+  .route-summary li {
+    display: flex;
+    flex-direction: column;
+    position: relative;
+    gap: 0.1rem;
+    white-space: nowrap;
+  }
+
+  .route-summary li:not(:last-child)::after {
+    content: "→";
+    position: absolute;
+    left: calc(100% + 0.45rem);
+    bottom: 0.05rem;
+    color: var(--text-tertiary);
+  }
+
+  .route-summary li strong {
+    color: var(--text-primary);
+    font-size: var(--text-sm);
+    font-weight: 600;
   }
 
   .day-pills-bar {

@@ -10,6 +10,7 @@
   import { capabilities } from "$lib/capabilities.svelte";
   import ConnectionGroups from "./ConnectionGroups.svelte";
   import { connectionsFor, deepLink, expand, type ConnectionGroup } from "./connections";
+  import { recordHref } from "./record";
 
   let groups = $state<ConnectionGroup[] | null>(null);
 
@@ -142,6 +143,12 @@
           <span class="type-name">{(item.type === "link" ? item.kind : item.type).toUpperCase()}</span>
         </div>
 
+        {@const asPage = recordHref(item)}
+        {#if asPage}
+          <a class="btn-close as-page" href={asPage} onclick={() => inspectorStore.close()} use:tip={"Open as page"}>
+            <Icon name="external" size={14} />
+          </a>
+        {/if}
         <button
           type="button"
           class="btn-close"
@@ -518,6 +525,11 @@
   .btn-close:hover {
     background: var(--surface);
     color: var(--text-primary);
+  }
+
+  /* Pushes itself and the close button to the right; space-between alone would centre it. */
+  .as-page {
+    margin-left: auto;
   }
 
   .panel-body {

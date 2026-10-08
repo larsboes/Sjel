@@ -16,7 +16,7 @@ use std::path::{Path, PathBuf};
 use serde::{Deserialize, Serialize};
 
 use super::agentfile::translate_agent_for_pi;
-use super::engine::{self, read_pack_skills, read_state, DeployConfig, FlatFileConvention};
+use super::engine::{self, read_pack_skills, read_state, DeployConfig, FlatFileConvention, StatusRow};
 use super::mutate::{self, Profile};
 
 // ---- locations -----------------------------------------------------------------------------
@@ -646,6 +646,33 @@ pub fn status_lines(config: &DeployConfig, packs: &[String]) -> Result<Vec<Strin
 /// two channels answer different questions: the settings rows ask "is this path registered",
 /// these ask "are the bytes at that flat destination the ones this Pack would write".
 fn agent_status_lines(config: &DeployConfig, packs: &[String]) -> Result<Vec<String>, String> {
+    Ok(agent_status_rows(config, packs)?
+        .into_iter()
+        .map(|row| {
+            let detail = row
+                .detail
+                .as_deref()
+                .map(|d| format!(" ({d})"))
+                .unwrap_or_default();
+            format!(
+                "{}/{}: {}{detail}",
+                row.pack,
+                row.skill,
+                row.status.as_str()
+            )
+        })
+        .collect())
+}
+
+/// The agent channel as rows, so `tools/harnesses status` shows it beside the settings rows.
+/// Without this the matrix reports a Pack `current` while the agent files it owns sit stale at
+/// the flat destination, which is the drift that went unseen from 2026-10-04 to 2026-10-08: the
+/// Rust port of `translate_agent_for_pi` changed the generated provenance header and nothing in
+/// the matrix compared the bytes.
+pub fn agent_status_rows(
+    config: &DeployConfig,
+    packs: &[String],
+) -> Result<Vec<StatusRow>, String> {
     let agents = agents_config(config);
     let selected: Vec<String> = if packs.is_empty() {
         engine::available_packs(&agents, true)?
@@ -657,18 +684,7 @@ fn agent_status_lines(config: &DeployConfig, packs: &[String]) -> Result<Vec<Str
         if agent_units(&agents, pack)?.is_empty() && !agents_ledger_owns(&agents, pack) {
             continue;
         }
-        for row in engine::get_statuses(&agents, Some(pack))? {
-            let detail = row
-                .detail
-                .as_deref()
-                .map(|d| format!(" ({d})"))
-                .unwrap_or_default();
-            out.push(format!(
-                "{pack}/{}: {}{detail}",
-                row.skill,
-                row.status.as_str()
-            ));
-        }
+        out.extend(engine::get_statuses(&agents, Some(pack))?);
     }
     Ok(out)
 }

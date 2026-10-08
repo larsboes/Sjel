@@ -68,6 +68,7 @@ pub enum DigestNotQueued {
     /// the day's request budget is spent.
     NoProviderAvailable(String),
     Store(String),
+    PolicyDeferred(String),
 }
 
 impl std::fmt::Display for DigestNotQueued {
@@ -82,6 +83,7 @@ impl std::fmt::Display for DigestNotQueued {
                 write!(f, "no cloud provider is available: {detail}")
             }
             Self::Store(detail) => write!(f, "store error: {detail}"),
+            Self::PolicyDeferred(detail) => f.write_str(detail),
         }
     }
 }
@@ -96,6 +98,8 @@ pub fn enqueue_digest_job(
     cfg: &Config,
     item: &FeedItem,
 ) -> Result<QueuedDigest, DigestNotQueued> {
+    sjel_runtime::require(sjel_runtime::Category::RemoteModels)
+        .map_err(|e| DigestNotQueued::PolicyDeferred(e.to_string()))?;
     let registry = crate::people_registry::entity_registry();
     let preview =
         cloud_derivative::prepare_pseudonymized(&CloudDocumentInput::from_feed(item), registry)
@@ -115,6 +119,8 @@ pub fn enqueue_digest_job(
 
     let mut blocked = Vec::new();
     for (name, role) in cleared {
+        role.runtime_admission()
+            .map_err(|e| DigestNotQueued::PolicyDeferred(e.to_string()))?;
         if !role.credential_ready() {
             blocked.push(format!("{name}: credential unavailable"));
             continue;
@@ -261,6 +267,7 @@ fn tier_rank(role: &ResolvedRole) -> u8 {
 /// Lifted out of the server handler unchanged in behaviour so the drain can call
 /// it. The handler is now the HTTP shell around this.
 pub fn run_job(store: &Store, cfg: &Config, job_id: &str) -> Result<CloudDerivativeState, String> {
+    sjel_runtime::require(sjel_runtime::Category::RemoteModels).map_err(|e| e.to_string())?;
     let job = store
         .cloud_job_for_dispatch(job_id)
         .map_err(|error| error.to_string())?
@@ -283,6 +290,9 @@ pub fn run_job(store: &Store, cfg: &Config, job_id: &str) -> Result<CloudDerivat
         .role(&job.provider_role)
         .filter(|role| role.has_cloud_policy())
         .ok_or_else(|| "provider role is no longer a reviewed HTTPS cloud role".to_string())?;
+    selected_role
+        .runtime_admission()
+        .map_err(|e| e.to_string())?;
     if !admits(&selected_role, &job) {
         return Err("provider role no longer allows the staged derivative".into());
     }
@@ -292,6 +302,7 @@ pub fn run_job(store: &Store, cfg: &Config, job_id: &str) -> Result<CloudDerivat
     let mut outcomes = Vec::new();
 
     for (candidate_name, role) in cfg.inference.cloud_failover_roles(&job.provider_role) {
+        role.runtime_admission().map_err(|e| e.to_string())?;
         if !admits(&role, &job) {
             continue;
         }
@@ -315,6 +326,8 @@ pub fn run_job(store: &Store, cfg: &Config, job_id: &str) -> Result<CloudDerivat
             continue;
         }
 
+        sjel_runtime::require(sjel_runtime::Category::RemoteModels).map_err(|e| e.to_string())?;
+        role.runtime_admission().map_err(|e| e.to_string())?;
         let attempt_id = match store
             .claim_cloud_job_attempt(
                 &job.job_id,
@@ -336,6 +349,15 @@ pub fn run_job(store: &Store, cfg: &Config, job_id: &str) -> Result<CloudDerivat
         requested = true;
         let result = match perform(store, &job, &role) {
             Ok(result) => result,
+            Err(error) if sjel_runtime::is_deferred(&error) => {
+                if !store
+                    .release_cloud_job_attempt(&job.job_id, attempt_id)
+                    .map_err(|store_error| store_error.to_string())?
+                {
+                    return Err("deferred cloud claim could not be released".into());
+                }
+                return Err(error);
+            }
             Err(error) => {
                 store
                     .fail_cloud_job_attempt(&job.job_id, attempt_id, &error)
@@ -536,6 +558,9 @@ fn perform(
     };
 
     if let Err(ref err) = result {
+        if sjel_runtime::is_deferred(err) {
+            return result;
+        }
         let estimated_tokens = cloud_dispatch::input_token_upper_bound(&job.document);
         let _ = store.record_egress(&crate::store::NewEgressEntry {
             job_id: Some(&job.job_id),

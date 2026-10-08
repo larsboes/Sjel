@@ -427,6 +427,10 @@ pub(super) fn enrich_many_in_background(ids: Vec<String>) {
                 eprintln!("ingest: summarize failed for {id}: {error}");
             }
         }
+        if let Err(reason) = sjel_runtime::require(sjel_runtime::Category::BulkIndexing) {
+            eprintln!("ingest: {reason}");
+            return;
+        }
         let mut items = ids
             .iter()
             .filter_map(|id| store.get_feed(id).ok().flatten())
@@ -462,6 +466,12 @@ pub(super) fn enrich_many_in_background(ids: Vec<String>) {
             &travel_context.revision,
             &feedback.revision,
         );
+        if let Err(reason) =
+            relevance::runtime_admission(embedding_role.as_ref(), reranking_role.as_ref())
+        {
+            eprintln!("ingest: {reason}");
+            return;
+        }
         let semantic_available = relevance::embedding_backend_reachable(embedding_role.as_ref());
         items.retain(|item| {
             let item_revision = evaluation::item_revision(item);
@@ -482,7 +492,17 @@ pub(super) fn enrich_many_in_background(ids: Vec<String>) {
             embedding_role.as_ref(),
             reranking_role.as_ref(),
         );
+        if let Some(reason) = outcome.deferred {
+            eprintln!("ingest: {reason}");
+            return;
+        }
         for (item, result) in items.iter().zip(outcome.items) {
+            if let Err(reason) =
+                relevance::runtime_admission(embedding_role.as_ref(), reranking_role.as_ref())
+            {
+                eprintln!("ingest: {reason}");
+                return;
+            }
             if let Err(error) = store.replace_feed_relevance(&item.id, &result.matches) {
                 eprintln!("ingest: relevance failed for {}: {error}", item.id);
                 continue;
@@ -734,6 +754,7 @@ pub(super) async fn relevance_refresh_handler(Json(body): Json<RefreshBody>) -> 
     }
     let requested_offset = body.offset;
     let result = tokio::task::spawn_blocking(move || -> Result<Value, String> {
+        sjel_runtime::require(sjel_runtime::Category::BulkIndexing).map_err(|e| e.to_string())?;
         let cfg = Config::load();
         let store = Store::open(&cfg.database_path).map_err(|error| error.to_string())?;
         // Fallible now: a declared lens directory that has moved is reported
@@ -776,6 +797,8 @@ pub(super) async fn relevance_refresh_handler(Json(body): Json<RefreshBody>) -> 
             embedding_producer.as_deref(),
             reranking_producer.as_deref(),
         );
+        relevance::runtime_admission(embedding_role.as_ref(), reranking_role.as_ref())
+            .map_err(|e| e.to_string())?;
         let semantic_available = relevance::embedding_backend_reachable(embedding_role.as_ref());
         let receipt = store.relevance_pass().map_err(|error| error.to_string())?;
         let mut cursor =
@@ -850,6 +873,8 @@ pub(super) async fn relevance_refresh_handler(Json(body): Json<RefreshBody>) -> 
             }
         }
 
+        relevance::runtime_admission(embedding_role.as_ref(), reranking_role.as_ref())
+            .map_err(|e| e.to_string())?;
         let refused_class = refused.len();
         let mut refused_lower_tier = 0usize;
         let mut refused_matches_cleared = 0usize;
@@ -903,7 +928,12 @@ pub(super) async fn relevance_refresh_handler(Json(body): Json<RefreshBody>) -> 
             embedding_role.as_ref(),
             reranking_role.as_ref(),
         );
+        if let Some(reason) = &outcome.deferred {
+            return Err(reason.clone());
+        }
         for (item, scored) in to_rescore.iter().zip(&outcome.items) {
+            relevance::runtime_admission(embedding_role.as_ref(), reranking_role.as_ref())
+                .map_err(|e| e.to_string())?;
             if !store
                 .replace_feed_relevance(&item.id, &scored.matches)
                 .map_err(|error| error.to_string())?
@@ -933,6 +963,8 @@ pub(super) async fn relevance_refresh_handler(Json(body): Json<RefreshBody>) -> 
         // are already stored, with no model call at all.
         let reused_relevance = to_reevaluate.len();
         for item in &to_reevaluate {
+            relevance::runtime_admission(embedding_role.as_ref(), reranking_role.as_ref())
+                .map_err(|e| e.to_string())?;
             let matches = stored_matches
                 .get(&item.id)
                 .map(Vec::as_slice)
@@ -975,6 +1007,8 @@ pub(super) async fn relevance_refresh_handler(Json(body): Json<RefreshBody>) -> 
             cursor.advance(&relevance_revision, days, offset, considered, has_more);
         }
         cursor.mode = mode.clone();
+        relevance::runtime_admission(embedding_role.as_ref(), reranking_role.as_ref())
+            .map_err(|e| e.to_string())?;
         store
             .record_relevance_pass(
                 &cursor.render(),
@@ -1021,6 +1055,10 @@ pub(super) async fn relevance_refresh_handler(Json(body): Json<RefreshBody>) -> 
 
     match result {
         Ok(Ok(value)) => (StatusCode::OK, Json(value)),
+        Ok(Err(error)) if sjel_runtime::is_deferred(&error) => (
+            StatusCode::CONFLICT,
+            Json(json!({ "state": "policy_deferred", "error": error })),
+        ),
         Ok(Err(error)) => (
             StatusCode::INTERNAL_SERVER_ERROR,
             Json(json!({ "error": error })),

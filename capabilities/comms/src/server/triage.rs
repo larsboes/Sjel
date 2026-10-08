@@ -249,6 +249,7 @@ pub(super) async fn triage_relevance_handler(
 ) -> HttpResponse {
     let limit = body.limit.unwrap_or(200).clamp(1, 500);
     let result = tokio::task::spawn_blocking(move || -> Result<Value, String> {
+        sjel_runtime::require(sjel_runtime::Category::BulkIndexing).map_err(|e| e.to_string())?;
         let cfg = Config::load();
         let store = Store::open(&cfg.database_path).map_err(|error| error.to_string())?;
         let profiles = relevance::load_profiles(&cfg.relevance)?;
@@ -286,6 +287,8 @@ pub(super) async fn triage_relevance_handler(
                 .map(|role| role.cache_key())
                 .as_deref(),
         );
+        relevance::runtime_admission(embedding_role.as_ref(), reranking_role.as_ref())
+            .map_err(|e| e.to_string())?;
         let semantic_available = relevance::embedding_backend_reachable(embedding_role.as_ref());
 
         // The limit bounds the WORK, not the head of a fixed list. `list_triage`
@@ -353,6 +356,9 @@ pub(super) async fn triage_relevance_handler(
             embedding_role.as_ref(),
             reranking_role.as_ref(),
         );
+        if let Some(reason) = &outcome.deferred {
+            return Err(reason.clone());
+        }
         let mode = outcome
             .items
             .iter()
@@ -361,6 +367,8 @@ pub(super) async fn triage_relevance_handler(
             .next();
         let mut scored = 0usize;
         for item in &outcome.items {
+            relevance::runtime_admission(embedding_role.as_ref(), reranking_role.as_ref())
+                .map_err(|e| e.to_string())?;
             scored += 1;
             store
                 .replace_triage_relevance(&item.feed_id, &item.matches)
@@ -373,6 +381,8 @@ pub(super) async fn triage_relevance_handler(
         // gate says no model may read. `replace_triage_relevance` carries no
         // tier gate, so unlike the feed's an empty set really does delete.
         for id in &refused_ids {
+            sjel_runtime::require(sjel_runtime::Category::BulkIndexing)
+                .map_err(|e| e.to_string())?;
             store
                 .replace_triage_relevance(id, &[])
                 .map_err(|error| error.to_string())?;
@@ -391,6 +401,8 @@ pub(super) async fn triage_relevance_handler(
         // then carries weight 0.
         let verdicts = store.model_verdicts().unwrap_or_default();
         for (item, scored_item) in scorable.iter().zip(&outcome.items) {
+            relevance::runtime_admission(embedding_role.as_ref(), reranking_role.as_ref())
+                .map_err(|e| e.to_string())?;
             // The rung's urgency moves the score THROUGH the evaluator rather
             // than competing with it on the wire, so a reader who asks why a
             // mail is at the top gets four bars, one of which is the model's.

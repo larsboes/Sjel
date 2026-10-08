@@ -114,12 +114,13 @@ pub fn was_prompted(state: &str) -> bool {
 /// carry — `{prefix}_triage_model_verdicts.state` has no CHECK, following
 /// `{prefix}_content_digests`. `every_stored_state_is_in_the_documented_set`
 /// is what holds it.
-pub const MODEL_VERDICT_STATES: [&str; 13] = [
+pub const MODEL_VERDICT_STATES: [&str; 14] = [
     // The nine from `summarize::Outcome::state()`.
     "generated",
     "skipped_short",
     "remote_refused",
     "unconfigured",
+    "policy_deferred",
     "http_error",
     "model_error",
     "capacity_aborted",
@@ -563,6 +564,11 @@ pub fn classify_one(cfg: &Config, candidate: &ModelCandidate) -> ModelVerdict {
         }
     };
 
+    if let Err(reason) = quiet::runtime_admission(&role, prompt.chars().count(), REPLY_TOKENS) {
+        verdict.state = "policy_deferred".into();
+        verdict.last_error = Some(reason.to_string());
+        return verdict;
+    }
     let target = digest::to_target(cfg, &role);
     let outcome = summarize::ask(Some(&target), &prompt, REPLY_TOKENS, Reach::LoopbackOnly);
     let answer = match &outcome {
@@ -678,6 +684,7 @@ pub fn run_pass(
     limit: usize,
     min_confidence_bp: i64,
 ) -> std::result::Result<PassReceipt, String> {
+    sjel_runtime::require(sjel_runtime::Category::BulkIndexing).map_err(|e| e.to_string())?;
     let producer = producer(cfg);
     let mut receipt = PassReceipt {
         mode: mode.as_str().into(),
@@ -703,7 +710,13 @@ pub fn run_pass(
     receipt.eligible = due.len();
 
     for candidate in due.into_iter().take(limit) {
+        sjel_runtime::require(sjel_runtime::Category::BulkIndexing).map_err(|e| e.to_string())?;
         let mut verdict = classify_one(cfg, &candidate);
+        if verdict.state == "policy_deferred" {
+            return Err(verdict
+                .last_error
+                .unwrap_or_else(|| "deferred by runtime profile: mail classification".into()));
+        }
         // Carried forward rather than restarted: a retryable failure
         // accumulates across passes, and anything else says the previous
         // failures are no longer the state of this row.
@@ -728,6 +741,7 @@ pub fn run_pass(
         }
         receipt.redactions += verdict.redactions;
 
+        sjel_runtime::require(sjel_runtime::Category::BulkIndexing).map_err(|e| e.to_string())?;
         settle(store, &mut verdict, mode, min_confidence_bp, &mut receipt)?;
         store
             .upsert_model_verdict(&verdict)
@@ -762,6 +776,7 @@ pub fn run_pass(
         }
         written += 1;
         let mut verdict = verdict.clone();
+        sjel_runtime::require(sjel_runtime::Category::BulkIndexing).map_err(|e| e.to_string())?;
         settle(store, &mut verdict, mode, min_confidence_bp, &mut receipt)?;
         store
             .upsert_model_verdict(&verdict)
@@ -850,6 +865,9 @@ fn is_due(candidate: &ModelCandidate, producer: &str) -> bool {
                 &candidate.data_class,
             )
     {
+        return true;
+    }
+    if stored.state == "policy_deferred" {
         return true;
     }
     crate::store::RETRYABLE_MODEL_VERDICT_STATES.contains(&stored.state.as_str())
@@ -1168,6 +1186,7 @@ mod tests {
             Outcome::CapacityAborted(String::new()),
             Outcome::EmptyResponse,
             Outcome::Timeout,
+            Outcome::PolicyDeferred(String::new()),
         ] {
             assert!(
                 MODEL_VERDICT_STATES.contains(&outcome.state()),
@@ -1185,7 +1204,7 @@ mod tests {
         }
         assert_eq!(
             MODEL_VERDICT_STATES.len(),
-            13,
+            14,
             "a state was added without updating the documented set"
         );
         for retryable in crate::store::RETRYABLE_MODEL_VERDICT_STATES {

@@ -49,6 +49,7 @@ pub enum SummarizeOutcome {
     /// nothing was sent anywhere, so nothing is counted against the row's retry
     /// ledger or the capacity-alert streak.
     OverWindow,
+    PolicyDeferred(String),
 }
 
 impl SummarizeOutcome {
@@ -65,6 +66,7 @@ impl SummarizeOutcome {
             SummarizeOutcome::RemoteRefused => "remote_refused",
             SummarizeOutcome::LocalRefused => crate::digest::LOCAL_REFUSED,
             SummarizeOutcome::OverWindow => "over_window",
+            SummarizeOutcome::PolicyDeferred(_) => "policy_deferred",
         }
     }
 }
@@ -144,15 +146,17 @@ pub fn summarize(text: &str, cfg: &Config, data_class: &str) -> SummarizeOutcome
     // `POST /ingest`, `comms summarize --pending` — and none of them is an
     // operator watching an item. Resolving `summarization` here is what fed 182
     // transcripts through a 9B model on the GPU on 2026-08-13.
-    let role = match crate::quiet::rung(
-        &cfg.inference,
-        text.chars().count().min(SUMMARY_INPUT_CAP),
-        SUMMARY_REPLY_TOKENS,
-    ) {
+    let role = match crate::quiet::rung(&cfg.inference, text.chars().count(), SUMMARY_REPLY_TOKENS)
+    {
         crate::quiet::Rung::Light(role) => *role,
         crate::quiet::Rung::OverWindow => return SummarizeOutcome::OverWindow,
         crate::quiet::Rung::Unconfigured => return SummarizeOutcome::Unconfigured,
     };
+    if let Err(reason) =
+        crate::quiet::runtime_admission(&role, text.chars().count(), SUMMARY_REPLY_TOKENS)
+    {
+        return SummarizeOutcome::PolicyDeferred(reason.to_string());
+    }
     // The class gate asks whether this endpoint may see the content at all, so
     // it asks about hardware the operator controls (Q39), not about loopback.
     // The admission gate below still asks `is_loopback`: a trusted peer does not
@@ -165,7 +169,11 @@ pub fn summarize(text: &str, cfg: &Config, data_class: &str) -> SummarizeOutcome
     {
         return SummarizeOutcome::RemoteRefused;
     }
-    let input = truncate_for_summary(text, SUMMARY_INPUT_CAP);
+    let input = if role.is_afm() {
+        text.to_string()
+    } else {
+        truncate_for_summary(text, SUMMARY_INPUT_CAP)
+    };
     let prompt = summary_prompt(&input);
 
     // Held to the end of the function by drop, on every return path below.
@@ -190,16 +198,24 @@ pub fn summarize(text: &str, cfg: &Config, data_class: &str) -> SummarizeOutcome
         Ok(c) => c,
         Err(e) => return SummarizeOutcome::HttpError(e.to_string()),
     };
-    let mut req = http
-        .post(role.chat_completions_endpoint())
-        .json(&serde_json::json!({
-            "model": role.model,
-            "messages": [{ "role": "user", "content": prompt }],
-            "max_tokens": 800,
-            "stream": false,
-        }));
+    let body = serde_json::json!({
+        "model": role.model,
+        "messages": [{ "role": "user", "content": prompt }],
+        "max_tokens": SUMMARY_REPLY_TOKENS,
+        "stream": false,
+    });
+    let mut req = http.post(role.chat_completions_endpoint()).json(&body);
     if let Some(key) = role.bearer_key() {
         req = req.bearer_auth(key);
+    }
+    if let Err(reason) = role.admit_chat_request(&body) {
+        return if sjel_runtime::is_deferred(&reason) {
+            SummarizeOutcome::PolicyDeferred(reason)
+        } else {
+            // No request was sent. In particular, AFM's context refusal must not
+            // burn retries or replace a prior summary.
+            SummarizeOutcome::OverWindow
+        };
     }
     let resp = match req.send() {
         Ok(r) => r,
@@ -298,6 +314,7 @@ pub fn summarize_item(store: &Store, cfg: &Config, id: &str) -> Result<bool> {
         SummarizeOutcome::Unconfigured
         | SummarizeOutcome::OverWindow
         | SummarizeOutcome::LocalRefused => Ok(false),
+        SummarizeOutcome::PolicyDeferred(reason) => Err(CommsError::Other(reason)),
         outcome => {
             let _ = store.record_summary_attempt(id, outcome.error_class(), &producer_revision);
             Ok(false)
@@ -362,6 +379,7 @@ pub fn summarize_pending(store: &Store, cfg: &Config) -> Result<EnrichmentPass> 
                 // `summarize_item` and `digest::write_digest` decide this
                 // refusal the same way.
                 SummarizeOutcome::LocalRefused => {}
+                SummarizeOutcome::PolicyDeferred(reason) => return Err(CommsError::Other(reason)),
                 SummarizeOutcome::Unconfigured => break, // no point continuing
                 outcome => {
                     // Same streak the digest drain counts, because it is the

@@ -106,6 +106,30 @@ pub fn rung(inference: &InferenceConfig, source_chars: usize, reply_tokens: u32)
     }
 }
 
+/// Runtime admission plus the full-source window check for On-the-go AFM work.
+/// No truncation is allowed to turn an oversized source into an admitted request.
+pub fn runtime_admission(
+    role: &ResolvedRole,
+    source_chars: usize,
+    reply_tokens: u32,
+) -> Result<(), sjel_runtime::Deferred> {
+    let status = sjel_runtime::current()?;
+    status.admit_model(&role.backend_name, &role.model, role.is_loopback())?;
+    if status.effective == sjel_runtime::Selection::OnTheGo
+        && role.backend_name == "foundation-models"
+        && role.model == "apple-foundationmodel"
+        && role.max_input_tokens.is_none_or(|window| {
+            source_chars > summarize::window_chars(reply_tokens, window)
+                || !summarize::fits_window(source_chars, reply_tokens, window)
+        })
+    {
+        return Err(sjel_runtime::Deferred(
+            "deferred by runtime profile: AFM needs a known context window that fits the full source".into(),
+        ));
+    }
+    Ok(())
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

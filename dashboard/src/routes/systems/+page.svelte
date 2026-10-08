@@ -6,6 +6,7 @@
   import { axonStatus, macmon, type MacmonSample, type StorageReport, type UpdatesReport } from "$lib/api";
   import { formatBytes, storageView } from "$lib/systems/storage";
   import AgentPanel from "$lib/systems/AgentPanel.svelte";
+  import RuntimeProfile from "$lib/systems/RuntimeProfile.svelte";
   import { applySummary, auditNeedsAttention, updatesView, versionLabel } from "$lib/systems/updates";
 
   let macmonState = $state<"checking" | "up" | "down">("checking");
@@ -136,6 +137,8 @@
   title="Systems"
   desc="What this computer is doing now: temperature, power, and utilisation."
 />
+
+<RuntimeProfile />
 
 <!-- ─── macmon dashboard ──────────────────────────────────────────────────── -->
 

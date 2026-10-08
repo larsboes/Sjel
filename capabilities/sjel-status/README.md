@@ -55,6 +55,13 @@ in this process would rebuild the plumbing the item deleted. Dependabot
 - `POST /api/sjel-status/capabilities/:name/start` — bring one up (via
   `service-runner.sh resume`, which also lifts a maintenance hold)
 - `POST /api/sjel-status/capabilities/:name/stop` — take one down and hold it
+- `GET /api/sjel-status/runtime` — this device's selected/effective runtime profile, power source and saved exceptions
+- `POST /api/sjel-status/runtime` — save `selection` (Auto, Normal, On the go) or the `allow` category set; optional `expected_revision` rejects stale updates with 409
+
+Runtime controls are owner-only, like the other shell controls. The owned power monitor samples
+at startup and every 30 seconds; workers reread the policy without restarting capabilities.
+A new installation stays Normal until a selection is saved. See
+[`sjel-runtime`](../../libs/runtime/README.md) for admission, exception and deferral behavior.
 
 ### Why a process-control endpoint is safe here, and when it stops being safe
 

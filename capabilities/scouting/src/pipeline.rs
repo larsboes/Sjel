@@ -22,18 +22,25 @@ pub fn run(
     mut store: Option<&mut Store>,
     events_dir: Option<&Path>,
 ) -> Result<PipelineReport, Box<dyn std::error::Error>> {
+    sjel_runtime::require(sjel_runtime::Category::BulkIndexing)?;
+    let role = crate::embed::embedding_role();
+    if opp_embeddings.is_none() {
+        if let Some(role) = &role { role.runtime_admission()?; }
+    }
     let opportunities = adapter.search(query)?;
 
     // A pre-computed file, if one was handed in, is authoritative. Otherwise
     // embed the opportunity side live: without this only the interest profile
     // ever carried a real vector and every cosine was half hash, whichever
     // backend was configured.
-    let role = crate::embed::embedding_role();
     let live: Option<HashMap<String, Vec<f32>>> = match (opp_embeddings, role.as_ref()) {
         (Some(_), _) => None,
         (None, Some(role)) => embed_opportunities(&opportunities, role),
         (None, None) => None,
     };
+    if opp_embeddings.is_none() {
+        if let Some(role) = &role { role.runtime_admission()?; }
+    }
     let vectors = opp_embeddings.or(live.as_ref());
     // Labelled by what happened, not by what was configured. Deriving this
     // from `role` alone printed the model's name on a run that had already
@@ -53,6 +60,7 @@ pub fn run(
     let mut vault_links = 0;
 
     for s in &mut scored {
+        sjel_runtime::require(sjel_runtime::Category::BulkIndexing)?;
         let vault_link =
             events_dir.and_then(|dir| vault_linker::link_to_vault(&s.opportunity, dir));
         if let Some(ref vl) = vault_link {

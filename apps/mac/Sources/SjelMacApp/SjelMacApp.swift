@@ -104,6 +104,7 @@ final class SjelMacViewModel: ObservableObject {
 
     /// Starts or stops capabilities one after the other, then reads the health again.
     func setRunning(_ names: [String], _ running: Bool) {
+        openProblem = nil
         let names = names.filter { !busy.contains($0) }
         busy.formUnion(names)
         Task {
@@ -211,55 +212,44 @@ enum MenuBarIcon {
     }
 }
 
-/// Answers one question: is Sjel all right, and does anything need me? What needs a decision
-/// comes first, then what is broken, then the one action. Settings sit behind the ⋯ menu
-/// (the explicitness ladder, Packs/design/skills/ui-craftsmanship/SKILL.md, rule 2).
+/// Answers one question: is Sjel all right, and does anything need me?
+///
+/// Layout rule: a click or a poll must not move what the reader is looking at. The fixed parts
+/// come first and keep their place in every state: the actions, the message line, the summary,
+/// and every capability in a list of fixed height. The parts that come and go (waiting writes,
+/// the calendar, agent activity) sit below them, so their arrival or departure cannot push a
+/// button or a capability. Settings sit behind the ⋯ menu (the explicitness ladder,
+/// ui-craftsmanship rule 2).
 struct SjelMenuBarView: View {
     @ObservedObject var model: SjelMacViewModel
 
-    /// More down than this and the rest is a count, so the panel keeps its size.
-    private let downShown = 5
+    /// Capability rows in view at once. The list keeps this height in every state, so a status
+    /// change never moves what sits below it. More than this scrolls.
+    private let rowsVisible = 6
+    private let rowHeight: CGFloat = 20
+    /// Older than this and the header says how old (the poll runs every 30 s).
+    private let staleAfter: TimeInterval = 90
 
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
             header
+            actions
+            message
+            Divider()
+            statusSummary
+            capabilityList
 
             if !model.pendingWrites.isEmpty {
                 Divider()
                 approvals
             }
-
             if let today = model.today {
                 Divider()
                 todaySection(today)
             }
-
-            Divider()
-            statusSection
-
             if !model.agentCalls.isEmpty {
                 Divider()
                 agentActivity
-            }
-
-            if let problem = model.openProblem {
-                Text(problem)
-                    .font(.system(size: 11))
-                    .foregroundStyle(.orange)
-            }
-
-            HStack {
-                Button {
-                    model.openDashboard()
-                } label: {
-                    Text("Open Dashboard").frame(maxWidth: .infinity)
-                }
-                .buttonStyle(.borderedProminent)
-                .keyboardShortcut("d", modifiers: .command)
-                .help("Open the dashboard in the browser, logged in (⌘D)")
-
-                Button("Ask") { model.showAsk() }
-                    .help("Ask Sjel from any app with ⌃⌥Space")
             }
         }
         .padding(14)
@@ -267,14 +257,29 @@ struct SjelMenuBarView: View {
         .task { await model.refreshStatus() }
     }
 
+    /// The health the list shows, or nil when the shell did not give one.
+    private var health: NodeHealth? {
+        if case .known(let health) = model.status { return health }
+        return nil
+    }
+
+    private var downNames: [String] { health?.down ?? [] }
+
     private var header: some View {
         HStack(alignment: .firstTextBaseline) {
             Text("Sjel")
                 .font(.system(size: 13, weight: .semibold))
-            if case .known(let health) = model.status {
+            if let health {
                 Text("\(health.version) · up \(uptime(health.uptimeSeconds))")
                     .font(.system(size: 10, design: .monospaced))
                     .foregroundStyle(.secondary)
+                    .lineLimit(1)
+                if let checked = model.checkedAt, Date().timeIntervalSince(checked) > staleAfter {
+                    Text("· checked \(checked, style: .relative) ago")
+                        .font(.system(size: 10))
+                        .foregroundStyle(.secondary)
+                        .lineLimit(1)
+                }
             }
             Spacer()
             Menu {
@@ -298,6 +303,102 @@ struct SjelMenuBarView: View {
         }
     }
 
+    /// Always both buttons, always here: nothing above them comes and goes.
+    private var actions: some View {
+        HStack {
+            Button {
+                model.openDashboard()
+            } label: {
+                Text("Open Dashboard").frame(maxWidth: .infinity)
+            }
+            .buttonStyle(.borderedProminent)
+            .keyboardShortcut("d", modifiers: .command)
+            .help("Open the dashboard in the browser, logged in (⌘D)")
+
+            Button("Ask") { model.showAsk() }
+                .help("Ask Sjel from any app with ⌃⌥Space")
+        }
+    }
+
+    /// What the last action could not do. Its line is always reserved, so an error appearing
+    /// or clearing moves nothing.
+    private var message: some View {
+        Text(model.openProblem ?? "")
+            .font(.system(size: 11))
+            .foregroundStyle(.orange)
+            .lineLimit(1)
+            .truncationMode(.tail)
+            .frame(maxWidth: .infinity, minHeight: 14, maxHeight: 14, alignment: .leading)
+            .help(model.openProblem ?? "")
+    }
+
+    private var summaryLine: (tone: Color, text: String) {
+        switch model.status {
+        case .offline:
+            return (.secondary, "Sjel is not running on this Mac.")
+        case .alive:
+            return (.green, "Running")
+        case .known(let health):
+            let down = health.down
+            let total = health.capabilities.count
+            if down.isEmpty { return (.green, "All \(total) capabilities up") }
+            return (.orange, "\(down.count) of \(total) down: \(down.joined(separator: ", "))")
+        }
+    }
+
+    /// One line, always the same height. The count and the names change; the place does not.
+    private var statusSummary: some View {
+        let line = summaryLine
+        return HStack(spacing: 6) {
+            Circle().fill(line.tone).frame(width: 8, height: 8)
+            Text(line.text)
+                .font(.system(size: 12, weight: .medium))
+                .lineLimit(1)
+                .truncationMode(.tail)
+                .help(line.text)
+            Spacer(minLength: 6)
+            startAll
+        }
+        .frame(height: 20)
+    }
+
+    /// Always in place. Disabled when nothing is down, and the tip says why.
+    private var startAll: some View {
+        Button("Start all") { model.setRunning(downNames, true) }
+            .controlSize(.small)
+            .disabled(downNames.isEmpty)
+            .help(
+                downNames.isEmpty
+                    ? (health == nil ? "Sjel's health is not known yet" : "Every capability is up")
+                    : "Start every capability that is down"
+            )
+            .frame(width: 66, alignment: .trailing)
+    }
+
+    /// Every capability, in name order. A start or a stop changes one row's dot and button, and
+    /// no row leaves the list. Fixed height, so the panel is the same size in every state.
+    private var capabilityList: some View {
+        ScrollView {
+            VStack(alignment: .leading, spacing: 0) {
+                if let health {
+                    ForEach(health.rowOrder, id: \.self) { name in
+                        let up = health.capabilities[name]?.up ?? false
+                        // Stopping the shell would take this panel's own source with it.
+                        CapabilityRow(name: name, up: up, busy: model.busy.contains(name), canStop: name != "sjel-status") {
+                            model.setRunning([name], !up)
+                        }
+                    }
+                } else if case .alive = model.status {
+                    Text("Capability health needs the deployment token in the Keychain.")
+                        .font(.system(size: 11))
+                        .foregroundStyle(.secondary)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+            }
+        }
+        .frame(height: CGFloat(rowsVisible) * rowHeight)
+    }
+
     private var approvals: some View {
         VStack(alignment: .leading, spacing: 6) {
             Text("Waiting for you")
@@ -315,56 +416,6 @@ struct SjelMenuBarView: View {
                     .controlSize(.small)
                 }
             }
-        }
-    }
-
-    @ViewBuilder
-    private var statusSection: some View {
-        switch model.status {
-        case .offline:
-            line(color: .secondary, "Sjel is not running on this Mac.")
-        case .alive:
-            line(color: .green, "Running")
-            Text("Capability health needs the deployment token in the Keychain.")
-                .font(.system(size: 11))
-                .foregroundStyle(.secondary)
-        case .known(let health):
-            let down = health.down
-            let total = health.capabilities.count
-            if down.isEmpty {
-                line(color: .green, "All \(total) capabilities up")
-            } else {
-                HStack {
-                    line(color: .orange, "\(down.count) of \(total) capabilities down")
-                    Spacer()
-                    if down.count > 1 {
-                        Button("Start all") { model.setRunning(down, true) }
-                            .controlSize(.small)
-                            .help("Start every capability that is down")
-                    }
-                }
-                VStack(alignment: .leading, spacing: 2) {
-                    ForEach(down.prefix(downShown), id: \.self) { name in
-                        CapabilityRow(name: name, up: false, busy: model.busy.contains(name)) {
-                            model.setRunning([name], true)
-                        }
-                    }
-                    if down.count > downShown {
-                        Text("and \(down.count - downShown) more")
-                            .font(.system(size: 11, design: .monospaced))
-                            .foregroundStyle(.secondary)
-                            .help(down.dropFirst(downShown).joined(separator: ", "))
-                    }
-                }
-                .padding(.leading, 14)
-            }
-            allCapabilities(health)
-        }
-        // Stale: the poll runs every 30 s, so anything older means it stopped.
-        if let checked = model.checkedAt, Date().timeIntervalSince(checked) > 90 {
-            Text("Checked \(checked, style: .relative) ago")
-                .font(.system(size: 10))
-                .foregroundStyle(.secondary)
         }
     }
 
@@ -406,24 +457,6 @@ struct SjelMenuBarView: View {
         }
     }
 
-    /// Every capability, folded away: stopping one is rare, so it sits a click down.
-    private func allCapabilities(_ health: NodeHealth) -> some View {
-        DisclosureGroup("All capabilities") {
-            VStack(alignment: .leading, spacing: 2) {
-                ForEach(health.capabilities.keys.sorted(), id: \.self) { name in
-                    let up = health.capabilities[name]?.up ?? false
-                    // Stopping the shell would take this panel's own source with it.
-                    CapabilityRow(name: name, up: up, busy: model.busy.contains(name), canStop: name != "sjel-status") {
-                        model.setRunning([name], !up)
-                    }
-                }
-            }
-            .padding(.top, 4)
-        }
-        .font(.system(size: 11))
-        .foregroundStyle(.secondary)
-    }
-
     /// Reads are most of the log and say little, so they are a count. Anything else (a
     /// write, a refusal) is listed.
     private var agentActivity: some View {
@@ -458,13 +491,6 @@ struct SjelMenuBarView: View {
         }
     }
 
-    private func line(color: Color, _ text: String) -> some View {
-        HStack(spacing: 6) {
-            Circle().fill(color).frame(width: 8, height: 8)
-            Text(text).font(.system(size: 12, weight: .medium))
-        }
-    }
-
     private func uptime(_ seconds: UInt64) -> String {
         let minutes = seconds / 60
         if minutes < 60 { return "\(minutes)m" }
@@ -474,8 +500,8 @@ struct SjelMenuBarView: View {
     }
 }
 
-/// One capability: its name, and the one action that changes its state. The list that holds
-/// up capabilities is folded away already, so Stop needs no second hiding.
+/// One capability: its dot, its name, and the one action that changes its state. The action
+/// keeps the same width whatever it holds, so a spinner or a label change moves nothing.
 struct CapabilityRow: View {
     let name: String
     let up: Bool
@@ -486,18 +512,27 @@ struct CapabilityRow: View {
     var body: some View {
         HStack(spacing: 6) {
             Circle().fill(up ? Color.green : Color.orange).frame(width: 6, height: 6)
-            Text(name).font(.system(size: 11, design: .monospaced))
-            Spacer()
-            if busy {
-                ProgressView().controlSize(.mini)
-            } else if !up || canStop {
-                Button(up ? "Stop" : "Start", action: action)
-                    .buttonStyle(.borderless)
-                    .font(.system(size: 11))
-                    .help(up ? "Stop \(name). It stays stopped until you start it." : "Start \(name)")
+            Text(name)
+                .font(.system(size: 11, design: .monospaced))
+                .lineLimit(1)
+            Spacer(minLength: 4)
+            Group {
+                if busy {
+                    ProgressView().controlSize(.mini)
+                } else if up && !canStop {
+                    Button("Stop") {}
+                        .disabled(true)
+                        .help("The shell serves this panel. Stop it from a terminal.")
+                } else {
+                    Button(up ? "Stop" : "Start", action: action)
+                        .help(up ? "Stop \(name). It stays stopped until you start it." : "Start \(name)")
+                }
             }
+            .buttonStyle(.borderless)
+            .font(.system(size: 11))
+            .frame(width: 44, alignment: .trailing)
         }
-        .frame(height: 18)
+        .frame(height: 20)
     }
 }
 

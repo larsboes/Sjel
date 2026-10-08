@@ -43,3 +43,8 @@ signal-hook = "0.4"
 
 [lints]
 workspace = true
+
+[dev-dependencies]
+# Property-based tests: `stream::fold` must survive any cut of a valid stream (AGT-22, D8).
+# Dev-only, so a release build links none of it.
+proptest.workspace = true

@@ -33,6 +33,12 @@ fn generated_id(prefix: &str) -> String {
     format!("{prefix}:{nanos:x}{sequence:04x}")
 }
 
+/// Orders a stored commitment column as SQL, matching `COMMITMENTS`. An unknown
+/// value ranks as `possible`, the same lenient direction `Commitment` reads it.
+fn commitment_rank_sql(column: &str) -> String {
+    format!("(CASE {column} WHEN 'committed' THEN 2 WHEN 'planned' THEN 1 ELSE 0 END)")
+}
+
 fn now_text() -> String {
     SystemTime::now()
         .duration_since(UNIX_EPOCH)
@@ -414,13 +420,19 @@ impl CalendarStore {
                    starts_at=excluded.starts_at, ends_at=excluded.ends_at, \
                    all_day=excluded.all_day, location=excluded.location, \
                    notes=excluded.notes, rhythm_id=excluded.rhythm_id, \
-                   payload=excluded.payload, updated_at=excluded.updated_at \
+                   payload=excluded.payload, updated_at=excluded.updated_at, \
+                   commitment=CASE WHEN {rank_new} > {rank_old} \
+                     THEN excluded.commitment ELSE commitment END \
                  RETURNING *",
-                // `commitment` is absent from that DO UPDATE list on purpose.
-                // A provider re-running its import re-states what an event is,
-                // never how committed the operator is to it: once they raise a promoted
-                // event to planned or committed, the next `scout
-                // --promote-calendar` must not quietly hand it back down.
+                // `commitment` only ratchets up. A provider re-running its import
+                // re-states what an event is, never lowers how committed the
+                // operator is to it: once they raise a promoted event to planned
+                // or committed, the next `scout --promote-calendar` must not
+                // quietly hand it back down. It may raise it: a trip stage that
+                // becomes `booked` must reach `committed` on the next sync, which
+                // it did not before 2026-10-08.
+                rank_new = commitment_rank_sql("excluded.commitment"),
+                rank_old = commitment_rank_sql("commitment"),
                 prefix = self.prefix
             ),
             params![
@@ -1282,6 +1294,23 @@ mod db_tests {
         let found = store.entries_for_plan("trip:plan:1").expect("a query");
         let titles: Vec<_> = found.iter().map(|e| e.title.as_str()).collect();
         assert_eq!(titles, ["Bonn → Stuttgart"]);
+    }
+
+    #[test]
+    fn an_external_upsert_raises_commitment_but_never_lowers_it() {
+        let store = open_test_store("commitment_ratchet");
+        let mut leg = an_entry("Bonn → Stuttgart", "2026-10-08", "away");
+        leg.source = "trips".into();
+        leg.external_id = Some("trip:stage:stuttgart".into());
+        store.upsert_external_entry(&leg).expect("a planning leg");
+
+        leg.commitment = Commitment::Committed;
+        let booked = store.upsert_external_entry(&leg).expect("the leg, booked");
+        assert_eq!(booked.commitment, Commitment::Committed);
+
+        leg.commitment = Commitment::Possible;
+        let again = store.upsert_external_entry(&leg).expect("a stale re-sync");
+        assert_eq!(again.commitment, Commitment::Committed);
     }
 
     #[test]

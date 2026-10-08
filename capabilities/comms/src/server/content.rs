@@ -406,6 +406,10 @@ pub(super) fn digest_response(
     match result {
         Ok(Ok(Some(digest))) => (StatusCode::OK, Json(json!(digest))),
         Ok(Ok(None)) => error_response(StatusCode::NOT_FOUND, "not found"),
+        Ok(Err(error)) if sjel_runtime::is_deferred(&error) => (
+            StatusCode::CONFLICT,
+            Json(json!({ "state": "policy_deferred", "error": error })),
+        ),
         Ok(Err(error)) if error.starts_with("unknown digest source") => {
             error_response(StatusCode::BAD_REQUEST, error)
         }

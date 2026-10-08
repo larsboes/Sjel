@@ -8,7 +8,8 @@
     width?: string;
     /** "end" for numbers, so digits line up by place value. */
     align?: "start" | "end";
-    cell: Snippet<[T]>;
+    /** Gets the column too, so one snippet can render several columns. */
+    cell: Snippet<[T, Column<T>]>;
   }
 </script>
 
@@ -26,6 +27,8 @@
     inactive,
     selected,
     actions,
+    sort,
+    onSort,
     empty = "Nothing here yet.",
   }: {
     rows: T[];
@@ -37,6 +40,9 @@
     inactive?: (row: T) => boolean;
     selected?: string | null;
     actions?: Snippet<[T]>;
+    /** The sorted column; with `onSort`, headers become buttons that sort by their column. */
+    sort?: { id: string | null; desc: boolean };
+    onSort?: (id: string) => void;
     empty?: string;
   } = $props();
 
@@ -55,7 +61,18 @@
       <thead>
         <tr>
           {#each columns as column (column.id)}
-            <th class:end={column.align === "end"} scope="col">{column.label}</th>
+            {@const sorted = sort?.id === column.id}
+            <th
+              class:end={column.align === "end"}
+              scope="col"
+              aria-sort={sorted ? (sort?.desc ? "descending" : "ascending") : undefined}
+            >
+              {#if onSort}
+                <button type="button" class="sort" class:sorted onclick={() => onSort(column.id)}>
+                  {column.label}{#if sorted}<span aria-hidden="true">{sort?.desc ? " ↓" : " ↑"}</span>{/if}
+                </button>
+              {:else}{column.label}{/if}
+            </th>
           {/each}
           {#if actions}<th scope="col"><span class="sr">Actions</span></th>{/if}
         </tr>
@@ -79,7 +96,7 @@
             }}
           >
             {#each columns as column (column.id)}
-              <td class:end={column.align === "end"}>{@render column.cell(row)}</td>
+              <td class:end={column.align === "end"}>{@render column.cell(row, column)}</td>
             {/each}
             {#if actions}<td class="row-actions">{@render actions(row)}</td>{/if}
           </tr>
@@ -120,6 +137,24 @@
     font-weight: 500;
     color: var(--text-tertiary);
     border-bottom: 1px solid var(--rule);
+  }
+
+  .sort {
+    padding: 0;
+    border: 0;
+    background: none;
+    font: inherit;
+    color: inherit;
+    cursor: pointer;
+  }
+
+  .sort:hover,
+  .sort.sorted {
+    color: var(--text-primary);
+  }
+
+  .sort:focus-visible {
+    outline: 2px solid var(--focus-ring);
   }
 
   .end {

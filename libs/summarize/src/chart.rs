@@ -337,7 +337,7 @@ pub fn chart(target: Option<&Target>, text: &str, reach: Reach) -> Outcome {
     if text.trim().is_empty() {
         return Outcome::SkippedShort;
     }
-    let input = truncate(text, INPUT_CAP);
+    let input = if target.backend_name == "foundation-models" { text.to_owned() } else { truncate(text, INPUT_CAP) };
     match complete(target, &chart_prompt(&input), 900) {
         // Verification runs against the *capped* input, not the full source:
         // claiming a number is present because it sits in text the model was
@@ -501,6 +501,8 @@ mod tests {
     #[test]
     fn a_non_loopback_target_is_refused_for_restricted_content() {
         let cloud = Target {
+            backend_name: "test".into(),
+            max_input_tokens: None,
             endpoint: "https://api.example.com/v1/chat/completions".into(),
             model: "m".into(),
             api_key: None,

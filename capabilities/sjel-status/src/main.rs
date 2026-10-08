@@ -126,6 +126,8 @@ const ROUTES: &[route_manifest::Route] = &[
         "/api/sjel-status/updates/apply",
         "Start one class of software moving. Body: { class } from brew, uv, rustup, graphify, interceptor, cargo, npm. Answers 202 immediately; the tool writes a receipt the next GET carries as lastApply.",
     ),
+    r("GET", "/api/sjel-status/runtime", "Runtime selection, effective profile, power and On-the-go exceptions."),
+    r("POST", "/api/sjel-status/runtime", "Owner-only: save selection and/or persistent On-the-go exceptions."),
     r(
         "GET",
         "/api/sjel-status/agent",
@@ -205,6 +207,7 @@ async fn main() {
     // job for the same reason: a reaper that outlives sjel-status could stop panels
     // while nothing is left to bring them back.
     let _idle_reaper = IdlePanelReaper::start();
+    let _runtime_monitor = RuntimeMonitor::start().await;
 
     // The timing policy. A target whose interval an operator set is run when it comes due,
     // and the loop lives here because this process already owns the state the decision reads
@@ -401,6 +404,10 @@ fn build_router(shell: proxy::Proxy) -> Router {
             post(session::logout_handler),
         )
         .route(sjel_server::SESSION_OPEN_PATH, get(session::open_handler))
+        .route(
+            "/api/sjel-status/runtime",
+            get(runtime_handler).post(runtime_update_handler),
+        )
         .route("/api/sjel-status/agent", get(agent_handler))
         .route("/api/sjel-status/agent/mode", post(agent_mode_handler))
         .route(

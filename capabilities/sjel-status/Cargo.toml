@@ -17,6 +17,7 @@ path = "src/main.rs"
 # machine's always-on status surface publishes them — the same shape /backups already
 # has with tools/backup.sh's receipts. Read-only: host-watch owns the table.
 sjel-config = { path = "../../libs/sjel-config" }
+sjel-runtime = { path = "../../libs/runtime" }
 sjel-store = { path = "../../libs/sjel-store" }
 sjel-server = { path = "../../libs/sjel-server" }
 # The device registry, for one call: the shell admits a paired device on its signature

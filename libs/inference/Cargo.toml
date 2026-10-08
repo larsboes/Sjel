@@ -16,6 +16,7 @@ path = "src/lib.rs"
 # Outbound HTTP goes through one factory: the user-agent, the timeout and the
 # connection pool are decided there, not at each call site (libs/sjel-http).
 sjel-http = { path = "../sjel-http" }
+sjel-runtime = { path = "../runtime" }
 serde = { workspace = true, features = ["derive"] }
 serde_json.workspace = true
 reqwest = { workspace = true, features = ["json", "blocking"] }

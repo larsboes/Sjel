@@ -200,6 +200,10 @@ pub fn run(argv: &[String]) -> ExitCode {
 /// is what the schedule exists to produce; refusing to record that because a ranking pass fell
 /// over would be the tail wagging the dog.
 fn relevance_page(port: &str, token: &str) {
+    if let Err(reason) = sjel_runtime::require(sjel_runtime::Category::BulkIndexing) {
+        eprintln!("feed-sweep: relevance page deferred — {reason}");
+        return;
+    }
     let skipped = |reason: String| eprintln!("feed-sweep: relevance page skipped — {reason}");
     let Ok(client) = sjel_http::client(Purpose::new("feed-sweep"), RELEVANCE_TIMEOUT) else {
         skipped("client build failed".to_owned());

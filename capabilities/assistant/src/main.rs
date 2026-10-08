@@ -35,8 +35,8 @@ struct GenerateResponse {
     source: &'static str,
 }
 
-fn failure(status: StatusCode, message: &'static str) -> (StatusCode, Json<Value>) {
-    (status, Json(json!({ "error": message })))
+fn failure(status: StatusCode, message: impl AsRef<str>) -> (StatusCode, Json<Value>) {
+    (status, Json(json!({ "error": message.as_ref() })))
 }
 
 fn ready_role() -> Option<sjel_inference::ResolvedRole> {
@@ -58,6 +58,10 @@ async fn ready() -> Result<Json<Value>, (StatusCode, Json<Value>)> {
             "the local assistant role is not configured",
         )
     })?;
+    let checked = role.clone();
+    tokio::task::spawn_blocking(move || checked.runtime_admission())
+        .await.map_err(|error| failure(StatusCode::INTERNAL_SERVER_ERROR, error.to_string()))?
+        .map_err(|reason| failure(StatusCode::CONFLICT, reason.to_string()))?;
     if role.max_input_tokens.is_none() {
         return Err(failure(
             StatusCode::SERVICE_UNAVAILABLE,
@@ -138,6 +142,14 @@ fn fits_role(
             <= MAX_PROMPT_BYTES
 }
 
+async fn admit_request(role: &sjel_inference::ResolvedRole, body: &Value) -> Result<(), (StatusCode, Json<Value>)> {
+    let role = role.clone();
+    let body = body.clone();
+    tokio::task::spawn_blocking(move || role.admit_chat_request(&body))
+        .await.map_err(|error| failure(StatusCode::INTERNAL_SERVER_ERROR, error.to_string()))?
+        .map_err(|reason| failure(StatusCode::CONFLICT, reason))
+}
+
 async fn generate(
     State(state): State<Arc<AppState>>,
     Json(request): Json<GenerateRequest>,
@@ -172,13 +184,16 @@ async fn generate(
         instructions: request.instructions,
         max_tokens: Some(max_tokens),
     };
+    let body = payload(&role, &request);
+    admit_request(&role, &body).await?;
     let mut call = state
         .client
         .post(role.chat_completions_endpoint())
-        .json(&payload(&role, &request));
+        .json(&body);
     if let Some(key) = role.bearer_key() {
         call = call.bearer_auth(key);
     }
+    admit_request(&role, &body).await?;
     let response = call.send().await.map_err(|_| {
         failure(
             StatusCode::BAD_GATEWAY,

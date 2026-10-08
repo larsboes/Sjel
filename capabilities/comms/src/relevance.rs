@@ -65,6 +65,8 @@ pub struct ScoredFeedItem {
 /// 2026-08-30). This is the receipt that makes the difference readable.
 #[derive(Debug, Clone)]
 pub struct ScoringOutcome {
+    /// No scores may be persisted when temporary admission refuses the pass.
+    pub deferred: Option<String>,
     pub items: Vec<ScoredFeedItem>,
     /// The strongest mode any item actually got: `reranked`, `semantic`,
     /// `lexical`, or `unscored` when there was nothing to score.
@@ -77,6 +79,31 @@ pub struct ScoringOutcome {
     /// now costs one chunk, not the pass.
     pub chunks: usize,
     pub chunks_failed: usize,
+}
+
+impl ScoringOutcome {
+    fn deferred(reason: String) -> Self {
+        Self {
+            deferred: Some(reason),
+            items: Vec::new(),
+            mode: "policy_deferred",
+            error_class: None,
+            chunks: 0,
+            chunks_failed: 0,
+        }
+    }
+}
+
+/// Admission does not change which producers define the stored vector space.
+pub fn runtime_admission(
+    embedding_role: Option<&ResolvedRole>,
+    reranking_role: Option<&ResolvedRole>,
+) -> Result<(), sjel_runtime::Deferred> {
+    sjel_runtime::require(sjel_runtime::Category::BulkIndexing)?;
+    for role in [embedding_role, reranking_role].into_iter().flatten() {
+        role.runtime_admission()?;
+    }
+    Ok(())
 }
 
 pub fn embedding_provider_label(role: Option<&ResolvedRole>) -> &'static str {
@@ -217,6 +244,9 @@ pub fn score_items(
     embedding_role: Option<&ResolvedRole>,
     reranking_role: Option<&ResolvedRole>,
 ) -> ScoringOutcome {
+    if let Err(reason) = runtime_admission(embedding_role, reranking_role) {
+        return ScoringOutcome::deferred(reason.to_string());
+    }
     let allowed = items
         .iter()
         .enumerate()
@@ -241,6 +271,7 @@ pub fn score_items(
     // `profile_count` is already in every receipt and in the status endpoint.
     if profiles.is_empty() {
         return ScoringOutcome {
+            deferred: None,
             items: scored,
             mode: "unscored",
             error_class: None,
@@ -250,6 +281,7 @@ pub fn score_items(
     }
     if allowed.is_empty() {
         return ScoringOutcome {
+            deferred: None,
             items: scored,
             mode: "unscored",
             error_class: None,
@@ -274,6 +306,7 @@ pub fn score_items(
     let mut chunks_failed = 0usize;
     let mut error_class: Option<&'static str> = None;
 
+    let mut deferred = None;
     let semantic_profile_vectors = embedding_role.and_then(|role| {
         chunks += 1;
         let inputs = profiles
@@ -282,6 +315,10 @@ pub fn score_items(
             .collect::<Vec<_>>();
         match embed(role, &inputs) {
             Ok(vectors) if vectors.len() == profiles.len() => Some(vectors),
+            Err(error) if sjel_runtime::is_deferred(&error) => {
+                deferred = Some(error);
+                None
+            }
             outcome => {
                 chunks_failed += 1;
                 error_class = Some(report_embed_failure("the profile set", role, outcome.err()));
@@ -290,6 +327,9 @@ pub fn score_items(
         }
     });
 
+    if let Some(reason) = deferred.take() {
+        return ScoringOutcome::deferred(reason);
+    }
     let mut item_vectors: Vec<Vec<f64>> = Vec::with_capacity(item_documents.len());
     let mut item_modes: Vec<&'static str> = Vec::with_capacity(item_documents.len());
     for chunk in item_documents.chunks(EMBED_CHUNK_SIZE) {
@@ -303,6 +343,9 @@ pub fn score_items(
                     .collect::<Vec<_>>();
                 match embed(role, &inputs) {
                     Ok(vectors) if vectors.len() == chunk.len() => Some(vectors),
+                    Err(error) if sjel_runtime::is_deferred(&error) => {
+                        return ScoringOutcome::deferred(error);
+                    }
                     outcome => {
                         chunks_failed += 1;
                         error_class = error_class.or(Some(report_embed_failure(
@@ -367,6 +410,10 @@ pub fn score_items(
         reranking_role.and_then(|role| {
             match rerank_candidate_scores(role, profiles, &item_documents, &candidate_profiles) {
                 Ok(scores) => Some(scores),
+                Err(error) if sjel_runtime::is_deferred(&error) => {
+                    deferred = Some(error);
+                    None
+                }
                 Err(error) => {
                     eprintln!("  comms: reranking unavailable ({error}) - keeping semantic scores");
                     None
@@ -377,6 +424,12 @@ pub fn score_items(
         None
     };
 
+    if let Some(reason) = deferred {
+        return ScoringOutcome::deferred(reason);
+    }
+    if let Err(reason) = runtime_admission(embedding_role, reranking_role) {
+        return ScoringOutcome::deferred(reason.to_string());
+    }
     for (position, item_index) in allowed.iter().enumerate() {
         let mode = item_modes[position];
         let rerank_scores = reranked
@@ -448,6 +501,7 @@ pub fn score_items(
         "lexical"
     };
     ScoringOutcome {
+        deferred: None,
         items: scored,
         mode,
         error_class,
@@ -497,6 +551,8 @@ fn rerank_candidate_scores(
                 .iter()
                 .map(|index| item_documents[*index].clone())
                 .collect::<Vec<_>>();
+            sjel_runtime::require(sjel_runtime::Category::BulkIndexing)
+                .map_err(|e| e.to_string())?;
             let reranked = role.rerank(&profile.text, &documents)?;
             for (item_index, score) in item_chunk.iter().zip(reranked) {
                 scores[*item_index][profile_index] = Some(f64::from(score));
@@ -543,6 +599,7 @@ fn item_document(item: &FeedItem) -> String {
 /// here was the reason a pass could degrade to lexical with nothing on stderr
 /// and nothing in the store to say so.
 fn embed(role: &ResolvedRole, inputs: &[(String, TextRole)]) -> Result<Vec<Vec<f64>>, String> {
+    sjel_runtime::require(sjel_runtime::Category::BulkIndexing).map_err(|e| e.to_string())?;
     role.embed_mixed(inputs).map(|vectors| {
         vectors
             .into_iter()

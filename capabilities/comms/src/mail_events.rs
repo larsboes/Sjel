@@ -301,6 +301,10 @@ pub fn analyze_batch(cfg: &Config, ids: &[String]) -> ScanReport {
         return report;
     };
     for item in candidates {
+        if let Err(reason) = role.runtime_admission() {
+            eprintln!("mail events: {reason}");
+            break;
+        }
         let body = match google::thread_body_text(&token, &item.id) {
             Ok(Some(body)) => body,
             _ => {
@@ -315,6 +319,12 @@ pub fn analyze_batch(cfg: &Config, ids: &[String]) -> ScanReport {
         // against the full body, so the cut can lose an event but cannot invent a date.
         let room = summarize::window_chars(REPLY_TOKENS, role.max_input_tokens.unwrap_or_default())
             .saturating_sub(prompt("").chars().count());
+        if let Err(reason) =
+            crate::quiet::runtime_admission(&role, prompt(&body).chars().count(), REPLY_TOKENS)
+        {
+            eprintln!("mail events: {reason}");
+            continue;
+        }
         let request = prompt(&body.chars().take(room).collect::<String>());
         if !summarize::fits_window(
             request.chars().count(),

@@ -324,7 +324,8 @@ impl Store {
                      attempts = EXCLUDED.attempts,
                      last_error = EXCLUDED.last_error,
                      generated_at = {now},
-                     next_attempt = EXCLUDED.next_attempt",
+                     next_attempt = EXCLUDED.next_attempt
+                 WHERE EXCLUDED.state <> 'policy_deferred'",
                 prefix = self.prefix,
                 retryable = retryable_digest_states_sql(),
                 now = sjel_store::NOW,
@@ -459,6 +460,7 @@ impl Store {
                   WHERE d.item_id IS NULL
                      OR (d.producer NOT IN (SELECT value FROM json_each(?2))
                          AND d.depth = 'standard')
+                     OR d.state = 'policy_deferred'
                      OR (d.state IN ({retryable})
                          AND (d.producer NOT IN (SELECT value FROM json_each(?3))
                               OR d.attempts < ?4)
@@ -772,6 +774,46 @@ impl Store {
         )?;
         transaction.commit()?;
         Ok(CloudAttemptClaim::Started(attempt_id))
+    }
+
+    /// Undo a claim that made no provider request. Delete the reservation so neither
+    /// the daily budget nor the per-job retry cap counts a runtime deferral.
+    pub fn release_cloud_job_attempt(
+        &self,
+        job_id: &str,
+        attempt_id: i64,
+    ) -> Result<bool, Box<dyn std::error::Error>> {
+        let mut conn = self.conn()?;
+        let transaction = sjel_store::write_transaction(&mut conn)?;
+        let updated = transaction.execute(
+            &format!(
+                "UPDATE {prefix}_content_cloud_jobs
+                 SET status = 'queued', provider_calls = provider_calls - 1,
+                     started_at = NULL, completed_at = NULL, last_error = NULL
+                 WHERE job_id = ?1 AND status = 'running'
+                   AND EXISTS (SELECT 1 FROM {prefix}_content_cloud_attempts
+                       WHERE attempt_id = ?2 AND job_id = ?1 AND status = 'running'
+                         AND sequence = {prefix}_content_cloud_jobs.provider_calls)",
+                prefix = self.prefix
+            ),
+            params![job_id, attempt_id],
+        )?;
+        if updated != 1 {
+            return Ok(false);
+        }
+        let deleted = transaction.execute(
+            &format!(
+                "DELETE FROM {}_content_cloud_attempts
+                 WHERE attempt_id = ?2 AND job_id = ?1 AND status = 'running'",
+                self.prefix
+            ),
+            params![job_id, attempt_id],
+        )?;
+        if deleted != 1 {
+            return Ok(false);
+        }
+        transaction.commit()?;
+        Ok(true)
     }
 
     pub fn complete_cloud_job_attempt(

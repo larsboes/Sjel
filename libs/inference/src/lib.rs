@@ -648,7 +648,59 @@ impl FromStr for InferenceConfig {
     }
 }
 
+/// apfel can be listening while Apple Intelligence is unavailable. A 200 alone is not ready.
+pub fn afm_available(base_url: &str) -> bool {
+    let base = base_url.trim_end_matches('/');
+    let origin = base.strip_suffix("/v1").unwrap_or(base);
+    let Ok(client) = sjel_http::client(sjel_http::Purpose::new("afm-health"), std::time::Duration::from_secs(2)) else {
+        return false;
+    };
+    client.get(format!("{origin}/health")).send().ok()
+        .filter(|response| response.status().is_success())
+        .and_then(|response| response.json::<serde_json::Value>().ok())
+        .is_some_and(|body| body.get("model_available").and_then(|v| v.as_bool()) == Some(true))
+}
+
 impl ResolvedRole {
+    /// Rechecked at dispatch, not role resolution: a mode change must also stop cached roles.
+    pub fn runtime_admission(&self) -> Result<(), sjel_runtime::Deferred> {
+        let local = reqwest::Url::parse(&self.backend.base_url)
+            .ok()
+            .and_then(|url| url.host_str().map(str::to_owned))
+            .is_some_and(|host| {
+                host == "localhost"
+                    || host.trim_matches(['[', ']']).parse::<std::net::IpAddr>()
+                        .is_ok_and(|ip| ip.is_loopback())
+            });
+        sjel_runtime::admit_model(&self.backend_name, &self.model, local)
+    }
+
+    pub fn is_afm(&self) -> bool {
+        self.backend_name == "foundation-models" && self.model == "apple-foundationmodel"
+            && self.is_loopback()
+    }
+
+    /// Overrides cannot replace the admitted model or exceed AFM's shared context.
+    pub fn admit_chat_request(&self, body: &serde_json::Value) -> Result<(), String> {
+        self.runtime_admission().map_err(|e| e.to_string())?;
+        if body.get("model").and_then(|m| m.as_str()) != Some(self.model.as_str()) {
+            return Err("request model does not match the admitted inference role".into());
+        }
+        if self.is_afm() {
+            let window = self.max_input_tokens.unwrap_or(4096).min(4096) as usize;
+            let input_bytes = body.get("messages").map_or(0, |v| v.to_string().len())
+                .saturating_add(body.get("tools").map_or(0, |v| v.to_string().len()));
+            let reply = body.get("max_tokens").and_then(|v| v.as_u64()).unwrap_or(1024);
+            if input_bytes.saturating_add(usize::try_from(reply).unwrap_or(usize::MAX)).saturating_add(256) > window {
+                return Err("deferred by runtime profile: AFM request exceeds its input-plus-reply context; no request was sent".into());
+            }
+            if !afm_available(&self.backend.base_url) {
+                return Err("deferred by runtime profile: AFM model is unavailable".into());
+            }
+        }
+        Ok(())
+    }
+
     /// Identifies the thing that produced a vector, so a cache can refuse to
     /// serve it to a different one. Cheap to store beside cached data and the
     /// only defence against a backend switch silently reusing incompatible
@@ -800,6 +852,9 @@ impl ResolvedRole {
     /// Cheap readiness probe that confirms the role's selected model is listed
     /// without loading it or running inference.
     pub fn model_reachable(&self) -> bool {
+        if self.runtime_admission().is_err() {
+            return false;
+        }
         if self.backend.base_url.trim().is_empty() || self.model.trim().is_empty() {
             return false;
         }
@@ -811,6 +866,7 @@ impl ResolvedRole {
             Err(_) => return false,
         };
         let base = self.backend.base_url.trim_end_matches('/');
+        if self.is_afm() && !afm_available(base) { return false; }
         let endpoint = match self.backend.api {
             Api::OpenAi => format!("{base}/models"),
             Api::Ollama => format!("{base}/api/tags"),
@@ -907,6 +963,7 @@ impl ResolvedRole {
         if let Some(key) = self.bearer_key() {
             request = request.bearer_auth(key);
         }
+        self.runtime_admission().map_err(|e| e.to_string())?;
         let response = request
             .send()
             .map_err(|error| format!("POST {endpoint}: {error}"))?;
@@ -981,6 +1038,7 @@ impl ResolvedRole {
             request = request.bearer_auth(key);
         }
 
+        self.runtime_admission().map_err(|e| e.to_string())?;
         let response = request
             .send()
             .map_err(|error| format!("POST {endpoint}: {error}"))?;

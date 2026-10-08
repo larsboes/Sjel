@@ -154,6 +154,8 @@ pub fn fold(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use proptest::prelude::*;
+    use serde_json::json;
 
     fn run(sse: &str) -> (Result<Message, AgentError>, String, String) {
         let (mut text, mut thinking) = (String::new(), String::new());
@@ -233,5 +235,107 @@ mod tests {
     fn an_error_inside_the_stream_is_an_error() {
         let (result, ..) = run("data: {\"error\":{\"message\":\"rate limited\"}}\n");
         assert!(result.unwrap_err().to_string().contains("rate limited"));
+    }
+
+    /// The bytes `fold` is given, handed over `size` bytes at a time.
+    ///
+    /// A stream arrives in whatever pieces the network wrote, and reading it a line at a time
+    /// through `BufRead` is what has to survive a cut in the middle of one.
+    struct InChunks {
+        data: Vec<u8>,
+        at: usize,
+        size: usize,
+    }
+
+    impl std::io::Read for InChunks {
+        fn read(&mut self, buf: &mut [u8]) -> std::io::Result<usize> {
+            let n = self.size.min(buf.len()).min(self.data.len() - self.at);
+            buf[..n].copy_from_slice(&self.data[self.at..self.at + n]);
+            self.at += n;
+            Ok(n)
+        }
+    }
+
+    /// `run`, for a stream handed over in pieces of `size` bytes.
+    fn run_in_chunks(stream: &str, size: usize) -> (Result<Message, AgentError>, String, String) {
+        let (mut text, mut thinking) = (String::new(), String::new());
+        let reader = std::io::BufReader::new(InChunks {
+            data: stream.as_bytes().to_vec(),
+            at: 0,
+            size,
+        });
+        let result = fold(reader, &AtomicBool::new(false), &mut |e| match e {
+            Event::Text(t) => text.push_str(t),
+            Event::Reasoning(t) => thinking.push_str(t),
+            _ => {}
+        });
+        (result, text, thinking)
+    }
+
+    /// The body a server would send for these chunks: `data:` lines, blanks between them, and
+    /// the terminator.
+    fn sse(chunks: &[String]) -> String {
+        let mut body: String = chunks.iter().map(|c| format!("data: {c}\n\n")).collect();
+        body.push_str("data: [DONE]\n\n");
+        body
+    }
+
+    /// Deltas of the shapes the fold has to understand, as JSON text.
+    fn deltas() -> impl Strategy<Value = String> {
+        let text = "[a-zA-Z ]{0,12}";
+        prop_oneof![
+            text.prop_map(|t| json!({ "choices": [{ "delta": { "content": t } }] }).to_string()),
+            text.prop_map(
+                |t| json!({ "choices": [{ "delta": { "reasoning_content": t } }] }).to_string()
+            ),
+            "[a-z]{1,8}".prop_map(|name| json!({ "choices": [{ "delta": { "tool_calls": [
+                { "index": 0, "id": "c1", "function": { "name": name, "arguments": "{}" } }] } }] })
+            .to_string()),
+        ]
+    }
+
+    proptest! {
+        /// AGT-22, first half: one valid stream, folded in pieces of any size, gives the same
+        /// message and the same streamed text as folding it whole.
+        #[test]
+        fn the_fold_is_the_same_however_the_stream_is_cut(
+            chunks in proptest::collection::vec(deltas(), 0..8),
+            size in 1usize..64,
+        ) {
+            let stream = sse(&chunks);
+            let (whole, whole_text, whole_thinking) = run(&stream);
+            let (cut, cut_text, cut_thinking) = run_in_chunks(&stream, size);
+            let whole = whole.expect("a stream built from valid chunks folds to a message");
+            let cut = cut.expect("and keeps folding that way whatever pieces it arrives in");
+            prop_assert_eq!(whole, cut);
+            prop_assert_eq!(whole_text, cut_text);
+            prop_assert_eq!(whole_thinking, cut_thinking);
+        }
+
+        /// AGT-22, second half: arbitrary bytes — not a stream, not UTF-8, not JSON — come back
+        /// as a message or an error. The claim is that they return at all.
+        #[test]
+        fn arbitrary_bytes_return_rather_than_panic(
+            bytes in proptest::collection::vec(any::<u8>(), 0..512),
+            size in 1usize..32,
+        ) {
+            let stream = String::from_utf8_lossy(&bytes).into_owned();
+            let (result, ..) = run_in_chunks(&stream, size);
+            // Ok or Err both satisfy the claim; a panic would not have returned.
+            let _ = result;
+        }
+
+        /// And a valid stream cut short mid-flight — the connection dropped — likewise returns.
+        /// Truncation is where a half-read line is most likely to be mishandled.
+        #[test]
+        fn a_truncated_stream_returns(
+            chunks in proptest::collection::vec(deltas(), 0..8),
+            cut_at in 0usize..512,
+        ) {
+            let stream = sse(&chunks);
+            let cut: String = stream.chars().take(cut_at).collect();
+            let (result, ..) = run_in_chunks(&cut, 5);
+            let _ = result;
+        }
     }
 }

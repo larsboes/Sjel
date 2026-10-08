@@ -1,0 +1,16 @@
+[package]
+name = "sjel-runtime"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+description = "Per-device runtime admission: battery profiles and explicit workload exceptions."
+publish = false
+
+[dependencies]
+sjel-config = { path = "../sjel-config" }
+serde = { workspace = true, features = ["derive"] }
+serde_json.workspace = true
+
+[lints]
+workspace = true

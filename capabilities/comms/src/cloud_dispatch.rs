@@ -197,8 +197,17 @@ pub(crate) fn chat(role: &ResolvedRole, body: serde_json::Value) -> Result<Strin
     chat_outcome(role, body).map(|outcome| outcome.content)
 }
 
+fn validate_model(role: &ResolvedRole, body: &serde_json::Value) -> Result<(), String> {
+    if body.get("model").and_then(serde_json::Value::as_str) != Some(role.model.as_str()) {
+        return Err("cloud request model differs from the admitted model".into());
+    }
+    Ok(())
+}
+
 fn chat_outcome(role: &ResolvedRole, mut body: serde_json::Value) -> Result<ChatOutcome, String> {
+    sjel_runtime::require(sjel_runtime::Category::RemoteModels).map_err(|e| e.to_string())?;
     apply_role_conventions(role, &mut body);
+    validate_model(role, &body)?;
     if !role.is_cloud_endpoint() {
         return Err("the selected role is not an approved HTTPS cloud endpoint".into());
     }
@@ -222,6 +231,8 @@ fn chat_outcome(role: &ResolvedRole, mut body: serde_json::Value) -> Result<Chat
     if let Some(key) = role.bearer_key() {
         request = request.bearer_auth(key);
     }
+    sjel_runtime::require(sjel_runtime::Category::RemoteModels).map_err(|e| e.to_string())?;
+    role.admit_chat_request(&body)?;
     let response = request.send().map_err(|error| {
         if error.is_timeout() {
             "cloud request timed out".to_string()
@@ -501,6 +512,18 @@ mod tests {
         apply_role_conventions(&role, &mut body);
 
         assert_eq!(body, before);
+    }
+
+    #[test]
+    fn overrides_cannot_replace_the_admitted_model() {
+        let role = role_with(serde_json::json!({
+            "request_overrides": { "model": "different-model" }
+        }));
+        let mut body = serde_json::json!({ "model": role.model });
+        apply_role_conventions(&role, &mut body);
+        assert!(validate_model(&role, &body).is_err());
+        assert!(validate_model(&role, &serde_json::json!({ "model": role.model })).is_ok());
+        assert!(validate_model(&role, &serde_json::json!({})).is_err());
     }
 
     #[test]

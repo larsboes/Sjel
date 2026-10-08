@@ -31,6 +31,7 @@ mod persist;
 mod registry;
 mod runargs;
 mod runner;
+mod runtime;
 mod schedule;
 mod search;
 mod self_model;
@@ -138,6 +139,7 @@ fn sjel(root: &Path, command: &str, rest: &[String]) -> ExitCode {
         ),
         "cargo" => exec(Command::new(tool("tools/cargo-hermetic")).args(rest)),
         "capability" => capability::command(root, rest),
+        "runtime" => runtime::run(root, rest),
         "agent" => match rest.first().map(String::as_str) {
             Some("enroll") => {
                 exec(Command::new(tool("tools/capability-auth/capability-auth")).arg("enroll"))
@@ -160,6 +162,7 @@ fn help(topic: &str) -> ExitCode {
     let text = match topic {
         "" => help::USAGE,
         "capability" => help::CAPABILITY,
+        "runtime" => help::RUNTIME,
         "claude" => help::CLAUDE,
         "mcp" => help::MCP,
         "pack" => help::PACK,

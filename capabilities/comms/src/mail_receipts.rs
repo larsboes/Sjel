@@ -317,6 +317,10 @@ pub fn analyze_batch(cfg: &Config, ids: &[String]) -> ScanReport {
         return report;
     };
     for item in candidates {
+        if let Err(reason) = role.runtime_admission() {
+            eprintln!("mail receipts: {reason}");
+            break;
+        }
         let body = match google::thread_body_text(&token, &item.id) {
             Ok(Some(body)) => body,
             _ => {
@@ -325,6 +329,12 @@ pub fn analyze_batch(cfg: &Config, ids: &[String]) -> ScanReport {
             }
         };
         let request = prompt(&body, &accounts);
+        if let Err(reason) =
+            crate::quiet::runtime_admission(&role, request.chars().count(), REPLY_TOKENS)
+        {
+            eprintln!("mail receipts: {reason}");
+            continue;
+        }
         let target = crate::digest::to_target(cfg, &role);
         if !summarize::fits_window(
             request.chars().count(),

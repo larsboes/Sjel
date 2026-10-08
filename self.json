@@ -262,6 +262,10 @@
       }
     },
     {
+      "name": "links",
+      "kind": "lib"
+    },
+    {
       "name": "macmon",
       "kind": "capability",
       "service": {
@@ -362,6 +366,10 @@
     },
     {
       "name": "route-manifest",
+      "kind": "lib"
+    },
+    {
+      "name": "runtime",
       "kind": "lib"
     },
     {
@@ -623,6 +631,16 @@
     },
     {
       "from": "calendar",
+      "to": "links",
+      "kinds": [
+        "cargo-dep"
+      ],
+      "evidence": [
+        "capabilities/calendar/Cargo.toml"
+      ]
+    },
+    {
+      "from": "calendar",
       "to": "markdown-root",
       "kinds": [
         "cargo-dep"
@@ -713,6 +731,16 @@
     },
     {
       "from": "comms",
+      "to": "links",
+      "kinds": [
+        "cargo-dep"
+      ],
+      "evidence": [
+        "capabilities/comms/Cargo.toml"
+      ]
+    },
+    {
+      "from": "comms",
       "to": "markdown-root",
       "kinds": [
         "cargo-dep"
@@ -734,6 +762,16 @@
     {
       "from": "comms",
       "to": "route-manifest",
+      "kinds": [
+        "cargo-dep"
+      ],
+      "evidence": [
+        "capabilities/comms/Cargo.toml"
+      ]
+    },
+    {
+      "from": "comms",
+      "to": "runtime",
       "kinds": [
         "cargo-dep"
       ],
@@ -843,6 +881,16 @@
     },
     {
       "from": "entities",
+      "to": "links",
+      "kinds": [
+        "cargo-dep"
+      ],
+      "evidence": [
+        "capabilities/entities/Cargo.toml"
+      ]
+    },
+    {
+      "from": "entities",
       "to": "route-manifest",
       "kinds": [
         "cargo-dep"
@@ -933,6 +981,16 @@
     },
     {
       "from": "finance",
+      "to": "links",
+      "kinds": [
+        "cargo-dep"
+      ],
+      "evidence": [
+        "capabilities/finance/Cargo.toml"
+      ]
+    },
+    {
+      "from": "finance",
       "to": "markdown-root",
       "kinds": [
         "cargo-dep"
@@ -999,6 +1057,16 @@
       ],
       "evidence": [
         "capabilities/host-net/Cargo.toml"
+      ]
+    },
+    {
+      "from": "inference",
+      "to": "runtime",
+      "kinds": [
+        "cargo-dep"
+      ],
+      "evidence": [
+        "libs/inference/Cargo.toml"
       ]
     },
     {
@@ -1233,6 +1301,16 @@
     },
     {
       "from": "places",
+      "to": "links",
+      "kinds": [
+        "cargo-dep"
+      ],
+      "evidence": [
+        "capabilities/places/Cargo.toml"
+      ]
+    },
+    {
+      "from": "places",
       "to": "route-manifest",
       "kinds": [
         "cargo-dep"
@@ -1342,6 +1420,16 @@
       ]
     },
     {
+      "from": "runtime",
+      "to": "sjel-config",
+      "kinds": [
+        "cargo-dep"
+      ],
+      "evidence": [
+        "libs/runtime/Cargo.toml"
+      ]
+    },
+    {
       "from": "scouting",
       "to": "content-item",
       "kinds": [
@@ -1374,6 +1462,16 @@
     {
       "from": "scouting",
       "to": "route-manifest",
+      "kinds": [
+        "cargo-dep"
+      ],
+      "evidence": [
+        "capabilities/scouting/Cargo.toml"
+      ]
+    },
+    {
+      "from": "scouting",
+      "to": "runtime",
       "kinds": [
         "cargo-dep"
       ],
@@ -1483,6 +1581,16 @@
     },
     {
       "from": "sjel-status",
+      "to": "runtime",
+      "kinds": [
+        "cargo-dep"
+      ],
+      "evidence": [
+        "capabilities/sjel-status/Cargo.toml"
+      ]
+    },
+    {
+      "from": "sjel-status",
       "to": "sjel-config",
       "kinds": [
         "cargo-dep"
@@ -1543,6 +1651,26 @@
     },
     {
       "from": "summarize",
+      "to": "inference",
+      "kinds": [
+        "cargo-dep"
+      ],
+      "evidence": [
+        "libs/summarize/Cargo.toml"
+      ]
+    },
+    {
+      "from": "summarize",
+      "to": "runtime",
+      "kinds": [
+        "cargo-dep"
+      ],
+      "evidence": [
+        "libs/summarize/Cargo.toml"
+      ]
+    },
+    {
+      "from": "summarize",
       "to": "sjel-http",
       "kinds": [
         "cargo-dep"
@@ -1564,6 +1692,16 @@
     {
       "from": "tools",
       "to": "inference",
+      "kinds": [
+        "cargo-dep"
+      ],
+      "evidence": [
+        "tools/sjel-cli/Cargo.toml"
+      ]
+    },
+    {
+      "from": "tools",
+      "to": "runtime",
       "kinds": [
         "cargo-dep"
       ],
@@ -1738,6 +1876,16 @@
     {
       "from": "trips",
       "to": "civil-date",
+      "kinds": [
+        "cargo-dep"
+      ],
+      "evidence": [
+        "capabilities/trips/Cargo.toml"
+      ]
+    },
+    {
+      "from": "trips",
+      "to": "links",
       "kinds": [
         "cargo-dep"
       ],

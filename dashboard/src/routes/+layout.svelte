@@ -22,6 +22,7 @@
   import JoinPrompt from "$lib/setup/JoinPrompt.svelte";
   import { inTauri } from "$lib/mac-bridge";
   import SyncStatus from "$lib/SyncStatus.svelte";
+  import RuntimeBadge from "$lib/RuntimeBadge.svelte";
   import OmniSearch from "$lib/omni/OmniSearch.svelte";
   import { omniStore } from "$lib/omni/omni.svelte";
   import EntityInspector from "$lib/inspector/EntityInspector.svelte";
@@ -231,6 +232,7 @@
           <Icon name="sparkles" size={14} />
           <span class="ask-btn-text">Ask</span>
         </button>
+        {#if !demo}<RuntimeBadge />{/if}
         <span class="clock mono">
           <Icon name="clock" size={14} />
           {now.toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit" })}

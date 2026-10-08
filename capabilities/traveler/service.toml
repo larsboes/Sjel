@@ -18,3 +18,9 @@ proxy_api_only = "true"
 # NOT `requires = ["trips"]` — the profile is read by a search that must keep
 # working when nothing has been stated, so a dependency here would turn "no
 # profile yet" into "search is down".
+
+# autostart, decided 2026-10-08. Transit and scouting read the cards (BahnCard,
+# Deutschlandticket) from here with a 3 s timeout and price without them when this
+# is down (transit/src/ranking.rs read_profile), so on-demand start meant fares
+# silently lost the discounts the traveller holds.
+autostart   = "true"

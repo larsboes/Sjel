@@ -21,6 +21,10 @@ public struct NodeHealth: Sendable, Equatable, Decodable {
     /// Names of the capabilities that did not answer, sorted so the list does not reorder
     /// between polls.
     public var down: [String] { capabilities.filter { !$0.value.up }.map(\.key).sorted() }
+
+    /// The order the menu lists every capability in: by name, whatever is up. A start or a stop
+    /// changes a row's dot and button, never its place.
+    public var rowOrder: [String] { capabilities.keys.sorted() }
 }
 
 public enum NodeStatus: Sendable, Equatable {

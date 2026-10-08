@@ -2,11 +2,12 @@
   import type { FinanceTransaction } from "$lib/api";
   import { inspectorStore } from "$lib/inspector/inspector.svelte";
   import { transactionItem } from "$lib/inspector/connections";
-  import DataTable, { type Column } from "$lib/ui/DataTable.svelte";
-  import Chip from "$lib/ui/Chip.svelte";
+  import Collection from "$lib/ui/Collection.svelte";
+  import type { Field } from "$lib/ui/collection";
   import { tip } from "$lib/tip";
 
-  let { rows }: { rows: FinanceTransaction[] } = $props();
+  /** `id` turns on search, filter, sort, group and the board, kept in the URL under it. */
+  let { rows, id }: { rows: FinanceTransaction[]; id?: string } = $props();
 
   const money = (cents: number, currency: string) =>
     new Intl.NumberFormat("de-DE", { style: "currency", currency }).format(cents / 100);
@@ -25,13 +26,24 @@
     });
   }
 
-  const columns: Column<FinanceTransaction>[] = [
-    { id: "date", label: "Date", width: "6rem", cell: dateCell },
-    { id: "description", label: "Description", cell: descriptionCell },
-    { id: "account", label: "Account", width: "9rem", cell: accountCell },
-    { id: "category", label: "Category", width: "9rem", cell: categoryCell },
-    { id: "purpose", label: "Purpose", width: "8rem", cell: purposeCell },
-    { id: "amount", label: "Your amount", width: "7.5rem", align: "end", cell: amountCell },
+  const purpose = (p: string) => p.replaceAll("_", " ");
+  const KIND = { expense: "Expense", income: "Income", transfer: "Transfer" } as Record<string, string>;
+
+  const fields: Field<FinanceTransaction>[] = [
+    { id: "date", label: "Date", kind: "date", width: "6rem", value: (r) => r.date, cell: dateCell },
+    { id: "description", label: "Description", value: (r) => r.description, cell: descriptionCell },
+    { id: "account", label: "Account", kind: "select", width: "9rem", value: (r) => r.account, display: short, cell: accountCell },
+    { id: "category", label: "Category", kind: "select", width: "9rem", value: (r) => r.category, display: short },
+    { id: "purpose", label: "Purpose", kind: "select", width: "8rem", value: (r) => r.purpose, display: purpose, cell: purposeCell },
+    // Not a column: the amount's sign already says it. Here so a view can filter or split by it.
+    {
+      id: "kind", label: "Kind", kind: "select", column: false, value: (r) => r.kind, display: (k) => KIND[k] ?? k,
+      tone: (k) => (k === "income" ? "success" : k === "transfer" ? "muted" : "neutral"),
+    },
+    {
+      id: "amount", label: "Your amount", kind: "number", width: "7.5rem",
+      value: (r) => (r.kind === "expense" ? -r.amount_cents : r.amount_cents), cell: amountCell,
+    },
   ];
 </script>
 
@@ -40,24 +52,25 @@
   <span class="desc" use:tip={row.description}>{row.description}</span>
 {/snippet}
 {#snippet accountCell(row: FinanceTransaction)}<span class="soft">{short(row.account)}</span>{/snippet}
-{#snippet categoryCell(row: FinanceTransaction)}<Chip label={short(row.category)} />{/snippet}
 {#snippet purposeCell(row: FinanceTransaction)}
   {#if row.shared_cents > 0}
     <span class="soft purpose" use:tip={`Shared. You paid ${money(row.cash_amount_cents, row.currency)}.`}>
-      {row.purpose ? `${row.purpose.replaceAll("_", " ")} · shared` : "Shared"}
+      {row.purpose ? `${purpose(row.purpose)} · shared` : "Shared"}
     </span>
   {:else}
-    <span class="soft purpose">{row.purpose?.replaceAll("_", " ") ?? ""}</span>
+    <span class="soft purpose">{row.purpose ? purpose(row.purpose) : ""}</span>
   {/if}
 {/snippet}
 {#snippet amountCell(row: FinanceTransaction)}<span class={row.kind}>{signed(row)}</span>{/snippet}
 
 <div class="card">
   <!-- A transfer moves money between your own accounts, so it is dimmed, not hidden. -->
-  <DataTable
+  <Collection
+    {id}
     {rows}
-    {columns}
+    {fields}
     key={(r) => r.id}
+    title={(r) => `${r.description} · ${signed(r)}`}
     onOpen={inspect}
     inactive={(r) => r.kind === "transfer"}
     empty="No matching transactions."

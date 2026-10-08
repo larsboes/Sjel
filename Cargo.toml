@@ -32,6 +32,7 @@ members = [
     "libs/content-item",
     "libs/extraction",
     "libs/inference",
+    "libs/runtime",
     "libs/markdown-root",
     "libs/pseudonymize",
     "libs/links",
@@ -126,6 +127,7 @@ chrono = { version = "0.4", default-features = false, features = ["std", "clock"
 getrandom = "0.4"
 reqwest = "0.13"
 rayon = "1"
+proptest = "1"
 regex = "1"
 rusqlite = { version = "0.40", features = ["bundled"] }
 serde = "1.0"

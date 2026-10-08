@@ -129,6 +129,8 @@ pub(crate) fn to_target(cfg: &Config, role: &sjel_inference::ResolvedRole) -> Ta
     Target {
         endpoint: role.chat_completions_endpoint(),
         model: role.model.clone(),
+        backend_name: role.backend_name.clone(),
+        max_input_tokens: role.max_input_tokens,
         api_key: role.bearer_key(),
         loopback,
         operator_owned: role.trusted_for_every_class(),
@@ -382,6 +384,11 @@ fn write_digest(
     // made. `libs/summarize`'s own `Reach` cannot express this — it decides how
     // far a payload may travel, and the answer here is "nowhere at all".
     let outcome = gathered.local_prompt_allowed().then(|| {
+        if let Some(role) = &role {
+            if let Err(reason) = crate::quiet::runtime_admission(role, chars, shape.max_tokens()) {
+                return Outcome::PolicyDeferred(reason.to_string());
+            }
+        }
         summarize::digest(
             role.as_ref().map(|role| to_target(cfg, role)).as_ref(),
             &gathered.text,
@@ -389,6 +396,10 @@ fn write_digest(
             reach_for(gathered, role.as_ref()),
         )
     });
+
+    if let Some(Outcome::PolicyDeferred(reason)) = &outcome {
+        return defer_digest(store, source, id, directive, gathered, &producer, reason);
+    }
 
     let mut redactions: Vec<RedactionFinding> = Vec::new();
     let text = match &outcome {
@@ -459,6 +470,52 @@ fn write_digest(
         clear_derived_output(store, cfg, source, id)?;
     }
     read_back(store, source, id)
+}
+
+/// A temporary policy never replaces existing work or its retry ledger.
+/// A first-time deferral stays selectable by the ordinary pending drain.
+fn defer_digest(
+    store: &Store,
+    source: &str,
+    id: &str,
+    directive: &Directive,
+    gathered: &SourceText,
+    producer: &str,
+    reason: &str,
+) -> Result<StoredDigest> {
+    if store
+        .content_digest(source, id)
+        .map_err(|error| crate::CommsError::Other(detail(error.as_ref())))?
+        .is_none()
+    {
+        store
+            .upsert_content_digest(&StoredDigest {
+                source: source.into(),
+                item_id: id.into(),
+                text: None,
+                state: "policy_deferred".into(),
+                shape: directive
+                    .shape_for(gathered.text.chars().count())
+                    .as_str()
+                    .into(),
+                depth: directive.depth.as_str().into(),
+                focus: directive.focus_text(),
+                producer: producer.into(),
+                source_chars: gathered.text.chars().count() as i64,
+                redactions: 0,
+                attempts: 0,
+                last_error: Some(reason.into()),
+                diagram: None,
+                diagram_state: None,
+                diagram_error: None,
+                chart: None,
+                chart_state: None,
+                chart_error: None,
+                generated_at: String::new(),
+            })
+            .map_err(|error| crate::CommsError::Other(detail(error.as_ref())))?;
+    }
+    Err(crate::CommsError::Other(reason.into()))
 }
 
 /// Drop the diagram and the chart beside a digest that was refused for its
@@ -545,6 +602,12 @@ pub fn generate_diagram(
     // asked of the same model (T3). The input is the digest when one exists,
     // and for a refused class there is none — so this would send the c3 source
     // itself.
+    if gathered.local_prompt_allowed() {
+        if let Some(role) = &role {
+            crate::quiet::runtime_admission(role, input.chars().count(), 700)
+                .map_err(|e| crate::CommsError::Other(e.to_string()))?;
+        }
+    }
     let outcome = gathered.local_prompt_allowed().then(|| {
         summarize::diagram(
             role.as_ref().map(|role| to_target(cfg, role)).as_ref(),
@@ -552,6 +615,9 @@ pub fn generate_diagram(
             reach_for(&gathered, role.as_ref()),
         )
     });
+    if let Some(Outcome::PolicyDeferred(reason)) = &outcome {
+        return Err(crate::CommsError::Other(reason.clone()));
+    }
     let producer = diagram_producer_revision(cfg).unwrap_or_else(|| "unconfigured".into());
 
     // A diagram hangs off a digest row, so an item digested for the first time
@@ -606,6 +672,12 @@ pub fn generate_chart(
     let role = cfg.summarization_role();
     // The source text is this path's input by design, so a refused class is
     // refused here most plainly of all (T3).
+    if gathered.local_prompt_allowed() {
+        if let Some(role) = &role {
+            crate::quiet::runtime_admission(role, gathered.text.chars().count(), 900)
+                .map_err(|e| crate::CommsError::Other(e.to_string()))?;
+        }
+    }
     let outcome = gathered.local_prompt_allowed().then(|| {
         summarize::chart::chart(
             role.as_ref().map(|role| to_target(cfg, role)).as_ref(),
@@ -613,6 +685,9 @@ pub fn generate_chart(
             reach_for(&gathered, role.as_ref()),
         )
     });
+    if let Some(Outcome::PolicyDeferred(reason)) = &outcome {
+        return Err(crate::CommsError::Other(reason.clone()));
+    }
     let producer = chart_producer_revision(cfg).unwrap_or_else(|| "unconfigured".into());
 
     // A chart hangs off a digest row, so an item charted before it was digested
@@ -783,6 +858,12 @@ fn refresh_one(
     };
     let chars = gathered.text.chars().count();
     let shape = directive.shape_for(chars);
+    if gathered.local_prompt_allowed() {
+        if let Some(role) = cfg.light_summarization_role() {
+            role.runtime_admission()
+                .map_err(|e| crate::CommsError::Other(e.to_string()))?;
+        }
+    }
     match crate::quiet::rung(&cfg.inference, chars, shape.max_tokens()) {
         crate::quiet::Rung::Unconfigured => Ok(Pass::Unconfigured),
         crate::quiet::Rung::Light(role) => {
@@ -841,6 +922,8 @@ fn over_window(
     shape: summarize::Shape,
 ) -> Result<Pass> {
     if source != "feed" {
+        sjel_runtime::require(sjel_runtime::Category::OtherLocalModels)
+            .map_err(|e| crate::CommsError::Other(e.to_string()))?;
         skip_over_window(store, cfg, source, id, shape)?;
         return Ok(Pass::OverWindow);
     }
@@ -1037,6 +1120,9 @@ pub fn store_cloud_failure(
     producer: &str,
     detail: &str,
 ) {
+    if sjel_runtime::is_deferred(detail) {
+        return;
+    }
     let previous = store.content_digest(source, item_id).ok().flatten();
     let stored = StoredDigest {
         source: source.to_string(),
@@ -1133,6 +1219,9 @@ pub fn state_explanation(state: &str, shape: &str) -> &'static str {
              model."
         }
         CLOUD_ERROR => "The cloud provider could not produce a digest. It will retry.",
+        "policy_deferred" => {
+            "Deferred by the runtime profile. Work resumes when the profile allows it."
+        }
         "unconfigured" => "No summarization model is configured on this machine.",
         "timeout" => "The local model did not answer in time.",
         // Deliberately about the machine, not the model. The server took this

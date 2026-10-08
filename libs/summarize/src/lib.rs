@@ -397,6 +397,8 @@ impl Reach {
 /// resolved, so this lib never names `libs/inference`'s types.
 #[derive(Clone)]
 pub struct Target {
+    pub backend_name: String,
+    pub max_input_tokens: Option<u32>,
     /// A full chat-completions URL.
     pub endpoint: String,
     pub model: String,
@@ -452,6 +454,8 @@ pub enum Outcome {
     Unconfigured,
     HttpError(String),
     ModelError(String),
+    /// Temporarily disallowed; preserve stored output and retry budgets.
+    PolicyDeferred(String),
     /// The server took the request and then ran out of room for it. Separate
     /// from [`Outcome::ModelError`] because it is a fact about the machine
     /// rather than about the request: the identical prompt succeeds when
@@ -471,6 +475,7 @@ impl Outcome {
             Outcome::Unconfigured => "unconfigured",
             Outcome::HttpError(_) => "http_error",
             Outcome::ModelError(_) => "model_error",
+            Outcome::PolicyDeferred(_) => "policy_deferred",
             Outcome::CapacityAborted(_) => "capacity_aborted",
             Outcome::EmptyResponse => "empty_response",
             Outcome::Timeout => "timeout",
@@ -495,7 +500,8 @@ impl Outcome {
         match self {
             Outcome::HttpError(detail)
             | Outcome::ModelError(detail)
-            | Outcome::CapacityAborted(detail) => Some(detail),
+            | Outcome::CapacityAborted(detail)
+            | Outcome::PolicyDeferred(detail) => Some(detail),
             _ => None,
         }
     }
@@ -571,7 +577,7 @@ pub fn digest(target: Option<&Target>, text: &str, directive: &Directive, reach:
     if !reach.admits(target) {
         return Outcome::RemoteRefused;
     }
-    let input = truncate(text, INPUT_CAP);
+    let input = if target.backend_name == "foundation-models" { text.to_owned() } else { truncate(text, INPUT_CAP) };
     let prompt = digest_prompt(&input, shape, directive);
     complete(target, &prompt, shape.max_tokens())
 }
@@ -687,7 +693,8 @@ pub fn diagram(target: Option<&Target>, text: &str, reach: Reach) -> Outcome {
     if text.trim().is_empty() {
         return Outcome::SkippedShort;
     }
-    let prompt = diagram_prompt(&truncate(text, INPUT_CAP));
+    let input = if target.backend_name == "foundation-models" { text.to_owned() } else { truncate(text, INPUT_CAP) };
+    let prompt = diagram_prompt(&input);
     match complete(target, &prompt, 700) {
         Outcome::Ok(answer) => match extract_mermaid(&answer) {
             Ok(diagram) => Outcome::Ok(diagram),
@@ -697,9 +704,31 @@ pub fn diagram(target: Option<&Target>, text: &str, reach: Reach) -> Outcome {
     }
 }
 
+fn runtime_admission(target: &Target, prompt: &str, reply_tokens: u32) -> Result<(), String> {
+    let local = reqwest::Url::parse(&target.endpoint).ok()
+        .and_then(|url| url.host_str().map(str::to_owned))
+        .is_some_and(|host| host == "localhost" || host.trim_matches(['[', ']'])
+            .parse::<std::net::IpAddr>().is_ok_and(|ip| ip.is_loopback()));
+    sjel_runtime::admit_model(&target.backend_name, &target.model, local).map_err(|e| e.to_string())?;
+    if local && target.backend_name == "foundation-models" && target.model == "apple-foundationmodel" {
+        let window = target.max_input_tokens.unwrap_or(4096).min(4096) as usize;
+        if prompt.len().saturating_add(reply_tokens as usize).saturating_add(256) > window {
+            return Err("deferred by runtime profile: AFM input plus reply exceeds its context; no request was sent".into());
+        }
+        let base = target.endpoint.strip_suffix("/chat/completions").unwrap_or(&target.endpoint);
+        if !sjel_inference::afm_available(base) {
+            return Err("deferred by runtime profile: AFM model is unavailable".into());
+        }
+    }
+    Ok(())
+}
+
 /// One OpenAI-compatible chat completion. The only place in this lib that
 /// speaks HTTP.
 pub(crate) fn complete(target: &Target, prompt: &str, max_tokens: u32) -> Outcome {
+    if let Err(reason) = runtime_admission(target, prompt, max_tokens) {
+        return Outcome::PolicyDeferred(reason);
+    }
     // Held for the whole request and released by drop on every return path
     // below. Loopback only: a hosted provider queues for itself and shares no
     // GPU with anything here.
@@ -727,6 +756,9 @@ pub(crate) fn complete(target: &Target, prompt: &str, max_tokens: u32) -> Outcom
     }));
     if let Some(key) = &target.api_key {
         request = request.bearer_auth(key);
+    }
+    if let Err(reason) = runtime_admission(target, prompt, max_tokens) {
+        return Outcome::PolicyDeferred(reason);
     }
     let response = match request.send() {
         Ok(response) => response,
@@ -994,6 +1026,8 @@ mod tests {
     #[test]
     fn a_non_loopback_target_is_refused_for_restricted_content() {
         let cloud = Target {
+            backend_name: "test".into(),
+            max_input_tokens: None,
             endpoint: "https://api.example.com/v1/chat/completions".into(),
             model: "m".into(),
             api_key: None,
@@ -1037,6 +1071,8 @@ mod tests {
             Outcome::Unconfigured
         );
         let local = Target {
+            backend_name: "test".into(),
+            max_input_tokens: None,
             endpoint: "http://127.0.0.1:9/v1/chat/completions".into(),
             model: "m".into(),
             api_key: None,
@@ -1060,6 +1096,8 @@ mod tests {
     #[test]
     fn a_loopback_target_is_never_refused_on_reach() {
         let local = Target {
+            backend_name: "test".into(),
+            max_input_tokens: None,
             endpoint: "http://127.0.0.1:8000/v1/chat/completions".into(),
             model: "m".into(),
             api_key: None,
@@ -1181,6 +1219,8 @@ mod tests {
             }
         }
         let local = Target {
+            backend_name: "test".into(),
+            max_input_tokens: None,
             endpoint: "http://127.0.0.1:9/v1/chat/completions".into(),
             model: "m".into(),
             api_key: None,
@@ -1211,6 +1251,8 @@ mod tests {
             }
         }
         let cloud = Target {
+            backend_name: "test".into(),
+            max_input_tokens: None,
             endpoint: "https://api.example.com/v1/chat/completions".into(),
             model: "m".into(),
             api_key: None,
@@ -1266,6 +1308,8 @@ mod tests {
 
         let counting = Arc::new(Counting::default());
         let target = Target {
+            backend_name: "test".into(),
+            max_input_tokens: None,
             endpoint: "http://127.0.0.1:9/v1/chat/completions".into(),
             model: "m".into(),
             api_key: None,

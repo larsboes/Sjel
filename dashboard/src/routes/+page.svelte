@@ -27,6 +27,7 @@
   import RepoStatusCard from "$lib/RepoStatusCard.svelte";
   import HomeHorizon from "$lib/home/HomeHorizon.svelte";
   import AxonGlance from "$lib/home/AxonGlance.svelte";
+  import TripDay from "$lib/home/TripDay.svelte";
   import LocationView from "$lib/home/LocationView.svelte";
   import SourcesView from "$lib/home/SourcesView.svelte";
   import {
@@ -123,9 +124,25 @@
   const feedEntries = $derived((sources.feed?.source as FeedEntry[] | undefined) ?? []);
   const health = $derived((sources.system?.source as AxonStatusHealth | undefined) ?? null);
 
+  const tomorrowKey = $derived(
+    localDateKey(new Date(today.getFullYear(), today.getMonth(), today.getDate() + 1)),
+  );
+  const activeTrip = $derived(
+    plans.find(
+      (plan) => plan.status !== "archived" && plan.date_start <= todayKey && todayKey <= plan.date_end,
+    ) ?? null,
+  );
+
   const upcomingEntries = $derived(
     calendarEntries
-      .filter((entry) => entry.starts_at.slice(0, 10) >= todayKey && entry.commitment !== "possible")
+      // Still running counts as upcoming: a trip that left yesterday is the one you are on.
+      // A trip leg stays in while it is only `possible`, because the plan it came from is
+      // your own; a scouting proposal at the same commitment is not.
+      .filter(
+        (entry) =>
+          (entry.starts_at.slice(0, 10) >= todayKey || entry.ends_at.slice(0, 10) > todayKey) &&
+          (entry.commitment !== "possible" || entry.source === "trips"),
+      )
       .sort((a, b) => a.starts_at.localeCompare(b.starts_at)),
   );
 
@@ -507,12 +524,21 @@
   <div class="workspace">
     <section class="next">
       {#if homeView === "now"}
+        {#if activeTrip}
+          <TripDay plan={activeTrip} entries={calendarEntries} />
+        {/if}
         <AxonGlance
           entries={upcomingEntries}
           plans={plans}
           macmon={macmonSample}
         />
-        <HomeHorizon contexts={calendarContexts} entries={upcomingEntries} />
+        <!-- With a trip running, TripDay owns today and tomorrow; the horizon keeps what starts later. -->
+        <HomeHorizon
+          contexts={calendarContexts}
+          entries={activeTrip
+            ? upcomingEntries.filter((e) => e.source !== "trips" && e.starts_at.slice(0, 10) > tomorrowKey)
+            : upcomingEntries}
+        />
       {/if}
 
       <!-- One header for the whole main column. The view switcher lives here rather than

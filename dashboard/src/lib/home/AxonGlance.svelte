@@ -19,6 +19,7 @@
     type FeedEntry,
   } from '$lib/api';
   import { assistantStore } from '$lib/assistant/assistant.svelte';
+  import { localDateKey } from './format';
   import { omniStore } from '$lib/omni/omni.svelte';
   import { inspectorStore } from '$lib/inspector/inspector.svelte';
 
@@ -33,7 +34,8 @@
   } = $props();
 
   const now = new Date();
-  const todayStr = now.toISOString().slice(0, 10);
+  // Local, not UTC: toISOString() says yesterday until 02:00 in summer.
+  const todayStr = localDateKey(now);
   const currentHour = now.getHours();
 
   const greeting = $derived(
@@ -74,10 +76,21 @@
       .sort((a, b) => a.starts_at.localeCompare(b.starts_at))
   );
 
-  const nextEntry = $derived(todayEntries[0] ?? null);
-  const upcomingTrip = $derived(plans[0] ?? null);
+  // A timed event only: an all-day trip leg reads better as the leg line below.
+  const nextEntry = $derived(todayEntries.find((e) => !e.all_day) ?? null);
+  // The trip you are on beats the first one in the list, and its leg today beats
+  // its first destination: on a Bonn → Stuttgart → Berlin trip, today is Stuttgart.
+  const activeTrip = $derived(
+    plans.find((p) => p.date_start <= todayStr && todayStr <= p.date_end) ?? null
+  );
+  const upcomingTrip = $derived(activeTrip ?? plans[0] ?? null);
+  const nextLeg = $derived(
+    activeTrip?.stages
+      ?.filter((s) => s.date && s.date >= todayStr)
+      .sort((a, b) => (a.date ?? '').localeCompare(b.date ?? '') || a.sequence - b.sequence)[0] ?? null
+  );
   const tripDestination = $derived(
-    upcomingTrip?.destinations?.[0]?.name ?? upcomingTrip?.title ?? "Travel"
+    nextLeg?.destination?.name ?? upcomingTrip?.destinations?.[0]?.name ?? upcomingTrip?.title ?? "Travel"
   );
   const tripDates = $derived(
     upcomingTrip ? `${upcomingTrip.date_start} – ${upcomingTrip.date_end}` : "Upcoming"
@@ -123,8 +136,10 @@
         <p class="pulse-status">
           {#if nextEntry}
             <span>Next: <strong>{nextEntry.title}</strong> at {nextEntry.starts_at.slice(11, 16) || "today"}</span>
+          {:else if nextLeg}
+            <span>{nextLeg.date === todayStr ? 'Today' : 'Next'}: <strong>{nextLeg.origin.name} → {nextLeg.destination.name}</strong> · {upcomingTrip?.title}</span>
           {:else if upcomingTrip}
-            <span>Upcoming: <strong>{upcomingTrip.title}</strong> to {tripDestination}</span>
+            <span>Upcoming: <strong>{upcomingTrip.title}</strong> · {upcomingTrip.date_start}</span>
           {:else}
             <span>Household rhythm calm · All signals steady</span>
           {/if}
@@ -312,6 +327,7 @@
 
   .greeting-text {
     margin: 0;
+    white-space: nowrap;
     font-size: var(--text-md);
     font-weight: 600;
     letter-spacing: -0.01em;

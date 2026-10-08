@@ -249,7 +249,7 @@
   <SpendingContextReview {data} {start} {end} {account} {category} onchanged={load} />
   <section class="panel transactions">
     <div class="panel-heading"><div><h2>Transactions</h2><p>{data.transactions.length} normalized journal rows. Transfers are excluded from totals by default.</p></div></div>
-    <TransactionTable rows={data.transactions} />
+    <TransactionTable id="tx" rows={data.transactions} />
   </section>
   <ImportReview onchanged={load} />
   <InvestmentPreview onchanged={load} />

@@ -20,6 +20,9 @@ Check a change before pushing it:
   cargo <args...>                Run cargo against a scratch target dir and a scratch overlay
 
 Operate capabilities:
+  runtime status                 Runtime mode, power and On-the-go exceptions
+  runtime mode <mode>            Owner-only: auto, normal or on-the-go
+  runtime allow <category> on|off Owner-only: persistent On-the-go exception
   capability list                List registered HTTP capability surfaces and health
   capability health              Probe registered capability health endpoints
   capability url <capability>    Print a registered capability's HTTP base URL
@@ -59,6 +62,17 @@ An external capability is polled at its resolved endpoint, not on loopback: it h
 port here because a port is a fact about the host that binds it. It is never `off`
 either — the registry blanks its autostart, because how another host runs a capability
 is that host's declaration to make, not a claim this machine may read as permission."#;
+
+pub const RUNTIME: &str = r#"Usage: sjel runtime <command>
+
+  status                         Read selection, effective mode, power and exceptions
+  mode auto|normal|on-the-go      Save this device's runtime selection
+  allow <category> on|off         Save an exception, applied only while On the go
+
+Categories: other-local-models, remote-models, bulk-indexing, transcription, media-conversion.
+Auto follows fresh power observations after the operator saves it. An unconfigured install
+stays Normal until a selection is saved. Exceptions persist but have no effect in Normal.
+Writes require owner credentials. Agent sessions keep their agent token and are refused."#;
 
 pub const CLAUDE: &str = r#"Usage: sjel claude [apply|check] [--force] [--dry-run]
 

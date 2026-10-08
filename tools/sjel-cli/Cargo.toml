@@ -40,6 +40,7 @@ zeroize.workspace = true
 # single `cargo build -p sjel-cli` no longer links only pure-Rust code — bundled SQLite needs a C
 # compiler, which is already the linker cargo picks on both macOS and Linux.
 sjel-config = { path = "../../libs/sjel-config" }
+sjel-runtime = { path = "../../libs/runtime" }
 sjel-store = { path = "../../libs/sjel-store" }
 sjel-skill-metadata = { path = "../../libs/skill-metadata" }
 # `tools/model-check` asks the registry the same questions every capability asks it: is this

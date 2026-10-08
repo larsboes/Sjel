@@ -380,7 +380,15 @@ pub(crate) fn statuses_for(
     selected: Option<&str>,
 ) -> Result<Vec<StatusRow>, String> {
     match harness.model {
-        Model::Registry => pi::registry_statuses(&harness.config, selected),
+        // pi's rows are two channels: the settings registry, and the agent files it copies to a
+        // flat destination. Both belong in the matrix — the registry alone reports a Pack current
+        // while its agent files sit stale.
+        Model::Registry => {
+            let packs: Vec<String> = selected.map(str::to_owned).into_iter().collect();
+            let mut rows = pi::registry_statuses(&harness.config, selected)?;
+            rows.extend(pi_settings::agent_status_rows(&harness.config, &packs)?);
+            Ok(rows)
+        }
         Model::Materialized => engine::get_statuses(&harness.config, selected),
     }
 }

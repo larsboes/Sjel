@@ -53,6 +53,7 @@ sjel-config = { path = "../../libs/sjel-config" }
 # dependency moved with the code rather than staying here.
 sjel-extraction = { path = "../../libs/extraction" }
 sjel-inference = { path = "../../libs/inference" }
+sjel-runtime = { path = "../../libs/runtime" }
 sjel-server = { path = "../../libs/sjel-server" }
 sjel-store = { path = "../../libs/sjel-store" }
 sjel-summarize = { path = "../../libs/summarize" }

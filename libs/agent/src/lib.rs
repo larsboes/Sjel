@@ -126,6 +126,8 @@ pub enum AgentError {
     },
     #[error("the model still called tools after {0} turns")]
     TurnLimit(usize),
+    #[error("{0}")]
+    RequestRefused(String),
     #[error("stopped by the user")]
     Stopped,
 }
@@ -379,13 +381,23 @@ impl Agent {
         for extension in &self.extensions {
             extension.before_request(messages);
         }
+        let mut body = self.request_body(messages);
+        if self.role.is_afm() {
+            body["max_tokens"] = json!(1024);
+        }
+        self.role
+            .admit_chat_request(&body)
+            .map_err(AgentError::RequestRefused)?;
         let mut request = self
             .client
             .post(self.role.chat_completions_endpoint())
-            .json(&self.request_body(messages));
+            .json(&body);
         if let Some(key) = self.role.bearer_key() {
             request = request.bearer_auth(key);
         }
+        self.role
+            .admit_chat_request(&body)
+            .map_err(AgentError::RequestRefused)?;
         let response = request.send()?;
         let status = response.status();
         if !status.is_success() {

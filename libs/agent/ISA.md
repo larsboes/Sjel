@@ -2,7 +2,7 @@
 project: sjel-agent
 type: isa
 phase: climbing
-progress: 20
+progress: 43
 principal_stated_goal: "pi agent inspiration rust implementation of slim core and official extensions from start but opt in"
 ---
 
@@ -121,19 +121,34 @@ Four hooks, because wave 1 needs exactly these: tools (skills, MCP, diagnostics)
 (skills), request context (compaction) and the tool-call gate (guard). pi's event bus, renderers
 and commands are not copied.
 
-- [ ] AGT-6 — `Agent` takes a list of extensions. Their tools join the core tools, `system` runs
+- [x] AGT-6 — `Agent` takes a list of extensions. Their tools join the core tools, `system` runs
   once per run, `before_request` before every completion, `tool_call` before every call. A
-  `Verdict::Deny(reason)` becomes the tool result and the call does not run. Falsifier: a denied
+  `Verdict::Deny(reason)` becomes the tool result and the call does not run. Evidence:
+  `an_extension_denies_a_call_and_the_tool_never_runs` (`src/lib.rs`), which is that probe — one
+  extension denies one call of two in the same turn, its tool's counter stays at 0, the other
+  call runs, `system` fired once and `before_request` twice for two requests. Falsifier: a denied
   call whose tool `run` executes. Probe: a test extension that denies `echo` and counts runs.
-- [ ] AGT-7 — a bare run is the F0 core. With no extensions named, the request body and the tool
-  list equal F0's byte for byte. Falsifier: any difference. Probe: a test that compares the two
-  request bodies.
-- [ ] AGT-8 — `<overlay>/config/agent.toml` `[agent] extensions = [...]` names what runs.
+- [x] AGT-7 — a bare run is the F0 core. With no extensions named, the request body and the tool
+  list equal F0's. Evidence: `a_bare_run_sends_the_core_request_body` (`src/lib.rs`) pins the whole
+  body — `model`, `messages`, `stream`, and the one tool's name, description and schema — so an
+  added key or a changed tool list fails it. One deviation from the claim as written: the
+  comparison is structural, not byte for byte, because JSON object order is not part of the wire
+  contract and `serde_json` sorts object keys anyway. Falsifier: any difference. Probe: a test
+  that compares the two request bodies.
+- [x] AGT-8 — `<overlay>/config/agent.toml` `[agent] extensions = [...]` names what runs.
   `--ext none` runs nothing beyond the core, `--ext +name` adds one and `--ext -name` removes one
-  for this run. An unknown name is an error at startup, not a silent skip. Falsifier: a run that
-  starts with a misspelled extension name.
-- [ ] AGT-9 — two extensions that register a tool with the same name stop the startup with both
-  names in the error. Falsifier: a run where one tool silently shadows another.
+  for this run. An unknown name is an error at startup, not a silent skip. Evidence:
+  `extension::tests::the_flags_change_the_configured_set` for the set arithmetic and the refused
+  flag forms, and `tests/cli.rs` for the binary — `--ext +typo` exits non-zero with the name in
+  the message, a bare `typo` is refused rather than guessed, and `none` passes the step. Live
+  2026-10-08: an `agent.toml` naming `guard`, which this build does not carry yet, stopped the run
+  at "unknown extension `guard`: this build carries none yet", and `--ext -guard` let it through.
+  Falsifier: a run that starts with a misspelled extension name.
+- [x] AGT-9 — two extensions that register a tool with the same name stop the startup with both
+  names in the error. Evidence: `two_tools_with_one_name_stop_the_startup` (`src/lib.rs`) — two
+  extensions claiming `dup` fail naming both of them, and an extension claiming `echo` fails
+  naming the core tools, which the claim's wording did not cover but the same accident does.
+  Falsifier: a run where one tool silently shadows another.
 
 ### F2 · Guard (on by default, D3)
 
@@ -216,8 +231,8 @@ agent reaches Sjel's data with no data path of its own.
 | AGT-5 | command | `cargo test -p sjel-agent append_then_load` | mode 0600 | cargo | F0, C4 |
 | AGT-23 | command | `cargo test -p sjel-agent ollama_names_thinking_reasoning` | thinking out of the answer | cargo | F0 |
 | AGT-6 | command | deny extension, count `run` calls | 0 | cargo | F1 |
-| AGT-7 | command | bare request body vs F0 request body | equal | cargo | F1 |
-| AGT-8 | command | start with `--ext typo` | non-zero exit | cargo | F1 |
+| AGT-7 | command | bare request body vs the pinned F0 body | equal | cargo | F1 |
+| AGT-8 | command | start with `--ext +typo`, and a bare `typo` | non-zero exit | cargo | F1 |
 | AGT-9 | command | two extensions, one tool name | non-zero exit, both names | cargo | F1 |
 | AGT-10 | command | table test over the `secrets-guard.ts` header cases | all equal | cargo | F2 |
 | AGT-11 | command | run with `--ext -guard`, read startup line | says off | cargo | F2, D3 |
@@ -279,6 +294,15 @@ agent reaches Sjel's data with no data path of its own.
 
 ## Log
 
+- 2026-10-08 · F1, the extension contract. `Extension` with four hooks (tools, `system`,
+  `before_request`, `tool_call`), `Verdict::Allow|Deny`, `Agent::new` takes the extension list and
+  refuses two tools under one name, and the CLI resolves `agent.toml` plus `--ext
+  none|+name|-name` before anything else — before the inference role, so a name this build does
+  not carry stops the run with nothing else to wait for. 21 tests, clippy clean, `cargo fmt
+  --check` clean. `BUILT_IN` (`src/main.rs`) is deliberately empty: the guard is the first
+  extension and it is F2, so every name is unknown by design rather than by omission. The startup
+  line that names the enabled set is therefore dead until F2 — AGT-11 is its first reader, and it
+  is the one piece of F1 with no test behind it.
 - 2026-10-08 · Made the agent run on this machine, the first time since the core was built. Two
   things were missing. The overlay had no `coding` role, so every run exited at startup; it now
   points at ollama/qwen3:4b, the only local model that declares `tools` (`ollama /api/show`;

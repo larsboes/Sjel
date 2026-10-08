@@ -1,8 +1,14 @@
-//! `sjel-agent [--role <name>] [--continue | --session <file>] [<prompt...>]`
+//! `sjel-agent [--role <name>] [--ext none|+name|-name] [--continue | --session <file>]
+//! [<prompt...>]
 //!
 //! A coding agent in the working directory. With a prompt it runs once and exits. Without one
 //! it reads prompts from stdin, one per line, and keeps the conversation between them.
 //! `/exit` or end of input (Ctrl-D) stops it.
+//!
+//! Beyond the core tools, the extensions named in `<overlay>/config/agent.toml` run, and the
+//! `--ext` flags change that set for this run: `none` clears it, `+name` adds one, `-name`
+//! removes one. A name that this binary does not carry is an error at startup. The extensions
+//! compiled in so far are in `BUILT_IN`.
 //!
 //! Ctrl-C stops the current turn and keeps the conversation. A second Ctrl-C before the next
 //! turn starts exits with 130, which is also the way out of a model that streams nothing.
@@ -22,7 +28,7 @@ use std::process::ExitCode;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
 
-use sjel_agent::{session, tools, Agent, AgentError, Event, Message};
+use sjel_agent::{extension, session, tools, Agent, AgentError, Event, Extension, Message};
 
 const DEFAULT_ROLE: &str = "coding";
 /// How much of a tool result the trace on stderr shows. The model still gets all of it.
@@ -35,6 +41,8 @@ const INTERRUPTED: u8 = 130;
 struct Args {
     role: String,
     resume: Resume,
+    /// The `--ext` flags, in the order they were given. `extension::select` reads them.
+    ext: Vec<String>,
     prompt: String,
 }
 
@@ -48,12 +56,16 @@ fn parse(mut args: impl Iterator<Item = String>) -> Result<Args, String> {
     let mut parsed = Args {
         role: DEFAULT_ROLE.to_owned(),
         resume: Resume::New,
+        ext: Vec::new(),
         prompt: String::new(),
     };
     let mut prompt = Vec::new();
     while let Some(arg) = args.next() {
         match arg.as_str() {
             "--role" => parsed.role = args.next().ok_or("--role needs a role name")?,
+            "--ext" => parsed
+                .ext
+                .push(args.next().ok_or("--ext needs none, +name or -name")?),
             "--continue" | "-c" => parsed.resume = Resume::Latest,
             "--session" => {
                 parsed.resume = Resume::File(args.next().ok_or("--session needs a file")?.into())
@@ -71,7 +83,8 @@ fn main() -> ExitCode {
         Err(e) => {
             eprintln!("sjel-agent: {e}");
             eprintln!(
-                "usage: sjel-agent [--role <name>] [--continue | --session <file>] [<prompt...>]"
+                "usage: sjel-agent [--role <name>] [--ext none|+name|-name] \
+                 [--continue | --session <file>] [<prompt...>]"
             );
             return ExitCode::from(2);
         }
@@ -86,6 +99,12 @@ fn main() -> ExitCode {
 }
 
 fn run(args: Args) -> Result<ExitCode, String> {
+    // Extensions resolve before anything else, so a name this build does not carry fails at
+    // startup with nothing else to wait for (AGT-8).
+    let chosen = chosen_extensions(&args.ext)?;
+    if !chosen.names.is_empty() {
+        eprintln!("{DIM}[extensions] {}{RESET}", chosen.names.join(", "));
+    }
     let role = sjel_inference::InferenceConfig::load(sjel_config::overlay_config)
         .role(&args.role)
         .ok_or_else(|| {
@@ -109,8 +128,13 @@ fn run(args: Args) -> Result<ExitCode, String> {
     .and_then(|_| signal_hook::flag::register(sigint, Arc::clone(&stop)))
     .map_err(|e| format!("could not handle Ctrl-C: {e}"))?;
 
-    let agent = Agent::new(role, tools::coding(&cwd, &stop), Arc::clone(&stop))
-        .map_err(|e| e.to_string())?;
+    let agent = Agent::new(
+        role,
+        tools::coding(&cwd, &stop),
+        chosen.extensions,
+        Arc::clone(&stop),
+    )
+    .map_err(|e| e.to_string())?;
 
     let session_dir = sjel_config::overlay_data_dir("agent").map(|d| {
         d.join("sessions")
@@ -198,6 +222,78 @@ fn run(args: Args) -> Result<ExitCode, String> {
             }
         }
     }
+}
+
+/// What a run starts with: the names it was given, and the extensions they resolved to.
+struct Chosen {
+    names: Vec<String>,
+    extensions: Vec<Box<dyn Extension>>,
+}
+
+/// The extension set for this run (AGT-8): `agent.toml` first, then the `--ext` flags in the
+/// order they were given, each name resolved against what this binary carries.
+fn chosen_extensions(flags: &[String]) -> Result<Chosen, String> {
+    let names = extension::select(&configured_extensions()?, flags)?;
+    let known: Vec<&str> = BUILT_IN.iter().map(|(name, _)| *name).collect();
+    let mut extensions: Vec<Box<dyn Extension>> = Vec::with_capacity(names.len());
+    for name in &names {
+        let Some(extension) = built_in(name) else {
+            return Err(if known.is_empty() {
+                format!("unknown extension `{name}`: this build carries none yet")
+            } else {
+                format!(
+                    "unknown extension `{name}`; this build carries {}",
+                    known.join(", ")
+                )
+            });
+        };
+        extensions.push(extension);
+    }
+    Ok(Chosen { names, extensions })
+}
+
+/// An extension this binary carries: its name, and how to build one.
+type BuiltIn = (&'static str, fn() -> Box<dyn Extension>);
+
+/// The extensions this binary carries (D1: first-party crates, compiled in, no store). Wave 1
+/// fills this table — `guard` (F2, on by default), `skills` (F3), `mcp` (F4), `compaction` (F5),
+/// `rust` (F6). Until the first one lands every name is unknown, and startup says so rather
+/// than running a session without the extension the operator asked for.
+const BUILT_IN: &[BuiltIn] = &[];
+
+fn built_in(name: &str) -> Option<Box<dyn Extension>> {
+    BUILT_IN
+        .iter()
+        .find(|(known, _)| *known == name)
+        .map(|(_, make)| make())
+}
+
+/// `<overlay>/config/agent.toml`, section `[agent]`. A missing file is an empty set and not an
+/// error: a bare run is the core and nothing else (AGT-7).
+fn configured_extensions() -> Result<Vec<String>, String> {
+    let Some(path) = sjel_config::overlay_config("agent.toml") else {
+        return Ok(Vec::new());
+    };
+    let text = match std::fs::read_to_string(&path) {
+        Ok(text) => text,
+        Err(e) if e.kind() == std::io::ErrorKind::NotFound => return Ok(Vec::new()),
+        Err(e) => return Err(format!("could not read {}: {e}", path.display())),
+    };
+    let file: AgentFile = toml::from_str(&text).map_err(|e| format!("{}: {e}", path.display()))?;
+    Ok(file.agent.extensions)
+}
+
+/// What `agent.toml` holds. Every key is optional, so a file that names nothing still parses.
+#[derive(serde::Deserialize)]
+struct AgentFile {
+    #[serde(default)]
+    agent: AgentSection,
+}
+
+#[derive(serde::Deserialize, Default)]
+struct AgentSection {
+    #[serde(default)]
+    extensions: Vec<String>,
 }
 
 fn system_prompt(cwd: &Path) -> String {

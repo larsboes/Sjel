@@ -38,6 +38,32 @@ The file tools are not confined to `root`. `bash` can reach any path the process
 path check on the other tools would not stop anything. The assistant must never get these
 tools.
 
+## Extensions
+
+The core is one tool set. Everything beyond it is an official extension: a first-party Rust
+crate compiled into this binary, doing nothing until it is named. The contract is four hooks in
+[`src/extension.rs`](src/extension.rs) — the tools it adds, the system prompt, the request
+context, and the gate in front of every tool call.
+
+`<overlay>/config/agent.toml` names the set a run starts with, and `--ext` changes it for one
+run, in the order the flags are given:
+
+```toml
+[agent]
+extensions = ["guard", "skills"]
+```
+
+```bash
+sjel-agent --ext none "..."       # the core only
+sjel-agent --ext +skills "..."    # add one
+sjel-agent --ext -guard "..."     # remove one
+```
+
+A name without a sign is an error rather than a guess, and a name this binary does not carry
+stops the run at startup: a session quietly missing the extension the operator asked for is worse
+than one that does not start. Nothing is compiled in yet — `BUILT_IN` in `src/main.rs` is `&[]` —
+so every name currently stops the run, and the guard (F2) is the first to land.
+
 ## Run it
 
 ```bash
@@ -71,8 +97,8 @@ Add a `coding` role to the overlay's `config/inference.json` first:
 
 ## Not here yet
 
-The plan for official, opt-in extensions is in [`ISA.md`](ISA.md): skills, MCP, compaction,
-Rust diagnostics, and a secrets guard that is on by default. Line editing, a full-screen TUI and
+The extension contract is in place (F1, [`ISA.md`](ISA.md)); nothing uses it yet. The guard is
+first, then skills, MCP, compaction and Rust diagnostics. Line editing, a full-screen TUI and
 subagents are named there as wave 2, not decided.
 
 A Ctrl-C while the model reads a long prompt and streams nothing takes effect at the first

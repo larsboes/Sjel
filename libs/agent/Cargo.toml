@@ -25,6 +25,8 @@ sjel-inference = { path = "../inference" }
 sjel-config = { path = "../sjel-config" }
 serde = { workspace = true, features = ["derive"] }
 serde_json.workspace = true
+# The `[agent]` section of the overlay's config/agent.toml names which extensions run.
+toml.workspace = true
 reqwest = { workspace = true, features = ["json", "blocking"] }
 thiserror.workspace = true
 # ripgrep's own crates, in-process instead of spawning `rg` per call: the parallel

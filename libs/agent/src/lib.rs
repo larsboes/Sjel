@@ -11,9 +11,12 @@
 //! and endpoint come from a [`ResolvedRole`], so moving the agent between a local and a
 //! hosted model is an overlay edit, not a code change.
 
+pub mod extension;
 pub mod session;
 pub mod stream;
 pub mod tools;
+
+pub use extension::{Extension, Verdict};
 
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
@@ -115,6 +118,12 @@ pub enum AgentError {
     Status { status: u16, body: String },
     #[error("the model endpoint returned no usable message: {0}")]
     Malformed(String),
+    #[error("two tools are named `{name}`: {first} and {second}")]
+    DuplicateTool {
+        name: String,
+        first: String,
+        second: String,
+    },
     #[error("the model still called tools after {0} turns")]
     TurnLimit(usize),
     #[error("stopped by the user")]
@@ -125,6 +134,7 @@ pub struct Agent {
     role: ResolvedRole,
     client: reqwest::blocking::Client,
     tools: Vec<Box<dyn Tool>>,
+    extensions: Vec<Box<dyn Extension>>,
     /// Set from outside (a Ctrl-C handler) to end the current run. The caller clears it.
     stop: Arc<AtomicBool>,
     /// One turn is one completion request. Stops a model that calls tools forever.
@@ -134,15 +144,43 @@ pub struct Agent {
 impl Agent {
     /// `stop` is shared with whatever ends a run early, and with tools that must end with it
     /// (see [`tools::coding`]).
+    ///
+    /// The extensions' tools join the core tools here, and two tools may not share a name: one
+    /// of them would never run, and which one depends on the order they were collected in
+    /// (AGT-9). The error names both owners.
     pub fn new(
         role: ResolvedRole,
-        tools: Vec<Box<dyn Tool>>,
+        mut tools: Vec<Box<dyn Tool>>,
+        extensions: impl IntoIterator<Item = Box<dyn Extension>>,
         stop: Arc<AtomicBool>,
     ) -> Result<Self, AgentError> {
+        let extensions: Vec<Box<dyn Extension>> = extensions.into_iter().collect();
+        // One owner string per tool, parallel to `tools`, so a collision can name both sides.
+        let mut owners = vec!["the core tools".to_owned(); tools.len()];
+        for extension in &extensions {
+            let added = extension.tools();
+            owners.extend(std::iter::repeat_n(
+                format!("the extension `{}`", extension.name()),
+                added.len(),
+            ));
+            tools.extend(added);
+        }
+        let mut seen: Vec<(&str, &String)> = Vec::new();
+        for (tool, owner) in tools.iter().zip(&owners) {
+            if let Some((_, first)) = seen.iter().find(|(name, _)| *name == tool.name()) {
+                return Err(AgentError::DuplicateTool {
+                    name: tool.name().to_owned(),
+                    first: (*first).clone(),
+                    second: owner.clone(),
+                });
+            }
+            seen.push((tool.name(), owner));
+        }
         Ok(Self {
             role,
             client: sjel_http::client(PURPOSE, REQUEST_TIMEOUT)?,
             tools,
+            extensions,
             stop,
             max_turns: 50,
         })
@@ -170,6 +208,14 @@ impl Agent {
         messages: &mut Vec<Message>,
         mut on: impl FnMut(Event<'_>),
     ) -> Result<(), AgentError> {
+        // The system prompt is the front end's text, and this is the one place an extension adds
+        // to it: once per run, never per request. The front end opens the conversation with it,
+        // and a resumed session is given the current one, so an edited `AGENTS.md` takes effect.
+        if let Some(Message::System { content }) = messages.first_mut() {
+            for extension in &self.extensions {
+                extension.system(content);
+            }
+        }
         for _ in 0..self.max_turns {
             let reply = self.complete(messages, &mut on)?;
             if self.stopped() {
@@ -255,6 +301,17 @@ impl Agent {
         let Some(tool) = self.tool(&call.function.name) else {
             return format!("error: there is no tool named `{}`", call.function.name);
         };
+        // The gate runs before the arguments are parsed: a guard blocks the call the model
+        // asked for, and a call whose arguments are unparseable is still a call it can name.
+        for extension in &self.extensions {
+            if let Verdict::Deny(reason) = extension.tool_call(call) {
+                return if reason.is_empty() {
+                    "error: the call was denied".into()
+                } else {
+                    reason
+                };
+            }
+        }
         // Some models send "" for a call with no arguments.
         let raw = call.function.arguments.trim();
         let args = if raw.is_empty() {
@@ -309,9 +366,13 @@ impl Agent {
 
     fn complete(
         &self,
-        messages: &[Message],
+        messages: &mut Vec<Message>,
         on: &mut impl FnMut(Event<'_>),
     ) -> Result<Message, AgentError> {
+        // Every extension sees the conversation just before it is sent, and may rewrite it.
+        for extension in &self.extensions {
+            extension.before_request(messages);
+        }
         let mut request = self
             .client
             .post(self.role.chat_completions_endpoint())
@@ -336,6 +397,7 @@ mod tests {
     use super::*;
     use std::io::{BufRead, BufReader, Read, Write};
     use std::net::TcpListener;
+    use std::sync::atomic::AtomicUsize;
 
     struct Echo;
     impl Tool for Echo {
@@ -423,7 +485,7 @@ mod tests {
                 delta(json!({ "content": "ne" })),
             ],
         ]);
-        let agent = Agent::new(role(port), vec![Box::new(Echo)], Arc::default()).unwrap();
+        let agent = Agent::new(role(port), vec![Box::new(Echo)], [], Arc::default()).unwrap();
         let mut messages = vec![Message::User {
             content: "ping".into(),
         }];
@@ -493,7 +555,7 @@ mod tests {
         ]]);
         let stop = Arc::new(AtomicBool::new(false));
         let tools: Vec<Box<dyn Tool>> = vec![Box::new(Halt(Arc::clone(&stop))), Box::new(Echo)];
-        let agent = Agent::new(role(port), tools, stop).unwrap();
+        let agent = Agent::new(role(port), tools, [], stop).unwrap();
         let mut messages = vec![Message::User {
             content: "go".into(),
         }];
@@ -517,7 +579,7 @@ mod tests {
 
     #[test]
     fn a_bad_call_becomes_text_for_the_model() {
-        let agent = Agent::new(role(1), vec![Box::new(Echo)], Arc::default()).unwrap();
+        let agent = Agent::new(role(1), vec![Box::new(Echo)], [], Arc::default()).unwrap();
         let call = |name: &str, arguments: &str| ToolCall {
             id: "c".into(),
             kind: function_kind(),
@@ -531,5 +593,207 @@ mod tests {
             .contains("no tool named `nope`"));
         assert!(agent.call(&call("echo", "{bad")).contains("not valid JSON"));
         assert_eq!(agent.call(&call("echo", "")), "error: no text");
+    }
+
+    fn tool_call(i: u32, id: &str, name: &str) -> Value {
+        json!({ "tool_calls": [{ "index": i, "id": id, "function": { "name": name, "arguments": "{}" } }] })
+    }
+
+    /// Counts the runs it is asked for, so a denied call can prove it never ran.
+    struct Counted(Arc<AtomicUsize>);
+    impl Tool for Counted {
+        fn name(&self) -> &'static str {
+            "counted"
+        }
+        fn description(&self) -> &'static str {
+            "Counts its runs."
+        }
+        fn parameters(&self) -> Value {
+            json!({ "type": "object" })
+        }
+        fn run(&self, _: &Value) -> Result<String, String> {
+            self.0.fetch_add(1, Ordering::Relaxed);
+            Ok("ran".into())
+        }
+    }
+
+    /// One extension touching every hook, denying `counted` and counting what fired (AGT-6).
+    #[derive(Default)]
+    struct Denier {
+        runs: Arc<AtomicUsize>,
+        systems: Arc<AtomicUsize>,
+        requests: Arc<AtomicUsize>,
+    }
+
+    impl Extension for Denier {
+        fn name(&self) -> &'static str {
+            "denier"
+        }
+        fn tools(&self) -> Vec<Box<dyn Tool>> {
+            vec![Box::new(Counted(Arc::clone(&self.runs)))]
+        }
+        fn system(&self, prompt: &mut String) {
+            self.systems.fetch_add(1, Ordering::Relaxed);
+            prompt.push_str("\ndeny");
+        }
+        fn before_request(&self, _messages: &mut Vec<Message>) {
+            self.requests.fetch_add(1, Ordering::Relaxed);
+        }
+        fn tool_call(&self, call: &ToolCall) -> Verdict {
+            match call.function.name.as_str() {
+                "counted" => Verdict::Deny("blocked by the denier".into()),
+                _ => Verdict::Allow,
+            }
+        }
+    }
+
+    #[test]
+    fn an_extension_denies_a_call_and_the_tool_never_runs() {
+        let (port, requests) = serve(vec![
+            vec![
+                delta(tool_call(0, "c1", "counted")),
+                delta(tool_call(1, "c2", "echo")),
+            ],
+            vec![delta(json!({ "content": "done" }))],
+        ]);
+        let denier = Denier::default();
+        let (runs, systems, seen) = (
+            Arc::clone(&denier.runs),
+            Arc::clone(&denier.systems),
+            Arc::clone(&denier.requests),
+        );
+        let agent = Agent::new(
+            role(port),
+            vec![Box::new(Echo)],
+            [Box::new(denier) as Box<dyn Extension>],
+            Arc::default(),
+        )
+        .unwrap();
+        let mut messages = vec![
+            Message::System {
+                content: "be terse".into(),
+            },
+            Message::User {
+                content: "go".into(),
+            },
+        ];
+        agent.run(&mut messages, |_| {}).unwrap();
+
+        assert_eq!(runs.load(Ordering::Relaxed), 0, "the denied tool ran");
+        // [0] system, [1] user, [2] the assistant's calls, [3] and [4] their results.
+        assert_eq!(
+            messages[3],
+            Message::Tool {
+                tool_call_id: "c1".into(),
+                content: "blocked by the denier".into()
+            }
+        );
+        // The allowed call in the same turn still ran.
+        assert_eq!(
+            messages[4],
+            Message::Tool {
+                tool_call_id: "c2".into(),
+                content: "error: no text".into()
+            }
+        );
+        assert_eq!(
+            systems.load(Ordering::Relaxed),
+            1,
+            "system ran once per run"
+        );
+        assert_eq!(
+            seen.load(Ordering::Relaxed),
+            2,
+            "before_request ran per request"
+        );
+
+        let first = requests.recv().unwrap();
+        assert_eq!(first["messages"][0]["content"], "be terse\ndeny");
+        assert_eq!(first["tools"][1]["function"]["name"], "counted");
+    }
+
+    #[test]
+    fn a_bare_run_sends_the_core_request_body() {
+        let agent = Agent::new(role(1), vec![Box::new(Echo)], [], Arc::default()).unwrap();
+        let body = agent.request_body(&[Message::User {
+            content: "ping".into(),
+        }]);
+        assert_eq!(
+            body,
+            json!({
+                "model": "m",
+                "messages": [{ "role": "user", "content": "ping" }],
+                "stream": true,
+                "tools": [{ "type": "function", "function": {
+                    "name": "echo",
+                    "description": "Returns its text argument.",
+                    "parameters": { "type": "object", "properties": { "text": { "type": "string" } } },
+                }}],
+            }),
+            "with no extensions named, the request body is F0's, key for key (AGT-7)"
+        );
+    }
+
+    /// A tool under a name it is given, for the collision cases.
+    struct Named(&'static str);
+    impl Tool for Named {
+        fn name(&self) -> &'static str {
+            self.0
+        }
+        fn description(&self) -> &'static str {
+            ""
+        }
+        fn parameters(&self) -> Value {
+            json!({ "type": "object" })
+        }
+        fn run(&self, _: &Value) -> Result<String, String> {
+            Ok(String::new())
+        }
+    }
+
+    /// An extension carrying one tool under a name it is given.
+    struct Carries(&'static str, &'static str);
+    impl Extension for Carries {
+        fn name(&self) -> &'static str {
+            self.0
+        }
+        fn tools(&self) -> Vec<Box<dyn Tool>> {
+            vec![Box::new(Named(self.1))]
+        }
+    }
+
+    #[test]
+    fn two_tools_with_one_name_stop_the_startup() {
+        let err = Agent::new(
+            role(1),
+            Vec::new(),
+            [
+                Box::new(Carries("first", "dup")) as Box<dyn Extension>,
+                Box::new(Carries("second", "dup")) as Box<dyn Extension>,
+            ],
+            Arc::default(),
+        )
+        .err()
+        .expect("two extensions claiming one tool name started anyway");
+        let said = err.to_string();
+        assert!(said.contains("`dup`"), "{said}");
+        assert!(said.contains("first") && said.contains("second"), "{said}");
+
+        // Nor may an extension shadow a core tool: `echo` would stop being the tool the
+        // operator can see.
+        let err = Agent::new(
+            role(1),
+            vec![Box::new(Echo)],
+            [Box::new(Carries("guard", "echo")) as Box<dyn Extension>],
+            Arc::default(),
+        )
+        .err()
+        .expect("an extension shadowed a core tool");
+        let said = err.to_string();
+        assert!(said.contains("`echo`"), "{said}");
+        assert!(
+            said.contains("the core tools") && said.contains("guard"),
+            "{said}"
+        );
     }
 }

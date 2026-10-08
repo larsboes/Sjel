@@ -4251,6 +4251,7 @@ dependencies = [
  "sjel-http",
  "sjel-inference",
  "thiserror",
+ "toml",
 ]
 
 [[package]]

@@ -77,7 +77,9 @@ describe("the scan reads templates, not comments about templates", () => {
 
   test("the templates still hold the elements under test", () => {
     const all = FILES.map((file) => markup(readFileSync(file, "utf8"))).join("\n");
-    expect(all.match(/<th\b/g)?.length ?? 0).toBeGreaterThanOrEqual(45);
+    // 45 until 2026-10-08, when the hand-built tables moved to the kit's DataTable. Its
+    // <th scope> now covers every data table, so the floor only proves the scan still reads.
+    expect(all.match(/<th\b/g)?.length ?? 0).toBeGreaterThanOrEqual(8);
     expect(all.match(/<button\b/g)?.length ?? 0).toBeGreaterThanOrEqual(200);
   });
 });

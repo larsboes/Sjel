@@ -58,7 +58,8 @@ const trip: DecisionKind<TripPlan[], TripPlan> = {
     const days = ctx.daysUntil(plan.date_start);
     return RESCALE(days <= 14 ? Math.max(0, 400 - days * 20) : 0, 400);
   },
-  href: () => link("/travel"),
+  // The trip with everything joined to it (lib/context); its itinerary is one click on from there.
+  href: (plan) => link(`/context?trip=${encodeURIComponent(plan.id)}`),
 
   whyHere: (plan) => tripGap(plan),
   startOrDueAt: (plan) => plan.date_start,

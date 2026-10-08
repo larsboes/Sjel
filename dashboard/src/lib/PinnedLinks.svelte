@@ -63,14 +63,21 @@
     border-radius: 6px;
   }
   a:hover {
-    background: var(--card-border, #eee);
+    background: var(--nav-hover);
   }
+
+  a:focus-visible {
+    outline: 2px solid var(--focus-ring);
+  }
+  /* One line per link in a narrow rail: the name keeps its line and the note gives way. */
   .name {
+    flex-shrink: 0;
+    white-space: nowrap;
     font-weight: 600;
-    font-size: 0.85rem;
+    font-size: var(--text-sm);
   }
   small {
-    color: var(--text-tertiary, #888);
+    color: var(--text-tertiary);
     font-size: var(--text-xs);
     flex: 1;
     min-width: 0;

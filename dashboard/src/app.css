@@ -492,7 +492,7 @@ a {
  * There was a `.tnum` class here for the tabular-figures half. It had zero consumers on
  * 2026-09-08 while 77 declarations set `font-variant-numeric` directly, so the class was
  * not the mechanism this codebase reaches for and was removed rather than adopted.
- * `.table .num` below is the one place the rule is worth stating once. */
+ * A number column states it once, in DataTable (`align: "end"`). */
 code,
 .mono {
   font-family: var(--font-mono);
@@ -550,37 +550,8 @@ code,
   border-color: var(--card-border-hover);
 }
 
-/* Tabular data, once. Fourteen routes hand-rolled a table and arrived at fourteen
- * paddings; the column alignment rule is the part that was most often missed. */
-.table {
-  width: 100%;
-  border-collapse: collapse;
-  font-size: var(--text-sm);
-}
-
-.table th,
-.table td {
-  padding: var(--space-3) var(--space-4);
-  text-align: left;
-  border-bottom: 1px solid var(--card-border);
-}
-
-.table th {
-  color: var(--text-tertiary);
-  font-size: var(--text-2xs);
-  font-weight: 600;
-  white-space: nowrap;
-}
-
-.table tbody tr:last-child td {
-  border-bottom: 0;
-}
-
-/* Numbers align on the decimal point or they are not a column. */
-.table .num {
-  text-align: right;
-  font-variant-numeric: tabular-nums;
-}
+/* .table was removed on 2026-10-08: its last consumer, /backup, moved to the kit's
+ * DataTable (lib/ui/DataTable.svelte), which now owns tabular data. */
 
 /* Row typography, shared by every list row in the app.
  *

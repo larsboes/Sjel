@@ -8,6 +8,7 @@
  */
 import type { Snippet } from 'svelte';
 import type { Tone } from './Chip.svelte';
+import type { Column } from './DataTable.svelte';
 
 export interface Field<T> {
   id: string;
@@ -23,7 +24,8 @@ export interface Field<T> {
   /** Table column. Leave `cell` unset for the default rendering of `value`. */
   width?: string;
   align?: 'start' | 'end';
-  cell?: Snippet<[T]>;
+  /** Gets the column too, so one snippet can render several fields (DataTable.svelte). */
+  cell?: Snippet<[T, Column<T>]>;
   /** False keeps the field out of the table; it still filters, sorts and groups. */
   column?: boolean;
 }
@@ -125,4 +127,38 @@ export function apply<T>(rows: T[], fields: Field<T>[], state: CollectionState):
       return a.index - b.index;
     })
     .map((x) => x.row);
+}
+
+/** The YYYY-MM-DD a date field holds, or null. Accepts a date or an ISO timestamp. */
+export function dayOf(v: unknown): string | null {
+  return typeof v === 'string' && /^\d{4}-\d{2}-\d{2}/.test(v) ? v.slice(0, 10) : null;
+}
+
+/** YYYY-MM shifted by whole months. */
+export function shiftMonth(month: string, by: number): string {
+  const [y, m] = month.split('-').map(Number);
+  const d = new Date(Date.UTC(y, m - 1 + by, 1));
+  return d.toISOString().slice(0, 7);
+}
+
+/** The month's grid: whole weeks from Monday, so a month spans five or six rows of seven days. */
+export function monthGrid(month: string): string[] {
+  const [y, m] = month.split('-').map(Number);
+  const first = new Date(Date.UTC(y, m - 1, 1));
+  const start = new Date(first);
+  start.setUTCDate(1 - ((first.getUTCDay() + 6) % 7));
+  const last = new Date(Date.UTC(y, m, 0));
+  const days: string[] = [];
+  for (const d = start; d <= last || days.length % 7 !== 0; d.setUTCDate(d.getUTCDate() + 1)) {
+    days.push(d.toISOString().slice(0, 10));
+  }
+  return days;
+}
+
+/** The day in `days` closest to `to` (all YYYY-MM-DD), or null for none. */
+export function nearestDay(days: string[], to: string): string | null {
+  const ms = (d: string) => Date.parse(`${d}T00:00:00Z`);
+  let best: string | null = null;
+  for (const d of days) if (best === null || Math.abs(ms(d) - ms(to)) < Math.abs(ms(best) - ms(to))) best = d;
+  return best;
 }

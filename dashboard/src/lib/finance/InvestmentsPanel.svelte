@@ -1,6 +1,10 @@
 <script lang="ts">
   import { exactMoney } from "$lib/finance/money";
-  import type { Portfolio, PriceStatus, Position } from "$lib/finance/invest-api";
+  import type { AssetClassRow, Decimal, Portfolio, PriceStatus, Position } from "$lib/finance/invest-api";
+  import Chip, { type Tone } from "$lib/ui/Chip.svelte";
+  import Collection from "$lib/ui/Collection.svelte";
+  import DataTable, { type Column } from "$lib/ui/DataTable.svelte";
+  import type { Field } from "$lib/ui/collection";
 
   let { portfolio, prices }: { portfolio: Portfolio; prices: PriceStatus | null } = $props();
 
@@ -24,7 +28,76 @@
     stale: "stale",
     none: "no quote",
   };
+  const freshnessTone: Record<string, Tone> = { fresh: "success", stale: "warning", none: "muted" };
+
+  // Sorting only: the figures shown still come from `exactMoney`, never from this float.
+  const amount = (d: Decimal | null) => (d ? Number(d.mantissa) / 10 ** d.scale : null);
+
+  const fields: Field<Position>[] = [
+    { id: "position", label: "Position", value: (p) => p.label, cell: positionCell },
+    { id: "asset_class", label: "Asset class", kind: "select", column: false, value: (p) => p.asset_class },
+    {
+      id: "freshness", label: "Quote", kind: "select", column: false, value: (p) => p.price_freshness,
+      display: (f) => freshnessLabel[f] ?? f, tone: (f) => freshnessTone[f] ?? "neutral",
+    },
+    { id: "price", label: "Price", kind: "number", width: "10rem", value: (p) => amount(p.market_price ?? p.review_price), cell: priceCell },
+    { id: "value", label: "Value", kind: "number", width: "8.5rem", value: (p) => amount(p.value), cell: valueCell },
+    { id: "share", label: "Share", kind: "number", width: "6.5rem", value: (p) => p.share_bp, cell: shareCell },
+    { id: "drift", label: "Drift", kind: "number", width: "8.5rem", value: (p) => p.drift_bp, cell: driftCell },
+  ];
+
+  const classColumns: Column<AssetClassRow>[] = [
+    { id: "class", label: "Asset class", cell: classCell },
+    { id: "value", label: "Value", width: "8.5rem", align: "end", cell: classValueCell },
+    { id: "share", label: "Share", width: "6.5rem", align: "end", cell: classShareCell },
+    { id: "drift", label: "Drift", width: "8.5rem", align: "end", cell: driftCell },
+  ];
 </script>
+
+{#snippet positionCell(position: Position)}
+  <span class="label">{position.label}</span>
+  <span class="meta">{position.instrument} · {position.asset_class}</span>
+{/snippet}
+{#snippet priceCell(position: Position)}
+  {#if position.market_price}
+    {exactMoney(position.market_price.mantissa, position.market_price.scale, position.currency)}
+    <span class="meta">
+      {position.market_price_source} · {position.market_price_observed_on}
+      <Chip label={freshnessLabel[position.price_freshness]} tone={freshnessTone[position.price_freshness]} />
+    </span>
+  {:else if position.review_price}
+    {exactMoney(position.review_price.mantissa, position.review_price.scale, position.currency)}
+    <span class="meta">reviewed import <Chip label="no quote" tone="muted" /></span>
+  {:else}
+    —
+  {/if}
+{/snippet}
+{#snippet valueCell(position: Position)}
+  {exactMoney(position.value.mantissa, position.value.scale, position.currency)}
+  {#if position.change_since_review_bp !== null}
+    <span class="meta">{signedPercent(position.change_since_review_bp)} since review</span>
+  {/if}
+{/snippet}
+{#snippet shareCell(position: Position)}
+  {percent(position.share_bp)}
+  <span class="bar" aria-hidden="true">
+    <span class="fill" class:outside={position.outside_band} style:width={barWidth(position)}></span>
+    {#if position.target_bp !== null}
+      <span class="target" style:left={targetOffset(position)}></span>
+    {/if}
+  </span>
+{/snippet}
+{#snippet driftCell(row: Position | AssetClassRow)}
+  {#if row.drift_bp === null}
+    <span class="meta">no target</span>
+  {:else}
+    <span class:outside={row.outside_band}>{signedPercent(row.drift_bp)}</span>
+    <span class="meta">target {percent(row.target_bp ?? 0)} ± {percent(row.band_bp ?? 0)}</span>
+  {/if}
+{/snippet}
+{#snippet classCell(row: AssetClassRow)}<span class="label">{row.asset_class}</span>{/snippet}
+{#snippet classValueCell(row: AssetClassRow)}{exactMoney(row.value.mantissa, row.value.scale, portfolio.currency)}{/snippet}
+{#snippet classShareCell(row: AssetClassRow)}{percent(row.share_bp)}{/snippet}
 
 <section class="investments">
   <div class="heading">
@@ -54,91 +127,20 @@
     <p>The reviewed snapshot holds no open positions.</p>
   {:else}
     <div class="table-wrap">
-      <table>
-        <thead>
-          <tr>
-            <th scope="col">Position</th>
-            <th scope="col">Price</th>
-            <th scope="col">Value</th>
-            <th scope="col">Share</th>
-            <th scope="col">Drift</th>
-          </tr>
-        </thead>
-        <tbody>
-          {#each portfolio.positions as position (position.instrument)}
-            <tr>
-              <td class="name">
-                <span class="label">{position.label}</span>
-                <span class="meta">{position.instrument} · {position.asset_class}</span>
-              </td>
-              <td>
-                {#if position.market_price}
-                  {exactMoney(position.market_price.mantissa, position.market_price.scale, position.currency)}
-                  <span class="meta">
-                    {position.market_price_source} · {position.market_price_observed_on}
-                    <span class="tag {position.price_freshness}">{freshnessLabel[position.price_freshness]}</span>
-                  </span>
-                {:else if position.review_price}
-                  {exactMoney(position.review_price.mantissa, position.review_price.scale, position.currency)}
-                  <span class="meta">reviewed import <span class="tag none">no quote</span></span>
-                {:else}
-                  —
-                {/if}
-              </td>
-              <td>
-                {exactMoney(position.value.mantissa, position.value.scale, position.currency)}
-                {#if position.change_since_review_bp !== null}
-                  <span class="meta">{signedPercent(position.change_since_review_bp)} since review</span>
-                {/if}
-              </td>
-              <td>
-                {percent(position.share_bp)}
-                <span class="bar" aria-hidden="true">
-                  <span class="fill" class:outside={position.outside_band} style:width={barWidth(position)}></span>
-                  {#if position.target_bp !== null}
-                    <span class="target" style:left={targetOffset(position)}></span>
-                  {/if}
-                </span>
-              </td>
-              <td>
-                {#if position.drift_bp === null}
-                  <span class="meta">no target</span>
-                {:else}
-                  <span class:outside={position.outside_band}>{signedPercent(position.drift_bp)}</span>
-                  <span class="meta">target {percent(position.target_bp ?? 0)} ± {percent(position.band_bp ?? 0)}</span>
-                {/if}
-              </td>
-            </tr>
-          {/each}
-        </tbody>
-      </table>
+      <Collection
+        id="pos"
+        rows={portfolio.positions}
+        {fields}
+        key={(p) => p.instrument}
+        title={(p) => p.label}
+        defaults={{ sort: "share", desc: true }}
+      />
     </div>
   {/if}
 
   {#if portfolio.asset_classes.some((row) => row.target_bp !== null)}
     <div class="table-wrap">
-      <table>
-        <thead>
-          <tr><th scope="col">Asset class</th><th scope="col">Value</th><th scope="col">Share</th><th scope="col">Drift</th></tr>
-        </thead>
-        <tbody>
-          {#each portfolio.asset_classes as row (row.asset_class)}
-            <tr>
-              <td class="name">{row.asset_class}</td>
-              <td>{exactMoney(row.value.mantissa, row.value.scale, portfolio.currency)}</td>
-              <td>{percent(row.share_bp)}</td>
-              <td>
-                {#if row.drift_bp === null}
-                  <span class="meta">no target</span>
-                {:else}
-                  <span class:outside={row.outside_band}>{signedPercent(row.drift_bp)}</span>
-                  <span class="meta">target {percent(row.target_bp ?? 0)} ± {percent(row.band_bp ?? 0)}</span>
-                {/if}
-              </td>
-            </tr>
-          {/each}
-        </tbody>
-      </table>
+      <DataTable rows={portfolio.asset_classes} columns={classColumns} key={(r) => r.asset_class} />
     </div>
   {/if}
 
@@ -184,16 +186,8 @@
   .no-policy { margin-top: .65rem; padding: .55rem .65rem; border-left: 3px solid var(--warning); background: var(--warning-soft); color: var(--text-primary); font-size: .72rem; }
   .no-policy code { font-family: var(--font-mono); font-size: .95em; }
   .table-wrap { margin-top: .75rem; overflow-x: auto; }
-  table { width: 100%; border-collapse: collapse; font-size: .78rem; }
-  th, td { padding: .5rem .4rem; border-top: 1px solid var(--card-border); text-align: left; vertical-align: top; }
-  th:nth-child(n+2), td:nth-child(n+2) { text-align: right; font-variant-numeric: tabular-nums; }
-  td.name { text-align: left; }
   .label { display: block; }
   .meta { display: block; color: var(--text-tertiary); font-size: .66rem; font-variant-numeric: tabular-nums; }
-  .tag { display: inline-block; padding: 0 .3rem; border-radius: var(--radius-sm); font-size: .95em; }
-  .tag.fresh { background: var(--success-soft); color: var(--success); }
-  .tag.stale { background: var(--warning-soft); color: var(--warning-ink); }
-  .tag.none { background: var(--accent-soft); color: var(--text-secondary); }
   .outside { color: var(--danger); }
   /* Two CSS tokens and a percentage width. No charting dependency: the build
      fails on any statically reachable chunk over 500 KB, and a drift bar is a

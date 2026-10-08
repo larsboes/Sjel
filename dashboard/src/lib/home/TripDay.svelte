@@ -5,6 +5,8 @@
   import { kindConfig } from "$lib/calendar/types";
   import { link } from "$lib/nav";
   import Icon from "$lib/Icon.svelte";
+  import Chip, { type Tone } from "$lib/ui/Chip.svelte";
+  import { tip } from "$lib/tip";
   import type { CalendarEntry, TripPlan, TripStage } from "$lib/api";
   import { localDateKey } from "./format";
 
@@ -24,6 +26,14 @@
   const tomorrowKey = $derived(
     localDateKey(new Date(now.getFullYear(), now.getMonth(), now.getDate() + 1)),
   );
+
+  const LEG_TONE: Record<TripStage["status"], Tone> = {
+    booked: "success",
+    completed: "muted",
+    option_selected: "accent",
+    planning: "warning",
+    open: "warning",
+  };
 
   const LEG_STATUS: Record<TripStage["status"], string> = {
     booked: "Booked",
@@ -98,79 +108,96 @@
   );
 </script>
 
+<!-- A strip above Home's list, not a card (2026-10-09): one line per row, so a long title
+     truncates instead of wrapping to three lines. Tomorrow folds away; the whole trip is one
+     click on, in its context. -->
 <section class="trip-day" aria-label="Trip today and tomorrow">
   <header>
-    <div>
-      <span class="kicker">On a trip · day {dayNumber(todayKey)} of {totalDays}</span>
-      <h2>{plan.title}</h2>
-    </div>
-    <a href={link(`/travel?plan=${encodeURIComponent(plan.id)}`)}>Open trip <Icon name="arrow-right" size={12} /></a>
+    <h2>{plan.title} <span>day {dayNumber(todayKey)} of {totalDays}</span></h2>
+    <a href={link(`/context?trip=${encodeURIComponent(plan.id)}`)}>Everything around it</a>
+    <a href={link(`/travel?plan=${encodeURIComponent(plan.id)}`)}>Itinerary <Icon name="arrow-right" size={12} /></a>
   </header>
 
-  <div class="days">
-    {#each days as day, index (day.key)}
-      <div class="day">
-        <h3>{index === 0 ? "Today" : "Tomorrow"} <span>{dayLabel(day.key)}</span></h3>
-        {#if day.empty}
-          <p class="quiet">Nothing planned.</p>
-        {:else}
-          <ol>
-            {#each day.first as leg (leg.id)}{@render legRow(leg)}{/each}
-            {#each day.timed as entry (entry.id)}{@render entryRow(entry)}{/each}
-            {#each day.later as leg (leg.id)}{@render legRow(leg)}{/each}
-            {#each day.allDay as entry (entry.id)}{@render entryRow(entry)}{/each}
-          </ol>
-        {/if}
-      </div>
-    {/each}
-  </div>
+  {#each days as day, index (day.key)}
+    {#if index === 0}
+      <h3>Today <span>{dayLabel(day.key)}</span></h3>
+      {@render dayRows(day)}
+    {:else if day.empty}
+      <p class="quiet">Tomorrow, {dayLabel(day.key)}: nothing planned.</p>
+    {:else}
+      <details>
+        <summary><h3>Tomorrow <span>{dayLabel(day.key)}</span></h3><span class="count">{day.first.length + day.timed.length + day.later.length + day.allDay.length}</span></summary>
+        {@render dayRows(day)}
+      </details>
+    {/if}
+  {/each}
 </section>
 
+{#snippet dayRows(day: (typeof days)[number])}
+  {#if day.empty}
+    <p class="quiet">Nothing planned.</p>
+  {:else}
+    <ol>
+      {#each day.first as leg (leg.id)}{@render legRow(leg)}{/each}
+      {#each day.timed as entry (entry.id)}{@render entryRow(entry)}{/each}
+      {#each day.later as leg (leg.id)}{@render legRow(leg)}{/each}
+      {#each day.allDay as entry (entry.id)}{@render entryRow(entry)}{/each}
+    </ol>
+  {/if}
+{/snippet}
+
 {#snippet legRow(leg: TripStage)}
-  <li class="leg">
+  {@const extra = [leg.transport_modes[0] && leg.transport_modes[0] !== "train" ? `by ${leg.transport_modes[0]}` : "", leg.branch_note ?? ""].filter(Boolean).join(" · ")}
+  <li class="row">
     <span class="when"><Icon name="train" size={13} /></span>
-    <strong>
-      {leg.origin.name} → {leg.destination.name}
-      {#if leg.transport_modes[0] && leg.transport_modes[0] !== "train"}<span class="mode">by {leg.transport_modes[0]}</span>{/if}
-      {#if leg.branch_note}<span class="mode">{leg.branch_note}</span>{/if}
-    </strong>
-    <span class="status" class:open={leg.status !== "booked" && leg.status !== "completed"}>
-      {LEG_STATUS[leg.status]}
-    </span>
+    <strong>{leg.origin.name} → {leg.destination.name}</strong>
+    <small use:tip={extra || undefined}>{extra}</small>
+    <Chip label={LEG_STATUS[leg.status]} tone={LEG_TONE[leg.status]} />
   </li>
 {/snippet}
 
 {#snippet entryRow(entry: CalendarEntry)}
   {@const s = timing(entry)}
   <li class:past={s === "past"}>
-    <button type="button" onclick={() => inspectorStore.open(eventItem(entry))}>
-      <span class="when">{entry.all_day ? "" : entry.starts_at.slice(11, 16)}</span>
-      <strong>
+    <button type="button" class="row" onclick={() => inspectorStore.open(eventItem(entry))}>
+      <span class="when">{entry.all_day ? "all day" : entry.starts_at.slice(11, 16)}</span>
+      <strong use:tip={entry.title}>
         <i style={`--entry-color: ${kindConfig(entry.kind).color}`} class:planned={entry.commitment !== "committed"}></i>
-        {entry.title}
-        {#if s === "now"}<span class="now">Now</span>{/if}
+        <span class="title">{entry.title}</span>
       </strong>
-      {#if entry.location}<small>{entry.location}</small>{/if}
+      <small use:tip={entry.location ?? undefined}>{entry.location ?? ""}</small>
+      {#if s === "now"}<Chip label="Now" tone="success" />{:else}<span></span>{/if}
     </button>
   </li>
 {/snippet}
 
 <style>
   .trip-day {
-    margin-bottom: var(--space-4);
-    padding: var(--space-4) var(--space-5);
-    border: 1px solid var(--card-border);
-    border-radius: var(--radius-lg);
-    background: var(--card-bg);
-    box-shadow: var(--card-shadow);
+    padding-bottom: var(--space-4);
+    margin-bottom: var(--space-5);
+    border-bottom: 1px solid var(--rule);
   }
 
   header {
     display: flex;
-    align-items: flex-start;
-    justify-content: space-between;
+    align-items: baseline;
     gap: var(--space-4);
     margin-bottom: var(--space-3);
+  }
+
+  h2 {
+    margin: 0 auto 0 0;
+    white-space: nowrap;
+    font-size: var(--text-md);
+    font-weight: 600;
+  }
+
+  h2 span,
+  h3 span {
+    margin-left: 0.35rem;
+    color: var(--text-tertiary);
+    font-size: var(--text-xs);
+    font-weight: 400;
   }
 
   header a {
@@ -185,33 +212,17 @@
     color: var(--primary);
   }
 
-  .kicker {
-    color: var(--text-tertiary);
-    font-size: var(--text-2xs);
-  }
-
-  h2 {
-    margin: 0.1rem 0 0;
-    font-size: var(--text-md);
-    font-weight: 600;
-  }
-
-  .days {
-    display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(18rem, 1fr));
-    gap: var(--space-5);
+  header a:focus-visible,
+  summary:focus-visible,
+  .row:focus-visible {
+    outline: 2px solid var(--focus-ring);
   }
 
   h3 {
-    margin: 0 0 0.35rem;
-    font-size: var(--text-sm);
+    margin: 0 0 var(--space-1);
+    font-size: var(--text-xs);
     font-weight: 600;
-  }
-
-  h3 span {
-    margin-left: 0.35rem;
-    color: var(--text-tertiary);
-    font-weight: 400;
+    color: var(--text-secondary);
   }
 
   ol {
@@ -220,34 +231,36 @@
     list-style: none;
   }
 
-  li + li {
-    border-top: 1px solid var(--card-border);
-  }
-
-  li.leg,
-  li button {
+  .row {
     display: grid;
-    grid-template-columns: 2.75rem minmax(0, 1fr) auto;
-    align-items: baseline;
-    gap: 0.5rem;
+    grid-template-columns: 3.25rem minmax(0, 1fr) minmax(0, 14rem) 5.5rem;
+    align-items: center;
+    gap: var(--space-3);
     width: 100%;
-    padding: 0.45rem 0.25rem;
-    border: none;
-    background: transparent;
-    text-align: left;
-  }
-
-  li button {
-    cursor: pointer;
+    min-height: 2rem;
+    padding: 0 var(--space-1);
+    border: 0;
     border-radius: var(--radius-sm);
+    background: none;
+    font: inherit;
+    text-align: left;
+    color: inherit;
   }
 
-  li button:hover {
-    background: var(--surface);
+  button.row {
+    cursor: pointer;
+  }
+
+  button.row:hover {
+    background: var(--nav-hover);
+  }
+
+  .row > :global(.chip) {
+    justify-self: end;
   }
 
   li.past {
-    opacity: 0.5;
+    color: var(--text-tertiary);
   }
 
   .when {
@@ -255,20 +268,24 @@
     font-family: var(--font-mono);
     font-size: var(--text-2xs);
     font-variant-numeric: tabular-nums;
-  }
-
-  .leg .when {
-    align-self: center;
-    color: var(--primary);
+    white-space: nowrap;
   }
 
   strong {
     display: flex;
     align-items: center;
-    gap: 0.4rem;
+    gap: 0.45rem;
     min-width: 0;
     font-size: var(--text-sm);
     font-weight: 550;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  .title {
+    overflow: hidden;
+    text-overflow: ellipsis;
   }
 
   i {
@@ -285,43 +302,53 @@
   }
 
   small {
+    min-width: 0;
     overflow: hidden;
-    max-width: 12rem;
     color: var(--text-tertiary);
     font-size: var(--text-2xs);
     text-overflow: ellipsis;
     white-space: nowrap;
   }
 
-  .status {
-    white-space: nowrap;
-    color: var(--success);
-    font-size: var(--text-2xs);
-    font-weight: 600;
+  details {
+    margin-top: var(--space-3);
   }
 
-  .status.open {
-    color: var(--warning);
+  summary {
+    display: flex;
+    align-items: baseline;
+    gap: var(--space-2);
+    cursor: pointer;
+    list-style: none;
   }
 
-  .now {
-    padding: 0.05rem 0.4rem;
-    border-radius: var(--radius-sm);
-    background: var(--success-soft);
-    color: var(--success);
-    font-size: var(--text-2xs);
-    font-weight: 600;
+  summary::-webkit-details-marker {
+    display: none;
   }
 
-  .mode {
+  summary h3 {
+    margin: 0;
+  }
+
+  .count {
     color: var(--text-tertiary);
+    font-family: var(--font-mono);
     font-size: var(--text-2xs);
-    font-weight: 400;
   }
 
   .quiet {
-    margin: 0.35rem 0 0;
+    margin: var(--space-3) 0 0;
     color: var(--text-tertiary);
     font-size: var(--text-xs);
+  }
+
+  @media (width < 38rem) {
+    .row {
+      grid-template-columns: 3rem minmax(0, 1fr) auto;
+    }
+
+    small {
+      display: none;
+    }
   }
 </style>

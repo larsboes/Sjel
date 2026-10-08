@@ -176,13 +176,13 @@ describe("no primitive is declared that nothing uses", () => {
 
   /**
    * The escape list for unused primitives in app.css.
-   * Empty now that `routes/backup/+page.svelte` adopts `.table`.
+   * Empty. `.table` and its `.num` left on 2026-10-08 with their last consumer (DataTable).
    */
   const KNOWN: Record<string, string> = {};
 
   test("the reader finds the primitives and not the font URLs", () => {
     const declared = declaredClasses();
-    for (const name of ["card", "btn", "btn-primary", "tag", "input", "table", "mono", "num"]) {
+    for (const name of ["card", "btn", "btn-primary", "tag", "input", "mono"]) {
       expect([name, declared.includes(name)]).toEqual([name, true]);
     }
     for (const name of ["org", "w3", "woff2"]) {

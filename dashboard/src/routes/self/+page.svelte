@@ -12,6 +12,8 @@
   } from "$lib/api";
   import RepoStatusCard from "$lib/RepoStatusCard.svelte";
   import UnitMap, { type MapNode, type MapEdge } from "$lib/UnitMap.svelte";
+  import Collection from "$lib/ui/Collection.svelte";
+  import type { Field } from "$lib/ui/collection";
 
   // Two altitudes, one page. The self-model is ~31 units and 16 couplings --
   // small enough to be a picture, which is the altitude at which Sjel can
@@ -172,6 +174,21 @@
     return "no health check";
   }
 
+  const degree = (name: string) => model?.coupling.filter((c) => c.from === name || c.to === name).length ?? 0;
+
+  const unitFields: Field<SelfUnit>[] = [
+    {
+      id: "health", label: "", kind: "select", width: "2rem", value: (u) => upLabel(u.name),
+      tone: (v) => (v === "running" ? "success" : v === "off" ? "warning" : "muted"), cell: healthCell,
+    },
+    { id: "unit", label: "Unit", value: (u) => u.name, cell: unitCell },
+    { id: "kind", label: "Kind", kind: "select", width: "7rem", value: (u) => u.kind },
+    { id: "files", label: "Files", kind: "number", width: "5rem", value: (u) => u.code?.files },
+    { id: "port", label: "Port", kind: "number", width: "5rem", value: (u) => u.service?.port },
+    { id: "requires", label: "Runtime dependencies", value: (u) => u.service?.requires.join(", "), cell: requiresCell },
+    { id: "couplings", label: "Couplings", kind: "number", width: "6rem", value: (u) => degree(u.name) || null },
+  ];
+
   function toggle(u: SelfUnit) {
     select(selected === u.name ? null : u.name);
   }
@@ -200,11 +217,11 @@
   <ul class="stats">
     <li><b>{model.units.length}</b><span>Units</span></li>
     <li><b>{model.coupling.length}</b><span>Couplings</span></li>
-    <li><b>{model.graph.present ? model.graph.nodes : "—"}</b><span>Graph nodes</span></li>
+    <li><b>{model.graph?.present ? model.graph.nodes : "—"}</b><span>Graph nodes</span></li>
     <li><b>{model.upstreams.length}</b><span>Upstreams</span></li>
   </ul>
 
-  {#if model.graph.stale.length}
+  {#if model.graph?.stale.length}
     <p class="err">
       <Icon name="alert" size={14} />
       {model.graph.stale.length} graph paths no longer exist — <span class="mono"
@@ -370,41 +387,22 @@
   </p>
 
   <div class="wrap">
-    <table>
-      <thead>
-        <tr>
-          <th scope="col"></th>
-          <th scope="col">Unit</th>
-          <th scope="col">Kind</th>
-          <th class="num" scope="col">Files</th>
-          <th class="num" scope="col">Port</th>
-          <th scope="col">Runtime dependencies</th>
-          <th class="num" scope="col">Couplings</th>
-        </tr>
-      </thead>
-      <tbody>
-        {#each model.units as u (u.name)}
-          {@const deg = model.coupling.filter((c) => c.from === u.name || c.to === u.name).length}
-          <tr
-            class:dim={!related(u.name)}
-            class:sel={selected === u.name}
-            onclick={() => toggle(u)}
-          >
-            <td>
-              <span class="dot {upClass(u.name)}" use:tip={upLabel(u.name)}></span>
-            </td>
-            <td class="mono name">{u.name}</td>
-            <td><span class="kind">{u.kind}</span></td>
-            <td class="num">{u.code?.files ?? "—"}</td>
-            <td class="num mono">{u.service?.port ?? "—"}</td>
-            <td class="req">{u.service?.requires.length ? u.service.requires.join(", ") : "—"}</td>
-            <td class="num">{deg || "—"}</td>
-          </tr>
-        {/each}
-      </tbody>
-    </table>
+    <Collection
+      id="units"
+      rows={model.units}
+      fields={unitFields}
+      key={(u) => u.name}
+      title={(u) => u.name}
+      onOpen={toggle}
+      selected={selected}
+      inactive={(u) => !related(u.name)}
+    />
   </div>
 {/if}
+
+{#snippet healthCell(u: SelfUnit)}<span class="dot {upClass(u.name)}" use:tip={upLabel(u.name)}></span>{/snippet}
+{#snippet unitCell(u: SelfUnit)}<span class="mono name">{u.name}</span>{/snippet}
+{#snippet requiresCell(u: SelfUnit)}<span class="req">{u.service?.requires.length ? u.service.requires.join(", ") : "—"}</span>{/snippet}
 
 <style>
   .stats {
@@ -634,42 +632,6 @@
     min-width: 0;
     max-width: 100%;
   }
-  table {
-    width: 100%;
-    border-collapse: collapse;
-    font-size: 0.84rem;
-  }
-  th {
-    text-align: left;
-    font-weight: 500;
-    font-size: 0.7rem;
-    text-transform: uppercase;
-    letter-spacing: 0.05em;
-    opacity: 0.55;
-    padding: 0 0.55rem 0.4rem;
-    white-space: nowrap;
-  }
-  td {
-    padding: 0.42rem 0.55rem;
-    border-top: 1px solid var(--line, #2a2a3e);
-    white-space: nowrap;
-  }
-  tbody tr {
-    cursor: pointer;
-  }
-  tbody tr:hover td {
-    background: var(--hover, rgba(255, 255, 255, 0.04));
-  }
-  tr.dim {
-    opacity: 0.28;
-  }
-  tr.sel td {
-    background: var(--hover, rgba(255, 255, 255, 0.07));
-  }
-  .num {
-    text-align: right;
-    font-variant-numeric: tabular-nums;
-  }
   .name {
     font-weight: 500;
   }
@@ -689,13 +651,13 @@
     width: 7px;
     height: 7px;
     border-radius: 50%;
-    background: var(--muted, #555);
+    background: var(--text-tertiary);
   }
   .dot.up {
-    background: var(--ok, #4ba36a);
+    background: var(--success);
   }
   .dot.down {
-    background: var(--warn, #e0a458);
+    background: var(--warning);
   }
 
   .detail {

@@ -1,7 +1,8 @@
 <script lang="ts">
   // A trip read stage by stage (2026-10-07): one band per leg with its days, its train and
-  // its stay, and the items in a table. The same items also show as a board (one column per
-  // day) or the timeline. A row opens in a side peek, where every property edits in place.
+  // its stay, and the items in a table. "All items" is the same set as a Collection (table,
+  // board by day, calendar, with filter and search), and the timeline is the third view.
+  // A row opens in a side peek, where every property edits in place.
   import type { Snippet } from "svelte";
   import Icon from "$lib/Icon.svelte";
   import { tip } from "$lib/tip";
@@ -10,6 +11,8 @@
   import Chip from "$lib/ui/Chip.svelte";
   import DataTable, { type Column } from "$lib/ui/DataTable.svelte";
   import ViewSwitch from "$lib/ui/ViewSwitch.svelte";
+  import Collection from "$lib/ui/Collection.svelte";
+  import type { Field } from "$lib/ui/collection";
   import SidePeek from "$lib/ui/SidePeek.svelte";
   import Property from "$lib/ui/Property.svelte";
   import { bandsFor, itemBlock, itemCost, itemInactive, itemStatus, itemTime, stageTone } from "./stages";
@@ -36,7 +39,7 @@
     timeline: Snippet;
   } = $props();
 
-  type View = "stages" | "board" | "timeline";
+  type View = "stages" | "items" | "timeline";
   let view = $state<View>("stages");
   let peekItem = $state<string | null>(null);
   let peekStage = $state<string | null>(null);
@@ -71,7 +74,7 @@
 
   const VIEWS = [
     { id: "stages" as const, label: "Stages", icon: "layout" as const },
-    { id: "board" as const, label: "Board", icon: "boxes" as const },
+    { id: "items" as const, label: "All items", icon: "database" as const },
     { id: "timeline" as const, label: "Timeline", icon: "calendar" as const },
   ];
 
@@ -81,6 +84,24 @@
     { id: "type", label: "Type", width: "5.5rem", cell: typeCell },
     { id: "status", label: "Status", width: "6rem", cell: statusCell },
     { id: "cost", label: "Cost", width: "5.5rem", align: "end", cell: costCell },
+  ];
+
+  // Groups and board columns follow the order rows arrive in, so they arrive by day and time.
+  const chronological = $derived(
+    [...items].sort((a, b) => (a.day ?? "9999").localeCompare(b.day ?? "9999") || (itemTime(a) ?? "").localeCompare(itemTime(b) ?? "")),
+  );
+  const statusTone = (label: string) => items.map(itemStatus).find((s) => s.label === label)?.tone ?? "neutral";
+  const fields: Field<PlanItem>[] = [
+    { id: "time", label: "Time", width: "5rem", value: (i) => itemTime(i) ?? itemBlock(i), cell: timeCell },
+    { id: "title", label: "What", value: (i) => i.title, cell: titleCell },
+    { id: "day", label: "Day", kind: "select", column: false, value: (i) => i.day ?? "", display: (d) => (d ? dayLabel(d) : "No day") },
+    { id: "date", label: "Date", kind: "date", column: false, value: (i) => i.day },
+    { id: "type", label: "Type", kind: "select", width: "5.5rem", value: (i) => i.item_type, display: (t) => TYPE[t] ?? t },
+    { id: "status", label: "Status", kind: "select", width: "6rem", value: (i) => itemStatus(i).label, tone: statusTone },
+    {
+      id: "cost", label: "Cost", kind: "number", width: "5.5rem", cell: costCell,
+      value: (i) => (typeof payload(i).amount_cents === "number" ? (payload(i).amount_cents as number) : null),
+    },
   ];
 
   async function edit(item: PlanItem, change: { title?: string; payload?: Record<string, unknown>; day?: string | null }) {
@@ -191,25 +212,20 @@
         </div>
       {/if}
     </div>
-  {:else if view === "board"}
-    <div class="board">
-      {#each allDays as day (day)}
-        {@const dayItems = trip.bands.flatMap((b) => b.items).filter((i) => i.day === day)}
-        <div class="column">
-          <header>
-            <strong>{dayLabel(day)}</strong>
-            <span class="mono soft">{dayItems.length}</span>
-          </header>
-          {#each dayItems as item (item.id)}
-            {@const s = itemStatus(item)}
-            <button type="button" class="card" class:selected={peekItem === item.id} class:inactive={itemInactive(item)} onclick={() => open(item)}>
-              <span class="card-top">{@render timeCell(item)}<Chip label={s.label} tone={s.tone} /></span>
-              <span class="card-title">{item.title}</span>
-            </button>
-          {/each}
-        </div>
-      {/each}
-    </div>
+  {:else if view === "items"}
+    <Collection
+      id="itin"
+      rows={chronological}
+      {fields}
+      key={(i) => i.id}
+      title={(i) => i.title}
+      defaults={{ group: "day", view: "board" }}
+      onOpen={open}
+      inactive={itemInactive}
+      selected={peekItem}
+      actions={rowActions}
+      empty="Nothing planned yet."
+    />
   {:else}
     {@render timeline()}
   {/if}
@@ -326,65 +342,6 @@
   .fact:hover {
     border-color: var(--card-border-hover);
     color: var(--text-primary);
-  }
-
-  .board {
-    display: grid;
-    grid-auto-flow: column;
-    grid-auto-columns: minmax(13rem, 1fr);
-    gap: var(--space-2);
-    overflow-x: auto;
-    padding-bottom: var(--space-2);
-  }
-
-  .column {
-    display: grid;
-    align-content: start;
-    gap: var(--space-1);
-    min-width: 0;
-  }
-
-  .column header {
-    display: flex;
-    justify-content: space-between;
-    font-size: var(--text-2xs);
-    padding: 0 0.15rem var(--space-1);
-    border-bottom: 1px solid var(--rule);
-  }
-
-  .card {
-    display: grid;
-    gap: 0.3rem;
-    padding: 0.45rem 0.5rem;
-    border: 1px solid var(--card-border);
-    border-radius: var(--radius-sm);
-    background: var(--card-bg);
-    text-align: left;
-    color: var(--text-primary);
-    font: inherit;
-    cursor: pointer;
-  }
-
-  .card:hover,
-  .card.selected {
-    border-color: var(--card-border-hover);
-    background: var(--nav-hover);
-  }
-
-  .card.inactive {
-    opacity: 0.55;
-  }
-
-  .card-top {
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    font-size: var(--text-2xs);
-  }
-
-  .card-title {
-    font-size: var(--text-xs);
-    line-height: var(--leading-tight);
   }
 
   .icon-btn {

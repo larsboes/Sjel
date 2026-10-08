@@ -3,6 +3,9 @@
   import { onMount } from "svelte";
   import Icon from "$lib/Icon.svelte";
   import PageHeader from "$lib/PageHeader.svelte";
+  import Chip from "$lib/ui/Chip.svelte";
+  import Collection from "$lib/ui/Collection.svelte";
+  import type { Field } from "$lib/ui/collection";
   import {
     axonStatus,
     type BackupStatus,
@@ -169,7 +172,57 @@
     if (state === "failed") return "badge-err";
     return "badge-dim";
   }
+
+  const outcomeOf = (run: BackupRunAttempt) =>
+    run.exit_code === 0 ? "ok" : run.exit_code === null && run.finished_at === null ? "running" : "failed";
+
+  const runFields: Field<BackupRunAttempt>[] = [
+    { id: "started", label: "Started", kind: "date", width: "9rem", value: (r) => r.started_at, cell: startedCell },
+    { id: "capability", label: "Capability", kind: "select", width: "8rem", value: (r) => r.capability, cell: capabilityCell },
+    { id: "target", label: "Target", kind: "select", width: "8rem", value: (r) => r.target },
+    {
+      id: "duration", label: "Duration", kind: "number", width: "5.5rem",
+      value: (r) => (r.finished_epoch && r.started_epoch ? r.finished_epoch - r.started_epoch : null), cell: durationCell,
+    },
+    {
+      id: "outcome", label: "Outcome", kind: "select", width: "6.5rem", value: outcomeOf,
+      display: (v) => ({ ok: "Succeeded", running: "Running", failed: "Failed" })[v] ?? v,
+      tone: (v) => (v === "ok" ? "success" : v === "failed" ? "danger" : "accent"), cell: outcomeCell,
+    },
+    { id: "archive", label: "Archive", width: "12rem", value: (r) => r.archive?.name, cell: archiveCell },
+    { id: "detail", label: "Detail & Log", value: (r) => r.detail || r.log_path, cell: detailCell },
+  ];
 </script>
+
+{#snippet startedCell(run: BackupRunAttempt)}<span class="mono">{formatTime(run.started_at)}</span>{/snippet}
+{#snippet capabilityCell(run: BackupRunAttempt)}<strong>{run.capability}</strong>{/snippet}
+{#snippet durationCell(run: BackupRunAttempt)}
+  {#if run.finished_epoch && run.started_epoch}
+    {Math.max(0, run.finished_epoch - run.started_epoch)}s
+  {:else if outcomeOf(run) === "running"}
+    <span class="active-pulse"><Icon name="loader" size={11} /> active</span>
+  {:else}—{/if}
+{/snippet}
+{#snippet outcomeCell(run: BackupRunAttempt)}
+  {@const o = outcomeOf(run)}
+  <Chip label={o === "ok" ? "exit 0" : o === "running" ? "running" : `exit ${run.exit_code ?? "?"}`} tone={o === "ok" ? "success" : o === "failed" ? "danger" : "accent"} />
+{/snippet}
+{#snippet archiveCell(run: BackupRunAttempt)}
+  {#if run.archive}
+    <span class="archive-name mono" use:tip={`SHA-256: ${run.archive.sha256}`}>
+      {run.archive.name} <span class="dim">({formatBytes(run.archive.bytes)})</span>
+    </span>
+  {:else}<span class="dim">—</span>{/if}
+{/snippet}
+{#snippet detailCell(run: BackupRunAttempt)}
+  {#if run.detail}
+    <span class="detail-msg mono" class:err-msg={outcomeOf(run) === "failed"} use:tip={run.detail}>{run.detail}</span>
+  {/if}
+  {#if run.log_path}
+    <span class="log-cell mono" use:tip={run.log_path}>{run.log_path.split("/").slice(-1)[0]}</span>
+  {/if}
+  {#if !run.detail && !run.log_path}<span class="dim">—</span>{/if}
+{/snippet}
 
 <PageHeader
   badge="Operations"
@@ -477,73 +530,13 @@
     </div>
   {:else}
     <div class="card table-wrap">
-      <table class="table">
-        <thead>
-          <tr>
-            <th scope="col">Started</th>
-            <th scope="col">Capability</th>
-            <th scope="col">Target</th>
-            <th scope="col">Duration</th>
-            <th scope="col">Outcome</th>
-            <th scope="col">Archive</th>
-            <th scope="col">Detail & Log</th>
-          </tr>
-        </thead>
-        <tbody>
-          {#each runs as run (run.id ?? `${run.started_at}-${run.capability}`)}
-            {@const isSuccess = run.exit_code === 0}
-            {@const isRunActive = run.exit_code === null && run.finished_at === null}
-            <tr>
-              <td class="mono num num-cell">{formatTime(run.started_at)}</td>
-              <td><strong>{run.capability}</strong></td>
-              <td><span class="mono tag">{run.target}</span></td>
-              <td class="mono num num-cell">
-                {#if run.finished_epoch && run.started_epoch}
-                  {Math.max(0, run.finished_epoch - run.started_epoch)}s
-                {:else if isRunActive}
-                  <span class="active-pulse"><Icon name="loader" size={11} /> active</span>
-                {:else}
-                  —
-                {/if}
-              </td>
-              <td>
-                {#if isSuccess}
-                  <span class="badge badge-ok">exit 0</span>
-                {:else if isRunActive}
-                  <span class="badge badge-info"><Icon name="loader" size={11} /> running</span>
-                {:else}
-                  <span class="badge badge-err">exit {run.exit_code ?? "?"}</span>
-                {/if}
-              </td>
-              <td class="mono">
-                {#if run.archive}
-                  <span class="archive-name" use:tip={"SHA-256: {run.archive.sha256}"}>
-                    {run.archive.name}
-                    <span class="dim">({formatBytes(run.archive.bytes)})</span>
-                  </span>
-                {:else}
-                  <span class="dim">—</span>
-                {/if}
-              </td>
-              <td class="detail-col">
-                {#if run.detail}
-                  <span class="detail-msg mono" class:err-msg={!isSuccess} use:tip={run.detail}>
-                    {run.detail}
-                  </span>
-                {/if}
-                {#if run.log_path}
-                  <span class="log-cell mono" use:tip={run.log_path}>
-                    {run.log_path.split("/").slice(-1)[0]}
-                  </span>
-                {/if}
-                {#if !run.detail && !run.log_path}
-                  <span class="dim">—</span>
-                {/if}
-              </td>
-            </tr>
-          {/each}
-        </tbody>
-      </table>
+      <Collection
+        id="runs"
+        rows={runs}
+        fields={runFields}
+        key={(run) => String(run.id ?? `${run.started_at}-${run.capability}`)}
+        title={(run) => `${run.capability} → ${run.target}`}
+      />
     </div>
   {/if}
 </section>
@@ -875,11 +868,6 @@
     color: var(--danger);
   }
 
-  .badge-info {
-    background-color: var(--primary-soft);
-    color: var(--primary);
-  }
-
   .badge-dim {
     background-color: var(--card-border);
     color: var(--text-tertiary);
@@ -893,11 +881,6 @@
   /* Runs Ledger Table */
   .table-wrap {
     overflow-x: auto;
-  }
-
-  .num-cell {
-    white-space: nowrap;
-    font-size: var(--text-xs);
   }
 
   .archive-name {

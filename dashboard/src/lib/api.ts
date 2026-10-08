@@ -1740,7 +1740,9 @@ export interface SelfModel {
   units: SelfUnit[];
   coupling: SelfCoupling[];
   upstreams: Array<{ name: string; verdict: string }>;
-  graph: { present: boolean; nodes: number; external: number; stale: string[]; unmatched: string[] };
+  /** Fused on read by the CLI where graphify-out/ exists; self.json, which this endpoint
+   *  serves as-is, never carries it (tools/sjel-cli/src/self_model/mod.rs). */
+  graph?: { present: boolean; nodes: number; external: number; stale: string[]; unmatched: string[] };
 }
 
 /**

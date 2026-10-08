@@ -26,7 +26,6 @@
   import PinnedLinks from "$lib/PinnedLinks.svelte";
   import RepoStatusCard from "$lib/RepoStatusCard.svelte";
   import HomeHorizon from "$lib/home/HomeHorizon.svelte";
-  import AxonGlance from "$lib/home/AxonGlance.svelte";
   import TripDay from "$lib/home/TripDay.svelte";
   import LocationView from "$lib/home/LocationView.svelte";
   import SourcesView from "$lib/home/SourcesView.svelte";
@@ -48,7 +47,7 @@
   } from "$lib/home/decisions";
   import type { CalendarSource } from "$lib/home/kinds/calendar";
   import type { OpportunitySource } from "$lib/home/kinds/opportunity";
-  import { countLabel, daysUntil, localDateKey, sentenceCase } from "$lib/home/format";
+  import { countLabel, daysUntil, localDateKey } from "$lib/home/format";
 
   type HomeView = "now" | "locations" | "sources";
 
@@ -221,22 +220,6 @@
   /// What the page is for, in one sentence: the nearest thing that expires. A count of the
   /// backlog ("57 open items") reads as debt and names nothing you can act on — and 53 of
   /// those 57 were unread articles.
-  const brief = $derived.by(() => {
-    if (loading && commitments.length === 0) {
-      return "Bringing together saved information, opportunities, and travel plans.";
-    }
-    const next = commitments[0];
-    if (!next) {
-      return reading.length === 0
-        ? "There are no open decisions right now. You can start something new."
-        : `Nothing is waiting on a decision. ${countLabel(reading.length, "unread item")} below.`;
-    }
-    const title = next.kind.title?.(next.row);
-    const why = next.kind.whyHere(next.row, scoreContext);
-    if (!title) return sentenceCase(why || next.kind.label);
-    return why ? `${title}: ${sentenceCase(why)}` : `${title} is waiting for a call.`;
-  });
-
   const rowId = (decision: Decision) => `decision-${decision.key.replace(/[^\w-]/g, "-")}`;
 
   const kindOf = (key: string) => KINDS.find((kind) => kind.key === key);
@@ -494,17 +477,7 @@
 <div class="home">
   <header class="briefing">
     <div>
-      <p class="date">{todayLabel}</p>
-      <h1>
-        {#if loading && commitments.length === 0}
-          Sjel is organising the day.
-        {:else if commitments.length === 0}
-          Nothing to decide.
-        {:else}
-          Here is what to do next.
-        {/if}
-      </h1>
-      <p class="brief">{brief}</p>
+      <h1>{todayLabel}</h1>
     </div>
     <a class="library-link" href={link("/feed/library")}>
       Library
@@ -527,18 +500,6 @@
         {#if activeTrip}
           <TripDay plan={activeTrip} entries={calendarEntries} />
         {/if}
-        <AxonGlance
-          entries={upcomingEntries}
-          plans={plans}
-          macmon={macmonSample}
-        />
-        <!-- With a trip running, TripDay owns today and tomorrow; the horizon keeps what starts later. -->
-        <HomeHorizon
-          contexts={calendarContexts}
-          entries={activeTrip
-            ? upcomingEntries.filter((e) => e.source !== "trips" && e.starts_at.slice(0, 10) > tomorrowKey)
-            : upcomingEntries}
-        />
       {/if}
 
       <!-- One header for the whole main column. The view switcher lives here rather than
@@ -546,8 +507,20 @@
            modes of the page. -->
       <div class="section-head">
         <div>
-          <h2>{viewHeadings[homeView].title}</h2>
+          <h2 use:tip={homeView === "now" ? "J / K select · Space inspect · Enter open" : undefined}>{viewHeadings[homeView].title}</h2>
         </div>
+        {#if homeView === "now"}
+          <label class="lens">
+            <span class="sr">Priority focus</span>
+            <select name="home-lens" bind:value={priorityLens}>
+              <option value="all">All ({commitments.length})</option>
+              <option value="focus">Today's focus</option>
+              <option value="schedule">Schedule & trips</option>
+              <option value="people">People</option>
+              <option value="tasks">Tasks & spend</option>
+            </select>
+          </label>
+        {/if}
         <nav class="home-views" aria-label="Home view">
           <button class:active={homeView === "now"} onclick={() => (homeView = "now")}>Now</button>
           <button class:active={homeView === "locations"} onclick={() => (homeView = "locations")}>
@@ -560,53 +533,6 @@
       </div>
 
       {#if homeView === "now"}
-        <div class="priority-lens-bar" role="group" aria-label="Priority focus">
-          <button
-            type="button"
-            class="lens-pill"
-            class:active={priorityLens === "all"}
-            onclick={() => (priorityLens = "all")}
-          >
-            All Priorities <span class="pill-count">{commitments.length}</span>
-          </button>
-          <button
-            type="button"
-            class="lens-pill"
-            class:active={priorityLens === "focus"}
-            onclick={() => (priorityLens = "focus")}
-          >
-            <Icon name="sparkles" size={12} />
-            Today's Focus
-          </button>
-          <button
-            type="button"
-            class="lens-pill"
-            class:active={priorityLens === "schedule"}
-            onclick={() => (priorityLens = "schedule")}
-          >
-            <Icon name="calendar" size={12} />
-            Schedule & Trips
-          </button>
-          <button
-            type="button"
-            class="lens-pill"
-            class:active={priorityLens === "people"}
-            onclick={() => (priorityLens = "people")}
-          >
-            <Icon name="users" size={12} />
-            People
-          </button>
-          <button
-            type="button"
-            class="lens-pill"
-            class:active={priorityLens === "tasks"}
-            onclick={() => (priorityLens = "tasks")}
-          >
-            <Icon name="check" size={12} />
-            Tasks & Spend
-          </button>
-        </div>
-
         {#if filteredCommitments.length === 0 && commitments.length > 0}
           <div class="priority-empty">
             <p>No items in this priority lens.</p>
@@ -616,9 +542,6 @@
           </div>
         {/if}
 
-        {#if visibleDecisions.length > 1}
-          <p class="key-hint"><kbd>J</kbd><kbd>K</kbd> select<span></span><kbd>Space</kbd> inspect<span></span><kbd>Enter</kbd> open</p>
-        {/if}
 
       <!-- role="list" and rows as listitems, not a listbox. An option must not contain
            focusable descendants and every row here holds a title link and up to three
@@ -748,6 +671,18 @@
         </div>
       {/if}
 
+      {#if activeTrip || upcomingEntries.length}
+        <div class="later">
+          <!-- With a trip running, TripDay owns today and tomorrow; the horizon keeps what starts later. -->
+          <HomeHorizon
+            contexts={calendarContexts}
+            entries={activeTrip
+              ? upcomingEntries.filter((e) => e.source !== "trips" && e.starts_at.slice(0, 10) > tomorrowKey)
+              : upcomingEntries}
+          />
+        </div>
+      {/if}
+
       {#if unavailable.length > 0}
         <p class="unavailable">
           <Icon name="wifi-off" size={12} />
@@ -774,26 +709,6 @@
     </section>
 
     <aside>
-      <RailSection label="Quick actions" open>
-        <nav class="quick-list" aria-label="Quick actions">
-          <a href={link("/feed")}>
-            <Icon name="plus" size={15} />
-            <span><strong>Add a link</strong><small>Article, video, or repository</small></span>
-            <Icon name="arrow-right" size={13} />
-          </a>
-          <a href={link("/travel")}>
-            <Icon name="map-pin" size={15} />
-            <span><strong>Plan travel</strong><small>Places, connections, and dates</small></span>
-            <Icon name="arrow-right" size={13} />
-          </a>
-          <a href={link("/feed?view=discover")}>
-            <Icon name="compass" size={15} />
-            <span><strong>Scan sources</strong><small>Look deliberately for new opportunities</small></span>
-            <Icon name="arrow-right" size={13} />
-          </a>
-        </nav>
-      </RailSection>
-
       {#if capabilities.panels.length > 0}
         <RailSection label="Continue working" count={capabilities.panels.length} open>
           {#snippet action()}
@@ -808,12 +723,8 @@
           <ul class="continue">
             {#each capabilities.panels as project (project.name)}
               <li>
-                <span class="project-mark">
-                  <Icon name={project.name === "server" ? "server" : "graduation"} size={15} />
-                </span>
                 <span class="project-copy">
                   <strong>{projectTitle(project)}</strong>
-                  <small>{project.up === true ? "running" : "starts on demand"}</small>
                 </span>
                 {#if project.up}
                   <a
@@ -924,25 +835,15 @@
     border-bottom: 1px solid var(--rule);
   }
 
-  /* Sentence case, like PageHeader's badge and the drawer's section labels. A
-     tracked-out all-caps line above every heading is template chrome, and Home carried
-     five of them: the date and four section kickers. */
-  .date,
-
+  /* The date is the title (2026-10-09). The headline it replaced promised a list that sat
+     three sections further down, and its subtitle repeated the list's first row. */
   h1 {
-    max-width: 48rem;
     margin: 0;
-    font-size: clamp(var(--text-xl), 2.6vw, var(--text-2xl));
+    white-space: nowrap;
+    font-size: var(--text-xl);
     font-weight: 620;
-    line-height: 1.08;
-    letter-spacing: -0.035em;
-  }
-
-  .brief {
-    max-width: var(--measure);
-    margin: var(--space-2) 0 0;
-    color: var(--text-secondary);
-    font-size: var(--text-sm);
+    line-height: 1.15;
+    letter-spacing: -0.02em;
   }
 
   .library-link,
@@ -1031,54 +932,45 @@
     padding-top: 1.2rem;
   }
 
+  .lens {
+    margin-left: auto;
+  }
+
+  .lens select {
+    padding: 0.2rem 0.4rem;
+    border: 1px solid var(--card-border);
+    border-radius: var(--radius-sm);
+    background: var(--surface);
+    color: var(--text-secondary);
+    font: 500 var(--text-2xs) var(--font-sans);
+  }
+
+  .lens select:focus-visible {
+    outline: 2px solid var(--focus-ring);
+  }
+
+  .sr {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    clip: rect(0 0 0 0);
+  }
+
+  .later {
+    margin-top: var(--space-6);
+  }
+
+  .section-head h2 {
+    white-space: nowrap;
+  }
+
   .section-head {
     display: flex;
     align-items: end;
     justify-content: space-between;
     gap: 1rem;
     margin-bottom: 0.8rem;
-  }
-
-  .priority-lens-bar {
-    display: flex;
-    gap: 0.4rem;
-    flex-wrap: wrap;
-    align-items: center;
-    margin-bottom: var(--space-3);
-  }
-
-  .lens-pill {
-    display: inline-flex;
-    align-items: center;
-    gap: 0.35rem;
-    padding: 0.25rem 0.6rem;
-    border-radius: var(--radius-full);
-    font-size: var(--text-xs);
-    font-weight: 500;
-    background: var(--card-bg);
-    border: 1px solid var(--rule);
-    color: var(--text-secondary);
-    cursor: pointer;
-    transition: color var(--motion-fast) ease, border-color var(--motion-fast) ease;
-  }
-
-  .lens-pill:hover {
-    color: var(--text-primary);
-    border-color: var(--primary);
-  }
-
-  .lens-pill.active {
-    background: var(--primary-soft);
-    color: var(--primary);
-    border-color: var(--primary);
-    font-weight: 600;
-  }
-
-  .pill-count {
-    padding: 0 0.35rem;
-    border-radius: var(--radius-full);
-    background: var(--rule-soft, rgba(125, 125, 125, 0.15));
-    font-size: var(--text-2xs);
   }
 
   .priority-empty {
@@ -1104,18 +996,6 @@
 
   /* Two hints, separated by space. The empty span is the gap the middle dot used to
      be — one flex child wide, nothing to read. */
-  .key-hint {
-    display: flex;
-    align-items: center;
-    margin: 0 0 var(--space-3);
-    color: var(--text-tertiary);
-    font-size: var(--text-2xs);
-  }
-
-  .key-hint span {
-    width: var(--space-5);
-  }
-
   /* The reading band. Deliberately quieter than a decision row: one line with
      a count, and the articles only when asked for. */
   .reading {
@@ -1169,18 +1049,6 @@
 
   .reading .queue {
     border-top: 0;
-  }
-
-  kbd {
-    min-width: 1.25rem;
-    padding: 0.1rem 0.25rem;
-    border: 1px solid var(--card-border);
-    border-bottom-color: var(--card-border-hover);
-    border-radius: 3px;
-    background: var(--surface);
-    color: var(--text-secondary);
-    font: 600 0.5625rem var(--font-mono);
-    text-align: center;
   }
 
   .queue {
@@ -1333,96 +1201,29 @@
     gap: var(--space-6);
   }
 
-  /* Both halves are panes now. The reading column used to sit flat on the page while
-   * the rail floated, so the page read as one finished surface beside one unfinished
-   * one. The content pane does NOT scroll independently and is not sticky — it is the
-   * thing being read, and a reading surface that traps its own scroll is a worse
-   * reading surface. It is glass for the material, not for the behaviour. */
+  /* Flat since 2026-10-09. The column used to be a glass pane holding two more cards, three
+   * borders before the first word. The rail is set off by a rule and stays sticky. */
   @media (width >= 50rem) {
-    .next {
-      padding: var(--space-6) var(--space-7);
-      background-color: var(--glass-bg);
-      border: 1px solid var(--card-border);
-      border-top-color: var(--glass-border);
-      border-radius: var(--radius-xl);
-      box-shadow: var(--glass-shadow);
-      -webkit-backdrop-filter: var(--glass-blur);
-      backdrop-filter: var(--glass-blur);
-    }
-
     aside {
       position: sticky;
       top: calc(var(--header-stack) + var(--space-3));
       max-height: calc(100vh - var(--header-stack) - var(--space-6));
-      padding: var(--space-6) var(--space-5);
+      padding-left: var(--space-5);
       overflow-y: auto;
-      background-color: var(--glass-bg);
-      border: 1px solid var(--card-border);
-      border-top-color: var(--glass-border);
-      border-radius: var(--radius-xl);
-      box-shadow: var(--glass-shadow);
-      -webkit-backdrop-filter: var(--glass-blur);
-      backdrop-filter: var(--glass-blur);
-    }
-
-    /* Translucency without the blur is text over text. Both spellings, because Safari
-       implements the prefixed one and a condition naming only the unprefixed property
-       would paint these opaque in the browser this surface is actually read in. */
-    @supports not ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))) {
-      .next,
-      aside {
-        background-color: var(--card-bg);
-      }
+      border-left: 1px solid var(--rule);
     }
   }
 
-  .quick-list {
-    border-top: 1px solid var(--card-border);
-  }
-
-  .quick-list a {
-    display: grid;
-    grid-template-columns: auto minmax(0, 1fr) auto;
-    align-items: center;
-    gap: 0.7rem;
-    padding: 0.8rem 0.1rem;
-    border-bottom: 1px solid var(--card-border);
-    color: var(--text-secondary);
-  }
-
-  .quick-list a > :global(svg):first-child {
-    color: var(--primary);
-  }
-
-  .quick-list a > :global(svg):last-child {
-    color: var(--text-tertiary);
-  }
-
-  .quick-list a:hover {
-    color: var(--primary);
-  }
-
-  .quick-list span,
   .project-copy {
     display: grid;
     min-width: 0;
   }
 
-  .quick-list strong,
   .project-copy strong {
     overflow: hidden;
     color: var(--text-primary);
     font-size: var(--text-xs);
     font-weight: 620;
-    text-overflow: ellipsis;
-    white-space: nowrap;
-  }
-
-  .quick-list small,
-  .project-copy small {
-    overflow: hidden;
-    color: var(--text-tertiary);
-    font-size: 0.625rem;
     text-overflow: ellipsis;
     white-space: nowrap;
   }
@@ -1436,21 +1237,11 @@
 
   ul.continue li {
     display: grid;
-    grid-template-columns: auto minmax(0, 1fr) auto;
+    grid-template-columns: minmax(0, 1fr) auto;
     align-items: center;
     gap: 0.65rem;
-    padding: 0.65rem 0;
+    padding: 0.35rem 0;
     border-bottom: 1px solid var(--card-border);
-  }
-
-  .project-mark {
-    display: grid;
-    place-items: center;
-    width: 1.8rem;
-    height: 1.8rem;
-    border-radius: var(--radius-sm);
-    background: var(--primary-soft);
-    color: var(--primary);
   }
 
   /* ── Compact macmon sidebar card ──────────────────────────── */
@@ -1668,16 +1459,6 @@
       padding-block: 0.15rem 1rem;
     }
 
-    h1 {
-      font-size: clamp(1.7rem, 8vw, 2.05rem);
-      line-height: 1.05;
-    }
-
-    .brief {
-      font-size: 0.9rem;
-      line-height: 1.45;
-    }
-
     .library-link {
       min-height: 2.5rem;
     }
@@ -1700,23 +1481,10 @@
       padding-top: 1rem;
     }
 
-    .quick-list a {
-      min-height: 3.75rem;
-    }
-
-    .quick-list strong,
     .project-copy strong {
       font-size: 0.82rem;
     }
 
-    .quick-list small,
-    .project-copy small {
-      font-size: 0.7rem;
-    }
-
-    .key-hint {
-      display: none;
-    }
   }
 
   .ladder-skeletons {

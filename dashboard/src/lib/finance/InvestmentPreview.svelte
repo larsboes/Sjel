@@ -8,6 +8,9 @@
     type InvestmentCsvMappingProfile,
     type InvestmentPreview,
   } from "$lib/api";
+  import DataTable, { type Column } from "$lib/ui/DataTable.svelte";
+
+  type Holding = InvestmentPreview["holdings"][number];
 
   let { onchanged = () => {} }: { onchanged?: () => void } = $props();
 
@@ -131,7 +134,19 @@
     return `${sign}${digits.slice(0, -scale)}.${digits.slice(-scale)}`;
   }
 
+  const holdingColumns: Column<Holding>[] = [
+    { id: "instrument", label: "Instrument", cell: instrumentCell },
+    { id: "quantity", label: "Quantity", width: "8rem", align: "end", cell: quantityCell },
+    { id: "price", label: "Latest activity price", width: "11rem", align: "end", cell: priceCell },
+  ];
+
 </script>
+
+{#snippet instrumentCell(holding: Holding)}{holding.instrument}{/snippet}
+{#snippet quantityCell(holding: Holding)}{quantity(holding.quantity.mantissa, holding.quantity.scale)}{/snippet}
+{#snippet priceCell(holding: Holding)}
+  {holding.latest_unit_price === null ? "—" : `${quantity(holding.latest_unit_price.mantissa, holding.latest_unit_price.scale)} ${holding.currency}`}
+{/snippet}
 
 <section class="preview">
   <div class="heading">
@@ -189,18 +204,7 @@
       <span>{coverage === "partial" ? "Partial means this source is known to omit positions. " : ""}Confirmation requires an explicit private alias for every instrument. Only aggregate aliases, quantities and prices are retained.</span>
     </div>
     {#if result.holdings.length > 0}
-      <table>
-        <thead><tr><th scope="col">Instrument</th><th class="num" scope="col">Quantity</th><th class="num" scope="col">Latest activity price</th></tr></thead>
-        <tbody>
-          {#each result.holdings as holding (holding.instrument)}
-            <tr>
-              <td>{holding.instrument}</td>
-              <td class="num">{quantity(holding.quantity.mantissa, holding.quantity.scale)}</td>
-              <td class="num">{holding.latest_unit_price === null ? "—" : `${quantity(holding.latest_unit_price.mantissa, holding.latest_unit_price.scale)} ${holding.currency}`}</td>
-            </tr>
-          {/each}
-        </tbody>
-      </table>
+      <DataTable rows={result.holdings} columns={holdingColumns} key={(h) => h.instrument} />
     {:else}
       <p class="empty">No open positions reconstructed.</p>
     {/if}
@@ -208,25 +212,22 @@
 </section>
 
 <style>
-  .preview { margin-top: 2rem; border-top: 1px solid var(--border, #333); padding-top: 1.25rem; }
+  .preview { margin-top: 2rem; border-top: 1px solid var(--card-border); padding-top: 1.25rem; }
   .heading { display: flex; align-items: center; justify-content: space-between; gap: .75rem; flex-wrap: wrap; }
   h2 { margin: 0; font-size: 1rem; }
-  p { margin: .25rem 0 0; color: var(--muted, #888); font-size: .8rem; }
-  .file, button { display: inline-flex; align-items: center; gap: .35rem; border: 1px solid var(--border, #333); border-radius: 6px; padding: .4rem .65rem; font: inherit; font-size: .78rem; background: transparent; color: inherit; cursor: pointer; }
+  p { margin: .25rem 0 0; color: var(--text-secondary); font-size: .8rem; }
+  .file, button { display: inline-flex; align-items: center; gap: .35rem; border: 1px solid var(--card-border); border-radius: 6px; padding: .4rem .65rem; font: inherit; font-size: .78rem; background: transparent; color: inherit; cursor: pointer; }
   .file input { display: none; }
-  .mapping { display: grid; grid-template-columns: repeat(auto-fit, minmax(9rem, 1fr)); gap: .65rem; margin: 1rem 0; padding: .8rem; background: var(--card-bg, rgba(127,127,127,.05)); border-radius: 8px; }
-  .mapping label { display: flex; flex-direction: column; gap: .2rem; color: var(--muted, #888); font-size: .68rem; }
+  .mapping { display: grid; grid-template-columns: repeat(auto-fit, minmax(9rem, 1fr)); gap: .65rem; margin: 1rem 0; padding: .8rem; background: var(--card-bg); border-radius: 8px; }
+  .mapping label { display: flex; flex-direction: column; gap: .2rem; color: var(--text-secondary); font-size: .68rem; }
   .mapping .profile { grid-column: span 2; }
   .mapping button { align-self: end; justify-content: center; }
-  input, select { min-width: 0; border: 1px solid var(--border, #333); border-radius: 5px; padding: .35rem .45rem; font: inherit; font-size: .78rem; background: transparent; color: inherit; }
+  input, select { min-width: 0; border: 1px solid var(--card-border); border-radius: 5px; padding: .35rem .45rem; font: inherit; font-size: .78rem; background: transparent; color: inherit; }
   button:disabled { opacity: .45; cursor: default; }
-  button.partial { border-color: var(--warning, #a76b2c); }
-  .error { color: var(--danger, #b44); }
+  button.partial { border-color: var(--warning); }
+  .error { color: var(--danger); }
   .summary { margin: 1rem 0 .65rem; }
   .review { display: flex; align-items: center; gap: .65rem; margin-bottom: .65rem; }
-  .review span { color: var(--muted, #888); font-size: .7rem; }
-  table { width: 100%; border-collapse: collapse; font-size: .78rem; }
-  th, td { padding: .55rem .4rem; border-bottom: 1px solid var(--border, #333); text-align: left; }
-  .num { text-align: right; font-variant-numeric: tabular-nums; }
+  .review span { color: var(--text-secondary); font-size: .7rem; }
   .empty { margin-top: 1rem; }
 </style>

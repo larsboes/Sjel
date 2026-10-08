@@ -68,6 +68,9 @@ export interface NavItem {
 /** Daily work stays visible. Machine administration sits one level deeper. */
 export const PRIMARY_NAV: NavItem[] = [
   { href: "/", label: "Home", icon: "home" },
+  // A day with everything joined to it: calendar, trips, spend (lib/context, 2026-10-08).
+  // Like Home it draws from several capabilities and degrades, so it names none.
+  { href: "/context", label: "Today", icon: "clock", starts: ["calendar", "trips", "finance"] },
   { href: "/calendar", label: "Calendar", icon: "calendar", capability: "calendar" },
   { href: "/feed", label: "Feed", icon: "feed", capability: "comms" },
   { href: "/travel", label: "Travel", icon: "map-pin", capability: "transit", starts: ["transit", "trips"], warmsMap: true },

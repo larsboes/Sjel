@@ -15,6 +15,7 @@
   import { connectionsFor, deepLink, expand, type ConnectionGroup } from "$lib/inspector/connections";
   import type { InspectableItem } from "$lib/inspector/inspector.svelte";
   import { recordHref, recordView, resolveRecord } from "$lib/inspector/record";
+  import { contextHref } from "$lib/context/context";
 
   const id = $derived(page.url.searchParams.get("id") ?? "");
   let item = $state<InspectableItem | null | undefined>(undefined);
@@ -46,6 +47,7 @@
 
   const view = $derived(item ? recordView(item) : null);
   const home = $derived(item ? deepLink(item) : null);
+  const around = $derived(item ? contextHref(item) : null);
 </script>
 
 {#if item === undefined}
@@ -55,6 +57,9 @@
 {:else}
   <PageHeader badge={view.kind} title={view.title}>
     {#snippet actions()}
+      {#if around}
+        <a class="open" href={around}><Icon name="compass" size={12} />Everything around it</a>
+      {/if}
       {#if home}
         <a class="open" href={home}><Icon name="external" size={12} />Open where it lives</a>
       {/if}

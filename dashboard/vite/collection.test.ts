@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'bun:test';
-import { apply, readState, writeState, type CollectionState, type Field } from '../src/lib/ui/collection';
+import { apply, dayOf, monthGrid, nearestDay, readState, shiftMonth, writeState, type CollectionState, type Field } from '../src/lib/ui/collection';
 
 type Row = { id: string; kind: string; amount: number | null; name: string };
 const rows: Row[] = [
@@ -52,5 +52,30 @@ describe('URL state', () => {
     const params = new URLSearchParams();
     writeState(params, 'tx', { ...d, sort: null, desc: false }, d);
     expect(readState(params, 'tx', d).sort).toBeNull();
+  });
+});
+
+describe('calendar helpers', () => {
+  it('reads a day from a date or a timestamp, and nothing else', () => {
+    expect(dayOf('2026-10-08')).toBe('2026-10-08');
+    expect(dayOf('2026-10-08T17:00:00Z')).toBe('2026-10-08');
+    expect(dayOf(1791495679)).toBeNull();
+    expect(dayOf('soon')).toBeNull();
+  });
+  it('lays a month out in whole weeks from Monday', () => {
+    const oct = monthGrid('2026-10'); // 1 Oct 2026 is a Thursday
+    expect(oct[0]).toBe('2026-09-28');
+    expect(oct.length % 7).toBe(0);
+    expect(oct.at(-1)).toBe('2026-11-01');
+    expect(monthGrid('2026-02')[0]).toBe('2026-01-26');
+  });
+  it('opens on the dated row nearest today', () => {
+    expect(nearestDay(['2025-11-03', '2026-07-16'], '2026-10-09')).toBe('2026-07-16');
+    expect(nearestDay(['2026-10-12', '2025-01-01'], '2026-10-09')).toBe('2026-10-12');
+    expect(nearestDay([], '2026-10-09')).toBeNull();
+  });
+  it('steps months across a year end', () => {
+    expect(shiftMonth('2026-12', 1)).toBe('2027-01');
+    expect(shiftMonth('2026-01', -1)).toBe('2025-12');
   });
 });

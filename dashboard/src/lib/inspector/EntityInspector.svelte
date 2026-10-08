@@ -11,8 +11,11 @@
   import ConnectionGroups from "./ConnectionGroups.svelte";
   import { connectionsFor, deepLink, expand, type ConnectionGroup } from "./connections";
   import { recordHref } from "./record";
+  import { contextHref } from "$lib/context/context";
 
   let groups = $state<ConnectionGroup[] | null>(null);
+  const asPage = $derived(inspectorStore.item ? recordHref(inspectorStore.item) : null);
+  const inContext = $derived(inspectorStore.item ? contextHref(inspectorStore.item) : null);
 
   // Read the connections each time the panel shows a different item. A slower answer for an
   // item already left behind is dropped, so the list never shows another item's links.
@@ -143,9 +146,13 @@
           <span class="type-name">{(item.type === "link" ? item.kind : item.type).toUpperCase()}</span>
         </div>
 
-        {@const asPage = recordHref(item)}
+        {#if inContext}
+          <a class="btn-close as-page" href={inContext} onclick={() => inspectorStore.close()} use:tip={"Everything around it"}>
+            <Icon name="compass" size={14} />
+          </a>
+        {/if}
         {#if asPage}
-          <a class="btn-close as-page" href={asPage} onclick={() => inspectorStore.close()} use:tip={"Open as page"}>
+          <a class="btn-close" class:as-page={!inContext} href={asPage} onclick={() => inspectorStore.close()} use:tip={"Open as page"}>
             <Icon name="external" size={14} />
           </a>
         {/if}

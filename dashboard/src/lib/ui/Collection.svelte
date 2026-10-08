@@ -1,5 +1,6 @@
 <script lang="ts" generics="T">
-  // One dataset as a table or a board, with search, filter, sort and group (2026-10-08).
+  // One dataset as a table, a board or a month calendar, with search, filter, sort and group
+  // (2026-10-08). The calendar appears when a field has `kind: "date"`.
   // The rows and their order come from `collection.ts`; the state lives in the URL under
   // `id`, so a view can be bookmarked. Without `id` it is a plain table with no toolbar,
   // for previews such as "recent transactions".
@@ -12,7 +13,7 @@
   import Chip from "./Chip.svelte";
   import DataTable, { type Column } from "./DataTable.svelte";
   import ViewSwitch from "./ViewSwitch.svelte";
-  import { apply, optionsOf, readState, writeState, type CollectionState, type Field } from "./collection";
+  import { apply, dayOf, monthGrid, optionsOf, readState, shiftMonth, writeState, type CollectionState, type Field } from "./collection";
 
   let {
     id,
@@ -43,29 +44,58 @@
   } = $props();
 
   const defaults: CollectionState = $derived({ view: "table", q: "", sort: null, desc: false, group: null, filter: {}, ...given });
-  // Seeded once from the URL; the toolbar writes `state` and the effect writes it back.
-  let state = $state<CollectionState>(untrack(() => (id ? readState(page.url.searchParams, id, defaults) : defaults)));
+  // Seeded once from the URL; the toolbar writes `current` and the effect writes it back.
+  let current = $state<CollectionState>(untrack(() => (id ? readState(page.url.searchParams, id, defaults) : defaults)));
 
   $effect(() => {
     if (!id) return;
     const url = new URL(page.url);
-    writeState(url.searchParams, id, $state.snapshot(state), defaults);
+    writeState(url.searchParams, id, $state.snapshot(current), defaults);
     if (url.search !== page.url.search) replaceState(url, page.state);
   });
 
   const selects = $derived(fields.filter((f) => f.kind === "select"));
-  const shown = $derived(id ? apply(rows, fields, state) : rows);
-  const groupField = $derived(fields.find((f) => f.id === state.group));
+  const shown = $derived(id ? apply(rows, fields, current) : rows);
+  const groupField = $derived(fields.find((f) => f.id === current.group));
   // The board splits by the grouped field, or the first select field when nothing is grouped.
   const boardField = $derived(groupField ?? selects[0]);
-  const filterCount = $derived(Object.values(state.filter).reduce((n, v) => n + v.length, 0));
+  const filterCount = $derived(Object.values(current.filter).reduce((n, v) => n + v.length, 0));
+  const dateField = $derived(fields.find((f) => f.kind === "date"));
   const views = $derived([
     { id: "table", label: "Table", icon: "database" as const },
     ...(selects.length ? [{ id: "board", label: "Board", icon: "boxes" as const }] : []),
+    ...(dateField ? [{ id: "calendar", label: "Calendar", icon: "calendar" as const }] : []),
   ]);
 
+  // The calendar's month is page-local, not in the URL: it opens where the rows are.
+  const today = new Date().toLocaleDateString("sv-SE");
+  let month = $state<string | null>(null);
+  let opened = $state<Set<string>>(new Set());
+  const byDay = $derived.by(() => {
+    const out = new Map<string, T[]>();
+    if (!dateField) return out;
+    for (const row of shown) {
+      const d = dayOf(dateField.value(row));
+      if (d) out.set(d, [...(out.get(d) ?? []), row]);
+    }
+    return out;
+  });
+  const undated = $derived(dateField ? shown.filter((r) => !dayOf(dateField.value(r))).length : 0);
+  // This month when it holds rows, else the month of the first dated row.
+  const shownMonth = $derived(
+    month ?? ([...byDay.keys()].some((d) => d.startsWith(today.slice(0, 7))) ? today.slice(0, 7) : ([...byDay.keys()].sort()[0]?.slice(0, 7) ?? today.slice(0, 7))),
+  );
+  const monthLabel = $derived(new Date(`${shownMonth}-15T12:00:00`).toLocaleDateString(undefined, { month: "long", year: "numeric" }));
+  const toneOf = (row: T) => {
+    const f = boardField;
+    const v = f ? text(f.value(row)) : "";
+    return (f && v && f.tone?.(v)) || "neutral";
+  };
+  const PER_DAY = 3;
+
   const text = (v: unknown) => (v == null ? "" : String(v));
-  const label = (f: Field<T>, v: string) => (v === "" ? "None" : (f.display?.(v) ?? v));
+  // `display` may name the empty value itself ("No day"); otherwise it reads "None".
+  const label = (f: Field<T>, v: string) => (f.display?.(v) ?? v) || "None";
   const byId = $derived(new Map(fields.map((f) => [f.id, f])));
 
   const columns: Column<T>[] = $derived(
@@ -76,16 +106,16 @@
 
   function sortBy(field: string) {
     // Ascending, descending, then back to the order the rows arrived in.
-    if (state.sort !== field) [state.sort, state.desc] = [field, false];
-    else if (!state.desc) state.desc = true;
-    else [state.sort, state.desc] = [null, false];
+    if (current.sort !== field) [current.sort, current.desc] = [field, false];
+    else if (!current.desc) current.desc = true;
+    else [current.sort, current.desc] = [null, false];
   }
 
   function toggle(field: string, value: string) {
-    const current = state.filter[field] ?? [];
-    const next = current.includes(value) ? current.filter((v) => v !== value) : [...current, value];
-    const { [field]: _, ...rest } = state.filter;
-    state.filter = next.length ? { ...rest, [field]: next } : rest;
+    const kept = current.filter[field] ?? [];
+    const next = kept.includes(value) ? kept.filter((v) => v !== value) : [...kept, value];
+    const { [field]: _, ...rest } = current.filter;
+    current.filter = next.length ? { ...rest, [field]: next } : rest;
   }
 </script>
 
@@ -99,10 +129,10 @@
 
 {#if id}
   <div class="toolbar">
-    {#if views.length > 1}<ViewSwitch {views} bind:value={state.view} label="View" />{/if}
+    {#if views.length > 1}<ViewSwitch {views} bind:value={current.view} label="View" />{/if}
     <label class="search">
       <Icon name="search" size={12} />
-      <input type="search" name="{id}-q" placeholder="Search" aria-label="Search" bind:value={state.q} />
+      <input type="search" name="{id}-q" placeholder="Search" aria-label="Search" bind:value={current.q} />
     </label>
     {#if selects.length}
       <button type="button" class="tool" class:on={filterCount > 0} popovertarget="{id}-filter" style:anchor-name="--{id}-filter">
@@ -114,17 +144,17 @@
             <legend>{f.label}</legend>
             {#each optionsOf(rows, f) as v (v)}
               <label>
-                <input type="checkbox" name="{id}-f-{f.id}" checked={state.filter[f.id]?.includes(v) ?? false} onchange={() => toggle(f.id, v)} />
+                <input type="checkbox" name="{id}-f-{f.id}" checked={current.filter[f.id]?.includes(v) ?? false} onchange={() => toggle(f.id, v)} />
                 {label(f, v)}
               </label>
             {/each}
           </fieldset>
         {/each}
-        {#if filterCount}<button type="button" class="tool" onclick={() => (state.filter = {})}>Clear filters</button>{/if}
+        {#if filterCount}<button type="button" class="tool" onclick={() => (current.filter = {})}>Clear filters</button>{/if}
       </div>
       <label class="tool">
         Group
-        <select name="{id}-group" bind:value={() => state.group ?? "", (v) => (state.group = v || null)}>
+        <select name="{id}-group" bind:value={() => current.group ?? "", (v) => (current.group = v || null)}>
           <option value="">None</option>
           {#each selects as f (f.id)}<option value={f.id}>{f.label}</option>{/each}
         </select>
@@ -134,7 +164,7 @@
   </div>
 {/if}
 
-{#if state.view === "board" && boardField}
+{#if current.view === "board" && boardField}
   {@const f = boardField}
   <div class="board">
     {#each optionsOf(shown, f) as v (v)}
@@ -157,6 +187,34 @@
       <p class="soft">{empty}</p>
     {/each}
   </div>
+{:else if current.view === "calendar" && dateField}
+  <div class="month-bar">
+    <button type="button" class="tool" onclick={() => (month = shiftMonth(shownMonth, -1))} use:tip={"Previous month"}><Icon name="arrow-left" size={12} /></button>
+    <strong>{monthLabel}</strong>
+    <button type="button" class="tool" onclick={() => (month = shiftMonth(shownMonth, 1))} use:tip={"Next month"}><Icon name="arrow-right" size={12} /></button>
+    {#if shownMonth !== today.slice(0, 7)}<button type="button" class="tool" onclick={() => (month = today.slice(0, 7))}>This month</button>{/if}
+    {#if undated}<span class="soft">{undated} without a date</span>{/if}
+  </div>
+  <div class="month" role="grid" aria-label={monthLabel}>
+    {#each ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"] as wd (wd)}<span class="wd" role="columnheader">{wd}</span>{/each}
+    {#each monthGrid(shownMonth) as d (d)}
+      {@const dayRows = byDay.get(d) ?? []}
+      {@const all = opened.has(d)}
+      <div class="cell" class:outside={!d.startsWith(shownMonth)} class:today={d === today} role="gridcell" aria-label={d}>
+        <span class="date mono">{Number(d.slice(8))}</span>
+        {#each all ? dayRows : dayRows.slice(0, PER_DAY) as row (key(row))}
+          <button type="button" class="entry tone-{toneOf(row)}" class:selected={selected === key(row)} class:inactive={inactive?.(row)} onclick={() => onOpen?.(row)} use:tip={title(row)}>
+            {title(row)}
+          </button>
+        {/each}
+        {#if dayRows.length > PER_DAY}
+          <button type="button" class="more" onclick={() => (opened = new Set(all ? [...opened].filter((x) => x !== d) : [...opened, d]))}>
+            {all ? "Fewer" : `+${dayRows.length - PER_DAY} more`}
+          </button>
+        {/if}
+      </div>
+    {/each}
+  </div>
 {:else}
   <DataTable
     rows={shown}
@@ -167,7 +225,7 @@
     {inactive}
     {selected}
     {actions}
-    sort={id ? { id: state.sort, desc: state.desc } : undefined}
+    sort={id ? { id: current.sort, desc: current.desc } : undefined}
     onSort={id ? sortBy : undefined}
     empty={rows.length && !shown.length ? "No rows match this view." : empty}
   />
@@ -247,8 +305,12 @@
     color: var(--text-tertiary);
   }
 
-  .filters {
+  /* Only while open: a display on the closed sheet would override the UA's hidden popover. */
+  .filters:popover-open {
     display: grid;
+  }
+
+  .filters {
     gap: var(--space-3);
     font-size: var(--text-xs);
   }
@@ -340,6 +402,108 @@
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
+  }
+
+  .month-bar {
+    display: flex;
+    align-items: center;
+    gap: var(--space-2);
+    margin-bottom: var(--space-2);
+    font-size: var(--text-xs);
+  }
+
+  .month-bar .soft {
+    margin-left: auto;
+    font-size: var(--text-2xs);
+  }
+
+  .month {
+    display: grid;
+    grid-template-columns: repeat(7, minmax(0, 1fr));
+    border-top: 1px solid var(--rule);
+    border-left: 1px solid var(--rule);
+  }
+
+  .wd {
+    padding: var(--space-1) var(--space-2);
+    border-right: 1px solid var(--rule);
+    border-bottom: 1px solid var(--rule);
+    font-size: var(--text-2xs);
+    color: var(--text-tertiary);
+  }
+
+  .cell {
+    display: grid;
+    align-content: start;
+    gap: 2px;
+    min-height: 5.5rem;
+    min-width: 0;
+    padding: var(--space-1);
+    border-right: 1px solid var(--rule);
+    border-bottom: 1px solid var(--rule);
+  }
+
+  .cell.outside {
+    background: var(--surface);
+  }
+
+  .cell.outside .date {
+    color: var(--text-tertiary);
+  }
+
+  .date {
+    font-size: var(--text-2xs);
+    color: var(--text-secondary);
+  }
+
+  .cell.today .date {
+    color: var(--accent);
+    font-weight: 600;
+  }
+
+  .entry,
+  .more {
+    padding: 1px var(--space-1);
+    border: 0;
+    border-radius: var(--radius-sm);
+    background: none;
+    text-align: left;
+    font: inherit;
+    font-size: var(--text-2xs);
+    color: var(--text-primary);
+    cursor: pointer;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  .entry {
+    border-left: 2px solid var(--text-tertiary);
+  }
+
+  .entry.tone-accent { border-left-color: var(--accent); }
+  .entry.tone-success { border-left-color: var(--success); }
+  .entry.tone-warning { border-left-color: var(--warning); }
+  .entry.tone-danger { border-left-color: var(--danger); }
+  .entry.tone-muted { border-left-color: var(--rule); }
+
+  .entry:hover,
+  .entry.selected,
+  .more:hover {
+    background: var(--nav-hover);
+  }
+
+  .entry:focus-visible,
+  .more:focus-visible {
+    outline: 2px solid var(--focus-ring);
+  }
+
+  .entry.inactive {
+    color: var(--text-tertiary);
+  }
+
+  .more {
+    color: var(--text-tertiary);
   }
 
   .card-meta {

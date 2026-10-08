@@ -8,6 +8,12 @@
   import Icon from "$lib/Icon.svelte";
   import PageHeader from "$lib/PageHeader.svelte";
   import { axonStatus, type PacksView, type HarnessView } from "$lib/api";
+  import Chip from "$lib/ui/Chip.svelte";
+  import Collection from "$lib/ui/Collection.svelte";
+  import type { Column } from "$lib/ui/DataTable.svelte";
+  import type { Field } from "$lib/ui/collection";
+
+  type Row = { pack: string; skill: string };
 
   let view = $state<PacksView | null>(null);
   let error = $state<string | null>(null);
@@ -47,6 +53,23 @@
     return status !== "current" && status !== "not-deployed";
   }
 
+  const attention = (row: Row) => shown.some((h) => needsAttention(statusOf(h, row.pack, row.skill)));
+
+  // One column per installed harness, so the field list follows what is on this machine.
+  const fields: Field<Row>[] = $derived([
+    { id: "pack", label: "Pack", kind: "select", width: "8rem", value: (r) => r.pack, cell: packCell },
+    { id: "skill", label: "Skill", value: (r) => r.skill, cell: skillCell },
+    {
+      id: "state", label: "State", kind: "select", column: false,
+      value: (r) => (attention(r) ? "attention" : "ok"),
+      display: (v) => (v === "attention" ? "Needs a decision" : "In order"),
+      tone: (v) => (v === "attention" ? "warning" : "muted"),
+    },
+    ...shown.map((h): Field<Row> => ({
+      id: `h:${h.id}`, label: h.label, width: "7rem", value: (r) => statusOf(h, r.pack, r.skill), cell: harnessCell,
+    })),
+  ]);
+
   async function load(): Promise<void> {
     try {
       view = await axonStatus.packs();
@@ -65,6 +88,14 @@
     return () => clearInterval(timer);
   });
 </script>
+
+{#snippet packCell(row: Row)}<span class="pack">{row.pack}</span>{/snippet}
+{#snippet skillCell(row: Row)}<span class="skill">{row.skill}</span>{/snippet}
+{#snippet harnessCell(row: Row, column: Column<Row>)}
+  {@const harness = shown.find((h) => `h:${h.id}` === column.id)}
+  {@const status = harness ? statusOf(harness, row.pack, row.skill) : "not-deployed"}
+  {#if needsAttention(status)}<Chip label={status} tone="warning" />{:else if status === "current"}<span class="cell">·</span>{/if}
+{/snippet}
 
 <PageHeader badge="Packs" title="Packs across harnesses" />
 
@@ -110,29 +141,7 @@
   {/each}
 
   <h2>The matrix</h2>
-  <table>
-    <thead>
-      <tr>
-        <th scope="col">Pack</th>
-        <th scope="col">Skill</th>
-        {#each shown as harness (harness.id)}<th scope="col">{harness.label}</th>{/each}
-      </tr>
-    </thead>
-    <tbody>
-      {#each rows as row (row.pack + "/" + row.skill)}
-        <tr>
-          <td class="pack">{row.pack}</td>
-          <td class="skill">{row.skill}</td>
-          {#each shown as harness (harness.id)}
-            {@const status = statusOf(harness, row.pack, row.skill)}
-            <td class="cell" class:attention={needsAttention(status)}>
-              {status === "current" ? "·" : status === "not-deployed" ? "" : status}
-            </td>
-          {/each}
-        </tr>
-      {/each}
-    </tbody>
-  </table>
+  <Collection id="matrix" {rows} {fields} key={(r) => `${r.pack}/${r.skill}`} title={(r) => r.skill} defaults={{ group: "pack" }} />
 
   {#each view.harnesses as harness (harness.id)}
     {#if harness.unowned.length}
@@ -220,13 +229,9 @@
   /* ── Matrix ─────────────────────────────────────────────────── */
   h2 { font-size: 0.9rem; margin: 1.4rem 0 0.5rem; }
 
-  table { width: 100%; border-collapse: collapse; font-size: 0.78rem; }
-  th { text-align: left; font-weight: 600; color: var(--text-secondary); padding: 0.3rem 0.5rem; border-bottom: 1px solid var(--rule); }
-  td { padding: 0.28rem 0.5rem; border-bottom: 1px solid var(--rule); }
   .pack { color: var(--text-tertiary); }
   .skill { font-weight: 500; }
   .cell { font-family: var(--font-mono); color: var(--text-secondary); }
-  .cell.attention { color: var(--warning-ink); font-weight: 600; }
 
   /* ── Strays ─────────────────────────────────────────────────── */
   .strays { list-style: none; padding: 0; margin: 0; font-size: 0.78rem; }

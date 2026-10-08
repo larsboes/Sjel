@@ -100,6 +100,13 @@
       });
     }
 
+    // Home's rail carried these three as cards until 2026-10-09; here they are one keystroke away.
+    list.push(
+      { id: "act-link", domain: "action", domainLabel: "Feed", icon: "plus", title: "Add a link", subtitle: "Article, video, or repository", href: link("/feed") },
+      { id: "act-travel", domain: "action", domainLabel: "Travel", icon: "map-pin", title: "Plan travel", subtitle: "Places, connections, and dates", href: link("/travel") },
+      { id: "act-scan", domain: "action", domainLabel: "Feed", icon: "compass", title: "Scan sources", subtitle: "Look deliberately for new opportunities", href: link("/feed?view=discover") },
+    );
+
     list.push({
       id: "act-cal",
       domain: "action",

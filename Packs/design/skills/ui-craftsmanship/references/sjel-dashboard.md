@@ -19,6 +19,7 @@ when a page needs it, and move other pages onto the kit one at a time (user deci
 | `ui/SidePeek.svelte` | 2 | Rung 4. A record's detail and editors beside the list. Not modal, Escape closes it, the next row is one click. |
 | `ui/Property.svelte` | 1, 2 | One field of a record, edited in place. Replaces a separate edit form. |
 | `ui/ViewSwitch.svelte` | 1 | Table, board and timeline over one dataset. |
+| `ui/Collection.svelte` + `ui/collection.ts` | 1, 2 | A dataset as table, board or month calendar, with search, filter, sort (click a header) and group. Declare `Field`s; a `select` field filters, groups and splits the board; a `date` field turns on the calendar. Groups and board columns follow arrival order, so pass rows sorted the way they should read. With `id`, the state is in the URL under that prefix (`tx.sort=-amount`), so a view is a link. Without `id`, it is a plain `DataTable`. Use this, not a hand-built filter bar. |
 | `ui/Section.svelte` | — | The one section header. Optional collapse, count and actions. |
 | `lib/StateLine.svelte` | 3 | Loading, error and empty in one line. Empty renders nothing unless the caller passes `empty`. |
 | `lib/tip.ts` (`use:tip`) | 3 | The tooltip. Shows on hover and keyboard focus, and becomes `aria-label` or `aria-description`. Never use `title`. |
@@ -26,6 +27,21 @@ when a page needs it, and move other pages onto the kit one at a time (user deci
 | `lib/modal.ts` | 2 | Focus trap for a true modal. Prefer `SidePeek` when the list must stay usable. |
 | `.popover` in `app.css` | 2 | Rides the native `popover` attribute: top layer, light dismiss, Escape. |
 | `lib/Icon.svelte` | tells | The only icon source. No emoji as icons. |
+
+The layers of disclosure, from widest to narrowest:
+
+1. Home's ranked list: what needs the reader now.
+2. A context at `/context?day=`, `?trip=` or `?person=` (`lib/context/context.ts`): one
+   Collection of every joined record (events, plan items, spend, trips), grouped by day.
+   "Today" in the nav opens the day. A source that does not answer is named on the page.
+3. The row, then a side peek or the inspector. The inspector links up to the context
+   ("Everything around it") and down to the record page.
+4. The record's own page at `/record?id=<typed id>` (`lib/inspector/record.ts`).
+
+Rule 4 (show the join) is built here: a new kind of record joins a context by adding a row
+builder and a source in `context.ts`, not by adding a page. The inspector links to the page with
+"Open as page". After a reload, only ids that `expand` reads again (`cal:entry`, `trip:plan`)
+resolve. Other ids show an error line that says so.
 
 The global inspector (`lib/inspector/inspector.svelte`) is a second rung-4 surface. Use it when
 the record has a linkable id that other capabilities can answer for (for example
@@ -67,5 +83,6 @@ Run them with `bun test tools/dashboard-*.test.ts` from the repository root.
 Measured 2026-10-08. Re-measure before quoting.
 
 - Stale data has no shared primitive. Each page decides how to show the age of its data.
-- Several pages still build their own `<table>` (`grep -rl '<table' dashboard/src`). Move them
-  to `DataTable` when you touch them.
+- Every data table uses `DataTable` or `Collection` since 2026-10-08. The `<table>`s left are
+  on purpose: markdown and chart tables (`feed/`), the conflict diff in `SyncStatus` (its
+  values must wrap), and interior's key/value readouts and sun heatmap.

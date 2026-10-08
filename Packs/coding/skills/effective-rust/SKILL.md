@@ -1,6 +1,6 @@
 ---
 name: effective-rust
-description: Guides authoring, review, refactoring, and auditing of idiomatic, clean, safe Rust across Sjel workspace crates (capabilities, libs, tools) per Sjel doctrine, Effective Rust principles, and zero-unsafe invariants. Use when writing new Rust modules, refactoring crates, reviewing error handling or concurrency, optimizing performance, or auditing unsafe code in the workspace. Do not use for frontend TypeScript/Svelte code or non-Rust scripting.
+description: Guides authoring, review, refactoring, and auditing of idiomatic, clean, safe Rust across Sjel crates and native desktop apps per Sjel doctrine, Effective Rust principles, and zero-unsafe invariants. Use when writing Rust modules, refactoring crates, reviewing errors or concurrency, optimizing performance, or auditing unsafe code. Do not use for frontend TypeScript/Svelte code or non-Rust scripting.
 allowed-tools: Read, Write, Edit, Bash
 ---
 
@@ -73,3 +73,5 @@ Zero-context ground truth: verify with `cargo check --workspace` and `cargo test
 | Domain errors, `thiserror`, Axum `IntoResponse` | [`references/error-architecture.md`](references/error-architecture.md) |
 | Property testing (`proptest`), `loom`, `cargo-fuzz`, verification | [`references/verification-and-testing.md`](references/verification-and-testing.md) |
 | Panics, checked arithmetic, performance measurement | [`references/error-architecture.md`](references/error-architecture.md) · [`references/data-and-performance.md`](references/data-and-performance.md) |
+
+For GPUI-specific view, entity, event, platform, or source-version questions, use the sibling `gpui` skill. Keep this skill responsible for Rust safety and general Rust quality.

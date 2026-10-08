@@ -1,0 +1,19 @@
+[package]
+name = "sjel-gpui-prototype"
+version = "0.1.0"
+edition = "2021"
+publish = false
+license = "AGPL-3.0-only"
+description = "Evaluation prototype for a native GPUI desktop surface"
+
+# Keep this evaluation app outside Sjel's production workspace and lockfile.
+[workspace]
+
+[dependencies]
+gpui = { git = "https://github.com/zed-industries/zed", rev = "5f8a7413a31769e0882357f90dc424b3962ac72d" }
+gpui_platform = { git = "https://github.com/zed-industries/zed", rev = "5f8a7413a31769e0882357f90dc424b3962ac72d", features = ["font-kit"] }
+futures = "0.3"
+reqwest = { version = "0.13", default-features = false, features = ["json"] }
+serde = { version = "1", features = ["derive"] }
+tokio = { version = "1", features = ["rt", "time", "net"] }
+

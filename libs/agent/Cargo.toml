@@ -23,6 +23,7 @@ path = "src/main.rs"
 sjel-http = { path = "../sjel-http" }
 sjel-inference = { path = "../inference" }
 sjel-config = { path = "../sjel-config" }
+sjel-skill-metadata = { path = "../skill-metadata" }
 serde = { workspace = true, features = ["derive"] }
 serde_json.workspace = true
 # The `[agent]` section of the overlay's config/agent.toml names which extensions run.

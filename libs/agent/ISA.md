@@ -2,7 +2,7 @@
 project: sjel-agent
 type: isa
 phase: climbing
-progress: 60
+progress: 68
 principal_stated_goal: "pi agent inspiration rust implementation of slim core and official extensions from start but opt in"
 ---
 
@@ -235,16 +235,39 @@ one, which is why the tool's description says so.
 
 ### F3 · Skills from `Packs/`
 
+The paths a run offers come from `[skills] paths = [...]` in `<overlay>/config/agent.toml`, and
+the frontmatter is read with `sjel-skill-metadata`, the crate the Pack engine deploys with — the
+two must read a `SKILL.md` the same way, because a skill that deploys while this sees no
+frontmatter is a skill that silently never reaches a prompt. That parser moved out of
+`tools/sjel-cli/src/harnesses/frontmatter.rs` for the second consumer, which is the placement
+rule this repository uses.
+
+- [x] AGT-12 — the system prompt carries each enabled skill's `name` and `description` from its
+  `SKILL.md` frontmatter, and nothing else of it. A `skill` tool returns the body on demand.
+  Evidence: `the_prompt_carries_each_skill_and_none_of_their_bodies` (`src/ext/skills.rs`) holds
+  the prompt to the two keys and fails if a byte of the document is in it, and
+  `the_tool_returns_the_document_without_its_frontmatter` holds the other half. Live 2026-10-08:
+  a run with `effective-rust` and `human-writing` enabled, asked to name the skills it was given,
+  answered "effective-rust, human-writing" — and the prompt is the system message the loop sends,
+  so those are request 1's bytes. Falsifier: a skill body in the first request. Probe: count
+  `SKILL.md` body bytes in request 1.
+- [x] AGT-13 — a skill directory that fails the frontmatter parse is reported with its path at
+  startup and skipped. The run continues. Evidence: `a_broken_skill_is_named_and_the_run_goes_on`
+  — the good skill survives, and the problem carries the path and the reason the Pack engine would
+  give — and live 2026-10-08: a run whose config named a skill with an empty `description` printed
+  `sjel-agent: skipped a skill — /tmp/agent-smoke/broken-skill/SKILL.md: SKILL.md description must
+  be a non-empty string` and then started. Falsifier: a crash, or a silent skip.
 - [ ] AGT-21 — sjel-agent is a harness in `tools/sjel-cli/src/harnesses/registry.rs` with the `registry`
   model. Activating a profile writes its skill paths into `<overlay>/config/agent.toml`, and
   `tools/harnesses status` shows a sjel-agent row per skill (D7). Falsifier: a profile switch
   that leaves `agent.toml` unchanged. Probe: `sjel harnesses use <profile> --harness sjel-agent`,
   then read the file.
-- [ ] AGT-12 — the system prompt carries each enabled skill's `name` and `description` from its
-  `SKILL.md` frontmatter, and nothing else of it. A `skill` tool returns the body on demand.
-  Falsifier: a skill body in the first request. Probe: count `SKILL.md` body bytes in request 1.
-- [ ] AGT-13 — a skill directory that fails the frontmatter parse is reported with its path at
-  startup and skipped. The run continues. Falsifier: a crash, or a silent skip.
+
+  Not done, and the reason is mechanical rather than a change of plan: its home is `tools/sjel-cli`,
+  and that crate is carrying uncommitted work of its own this hour, its manifest among the files.
+  Editing the same manifest would have committed someone else's half-landed crate together with
+  this one. `[skills] paths` is written by hand until it lands, which is the shape that tool will
+  fill.
 
 ### F4 · MCP client
 
@@ -379,6 +402,16 @@ agent reaches Sjel's data with no data path of its own.
 
 ## Log
 
+- 2026-10-08 · F3, skills. The `skills` extension puts each enabled skill's name and description
+  in the system prompt and returns the document through a `skill` tool only when the model asks:
+  twenty skills cost twenty lines, not twenty documents. The frontmatter parser moved from
+  `tools/sjel-cli/src/harnesses/frontmatter.rs` into `libs/skill-metadata`, because the Pack
+  engine and this extension must read the same block the same way. While moving it, `block()`
+  lost a three-byte prefix it had carried since the port — harmless to a reader that only looks
+  for `key:` lines, and not harmless now that the body is read from the same scan. Skill paths
+  live in `[skills] paths`; one that will not read, or whose frontmatter the engine would refuse,
+  is named at startup and skipped. 46 tests, clippy clean. AGT-21 — the harness row, so a profile
+  switch writes those paths — is not done, and the reason is recorded with the claim.
 - 2026-10-08 · D9 and the fifth hook. `Extension::tool_result` rewrites a tool's result before it
   becomes the model's message, and the front end's event keeps the raw text: that trace goes to
   the operator's own terminal, and hiding their own command's output from them helps nobody. The

@@ -1,0 +1,15 @@
+[package]
+name = "sjel-skill-metadata"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+description = "The SKILL.md frontmatter contract: the name and description a reader needs, read the same way by the Pack engine and by the agent's skills extension. No dependencies, no YAML crate."
+publish = false
+
+[lib]
+name = "sjel_skill_metadata"
+path = "src/lib.rs"
+
+[lints]
+workspace = true

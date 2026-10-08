@@ -4251,6 +4251,7 @@ dependencies = [
  "sjel-config",
  "sjel-http",
  "sjel-inference",
+ "sjel-skill-metadata",
  "thiserror",
  "toml",
 ]
@@ -4338,6 +4339,7 @@ dependencies = [
  "sjel-http",
  "sjel-inference",
  "sjel-server",
+ "sjel-skill-metadata",
  "sjel-store",
  "toml",
  "zeroize",
@@ -4686,6 +4688,10 @@ dependencies = [
  "tokio",
  "tokio-rustls",
 ]
+
+[[package]]
+name = "sjel-skill-metadata"
+version = "0.1.0"
 
 [[package]]
 name = "sjel-soundscape"

@@ -41,6 +41,7 @@ zeroize.workspace = true
 # compiler, which is already the linker cargo picks on both macOS and Linux.
 sjel-config = { path = "../../libs/sjel-config" }
 sjel-store = { path = "../../libs/sjel-store" }
+sjel-skill-metadata = { path = "../../libs/skill-metadata" }
 # `tools/model-check` asks the registry the same questions every capability asks it: is this
 # backend on loopback, and is this backend's credential present. Both rules live in
 # `libs/inference` (`is_loopback_url`, `resolve_key_file` + `api_key_from_file`) and are reused

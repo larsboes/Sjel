@@ -80,7 +80,28 @@ only the variables the command needs into its environment; without it the whole 
 every variable in the file are inherited, which is the risky default and what the tool's own
 description says.
 
-Everything else in wave 1 — skills, MCP, compaction, Rust diagnostics — is still to come.
+## Skills
+
+The `skills` extension is not on by default: it offers what `[skills] paths` names.
+
+```toml
+[agent]
+extensions = ["guard", "skills"]
+
+[skills]
+paths = [
+  "~/Developer/Sjel/Packs/coding/skills/effective-rust",
+  "~/Developer/Sjel/Packs/writing/skills/human-writing",
+]
+```
+
+Each named skill contributes its `name` and its `description` to the system prompt — one line
+each — and nothing else of its `SKILL.md`. The document arrives when the model calls the `skill`
+tool with that name, which is the point: twenty skills cost twenty lines, not twenty documents. A
+path that will not read, or whose frontmatter the Pack engine would refuse, is named at startup
+and skipped, and the run goes on.
+
+Everything else in wave 1 — MCP, compaction, Rust diagnostics — is still to come.
 
 ## Run it
 
@@ -115,9 +136,10 @@ Add a `coding` role to the overlay's `config/inference.json` first:
 
 ## Not here yet
 
-The extension contract is in place (F1) and the guard uses all of it, including the fifth hook
-(F2, D9). Next: skills, MCP, compaction and Rust diagnostics. Line editing, a full-screen TUI and
-subagents are named in [`ISA.md`](ISA.md) as wave 2, not decided.
+The extension contract is in place (F1), the guard uses all of it including the fifth hook (F2,
+D9), and skills run on it (F3). Next: MCP, compaction and Rust diagnostics. What is not done is
+letting a profile switch fill `[skills] paths` for you (AGT-21, in `tools/sjel-cli`). Line
+editing, a full-screen TUI and subagents are named in [`ISA.md`](ISA.md) as wave 2, not decided.
 
 A Ctrl-C while the model reads a long prompt and streams nothing takes effect at the first
 chunk. Press it twice to exit instead.

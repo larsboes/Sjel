@@ -114,8 +114,10 @@ fn run(args: Args) -> Result<ExitCode, String> {
     .map_err(|e| format!("could not handle Ctrl-C: {e}"))?;
 
     // Extensions resolve before the inference role, so a name this build does not carry fails at
-    // startup with nothing else to wait for (AGT-8).
-    let chosen = chosen_extensions(&args.ext, &stop)?;
+    // startup with nothing else to wait for (AGT-8), and a skill that will not read is named
+    // there too (AGT-13).
+    let config = agent_toml()?;
+    let chosen = chosen_extensions(&config, &args.ext, &stop)?;
     eprintln!("{DIM}{}{RESET}", extension_line(&chosen.names));
     let role = sjel_inference::InferenceConfig::load(sjel_config::overlay_config)
         .role(&args.role)
@@ -232,43 +234,54 @@ struct Chosen {
 
 /// The extension set for this run (AGT-8): `agent.toml` first, then the `--ext` flags in the
 /// order they were given, each name resolved against what this binary carries.
-fn chosen_extensions(flags: &[String], stop: &Arc<AtomicBool>) -> Result<Chosen, String> {
-    let names = extension::select(&configured_extensions()?, flags)?;
-    let known: Vec<&str> = BUILT_IN.iter().map(|(name, _)| *name).collect();
+fn chosen_extensions(
+    config: &AgentFile,
+    flags: &[String],
+    stop: &Arc<AtomicBool>,
+) -> Result<Chosen, String> {
+    let configured = config
+        .agent
+        .extensions
+        .clone()
+        .unwrap_or_else(default_extensions);
+    let names = extension::select(&configured, flags)?;
     let mut extensions: Vec<Box<dyn Extension>> = Vec::with_capacity(names.len());
     for name in &names {
-        let Some(extension) = built_in(name, stop) else {
-            return Err(if known.is_empty() {
-                format!("unknown extension `{name}`: this build carries none yet")
-            } else {
-                format!(
-                    "unknown extension `{name}`; this build carries {}",
-                    known.join(", ")
-                )
-            });
+        let Some(extension) = built_in(name, config, stop) else {
+            return Err(format!(
+                "unknown extension `{name}`; this build carries {}",
+                BUILT_IN.join(", ")
+            ));
         };
         extensions.push(extension);
     }
     Ok(Chosen { names, extensions })
 }
 
-/// An extension this binary carries: its name, and how to build one. The stop flag is handed in
-/// because an extension can carry a tool that runs a command, and that command has to end with
-/// the turn.
-type BuiltIn = (&'static str, fn(&Arc<AtomicBool>) -> Box<dyn Extension>);
-
 /// The extensions this binary carries (D1: first-party crates, compiled in, no store). Wave 1
-/// fills this table — the guard is here (F2), `skills` (F3), `mcp` (F4), `compaction` (F5) and
-/// `rust` (F6) are next.
-const BUILT_IN: &[BuiltIn] = &[(ext::guard::NAME, |stop| {
-    Box::new(ext::guard::Guard::new(stop)) as Box<dyn Extension>
-})];
+/// fills this list — the guard is here (F2) and skills (F3); `mcp` (F4), `compaction` (F5) and
+/// `rust` (F6) are next. It is only used to name what exists when a name does not.
+const BUILT_IN: &[&str] = &[ext::guard::NAME, ext::skills::NAME];
 
-fn built_in(name: &str, stop: &Arc<AtomicBool>) -> Option<Box<dyn Extension>> {
-    BUILT_IN
-        .iter()
-        .find(|(known, _)| *known == name)
-        .map(|(_, make)| make(stop))
+/// The extension a name resolves to, or `None` when this build does not carry it. `stop` is
+/// handed in because an extension can carry a tool that runs a command, and that command has to
+/// end with the turn; the config is handed in because an extension's own settings are not the
+/// core's business to interpret.
+fn built_in(name: &str, config: &AgentFile, stop: &Arc<AtomicBool>) -> Option<Box<dyn Extension>> {
+    match name {
+        ext::guard::NAME => Some(Box::new(ext::guard::Guard::new(stop))),
+        ext::skills::NAME => {
+            let (skills, problems) = ext::skills::Skills::load(&config.skills.paths);
+            // A skill whose frontmatter does not parse is named and skipped, and the run goes
+            // on: one broken skill among twenty must not stop the session, and must not vanish
+            // without a word either (AGT-13).
+            for problem in problems {
+                eprintln!("{DIM}sjel-agent: skipped a skill — {problem}{RESET}");
+            }
+            Some(Box::new(skills))
+        }
+        _ => None,
+    }
 }
 
 /// The startup line (AGT-11): what runs, and — because the guard is the one extension that is on
@@ -287,43 +300,49 @@ fn extension_line(names: &[String]) -> String {
     }
 }
 
-/// The set a run starts with, before the flags: whatever `agent.toml` names, or the default set
-/// when it names nothing at all. The guard is the default set and the only member of it (D3) —
-/// its absence is the one thing that can put a credential in a request, so it is not opted into.
-fn configured_extensions() -> Result<Vec<String>, String> {
-    Ok(agent_toml()?.unwrap_or_else(default_extensions))
-}
-
+/// The set a run starts with, before the flags. The guard is the default set and its only member
+/// (D3) — its absence is the one thing that can put a credential in a request, so it is not opted
+/// into.
 fn default_extensions() -> Vec<String> {
     vec![ext::guard::NAME.to_owned()]
 }
 
-/// `[agent] extensions = [...]` from `<overlay>/config/agent.toml`. `None` when there is no file
-/// or no such key, which is what makes the default set apply; `Some(vec![])` is a file that says
-/// "the core only" and means it.
-fn agent_toml() -> Result<Option<Vec<String>>, String> {
+/// Reads `agent.toml`: every section optional, so a file that names nothing — or no file at all —
+/// is the same empty shape.
+fn agent_toml() -> Result<AgentFile, String> {
     let Some(path) = sjel_config::overlay_config("agent.toml") else {
-        return Ok(None);
+        return Ok(AgentFile::default());
     };
     let text = match std::fs::read_to_string(&path) {
         Ok(text) => text,
-        Err(e) if e.kind() == std::io::ErrorKind::NotFound => return Ok(None),
+        Err(e) if e.kind() == std::io::ErrorKind::NotFound => return Ok(AgentFile::default()),
         Err(e) => return Err(format!("could not read {}: {e}", path.display())),
     };
-    let file: AgentFile = toml::from_str(&text).map_err(|e| format!("{}: {e}", path.display()))?;
-    Ok(file.agent.extensions)
+    toml::from_str(&text).map_err(|e| format!("{}: {e}", path.display()))
 }
 
 /// What `agent.toml` holds. Every key is optional, so a file that names nothing still parses.
-#[derive(serde::Deserialize)]
+#[derive(serde::Deserialize, Default)]
 struct AgentFile {
     #[serde(default)]
     agent: AgentSection,
+    #[serde(default)]
+    skills: SkillsSection,
 }
 
 #[derive(serde::Deserialize, Default)]
 struct AgentSection {
+    /// `None` when the key is absent, which is what makes the default set apply; `Some(vec![])`
+    /// is a file that says "the core only" and means it.
     extensions: Option<Vec<String>>,
+}
+
+/// `[skills] paths = [...]`: the skill directories this run offers, written by whatever deployed
+/// them (AGT-21 has the harness do it) and read here.
+#[derive(serde::Deserialize, Default)]
+struct SkillsSection {
+    #[serde(default)]
+    paths: Vec<String>,
 }
 
 fn system_prompt(cwd: &Path) -> String {

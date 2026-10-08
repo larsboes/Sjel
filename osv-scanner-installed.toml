@@ -178,3 +178,8 @@ reason = "rustls-pemfile 2.2.0 is unmaintained. No vulnerability and no fixed ve
 id = "RUSTSEC-2026-0206"
 ignoreUntil = 2027-01-01
 reason = "rustybuzz 0.20.1 is unmaintained. No vulnerability and no fixed version: an informational advisory. Reach: the published lock of tauri-cli 2.12.1, at its latest stable release, where it is reached through text shaping. Ends when tauri-cli republishes or is dropped."
+
+[[IgnoredVulns]]
+id = "GHSA-rj75-hqrm-r3gf"
+ignoreUntil = 2027-01-01
+reason = "Quadratic complexity in postcss-selector-parser's flat-selector parsing (CVE-2026-104844): `.a.a.a...` reaches itself as one word token carrying n indexes, and three passes scan those arrays per index, so a 400 KB selector costs ~34 s of one thread. Fixed in 7.1.6. Reach: the tree npm 12.2.0 bundles for itself (npm/node_modules/@npmcli/arborist <- @npmcli/query), not a package this machine installed, and 12.2.0 is the newest published release while still carrying 7.1.4 — so no install command here moves it. The exposure needs a caller to hand that parser an attacker-controlled selector; nothing in this repository or its CI does, and the audit's second pass is what reads it at all. Ends when npm republishes against a refreshed tree, or when npm is dropped. Accepted 2026-10-08 after `sjel update apply --only npm --re-resolve postcss-selector-parser` reported the package as one this plan does not move."

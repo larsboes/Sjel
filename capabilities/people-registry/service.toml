@@ -18,7 +18,7 @@ command  = ["tools/people-registry-refresh.sh"]
 # its manifest builds vault-server only. Without these two lines a fresh or cleaned checkout ran
 # this job into "vault binary not built" every 6h. build_output names the artifact to look for,
 # because the command itself is a script that always exists.
-build        = ["cargo", "build", "--locked", "--release", "-p", "vault", "--bin", "vault"]
+build        = ["cargo", "build", "--locked", "--release", "-p", "sjel-vault", "--bin", "vault"]
 build_output = "target/release/vault"
 
 # 6h, carried over from the unit it replaces. The registry is derived from Atlas/People and goes

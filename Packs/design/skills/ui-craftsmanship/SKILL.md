@@ -1,6 +1,6 @@
 ---
 name: ui-craftsmanship
-description: Guides design, layout, styling and visual review of Sjel interfaces (the dashboard, capability UIs, components). Covers three rules — the data picks the form, the explicitness ladder for progressive disclosure, and the state inventory of UI the reader does not see at first — plus a speed budget, anti-vibe-coding tells and mechanical sympathy. Use when designing or reviewing a page, table, panel or component, when moving a page onto the shared UI kit, when deciding where an action goes or whether a feature needs its own page, or when auditing an interface for generic AI or SaaS design tells. Do not use for backend Rust APIs, non-visual scripts or prose writing.
+description: Guides design, layout, styling and visual review of Sjel interfaces (the dashboard, capability UIs, components). Covers four rules — the data picks the form, the explicitness ladder for progressive disclosure, the state inventory of UI the reader does not see at first, and show the join across capabilities — plus a speed budget, anti-vibe-coding tells and mechanical sympathy. Use when designing or reviewing a page, table, panel or component, when moving a page onto the shared UI kit, when deciding where an action goes or whether a feature needs its own page, or when auditing an interface for generic AI or SaaS design tells. Do not use for backend Rust APIs, non-visual scripts or prose writing.
 allowed-tools: Read, Write, Edit, Bash
 ---
 
@@ -16,7 +16,8 @@ kit primitives, tokens and the tests that enforce them — is in
 `dashboard/`.
 
 Source for rules 1–3: Kole Jain, "The 3 dashboard UI flaws that give away you've never built
-one" (https://www.youtube.com/watch?v=Ksx9C2-3yMo), adapted to Sjel.
+one" (https://www.youtube.com/watch?v=Ksx9C2-3yMo), adapted to Sjel. Rule 4 and the tip rule
+come from the vault note `Projects/Sjel/Connected shell.md` (2026-10-06).
 
 ## Rule 1: the data picks the form
 
@@ -70,7 +71,7 @@ done, check each state below. Write "not applicable" for a state only when you k
 |---|---|
 | Hover | Rows and controls that react to a click show that they react |
 | Focus | Every control is reachable by keyboard and shows a visible focus ring |
-| Tip | Every icon-only control and every ambiguous label has a tip. The tip is also its accessible name |
+| Tip | Every icon-only control and every ambiguous label has a tip. The tip is also its accessible name. A tip never carries the only reason for something: the reason is also one click away |
 | Empty | Say nothing when quiet is normal. Say what to do next when the reader expected data |
 | Loading | Only for remote data. Reserve the final size so nothing shifts when data arrives |
 | Error | Say what failed and offer retry where retry can work |
@@ -78,6 +79,13 @@ done, check each state below. Write "not applicable" for a state only when you k
 | Disabled | A disabled control says why in its tip |
 | Inactive | Spent or cancelled records are dimmed, not removed |
 | Overflow | Long text truncates, and the full text is one hover or one click away |
+
+## Rule 4: show the join
+
+Sjel's value is the joins between its areas: the trip that explains the spend, the event that
+explains the trip. Every view of one record lists what it touches in other capabilities, and
+opens it in place (the inspector, `libs/links/ISA.md`). In review, a record view that lists
+nothing outside its own capability gets a question.
 
 ## Speed budget
 
@@ -100,7 +108,7 @@ Speed is a feature of the design, not a later optimisation.
 2. **Shape the data** with rule 1. Use a kit primitive. Add a primitive to the kit only when a
    page needs one that does not exist.
 3. **Place every action** with rule 2.
-4. **Walk the state inventory** with rule 3.
+4. **Walk the state inventory** with rule 3, and **list the joins** with rule 4.
 5. **Check the tells and the budget.** Read
    [`references/anti-slop-tells.md`](references/anti-slop-tells.md) and
    [`references/mechanical-sympathy-in-ui.md`](references/mechanical-sympathy-in-ui.md).

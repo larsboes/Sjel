@@ -42,6 +42,27 @@ that data, and an assistant works on it.
 Sjel has a small core and optional extensions. All extensions live in this repository. Each
 installation switches on the extensions it needs.
 
+## Why I built it
+
+I lost track. I kept trying tools, for myself and for my AI agents, and nothing held the pieces
+together.
+
+It started in high school with Notion, which got me hooked on personal knowledge management. Then
+I found Obsidian, and it has been my life management system ever since. I still kept drifting to
+other tools, and every vault migration taught me something about what I actually need. That
+experience, plus ideas from Reddit and YouTube, is where this project comes from.
+
+Sjel is a layer under the tools you already use, not a replacement for them. Obsidian stays
+Obsidian, with its own sync. Sjel connects the areas of a life and may find connections you didn't
+think of. Privacy was part of the design from day one. Not every feature meets that bar yet, and
+closing the gap is ongoing work. I try to keep all of it as efficient and light as I know how.
+
+An honest note: much of the text and code here was written with AI. It started clean, then I
+wanted features fast
+([Mario Zechner on why that goes wrong](https://mariozechner.at/posts/2026-03-25-thoughts-on-slowing-the-fuck-down/)).
+What's left has good ideas, some well-built parts and some sloppy ones. I want to clean it up.
+Expect AI-polished text throughout, because I trust my drafts more after an AI pass.
+
 ## Two surfaces: calm on the glass, open in the terminal
 
 Sjel is designed with two deliberate surfaces:
@@ -96,12 +117,12 @@ smart. Using and maintaining it may not require that smartness.
 | Typed people, places, trips, money, home and calendar, with a source on every value | Built |
 | iPhone app with an offline copy, paired by device key | Built |
 | Same Wi-Fi, Tailscale and own-server connections | Built |
-| Pseudonymizer in front of cloud model calls, for the owner's own data | Built, one caller (`comms`) |
+| Pseudonymizer in front of cloud model calls, and in front of every agent read | Built: `comms` cloud calls, and the agent gate (ISA F9) |
 | Data about other people sent to a cloud model pseudonymized, or synced end-to-end encrypted | Target |
 | Model selection: dual-mechanism — device model or local decision engine, with zero-fail heuristic fallback | Built |
-| Assistant that proposes actions and asks before anything that leaves Sjel or cannot be undone | Target. Today it routes by keyword. |
-| Mac app | Target |
-| iCloud connection, encrypted by Sjel | Target |
+| Assistant that proposes actions and asks before anything that leaves Sjel or cannot be undone | Partly built. Agent writes run under a per-capability mode with approvals (ISA F10). The drawer sends unrouted questions down the model ladder. |
+| Mac app | Built: menu bar companion (`apps/mac`) |
+| iCloud connection, encrypted by Sjel | Relay built and tested (`apps/mac`, ISC-19). Nothing syncs through it yet. |
 
 ## Try it
 

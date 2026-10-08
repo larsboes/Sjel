@@ -182,7 +182,7 @@ in the shell. The same holds for a place, an entity and a calendar entry.
 - [x] LNK-8 — calendar answers `to=trip:plan:…` from `payload.plan_id`.
 - [x] LNK-9 — places answers `to=fin:tx:…` from `transaction_places.source_id`. Replaces "trips
       answers `to=place:…`", which had no stored reference to answer from.
-- [ ] LNK-10 — withdrawn 2026-10-06: inventory holds no reference to entities (see Problem).
+- ~~LNK-10~~ — withdrawn 2026-10-06: inventory holds no reference to entities (see Problem).
 
 ### F3 · Migration
 
@@ -245,9 +245,7 @@ trips to expose them.
 
 ## Out of scope
 
-- People by name. Trip travellers and `person_places.person` are strings; turning them into
-  `ent:` ids is the entities capability's decision, not this contract's.
 - Trips' own place namespace. A destination's `obsidian-place:…` id does not resolve to the
   places registry, so a place cannot list the trips that went there. Resolving it is a trips
   decision.
-- Import and export formats. They are a separate contract, in the same note's direction section.
+- Import and export formats. They are a separate contract, `dashboard/ISA.md`, Not yet specified.

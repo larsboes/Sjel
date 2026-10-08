@@ -2,7 +2,7 @@
 project: sjel
 type: isa
 phase: climbing
-progress: 75
+progress: 89
 principal_stated_goal: "I want no new issues, I wanna get rid of all issues for sjel and sjel personal and only carry through normal ISAs etc."
 ---
 
@@ -14,11 +14,14 @@ file holds what is repo-wide or has no other owner.
 
 ## Problem
 
-The backlog lived in GitHub Issues, and a tracker is a second system of record that
-never says what *done* means. An issue carries a description and a lifecycle; it does
-not carry a falsifier, so nothing about closing one proves anything was verified. The
-ISA already is the artifact that states done as testable claims, and running both means
-maintaining two surfaces that disagree the moment either is edited.
+Sjel's work often crosses capability boundaries: the agent gate, the rename, the disk, the
+privacy rules. Work that belongs to one capability or Pack has that owner's ISA. Work that
+crosses owners, or that no owner holds, needs one record that says what *done* means and how
+to check it.
+
+Until 2026-08-20 that record was GitHub Issues. An issue has a description and a lifecycle,
+but no falsifier, so closing one proves nothing. Two records also disagree as soon as someone
+edits one of them. F0 moved the backlog here (archived, `ISA-archive.md`).
 
 ## Vision
 
@@ -75,8 +78,10 @@ tracker holds nothing, and no automation creates entries in it.
 
 ## Goal
 
-Zero open issues in this repository and in the private overlay, every live item they
-carried standing as a claim in an ISA, and no automation able to open a new one.
+Every open claim in this file is verified by its probe or withdrawn with a reason. No open
+issue exists in this repository or in the private overlay, and no automation can open one.
+When the last claim of a feature is ticked, the feature moves to `ISA-archive.md`. This file
+holds open work, unplaced ideas and the decisions that bind them.
 
 ## Features
 
@@ -200,7 +205,7 @@ the phone. Each item below is built and unverified, or ruled and unbuilt.
 
 ### F6 · What the old PRD still owes
 
-Why: the vault PRD (`Projects/Axon/PRD Axon.md`) is archived and stays so, because 528 citations
+Why: the vault PRD (`Projects/Sjel/PRD Axon.md`, in `Projects/Axon/` until 2026-10-08) is archived and stays so, because 528 citations
 in 260 files point into it. A read on 2026-09-27 found about 90% of it settled decision log. The
 rest is below or under Not yet specified; nothing new goes into the PRD.
 
@@ -789,35 +794,12 @@ deployment with no fix from Lars.
 - **Funding.** Support and sponsorship with a build-in-public video series (decisions, papers,
   measurements, in the style of James Simo's city-builder devlog), hosting, or a company.
   Undecided.
-- **One Rust agent for the Sjel app and local coding.** Recorded 2026-10-03, principal's
-  decision: keep this as a candidate, no implementation yet. The intended destination is an
-  agent replacement usable both inside the app and as a local coding agent; a household-only
-  loop would not satisfy it. Pi is already adopted (`upstreams.toml [pi-coding-agent]`), so
-  replacing it must earn its maintenance cost rather than follow from the language choice.
-  Today `capabilities/assistant/src/main.rs` sends a system and user message to a local model
-  and reads text back; it has no tool-calling conversation loop. Discovery, capability policy,
-  approvals and pseudonymization already exist (F8–F10). MCP dispatch and its registration are
-  both in the Rust `tools/sjel-mcp` crate since 2026-10-04; there is no TypeScript in the MCP path.
-
-  Candidate design to evaluate: one headless engine for model exchanges, tool calls, bounded
-  context and session events, with separate household and coding tool profiles. Household
-  access must retain the declared capability contracts and their authentication, rewriting,
-  approvals and audit; importing domain stores into the engine would bypass that boundary.
-  The coding profile needs workspace file and command tools, with an explicit execution and
-  data-egress boundary. Coding access must not silently give the app, or household tool output,
-  unrestricted shell or filesystem access. Rust does not establish either boundary by itself.
-
-  Before promotion: name the Pi features the replacement must retain, including a decision
-  on sessions, context folding, skills, subagents, MCP, provider coverage and terminal UX.
-  Prove one useful multi-step household task and one local coding task against those needs,
-  with observed completion, latency, memory and operating cost compared with the existing
-  path. The probe must also exercise malformed tool calls, oversized results, budget limits,
-  injected tool text, cancellation and interrupted side effects; an uncertain write must not
-  be reported as safely aborted or blindly replayed. No claim of a tiny line count, automatic
-  process cancellation or zero disclosure is accepted from the proposal. The unresolved
-  privacy probes in ISC-39 and ISC-45 remain unresolved. Failure to meet either use case, or
-  replacement work that costs more than its measured benefit, is grounds to keep Pi and narrow
-  or retire the candidate. No new UI, storage migration or Pi retirement is authorized here.
+- **One Rust agent for the Sjel app and local coding.** Promoted 2026-10-04: `libs/agent`
+  (crate `sjel-agent`) started with c4a13a85, and its claims live in `libs/agent/ISA.md`. The
+  product reasoning is in the vault, `Projects/Sjel/Agent/PRD sjel-agent.md`. The bar this entry
+  set for replacing Pi stays in force: one household task and one coding task, measured against
+  the existing path, before any Pi retirement. The privacy probes in ISC-39 and ISC-45 are still
+  open.
 - **The pseudonymizer as its own library.** Grow the data classes and the reversible
   pseudonymizer into a standalone Rust crate with its own README. Performance work (unsafe Rust included)
   only after a benchmark says where the time goes.
@@ -828,12 +810,11 @@ deployment with no fix from Lars.
 - **Generative interface from the typed core** ([product rule 6](CONTRIBUTING.md#product-rules)). No design yet.
 - **The on-device model path is untested on an eligible device.** The iPhone 14 Pro reports
   `deviceNotEligible`; a 15 Pro or later, or a Simulator, is needed.
-- **The code graph cannot be rebuilt here.** graphify's semantic step calls
-  `deepseek-ai/deepseek-v4-flash`, retired on 2026-08-07. This stopped blocking `self.json` on
-  2026-09-29 (ISC-26): the per-unit counts are fused on read from `graphify-out/`, so
-  `tools/self generate` needs no graph at all. What it still blocks is the graph's own freshness —
-  `status` shows counts rolled up from whatever graph exists, and this machine's is behind the
-  tree. Commit `2f0feb6` says it regenerated `self.json`; only `ARCHITECTURE.md` changed.
+- **The code graph's semantic step cannot run here.** graphify's semantic step calls
+  `deepseek-ai/deepseek-v4-flash`, retired on 2026-08-07 (not re-checked since). The AST step
+  still runs: `graphify-out/graph.json` was rebuilt on 2026-10-08. Since 2026-09-29 (ISC-26)
+  `tools/self generate` needs no graph at all. What the graph loses without the semantic step is
+  not measured. Commit `2f0feb6` says it regenerated `self.json`; only `ARCHITECTURE.md` changed.
 - **From the old PRD, not yet planned.** Device loss as a threat (what a stolen phone exposes).
   A health domain (energy, sleep, training, records). Item intake: **the link half is built**
   (F12, 2026-10-05) — what remains is *scan an object*, which needs the Q63 ladder to end at
@@ -844,6 +825,28 @@ deployment with no fix from Lars.
   at ≥ 0.95 confidence, otherwise a card). shellcheck as shell analysis. `tools/backup.sh`
   skipping private capability manifests. The PRD's non-goals, which conflict with Sjel ("not a
   product", "tailnet only") and need a new ruling rather than a copy.
+
+**Filed 2026-10-08 from the vault's former `Projects/Axon/`.** The folder merged into
+`Projects/Sjel/` that day. These four items were open there and are owned nowhere in this repo.
+The vault copies now point here.
+
+- **Bulk import of saved Instagram posts.** `comms` extracts one Instagram URL at a time
+  (`capabilities/comms/README.md`, the per-source extractor table). Nothing imports a saved
+  collection. The constraint the principal set (2026-08-12): the import must not break
+  Instagram's terms of use, so that the account is not banned. Existing open-source importers are
+  not surveyed yet.
+- **The feed, installable by someone else.** A colleague fetches favourite podcasts daily and
+  summarizes them with a local Whisper model, and said many people would want Sjel's feed if it
+  were easy to set up (principal, 2026-08-12). The README quick start installs the whole system,
+  and nothing installs the feed alone. Not measured: what a feed-only install would need.
+- **`OPERATIONAL_RULES.md`, sorted.** From the 2026-08-22 skills audit (claim C7): sort the old
+  LifeOS operational rules down to what is worth keeping, put them in the private overlay, and make
+  them deployable to the user-level `CLAUDE.md`. The source is only in the overlay's LifeOS backup
+  today. Falsifier carried over: a port that carries LifeOS-specific rules across, or edits made
+  only in the live `~/.claude` tree.
+- **A prior-art skill that searches.** Same audit, claim C8: rethink the prior-art and build-ladder
+  skills from the start rather than wrap them. Falsifier carried over: a skill that restates the
+  ladder without a way to actually search.
 
 **Filed 2026-10-01 from the Sjel project roast.** Seven items the roast raised that nothing in this
 repo owned. Each states what exists in that slot today, read from the tree on that date; none is a

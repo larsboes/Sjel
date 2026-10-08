@@ -84,21 +84,23 @@ run, choose the target, and set the timing.
 
 ## Features
 
-Each is a claim, and names the probe that would falsify it.
+Each claim names the probe that would falsify it. Claim ids are BKP-1 to BKP-7, numbered 2026-10-08.
 
 ### F0 · The declared schedule keeps running while the surface is built
 
-**Claim.** Automatic backups continue on the declared 24h interval until the panel can own the
-timing, and the handover leaves no gap in coverage.
+- [x] BKP-1 — Automatic backups continue on the declared 24h interval until the panel can own the
+  timing, and the handover leaves no gap in coverage.
+  Evidence: probe record 2026-09-29 (F4/F0), and on 2026-10-08 `tools/doctor` reports every backup receipt under a day old.
 
 > *Probe:* `tools/doctor`'s Scheduled producers reports `backup` with a recent production and
 > `launchctl list` holds the unit, through every commit of steps 2 and 3. Falsified by a commit that
 > leaves the manifest without a valid `schedule` or `port`, or by a machine where the unit is
 > installed but no run follows.
 
-**Claim.** The handover is one structural change, not a change to the operator's interval. The
-manifest keeps a declared `schedule` until the process has a `port`; after that the interval is
-stored policy (F4) and the manifest declares neither.
+- [x] BKP-2 — The handover is one structural change, not a change to the operator's interval. The
+  manifest keeps a declared `schedule` until the process has a `port`; after that the interval is
+  stored policy (F4) and the manifest declares neither.
+  Met in another shape: the backup capability has no manifest at all. It is a library that `sjel-status` hosts (`capabilities/sjel-status/Cargo.toml`, the `backup` dependency), and the interval is stored policy (probe record 2026-09-29, F4).
 
 > *Probe:* at the end of step 4, the manifest declares `port` and no `schedule`, and changing the
 > interval in the panel changes a row, not a file. Falsified by an interval that still requires a
@@ -106,24 +108,27 @@ stored policy (F4) and the manifest declares neither.
 
 ### F1 · Run records
 
-**Claim.** Every triggered run has a row carrying its capability, target, start, exit status and the
-archive's recorded digest, including runs that fail.
+- [x] BKP-3 — Every triggered run has a row carrying its capability, target, start, exit status and the
+  archive's recorded digest, including runs that fail.
+  Evidence: probe record 2026-09-29, F1.
 
 > *Probe:* trigger a run against a deliberately failing target; assert the row exists and names the
 > failure. Falsified by a failure that leaves no record — the hole this ISA opens with.
 
 ### F2 · Target registry
 
-**Claim.** Targets are declared data with a kind, and a target that is not present is refused before
-a run starts rather than discovered part-way through.
+- [x] BKP-4 — Targets are declared data with a kind, and a target that is not present is refused before
+  a run starts rather than discovered part-way through.
+  Evidence: probe record 2026-09-29, F2.
 
 > *Probe:* declare a target on a volume that is not attached; assert the surface refuses by name and
 > no partial archive is written. Falsified by a run that fails after writing bytes.
 
 ### F3 · Per-kind verification
 
-**Claim.** Each target kind counts as verified only when its own check passes, and an unverified
-target is never presented as verified.
+- [ ] BKP-5 — Each target kind counts as verified only when its own check passes, and an unverified
+  target is never presented as verified.
+  Open: only the local kind is rehearsed (probe record 2026-09-29, F3). An ssh target answers `unchecked`, and no iCloud rehearsal is recorded.
 
 | Target kind | Verified only when |
 |---|---|
@@ -136,16 +141,19 @@ target is never presented as verified.
 
 ### F4 · Timing policy
 
-**Claim.** The interval is stored policy, settable from the panel (`off`, the declared 24h, or
-another interval), and changing it is not a source change.
+- [ ] BKP-6 — The interval is stored policy, settable from the panel (`off`, the declared 24h, or
+  another interval), and changing it is not a source change.
+  Half met: the interval round-trips through the API (probe record 2026-09-29, F4). Open: the
+  dashboard has no interval control yet, and the claim names the panel.
 
 > *Probe:* set `24h`, assert a run occurs inside the interval; set `off`, assert none occurs; assert
 > no manifest changed. Falsified by a timing that only a manifest edit can express.
 
 ### F5 · Media live probes *(blocked on F3)*
 
-**Claim.** The `media` capability's live F0 index, F1 ingest and F2 mirror verification run only
-after the active target has a rehearsal row.
+- [ ] BKP-7 — The `media` capability's live F0 index, F1 ingest and F2 mirror verification run only
+  after the active target has a rehearsal row.
+  Open: blocked on BKP-5 (F3).
 
 > *Probe:* the rehearsal row exists; then index both volumes by recorded UUID, audit by sample,
 > ingest a staging batch, and verify the mirror. Falsified by a migration into the shared store with

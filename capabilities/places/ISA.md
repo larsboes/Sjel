@@ -1,8 +1,8 @@
 ---
-project: axon-places
+project: places
 type: isa
-phase: climbing
-progress: 80
+phase: complete
+progress: 100
 principal_stated_goal: "One map with layers: where I bought, where I travelled, where people I know are — photos later."
 ---
 

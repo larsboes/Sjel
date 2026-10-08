@@ -1,8 +1,8 @@
 ---
-project: axon-traveler
+project: traveler
 type: isa
-phase: climbing
-progress: 90
+phase: complete
+progress: 100
 principal_stated_goal: "Upgrade the Sjel travel systems into a real hyper-personalised travel planning system, usable both by me directly and with an agent."
 ---
 

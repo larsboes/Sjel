@@ -9,8 +9,10 @@ principal_stated_goal: "pi agent inspiration rust implementation of slim core an
 # ISA · agent
 
 Lib-scoped state of record for `libs/agent` (crate `sjel-agent`) and the extensions built on it.
-Repo-wide items stay in the root `ISA.md`. The idea, the why and the scope are in the private
-vault, `Projects/Sjel/Agent/PRD sjel-agent.md`. This file holds the testable claims.
+Repo-wide items stay in the root `ISA.md`. The why, the scope and the testable claims are all in
+this file. The vault PRD (`Projects/Sjel/Agent/PRD sjel-agent.md`) merged in on 2026-10-09: its
+decisions were already D1–D8 below, and its remaining content is in Problem, "The Rust specialist"
+and Not yet specified.
 
 ## Problem
 
@@ -24,6 +26,13 @@ Two things follow. All of it loads in every session, whether the session needs i
 pi's extension model is TypeScript in-process with 12 integration points (the table in pi's
 `docs/extensions.md`, "Choose an integration point"), which Sjel would have to track release by
 release to keep the vendored packages working (`Packs/harness/README.md`, the Accordion deltas).
+
+The second problem: a model that knows Rust syntax still writes script-like Rust, with excessive
+cloning, `unwrap` abuse, naive locks and unbounded channels. That thesis comes from a model's
+answer clipped into the vault on 2026-09-29, so it is a lead, not evidence ("The Rust specialist"
+below separates what was checked). It matters here because the work is mostly Rust: on 2026-10-03
+the workspace held 43 packages and 214,801 tracked lines of `.rs` (`cargo metadata`,
+`git ls-files '*.rs'`).
 
 `libs/agent` started 2026-10-03 as the minimum that runs: one loop, six tools, sessions, and a
 Ctrl-C that stops one turn. This file plans what comes next without letting the core grow.
@@ -44,6 +53,35 @@ choose different extensions.
   are pi features this plan does not copy. pi stays installed and in use beside sjel-agent.
 - **A second wire format.** OpenAI chat completions only, decided 2026-10-03 (Decisions). Every
   backend in the overlay's `config/inference.json` speaks it.
+
+## The Rust specialist
+
+The clipping names five disciplines. Each row puts one against what Sjel already has, measured on
+this machine on 2026-10-03.
+
+| Discipline | Already in Sjel | What the agent adds |
+|---|---|---|
+| Sound unsafe, Miri | The workspace denies `unsafe` (`Cargo.toml`). No nightly toolchain, no `cargo miri` | Little to check in Sjel's own code |
+| Data-oriented, cache-aware | `effective-rust` skill, `references/data-oriented-and-cache.md` | The skill, loaded on demand (F3) |
+| Async, backpressure, atomics | `effective-rust`, `references/async-and-concurrency.md`. `loom` absent | The skill (F3) |
+| Type-state, error hierarchies | `effective-rust`, `references/type-state-and-modeling.md`, `error-architecture.md` | The skill (F3) |
+| Verification, adversarial tests | `clippy` and `cargo-deny` installed. `cargo-fuzz`, `cargo-asm`, `cargo-nextest` absent | Compiler and clippy findings as one line each, fed back into the loop (F6) |
+
+The measurement moved the weight to the last row. The clipping leads with unsafe code and Miri,
+but the workspace denies `unsafe`, so the value for this repository is a model that sees each
+clippy finding as one structured line and fixes it before it answers. That is why F6 is in wave 1
+and Miri, loom and fuzzing are not.
+
+Not checked: the clipping names four skill repositories, and all four exist (GitHub API,
+2026-10-03): leonardomso/rust-skills (MIT), mohitmishra786/low-level-dev-skills (MIT),
+ytakano/rust_skills (no licence) and full-stack-skills/rust-skills (Apache-2.0). Their contents and
+the claim that they derive from Polars and Tokio idioms are unverified. Nothing is adopted from
+them. A reading goes through `upstreams.toml` first, and ytakano/rust_skills can only be read,
+never copied. The durable sources behind the disciplines: the
+[Rustonomicon](https://doc.rust-lang.org/nomicon/), the
+[Rust Performance Book](https://nnethercote.github.io/perf-book/),
+[Rust Atomics and Locks](https://marabos.nl/atomics/), [Effective Rust](https://effective-rust.com/)
+and the [Rust API Guidelines](https://rust-lang.github.io/api-guidelines/).
 
 ## Principles
 
@@ -342,6 +380,12 @@ nobody can read as diagnostics.
   20,943 lines today), web access (pi-web-access, 30,925 lines), a full-screen TUI, line editing,
   and `capabilities/assistant` adopting the loop with read-only Sjel tools and no `bash`.
 
+- **Measure the specialist claim.** A fixed set of Rust tasks in this workspace runs twice on the
+  same model, with and without the `skills` and `cargo` extensions. The measure is the share of
+  results that pass `cargo clippy --all-targets` with no new warnings. The task set does not exist
+  yet, and it gets written before either run. Moved from the vault PRD's success criteria,
+  2026-10-09.
+
 ## Test Strategy
 
 | isc | type | check | threshold | tool | anchors_to |
@@ -428,6 +472,9 @@ nobody can read as diagnostics.
 - **2026-10-03 — this plan lives here, not in the Axon PRD.** `PRD Axon.md` in the vault was frozen
   2026-09-26: "Open work lives in the repo's `ISA.md` files. Nothing new is recorded here." The idea got
   its own vault PRD the same day (header), because an ISA records claims, not why they exist.
+- **2026-10-09 — the vault PRD merged into this file** (principal's call: what the repo holds is
+  not kept in the vault as well). The why now sits in Problem and "The Rust specialist". This
+  supersedes the entry above.
 
 ## Log
 

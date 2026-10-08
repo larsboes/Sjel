@@ -4,6 +4,7 @@
   import { checkFareAlerts } from "$lib/travel/fare-alerts";
   import { base } from "$app/paths";
   import { page } from "$app/state";
+  import { replaceState } from "$app/navigation";
   import "../app.css";
   import Icon from "$lib/Icon.svelte";
   import { capabilities } from "$lib/capabilities.svelte";
@@ -88,6 +89,16 @@
       if (document.visibilityState === "visible") void checkFareAlerts();
     };
     document.addEventListener("visibilitychange", onVisible);
+    // The menu bar's Quick Ask opens `/?ask=…` (apps/mac): the question lands in the drawer
+    // as if typed. The parameter is dropped at once, so a reload does not ask again.
+    const ask = page.url.searchParams.get("ask");
+    if (ask) {
+      const clean = new URL(page.url);
+      clean.searchParams.delete("ask");
+      replaceState(clean, page.state);
+      assistantStore.openDrawer();
+      void assistantStore.send(ask, clean.pathname);
+    }
     return () => {
       clearInterval(clock);
       stop();

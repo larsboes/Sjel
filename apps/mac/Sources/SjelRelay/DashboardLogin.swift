@@ -93,8 +93,10 @@ public struct DashboardLogin: Sendable {
         return url
     }
 
-    /// Asks the shell for a ticket and returns the URL that logs the browser in.
-    public func loginURL(session: URLSession = .shared) async throws(Failure) -> URL {
+    /// Asks the shell for a ticket and returns the URL that logs the browser in. `next` is
+    /// the dashboard path to land on; the shell accepts only a path on its own origin
+    /// (`landing` in `capabilities/sjel-status/src/session.rs`).
+    public func loginURL(next: String? = nil, session: URLSession = .shared) async throws(Failure) -> URL {
         guard let request = ticketRequest() else { throw .notSetUp }
         let data: Data
         let response: URLResponse
@@ -107,7 +109,13 @@ public struct DashboardLogin: Sendable {
         guard status == 200, let url = openURL(fromTicketResponse: data) else {
             throw .refused(status)
         }
-        return url
+        return Self.landing(url, next: next)
+    }
+
+    static func landing(_ url: URL, next: String?) -> URL {
+        guard let next, var parts = URLComponents(url: url, resolvingAgainstBaseURL: false) else { return url }
+        parts.queryItems = (parts.queryItems ?? []) + [URLQueryItem(name: "next", value: next)]
+        return parts.url ?? url
     }
 }
 

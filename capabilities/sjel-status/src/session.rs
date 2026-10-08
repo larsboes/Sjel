@@ -23,10 +23,10 @@ use std::collections::HashMap;
 use std::sync::{Arc, Mutex, OnceLock};
 use std::time::{Duration, Instant};
 
-use axum::extract::Query;
-use axum::http::{header, HeaderMap, StatusCode};
-use axum::response::{IntoResponse, Response};
 use axum::Json;
+use axum::extract::Query;
+use axum::http::{HeaderMap, StatusCode, header};
+use axum::response::{IntoResponse, Response};
 use serde::Deserialize;
 use serde_json::json;
 use sha2::{Digest, Sha256};
@@ -134,6 +134,25 @@ pub async fn ticket_handler() -> Response {
 #[derive(Debug, Deserialize)]
 pub struct OpenQuery {
     ticket: Option<String>,
+    /// Where to land after login, so the menu bar can open a page and not only Home.
+    next: Option<String>,
+}
+
+/// `next` as a redirect target, or `/`. Only a path on this origin: a leading `//` or a
+/// backslash would let a browser read it as another host, and a control character cannot go
+/// in a header, so any of them falls back to `/`.
+fn landing(next: Option<&str>) -> String {
+    match next {
+        Some(path)
+            if path.starts_with('/')
+                && !path.starts_with("//")
+                && !path.contains('\\')
+                && !path.chars().any(char::is_control) =>
+        {
+            path.to_string()
+        }
+        _ => "/".to_string(),
+    }
 }
 
 const EXPIRED_PAGE: &str = "<!doctype html><meta charset=utf-8><title>Sjel</title>\
@@ -155,7 +174,7 @@ pub async fn open_handler(Query(query): Query<OpenQuery>) -> Response {
         Ok(Some(session)) => (
             StatusCode::SEE_OTHER,
             [
-                (header::LOCATION, "/".to_string()),
+                (header::LOCATION, landing(query.next.as_deref())),
                 (
                     header::SET_COOKIE,
                     sjel_server::session_cookie_header(&session, sjel_server::SESSION_TTL_SECONDS),
@@ -221,6 +240,17 @@ mod tests {
 
     fn signer() -> SignedSessions {
         SignedSessions::new(b"deployment-token".to_vec())
+    }
+
+    #[test]
+    fn the_landing_stays_on_this_origin() {
+        assert_eq!(landing(Some("/?ask=next%20train")), "/?ask=next%20train");
+        assert_eq!(landing(Some("/finance")), "/finance");
+        assert_eq!(landing(Some("//evil.example")), "/");
+        assert_eq!(landing(Some("/\\evil.example")), "/");
+        assert_eq!(landing(Some("https://evil.example")), "/");
+        assert_eq!(landing(Some("/x\r\nSet-Cookie: a=b")), "/");
+        assert_eq!(landing(None), "/");
     }
 
     #[test]

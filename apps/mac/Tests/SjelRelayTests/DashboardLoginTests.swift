@@ -34,3 +34,13 @@ import Testing
         }
     }
 }
+
+@Suite struct LandingTests {
+    @Test func theAskTravelsAsOneEncodedNextParameter() throws {
+        let base = try #require(URL(string: "http://127.0.0.1:8082/session/open?ticket=abc"))
+        let url = DashboardLogin.landing(base, next: "/?ask=next train & co")
+        let items = URLComponents(url: url, resolvingAgainstBaseURL: false)?.queryItems ?? []
+        #expect(items.first { $0.name == "ticket" }?.value == "abc")
+        #expect(items.first { $0.name == "next" }?.value == "/?ask=next train & co")
+    }
+}

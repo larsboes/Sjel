@@ -40,6 +40,7 @@ final class SjelMacViewModel: ObservableObject {
     private let login = DashboardLogin()
     private let notifications = ApprovalNotifications()
     private var announced: Set<String> = []
+    private var quickAsk: QuickAsk?
 
     /// The menu bar icon is the only part seen without a click, so it carries the state:
     /// something needs you (an agent waits, or a capability is down), Sjel is not running,
@@ -54,6 +55,7 @@ final class SjelMacViewModel: ObservableObject {
     }
 
     init() {
+        quickAsk = QuickAsk { [weak self] question in self?.ask(question) }
         notifications.onDecision = { [weak self] id, allow in
             Task { @MainActor in await self?.decide(id: id, allow: allow) }
         }
@@ -112,10 +114,21 @@ final class SjelMacViewModel: ObservableObject {
 
     /// Opens the dashboard logged in: a single-use ticket from the shell, then the browser
     /// (ISA ISC-45). The shell's listener refuses a browser with no session.
-    func openDashboard() {
+    func showAsk() { quickAsk?.show() }
+
+    /// The question goes to the dashboard's Ask drawer. Encoded here with the strict set, so
+    /// an `&` or `#` in the question stays part of it.
+    func ask(_ question: String) {
+        var allowed = CharacterSet.alphanumerics
+        allowed.insert(charactersIn: "-._~")
+        let encoded = question.addingPercentEncoding(withAllowedCharacters: allowed) ?? ""
+        openDashboard(next: "/?ask=\(encoded)")
+    }
+
+    func openDashboard(next: String? = nil) {
         Task {
             do throws(DashboardLogin.Failure) {
-                let url = try await login.loginURL()
+                let url = try await login.loginURL(next: next)
                 openProblem = nil
                 NSWorkspace.shared.open(url)
             } catch {
@@ -227,14 +240,19 @@ struct SjelMenuBarView: View {
                     .foregroundStyle(.orange)
             }
 
-            Button {
-                model.openDashboard()
-            } label: {
-                Text("Open Dashboard").frame(maxWidth: .infinity)
+            HStack {
+                Button {
+                    model.openDashboard()
+                } label: {
+                    Text("Open Dashboard").frame(maxWidth: .infinity)
+                }
+                .buttonStyle(.borderedProminent)
+                .keyboardShortcut("d", modifiers: .command)
+                .help("Open the dashboard in the browser, logged in (⌘D)")
+
+                Button("Ask") { model.showAsk() }
+                    .help("Ask Sjel from any app with ⌃⌥Space")
             }
-            .buttonStyle(.borderedProminent)
-            .keyboardShortcut("d", modifiers: .command)
-            .help("Open the dashboard in the browser, logged in (⌘D)")
         }
         .padding(14)
         .frame(width: 280)

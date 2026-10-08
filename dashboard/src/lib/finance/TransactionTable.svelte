@@ -2,6 +2,9 @@
   import type { FinanceTransaction } from "$lib/api";
   import { inspectorStore } from "$lib/inspector/inspector.svelte";
   import { transactionItem } from "$lib/inspector/connections";
+  import DataTable, { type Column } from "$lib/ui/DataTable.svelte";
+  import Chip from "$lib/ui/Chip.svelte";
+  import { tip } from "$lib/tip";
 
   let { rows }: { rows: FinanceTransaction[] } = $props();
 
@@ -9,6 +12,9 @@
     new Intl.NumberFormat("de-DE", { style: "currency", currency }).format(cents / 100);
 
   const short = (account: string) => account.split(":").slice(1).join(" · ") || account;
+
+  const signed = (row: FinanceTransaction) =>
+    `${row.kind === "expense" ? "−" : row.kind === "income" ? "+" : ""}${money(row.amount_cents, row.currency)}`;
 
   // Through `transactionItem`, so the inspector gets the linkable `fin:tx:` id and every
   // capability that references this transaction can answer for it (libs/links/ISA.md D3).
@@ -18,162 +24,79 @@
       notes: row.purpose ? `Purpose: ${row.purpose.replaceAll("_", " ")}` : undefined,
     });
   }
+
+  const columns: Column<FinanceTransaction>[] = [
+    { id: "date", label: "Date", width: "6rem", cell: dateCell },
+    { id: "description", label: "Description", cell: descriptionCell },
+    { id: "account", label: "Account", width: "9rem", cell: accountCell },
+    { id: "category", label: "Category", width: "9rem", cell: categoryCell },
+    { id: "purpose", label: "Purpose", width: "8rem", cell: purposeCell },
+    { id: "amount", label: "Your amount", width: "7.5rem", align: "end", cell: amountCell },
+  ];
 </script>
 
-<div class="table-wrap">
-  <table>
-    <thead>
-      <tr>
-        <th scope="col">Date</th>
-        <th scope="col">Description</th>
-        <th scope="col">Account</th>
-        <th scope="col">Category</th>
-        <th scope="col">Purpose</th>
-        <th class="num" scope="col">Your amount</th>
-      </tr>
-    </thead>
-    <tbody>
-      {#each rows as row (row.id)}
-        <tr
-          class="interactive-row"
-          tabindex="0"
-          role="button"
-          aria-label={`Transaction: ${row.description}, ${money(row.amount_cents, row.currency)}`}
-          onclick={() => {
-            inspect(row);
-          }}
-          onkeydown={(e) => {
-            if (e.key === "Enter" || e.key === " ") {
-              e.preventDefault();
-              inspect(row);
-            }
-          }}
-        >
-          <td class="mono">{row.date}</td>
-          <td class="desc-cell">
-            <span class="desc-text">{row.description}</span>
-          </td>
-          <td><span class="account-tag">{short(row.account)}</span></td>
-          <td><span class="category-pill">{short(row.category)}</span></td>
-          <td class="context">
-            {row.purpose?.replaceAll("_", " ") ?? "—"}
-            {#if row.shared_cents > 0}
-              <span class="shared-sub">· {money(row.cash_amount_cents, row.currency)} paid</span>
-            {/if}
-          </td>
-          <td class="num {row.kind}">
-            {row.kind === "expense" ? "−" : row.kind === "income" ? "+" : ""}{money(row.amount_cents, row.currency)}
-          </td>
-        </tr>
-      {/each}
-      {#if rows.length === 0}
-        <tr><td colspan="6" class="muted">No matching transactions.</td></tr>
-      {/if}
-    </tbody>
-  </table>
+{#snippet dateCell(row: FinanceTransaction)}<span class="mono">{row.date}</span>{/snippet}
+{#snippet descriptionCell(row: FinanceTransaction)}
+  <span class="desc" use:tip={row.description}>{row.description}</span>
+{/snippet}
+{#snippet accountCell(row: FinanceTransaction)}<span class="soft">{short(row.account)}</span>{/snippet}
+{#snippet categoryCell(row: FinanceTransaction)}<Chip label={short(row.category)} />{/snippet}
+{#snippet purposeCell(row: FinanceTransaction)}
+  {#if row.shared_cents > 0}
+    <span class="soft purpose" use:tip={`Shared. You paid ${money(row.cash_amount_cents, row.currency)}.`}>
+      {row.purpose ? `${row.purpose.replaceAll("_", " ")} · shared` : "Shared"}
+    </span>
+  {:else}
+    <span class="soft purpose">{row.purpose?.replaceAll("_", " ") ?? ""}</span>
+  {/if}
+{/snippet}
+{#snippet amountCell(row: FinanceTransaction)}<span class={row.kind}>{signed(row)}</span>{/snippet}
+
+<div class="card">
+  <!-- A transfer moves money between your own accounts, so it is dimmed, not hidden. -->
+  <DataTable
+    {rows}
+    {columns}
+    key={(r) => r.id}
+    onOpen={inspect}
+    inactive={(r) => r.kind === "transfer"}
+    empty="No matching transactions."
+  />
 </div>
 
 <style>
-  .table-wrap {
-    overflow-x: auto;
-    margin-top: 0.65rem;
+  .card {
+    margin-top: var(--space-2);
+    padding: var(--space-1) var(--space-2);
     border-radius: var(--radius-lg);
     background: var(--card-bg);
     border: 1px solid var(--card-border);
   }
 
-  table {
-    width: 100%;
-    border-collapse: collapse;
-    font-size: var(--text-xs);
-  }
-
-  th,
-  td {
-    text-align: left;
-    padding: 0.55rem 0.65rem;
-    border-bottom: 1px solid var(--card-border);
-    white-space: nowrap;
-  }
-
-  th {
-    color: var(--text-tertiary);
-    font-size: var(--text-2xs);
-    font-weight: 600;
-    text-transform: uppercase;
-    letter-spacing: 0.05em;
-    background: var(--surface);
-  }
-
-  .interactive-row {
-    cursor: pointer;
-    transition: background-color var(--motion-fast) var(--ease-out);
-  }
-
-  .interactive-row:hover {
-    background: var(--surface);
-  }
-
-  .interactive-row:focus-visible {
-    outline: 2px solid var(--primary);
-    outline-offset: -2px;
-  }
-
   .mono {
     font-family: var(--font-mono);
-    font-size: var(--text-2xs);
+    font-variant-numeric: tabular-nums;
     color: var(--text-secondary);
   }
 
-  .desc-cell {
-    white-space: normal;
-    min-width: 11rem;
-  }
-
-  .desc-text {
+  .desc {
     font-weight: 500;
-    color: var(--text-primary);
   }
 
-  .account-tag {
+  .soft {
     color: var(--text-tertiary);
-    font-size: var(--text-2xs);
   }
 
-  .category-pill {
-    display: inline-flex;
-    align-items: center;
-    padding: 0.1rem 0.45rem;
-    border-radius: var(--radius-full);
-    background: var(--surface);
-    color: var(--text-secondary);
-    font-size: var(--text-2xs);
-    font-weight: 500;
-    border: 1px solid var(--card-border);
-  }
-
-  td.context {
-    color: var(--text-tertiary);
+  .purpose {
     text-transform: capitalize;
   }
 
-  .shared-sub {
-    font-size: var(--text-2xs);
-    color: var(--text-tertiary);
-  }
-
-  .num {
-    text-align: right;
-    font-variant-numeric: tabular-nums;
+  .expense {
     font-weight: 600;
   }
 
-  td.income {
+  .income {
+    font-weight: 600;
     color: var(--primary);
-  }
-
-  td.transfer,
-  .muted {
-    color: var(--text-tertiary);
   }
 </style>

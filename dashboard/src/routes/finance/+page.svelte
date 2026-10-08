@@ -6,6 +6,9 @@
   import FinanceDashboard from "$lib/finance/FinanceDashboard.svelte";
   import InvestmentsPanel from "$lib/finance/InvestmentsPanel.svelte";
   import DecisionsInbox from "$lib/finance/DecisionsInbox.svelte";
+  import DataTable, { type Column } from "$lib/ui/DataTable.svelte";
+  import Chip, { type Tone } from "$lib/ui/Chip.svelte";
+  import SidePeek from "$lib/ui/SidePeek.svelte";
   import * as invest from "$lib/finance/invest-api";
   import {
     axonStatus,
@@ -308,6 +311,25 @@
   // Which row is expanded. One at a time: two open editors invite editing the wrong
   // subscription, and the rows are one line each so there is nothing to compare.
   let open = $state<string | null>(null);
+  const openRow = $derived(rows.find((r) => r.sub.id === open) ?? null);
+
+  // success = settled, warning = needs a decision, muted = not costing anything (Chip.svelte).
+  const STATE_TONE: Record<SubscriptionState, Tone> = {
+    active: "success",
+    trial: "accent",
+    covered: "neutral",
+    considering: "warning",
+    paused: "muted",
+    cancelled: "muted",
+  };
+
+  const subColumns: Column<Row>[] = [
+    { id: "name", label: "Subscription", cell: subNameCell },
+    { id: "state", label: "State", width: "7rem", cell: subStateCell },
+    { id: "monthly", label: "Monthly", width: "7rem", align: "end", cell: subMonthlyCell },
+    { id: "value", label: "Value", width: "4rem", align: "end", cell: subValueCell },
+    { id: "category", label: "Category", width: "8rem", cell: subCategoryCell },
+  ];
 
   // Draft state for the two forms. Reset whenever a different row opens, so a date
   // typed for one subscription cannot be submitted against another.
@@ -439,6 +461,14 @@
     return `${i.created} imported, ${i.already_present} already known.`;
   }
 </script>
+
+{#snippet subNameCell(row: Row)}
+  {row.sub.name}{#if row.price?.plan} <Chip label={row.price.plan} tone="muted" />{/if}
+{/snippet}
+{#snippet subStateCell(row: Row)}<Chip label={row.state} tone={STATE_TONE[row.state]} />{/snippet}
+{#snippet subMonthlyCell(row: Row)}{row.monthlyCents > 0 ? money(row.monthlyCents, row.currency) : ""}{/snippet}
+{#snippet subValueCell(row: Row)}{row.sub.value_rating ?? ""}{/snippet}
+{#snippet subCategoryCell(row: Row)}<span class="muted">{row.sub.category ?? ""}</span>{/snippet}
 
 <PageHeader
   badge="Finance"
@@ -574,123 +604,101 @@
     {/each}
   </div>
 
-  <div class="subscription-table">
-  <table>
-    <thead>
-      <tr>
-        <th scope="col">Subscription</th>
-        <th scope="col">State</th>
-        <th class="num" scope="col">Monthly</th>
-        <th class="num" scope="col">Value</th>
-        <th scope="col">Category</th>
-      </tr>
-    </thead>
-    <tbody>
-      {#each visibleRows as row (row.sub.id)}
-        <tr class:dim={row.monthlyCents === 0} class:open={open === row.sub.id}>
-          <td>
-            <button class="name" onclick={() => toggle(row)} aria-expanded={open === row.sub.id}>
-              {row.sub.name}
-              {#if row.price?.plan}<span class="plan">{row.price.plan}</span>{/if}
-            </button>
-          </td>
-          <td><span class="state {row.state}">{row.state}</span></td>
-          <td class="num">{row.monthlyCents > 0 ? money(row.monthlyCents, row.currency) : "—"}</td>
-          <td class="num">{row.sub.value_rating ?? "—"}</td>
-          <td class="muted">{row.sub.category ?? "—"}</td>
-        </tr>
-
-        {#if open === row.sub.id}
-          <tr class="editor">
-            <td colspan="5">
-              <div class="panes">
-                <form class="pane" onsubmit={(e) => { e.preventDefault(); void submitPrice(row); }}>
-                  <h3>Change price or plan</h3>
-                  <div class="fields">
-                    <label>From<input type="date" bind:value={priceDraft.valid_from} /></label>
-                    <label>Amount<input
-                      type="text"
-                      inputmode="decimal"
-                      placeholder="100"
-                      bind:value={priceDraft.amount}
-                    /></label>
-                    <label>Cycle<select bind:value={priceDraft.cycle}>
-                      <option value="weekly">weekly</option>
-                      <option value="monthly">monthly</option>
-                      <option value="quarterly">quarterly</option>
-                      <option value="yearly">yearly</option>
-                      <option value="one_off">one-off</option>
-                    </select></label>
-                    <label>Plan<input
-                      type="text"
-                      list="plans-{row.sub.id}"
-                      placeholder="Max"
-                      bind:value={priceDraft.plan}
-                    /></label>
-                  </div>
-                  <datalist id="plans-{row.sub.id}">
-                    {#each knownPlans(row.sub) as plan (plan)}<option value={plan}></option>{/each}
-                  </datalist>
-                  <label class="wide">Why<input
-                    type="text"
-                    required
-                    placeholder="upgrade to Max, income scales"
-                    bind:value={priceDraft.reason}
-                  /></label>
-                  <button type="submit" disabled={busy || !priceReady}>Append price point</button>
-                </form>
-
-                <form class="pane" onsubmit={(e) => { e.preventDefault(); void submitState(row); }}>
-                  <h3>Change state</h3>
-                  <div class="fields">
-                    <label>From<input type="date" bind:value={stateDraft.effective} /></label>
-                    <label>State<select bind:value={stateDraft.state}>
-                      <option value="active">active</option>
-                      <option value="covered">covered externally</option>
-                      <option value="paused">paused</option>
-                      <option value="trial">trial</option>
-                      <option value="considering">considering</option>
-                      <option value="cancelled">cancelled</option>
-                    </select></label>
-                  </div>
-                  <label class="wide">Note<input
-                    type="text"
-                    placeholder="reassess after the raise lands"
-                    bind:value={stateDraft.note}
-                  /></label>
-                  <button type="submit" disabled={busy || !stateReady}>Append state change</button>
-                </form>
-
-                <div class="pane history">
-                  <h3>History</h3>
-                  <ul>
-                    {#each row.sub.prices as p (p.valid_from + p.reason)}
-                      <li>
-                        <code>{p.valid_from}</code>
-                        {money(p.amount_cents, p.currency)}{#if p.plan}, {p.plan}{/if}
-                        {#if p.reason}<span class="muted">— {p.reason}</span>{/if}
-                      </li>
-                    {/each}
-                    {#each row.sub.states as st (st.effective + st.state)}
-                      <li>
-                        <code>{st.effective}</code> {st.state}
-                        {#if st.note}<span class="muted">— {st.note}</span>{/if}
-                      </li>
-                    {/each}
-                  </ul>
-                  <p class="muted small">Appended, never edited. Nothing above is overwritten.</p>
-                </div>
-              </div>
-            </td>
-          </tr>
-        {/if}
-      {/each}
-      {#if rows.length === 0}
-        <tr><td colspan="5" class="muted">Nothing imported yet. Import vault reads the notes.</td></tr>
-      {/if}
-    </tbody>
-  </table>
+  <div class="sub-card">
+    <DataTable
+      rows={visibleRows}
+      columns={subColumns}
+      key={(r) => r.sub.id}
+      onOpen={toggle}
+      selected={open}
+      inactive={(r) => r.monthlyCents === 0}
+      empty={rows.length === 0 ? "Nothing imported yet. Import vault reads the notes." : "No subscriptions in this pillar."}
+    />
   </div>
+
+  {#if openRow}
+    {@const row = openRow}
+    <SidePeek title={row.sub.name} eyebrow={row.price?.plan ? `Subscription · ${row.price.plan}` : "Subscription"} onClose={() => (open = null)}>
+    <div class="panes">
+        <form class="pane" onsubmit={(e) => { e.preventDefault(); void submitPrice(row); }}>
+          <h3>Change price or plan</h3>
+          <div class="fields">
+            <label>From<input type="date" bind:value={priceDraft.valid_from} /></label>
+            <label>Amount<input
+              type="text"
+              inputmode="decimal"
+              placeholder="100"
+              bind:value={priceDraft.amount}
+            /></label>
+            <label>Cycle<select bind:value={priceDraft.cycle}>
+              <option value="weekly">weekly</option>
+              <option value="monthly">monthly</option>
+              <option value="quarterly">quarterly</option>
+              <option value="yearly">yearly</option>
+              <option value="one_off">one-off</option>
+            </select></label>
+            <label>Plan<input
+              type="text"
+              list="plans-{row.sub.id}"
+              placeholder="Max"
+              bind:value={priceDraft.plan}
+            /></label>
+          </div>
+          <datalist id="plans-{row.sub.id}">
+            {#each knownPlans(row.sub) as plan (plan)}<option value={plan}></option>{/each}
+          </datalist>
+          <label class="wide">Why<input
+            type="text"
+            required
+            placeholder="upgrade to Max, income scales"
+            bind:value={priceDraft.reason}
+          /></label>
+          <button type="submit" disabled={busy || !priceReady}>Append price point</button>
+        </form>
+
+        <form class="pane" onsubmit={(e) => { e.preventDefault(); void submitState(row); }}>
+          <h3>Change state</h3>
+          <div class="fields">
+            <label>From<input type="date" bind:value={stateDraft.effective} /></label>
+            <label>State<select bind:value={stateDraft.state}>
+              <option value="active">active</option>
+              <option value="covered">covered externally</option>
+              <option value="paused">paused</option>
+              <option value="trial">trial</option>
+              <option value="considering">considering</option>
+              <option value="cancelled">cancelled</option>
+            </select></label>
+          </div>
+          <label class="wide">Note<input
+            type="text"
+            placeholder="reassess after the raise lands"
+            bind:value={stateDraft.note}
+          /></label>
+          <button type="submit" disabled={busy || !stateReady}>Append state change</button>
+        </form>
+
+        <div class="pane history">
+          <h3>History</h3>
+          <ul>
+            {#each row.sub.prices as p (p.valid_from + p.reason)}
+              <li>
+                <code>{p.valid_from}</code>
+                {money(p.amount_cents, p.currency)}{#if p.plan}, {p.plan}{/if}
+                {#if p.reason}<span class="muted">— {p.reason}</span>{/if}
+              </li>
+            {/each}
+            {#each row.sub.states as st (st.effective + st.state)}
+              <li>
+                <code>{st.effective}</code> {st.state}
+                {#if st.note}<span class="muted">— {st.note}</span>{/if}
+              </li>
+            {/each}
+          </ul>
+          <p class="muted small">Appended, never edited. Nothing above is overwritten.</p>
+        </div>
+      </div>
+    </SidePeek>
+  {/if}
 {/if}
 
 <style>
@@ -740,7 +748,7 @@
     display: flex;
     gap: 0.2rem;
     margin: -0.25rem 0 1.25rem;
-    border-bottom: 1px solid var(--border, #333);
+    border-bottom: 1px solid var(--card-border);
     max-width: 100%;
     overflow-x: auto;
   }
@@ -750,7 +758,7 @@
     border-bottom: 2px solid transparent;
     padding: 0.55rem 0.75rem;
     background: transparent;
-    color: var(--muted, #888);
+    color: var(--text-tertiary);
     font: inherit;
     font-size: 0.78rem;
     text-transform: capitalize;
@@ -776,14 +784,14 @@
     flex-direction: column;
     gap: 0.25rem;
     font-size: var(--text-xs);
-    color: var(--muted, #888);
+    color: var(--text-tertiary);
   }
 
   .date input {
     font: inherit;
     font-size: 0.875rem;
     padding: 0.35rem 0.5rem;
-    border: 1px solid var(--border, #333);
+    border: 1px solid var(--card-border);
     border-radius: 6px;
     background: transparent;
     color: inherit;
@@ -810,7 +818,7 @@
 
   .unit {
     font-size: var(--text-xs);
-    color: var(--muted, #888);
+    color: var(--text-tertiary);
   }
 
   .count {
@@ -831,7 +839,7 @@
     font: inherit;
     font-size: var(--text-sm);
     padding: 0.4rem 0.7rem;
-    border: 1px solid var(--border, #333);
+    border: 1px solid var(--card-border);
     border-radius: 6px;
     background: transparent;
     color: inherit;
@@ -846,7 +854,7 @@
   .scenario {
     margin-bottom: 1rem;
     padding: 0.85rem;
-    border: 1px solid var(--border, #333);
+    border: 1px solid var(--card-border);
     border-top: 2px solid var(--primary);
   }
 
@@ -865,7 +873,7 @@
 
   .scenario p {
     margin: 0.18rem 0 0;
-    color: var(--muted, #888);
+    color: var(--text-tertiary);
     font-size: 0.68rem;
   }
 
@@ -890,7 +898,7 @@
   .scenario-options {
     display: grid;
     grid-template-columns: repeat(auto-fit, minmax(18rem, 1fr));
-    border-top: 1px solid var(--border, #333);
+    border-top: 1px solid var(--card-border);
   }
 
   .scenario-options label {
@@ -899,7 +907,7 @@
     align-items: center;
     gap: 0.55rem;
     padding: 0.5rem;
-    border-bottom: 1px solid var(--border, #333);
+    border-bottom: 1px solid var(--card-border);
     font-size: 0.7rem;
     cursor: pointer;
   }
@@ -914,7 +922,7 @@
   }
 
   .scenario-options small {
-    color: var(--muted, #888);
+    color: var(--text-tertiary);
     font-size: 0.6rem;
   }
 
@@ -933,13 +941,13 @@
   .scenario-anomalies ul {
     margin: 0;
     padding-left: 1rem;
-    color: var(--muted, #888);
+    color: var(--text-tertiary);
   }
 
   .upcoming {
     margin-bottom: 1.25rem;
     padding: 0.75rem 1rem;
-    border: 1px solid var(--border, #333);
+    border: 1px solid var(--card-border);
     border-radius: 8px;
   }
 
@@ -958,40 +966,11 @@
     font-size: 0.875rem;
   }
 
-  table {
-    width: 100%;
-    border-collapse: collapse;
-    font-size: 0.875rem;
-  }
 
-  .subscription-table {
-    max-width: 100%;
-    overflow-x: auto;
-  }
 
-  th,
-  td {
-    text-align: left;
-    padding: 0.5rem 0.6rem;
-    border-bottom: 1px solid var(--border, #2a2a2a);
-  }
 
-  th {
-    font-size: var(--text-2xs);
-    font-weight: 600;
-    text-transform: uppercase;
-    letter-spacing: 0.05em;
-    color: var(--muted, #888);
-  }
 
-  .num {
-    text-align: right;
-    font-variant-numeric: tabular-nums;
-  }
 
-  tr.dim td {
-    opacity: 0.55;
-  }
 
   .state {
     font-size: var(--text-2xs);
@@ -999,7 +978,7 @@
     letter-spacing: 0.04em;
     padding: 0.1rem 0.4rem;
     border-radius: 4px;
-    border: 1px solid var(--border, #333);
+    border: 1px solid var(--card-border);
   }
 
   .state.active {
@@ -1013,56 +992,30 @@
   }
 
   .muted {
-    color: var(--muted, #888);
+    color: var(--text-tertiary);
   }
 
-  .name {
-    font: inherit;
-    padding: 0;
-    border: 0;
-    background: transparent;
-    color: inherit;
-    cursor: pointer;
-    text-align: left;
-  }
 
-  .name:hover {
-    color: var(--primary);
-  }
 
-  .plan {
-    margin-left: 0.4rem;
-    font-size: var(--text-2xs);
-    letter-spacing: 0.03em;
-    padding: 0.05rem 0.35rem;
-    border-radius: 4px;
-    border: 1px solid var(--border, #333);
-    color: var(--muted, #888);
-  }
 
-  tr.open td {
-    border-bottom: 0;
-  }
 
-  .editor td {
-    padding: 0 0.6rem 1rem;
+
+  .sub-card {
+    padding: var(--space-1) var(--space-2);
+    border-radius: var(--radius-lg);
+    background: var(--card-bg);
+    border: 1px solid var(--card-border);
   }
 
   .panes {
-    display: flex;
-    flex-wrap: wrap;
-    gap: 1.5rem;
-    padding: 0.9rem 1rem;
-    border: 1px solid var(--border, #333);
-    border-radius: 8px;
+    display: grid;
+    gap: var(--space-5);
   }
 
   .pane {
     display: flex;
     flex-direction: column;
     gap: 0.5rem;
-    min-width: 15rem;
-    flex: 1;
   }
 
   .pane h3 {
@@ -1085,7 +1038,7 @@
     flex-direction: column;
     gap: 0.2rem;
     font-size: var(--text-2xs);
-    color: var(--muted, #888);
+    color: var(--text-tertiary);
     flex: 1;
   }
 
@@ -1094,7 +1047,7 @@
     font: inherit;
     font-size: var(--text-sm);
     padding: 0.3rem 0.45rem;
-    border: 1px solid var(--border, #333);
+    border: 1px solid var(--card-border);
     border-radius: 5px;
     background: transparent;
     color: inherit;
@@ -1106,7 +1059,7 @@
     font: inherit;
     font-size: var(--text-sm);
     padding: 0.35rem 0.7rem;
-    border: 1px solid var(--border, #333);
+    border: 1px solid var(--card-border);
     border-radius: 6px;
     background: transparent;
     color: inherit;

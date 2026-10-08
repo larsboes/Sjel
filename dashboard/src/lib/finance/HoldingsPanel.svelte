@@ -1,5 +1,9 @@
 <script lang="ts">
   import type { ReviewedHoldingsSnapshot } from "$lib/api";
+  import DataTable, { type Column } from "$lib/ui/DataTable.svelte";
+  import Chip from "$lib/ui/Chip.svelte";
+
+  type Holding = ReviewedHoldingsSnapshot["holdings"][number];
 
   let { snapshot }: { snapshot: ReviewedHoldingsSnapshot | null } = $props();
 
@@ -25,7 +29,19 @@
     const count = snapshot.sources.filter((source) => source.coverage === "partial").length;
     return snapshot.coverage === "partial" ? Math.max(count, 1) : count;
   }
+
+  const columns: Column<Holding>[] = [
+    { id: "instrument", label: "Instrument", cell: instrumentCell },
+    { id: "quantity", label: "Quantity", width: "8rem", align: "end", cell: quantityCell },
+    { id: "price", label: "Latest activity price", width: "11rem", align: "end", cell: priceCell },
+  ];
 </script>
+
+{#snippet instrumentCell(h: Holding)}{h.instrument}{/snippet}
+{#snippet quantityCell(h: Holding)}{decimal(h.quantity.mantissa, h.quantity.scale)}{/snippet}
+{#snippet priceCell(h: Holding)}
+  {h.latest_unit_price === null ? "" : `${decimal(h.latest_unit_price.mantissa, h.latest_unit_price.scale)} ${h.currency}`}
+{/snippet}
 
 <section class="portfolio">
   <div class="heading">
@@ -47,42 +63,26 @@
       {#if snapshot.sources.length > 0}
         <ul class="sources" aria-label="Reviewed holding sources">
           {#each snapshot.sources as source (source.source_key)}
-            <li class:partial={source.coverage === "partial"}><span>{source.source_key}</span><span class="coverage">{source.coverage}</span><time datetime={source.reviewed_at}>{source.reviewed_at}</time></li>
+            <li><span>{source.source_key}</span><Chip label={source.coverage} tone={source.coverage === "partial" ? "warning" : "muted"} /><time datetime={source.reviewed_at}>{source.reviewed_at}</time></li>
           {/each}
         </ul>
       {/if}
       <div class="table-wrap">
-        <table>
-          <thead><tr><th scope="col">Instrument</th><th scope="col">Quantity</th><th scope="col">Latest activity price</th></tr></thead>
-          <tbody>
-            {#each snapshot.holdings as holding (holding.instrument)}
-              <tr>
-                <td>{holding.instrument}</td>
-                <td>{decimal(holding.quantity.mantissa, holding.quantity.scale)}</td>
-                <td>{holding.latest_unit_price === null ? "—" : `${decimal(holding.latest_unit_price.mantissa, holding.latest_unit_price.scale)} ${holding.currency}`}</td>
-              </tr>
-            {/each}
-          </tbody>
-        </table>
+        <DataTable rows={snapshot.holdings} {columns} key={(h) => h.instrument} />
       </div>
     {/if}
   {/if}
 </section>
 
 <style>
-  .portfolio { margin-top: .75rem; padding: .9rem; border: 1px solid var(--border, #333); border-radius: 8px; background: var(--card-bg, transparent); }
-  .heading { display: flex; align-items: start; justify-content: space-between; gap: 1rem; }
-  h2 { margin: 0; font-size: .85rem; }
-  p { margin: .2rem 0 0; color: var(--muted, #888); font-size: .7rem; }
-  .heading > strong { font-size: .78rem; font-variant-numeric: tabular-nums; }
-  .sources { display: flex; flex-wrap: wrap; gap: .4rem; margin: .65rem 0 0; padding: 0; list-style: none; }
-  .sources li { display: flex; gap: .35rem; padding: .25rem .4rem; border: 1px solid var(--border, #333); border-radius: 5px; font-size: .68rem; }
-  .sources li.partial { border-color: var(--warning, #a76b2c); }
-  .sources .coverage { color: var(--muted, #888); }
-  .sources time { color: var(--muted, #888); font-variant-numeric: tabular-nums; }
-  .coverage-warning { margin-top: .65rem; padding: .55rem .65rem; border-left: 3px solid var(--warning, #a76b2c); background: color-mix(in srgb, var(--warning, #a76b2c) 10%, transparent); color: inherit; }
-  .table-wrap { margin-top: .75rem; overflow-x: auto; }
-  table { width: 100%; border-collapse: collapse; font-size: .78rem; }
-  th, td { padding: .5rem .4rem; border-top: 1px solid var(--border, #333); text-align: left; }
-  th:nth-child(n+2), td:nth-child(n+2) { text-align: right; font-variant-numeric: tabular-nums; }
+  .portfolio { margin-top: var(--space-3); padding: var(--space-3); border: 1px solid var(--card-border); border-radius: var(--radius-md); background: var(--card-bg); }
+  .heading { display: flex; align-items: start; justify-content: space-between; gap: var(--space-4); }
+  h2 { margin: 0; font-size: var(--text-sm); }
+  p { margin: 0.2rem 0 0; color: var(--text-tertiary); font-size: var(--text-2xs); }
+  .heading > strong { font-size: var(--text-xs); font-variant-numeric: tabular-nums; }
+  .sources { display: flex; flex-wrap: wrap; gap: var(--space-2); margin: var(--space-3) 0 0; padding: 0; list-style: none; }
+  .sources li { display: flex; align-items: center; gap: var(--space-1); padding: 0.2rem 0.4rem; border: 1px solid var(--card-border); border-radius: var(--radius-sm); font-size: var(--text-2xs); }
+  .sources time { color: var(--text-tertiary); font-family: var(--font-mono); font-variant-numeric: tabular-nums; }
+  .coverage-warning { margin-top: var(--space-3); padding: 0.55rem 0.65rem; border-left: 3px solid var(--warning); background: var(--warning-soft); color: inherit; }
+  .table-wrap { margin-top: var(--space-3); }
 </style>

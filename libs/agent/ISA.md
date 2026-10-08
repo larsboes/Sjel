@@ -2,7 +2,7 @@
 project: sjel-agent
 type: isa
 phase: climbing
-progress: 43
+progress: 52
 principal_stated_goal: "pi agent inspiration rust implementation of slim core and official extensions from start but opt in"
 ---
 
@@ -156,11 +156,35 @@ A port of `Packs/security/extensions/secrets-guard.ts` (572 lines) to the `tool_
 header lists what it blocks: secret paths on `read` and `edit`, secret patterns in
 `grep` and `find`, and `cat`, `bw get`, `env` and similar on `bash`.
 
-- [ ] AGT-10 — every block and allow case listed in the header of `secrets-guard.ts` is a test
-  case in the Rust port, with the same verdict. Falsifier: a case where the two disagree. Probe:
-  a table test over the header's examples.
-- [ ] AGT-11 — the guard runs unless `--ext -guard` or config removes it, and the startup line
-  says so when it is off. Falsifier: a run with the guard off and no line saying so.
+- [x] AGT-10 — every block and allow case listed in the header of `secrets-guard.ts` is a test
+  case in the Rust port, with the same verdict. Evidence:
+  `every_case_in_the_header_gets_the_same_verdict` (`src/ext/guard.rs`), 62 rows, one per line of
+  the header's two lists: every secret-path shape on `read` and `edit`, the pattern/glob cases on
+  `grep` and `find`, the reader blocklist on `bash`, the `bw get|list|sync|export` and
+  `echo $SECRET`, `env`, `printenv` and `openssl` cases, the allow cases (`source .env && …`,
+  `. .env`, `export …`, `bw unlock|encode|generate`, `printf`/`echo` writing a reference, and
+  `process.env` in code), and `write` to an env file. The readers nobody listed — `base64`,
+  `tar`, `python3 -c`, `git show HEAD:.env`, `cp` — are caught by the inversion and are rows too.
+  Falsifier: a case where the two disagree. Probe: a table test over the header's examples.
+  One thing the table cannot see, so it has its own test:
+  `the_guard_covers_every_core_tool_that_names_a_path_or_a_command` fails if a core tool takes a
+  `path` or a `command` the guard never looks at — `write` is the one name in that list on
+  purpose.
+- [x] AGT-11 — the guard runs unless `--ext -guard` or config removes it, and the startup line
+  says so when it is off. Evidence: `tests/cli.rs` — no flags and no overlay prints
+  `[extensions] guard`; `--ext none`, `--ext -guard`, and an `agent.toml` whose `[agent]
+  extensions = []` each print `[extensions] none — secrets-guard is off for this run`. Live
+  2026-10-08: a run whose first line was `[extensions] guard`, and whose model asked to `grep`
+  and then `read` a real `.env` — both refused by the guard, with the value appearing zero times
+  in stdout, stderr and the session file. Falsifier: a run with the guard off and no line saying
+  so.
+
+Not ported, and deliberately not half-ported: that file's `tool_result` half strips
+secret-shaped lines out of tool output, and its `vault_exec` and `vault_keys` tools are the way a
+command is meant to use a credential once a read is refused. The first needs a hook this core
+has not got (see below); the second needs only the tool hook, and is the natural next piece,
+because every denial above tells the model that `vault_exec` is the way to reach a credential and
+no such tool exists yet.
 
 ### F3 · Skills from `Packs/`
 
@@ -213,6 +237,19 @@ agent reaches Sjel's data with no data path of its own.
 
 ## Not yet specified
 
+- **The guard's other two halves.** `vault_exec` and `vault_keys` from `secrets-guard.ts`: the
+  tools that make the guard's advice actionable, and the only way a run reads a credential at
+  all. `vault_exec` needs the tool hook the contract already has (`Extension::tools`) and a
+  scoped child environment; `vault_keys` needs only the env-file parser. Named here rather than
+  built, because the plan put F2 at the `tool_call` hook and these are a decision about what the
+  agent may do with a credential, not a port.
+- **A tool-result hook.** `secrets-guard.ts` also rewrites `tool_result` content, stripping
+  secret-shaped lines and long random strings before the model sees them. The extension contract
+  has four hooks and this is not one of them (F1's principle: a new hook is a core change and a
+  decision here first). The case for it: the guard checks what a command *names*, and
+  `source .env && curl -H "Authorization: $TOKEN" …` is allowed, so a response that echoes the
+  token reaches the transcript. The case against: every hook the core grows is one pi's release
+  cadence cannot break but this file can.
 - **MCP client: `rmcp` or hand-written.** The official Rust SDK is async. The core is blocking
   (C3). Measure `rmcp`'s dependency count against the size of `initialize` + `tools/list` +
   `tools/call` over stdio before choosing.
@@ -236,6 +273,7 @@ agent reaches Sjel's data with no data path of its own.
 | AGT-9 | command | two extensions, one tool name | non-zero exit, both names | cargo | F1 |
 | AGT-10 | command | table test over the `secrets-guard.ts` header cases | all equal | cargo | F2 |
 | AGT-11 | command | run with `--ext -guard`, read startup line | says off | cargo | F2, D3 |
+| AGT-10b | command | every guarded-name core tool, from its own schema | none missing | cargo | F2 |
 | AGT-12 | command | `SKILL.md` body bytes in request 1 | 0 | cargo | F3 |
 | AGT-13 | command | broken frontmatter fixture | reported, run continues | cargo | F3 |
 | AGT-14 | command | fixture MCP server, call each listed tool | all answer | cargo | F4 |
@@ -294,6 +332,16 @@ agent reaches Sjel's data with no data path of its own.
 
 ## Log
 
+- 2026-10-08 · F2, the guard. The `tool_call` half of `Packs/security/extensions/secrets-guard.ts`
+  as `src/ext/guard.rs`, patterns and design ported rather than reinvented: the blocklist catches
+  the readers somebody thought of, and the inversion refuses any command that names a secret path
+  unless it is one of the allowlisted shapes. The guard is the default set and the only member of
+  it (D3), so an `agent.toml` that names nothing gets it and an `agent.toml` that names a set
+  replaces it; a run without it says so in its first line. 26 tests, clippy clean. Live: a run
+  against a real `.env` was refused twice — `grep` and then `read` — and the value never appeared
+  in stdout, stderr or the session file. Two of the file's three parts are not ported and are
+  named in Not yet specified, one of them because it needs a hook the core does not have: every
+  denial above points the model at `vault_exec`, and it does not exist yet.
 - 2026-10-08 · F1, the extension contract. `Extension` with four hooks (tools, `system`,
   `before_request`, `tool_call`), `Verdict::Allow|Deny`, `Agent::new` takes the extension list and
   refuses two tools under one name, and the CLI resolves `agent.toml` plus `--ext

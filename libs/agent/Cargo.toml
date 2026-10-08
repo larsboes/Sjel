@@ -26,6 +26,8 @@ sjel-config = { path = "../sjel-config" }
 serde = { workspace = true, features = ["derive"] }
 serde_json.workspace = true
 # The `[agent]` section of the overlay's config/agent.toml names which extensions run.
+# The guard matches paths and bash commands with the same patterns the pi extension uses.
+regex.workspace = true
 toml.workspace = true
 reqwest = { workspace = true, features = ["json", "blocking"] }
 thiserror.workspace = true

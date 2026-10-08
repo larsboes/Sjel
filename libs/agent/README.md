@@ -61,8 +61,12 @@ sjel-agent --ext -guard "..."     # remove one
 
 A name without a sign is an error rather than a guess, and a name this binary does not carry
 stops the run at startup: a session quietly missing the extension the operator asked for is worse
-than one that does not start. Nothing is compiled in yet — `BUILT_IN` in `src/main.rs` is `&[]` —
-so every name currently stops the run, and the guard (F2) is the first to land.
+than one that does not start. The guard is compiled in and on by default — the one exception to "off until named", because its
+absence is what puts a credential in a request. `--ext -guard`, `--ext none`, or an `agent.toml`
+that names a set without it, removes it, and the startup line says so when it is gone. It refuses
+secret paths on `read`, `edit`, `grep` and `find`, and any `bash` command that names one unless
+it is an allowlisted shape (`source .env && …`, `export VAR=…`, `bw unlock`, writing a reference).
+Everything else in wave 1 — skills, MCP, compaction, Rust diagnostics — is still to come.
 
 ## Run it
 
@@ -97,9 +101,10 @@ Add a `coding` role to the overlay's `config/inference.json` first:
 
 ## Not here yet
 
-The extension contract is in place (F1, [`ISA.md`](ISA.md)); nothing uses it yet. The guard is
-first, then skills, MCP, compaction and Rust diagnostics. Line editing, a full-screen TUI and
-subagents are named there as wave 2, not decided.
+The extension contract is in place (F1) and the guard uses it (F2). Next: the two tools that make
+the guard's advice actionable (`vault_exec`, `vault_keys`), then skills, MCP, compaction and Rust
+diagnostics. Line editing, a full-screen TUI and subagents are named in [`ISA.md`](ISA.md) as
+wave 2, not decided.
 
 A Ctrl-C while the model reads a long prompt and streams nothing takes effect at the first
 chunk. Press it twice to exit instead.

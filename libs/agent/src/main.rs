@@ -30,6 +30,8 @@ use std::sync::Arc;
 
 use sjel_agent::{extension, session, tools, Agent, AgentError, Event, Extension, Message};
 
+mod ext;
+
 const DEFAULT_ROLE: &str = "coding";
 /// How much of a tool result the trace on stderr shows. The model still gets all of it.
 const TRACE_LIMIT: usize = 400;
@@ -102,9 +104,7 @@ fn run(args: Args) -> Result<ExitCode, String> {
     // Extensions resolve before anything else, so a name this build does not carry fails at
     // startup with nothing else to wait for (AGT-8).
     let chosen = chosen_extensions(&args.ext)?;
-    if !chosen.names.is_empty() {
-        eprintln!("{DIM}[extensions] {}{RESET}", chosen.names.join(", "));
-    }
+    eprintln!("{DIM}{}{RESET}", extension_line(&chosen.names));
     let role = sjel_inference::InferenceConfig::load(sjel_config::overlay_config)
         .role(&args.role)
         .ok_or_else(|| {
@@ -256,10 +256,11 @@ fn chosen_extensions(flags: &[String]) -> Result<Chosen, String> {
 type BuiltIn = (&'static str, fn() -> Box<dyn Extension>);
 
 /// The extensions this binary carries (D1: first-party crates, compiled in, no store). Wave 1
-/// fills this table — `guard` (F2, on by default), `skills` (F3), `mcp` (F4), `compaction` (F5),
-/// `rust` (F6). Until the first one lands every name is unknown, and startup says so rather
-/// than running a session without the extension the operator asked for.
-const BUILT_IN: &[BuiltIn] = &[];
+/// fills this table — the guard is here (F2), `skills` (F3), `mcp` (F4), `compaction` (F5) and
+/// `rust` (F6) are next.
+const BUILT_IN: &[BuiltIn] = &[(ext::guard::NAME, || {
+    Box::new(ext::guard::Guard) as Box<dyn Extension>
+})];
 
 fn built_in(name: &str) -> Option<Box<dyn Extension>> {
     BUILT_IN
@@ -268,15 +269,43 @@ fn built_in(name: &str) -> Option<Box<dyn Extension>> {
         .map(|(_, make)| make())
 }
 
-/// `<overlay>/config/agent.toml`, section `[agent]`. A missing file is an empty set and not an
-/// error: a bare run is the core and nothing else (AGT-7).
+/// The startup line (AGT-11): what runs, and — because the guard is the one extension that is on
+/// by default (D3) — that it does not, when something removed it. A run that can read secrets
+/// says so before it starts.
+fn extension_line(names: &[String]) -> String {
+    let listed = if names.is_empty() {
+        "none".to_owned()
+    } else {
+        names.join(", ")
+    };
+    if names.iter().any(|name| name == ext::guard::NAME) {
+        format!("[extensions] {listed}")
+    } else {
+        format!("[extensions] {listed} — secrets-guard is off for this run")
+    }
+}
+
+/// The set a run starts with, before the flags: whatever `agent.toml` names, or the default set
+/// when it names nothing at all. The guard is the default set and the only member of it (D3) —
+/// its absence is the one thing that can put a credential in a request, so it is not opted into.
 fn configured_extensions() -> Result<Vec<String>, String> {
+    Ok(agent_toml()?.unwrap_or_else(default_extensions))
+}
+
+fn default_extensions() -> Vec<String> {
+    vec![ext::guard::NAME.to_owned()]
+}
+
+/// `[agent] extensions = [...]` from `<overlay>/config/agent.toml`. `None` when there is no file
+/// or no such key, which is what makes the default set apply; `Some(vec![])` is a file that says
+/// "the core only" and means it.
+fn agent_toml() -> Result<Option<Vec<String>>, String> {
     let Some(path) = sjel_config::overlay_config("agent.toml") else {
-        return Ok(Vec::new());
+        return Ok(None);
     };
     let text = match std::fs::read_to_string(&path) {
         Ok(text) => text,
-        Err(e) if e.kind() == std::io::ErrorKind::NotFound => return Ok(Vec::new()),
+        Err(e) if e.kind() == std::io::ErrorKind::NotFound => return Ok(None),
         Err(e) => return Err(format!("could not read {}: {e}", path.display())),
     };
     let file: AgentFile = toml::from_str(&text).map_err(|e| format!("{}: {e}", path.display()))?;
@@ -292,8 +321,7 @@ struct AgentFile {
 
 #[derive(serde::Deserialize, Default)]
 struct AgentSection {
-    #[serde(default)]
-    extensions: Vec<String>,
+    extensions: Option<Vec<String>>,
 }
 
 fn system_prompt(cwd: &Path) -> String {

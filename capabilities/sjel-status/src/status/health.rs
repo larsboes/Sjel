@@ -15,6 +15,78 @@ pub(crate) async fn is_up(client: &reqwest::Client, svc: &Service) -> bool {
         .unwrap_or(false)
 }
 
+/// How long a probe result is served before a refresh starts in the background.
+const LIVENESS_TTL: Duration = Duration::from_secs(5);
+
+/// The last probe of each readiness URL, and when it ran.
+static LIVENESS: OnceLock<Mutex<HashMap<String, (Instant, bool)>>> = OnceLock::new();
+static LIVENESS_REFRESHING: std::sync::atomic::AtomicBool =
+    std::sync::atomic::AtomicBool::new(false);
+
+/// Whether each service that declares a readiness surface answers, keyed by that URL.
+///
+/// Three handlers ask this on every shell poll. They probed one service after another,
+/// so the slowest probe set the response time: on 2026-10-09 vaultwarden on the LAN took
+/// 0.3–1.0 s, and the capabilities endpoint took 1.0–1.4 s with every local probe under
+/// 35 ms (dashboard/ISA.md DSH-8). Probes now run concurrently, and a result younger
+/// than `LIVENESS_TTL` is served from memory. An older one is still served, and a
+/// refresh starts behind it, so no poll waits on the network once the first has run.
+/// A service the last probe did not cover forces a fresh probe, and so does a start or
+/// stop (`forget_liveness`). The reaper does not read this. It probes live, because it
+/// stops processes.
+pub(crate) async fn liveness(services: &[Service]) -> HashMap<String, bool> {
+    let urls: Vec<String> = services.iter().filter_map(Service::readiness_url).collect();
+    let cached: Option<Vec<(Instant, bool)>> = LIVENESS
+        .get_or_init(Default::default)
+        .lock()
+        .ok()
+        .and_then(|cell| urls.iter().map(|url| cell.get(url).copied()).collect());
+    let Some(cached) = cached else {
+        return probe_all(services).await;
+    };
+    let stale = cached.iter().any(|(at, _)| at.elapsed() > LIVENESS_TTL);
+    if stale && !LIVENESS_REFRESHING.swap(true, std::sync::atomic::Ordering::AcqRel) {
+        let services = services.to_vec();
+        tokio::spawn(async move {
+            probe_all(&services).await;
+            LIVENESS_REFRESHING.store(false, std::sync::atomic::Ordering::Release);
+        });
+    }
+    urls.into_iter()
+        .zip(cached)
+        .map(|(url, (_, up))| (url, up))
+        .collect()
+}
+
+async fn probe_all(services: &[Service]) -> HashMap<String, bool> {
+    let client = reqwest::Client::new();
+    let mut probes = tokio::task::JoinSet::new();
+    for service in services {
+        let Some(url) = service.readiness_url() else {
+            continue;
+        };
+        let (client, service) = (client.clone(), service.clone());
+        probes.spawn(async move { (url, is_up(&client, &service).await) });
+    }
+    let up: HashMap<String, bool> = probes.join_all().await.into_iter().collect();
+    if let Ok(mut cell) = LIVENESS.get_or_init(Default::default).lock() {
+        let now = Instant::now();
+        cell.extend(up.iter().map(|(url, ok)| (url.clone(), (now, *ok))));
+    }
+    up
+}
+
+/// Drops every stored probe, so the next reader sees a start or stop at once.
+///
+/// ponytail: a refresh already in flight can store its pre-action result after this
+/// runs, so a start or stop can read stale for one more `LIVENESS_TTL`. A generation
+/// counter checked in `probe_all` closes that if it is ever seen.
+pub(crate) fn forget_liveness() {
+    if let Ok(mut cell) = LIVENESS.get_or_init(Default::default).lock() {
+        cell.clear();
+    }
+}
+
 pub(crate) async fn health_handler() -> Json<Value> {
     Json(json!({ "ok": true, "service": "sjel-status" }))
 }
@@ -78,14 +150,13 @@ pub(crate) async fn self_model_handler() -> Result<Json<Value>, (StatusCode, Jso
         .map_err(|e| bad_gateway(format!("{} is not valid JSON: {e}", path.display())))?;
 
     let services = registry().await.map_err(bad_gateway)?;
-    let client = reqwest::Client::new();
+    let up = liveness(&services).await;
     let mut live = serde_json::Map::new();
     for service in &services {
-        let up = match service.readiness_url() {
-            Some(_) => Some(is_up(&client, service).await),
-            None => None,
-        };
-        live.insert(service.name.clone(), json!(up));
+        let answer = service
+            .readiness_url()
+            .map(|url| up.get(&url) == Some(&true));
+        live.insert(service.name.clone(), json!(answer));
     }
 
     Ok(Json(json!({ "model": model, "live": live })))
@@ -96,7 +167,7 @@ pub(crate) async fn self_model_handler() -> Result<Json<Value>, (StatusCode, Jso
 pub(crate) async fn sjel_status_health_handler(
 ) -> Result<Json<AxonStatusHealth>, (StatusCode, Json<Value>)> {
     let services = registry().await.map_err(bad_gateway)?;
-    let client = reqwest::Client::new();
+    let up = liveness(&services).await;
 
     let mut capabilities = HashMap::new();
     for svc in &services {
@@ -108,7 +179,7 @@ pub(crate) async fn sjel_status_health_handler(
         capabilities.insert(
             svc.name.clone(),
             CapabilityStatus {
-                up: is_up(&client, svc).await,
+                up: up.get(&url) == Some(&true),
                 url,
             },
         );
@@ -153,20 +224,18 @@ pub(crate) async fn sjel_status_health_handler(
 pub(crate) async fn capabilities_handler(
 ) -> Result<Json<Vec<CapabilityView>>, (StatusCode, Json<Value>)> {
     let services = registry().await.map_err(bad_gateway)?;
-    let client = reqwest::Client::new();
+    let up = liveness(&services).await;
 
-    let mut views = Vec::with_capacity(services.len());
-    for service in services {
-        let up = match service.readiness_url() {
-            Some(_) => Some(is_up(&client, &service).await),
-            None => None,
-        };
-        views.push(CapabilityView {
+    let views = services
+        .into_iter()
+        .map(|service| CapabilityView {
             health_url: service.health_url(),
-            up,
+            up: service
+                .readiness_url()
+                .map(|url| up.get(&url) == Some(&true)),
             service,
-        });
-    }
+        })
+        .collect();
     Ok(Json(views))
 }
 
@@ -222,4 +291,66 @@ pub(crate) async fn routes_handler() -> Result<Json<Value>, (StatusCode, Json<Va
         capabilities.push(entry);
     }
     Ok(Json(json!({ "capabilities": capabilities })))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn service(port: u16) -> Service {
+        // Every manifest field the registry emits, empty unless the probe reads it.
+        let mut manifest = json!({
+            "name": "probe-test", "kind": "process", "scope": "capability",
+            "health_path": "/health", "proxy_extra": [], "requires": [], "links_to": [],
+        });
+        for field in [
+            "ready_path",
+            "panel_port",
+            "panel_path",
+            "autostart",
+            "schedule",
+            "proxy_api_only",
+            "idle_timeout",
+            "routes_absent",
+            "backup_target",
+            "backup_sqlite",
+            "backup_sqlite_online",
+            "backup_advise_days",
+            "backup_stale_days",
+            "freshness_advise_hours",
+            "freshness_stale_hours",
+            "endpoint",
+        ] {
+            manifest[field] = json!("");
+        }
+        manifest["port"] = json!(port.to_string());
+        serde_json::from_value(manifest).expect("a service")
+    }
+
+    /// A probe is served from memory inside the TTL, so a stopped service still reads up,
+    /// and `forget_liveness` makes the next reader probe again (dashboard/ISA.md DSH-8).
+    #[tokio::test]
+    async fn liveness_serves_the_last_probe_until_it_is_forgotten() {
+        let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let port = listener.local_addr().unwrap().port();
+        let app = Router::new().route("/health", get(|| async { "ok" }));
+        let server = tokio::spawn(async move { axum::serve(listener, app).await });
+        let services = [service(port)];
+        let url = services[0].readiness_url().unwrap();
+
+        assert_eq!(liveness(&services).await.get(&url), Some(&true));
+        server.abort();
+        let _ = server.await;
+        assert_eq!(
+            liveness(&services).await.get(&url),
+            Some(&true),
+            "served from memory"
+        );
+        forget_liveness();
+        assert_eq!(
+            liveness(&services).await.get(&url),
+            Some(&false),
+            "probed again"
+        );
+    }
 }

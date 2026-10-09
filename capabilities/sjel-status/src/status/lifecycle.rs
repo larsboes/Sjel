@@ -46,6 +46,7 @@ pub(crate) async fn lifecycle(
         ));
     }
 
+    forget_liveness();
     let up = is_up(&reqwest::Client::new(), &service).await;
     Ok(Json(json!({
         "name": service.name,

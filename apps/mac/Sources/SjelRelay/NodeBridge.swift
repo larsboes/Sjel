@@ -6,6 +6,23 @@ import Foundation
 public struct NodeHealth: Sendable, Equatable, Decodable {
     public struct Capability: Sendable, Equatable, Decodable {
         public let up: Bool
+        /// The machine keeps it running (`autostart = "true"`). Anything else starts on
+        /// demand, so stopped is normal for it. A shell from before the field counts every
+        /// capability as kept running, the old reading.
+        public let autostart: Bool
+
+        public init(up: Bool, autostart: Bool = true) {
+            self.up = up
+            self.autostart = autostart
+        }
+
+        public init(from decoder: Decoder) throws {
+            let c = try decoder.container(keyedBy: CodingKeys.self)
+            up = try c.decode(Bool.self, forKey: .up)
+            autostart = try c.decodeIfPresent(Bool.self, forKey: .autostart) ?? true
+        }
+
+        enum CodingKeys: String, CodingKey { case up, autostart }
     }
 
     public let ok: Bool
@@ -18,9 +35,12 @@ public struct NodeHealth: Sendable, Equatable, Decodable {
         case uptimeSeconds = "uptime_seconds"
     }
 
-    /// Names of the capabilities that did not answer, sorted so the list does not reorder
-    /// between polls.
-    public var down: [String] { capabilities.filter { !$0.value.up }.map(\.key).sorted() }
+    /// Names of the kept-running capabilities that did not answer, sorted so the list does not
+    /// reorder between polls. An on-demand capability that is stopped is not down
+    /// (dashboard/ISA.md DSH-1): on 2026-10-08 four of those kept the "needs you" dot on.
+    public var down: [String] {
+        capabilities.filter { $0.value.autostart && !$0.value.up }.map(\.key).sorted()
+    }
 
     /// The order the menu lists every capability in: by name, whatever is up. A start or a stop
     /// changes a row's dot and button, never its place.

@@ -181,6 +181,7 @@ pub(crate) async fn sjel_status_health_handler(
             CapabilityStatus {
                 up: up.get(&url) == Some(&true),
                 url,
+                autostart: svc.autostart == "true",
             },
         );
     }

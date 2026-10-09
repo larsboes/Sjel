@@ -25,10 +25,16 @@ What is left is below.
 
 ## Claims
 
-- [ ] DSH-1 — the menu bar panel shows a capability as down only when it is down. Falsifier: a
+- [x] DSH-1 — the menu bar panel shows a capability as down only when it is down. Falsifier: a
   capability shown down while its own `/health` answers 200. On 2026-10-08 the panel showed nine
   of 22 capabilities down, `dashboard` among them while the dashboard worked, so at least one
-  health URL is wrong. Until this holds, the "needs you" dot stays on.
+  health URL is wrong. Until this holds, the "needs you" dot stays on. Measured 2026-10-09: no
+  health URL was wrong. Every capability read down was stopped and not listening, and each was
+  on-demand by its manifest. `dashboard` is the Vite dev server on 47117, not the shell that
+  serves the built pages. The panel counted stopped-on-demand as down. Now
+  `/api/sjel-status/health` carries `autostart` per capability, `NodeHealth.down` counts only
+  `autostart` ones, and an on-demand row that is stopped shows a grey dot. After the restart:
+  `ok: true`, no kept-running capability down, four on-demand stopped.
 - [ ] DSH-2 — ⌃⌥Space opens Ask from any app, and the question arrives in the dashboard drawer.
   Falsifier: the drawer opens empty. Needs a `sjel-status` restart for the `next` change in
   `capabilities/sjel-status/src/session.rs`, not done on 2026-10-08 because another session had

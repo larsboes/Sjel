@@ -174,6 +174,9 @@ pub(crate) struct BackupContract {
 pub(crate) struct CapabilityStatus {
     pub(crate) up: bool,
     pub(crate) url: String,
+    /// The manifest says `autostart = "true"`: this machine keeps it running, so down is a
+    /// fault. Anything else starts on demand, and stopped is its normal state (DSH-1).
+    pub(crate) autostart: bool,
 }
 
 #[derive(Serialize)]

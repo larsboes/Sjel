@@ -341,7 +341,7 @@ struct SjelMenuBarView: View {
         case .known(let health):
             let down = health.down
             let total = health.capabilities.count
-            if down.isEmpty { return (.green, "All \(total) capabilities up") }
+            if down.isEmpty { return (.green, "Every kept-running capability is up (\(total) in all)") }
             return (.orange, "\(down.count) of \(total) down: \(down.joined(separator: ", "))")
         }
     }
@@ -369,7 +369,7 @@ struct SjelMenuBarView: View {
             .disabled(downNames.isEmpty)
             .help(
                 downNames.isEmpty
-                    ? (health == nil ? "Sjel's health is not known yet" : "Every capability is up")
+                    ? (health == nil ? "Sjel's health is not known yet" : "Every kept-running capability is up")
                     : "Start every capability that is down"
             )
             .frame(width: 66, alignment: .trailing)
@@ -383,8 +383,9 @@ struct SjelMenuBarView: View {
                 if let health {
                     ForEach(health.rowOrder, id: \.self) { name in
                         let up = health.capabilities[name]?.up ?? false
+                        let onDemand = health.capabilities[name]?.autostart == false
                         // Stopping the shell would take this panel's own source with it.
-                        CapabilityRow(name: name, up: up, busy: model.busy.contains(name), canStop: name != "sjel-status") {
+                        CapabilityRow(name: name, up: up, onDemand: onDemand, busy: model.busy.contains(name), canStop: name != "sjel-status") {
                             model.setRunning([name], !up)
                         }
                     }
@@ -505,13 +506,15 @@ struct SjelMenuBarView: View {
 struct CapabilityRow: View {
     let name: String
     let up: Bool
+    /// Starts on demand, so stopped is its normal state: grey, not orange.
+    var onDemand = false
     let busy: Bool
     var canStop = true
     let action: () -> Void
 
     var body: some View {
         HStack(spacing: 6) {
-            Circle().fill(up ? Color.green : Color.orange).frame(width: 6, height: 6)
+            Circle().fill(up ? Color.green : onDemand ? Color.secondary : Color.orange).frame(width: 6, height: 6)
             Text(name)
                 .font(.system(size: 11, design: .monospaced))
                 .lineLimit(1)

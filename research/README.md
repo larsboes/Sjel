@@ -32,8 +32,11 @@ project named here has a `watch` row in `../upstreams.toml`.
   Mac answers `/v1/systemone`, and the Nimble model (`nimble` in `../upstreams.toml`) is not
   pulled yet. Nothing is measured. Extends [the local decision entry](local-decision-models.md).
 - Is one native GPUI surface worth a third UI stack? Sjel has a Svelte dashboard and a SwiftUI
-  menu-bar app. The talk that raised it measures render speed; whether Sjel's waits come from
-  rendering or from its services is not measured. Source:
+  menu-bar app. The talk that raised it measures render speed. Measured 2026-10-09: Sjel's waits
+  come from a service, not from rendering. A `/context` day switch settles in 26 ms in Chrome, and
+  one shell endpoint takes over a second (`../dashboard/ISA.md` DSH-8). `../ISA.md` Decisions
+  (2026-10-09) gives GPUI a command palette on start time and memory instead. Neither of those
+  two numbers is measured yet. Source:
   [Conrad Irwin, EuroRust 2025](https://www.youtube.com/watch?v=sheIOOf-xRo).
 - Does a booking document need a reader of its own? `kitinerary` is read AND run: it installs on
   the Linux runtime, takes stdin and emits schema.org JSON-LD, and it extracted a JSON-LD

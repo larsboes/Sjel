@@ -899,6 +899,16 @@ claim yet, and the watch rows they name are in `upstreams.toml` with the questio
   every icon, empty and error states). Progressive disclosure is already
   `research/simplicity-and-adoption.md`; the other two have no home. Either they become a checklist
   in `dashboard/README.md` or they stay folklore.
+- **A planning owner.** Decided 2026-10-09 (see Decisions): a new capability, working name
+  `projects`, owns projects and tasks as markdown files outside the vault, indexed in SQLite.
+  The name collides with the dashboard's `/projects` route, which lists capabilities, so one
+  of them is renamed. Open before an ISA exists: where the root lives (overlay path or the
+  store mount), which part of a vault project note moves (status, outcome, tasks) and which
+  stays as knowledge with a link, and how decision-ladder band 620 switches from
+  `capabilities/vault` to the new owner. Habits: which `calendar` rhythm fields carry a habit,
+  and whether the daily metrics in `Journal/01. Daily Notes` (read by vault `Habits.base`)
+  move or stay as journal entries. Vault `Domains/Journal.md` says nothing is written back
+  into a journal entry.
 
 ## Test Strategy
 
@@ -927,6 +937,29 @@ claim yet, and the watch rows they name are in `upstreams.toml` with the questio
 
 ## Decisions
 
+- **2026-10-09 — the vault keeps knowledge, and Sjel takes projects, tasks and habits**
+  (principal's call, all recommendations accepted). Obsidian keeps Knowledge, Atlas, Journal and
+  Reflections. Projects, tasks and habits get a Sjel owner, because their value is the join with
+  calendar, trips and finance, and a vault note cannot run a join. This **reverses PRD Q48**
+  (2026-08-27, vault `Projects/Sjel/PRD Axon.md`, "Q48"), which returned the Action kind to
+  `Projects/**/Tasks/` and deleted `capabilities/tasks` in `73a47ba1`. Principle 8 holds: the new
+  owner writes markdown with frontmatter into a Sjel-owned root outside the vault, and its SQLite
+  table is an index that can be rebuilt from those files. That is the shape vault
+  `Domains/Planning.md` recommended on 2026-08-07: uniqueness becomes a parse-time check that
+  names both paths, not a database constraint. Habits become `calendar` rhythms plus a daily
+  metric record. The 72 vault notes typed `task` or `project` are imported once, then retired.
+  Until the import runs, Q48 and the read-only `GET /api/tasks` in `capabilities/vault` stay in
+  force. The owner itself is under Not yet specified, "A planning owner".
+- **2026-10-09 — GPUI takes the resident keyboard surfaces, and Svelte keeps the rest**
+  (principal's call). Measured first, on this Mac: the four calls behind `/context` answer in
+  1–5 ms, a day switch settles in 26 ms in Chrome, and
+  `GET /sjel-status/api/sjel-status/capabilities` takes 1.0–1.4 s (DSH-8). Rendering is not where
+  Sjel waits, so this split is a placement rule, not a speed claim. GPUI gets surfaces that stay
+  resident and are driven from the keyboard, where start time and memory count. The first is a
+  command palette. Svelte keeps maps (`maplibre-gl-js`), charts (`vega`), forms, and every view
+  the iPhone needs through Tauri, because GPUI has no iOS target. The Swift menu bar keeps
+  Keychain, CloudKit and the global hotkey. `gpui` stays `watch` in `upstreams.toml` until the
+  palette ships. The memory gap between a GPUI window and a webview is not measured.
 - **2026-10-05 — clothing is a row, and a link is an intake** (principal's call, overruling the
   recommendation twice). Two questions, both answered against the smaller option. First: the
   three fields a garment needs (`category`, `groesse`, `farbe`, `saison`) go **on the same
@@ -1014,6 +1047,11 @@ claim yet, and the watch rows they name are in `upstreams.toml` with the questio
 ## Log
 
 Entries before 2026-10-08 are in [`ISA-archive.md`](ISA-archive.md#log).
+
+- 2026-10-09 · Two decisions: projects, tasks and habits leave the vault for a Sjel owner,
+  reversing Q48, and GPUI gets resident keyboard surfaces while Svelte keeps the rest. The
+  measurement behind the second is DSH-8 in `dashboard/ISA.md`. The vault side is updated in
+  `Domains/Planning.md`, the vault contract's kind table, and the Q48 callout.
 
 - 2026-10-08 · Review of every ISA against the tree. Three claims changed state. ISC-65 is done:
   its routes left in b10e5260, and the box was not ticked. ISC-22 and ISC-25 are reopened,

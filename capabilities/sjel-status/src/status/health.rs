@@ -4,9 +4,13 @@ pub(crate) async fn is_up(client: &reqwest::Client, svc: &Service) -> bool {
     let Some(url) = svc.readiness_url() else {
         return false;
     };
+    // An external capability answers from another host. Over the tailnet from away, one
+    // cold HTTPS probe to vaultwarden took 0.3-1.0 s and once ran past 2 s (2026-10-09).
+    // Polls read `liveness`, so only a cold probe waits for this.
+    let timeout = Duration::from_secs(if svc.is_external() { 5 } else { 2 });
     client
         .get(&url)
-        .timeout(Duration::from_secs(2))
+        .timeout(timeout)
         .send()
         .await
         // A redirect counts as up: a locale-routing frontend answers / with a 307 and
@@ -181,12 +185,13 @@ pub(crate) async fn sjel_status_health_handler(
             CapabilityStatus {
                 up: up.get(&url) == Some(&true),
                 url,
-                autostart: svc.autostart == "true",
+                autostart: svc.kept_running(),
             },
         );
     }
 
-    // "ok" means what should be running is running — the autostart set. Once
+    // "ok" means what should be running is running: the autostart set, plus every
+    // external capability, which another host keeps running (`kept_running`). Once
     // capabilities start on demand, "everything is up" stopped being a health signal:
     // a stopped on-demand capability is the normal state, not a fault, and reporting
     // it as one would leave the shell permanently amber.
@@ -200,7 +205,7 @@ pub(crate) async fn sjel_status_health_handler(
     // that is what every other reader of this registry already says.
     let ok = services
         .iter()
-        .filter(|s| s.autostart == "true")
+        .filter(|s| s.kept_running())
         .filter_map(|s| capabilities.get(&s.name))
         .all(|c| c.up);
     let uptime_seconds = STARTED_AT.get().map(|t| t.elapsed().as_secs()).unwrap_or(0);

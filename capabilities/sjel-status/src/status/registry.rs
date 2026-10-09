@@ -80,6 +80,13 @@ impl Service {
     /// A capability this machine consumes rather than runs. The registry decides this; the
     /// question is asked here often enough that spelling the comparison out at each call site
     /// would be four chances to spell it differently.
+    /// This machine expects it to answer: `autostart = "true"`, or external. Another host
+    /// runs an external capability, and the registry blanks its `autostart`, so the blank is
+    /// not "on demand" (the same rule as `state` in tools/sjel-cli/src/capability.rs).
+    pub(crate) fn kept_running(&self) -> bool {
+        self.autostart == "true" || self.is_external()
+    }
+
     pub(crate) fn is_external(&self) -> bool {
         self.scope == "external"
     }
@@ -174,8 +181,8 @@ pub(crate) struct BackupContract {
 pub(crate) struct CapabilityStatus {
     pub(crate) up: bool,
     pub(crate) url: String,
-    /// The manifest says `autostart = "true"`: this machine keeps it running, so down is a
-    /// fault. Anything else starts on demand, and stopped is its normal state (DSH-1).
+    /// `Service::kept_running`: down is a fault. Anything else starts on demand, and
+    /// stopped is its normal state (DSH-1). Named for the manifest field the menu bar reads.
     pub(crate) autostart: bool,
 }
 

@@ -791,7 +791,8 @@ pub fn parse_launchd_schedule(plist: &str) -> LaunchdSchedule {
             r"<key>StartInterval</key>\s*<integer>(\d+)</integer>",
         )
         .captures(plist)
-        .and_then(|c| c[1].parse::<f64>().ok()),
+        .and_then(|c| c[1].parse::<f64>().ok())
+        .or_else(|| calendar_interval(plist)),
         stdout: s(re(
             &OUT,
             r"<key>StandardOutPath</key>\s*<string>([^<]*)</string>",
@@ -800,6 +801,24 @@ pub fn parse_launchd_schedule(plist: &str) -> LaunchdSchedule {
             &ERR,
             r"<key>StandardErrorPath</key>\s*<string>([^<]*)</string>",
         )),
+    }
+}
+
+/// The cadence of the StartCalendarInterval slots `persist::launchd_trigger` renders: evenly
+/// spaced, so N slots with an Hour mean every 24h/N, and N with only a Minute every 60m/N.
+fn calendar_interval(plist: &str) -> Option<f64> {
+    let cal = plist
+        .split("<key>StartCalendarInterval</key>")
+        .nth(1)?
+        .split("</array>")
+        .next()?;
+    match (
+        cal.matches("<key>Hour</key>").count(),
+        cal.matches("<key>Minute</key>").count(),
+    ) {
+        (0, 0) => None,
+        (0, m) => Some(3600.0 / m as f64),
+        (h, _) => Some(86_400.0 / h as f64),
     }
 }
 
@@ -850,7 +869,7 @@ pub fn classify_scheduled_producer(p: &Producer) -> (Level, String) {
         );
     }
     let Some(interval) = p.interval else {
-        return (Level::Warn, format!("{name} — its unit declares no StartInterval, so there is no cadence to judge it against ({seen})"));
+        return (Level::Warn, format!("{name} — its unit declares no StartInterval or StartCalendarInterval, so there is no cadence to judge it against ({seen})"));
     };
     let every = format_age(interval);
     let Some(age_s) = p.last_output_age else {
@@ -1770,6 +1789,16 @@ mod tests {
         assert_eq!(
             parse_launchd_schedule("<dict><key>KeepAlive</key><true/></dict>").interval,
             None
+        );
+        let slot = |h: u32| format!("<dict><key>Hour</key><integer>{h}</integer><key>Minute</key><integer>7</integer></dict>");
+        let six_hourly: String = [0, 6, 12, 18].map(slot).concat();
+        assert_eq!(
+            parse_launchd_schedule(&format!("<key>StartCalendarInterval</key><array>{six_hourly}</array>")).interval,
+            Some(21600.0)
+        );
+        assert_eq!(
+            parse_launchd_schedule("<key>StartCalendarInterval</key><array><dict><key>Minute</key><integer>0</integer></dict><dict><key>Minute</key><integer>30</integer></dict></array>").interval,
+            Some(1800.0)
         );
         assert_eq!(
             launchd_unit_capability("com.sjel.comms.plist").as_deref(),

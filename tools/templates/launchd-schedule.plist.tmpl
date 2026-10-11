@@ -27,8 +27,9 @@ __EXTRA_ENV__
        contract, not a surprise. -->
   <key>RunAtLoad</key>
   <true/>
-  <key>StartInterval</key>
-  <integer>__INTERVAL_SECONDS__</integer>
+  <!-- StartCalendarInterval slots, or StartInterval when the interval has no wall-clock form.
+       tools/sjel-cli/src/persist.rs launchd_trigger says why. -->
+__TRIGGER__
   <key>StandardOutPath</key>
   <string>__LOG_OUT__</string>
   <key>StandardErrorPath</key>

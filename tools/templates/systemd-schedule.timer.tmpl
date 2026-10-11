@@ -11,8 +11,8 @@ OnBootSec=1min
 # so the interval measures from when the last run finished.
 OnUnitActiveSec=__INTERVAL_SECONDS__s
 # A laptop that was asleep through a tick runs it on wake instead of silently skipping it. The
-# launchd side does this on its own — StartInterval fires a missed job at wake — so Persistent is
-# what keeps the two backends answering the same way.
+# launchd side gets the same from StartCalendarInterval (StartInterval would skip it; see
+# tools/sjel-cli/src/persist.rs launchd_trigger), so Persistent keeps the two backends alike.
 Persistent=true
 
 [Install]

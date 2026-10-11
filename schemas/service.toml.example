@@ -253,7 +253,9 @@ freshness_stale_hours  = "24"             # past this age nothing is arriving, a
 #                                           # OnUnitActiveSec is a time span) and a second scheduling
 #                                           # language in a manifest is a language to translate out
 #                                           # of. `install-persistence` renders a launchd agent with
-#                                           # StartInterval on macOS and a systemd --user timer plus
+#                                           # StartCalendarInterval on macOS (StartInterval when the
+#                                           # interval does not divide a day or an hour, and that
+#                                           # one skips firings in sleep) and a systemd --user timer plus
 #                                           # its oneshot on Linux. The first run comes ~1min after
 #                                           # boot rather than a whole interval later, and
 #                                           # re-installing triggers a run.

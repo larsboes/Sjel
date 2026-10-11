@@ -227,6 +227,35 @@ fn render(
     Ok(out)
 }
 
+/// The launchd trigger for a schedule of `secs`.
+///
+/// Not StartInterval where it can be avoided: "If the system is asleep during the time of the next
+/// scheduled interval firing, that interval will be missed" (launchd.plist(5), StartInterval). On a
+/// laptop that left 24h jobs silent for 3.5 days (tools/doctor, 2026-10-11). StartCalendarInterval
+/// runs a firing missed in sleep at wake, but it names wall-clock slots, so it covers an interval
+/// that divides a day into whole hours or an hour into whole minutes. Anything else keeps
+/// StartInterval and its caveat. The minute comes from the name, so jobs do not all start at :00.
+fn launchd_trigger(secs: u64, cap: &str) -> String {
+    let minute = cap.bytes().map(u64::from).sum::<u64>() % 60;
+    let slots: Vec<String> = if secs % 3600 == 0 && 86_400 % secs == 0 {
+        (0..24)
+            .step_by((secs / 3600) as usize)
+            .map(|h| format!("    <dict><key>Hour</key><integer>{h}</integer><key>Minute</key><integer>{minute}</integer></dict>"))
+            .collect()
+    } else if secs % 60 == 0 && 3600 % secs == 0 {
+        (0..60)
+            .step_by((secs / 60) as usize)
+            .map(|m| format!("    <dict><key>Minute</key><integer>{m}</integer></dict>"))
+            .collect()
+    } else {
+        return format!("  <key>StartInterval</key>\n  <integer>{secs}</integer>");
+    };
+    format!(
+        "  <key>StartCalendarInterval</key>\n  <array>\n{}\n  </array>",
+        slots.join("\n")
+    )
+}
+
 fn render_unit(s: &mut Svc) -> R<String> {
     let m = match mode(s, true) {
         Ok(Some(m)) => m,
@@ -274,7 +303,9 @@ fn render_unit(s: &mut Svc) -> R<String> {
             &env,
         ),
         ("macos", Mode::Scheduled) => {
-            let secs = secs()?;
+            let trigger = schedule::seconds(&s.schedule)
+                .map(|n| launchd_trigger(n, &cap))
+                .map_err(|e| Fail { code: 1, msg: e })?;
             // full_disk_access: the run starts through the signed sjel-fda-launcher, which holds
             // the Full Disk Access grant, instead of as /bin/bash, which has none.
             let mut launcher_line = String::new();
@@ -298,7 +329,7 @@ fn render_unit(s: &mut Svc) -> R<String> {
                     ("__LAUNCHER__", launcher_line),
                     ("__LABEL__", label),
                     ("__RUNNER_PATH__", runner),
-                    ("__INTERVAL_SECONDS__", secs),
+                    ("__TRIGGER__", trigger),
                     (
                         "__PATH__",
                         format!("{runtime_dir}:/usr/bin:/bin:/usr/sbin:/sbin"),

@@ -214,10 +214,11 @@ run sched install-persistence
 [ -f "$SCHED_PLIST" ] || fail "install-persistence did not write $SCHED_PLIST (said: $out)"
 expect_state "macos, freshly installed schedule" sched installed
 
-# 6h in the manifest, 21600 seconds in the unit — the conversion is the whole reason the manifest
-# can say something an operator reads and both backends still get what they want.
-grep -q "<integer>21600</integer>" "$SCHED_PLIST" || fail "6h did not render as a 21600s StartInterval: $(cat "$SCHED_PLIST")"
-grep -q "<key>StartInterval</key>" "$SCHED_PLIST" || fail "a scheduled job rendered without StartInterval"
+# 6h in the manifest, four calendar slots in the unit. Not StartInterval: launchd skips that one
+# while the Mac sleeps, and a calendar slot missed in sleep runs at wake (persist.rs launchd_trigger).
+grep -q "<key>StartCalendarInterval</key>" "$SCHED_PLIST" || fail "6h did not render as StartCalendarInterval: $(cat "$SCHED_PLIST")"
+[ "$(grep -o "<key>Hour</key>" "$SCHED_PLIST" | wc -l | tr -d ' ')" = 4 ] || fail "6h did not render as four daily slots: $(cat "$SCHED_PLIST")"
+grep -q "<key>StartInterval</key>" "$SCHED_PLIST" && fail "a 6h job still rendered StartInterval, which misses firings in sleep"
 # The negative half, and the one that would silently ruin it: a KeepAlive here would hold the
 # process up continuously and the interval would never mean anything.
 grep -q "<key>KeepAlive</key>" "$SCHED_PLIST" && fail "a scheduled job must not render a KeepAlive watchdog"
@@ -260,13 +261,14 @@ esac
 run badsched install-persistence
 [ "$status" -ne 0 ] || fail "install-persistence on an unparseable schedule exited 0"
 
-# Minutes and days convert too, and the unit is a whole number of seconds in both cases.
+# Minutes and days convert too. 30m divides an hour, so it gets two minute slots; 2d divides
+# neither a day nor an hour, so it falls back to a StartInterval in whole seconds.
 mkcap minutely false 'schedule = "30m"'
 mkcap daily false 'schedule = "2d"'
 machine macos '["minutely", "daily"]'
 run minutely install-persistence
-grep -q "<integer>1800</integer>" "$FAKE_HOME/Library/LaunchAgents/com.sjel.minutely.plist" \
-  || fail "30m did not render as 1800s"
+[ "$(grep -o "<key>Minute</key>" "$FAKE_HOME/Library/LaunchAgents/com.sjel.minutely.plist" | wc -l | tr -d ' ')" = 2 ] \
+  || fail "30m did not render as two minute slots"
 run daily install-persistence
 grep -q "<integer>172800</integer>" "$FAKE_HOME/Library/LaunchAgents/com.sjel.daily.plist" \
   || fail "2d did not render as 172800s"

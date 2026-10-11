@@ -55,3 +55,16 @@ reason = "Unmaintained proc-macro-error 1.0.4, build-time only, via glib-macros 
 id = "GHSA-238p-pmpm-9mq7"
 ignoreUntil = 2026-12-01
 reason = "katex 0.16.47 via mermaid 12.x, whose range (^0.16.47) excludes the fix (0.18.2); newest mermaid 12.1.0 still pins ^0.16.47. Read-side prototype-pollution gadget needing an already-polluted Object.prototype or attacker-set renderer options; the dashboard renders operator-authored mermaid, so neither holds. Revisit when mermaid widens the range."
+
+# Both arrive through GPUI at the Zed revision apps/gpui-prototype pins (5f8a7413), so the bump is
+# Zed's to make, not a transitive patch here. Checked 2026-10-11 with `cargo tree -i` in
+# apps/gpui-prototype.
+[[IgnoredVulns]]
+id = "RUSTSEC-2026-0173"
+ignoreUntil = 2026-12-01
+reason = "Unmaintained proc-macro-error2 2.0.1, build-time only, via stacksafe-macro <- stacksafe <- gpui (Zed 5f8a7413) <- apps/gpui-prototype. No affected functions, CVSS, or fixed version. Revisit when Zed drops stacksafe or the prototype bumps its Zed pin."
+
+[[IgnoredVulns]]
+id = "RUSTSEC-2026-0206"
+ignoreUntil = 2026-12-01
+reason = "Unmaintained rustybuzz 0.20.1, runtime, via usvg 0.46 <- gpui (Zed 5f8a7413) <- apps/gpui-prototype. It shapes text inside SVGs; apps/gpui-prototype/src loads no SVG and no asset (grep, 2026-10-11), so nothing reaches it. No affected functions, CVSS, or fixed version. The successor is harfrust; revisit when Zed moves usvg to it or the prototype bumps its Zed pin."

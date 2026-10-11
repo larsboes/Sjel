@@ -140,7 +140,7 @@ zeroize = "1.9"
 tower = "0.5"
 tower-http = "0.7"
 
-# Dependencies carry no debug info; workspace crates keep all of it.
+# Dependencies carry no debug info; workspace crates keep line tables only.
 #
 # Measured 2026-08-29, before this stanza existed: `target/debug` was 44 GB, of which `deps/`
 # alone was 27 GB and held **166,635 loose `.o` files totalling 14.9 GB**. The same 580 crates
@@ -157,16 +157,23 @@ tower-http = "0.7"
 #                             why the object files sit loose on disk instead of in a bundle.
 #
 # The `"*"` glob is the precise tool for this: cargo documents it as overriding "the settings for
-# all dependencies (but not any workspace member)". So the crates in `members` above keep
-# `debug = true` and stay fully steppable in lldb, and the dependencies — which nobody steps
-# into — stop paying for it.
+# all dependencies (but not any workspace member)". The dependencies, which nobody steps into,
+# stop paying for it.
+#
+# The workspace crates themselves get `line-tables-only` since 2026-10-11: backtraces, profilers
+# and lldb breakpoints keep file and line, but lldb cannot show variables or types. Nobody here
+# inspects variables in a debugger (no `lldb` in shell history), and smaller objects link faster.
+# To step with variables again, set `[profile.dev] debug = true` and rebuild.
 #
 # The trade, stated so it is not discovered: a backtrace through a dependency keeps its frames
 # but loses file, line and variable detail inside them. If that ever costs more than the disk,
-# delete these two lines; nothing else depends on them.
+# delete the `package."*"` lines; nothing else depends on them.
 #
 # Why this belongs in the tracked file rather than an overlay: it is a fact about Axon's build,
 # identical on every machine and in CI, so it is not a per-machine value (axon.toml's header
 # states that boundary). §9's R6 in the PRD is what made the number worth acting on.
+[profile.dev]
+debug = "line-tables-only"
+
 [profile.dev.package."*"]
 debug = false

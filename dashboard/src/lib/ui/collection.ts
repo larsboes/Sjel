@@ -58,7 +58,8 @@ export function readState(params: URLSearchParams, id: string, defaults: Collect
     sort: sort === null ? defaults.sort : sort.replace(/^-/, '') || null,
     desc: sort === null ? defaults.desc : sort.startsWith('-'),
     group: params.has(key('group')) ? params.get(key('group')) || null : defaults.group,
-    filter: Object.keys(filter).length ? filter : defaults.filter,
+    // An empty `<id>.f` is a default filter the reader cleared.
+    filter: Object.keys(filter).length ? filter : params.has(key('f')) ? {} : defaults.filter,
   };
 }
 
@@ -66,7 +67,7 @@ export function readState(params: URLSearchParams, id: string, defaults: Collect
 export function writeState(params: URLSearchParams, id: string, state: CollectionState, defaults: CollectionState): void {
   const key = (name: string) => `${id}.${name}`;
   for (const name of [...params.keys()]) {
-    if (name.startsWith(`${id}.f.`) || RESERVED.some((r) => name === key(r))) params.delete(name);
+    if (name.startsWith(`${id}.f.`) || name === key('f') || RESERVED.some((r) => name === key(r))) params.delete(name);
   }
   if (state.view !== defaults.view) params.set(key('view'), state.view);
   if (state.q) params.set(key('q'), state.q);
@@ -74,6 +75,8 @@ export function writeState(params: URLSearchParams, id: string, state: Collectio
     params.set(key('sort'), state.sort ? `${state.desc ? '-' : ''}${state.sort}` : '');
   }
   if (state.group !== defaults.group) params.set(key('group'), state.group ?? '');
+  if (JSON.stringify(state.filter) === JSON.stringify(defaults.filter)) return;
+  if (!Object.keys(state.filter).length) params.set(key('f'), '');
   for (const [field, values] of Object.entries(state.filter)) {
     for (const v of values) params.append(key(`f.${field}`), v);
   }

@@ -47,6 +47,14 @@ describe('URL state', () => {
     writeState(params, 'tx', defaults, defaults);
     expect(params.toString()).toBe('');
   });
+  it('writes nothing for a default filter, and can clear it', () => {
+    const d = { ...defaults, filter: { kind: ['expense'] } };
+    const params = new URLSearchParams();
+    writeState(params, 'tx', d, d);
+    expect(params.toString()).toBe('');
+    writeState(params, 'tx', { ...d, filter: {} }, d);
+    expect(readState(params, 'tx', d).filter).toEqual({});
+  });
   it('can clear a default sort', () => {
     const d = { ...defaults, sort: 'amount', desc: true };
     const params = new URLSearchParams();

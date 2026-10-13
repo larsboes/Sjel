@@ -1172,7 +1172,7 @@ pub(crate) mod db_tests {
         .unwrap();
 
         for _ in 0..2 {
-            let tx = conn.transaction().unwrap();
+            let tx = sjel_store::write_transaction(&mut conn).unwrap();
             PlacesStore::type_ids(&tx, "places").unwrap();
             tx.commit().unwrap();
         }

@@ -75,7 +75,7 @@ describe("storageView", () => {
         protected: [
           // The four entries really in this state were paths that no longer existed, and the
           // panel used to explain them to the reader as a permissions problem.
-          { path: "~/Developer/Inbox", bytes: 0, reason: "13 GB staging area", present: false },
+          { path: "~/Documents/Staging", bytes: 0, reason: "13 GB staging area", present: false },
           // Live but empty, or unreadable: the tool does not say which, so neither does this.
           { path: "~/Library/Application Support/Claude", bytes: 0, reason: "app-owned" },
           { path: "~/Pictures/Photos Library.photoslibrary", bytes: 66_062_876_672, reason: "iCloud governs it" },
@@ -84,7 +84,7 @@ describe("storageView", () => {
     );
     expect(view.protected.map((row) => row.path)).toEqual([
       "~/Pictures/Photos Library.photoslibrary",
-      "~/Developer/Inbox",
+      "~/Documents/Staging",
       "~/Library/Application Support/Claude",
     ]);
     expect(view.protectedAbsent).toBe(1);

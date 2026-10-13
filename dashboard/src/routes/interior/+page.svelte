@@ -44,6 +44,7 @@
   import { bridgedSrc } from "$lib/bridged-url";
   import { getConnectionSettings } from "$lib/mac-bridge";
   import { modal } from "$lib/modal";
+  import Wishlist from "$lib/inventory/Wishlist.svelte";
 
   type View = "plans" | "inventory" | "solve" | "buy";
 
@@ -123,12 +124,6 @@
     query.addEventListener("change", sync);
     return () => query.removeEventListener("change", sync);
   });
-
-  /** Which cards show their whole note on a phone. A tap opens one; the rest stay clamped. */
-  let expandedNotes = $state<Record<string, boolean>>({});
-
-  /** The lower edge: a product's own price, otherwise the bottom of its estimate. */
-  const floorPrice = (i: InteriorItem): number | null => i.preis_cent ?? i.kosten_min_cent;
 
   // A garment carries its own `category`; furniture predates the field and is told by `kind`.
   const groupOf = (i: InteriorItem): string =>
@@ -886,6 +881,16 @@
       }
     } finally {
       saving = false;
+    }
+  }
+
+  /** One field from the wishlist's side peek. A conflict reloads, so the peek shows what stands now. */
+  async function patchWish(item: InteriorItem, patch: Partial<InteriorItem>): Promise<void> {
+    try {
+      await interior.patchItem(item.id, patch, item.revision);
+    } finally {
+      // Not `load()`: its loading flag unmounts the list and closes the peek mid-edit.
+      [inventory, wishlist] = await Promise.all([interior.inventory(), interior.wishlist()]);
     }
   }
 
@@ -1900,61 +1905,15 @@
     </section>
 
     <h3 class="group">Wanted <span class="count">{wishlist.items.length}</span></h3>
-    <ul class="items">
-      {#each wishlist.items as i (i.id)}
-        <li class="card item" class:has-shot={!!i.bild}>
-          <div class="head">
-            <span class="label">{i.label}</span>
-            {#if i.prioritaet}<span class="tag">{i.prioritaet}</span>{/if}
-            {#if i.kind === "slot"}<span class="tag slot">slot</span>{/if}
-            {#if pendingIds.has(i.id)}<span class="tag pending" use:tip={"Saved on this device; not on the canonical node yet."}>not synced</span>{/if}
-            {#if conflictIds.has(i.id)}<span class="tag conflict" use:tip={"The canonical node changed this item too. Review it in the sync line at the top."}>conflict</span>{/if}
-          </div>
-          {#if i.bild}
-            <img class="shot" use:bridgedSrc={interior.mediaUrl(i.bild)} alt={i.label} loading="lazy" />
-          {/if}
-          <!-- One meta line: size and price, with an unknown size left out rather than
-               printed as "—", and a missing price as a small tag. -->
-          <p class="meta">
-            {#if knownSize(i)}<span class="dims mono">{knownSize(i)}</span>{/if}
-            {#if floorPrice(i) === null}
-              <span class="tag unpriced">no price</span>
-            {:else}
-              <span class="price mono">
-                {#if i.preis_cent !== null}
-                  {euro(i.preis_cent)}
-                {:else}
-                  {euro(i.kosten_min_cent ?? 0)} – {euro(i.kosten_max_cent ?? 0)}
-                {/if}
-              </span>
-            {/if}
-            {#if i.unsicher.length > 0}
-              <span class="guess" use:tip={"measured? no."}>~ {i.unsicher.join(", ")}</span>
-            {/if}
-          </p>
-          {#if i.ziel}
-            {#if phone}
-              <!-- Clamped to two lines on a phone; a tap shows the rest. -->
-              <button
-                type="button"
-                class="target clamp"
-                class:open={expandedNotes[i.id]}
-                aria-expanded={!!expandedNotes[i.id]}
-                onclick={() => (expandedNotes[i.id] = !expandedNotes[i.id])}
-              ><span>{i.ziel}</span></button>
-            {:else}
-              <p class="target">{i.ziel}</p>
-            {/if}
-          {/if}
-          <div class="actions">
-            <button class="ghost" data-edit={i.id} onclick={() => openEditor(i.id)}>Edit</button>
-            <button class="ghost" disabled={saving} onclick={() => move(i.id, "owned")}>
-              Mark bought
-            </button>
-          </div>
-        </li>
-      {/each}
-    </ul>
+    <Wishlist
+      items={wishlist.items}
+      pending={pendingIds}
+      conflicts={conflictIds}
+      busy={saving}
+      onPatch={patchWish}
+      onBought={(id) => move(id, "owned")}
+      onFullEditor={openEditor}
+    />
   {/if}
 
   <h3 class="group">Owned <span class="count">{owned.length}</span></h3>
@@ -2923,9 +2882,6 @@
     font-size: var(--text-2xs);
     padding: 0.05rem 0.35rem;
   }
-  .tag.slot {
-    background: var(--warning-soft);
-  }
   .tag.pending {
     background: var(--warning-soft);
     color: var(--text-primary);
@@ -2934,8 +2890,7 @@
     background: var(--danger-soft, var(--warning-soft));
     color: var(--text-primary);
   }
-  .dims,
-  .price {
+  .dims {
     color: var(--text-secondary);
     font-size: var(--text-sm);
   }
@@ -2947,49 +2902,9 @@
     gap: var(--space-1) var(--space-3);
     margin: 0;
   }
-  .meta .dims + .price::before {
-    color: var(--text-tertiary);
-    content: "·";
-    margin-right: var(--space-3);
-  }
-  /* A missing price is a fact about the record, not an alarm: a quiet tag. */
-  .tag.unpriced {
-    background: var(--surface);
-    color: var(--text-tertiary);
-  }
   .guess {
     color: var(--warning-ink);
     font-size: var(--text-xs);
-  }
-  .target {
-    color: var(--text-tertiary);
-    font-size: var(--text-xs);
-    margin: 0.25rem 0 0;
-  }
-  /* The phone's note: two lines, and the whole text on a tap. Still a button, so it is
-     reachable and announced as something that opens. */
-  .target.clamp {
-    background: none;
-    border: 0;
-    color: var(--text-tertiary);
-    cursor: pointer;
-    font: inherit;
-    font-size: var(--text-xs);
-    line-height: var(--leading-normal);
-    padding: 0;
-    text-align: left;
-    width: 100%;
-  }
-  /* The clamp sits on the span: WebKit does not lay a <button> out as a line-clamp box. */
-  .target.clamp span {
-    -webkit-box-orient: vertical;
-    display: -webkit-box;
-    -webkit-line-clamp: 2;
-    line-clamp: 2;
-    overflow: hidden;
-  }
-  .target.clamp.open span {
-    display: block;
   }
 
   .card {
@@ -3366,9 +3281,6 @@
       font-size: var(--text-sm);
       min-height: 2.5rem;
       padding: 0 var(--space-4);
-    }
-    .target {
-      margin: 0;
     }
 
     .group {

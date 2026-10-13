@@ -148,8 +148,15 @@ pub(super) async fn source_scan_handler(Json(body): Json<SourceScanBody>) -> Htt
                     .map_err(|error| error.to_string())?;
                 ids.insert(item.id.clone());
             }
+            // `record_sweep_success`, not `record_run`. This endpoint is what feed-sweep and the
+            // dashboard call, and `record_run` writes only `last_run_at` and the cursor, so a
+            // source scanned here could contribute to `GET /__axon/freshness` neither by success
+            // nor by failure. Measured 2026-10-13: `arxiv-ai-recent` and `github-trending-daily`
+            // had run every six hours for days with `last_success_at` NULL, which left that
+            // contract resting on the inbox sweep alone -- and it went stale the moment gmail's
+            // refresh token did, while two healthy producers went unmentioned.
             store
-                .record_run(&source.id, None)
+                .record_sweep_success(&source.id, found.len() as i64, new_count as i64)
                 .map_err(|error| error.to_string())?;
             let stored = found.len() - failed.len();
             results.push(json!({

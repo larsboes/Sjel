@@ -155,8 +155,9 @@
       <label class="tool">
         Group
         <select name="{id}-group" bind:value={() => current.group ?? "", (v) => (current.group = v || null)}>
-          <option value="">None</option>
-          {#each selects as f (f.id)}<option value={f.id}>{f.label}</option>{/each}
+          <!-- `selected` as well as the binding: the value is set before these options exist. -->
+          <option value="" selected={!current.group}>None</option>
+          {#each selects as f (f.id)}<option value={f.id} selected={current.group === f.id}>{f.label}</option>{/each}
         </select>
       </label>
     {/if}

@@ -179,9 +179,13 @@
     cursor: pointer;
   }
 
-  tr.openable:hover,
+  /* --nav-hover is a text colour; as a fill it turned the row black (light) or white (dark). */
+  tr.openable:hover {
+    background: var(--surface);
+  }
+
   tr.selected {
-    background: var(--nav-hover);
+    background: var(--accent-soft);
   }
 
   tr:focus-visible {

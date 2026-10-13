@@ -155,14 +155,14 @@ fn an_invariant_has_no_rule_text_and_needs_no_declaration() {
     let v = r
         .hard
         .iter()
-        .find(|v| v.rule == "raumgrenze")
+        .find(|v| v.rule == "room_boundary")
         .expect("d-ausserhalb stellt ein Moebel durch die Wand");
     assert!(
         v.text.is_none(),
         "`raumgrenze` ist Geometrie und keine Hausregel — es gibt keinen Text nachzuschlagen"
     );
     assert!(
-        !RULE_IDS.contains(&"raumgrenze"),
+        !RULE_IDS.contains(&"room_boundary"),
         "und es steht deshalb auch nicht in REGEL_IDS"
     );
 }
@@ -397,9 +397,9 @@ fn a_rotation_rotates_the_opening_side() {
 
     let (pass, regeln) = verdict(90);
     assert!(!pass, "Tueren nach Westen: gegen die Wand bei x = 0");
-    assert!(regeln.contains(&"oeffnen".to_string()), "{regeln:?}");
+    assert!(regeln.contains(&"open".to_string()), "{regeln:?}");
 
     let (pass, regeln) = verdict(180);
     assert!(!pass, "Tueren nach Norden: gegen die Wand bei y = 0");
-    assert!(regeln.contains(&"oeffnen".to_string()), "{regeln:?}");
+    assert!(regeln.contains(&"open".to_string()), "{regeln:?}");
 }

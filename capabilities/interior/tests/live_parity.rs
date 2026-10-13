@@ -142,7 +142,7 @@ fn every_layout_matches_the_template_result() {
                 .as_array()
                 .unwrap()
                 .iter()
-                .map(|x| x["rule"].as_str().unwrap().to_string())
+                .map(|x| english_rule_id(x["rule"].as_str().unwrap()))
                 .collect();
             v.sort();
             v
@@ -156,7 +156,7 @@ fn every_layout_matches_the_template_result() {
                 .as_array()
                 .map(|a| {
                     a.iter()
-                        .filter_map(|v| v.as_str().map(str::to_string))
+                        .filter_map(|v| v.as_str().map(english_rule_id))
                         .collect()
                 })
                 .unwrap_or_default()
@@ -238,4 +238,13 @@ fn every_piece_keeps_its_size() {
         }
     }
     assert!(dev.is_empty(), "Masse weichen ab:\n  {}", dev.join("\n  "));
+}
+
+/// The baseline was recorded with the German rule ids.
+fn english_rule_id(id: &str) -> String {
+    interior::clearance::LEGACY_RULE_IDS
+        .iter()
+        .find(|(old, _)| *old == id)
+        .map_or(id, |(_, new)| new)
+        .to_string()
 }

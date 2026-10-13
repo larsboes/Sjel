@@ -1,33 +1,26 @@
-//! Zeichnet ein Layout als SVG.
+//! Draws a layout as SVG.
 //!
-//! Nichts hier kennt ein Mass. Jede Zahl auf dem Blatt kommt zur Laufzeit aus dem Modell, und
-//! die Zeichnung entsteht aus denselben Koordinaten, gegen die der Pruefer urteilt — Bild und
-//! Verdikt koennen deshalb nicht auseinanderlaufen. Genau diese Drift ist der Grund, warum es
-//! keine handgezeichnete Planseite gibt.
-//!
-//! Selbsttragend: keine externe Schrift, kein Skript, kein Bildhost. Das SVG funktioniert aus
-//! einer Datei, im Browser und in einer Vorschau ohne Netz.
+//! Nothing here knows a size: every number on the sheet comes from the model at run time, from the
+//! same coordinates the checker judges, so picture and verdict cannot drift apart. Self-contained:
+//! no external font, script or image host, so it works from a file and offline.
 
 use crate::clearance::{check_layout, kind_of, Kind};
 use crate::model::{footprint, Layout, Model, ModelError, PlacedItem, Rect};
 
 const PAD: i32 = 40;
 
-/// Schriftgrade der Moebelbeschriftung, gross zuerst. Die viewBox laeuft in Zentimetern, also
-/// IST ein Schriftgrad hier ein Mass auf dem Blatt und keine Bildschirmgroesse: er waechst mit
-/// dem Plan und nicht mit dem Fenster.
+/// Label font sizes, largest first. The viewBox runs in centimetres, so a font size is a length on
+/// the sheet and grows with the plan, not the window.
 const GRADE: [i32; 4] = [19, 16, 14, 12];
 
-/// Mittlere Glyphenbreite von Helvetica als Anteil des Schriftgrads. GESCHAETZT und nicht
-/// gemessen — das SVG traegt keine Schrift mit sich, also kann hier niemand die wirkliche
-/// Breite kennen. Eher zu gross gewaehlt: ein zu klein geschaetzter Text laeuft ueber seine
-/// Kante, ein zu gross geschaetzter kostet nur einen Schriftgrad.
+/// Mean Helvetica glyph width as a share of the font size. Estimated, since the SVG embeds no
+/// font, and on the large side: an underestimate runs past its edge.
 const GLYPH: f64 = 0.58;
 
-/// Luft zwischen Text und Moebelkante.
+/// Air between text and the piece's edge.
 const AIR: i32 = 4;
 
-/// Abstand zwischen Moebelkante und einer aussen gesetzten Beschriftung.
+/// Gap between a piece's edge and a label placed outside it.
 const GAP: i32 = 8;
 
 fn esc(s: &str) -> String {
@@ -37,49 +30,44 @@ fn esc(s: &str) -> String {
         .replace('"', "&quot;")
 }
 
-/// Kopfwoerter, an denen ein Bezeichner erkannt wird — geprueft als ENDUNG, weil ein deutsches
-/// Kompositum sein Kopfwort hinten traegt: `buerostuhl` und `schreibtischstuhl` sind beide ein
-/// Stuhl und enden beide auf `stuhl`. Es gewinnt der laengste Treffer, also faellt `couchtisch`
-/// nicht auf `tisch` zurueck und die Reihenfolge dieser Liste traegt nichts. Anders als bei
-/// `clearance::kind_of_name`, wo genau diese Reihenfolge einmal teuer war.
-///
-/// Die Liste ist eine Abkuerzung und keine Bedingung: ein Bezeichner, der hier nicht vorkommt,
-/// bekommt sein eigenes Wort gross geschrieben und bleibt lesbar.
+/// Head words that identify an id, matched as endings because German compounds end in their
+/// head word (`buerostuhl` is a `stuhl`). The longest match wins, so order does not matter. The
+/// keys match your item ids and stay German; the labels are English. An id with no match shows
+/// its own first word.
 const HEADER_WORDS: &[(&str, &str)] = &[
-    ("saugroboter", "Sauger"),
-    ("beistelltisch", "Beistelltisch"),
-    ("couchtisch", "Couchtisch"),
-    ("schreibtisch", "Schreibtisch"),
-    ("stuehle", "Stuhl"),
-    ("stuhl", "Stuhl"),
-    ("schrank", "Schrank"),
-    ("pflanzen", "Pflanze"),
-    ("pflanze", "Pflanze"),
-    ("regale", "Regal"),
-    ("regal", "Regal"),
-    ("platte", "Platte"),
-    ("tisch", "Tisch"),
+    ("saugroboter", "Vacuum"),
+    ("beistelltisch", "Side table"),
+    ("couchtisch", "Coffee table"),
+    ("schreibtisch", "Desk"),
+    ("stuehle", "Chair"),
+    ("stuhl", "Chair"),
+    ("schrank", "Wardrobe"),
+    ("pflanzen", "Plant"),
+    ("pflanze", "Plant"),
+    ("regale", "Shelf"),
+    ("regal", "Shelf"),
+    ("platte", "Top"),
+    ("tisch", "Table"),
     ("couch", "Couch"),
     ("sofa", "Couch"),
-    ("bett", "Bett"),
+    ("bett", "Bed"),
 ];
 
-/// Das Wort, das eine deklarierte Art auf dem Blatt traegt. `Other` hat keines — es ist die
-/// Aussage "keine der bekannten Arten" und nicht der Name eines Moebels.
-fn art_wort(kind: Kind) -> Option<&'static str> {
+/// The word a declared kind shows. `Other` has none: it means none of the known kinds.
+fn kind_word(kind: Kind) -> Option<&'static str> {
     match kind {
-        Kind::Bed => Some("Bett"),
-        Kind::Desk => Some("Schreibtisch"),
+        Kind::Bed => Some("Bed"),
+        Kind::Desk => Some("Desk"),
         Kind::Couch => Some("Couch"),
-        Kind::Wardrobe => Some("Schrank"),
-        Kind::CoffeeTable => Some("Couchtisch"),
-        Kind::Table => Some("Tisch"),
-        Kind::Shelf => Some("Regal"),
+        Kind::Wardrobe => Some("Wardrobe"),
+        Kind::CoffeeTable => Some("Coffee table"),
+        Kind::Table => Some("Table"),
+        Kind::Shelf => Some("Shelf"),
         Kind::Other => None,
     }
 }
 
-fn gross(s: &str) -> String {
+fn capitalised(s: &str) -> String {
     let mut c = s.chars();
     match c.next() {
         Some(f) => f.to_uppercase().collect::<String>() + c.as_str(),
@@ -87,62 +75,48 @@ fn gross(s: &str) -> String {
     }
 }
 
-/// Der kurze Name, der im Moebel steht.
+/// The short name shown inside a piece, from the id rather than the human `label`.
 ///
-/// Abgeleitet aus dem BEZEICHNER und nicht aus `label`. Der Katalogtext ist ein Satz fuer
-/// Menschen — "2x Esstischstuhl", "Saugroboter mit Dock (Standardmass, kein Modell gewaehlt)" —
-/// und stand bis 2026-08-31 nur an Komma und Klammer gekuerzt im Plan: beide Stuehle trugen
-/// dadurch das Wort "2x", keiner passte in sein Rechteck, und die dritte Bodenpflanze deckte
-/// die zweite zu. Der volle Name bleibt in der Oberflaeche am Stueck stehen, siehe
-/// `dashboard/src/routes/interior/+page.svelte` (`focusRef` -> `it.label`).
+/// 1. The id splits at `_`: the first part is the word, a trailing number the count, the rest is
+///    dropped (`pflanze_boden_1` -> "Plant 1").
+/// 2. The word is shortened to its head word if one matches.
+/// 3. Otherwise the kind declared in the layout, else the word itself.
 ///
-/// Drei Schritte, jeder allgemein:
-///
-/// 1. Der Bezeichner zerfaellt an `_`. Das ERSTE Stueck ist das Wort, eine abschliessende Zahl
-///    ist die laufende Nummer, alles dazwischen ist Beiwerk. `pflanze_boden_1` wird damit
-///    "Pflanze 1" und `bett_bestand` wird "Bett", ohne eine Liste von Endungen zu pflegen.
-/// 2. Das Wort wird auf sein Kopfwort gekuerzt, falls eines passt.
-/// 3. Sonst zaehlt die im Layout DEKLARIERTE Art, und sonst das Wort selbst.
-///
-/// Diese Reihenfolge, weil der Name genauer ist als die Art: `clearance::kind_of_name` fuehrt
-/// `buerostuhl` unter `Desk`, damit der Stuhl die Zonen eines Arbeitsplatzes erbt. Mit der Art
-/// zuerst stand im Plan bis 2026-08-31 ein zweites "Schreibtisch" auf dem Buerostuhl — zwei
-/// Kaesten, ein Wort, und eines davon gelogen. Die geerbte Art bleibt richtig; nur das WORT
-/// kommt jetzt vom Stueck selbst.
+/// Name before kind, because the name is more precise: `kind_of_name` files an office chair
+/// under Desk so it inherits a workplace's zones, but it should still read "Chair".
 pub fn short_label(reference: &str, declared: Option<Kind>) -> String {
     let mut parts: Vec<&str> = reference.split('_').filter(|s| !s.is_empty()).collect();
     let number = match parts.last() {
         Some(l) if parts.len() > 1 && l.chars().all(|c| c.is_ascii_digit()) => parts.pop(),
         _ => None,
     };
-    let wort = parts
+    let word = parts
         .first()
         .copied()
         .unwrap_or(reference)
         .to_ascii_lowercase();
     let header = HEADER_WORDS
         .iter()
-        .filter(|(ending, _)| wort.ends_with(ending))
+        .filter(|(ending, _)| word.ends_with(ending))
         .max_by_key(|(ending, _)| ending.len())
         .map(|(_, short)| (*short).to_string())
-        .or_else(|| declared.and_then(art_wort).map(str::to_string))
-        .unwrap_or_else(|| gross(&wort));
+        .or_else(|| declared.and_then(kind_word).map(str::to_string))
+        .unwrap_or_else(|| capitalised(&word));
     match number {
         Some(n) => format!("{header} {n}"),
         None => header,
     }
 }
 
-/// Wie breit ein Text auf dem Blatt wird. Siehe `GLYPHE`: eine Schaetzung, absichtlich zu gross.
-fn width(zeichen: usize, grad: i32) -> i32 {
-    (zeichen as f64 * GLYPH * grad as f64).ceil() as i32
+/// How wide a text runs on the sheet; see `GLYPH`.
+fn width(n_chars: usize, grad: i32) -> i32 {
+    (n_chars as f64 * GLYPH * grad as f64).ceil() as i32
 }
 
-/// Die Flaeche eines mittig gesetzten Textes. Fuer die Beschriftungen des RAUMS — Bad, Einbau,
-/// Terrasse —, damit die Moebelbeschriftungen ihnen ausweichen statt sie zuzudecken. `sperrung`
-/// ist das `letter-spacing`, das diese drei tragen und das die Schaetzung sonst unterschlaegt.
-fn centred(cx: i32, cy: i32, zeichen: usize, grad: i32, blocking: i32, across: bool) -> Rect {
-    let long = width(zeichen, grad) + zeichen as i32 * blocking;
+/// The area of a centred text, for the room's own labels (bathroom, fixtures, terrace), so piece
+/// labels avoid them. `blocking` is the letter-spacing those carry.
+fn centred(cx: i32, cy: i32, n_chars: usize, grad: i32, blocking: i32, across: bool) -> Rect {
+    let long = width(n_chars, grad) + n_chars as i32 * blocking;
     let (w, d) = if across { (grad, long) } else { (long, grad) };
     Rect {
         x: cx - w / 2,
@@ -152,8 +126,8 @@ fn centred(cx: i32, cy: i32, zeichen: usize, grad: i32, blocking: i32, across: b
     }
 }
 
-/// Eine gesetzte Beschriftung: wo sie steht, wie gross, wie herum, und welche Flaeche sie damit
-/// belegt. Die Flaeche ist der Punkt — sie ist es, gegen die die naechste Beschriftung prueft.
+/// A placed label: where, how large, which way round, and the area it takes, which the next
+/// label checks against.
 struct PlacedText {
     x: i32,
     y: i32,
@@ -164,7 +138,7 @@ struct PlacedText {
     area: Rect,
 }
 
-fn frei(f: &Rect, obstacles: &[Rect], set: &[Rect], sheet: &Rect) -> bool {
+fn is_free(f: &Rect, obstacles: &[Rect], set: &[Rect], sheet: &Rect) -> bool {
     f.x >= sheet.x
         && f.y >= sheet.y
         && f.right() <= sheet.right()
@@ -173,36 +147,26 @@ fn frei(f: &Rect, obstacles: &[Rect], set: &[Rect], sheet: &Rect) -> bool {
         && !set.iter().any(|g| g.overlaps(f))
 }
 
-/// Wohin die Beschriftung eines Moebels gehoert.
+/// Where a piece's label goes.
 ///
-/// Zuerst hinein, so gross wie moeglich; passt sie liegend nicht, dann stehend — ein Rechteck,
-/// das tiefer als breit ist, traegt seinen Text quer. Passt sie in keinem Schriftgrad hinein,
-/// geht sie nach aussen, und dort wird die erste Stelle genommen, die weder ein Moebel noch
-/// eine schon gesetzte Beschriftung noch den Blattrand trifft; eine Fuehrungslinie haelt sie an
-/// ihrem Stueck. Erst wenn gar nichts frei ist, faellt sie klein nach Osten und darf
-/// kollidieren — eine Beschriftung, die nirgends hinpasst, ist immer noch besser als keine, und
-/// dass sie dann anstoesst, ist eine Aussage ueber die Enge.
+/// Inside first, as large as possible, horizontal then upright. If no size fits, outside at the
+/// first spot that hits no piece, no label and no sheet edge, held by a leader line. Only when
+/// nothing is free does it go small to the east and may collide; a label that fits nowhere says
+/// something about the crowding.
 ///
-/// Vorher entschied eine einzige Zeile — `zeichen * 11 > w && d > w` — ueber quer oder nicht und
-/// liess den Text sonst laufen. Im Plan vom 2026-08-31 lagen dadurch zwei gedrehte Stuhlnamen
-/// uebereinander, ein Pflanzenname war am Bildrand abgeschnitten, und der Name des Saugroboters
-/// lag quer ueber drei anderen Stuecken.
-///
-/// `blatt` ist die ganze Zeichenflaeche, `kern` das Gemessene darin. Ein Name unter oder ueber
-/// seinem Stueck wird in den Kern geschoben statt mittig ueber die Aussenwand zu rutschen —
-/// sonst steht die Beschriftung eines Stuecks an der Fensterwand halb auf der Terrasse, also auf
-/// einer geschaetzten Flaeche.
+/// `sheet` is the whole drawing, `core` the measured part: a label above or below its piece is
+/// pushed into the core rather than onto the estimated terrace.
 fn set_value(
     r: &Rect,
-    zeichen: usize,
+    n_chars: usize,
     obstacles: &[Rect],
     set: &[Rect],
     sheet: &Rect,
-    kern: &Rect,
+    core: &Rect,
 ) -> PlacedText {
     let (cx, cy) = (r.x + r.w / 2, r.y + r.d / 2);
     for grad in GRADE {
-        let tw = width(zeichen, grad);
+        let tw = width(n_chars, grad);
         if tw + 2 * AIR <= r.w && grad + 2 * AIR <= r.d {
             return PlacedText {
                 x: cx,
@@ -238,11 +202,11 @@ fn set_value(
     }
 
     let outside = |grad: i32| -> [PlacedText; 4] {
-        let tw = width(zeichen, grad);
+        let tw = width(n_chars, grad);
         let half = grad / 2;
-        // Waagerecht in den Kern geschoben, solange der Text ueberhaupt hineinpasst.
-        let lengthwise = if tw <= kern.w {
-            (cx - tw / 2).clamp(kern.x, kern.right() - tw)
+        // Pushed horizontally into the core while the text fits there at all.
+        let lengthwise = if tw <= core.w {
+            (cx - tw / 2).clamp(core.x, core.right() - tw)
         } else {
             cx - tw / 2
         };
@@ -308,7 +272,7 @@ fn set_value(
 
     for grad in GRADE {
         for candidate in outside(grad) {
-            if frei(&candidate.area, obstacles, set, sheet) {
+            if is_free(&candidate.area, obstacles, set, sheet) {
                 return candidate;
             }
         }
@@ -320,17 +284,8 @@ fn set_value(
 pub fn svg(model: &Model, layout: &Layout) -> Result<String, ModelError> {
     let room = &model.room;
     let poly = &room.main_room.polygon;
-    // Nur GEMESSENES spannt das Blatt auf.
-    //
-    // Bis 2026-08-31 lief auch die Terrasse in die Ausdehnung ein. Sie ist geschaetzt — das
-    // Wohnungsmodell fuehrt sie ausdruecklich so, ihre Tiefe ist aus der Luecke zwischen
-    // Expose und Aufmass zurueckgerechnet und hat nie ein Bandmass gesehen — und sie nahm damit
-    // ein knappes Viertel der Blattbreite. Der gemessene Raum stand auf der Haelfte des Blattes
-    // und las sich kleiner, als er ist. Eine Schaetzung, die den Massstab des Gemessenen
-    // bestimmt, ist genau die Falle, gegen die der Rest dieser Datei gebaut ist.
-    //
-    // Gezeichnet wird sie weiter, aber als Band, das der Blattrand ABSCHNEIDET: dass ihre Tiefe
-    // unbekannt ist, steht damit im Bild und nicht in einer Fussnote.
+    // Only what is measured spans the sheet. The terrace is estimated, so it is drawn as a band the
+    // sheet edge cuts off: its unknown depth shows in the picture.
     let mut xs: Vec<i32> = poly.iter().map(|p| p[0]).collect();
     let mut ys: Vec<i32> = poly.iter().map(|p| p[1]).collect();
     if let Some(b) = &room.bathroom {
@@ -347,9 +302,8 @@ pub fn svg(model: &Model, layout: &Layout) -> Result<String, ModelError> {
     );
 
     let mut p = String::new();
-    // Breite UND Hoehe setzen, im Verhaeltnis der viewBox. Nur `width` zu setzen laesst
-    // Vorschau-Renderer (qlmanage, Quick Look) auf ein Quadrat zurueckfallen und schneidet
-    // den Plan ab — die viewBox allein regelt das nicht.
+    // Set width and height in the viewBox ratio: with only `width`, Quick Look falls back to a square
+    // and crops the plan.
     let (vw, vh) = (max_x - min_x, max_y - min_y);
     let out_w = 1100;
     let out_h = (out_w as f64 * vh as f64 / vw as f64).round() as i32;
@@ -361,24 +315,19 @@ pub fn svg(model: &Model, layout: &Layout) -> Result<String, ModelError> {
         max_y - min_y
     ));
 
-    // Jeder Text, der schon auf dem Blatt steht. Die Moebelbeschriftungen weichen ihm aus.
+    // Every text already on the sheet; piece labels avoid them.
     let mut set: Vec<Rect> = Vec::new();
 
-    // Terrasse zuerst, damit die Aussenwand darueber liegt. Schraffiert, an den Laengsseiten
-    // gestrichelt, nach aussen offen und mit "ca." beschriftet — vier Signaturen fuer dieselbe
-    // Aussage: hier ist etwas, und niemand hat es gemessen. Eine Aussenflaeche, die aussieht wie
-    // eine gemessene, ist eine Falle.
-    //
-    // Das Band selbst sperrt nichts: es ist Schraffur, und ein Name darueber bleibt lesbar. Sein
-    // TEXT sperrt, wie jeder andere auch.
+    // Terrace first, so the outer wall lies on top. Hatched, dashed on its long sides, open to the
+    // outside and labelled "approx.": here is something nobody measured. Its text blocks like any
+    // other; the band itself blocks nothing.
     if let Some(t) = &room.terrace {
         let (x0, x1) = (t.x[0].max(min_x), t.x[1].min(max_x));
         let (y0, y1) = (t.y[0].max(min_y), t.y[1].min(max_y));
         if x1 > x0 && y1 > y0 {
             let (w, h) = (x1 - x0, y1 - y0);
-            // Schraffur statt Flaeche, und je Strich an das Band geschnitten. Ein `<pattern>`
-            // waere kuerzer und traegt eine Kennung: mehrere Plaene auf einer Side — die
-            // CLI-Side zeigt alle — teilten sie sich dann.
+            // Hatching cut per stroke to the band. A `<pattern>` would carry an id that several plans on
+            // one page would share.
             let mut s = x0 - h;
             while s < x1 {
                 let lo = (x0 - s).max(0);
@@ -404,8 +353,7 @@ pub fn svg(model: &Model, layout: &Layout) -> Result<String, ModelError> {
         }
     }
 
-    // Nur die Flaeche. Die Kontur wird nach den Moebeln gezeichnet, und der Absatz dort sagt,
-    // warum das keine Kosmetik ist.
+    // Area only; the outline is drawn after the pieces.
     let pts = poly
         .iter()
         .map(|q| format!("{},{}", q[0], q[1]))
@@ -430,9 +378,7 @@ pub fn svg(model: &Model, layout: &Layout) -> Result<String, ModelError> {
         p.push_str(&format!(
             r##"<rect x="{}" y="{}" width="{w}" height="{h}" fill="none" stroke="#6E655A" stroke-width="3" stroke-dasharray="12 8"/>"##,
             f.x[0], f.y[0]));
-        // Mittig und mit dem Namen aus der Datei. Bis 2026-08-31 stand hier das Wort KUECHE
-        // fuer jeden Einbau, 40 cm nach Sueden versetzt — bei einem Einbau an der Suedwand fiel
-        // die Beschriftung damit AUS der Wohnung heraus.
+        // Centred, with the name from the file.
         let name = f.id.to_uppercase();
         let (cx, cy) = (f.x[0] + w / 2, f.y[0] + h / 2);
         set.push(centred(cx, cy, name.chars().count(), 20, 1, false));
@@ -441,9 +387,8 @@ pub fn svg(model: &Model, layout: &Layout) -> Result<String, ModelError> {
             esc(&name)));
     }
 
-    // Erst alle Grundflaechen, dann die Beschriftungen. Eine Beschriftung, die nach aussen
-    // muss, braucht die Stuecke, die NACH ihr kommen — in einem Durchgang wuesste sie nur von
-    // denen davor und legte sich auf das naechste Moebel.
+    // All footprints first, then the labels: a label that has to go outside needs to know the pieces
+    // after it too.
     let mut pieces: Vec<(&PlacedItem, Rect, String)> = Vec::with_capacity(layout.items.len());
     for it in &layout.items {
         let (w, d, _) = footprint(it, &model.catalogue)?;
@@ -482,7 +427,7 @@ pub fn svg(model: &Model, layout: &Layout) -> Result<String, ModelError> {
         w: vw,
         d: vh,
     };
-    let kern = Rect {
+    let core = Rect {
         x: min_x + PAD,
         y: min_y + PAD,
         w: vw - 2 * PAD,
@@ -491,13 +436,9 @@ pub fn svg(model: &Model, layout: &Layout) -> Result<String, ModelError> {
 
     for (it, r, label) in &pieces {
         let (w, d) = (r.w, r.d);
-        // Rechteck und Beschriftung in EINER Gruppe, mit dem Ref als Griff.
-        //
-        // Gruppiert, weil beim Ziehen sonst die Beschriftung stehen bleibt und das Moebel ohne
-        // sie wandert. `data-x`/`data-y` tragen die Modellkoordinaten in Zentimetern mit, damit
-        // die Oberflaeche beim Loslassen nicht aus Bildschirmpixeln zurueckrechnen muss: die
-        // viewBox laeuft ohnehin in Zentimetern, also ist die Umrechnung eine Matrixinversion
-        // und keine eigene Skalenrechnung. Eine solche waere eine zweite Fassung der Geometrie.
+        // Rect and label in one group with the ref as handle, so dragging moves both. `data-x`/`data-y`
+        // carry model coordinates in cm, so the dashboard inverts the viewBox matrix instead of keeping a
+        // second scale.
         p.push_str(&format!(
             r##"<g data-ref="{}" data-x="{}" data-y="{}" data-w="{w}" data-d="{d}" data-rot="{}">"##,
             esc(&it.reference), r.x, r.y, it.rot));
@@ -510,7 +451,7 @@ pub fn svg(model: &Model, layout: &Layout) -> Result<String, ModelError> {
             &obstacles,
             &set,
             &sheet,
-            &kern,
+            &core,
         );
         set.push(s.area);
         if let Some([x1, y1, x2, y2]) = s.leader {
@@ -518,30 +459,22 @@ pub fn svg(model: &Model, layout: &Layout) -> Result<String, ModelError> {
                 r##"<line x1="{x1}" y1="{y1}" x2="{x2}" y2="{y2}" stroke="#6E655A" stroke-width="2"/>"##
             ));
         }
-        // Nur `rotate(-90)`, nie `+90`: quer heisst von unten nach oben lesbar. Ein Text, der
-        // mit der zweiten Drehrichtung gesetzt wird, steht auf dem Kopf.
-        let dreh = if s.across {
+        // Only `rotate(-90)`: across means readable bottom to top; the other way is upside down.
+        let turn = if s.across {
             format!(r##" transform="rotate(-90 {} {})""##, s.x, s.y)
         } else {
             String::new()
         };
         p.push_str(&format!(
-            r##"<text x="{}" y="{}"{dreh} font-family="Helvetica,Arial" font-size="{}" fill="#16181A" text-anchor="{}" dominant-baseline="central">{}</text>"##,
+            r##"<text x="{}" y="{}"{turn} font-family="Helvetica,Arial" font-size="{}" fill="#16181A" text-anchor="{}" dominant-baseline="central">{}</text>"##,
             s.x, s.y, s.grad, s.anker, esc(label)));
         p.push_str("</g>");
     }
 
-    // Die Huelle liegt OBEN, und das ist keine Kosmetik.
-    //
-    // Eine Kontur liegt mittig auf ihrer Linie, also deckt jedes Moebel an einer Wand die halbe
-    // Wandstaerke zu. Bis 2026-08-31 wurde die Wand vor den Moebeln gezeichnet: im Bild
-    // verschwand sie hinter jedem Stueck, das sie beruehrt, und der Schrank an der Nordwand sah
-    // aus, als ragte er aus der Wohnung heraus. Die Zahlen waren dabei die ganze Zeit richtig.
-    //
-    // Die Oeffnungen gehoeren aus demselben Grund darueber, und zusaetzlich aus einem zweiten:
-    // dass ein Schrank vor der Tuer steht, ist genau die Auskunft, fuer die jemand den Plan
-    // ansieht. Glastuer voll, Fenster gestrichelt, Tuer grau — drei Signaturen, weil sie drei
-    // verschiedene Dinge sind. Die TypeScript-Vorlage zeichnete Fenster wie Glastueren.
+    // The outline goes on top. A stroke sits centred on its line, so drawn first, every piece at a
+    // wall covered half the wall and seemed to stick out of the flat. Openings go above too, because
+    // a wardrobe in front of a door is what someone looks at the plan for. Glass door solid, window
+    // dashed, door grey: three things, three signatures.
     p.push_str(&format!(
         r##"<polygon points="{pts}" fill="none" stroke="#16181A" stroke-width="5" stroke-linejoin="miter"/>"##
     ));
@@ -564,26 +497,21 @@ pub fn svg(model: &Model, layout: &Layout) -> Result<String, ModelError> {
     Ok(p)
 }
 
-/// Plan plus Verdikt in einer Datei — damit ein Bild nie ohne sein Urteil weitergereicht wird.
-/// Woher die Positionen auf einem Blatt stammen.
-///
-/// Der Satz unter dem Titel behauptete bis 2026-09-26, nichts sei von Hand gesetzt. Fuer einen
-/// Vorschlag stimmt das: jede Zahl kommt aus dem Modell. Fuer den Ist-Zustand stimmt es **nicht** —
-/// dort ist jede Position eine Zeile in `interior_placement`, und die hat ein Mensch geschrieben.
-/// Ein Blatt, das seine eigene Herkunft falsch nennt, ist genau die Sorte Aussage, gegen die der
-/// Rest dieser Datei gebaut ist: es sieht aus wie ein gerechnetes Ergebnis und ist eine Eingabe.
+/// Plan and verdict in one file, so a picture never travels without its judgement.
+/// Where the positions on a sheet come from: a proposal is computed from the model, the as-is
+/// state was placed by a person, and the sheet says which.
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub enum Origin {
-    /// Ein Vorschlag: die Positionen stehen in `layouts/*.toml`, alle Zahlen aus dem Modell.
+    /// A proposal: positions in `layouts/*.toml`, every number from the model.
     Proposal,
-    /// Der Zustand: die Positionen stehen in `interior_placement` und sind gesetzt worden.
+    /// The as-is state: positions in `interior_placement`, set by a person.
     AsIs,
 }
 
 pub fn page(model: &Model, layouts: &[Layout], origin: Origin) -> Result<String, ModelError> {
-    // Der Titel kommt aus dem Modell. Hier stand der Name dieser einen Wohnung im Quelltext.
+    // The title comes from the model.
     let mut h = String::from(
-        r##"<!doctype html><meta charset="utf-8"><title>Wohnung — Plaene</title>
+        r##"<!doctype html><meta charset="utf-8"><title>Flat — plans</title>
 <style>
 :root{color-scheme:light dark}
 body{margin:0;background:#FBFAF8;color:#16181A;font:16px/1.6 ui-sans-serif,-apple-system,Helvetica,Arial;padding:40px}
@@ -598,16 +526,16 @@ svg{width:100%;height:auto;display:block;margin:14px 0}
 .warn{color:#9A6A00}
 ul{margin:8px 0;padding-left:20px}
 .meta{font:13px ui-monospace,Menlo,monospace;color:#5B5F63}
-</style><div class="wrap"><h1>{TITEL} — Pläne</h1>
-<p class="meta">Aus dem gemessenen Modell erzeugt. Jede Zahl stammt aus <code>room.toml</code>,
-<code>rules.toml</code> und dem Inventar; {HERKUNFT}</p>"##)
-        .replace("{TITEL}", &esc(&model.room.flat.name))
+</style><div class="wrap"><h1>{TITLE} — plans</h1>
+<p class="meta">Generated from the measured model. Every number comes from <code>room.toml</code>,
+<code>rules.toml</code> and the inventory; {ORIGIN}</p>"##)
+        .replace("{TITLE}", &esc(&model.room.flat.name))
         .replace(
-            "{HERKUNFT}",
+            "{ORIGIN}",
             match origin {
-                Origin::Proposal => "nichts onto dieser Side ist von Hand set.",
-                Origin::AsIs => "die Positionen des Ist-Zustands hat ein Mensch gesetzt, \
-                     das Modell liefert dazu nur den Raum und die Masse der Stuecke.",
+                Origin::Proposal => "nothing on this page was placed by hand.",
+                Origin::AsIs => "a person placed the positions of the as-is state; \
+                     the model supplies only the room and the sizes of the pieces.",
             },
         );
 
@@ -618,9 +546,9 @@ ul{margin:8px 0;padding-left:20px}
             esc(&l.name),
             if r.pass { "pass" } else { "fail" },
             if r.pass {
-                "bestanden — keine harte Regel verletzt"
+                "passes: no hard rule broken"
             } else {
-                "durchgefallen"
+                "fails"
             }
         ));
         h.push_str(&svg(model, l)?);
@@ -635,7 +563,7 @@ ul{margin:8px 0;padding-left:20px}
                     "{} → {}: {}",
                     c.from,
                     c.to,
-                    c.width_cm.map_or("kein Weg".into(), |w| format!("{w} cm"))
+                    c.width_cm.map_or("no path".into(), |w| format!("{w} cm"))
                 ))
                 .collect::<Vec<_>>()
                 .join(" · ")
@@ -664,7 +592,7 @@ ul{margin:8px 0;padding-left:20px}
         }
         if !r.uncertainties.is_empty() {
             h.push_str(&format!(
-                r##"<p class="meta">gemessen? nein: {}</p>"##,
+                r##"<p class="meta">measured? no: {}</p>"##,
                 r.uncertainties
                     .iter()
                     .map(|u| format!("{} ({})", esc(&u.label), u.fields.join(", ")))
@@ -682,25 +610,24 @@ ul{margin:8px 0;padding-left:20px}
 mod tests {
     use super::*;
 
-    /// Die Faelle, die am 2026-08-31 im Bild standen, und was statt ihrer dort stehen soll.
-    /// Jeder faellt aus einer der drei Regeln von `short_label` und nicht aus einer Tabelle.
+    /// Each case follows from one of `short_label`'s three rules, not from a table.
     #[test]
     fn a_short_name_comes_from_the_identifier() {
         for (identifier, expected) in [
-            // Beiwerk faellt weg, eine abschliessende Zahl bleibt.
-            ("pflanze_boden_1", "Pflanze 1"),
-            ("bett_bestand", "Bett"),
-            ("schreibtisch_gestell", "Schreibtisch"),
+            // Extras drop, a trailing number stays.
+            ("pflanze_boden_1", "Plant 1"),
+            ("bett_bestand", "Bed"),
+            ("schreibtisch_gestell", "Desk"),
             ("couch_bestand", "Couch"),
-            // Das Kopfwort steht hinten.
-            ("kleiderschrank_bestand", "Schrank"),
-            ("esstisch_midyou", "Tisch"),
-            ("esstischstuehle", "Stuhl"),
-            ("schreibtischplatte_bestand", "Platte"),
-            ("saugroboter", "Sauger"),
-            // Der Name schlaegt die geerbte Art: `kind_of_name` fuehrt dieses Stueck als Desk.
-            ("buerostuhl", "Stuhl"),
-            // Kein Kopfwort, keine deklarierte Art — dann das Wort selbst.
+            // The head word is at the end.
+            ("kleiderschrank_bestand", "Wardrobe"),
+            ("esstisch_midyou", "Table"),
+            ("esstischstuehle", "Chair"),
+            ("schreibtischplatte_bestand", "Top"),
+            ("saugroboter", "Vacuum"),
+            // The name beats the inherited kind: `kind_of_name` files this piece as Desk.
+            ("buerostuhl", "Chair"),
+            // No head word and no declared kind: the word itself.
             ("kallax_regale", "Kallax"),
             ("luftreiniger", "Luftreiniger"),
         ] {
@@ -710,11 +637,11 @@ mod tests {
 
     #[test]
     fn a_declared_kind_carries_an_unknown_name() {
-        assert_eq!(short_label("pinntorp", Some(Kind::Table)), "Tisch");
-        // `other` ist die Aussage "keine der bekannten Arten" und darf kein Wort stellen.
+        assert_eq!(short_label("pinntorp", Some(Kind::Table)), "Table");
+        // `other` means none of the known kinds and supplies no word.
         assert_eq!(short_label("pinntorp", Some(Kind::Other)), "Pinntorp");
-        // Und sie schlaegt den Namen nicht, wenn der eines hat.
-        assert_eq!(short_label("buerostuhl", Some(Kind::Desk)), "Stuhl");
+        // And it does not beat a name that has one.
+        assert_eq!(short_label("buerostuhl", Some(Kind::Desk)), "Chair");
     }
 
     fn sheet() -> Rect {
@@ -734,18 +661,17 @@ mod tests {
             w: 140,
             d: 80,
         };
-        let s = set_value(&r, "Bett".chars().count(), &[r], &[], &sheet(), &sheet());
+        let s = set_value(&r, "Bed".chars().count(), &[r], &[], &sheet(), &sheet());
         assert_eq!(
             s.grad, GRADE[0],
-            "ein weites Rechteck traegt den grossen Grad"
+            "a wide rect carries the large size"
         );
         assert!(!s.across);
-        assert!(s.leader.is_none(), "innen braucht keine Fuehrungslinie");
+        assert!(s.leader.is_none(), "inside needs no leader line");
         assert_eq!((s.x, s.y), (70, 40));
     }
 
-    /// Ein Rechteck, das tiefer als breit ist, traegt seinen Text stehend statt ihn zu
-    /// verlieren — und nimmt dafuer einen kleineren Grad in Kauf.
+    /// A rect deeper than wide carries its text upright, at a smaller size if needed.
     #[test]
     fn a_narrow_deep_rect_labels_across() {
         let r = Rect {
@@ -754,15 +680,14 @@ mod tests {
             w: 45,
             d: 50,
         };
-        let s = set_value(&r, "Stuhl".chars().count(), &[r], &[], &sheet(), &sheet());
+        let s = set_value(&r, "Chair".chars().count(), &[r], &[], &sheet(), &sheet());
         assert!(s.across);
         assert!(s.grad < GRADE[0]);
         assert!(width(5, s.grad) + 2 * AIR <= r.d);
         assert!(s.leader.is_none());
     }
 
-    /// Zu klein fuer jeden Grad: der Name geht nach draussen, haengt an einer Fuehrungslinie und
-    /// legt sich auf kein Moebel.
+    /// Too small for any size: the name goes outside on a leader line and covers no piece.
     #[test]
     fn a_too_small_piece_labels_outside_without_hitting_anything() {
         let r = Rect {
@@ -779,23 +704,22 @@ mod tests {
         };
         let s = set_value(
             &r,
-            "Sauger".chars().count(),
+            "Vacuum".chars().count(),
             &[r, neighbour],
             &[],
             &sheet(),
             &sheet(),
         );
-        assert!(s.leader.is_some(), "aussen braucht eine Fuehrungslinie");
+        assert!(s.leader.is_some(), "outside needs a leader line");
         assert!(!s.area.overlaps(&r));
         assert!(
             !s.area.overlaps(&neighbour),
-            "die Stelle nach Osten ist belegt, also darf sie nicht genommen werden"
+            "the spot to the east is taken, so it must not be used"
         );
-        assert!(frei(&s.area, &[r, neighbour], &[], &sheet()));
+        assert!(is_free(&s.area, &[r, neighbour], &[], &sheet()));
     }
 
-    /// Zwei gleiche Stuecke nebeneinander sind der Fall, an dem die alte Fassung zerbrach:
-    /// beide trugen denselben Text an derselben Stelle.
+    /// Two equal pieces side by side, where the old version put the same text in the same place.
     #[test]
     fn two_equal_neighbours_get_two_places() {
         let a = Rect {
@@ -811,9 +735,9 @@ mod tests {
             d: 40,
         };
         let obstacles = [a, b];
-        let erste = set_value(
+        let first_part = set_value(
             &a,
-            "Pflanze 1".chars().count(),
+            "Plant 1".chars().count(),
             &obstacles,
             &[],
             &sheet(),
@@ -821,12 +745,12 @@ mod tests {
         );
         let second = set_value(
             &b,
-            "Pflanze 2".chars().count(),
+            "Plant 2".chars().count(),
             &obstacles,
-            &[erste.area],
+            &[first_part.area],
             &sheet(),
             &sheet(),
         );
-        assert!(!erste.area.overlaps(&second.area));
+        assert!(!first_part.area.overlaps(&second.area));
     }
 }

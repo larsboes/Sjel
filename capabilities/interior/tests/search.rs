@@ -253,7 +253,7 @@ fn allowed_positions_lie_in_the_room_not_in_a_fixture() {
                 };
                 let r = interior::clearance::check_layout(&m, &l).expect("Pruefung");
                 assert!(
-                    !r.hard.iter().any(|v| v.rule == "raumgrenze"),
+                    !r.hard.iter().any(|v| v.rule == "room_boundary"),
                     "erlaubte Position {x},{} liegt ausserhalb des Raums",
                     row.y
                 );

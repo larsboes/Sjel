@@ -89,7 +89,7 @@ fn the_piece_shows_the_short_name() {
             "der Plan traegt den Katalogtext {long:?} von {ref_}"
         );
     }
-    for short in ["Schrank", "Schreibtisch", "Bett"] {
+    for short in ["Wardrobe", "Desk", "Bed"] {
         assert!(
             texts(&svg).iter().any(|t| t == short),
             "der Plan traegt {short:?} nicht: {:?}",

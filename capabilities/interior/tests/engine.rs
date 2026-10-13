@@ -118,7 +118,7 @@ fn a_piece_outside_the_room_is_no_close_call() {
     let r = check("d-ausserhalb");
     assert!(!r.pass);
     assert!(
-        rules(&r, Severity::Hard).contains(&"raumgrenze"),
+        rules(&r, Severity::Hard).contains(&"room_boundary"),
         "{:?}",
         r.hard
     );
@@ -355,7 +355,7 @@ fn a_piece_that_declares_its_space_is_no_longer_judged_by_name() {
     let v = rotated
         .hard
         .iter()
-        .find(|v| v.rule == "oeffnen")
+        .find(|v| v.rule == "open")
         .expect("die Tueren zeigen zur Wand");
     assert_eq!(v.item.as_deref(), Some("kleiderschrank"));
     // 65, am Stueck gemessen — NICHT die 90, die rules.toml als generische Schwelle fuehrt.
@@ -555,7 +555,7 @@ fn no_hard_reserve_contradicts_its_verdict() {
     let m = model();
     for name in m.layout_names().unwrap() {
         let r = check(&name);
-        for res in r.reserves.iter().filter(|x| x.hart && x.slack < 0) {
+        for res in r.reserves.iter().filter(|x| x.hard && x.slack < 0) {
             assert!(
                 r.hard.iter().any(|v| v.rule == res.rule),
                 "{name}: Reserve {} meldet {} cm zu wenig, aber kein harter Verstoss nennt sie",
@@ -617,7 +617,7 @@ fn a_failing_layout_has_no_positive_tightest_reserve() {
         let other = r
             .reserves
             .iter()
-            .any(|x| x.hart && x.unit != "cm" && x.slack < 0);
+            .any(|x| x.hard && x.unit != "cm" && x.slack < 0);
         assert!(
             in_cm || other,
             "{name} faellt durch, aber keine harte Reserve ist negativ: {:?}",
@@ -634,7 +634,7 @@ fn the_room_boundary_measures_how_far_a_piece_sticks_out() {
     let g = r
         .reserves
         .iter()
-        .find(|x| x.rule == "raumgrenze")
+        .find(|x| x.rule == "room_boundary")
         .expect("die Raumgrenze wird gemessen");
     assert!(
         g.slack < 0,
@@ -660,7 +660,7 @@ fn a_wall_behind_does_not_lower_the_tightest_reserve() {
     let g = r
         .reserves
         .iter()
-        .find(|x| x.rule == "raumgrenze")
+        .find(|x| x.rule == "room_boundary")
         .expect("die Raumgrenze wird gemessen");
     assert_eq!(
         g.slack, 1,

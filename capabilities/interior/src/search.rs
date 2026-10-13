@@ -1,17 +1,10 @@
-//! Positionssuche: haelt ein Layout fest und rastert einzelne Moebel durch, bis eine
-//! Kombination ohne harten Verstoss dasteht.
+//! Position search: keep a layout and step single pieces through the grid until a combination
+//! without a hard violation stands.
 //!
-//! Warum das ein Modul ist und kein Skript: die Frage "wohin passt X noch" kam am 2026-08-30
-//! viermal, und viermal wurde dafuer ein Wegwerf-Skript geschrieben, ausgefuehrt und geloescht.
-//! Jedes hatte leicht andere Annahmen darueber, was eine Sperrflaeche ist, und das Ergebnis des
-//! letzten ging beim Sessionende verloren.
-//!
-//! Zwei Dinge machen die Suche praktikabel:
-//!   * Ein billiger Vorfilter vor der vollen Pruefung. Rechteck-Ueberlappung kostet
-//!     Nanosekunden, eine Raeumungspruefung 0,18 ms — der Filter entscheidet ueber Sekunden
-//!     gegen Minuten.
-//!   * Parallelitaet ueber die Kandidaten. Sie sind voneinander unabhaengig; das ist der
-//!     Grund, warum hier rayon steht und keine DataFrame-Bibliothek.
+//! A module rather than a script: "where else does X fit" was asked four times on 2026-08-30,
+//! answered four times by a throwaway script with slightly different assumptions. Two things make
+//! it fast: a cheap rect-overlap prefilter before the full check (nanoseconds against 0.18 ms), and
+//! parallelism over the independent candidates.
 
 use crate::clearance::{check_layout, CheckResult};
 use crate::geometry::{point_in_polygon, RES};
@@ -22,36 +15,28 @@ use std::collections::BTreeMap;
 
 #[derive(Debug, Clone)]
 pub struct Spec {
-    /// Ids, die bewegt werden duerfen. Alles andere im Layout bleibt, wo es steht.
+    /// Ids that may move; everything else stays.
     pub move_refs: Vec<String>,
-    /// Rasterschritt in cm. Grob suchen, dann verfeinern.
+    /// Grid step in cm. Search coarse, then refine.
     pub step: i32,
-    /// Optional je Id: erlaubtes Band [x0, x1, y0, y1].
+    /// Optional per id: allowed band [x0, x1, y0, y1].
     pub bands: BTreeMap<String, [i32; 4]>,
-    /// Abbruch nach so vielen Treffern. 0 = alle.
+    /// Stop after this many hits; 0 means all.
     pub limit: usize,
 }
 
-/// Wie viele Ziele eine Aufstellung gleichzeitig verfolgt.
-///
-/// Vier, und keines von ihnen ist der Sieger: mehr Wand im Ruecken kostet Laufbreite, mehr
-/// Reserve kostet Wand. Eine einzelne Zahl aus vieren zu machen hiesse, drei Gewichte zu
-/// erfinden, die niemand gemessen hat.
+/// The objectives an arrangement pursues at once. Four, and none wins: more wall behind costs
+/// walkway width, more reserve costs wall. One number from four would need three invented weights.
 pub const TARGETS: usize = 4;
 
-/// Welche Kandidaten unter KEINER Gewichtung der Ziele die besten sein koennen.
+/// Which candidates can be best under some weighting of the objectives.
 ///
-/// Ein Punkt ist dominiert, wenn ein anderer in jedem Ziel mindestens so gut und in einem
-/// echt besser ist. Solche Punkte koennen nie gewinnen, egal wie man gewichtet — sie hinter
-/// die Front zu sortieren ist deshalb keine Meinung ueber Geschmack, sondern Arithmetik.
+/// A point is dominated when another is at least as good in every objective and better in one;
+/// it can never win, so ranking it behind the front is arithmetic, not taste. All objectives point
+/// the same way, bigger is better, so `soft` is passed negated.
 ///
-/// Alle Ziele zeigen in dieselbe Richtung: **groesser ist besser**. Wer eine Zahl beitraegt,
-/// bei der weniger besser ist, uebergibt sie negiert — `soft` tut das.
-///
-/// Die Front wird ueber die VERSCHIEDENEN Zielwerten gebildet, nicht ueber die Kandidaten:
-/// zehntausend Aufstellungen fallen typisch auf einige hundert verschiedene Vierlinge
-/// zusammen, und der quadratische Vergleich laeuft dann auf denen. Ohne das waere die Front
-/// bei einer erschoepfenden Suche teurer als die Suche.
+/// The front is built over distinct objective values, not candidates: ten thousand arrangements
+/// collapse to a few hundred distinct quadruples, and the quadratic comparison runs on those.
 pub fn pareto_front(points: &[[i32; TARGETS]]) -> Vec<bool> {
     let dominates = |a: &[i32; TARGETS], b: &[i32; TARGETS]| {
         a.iter().zip(b.iter()).all(|(x, y)| x >= y) && a.iter().zip(b.iter()).any(|(x, y)| x > y)
@@ -76,21 +61,15 @@ pub fn pareto_front(points: &[[i32; TARGETS]]) -> Vec<bool> {
 pub struct Hit {
     pub places: BTreeMap<String, [i32; 2]>,
     pub soft: usize,
-    /// Engste der geprueften Routen in cm — hoeher ist besser.
+    /// Narrowest checked route in cm; higher is better.
     pub bottleneck_cm: i32,
-    /// Die knappste harte Messung dieser Aufstellung in cm: um so viel besteht sie.
-    ///
-    /// Zwei Treffer koennen beide bestehen und dabei 2 cm und 30 cm Luft haben. Bis diese
-    /// Zahl hier stand, waren sie in jedem Bericht dasselbe Wort.
+    /// The tightest hard measurement of this arrangement in cm: it passes by this much.
     pub tightest_reserve_cm: Option<i32>,
-    /// Auf der Pareto-Front: unter keiner Gewichtung der Ziele schlechter als ein anderer.
+    /// On the Pareto front: under no weighting worse than another.
     pub pareto: bool,
-    /// Wie viele Zentimeter der bewegten Moebel an einer Wand anliegen.
-    ///
-    /// Der Raeumungspruefer kennt nur Abstaende, nicht Sinn: er haelt einen Esstisch mitten
-    /// im Raum fuer genauso richtig wie einen an der Wand, solange die Laufwege stimmen. Die
-    /// ersten Suchlaeufe am 2026-08-30 lieferten deshalb lauter formal fehlerfreie Layouts,
-    /// die niemand so einrichten wuerde. Diese Zahl ist die fehlende Haelfte des Urteils.
+    /// Centimetres of the moved pieces that touch a wall. The checker knows gaps, not sense: a dining
+    /// table in the middle of the room passes as well as one at the wall. This is the other half of the
+    /// judgement.
     pub wall_contact_cm: i32,
 }
 
@@ -105,11 +84,8 @@ pub struct SearchReport {
     pub elapsed_ms: u128,
 }
 
-/// Zentimeter der Rechteckkanten, die unmittelbar an einer Wand liegen.
-///
-/// Geprueft wird knapp ausserhalb der Kante: liegt der Punkt nicht mehr im Wohnpolygon, ist
-/// dort eine Wand. Freistehende Moebel bekommen 0 und sinken damit in der Rangfolge — nicht
-/// weil sie regelwidrig waeren, sondern weil sie schlechter sind.
+/// Centimetres of rect edges lying against a wall, probed just outside the edge: outside the
+/// polygon means a wall. Free-standing pieces get 0 and rank lower, as worse, not as wrong.
 fn wall_contact_cm(model: &Model, r: &Rect) -> i32 {
     let poly = &model.room.main_room.polygon;
     let outside = |x: f64, y: f64| !point_in_polygon([x, y], poly);
@@ -139,15 +115,8 @@ fn wall_contact_cm(model: &Model, r: &Rect) -> i32 {
     n
 }
 
-/// Sagt dieses Stueck selbst, dass es frei stehen soll?
-///
-/// Die Wandsumme belohnt eine Wand im Ruecken, und ein Raumtrenner hat per Definition keine.
-/// Bis 2026-08-31 sank er deshalb in der Rangfolge — bestraft dafuer, dass er seine Aufgabe
-/// erfuellt. Er zaehlt jetzt gar nicht mit, statt mit 0 cm zu zaehlen: ein Regal quer im Raum
-/// soll die Bewertung der uebrigen Stuecke weder heben noch senken.
-///
-/// Freiwillig wie jedes Feld aus PRD Q61. Ein Stueck ohne die Angabe wird weiter an der Wand
-/// gemessen, also aendert sich kein bestehender Rang, bis jemand eine Zeile fuellt.
+/// Does the piece say it should stand free? A room divider has no wall behind by definition, so it
+/// is left out of the wall sum instead of counting 0.
 fn is_room_divider(model: &Model, reference: &str) -> bool {
     model
         .catalogue
@@ -166,8 +135,7 @@ fn inside_room(model: &Model, r: &Rect) -> bool {
     })
 }
 
-/// Sperrflaechen aus dem Modell, nicht aus dem Kopf. Die Wegwerf-Skripte haben genau diese
-/// Rechtecke jedes Mal neu abgetippt — hier stammen sie aus room.toml und rules.toml.
+/// Blocked areas from the model (room.toml, rules.toml), not retyped.
 fn blockers(model: &Model, fixed: &[&PlacedItem]) -> Result<Vec<Rect>, ModelError> {
     let mut out = Vec::new();
     for it in fixed {
@@ -187,10 +155,8 @@ fn blockers(model: &Model, fixed: &[&PlacedItem]) -> Result<Vec<Rect>, ModelErro
     Ok(out)
 }
 
-/// Die vier Ziele eines Treffers, alle so gedreht, dass groesser besser ist.
-///
-/// Eine fehlende Reserve zaehlt als `i32::MIN`, damit eine Aufstellung, an der nichts gemessen
-/// wurde, nicht durch Schweigen die Front gewinnt.
+/// A hit's four objectives, each turned so bigger is better. A missing reserve counts as
+/// `i32::MIN`, so an arrangement nothing was measured on cannot win the front by silence.
 fn hit_targets(h: &Hit) -> [i32; TARGETS] {
     [
         h.tightest_reserve_cm.unwrap_or(i32::MIN),
@@ -217,7 +183,7 @@ pub fn search(model: &Model, base: &Layout, spec: &Spec) -> Result<SearchReport,
                 .find(|i| &i.reference == r)
                 .ok_or_else(|| {
                     ModelError::Missing(format!(
-                        "`{r}` steht nicht in \"{}\" — nichts zu bewegen",
+                        "`{r}` is not in \"{}\": nothing to move",
                         base.name
                     ))
                 })
@@ -226,13 +192,11 @@ pub fn search(model: &Model, base: &Layout, spec: &Spec) -> Result<SearchReport,
 
     let block = blockers(model, &fixed)?;
 
-    // Alle geometrisch zulaessigen Kombinationen sammeln, bevor irgendetwas geprueft wird.
+    // Collect every geometrically allowed combination before checking anything.
     let mut combos: Vec<Vec<(String, [i32; 2], Rect)>> = vec![Vec::new()];
     for m in &movers {
         let (w, d, _) = footprint(m, &model.catalogue)?;
-        // Ohne Band die Ausdehnung des Wohnpolygons, NICHT eine gemerkte Zahl. Hier stand
-        // [0, 420, 0, 590] — die Masse dieser einen Wohnung, fest im Code einer Bibliothek,
-        // die keine Wohnung kennen darf.
+        // Without a band, the extent of the flat's polygon, not a remembered number.
         let b = spec.bands.get(&m.reference).copied().unwrap_or_else(|| {
             let poly = &model.room.main_room.polygon;
             [
@@ -266,7 +230,7 @@ pub fn search(model: &Model, base: &Layout, spec: &Spec) -> Result<SearchReport,
     }
     let candidates = combos.len();
 
-    // Die volle Pruefung parallel. Jeder Kandidat ist unabhaengig; das Modell wird nur gelesen.
+    // The full check in parallel: candidates are independent, the model is only read.
     let checked = std::sync::atomic::AtomicUsize::new(0);
     let mut hits: Vec<Hit> = combos
         .par_iter()
@@ -281,7 +245,7 @@ pub fn search(model: &Model, base: &Layout, spec: &Spec) -> Result<SearchReport,
                 });
             }
             let l = Layout {
-                name: format!("{} (Suche)", base.name),
+                name: format!("{} (search)", base.name),
                 items,
                 id: String::new(),
             };
@@ -312,21 +276,15 @@ pub fn search(model: &Model, base: &Layout, spec: &Spec) -> Result<SearchReport,
         })
         .collect();
 
-    // Die Front zuerst, und das ist keine Geschmacksfrage: ein dominierter Treffer ist unter
-    // JEDER Gewichtung der vier Ziele schlechter als ein bestimmter anderer, also kann er die
-    // Antwort nicht sein. Innerhalb der Front gilt weiter die Rangfolge von 2026-08-30 — erst
-    // keine Warnungen, dann Wand im Ruecken, dann der breiteste Engpass —, weil eine Front
-    // ungeordnet ist und eine Liste trotzdem eine Reihenfolge braucht.
+    // The front first: a dominated hit is worse than a particular other under every weighting, so it
+    // cannot be the answer. Within the front the older order applies, since a list needs one:
+    // no warnings, wall behind, widest bottleneck.
     let targets: Vec<[i32; TARGETS]> = hits.iter().map(hit_targets).collect();
     for (h, front) in hits.iter_mut().zip(pareto_front(&targets)) {
         h.pareto = front;
     }
-    // Die Reserve steht als LETZTE Stufe und nicht weiter vorn, und das ist der Unterschied
-    // zwischen einer neuen Rangfolge und einer widerspruchsfreien. Genau so wird die Kette zu
-    // einer lexikographischen Ordnung ueber alle vier Ziele — und damit kann kein Treffer mehr
-    // vor einem stehen, der ihn in allem schlaegt. Ein Test haelt das fest; ohne diese Stufe
-    // fand er zwei Aufstellungen, die sich nur in einem Zentimeter Reserve unterschieden und
-    // in der falschen Reihenfolge standen.
+    // Reserve as the last stage makes the chain a lexicographic order over all four objectives, so no
+    // hit can rank before one that beats it everywhere. A test holds this.
     hits.sort_by(|a, b| {
         b.pareto
             .cmp(&a.pareto)
@@ -350,16 +308,9 @@ pub fn search(model: &Model, base: &Layout, spec: &Spec) -> Result<SearchReport,
     })
 }
 
-/// Die Flaeche, die ein Stueck DAUERHAFT belegt — Grundflaeche plus die Zone, die es selbst
-/// verlangt und die nicht wieder freigeraeumt wird.
-///
-/// Nur Angaben mit einer RICHTUNG: `expands = {dir, to}` und `opens` mit `open_clear`. Die
-/// Zahlen stammen aus der Deklaration des Stuecks, hier wird keine Regel nachgebaut — der
-/// Unterschied ist, dass `check_layout` prueft, ob die Flaeche frei IST, und dieser Platzierer
-/// sie von vornherein mitreserviert.
-///
-/// `access_sides` bleibt draussen, weil es keine Side nennt: welche Laengsseite eines Bettes
-/// begehbar sein soll, entscheidet erst die Aufstellung. Das faengt die Schlusspruefung.
+/// The area a piece occupies for good: footprint plus the zone it demands itself. Only declarations
+/// with a direction (`expands`, `opens` with `open_clear`); `access_sides` names no side and is left
+/// to the final check.
 fn lasting_area(model: &Model, reference: &str, rot: i32, r: Rect) -> Rect {
     let Some(it) = model.catalogue.get(reference) else {
         return r;
@@ -384,34 +335,27 @@ fn lasting_area(model: &Model, reference: &str, rot: i32, r: Rect) -> Rect {
     };
     if let (Some(dir), Some(to)) = (it.expands_dir, it.expands_to) {
         let side = dir.rotated(rot);
-        let jetzt = match side {
+        let current = match side {
             Side::North | Side::South => r.d,
             Side::East | Side::West => r.w,
         };
-        grow(side, to - jetzt);
+        grow(side, to - current);
     }
-    if let (Some(dir), Some(frei)) = (it.opens, it.open_clear) {
-        grow(dir.rotated(rot), frei);
+    if let (Some(dir), Some(clear)) = (it.opens, it.open_clear) {
+        grow(dir.rotated(rot), clear);
     }
     out
 }
 
-/// Wo die linke obere Ecke eines Stuecks liegen DARF, als Lauflaengen je Rasterzeile.
+/// Where a piece's top-left corner may lie, as runs per grid row.
 ///
-/// Die Frage, die eine Oberflaeche beim Ziehen stellt: harte Kanten, damit ein Moebel gar nicht
-/// erst durch eine Wand geschoben werden kann, statt es hinterher als Verstoss zu melden.
+/// What the dashboard asks while dragging, so a piece cannot be pushed through a wall. Computed here
+/// because the room is not a rectangle, and a second `point_in_polygon` in JavaScript would be the
+/// duplication this capability exists against.
 ///
-/// **Warum das hier steht und nicht im Browser.** Der Hauptraum ist ein Sechseck, kein Rechteck
-/// — an einer Ecke liegt das Bad. Auf ein umschliessendes Rechteck zu klemmen wuerde ein Bett in
-/// der Kerbe abstellen, die nicht zum Raum gehoert. Richtig klemmen heisst `point_in_polygon`,
-/// und eine zweite Fassung davon in JavaScript waere die Doppelung, gegen die diese Capability
-/// existiert. Die Oberflaeche bekommt deshalb eine LISTE und rechnet nichts.
-///
-/// Hart sind Waende und was sich nicht bewegen laesst: feste Einbauten und Tuerschwenkbereiche,
-/// dieselben `blockers`, gegen die auch die Suche prueft. **Andere Moebel sind NICHT hart** —
-/// beim Umstellen muss man ein Stueck an einem anderen vorbeifuehren koennen, und eine
-/// Ueberlappung meldet `kollision` ohnehin sichtbar. Eine Kante, die das Umstellen unmoeglich
-/// macht, waere schlimmer als der Verstoss, den sie verhindert.
+/// Hard are walls and what cannot move: fixtures and door swings, the same `blockers` the search
+/// uses. Other pieces are not hard: rearranging means moving one past another, and an overlap is
+/// reported anyway.
 pub fn allowed_positions(
     model: &Model,
     base: &Layout,
@@ -423,16 +367,15 @@ pub fn allowed_positions(
         .iter()
         .find(|i| i.reference == reference)
         .ok_or_else(|| {
-            ModelError::Missing(format!("`{reference}` steht nicht in \"{}\"", base.name))
+            ModelError::Missing(format!("`{reference}` is not in \"{}\"", base.name))
         })?;
-    // Die Grundflaeche fuer die GEFRAGTE Drehung, nicht fuer die aktuelle.
+    // The footprint for the requested rotation, not the current one.
     let rotated = PlacedItem { rot, ..it.clone() };
     let (w, d, _) = footprint(&rotated, &model.catalogue)?;
 
-    // Was sich NICHT bewegen laesst: feste Einbauten und Tuerschwenkbereiche. Beides steht in
-    // room.toml, beides wird hier gelesen statt abgetippt.
-    let mut sperr: Vec<Rect> = model.room.fixed_furniture.iter().map(|f| f.rect()).collect();
-    sperr.extend(
+    // What cannot move: fixtures and door swings, read from room.toml.
+    let mut blocked: Vec<Rect> = model.room.fixed_furniture.iter().map(|f| f.rect()).collect();
+    blocked.extend(
         model
             .room
             .openings
@@ -458,8 +401,8 @@ pub fn allowed_positions(
         let mut x = min_x;
         while x + w <= max_x {
             let r = Rect { x, y, w, d };
-            let frei = inside_room(model, &r) && !sperr.iter().any(|b| r.overlaps(b));
-            match (frei, run) {
+            let clear = inside_room(model, &r) && !blocked.iter().any(|b| r.overlaps(b));
+            match (clear, run) {
                 (true, None) => run = Some(x),
                 (false, Some(start)) => {
                     runs.push([start, x - RES]);
@@ -491,7 +434,7 @@ pub fn allowed_positions(
 #[derive(Debug, Clone, Serialize)]
 pub struct AllowedRow {
     pub y: i32,
-    /// Erlaubte x-Bereiche, jeweils [von, bis] einschliesslich.
+    /// Allowed x ranges, each [from, to] inclusive.
     pub x: Vec<[i32; 2]>,
 }
 
@@ -505,22 +448,22 @@ pub struct AllowedPositions {
     pub rows: Vec<AllowedRow>,
 }
 
-/// Was `compose` stellen soll und wie gruendlich.
+/// What `compose` should place, and how thoroughly.
 #[derive(Debug, Clone)]
 pub struct ComposeSpec {
-    /// Die Stuecke, in der Reihenfolge, in der sie gestellt werden. Grosses zuerst.
+    /// The pieces, in placing order; large first.
     pub refs: Vec<String>,
-    /// Rasterschritt in cm. Grob suchen, dann von Hand verfeinern.
+    /// Grid step in cm. Search coarse, refine by hand.
     pub step: i32,
-    /// Wie viele Teilaufstellungen je Runde ueberleben.
+    /// Partial arrangements that survive each round.
     pub beam: usize,
-    /// Erlaubte Drehungen je Stueck.
+    /// Allowed rotations per piece.
     pub rotations: Vec<i32>,
-    /// Wie viele fertige Aufstellungen zurueckkommen.
+    /// How many finished arrangements come back.
     pub limit: usize,
 }
 
-/// Eine fertig gestellte Wohnung und ihr Verdikt.
+/// A fully placed flat and its verdict.
 #[derive(Debug, Clone, Serialize)]
 pub struct Composed {
     pub places: Vec<(String, [i32; 2], i32)>,
@@ -530,43 +473,33 @@ pub struct Composed {
     pub wall_contact_cm: i32,
     pub bottleneck_cm: i32,
     pub free_m2: f64,
-    /// Die knappste harte Messung dieser Aufstellung in cm: um so viel besteht sie.
+    /// The tightest hard measurement of this arrangement in cm: it passes by this much.
     pub tightest_reserve_cm: Option<i32>,
-    /// Auf der Pareto-Front der vier Ziele.
+    /// On the Pareto front of the four objectives.
     pub pareto: bool,
 }
 
-/// Eine Wohnung von Grund auf stellen, statt eine bestehende Aufstellung zu verschieben.
+/// Furnish a flat from scratch instead of moving pieces in an existing layout.
 ///
-/// `search` bewegt eine Handvoll Stuecke in einem Layout, das schon existiert. Das reicht nicht,
-/// um zu fragen *wie sollte diese Wohnung ueberhaupt aussehen* — und die Antwort ist auch nicht
-/// dieselbe Funktion mit mehr Stuecken: `search` sammelt das volle kartesische Produkt, bevor es
-/// irgendetwas prueft. Sechs Stuecke waeren rund 10^15 Kombinationen. Nicht langsam, unmoeglich.
+/// `search` collects the full cartesian product before checking; six pieces would be about 10^15
+/// combinations. So this is a beam search: piece by piece, keeping the best `beam` partial
+/// arrangements per round. The price, stated: it can drop a partial arrangement that the last piece
+/// would have made good, so the optimum is not guaranteed. What it returns is computed and
+/// reproducible.
 ///
-/// Deshalb eine **Strahlsuche**: Stueck fuer Stueck, und nach jeder Runde ueberleben nur die
-/// besten `beam` Teilaufstellungen. Das ist der Preis, und er wird hier genannt statt verschwiegen
-/// — eine Strahlsuche findet nicht garantiert das Optimum, weil sie eine Teilaufstellung
-/// verwerfen kann, die erst durch das letzte Stueck gut geworden waere. Was sie liefert, ist
-/// gerechnet und reproduzierbar, nicht geraten.
-///
-/// **Geprueft wird erst am Ende.** Waehrend des Stellens zaehlt nur Geometrie: im Raum, kein
-/// Ueberlapp, moeglichst viel Wand im Ruecken. Die volle Raeumungspruefung auf eine halbe
-/// Wohnung anzuwenden waere sinnlos — ohne Moebel ist jeder Laufweg frei, und eine Regel, die
-/// auf einer Teilaufstellung besteht, sagt nichts ueber die ganze.
+/// The full check runs at the end: on half a flat every walkway is free, and a rule passing on a
+/// partial arrangement says nothing about the whole.
 pub fn compose(model: &Model, spec: &ComposeSpec) -> Result<Vec<Composed>, ModelError> {
-    // Die vollen harten Zonen, nicht nur die Waende: eine Position in der Anlaufzone der
-    // Terrassentuer ist nie gueltig, und ein Platzierer, der sie erst am Ende verwirft, hat den
-    // ganzen Strahl mit Kandidaten gefuellt, die nicht bestehen koennen. Genau das ist beim
-    // ersten Lauf passiert — alle drei Vorschlaege scheiterten an R1 und R7.
-    let sperr = crate::clearance::hard_zones(&model.room, &model.rules)?;
+    // The full hard zones, not only walls: a position in a door's approach zone is never valid, and
+    // filtering it late filled the whole beam with candidates that could not pass.
+    let blocked = crate::clearance::hard_zones(&model.room, &model.rules)?;
 
-    // Zulaessige Plaetze je (Stueck, Drehung), einmal gegen Waende und feste Einbauten gerechnet.
-    // Was gegen die Nachbarn kollidiert, faellt beim Erweitern weg — das haengt an der
-    // Teilaufstellung und laesst sich nicht vorher wissen.
+    // Allowed places per (piece, rotation), computed once against walls and fixtures. Collisions with
+    // neighbours depend on the partial arrangement and drop out while extending.
     type Place = ([i32; 2], i32, Rect);
-    let mut plaetze: BTreeMap<String, Vec<Place>> = BTreeMap::new();
+    let mut placements_by_ref: BTreeMap<String, Vec<Place>> = BTreeMap::new();
     for r in &spec.refs {
-        let mut alle = Vec::new();
+        let mut all = Vec::new();
         for rot in &spec.rotations {
             let probe = PlacedItem {
                 reference: r.clone(),
@@ -591,32 +524,31 @@ pub fn compose(model: &Model, spec: &ComposeSpec) -> Result<Vec<Composed>, Model
                 let mut x = min_x;
                 while x + w <= max_x {
                     let rect = Rect { x, y, w, d };
-                    // Der Platz muss fuer die DAUERFLAECHE reichen, nicht nur fuer das Moebel:
-                    // die Klappe des Esstischs und die Schranktuer sind dauerhaft freizuhalten,
-                    // also darf dort von vornherein nichts hin.
+                    // The place must hold the lasting area, not just the piece: a table's flap and a wardrobe door
+                    // stay clear.
                     let occupied = lasting_area(model, r, *rot, rect);
-                    if inside_room(model, &rect) && !sperr.iter().any(|b| occupied.overlaps(b)) {
-                        alle.push(([x, y], *rot, occupied));
+                    if inside_room(model, &rect) && !blocked.iter().any(|b| occupied.overlaps(b)) {
+                        all.push(([x, y], *rot, occupied));
                     }
                     x += spec.step;
                 }
                 y += spec.step;
             }
         }
-        if alle.is_empty() {
+        if all.is_empty() {
             return Err(ModelError::Missing(format!(
-                "fuer `{r}` gibt es bei Schritt {} cm keinen Platz im Raum",
+                "`{r}` has no place in the room at a {} cm step",
                 spec.step
             )));
         }
-        plaetze.insert(r.clone(), alle);
+        placements_by_ref.insert(r.clone(), all);
     }
 
-    // Runde fuer Runde erweitern, dann auf die besten `beam` kuerzen.
-    let mut strahl: Vec<Vec<Place>> = vec![Vec::new()];
+    // Extend round by round, then cut to the best `beam`.
+    let mut beam_set: Vec<Vec<Place>> = vec![Vec::new()];
     for r in &spec.refs {
-        let options = &plaetze[r];
-        let mut nearest: Vec<(i32, Vec<Place>)> = strahl
+        let options = &placements_by_ref[r];
+        let mut nearest: Vec<(i32, Vec<Place>)> = beam_set
             .par_iter()
             .flat_map(|teil| {
                 options
@@ -625,9 +557,8 @@ pub fn compose(model: &Model, spec: &ComposeSpec) -> Result<Vec<Composed>, Model
                     .map(|p| {
                         let mut c = teil.clone();
                         c.push(*p);
-                        // Wand im Ruecken, ausser das Stueck sagt, es solle frei stehen.
-                        // Wandkontakt am MOEBEL, nicht an seiner reservierten Zone — sonst
-                        // zaehlte die Klappe eines Tisches als Rueckenlehne an der Wand.
+                        // Wall behind, unless the piece says it stands free. Measured at the piece, not its reserved zone,
+                        // or a table's flap would count as its back.
                         let score: i32 = c
                             .iter()
                             .zip(spec.refs.iter())
@@ -660,13 +591,11 @@ pub fn compose(model: &Model, spec: &ComposeSpec) -> Result<Vec<Composed>, Model
             .collect();
         if nearest.is_empty() {
             return Err(ModelError::Missing(format!(
-                "nach `{r}` bleibt keine Aufstellung uebrig — Schritt zu grob oder zu viele Stuecke"
+                "after `{r}` no arrangement is left: step too coarse or too many pieces"
             )));
         }
-        // Vielfalt vor Menge: je Position des GERADE gestellten Stuecks ueberlebt nur die beste
-        // Teilaufstellung. Ohne das fuellt sich der Strahl mit Varianten derselben Idee — der
-        // erste Lauf lieferte drei Vorschlaege, die sich in einer einzigen Koordinate
-        // unterschieden, und verwarf dafuer jede andere Anordnung.
+        // Variety over volume: per position of the piece just placed, only the best partial arrangement
+        // survives, or the beam fills with variants of one idea.
         nearest.sort_by_key(|(score, _)| std::cmp::Reverse(*score));
         let mut seen: std::collections::HashSet<[i32; 2]> = std::collections::HashSet::new();
         nearest.retain(|(_, c)| {
@@ -675,11 +604,11 @@ pub fn compose(model: &Model, spec: &ComposeSpec) -> Result<Vec<Composed>, Model
                 .unwrap_or(false)
         });
         nearest.truncate(spec.beam);
-        strahl = nearest.into_iter().map(|(_, c)| c).collect();
+        beam_set = nearest.into_iter().map(|(_, c)| c).collect();
     }
 
-    // Erst jetzt die volle Pruefung, auf ganzen Wohnungen.
-    let mut done: Vec<Composed> = strahl
+    // Only now the full check, on whole flats.
+    let mut done: Vec<Composed> = beam_set
         .par_iter()
         .filter_map(|c| {
             let items: Vec<PlacedItem> = c
@@ -739,14 +668,10 @@ pub fn compose(model: &Model, spec: &ComposeSpec) -> Result<Vec<Composed>, Model
         })
         .collect();
 
-    // Dieselbe Rangfolge wie `search`: bestehen, wenige Warnungen, Wand im Ruecken, dann der
-    // breiteste Engpass. Die dritte Stufe ist nicht schmueckend — mit Engpass davor gewann eine
-    // Aufstellung mit 0 cm Wandkontakt, also jedes Stueck frei im Raum. Formal fehlerfrei, und
-    // niemand richtet so ein. Zwei Rangfolgen fuer dieselbe Frage waeren ausserdem genau die
-    // Doppelung, gegen die diese Capability existiert.
-    // Die Front wird nur unter den BESTEHENDEN gebildet. Eine durchgefallene Aufstellung mit
-    // viel Wandkontakt waere sonst nicht dominiert und stuende vorn — auf einer Liste, deren
-    // erste Frage ist, ob man so einziehen kann.
+    // The same order as `search`: passing, few warnings, wall behind, widest bottleneck; with the
+    // bottleneck first an arrangement with every piece free in the room won. The front is built among
+    // the passing only, or a failing one with lots of wall would lead a list whose first question is
+    // whether one can move in.
     let targets: Vec<[i32; TARGETS]> = done
         .iter()
         .map(|c| {
@@ -781,36 +706,36 @@ pub fn compose(model: &Model, spec: &ComposeSpec) -> Result<Vec<Composed>, Model
 mod pareto_tests {
     use super::{pareto_front, TARGETS};
 
-    /// Ein Punkt, der in allem schlechter ist, gehoert nicht auf die Front.
+    /// A point worse in everything does not belong on the front.
     #[test]
     fn a_point_worse_in_everything_drops_out() {
         let p: Vec<[i32; TARGETS]> = vec![[10, 10, 10, 0], [9, 9, 9, -1]];
         assert_eq!(pareto_front(&p), vec![true, false]);
     }
 
-    /// Ein Tausch ist keine Niederlage: wer ein Ziel aufgibt und ein anderes gewinnt, bleibt.
+    /// A trade-off is no defeat: giving up one objective for another stays on the front.
     #[test]
     fn a_trade_off_keeps_both_on_the_front() {
         let p: Vec<[i32; TARGETS]> = vec![[10, 0, 5, 0], [0, 10, 5, 0]];
         assert_eq!(pareto_front(&p), vec![true, true]);
     }
 
-    /// Gleiche Punkte dominieren einander nicht — sonst faengt die Front an, Duplikate zu
-    /// verwerfen, und zwei gleich gute Aufstellungen an verschiedenen Orten waeren eine.
+    /// Equal points do not dominate each other, or two equally good arrangements in different places
+    /// would become one.
     #[test]
     fn identical_points_both_stay() {
         let p: Vec<[i32; TARGETS]> = vec![[3, 3, 3, 3], [3, 3, 3, 3]];
         assert_eq!(pareto_front(&p), vec![true, true]);
     }
 
-    /// Gleich in drei Zielen, besser im vierten: das ist Dominanz und kein Gleichstand.
+    /// Equal in three objectives and better in the fourth: dominance, not a tie.
     #[test]
     fn one_better_target_is_enough_to_dominate() {
         let p: Vec<[i32; TARGETS]> = vec![[5, 5, 5, 5], [5, 5, 5, 6]];
         assert_eq!(pareto_front(&p), vec![false, true]);
     }
 
-    /// Die Front eines leeren Feldes ist leer und kein Absturz.
+    /// The front of an empty field is empty, not a crash.
     #[test]
     fn empty_stays_empty() {
         assert!(pareto_front(&[]).is_empty());

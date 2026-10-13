@@ -81,6 +81,7 @@ export const PRIMARY_NAV: NavItem[] = [
   // capability); the floor plan is one view of it and moves to More. Interior still serves
   // the photos, so it starts alongside.
   { href: "/inventory", label: "Inventory", icon: "boxes", capability: "inventory", starts: ["inventory", "interior"] },
+  { href: "/wishlist", label: "Wishlist", icon: "wallet", capability: "inventory", starts: ["inventory", "interior", "finance"] },
   // PRD Q117: Sjel is the system of record for people; the page edits capabilities/entities.
   { href: "/people", label: "People", icon: "users", capability: "entities" },
 ];

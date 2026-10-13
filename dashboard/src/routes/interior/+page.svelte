@@ -13,6 +13,7 @@
   import Icon from "$lib/Icon.svelte";
   import PageHeader from "$lib/PageHeader.svelte";
   import { tip } from "$lib/tip";
+  import { link } from "$lib/nav";
   import {
     axonStatus,
     interior,
@@ -46,7 +47,7 @@
   import { modal } from "$lib/modal";
   import Wishlist from "$lib/inventory/Wishlist.svelte";
 
-  type View = "plans" | "inventory" | "solve" | "buy";
+  type View = "plans" | "inventory" | "wishlist" | "solve" | "buy";
 
   // `/inventory` renders this page opened on its inventory view: one list and one editor for
   // the rows, not a second read-only copy beside them (the 2026-10-05 stub's warning).
@@ -1227,7 +1228,9 @@
 
 <svelte:window onkeydown={onKey} />
 
-{#if initialView === "inventory"}
+{#if initialView === "wishlist"}
+  <PageHeader badge="Household" title="Wishlist" desc="What you still want to buy, and what it costs together." />
+{:else if initialView === "inventory"}
   <PageHeader
     badge="Household"
     title="Inventory"
@@ -1241,7 +1244,7 @@
   />
 {/if}
 
-<RoomCapturePanel />
+{#if initialView !== "wishlist"}<RoomCapturePanel />{/if}
 
 {#if phoneOnly}
   <div class="card offer">
@@ -1257,7 +1260,7 @@
   </div>
 {:else if loading}
   <p class="empty">Reading the model…</p>
-{:else}
+{:else if initialView !== "wishlist"}
   <!-- On a phone: one sticky line under the header, scrolling sideways if it must. -->
   <nav class="views" aria-label="Interior views">
     <button class:active={view === "plans"} aria-pressed={view === "plans"} onclick={() => (view = "plans")}>
@@ -1866,8 +1869,11 @@
   {/if}
 {/if}
 
-{#if !loading && !error && view === "inventory"}
-  {#if wishlist}
+{#if !loading && !error && (view === "inventory" || view === "wishlist")}
+  {#if view === "inventory" && wishlist}
+    <p class="note"><a href={link("/wishlist")}>{wishlist.items.length} wanted items are on the wishlist</a></p>
+  {/if}
+  {#if view === "wishlist" && wishlist}
     <section class="card budget">
       <h2>What is still missing</h2>
       <p class="sum">
@@ -1916,6 +1922,7 @@
     />
   {/if}
 
+  {#if view === "inventory"}
   <h3 class="group">Owned <span class="count">{owned.length}</span></h3>
   <div class="group-chips" role="group" aria-label="Filter owned by group">
     <button type="button" class:active={group === "alle"} onclick={() => (group = "alle")}>
@@ -1970,6 +1977,7 @@
       </li>
     {/each}
   </ul>
+  {/if}
 
   <!--
     One editor, two frames. On a phone it is a bottom sheet over the list, with Save and
@@ -2216,7 +2224,7 @@
     </form>
   {/if}
 
-  {#if gone.length > 0}
+  {#if view === "inventory" && gone.length > 0}
     <h3 class="group">Gone <span class="count">{gone.length}</span></h3>
     <ul class="items">
       {#each gone as { item: i } (i.id)}

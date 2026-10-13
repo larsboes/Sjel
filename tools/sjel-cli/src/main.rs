@@ -105,7 +105,7 @@ fn main() -> ExitCode {
 fn sjel(root: &Path, command: &str, rest: &[String]) -> ExitCode {
     let tool = |rel: &str| root.join(rel);
     match command {
-        "help" => help(rest.first().map_or("", String::as_str)),
+        "help" => help(root, rest.first().map_or("", String::as_str)),
         "-h" | "--help" => {
             println!("{}", help::USAGE);
             ExitCode::SUCCESS
@@ -159,7 +159,7 @@ fn sjel(root: &Path, command: &str, rest: &[String]) -> ExitCode {
     }
 }
 
-fn help(topic: &str) -> ExitCode {
+fn help(root: &Path, topic: &str) -> ExitCode {
     let text = match topic {
         "" => help::USAGE,
         "capability" => help::CAPABILITY,
@@ -168,13 +168,17 @@ fn help(topic: &str) -> ExitCode {
         "mcp" => help::MCP,
         "pack" => help::PACK,
         "context" => "Usage: sjel context with [capability] | on [unit-or-path]",
-        "storage" => help::STORAGE,
+        // The tool's own `-h` is the one text that cannot drift from its verbs. A copy here
+        // listed `apply` and `prune` after both had become `reclaim`.
+        "storage" => return exec(Command::new(root.join("tools/storage/storage")).arg("-h")),
         "update" => help::UPDATE,
         "gates" | "test" => help::GATES,
         "cargo" => help::CARGO,
         "doctor" => "Usage: sjel doctor",
         "search" => "Usage: sjel search <words...>",
-        "capture" => "Usage: sjel capture [url] [text] [#buy|#look|#go|#learn]  (no words: list unsorted)",
+        "capture" => {
+            "Usage: sjel capture [url] [text] [#buy|#look|#go|#learn]  (no words: list unsorted)"
+        }
         other => return fail(&format!("sjel: no help for '{other}'")),
     };
     println!("{text}");

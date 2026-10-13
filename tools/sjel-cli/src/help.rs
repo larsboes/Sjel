@@ -112,15 +112,6 @@ pub const PACK: &str = r#"Usage: sjel pack <command> <harness> ...
 Harnesses: claude, codex, opencode, pi
 Commands: list [harness], status, deploy, sync, remove, use <profile>"#;
 
-pub const STORAGE: &str = r#"Usage: sjel storage <command>
-
-  report [--json]   free/used/total, every policy class, what is flagged
-  apply  [--json]   run each applicable class's reclaim command
-  target [--json]   the Cargo target dir against PRD §9's R6 debug/release ratio
-  prune [--incremental] [--target] [--node-modules] [--dry-run]
-
-Policy: <overlay>/config/storage-policy.toml. See tools/storage/README.md."#;
-
 pub const UPDATE: &str = r#"Usage: sjel update [report|apply] [--json] [--offline] [--only <class>...]
 
   report [--json]   what is installed outside this checkout, who owns moving each

@@ -138,9 +138,8 @@ case "$cmd" in
   storage|disk)
     # Delegates rather than reimplements: storage owns the overlay policy, the du/df
     # arithmetic and the exit code. Pass the remaining args through so
-    # `sysmon storage --apply`, `--json` and the newer verbs reach it unchanged.
-    # The launcher moved into tools/storage/ on 2026-09-03 when the tool became a Rust
-    # crate; a directory and an executable cannot share one name.
+    # `sysmon storage reclaim`, `--json` and the other verbs reach it unchanged.
+    # The launcher is nested because a directory and an executable cannot share one name.
     shift
     exec "$_here/storage/storage" "$@"
     ;;

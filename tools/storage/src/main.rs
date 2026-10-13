@@ -4,25 +4,17 @@
 //! me", which `df` structurally cannot: the 46 GB that started this was 215 individually
 //! unremarkable 230 MB cache blocks, invisible to every per-file view.
 //!
-//! Five verbs, two questions. `report`, `discover` and `apply` are about the machine and
-//! read the overlay's `config/storage-policy.toml`, so core Axon stays generic and "normal
-//! here" stays machine-specific (CONTRIBUTING.md#public-core-and-private-overlays).
-//! `target` and `prune` are about this checkout. `prune` asks the policy which paths are the
-//! policy's to decide and defers to it there, but it works on a clone with no overlay, which
-//! is when someone most needs the disk back.
-//!
-//! Rust, not TypeScript. This replaced `tools/storage.ts` on 2026-09-03 under the owner's
-//! ruling that generalized tooling is built in Rust first
-//! (Packs/harness/skills/sjel/references/on-dependencies-and-build.md, "add backend logic in
-//! Rust"). The TypeScript version's argument for its own runtime was that the policy is
-//! array-of-tables and `tools/lib/toml.sh` cannot parse it — true, and an argument against
-//! bash, not against Rust. Every pure function it carried is here with its tests.
+//! Four verbs, and the split is the contract. `report` and `discover` read; `reclaim` is the
+//! only thing that removes; `target` answers PRD §9's R6 for this checkout. `report`,
+//! `discover` and `reclaim` read the overlay's `config/storage-policy.toml`, so the core
+//! names no path on this machine (CONTRIBUTING.md#public-core-and-private-overlays).
+//! `target` works on a clone with no overlay, which is when someone most needs the disk back.
 //!
 //! Exit codes, which `tools/host-watch`, `tools/doctor` and any hook depend on:
 //!
 //! * `0` — measured, and nothing is over a threshold.
-//! * `1` — measured, and something is: free space below `free_critical_gb`, or `target`'s
-//!   debug/release ratio above R6's 3×, or a `prune` path that had to be refused.
+//! * `1` — measured, and something is: free space below `free_critical_gb`, `target`'s
+//!   debug/release ratio above R6's 3×, or a reclaim path that had to be refused.
 //! * `2` — could not measure: a usage error, or no overlay policy to read.
 
 mod checkout;
@@ -48,16 +40,20 @@ use policy::{disk_state, expand_glob, is_applicable, ExpectedService, ProtectedE
 
 const HELP: &str = "sjel-storage — what is filling this disk, and what is safe to reclaim.
 
-  sjel-storage report [--json]     free/used/total, every policy class, what is flagged
+  sjel-storage report [--where [--root PATH]] [--json]
+                                   free/used/total, every policy class, what is flagged.
+                                   `--where` adds the largest directories no policy path
+                                   names, which is where `unattributed` lives
   sjel-storage reclaim [--dry-run] [--force] [--scheduled] [--only <class>]
                                    [--repo [--incremental] [--target] [--node-modules]]
                                    the one verb that removes anything. Classes by
                                    default; `--repo` acts on the checkout's build
                                    output instead, and needs one of the three
   sjel-storage target [--json]     the Cargo target dir against PRD §9's R6 ratio
-  sjel-storage discover [--top N] [--depth D] [--json]
-                                   the largest directories under $HOME that no policy
-                                   path names — where the `unattributed` figure lives
+  sjel-storage discover [--top N] [--depth D] [--root PATH] [--json]
+                                   the largest directories under PATH (default $HOME) that
+                                   no policy path names — where `unattributed` lives.
+                                   `--root /System/Volumes/Data` covers the whole volume
   sjel-storage -h                  this help
 
 Policy: <overlay>/config/storage-policy.toml — see schemas/storage-policy.toml.example.
@@ -104,7 +100,29 @@ fn main() -> ExitCode {
     };
 
     let result = match verb {
-        "report" => cmd_report(json),
+        "report" => {
+            // `--root` roots the walk `--where` adds, so on its own it would do nothing.
+            if value("--root").is_some() && !has("--where") {
+                Err(
+                    "--root applies to `report --where` — without `--where` there is no walk \
+                     to root"
+                        .to_string(),
+                )
+            } else {
+                number("--depth", 2).and_then(|depth| {
+                    number("--top", 10).and_then(|top| {
+                        cmd_report(
+                            json,
+                            has("--where").then(|| WhereRequest {
+                                root: value("--root"),
+                                depth,
+                                top,
+                            }),
+                        )
+                    })
+                })
+            }
+        }
         "reclaim" | "apply" | "prune" if json => Err(
             // Carried over from `apply --json`, which printed a report and deleted nothing: a
             // caller that meant to act read that as success.
@@ -130,8 +148,9 @@ fn main() -> ExitCode {
             verb != "reclaim",
         ),
         "target" => cmd_target(json),
-        "discover" => number("--top", 20)
-            .and_then(|top| number("--depth", 2).and_then(|depth| cmd_discover(json, top, depth))),
+        "discover" => number("--top", 20).and_then(|top| {
+            number("--depth", 2).and_then(|depth| cmd_discover(json, top, depth, value("--root")))
+        }),
         other => Err(format!("unknown command '{other}'\n\n{HELP}")),
     };
 
@@ -209,10 +228,18 @@ struct CheckedService {
     presence: service::Presence,
 }
 
-fn cmd_report(json: bool) -> Result<u8, String> {
+fn cmd_report(json: bool, where_request: Option<WhereRequest>) -> Result<u8, String> {
     let path = policy_path()?;
     let policy = policy::load(&path)?;
     let home = std::env::var("HOME").unwrap_or_default();
+    // The walk is the expensive half of this command — 35 s under `$HOME`, 45 s over the whole
+    // volume — so it runs only when asked for, and never in `host-watch`'s hourly read.
+    let where_walk = where_request
+        .map(|request| {
+            let root = request.root.unwrap_or_else(|| home.clone());
+            where_scan(&policy, &home, &root, request.depth, request.top)
+        })
+        .transpose()?;
 
     let warn_gb = policy.thresholds.free_warn_gb.unwrap_or(0.0);
     let crit_gb = policy.thresholds.free_critical_gb.unwrap_or(0.0);
@@ -288,7 +315,7 @@ fn cmd_report(json: bool) -> Result<u8, String> {
         // so an existing consumer is unaffected: `expected_service` (the text report always
         // printed it and a JSON reader had no way to see it), `named_bytes`,
         // `unattributed_bytes`, `measured` per class, and `presence` on each service.
-        let doc = serde_json::json!({
+        let mut doc = serde_json::json!({
             "disk": disk,
             "state": state,
             "classes": measured.iter().map(|m| serde_json::json!({
@@ -332,6 +359,11 @@ fn cmd_report(json: bool) -> Result<u8, String> {
                 "reason": c.presence.reason(),
             })).collect::<Vec<_>>(),
         });
+        // Additive, and present only when `--where` asked for it: a `du` walk is not
+        // something the hourly reader pays for.
+        if let Some(walk) = &where_walk {
+            doc["where"] = walk.json();
+        }
         println!("{}", serde_json::to_string_pretty(&doc).unwrap_or_default());
         return Ok(if over_critical { EXIT_OVER } else { EXIT_OK });
     }
@@ -442,6 +474,24 @@ fn cmd_report(json: bool) -> Result<u8, String> {
         fmt_bytes(named),
         fmt_bytes(unattributed)
     );
+
+    if let Some(walk) = &where_walk {
+        println!(
+            "Where the unattributed space is — {} (depth {})\n",
+            discover::shorten(&walk.root, &home),
+            walk.depth
+        );
+        print_walk(walk, &home);
+        if walk.root != "/" {
+            // The figure above is the whole Data volume and this walk is one root, so say
+            // which scope is which rather than leaving a reader to subtract them.
+            println!(
+                "\n  `--root {}` is the same walk over the scope `unattributed` covers.",
+                discover::DATA_VOLUME
+            );
+        }
+        println!();
+    }
 
     // A class whose paths have all vanished is skipped by the list above, which is right for
     // an empty directory and wrong for a path that is gone: it makes a dead entry quieter
@@ -714,21 +764,63 @@ fn cmd_reclaim(args: reclaim::Args, alias: bool) -> Result<u8, String> {
     })
 }
 
-/// Where the space the policy does not name actually is.
+/// What `report --where` asks for. `discover` is the same walk with its own defaults.
+struct WhereRequest {
+    root: Option<String>,
+    depth: usize,
+    top: usize,
+}
+
+/// One walk of a root, with every policy path inside it subtracted.
+struct Where {
+    root: String,
+    depth: usize,
+    top: usize,
+    partial: bool,
+    error: String,
+    root_bytes: u64,
+    named_bytes: u64,
+    unnamed_bytes: u64,
+    rows: Vec<discover::Row>,
+}
+
+impl Where {
+    fn json(&self) -> serde_json::Value {
+        serde_json::json!({
+            "root": self.root,
+            "depth": self.depth,
+            "top": self.top,
+            "partial": self.partial,
+            "error": self.error,
+            "root_bytes": self.root_bytes,
+            "named_bytes": self.named_bytes,
+            "unnamed_bytes": self.unnamed_bytes,
+            "rows": self.rows,
+        })
+    }
+}
+
+/// Walk `root` and subtract every policy path inside it.
 ///
-/// The walk is one `du`; the policy paths are measured on their own because each has to be
-/// subtracted from whichever directory contains it. `-x` keeps the walk on one filesystem,
-/// and `-d` bounds what is reported rather than what is read — `du` walks the whole tree at
-/// any depth, so `--depth` changes the answer's shape, not its cost.
-fn cmd_discover(json: bool, top: usize, depth: usize) -> Result<u8, String> {
+/// Shared by `discover` and `report --where` so the two cannot answer the same question
+/// differently — the rule `report` and `reclaim` already follow for a class's size.
+fn where_scan(
+    policy: &policy::Policy,
+    home: &str,
+    root: &str,
+    depth: usize,
+    top: usize,
+) -> Result<Where, String> {
+    discover::check_root(root)?;
     if depth == 0 {
         return Err("--depth must be at least 1".to_string());
     }
-    let home = std::env::var("HOME")
-        .ok()
-        .filter(|h| !h.is_empty())
-        .ok_or_else(|| "no HOME in the environment".to_string())?;
-    let policy = policy::load(&policy_path()?)?;
+    if !Path::new(root).is_dir() {
+        return Err(format!("--root {root} is not a directory"));
+    }
+    // What `du` prints and what the policy writes are different strings of one directory when
+    // the root is the Data volume; `discover::normalize` is where the two are made one.
+    let display = discover::normalize(root, root);
 
     // Every policy path measured on its own. `report` sums a class's paths together; here
     // they must be separate or the subtraction charges the wrong directory.
@@ -739,79 +831,83 @@ fn cmd_discover(json: bool, top: usize, depth: usize) -> Result<u8, String> {
         .flat_map(|c| c.paths.iter())
         .chain(policy.protected.iter().map(|p| &p.path));
     for pattern in policy_paths {
-        for expanded in expand_glob(pattern, &home) {
+        for expanded in expand_glob(pattern, home) {
             let bytes = size_of(std::slice::from_ref(&expanded)).bytes;
             named.push(discover::Named {
-                path: expanded,
+                path: discover::normalize(&expanded, root),
                 bytes,
             });
         }
     }
 
+    // The walk is one `du`; `-x` keeps it on one filesystem, and `-d` bounds what is reported
+    // rather than what is read — `du` walks the whole tree at any depth, so `--depth` changes
+    // the answer's shape, not its cost.
     let out = Command::new("du")
         .arg("-x")
         .arg("-k")
         .arg("-d")
         .arg(depth.to_string())
-        .arg(&home)
+        .arg(root)
         .output()
         .map_err(|e| format!("could not run du: {e}"))?;
     let scan = discover::scan_state(out.status.success(), &String::from_utf8_lossy(&out.stderr));
-    let walk = discover::parse_du_depth(&String::from_utf8_lossy(&out.stdout));
+    let walk: Vec<discover::DirSize> =
+        discover::parse_du_depth(&String::from_utf8_lossy(&out.stdout))
+            .into_iter()
+            .map(|d| discover::DirSize {
+                path: discover::normalize(&d.path, root),
+                bytes: d.bytes,
+            })
+            .collect();
 
-    let mut rows = discover::rows(&walk, &named, &home, depth);
+    let mut rows = discover::rows(&walk, &named, &display, depth);
     rows.truncate(top);
 
     let root_bytes = walk
         .iter()
-        .find(|d| d.path == home)
+        .find(|d| d.path == display)
         .map(|d| d.bytes)
         .unwrap_or(0);
-    let named_bytes = discover::named_inside(&home, &named);
-    let unnamed_bytes = root_bytes.saturating_sub(named_bytes);
+    let named_bytes = discover::named_inside(&display, &named);
+    Ok(Where {
+        root: display,
+        depth,
+        top,
+        partial: !scan.complete,
+        error: scan.error,
+        root_bytes,
+        named_bytes,
+        unnamed_bytes: root_bytes.saturating_sub(named_bytes),
+        rows,
+    })
+}
 
-    if json {
-        let doc = serde_json::json!({
-            "root": home,
-            "depth": depth,
-            "top": top,
-            "partial": !scan.complete,
-            "error": scan.error,
-            "root_bytes": root_bytes,
-            "named_bytes": named_bytes,
-            "unnamed_bytes": unnamed_bytes,
-            "rows": rows,
-        });
-        println!(
-            "{}",
-            serde_json::to_string_pretty(&doc).map_err(|e| e.to_string())?
-        );
-        return Ok(EXIT_OK);
-    }
-
-    println!("Sjel storage discover · {home} (depth {depth})");
+/// The walk's own words, shared so `discover` and `report --where` cannot drift.
+fn print_walk(walk: &Where, home: &str) {
+    let short_root = discover::shorten(&walk.root, home);
     println!(
-        "  {} under $HOME is named by no policy path ({} total, {} named)",
-        fmt_bytes(unnamed_bytes),
-        fmt_bytes(root_bytes),
-        fmt_bytes(named_bytes)
+        "  {} under {short_root} is named by no policy path ({} total, {} named)",
+        fmt_bytes(walk.unnamed_bytes),
+        fmt_bytes(walk.root_bytes),
+        fmt_bytes(walk.named_bytes)
     );
-    if !scan.complete {
+    if walk.partial {
         // The same rule as a class measurement: a partial number is said to be partial
         // rather than presented as a size. `du` meets this on cloud-backed directories.
         println!("  PARTIAL — du could not read everything, so every size below is a lower bound");
-        if !scan.error.is_empty() {
-            println!("    {}", scan.error);
+        if !walk.error.is_empty() {
+            println!("    {}", walk.error);
         }
     }
     println!();
-    if rows.is_empty() {
-        println!("  nothing unnamed at depth {depth}");
-        return Ok(EXIT_OK);
+    if walk.rows.is_empty() {
+        println!("  nothing unnamed at depth {}", walk.depth);
+        return;
     }
-    for row in &rows {
+    for row in &walk.rows {
         let named_part = row.bytes.saturating_sub(row.unnamed_bytes);
-        let short = discover::shorten(&row.path, &home);
+        let short = discover::shorten(&row.path, home);
         if named_part > 0 {
             println!(
                 "  {:>9}  {short}  ({} of it named)",
@@ -822,6 +918,31 @@ fn cmd_discover(json: bool, top: usize, depth: usize) -> Result<u8, String> {
             println!("  {:>9}  {short}", fmt_bytes(row.unnamed_bytes));
         }
     }
+}
+
+/// Where the space the policy does not name actually is.
+fn cmd_discover(json: bool, top: usize, depth: usize, root: Option<String>) -> Result<u8, String> {
+    let home = std::env::var("HOME")
+        .ok()
+        .filter(|h| !h.is_empty())
+        .ok_or_else(|| "no HOME in the environment".to_string())?;
+    let root = root.unwrap_or_else(|| home.clone());
+    let policy = policy::load(&policy_path()?)?;
+    let walk = where_scan(&policy, &home, &root, depth, top)?;
+
+    if json {
+        println!(
+            "{}",
+            serde_json::to_string_pretty(&walk.json()).map_err(|e| e.to_string())?
+        );
+        return Ok(EXIT_OK);
+    }
+
+    println!(
+        "Sjel storage discover · {} (depth {})",
+        walk.root, walk.depth
+    );
+    print_walk(&walk, &home);
     println!("\n  What is reclaimable is `sjel storage report`. This ranks what no policy names.");
     Ok(EXIT_OK)
 }

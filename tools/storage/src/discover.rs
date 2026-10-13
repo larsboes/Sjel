@@ -30,6 +30,49 @@ use serde::Serialize;
 
 use crate::measure::first_line;
 
+/// The APFS Data volume's mount point, which is the root that explains `report`'s
+/// `unattributed`.
+///
+/// `--root /` cannot answer it: `/System/Volumes/Data` is reached through a firmlink, which
+/// is not a mount point, so `du -x /` does not stop at the boundary and counts the Data
+/// volume inside `/System`. Measured 2026-10-13: `du -x -d 1 /` read 474 GB and put 263 GB
+/// under `/System`, of which 231 GB was the Data volume itself.
+pub const DATA_VOLUME: &str = "/System/Volumes/Data";
+
+fn under_data_volume(root: &str) -> bool {
+    root == DATA_VOLUME || root.starts_with(&format!("{DATA_VOLUME}/"))
+}
+
+/// Rewrite a path a walk printed into the form the policy uses.
+///
+/// The policy's paths are firmlinked (`/Users/x/...`) while a walk rooted at the Data volume
+/// prints `/System/Volumes/Data/Users/x/...`. Same directory, different strings — and the
+/// subtraction is a prefix test, so without this nothing under the wide root is subtracted
+/// and every named path is reported as unnamed. The volume's own path becomes `/`, which is
+/// what makes the result readable next to the policy it is measured against.
+pub fn normalize(path: &str, root: &str) -> String {
+    if !under_data_volume(root) {
+        return path.to_string();
+    }
+    match path.strip_prefix(DATA_VOLUME) {
+        Some("") => "/".to_string(),
+        Some(rest) => rest.to_string(),
+        None => path.to_string(),
+    }
+}
+
+/// Refuse a root that would be measured wrongly, before anything is walked.
+pub fn check_root(root: &str) -> Result<(), String> {
+    if root == "/" {
+        return Err(format!(
+            "`--root /` is not measurable: {DATA_VOLUME} is reached through a firmlink, not a \
+             mount point, so `du -x /` counts the Data volume inside /System. Use \
+             `--root {DATA_VOLUME}` for the whole volume."
+        ));
+    }
+    Ok(())
+}
+
 /// Why a scan is partial, mirroring [`crate::measure::Sizing`] for the directory walk.
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
 pub struct Scan {
@@ -83,7 +126,11 @@ pub fn depth_of(path: &str, root: &str) -> Option<usize> {
     if path == root {
         return Some(0);
     }
-    let rest = path.strip_prefix(root)?.strip_prefix('/')?;
+    let rest = if root == "/" {
+        path.strip_prefix('/')?
+    } else {
+        path.strip_prefix(root)?.strip_prefix('/')?
+    };
     Some(rest.split('/').filter(|s| !s.is_empty()).count())
 }
 
@@ -105,10 +152,14 @@ pub fn outermost(named: &[Named]) -> Vec<&Named> {
 
 /// True when `path` is `dir` itself or lies below it.
 pub fn is_inside(path: &str, dir: &str) -> bool {
-    path == dir
-        || path
-            .strip_prefix(dir)
-            .is_some_and(|rest| rest.starts_with('/'))
+    if path == dir {
+        return true;
+    }
+    if dir == "/" {
+        return path.starts_with('/');
+    }
+    path.strip_prefix(dir)
+        .is_some_and(|rest| rest.starts_with('/'))
 }
 
 /// The bytes the policy's paths account for, counting a class that sits inside a protected
@@ -233,6 +284,45 @@ mod tests {
         // Not under the root, and not a prefix match on a sibling name.
         assert_eq!(depth_of("/Users/xy/Library", "/Users/x"), None);
         assert_eq!(depth_of("/Users/y", "/Users/x"), None);
+    }
+
+    #[test]
+    fn a_slash_root_counts_and_contains_without_a_trailing_segment() {
+        // The Data volume normalises to `/`, so both helpers must take it. Without the case,
+        // `depth_of` returns None for every row and `named_inside` subtracts nothing.
+        assert_eq!(depth_of("/Users/x", "/"), Some(2));
+        assert_eq!(depth_of("/Users/x/Library", "/"), Some(3));
+        assert_eq!(depth_of("/opt", "/"), Some(1));
+        assert_eq!(depth_of("/", "/"), Some(0));
+        assert!(is_inside("/Users/x", "/"));
+        assert!(!is_inside("relative", "/"));
+    }
+
+    #[test]
+    fn a_path_walked_from_the_data_volume_is_rewritten_firmlinked() {
+        // The whole reason `--root /System/Volumes/Data` works: `du` prints the mount point
+        // while the policy writes `/Users/...`, and the subtraction is a prefix test.
+        assert_eq!(normalize(DATA_VOLUME, DATA_VOLUME), "/");
+        assert_eq!(
+            normalize("/System/Volumes/Data/Users/x", DATA_VOLUME),
+            "/Users/x"
+        );
+        assert_eq!(
+            normalize("/System/Volumes/Data/opt/homebrew", DATA_VOLUME),
+            "/opt/homebrew"
+        );
+        // A root outside the volume is already in the policy's form, and a path that does not
+        // carry the prefix is left alone rather than mangled.
+        assert_eq!(normalize("/Users/x", "/Users/x"), "/Users/x");
+        assert_eq!(normalize("/Users/x", DATA_VOLUME), "/Users/x");
+    }
+
+    #[test]
+    fn the_root_du_measures_wrongly_is_refused_with_the_reason() {
+        let error = check_root("/").unwrap_err();
+        assert!(error.contains(DATA_VOLUME), "{error}");
+        assert!(check_root(DATA_VOLUME).is_ok());
+        assert!(check_root("/Users/x").is_ok());
     }
 
     #[test]

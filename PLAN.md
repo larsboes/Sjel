@@ -30,36 +30,48 @@ A group with one constraint for all its items ("travel-friendly, fewer but bette
 ## Storage: what is still open
 
 2026-10-13. The crate has **one reporting surface and one reclaim surface**. `report`,
-`discover` and `target` read; `reclaim` is the only thing that removes, with `apply` and `prune`
-kept as spellings of it so a finding already written that says `--apply` still resolves. Every
-removal goes through one guard (`guard.rs`): canonicalise, scope, git, the policy's protection
-and ownership, then the live-process probe. The policy gained a size axis (`cap_gb`,
-`older_than_days`), which is what let `capabilities/cargo-trim` stop being a shell script with its
-own `du`, its own `pgrep` guard and its own 50 GB cap — it runs `reclaim --scheduled` now.
+`discover`, `report --where` and `target` read; `reclaim` is the only thing that removes, with
+`apply` and `prune` kept as spellings of it so a finding already written that says `--apply`
+still resolves. Every removal goes through one guard (`guard.rs`): canonicalise, scope, git, the
+policy's protection and ownership, then the live-process probe. The policy gained a size axis
+(`cap_gb`, `older_than_days`), which is what let `capabilities/cargo-trim` stop being a shell
+script with its own `du`, its own `pgrep` guard and its own 50 GB cap — it runs
+`reclaim --scheduled` now.
+
+`discover` took `--root <path>` and a caller, so the space the report could only total is now
+ranked. `--root /System/Volumes/Data` covers the scope `unattributed` does; `--root
+/opt/homebrew` (17.0 GB, 0 named), `/Applications` and `/private/var` answer on their own.
+`--root /` is refused, because the Data volume is reached through a firmlink rather than a mount
+point and `du -x /` counts it inside `/System`. The walk costs 35 s under `$HOME` and 45 s over
+the volume, so it runs on demand and never in the hourly report.
 
 Still open:
 
-### `discover` stops at `$HOME`, and nothing runs it
+### 190 GB the policy does not name
 
-79 GB of the used disk still has no instrument: `/opt/homebrew` 17.0, `/Applications` 13.4,
-`/private/var` 8.7 (measured 2026-10-13). `discover` is the verb built for exactly this and has no
-caller, so `--root <path>` and `--include-system` would widen a reading nobody takes. The Google
-Drive `.tmp` deadlock already makes every figure a lower bound.
-
-### 192 GB the policy does not name
-
-Named 49.0 GB against 192.5 GB unattributed (2026-10-13, after the trim). Naming
-`~/.ollama/models` (17.7 GB, in active use — report-only, not a reclaim target), iCloud and
-`~/Music` (protected), `/opt/homebrew` and `/private/var/folders` (report-only), and a
-developer-caches class (~5 GB across `~/.npm/_cacache`, `_npx`, `~/.local/pipx` and
-`~/.codex/packages`, each with an owning cleanup verb) would take named to roughly 100 GB. Overlay
-work, not a crate change.
+Named 54.0 GB against 190.7 GB unattributed (2026-10-13). `report --where` says where it is, and
+most of it is legitimate and unowned: `~` 106.1 GB (50.9 GB of it named), the Data volume's
+`/System/Library` 19.8, `/opt/homebrew` 17.0, `/private/var` 8.9, `/Applications/Xcode.app` 3.9.
+Naming `~/.ollama/models` (17.7 GB, in active use — report-only, not a reclaim target), iCloud
+(`~/Library/Mobile Documents` 20.5) and `~/Music` (protected), Homebrew and `/private/var`
+(report-only), and a developer-caches class (~5 GB across `~/.npm/_cacache`, `_npx`,
+`~/.local/pipx` and `~/.codex/packages`, each with an owning cleanup verb) would take named to
+roughly 100 GB. Overlay work, not a crate change.
 
 ### No class has a growth curve
 
 `storage_samples` holds `named_bytes` and `unattributed_bytes`, and `storage_absent` holds which
 names were gone; neither holds a per-class size, so a class that doubled is invisible. The sampler
-already runs hourly, so this waits on nothing.
+already runs hourly, so this waits on nothing. `discover`'s walk is on demand and 35–45 s, so a
+directory that grows between two runs is not tracked either.
+
+### The storage-history surface is live but uncommitted
+
+On this machine `sjel-status` samples the report hourly and serves `/storage-history` — 11 rows,
+2026-10-12 07:00 to 2026-10-13 14:00 — but the source
+(`capabilities/sjel-status/src/storage_history.rs`, the route, the dashboard panel and its test)
+is uncommitted in a worktree, while committed docs describe the surface. Decide whether that work
+is committed as one change or the claims come out until it is.
 
 ## Storage declarations that were retired
 

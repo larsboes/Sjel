@@ -441,7 +441,7 @@ production began consuming capability-owned UI bundles; its README records that 
 
 Build artifacts are not state. `sjel storage target` measures `target/` per profile and per
 bucket and checks PRD §9's R6 — `target/debug` may not exceed `target/release` by more than 3× —
-and `tools/doctor` reports the verdict. `sjel storage prune` gives the space back:
+and `tools/doctor` reports the verdict. `sjel storage reclaim --repo` gives the space back:
 `--incremental` for the cache that always regrows, `--target` for a `cargo clean`, and
 `--node-modules` for every ignored `node_modules`, `.svelte-kit` and `dist` in the checkout. The
 `[profile.dev.package."*"]` stanza in the root `Cargo.toml` is the measurement that produced the
@@ -1014,7 +1014,7 @@ One web app is the visible form of the gluing layer: **installer, maintainer, an
 | `dashboard/` | the spine's shell — discovers installed capabilities via their manifests and mounts their panels (installer, doctor UI, service dashboards); owns no domain, no data |
 | `libs/<name>/` | spine-owned shared code with no domain of its own — statically linked into capability binaries at compile time, own crate in the Cargo workspace from day one |
 | `schemas/` | shared contracts; import, never redefine |
-| `tools/` | install (bootstrap + capability selection), capability (enable/disable, requires-resolution), update (interactive maintainer), doctor (health + version), audit (gitleaks + osv-scanner behind one verb), host-patch (the daily host upgrade job), container-refresh (the daily image pull + recreate), storage (disk classes from the overlay policy, plus `target` for PRD §9's R6 and `prune` for the checkout — a Cargo member, see `tools/storage/README.md`), generate-architecture, graphify, agent-integrations (each upstream's own harness integration, at its latest release), mini-tools |
+| `tools/` | install (bootstrap + capability selection), capability (enable/disable, requires-resolution), update (interactive maintainer), doctor (health + version), audit (gitleaks + osv-scanner behind one verb), host-patch (the daily host upgrade job), container-refresh (the daily image pull + recreate), storage (disk classes from the overlay policy, plus `target` for PRD §9's R6 and `reclaim --repo` for the checkout — a Cargo member, see `tools/storage/README.md`), generate-architecture, graphify, agent-integrations (each upstream's own harness integration, at its latest release), mini-tools |
 
 `ARCHITECTURE.md`'s tables and its Mermaid dependency graph (Packs → capabilities they drive →
 the upstream image each declares) are derived straight from

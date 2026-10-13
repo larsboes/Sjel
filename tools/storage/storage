@@ -7,7 +7,6 @@
 # release binary when it is missing or older than its sources, so `sjel storage` works on a
 # fresh clone without a separate build step.
 #
-# Rust, not the TypeScript this replaced on 2026-09-03: see tools/storage/README.md.
 # bash 3.2-safe.
 set -u
 

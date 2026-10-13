@@ -25,12 +25,21 @@ with a service already held down.
 Keep public code and doctrine in Sjel. Keep private values, machine state and secrets in the active
 overlay or Vaultwarden. Never generate, expose or change a secret without explicit authorization.
 
-## Code and docs
+## Code, documentation, and planning doctrine (Vector & Rust Reference standard)
 
-The code says what it does. A comment says only a reason the code cannot show, in one or two
-lines. Do not retell history, ISC numbers or PRD questions in code; git log keeps them. An `ISA.md`
-is the contract of its unit and nothing else. Ideas and open questions go in `PLAN.md`.
-When you edit a module, trim its comments to this rule. Do not run a separate sweep.
+- **Code is the source of truth**: Code, tests, and AST knowledge graphs (`graphify`) are the ground truth for humans and AI agents. Avoid sprawling markdown decision logs or PR retrospectives in the tree.
+- **Short, precise planning & claims**: Issues and open claims in `PLAN.md` or `ISA.md` must be short, falsifiable, and precise specifications, never narrative essays.
+- **Self-explanatory code over prose comments**:
+  - Write expressive, strongly typed code (Newtypes, type-state pattern, explicit enums).
+  - If code needs a paragraph to explain *what* it does, refactor the code and variable names instead.
+- **Interface contracts over historical narrative**:
+  - **Zero history in code**: Never put dates, PR numbers, ISC tickets, or past migration stories into comments. Git log owns history.
+  - **Document public boundaries**: Use standard rustdoc (`///`) or JSDoc (`/** ... */`) for every public type, struct field, function, parameter, and error condition (`# Errors`).
+  - **Internal comments**: Maximum 1–2 lines strictly explaining non-obvious hardware, kernel, or concurrency invariants.
+- **Visual diagrams for architecture**:
+  - Prefer concise Mermaid or ASCII diagrams in module READMEs to illustrate data flow, state transitions, or component pipelines.
+- **Opportunistic trimming**:
+  - When editing a module, trim sprawling narrative comments to this rule. Do not run a separate sweep.
 
 ## Interaction and output style (ADHD-friendly / low cognitive load)
 

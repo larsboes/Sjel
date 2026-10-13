@@ -9,11 +9,11 @@ Shipped 2026-10-13: `comms` `/captures`, `sjel capture`, and the dashboard page 
 
 ### Capture from the phone
 
-The phone reaches Sjel only through the LAN listener, and that listener admits only requests signed with a paired device's key (`libs/sjel-server/src/lan.rs`). An iOS Shortcut cannot sign a request, so it cannot post to `/captures`. Open.
+The phone reaches Sjel only through the LAN listener, and that listener admits only requests signed with a paired device's key (`libs/sjel-server/src/lan.rs`). An iOS Shortcut cannot sign a request, so it cannot post to `/captures`. Decided 2026-10-13: an iOS share extension in the phone app, which signs with the paired key. A shared-token endpoint was rejected because it opens the signed-only listener.
 
 ### `#go` has no destination
 
-It stays in the inbox. A candidate destination is `places`.
+It stays in the inbox. Decided 2026-10-13: it goes to `places`, which needs a write path for a place from a link or a note.
 
 ### Model suggestions
 

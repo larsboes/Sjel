@@ -1,0 +1,45 @@
+#!/bin/bash
+# pre-push — the secret check that runs when a push does, not a day later.
+#
+# The public repo is covered by GitHub's own push protection (tools/sjel-cli/src/audit.rs states
+# that as its reason for scanning the overlay at all), but a PRIVATE repository needs a paid plan
+# for it, so nothing stopped a secret from leaving the overlay until tools/host-patch ran its
+# daily audit. This is that same gitleaks scan, at the one moment it can still refuse.
+#
+# Scoped to the outgoing commits (`<sha> --not --remotes`), so it does not re-scan history that
+# is already on a remote — the audit's whole-history half stays where it is.
+#
+# It never blocks on a missing scanner. A push is not the place to install one, and a hook that
+# fails closed on a setup problem gets deleted rather than fixed.
+#
+# Installed by tools/install.sh via `core.hooksPath`, and run by git with the refs being pushed
+# on stdin. bash 3.2-safe (CONTRIBUTING.md#portable-shell).
+set -u
+
+if ! command -v gitleaks >/dev/null 2>&1; then
+  echo "pre-push: gitleaks is not installed — this push was NOT secret-scanned" >&2
+  exit 0
+fi
+
+status=0
+seen=""
+while read -r _local_ref local_sha _remote_ref _remote_sha; do
+  [ -n "${local_sha:-}" ] || continue
+  # A deleted ref carries no commits to scan.
+  case "$local_sha" in 0000000000000000000000000000000000000000) continue ;; esac
+  # Two refs pushed from one commit are one range, and gitleaks is not free.
+  case " $seen " in *" $local_sha "*) continue ;; esac
+  seen="$seen $local_sha"
+
+  # `--exit-code` takes an INT in gitleaks 8.30.1, so it needs its value: bare, it swallows the
+  # next flag and every push fails on the parse rather than on a secret.
+  if ! gitleaks git --redact --no-banner --exit-code 1 \
+    --log-opts="$local_sha --not --remotes" >&2; then
+    status=1
+  fi
+done
+
+if [ "$status" -ne 0 ]; then
+  echo "pre-push: gitleaks found a secret in a commit being pushed — fix or remove it, then push again" >&2
+fi
+exit "$status"

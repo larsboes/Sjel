@@ -68,6 +68,27 @@ write_bun_global_hold() {
   echo "Bun install policy: ~/.bunfig.toml now holds new npm releases for 24h."
 }
 
+# Point a repository's git hooks at the tracked tools/githooks/, so the pre-push secret scan
+# survives a fresh clone instead of living in one developer's .git/hooks. The overlay is pointed
+# at the same directory: the public repo already has GitHub's push protection, and a private one
+# needs the paid plan it does not have (tools/githooks/pre-push says so at length).
+#
+# `core.hooksPath` REPLACES .git/hooks rather than adding to it, so an existing setting is
+# reported and left alone rather than silently shadowing whatever it installed.
+install_git_hooks() {
+  local repo existing
+  for repo in "$SJEL_ROOT" "${OVERLAY_PATH:-}"; do
+    [ -n "$repo" ] && [ -d "$repo/.git" ] || continue
+    existing="$(git -C "$repo" config --get core.hooksPath || true)"
+    if [ -n "$existing" ] && [ "$existing" != "$TOOLS_DIR/githooks" ]; then
+      echo "Git hooks: $repo already points at '$existing' — left alone."
+      continue
+    fi
+    git -C "$repo" config core.hooksPath "$TOOLS_DIR/githooks"
+    echo "Git hooks: $repo runs tools/githooks/pre-push before a push."
+  done
+}
+
 # `sjel` is the public human/agent interface, and `axon` is its earlier name (a symlink in the
 # checkout), so installation puts both launchers in the conventional user bin directory. Never
 # replace an unrelated command: an existing non-symlink requires an explicit operator decision
@@ -449,6 +470,12 @@ if [ -n "$PERSIST_OWED" ]; then
 else
   echo "Boot persistence: nothing outstanding for the enabled autostart set."
 fi
+
+# 10) Git hooks — the pre-push secret scan, installed rather than described. Not opt-in: a
+# hook that is not installed is the state this step exists to leave behind, and it refuses
+# nothing a developer was not already going to be refused by GitHub on the public repo.
+echo
+install_git_hooks
 
 echo
 echo "Setup done."

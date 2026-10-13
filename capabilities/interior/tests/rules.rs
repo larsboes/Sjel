@@ -1,14 +1,7 @@
-//! Die Wohnung deklariert ihre Regeln, und der Pruefer schlaegt sie nach.
+//! The flat declares its rules, and the checker looks them up.
 //!
-//! Bis 2026-08-31 tat er das nicht. `rules.toml` fuehrte `[[regeln]]` mit `id`, `schwere` und
-//! `text`; `model::Rules` parste die Liste; **nichts las sie**. Die Schwere stand stattdessen an
-//! allen 21 Ausgabestellen in `clearance.rs` als Literal, und der Modulkopf dort behauptete
-//! trotzdem "Schwere folgt rules.toml". Eine Wohnung konnte R3 auf `hart` setzen und bekam
-//! weiterhin eine Warnung.
-//!
-//! Jeder Test hier arbeitet auf einer KOPIE der Musterwohnung im Temp-Verzeichnis, weil er die
-//! Regeln veraendern muss, um zu zeigen, dass sie wirken. Eine Datei zu editieren, die andere
-//! Testbinaries lesen, waere die zweite Fassung des Fehlers, den D20 gerade geschlossen hat.
+//! Every test here works on a copy of the sample flat in a temp dir, because it has to change the
+//! rules to show they take effect; editing a file other test binaries read would race them.
 
 use interior::clearance::{check_layout, RULE_IDS};
 use interior::model::Model;
@@ -17,33 +10,29 @@ use std::sync::Once;
 
 const FLAT: &str = "muster";
 
-/// Eine Kopie der Fixture, in der eine Zeile ersetzt ist.
-///
-/// Jede Variante bekommt ihr eigenes Verzeichnis und ihren eigenen Wohnungsnamen, damit die
-/// Varianten nebeneinander existieren koennen: `SJEL_PERSONAL_ROOT` ist prozessweit, und ein
-/// Test, der sie zwischen zwei Laeufen umsetzt, laeuft gegen jeden Nachbarn im selben Binary.
-fn variant(name: &str, ersetze: &[(&str, &str)]) -> Model {
+/// A copy of the fixture with one line replaced. Each variant gets its own dir and flat name, so
+/// variants coexist: `SJEL_PERSONAL_ROOT` is process-wide.
+fn variant(name: &str, replacements: &[(&str, &str)]) -> Model {
     let wurzel = unique_root();
     let target = wurzel.join("data/interior/flats").join(name);
     if !target.exists() {
         let source = fixture().join("data/interior/flats").join(FLAT);
         copy_layout(&source, &target);
-        // Beide Dateien, weil die Regeln in `rules.toml` stehen und das, WORAN sie messen,
-        // teils in `room.toml` — `eingang = true` etwa. Ein Ersetzen, das nirgends greift, ist
-        // ein Fehler und kein wirkungsloser Test.
-        for (von, nach) in ersetze {
+        // Both files, because the rules live in `rules.toml` and what they measure partly in
+        // `room.toml` (`eingang = true`). A replacement that matches nowhere is an error.
+        for (old, new) in replacements {
             let mut hit = false;
             for file in ["rules.toml", "room.toml"] {
-                let pfad = target.join(file);
-                let text = std::fs::read_to_string(&pfad).expect("Datei der Kopie");
-                if text.contains(von) {
-                    std::fs::write(&pfad, text.replace(von, nach)).expect("Kopie schreiben");
+                let path = target.join(file);
+                let text = std::fs::read_to_string(&path).expect("file of the copy");
+                if text.contains(old) {
+                    std::fs::write(&path, text.replace(old, new)).expect("write the copy");
                     hit = true;
                 }
             }
             assert!(
                 hit,
-                "{name}: `{von}` steht weder in rules.toml noch in room.toml — der Test prueft eine Zeile, die es nicht gibt"
+                "{name}: `{old}` is neither in rules.toml nor in room.toml; the test checks a line that does not exist"
             );
         }
     }
@@ -54,8 +43,8 @@ fn fixture() -> PathBuf {
     Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/fixtures/overlay")
 }
 
-/// Setzt die Umgebung genau einmal je Binary und fuellt das Inventar ueber denselben Import,
-/// den `interior import` fuehrt — kein zweiter Weg, Zeilen anzulegen.
+/// Sets the environment once per binary and fills the inventory through the same import
+/// `interior import` uses.
 fn unique_root() -> PathBuf {
     static ONCE: Once = Once::new();
     let wurzel = std::env::temp_dir().join(format!("interior-rules-{}", std::process::id()));
@@ -66,32 +55,29 @@ fn unique_root() -> PathBuf {
         std::env::set_var("SJEL_PERSONAL_ROOT", &wurzel);
         std::env::set_var("SJEL_DB_PATH", &db);
         std::env::remove_var("SJEL_INTERIOR_FLAT");
-        let store = sjel_inventory::store::Store::open(&db).expect("die Testdatenbank oeffnet");
+        let store = sjel_inventory::store::Store::open(&db).expect("the test database opens");
         sjel_inventory::import::inventory(&store, &fixture().join("data/interior/inventory"))
-            .expect("das Musterinventar importiert");
+            .expect("the sample inventory imports");
     });
     wurzel
 }
 
-fn copy_layout(von: &Path, nach: &Path) {
-    std::fs::create_dir_all(nach).expect("Zielverzeichnis");
-    for e in std::fs::read_dir(von).expect("Quellverzeichnis") {
-        let e = e.expect("Eintrag");
-        let target = nach.join(e.file_name());
+fn copy_layout(old: &Path, new: &Path) {
+    std::fs::create_dir_all(new).expect("Zielverzeichnis");
+    for e in std::fs::read_dir(old).expect("source dir") {
+        let e = e.expect("entry");
+        let target = new.join(e.file_name());
         if e.file_type().expect("Typ").is_dir() {
             copy_layout(&e.path(), &target);
         } else {
-            std::fs::copy(e.path(), &target).expect("Datei kopieren");
+            std::fs::copy(e.path(), &target).expect("copy file");
         }
     }
 }
 
-/// Der Kern: dieselbe Geometrie, dieselbe Verletzung, **ein Wort in der Datei anders**.
-///
-/// `b-lichtkorridor` stellt ein zu hohes Stueck in den Lichtkorridor. R3 steht in der
-/// Musterwohnung auf `weich`, also ist das eine Warnung und das Layout besteht. Steht R3 auf
-/// `hart`, faellt dasselbe Layout durch. Aendert sich hier nichts, kommt die Schwere wieder
-/// aus dem Code.
+/// Same geometry, same violation, one word different in the file. `b-lichtkorridor` puts a piece
+/// too tall into the light corridor: with R3 soft the layout passes with a warning, with R3 hard
+/// the same layout fails.
 #[test]
 fn a_rule_severity_comes_from_the_file() {
     let weich = variant("r3-weich", &[]);
@@ -104,100 +90,88 @@ fn a_rule_severity_comes_from_the_file() {
     );
 
     let l = weich.load_layout("b-lichtkorridor").expect("Layout");
-    let w = check_layout(&weich, &l).expect("Pruefung weich");
-    assert!(w.pass, "R3 weich: das Layout besteht mit einer Warnung");
+    let w = check_layout(&weich, &l).expect("check soft");
+    assert!(w.pass, "R3 soft: the layout passes with a warning");
     assert_eq!(w.soft.iter().filter(|v| v.rule == "R3").count(), 1);
     assert_eq!(w.hard.iter().filter(|v| v.rule == "R3").count(), 0);
 
     let l = hart.load_layout("b-lichtkorridor").expect("Layout");
-    let h = check_layout(&hart, &l).expect("Pruefung hart");
+    let h = check_layout(&hart, &l).expect("check hard");
     assert!(
         !h.pass,
-        "R3 hart: dasselbe Layout faellt durch — sonst steht die Schwere weiter im Code"
+        "R3 hard: the same layout fails, or the severity still lives in the code"
     );
     assert_eq!(h.hard.iter().filter(|v| v.rule == "R3").count(), 1);
     assert_eq!(h.soft.iter().filter(|v| v.rule == "R3").count(), 0);
 }
 
-/// Der Regeltext erreicht den Bericht.
-///
-/// Er stand seit jeher in `rules.toml` und kam in keinem Verdikt vor. `message` sagt, was
-/// dieses Layout falsch macht; `text` sagt, welche Regel das ueberhaupt zu einer Regel macht.
+/// The rule text reaches the report: `message` says what this layout gets wrong, `text` what makes
+/// it a rule.
 #[test]
 fn a_violation_carries_the_flat_rule_text() {
     let m = variant("text", &[]);
     let l = m.load_layout("c-terrassentuer").expect("Layout");
-    let r = check_layout(&m, &l).expect("Pruefung");
+    let r = check_layout(&m, &l).expect("check");
 
     let v = r
         .hard
         .iter()
         .find(|v| v.rule == "R1")
-        .expect("c-terrassentuer verletzt R1");
+        .expect("c-terrassentuer breaks R1");
     assert_eq!(
         v.text.as_deref(),
         Some("Anlaufzone vor der gesamten Breite der Terrassentuer freihalten."),
-        "der Text kommt woertlich aus rules.toml"
+        "the text comes verbatim from rules.toml"
     );
 }
 
-/// Eine Invariante traegt keinen Regeltext, und das ist die Grenze zwischen den zwei Klassen.
-///
-/// Zwei Moebel koennen sich nicht ueberlappen, und keine Wohnung kann das erlauben. Sie
-/// deklarieren zu lassen hiesse, jede Wohnung eine Invariante wiederholen zu lassen, die sie
-/// nicht aendern kann — und die erste vergessene waere eine still abgeschaltete Pruefung.
+/// An invariant carries no rule text: that is the line between the two kinds of ids.
 #[test]
 fn an_invariant_has_no_rule_text_and_needs_no_declaration() {
     let m = variant("invariante", &[]);
     let l = m.load_layout("d-ausserhalb").expect("Layout");
-    let r = check_layout(&m, &l).expect("Pruefung");
+    let r = check_layout(&m, &l).expect("check");
 
     let v = r
         .hard
         .iter()
         .find(|v| v.rule == "room_boundary")
-        .expect("d-ausserhalb stellt ein Moebel durch die Wand");
+        .expect("d-ausserhalb puts a piece through the wall");
     assert!(
         v.text.is_none(),
-        "`raumgrenze` ist Geometrie und keine Hausregel — es gibt keinen Text nachzuschlagen"
+        "`room_boundary` is geometry, not a house rule; there is no text to look up"
     );
     assert!(
         !RULE_IDS.contains(&"room_boundary"),
-        "und es steht deshalb auch nicht in REGEL_IDS"
+        "and so it is not in RULE_IDS either"
     );
 }
 
-/// Eine Kennung, die die Wohnung nicht fuehrt, ist ein FEHLER und kein textloser Verstoss.
-///
-/// Vorher haette der Pruefer `R1` ausgegeben und der Bericht haette eine Regel genannt, die
-/// niemand nachschlagen kann. Die Fehlermeldung nennt, was stattdessen deklariert ist — der
-/// gleiche Umgang, den B26a fuer einen unbekannten Wegpunkt eingefuehrt hat.
+/// An id the flat does not declare is an error, not a violation without text; the message lists
+/// what is declared.
 #[test]
 fn an_undeclared_id_aborts_the_check() {
     let m = variant(
-        "ohne-r1",
+        "without-r1",
         &[(
             "[[regeln]]\nid = \"R1\"\nschwere = \"hart\"\ntext = \"Anlaufzone vor der gesamten Breite der Terrassentuer freihalten.\"\n",
             "",
         )],
     );
     let l = m.load_layout("c-terrassentuer").expect("Layout");
-    let e = check_layout(&m, &l).expect_err("R1 fehlt, also gibt es nichts nachzuschlagen");
+    let e = check_layout(&m, &l).expect_err("R1 is missing, so there is nothing to look up");
     let text = e.to_string();
     assert!(
         text.contains("R1"),
-        "die Meldung nennt die fehlende Kennung: {text}"
+        "the message names the missing id: {text}"
     );
     assert!(
         text.contains("R2"),
-        "und die, die es gibt, damit ein Tippfehler sofort sichtbar ist: {text}"
+        "and the existing ones, so a typo shows at once: {text}"
     );
 }
 
-/// Eine unbekannte Schwere ist kein stillschweigendes `weich`.
-///
-/// Eine Wohnung, die sich vertippt, bekaeme sonst eine Regel, die nie blockiert, und der
-/// Bericht saehe aus wie einer ueber eine Wohnung, in der alles erlaubt ist.
+/// An unknown severity is not silently `soft`.
 #[test]
 fn an_unknown_severity_is_an_error() {
     let m = variant(
@@ -208,140 +182,120 @@ fn an_unknown_severity_is_an_error() {
         )],
     );
     let l = m.load_layout("c-terrassentuer").expect("Layout");
-    let e = check_layout(&m, &l).expect_err("`haart` ist keine Schwere");
+    let e = check_layout(&m, &l).expect_err("`haart` is no severity");
     assert!(e.to_string().contains("haart"), "{e}");
 }
 
-/// Was die Wohnung deklariert und diese Maschine nicht prueft, steht im Ergebnis.
-///
-/// Die reale Wohnung fuehrt R5 und R6 — Blendung am Schreibtisch, der Blick vom Eingang aufs
-/// Bett. Beides sind Hausregeln, beides prueft hier niemand, und bis 2026-08-31 fielen sie
-/// stumm heraus: ein Bericht ueber acht deklarierte Regeln sah aus wie einer ueber sechs
-/// gepruefte. „Bestanden" heisst ab hier „bestanden, gemessen an den Regeln, die gemessen
-/// wurden".
+/// What the flat declares and this checker does not check is in the result: "passes" means passes
+/// the rules that were measured.
 #[test]
 fn declared_rules_without_a_check_are_reported() {
-    let m = variant("ungeprueft", &[]);
+    let m = variant("unchecked", &[]);
     let l = m.load_layout("a-frei").expect("Layout");
-    let r = check_layout(&m, &l).expect("Pruefung");
+    let r = check_layout(&m, &l).expect("check");
 
     assert!(r.pass, "a-frei besteht");
-    let offen: Vec<&str> = r.unchecked.iter().map(|u| u.rule.as_str()).collect();
+    let unchecked_r3: Vec<&str> = r.unchecked.iter().map(|u| u.rule.as_str()).collect();
     assert_eq!(
-        offen,
+        unchecked_r3,
         vec!["R10"],
-        "ein bestandenes Layout sagt trotzdem, was an ihm nicht gemessen wurde"
+        "a passing layout still says what was not measured"
     );
     let u = &r.unchecked[0];
     assert!(
         u.text.contains("Teppich"),
-        "mit dem Regeltext, damit der Bericht sagt, was ungeprueft blieb: {}",
+        "with the rule text, so the report says what stayed unchecked: {}",
         u.text
     );
     assert!(
-        u.reason.contains("prueft sie nicht"),
-        "und mit dem Grund: {}",
+        u.reason.contains("does not check it"),
+        "and with the reason: {}",
         u.reason
     );
 }
 
-/// Jede Kennung, die diese Maschine ausgeben kann, fuehrt die Musterwohnung auch.
-///
-/// Der Abgleich laeuft in beide Richtungen, und das ist die Richtung, die kein Layout prueft:
-/// R2 und R4 feuert in der Fixture nichts, also faende erst die echte Wohnung eine fehlende
-/// Deklaration — zur Laufzeit, an einem Verdikt.
+/// Every id this checker can emit is declared by the sample flat too. R2 and R4 fire nothing in
+/// the fixture, so only this check would catch a missing declaration before the real flat does.
 #[test]
 fn the_sample_flat_declares_every_rule_the_checker_knows() {
-    let m = variant("vollstaendig", &[]);
+    let m = variant("complete", &[]);
     for id in RULE_IDS {
         m.rules
             .rule(id)
-            .unwrap_or_else(|e| panic!("REGEL_IDS nennt `{id}`, die Musterwohnung nicht: {e}"));
+            .unwrap_or_else(|e| panic!("RULE_IDS names `{id}`, the sample flat does not: {e}"));
     }
 }
 
-/// R5 misst die Achse, auf der das Licht einfaellt — nicht den Abstand zweier Mittelpunkte.
-///
-/// Der erste Entwurf verglich Mittelpunkte und meldete daraufhin in **allen 13** Layouts der
-/// echten Wohnung einen Verstoss, bei einem Schreibtisch, der in allen 13 an derselben Stelle
-/// steht und dessen Fenster in der Seitenwand sitzt. Eine Regel, die ueberall feuert, misst
-/// nichts. `a-frei` und `h-blendung` stellen dasselbe Moebel in denselben Raum und
-/// unterscheiden sich nur in `rot`.
+/// R5 measures the axis light comes along, not the gap between two centres. `a-frei` and
+/// `h-blendung` place the same piece in the same room and differ only in `rot`.
 #[test]
 fn r5_tells_side_light_from_frontal() {
     let m = variant("r5", &[]);
 
     let frei = m.load_layout("a-frei").expect("Layout");
-    let r = check_layout(&m, &frei).expect("Pruefung");
+    let r = check_layout(&m, &frei).expect("check");
     assert!(
         !r.soft.iter().any(|v| v.rule == "R5"),
-        "ungedreht faellt das Licht der Westwand seitlich ein"
+        "unrotated, the light from the west wall falls from the side"
     );
 
     let rotated = m.load_layout("h-blendung").expect("Layout");
-    let r = check_layout(&m, &rotated).expect("Pruefung");
+    let r = check_layout(&m, &rotated).expect("check");
     assert_eq!(
         r.soft.iter().filter(|v| v.rule == "R5").count(),
         1,
-        "um 90 Grad gedreht zeigen Front und Ruecken zur Verglasung"
+        "rotated by 90 degrees, front and back face the glazing"
     );
-    assert!(r.hard.is_empty(), "und sonst verletzt dieses Layout nichts");
+    assert!(r.hard.is_empty(), "and otherwise this layout breaks nothing");
 }
 
-/// R6 schaut vom Eingang in den Raum und meldet, was zuerst im Blick liegt.
+/// R6 looks from the entrance into the room and reports what is seen first.
 #[test]
 fn r6_reports_the_bed_in_the_entrance_sight_line() {
     let m = variant("r6", &[]);
 
     let l = m.load_layout("i-blick-aufs-bett").expect("Layout");
-    let r = check_layout(&m, &l).expect("Pruefung");
+    let r = check_layout(&m, &l).expect("check");
     assert_eq!(r.soft.iter().filter(|v| v.rule == "R6").count(), 1);
-    assert!(r.hard.is_empty(), "und sonst nichts");
+    assert!(r.hard.is_empty(), "and nothing else");
 
     let frei = m.load_layout("a-frei").expect("Layout");
-    let r = check_layout(&m, &frei).expect("Pruefung");
+    let r = check_layout(&m, &frei).expect("check");
     assert!(
         !r.soft.iter().any(|v| v.rule == "R6"),
-        "steht das Bett nicht in der Achse, schweigt die Regel"
+        "with the bed out of the line, the rule stays quiet"
     );
 }
 
-/// Ohne deklarierten Eingang faellt R6 nicht STILL aus, sondern meldet sich als ungeprueft.
-///
-/// Der Unterschied ist der ganze Punkt. Eine Regel, die mangels Angabe nicht laufen kann und
-/// nichts sagt, sieht im Bericht aus wie eine bestandene.
+/// Without a declared entrance R6 reports itself unchecked instead of failing silently.
 #[test]
 fn without_a_declared_entrance_r6_reports_unchecked() {
-    let m = variant("ohne-eingang", &[("eingang = true\n", "")]);
+    let m = variant("without-entrance", &[("eingang = true\n", "")]);
     let l = m.load_layout("i-blick-aufs-bett").expect("Layout");
-    let r = check_layout(&m, &l).expect("Pruefung");
+    let r = check_layout(&m, &l).expect("check");
 
     assert!(
         !r.soft.iter().any(|v| v.rule == "R6"),
-        "ohne Eingang gibt es nichts zu messen"
+        "without an entrance there is nothing to measure"
     );
-    let offen = r
+    let unchecked_r3 = r
         .unchecked
         .iter()
         .find(|u| u.rule == "R6")
-        .expect("R6 meldet sich als ungeprueft");
+        .expect("R6 reports itself unchecked");
     assert!(
-        offen.reason.contains("eingang"),
-        "und nennt, was fehlt: {}",
-        offen.reason
+        unchecked_r3.reason.contains("eingang"),
+        "and names what is missing: {}",
+        unchecked_r3.reason
     );
 }
 
-/// Eine Regel, die eine fehlende MESSUNG nicht anwenden kann, sagt das ebenfalls.
-///
-/// Der Anlass ist real: `kleiderschrank_bestand` stand ohne gemessene Hoehe in drei Layouts im
-/// Lichtkorridor. R3 begrenzt dort auf 140 cm, `if let Some(h)` uebersprang das Stueck, und zwei
-/// Layouts bestanden auf einer Regel, die fuer das entscheidende Moebel nie gelaufen war.
+/// A rule that cannot apply for a missing measurement says so too.
 #[test]
 fn a_missing_measurement_makes_the_rule_unchecked_not_silent() {
-    let m = variant("ohne-hoehe", &[]);
-    // `sideboard` ist das Stueck der Musterwohnung mit geschaetzten Massen; es bekommt hier
-    // gar keine Hoehe und wird in den Lichtkorridor gestellt.
+    let m = variant("without-height", &[]);
+    // `sideboard` is the sample piece with estimated sizes; here it gets no height at all and stands
+    // in the light corridor.
     let mut l = m.load_layout("a-frei").expect("Layout");
     l.items.push(interior::model::PlacedItem {
         reference: "sideboard".into(),
@@ -351,25 +305,20 @@ fn a_missing_measurement_makes_the_rule_unchecked_not_silent() {
         size: None,
         kind: None,
     });
-    let r = check_layout(&m, &l).expect("Pruefung");
-    let offen = r.unchecked.iter().find(|u| u.rule == "R3");
-    if let Some(u) = offen {
+    let r = check_layout(&m, &l).expect("check");
+    let unchecked_r3 = r.unchecked.iter().find(|u| u.rule == "R3");
+    if let Some(u) = unchecked_r3 {
         assert!(
-            u.reason.contains("Hoehe"),
-            "der Grund nennt die fehlende Messung: {}",
+            u.reason.contains("height"),
+            "the reason names the missing measurement: {}",
             u.reason
         );
     }
 }
 
-/// Drehen dreht mit, was ein Stueck von sich aus verlangt.
-///
-/// `opens` steht in der Ausrichtung des Stuecks, nicht des Raums, und `Side::gedreht` fuehrt es
-/// mit. Genau das konnte die Namensfassung nicht sehen: ein Schrank mit den Tueren zur Wand ist
-/// kein gedrehter Schrank, sondern ein unbenutzbarer (PRD B26).
-///
-/// Dieselbe Ecke, vier Drehungen, ein Stueck. Nach Sueden und Osten oeffnet es in den Raum,
-/// nach Westen und Norden gegen die Waende bei x = 0 und y = 0.
+/// Rotating turns what a piece demands: `opens` is in the piece's orientation and
+/// `Side::rotated` carries it. Same corner, four rotations: south and east open into the room, west
+/// and north against the walls at x = 0 and y = 0.
 #[test]
 fn a_rotation_rotates_the_opening_side() {
     use interior::model::{Layout, PlacedItem};
@@ -388,18 +337,18 @@ fn a_rotation_rotates_the_opening_side() {
                 kind: None,
             }],
         };
-        let r = check_layout(&m, &l).expect("Pruefung");
+        let r = check_layout(&m, &l).expect("check");
         (r.pass, r.hard.iter().map(|v| v.rule.clone()).collect())
     };
 
-    assert!(verdict(0).0, "Tueren nach Sueden: oeffnet in den Raum");
-    assert!(verdict(270).0, "Tueren nach Osten: oeffnet in den Raum");
+    assert!(verdict(0).0, "doors to the south: opens into the room");
+    assert!(verdict(270).0, "doors to the east: opens into the room");
 
-    let (pass, regeln) = verdict(90);
-    assert!(!pass, "Tueren nach Westen: gegen die Wand bei x = 0");
-    assert!(regeln.contains(&"open".to_string()), "{regeln:?}");
+    let (pass, rule_ids) = verdict(90);
+    assert!(!pass, "doors to the west: against the wall at x = 0");
+    assert!(rule_ids.contains(&"open".to_string()), "{rule_ids:?}");
 
-    let (pass, regeln) = verdict(180);
-    assert!(!pass, "Tueren nach Norden: gegen die Wand bei y = 0");
-    assert!(regeln.contains(&"open".to_string()), "{regeln:?}");
+    let (pass, rule_ids) = verdict(180);
+    assert!(!pass, "doors to the north: against the wall at y = 0");
+    assert!(rule_ids.contains(&"open".to_string()), "{rule_ids:?}");
 }

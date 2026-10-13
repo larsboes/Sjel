@@ -1,41 +1,30 @@
-//! Paritaet gegen die aufgezeichneten Verdikte der TypeScript-Vorlage — an der ECHTEN Wohnung.
+//! Parity against the recorded verdicts of the TypeScript predecessor, on the REAL flat.
 //!
-//! Die Baseline wurde am 2026-08-30 aus der TS-Engine gezogen, bevor sie geloescht wurde. Sie
-//! ist kein zweiter Pruefer, sondern ein Protokoll: dieselben zehn Layouts, dieselben Regeln,
-//! dieselben Zahlen. Weicht Rust ab, ist entweder die Portierung falsch oder eine Regel hat
-//! sich absichtlich geaendert — und dann gehoert die Baseline mit einer Begruendung neu
-//! aufgezeichnet, nicht der Test entschaerft.
+//! The baseline was taken from the TS engine on 2026-08-30 before it was deleted: the same ten
+//! layouts, rules and numbers. If Rust deviates, either the port is wrong or a rule changed on
+//! purpose, and then the baseline is re-recorded with a reason; the test is not loosened.
 //!
-//! Warum sie im Overlay liegt und nicht hier: sie enthaelt die Korridorbreiten und Moebelmasse
-//! EINER Wohnung. Das ist dieselbe Kategorie wie das Raummodell selbst, und dieses Repository
-//! ist oeffentlich. Sie liegt deshalb neben der Wohnung, die sie beschreibt, unter
-//! `<overlay>/data/interior/flats/<id>/ts-baseline.json`.
-//!
-//! Ohne `SJEL_PERSONAL_ROOT` meldet dieser Test, warum er nichts getan hat, und kehrt zurueck —
-//! der Zustand in CI und auf jedem Rechner, der die Dateien nicht haelt. Die Maschine selbst
-//! ist davon unabhaengig geprueft: `tests/engine.rs` laeuft ueberall.
-//!
-//! Die Routenbreiten haengen an der Rasterweite (geometry::RES = 5 cm). Wer sie aendert,
-//! aendert diese Zahlen.
-//!
-//! Die zehn Layouts stehen seit der Kuratierung vom 2026-08-31 nicht mehr in der Liste, sondern
-//! im Archiv daneben. Wie sie trotzdem gefunden werden, steht bei `aufgezeichnetes_layout`.
+//! It lives in the overlay next to the flat it describes
+//! (`<overlay>/data/interior/flats/<id>/ts-baseline.json`), because it holds one flat's corridor
+//! widths and sizes and this repository is public. Without `SJEL_PERSONAL_ROOT` the test says why
+//! it did nothing and returns; `tests/engine.rs` checks the engine everywhere. Route widths depend
+//! on the grid step (`geometry::RES` = 5 cm). The ten layouts now lie in the archive; see
+//! `recorded_layout`.
 
 use interior::clearance::check_layout;
 use interior::layout_io;
 use interior::model::{default_flat, Layout, Model, ModelError};
 use serde_json::Value;
 
-/// Das Modell der aktiven Wohnung und ihre aufgezeichnete Vorlage, oder `None` mit einem Grund.
-/// `SJEL_PERSONAL_ROOT` wird gelesen und nie gesetzt: welches Overlay gemeint ist, entscheidet
-/// die Umgebung, nicht der Test.
+/// The active flat's model and its recorded baseline, or `None` with a reason.
+/// `SJEL_PERSONAL_ROOT` is read, never set: the environment decides which overlay is meant.
 fn live() -> Option<(Model, Value)> {
     sjel_config::env_var_os("SJEL_PERSONAL_ROOT")?;
     let flat = match default_flat() {
         Ok(f) => f,
         Err(e) => {
             eprintln!(
-                "SJEL_PERSONAL_ROOT ist gesetzt, aber keine Wohnung waehlbar ({e}); uebersprungen"
+                "SJEL_PERSONAL_ROOT is set, but no flat can be chosen ({e}); skipped"
             );
             return None;
         }
@@ -44,20 +33,20 @@ fn live() -> Option<(Model, Value)> {
         Ok(m) => m,
         Err(e) => {
             eprintln!(
-                "SJEL_PERSONAL_ROOT ist gesetzt, aber das Modell laedt nicht ({e}); uebersprungen"
+                "SJEL_PERSONAL_ROOT is set, but the model does not load ({e}); skipped"
             );
             return None;
         }
     };
     let path = model.flat_dir.join("ts-baseline.json");
     if !path.is_file() {
-        eprintln!("keine ts-baseline.json neben dieser Wohnung; uebersprungen");
+        eprintln!("no ts-baseline.json beside this flat; skipped");
         return None;
     }
-    let text = std::fs::read_to_string(&path).expect("die Baseline muss lesbar sein");
+    let text = std::fs::read_to_string(&path).expect("the baseline must be readable");
     Some((
         model,
-        serde_json::from_str(&text).expect("Baseline ist gueltiges JSON"),
+        serde_json::from_str(&text).expect("the baseline is valid JSON"),
     ))
 }
 
@@ -66,26 +55,17 @@ macro_rules! live_or_skip {
         match live() {
             Some(v) => v,
             None => {
-                eprintln!("setze SJEL_PERSONAL_ROOT, um die Paritaet gegen die echte Wohnung zu pruefen; uebersprungen");
+                eprintln!("set SJEL_PERSONAL_ROOT to check parity against the real flat; skipped");
                 return;
             }
         }
     };
 }
 
-/// Ein aufgezeichnetes Layout laden: erst `layouts/<id>.toml`, dann `layouts/archiv/<id>.toml`.
-///
-/// **Archivierte Layouts bleiben vergleichbar** — `layout_io::archiviere` (src/layout_io.rs:164-174)
-/// loescht nicht, sondern verschiebt nach `layouts/archiv/` und hebt die Datei genau dafuer
-/// lesbar auf. Die Kuratierung vom 2026-08-31 hat alle zehn aufgezeichneten Layouts dorthin
-/// gelegt; die Vorlage kennt sie unveraendert, also muss dieser Test sie unveraendert finden.
-/// Der Vergleich verliert dabei keinen Fall: es bleiben zehn.
-///
-/// Warum das hier steht und nicht als `Model::load_layout("archiv/…")`: ein Layoutname wird zu
-/// einem Dateinamen, und `layout_io::pruefe_id` laesst darin kein Trennzeichen zu — das ist die
-/// Grenze, die einen Schreiber aus dem Netz in diesem Verzeichnis haelt. Ein Name mit `/` waere
-/// die Ausnahme, die sie aufweicht. Wo eine Datei liegt, ist eine Frage des Ladens, also loest
-/// dieser Test den Pfad selbst auf.
+/// Loads a recorded layout: first `layouts/<id>.toml`, then `layouts/archiv/<id>.toml`.
+/// Archiving moves rather than deletes, and all ten recorded layouts were archived on 2026-08-31,
+/// so this finds them there. The path is resolved here rather than through
+/// `Model::load_layout("archiv/…")`, because layout names may not contain separators.
 fn recorded_layout(model: &Model, id: &str) -> Result<Layout, ModelError> {
     let dir = model.layouts_dir();
     let file = format!("{id}.toml");
@@ -94,7 +74,7 @@ fn recorded_layout(model: &Model, id: &str) -> Result<Layout, ModelError> {
         .find(|p| p.is_file())
         .ok_or_else(|| {
             ModelError::Missing(format!(
-                "weder layouts/{file} noch layouts/{}/{file}",
+                "neither layouts/{file} nor layouts/{}/{file}",
                 layout_io::ARCHIVE
             ))
         })?;
@@ -104,7 +84,7 @@ fn recorded_layout(model: &Model, id: &str) -> Result<Layout, ModelError> {
     })?;
     let mut layout: Layout =
         toml::from_str(&text).map_err(|source| ModelError::Parse { path: pfad, source })?;
-    // Wie in `Model::load_layout`: die Kennung steht nicht in der Datei, sie ist der Dateiname.
+    // As in `Model::load_layout`: the id is the file name.
     layout.id = id.to_string();
     Ok(layout)
 }
@@ -124,14 +104,7 @@ fn every_layout_matches_the_template_result() {
         if got.pass != want_pass {
             deviations.push(format!("{name}: pass {} statt {}", got.pass, want_pass));
         }
-        // Kennungen und nicht nur Anzahlen, seit 2026-08-31.
-        //
-        // Die Vorlage hat die Kennungen immer aufgezeichnet und dieser Test hat sie immer
-        // weggeworfen: er verglich `hard.len()` gegen `hard.len()`. Damit war eine Umbenennung
-        // fuer ihn unsichtbar — und genau eine war passiert. Die TypeScript-Fassung meldete
-        // die Ausklappzone des Schlafsofas als **R8**, so wie jede rules.toml sie deklariert;
-        // die Rust-Portierung nannte sie `couch_ausklappen` und hat die zweite Fassung damit
-        // selbst erfunden. Zwei Verstoesse mit vertauschten Namen haetten hier bestanden.
+        // Ids, not just counts: comparing `hard.len()` alone would miss a renamed violation.
         let ids = |vs: &[interior::clearance::Violation]| -> Vec<String> {
             let mut v: Vec<String> = vs.iter().map(|x| x.rule.clone()).collect();
             v.sort();
@@ -147,10 +120,8 @@ fn every_layout_matches_the_template_result() {
             v.sort();
             v
         };
-        // Bewusste Abweichungen stehen in der Vorlage selbst, im Overlay neben der Wohnung —
-        // nicht hier. Sie beschreiben eine Wohnung, und dieser Test steht in einem oeffentlichen
-        // Repository. Die Vorlage bleibt dabei unveraendert: `abweichungen` ist ein zweiter
-        // Schluessel daneben, kein korrigierter Messwert.
+        // Deliberate deviations are recorded in the baseline itself, in the overlay next to the flat,
+        // under a second key; the recorded values stay unchanged.
         let allowed = |key: &str| -> Vec<String> {
             base["abweichungen"][name][format!("{key}_zusaetzlich")]
                 .as_array()
@@ -173,12 +144,12 @@ fn every_layout_matches_the_template_result() {
                 ));
             }
         }
-        // Die Korridorbreiten sind die empfindlichste Zahl im ganzen System: sie haengen an
-        // Raster, Distanzfeld und Wegsuche zugleich. Stimmen sie, stimmt der Kern.
+        // Corridor widths are the most sensitive number: they depend on grid, distance field and path
+        // search at once.
         let want_c = want["corridors"].as_array().unwrap();
         for (i, wc) in want_c.iter().enumerate() {
             let Some(gc) = got.metrics.corridors.get(i) else {
-                deviations.push(format!("{name}: Korridor {i} fehlt"));
+                deviations.push(format!("{name}: corridor {i} is missing"));
                 continue;
             };
             let w = wc["widthCm"].as_i64().map(|v| v as i32);
@@ -192,10 +163,10 @@ fn every_layout_matches_the_template_result() {
         checked += 1;
     }
 
-    assert!(checked == 10, "10 Layouts erwartet, {checked} geprueft");
+    assert!(checked == 10, "10 layouts expected, {checked} checked");
     assert!(
         deviations.is_empty(),
-        "Abweichungen zur Vorlage:\n  {}",
+        "deviations from the baseline:\n  {}",
         deviations.join("\n  ")
     );
 }
@@ -209,14 +180,8 @@ fn the_catalogue_is_taken_over_completely() {
         .filter(|k| !model.catalogue.contains_key(*k))
         .collect();
     missing.sort();
-    assert!(missing.is_empty(), "im TOML-Inventar fehlen: {missing:?}");
-    assert_eq!(
-        model.catalogue.len(),
-        want.len(),
-        "Katalog hat {} Eintraege, die Vorlage {}",
-        model.catalogue.len(),
-        want.len()
-    );
+    // A superset, not an equal count: the catalogue grows with every wish and garment.
+    assert!(missing.is_empty(), "missing from the catalogue: {missing:?}");
 }
 
 #[test]
@@ -232,12 +197,12 @@ fn every_piece_keeps_its_size() {
         let wt = w["t"].as_i64().map(|v| v as i32);
         if item.width != wb || item.depth != wt {
             dev.push(format!(
-                "{id}: {:?}×{:?} statt {:?}×{:?}",
+                "{id}: {:?}×{:?} instead of {:?}×{:?}",
                 item.width, item.depth, wb, wt
             ));
         }
     }
-    assert!(dev.is_empty(), "Masse weichen ab:\n  {}", dev.join("\n  "));
+    assert!(dev.is_empty(), "sizes differ:\n  {}", dev.join("\n  "));
 }
 
 /// The baseline was recorded with the German rule ids.

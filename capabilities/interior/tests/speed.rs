@@ -1,12 +1,7 @@
-//! Wie teuer eine Layoutpruefung ist. Kein Grenzwert, eine Messung — der Wert wandert in den
-//! Bericht, damit eine Verlangsamung auffaellt, bevor sie in einer Suche zu Minuten wird.
-//!
-//! Gemessen wird an der Musterwohnung, nicht an der echten: dieser Test soll ueberall laufen.
-//! Die historischen Zahlen unten stammen von einem anderen Grundriss (TypeScript mit linearem
-//! Max-Scan 67,7 ms, dieselbe TS-Fassung mit Heap 2,7 ms, beide am 2026-08-30). Sie stehen
-//! hier als Groessenordnung und nicht als Vergleichswert — ein anderer Raum ist ein anderes
-//! Raster. Die Schranke ist entsprechend grob gesetzt: sie faengt einen Rueckfall auf den
-//! linearen Scan, nicht ein paar Prozent.
+//! What a layout check costs. A measurement, not a limit: the value goes into the output so a
+//! slowdown shows before it becomes minutes in a search. Measured on the sample flat so it runs
+//! everywhere. The bound is coarse on purpose: it catches a fallback to the linear scan (67.7 ms
+//! against 2.7 ms with the heap, measured 2026-08-30 on another plan), not a few percent.
 
 use interior::clearance::check_layout;
 use interior::model::Model;
@@ -23,13 +18,13 @@ fn a_layout_check_costs_a_few_milliseconds() {
     let model = Model::load("muster").unwrap();
     let layout = model.load_layout("a-frei").unwrap();
 
-    check_layout(&model, &layout).unwrap(); // warmlaufen
+    check_layout(&model, &layout).unwrap(); // warm up
     let n = 50;
     let t0 = std::time::Instant::now();
     for _ in 0..n {
         check_layout(&model, &layout).unwrap();
     }
     let per = t0.elapsed().as_secs_f64() * 1000.0 / n as f64;
-    println!("check_layout: {per:.2} ms pro Aufruf (Musterwohnung, 600 x 450 cm bei 5 cm Raster)");
-    assert!(per < 20.0, "{per:.2} ms — das ist die Groessenordnung des linearen Max-Scans, den der Heap abgeloest hat");
+    println!("check_layout: {per:.2} ms per call (sample flat, 600 x 450 cm at a 5 cm grid)");
+    assert!(per < 20.0, "{per:.2} ms: the order of the linear max scan the heap replaced");
 }

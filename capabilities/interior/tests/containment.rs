@@ -1,35 +1,23 @@
-//! Das Repository darf keine Wohnung kennen.
+//! The repository must not know any flat.
 //!
-//! Q59 (PRD §8.3) hat diese Capability in das oeffentliche Axon-Repository verschoben. Damit
-//! das sicher ist, muss der generische Teil generisch SEIN und nicht nur so heissen. Dieser
-//! Test ist die Bedingung dafuer.
-//!
-//! Er hat beim ersten Lauf am 2026-08-30 drei echte Lecks gefunden — `search.rs` hielt
-//! [0, 420, 0, 590] als Standard-Suchband, also die Masse dieser Wohnung, `plan.rs` trug ihren
-//! Namen im Seitentitel, und `main.rs` nannte ihn in einer Konstante und einem Doc-Kommentar.
-//!
-//! Er prueft seit dem Umzug `tests/` MIT, und das war kein Zierrat: die aufgezeichnete
-//! Vorlage der TypeScript-Fassung lag als `tests/ts-baseline.json` genau ein Verzeichnis neben
-//! dem Code, den dieser Test las, und enthielt Korridorbreiten und Moebelmasse der echten
-//! Wohnung. Ein Containment-Test, der nur `src/` liest, haette sie mit veroeffentlicht. Sie
-//! liegt jetzt im Overlay neben der Wohnung, die sie beschreibt.
+//! This capability lives in a public repository, so its generic part must be generic, and this test
+//! is the condition. Its first run found three real leaks: a default search band with this flat's
+//! sizes, the flat's name in a page title, and in a constant. It reads `tests/` too: the TypeScript
+//! baseline once lay there with real corridor widths.
 
 use std::fs;
 use std::path::{Path, PathBuf};
 
-/// Masse dieser Wohnung, die in diesem Repository nichts zu suchen haben. Bewusst als Literale
-/// gefuehrt: die Liste IST die Behauptung, und sie muss mitwachsen, wenn das Modell Zahlen
-/// dazugewinnt.
+/// Sizes of the real flat that have no place in this repository; the list is the claim.
 const FORBIDDEN_SIZES: &[&str] = &["420", "460", "590", "263", "196", "329"];
 const FORBIDDEN_NAMES: &[&str] = &["Beuel", "beuel-sued", "Petersbergweg"];
 
-/// Nur Text. Ein Verzeichnis, in dem eine Wohnung stehen koennte, wird durchsucht, nicht
-/// ausgenommen — `tests/fixtures/` ist erfundene Geometrie und muss das beweisen koennen.
+/// Text only. A directory a flat could hide in is searched, not excluded: `tests/fixtures/` is
+/// invented geometry and must prove it.
 const ENDINGS: &[&str] = &["rs", "toml", "json", "md"];
 
-/// `unter` ist ein Unterverzeichnis oder "." fuer das Wurzelverzeichnis der Capability.
-/// Das Wurzelverzeichnis gehoert dazu: die README nannte bis zum Umzug das Verzeichnis der
-/// echten Wohnung beim Namen, und ein Test, der nur Quelltext liest, haette das durchgelassen.
+/// `under` is a subdirectory, or "." for the capability root; the root counts, since the README
+/// once named the real flat's directory.
 fn files(below: &str) -> Vec<(String, String)> {
     let wurzel = Path::new(env!("CARGO_MANIFEST_DIR")).join(below);
     let mut offen = vec![wurzel.clone()];
@@ -39,7 +27,7 @@ fn files(below: &str) -> Vec<(String, String)> {
         for e in rd.filter_map(|e| e.ok()) {
             let p: PathBuf = e.path();
             if p.is_dir() {
-                // Bauausgabe und die beiden Unterbaeume, die eigene Laeufe haben.
+                // Build output, and the two subtrees that have their own runs.
                 let name = p.file_name().and_then(|n| n.to_str()).unwrap_or("");
                 if !matches!(name, "target" | "src" | "tests") {
                     offen.push(p);
@@ -68,9 +56,7 @@ fn files(below: &str) -> Vec<(String, String)> {
     out
 }
 
-/// In Rust duerfen Kommentare die Zahlen nennen — dort erklaeren sie, warum etwas so ist, und
-/// dieser Test selbst ist das Beispiel. In Daten gibt es diese Trennung nicht: eine TOML- oder
-/// JSON-Datei, die eine Wandlaenge nennt, nennt sie, ob mit `#` davor oder ohne.
+/// Rust comments may name the numbers, to explain why; data files cannot make that distinction.
 fn checkable(name: &str, src: &str) -> String {
     if !name.ends_with(".rs") {
         return src.to_string();
@@ -84,7 +70,7 @@ fn checkable(name: &str, src: &str) -> String {
         .join("\n")
 }
 
-/// Als eigenstaendige Zahl, nicht als Teilfolge: 460 in 1460 ist keine Wandlaenge.
+/// As a standalone number, not a substring: 460 in 1460 is no wall length.
 fn names_number(line: &str, mass: &str) -> bool {
     line.match_indices(mass).any(|(i, _)| {
         let before = i == 0 || !line.as_bytes()[i - 1].is_ascii_digit();
@@ -102,15 +88,12 @@ fn no_flat_data_in_the_repository() {
         .chain(files("tests"))
         .chain(files("."));
     for (name, src) in alle {
-        // Eine Datei, deren Aufgabe das Erkennen von Markern ist, muss sie enthalten. Genau
-        // diese Ausnahme, mit genau dieser Begruendung, fuehrt `tools/check-publication-
-        // hygiene.sh` fuer sich selbst und seinen Test — hier ist es dieselbe Datei und
-        // dieselbe einzige. Jede andere hat keinen Grund, eine dieser Zahlen zu tragen.
+        // A file whose job is to recognise the markers must contain them; this is that file, as
+        // `tools/check-publication-hygiene.sh` is for itself.
         if name.ends_with("containment.rs") {
             continue;
         }
-        // Der Name der Wohnung ist auch in einem Kommentar ein Leck, sobald das Repo
-        // oeffentlich ist — und dieses ist es.
+        // The flat's name is a leak even in a comment, in a public repository.
         for forbidden in FORBIDDEN_NAMES {
             if src.contains(forbidden) {
                 found.push(format!("{name}: nennt \"{forbidden}\""));
@@ -131,14 +114,13 @@ fn no_flat_data_in_the_repository() {
     }
     assert!(
         found.is_empty(),
-        "Wohnungsdaten im oeffentlichen Repository. Sie gehoeren in das Overlay, unter \
-         data/interior/, nicht hierher:\n  {}",
+        "flat data in the public repository; it belongs in the overlay under \
+         data/interior/, not here:\n  {}",
         found.join("\n  ")
     );
 }
 
-/// Der Test muss die Dateien auch wirklich sehen. Ein Verzeichniswanderer, der nichts findet,
-/// besteht jede Behauptung.
+/// The test must actually see the files: a walker that finds nothing passes every claim.
 #[test]
 fn the_test_reads_all_three_trees() {
     let src = files("src");
@@ -147,22 +129,19 @@ fn the_test_reads_all_three_trees() {
     assert!(src.len() >= 8, "src/ hat {} Dateien", src.len());
     assert!(
         tests.iter().any(|(n, _)| n.contains("fixtures")),
-        "die Musterwohnung wird nicht mitgelesen: {:?}",
+        "the sample flat is not read along: {:?}",
         tests.iter().map(|(n, _)| n).collect::<Vec<_>>()
     );
     assert!(
         wurzel.iter().any(|(n, _)| n == "README.md"),
-        "die README wird nicht mitgelesen: {:?}",
+        "the README is not read along: {:?}",
         wurzel.iter().map(|(n, _)| n).collect::<Vec<_>>()
     );
 }
 
-/// Der Medienpfad kommt vom Client, also darf er nicht aus `media/` herausfuehren.
-///
-/// Geprueft wird die Aufloesung selbst und nicht der HTTP-Weg: `canonicalize` beidseitig, dann
-/// `starts_with`. Eine Pruefung auf die Zeichenfolge `..` waere die naheliegende Fassung und die
-/// falsche — sie versagt still, sobald ein Symlink aus dem Verzeichnis zeigt, und genau das
-/// prueft der letzte Fall hier.
+/// The media path comes from the client and must not lead out of `media/`. Checks the resolution
+/// itself: `canonicalize` both sides, then `starts_with`. A check for `..` alone fails silently
+/// for a symlink, which the last case covers.
 #[test]
 fn a_media_path_does_not_lead_out_of_the_dir() {
     let tmp = std::env::temp_dir().join(format!("interior-media-{}", std::process::id()));
@@ -170,9 +149,9 @@ fn a_media_path_does_not_lead_out_of_the_dir() {
     let _ = std::fs::remove_dir_all(&tmp);
     std::fs::create_dir_all(media.join("produkt")).expect("Testbaum");
     std::fs::write(media.join("produkt/bild.png"), b"x").expect("Bild");
-    std::fs::write(tmp.join("geheim.txt"), b"x").expect("Datei daneben");
+    std::fs::write(tmp.join("geheim.txt"), b"x").expect("file beside it");
 
-    // Dieselbe Aufloesung, die `api_media` fuehrt.
+    // The same resolution `api_media` uses.
     let allowed = |pfad: &str| -> bool {
         let wurzel = match media.canonicalize() {
             Ok(w) => w,
@@ -186,23 +165,23 @@ fn a_media_path_does_not_lead_out_of_the_dir() {
 
     assert!(
         allowed("produkt/bild.png"),
-        "das Bild selbst wird geliefert"
+        "the image itself is served"
     );
-    assert!(!allowed("../geheim.txt"), "eine Ebene hoeher: nein");
+    assert!(!allowed("../geheim.txt"), "one level up: no");
     assert!(
         !allowed("produkt/../../geheim.txt"),
-        "ueber einen Umweg: nein"
+        "through a detour: no"
     );
-    assert!(!allowed("produkt"), "ein Verzeichnis ist keine Datei");
+    assert!(!allowed("produkt"), "a directory is no file");
 
-    // Der Fall, den eine `..`-Pruefung durchliesse: ein Symlink ohne einen einzigen Punkt.
+    // The case a `..` check would let through: a symlink without a single dot.
     #[cfg(unix)]
     {
         let link = media.join("raus.txt");
         std::os::unix::fs::symlink(tmp.join("geheim.txt"), &link).expect("Symlink");
         assert!(
             !allowed("raus.txt"),
-            "ein Symlink aus dem Verzeichnis heraus wird nicht geliefert"
+            "a symlink out of the directory is not served"
         );
     }
     let _ = std::fs::remove_dir_all(&tmp);

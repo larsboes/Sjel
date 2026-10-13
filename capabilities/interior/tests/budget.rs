@@ -1,9 +1,8 @@
-//! Die Kaufreihenfolge gegen das Musterinventar.
+//! The purchase order against the sample inventory.
 
-// ---------------------------------------------------------------- die Reihenfolge
+// ---------------------------------------------------------------- the order
 
-/// Fuer die Reihenfolge braucht es das Musterinventar, nicht nur erfundene Buchungen: sie
-/// sortiert Zeilen und rechnet nicht mit ihnen.
+/// The order needs the sample inventory, not just invented bookings: it sorts rows.
 fn model() -> interior::model::Model {
     use std::sync::Once;
     static ONCE: Once = Once::new();
@@ -15,19 +14,16 @@ fn model() -> interior::model::Model {
         std::env::set_var("SJEL_PERSONAL_ROOT", &fixture);
         std::env::set_var("SJEL_DB_PATH", &db);
         std::env::remove_var("SJEL_INTERIOR_FLAT");
-        let store = sjel_inventory::store::Store::open(&db).expect("die Testdatenbank oeffnet");
+        let store = sjel_inventory::store::Store::open(&db).expect("the test database opens");
         sjel_inventory::import::inventory(&store, &fixture.join("data/interior/inventory"))
-            .expect("das Musterinventar importiert");
+            .expect("the sample inventory imports");
     });
     interior::model::Model::load("muster").expect("muster")
 }
 
-/// Dringlichkeit schlaegt Preis, und ein Entwurf schlaegt eine Idee.
-///
-/// Die Fixture ist so gebaut, dass sich die drei Stufen widersprechen: `nachttisch` ist
-/// Pflicht und teuer, `wandregal` nur Empfehlung und billig, `bilderleiste` Konzept und am
-/// billigsten. Eine Sortierung nach Preis kaeme genau umgekehrt heraus — deshalb ist diese
-/// Reihenfolge eine Pruefung und keine Aufzeichnung.
+/// Urgency beats price, and a layout beats an idea. The fixture makes the stages contradict
+/// price: `nachttisch` is required and dear, `wandregal` recommended and cheap, `bilderleiste` a
+/// concept and cheapest, so a price sort would come out reversed.
 #[test]
 fn urgency_comes_before_price() {
     let m = model();
@@ -36,7 +32,7 @@ fn urgency_comes_before_price() {
     let pos = |id: &str| ids.iter().position(|x| *x == id).expect(id);
     assert!(
         pos("nachttisch") < pos("wandregal"),
-        "Pflicht vor Empfehlung, auch wenn sie teurer ist: {ids:?}"
+        "required before recommended, even when dearer: {ids:?}"
     );
     assert!(
         pos("wandregal") < pos("bilderleiste"),
@@ -44,32 +40,25 @@ fn urgency_comes_before_price() {
     );
 }
 
-/// Die ENTSCHEIDUNGSachse zaehlt auch, und sie war bis 2026-08-31 unsichtbar.
-///
-/// `gesetzt` heisst "entschieden, das wird gekauft" und `zurueckgestellt` heisst "bewusst
-/// verschoben". Beide Woerter stehen im Inventar der echten Wohnung, beide fehlten in `rang`,
-/// und beide fielen deshalb auf denselben Rang wie alles Unbekannte — was zwischen ihnen
-/// entschied, war der Preis. Hier ist der teure Posten der gesetzte und der billige der
-/// zurueckgestellte, damit eine Preissortierung genau umgekehrt herauskaeme.
+/// The decision axis counts too: `decided` means it will be bought, `deferred` means postponed
+/// on purpose. The dear line is the decided one and the cheap line the deferred one, so a price
+/// sort would come out reversed.
 #[test]
 fn a_made_decision_comes_before_a_deferred_one() {
     let m = model();
     let r = interior::budget::purchase_order(&m, None).expect("Reihenfolge");
     let ids: Vec<&str> = r.lines.iter().map(|p| p.id.as_str()).collect();
     let pos = |id: &str| ids.iter().position(|x| *x == id).expect(id);
-    assert_eq!(ids[0], "deckenlampe", "das Gesetzte zuerst: {ids:?}");
+    assert_eq!(ids[0], "deckenlampe", "the decided first: {ids:?}");
     assert_eq!(
         *ids.last().unwrap(),
         "garderobenhaken",
-        "das Zurueckgestellte zuletzt: {ids:?}"
+        "the deferred last: {ids:?}"
     );
     assert!(pos("deckenlampe") < pos("nachttisch"), "{ids:?}");
 }
 
-/// Ein Wort, das diese Rangfolge nicht kennt, wird gemeldet statt einsortiert.
-///
-/// Das ist die Lehre aus dem Fehler selbst: die erste Fassung kannte drei der acht Woerter und
-/// sah trotzdem sortiert aus. Ein neues Wort in den Daten muss auffallen.
+/// A word the order does not know is reported rather than sorted in.
 #[test]
 fn an_unknown_priority_word_is_reported() {
     let mut m = model();
@@ -85,11 +74,11 @@ fn an_unknown_priority_word_is_reported() {
     assert_eq!(
         *ids.last().unwrap(),
         "wandregal",
-        "was niemand einordnen kann, steht hinten: {ids:?}"
+        "what nobody can rank comes last: {ids:?}"
     );
 }
 
-/// Was abgeloest wurde, steht in keiner Kaufreihenfolge.
+/// What was replaced is in no purchase order.
 #[test]
 fn a_replaced_need_drops_out() {
     let m = model();
@@ -101,46 +90,43 @@ fn a_replaced_need_drops_out() {
         .all(|p| p.priority.as_deref() != Some("replaced")));
 }
 
-/// Die kumulierte Summe waechst monoton und endet auf der Gesamtsumme.
+/// The cumulative total grows monotonically and ends at the total.
 #[test]
 fn the_cumulative_total_really_adds_up() {
     let m = model();
     let r = interior::budget::purchase_order(&m, None).expect("Reihenfolge");
     let mut letzte = 0;
     for p in &r.lines {
-        assert!(p.cumulative_cents >= letzte, "die Summe faellt: {:?}", p.id);
+        assert!(p.cumulative_cents >= letzte, "the total falls: {:?}", p.id);
         letzte = p.cumulative_cents;
     }
     let total: i64 = r.lines.iter().map(|p| p.price_cents.unwrap_or(0)).sum();
     assert_eq!(letzte, total);
 }
 
-/// Ein Bedarf ohne Preis steht nicht in der Reihenfolge — und schon gar nicht vorn.
-///
-/// Mit null angesetzt waere er der billigste Posten und stuende zuerst; das waere eine
-/// Kaufempfehlung, die aus einer fehlenden Zahl folgt. PRD B29 zaehlt sie in der Wunschliste
-/// schon als Warnung, und hier ist die Handlung dazu ein Preis und kein Kauf.
+/// A need without a price is not in the order, least of all first: at zero it would be the cheapest
+/// line.
 #[test]
 fn a_need_without_a_price_is_in_no_order() {
     let m = model();
     let r = interior::budget::purchase_order(&m, None).expect("Reihenfolge");
     assert!(
         r.lines.iter().all(|p| p.price_cents.is_some()),
-        "in der Reihenfolge steht nur, was einen Preis hat"
+        "only priced lines are in the order"
     );
     assert!(
         r.unpriced.iter().any(|p| p.id == "teppich"),
-        "und der Teppich steht daneben, mit Namen"
+        "and the rug stands beside it, by name"
     );
 }
 
-/// Ohne positiven Saldo gibt es keine Monatszahl — dieselbe Haltung wie `monate_bis_bezahlt`.
+/// Without a positive balance there is no month count, as with `months_to_pay`.
 #[test]
 fn without_a_balance_there_is_no_timeline() {
     let m = model();
     let r = interior::budget::purchase_order(&m, None).expect("Reihenfolge");
     assert!(
         r.lines.iter().all(|p| p.affordable_after_months.is_none()),
-        "eine Zeitachse ohne Messung waere eine erfundene Zahl"
+        "a timeline without a measurement would be an invented number"
     );
 }

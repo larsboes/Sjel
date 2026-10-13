@@ -1,24 +1,18 @@
-//! Der Sonnenstand, gegen Eigenschaften geprueft statt gegen eine Tabelle.
-//!
-//! Es gibt hier keine abgeschriebenen Referenzwerte, und das ist Absicht: eine Tabelle aus
-//! einer fremden Quelle prueft, ob jemand richtig abgeschrieben hat. Die Aussagen unten folgen
-//! dagegen aus der Himmelsmechanik selbst und lassen sich am Papier nachrechnen —
-//! **Mittagshoehe = 90 Grad minus dem Abstand zwischen Breite und Deklination**, und die
-//! Deklination erreicht an den Sonnenwenden die Schiefe der Ekliptik.
-//!
-//! Eine falsch gerechnete Zeitgleichung, eine vertauschte Achse oder ein Vorzeichenfehler in
-//! der Deklination faellt an genau diesen Saetzen um.
+//! The sun position, checked against properties rather than a table: a copied table only checks
+//! the copying. The claims below follow from celestial mechanics and can be worked on paper: noon
+//! altitude is 90 degrees minus the distance between latitude and declination, and the declination
+//! reaches the obliquity of the ecliptic at the solstices. A wrong equation of time, a swapped axis
+//! or a sign error in the declination fails one of these.
 
 use interior::sun::sun_position;
 
-/// Die Schiefe der Ekliptik. Kein Parameter dieses Codes, sondern die Groesse, die er
-/// reproduzieren muss.
+/// The obliquity of the ecliptic: not a parameter of this code, but the value it must reproduce.
 const ECLIPTIC: f64 = 23.44;
 
-fn peak(tag: u32, width: f64, length: f64) -> (f64, f64) {
+fn peak(day: u32, latitude: f64, longitude: f64) -> (f64, f64) {
     let mut best = (-90.0f64, 0.0);
     for q in 0..(24 * 60) {
-        let s = sun_position(2026, tag, q as f64 / 60.0, width, length);
+        let s = sun_position(2026, day, q as f64 / 60.0, latitude, longitude);
         if s.altitude_deg > best.0 {
             best = (s.altitude_deg, s.azimuth_deg);
         }
@@ -26,27 +20,27 @@ fn peak(tag: u32, width: f64, length: f64) -> (f64, f64) {
     best
 }
 
-/// Zur Sommersonnenwende steht die Sonne genau um die Schiefe der Ekliptik hoeher als zur
-/// Tagundnachtgleiche, und zur Wintersonnenwende ebenso viel tiefer.
+/// At the summer solstice the sun stands exactly the obliquity higher than at the equinox, and at
+/// the winter solstice as much lower.
 #[test]
 fn the_solstices_hit_the_obliquity_of_the_ecliptic() {
-    let width = 50.0;
-    let (june, _) = peak(172, width, 0.0);
-    let (dezember, _) = peak(355, width, 0.0);
+    let latitude = 50.0;
+    let (june, _) = peak(172, latitude, 0.0);
+    let (december, _) = peak(355, latitude, 0.0);
     assert!(
-        (june - (90.0 - width + ECLIPTIC)).abs() < 0.3,
-        "21. Juni auf {width} Grad Nord: {june:.2} statt {:.2}",
-        90.0 - width + ECLIPTIC
+        (june - (90.0 - latitude + ECLIPTIC)).abs() < 0.3,
+        "21 June at {latitude} degrees north: {june:.2} instead of {:.2}",
+        90.0 - latitude + ECLIPTIC
     );
     assert!(
-        (dezember - (90.0 - width - ECLIPTIC)).abs() < 0.3,
-        "21. Dezember auf {width} Grad Nord: {dezember:.2} statt {:.2}",
-        90.0 - width - ECLIPTIC
+        (december - (90.0 - latitude - ECLIPTIC)).abs() < 0.3,
+        "21 December at {latitude} degrees north: {december:.2} instead of {:.2}",
+        90.0 - latitude - ECLIPTIC
     );
 }
 
-/// Am Aequator zur Sommersonnenwende: die Sonne bleibt genau um die Ekliptikschiefe unter dem
-/// Zenit. Ein Vorzeichenfehler in der Deklination gibt hier 90 Grad und faellt sofort auf.
+/// At the equator on the summer solstice the sun stays exactly the obliquity below the zenith; a
+/// sign error in the declination gives 90 degrees here.
 #[test]
 fn at_the_equator_the_sun_stays_within_the_ecliptic_of_the_zenith() {
     let (june, _) = peak(172, 0.0, 0.0);
@@ -57,47 +51,47 @@ fn at_the_equator_the_sun_stays_within_the_ecliptic_of_the_zenith() {
     );
 }
 
-/// Zur Tagundnachtgleiche ist die Mittagshoehe das Komplement der Breite — auf jeder Breite.
+/// At the equinox the noon altitude is the complement of the latitude, at every latitude.
 #[test]
 fn at_the_equinox_the_noon_altitude_is_the_latitude_complement() {
-    for width in [0.0, 20.0, 50.0, 60.0] {
-        let (h, _) = peak(266, width, 0.0);
+    for latitude in [0.0, 20.0, 50.0, 60.0] {
+        let (h, _) = peak(266, latitude, 0.0);
         assert!(
-            (h - (90.0 - width)).abs() < 1.0,
-            "auf {width} Grad: {h:.2} statt {:.2}",
-            90.0 - width
+            (h - (90.0 - latitude)).abs() < 1.0,
+            "at {latitude} degrees: {h:.2} instead of {:.2}",
+            90.0 - latitude
         );
     }
 }
 
-/// Auf der Nordhalbkugel kulminiert die Sonne im Sueden, und der Azimut zaehlt von Norden.
+/// In the northern hemisphere the sun culminates in the south, and azimuth counts from north.
 #[test]
 fn the_peak_is_in_the_south() {
     let (_, azimuth) = peak(172, 50.0, 0.0);
     assert!(
         (azimuth - 180.0).abs() < 3.0,
-        "Kulmination bei Azimut {azimuth:.1} statt bei 180"
+        "culmination at azimuth {azimuth:.1} instead of 180"
     );
 }
 
-/// Morgens im Osten, abends im Westen. Ein vertauschter Stundenwinkel spiegelt genau das.
+/// East in the morning, west in the evening; a swapped hour angle mirrors exactly that.
 #[test]
 fn the_sun_moves_from_east_to_west() {
     let morgens = sun_position(2026, 172, 5.0, 50.0, 0.0);
     let evening = sun_position(2026, 172, 17.0, 50.0, 0.0);
     assert!(
         morgens.azimuth_deg < 130.0,
-        "um 05:00 UTC steht sie im Osten, nicht bei {:.1}",
+        "at 05:00 UTC it is in the east, not at {:.1}",
         morgens.azimuth_deg
     );
     assert!(
         evening.azimuth_deg > 230.0,
-        "um 17:00 UTC steht sie im Westen, nicht bei {:.1}",
+        "at 17:00 UTC it is in the west, not at {:.1}",
         evening.azimuth_deg
     );
 }
 
-/// Nachts steht sie unter dem Horizont, und das darf keine Ausnahme brauchen.
+/// At night it is below the horizon, without needing an exception.
 #[test]
 fn at_midnight_it_is_below_the_horizon() {
     let s = sun_position(2026, 355, 0.0, 50.0, 0.0);
@@ -108,7 +102,7 @@ fn at_midnight_it_is_below_the_horizon() {
     );
 }
 
-// ---------------------------------------------------------------- der Lichtfleck
+// ---------------------------------------------------------------- the light patch
 
 use interior::model::{Model, Rect};
 use interior::sun::{report, touch, light_patch, SunPosition};
@@ -129,17 +123,15 @@ fn fixture_overlay() {
         std::env::set_var("SJEL_PERSONAL_ROOT", &fixture);
         std::env::set_var("SJEL_DB_PATH", &db);
         std::env::remove_var("SJEL_INTERIOR_FLAT");
-        let store = sjel_inventory::store::Store::open(&db).expect("die Testdatenbank oeffnet");
+        let store = sjel_inventory::store::Store::open(&db).expect("the test database opens");
         sjel_inventory::import::inventory(&store, &fixture.join("data/interior/inventory"))
-            .expect("das Musterinventar importiert");
+            .expect("the sample inventory imports");
     });
 }
 
-/// Bei 45 Grad Sonnenhoehe ist der Versatz gleich der Hoehe — Tangens von 45 ist eins.
-///
-/// Die Musterwohnung hat ihre Terrassentuer in der Westwand, bodentief bis 210 cm. Steht die
-/// Sonne genau im Westen und 45 Grad hoch, muss der Lichtfleck exakt 210 cm weit nach Osten in
-/// den Raum reichen. Diese Zahl folgt aus der Geometrie und nicht aus einem Probelauf.
+/// At 45 degrees altitude the offset equals the height, since tan 45 is one. The sample flat's
+/// terrace door is in the west wall, glazed to 210 cm, so with the sun due west at 45 degrees the
+/// patch must reach exactly 210 cm east into the room.
 #[test]
 fn at_forty_five_degrees_the_offset_is_the_glass_height() {
     let m = model();
@@ -153,15 +145,15 @@ fn at_forty_five_degrees_the_offset_is_the_glass_height() {
         altitude_deg: 45.0,
         azimuth_deg: 270.0,
     };
-    let f = light_patch(&m, door, stand, 0.0).expect("die Westwand bekommt Westsonne");
+    let f = light_patch(&m, door, stand, 0.0).expect("the west wall gets western sun");
     let furthest = f.corners.iter().fold(0.0f64, |a, e| a.max(e[0]));
     assert!(
         (furthest - 210.0).abs() < 1.0,
-        "der Fleck reicht {furthest:.1} cm weit statt 210"
+        "the patch reaches {furthest:.1} cm instead of 210"
     );
 }
 
-/// Flacher Stand heisst laengerer Fleck. Halber Tangens, doppelte Weite.
+/// A lower sun means a longer patch: half the tangent, twice the reach.
 #[test]
 fn a_lower_sun_throws_the_patch_further() {
     let m = model();
@@ -187,14 +179,11 @@ fn a_lower_sun_throws_the_patch_further() {
     let flat_angle = reach(30.0).unwrap();
     assert!(
         flat_angle > up * 2.0,
-        "30 Grad wirft {flat_angle:.0} cm, 60 Grad {up:.0} cm — das ist nicht der Tangens"
+        "30 degrees throws {flat_angle:.0} cm, 60 degrees {up:.0} cm: that is not the tangent"
     );
 }
 
-/// Die Sonne im Osten scheint nicht durch eine Tuer in der Westwand.
-///
-/// Ohne diese Pruefung waere der Lichtfleck ein Rechteck, das aus jeder Wand in jede Richtung
-/// faellt — die Sorte Fehler, die im Bericht wie ein sehr sonniger Raum aussieht.
+/// The sun in the east does not shine through a door in the west wall.
 #[test]
 fn the_sun_does_not_shine_through_the_back_of_a_wall() {
     let m = model();
@@ -215,11 +204,11 @@ fn the_sun_does_not_shine_through_the_back_of_a_wall() {
             0.0
         )
         .is_none(),
-        "Ostsonne kommt nicht durch die Westwand"
+        "eastern sun does not come through the west wall"
     );
 }
 
-/// Unter dem Horizont gibt es kein Licht — und keine Division, die gegen unendlich laeuft.
+/// Below the horizon there is no light, and no division running to infinity.
 #[test]
 fn below_the_horizon_no_light_falls() {
     let m = model();
@@ -241,10 +230,8 @@ fn below_the_horizon_no_light_falls() {
     .is_none());
 }
 
-/// Ein Stueck IM Fleck wird getroffen, dasselbe Stueck daneben nicht.
-///
-/// Der Trennachsensatz ist eine Aussage in beide Richtungen, und ein Test, der nur den Treffer
-/// prueft, bestuende auch bei einer Funktion, die immer `true` sagt.
+/// A piece inside the patch is hit, the same piece beside it is not; a test of hits alone would
+/// pass a function that always says `true`.
 #[test]
 fn the_separating_axis_theorem_really_separates() {
     let m = model();
@@ -264,7 +251,7 @@ fn the_separating_axis_theorem_really_separates() {
         0.0,
     )
     .unwrap();
-    // Die Tuer spannt y 120..300; der Fleck reicht x 0..210.
+    // The door spans y 120..300; the patch reaches x 0..210.
     let drin = Rect {
         x: 100,
         y: 200,
@@ -284,14 +271,14 @@ fn the_separating_axis_theorem_really_separates() {
         d: 50,
     };
     assert!(touch(&drin, &f), "mitten im Fleck");
-    assert!(!touch(&beside, &f), "noerdlich der Tuerspanne");
+    assert!(!touch(&beside, &f), "north of the door span");
     assert!(
         !touch(&behind, &f),
-        "weiter im Raum als der Fleck reicht"
+        "further into the room than the patch reaches"
     );
 }
 
-/// Der Jahresbericht laeuft und zaehlt, statt eine Meinung zu haben.
+/// The year report runs and counts.
 #[test]
 fn the_year_report_names_hours_and_gaps() {
     let m = model();
@@ -300,29 +287,25 @@ fn the_year_report_names_hours_and_gaps() {
     assert_eq!(
         b.hours.len(),
         interior::sun::DAYS.len() * interior::sun::HOURS.count(),
-        "vier Tage mal elf Stunden"
+        "four days times eleven hours"
     );
     assert!(
         b.without_glass_heights.is_empty(),
-        "die Musterwohnung erklaert beide Verglasungen: {:?}",
+        "the sample flat declares both glazings: {:?}",
         b.without_glass_heights
     );
     assert!(
         b.hours.iter().any(|s| !s.hit.is_empty()),
-        "eine Westwohnung ohne einen einzigen Sonnentreffer waere ein Rechenfehler"
+        "a west-facing flat without a single sun hit would be a computing error"
     );
     assert!(
         b.hours.iter().any(|s| s.altitude_deg < 0.0),
-        "am 21. Dezember um 08:00 steht die Sonne hier noch nicht"
+        "on 21 December at 08:00 the sun is not up here yet"
     );
 }
 
-/// R9 trennt, statt ueberall zu feuern.
-///
-/// Derselbe Schreibtisch in derselben Wohnung: in `a-frei` bekommt er 11 der 44 geprueften
-/// Stunden Sonne und schweigt, in `i-blick-aufs-bett` 15 und meldet. Die Schwelle steht in
-/// `rules.toml` auf 12. Eine Regel, an deren Schwelle kein Layout auf der einen und keines auf
-/// der anderen Side liegt, prueft nichts — dieselbe Lehre, die R5 einmal gekostet hat.
+/// R9 tells apart instead of firing everywhere: the same desk gets 11 of 44 hours in `a-frei` and
+/// stays quiet, 15 in `i-blick-aufs-bett` and reports; the threshold in `rules.toml` is 12.
 #[test]
 fn r9_tells_the_sunny_spot_from_the_desk() {
     let m = model();
@@ -331,27 +314,26 @@ fn r9_tells_the_sunny_spot_from_the_desk() {
     assert_eq!(
         r.soft.iter().filter(|v| v.rule == "R9").count(),
         1,
-        "15 von 44 Stunden ueber einer Schwelle von 12"
+        "15 of 44 hours above a threshold of 12"
     );
 
     let frei = m.load_layout("a-frei").unwrap();
     let r = interior::clearance::check_layout(&m, &frei).unwrap();
     assert!(
         !r.soft.iter().any(|v| v.rule == "R9"),
-        "11 von 44 liegt darunter"
+        "11 of 44 lies below it"
     );
-    // Und die Reserve traegt die Stunden, nicht Zentimeter — sonst liefe sie in
-    // `engste_reserve_cm` ein und machte daraus eine Zahl ohne Einheit.
+    // And the reserve carries hours, not centimetres, so it stays out of `tightest_reserve_cm`.
     let res = r
         .reserves
         .iter()
         .find(|x| x.rule == "R9")
-        .expect("gemessen wird auch, wenn nichts meldet");
+        .expect("it is measured even when nothing reports");
     assert_eq!(res.unit, "stunden");
-    assert_eq!(res.slack, 1, "12 erlaubt, 11 gemessen");
+    assert_eq!(res.slack, 1, "12 allowed, 11 measured");
 }
 
-/// Fuehrt eine Wohnung R9 ohne Standort, ist das eine Luecke und kein Bestehen.
+/// A flat with R9 but no location is a gap, not a pass.
 #[test]
 fn r9_without_a_location_reports_unchecked() {
     let mut m = model();
@@ -362,10 +344,10 @@ fn r9_without_a_location_reports_unchecked() {
         .unchecked
         .iter()
         .find(|u| u.rule == "R9")
-        .expect("R9 meldet sich als ungeprueft");
+        .expect("R9 reports itself unchecked");
     assert!(
         offen.reason.contains("[lage]"),
-        "und nennt, was fehlt: {}",
+        "and names what is missing: {}",
         offen.reason
     );
 }

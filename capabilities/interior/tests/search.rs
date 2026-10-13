@@ -1,12 +1,5 @@
-//! Die Suche, und was ihre Rangfolge fuer richtig haelt.
-//!
-//! `search.rs` hatte bis 2026-08-31 keinen einzigen Test — 257 Zeilen, der teuerste Codepfad
-//! der Capability (3,5 Mio. Kandidaten ueber rayon), und die einzige Stelle, an der etwas
-//! anderes als „erlaubt/verboten" entschieden wird.
-//!
-//! Was hier geprueft wird, ist eine RANGFOLGE und kein Verdikt. `raumtrenner` kann kein Layout
-//! bestehen oder durchfallen lassen; es entscheidet nur, welcher von mehreren zulaessigen
-//! Vorschlaegen oben steht.
+//! The search, and what its ranking holds right. A ranking, not a verdict: `room_divider` cannot
+//! make a layout pass or fail; it decides which of several allowed proposals ranks first.
 
 use interior::model::Model;
 use interior::search::{search, Spec};
@@ -25,17 +18,15 @@ fn model() -> Model {
         std::env::set_var("SJEL_PERSONAL_ROOT", &fixture);
         std::env::set_var("SJEL_DB_PATH", &db);
         std::env::remove_var("SJEL_INTERIOR_FLAT");
-        let store = sjel_inventory::store::Store::open(&db).expect("die Testdatenbank oeffnet");
+        let store = sjel_inventory::store::Store::open(&db).expect("the test database opens");
         sjel_inventory::import::inventory(&store, &fixture.join("data/interior/inventory"))
-            .expect("das Musterinventar importiert");
+            .expect("the sample inventory imports");
     });
     Model::load(FLAT).expect("Musterwohnung")
 }
 
-/// Sucht in dem Layout, das genau dieses eine Brett enthaelt.
-///
-/// Beide Layouts stellen ihr Brett auf dieselben Koordinaten, also unterscheiden sich die zwei
-/// Laeufe in einer einzigen Sache: ob das Inventar `raumtrenner = true` fuehrt.
+/// Searches the layout holding just this one board. Both layouts place their board at the same
+/// coordinates, so the two runs differ in one thing: whether the item has `room_divider = true`.
 fn search_state(m: &Model, variant: &str) -> interior::search::SearchReport {
     let base = m
         .load_layout(&format!("g-trenner-{variant}"))
@@ -50,18 +41,13 @@ fn search_state(m: &Model, variant: &str) -> interior::search::SearchReport {
             limit: 0,
         },
     )
-    .expect("Suche")
+    .expect("search")
 }
 
-/// Der Beleg, in einem Vergleich mit genau einer Variablen.
-///
-/// `trenner_erklaert` und `trenner_stumm` haben dieselben Masse und stehen in derselben
-/// Wohnung. Das eine sagt `raumtrenner = true`, das andere sagt nichts. Bewegt die Suche das
-/// stumme Brett, findet sie Plaetze an der Wand und bewertet sie hoeher; bewegt sie das
-/// erklaerte, zaehlt seine Wandberuehrung ueberhaupt nicht mit.
-///
-/// Ohne den Vergleich waere der Test wertlos: eine Wandsumme von 0 kann auch heissen, dass die
-/// Suche keinen Platz an einer Wand gefunden hat.
+/// The evidence, in a comparison with one variable: `trenner_erklaert` and `trenner_stumm` have
+/// the same size in the same flat. Moving the quiet board finds wall places rated higher; the
+/// declared one's wall contact does not count at all. Without the comparison, a wall sum of 0 could
+/// also mean no wall place was found.
 #[test]
 fn a_declared_room_divider_is_not_penalised_for_standing_free() {
     let m = model();
@@ -69,7 +55,7 @@ fn a_declared_room_divider_is_not_penalised_for_standing_free() {
     let quiet = search_state(&m, "stumm");
     assert!(
         !quiet.hits.is_empty(),
-        "die Suche findet Plaetze fuer das stumme Brett"
+        "the search finds places for the quiet board"
     );
     let best_wall = quiet
         .hits
@@ -79,38 +65,31 @@ fn a_declared_room_divider_is_not_penalised_for_standing_free() {
         .unwrap_or(0);
     assert!(
         best_wall > 0,
-        "ein Brett, das nichts erklaert, findet eine Wand und bekommt sie angerechnet — \
-         sonst prueft der Vergleich unten nichts"
+        "a board that declares nothing finds a wall and is credited for it; \
+         otherwise the comparison below checks nothing"
     );
 
     let declared = search_state(&m, "erklaert");
     assert!(
         !declared.hits.is_empty(),
-        "und Plaetze fuer das erklaerte Brett"
+        "and places for the declared board"
     );
     assert!(
         declared.hits.iter().all(|h| h.wall_contact_cm == 0),
-        "ein erklaerter Raumtrenner zaehlt gar nicht in die Wandsumme — er soll die Bewertung \
-         der uebrigen Stuecke weder heben noch senken"
+        "a declared room divider does not count in the wall sum at all; it should neither raise \
+         nor lower the rating of the other pieces"
     );
 }
 
-/// Die Rangfolge ist stabil und in der dokumentierten Reihenfolge.
-///
-/// Erst die Front, dann keine Warnungen, dann Wand im Ruecken, dann der breiteste Engpass. Der
-/// Kommentar in `search.rs` behauptet das; hier steht es als Pruefung, damit eine vertauschte
-/// `then`-Kette auffaellt.
-///
-/// Die erste Stufe kam am 2026-08-31 dazu und ist die einzige, die keine Meinung ist: ein
-/// dominierter Treffer ist unter JEDER Gewichtung der vier Ziele schlechter als ein bestimmter
-/// anderer. Innerhalb einer Klasse gilt die Rangfolge vom 2026-08-30 unveraendert weiter.
+/// The ranking is stable and in the documented order: front, then no warnings, then wall behind,
+/// then the widest bottleneck, so a reordered `then` chain shows.
 #[test]
 fn the_ranking_sorts_front_then_warnings_then_wall_then_bottleneck() {
     let m = model();
     let r = search_state(&m, "stumm");
     assert!(
         r.hits.len() > 1,
-        "fuer eine Rangfolge braucht es mehr als einen Treffer"
+        "a ranking needs more than one hit"
     );
 
     for paar in r.hits.windows(2) {
@@ -129,32 +108,27 @@ fn the_ranking_sorts_front_then_warnings_then_wall_then_bottleneck() {
             -b.bottleneck_cm,
             std::cmp::Reverse(b.tightest_reserve_cm),
         );
-        assert!(a_key <= b_key, "Rangfolge verletzt: {a:?} steht vor {b:?}");
+        assert!(a_key <= b_key, "ranking broken: {a:?} before {b:?}");
     }
 }
 
-/// Die Front ist eine Auswahl und keine Umbenennung aller Treffer.
-///
-/// Ein Flag, das ueberall `true` steht, sortiert nichts und meldet trotzdem Erfolg — genau die
-/// Art von stiller Nulloperation, die diese Datei bei `raumtrenner` schon einmal gefunden hat.
+/// The front is a selection, not a relabelling of every hit: a flag that is `true` everywhere
+/// sorts nothing.
 #[test]
 fn the_front_is_strictly_smaller_than_the_hits() {
     let m = model();
     let r = search_state(&m, "stumm");
     let front = r.hits.iter().filter(|h| h.pareto).count();
-    assert!(front > 0, "ohne Front gibt es keine beste Antwort");
+    assert!(front > 0, "without a front there is no best answer");
     assert!(
         front < r.hits.len(),
-        "{front} von {} Treffern sind Front — dann trennt das Flag nichts",
+        "{front} of {} hits are front; then the flag separates nothing",
         r.hits.len()
     );
 }
 
-/// Kein dominierter Treffer steht vor einem, der ihn dominiert.
-///
-/// Das ist die Eigenschaft, wegen der die Front ueberhaupt vorne sortiert wird, und sie wird
-/// hier an den Zahlen geprueft statt am Flag: ein falsch gesetztes Flag bestuende den Test
-/// oben und diesen nicht.
+/// No dominated hit ranks before one that dominates it, checked on the numbers rather than the
+/// flag.
 #[test]
 fn no_hit_ranks_before_one_that_beats_it_everywhere() {
     let m = model();
@@ -174,17 +148,13 @@ fn no_hit_ranks_before_one_that_beats_it_everywhere() {
                 && zb.iter().zip(za.iter()).any(|(x, y)| x > y);
             assert!(
                 !dominates,
-                "{b:?} schlaegt {a:?} in allem und steht dahinter"
+                "{b:?} beats {a:?} in everything and ranks behind it"
             );
         }
     }
 }
 
-/// Ein harter Verstoss kommt nie als Treffer zurueck.
-///
-/// Die Suche schlaegt Plaetze vor, und ein Vorschlag, der eine harte Regel verletzt, ist kein
-/// Vorschlag. `clearance.rs` sagt dasselbe von der anderen Side: es gibt keinen Weg, ein
-/// Bestehen zu melden, solange ein harter Verstoss offen ist.
+/// A hard violation never comes back as a hit.
 #[test]
 fn no_hit_breaks_a_hard_rule() {
     let m = model();
@@ -197,7 +167,7 @@ fn no_hit_breaks_a_hard_rule() {
             let it = items
                 .iter_mut()
                 .find(|i| &i.reference == reference)
-                .expect("der bewegte Ref steht im Layout");
+                .expect("the moved ref is in the layout");
             it.x = pos[0];
             it.y = pos[1];
         }
@@ -209,20 +179,15 @@ fn no_hit_breaks_a_hard_rule() {
         let c = interior::clearance::check_layout(&m, &l).expect("Nachrechnung");
         assert!(
             c.hard.is_empty(),
-            "Treffer bei {:?} verletzt {:?}",
+            "hit at {:?} breaks {:?}",
             h.places,
             c.hard.iter().map(|v| &v.rule).collect::<Vec<_>>()
         );
     }
 }
 
-/// Harte Kanten: was die Liste erlaubt, steht wirklich im Raum und nicht in einem Einbau.
-///
-/// Zwei Richtungen, und die zweite ist die wichtigere. Dass jede erlaubte Position zulaessig
-/// ist, faellt bei einem Fehler sofort auf. Dass die Liste **nicht einfach das umschliessende
-/// Rechteck** ist, faellt sonst nie auf — und genau das waere die naheliegende falsche Fassung
-/// im Browser. Die Musterwohnung hat dafuer eine Kuechenzeile und einen Tuerschwenkbereich; die
-/// echte Wohnung ist obendrein ein Sechseck.
+/// Hard edges: what the list allows really lies in the room and not in a fixture. And the list is
+/// not simply the bounding rect, the obvious wrong version in a browser.
 #[test]
 fn allowed_positions_lie_in_the_room_not_in_a_fixture() {
     use interior::model::{Layout, PlacedItem};
@@ -231,10 +196,10 @@ fn allowed_positions_lie_in_the_room_not_in_a_fixture() {
     let a = interior::search::allowed_positions(&m, &base, "trenner_stumm", 0)
         .expect("erlaubte Positionen");
 
-    assert!(!a.rows.is_empty(), "es gibt Platz fuer das Brett");
+    assert!(!a.rows.is_empty(), "there is room for the board");
     assert_eq!(a.step, 5);
 
-    // Jede erlaubte Position ueberlebt die Raumgrenze.
+    // Every allowed position survives the room boundary.
     let mut checked = 0;
     for row in &a.rows {
         for [lo, hi] in &row.x {
@@ -251,7 +216,7 @@ fn allowed_positions_lie_in_the_room_not_in_a_fixture() {
                         kind: None,
                     }],
                 };
-                let r = interior::clearance::check_layout(&m, &l).expect("Pruefung");
+                let r = interior::clearance::check_layout(&m, &l).expect("check");
                 assert!(
                     !r.hard.iter().any(|v| v.rule == "room_boundary"),
                     "erlaubte Position {x},{} liegt ausserhalb des Raums",
@@ -261,23 +226,21 @@ fn allowed_positions_lie_in_the_room_not_in_a_fixture() {
             }
         }
     }
-    assert!(checked > 50, "nur {checked} Kanten geprueft");
+    assert!(checked > 50, "only {checked} edges checked");
 
-    // Und die Liste ist enger als das umschliessende Rechteck. Die Kuechenzeile liegt bei
-    // x 0..250, y 390..450: eine Zeile, die sie beruehrt, darf nicht bei x = 0 anfangen, eine
-    // freie Zeile schon. Genau diese Verengung waere in einer Rechteck-Fassung verschwunden —
-    // und die Rechteck-Fassung ist die, die im Browser naheliegt.
+    // And the list is narrower than the bounding rect: the kitchen run lies at x 0..250,
+    // y 390..450, so a row touching it must not start at x = 0, while a free row may.
     let start = |y: i32| -> Option<i32> { a.rows.iter().find(|r| r.y == y).map(|r| r.x[0][0]) };
-    assert_eq!(start(0), Some(0), "oben ist die Wand die einzige Grenze");
-    let down = start(380).expect("es gibt eine Zeile bei y = 380");
+    assert_eq!(start(0), Some(0), "at the top the wall is the only limit");
+    let down = start(380).expect("there is a row at y = 380");
     assert!(
         down > 0,
-        "bei y = 380 reicht das Brett in die Kuechenzeile, also darf x = 0 nicht erlaubt sein \
-         (bekommen: {down})"
+        "at y = 380 the board reaches into the kitchen run, so x = 0 must not be allowed \
+         (got: {down})"
     );
 }
 
-/// Eine Position IM Einbau steht nicht auf der Liste.
+/// A position inside a fixture is not on the list.
 #[test]
 fn a_position_in_the_kitchen_run_is_not_allowed() {
     let m = model();
@@ -285,7 +248,7 @@ fn a_position_in_the_kitchen_run_is_not_allowed() {
     let a = interior::search::allowed_positions(&m, &base, "trenner_stumm", 0)
         .expect("erlaubte Positionen");
 
-    // Die Kuechenzeile der Musterwohnung liegt bei x 0..250, y 390..450.
+    // The sample flat's kitchen run lies at x 0..250, y 390..450.
     let drin = |x: i32, y: i32| {
         a.rows
             .iter()
@@ -294,6 +257,6 @@ fn a_position_in_the_kitchen_run_is_not_allowed() {
     };
     assert!(
         !drin(0, 390),
-        "0,390 liegt in der Kuechenzeile und darf nicht erlaubt sein"
+        "0,390 lies in the kitchen run and must not be allowed"
     );
 }

@@ -67,7 +67,7 @@ pub fn update(model: &Model, id: &str, items: &[PlacedItem]) -> Result<(), Model
     })?;
     check_header_suffices(&text, &path)?;
     let content = format!("{}{}", header(&text), entries(items));
-    std::fs::write(&path, content).map_err(|source| ModelError::Read { path: path, source })
+    std::fs::write(&path, content).map_err(|source| ModelError::Read { path, source })
 }
 
 /// A layout name that may be a file name. This decides what a caller can write into the overlay
@@ -126,7 +126,7 @@ pub fn create(model: &Model, id: &str, layout: &Layout, note: &str) -> Result<()
         })?;
     }
     std::fs::write(&path, format!("{header}{}", entries(&layout.items)))
-        .map_err(|source| ModelError::Read { path: path, source })
+        .map_err(|source| ModelError::Read { path, source })
 }
 
 /// Where an archived layout goes: a subdirectory, not a bin. The name is a directory in the

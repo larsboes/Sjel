@@ -1,13 +1,9 @@
-//! Ein Plan entsteht, und ein Plan verschwindet aus der Liste, ohne dass etwas verloren geht.
+//! A plan is created, and a plan leaves the list, without anything getting lost.
 //!
-//! Layouts sind Dateien und keine Zeilen (PRD Q60), und der Kopf einer solchen Datei traegt die
-//! Begruendung — bei einem verworfenen Moebel ist er der einzige Ort, an dem sie steht. Daraus
-//! folgen die drei Faelle hier: ein Kopf, der eine Herkunft behauptet, die es nicht gibt; ein
-//! Name, der aus dem Verzeichnis zeigt; und ein Wegraeumen, das die Begruendung mitnimmt.
-//!
-//! Gearbeitet wird auf einer KOPIE der Musterwohnung, weil hier geschrieben wird. Dieselbe
-//! Trennung wie in `tests/rules.rs`, aus demselben Grund: eine Datei zu veraendern, die andere
-//! Testbinaries lesen, ist ein Test, der seine Nachbarn kaputt macht.
+//! Layouts are files, and a file's header carries the reasoning, for a rejected piece the only
+//! place it is written. Hence the three cases: a header claiming an origin that does not exist, a
+//! name pointing out of the dir, and a clearing-away that takes the reasoning with it. Works on a
+//! copy of the sample flat, because it writes.
 
 use interior::layout_io;
 use interior::model::{Layout, Model, PlacedItem};
@@ -15,15 +11,15 @@ use std::path::{Path, PathBuf};
 use std::sync::Once;
 
 const MUSTER: &str = "muster";
-/// Eins der Layouts der Musterwohnung, als Vorlage zum Kopieren.
+/// One of the sample flat's layouts, as a template to copy.
 const TEMPLATE: &str = "a-frei";
 
 fn fixture() -> PathBuf {
     Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/fixtures/overlay")
 }
 
-/// Setzt die Umgebung genau einmal je Binary und fuellt das Inventar ueber denselben Import,
-/// den `interior import` fuehrt — kein zweiter Weg, Zeilen anzulegen.
+/// Sets the environment once per binary and fills the inventory through the same import
+/// `interior import` uses.
 fn unique_root() -> PathBuf {
     static ONCE: Once = Once::new();
     let wurzel = std::env::temp_dir().join(format!("interior-layouts-{}", std::process::id()));
@@ -34,17 +30,15 @@ fn unique_root() -> PathBuf {
         std::env::set_var("SJEL_PERSONAL_ROOT", &wurzel);
         std::env::set_var("SJEL_DB_PATH", &db);
         std::env::remove_var("SJEL_INTERIOR_FLAT");
-        let store = sjel_inventory::store::Store::open(&db).expect("die Testdatenbank oeffnet");
+        let store = sjel_inventory::store::Store::open(&db).expect("the test database opens");
         sjel_inventory::import::inventory(&store, &fixture().join("data/interior/inventory"))
-            .expect("das Musterinventar importiert");
+            .expect("the sample inventory imports");
     });
     wurzel
 }
 
-/// Eine eigene Kopie der Musterwohnung je Test.
-///
-/// Jeder Test hier schreibt Dateien, und `SJEL_PERSONAL_ROOT` ist prozessweit: zwei Tests, die
-/// sich eine Wohnung teilen, zaehlen die Layouts des jeweils anderen mit.
+/// Its own copy of the sample flat per test: every test here writes files, and
+/// `SJEL_PERSONAL_ROOT` is process-wide.
 fn flat(name: &str) -> Model {
     let wurzel = unique_root();
     let target = wurzel.join("data/interior/flats").join(name);
@@ -56,13 +50,13 @@ fn flat(name: &str) -> Model {
 
 fn copy_layout(von: &Path, nach: &Path) {
     std::fs::create_dir_all(nach).expect("Zielverzeichnis");
-    for e in std::fs::read_dir(von).expect("Quellverzeichnis") {
-        let e = e.expect("Eintrag");
+    for e in std::fs::read_dir(von).expect("source dir") {
+        let e = e.expect("entry");
         let target = nach.join(e.file_name());
         if e.file_type().expect("Typ").is_dir() {
             copy_layout(&e.path(), &target);
         } else {
-            std::fs::copy(e.path(), &target).expect("Datei kopieren");
+            std::fs::copy(e.path(), &target).expect("copy file");
         }
     }
 }
@@ -80,65 +74,60 @@ fn plan(name: &str, items: Vec<PlacedItem>) -> Layout {
     }
 }
 
-/// Ein leerer Plan ist der Anfang jeder Planung von Hand und kein Sonderfall.
+/// An empty plan is how hand planning starts, not a special case.
 #[test]
 fn a_new_plan_may_be_empty() {
-    let m = flat("leer");
+    let m = flat("empty");
     layout_io::create(
         &m,
-        "noch-nichts",
+        "nothing-yet",
         &plan("Noch nichts", vec![]),
         "Ein Anfang.",
     )
-    .expect("ein leerer Plan wird geschrieben");
+    .expect("an empty plan is written");
 
     let l = m
-        .load_layout("noch-nichts")
-        .expect("und wird wieder gelesen");
-    assert!(l.items.is_empty(), "kein Stueck, weil keins gesetzt wurde");
+        .load_layout("nothing-yet")
+        .expect("and read back");
+    assert!(l.items.is_empty(), "no piece, because none was placed");
     assert_eq!(l.name, "Noch nichts");
     assert!(
         m.layout_names()
             .expect("Liste")
-            .contains(&"noch-nichts".to_string()),
-        "und er steht in der Liste"
+            .contains(&"nothing-yet".to_string()),
+        "and it is in the list"
     );
 }
 
-/// Der Kern: der Kopf sagt, was der Aufrufer gesagt hat, und nichts darueber hinaus.
-///
-/// Bis 2026-08-31 schrieb `create` in JEDE neue Datei „Von einer Maschine gesetzt … jede
-/// Position hat die volle Raeumungspruefung durchlaufen". Fuer `interior compose` stimmt das.
-/// Fuer einen leeren Plan, den jemand ueber die API anlegt und danach von Hand zieht, ist es
-/// falsch — und eine Datei, die ihre eigene Herkunft falsch behauptet, ist schlimmer als eine
-/// ohne Kopf, weil sie geglaubt wird.
+/// The header says what the caller said and nothing more: a file claiming a clearance check that
+/// never ran is worse than one without a header, because it is believed.
 #[test]
 fn the_header_claims_no_check_that_did_not_happen() {
     let m = flat("herkunft");
-    let notiz = "Erstellt 2026-08-31 ueber die API.\n\nZweiter Absatz.";
-    layout_io::create(&m, "von-hand", &plan("Von Hand", vec![]), notiz).expect("geschrieben");
+    let note = "Created 2026-08-31 through the API.\n\nSecond paragraph.";
+    layout_io::create(&m, "by-hand", &plan("By hand", vec![]), note).expect("written");
 
-    let text = file(&m, "von-hand");
+    let text = file(&m, "by-hand");
     assert!(
-        text.contains("# Erstellt 2026-08-31 ueber die API."),
-        "die Notiz steht als Kommentar im Kopf:\n{text}"
+        text.contains("# Created 2026-08-31 through the API."),
+        "the note is a comment in the header:\n{text}"
     );
     assert!(
-        text.contains("#\n# Zweiter Absatz."),
-        "und ein Absatz bleibt ein Absatz:\n{text}"
+        text.contains("#\n# Second paragraph."),
+        "and a paragraph stays a paragraph:\n{text}"
     );
     assert!(
-        !text.contains("Raeumungspruefung"),
-        "niemand hat hier etwas geprueft, also behauptet der Kopf es auch nicht:\n{text}"
+        !text.contains("clearance check"),
+        "nobody checked anything here, so the header claims nothing:\n{text}"
     );
 }
 
-/// Eine Vorlage wird gelesen, nicht angefasst.
+/// A template is read, not touched.
 #[test]
 fn a_template_is_copied_and_stays_as_it_was() {
     let m = flat("kopie");
     let before = file(&m, TEMPLATE);
-    let template = m.load_layout(TEMPLATE).expect("die Vorlage");
+    let template = m.load_layout(TEMPLATE).expect("the template");
 
     layout_io::create(
         &m,
@@ -146,9 +135,9 @@ fn a_template_is_copied_and_stays_as_it_was() {
         &plan("Abgeschrieben", template.items.clone()),
         "Kopie.",
     )
-    .expect("geschrieben");
+    .expect("written");
 
-    let neu = m.load_layout("abgeschrieben").expect("die Kopie");
+    let neu = m.load_layout("abgeschrieben").expect("the copy");
     assert_eq!(neu.items.len(), template.items.len());
     for (a, b) in neu.items.iter().zip(&template.items) {
         assert_eq!(
@@ -159,23 +148,23 @@ fn a_template_is_copied_and_stays_as_it_was() {
     assert_eq!(
         file(&m, TEMPLATE),
         before,
-        "die Vorlage hat Zeichen fuer Zeichen ueberlebt"
+        "the template survived character for character"
     );
 }
 
-/// Ein bestehender Plan wird nicht ueberschrieben, und zwar auch dann nicht, wenn der neue
-/// besser ist: der Kopf des alten ist das Argument, das ihn ersetzt hat.
+/// An existing plan is not overwritten, even by a better one: its header is the argument that
+/// replaced it.
 #[test]
 fn an_existing_layout_is_not_overwritten() {
-    let m = flat("kein-ueberschreiben");
+    let m = flat("no-overwrite");
     let before = file(&m, TEMPLATE);
     let e = layout_io::create(&m, TEMPLATE, &plan("Neu", vec![]), "Zweiter Versuch.")
-        .expect_err("den Namen gibt es schon");
+        .expect_err("the name exists already");
     assert!(e.to_string().contains("exists already"), "{e}");
-    assert_eq!(file(&m, TEMPLATE), before, "und die Datei ist unberuehrt");
+    assert_eq!(file(&m, TEMPLATE), before, "and the file is untouched");
 }
 
-/// Der Name wird zu einem Dateinamen. Ueber die API kommt er von aussen.
+/// The name becomes a file name, and over the API it comes from outside.
 #[test]
 fn a_layout_name_cannot_point_out_of_the_dir() {
     let m = flat("namen");
@@ -183,17 +172,17 @@ fn a_layout_name_cannot_point_out_of_the_dir() {
     for bad in ["../room", "unter/plan", "plan.toml", ""] {
         assert!(
             layout_io::create(&m, bad, &plan("X", vec![]), "n").is_err(),
-            "`{bad}` darf keine Datei werden"
+            "`{bad}` must not become a file"
         );
     }
     assert_eq!(
         m.layout_names().expect("Liste").len(),
         starts,
-        "und keiner davon hat sich an der Pruefung vorbei eine Datei geschrieben"
+        "and none of them wrote a file past the check"
     );
 }
 
-/// Archivieren heisst: aus der Liste, nicht von der Platte.
+/// Archiving means off the list, not off the disk.
 #[test]
 fn an_archived_layout_leaves_the_list_not_the_disk() {
     let m = flat("archiv");
@@ -201,35 +190,35 @@ fn an_archived_layout_leaves_the_list_not_the_disk() {
         &m,
         "verworfen",
         &plan("Verworfen", vec![]),
-        "Drei Absaetze Begruendung.",
+        "Three paragraphs of reasoning.",
     )
-    .expect("geschrieben");
+    .expect("written");
     let before = file(&m, "verworfen");
 
     let whither = layout_io::archive_layout(&m, "verworfen").expect("archiviert");
     assert_eq!(
         whither, "archiv/verworfen.toml",
-        "und die Antwort nennt keinen Pfad des Overlays"
+        "and the answer names no overlay path"
     );
 
     let names = m.layout_names().expect("Liste");
     assert!(
         !names.contains(&"verworfen".to_string()),
-        "aus der Liste: {names:?}"
+        "off the list: {names:?}"
     );
     assert!(
         !names.contains(&"archiv".to_string()),
-        "und das Verzeichnis selbst ist kein Layout: {names:?}"
+        "and the directory itself is no layout: {names:?}"
     );
     let stored = m.layouts_dir().join(&whither);
     assert_eq!(
-        std::fs::read_to_string(&stored).expect("die Datei liegt im Archiv"),
+        std::fs::read_to_string(&stored).expect("the file is in the archive"),
         before,
-        "mit ihrer Begruendung, Zeichen fuer Zeichen"
+        "with its reasoning, character for character"
     );
 }
 
-/// Zwei Fassungen unter einem Namen waeren eine verlorene Begruendung.
+/// Two versions under one name would lose a reason.
 #[test]
 fn archiving_twice_under_one_name_is_refused() {
     let m = flat("archiv-zweimal");
@@ -237,17 +226,17 @@ fn archiving_twice_under_one_name_is_refused() {
     layout_io::archive_layout(&m, "doppelt").expect("erste archiviert");
     layout_io::create(&m, "doppelt", &plan("Dann", vec![]), "Zweite Fassung.").expect("zweite");
 
-    let e = layout_io::archive_layout(&m, "doppelt").expect_err("das Archiv ist belegt");
+    let e = layout_io::archive_layout(&m, "doppelt").expect_err("the archive is taken");
     assert!(e.to_string().contains("archive"), "{e}");
     assert!(
         file(&m, "doppelt").contains("Zweite Fassung"),
-        "und die zweite steht noch da, statt still ueber die erste zu wandern"
+        "and the second is still there instead of silently moving over the first"
     );
 }
 
 #[test]
 fn a_layout_that_does_not_exist_is_not_archived() {
-    let m = flat("archiv-leer");
-    let e = layout_io::archive_layout(&m, "gab-es-nie").expect_err("es gibt nichts wegzuraeumen");
+    let m = flat("archive-empty");
+    let e = layout_io::archive_layout(&m, "gab-es-nie").expect_err("there is nothing to clear away");
     assert!(e.to_string().contains("gab-es-nie"), "{e}");
 }

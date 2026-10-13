@@ -1,9 +1,7 @@
-//! Was ein Verdikt aushaelt, wenn das Bandmass sich geirrt hat.
+//! What a verdict survives when the tape measure was off.
 //!
-//! Die Antworten hier sind konstruiert und nicht aufgezeichnet: `j-sideboard-knapp` stellt das
-//! einzige Stueck mit geschaetzten Massen genau fuenf Zentimeter vor eine harte Zone. Die
-//! Zahlen unten folgen aus der Geometrie der Musterwohnung, nicht daraus, was der Code beim
-//! ersten Lauf ausgegeben hat.
+//! The answers are constructed, not recorded: `j-sideboard-knapp` places the one piece with
+//! estimated sizes exactly five centimetres before a hard zone.
 
 use interior::model::Model;
 use interior::tolerance::{robustness, Holds, HORIZON_CM};
@@ -16,8 +14,8 @@ fn model() -> Model {
     Model::load(FLAT).unwrap_or_else(|e| panic!("{FLAT}: {e}"))
 }
 
-/// Dieselbe Vorbereitung wie in `engine.rs`: eigene Datenbankdatei je Testbinary, gefuellt
-/// ueber den echten Import.
+/// The same setup as `engine.rs`: one database file per test binary, filled through the real
+/// import.
 fn fixture_overlay() {
     static ONCE: Once = Once::new();
     ONCE.call_once(|| {
@@ -28,9 +26,9 @@ fn fixture_overlay() {
         std::env::set_var("SJEL_PERSONAL_ROOT", &fixture);
         std::env::set_var("SJEL_DB_PATH", &db);
         std::env::remove_var("SJEL_INTERIOR_FLAT");
-        let store = sjel_inventory::store::Store::open(&db).expect("die Testdatenbank oeffnet");
+        let store = sjel_inventory::store::Store::open(&db).expect("the test database opens");
         sjel_inventory::import::inventory(&store, &fixture.join("data/interior/inventory"))
-            .expect("das Musterinventar importiert");
+            .expect("the sample inventory imports");
     });
 }
 
@@ -42,38 +40,33 @@ fn robust(layout: &str) -> interior::tolerance::Robustness {
     robustness(&m, &l).unwrap_or_else(|e| panic!("{layout}: {e}"))
 }
 
-/// Fuenf Zentimeter Luft, also fuenf Zentimeter Messfehler — und beim sechsten reisst R7.
-///
-/// Beide Zahlen stehen im Kopf der Layoutdatei, bevor dieser Test lief. Sie kommen aus der
-/// Suedkante des Sideboards (y 285) und dem Beginn der Kuechen-Anlaufzone (y 290).
+/// Five centimetres of air, so five centimetres of error, and at the sixth R7 breaks. Both numbers
+/// come from the sideboard's south edge (y 285) and the kitchen approach zone (y 290).
 #[test]
 fn an_estimated_size_gets_a_number_instead_of_a_verdict() {
     let r = robust("j-sideboard-knapp");
     assert!(
         r.nominal_pass,
-        "das Layout besteht mit den eingetragenen Massen"
+        "the layout passes with the recorded sizes"
     );
     match r.holds {
-        Holds::UpTo { cm } => assert_eq!(cm, 5, "fuenf cm Luft, also fuenf cm Toleranz"),
+        Holds::UpTo { cm } => assert_eq!(cm, 5, "five cm of air, so five cm of tolerance"),
         other => panic!("expected UpTo {{ cm: 5 }}, bekommen {other:?}"),
     }
     assert_eq!(
         r.tips_at,
         vec!["R7".to_string()],
-        "die Kuechen-Anlaufzone ist das, was zuerst reisst"
+        "the kitchen approach zone is what breaks first"
     );
 }
 
-/// Die Bisektion und die Reserve messen dasselbe auf zwei Wegen und muessen sich einigen.
-///
-/// `engste_reserve_cm` faellt aus einem Rechteckabstand, `haelt` aus wiederholten vollen
-/// Pruefungen mit vergroesserten Massen. Dass beide 5 sagen, ist der Grund, einer von beiden
-/// zu glauben — und wenn sie je auseinanderlaufen, ist eine der beiden Fassungen falsch.
+/// Bisection and reserve measure the same thing two ways and must agree: `tightest_reserve_cm`
+/// from a rect gap, `holds` from repeated full checks with grown sizes.
 #[test]
 fn reserve_and_bisection_reach_the_same_number() {
     let r = robust("j-sideboard-knapp");
     let Holds::UpTo { cm } = r.holds else {
-        panic!("dieses Layout kippt innerhalb des Horizonts")
+        panic!("this layout tips within the horizon")
     };
     assert_eq!(
         r.tightest_reserve_cm,
@@ -82,11 +75,7 @@ fn reserve_and_bisection_reach_the_same_number() {
     );
 }
 
-/// Ohne geschaetztes Mass gibt es nichts zu variieren, und das ist eine Aussage.
-///
-/// Nicht „haelt unendlich": es heisst, dass das Inventar nichts als unsicher fuehrt. Der
-/// Unterschied ist genau der, den `Haltbarkeit` als eigene Variante fuehrt, statt `None`
-/// zweimal mit verschiedener Bedeutung auszugeben.
+/// Without an estimated size there is nothing to vary, which is a statement, not "holds forever".
 #[test]
 fn a_layout_without_estimated_sizes_says_so_instead_of_inventing_a_number() {
     let r = robust("a-frei");
@@ -98,7 +87,7 @@ fn a_layout_without_estimated_sizes_says_so_instead_of_inventing_a_number() {
     assert!(r.tips_at.is_empty());
 }
 
-/// Was schon durchfaellt, wird nicht gestoert. Ein Messfehler ist dort nicht die Frage.
+/// What fails already is not disturbed.
 #[test]
 fn a_failing_layout_is_not_varied() {
     let r = robust("c-terrassentuer");
@@ -106,11 +95,8 @@ fn a_failing_layout_is_not_varied() {
     assert!(matches!(r.holds, Holds::Fails), "{:?}", r.holds);
 }
 
-/// Die Voraussetzung der Halbierung, an den Zahlen geprueft statt im Kommentar behauptet.
-///
-/// Die Stoerung vergroessert Masse nur, also darf ein Layout, das bei `t` durchfaellt, bei
-/// keinem groesseren `t` wieder bestehen. Waere das falsch, waere die Bisektion in
-/// `toleranz.rs` ein Verfahren, das eine beliebige Kippstelle findet und die kleinste meldet.
+/// The bisection's precondition, checked on numbers: sizes only grow, so a layout failing at `t`
+/// may pass at no larger `t`.
 #[test]
 fn passing_falls_monotonically_with_the_measurement_error() {
     let m = model();
@@ -121,7 +107,7 @@ fn passing_falls_monotonically_with_the_measurement_error() {
         if failed {
             assert!(
                 !pass,
-                "bei {tol} cm besteht es wieder, nachdem es gefallen war"
+                "at {tol} cm it passes again after failing"
             );
         }
         if !pass {
@@ -130,6 +116,6 @@ fn passing_falls_monotonically_with_the_measurement_error() {
     }
     assert!(
         failed,
-        "innerhalb des Horizonts muss dieses Layout kippen"
+        "this layout must tip within the horizon"
     );
 }

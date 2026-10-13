@@ -45,8 +45,8 @@ pub fn sun_position(
     year: i32,
     day_of_year: u32,
     hour_utc: f64,
-    width: f64,
-    length: f64,
+    latitude: f64,
+    longitude: f64,
 ) -> SunPosition {
     // Julian day of the year start plus the day. Seconds of accuracy are enough here.
     let a = ((14 - 1) / 12) as f64;
@@ -85,7 +85,7 @@ pub fn sun_position(
             - 1.25 * e * e * (2.0 * m_rad).sin())
         .to_degrees();
 
-    let true_solar_time = (hour_utc * 60.0 + equation_of_time + 4.0 * length).rem_euclid(1440.0);
+    let true_solar_time = (hour_utc * 60.0 + equation_of_time + 4.0 * longitude).rem_euclid(1440.0);
     let hour_angle = if true_solar_time / 4.0 < 0.0 {
         true_solar_time / 4.0 + 180.0
     } else {
@@ -93,7 +93,7 @@ pub fn sun_position(
     };
 
     let (b, d, h) = (
-        width.to_radians(),
+        latitude.to_radians(),
         declination.to_radians(),
         hour_angle.to_radians(),
     );
@@ -144,21 +144,21 @@ fn light_direction(azimuth_deg: f64, north_deg: f64) -> [f64; 2] {
 pub fn light_patch(
     model: &Model,
     o: &Opening,
-    stand: SunPosition,
+    position: SunPosition,
     north_deg: f64,
 ) -> Option<LightPatch> {
     let (from_cm, bis_cm) = (o.glass_from_cm?, o.glass_to_cm?);
-    if stand.altitude_deg <= 0.5 {
+    if position.altitude_deg <= 0.5 {
         // Below half a degree the offset exceeds any flat and runs towards infinity.
         return None;
     }
     let seg = crate::clearance::opening_segment(&model.room, o)?;
-    let d = light_direction(stand.azimuth_deg, north_deg);
+    let d = light_direction(position.azimuth_deg, north_deg);
     // Does it shine on this facade at all? The light must travel inwards.
     if d[0] * seg.normal[0] + d[1] * seg.normal[1] <= 0.0 {
         return None;
     }
-    let tan_h = stand.altitude_deg.to_radians().tan();
+    let tan_h = position.altitude_deg.to_radians().tan();
     let offset = |z: f64| z / tan_h;
     let (near, fern) = (offset(bis_cm as f64), offset(from_cm as f64));
     // The upper edge stands highest, so its ray reaches furthest into the room; the lower edge draws
@@ -280,11 +280,11 @@ pub fn hours_in_sun(model: &Model, r: &Rect) -> Result<usize, ModelError> {
         ));
     };
     let mut n = 0;
-    for (_, tag) in DAYS {
+    for (_, day) in DAYS {
         for h in HOURS {
-            let stand = sun_position(
+            let position = sun_position(
                 year_now(),
-                *tag,
+                *day,
                 h as f64 - location.utc_offset_h,
                 location.latitude,
                 location.longitude,
@@ -298,7 +298,7 @@ pub fn hours_in_sun(model: &Model, r: &Rect) -> Result<usize, ModelError> {
                         .as_deref()
                         .is_some_and(|t| t.starts_with("glass_door") || t.starts_with("window"))
                 })
-                .filter_map(|o| light_patch(model, o, stand, location.north_deg))
+                .filter_map(|o| light_patch(model, o, position, location.north_deg))
                 .any(|f| touch(r, &f));
             if hit {
                 n += 1;
@@ -342,13 +342,13 @@ pub fn report(model: &Model, layout: &crate::model::Layout) -> Result<SunReport,
     let mut hours = Vec::new();
     let mut hits_per_piece: std::collections::BTreeMap<String, usize> =
         std::collections::BTreeMap::new();
-    for (name, tag) in DAYS {
+    for (name, day) in DAYS {
         for h in HOURS {
             let utc = h as f64 - location.utc_offset_h;
-            let stand = sun_position(year_now(), *tag, utc, location.latitude, location.longitude);
+            let position = sun_position(year_now(), *day, utc, location.latitude, location.longitude);
             let flecken: Vec<LightPatch> = glazings
                 .iter()
-                .filter_map(|o| light_patch(model, o, stand, location.north_deg))
+                .filter_map(|o| light_patch(model, o, position, location.north_deg))
                 .collect();
             let mut hit = Vec::new();
             for it in &layout.items {
@@ -367,8 +367,8 @@ pub fn report(model: &Model, layout: &crate::model::Layout) -> Result<SunReport,
             hours.push(SunHour {
                 day: name,
                 hour_local: h,
-                altitude_deg: stand.altitude_deg,
-                azimuth_deg: stand.azimuth_deg,
+                altitude_deg: position.altitude_deg,
+                azimuth_deg: position.azimuth_deg,
                 hit,
             });
         }

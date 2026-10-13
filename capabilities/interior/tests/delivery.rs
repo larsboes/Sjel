@@ -1,9 +1,7 @@
-//! Kommt das Stueck herein — und bis an seinen Platz?
+//! Does the piece get in, and as far as its place?
 //!
-//! Die Faelle hier sind konstruiert und nicht abgelesen. `k-vitrine` ist der Kern: ein Layout,
-//! das jede Raeumungsregel erfuellt und trotzdem nie stattfinden kann, weil das Moebel 10 cm
-//! breiter ist als die Wohnungstuer. Bis 2026-08-31 hat diese Capability darauf `BESTANDEN`
-//! geantwortet — richtig gerechnet, falsche Frage.
+//! The cases are constructed. `k-vitrine` is the core: a layout meeting every clearance rule that
+//! can never happen, because the piece is 10 cm wider than the entrance door.
 
 use interior::delivery::{through_the_door, delivery, DoorFit};
 use interior::model::Model;
@@ -27,16 +25,14 @@ fn fixture_overlay() {
         std::env::set_var("SJEL_PERSONAL_ROOT", &fixture);
         std::env::set_var("SJEL_DB_PATH", &db);
         std::env::remove_var("SJEL_INTERIOR_FLAT");
-        let store = sjel_inventory::store::Store::open(&db).expect("die Testdatenbank oeffnet");
+        let store = sjel_inventory::store::Store::open(&db).expect("the test database opens");
         sjel_inventory::import::inventory(&store, &fixture.join("data/interior/inventory"))
-            .expect("das Musterinventar importiert");
+            .expect("the sample inventory imports");
     });
 }
 
-/// Ein bestandenes Layout und ein Stueck, das nicht hereinkommt — beides zugleich wahr.
-///
-/// Das ist der ganze Grund fuer dieses Modul. Wuerde `check_layout` hier durchfallen, waere
-/// die Frage schon beantwortet und `einbringung.rs` ueberfluessig.
+/// A passing layout and a piece that does not get in, both true at once: the reason this module
+/// exists.
 #[test]
 fn a_rule_abiding_layout_can_fail_at_the_door() {
     let m = model();
@@ -44,7 +40,7 @@ fn a_rule_abiding_layout_can_fail_at_the_door() {
     let verdict = interior::clearance::check_layout(&m, &l).unwrap();
     assert!(
         verdict.pass,
-        "die Vitrine steht regelkonform: {:?}",
+        "the display cabinet stands by the rules: {:?}",
         verdict.hard
     );
 
@@ -55,34 +51,29 @@ fn a_rule_abiding_layout_can_fail_at_the_door() {
             missing_cm: 10,
             door_cm: 100
         },
-        "110 cm in beiden Richtungen an einer 100 cm breiten Tuer"
+        "110 cm both ways at a 100 cm door"
     );
 }
 
-/// Die schmale Side entscheidet: ein Schrank geht hochkant durch die Tuer.
-///
-/// Ohne diese Regel waere jedes Stueck breiter als 100 cm ein Problem, und das ist offenkundig
-/// falsch — der 120 x 60 cm Kleiderschrank kommt durch jede Wohnungstuer.
+/// The narrow side decides: a wardrobe goes through a door upright.
 #[test]
 fn the_narrow_side_decides_not_the_width() {
     let m = model();
     assert!(
         matches!(through_the_door(&m, 120, 60, false), DoorFit::Fits { .. }),
-        "120 x 60 passt hochkant durch 100 cm"
+        "120 x 60 fits upright through 100 cm"
     );
     assert!(
         matches!(
             through_the_door(&m, 120, 110, false),
             DoorFit::DoesNotFit { .. }
         ),
-        "120 x 110 passt in keiner Lage"
+        "120 x 110 fits in no position"
     );
 }
 
-/// Was zerlegt kommt, wird an der Tuer nicht gemessen — und sagt das, statt zu bestehen.
-///
-/// Das Bett ist 140 cm breit und steht trotzdem in jedem Schlafzimmer. Die Auskunft kommt aus
-/// seiner Zeile (`zerlegbar = true`) und nicht aus einer Vermutung ueber Betten.
+/// What comes apart is not measured at the door, and says so: the answer comes from the row
+/// (`disassembles = true`), not from a guess about beds.
 #[test]
 fn a_piece_that_comes_apart_is_not_measured_at_the_door() {
     let m = model();
@@ -97,11 +88,11 @@ fn a_piece_that_comes_apart_is_not_measured_at_the_door() {
     );
     assert!(
         !matches!(through_the_door(&m, 140, 200, false), DoorFit::Fits { .. }),
-        "ohne die Deklaration bliebe es ein Verstoss"
+        "without the declaration it would stay a violation"
     );
 }
 
-/// Ein Platz, den es gibt, ist ein Platz, zu dem es einen Weg gibt.
+/// A place that exists is a place there is a path to.
 #[test]
 fn every_piece_of_a_passing_layout_reaches_its_place() {
     let m = model();
@@ -110,17 +101,14 @@ fn every_piece_of_a_passing_layout_reaches_its_place() {
         let e = delivery(&m, &l, &it.reference).unwrap();
         assert!(
             e.affordable,
-            "{} kommt nicht an seinen Platz: {:?}",
+            "{} does not reach its place: {:?}",
             it.reference, e.reason
         );
         assert!(e.steps.is_some_and(|n| n > 0));
     }
 }
 
-/// Ohne deklarierten Eingang wird nicht geraten.
-///
-/// Dieselbe Haltung wie bei R6: `badtuer` und `eingangstuer` tragen denselben `typ`, und sie
-/// am Namen zu unterscheiden waere der Fehler, den PRD B26a einmal geschlossen hat.
+/// Without a declared entrance nothing is guessed: the bathroom and entrance doors share a kind.
 #[test]
 fn without_a_declared_entrance_nothing_is_guessed() {
     let mut m = model();

@@ -1,7 +1,7 @@
 "$schema" = "schemas/schema.json"
 
 [default]
-description = "Find an Axon node on the local network."
+description = "Find an Sjel node on the local network."
 permissions = ["allow-browse"]
 
 [[permission]]

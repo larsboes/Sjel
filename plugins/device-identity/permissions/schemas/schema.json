@@ -331,10 +331,10 @@
           "markdownDescription": "Denies the sign command without any pre-configured scope."
         },
         {
-          "description": "Expose the iOS Keychain-backed Axon device identity.\n#### This default permission set includes:\n\n- `allow-get-identity`\n- `allow-signing`\n- `allow-reset-identity`",
+          "description": "Expose the iOS Keychain-backed Sjel device identity.\n#### This default permission set includes:\n\n- `allow-get-identity`\n- `allow-signing`\n- `allow-reset-identity`",
           "type": "string",
           "const": "default",
-          "markdownDescription": "Expose the iOS Keychain-backed Axon device identity.\n#### This default permission set includes:\n\n- `allow-get-identity`\n- `allow-signing`\n- `allow-reset-identity`"
+          "markdownDescription": "Expose the iOS Keychain-backed Sjel device identity.\n#### This default permission set includes:\n\n- `allow-get-identity`\n- `allow-signing`\n- `allow-reset-identity`"
         },
         {
           "description": "Read the device identity's public key. The private key remains in iOS Keychain.",

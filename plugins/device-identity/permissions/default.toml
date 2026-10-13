@@ -1,7 +1,7 @@
 "$schema" = "schemas/schema.json"
 
 [default]
-description = "Expose the iOS Keychain-backed Axon device identity."
+description = "Expose the iOS Keychain-backed Sjel device identity."
 permissions = ["allow-get-identity", "allow-signing", "allow-reset-identity"]
 
 [[permission]]

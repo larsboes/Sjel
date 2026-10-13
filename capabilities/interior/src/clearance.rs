@@ -112,7 +112,7 @@ pub const LEGACY_RULE_IDS: [(&str, &str); 11] = [
 
 /// Which way a threshold works: R3 limits a height upwards, every gap rule a depth downwards.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
-#[serde(rename_all = "lowercase")]
+#[serde(rename_all = "snake_case")]
 pub enum Limit {
     /// The measured value must be at least the required one.
     AtLeast,

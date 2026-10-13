@@ -1,11 +1,6 @@
-//! HTTP-Oberflaeche der Capability.
-//!
-//! Die Rechnung passiert hier, die Anzeige nicht: jeder Endpunkt liefert entweder JSON oder
-//! fertiges SVG/HTML, das aus dem Modell erzeugt wurde. Ein Frontend, das eigene Masse haelt
-//! oder eigene Regeln auslegt, waere die Drift, die dieses Programm verhindern soll.
-//!
-//! Gebunden wird ueber `sjel_server::serve_local` — Loopback, wie es die Bind-Policy von
-//! `axon doctor` fuer jede Capability in beiden Roots verlangt.
+//! The capability's HTTP surface. Every endpoint returns JSON or finished SVG/HTML from the
+//! model; a frontend that kept its own sizes or rules would drift from it. Bound to loopback
+//! through `sjel_server::serve_local`.
 
 use crate::clearance::check_layout;
 use crate::model::Model;
@@ -22,18 +17,13 @@ use std::sync::Arc;
 
 struct AppState {
     flat: String,
-    /// Die SQLite-Datei, einmal beim Start aufgeloest. Ein Feld und kein Aufruf je Anfrage,
-    /// damit ein Test den verdrahteten Router gegen eine Temp-Datei fahren kann statt gegen
-    /// die Datenbank der Installation.
+    /// Resolved once at start, so a test can point the router at a temp file.
     database: PathBuf,
 }
 
-/// Das Modell wird pro Anfrage frisch gelesen, nicht beim Start zwischengespeichert.
-///
-/// Absicht: die TOML-Dateien sind von Hand editierbar und werden von Hand editiert. Ein
-/// Prozess, der beim Start eine Kopie zieht, zeigt nach der ersten Korrektur einen Plan, der
-/// den Zahlen widerspricht, aus denen er zu stammen behauptet. Das Lesen kostet unter einer
-/// Millisekunde; ein veralteter Plan kostet eine Fehlentscheidung.
+/// The model is read fresh per request, not cached at start: the TOML files are edited by hand,
+/// and a cached copy would show a plan contradicting its own numbers. Reading takes under a
+/// millisecond.
 fn load(state: &AppState) -> Result<Model, (StatusCode, String)> {
     Model::load(&state.flat).map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))
 }
@@ -42,166 +32,164 @@ async fn health() -> &'static str {
     "ok"
 }
 
-/// Was diese Capability beantwortet, als Daten neben `/health` — dieselbe Zusage wie in jeder
-/// anderen Capability mit HTTP-Oberflaeche. Ein veralteter Katalog waere schlimmer als keiner,
-/// weil er geglaubt wird; `route_manifest::undeclared_routes` liest deshalb unten den Router
-/// aus diesem Quelltext und faellt um, wenn eine Route hier fehlt.
+/// What this capability answers. `route_manifest::undeclared_routes` reads the router from this
+/// source below and fails when a route is missing here.
 const ROUTES: &[route_manifest::Route] = &[
     r(
         "GET",
         "/",
-        "Alle Layouts als Side, bei jeder Anfrage aus dem Modell erzeugt.",
+        "Every layout as a page, rendered from the model on each request.",
     ),
     r("GET", "/health", "Liveness."),
     r(
         "GET",
-        "/api/media/{*pfad}",
-        "Ein Bild aus dem privaten Asset-Verzeichnis. Nur von dort, und nur auf Anfrage.",
+        "/api/media/{*path}",
+        "An image from the private asset dir, only from there and only on request.",
     ),
     r(
         "GET",
         "/api/roomplan/reference",
-        "Die aktuellste native RoomPlan-Referenz als Metadaten, ohne absolute Pfade.",
+        "The newest native RoomPlan reference as metadata, without absolute paths.",
     ),
     r(
         "GET",
         "/api/roomplan/asset",
-        "Die aktuellste native RoomPlan-Referenz als unveraenderte USDZ-Datei.",
+        "The newest native RoomPlan reference as the unchanged USDZ file.",
     ),
     r(
         "GET",
         "/api/roomplan/revisions",
-        "Synchronisierte semantische RoomPlan-Revisionen fuer den Vergleich.",
+        "Synced semantic RoomPlan revisions for comparison.",
     ),
     r(
         "POST",
         "/api/roomplan/revisions/{revision_id}/review",
-        "Eine RoomPlan-Revision annehmen oder ablehnen, ohne room.toml zu aendern.",
+        "Accept or reject a RoomPlan revision without changing room.toml.",
     ),
     r(
         "GET",
         "/api/layouts/{name}/allowed",
-        "Erlaubte Positionen eines Stuecks als Lauflaengen. Harte Kanten fuers Ziehen. ?ref=&rot=",
+        "Allowed positions of a piece as runs, the hard edges for dragging. ?ref=&rot=",
     ),
     r(
         "POST",
         "/api/layouts/{name}/preview",
-        "Verdikt und Plan zu einer Aufstellung, ohne sie zu schreiben. Fuers Drehen noetig.",
+        "Verdict and plan for an arrangement without writing it; needed for rotating.",
     ),
     r(
         "POST",
         "/api/layouts",
-        "Ein Layout anlegen: {id, name?, von?, items?, notiz?}. Ohne von und items ist es leer.",
+        "Create a layout: {id, name?, from?, items?, note?}. Without from and items it is empty.",
     ),
     r(
         "DELETE",
         "/api/layouts/{name}",
-        "Ein Layout aus der Liste nehmen. Es wandert nach layouts/archiv/ und wird nie geloescht.",
+        "Take a layout off the list. It moves to layouts/archiv/ and is never deleted.",
     ),
     r(
         "PUT",
         "/api/layouts/{name}",
-        "Die Positionen eines Layouts ersetzen und sofort neu pruefen. Der Kopf der Datei bleibt.",
+        "Replace a layout's positions and check again at once. The file header stays.",
     ),
     r(
         "PUT",
         "/api/placements",
-        "Wo die Stuecke wirklich stehen, fuer die aktive Wohnung. Body: {items}.",
+        "Where the pieces really stand in the active flat. Body: {items}.",
     ),
     r(
         "POST",
         "/api/placements/preview",
-        "Der Ist-Zustand als Plan und Verdikt, ohne Layoutdatei. Body: {items}.",
+        "The as-is state as plan and verdict, without a layout file. Body: {items}.",
     ),
     r(
         "POST",
         "/api/placements/allowed",
-        "Erlaubte Positionen eines Stuecks im Ist-Zustand. Body: {items, ref, rot}.",
+        "Allowed positions of a piece in the as-is state. Body: {items, ref, rot}.",
     ),
     r(
         "POST",
         "/api/items/{id}/impact",
-        "Was ein Feld mit den Verdikten machen wuerde, ohne es zu schreiben.",
+        "What a field would do to the verdicts, without writing it.",
     ),
     r("GET", "/routes", "Dieser Katalog."),
     r(
         "GET",
-        "/api/layouts/{name}/toleranz",
-        "Bis zu welchem Messfehler das Verdikt haelt, und woran es dann kippt.",
+        "/api/layouts/{name}/tolerance",
+        "Up to which measurement error the verdict holds, and what breaks then.",
     ),
     r(
         "GET",
-        "/api/layouts/{name}/sonne",
-        "Wann im Jahr welches Stueck in direkter Sonne steht. Braucht [lage] in room.toml.",
+        "/api/layouts/{name}/sun",
+        "When in the year which piece is in direct sun. Needs [lage] in room.toml.",
     ),
     r(
         "GET",
-        "/api/layouts/{name}/einbringung",
-        "Kommt jedes Stueck durch die Tuer und bis an seinen Platz.",
+        "/api/layouts/{name}/delivery",
+        "Whether every piece gets through the door and to its place.",
     ),
     r(
         "GET",
-        "/api/passt",
-        "Passt ein gedachtes Stueck durch die Tuer? ?b=&t=&zerlegbar= — die Frage vor dem Kauf.",
+        "/api/fits",
+        "Does an imagined piece fit through the door? ?width=&depth=&disassembles=, the question before buying.",
     ),
     r(
         "GET",
-        "/api/deklaration",
-        "Wer wird noch am Namen gemessen, was waere die Zeile, und was aendert sie.",
+        "/api/declarations",
+        "Which items are still judged by name, what their declaration would be, and what it changes.",
     ),
     r(
         "GET",
-        "/api/kaufen",
-        "Welcher Bedarf zuerst, kumuliert, und wann er aus dem Monatssaldo erreicht ist.",
+        "/api/purchase-order",
+        "Which need first, cumulated, and when the monthly balance affords it.",
     ),
     r(
         "POST",
         "/api/search",
-        "Eine Suche anstossen. Antwortet 202 mit einer Auftragsnummer, nicht mit dem Ergebnis.",
+        "Start a search. Answers 202 with a job number, not the result.",
     ),
     r(
         "POST",
         "/api/compose",
-        "Eine ganze Wohnung stellen lassen. Ebenfalls ein Auftrag: die Strahlsuche rechnet Minuten.",
+        "Furnish a whole flat. Also a job: the beam search takes minutes.",
     ),
     r(
         "GET",
-        "/api/auftraege/{id}",
-        "Was aus einem Auftrag geworden ist: laeuft, fertig mit Ergebnis, oder gescheitert.",
+        "/api/jobs/{id}",
+        "What became of a job: running, done with a result, or failed.",
     ),
     r(
         "GET",
         "/api/model",
-        "Der gemessene Raum: Masse, Polygon, Waende, Oeffnungen, und was daran geschaetzt ist.",
+        "The measured room: dimensions, polygon, walls, openings, and what of it is estimated.",
     ),
     r(
         "GET",
         "/api/layouts",
-        "Jedes Layout mit Verdikt, Verstosszahlen und Korridorbreiten.",
+        "Every layout with verdict, violation counts and corridor widths.",
     ),
     r(
         "GET",
         "/api/layouts/{name}",
-        "Ein Layout: die volle Pruefung und der fertige Plan als SVG.",
+        "One layout: the full check and the finished plan as SVG.",
     ),
     r(
         "GET",
         "/api/flats",
-        "Welche Wohnungen es gibt und gegen welche dieser Prozess rechnet.",
+        "Which flats exist and which one this process computes against.",
     ),
     r(
         "GET",
         "/api/placements/{flat}",
-        "Wo die Stuecke in dieser Wohnung tatsaechlich stehen.",
+        "Where the pieces in this flat actually stand.",
     ),
     r(
         "PUT",
         "/api/placements/{flat}/{item}",
-        "Ein Stueck in dieser Wohnung platzieren. Body: {x, y, rot}.",
+        "Place a piece in this flat. Body: {x, y, rot}.",
     ),
 ];
 
-/// Kurzform, damit die Tabelle oben wie eine Tabelle liest.
+/// Short form, so the table above reads like a table.
 const fn r(
     method: &'static str,
     path: &'static str,
@@ -222,20 +210,19 @@ async fn api_model(
     Ok(Json(serde_json::json!({
         "flat": m.room.flat,
         "area_m2": m.room.area_m2(),
-        // Die aeusseren Masse, damit die Oberflaeche sie neben den Plan schreiben kann, ohne
-        // sich das Polygon selbst auszumessen.
-        "masse": { "b": b, "t": t },
-        "hoehe": m.room.main_room.height,
+        // The outer dimensions, so the dashboard can show them without measuring the polygon itself.
+        "dimensions": { "width": b, "depth": t },
+        "height": m.room.main_room.height,
         "polygon": m.room.main_room.polygon,
-        "bad": m.room.bathroom,
-        "terrasse": m.room.terrace,
-        "waende": m.room.walls,
-        "oeffnungen": m.room.openings,
-        "fix_moebel": m.room.fixed_furniture,
+        "bathroom": m.room.bathroom,
+        "terrace": m.room.terrace,
+        "walls": m.room.walls,
+        "openings": m.room.openings,
+        "fixed_furniture": m.room.fixed_furniture,
         "todo": m.room.todo.open,
-        "katalog_groesse": m.catalogue.len(),
-        "ungemessen": m.uncertainties().into_iter()
-            .map(|(id, label, f)| serde_json::json!({ "id": id, "label": label, "felder": f }))
+        "catalogue_size": m.catalogue.len(),
+        "unmeasured": m.uncertainties().into_iter()
+            .map(|(id, label, f)| serde_json::json!({ "id": id, "label": label, "fields": f }))
             .collect::<Vec<_>>(),
     })))
 }
@@ -287,18 +274,14 @@ fn boom<E: std::fmt::Display>(e: E) -> (StatusCode, String) {
     (StatusCode::INTERNAL_SERVER_ERROR, e.to_string())
 }
 
-/// Welche Wohnungen unter `flats/` liegen, und welche dieser Prozess bedient.
-///
-/// Die uebrigen Endpunkte antworten fuer GENAU EINE Wohnung — die aus `SJEL_INTERIOR_FLAT`
-/// oder die einzige vorhandene. Das ist heute richtig und wird es nicht bleiben: PRD B28 will
-/// zwei Raeume nebeneinander, und dann traegt jeder Pfad die Wohnung. Bis dahin sagt dieser
-/// Endpunkt wenigstens, dass es eine Auswahl gibt, statt sie zu verschweigen.
+/// The flats under `flats/`, and which one this process serves. Every other endpoint answers for
+/// exactly one flat, from `SJEL_INTERIOR_FLAT` or the only one.
 async fn api_flats(
     State(s): State<Arc<AppState>>,
 ) -> Result<impl IntoResponse, (StatusCode, String)> {
     let alle =
         crate::model::flats().map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
-    Ok(Json(serde_json::json!({ "flats": alle, "aktiv": s.flat })))
+    Ok(Json(serde_json::json!({ "flats": alle, "active": s.flat })))
 }
 
 async fn api_placements(
@@ -308,15 +291,9 @@ async fn api_placements(
     Ok(Json(store(&s)?.placements(&flat).map_err(boom)?))
 }
 
-/// Was eine Aenderung mit den Verdikten machen WUERDE, ohne sie zu schreiben.
-///
-/// Der Grund, aus dem das ein Endpunkt ist und kein Kommentar in einer Anleitung: die
-/// Raeumungsfelder aus PRD Q61 sind genau die, deren Wirkung man nicht sieht, bevor man sie
-/// setzt. `opens` am Kleiderschrank kostet je nach Richtung 2 oder 4 Layouts, und das stand
-/// nirgends — es musste am 2026-08-31 von Hand ausgerechnet werden, einmal je Richtung. Wer ein
-/// Feld in der Oberflaeche fuellt, soll dieselbe Rechnung sehen, bevor er speichert.
-///
-/// Schreibt nichts. Der Katalog wird im Speicher gepatcht und jedes Layout neu gerechnet.
+/// What a change would do to the verdicts, without writing it. Clearance fields are the ones whose
+/// effect is invisible before setting them: `opens` on a wardrobe costs 2 or 4 layouts depending on
+/// the direction. Patches the catalogue in memory and recomputes every layout.
 async fn api_item_impact(
     State(s): State<Arc<AppState>>,
     Path(id): Path<String>,
@@ -328,11 +305,11 @@ async fn api_item_impact(
     let alt = model
         .catalogue
         .get(&id)
-        .ok_or((StatusCode::NOT_FOUND, format!("kein Eintrag `{id}`")))?;
-    let neu = sjel_inventory::api::merge_patch(alt, patch)?;
+        .ok_or((StatusCode::NOT_FOUND, format!("no entry `{id}`")))?;
+    let created = sjel_inventory::api::merge_patch(alt, patch)?;
 
     let mut model = load(&s)?;
-    model.catalogue.insert(id.clone(), neu);
+    model.catalogue.insert(id.clone(), created);
     let after = verdicts(&model)?;
 
     let mut changed = Vec::new();
@@ -343,17 +320,17 @@ async fn api_item_impact(
         if pass != p2 || hard != h2 || soft != s2 {
             changed.push(serde_json::json!({
                 "layout": name,
-                "vorher": { "pass": pass, "hard": hard, "soft": soft },
-                "nachher": { "pass": p2, "hard": h2, "soft": s2 },
+                "before": { "pass": pass, "hard": hard, "soft": soft },
+                "after": { "pass": p2, "hard": h2, "soft": s2 },
             }));
         }
     }
     Ok(Json(serde_json::json!({
         "item": id,
         "layouts": before.len(),
-        "bestanden_vorher": before.values().filter(|(p, _, _)| *p).count(),
-        "bestanden_nachher": after.values().filter(|(p, _, _)| *p).count(),
-        "geaendert": changed,
+        "passing_before": before.values().filter(|(p, _, _)| *p).count(),
+        "passing_after": after.values().filter(|(p, _, _)| *p).count(),
+        "changed": changed,
     })))
 }
 
@@ -409,11 +386,8 @@ struct LayoutBody {
     items: Vec<crate::model::PlacedItem>,
 }
 
-/// Die Positionen eines bestehenden Layouts ersetzen und sofort neu pruefen.
-///
-/// Antwortet mit dem Verdikt und dem fertigen Plan, damit die Oberflaeche nach einem Zug nichts
-/// selbst zu rechnen hat. Der Kopf der Datei bleibt stehen — `layout_io` erhaelt ihn, und wo er
-/// nicht genuegt, bricht es ab statt zu kuerzen.
+/// Replace an existing layout's positions and check again at once. Answers with verdict and plan;
+/// the file header stays (`layout_io` keeps it or refuses).
 async fn api_put_layout(
     State(s): State<Arc<AppState>>,
     Path(id): Path<String>,
@@ -432,22 +406,11 @@ async fn api_put_layout(
     ))
 }
 
-/// Ein Bild aus dem konfigurierten privaten Asset-Verzeichnis, auf Anfrage und nur von dort.
+/// An image from the configured private asset dir, on request and only from there.
 ///
-/// **Der Pfad kommt vom Client, also wird er aufgeloest und geprueft, nicht zusammengesetzt.**
-/// `canonicalize` beidseitig und dann ein `starts_with`: ein `..`, ein absoluter Pfad oder ein
-/// Symlink, der aus dem Verzeichnis zeigt, faellt damit auf, statt eine Datei auszuliefern, die
-/// niemand gemeint hat. Eine Pruefung auf die Zeichenfolge `..` allein waere die Fassung, die
-/// bei einem Symlink still versagt.
-///
-/// `service.toml` nennt diese Trennung als den Grund, aus dem die Capability oeffentlich stehen
-/// darf: das Bundle enthaelt kein Foto, die privaten Assets liegen ausserhalb des Bundles, und
-/// geliefert wird erst auf Anfrage.
-///
-/// Jeder Dateizugriff hier laeuft ueber `tokio::fs`, nicht ueber `std::fs`. Das ist der einzige
-/// Handler im Repo, der ein ganzes Bild liest, und ein `std::fs::read` in einem `async fn` haelt
-/// einen Worker-Thread der Laufzeit an, statt nur diese eine Anfrage warten zu lassen. Die
-/// Pfadpruefung bleibt davon unberuehrt: `canonicalize` und `starts_with` sagen dasselbe.
+/// The path comes from the client, so it is resolved and checked: `canonicalize` on both sides,
+/// then `starts_with`, which catches `..`, absolute paths and symlinks pointing out. Uses
+/// `tokio::fs`, because this reads whole images and `std::fs` would block a runtime worker.
 async fn latest_roomplan_capture(
     flat: &str,
 ) -> Result<(PathBuf, PathBuf, PathBuf), (StatusCode, String)> {
@@ -458,7 +421,7 @@ async fn latest_roomplan_capture(
     let mut entries = tokio::fs::read_dir(&root).await.map_err(|_| {
         (
             StatusCode::NOT_FOUND,
-            "keine RoomPlan-Aufnahmen".to_string(),
+            "no RoomPlan captures".to_string(),
         )
     })?;
     let mut dates = Vec::new();
@@ -479,7 +442,7 @@ async fn latest_roomplan_capture(
     }
     Err((
         StatusCode::NOT_FOUND,
-        "keine vollstaendige RoomPlan-Aufnahme".to_string(),
+        "no complete RoomPlan capture".to_string(),
     ))
 }
 
@@ -621,7 +584,7 @@ async fn api_roomplan_review(
     let mut dates = tokio::fs::read_dir(&root).await.map_err(|_| {
         (
             StatusCode::NOT_FOUND,
-            "keine RoomPlan-Aufnahmen".to_string(),
+            "no RoomPlan captures".to_string(),
         )
     })?;
     while let Some(date) = dates.next_entry().await.map_err(boom)? {
@@ -665,31 +628,31 @@ async fn api_roomplan_review(
     }
     Err((
         StatusCode::NOT_FOUND,
-        "RoomPlan-Revision nicht gefunden".to_string(),
+        "RoomPlan revision not found".to_string(),
     ))
 }
 
-async fn api_media(Path(pfad): Path<String>) -> Result<impl IntoResponse, (StatusCode, String)> {
+async fn api_media(Path(media_path): Path<String>) -> Result<impl IntoResponse, (StatusCode, String)> {
     let wurzel = crate::model::assets_dir()
         .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?
         .join("media");
     let wurzel = tokio::fs::canonicalize(&wurzel)
         .await
-        .map_err(|_| (StatusCode::NOT_FOUND, "kein media-Verzeichnis".to_string()))?;
-    let target = tokio::fs::canonicalize(wurzel.join(&pfad))
+        .map_err(|_| (StatusCode::NOT_FOUND, "no media dir".to_string()))?;
+    let target = tokio::fs::canonicalize(wurzel.join(&media_path))
         .await
-        .map_err(|_| (StatusCode::NOT_FOUND, format!("kein Medium `{pfad}`")))?;
-    let ist_datei = tokio::fs::metadata(&target)
+        .map_err(|_| (StatusCode::NOT_FOUND, format!("no medium `{media_path}`")))?;
+    let is_regular_file = tokio::fs::metadata(&target)
         .await
         .map(|m| m.is_file())
         .unwrap_or(false);
-    if !target.starts_with(&wurzel) || !ist_datei {
+    if !target.starts_with(&wurzel) || !is_regular_file {
         return Err((
             StatusCode::FORBIDDEN,
-            format!("`{pfad}` liegt nicht unter media/"),
+            format!("`{media_path}` is not below media/"),
         ));
     }
-    let typ = match target
+    let content_type = match target
         .extension()
         .and_then(|e| e.to_str())
         .map(str::to_ascii_lowercase)
@@ -699,19 +662,15 @@ async fn api_media(Path(pfad): Path<String>) -> Result<impl IntoResponse, (Statu
         Some("jpg" | "jpeg") => "image/jpeg",
         Some("webp") => "image/webp",
         Some("gif") => "image/gif",
-        // Kein Standardtyp: was hier unbekannt ist, wird nicht geraten und nicht geliefert.
-        _ => return Err((StatusCode::UNSUPPORTED_MEDIA_TYPE, "kein Bildformat".into())),
+        // No default type: what is unknown here is neither guessed nor served.
+        _ => return Err((StatusCode::UNSUPPORTED_MEDIA_TYPE, "not an image format".into())),
     };
     let bytes = tokio::fs::read(&target).await.map_err(boom)?;
-    Ok(([(axum::http::header::CONTENT_TYPE, typ)], bytes))
+    Ok(([(axum::http::header::CONTENT_TYPE, content_type)], bytes))
 }
 
-/// Wo die linke obere Ecke eines Stuecks liegen darf — harte Kanten fuers Ziehen.
-///
-/// Die Oberflaeche fragt einmal beim Aufnehmen und rastet danach auf die Liste ein. Sie
-/// bekommt Lauflaengen und keine Geometrie: der Hauptraum ist ein Sechseck, und auf ein
-/// umschliessendes Rechteck zu klemmen wuerde ein Moebel in der Kerbe abstellen, in der das
-/// Bad liegt.
+/// Where a piece's top-left corner may go: hard edges for dragging. The dashboard asks once when
+/// picking up and snaps to the list; it gets runs, not geometry.
 async fn api_allowed(
     State(s): State<Arc<AppState>>,
     Path(name): Path<String>,
@@ -734,18 +693,12 @@ struct AllowedQuery {
     rot: i32,
 }
 
-/// Der Ist-Zustand als Aufstellung — die Vorlage kommt im Rumpf und nicht aus einer Datei.
-///
-/// Der Name ist die einzige Stelle, an der sich das vom Layout unterscheidet, und deshalb wird
-/// hier nichts zusammengelegt: `/api/layouts/{name}/preview` **liest** eine Entscheidung, samt
-/// dem Kopf der Datei, in dem steht, warum ein Stueck so steht (PRD Q60). Eine Platzierung hat
-/// keinen Kopf — sie ist der Zustand und eine Zeile, nicht der Vorschlag und eine Datei. Zwei
-/// Endpunkte, weil zwei Dinge hereinkommen, und nicht weil zwei Dinge herauskommen: Plan und
-/// Verdikt sind dieselben und werden von derselben Funktion gerechnet.
+/// The as-is state as an arrangement, with positions in the body rather than a file. Plan and
+/// verdict are computed by the same function as for a layout; only the input differs.
 fn as_is(items: Vec<crate::model::PlacedItem>) -> crate::model::Layout {
     crate::model::Layout {
-        name: "ist-zustand".to_string(),
-        id: "ist-zustand".to_string(),
+        name: "as-is".to_string(),
+        id: "as-is".to_string(),
         items,
     }
 }
@@ -763,11 +716,8 @@ async fn api_preview_placements(
     ))
 }
 
-/// Erlaubte Positionen eines Stuecks im Ist-Zustand.
-///
-/// Die Aufstellung kommt im Rumpf, weil sie nirgends sonst steht: die Platzierungen sind Zeilen
-/// in der Datenbank und keine Datei, die man nachladen koennte. `allowed_positions` braucht sie
-/// als Grundlage, weil ein Stueck nicht dort stehen darf, wo ein anderes schon steht.
+/// Allowed positions of a piece in the as-is state. The arrangement comes in the body, because
+/// placements are rows, not a file to reload.
 async fn api_placements_allowed(
     State(s): State<Arc<AppState>>,
     Json(body): Json<PlacementsAllowedBody>,
@@ -788,13 +738,8 @@ struct PlacementsAllowedBody {
     rot: i32,
 }
 
-/// Wie ein Layout AUSSAEHE und ausfiele, ohne es zu schreiben.
-///
-/// Verschieben kann die Oberflaeche selbst zeichnen: eine Verschiebung ist eine Translation und
-/// aendert an der Grundflaeche nichts. **Drehen kann sie nicht** — bei 90 Grad tauschen Breite
-/// und Tiefe, und `opens` und `expands_dir` drehen mit. Das im Browser nachzubauen waere eine
-/// zweite Fassung von `footprint` und `Side::gedreht`, also genau die Doppelung, gegen die
-/// diese Capability existiert. Sie fragt stattdessen hier nach.
+/// How a layout would look and fare, without writing it. Moving the dashboard can draw itself;
+/// rotating it cannot, since sizes swap and `opens`/`expands_dir` turn with the piece.
 async fn api_preview_layout(
     State(s): State<Arc<AppState>>,
     Path(id): Path<String>,
@@ -816,31 +761,21 @@ async fn api_preview_layout(
     ))
 }
 
-/// Ein neues Layout anlegen. Ueberschreibt nie ein bestehendes.
-///
-/// Drei Wege in einen Rumpf, weil es drei Arten gibt, einen Plan anzufangen, und keine davon
-/// eine Sonderform verdient: **leer** (weder `von` noch `items`), **als Kopie** (`von`), oder
-/// **fertig gestellt** (`items`). Ein Aufrufer, der eine Variante durchspielen will, schickt
-/// eine Zeile und faengt nicht damit an, sich eine Aufstellung aus `GET` zusammenzusuchen.
-///
-/// Antwortet wie `PUT` und die Vorschau mit `{layout, check, svg}`: wer einen Plan anlegt, will
-/// als Naechstes wissen, ob er besteht und wie er aussieht, und das ist dieselbe Rechnung.
+/// Create a layout; never overwrites one. Empty (neither `from` nor `items`), a copy (`from`), or
+/// fully placed (`items`). Answers like `PUT` with `{layout, check, svg}`.
 async fn api_post_layout(
     State(s): State<Arc<AppState>>,
     Json(body): Json<NewLayout>,
 ) -> Result<impl IntoResponse, (StatusCode, String)> {
     let model = load(&s)?;
-    // Ein unbrauchbarer Name ist eine schlechte Anfrage und kein Konflikt. Beides auf 409 zu
-    // legen hiesse, einem Aufrufer „gibt es schon" zu melden, wo „so darf es nicht heissen"
-    // gemeint ist.
+    // An unusable name is a bad request, not a conflict.
     crate::layout_io::check_id(&body.id).map_err(|e| (StatusCode::BAD_REQUEST, e.to_string()))?;
-    let template = match &body.von {
-        // Der Name der Vorlage und nicht der Lesefehler: der traegt den Pfad im privaten
-        // Overlay, und der Aufrufer hat nach einem Layout gefragt, nicht nach einer Datei.
+    let template = match &body.from {
+        // The template's name, not the read error, which carries a path into the private overlay.
         Some(v) => Some(
             model
                 .load_layout(v)
-                .map_err(|_| (StatusCode::NOT_FOUND, format!("keine Vorlage `{v}`")))?,
+                .map_err(|_| (StatusCode::NOT_FOUND, format!("no template `{v}`")))?,
         ),
         None => None,
     };
@@ -849,19 +784,19 @@ async fn api_post_layout(
         (None, Some(v)) => v.items.clone(),
         (None, None) => Vec::new(),
     };
-    let notiz = body.notiz.unwrap_or_else(|| match &body.von {
+    let note_text = body.note_text.unwrap_or_else(|| match &body.from {
         Some(v) => format!(
-            "Erstellt {} ueber die API, als Kopie von `{v}`.",
+            "Created {} through the API, as a copy of `{v}`.",
             crate::layout_io::today()
         ),
-        None => format!("Erstellt {} ueber die API.", crate::layout_io::today()),
+        None => format!("Created {} through the API.", crate::layout_io::today()),
     });
     let layout = crate::model::Layout {
         name: body.name.unwrap_or_else(|| body.id.clone()),
         items,
         id: body.id.clone(),
     };
-    crate::layout_io::create(&model, &body.id, &layout, &notiz)
+    crate::layout_io::create(&model, &body.id, &layout, &note_text)
         .map_err(|e| (StatusCode::CONFLICT, e.to_string()))?;
     let l = model
         .load_layout(&body.id)
@@ -877,51 +812,42 @@ async fn api_post_layout(
 #[derive(serde::Deserialize)]
 struct NewLayout {
     id: String,
-    /// Der Anzeigename. Fehlt er, ist es die Id — ein Plan ohne Namen waere in jeder Liste eine
-    /// leere Zeile, und ein erfundener waere schlimmer.
+    /// The display name; without it, the id.
     #[serde(default)]
     name: Option<String>,
-    /// Die Vorlage, deren Aufstellung uebernommen wird.
-    #[serde(default)]
-    von: Option<String>,
-    /// Schlaegt `von`. Fehlen beide, entsteht ein **leerer** Plan — kein Versehen, sondern der
-    /// Anfang jeder Planung, die von Hand gezogen wird.
+    /// A layout to copy.
+    #[serde(default, alias = "von")]
+    from: Option<String>,
+    /// Beats `from`. Without both the plan is empty, which is how a hand-placed plan starts.
     #[serde(default)]
     items: Option<Vec<crate::model::PlacedItem>>,
-    /// Die erste Zeile des Dateikopfs, und damit die Begruendung. Ohne sie schreibt der Kopf
-    /// das Datum und die API hin, statt eine Herkunft zu behaupten, die niemand hat.
+    /// The first line of the file header. Without it the header names the date and the API.
     #[serde(default)]
-    notiz: Option<String>,
+    note_text: Option<String>,
 }
 
-/// Ein Layout aus der Liste nehmen, ohne es zu verlieren.
-///
-/// `DELETE` heisst hier **archivieren**: die Datei wandert nach `layouts/archiv/` und bleibt
-/// lesbar. Ihr Kopf traegt die Begruendung, aus der ein Moebel verworfen wurde (PRD Q60), und
-/// die wird genau dann gebraucht, wenn dasselbe Moebel wieder zur Debatte steht.
+/// Take a layout off the list without losing it: `DELETE` archives to `layouts/archiv/`, where its
+/// header keeps the reasoning.
 async fn api_delete_layout(
     State(s): State<Arc<AppState>>,
     Path(id): Path<String>,
 ) -> Result<impl IntoResponse, (StatusCode, String)> {
     let model = load(&s)?;
     crate::layout_io::check_id(&id).map_err(|e| (StatusCode::BAD_REQUEST, e.to_string()))?;
-    // Ueber die Namensliste und nicht ueber `load_layout`: die liest die Datei, und ein Layout
-    // mit einem Tippfehler im TOML ist genau eins, das jemand wegraeumen will.
+    // Through the name list, not `load_layout`: a layout with a TOML typo is one someone wants to
+    // clear away.
     if !model.layout_names().map_err(boom)?.iter().any(|n| n == &id) {
-        return Err((StatusCode::NOT_FOUND, format!("kein Layout `{id}`")));
+        return Err((StatusCode::NOT_FOUND, format!("no layout `{id}`")));
     }
     let nach = crate::layout_io::archive_layout(&model, &id)
         .map_err(|e| (StatusCode::CONFLICT, e.to_string()))?;
     Ok(Json(
-        serde_json::json!({ "id": id, "archiviert": nach, "geloescht": false }),
+        serde_json::json!({ "id": id, "archived": nach, "deleted": false }),
     ))
 }
 
-/// Wo die Stuecke in dieser Wohnung WIRKLICH stehen — nicht, was vorgeschlagen ist.
-///
-/// Der Unterschied ist der Grund, aus dem `interior_placement` eine eigene Tabelle ist: ein
-/// Layout ist ein Vorschlag und eine Datei, eine Platzierung ist der Zustand und eine Zeile.
-/// Die Tabelle stand seit B25 leer, weil nichts sie geschrieben hat.
+/// Where the pieces in this flat really stand, as opposed to what is proposed: a layout is a
+/// proposal and a file, a placement is the state and a row.
 async fn api_put_placements(
     State(s): State<Arc<AppState>>,
     Json(body): Json<LayoutBody>,
@@ -938,7 +864,7 @@ async fn api_put_placements(
         .map_err(boom)?;
     }
     Ok(Json(
-        serde_json::json!({ "flat": s.flat, "gesetzt": body.items.len() }),
+        serde_json::json!({ "flat": s.flat, "placed": body.items.len() }),
     ))
 }
 
@@ -961,25 +887,14 @@ pub async fn serve(flat: &str, port: u16) {
     sjel_server::serve_local("interior", port, build_router(state)).await;
 }
 
-/// Der Name dieser Capability, fuer die Umgebungsvariable der Origin-Sperre
-/// (`SJEL_INTERIOR_ALLOWED_ORIGIN_HOSTS`).
+/// Names the origin allowlist variable, `SJEL_INTERIOR_ALLOWED_ORIGIN_HOSTS`.
 const CAPABILITY: &str = "interior";
 
-/// Der verdrahtete Router, damit ein Test das echte Ding fahren kann statt einen Handler.
+/// The wired router, so a test can drive the real thing.
 ///
-/// Diese Capability traegt keine CORS-Schicht, also kann eine fremde Side die Antwort
-/// nicht lesen — und genau das hat eine Luecke verdeckt, die bis 2026-10-05 hier stand:
-/// `POST /api/vault/writeback` nahm keinen Request-Body, war damit eine *einfache* Anfrage
-/// im Sinne von CORS, lief ohne Preflight und schrieb in die Obsidian-Vault. Ob der Browser
-/// die Antwort danach weiterreicht, ist fuer einen Schreibvorgang gleichgueltig; er ist
-/// schon passiert. Diese Route ist mit der Item-Oberflaeche nach `capabilities/inventory`
-/// gezogen — und hat ihre Sperre mitgenommen. Hier bleibt sie, weil jeder Handler dieser
-/// Capability privates liefert: einen fremden Ursprung gar nicht erst bis zum Handler zu
-/// lassen ist die billigere Antwort als eine, die nur keinen Header zurueckschickt.
-///
-/// Die Sperre liegt absichtlich unter allen Routen: axum umhuellt nur die Routen, die VOR
-/// einem `.layer()`-Aufruf registriert wurden (axum 0.7 `src/docs/routing/layer.md`), eine
-/// darunter angehaengte Route verloere sie stillschweigend.
+/// Every handler here serves private data, so a foreign origin is refused before the handler
+/// rather than only denied the response. The lock sits below all routes because axum wraps only
+/// routes registered before `.layer()`.
 fn build_router(state: Arc<AppState>) -> Router {
     Router::new()
         .route("/", get(index))
@@ -999,7 +914,7 @@ fn build_router(state: Arc<AppState>) -> Router {
         .route("/api/placements/preview", post(api_preview_placements))
         .route("/api/placements/allowed", post(api_placements_allowed))
         .route("/api/flats", get(api_flats))
-        .route("/api/media/{*pfad}", get(api_media))
+        .route("/api/media/{*path}", get(api_media))
         .route("/api/roomplan/reference", get(api_roomplan_reference))
         .route("/api/roomplan/asset", get(api_roomplan_asset))
         .route("/api/roomplan/revisions", get(api_roomplan_revisions))
@@ -1008,22 +923,20 @@ fn build_router(state: Arc<AppState>) -> Router {
             post(api_roomplan_review),
         )
         .route("/api/placements/{flat}", get(api_placements))
-        // Die Item-Oberflaeche liegt in `capabilities/inventory` (ISA F13). Hier bleibt
-        // genau eine Item-Route: die Vorschau, was eine Aenderung mit den Verdikten machen
-        // wuerde. Die rechnet gegen Raeumungsregeln und Layouts, also gehoert sie hierher —
-        // und sie schreibt nichts.
+        // The item surface lives in `capabilities/inventory`. One item route stays: the impact preview,
+        // which computes against clearance rules and layouts and writes nothing.
         .route("/api/items/{id}/impact", post(api_item_impact))
         .route("/api/placements/{flat}/{item}", put(api_put_placement))
-        .route("/api/layouts/{name}/toleranz", get(api_tolerance))
-        .route("/api/layouts/{name}/sonne", get(api_sun))
-        .route("/api/layouts/{name}/einbringung", get(api_delivery))
-        .route("/api/passt", get(api_fits))
-        .route("/api/deklaration", get(api_declarations))
-        .route("/api/kaufen", get(api_purchase_order))
+        .route("/api/layouts/{name}/tolerance", get(api_tolerance))
+        .route("/api/layouts/{name}/sun", get(api_sun))
+        .route("/api/layouts/{name}/delivery", get(api_delivery))
+        .route("/api/fits", get(api_fits))
+        .route("/api/declarations", get(api_declarations))
+        .route("/api/purchase-order", get(api_purchase_order))
         .route("/api/search", post(api_search))
         .route("/api/compose", post(api_compose))
-        .route("/api/auftraege/{id}", get(api_job))
-        // NEUE ROUTEN UEBER DIESE ZEILE. Darunter verlieren sie die Origin-Sperre.
+        .route("/api/jobs/{id}", get(api_job))
+        // NEW ROUTES ABOVE THIS LINE. Below it they lose the origin lock.
         .layer(axum::middleware::from_fn_with_state(
             CAPABILITY,
             sjel_server::origin::refuse_foreign_origins,
@@ -1033,29 +946,21 @@ fn build_router(state: Arc<AppState>) -> Router {
 
 #[cfg(test)]
 mod route_manifest_tests {
-    /// Ein Katalog, der luegt, wird geglaubt. Das hier liest den Router aus seinem eigenen
-    /// Quelltext, also faellt ein `.route()` ohne Zusammenfassung hier um, statt eine
-    /// Oberflaeche auszuliefern, die sich selbst falsch beschreibt.
+    /// Reads the router from its own source, so a `.route()` without a summary fails here.
     #[test]
     fn the_catalogue_names_every_served_route() {
         let missing = route_manifest::undeclared_routes(include_str!("api.rs"), super::ROUTES);
         assert!(
             missing.is_empty(),
-            "ausgeliefert, aber nicht beschrieben: {missing:?}"
+            "served but not described: {missing:?}"
         );
     }
 }
 
-/// Der Beweis auf Router-Ebene, den die Praedikat-Tests in `libs/sjel-server` nicht fuehren
-/// koennen: eine Route UNTER dem `.layer()`-Aufruf besteht jeden Test von
-/// `origin_allowed_by` und antwortet einer fremden Side trotzdem.
-///
-/// `tower::ServiceExt::oneshot` statt eines Loopback-Listeners, damit der Test weder einen
-/// Port noch einen HTTP-Client braucht.
-///
-/// `/routes` ist die Gegenprobe und nicht `/api/inventory`: jeder Datenhandler hier oeffnet
-/// die SQLite-Datei der Installation, und das darf ein Test nicht. Die Zurueckweisung wird
-/// auf den Datenrouten geprueft, wo die Sperre vor dem Handler antwortet und nichts oeffnet.
+/// Router-level proof the predicate tests in `libs/sjel-server` cannot give: a route below
+/// `.layer()` passes every `origin_allowed_by` test and still answers a foreign page. Uses
+/// `oneshot`, no port. `/routes` is the counter-check, since data handlers open the installation's
+/// database, which a test must not.
 #[cfg(test)]
 mod origin_tests {
     use super::*;
@@ -1063,42 +968,40 @@ mod origin_tests {
     use axum::http::Request;
     use tower::ServiceExt;
 
-    async fn answer(methode: &str, pfad: &str, origin: Option<&str>) -> StatusCode {
-        let mut anfrage = Request::builder().method(methode).uri(pfad);
+    async fn answer(http_method: &str, media_path: &str, origin: Option<&str>) -> StatusCode {
+        let mut req = Request::builder().method(http_method).uri(media_path);
         if let Some(origin) = origin {
-            anfrage = anfrage.header("origin", origin);
+            req = req.header("origin", origin);
         }
         build_router(Arc::new(AppState {
             flat: "flat".to_string(),
             database: sjel_config::database_path(),
         }))
-        .oneshot(anfrage.body(Body::empty()).unwrap())
+        .oneshot(req.body(Body::empty()).unwrap())
         .await
-        .expect("der Router antwortet")
+        .expect("the router answers")
         .status()
     }
 
-    /// Jeder Datenhandler hier liefert privates — einen Grundriss, private Fotos, die
-    /// Verdikte einer Wohnung. Genau deshalb weist die Sperre die Anfrage zurueck, statt nur
-    /// einen Antwort-Header wegzulassen.
+    /// Every data handler serves private data, so the lock refuses the request outright.
     #[tokio::test]
     async fn a_foreign_page_reaches_no_data_handler() {
-        for (methode, pfad) in [
+        for (http_method, media_path) in [
             ("GET", "/api/model"),
             ("GET", "/api/layouts"),
-            ("GET", "/api/deklaration"),
+            ("GET", "/api/declarations"),
             ("POST", "/api/search"),
             ("POST", "/api/items/schrank/impact"),
         ] {
             assert_eq!(
-                answer(methode, pfad, Some("https://evil.example")).await,
+                answer(http_method, media_path, Some("https://evil.example")).await,
                 StatusCode::FORBIDDEN,
-                "{methode} {pfad} hat einer fremden Herkunft geantwortet — die Route steht unter der Sperre"
+                "{http_method} {media_path} answered a foreign origin; the route is behind the lock"
             );
         }
     }
 
-    /// Die andere Haelfte. 200 von `/routes` heisst: ein Handler hat geantwortet.
+    /// The other half: 200 from `/routes` means a handler answered.
     #[tokio::test]
     async fn the_dashboard_and_a_non_browser_caller_reach_the_handler() {
         for origin in [
@@ -1109,7 +1012,7 @@ mod origin_tests {
             assert_eq!(
                 answer("GET", "/routes", origin).await,
                 StatusCode::OK,
-                "die Sperre hat einen Aufrufer zurueckgewiesen, den sie zulassen muss: {origin:?}"
+                "the lock refused a caller it has to admit: {origin:?}"
             );
         }
     }
@@ -1120,170 +1023,129 @@ mod tests {
     use super::{Jobs, JobState, JOBS_MAX};
     use serde_json::json;
 
-    /// Zehn Auftraege anlegen und die jungen davon fertig melden.
+    /// Create ten jobs and mark the younger ones done.
     fn full_map(run: u64) -> Jobs {
         let mut a = Jobs::default();
         for _ in 0..JOBS_MAX {
-            a.anlegen().expect("unter der Grenze");
+            a.start().expect("below the limit");
         }
         for id in run..JOBS_MAX as u64 {
-            a.stand.get_mut(&id).expect("gerade angelegt").1 = JobState::Done {
+            a.by_id.get_mut(&id).expect("just created").1 = JobState::Done {
                 outcome: json!(null),
             };
         }
         a
     }
 
-    /// Verdraengt wird der aelteste FERTIGE, nicht der aelteste.
-    ///
-    /// Bis 2026-08-31 warf `anlegen` blind den ersten Schluessel weg. Traf es einen, der noch
-    /// rechnete, schrieb sein Hintergrundfaden das Ergebnis in eine Nummer, die es nicht mehr
-    /// gab — und der Abholer bekam 404 auf eine Suche, die Minuten gelaufen war.
+    /// Evicted is the oldest done job, not the oldest: a running job's thread would write into a
+    /// number that no longer exists.
     #[test]
     fn a_running_job_is_not_evicted() {
         let mut a = full_map(1);
-        let neu = a.anlegen().expect("neun fertige machen Platz");
-        assert!(a.stand.contains_key(&0), "der laufende steht noch da");
+        let created = a.start().expect("neun fertige machen Platz");
+        assert!(a.by_id.contains_key(&0), "the running one is still there");
         assert!(
-            !a.stand.contains_key(&1),
-            "der aelteste fertige ist gewichen"
+            !a.by_id.contains_key(&1),
+            "the oldest done one gave way"
         );
-        assert!(a.stand.contains_key(&neu));
-        assert_eq!(a.stand.len(), JOBS_MAX);
+        assert!(a.by_id.contains_key(&created));
+        assert_eq!(a.by_id.len(), JOBS_MAX);
     }
 
-    /// Rechnen alle zehn, ist die Absage die einzige ehrliche Antwort.
+    /// With all ten running, refusing is the only honest answer.
     #[test]
     fn a_map_full_of_running_jobs_refuses() {
         let mut a = full_map(JOBS_MAX as u64);
-        let reason = a.anlegen().expect_err("es gibt nichts zu verdraengen");
-        assert!(reason.contains("rechnen bereits"), "{reason}");
-        assert_eq!(a.stand.len(), JOBS_MAX, "und keiner ist verschwunden");
-        assert!((0..JOBS_MAX as u64).all(|id| a.stand.contains_key(&id)));
+        let reason = a.start().expect_err("there is nothing to evict");
+        assert!(reason.contains("already running"), "{reason}");
+        assert_eq!(a.by_id.len(), JOBS_MAX, "and none disappeared");
+        assert!((0..JOBS_MAX as u64).all(|id| a.by_id.contains_key(&id)));
     }
 
-    /// Eine einzige Panik unter der Sperre beendete bis hierher die drei Wege, die
-    /// die Karte anfassen: `expect("Auftragskarte")` auf einem vergifteten Schloss
-    /// ist die zweite Panik, und `map_err(boom)` im Abholer waere 500 fuer die
-    /// Lebensdauer des Prozesses gewesen.
-    ///
-    /// Das vergiftet die echte prozessweite Karte mit Absicht. Dass jeder andere
-    /// Test in dieser Binaerdatei danach weiterlaeuft, ist die Zusage unter den
-    /// ausgeschriebenen.
+    /// One panic under the lock used to end every path touching the map. This poisons the real
+    /// process-wide map on purpose; every other test in this binary still running afterwards is the
+    /// promise.
     #[test]
     fn a_poisoned_job_map_still_creates_and_reads() {
         let poison = std::thread::spawn(|| {
             let _lock = super::jobs();
-            panic!("jemand ist mit der Auftragskarte in der Hand gestuerzt");
+            panic!("someone crashed holding the job map");
         })
         .join();
-        assert!(poison.is_err(), "der Hilfsfaden muss wirklich stuerzen");
+        assert!(poison.is_err(), "the helper thread must really crash");
 
         let id = super::jobs()
-            .anlegen()
-            .expect("die Karte legt weiter an");
+            .start()
+            .expect("the map still creates");
         assert!(
-            super::jobs().stand.contains_key(&id),
-            "eine erholte Sperre muss den Eintrag noch zeigen"
+            super::jobs().by_id.contains_key(&id),
+            "a recovered lock must still show the entry"
         );
     }
 }
 
-// ---------------------------------------------------------------- lange Rechnungen
+// ---------------------------------------------------------------- long computations
 
-/// Was aus einer Suche geworden ist.
+/// What became of a search.
 ///
-/// **Warum das ueberhaupt eine eigene Form braucht.** `search` prueft die Kandidaten
-/// erschoepfend — 3,5 Millionen in rund hundert Sekunden (PRD §13.1). Eine HTTP-Anfrage, die
-/// hundert Sekunden offen steht, ist keine Anfrage mehr, sondern eine Wette auf jeden Proxy
-/// und jedes Zeitlimit dazwischen. Bis 2026-08-31 gab es die Suche deshalb nur auf der
-/// Kommandozeile: die teuerste Rechnung dieser Capability war von der Oberflaeche aus, die sie
-/// braucht, nicht erreichbar.
-///
-/// Der Auftrag ist die Antwort darauf, und er ist absichtlich das kleinste, was funktioniert:
-/// eine Nummer, ein Zustand, ein Ergebnis. Keine Warteschlange, keine Wiederaufnahme, keine
-/// Tabelle. Er lebt im Prozess und stirbt mit ihm — was richtig ist, weil sein Ergebnis eine
-/// Liste von Vorschlaegen ist und keine Tatsache ueber die Wohnung. Wer den Vorschlag behalten
-/// will, schreibt ihn als Layout.
+/// `search` is exhaustive, 3.5 million candidates in about a hundred seconds, too long for one
+/// HTTP request. A job is the smallest thing that works: a number, a state, a result, living in
+/// the process and dying with it. Its result is proposals, not facts about the flat; whoever wants
+/// one keeps it as a layout.
 #[derive(Debug, Clone, Serialize)]
-#[serde(tag = "zustand", rename_all = "snake_case")]
+#[serde(tag = "state", rename_all = "snake_case")]
 pub enum JobState {
-    Running { seit_ms: u128 },
+    Running { since_ms: u128 },
     Done { outcome: serde_json::Value },
     Failed { reason: String },
 }
 
 #[derive(Default)]
 struct Jobs {
-    nearest: u64,
-    stand: std::collections::BTreeMap<u64, (std::time::Instant, JobState)>,
+    next_id: u64,
+    by_id: std::collections::BTreeMap<u64, (std::time::Instant, JobState)>,
 }
 
-/// Wie viele fertige Auftraege aufgehoben werden.
-///
-/// Ohne Grenze waechst die Karte mit jeder Suche, und ein Prozess, der wochenlang laeuft,
-/// haelt jedes Ergebnis fest, das je jemand angesehen hat. Zehn, weil die Oberflaeche das
-/// letzte abholt und die davor nur noch Verlauf sind.
+/// How many finished jobs are kept: ten, since the dashboard fetches the latest.
 const JOBS_MAX: usize = 10;
 
 impl Jobs {
-    /// Platz schaffen und die naechste Nummer ziehen — oder ablehnen.
-    ///
-    /// Verdraengt wird nur, was schon fertig ist. Ein laufender Auftrag hat seinen Schreiber
-    /// noch im Hintergrund: verschwindet der Eintrag, schreibt der in nichts, und der Abholer
-    /// bekommt 404 auf eine Rechnung, die minutenlang lief. Sind alle zehn belegt, ist die
-    /// ehrliche Antwort eine Absage und keine stillschweigend verlorene Suche.
-    fn anlegen(&mut self) -> Result<u64, String> {
-        while self.stand.len() >= JOBS_MAX {
-            // Die Schluessel steigen, also ist der erste verdraengbare auch der aelteste.
+    /// Make room and take the next number, or refuse. Only finished jobs are evicted.
+    fn start(&mut self) -> Result<u64, String> {
+        while self.by_id.len() >= JOBS_MAX {
+            // Keys ascend, so the first evictable one is also the oldest.
             let Some(alt) = self
-                .stand
+                .by_id
                 .iter()
                 .find(|(_, (_, s))| !matches!(s, JobState::Running { .. }))
                 .map(|(id, _)| *id)
             else {
                 return Err(format!(
-                    "{JOBS_MAX} Auftraege rechnen bereits — warte, bis einer fertig ist"
+                    "{JOBS_MAX} jobs are already running; wait until one is done"
                 ));
             };
-            self.stand.remove(&alt);
+            self.by_id.remove(&alt);
         }
-        let id = self.nearest;
-        self.nearest += 1;
-        self.stand.insert(
+        let id = self.next_id;
+        self.next_id += 1;
+        self.by_id.insert(
             id,
             (
                 std::time::Instant::now(),
-                JobState::Running { seit_ms: 0 },
+                JobState::Running { since_ms: 0 },
             ),
         );
         Ok(id)
     }
 }
 
-/// Die Auftragskarte, gesperrt, mit einem vergifteten Schloss erholt statt weitergereicht.
+/// The job map, locked, recovering from a poisoned lock instead of propagating it.
 ///
-/// Sie gibt die Sperre zurueck und nicht den `Mutex`: drei Aufrufstellen schrieben je eine
-/// eigene Behandlung — zweimal `expect("Auftragskarte")`, einmal `map_err(boom)` — und eine
-/// Entscheidung, die an jeder Aufrufstelle wiederholt wird, faellt an der vierten anders aus.
-/// Jetzt sperrt nur diese Stelle, also muss auch nur diese Stelle stimmen.
-///
-/// **Erholen, nicht toedlich.** Vergiftet ist das Schloss, wenn jemand mit der Sperre in der
-/// Hand in Panik geraten ist. Unter der Sperre liegt nichts Dauerhaftes: `Auftraege` ist eine
-/// `BTreeMap` von Nummern auf Zustaende im Prozess, sicheres Rust kann sie nicht halb
-/// beschrieben hinterlassen, und der schlechteste Fall ist ein Eintrag, der `Laeuft` sagt,
-/// waehrend sein Faden weg ist — genau der Zustand, den `anlegen` schon kennt und nicht
-/// verdraengt.
-///
-/// Die Kosten der Gegenrichtung sind das Argument. Ein `expect` auf ein vergiftetes Schloss
-/// ist eine zweite Panik, also wuerden `POST /api/search`, `POST /api/compose` und
-/// `GET /api/auftraege/{id}` fuer die Lebensdauer des Prozesses umfallen, weil irgendwann
-/// einmal jemand mit der Sperre gestuerzt ist — und das Ergebnis einer Suche, die Minuten
-/// gelaufen ist, waere unerreichbar. Dieselbe Wahl trifft
-/// `capabilities/scouting/src/config.rs`' `env_lock` mit derselben Begruendung.
-///
-/// Was das ausdruecklich NICHT tut: die erste Panik verstecken. Die laeuft weiter auf, landet
-/// in der Standardfehlerausgabe des Runners und bleibt das, was man liest.
+/// One place locks, so one place must be right. Nothing durable lies under the lock: a map of
+/// numbers to in-process states, which safe Rust cannot leave half-written. The worst case is an
+/// entry saying `Running` whose thread is gone, which `start` already does not evict. Panicking
+/// instead would take search, compose and job lookups down for the life of the process. The first
+/// panic still reaches stderr.
 fn jobs() -> std::sync::MutexGuard<'static, Jobs> {
     static A: std::sync::OnceLock<std::sync::Mutex<Jobs>> = std::sync::OnceLock::new();
     A.get_or_init(|| std::sync::Mutex::new(Jobs::default()))
@@ -1291,23 +1153,20 @@ fn jobs() -> std::sync::MutexGuard<'static, Jobs> {
         .unwrap_or_else(|poisoned| poisoned.into_inner())
 }
 
-/// Eine Rechnung im Hintergrund starten und sofort ihre Nummer zurueckgeben.
-///
-/// `spawn_blocking`, weil `search` und `compose` rayon benutzen und minutenlang rechnen: auf
-/// einem async-Thread wuerde das jede andere Anfrage dieses Prozesses anhalten. Dieselbe
-/// Begruendung, aus der `punctuality` und `finance` ihre schweren Wege dorthin legen (PRD B20).
+/// Start a computation in the background and return its number at once. `spawn_blocking`,
+/// because `search` and `compose` use rayon for minutes.
 fn in_the_background<F>(f: F) -> Result<u64, (StatusCode, String)>
 where
     F: FnOnce() -> Result<serde_json::Value, String> + Send + 'static,
 {
     let id = jobs()
-        .anlegen()
+        .start()
         .map_err(|e| (StatusCode::SERVICE_UNAVAILABLE, e))?;
     tokio::task::spawn_blocking(move || {
         let outcome = f();
         let mut a = jobs();
-        if let Some((_, stand)) = a.stand.get_mut(&id) {
-            *stand = match outcome {
+        if let Some((_, by_id)) = a.by_id.get_mut(&id) {
+            *by_id = match outcome {
                 Ok(v) => JobState::Done { outcome: v },
                 Err(e) => JobState::Failed { reason: e },
             };
@@ -1318,19 +1177,18 @@ where
 
 async fn api_job(Path(id): Path<u64>) -> Result<impl IntoResponse, (StatusCode, String)> {
     let a = jobs();
-    let (start, stand) = a
-        .stand
+    let (start, by_id) = a
+        .by_id
         .get(&id)
-        .ok_or((StatusCode::NOT_FOUND, format!("kein Auftrag {id}")))?;
-    // Die Laufzeit wird beim Lesen gerechnet und nicht fortgeschrieben: ein Auftrag, der sie
-    // selbst zaehlen muesste, braeuchte einen zweiten Faden fuer nichts.
-    let stand = match stand {
+        .ok_or((StatusCode::NOT_FOUND, format!("no job {id}")))?;
+    // Elapsed time is computed on read, not tracked.
+    let by_id = match by_id {
         JobState::Running { .. } => JobState::Running {
-            seit_ms: start.elapsed().as_millis(),
+            since_ms: start.elapsed().as_millis(),
         },
         done => done.clone(),
     };
-    Ok(Json(serde_json::json!({ "id": id, "stand": stand })))
+    Ok(Json(serde_json::json!({ "id": id, "state": by_id })))
 }
 
 #[derive(serde::Deserialize)]
@@ -1347,42 +1205,41 @@ struct SearchRequest {
 fn raster_standard() -> i32 {
     20
 }
-/// Dieselbe Zahl wie `--limit` auf der Kommandozeile (`main.rs`, `cmd_search`). Ohne sie stand
-/// hier `usize::default()`, und die Null heisst in `search::search` *unbegrenzt*: dieselbe
-/// Anfrage lieferte auf der Oberflaeche Tausende Treffer und im Terminal sechs.
+/// The same number as `--limit` on the command line (`main.rs`, `cmd_search`); 0 would mean
+/// unlimited.
 fn search_limit() -> usize {
     6
 }
 
-/// Eine Suche anstossen. Antwortet mit der Auftragsnummer, nicht mit dem Ergebnis.
+/// Start a search; answers with the job number, not the result.
 async fn api_search(
     State(s): State<Arc<AppState>>,
-    Json(anfrage): Json<SearchRequest>,
+    Json(req): Json<SearchRequest>,
 ) -> Result<impl IntoResponse, (StatusCode, String)> {
-    if anfrage.move_refs.is_empty() {
+    if req.move_refs.is_empty() {
         return Err((
             StatusCode::BAD_REQUEST,
-            "`move_refs` ist leer — ohne bewegliche Moebel gibt es nichts zu suchen".into(),
+            "`move_refs` is empty; without movable pieces there is nothing to search".into(),
         ));
     }
     let flat = s.flat.clone();
     let id = in_the_background(move || {
         let model = Model::load(&flat).map_err(|e| e.to_string())?;
         let base = model
-            .load_layout(&anfrage.layout)
+            .load_layout(&req.layout)
             .map_err(|e| e.to_string())?;
         let spec = crate::search::Spec {
-            move_refs: anfrage.move_refs,
-            step: anfrage.step,
+            move_refs: req.move_refs,
+            step: req.step,
             bands: Default::default(),
-            limit: anfrage.limit,
+            limit: req.limit,
         };
         let rep = crate::search::search(&model, &base, &spec).map_err(|e| e.to_string())?;
         serde_json::to_value(rep).map_err(|e| e.to_string())
     })?;
     Ok((
         StatusCode::ACCEPTED,
-        Json(serde_json::json!({ "auftrag": id })),
+        Json(serde_json::json!({ "job": id })),
     ))
 }
 
@@ -1405,7 +1262,7 @@ fn compose_raster() -> i32 {
 fn compose_beam() -> usize {
     60
 }
-/// Dieselbe Zahl wie `--limit` auf der Kommandozeile (`main.rs`, `cmd_compose`).
+/// The same number as `--limit` on the command line (`main.rs`, `cmd_compose`).
 fn compose_limit() -> usize {
     5
 }
@@ -1413,37 +1270,37 @@ fn compose_rotations() -> Vec<i32> {
     vec![0, 90]
 }
 
-/// Eine ganze Wohnung stellen lassen. Ebenfalls ein Auftrag: die Strahlsuche rechnet Minuten.
+/// Furnish a whole flat. Also a job: the beam search takes minutes.
 async fn api_compose(
     State(s): State<Arc<AppState>>,
-    Json(anfrage): Json<ComposeRequest>,
+    Json(req): Json<ComposeRequest>,
 ) -> Result<impl IntoResponse, (StatusCode, String)> {
-    if anfrage.refs.is_empty() {
+    if req.refs.is_empty() {
         return Err((
             StatusCode::BAD_REQUEST,
-            "`refs` ist leer — ohne Stuecke gibt es nichts zu stellen".into(),
+            "`refs` is empty; without pieces there is nothing to place".into(),
         ));
     }
     let flat = s.flat.clone();
     let id = in_the_background(move || {
         let model = Model::load(&flat).map_err(|e| e.to_string())?;
         let spec = crate::search::ComposeSpec {
-            refs: anfrage.refs,
-            step: anfrage.step,
-            beam: anfrage.beam,
-            rotations: anfrage.rotations,
-            limit: anfrage.limit,
+            refs: req.refs,
+            step: req.step,
+            beam: req.beam,
+            rotations: req.rotations,
+            limit: req.limit,
         };
         let out = crate::search::compose(&model, &spec).map_err(|e| e.to_string())?;
         serde_json::to_value(out).map_err(|e| e.to_string())
     })?;
     Ok((
         StatusCode::ACCEPTED,
-        Json(serde_json::json!({ "auftrag": id })),
+        Json(serde_json::json!({ "job": id })),
     ))
 }
 
-// ---------------------------------------------------------------- die neuen Auskuenfte
+// ---------------------------------------------------------------- reports
 
 async fn api_tolerance(
     State(s): State<Arc<AppState>>,
@@ -1478,14 +1335,16 @@ async fn api_delivery(
 
 #[derive(serde::Deserialize)]
 struct PieceSize {
-    b: i32,
-    t: i32,
+    #[serde(alias = "b")]
+    width: i32,
+    #[serde(alias = "t")]
+    depth: i32,
     #[serde(default)]
     #[serde(alias = "zerlegbar")]
     disassembles: bool,
 }
 
-/// Passt ein gedachtes Stueck durch die Tuer? Die Frage VOR dem Kauf.
+/// Does an imagined piece fit through the door? The question before buying.
 async fn api_fits(
     State(s): State<Arc<AppState>>,
     axum::extract::Query(q): axum::extract::Query<PieceSize>,
@@ -1493,8 +1352,8 @@ async fn api_fits(
     let model = load(&s)?;
     Ok(Json(crate::delivery::through_the_door(
         &model,
-        q.b,
-        q.t,
+        q.width,
+        q.depth,
         q.disassembles,
     )))
 }

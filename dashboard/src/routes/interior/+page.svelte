@@ -28,11 +28,11 @@
     type InteriorImpact,
     type InteriorPlacedItem,
     type InteriorAllowed,
-    type InteriorRobustheit,
-    type InteriorSonne,
-    type InteriorEinbringung,
-    type InteriorDeklaration,
-    type InteriorKaufreihenfolge,
+    type InteriorRobustness,
+    type InteriorSun,
+    type InteriorDelivery,
+    type InteriorDeclaration,
+    type InteriorPurchaseOrder,
     type InteriorSearchReport,
     type InteriorComposed,
     type InteriorModel,
@@ -74,13 +74,13 @@
    * Loaded beside the layout rather than with it: each is a separate endpoint and a separate
    * cost, and a plan that will not draw until the sun is computed would be a worse plan.
    */
-  let robust = $state<InteriorRobustheit | null>(null);
-  let sun = $state<InteriorSonne | null>(null);
+  let robust = $state<InteriorRobustness | null>(null);
+  let sun = $state<InteriorSun | null>(null);
   let sunError = $state<string | null>(null);
-  let moveIn = $state<InteriorEinbringung[]>([]);
+  let moveIn = $state<InteriorDelivery[]>([]);
 
-  let declarations = $state<InteriorDeklaration[]>([]);
-  let order = $state<InteriorKaufreihenfolge | null>(null);
+  let declarations = $state<InteriorDeclaration[]>([]);
+  let order = $state<InteriorPurchaseOrder | null>(null);
 
   /** A hypothetical piece, measured against the entrance before anyone buys it. */
   let probeB = $state(120);
@@ -118,9 +118,9 @@
   /**
    * The as-is layer has no layout file, so the selector needs a name for it — and a name no real
    * id can collide with. The leading underscores make it an illegal file name, which is the point:
-   * `layouts/__ist-zustand__.toml` cannot exist, so this entry can never shadow a real plan.
+   * `layouts/__as-is__.toml` cannot exist, so this entry can never shadow a real plan.
    */
-  const ASIS = "__ist-zustand__";
+  const ASIS = "__as-is__";
   let asisItems = $state<InteriorPlacedItem[]>([]);
   const inAsis = $derived(selected === ASIS);
   let planError = $state<string | null>(null);
@@ -440,7 +440,7 @@
       await interior.createLayout({
         id,
         items: itemsFromPlan(planRoot),
-        notiz: `Am ${stamp} in der Oberflaeche gestellt, ausgehend von ${selected ?? "einem leeren Plan"}.`,
+        note: `Placed in the dashboard on ${stamp}, starting from ${selected ?? "an empty plan"}.`,
       });
       saveAs = "";
       dirty = false;
@@ -487,7 +487,7 @@
       // `von` copies server-side: the page has no business rebuilding an arrangement it
       // already asked for once. An empty plan sends neither, and the capability writes a
       // header saying the date and that the API made it — not a provenance it does not have.
-      await interior.createLayout({ id, von: newCopy && selected ? selected : undefined });
+      await interior.createLayout({ id, from: newCopy && selected ? selected : undefined });
       newId = "";
       planNew = false;
       dirty = false;
@@ -513,7 +513,7 @@
     planError = null;
     try {
       const r = await interior.archiveLayout(selected);
-      planError = `Moved to ${r.archiviert}. Nothing was deleted.`;
+      planError = `Moved to ${r.archived}. Nothing was deleted.`;
       archiveArmed = null;
       selected = null;
       detail = null;
@@ -533,7 +533,7 @@
     planError = null;
     try {
       const r = await interior.savePlacements(itemsFromPlan(planRoot));
-      planError = `Recorded ${r.gesetzt} pieces as actually placed.`;
+      planError = `Recorded ${r.placed} pieces as actually placed.`;
     } catch (caught) {
       planError = caught instanceof Error ? caught.message : String(caught);
     } finally {
@@ -631,49 +631,49 @@
     // Beside the plan, not before it. Each answers its own question and each may fail on its
     // own — a flat without `[lage]` has no sun report and still has a layout.
     void interior
-      .toleranz(id)
+      .tolerance(id)
       .then((r) => (robust = r))
       .catch(() => (robust = null));
     void interior
-      .einbringung(id)
+      .delivery(id)
       .then((r) => (moveIn = r))
       .catch(() => (moveIn = []));
     void interior
-      .sonne(id)
+      .sun(id)
       .then((r) => (sun = r))
       .catch((e) => (sunError = e instanceof Error ? e.message : String(e)));
   }
 
   /** How much error the verdict survives, in one sentence. */
-  const holdsUpTo = (r: InteriorRobustheit): string => {
-    switch (r.haelt.art) {
-      case "faellt_durch":
+  const holdsUpTo = (r: InteriorRobustness): string => {
+    switch (r.holds.kind) {
+      case "fails":
         return "fails already at the measurements on file";
-      case "nichts_geraten":
+      case "nothing_guessed":
         return "no measurement in this layout is marked as a guess";
-      case "bis":
-        return `holds up to ${r.haelt.cm} cm of measurement error`;
-      case "ueber_horizont":
-        return `holds past ${r.haelt.horizont_cm} cm — further was not searched`;
+      case "up_to":
+        return `holds up to ${r.holds.cm} cm of measurement error`;
+      case "beyond_horizon":
+        return `holds past ${r.holds.horizon_cm} cm — further was not searched`;
     }
   };
 
-  const doorLine = (e: InteriorEinbringung): string => {
-    switch (e.tuer.art) {
-      case "passt":
-        return `through the ${e.tuer.tuer_cm} cm door, ${e.tuer.luft_cm} cm to spare`;
-      case "passt_nicht":
-        return `does NOT fit the ${e.tuer.tuer_cm} cm door — ${e.tuer.fehlen_cm} cm too wide`;
-      case "zerlegt_getragen":
-        return `${e.tuer.fehlen_cm} cm wider than the ${e.tuer.tuer_cm} cm door, carried in parts`;
-      case "kein_eingang":
+  const doorLine = (e: InteriorDelivery): string => {
+    switch (e.door.kind) {
+      case "fits":
+        return `through the ${e.door.door_cm} cm door, ${e.door.air_cm} cm to spare`;
+      case "does_not_fit":
+        return `does NOT fit the ${e.door.door_cm} cm door — ${e.door.missing_cm} cm too wide`;
+      case "carried_apart":
+        return `${e.door.missing_cm} cm wider than the ${e.door.door_cm} cm door, carried in parts`;
+      case "no_entrance":
         return "no opening is declared as the entrance";
     }
   };
 
   async function loadDeclarations(): Promise<void> {
     try {
-      declarations = await interior.deklaration();
+      declarations = await interior.declarations();
     } catch (caught) {
       error = caught instanceof Error ? caught.message : String(caught);
     }
@@ -681,7 +681,7 @@
 
   async function loadOrder(): Promise<void> {
     try {
-      order = await interior.kaufen();
+      order = await interior.purchaseOrder();
     } catch (caught) {
       error = caught instanceof Error ? caught.message : String(caught);
     }
@@ -690,14 +690,14 @@
   async function probeDoor(): Promise<void> {
     probeAnswer = null;
     try {
-      const t = await interior.passt(probeB, probeT, probeZerlegbar);
+      const t = await interior.fits(probeB, probeT, probeZerlegbar);
       probeAnswer = doorLine({
         reference: "",
-        b: probeB,
-        t: probeT,
-        tuer: t,
-        erreichbar: false,
-        dreht: false,
+        width: probeB,
+        depth: probeT,
+        door: t,
+        affordable: false,
+        rotates: false,
       });
     } catch (caught) {
       probeAnswer = caught instanceof Error ? caught.message : String(caught);
@@ -715,9 +715,9 @@
   async function awaitJob<T>(id: number): Promise<T> {
     const started = Date.now();
     for (;;) {
-      const { stand } = await interior.auftrag(id);
-      if (stand.zustand === "fertig") return stand.ergebnis as T;
-      if (stand.zustand === "gescheitert") throw new Error(stand.grund);
+      const { state } = await interior.job(id);
+      if (state.state === "done") return state.outcome as T;
+      if (state.state === "failed") throw new Error(state.reason);
       solverElapsed = Math.round((Date.now() - started) / 1000);
       await new Promise((r) => setTimeout(r, 1000));
     }
@@ -730,8 +730,8 @@
     searchResult = null;
     composeResult = null;
     try {
-      const { auftrag } = await interior.search(selected, moveRefs, step, 12);
-      searchResult = await awaitJob<InteriorSearchReport>(auftrag);
+      const { job } = await interior.search(selected, moveRefs, step, 12);
+      searchResult = await awaitJob<InteriorSearchReport>(job);
     } catch (caught) {
       solverError = caught instanceof Error ? caught.message : String(caught);
     } finally {
@@ -746,8 +746,8 @@
     searchResult = null;
     composeResult = null;
     try {
-      const { auftrag } = await interior.compose(composeRefs, 25, 60, 5);
-      composeResult = await awaitJob<InteriorComposed[]>(auftrag);
+      const { job } = await interior.compose(composeRefs, 25, 60, 5);
+      composeResult = await awaitJob<InteriorComposed[]>(job);
     } catch (caught) {
       solverError = caught instanceof Error ? caught.message : String(caught);
     } finally {
@@ -948,7 +948,7 @@
             <span class="mono id">{selected}</span>
             {#if room}
               <span class="of">
-                {room.flat.name} · {room.masse.b} × {room.masse.t} cm ·
+                {room.flat.name} · {room.dimensions.width} × {room.dimensions.depth} cm ·
                 {room.area_m2.toFixed(1)} m²
               </span>
             {/if}
@@ -1043,15 +1043,15 @@
             By how much, not whether. Two layouts that both report `pass` can have 2 cm and
             40 cm of air, and until 2026-08-31 they were the same word in every report.
           -->
-          {#if detail.check.engste_reserve_cm !== null}
-            <p class="reserve" class:tight={detail.check.engste_reserve_cm < 10}>
-              <strong class="mono">{detail.check.engste_reserve_cm} cm</strong>
-              {detail.check.engste_reserve_cm < 0
+          {#if detail.check.tightest_reserve_cm !== null}
+            <p class="reserve" class:tight={detail.check.tightest_reserve_cm < 10}>
+              <strong class="mono">{detail.check.tightest_reserve_cm} cm</strong>
+              {detail.check.tightest_reserve_cm < 0
                 ? "short at its tightest hard rule"
                 : "is all the room the tightest hard rule has left"}
               {#if robust}<span class="holds">· {holdsUpTo(robust)}</span>{/if}
-              {#if robust && robust.kippt_an.length > 0}
-                <span class="holds">· breaks first at {robust.kippt_an.join(", ")}</span>
+              {#if robust && robust.tips_at.length > 0}
+                <span class="holds">· breaks first at {robust.tips_at.join(", ")}</span>
               {/if}
             </p>
           {/if}
@@ -1101,11 +1101,11 @@
             "passes" means "passes the rules that were checked", and this is the difference
             between the two. It was invisible until 2026-08-31.
           -->
-          {#if detail.check.nicht_geprueft.length > 0}
+          {#if detail.check.unchecked.length > 0}
             <p class="unchecked">
               <Icon name="alert" size={14} />
               Not measured here:
-              {detail.check.nicht_geprueft.map((r) => `${r.rule} (${r.grund})`).join(" · ")}
+              {detail.check.unchecked.map((r) => `${r.rule} (${r.reason})`).join(" · ")}
             </p>
           {/if}
           <!--
@@ -1113,10 +1113,10 @@
             answers no question that is still open — and one of the failing layouts fails on
             exactly such a piece.
           -->
-          {#if detail.check.veraltet.length > 0}
+          {#if detail.check.outdated.length > 0}
             <p class="unchecked">
               <Icon name="alert" size={14} />
-              Places furniture already rejected: {detail.check.veraltet.join(", ")} — this
+              Places furniture already rejected: {detail.check.outdated.join(", ")} — this
               verdict is about a plan you have moved on from.
             </p>
           {/if}
@@ -1132,21 +1132,21 @@
             Every measurement, including the ones that passed. The table is the difference
             between "this layout works" and "this layout works, and here is where it is thin".
           -->
-          {#if detail.check.reserven.length > 0}
+          {#if detail.check.reserves.length > 0}
             <details class="reserves">
-              <summary>Every measurement, passed or not ({detail.check.reserven.length})</summary>
+              <summary>Every measurement, passed or not ({detail.check.reserves.length})</summary>
               <table class="corridors">
                 <tbody>
-                  {#each detail.check.reserven as r, i (r.rule + i)}
-                    <tr class:tight={r.hart && r.bindend && r.slack < 10}>
+                  {#each detail.check.reserves as r, i (r.rule + i)}
+                    <tr class:tight={r.hard && r.binding && r.slack < 10}>
                       <th scope="row">
-                        {r.rule}{#if r.item}<span class="of"> · {r.item}</span>{/if}{#if r.bezug}<span class="of"> · {r.bezug}</span>{/if}
+                        {r.rule}{#if r.item}<span class="of"> · {r.item}</span>{/if}{#if r.subject}<span class="of"> · {r.subject}</span>{/if}
                       </th>
                       <td class="mono">
-                        {r.measured}/{r.required} {r.einheit}
+                        {r.measured}/{r.required} {r.unit}
                       </td>
                       <td class="mono slack" class:neg={r.slack < 0}>
-                        {r.gedeckelt ? "≥ " : ""}{r.slack > 0 ? "+" : ""}{r.slack}
+                        {r.capped ? "≥ " : ""}{r.slack > 0 ? "+" : ""}{r.slack}
                       </td>
                     </tr>
                   {/each}
@@ -1161,18 +1161,18 @@
             "passes" — computed right, wrong question.
           -->
           {#if moveIn.length > 0}
-            <details class="reserves" open={moveIn.some((e) => e.tuer.art === "passt_nicht" || !e.erreichbar)}>
+            <details class="reserves" open={moveIn.some((e) => e.door.kind === "does_not_fit" || !e.affordable)}>
               <summary>Getting it in ({moveIn.length})</summary>
               <ul class="movein">
                 {#each moveIn as e (e.reference)}
-                  <li class:bad={e.tuer.art === "passt_nicht" || !e.erreichbar}>
+                  <li class:bad={e.door.kind === "does_not_fit" || !e.affordable}>
                     <span class="mono">{e.reference}</span>
-                    <span class="dims mono">{e.b}×{e.t}</span>
+                    <span class="dims mono">{e.width}×{e.depth}</span>
                     <span>{doorLine(e)}</span>
                     <span class="way">
-                      {e.erreichbar
-                        ? `route free${e.dreht ? ", with a turn" : ""}`
-                        : (e.grund ?? "no way to its place")}
+                      {e.affordable
+                        ? `route free${e.rotates ? ", with a turn" : ""}`
+                        : (e.reason ?? "no way to its place")}
                     </span>
                   </li>
                 {/each}
@@ -1189,16 +1189,16 @@
               <summary>Sun over the year</summary>
               <table class="sun mono">
                 <tbody>
-                  {#each [...new Set(sun.stunden.map((s) => s.tag))] as tag (tag)}
+                  {#each [...new Set(sun.hours.map((s) => s.day))] as tag (tag)}
                     <tr>
                       <th scope="row">{tag}</th>
-                      {#each sun.stunden.filter((s) => s.tag === tag) as h (h.stunde_lokal)}
+                      {#each sun.hours.filter((s) => s.day === tag) as h (h.hour_local)}
                         <td
-                          class:night={h.hoehe_grad <= 0}
-                          class:hit={h.getroffen.length > 0}
-                          use:tip={`${h.stunde_lokal}:00 · ${h.hoehe_grad.toFixed(0)}° up, ${h.azimut_grad.toFixed(0)}° · ${h.getroffen.join(", ") || "nothing in the sun"}`}
+                          class:night={h.altitude_deg <= 0}
+                          class:hit={h.hit.length > 0}
+                          use:tip={`${h.hour_local}:00 · ${h.altitude_deg.toFixed(0)}° up, ${h.azimuth_deg.toFixed(0)}° · ${h.hit.join(", ") || "nothing in the sun"}`}
                         >
-                          {h.hoehe_grad <= 0 ? "·" : h.getroffen.length || "–"}
+                          {h.altitude_deg <= 0 ? "·" : h.hit.length || "–"}
                         </td>
                       {/each}
                     </tr>
@@ -1206,13 +1206,13 @@
                 </tbody>
               </table>
               <ul class="sunlist">
-                {#each Object.entries(sun.treffer_je_stueck) as [ref, n] (ref)}
+                {#each Object.entries(sun.hits_per_piece) as [ref, n] (ref)}
                   <li><span class="mono">{ref}</span> {n} hours in direct sun</li>
                 {/each}
               </ul>
-              {#if sun.ohne_glashoehen.length > 0}
+              {#if sun.without_glass_heights.length > 0}
                 <p class="note">
-                  No glazing heights on file for {sun.ohne_glashoehen.join(", ")} — those
+                  No glazing heights on file for {sun.without_glass_heights.join(", ")} — those
                   windows throw no light here, and they should.
                 </p>
               {/if}
@@ -1299,8 +1299,8 @@
           {#each searchResult.hits as h, i (i)}
             <tr>
               <th scope="row">{h.pareto ? "★" : ""} {Object.entries(h.places).map(([k, p]) => `${k} ${p[0]},${p[1]}`).join(" · ")}</th>
-              <td class="mono">{h.engste_reserve_cm ?? "—"} cm spare</td>
-              <td class="mono">{h.wandkontakt_cm} cm wall</td>
+              <td class="mono">{h.tightest_reserve_cm ?? "—"} cm spare</td>
+              <td class="mono">{h.wall_contact_cm} cm wall</td>
               <td class="mono">{h.bottleneck_cm} cm walk</td>
               <td class="mono">{h.soft} soft</td>
             </tr>
@@ -1320,7 +1320,7 @@
             <span class="verdict" class:pass={c.pass}>{c.pass ? "passes" : "fails"}</span>
           </h3>
           <p class="mono">
-            {c.engste_reserve_cm ?? "—"} cm spare · {c.wandkontakt_cm} cm wall ·
+            {c.tightest_reserve_cm ?? "—"} cm spare · {c.wall_contact_cm} cm wall ·
             {c.bottleneck_cm} cm walk · {c.free_m2.toFixed(2)} m² free
           </p>
           {#if c.hard.length > 0}<p class="note">hard: {c.hard.join(", ")}</p>{/if}
@@ -1359,20 +1359,20 @@
       </p>
       <table class="corridors">
         <tbody>
-          {#each order.posten as p, i (p.id)}
+          {#each order.lines as p, i (p.id)}
             <tr>
               <th scope="row">{i + 1}. {p.label}</th>
-              <td class="mono">{p.prioritaet ?? "—"}</td>
-              <td class="mono">{euro(p.preis_cent ?? 0)}</td>
-              <td class="mono">{euro(p.kumuliert_cent)}</td>
+              <td class="mono">{p.priority ?? "—"}</td>
+              <td class="mono">{euro(p.price_cents ?? 0)}</td>
+              <td class="mono">{euro(p.cumulative_cents)}</td>
               <!--
                 Two reasons for no month count, and they must not read the same: "no balance"
                 is a missing measurement, "the balance is not positive" is an answer.
               -->
               <td class="mono">
-                {p.erreichbar_nach_monaten !== null
-                  ? `${p.erreichbar_nach_monaten.toFixed(1)} months`
-                  : order.saldo
+                {p.affordable_after_months !== null
+                  ? `${p.affordable_after_months.toFixed(1)} months`
+                  : order.balance
                     ? "not out of this balance"
                     : "no balance measured"}
               </td>
@@ -1380,24 +1380,24 @@
           {/each}
         </tbody>
       </table>
-      {#if order.ohne_preis.length > 0}
+      {#if order.unpriced.length > 0}
         <p class="unchecked">
           <Icon name="alert" size={14} />
-          {order.ohne_preis.length} needs carry no price and stand in no order:
-          {order.ohne_preis.map((p) => p.label).join(", ")} — the move here is a price, not a
+          {order.unpriced.length} needs carry no price and stand in no order:
+          {order.unpriced.map((p) => p.label).join(", ")} — the move here is a price, not a
           purchase.
         </p>
       {/if}
-      {#if order.unbekannte_prioritaeten.length > 0}
+      {#if order.unknown_priorities.length > 0}
         <p class="unchecked">
           <Icon name="alert" size={14} />
           Priority words this ranking does not know, sorted last:
-          {order.unbekannte_prioritaeten.join(", ")}
+          {order.unknown_priorities.join(", ")}
         </p>
       {/if}
-      {#if order.saldo && order.saldo.median_cent <= 0}
+      {#if order.balance && order.balance.median_cents <= 0}
         <p class="note">
-          Median monthly balance {euro(order.saldo.median_cent)} over {order.saldo.monate}
+          Median monthly balance {euro(order.balance.median_cents)} over {order.balance.months}
           months — nothing accrues out of that, so there is no month count.
         </p>
       {/if}
@@ -1408,7 +1408,7 @@
     <section class="card">
       <h2>
         Still judged by name
-        <span class="count">{declarations.filter((d) => !d.erklaert).length}</span>
+        <span class="count">{declarations.filter((d) => !d.declared).length}</span>
       </h2>
       <p class="note">
         The engine has been cleverer than its data since 2026-08-31. Each line below is what the
@@ -1416,16 +1416,16 @@
         accepting it would change.
       </p>
       <ul class="declarations">
-        {#each declarations.filter((d) => !d.erklaert && d.vorschlag) as d (d.id)}
+        {#each declarations.filter((d) => !d.declared && d.proposal) as d (d.id)}
           <li>
             <span class="mono">{d.id}</span>
-            <span class="of">read as {d.geraten_als}, in {d.in_layouts.length} layouts</span>
-            <pre class="mono">{d.vorschlag?.toml}</pre>
-            {#if d.folgen}
-              <span class="holds" class:tight={d.folgen.geaendert.length > 0}>
-                {d.folgen.geaendert.length === 0
+            <span class="of">read as {d.guessed_as}, in {d.in_layouts.length} layouts</span>
+            <pre class="mono">{d.proposal?.toml}</pre>
+            {#if d.consequences}
+              <span class="holds" class:tight={d.consequences.changed.length > 0}>
+                {d.consequences.changed.length === 0
                   ? "changes no verdict"
-                  : `changes ${d.folgen.geaendert.join(", ")}`}
+                  : `changes ${d.consequences.changed.join(", ")}`}
               </span>
             {/if}
           </li>

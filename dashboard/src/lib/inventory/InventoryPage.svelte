@@ -718,20 +718,20 @@
       out by hand. The capability re-checks every layout here; the page only prints the answer.
     -->
     {#if impact}
-      <div class="impact" bind:this={impactEl} class:worse={impact.bestanden_nachher < impact.bestanden_vorher}>
+      <div class="impact" bind:this={impactEl} class:worse={impact.passing_after < impact.passing_before}>
         <strong>
-          {impact.bestanden_vorher} → {impact.bestanden_nachher} of {impact.layouts} layouts pass
+          {impact.passing_before} → {impact.passing_after} of {impact.layouts} layouts pass
         </strong>
-        {#if impact.geaendert.length === 0}
+        {#if impact.changed.length === 0}
           <p>No verdict moves. Safe to save.</p>
         {:else}
           <ul>
-            {#each impact.geaendert as g (g.layout)}
+            {#each impact.changed as g (g.layout)}
               <li>
                 <span class="mono">{g.layout}</span>
-                {g.vorher.pass ? "passes" : "fails"} → {g.nachher.pass ? "passes" : "fails"}
-                {#if g.nachher.hard.length > 0}
-                  <span class="mono rules">{g.nachher.hard.join(", ")}</span>
+                {g.before.pass ? "passes" : "fails"} → {g.after.pass ? "passes" : "fails"}
+                {#if g.after.hard.length > 0}
+                  <span class="mono rules">{g.after.hard.join(", ")}</span>
                 {/if}
               </li>
             {/each}

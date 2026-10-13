@@ -55,7 +55,7 @@ pub struct PurchaseLine {
 
 #[derive(Debug, Clone, serde::Serialize)]
 pub struct PurchaseOrder {
-    pub posten: Vec<PurchaseLine>,
+    pub lines: Vec<PurchaseLine>,
     /// Needs without any price. Not in the order: at zero they would rank first.
     pub unpriced: Vec<PurchaseLine>,
     pub balance: Option<MonthlyBalance>,
@@ -96,7 +96,7 @@ pub fn purchase_order(
             }
         }
         let price = i.price_cents.or(i.cost_min_cents);
-        let posten = PurchaseLine {
+        let line = PurchaseLine {
             id: i.id.clone(),
             label: i.label.clone(),
             priority: i.priority.clone(),
@@ -106,9 +106,9 @@ pub fn purchase_order(
             affordable_after_months: None,
         };
         if price.is_some() {
-            priced.push(posten);
+            priced.push(line);
         } else {
-            unpriced.push(posten);
+            unpriced.push(line);
         }
     }
 
@@ -135,7 +135,7 @@ pub fn purchase_order(
     }
 
     Ok(PurchaseOrder {
-        posten: priced,
+        lines: priced,
         unpriced,
         balance,
         unknown_priorities: unknown.into_iter().collect(),

@@ -1,54 +1,32 @@
-//! Was in einer RoomPlan-Aufnahme steckt, und was daran gegen das Bandmass spricht.
+//! What a RoomPlan capture holds, and how it compares with the tape measure.
 //!
-//! Bis 2026-09-26 stand in der Sitzungsnotiz, Wand-, Tuer- und Fenstermasse seien „noch
-//! ungelesen", weil der semantische `CapturedRoom`-Entwurf (`roomplan-capture/v1`) den Mac nie
-//! erreicht hat. Das war falsch. In der rohen USDZ steht alles, was dafuer gebraucht wird: jede
-//! `WallN.usda` traegt einen lokalen Rahmen in Metern plus eine `matrix4d xformOp:transform`,
-//! und die `Door*`- und `Window*`-Dateien tragen denselben. Was der Entwurf vom Telefon
-//! zusaetzlich liefert, ist Apples eigenes Vertrauen je Objekt — das steht in der USDZ nicht.
+//! The raw USDZ carries everything needed: each `WallN.usda` has a local frame in metres plus a
+//! `matrix4d xformOp:transform`, and the `Door*` and `Window*` files carry the same. What the
+//! phone's semantic draft adds is Apple's per-object confidence, which the USDZ lacks.
 //!
-//! # Meter, und warum sie genau hier stehen duerfen
+//! Metres are allowed here, as the one exception to `model.rs`: the target format
+//! `roomplan-capture/v1` names its fields `dimensions_m` and its units `"meters"`. Conversion
+//! happens at one boundary, in [`Diff`], where the scan meets `room.toml`.
 //!
-//! `model.rs` sagt: „Meter kommen in diesem Programm nirgends vor." Das gilt weiter, und dieses
-//! Modul ist die eine Ausnahme mit Begruendung: das Zielformat ist `roomplan-capture/v1`, dessen
-//! Felder `dimensions_m` heissen und dessen `coordinate_system.units` `"meters"` ist. Eine
-//! Aufnahme in Zentimeter umzuschreiben hiesse, das Schema zu brechen und die Zahl zu verwerfen,
-//! die Apple geschrieben hat. Umgerechnet wird an genau einer Grenze, in [`Diff`] — dort, wo der
-//! Scan gegen `room.toml` gehalten wird, und nirgends sonst.
+//! No decompressor: Apple stores USDZ entries with method 0 (`Stored`; all 28 entries checked
+//! 2026-09-26). An entry with any other method is an error, not a silently wrong answer.
 //!
-//! # Kein Entpacker
+//! What the capture does not give:
+//! - Confidence. Every element goes into the draft as `"low"`; a scan is evidence, not a
+//!   measurement.
+//! - Room membership. `CapturedRoom.usda` lists room groups with centres but no members, so no
+//!   element can be assigned to a room.
+//! - Wall thickness as a measurement. All walls carry the same value, a model constant, so it
+//!   stays out of the comparison; [`Scan::wall_thickness_m`] only shows it.
 //!
-//! Eine USDZ ist ein ZIP, und Apple schreibt ihre Eintraege mit Verfahren 0 (`Stored`, am
-//! 2026-09-26 an allen 28 Eintraegen nachgesehen). Die Datei liegt damit ohne Dekomprimierer vor,
-//! und dieses Modul nimmt keinen auf. Ein Eintrag mit einem anderen Verfahren ist ein **Fehler
-//! und keine stille Fehlantwort** — dieselbe Regel, die `room.toml` fuer unbenannte Routen
-//! fuehrt: was aussieht wie ein Ergebnis und keines ist, ist schlimmer als eine Fehlermeldung.
-//!
-//! # Was die Aufnahme nicht hergibt
-//!
-//! - **Vertrauen.** Die USDZ traegt kein `confidence` je Element. Jedes Element geht deshalb als
-//!   `"low"` in den Entwurf. Das ist keine Vorsicht und keine Verzierung: die Beobachtung daneben
-//!   sagt `"source_contract": "raw RoomPlan USDZ preserved; USDA is inspection evidence only"`,
-//!   und ein Scan ist nach der Regel dieses Projekts ein Beleg und keine Messung.
-//! - **Raumzugehoerigkeit.** `CapturedRoom.usda` fuehrt unter `Section_grp` die Raumgruppen mit
-//!   ihren Mittelpunkten und **keine Mitgliedschaft**: die Maschen haengen unter `Mesh_grp` und
-//!   nicht unter den Gruppen. Ein Element laesst sich daher keinem Raum zuordnen — und genau
-//!   deshalb laesst sich auch die im Scan fehlende Badtuer keinem Raum zuschreiben.
-//! - **Wandstaerke als Messung.** Alle Waende tragen dieselbe Staerke. Ein Wert, der sich nicht
-//!   unterscheidet, ist eine Konstante des Modells und keine Messung; die Staerke geht deshalb
-//!   nicht in den Vergleich ein, und [`Scan::wandstaerke_m`] gibt sie nur zur Ansicht heraus.
-//!
-//! # Es wird nichts zurueckgeschrieben
-//!
-//! [`Diff`] ist ein Bericht. Weder `room.toml` noch die Tabellen noch eine Platzierung werden von
-//! diesem Modul angefasst. Der Entwurf geht auf Wunsch als `draft.json` neben die Aufnahme, wo
-//! `/api/roomplan/revisions` ihn schon erwartet, und die Entscheidung darueber faellt im Review.
+//! Nothing is written back. [`Diff`] is a report; the draft can go next to the capture as
+//! `draft.json`, where `/api/roomplan/revisions` expects it, and the decision falls in review.
 
 use crate::model::{Model, Room};
 use std::collections::BTreeMap;
 use std::path::{Path, PathBuf};
 
-/// Verfahren 0 im ZIP. Alles andere kann dieses Modul nicht und sagt das.
+/// ZIP method 0. Anything else this module cannot read, and says so.
 const METHOD_STORED: u16 = 0;
 
 #[derive(Debug, thiserror::Error)]
@@ -58,57 +36,53 @@ pub enum ScanError {
         path: PathBuf,
         source: std::io::Error,
     },
-    #[error("{path} ist kein lesbares ZIP: {detail}")]
+    #[error("{path} is not a readable ZIP: {detail}")]
     NotZip { path: PathBuf, detail: String },
     #[error(
-        "{path}: `{name}` liegt mit Verfahren {method} vor — dieses Modul entpackt nicht, \
-         und ein halb gelesener Scan waere schlimmer als kein Scan"
+        "{path}: `{name}` uses method {method}; this module does not decompress, \
+         and a half-read scan is worse than none"
     )]
     Compressed {
         path: PathBuf,
         name: String,
         method: u16,
     },
-    #[error("{path}: `{name}` fehlt im Archiv")]
+    #[error("{path}: `{name}` is missing from the archive")]
     Missing { path: PathBuf, name: String },
-    #[error("{path}: `{name}` ist kein lesbares USDA: {detail}")]
+    #[error("{path}: `{name}` is not readable USDA: {detail}")]
     Form {
         path: PathBuf,
         name: String,
         detail: String,
     },
-    #[error("kein Aufnahmeverzeichnis: {0}")]
+    #[error("no capture directory: {0}")]
     NoCapture(String),
     #[error("{0}")]
     Assets(String),
 }
 
-/// Ein Element aus der Aufnahme, in der Form, die `roomplan-capture/v1` verlangt.
+/// One element of the capture, in the shape `roomplan-capture/v1` requires.
 #[derive(Debug, Clone, PartialEq)]
 pub struct Element {
-    /// Der Dateiname ohne Endung, also `Wall0`, `Door1`, `Bed0`.
+    /// The file name without extension: `Wall0`, `Door1`, `Bed0`.
     pub id: String,
-    /// Apples Kategorie, woertlich: `Wall`, `Door(Isopen: False)`, `Window`, `Bed`, `Storage` …
+    /// Apple's category, verbatim: `Wall`, `Door(Isopen: False)`, `Window`, `Bed`, `Storage`, …
     pub category: String,
-    /// Ausdehnung im lokalen Rahmen, in Metern. Fuer Waende und Objekte ist `y` die Hoehe; die
-    /// Bodenplatte ist die Ausnahme, dort ist `z` die Staerke.
+    /// Extent in the local frame, in metres. For walls and objects `y` is the height; the floor
+    /// plate is the exception, where `z` is the thickness.
     pub dimensions_m: [f64; 3],
-    /// 16 Zahlen in der Reihenfolge, in der `dashboard/src/lib/roomplan.ts` sie liest: die
-    /// Verschiebung steht in `[12..15]`.
-    ///
-    /// USD schreibt zeilenweise mit der Verschiebung in der vierten Zeile, und das ist dieselbe
-    /// Reihenfolge. [`transform`] begruendet, warum hier **nicht** transponiert wird.
+    /// 16 numbers in the order `dashboard/src/lib/roomplan.ts` reads them: the translation is at
+    /// `[12..15]`. USD writes rows with the translation in the fourth row, the same order; [`transform`]
+    /// explains why nothing is transposed.
     pub transform: [f64; 16],
-    /// Immer `"low"`: die USDZ traegt kein Vertrauen, siehe Modulkopf.
+    /// Always `"low"`: the USDZ carries no confidence.
     pub confidence: &'static str,
-    /// Die native UUID aus `customData`. Die Aufnahme meldet `native_identifiers_present: true`,
-    /// und das ist das Feld, das damit gemeint ist.
+    /// The native UUID from `customData`; the capture reports `native_identifiers_present: true`.
     pub source_id: String,
 }
 
 impl Element {
-    /// Wohin das Element in der Aufnahme steht, in Metern. Aus derselben Spalte, die der Client
-    /// liest.
+    /// Where the element stands in the capture, in metres, from the column the client reads.
     pub fn position_m(&self) -> [f64; 3] {
         [self.transform[12], self.transform[13], self.transform[14]]
     }
@@ -117,8 +91,7 @@ impl Element {
         matches!(self.category.as_str(), "Wall" | "Floor")
     }
 
-    /// Apples Kategorie traegt bei Tueren den Zustand mit (`Door(Isopen: False)`), deshalb wird
-    /// auf den Anfang geprueft und nicht auf Gleichheit.
+    /// Apple's door category carries the state (`Door(Isopen: False)`), so the prefix is checked.
     pub fn is_opening(&self) -> bool {
         self.category.starts_with("Door")
             || self.category.starts_with("Window")
@@ -129,28 +102,26 @@ impl Element {
         self.category.starts_with("Door") || self.category.starts_with("Opening")
     }
 
-    /// Alles, was weder Flaeche noch Oeffnung ist: Moebelstuecke und Geraete.
+    /// Everything that is neither surface nor opening: furniture and appliances.
     pub fn is_object(&self) -> bool {
         !self.is_surface() && !self.is_opening()
     }
 }
 
-/// Eine gelesene Aufnahme.
+/// A read capture.
 #[derive(Debug, Clone, PartialEq, Default)]
 pub struct Scan {
     pub elements: Vec<Element>,
-    /// Wann das Archiv geschrieben wurde, aus dem ZIP-Zeitstempel — nicht „jetzt". Der Scan
-    /// datiert sich selbst, und ein Entwurf, der das Datum des Lesens traegt, verliert genau die
-    /// Angabe, die ueber seine Gueltigkeit entscheidet.
+    /// When the archive was written, from the ZIP timestamp, not now: the scan dates itself.
     pub capture_finished_at: Option<String>,
-    /// Anzahl der Eintraege unter `assets/Mesh/`.
+    /// Number of entries under `assets/Mesh/`.
     pub mesh_assets: usize,
-    /// Wie viele Raumgruppen `CapturedRoom.usda` fuehrt, ohne Mitgliedschaft.
+    /// How many room groups `CapturedRoom.usda` lists, without members.
     pub room_groups: usize,
     pub sha256: String,
     pub byte_length: usize,
-    /// Der USDA-Text der Bodenplatte. Die Zusammenfassung traegt nur Spannen, und die Flaeche
-    /// einer L-Form steht nicht in ihrer Spanne.
+    /// The floor plate's USDA text: the summary has only spans, and an L-shape's area is not its
+    /// span.
     pub boden_usda: Option<String>,
 }
 
@@ -173,38 +144,32 @@ impl Scan {
         out
     }
 
-    fn uniform(&self, axis: usize, kategorie: &str) -> Option<f64> {
-        let werte: Vec<f64> = self
+    fn uniform(&self, axis: usize, wanted_category: &str) -> Option<f64> {
+        let values: Vec<f64> = self
             .surfaces()
-            .filter(|e| e.category == kategorie)
+            .filter(|e| e.category == wanted_category)
             .map(|e| e.dimensions_m[axis])
             .collect();
-        let erste = *werte.first()?;
-        // Ein Mikrometer und nicht Gleichheit: die Maschenausgabe traegt Werte wie -0,15999998
-        // neben 0,16, und ein Gleichheitsvergleich erklaert elf einheitliche Waende plus eine
-        // gerundete fuer uneinig. Ein Mikrometer liegt weit unter allem, was dieses Programm in
-        // Zentimetern ausdruecken kann.
-        if werte.iter().all(|w| (w - erste).abs() < 1e-6) {
-            Some(erste)
+        let first_value = *values.first()?;
+        // A micrometre, not equality: mesh output carries values like -0.15999998 next to 0.16.
+        if values.iter().all(|w| (w - first_value).abs() < 1e-6) {
+            Some(first_value)
         } else {
             None
         }
     }
 
-    /// Die Hoehe, die **jede** Wand traegt, in Metern.
-    ///
-    /// `None`, wenn sich die Waende widersprechen. Ein einzelner Wert aus einem widerspruechigen
-    /// Scan waere die Zahl, die am Ende niemand mehr nachpruefen kann.
+    /// The height every wall carries, in metres; `None` when the walls disagree.
     pub fn wall_height_m(&self) -> Option<f64> {
         self.uniform(1, "Wall")
     }
 
-    /// Die Wandstaerke in Metern, wenn alle Waende dieselbe tragen, sonst `None`.
+    /// The wall thickness in metres when all walls agree, else `None`.
     pub fn wall_thickness_m(&self) -> Option<f64> {
         self.uniform(2, "Wall")
     }
 
-    /// Flaeche der oberen Bodenseite in Quadratmetern.
+    /// Area of the floor's upper side in square metres.
     pub fn floor_area_m2(&self) -> Option<f64> {
         top_area_m2(self.boden_usda.as_deref()?)
     }
@@ -219,12 +184,8 @@ fn u32_at(b: &[u8], i: usize) -> u32 {
     u32::from_le_bytes([b[i], b[i + 1], b[i + 2], b[i + 3]])
 }
 
-/// Der Zeitstempel eines ZIP-Eintrags als ISO-8601 ohne Zonenangabe.
-///
-/// ZIP fuehrt MS-DOS-Zeit: zwei Sekunden Aufloesung, Jahre ab 1980, kein Zeitzonenfeld. Was hier
-/// herauskommt, ist die Uhrzeit des aufnehmenden Geraets und **nicht** als UTC ausgewiesen — das
-/// Feld existiert im Archiv nicht, und eine Zone zu erfinden waere eine Genauigkeit, die die
-/// Quelle nicht hat.
+/// A ZIP entry's timestamp as ISO 8601 without a zone. ZIP stores MS-DOS time, the capturing
+/// device's clock with no zone field, so none is invented.
 fn dos_time(datum: u16, time: u16) -> Option<String> {
     let year = 1980 + ((datum >> 9) & 0x7f) as i64;
     let month = ((datum >> 5) & 0x0f) as u32;
@@ -246,28 +207,25 @@ struct Entry<'a> {
     time: Option<String>,
 }
 
-/// Liest die Eintraege eines ZIP, sofern sie alle gespeichert sind.
-///
-/// Gelesen wird das zentrale Verzeichnis und nicht der erste lokale Kopf: nur dort stehen die
-/// Groessen verlaesslich. Ein lokaler Kopf darf sie als null fuehren und die Zahlen in einem
-/// Datenbeschreiber hinter den Nutzdaten nachreichen, und ein Leser, der das annimmt, liest
-/// stillschweigend zu kurz.
+/// Reads a ZIP's entries, provided all are stored. Reads the central directory, not the first
+/// local header: only there are sizes reliable, since a local header may defer them to a data
+/// descriptor.
 fn zip_entries<'a>(bytes: &'a [u8], path: &Path) -> Result<Vec<Entry<'a>>, ScanError> {
     let not_zip = |detail: &str| ScanError::NotZip {
         path: path.to_path_buf(),
         detail: detail.to_string(),
     };
-    // Das EOCD steht am Ende, hinter einem Kommentar von hoechstens 65535 Bytes.
+    // The EOCD sits at the end, behind a comment of at most 65535 bytes.
     let search_from = bytes.len().saturating_sub(65_557);
     let eocd = (search_from..bytes.len().saturating_sub(3))
         .rev()
         .find(|&i| u32_at(bytes, i) == 0x0605_4b50)
-        .ok_or_else(|| not_zip("kein End-of-Central-Directory gefunden"))?;
-    let anzahl = u16_at(bytes, eocd + 10) as usize;
+        .ok_or_else(|| not_zip("no end-of-central-directory found"))?;
+    let entry_count = u16_at(bytes, eocd + 10) as usize;
     let mut pos = u32_at(bytes, eocd + 16) as usize;
 
-    let mut out = Vec::with_capacity(anzahl);
-    for _ in 0..anzahl {
+    let mut out = Vec::with_capacity(entry_count);
+    for _ in 0..entry_count {
         if pos + 46 > bytes.len() || u32_at(bytes, pos) != 0x0201_4b50 {
             return Err(not_zip("zentrales Verzeichnis endet vorzeitig"));
         }
@@ -292,16 +250,16 @@ fn zip_entries<'a>(bytes: &'a [u8], path: &Path) -> Result<Vec<Entry<'a>>, ScanE
                 method,
             });
         }
-        // Der lokale Kopf traegt eigene Namens- und Extra-Laengen, und sie duerfen von den
-        // Werten im zentralen Verzeichnis abweichen.
+        // The local header carries its own name and extra lengths, which may differ from the central
+        // directory's.
         if local + 30 > bytes.len() || u32_at(bytes, local) != 0x0403_4b50 {
-            return Err(not_zip("lokaler Kopf fehlt"));
+            return Err(not_zip("local header missing"));
         }
         let l_name = u16_at(bytes, local + 26) as usize;
         let l_extra = u16_at(bytes, local + 28) as usize;
         let start = local + 30 + l_name + l_extra;
         if start + size > bytes.len() {
-            return Err(not_zip("Eintrag reicht ueber das Archiv hinaus"));
+            return Err(not_zip("entry reaches past the archive"));
         }
         out.push(Entry {
             name,
@@ -314,10 +272,8 @@ fn zip_entries<'a>(bytes: &'a [u8], path: &Path) -> Result<Vec<Entry<'a>>, ScanE
 
 // ------------------------------------------------------------------ USDA
 
-/// Alle `(a, b, c)`-Tripel aus einem Feld wie `point3f[] points = [ … ]`.
-///
-/// Gesucht wird der Feldname und danach die **erste** oeffnende Klammer. Beim Feldnamen
-/// `point3f[] points` liegt das `[]` noch davor, das erste `[` nach ihm ist also die echte Liste.
+/// Every `(a, b, c)` triple of a field like `point3f[] points = [ … ]`. The field name already
+/// contains `[]`, so the first `[` after it is the real list.
 fn tripel(text: &str, field: &str) -> Option<Vec<[f64; 3]>> {
     let start = text.find(field)? + field.len();
     let rest = &text[start..];
@@ -337,10 +293,8 @@ fn tripel(text: &str, field: &str) -> Option<Vec<[f64; 3]>> {
     Some(out)
 }
 
-/// Eine Liste ganzer Zahlen aus `int[] NAME = [ … ]`.
-///
-/// Der Feldname darf das `[]` nicht enthalten, sonst findet `find('[')` die Klammer des Typs und
-/// liefert eine leere Liste — still, und damit sieht jede Flaeche danach wie null aus.
+/// A list of integers from `int[] NAME = [ … ]`. The name must not include `[]`, or `find('[')`
+/// hits the type's bracket and silently returns an empty list.
 fn numbers(text: &str, field: &str) -> Option<Vec<usize>> {
     let start = text.find(field)? + field.len();
     let rest = &text[start..];
@@ -354,7 +308,7 @@ fn numbers(text: &str, field: &str) -> Option<Vec<usize>> {
     )
 }
 
-/// Ein `string NAME = "…"` aus dem Kopf einer USDA.
+/// A `string NAME = "…"` from a USDA header.
 fn string(text: &str, field: &str) -> Option<String> {
     let start = text.find(field)? + field.len();
     let rest = &text[start..];
@@ -363,26 +317,16 @@ fn string(text: &str, field: &str) -> Option<String> {
     Some(rest[onto..zu].to_string())
 }
 
-/// Die `matrix4d xformOp:transform`, **ohne** Umsetzung.
-///
-/// Das sieht nach einem vergessenen Rechenschritt aus und ist genau richtig. Der Client liest die
-/// Verschiebung aus `transform[12..15]`; USD schreibt sie in die vierte **Zeile** eines
-/// zeilenweise abgelegten Feldes, und die liegt bei 12 bis 15. Beides faellt zusammen, weil USD
-/// den Punkt als Zeilenvektor fuehrt (`p' = p · M`) und das Client-Format als Spaltenvektor
-/// (`p' = M · p`): die beiden Fassungen sind Transponierte voneinander, und die Transponierung
-/// schiebt die Verschiebung in der einen in die vierte Zeile und in der anderen in die vierte
-/// Spalte — dieselben vier Indizes.
-///
-/// Wer hier transponiert, schiebt jedes Element nach (0, 0, 0). Das ist nicht nur falsch, es
-/// sieht auch plausibel aus: die Aufnahme hat dann eben einen Schwerpunkt im Ursprung, und
-/// nichts meldet es. Ein erster Anlauf dieses Moduls tat genau das, und
-/// `die_verschiebung_landet_in_der_vierten_spalte` hat es gefangen.
+/// The `matrix4d xformOp:transform`, without transposing, on purpose. The client reads the
+/// translation from `transform[12..15]`; USD stores it in the fourth row of a row-major array, at
+/// the same indices, because USD uses row vectors (`p' = p · M`) and the client column vectors
+/// (`p' = M · p`). Transposing would move every element to (0, 0, 0) and look plausible;
+/// `the_translation_lands_in_the_fourth_column` catches it.
 fn transform(text: &str) -> Option<[f64; 16]> {
     let start = text.find("matrix4d xformOp:transform")?;
     let rest = &text[start..];
     let onto = rest.find('(')? + 1;
-    // Die Matrix steht in vier Klammergruppen; die fuenfte Klammer schliesst das Feld. Gesucht
-    // werden die Gruppen, nicht das erste `)`.
+    // The matrix is four bracket groups; a fifth bracket closes the field.
     let mut lines = Vec::new();
     for line in rest[onto..].split('(').skip(1) {
         let end = line.find(')')?;
@@ -409,11 +353,8 @@ fn transform(text: &str) -> Option<[f64; 16]> {
     Some(out)
 }
 
-/// Ein einzelnes `…/Wall0.usda` in ein Element.
-///
-/// Die Ausdehnung kommt aus der Spanne der Punkte im **lokalen** Rahmen: das ist die Groesse, die
-/// das Element vor seiner Verschiebung hat, und damit die einzige, die unveraendert bleibt, wenn
-/// dieselbe Aufnahme spaeter anders ausgerichtet wird.
+/// One `…/Wall0.usda` as an element. The extent is the span of the points in the local frame,
+/// the size before translation, which stays fixed if the capture is later reoriented.
 pub fn parse_usda(name: &str, text: &str) -> Option<Element> {
     let points = tripel(text, "point3f[] points")?;
     if points.is_empty() {
@@ -447,14 +388,10 @@ pub fn parse_usda(name: &str, text: &str) -> Option<Element> {
     })
 }
 
-/// Die Flaeche der **oberen** Side eines flachen Koerpers, aus seinen Dreiecken.
-///
-/// Nicht `x * y`: die Bodenplatte ist eine L-Form, und ihr Rahmen misst die Huelle, nicht die
-/// Flaeche. Ebenso wenig aus einem Ring ihrer Randpunkte — der Boden traegt 28 Facetten, davon 6
-/// nach oben, 6 nach unten und 16 als Kante (nachgesehen am 2026-09-26 an der echten Aufnahme;
-/// ein Ring aus acht Randpunkten ergab 32,99 statt 31,57 m², weil die L-Form dabei zu ihrer
-/// Huelle wird). Gerechnet wird deshalb ueber genau die Dreiecke, deren Normale im lokalen Rahmen
-/// nach oben zeigt: bei der Bodenplatte ist das die lokale z-Achse, weil sie flach liegt.
+/// Area of a flat body's upper side, from its triangles. Not `x * y`: the floor is an L-shape,
+/// and its frame measures the hull. Summed over the triangles whose local normal points up (+z for
+/// the flat floor plate); checked 2026-09-26 against the real capture, where a ring of edge points
+/// gave 32.99 instead of 31.57 m².
 pub fn top_area_m2(text: &str) -> Option<f64> {
     let points = tripel(text, "point3f[] points")?;
     let normals = tripel(text, "normal3f[] normals")?;
@@ -493,8 +430,7 @@ pub fn top_area_m2(text: &str) -> Option<f64> {
     Some(total)
 }
 
-/// Eine USDZ lesen. Bekommt den Pfad, nicht den Inhalt: die Aufnahme ist gross und bleibt liegen,
-/// wo sie liegt.
+/// Reads a USDZ from its path; the capture is large and stays where it is.
 pub fn read_usdz(path: &Path) -> Result<Scan, ScanError> {
     let bytes = std::fs::read(path).map_err(|source| ScanError::Read {
         path: path.to_path_buf(),
@@ -522,12 +458,12 @@ pub fn read_usdz(path: &Path) -> Result<Scan, ScanError> {
         let text = std::str::from_utf8(e.data).map_err(|err| ScanError::Form {
             path: path.to_path_buf(),
             name: e.name.clone(),
-            detail: format!("kein UTF-8: {err}"),
+            detail: format!("not UTF-8: {err}"),
         })?;
         let element = parse_usda(&e.name, text).ok_or_else(|| ScanError::Form {
             path: path.to_path_buf(),
             name: e.name.clone(),
-            detail: "Punkte, Normale oder Transform fehlen".to_string(),
+            detail: "points, normals or transform missing".to_string(),
         })?;
         if element.category == "Floor" {
             boden_usda = Some(text.to_string());
@@ -545,10 +481,9 @@ pub fn read_usdz(path: &Path) -> Result<Scan, ScanError> {
     let header_text = std::str::from_utf8(header.data).map_err(|err| ScanError::Form {
         path: path.to_path_buf(),
         name: header.name.clone(),
-        detail: format!("kein UTF-8: {err}"),
+        detail: format!("not UTF-8: {err}"),
     })?;
-    // Jede Raumgruppe fuehrt neben sich einen Mittelpunkt `…_centerTop`. Deren Anzahl ist die
-    // Anzahl der Gruppen, ohne die Klammerstruktur der Datei nachzubauen.
+    // Every room group has a `…_centerTop` beside it; counting those counts the groups.
     let room_groups = header_text.matches("_centerTop").count();
 
     elements.sort_by(|a, b| a.id.cmp(&b.id));
@@ -563,9 +498,9 @@ pub fn read_usdz(path: &Path) -> Result<Scan, ScanError> {
     })
 }
 
-// ------------------------------------------------------------------ Aufnahmen auf der Platte
+// ------------------------------------------------------------------ Captures on disk
 
-/// `<assets_root>/captures/<flat>`, oder ein Fehler mit dem Pfad, der gefehlt hat.
+/// `<assets_root>/captures/<flat>`, or an error naming the missing path.
 pub fn captures_root(flat: &str) -> Result<PathBuf, ScanError> {
     let root = crate::model::assets_dir()
         .map_err(|e| ScanError::Assets(e.to_string()))?
@@ -578,8 +513,7 @@ pub fn captures_root(flat: &str) -> Result<PathBuf, ScanError> {
     }
 }
 
-/// Die Aufnahmedaten unter einem Wurzelverzeichnis, aufsteigend sortiert. Der Name ist das
-/// Datum, und ein Datum sortiert sich als Zeichenkette richtig.
+/// Capture dates under a root, ascending; the name is the date, which sorts as a string.
 pub fn capture_dates(flat: &str) -> Result<Vec<PathBuf>, ScanError> {
     let root = captures_root(flat)?;
     let mut dates: Vec<PathBuf> = std::fs::read_dir(&root)
@@ -595,10 +529,8 @@ pub fn capture_dates(flat: &str) -> Result<Vec<PathBuf>, ScanError> {
     Ok(dates)
 }
 
-/// Die juengste Aufnahme, deren USDZ **und** Beobachtung beide da sind.
-///
-/// Dieselbe Bedingung, die `/api/roomplan/reference` fuehrt: eine Aufnahme ohne ihre Beobachtung
-/// ist eine halbe, und ein halber Scan sieht aus wie ein ganzer.
+/// The newest capture with both its USDZ and its observation, the same condition
+/// `/api/roomplan/reference` uses: half a capture looks like a whole one.
 pub fn latest_capture(flat: &str) -> Result<PathBuf, ScanError> {
     for dir in capture_dates(flat)?.into_iter().rev() {
         if dir.join("captured-room.usdz").is_file() && dir.join("observation.json").is_file() {
@@ -606,35 +538,31 @@ pub fn latest_capture(flat: &str) -> Result<PathBuf, ScanError> {
         }
     }
     Err(ScanError::NoCapture(format!(
-        "unter {} liegt keine vollstaendige Aufnahme",
+        "no complete capture under {}",
         captures_root(flat)?.display()
     )))
 }
 
-/// Der Entwurf als Datei neben die Aufnahme — dort, wo `/api/roomplan/revisions` ihn liest.
-///
-/// Geschrieben wird `draft.json`. Ein bereits vorhandener Entwurf wird ersetzt: er ist aus der
-/// USDZ abgeleitet und traegt keine Information, die dabei verloren gehen koennte. Das **Review**
-/// daneben (`review.json`) wird nicht angefasst, und die USDZ selbst schon gar nicht.
+/// Writes the draft as `draft.json` next to the capture, where `/api/roomplan/revisions` reads it.
+/// An existing draft is replaced (it is derived from the USDZ); `review.json` and the USDZ itself
+/// are not touched.
 pub fn write_draft(
     scan: &Scan,
     flat: &str,
-    verzeichnis: &Path,
-    heute: &str,
+    capture_dir: &Path,
+    today: &str,
 ) -> std::io::Result<PathBuf> {
-    let pfad = verzeichnis.join("draft.json");
-    let content = draft(scan, flat, heute);
-    std::fs::write(&pfad, serde_json::to_vec_pretty(&content)?)?;
-    Ok(pfad)
+    let file = capture_dir.join("draft.json");
+    let content = draft(scan, flat, today);
+    std::fs::write(&file, serde_json::to_vec_pretty(&content)?)?;
+    Ok(file)
 }
 
-// ------------------------------------------------------------------ Entwurf
+// ------------------------------------------------------------------ Draft
 
-/// Der Entwurf als `roomplan-capture/v1` — die Form, die `/api/roomplan/revisions` erwartet und
-/// `dashboard/src/lib/roomplan.ts` liest.
-///
-/// `created_at` ist der Tag, an dem dieser Entwurf entsteht; `provenance.capture_finished_at`
-/// traegt den Tag der Aufnahme. Zwei Angaben, weil sie zwei Dinge sind.
+/// The draft as `roomplan-capture/v1`, as `/api/roomplan/revisions` expects and
+/// `dashboard/src/lib/roomplan.ts` reads. `created_at` is the day of the draft;
+/// `provenance.capture_finished_at` the day of the capture.
 pub fn draft(scan: &Scan, flat: &str, created_at: &str) -> serde_json::Value {
     let als_json = |e: &Element| {
         serde_json::json!({
@@ -692,59 +620,47 @@ pub fn draft(scan: &Scan, flat: &str, created_at: &str) -> serde_json::Value {
     })
 }
 
-// ------------------------------------------------------------------ Vergleich
+// ------------------------------------------------------------------ Comparison
 
-/// Ein Befund: was der Scan sagt, was `room.toml` sagt, und wie weit sie auseinanderliegen.
-///
-/// Der Vergleich behauptet **keine Identitaet** zwischen einem Scan-Element und einem Eintrag aus
-/// `room.toml`. Eine Oeffnung im Scan hat keinen Namen und einen Zustand (`Isopen`), ein Eintrag
-/// in `room.toml` hat eine Kennung und eine Schwelle; beides zusammenzubringen ist eine
-/// Entscheidung und keine Rechnung. Hier stehen deshalb beide Seiten nebeneinander, und die
-/// Zuordnung passiert im Review.
+/// A finding: what the scan says, what `room.toml` says, and how far apart they are. It claims
+/// no identity between a scan element and a `room.toml` entry; matching them is a decision made in
+/// review, not a computation.
 #[derive(Debug, Clone, PartialEq)]
 pub struct Diff {
-    /// Die Wandhoehe in Zentimetern, wenn alle Waende einig sind.
+    /// Wall height in cm when all walls agree.
     pub scan_wall_height_cm: Option<f64>,
-    /// Was `room.toml` als Hoehe fuehrt. `0` heisst dort „nicht gemessen" und nicht „null".
+    /// The height `room.toml` states; `0` there means not measured.
     pub model_height_cm: i32,
-    /// Tueren und Fenster aus dem Scan: Kennung, Kategorie, Breite und Hoehe in Zentimetern.
+    /// Doors and windows from the scan: id, category, width and height in cm.
     pub scan_openings: Vec<(String, String, f64, f64)>,
-    /// Tueren und Fenster aus `room.toml`: Kennung, Breite in Zentimetern.
+    /// Doors and windows from `room.toml`: id, width in cm.
     pub model_openings: Vec<(String, i32)>,
-    /// Der Boden, den die Aufnahme zeigt, als Flaeche der oberen Bodenseite.
+    /// The floor the capture shows, as the area of its upper side.
     pub scan_floor_area_m2: Option<f64>,
-    /// Die innere Grundflaeche, die `room.toml` kennt.
+    /// The inner floor area `room.toml` knows.
     pub model_inner_area_m2: f64,
-    /// Gesamtlaenge aller Waende aus dem Scan, in Zentimetern. Nicht die Summe aus `room.toml`:
-    /// der Scan trennt Waende an ihren Oeffnungen, `room.toml` fuehrt eine Wand mit einer
-    /// Oeffnung darin, und die beiden Summen sind deshalb nicht dieselbe Groesse. Der Wert steht
-    /// zum Nachsehen hier und geht in kein Urteil ein.
+    /// Total length of all scanned walls in cm. Not comparable to `room.toml`: the scan splits walls
+    /// at their openings. Shown for reference only.
     pub scan_wall_length_cm: f64,
-    /// Moebelstuecke und Geraete aus dem Scan: `Element (Kategorie)` und die Aussenmasse in
-    /// Zentimetern, in der Reihenfolge des lokalen Rahmens.
+    /// Furniture and appliances from the scan: `Element (category)` and outer size in cm, in local
+    /// frame order.
     pub scan_objects: Vec<(String, [f64; 3])>,
 }
 
 impl Diff {
-    /// Wo der Scan eine Zahl hat, die `room.toml` als offen fuehrt.
+    /// Where the scan has a number that `room.toml` lists as open.
     pub fn open_question_answered(&self) -> bool {
         self.scan_wall_height_cm.is_some() && self.model_height_cm == 0
     }
 }
 
-/// Die innere Grundflaeche, die das Modell kennt: das Polygon des Hauptraums (die Kuechennische
-/// ist Teil davon) plus das Bad.
-///
-/// Gerechnet und nicht aus `[flat.flaeche]` gelesen — dieselbe Begruendung, die `Room::area_m2`
-/// schon fuehrt: eine abgeschriebene Zahl kann von der Geometrie abdriften, aus der jede Pruefung
-/// sie ableitet. Die Aufnahme zeigt die ganze Wohnung und nicht nur einen Raum, und
-/// `innen_gemessen_m2` in `room.toml` ist genau diese Summe; gelesen wird sie hier trotzdem
-/// nicht.
+/// The inner floor area the model knows: the main room's polygon (the kitchen niche is part of
+/// it) plus the bathroom, computed rather than read, as `Room::area_m2` is.
 fn model_inner_area_m2(room: &Room) -> f64 {
     room.area_m2() + room.bathroom.as_ref().map_or(0.0, |bad| bad.area_m2)
 }
 
-/// Der Scan gegen das gemessene Modell. Rechnet, schreibt nichts.
+/// The scan against the measured model. Computes, writes nothing.
 pub fn diff(scan: &Scan, room: &Room) -> Diff {
     let mut openings: Vec<(String, String, f64, f64)> = scan
         .openings()
@@ -792,7 +708,7 @@ pub fn diff(scan: &Scan, room: &Room) -> Diff {
     }
 }
 
-/// Der Scan gegen ein geladenes Modell.
+/// The scan against a loaded model.
 pub fn compare(scan: &Scan, model: &Model) -> Diff {
     diff(scan, &model.room)
 }
@@ -801,32 +717,31 @@ pub fn compare(scan: &Scan, model: &Model) -> Diff {
 mod tests {
     use super::*;
 
-    /// Ein ZIP mit gespeicherten Eintraegen, wie `zip -0` es schreibt. Nur so viel Format, wie
-    /// der Leser oben behauptet zu verstehen.
+    /// A ZIP with stored entries, as `zip -0` writes it; only as much format as the reader claims.
     fn zip(entries: &[(&str, &str)]) -> Vec<u8> {
         let mut out = Vec::new();
         let mut central = Vec::new();
-        // Ein fester Zeitstempel: 1980-01-01 00:00, damit der Test nicht von der Uhr abhaengt.
+        // A fixed timestamp, 1980-01-01 00:00, so the test does not depend on the clock.
         for (name, content) in entries {
             let offset = out.len() as u32;
             out.extend_from_slice(&0x0403_4b50u32.to_le_bytes());
-            out.extend_from_slice(&20u16.to_le_bytes()); // Version
-            out.extend_from_slice(&0u16.to_le_bytes()); // Flags
+            out.extend_from_slice(&20u16.to_le_bytes()); // version
+            out.extend_from_slice(&0u16.to_le_bytes()); // flags
             out.extend_from_slice(&METHOD_STORED.to_le_bytes());
-            out.extend_from_slice(&0u16.to_le_bytes()); // Zeit
-            out.extend_from_slice(&0x0021u16.to_le_bytes()); // Datum: 1980-01-01
-            out.extend_from_slice(&0u32.to_le_bytes()); // CRC, hier nicht geprueft
+            out.extend_from_slice(&0u16.to_le_bytes()); // time
+            out.extend_from_slice(&0x0021u16.to_le_bytes()); // date: 1980-01-01
+            out.extend_from_slice(&0u32.to_le_bytes()); // CRC, not checked here
             out.extend_from_slice(&(content.len() as u32).to_le_bytes());
             out.extend_from_slice(&(content.len() as u32).to_le_bytes());
             out.extend_from_slice(&(name.len() as u16).to_le_bytes());
-            out.extend_from_slice(&0u16.to_le_bytes()); // Extra
+            out.extend_from_slice(&0u16.to_le_bytes()); // extra
             out.extend_from_slice(name.as_bytes());
             out.extend_from_slice(content.as_bytes());
 
             central.extend_from_slice(&0x0201_4b50u32.to_le_bytes());
-            central.extend_from_slice(&20u16.to_le_bytes()); // Version, die es schrieb
-            central.extend_from_slice(&20u16.to_le_bytes()); // Version, die es braucht
-            central.extend_from_slice(&0u16.to_le_bytes()); // Flags
+            central.extend_from_slice(&20u16.to_le_bytes()); // version made by
+            central.extend_from_slice(&20u16.to_le_bytes()); // version needed
+            central.extend_from_slice(&0u16.to_le_bytes()); // flags
             central.extend_from_slice(&METHOD_STORED.to_le_bytes());
             central.extend_from_slice(&0u16.to_le_bytes());
             central.extend_from_slice(&0x0021u16.to_le_bytes());
@@ -834,11 +749,11 @@ mod tests {
             central.extend_from_slice(&(content.len() as u32).to_le_bytes());
             central.extend_from_slice(&(content.len() as u32).to_le_bytes());
             central.extend_from_slice(&(name.len() as u16).to_le_bytes());
-            central.extend_from_slice(&0u16.to_le_bytes()); // Extra
-            central.extend_from_slice(&0u16.to_le_bytes()); // Kommentar
-            central.extend_from_slice(&0u16.to_le_bytes()); // Platte
-            central.extend_from_slice(&0u16.to_le_bytes()); // Attribute
-            central.extend_from_slice(&0u32.to_le_bytes()); // extern
+            central.extend_from_slice(&0u16.to_le_bytes()); // extra
+            central.extend_from_slice(&0u16.to_le_bytes()); // comment
+            central.extend_from_slice(&0u16.to_le_bytes()); // disk
+            central.extend_from_slice(&0u16.to_le_bytes()); // attributes
+            central.extend_from_slice(&0u32.to_le_bytes()); // external
             central.extend_from_slice(&offset.to_le_bytes());
             central.extend_from_slice(name.as_bytes());
         }
@@ -855,8 +770,7 @@ mod tests {
         out
     }
 
-    /// Eine Wand von 3,00 m Laenge, 2,50 m Hoehe und 0,16 m Staerke, verschoben um (1, 2, 3).
-    /// Die Zahlen sind erfunden und haben mit keiner Wohnung zu tun.
+    /// A wall 3.00 m long, 2.50 m high and 0.16 m thick, translated by (1, 2, 3). Invented numbers.
     fn wand_usda() -> String {
         r#"#usda 1.0
 (
@@ -886,23 +800,22 @@ def Xform "Wall0" (
         let bytes = zip(&[("CapturedRoom.usda", "def Xform \"Section_grp\"\n")]);
         let path = std::env::temp_dir().join(format!("interior-zip-{}.usdz", std::process::id()));
         std::fs::write(&path, &bytes).expect("Testdatei");
-        let entries = zip_entries(&bytes, &path).expect("gelesen");
+        let entries = zip_entries(&bytes, &path).expect("read");
         assert_eq!(entries.len(), 1);
         assert_eq!(entries[0].name, "CapturedRoom.usda");
         assert_eq!(
             entries[0].time.as_deref(),
             Some("1980-01-01T00:00:00"),
-            "das Datum 0x0021 ist der 1.1.1980"
+            "date 0x0021 is 1980-01-01"
         );
         let _ = std::fs::remove_file(&path);
     }
 
-    /// Ein komprimierter Eintrag ist ein Fehler und keine leere Antwort. Ohne diesen Test waere
-    /// die Regel „kein Entpacker" eine Behauptung im Modulkopf.
+    /// A compressed entry is an error, not an empty answer.
     #[test]
     fn a_compressed_entry_is_an_error() {
-        let mut bytes = zip(&[("CapturedRoom.usda", "leer")]);
-        // Verfahren im lokalen UND im zentralen Kopf auf 8 (deflate) setzen.
+        let mut bytes = zip(&[("CapturedRoom.usda", "empty")]);
+        // Set the method to 8 (deflate) in the local and the central header.
         let local = bytes.iter().position(|_| true).unwrap();
         bytes[local + 8] = 8;
         let central_start = u32::from_le_bytes([
@@ -917,19 +830,17 @@ def Xform "Wall0" (
         std::fs::write(&path, &bytes).expect("Testdatei");
         match zip_entries(&bytes, &path) {
             Err(ScanError::Compressed { method, .. }) => assert_eq!(method, 8),
-            Err(other) => panic!("erwartet Komprimiert, bekommen: {other:?}"),
-            // Kein `{:?}` auf dem Erfolgsfall: der traegt die Nutzdaten, und ein Test, der bei
-            // einem Fehlschlag ein Archiv ausdruckt, ist beim Lesen schlimmer als nutzlos.
-            Ok(gelesen) => panic!(
-                "erwartet einen Fehler, gelesen wurden {} Eintraege",
-                gelesen.len()
+            Err(other) => panic!("expected Compressed, got: {other:?}"),
+            // No `{:?}` on success: it carries the payload.
+            Ok(read_entries) => panic!(
+                "expected an error, read {} entries",
+                read_entries.len()
             ),
         }
         let _ = std::fs::remove_file(&path);
     }
 
-    /// Die Verschiebung muss in `[12..15]` landen. USD schreibt sie in die vierte Zeile; steht sie
-    /// nach der Umsetzung dort, liest der Client sie falsch, ohne dass irgendetwas fehlschlaegt.
+    /// The translation must land in `[12..15]`; read wrongly, nothing fails.
     #[test]
     fn the_translation_lands_in_the_fourth_column() {
         let e = parse_usda("assets/Mesh/Walls/Wall0/Wall0.usda", &wand_usda()).expect("Element");
@@ -937,17 +848,17 @@ def Xform "Wall0" (
         assert_eq!(e.category, "Wall");
         assert_eq!(
             e.source_id, "AAAAAAAA-BBBB-CCCC-DDDD-EEEEEEEEEEEE",
-            "die native UUID ist die Identitaet, nicht der Dateiname"
+            "the native UUID is the identity, not the file name"
         );
         assert_eq!(e.position_m(), [1.0, 2.0, 3.0]);
-        assert_eq!(e.confidence, "low", "die USDZ traegt kein Vertrauen");
+        assert_eq!(e.confidence, "low", "the USDZ carries no confidence");
     }
 
     #[test]
     fn the_extent_comes_from_the_local_frame_in_metres() {
         let e = parse_usda("assets/Mesh/Walls/Wall0/Wall0.usda", &wand_usda()).expect("Element");
-        // Punkte in Zentimetern geschrieben und durch metersPerUnit = 1 als Meter gemeint: die
-        // Spanne ist die Differenz der Punkte, unveraendert.
+        // Points written in centimetres and meant as metres by metersPerUnit = 1: the span is the
+        // difference of the points, unchanged.
         assert_eq!(e.dimensions_m, [300.0, 250.0, 16.0]);
     }
 
@@ -972,19 +883,18 @@ def Xform "Wall0" (
     point3f[] points = [(0, 0, 0), (90, 0, 0), (90, 200, 0)]
     matrix4d xformOp:transform = ( (1, 0, 0, 0), (0, 1, 0, 0), (0, 0, 1, 0), (0, 0, 0, 1) )
 } }"#;
-        let t = parse_usda("Door0.usda", door).expect("Tuer");
+        let t = parse_usda("Door0.usda", door).expect("door");
         assert!(
             t.is_door(),
-            "der Zustand in der Kategorie macht sie nicht zu etwas anderem"
+            "the state inside the category does not make it something else"
         );
     }
 
-    /// Die Koerper sind flach, und ihre Flaeche steht nicht in ihrer Spanne. Der Test haelt den
-    /// Unterschied fest: die Dreieckssumme zweier gleich grosser Platten ist ihre Summe, waehrend
-    /// die Spanne desselben Koerpers doppelt so gross waere.
+    /// Flat bodies: their area is not their span. Two equal plates sum to their total, while the
+    /// span of the same body would be twice that.
     #[test]
     fn the_floor_area_comes_from_the_triangles_not_the_span() {
-        // Zwei Platten von je 2 x 3, nebeneinander: die Gesamtspanne ist 4 x 3, die Flaeche 12.
+        // Two 2 x 3 plates side by side: total span 4 x 3, area 12.
         let text = r#"def Xform "Floor0" {
     def Mesh "Floor0"
     {
@@ -994,19 +904,16 @@ def Xform "Wall0" (
         point3f[] points = [(0, 0, 0), (2, 0, 0), (2, 3, 0), (0, 3, 0), (2, 0, 0), (4, 0, 0), (4, 3, 0), (2, 3, 0)]
     }
 }"#;
-        let area = top_area_m2(text).expect("Flaeche");
+        let area = top_area_m2(text).expect("area");
         assert!(
             (area - 12.0).abs() < 1e-9,
-            "erwartet 12, bekommen {area}"
+            "expected 12, got {area}"
         );
     }
 
-    /// Nur nach oben zeigende Dreiecke zaehlen. Sonst waere die Flaeche die doppelte.
-    ///
-    /// Das zweite Dreieck benutzt die Punkte 3 bis 5 und nicht noch einmal 0 bis 2: eine
-    /// Maschenausgabe, die zwei Flaechen mit verschiedener Richtung teilt, muss die Punkte doppelt
-    /// fuehren, sonst traegt ein Punkt zwei Normalen zugleich. Die echte Bodenplatte tut das auch —
-    /// sie traegt 28 Facetten auf 84 Punkte.
+    /// Only upward triangles count, or the area doubles. The second triangle uses points 3 to 5:
+    /// mesh output that shares two faces of different direction duplicates the points, as the real
+    /// floor does (28 facets on 84 points).
     #[test]
     fn the_underside_does_not_count() {
         let text = r#"def Mesh "Floor0"
@@ -1016,15 +923,14 @@ def Xform "Wall0" (
     normal3f[] normals = [(0, 0, 1), (0, 0, 1), (0, 0, 1), (0, 0, -1), (0, 0, -1), (0, 0, -1)]
     point3f[] points = [(0, 0, 0), (2, 0, 0), (0, 3, 0), (0, 0, 0), (2, 0, 0), (0, 3, 0)]
 }"#;
-        let area = top_area_m2(text).expect("Flaeche");
+        let area = top_area_m2(text).expect("area");
         assert!(
             (area - 3.0).abs() < 1e-9,
-            "erwartet 3, bekommen {area}"
+            "expected 3, got {area}"
         );
     }
 
-    /// Ein widerspruechiger Scan gibt keine Zahl heraus. Eine Wandhoehe aus zwoelf Waenden, von
-    /// denen zwei anderer Meinung sind, ist die Zahl, die niemand mehr nachpruefen kann.
+    /// A contradicting scan gives no number.
     #[test]
     fn contradicting_walls_give_no_height() {
         let mut a = parse_usda("Wall0.usda", &wand_usda()).expect("Wand");
@@ -1043,8 +949,8 @@ def Xform "Wall0" (
         assert_eq!(one.wall_height_m(), Some(250.0));
     }
 
-    /// Der Entwurf muss die Form tragen, die `roomplan.ts` liest. Ein falsch geschriebenes
-    /// `schema_version` faellt dort nirgends auf, es kommt nur kein Entwurf an.
+    /// The draft must have the shape `roomplan.ts` reads; a misspelt `schema_version` fails nowhere,
+    /// the draft simply never arrives.
     #[test]
     fn the_draft_has_the_client_shape() {
         let scan = Scan {
@@ -1066,7 +972,7 @@ def Xform "Wall0" (
         let e = &d["room"]["surfaces"][0];
         assert_eq!(
             e["transform"][12], 1.0,
-            "der Client liest die Verschiebung hier"
+            "the client reads the translation here"
         );
         assert_eq!(e["confidence"], "low");
     }

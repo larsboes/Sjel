@@ -23,7 +23,7 @@ use std::collections::VecDeque;
 
 /// Does the piece fit through the entrance door?
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
-#[serde(tag = "art", rename_all = "snake_case")]
+#[serde(tag = "kind", rename_all = "snake_case")]
 pub enum DoorFit {
     /// The narrow side fits, with this much air in cm.
     Fits { air_cm: i32, door_cm: i32 },

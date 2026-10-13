@@ -215,7 +215,7 @@ pub fn touch(r: &Rect, l: &LightPatch) -> bool {
 /// A checked date with its hour.
 #[derive(Debug, Clone, Serialize)]
 pub struct SunHour {
-    pub tag: &'static str,
+    pub day: &'static str,
     pub hour_local: u32,
     pub altitude_deg: f64,
     pub azimuth_deg: f64,
@@ -365,7 +365,7 @@ pub fn report(model: &Model, layout: &crate::model::Layout) -> Result<SunReport,
                 }
             }
             hours.push(SunHour {
-                tag: name,
+                day: name,
                 hour_local: h,
                 altitude_deg: stand.altitude_deg,
                 azimuth_deg: stand.azimuth_deg,

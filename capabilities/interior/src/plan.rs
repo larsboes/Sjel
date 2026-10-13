@@ -345,7 +345,7 @@ pub fn svg(model: &Model, layout: &Layout) -> Result<String, ModelError> {
                 ));
             }
             let (cx, cy) = (x0 + w / 2, y0 + h / 2);
-            let name = format!("TERRASSE{}", if t.estimated { " (ca.)" } else { "" });
+            let name = format!("TERRACE{}", if t.estimated { " (approx.)" } else { "" });
             set.push(centred(cx, cy, name.chars().count(), 20, 1, true));
             p.push_str(&format!(
                 r##"<text x="{cx}" y="{cy}" transform="rotate(-90 {cx} {cy})" font-family="Helvetica,Arial" font-size="20" fill="#5B5F63" text-anchor="middle" dominant-baseline="central" letter-spacing="1">{name}</text>"##
@@ -367,9 +367,9 @@ pub fn svg(model: &Model, layout: &Layout) -> Result<String, ModelError> {
             r##"<rect x="{}" y="{}" width="{w}" height="{h}" fill="#E2DDD2" stroke="#9A968E" stroke-width="3"/>"##,
             b.x[0], b.y[0]));
         let (cx, cy) = (b.x[0] + w / 2, b.y[0] + h / 2);
-        set.push(centred(cx, cy, 3, 20, 1, false));
+        set.push(centred(cx, cy, "BATH".len(), 20, 1, false));
         p.push_str(&format!(
-            r##"<text x="{cx}" y="{cy}" font-family="Helvetica,Arial" font-size="20" fill="#5B5F63" text-anchor="middle" dominant-baseline="central" letter-spacing="1">BAD</text>"##
+            r##"<text x="{cx}" y="{cy}" font-family="Helvetica,Arial" font-size="20" fill="#5B5F63" text-anchor="middle" dominant-baseline="central" letter-spacing="1">BATH</text>"##
         ));
     }
 

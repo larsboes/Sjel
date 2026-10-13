@@ -166,7 +166,7 @@ fn the_estimated_terrace_does_not_widen_the_sheet() {
         gemessen - links
     );
     assert!(
-        texts(&svg).iter().any(|t| t.starts_with("TERRASSE")),
+        texts(&svg).iter().any(|t| t.starts_with("TERRACE")),
         "die Terrasse ist nicht mehr beschriftet"
     );
 }

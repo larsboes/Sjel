@@ -34,10 +34,9 @@ tells a working implementation from a plausible one.
 
 **Free space.** Delegated whole to `sjel storage report --json`; this reads its verdict and
 adds no thresholds of its own. Deliberately fires on the volume state alone and **not**
-on a class being large: `class_flag_gb` legitimately fires today, on a 28 GB cargo target
-dir, on a machine with 130 GB free and nothing wrong with it. Alerting on that would mean
-the watcher's first ever run produced a finding nobody needed, which is how a watcher gets
-muted. The class breakdown stays what it already was — what `sysmon storage` tells you
+on a class being large: a 28 GB cargo target dir on a machine with 130 GB free and nothing
+wrong with it would be a finding nobody needed, which is how a watcher gets muted. The
+class breakdown stays what it already was — what `sysmon storage` tells you
 once you are already looking.
 
 **Unexpected network exposure.** Delegated whole to `host-net check --json`, the same shape

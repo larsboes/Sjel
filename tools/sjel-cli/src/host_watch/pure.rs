@@ -333,11 +333,11 @@ fn fmt_bytes(b: f64) -> String {
 
 /// The volume state is the finding; a large class is not.
 ///
-/// Decided in Axon#177 against the tempting alternative. `class_flag_gb` legitimately fires
-/// today — the cargo target dir is 28 GB against a 20 GB flag — on a machine with 130 GB free
-/// and nothing wrong with it. Alerting on that would mean this watcher's FIRST run produced a
-/// task nobody needed, which is precisely how a watcher gets muted. The class breakdown stays
-/// what it already was: what `sysmon storage` tells you once you are looking.
+/// Decided in Axon#177 against the tempting alternative. A large class dir — the cargo target
+/// dir runs tens of GB — is not a finding on a machine with plenty free, and alerting on it
+/// would mean this watcher's FIRST run produced a task nobody needed, which is precisely how a
+/// watcher gets muted. The class breakdown stays what it already was: what `sysmon storage`
+/// tells you once you are looking.
 pub fn storage_finding(report: &StorageReport) -> Option<Finding> {
     let state = report.state.as_deref().unwrap_or("ok");
     if state == "ok" {

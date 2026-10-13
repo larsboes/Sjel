@@ -403,12 +403,16 @@ fn globals_osv_section(root: &Path, r: &mut Report) {
                 0 => println!("  ✓ clean"),
                 1 => {
                     println!("  ✗ vulnerabilities found above");
-                    // The one command that can move an npm finding whose OWNER is current: npm
-                    // re-resolves a tree when the package is reinstalled, and `sjel update`'s
-                    // report names the owners whose trees are behind. Named here rather than left
-                    // as "run tools/audit", which was this pass's advice for a class no command
-                    // reached (2026-10-04).
+                    // Two remedies, because the ecosystems differ. npm re-resolves a tree when
+                    // the package is reinstalled. A CARGO one cannot be moved at all: `cargo
+                    // install --locked` resolves the Cargo.lock published inside the crate, and
+                    // `copy_lockfiles` reads that same file, so reinstalling — with or without
+                    // `--locked` — leaves the finding where it was. Measured 2026-10-13 by
+                    // forcing a tauri-cli reinstall and watching all eight survive it. Printing
+                    // only the npm line sent a reader to a command that cannot act on a cargo
+                    // row.
                     println!("  · an npm finding here may be movable: `sjel update apply --only npm --re-resolve <package>`");
+                    println!("  · a cargo one cannot be: this pass reads the Cargo.lock published inside the crate, and no install on this machine changes that file — accept it in osv-scanner-installed.toml with its reach and a date");
                     r.fail = true;
                 }
                 _ => {

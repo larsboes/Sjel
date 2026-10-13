@@ -138,8 +138,11 @@ const HELP: &str = "sjel update — every piece of software installed outside th
                                 copy. The list is printed first; a package a parent pins is
                                 never included. This is the only destructive mode
   sjel update apply --only cargo --re-resolve <crate,...>
-                                reinstall the named crates WITHOUT --locked, for a crate whose
-                                published lockfile pins a dependency the audit has flagged
+                                reinstall the named crates WITHOUT --locked, so the BUILD tree
+                                re-resolves past a dependency the audit has flagged. It does
+                                not clear the finding: the audit reads the Cargo.lock published
+                                inside the crate, which only the maintainer can change, so a
+                                cargo row is accepted in osv-scanner-installed.toml instead.
   sjel update apply --only npm --re-resolve <package,...>
                                 reinstall the named global npm packages, which is what makes npm
                                 resolve their dependency ranges again. For an owner whose own

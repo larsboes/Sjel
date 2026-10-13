@@ -193,7 +193,7 @@ pub fn is_trip_offline(path: &str) -> bool {
     route_of(path) == TRIPS_LIST || trip_plan_id(path).is_some()
 }
 
-/// `encodeURIComponent`, which is how `dashboard/src/lib/api.ts` builds a plan's path. The
+/// `encodeURIComponent`, which is how `dashboard/src/lib/api/travel.ts` builds a plan's path. The
 /// prefetch must store under the same key the page later reads.
 fn encode_component(s: &str) -> String {
     let mut out = String::with_capacity(s.len());

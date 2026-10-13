@@ -68,7 +68,7 @@ use crate::sync::{self, LocalStore, Outgoing, Reply, SendError, SyncStatus, Tran
 /// `/<name>/api` where its `service.toml` sets `proxy_api_only = "true"`
 /// (calendar, finance, interior, traveler, trips), and passes each
 /// `proxy_extra` prefix through unstripped (transit's `/api`, which is how
-/// `transit` in `dashboard/src/lib/api.ts` calls it). `/sjel-status/` is the
+/// `transit` in `dashboard/src/lib/api/travel.ts` calls it). `/sjel-status/` is the
 /// shell's own API, which `strip_self_prefix` in the same file serves.
 ///
 /// PRD Q94 puts that shell behind `tailscale serve`, so a phone browser on the

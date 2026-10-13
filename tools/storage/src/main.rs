@@ -51,8 +51,9 @@ const HELP: &str = "sjel-storage — what is filling this disk, and what is safe
   sjel-storage report [--json]     free/used/total, every policy class, what is flagged
   sjel-storage reclaim [--dry-run] [--force] [--scheduled] [--only <class>]
                                    [--repo [--incremental] [--target] [--node-modules]]
-                                   the one verb that removes anything. Classes by default;
-                                   `--repo` adds the checkout's build output
+                                   the one verb that removes anything. Classes by
+                                   default; `--repo` acts on the checkout's build
+                                   output instead, and needs one of the three
   sjel-storage target [--json]     the Cargo target dir against PRD §9's R6 ratio
   sjel-storage discover [--top N] [--depth D] [--json]
                                    the largest directories under $HOME that no policy

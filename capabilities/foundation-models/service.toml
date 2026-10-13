@@ -49,9 +49,20 @@ routes_absent = "upstream binary (apfel); serves the OpenAI chat-completions API
 # It read: "the light role is an optimisation, not a floor: a machine where this is not running
 # digests everything on the strong model exactly as it did before, so starting it is a choice
 # rather than a prerequisite." That was true while there was a strong model to fall back to. There
-# is not: oMLX and Ollama are both retired, so `summarization` resolves to nothing local, and the
-# unattended pass never falls back to it anyway -- `quiet::rung` refuses that fallthrough on
-# purpose, so the light role IS the floor for every drain on this machine.
+# is not: oMLX is retired, so the local strong role this argument assumed is gone, and the
+# unattended pass never falls back to the light one anyway -- `quiet::rung` refuses that
+# fallthrough on purpose -- so the light role IS the floor for every drain on this machine.
+#
+# CORRECTED 2026-10-11. This read "oMLX and Ollama are both retired". Only oMLX is. Measured that
+# day: nothing listens on :8000, no omlx-server process runs, and ~/.omlx does not exist. Ollama is
+# the opposite -- it listens on :11434, and the overlay's inference.json assigns it three roles
+# (embedding bge-m3, summarization axon-qwen3-4b:ctx8k, coding qwen3:4b, the last added the same
+# day). So `summarization` does resolve locally, to Ollama, which is not what the sentence above
+# said. The correction sits beside the original rather than replacing it because the tension is
+# unresolved, and it is a real fork rather than a wording problem: either a local strong model does
+# exist and the reversal above needs re-arguing, or Ollama's model is not the "strong model to fall
+# back to" that sentence was written about and this comment should say why. Do not read this as a
+# record that Ollama is gone, and do not retire it on the strength of the old sentence.
 #
 # The original sentence is kept rather than replaced because the reversal is a fact about the
 # machine, not about the argument: restore a local strong model and the old reasoning holds again.

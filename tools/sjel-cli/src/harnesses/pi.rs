@@ -12,6 +12,7 @@ use std::collections::BTreeMap;
 use std::path::{Path, PathBuf};
 
 use super::engine::{self, DeployConfig, SkillStatus, StatusRow};
+use super::pi_settings;
 
 #[derive(Debug, Clone)]
 pub struct PiDiscovered {
@@ -247,23 +248,15 @@ pub fn registry_statuses(
     selected: Option<&str>,
 ) -> Result<Vec<StatusRow>, String> {
     let settings_path = home().join(".pi").join("agent").join("settings.json");
-    let registered: Vec<String> = match std::fs::read_to_string(&settings_path) {
+    let settings: serde_json::Value = match std::fs::read_to_string(&settings_path) {
         Ok(text) => {
-            let parsed: serde_json::Value = serde_json::from_str(&text)
-                .map_err(|e| format!("{}: {e}", settings_path.display()))?;
-            parsed
-                .get("skills")
-                .and_then(serde_json::Value::as_array)
-                .map(|a| {
-                    a.iter()
-                        .filter_map(serde_json::Value::as_str)
-                        .map(str::to_owned)
-                        .collect()
-                })
-                .unwrap_or_default()
+            serde_json::from_str(&text).map_err(|e| format!("{}: {e}", settings_path.display()))?
         }
-        Err(_) => Vec::new(),
+        Err(_) => serde_json::Value::Null,
     };
+    let registered = registry_paths(&settings, "skills");
+    let registered_extensions = registry_paths(&settings, "extensions");
+    let registered_packages = registry_paths(&settings, "packages");
 
     let mut discovered: BTreeMap<String, Vec<PiDiscovered>> = BTreeMap::new();
     for (root, label) in discovery_roots() {
@@ -285,9 +278,7 @@ pub fn registry_statuses(
                 continue;
             }
             let source_root = unit.source_root.display().to_string();
-            let is_registered = registered
-                .iter()
-                .any(|p| p.trim_end_matches('/') == source_root.trim_end_matches('/'));
+            let is_registered = is_registered(&registered, &source_root);
             let hits = discovered.get(&unit.key).cloned().unwrap_or_default();
             let (status, detail) = if is_registered && !hits.is_empty() {
                 (
@@ -332,24 +323,95 @@ pub fn registry_statuses(
                 detail,
             });
         }
-    }
 
-    // A registered path that no longer exists is this model's only other defect.
-    for path in &registered {
-        if !Path::new(path).exists() {
-            let name = Path::new(path)
-                .file_name()
-                .map(|n| n.to_string_lossy().into_owned())
-                .unwrap_or_default();
+        // Extensions and vendored packages are registered the same way a skill is — by path — so
+        // they belong in the same matrix. Without these rows a `[unit_hold]` naming a package, or
+        // a hand-registration that overrides one, is invisible: doctor reads this table, and the
+        // row's label is the `<pack>/<path from the Pack root>` form a hold is written in.
+        // Only Current and NotDeployed are answered here: whether an unregistered copy of the same
+        // name is being loaded from a global root is a question this row does not ask.
+        for path in pi_settings::extensions_for_pack(config, &pack)? {
+            let registered_here = is_registered(&registered_extensions, &path);
             rows.push(StatusRow {
-                pack: "(registered)".to_owned(),
-                skill: name,
-                status: SkillStatus::Missing,
-                detail: Some(format!("{path} does not exist")),
+                pack: pack.clone(),
+                skill: format!("extensions/{}", pi_settings::extension_label(&path)),
+                status: if registered_here {
+                    SkillStatus::Current
+                } else {
+                    SkillStatus::NotDeployed
+                },
+                detail: registered_here.then(|| "registered in settings".to_owned()),
+            });
+        }
+        for path in pi_settings::packages_for_pack(config, &pack)? {
+            let registered_here = is_registered(&registered_packages, &path);
+            rows.push(StatusRow {
+                pack: pack.clone(),
+                skill: format!("pi-packages/{}", pi_settings::last_segment(&path)),
+                status: if registered_here {
+                    SkillStatus::Current
+                } else {
+                    SkillStatus::NotDeployed
+                },
+                detail: registered_here.then(|| "registered in settings".to_owned()),
             });
         }
     }
+
+    // A registered path that no longer exists is this model's only other defect.
+    for path in registered
+        .iter()
+        .chain(registered_extensions.iter())
+        .chain(registered_packages.iter())
+    {
+        // Only an absolute local path can be judged here: a `git:` or `npm:` source is not a
+        // filesystem path, and `~` is not one until a shell expands it.
+        if !path.starts_with('/') || Path::new(path).exists() {
+            continue;
+        }
+        let name = Path::new(path)
+            .file_name()
+            .map(|n| n.to_string_lossy().into_owned())
+            .unwrap_or_default();
+        rows.push(StatusRow {
+            pack: "(registered)".to_owned(),
+            skill: name,
+            status: SkillStatus::Missing,
+            detail: Some(format!("{path} does not exist")),
+        });
+    }
     Ok(rows)
+}
+
+/// Whether a Pack path is the path a settings entry names, both read as the absolute path pi would
+/// load. A relative entry written by `pi install` resolves from the settings file's directory, so
+/// comparing the strings as written would report a registered package as unregistered.
+fn is_registered(registered: &[String], path: &str) -> bool {
+    let target = pi_settings::canonical_path(path);
+    registered
+        .iter()
+        .any(|entry| pi_settings::registered_path(entry) == target)
+}
+
+/// One settings list as registry paths. The object form declares a `source` beside its resource
+/// filters (pi docs/packages.md), so a package written that way is still one path here.
+fn registry_paths(settings: &serde_json::Value, key: &str) -> Vec<String> {
+    settings
+        .get(key)
+        .and_then(serde_json::Value::as_array)
+        .map(|a| {
+            a.iter()
+                .filter_map(|entry| match entry {
+                    serde_json::Value::String(s) => Some(s.clone()),
+                    serde_json::Value::Object(o) => o
+                        .get("source")
+                        .and_then(serde_json::Value::as_str)
+                        .map(str::to_owned),
+                    _ => None,
+                })
+                .collect()
+        })
+        .unwrap_or_default()
 }
 
 #[cfg(test)]
@@ -373,5 +435,75 @@ mod tests {
         let roots = discovery_roots();
         assert_eq!(roots[0].1, "~/.pi/agent/skills");
         assert_eq!(roots[1].1, "~/.agents/skills");
+    }
+
+    /// The two channels a `[unit_hold]` can name and no row used to answer for. The label is the
+    /// hold's own `<pack>/<path from the Pack root>` form, because doctor matches the two.
+    #[test]
+    fn an_extension_and_a_package_each_get_a_row_and_a_sibling_pack_is_ignored() {
+        let root = std::env::temp_dir().join(format!("sjel-pi-rows-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&root);
+        let pack_root = root.join("Packs");
+        let pack = pack_root.join("demo");
+        std::fs::create_dir_all(pack.join("pi-packages/accordion")).unwrap();
+        std::fs::create_dir_all(pack.join("extensions")).unwrap();
+        std::fs::write(
+            pack.join("pack.toml"),
+            "name = \"demo\"\ndescription = \"test\"\nskills = []\n",
+        )
+        .unwrap();
+        std::fs::write(
+            pack.join("pi-packages/accordion/package.json"),
+            "{\"name\":\"accordion\",\"pi\":{\"extensions\":[\"./extension/accordion.ts\"]}}\n",
+        )
+        .unwrap();
+        std::fs::write(pack.join("extensions/thing.ts"), "export default 1;\n").unwrap();
+
+        let config = DeployConfig {
+            axon_root: root.clone(),
+            pack_roots: Some(vec![pack_root.clone()]),
+            destination: root.join("dest"),
+            state_file: root.join("state.json"),
+            adapter: "pi".to_owned(),
+            state_env_var: None,
+            tree_convention: None,
+            flat_file_convention: None,
+            skip_manifest_skills: false,
+            validate_adapter_files: None,
+        };
+
+        let rows = registry_statuses(&config, Some("demo")).unwrap();
+        let label = |skill: &str| {
+            rows.iter()
+                .find(|r| r.pack == "demo" && r.skill == skill)
+                .unwrap_or_else(|| panic!("no row for demo/{skill}: {rows:?}"))
+        };
+        assert_eq!(
+            label("pi-packages/accordion").status,
+            SkillStatus::NotDeployed
+        );
+        assert_eq!(
+            label("extensions/thing.ts").status,
+            SkillStatus::NotDeployed
+        );
+        let _ = std::fs::remove_dir_all(&root);
+    }
+
+    /// A package declared in the object form is one path, because that is what the hold, the
+    /// status row and the settings write all compare.
+    #[test]
+    fn the_object_form_of_a_package_is_read_as_its_source() {
+        let settings = serde_json::json!({
+            "packages": [
+                {"source": "/tmp/accordion", "skills": []},
+                "git:github.com/x/y",
+                7
+            ]
+        });
+        assert_eq!(
+            registry_paths(&settings, "packages"),
+            vec!["/tmp/accordion".to_owned(), "git:github.com/x/y".to_owned()]
+        );
+        assert!(registry_paths(&settings, "skills").is_empty());
     }
 }

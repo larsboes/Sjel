@@ -7,6 +7,25 @@
 #   tools/packs-pi use <name>                     apply to pi (rewrites settings.json)
 #   tools/packs-codex use <name>                  apply to Codex (declined on this host)
 #
+# ── 2026-10-09: Codex's 21 deployed skills were removed, and this is why ─────────────
+#
+# Codex's destination is `$HOME/.agents/skills` (registry.rs, CODEX_SKILLS_DIR), which is
+# ALSO one of pi's two automatic global discovery roots (pi.rs discovery_roots). Deploying a
+# Pack to Codex therefore loaded every one of its skills into pi a second time: 21 Pack
+# skills sat in both pi's settings.json registry and the Codex copy, and pi's loader keeps
+# the first and warns `name "X" collision` for the loser (skills.js, addSkills). The registry
+# entry won every time, so no content was ever wrong -- but a skill pi does NOT register
+# silently fell back to Codex's stale copy, which is how `gpui` was being loaded after it
+# was added to the coding Pack (2026-10-09, 949a9cb7) and before `tools/packs-pi deploy
+# coding` registered it. Two channels for one skill is the defect; only one should exist.
+#
+# So: a Pack is deployed either materialized (Claude Code, whose ~/.claude/skills pi does
+# not read) or through pi's registry, not both. Re-deploying to Codex reintroduces 21
+# collisions and the stale-copy fallback above -- read this first.
+#
+# Codex itself stays installed and usable; it simply carries no Sjel skills now. Its
+# superseded state is undone with `tools/packs-codex deploy <pack>...` per Pack.
+#
 # A profile is a SELECTION, not a recommendation: activating it replaces what the
 # harness loads with exactly this set. What is deployed, and what is not, is the
 # operator's decision and it is written HERE — see `full` below, and see the note on
@@ -47,6 +66,44 @@
 # Note on `sync` vs profiles: after activating a profile, a manual `sync <pack>`
 # deploys the WHOLE Pack again (the ledger does not remember the subset). Re-run
 # `use <name>` to re-trim.
+
+# ── Per-harness unit holds ──────────────────────────────────────────────────────────
+#
+# A unit a Pack carries that must NOT be deployed to one harness: `deploy` and `sync` skip
+# it, printing why, and `tools/doctor` reads this table instead of warning that the unit is
+# missing. It is also a violation doctor reports if the unit IS at that destination.
+#
+# It lives in this file, and not in a Pack manifest, for the reason
+# Packs/home-automation/pack.toml records for its retired `# pi: REFUSED` line: a
+# harness-specific rule does not belong in a manifest the schema keeps harness-neutral.
+# This file is where operator decisions live.
+#
+# claude: `harness/agents/` is Explore.md, which overrides the agent that carries a model pin.
+# It is deployed to pi only. pi's pin (`anthropic/claude-haiku-4-5`) reached no provider this
+# machine can use, so the override fixes pi; Claude Code is Anthropic-native, the pin resolves
+# there, and deploying this file would REMOVE a working Haiku tier from that harness. Measured
+# 2026-10-09: `tools/packs-claude sync harness` deployed it, because sync takes every unit —
+# this hold is what stops the next sync from repeating that. See
+# Packs/harness/README.md, "agents/Explore.md".
+#
+# Extend it with what is missing, never with what is merely unused: a dormant Pack is excluded
+# by a profile's `except`, which is a different decision.
+#
+# pi: `harness/pi-packages/accordion` was removed from pi's registry on 2026-10-09 (owner
+# decision), together with the ponytail extension — that one is a personal `git:` install in
+# ~/.pi/agent/settings.json and not a Pack unit, so `pi remove git:github.com/DietrichGebert/ponytail`
+# is its whole trace and no hold can express it. Measured before and after on a real session:
+# the system prompt fell 52,598 → 40,964 characters (−11,634, about 2.9k tokens a turn), of which
+# 5,252 was ponytail mode's block and the rest eight skill entries (six ponytail, two accordion);
+# TUI startup was 0.81s either way, so this is a per-turn cost and not a startup one. The hold is
+# what stops `tools/packs-pi deploy|sync harness` and `tools/harnesses use <profile> --harness pi`
+# from re-registering accordion, because both rediscover it from `pi-packages/` alone. The tree
+# stays in the Pack: accordion is vendored and deliberately owned (upstreams.toml [accordion]),
+# and a hold is a decision not to write a path, not a deletion.
+
+[unit_hold]
+claude = ["harness/agents/"]
+pi = ["harness/pi-packages/accordion"]
 
 [[profile]]
 name = "productive"
@@ -91,6 +148,9 @@ packs = ["writing", "harness"]
 # the prose skill, and the skill author — not academic-writing, and not trim/harness-sync.
 skills = { "writing" = ["unslop", "human-writing", "skill-creator"], "harness" = ["sjel"] }
 # unslop: 0 script runs — code-quality review pass by role · sjel: orientation for repo work
+
+# Codex is installed but carries no Sjel Pack (see the 2026-10-09 note above). Its
+# `use` verb therefore still applies here as recorded: declined, on this host.
 
 [[profile]]
 name = "full"

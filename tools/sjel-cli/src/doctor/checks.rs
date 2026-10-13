@@ -9,6 +9,7 @@ use regex::Regex;
 use serde_json::Value as Json;
 
 use crate::harnesses::engine::SkillStatus;
+use crate::harnesses::mutate::held_units;
 use crate::harnesses::registry::{is_installed, Model, Registry};
 use crate::harnesses::statuses_for;
 
@@ -2014,8 +2015,31 @@ fn pack_state(root: &Path) -> Result<Vec<PackSection>, String> {
             }
             Ok(rows) => {
                 let mut unselected: Vec<String> = Vec::new();
+                // Units `profiles.toml` holds back from this harness. Read here so the "not
+                // deployed" warning can be replaced by the reason, and so a hold that was
+                // overridden by a hand-run deploy is reported instead of passing as intent.
+                let held = held_units(&harness.config).unwrap_or_default();
                 for row in &rows {
                     let label = format!("{}/{}", row.pack, row.skill);
+                    if held.contains(&label) && row.status != SkillStatus::NotDeployed {
+                        // The remedy differs by delivery model. A registry harness registers a
+                        // PATH in its own settings file and has no per-unit verb —
+                        // `tools/packs-pi remove` takes Packs — so naming that command would send
+                        // the reader to delete the whole Pack to undo one entry.
+                        let remedy = if harness.model == Model::Registry {
+                            "remove its path from ~/.pi/agent/settings.json".to_owned()
+                        } else {
+                            format!("remove: {} remove {}", harness.cli, row.pack)
+                        };
+                        lines.push((
+                            Level::Bad,
+                            format!(
+                                "{label} is deployed to {} although profiles.toml [unit_hold] holds it back — {remedy}",
+                                harness.label
+                            ),
+                        ));
+                        continue;
+                    }
                     let detail = row
                         .detail
                         .as_ref()
@@ -2025,7 +2049,15 @@ fn pack_state(root: &Path) -> Result<Vec<PackSection>, String> {
                     match row.status {
                         SkillStatus::Current => lines.push((Level::Ok, format!("{label} current"))),
                         SkillStatus::NotDeployed => {
-                            if harness.model == Model::Registry {
+                            if held.contains(&label) {
+                                lines.push((
+                                    Level::Ok,
+                                    format!(
+                                        "{label} held back from {} by profiles.toml [unit_hold]",
+                                        harness.label
+                                    ),
+                                ));
+                            } else if harness.model == Model::Registry {
                                 unselected.push(row.pack.clone());
                             } else {
                                 lines.push((
@@ -2418,7 +2450,7 @@ fn build_artifacts(ctx: &mut Ctx) {
     match data.get("ratio").filter(|r| !r.is_null()).and_then(Json::as_f64) {
         None => ctx.warn(format!("{} in {} — no release build, so R6 has no control", gb(num(data.get("bytes"))), jstr(data.get("target_dir")))),
         Some(ratio) if data.get("r6").and_then(Json::as_str) == Some("over") => ctx.warn(format!(
-            "target/debug is {}× target/release, over R6's {}× ({} vs {} units) — sjel storage prune --incremental, or build both profiles and re-check",
+            "target/debug is {}× target/release, over R6's {}× ({} vs {} units) — either build both profiles and re-check, or reclaim deliberately: `sjel storage report` names each class and its cap, and `sjel storage reclaim` refuses anything the overlay's policy owns",
             to_fixed(ratio, 1),
             jstr(data.get("r6_max_ratio")),
             units("debug"),

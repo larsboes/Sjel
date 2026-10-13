@@ -470,13 +470,16 @@ fn remove_owned_unit(
 
 pub fn sync_pack(config: &DeployConfig, pack: &str) -> Result<Vec<String>, String> {
     with_state_lock(config, || {
-        let units = pack_units(config, pack)?;
+        let held = held_units(config)?;
+        let (units, held_here): (Vec<Unit>, Vec<Unit>) = pack_units(config, pack)?
+            .into_iter()
+            .partition(|u| !held.contains(&format!("{pack}/{}", u.key)));
         let mut state = read_state(config)?;
         if !state.packs.contains_key(pack) {
             return Err(format!("{pack}: not deployed; deploy it first"));
         }
         let desired: BTreeSet<String> = units.iter().map(|u| u.key.clone()).collect();
-        let mut messages = Vec::new();
+        let mut messages = held_messages(pack, &config.adapter, &held_here);
         let mut failures: Vec<String> = Vec::new();
 
         // Preflight both stale removals and desired updates before mutating either.
@@ -505,10 +508,12 @@ pub fn sync_pack(config: &DeployConfig, pack: &str) -> Result<Vec<String>, Strin
             }
         }
 
+        // A held unit that is already recorded stays recorded: the hold means "never write this",
+        // not "delete what is there". doctor reports a held-and-deployed unit as a violation.
         let stale: Vec<String> = state.packs[pack]
             .skills
             .keys()
-            .filter(|k| !desired.contains(*k))
+            .filter(|k| !desired.contains(*k) && !held.contains(&format!("{pack}/{k}")))
             .cloned()
             .collect();
         for unit_key in stale {
@@ -618,10 +623,11 @@ pub fn deploy_pack(
     skill_subset: Option<&BTreeSet<String>>,
 ) -> Result<Vec<String>, String> {
     with_state_lock(config, || {
-        let units: Vec<Unit> = pack_units(config, pack)?
+        let held = held_units(config)?;
+        let (units, held_here): (Vec<Unit>, Vec<Unit>) = pack_units(config, pack)?
             .into_iter()
             .filter(|u| skill_subset.is_none_or(|s| !u.is_skill || s.contains(&u.key)))
-            .collect();
+            .partition(|u| !held.contains(&format!("{pack}/{}", u.key)));
         let mut state = read_state(config)?;
         // Validate every source and collision before the first write so a bad unit cannot leave
         // a normally-failing Pack only partially deployed.
@@ -659,7 +665,7 @@ pub fn deploy_pack(
                     .insert(unit.key.clone(), record);
             }
         }
-        let mut messages = Vec::new();
+        let mut messages = held_messages(pack, &config.adapter, &held_here);
         let mut failures: Vec<String> = Vec::new();
         for unit in &units {
             match install_one(config, &mut state, pack, unit, "deploy").and_then(|m| {
@@ -906,6 +912,84 @@ pub fn read_profiles_at(root: &Path) -> Result<Vec<Profile>, String> {
             p.clone()
                 .try_into::<Profile>()
                 .map_err(|e| format!("{}: {e}", path.display()))
+        })
+        .collect()
+}
+
+/// Per-harness unit holds, from `profiles.toml`'s `[unit_hold]` table:
+/// `<harness> = ["<pack>/<unit>"]`.
+///
+/// A held unit is never written by `deploy` or `sync` for that harness, and `tools/doctor` reads
+/// the same table instead of reporting the unit as missing. It lives here and not in a Pack
+/// manifest for the reason Packs/home-automation/pack.toml records for its retired `# pi: REFUSED`
+/// line: a harness-specific rule does not belong in a manifest the schema keeps harness-neutral,
+/// and this file is where operator decisions live.
+///
+/// A hold is read at mutation time rather than remembered from `use`, because `sync` — the verb
+/// that writes without asking — has to honour it too.
+pub type UnitHolds = BTreeMap<String, Vec<String>>;
+
+pub fn read_unit_holds_at(root: &Path) -> Result<UnitHolds, String> {
+    let path = root.join("profiles.toml");
+    if !path.is_file() {
+        return Ok(UnitHolds::new());
+    }
+    let text = fs::read_to_string(&path).map_err(|e| format!("{}: {e}", path.display()))?;
+    let parsed: toml::Table = text
+        .parse()
+        .map_err(|e| format!("{}: {e}", path.display()))?;
+    let Some(holds) = parsed.get("unit_hold").and_then(toml::Value::as_table) else {
+        return Ok(UnitHolds::new());
+    };
+    let mut out = UnitHolds::new();
+    for (harness, units) in holds {
+        let list = units.as_array().ok_or_else(|| {
+            format!(
+                "{}: unit_hold.{harness} must be an array of \"<pack>/<unit>\" strings",
+                path.display()
+            )
+        })?;
+        let mut keys = Vec::new();
+        for unit in list {
+            let key = unit.as_str().ok_or_else(|| {
+                format!(
+                    "{}: unit_hold.{harness} entries must be strings",
+                    path.display()
+                )
+            })?;
+            // A hold naming no Pack reads as enforced while holding nothing, so it is an error
+            // rather than a no-op.
+            if !key.contains('/') {
+                return Err(format!(
+                    "{}: unit_hold.{harness} entry '{key}' must be \"<pack>/<unit>\"",
+                    path.display()
+                ));
+            }
+            keys.push(key.to_owned());
+        }
+        out.insert(harness.clone(), keys);
+    }
+    Ok(out)
+}
+
+/// The `<pack>/<unit>` keys held back from this deployment's harness.
+pub fn held_units(config: &DeployConfig) -> Result<BTreeSet<String>, String> {
+    Ok(read_unit_holds_at(&config.axon_root)?
+        .remove(&config.adapter)
+        .unwrap_or_default()
+        .into_iter()
+        .collect())
+}
+
+/// The note a deploy or sync prints for each unit a hold kept out, so an absent unit reads as a
+/// decision rather than as a failure.
+fn held_messages(pack: &str, harness: &str, held: &[Unit]) -> Vec<String> {
+    held.iter()
+        .map(|unit| {
+            format!(
+                "- {pack}/{} held back from {harness} (profiles.toml [unit_hold])",
+                unit.key
+            )
         })
         .collect()
 }
@@ -1184,6 +1268,129 @@ mod tests {
         );
         assert!(sync_targets(None, true, &[]).is_empty());
         assert!(sync_targets(None, false, &known).is_empty());
+    }
+
+    #[test]
+    fn a_unit_hold_scopes_to_its_harness_and_must_name_a_unit() {
+        let root =
+            std::env::temp_dir().join(format!("sjel-harnesses-holds-{}", std::process::id()));
+        let _ = fs::remove_dir_all(&root);
+        fs::create_dir_all(&root).unwrap();
+        fs::write(
+            root.join("profiles.toml"),
+            "[unit_hold]\nclaude = [\"harness/agents/\"]\n",
+        )
+        .unwrap();
+
+        let holds = read_unit_holds_at(&root).unwrap();
+        assert_eq!(holds["claude"], vec!["harness/agents/".to_owned()]);
+        assert!(!holds.contains_key("pi"), "a hold names one harness");
+
+        // An entry that names no unit is an error, not a hold that silently holds nothing.
+        fs::write(
+            root.join("profiles.toml"),
+            "[unit_hold]\nclaude = [\"harness\"]\n",
+        )
+        .unwrap();
+        let err = read_unit_holds_at(&root).unwrap_err();
+        assert!(err.contains("<pack>/<unit>"), "{err}");
+
+        // No table, no holds: a repository that declares none behaves as it did before.
+        fs::write(root.join("profiles.toml"), "[[profile]]\nname = \"p\"\n").unwrap();
+        assert!(read_unit_holds_at(&root).unwrap().is_empty());
+        let _ = fs::remove_dir_all(&root);
+    }
+
+    /// A held unit is not written by deploy, is reported as held, and stays out of the ledger —
+    /// while a sibling unit in the same Pack still deploys. sync honours the same hold and
+    /// leaves an already-recorded held unit alone, so doctor can report an override rather than
+    /// sync silently undoing one.
+    #[test]
+    fn a_held_unit_is_never_deployed_and_never_enters_the_ledger() {
+        let root = std::env::temp_dir().join(format!("sjel-harnesses-hold-{}", std::process::id()));
+        let _ = fs::remove_dir_all(&root);
+        let pack = root.join("repo/Packs/demo");
+        fs::create_dir_all(pack.join("skills/alpha")).unwrap();
+        fs::create_dir_all(pack.join("agents")).unwrap();
+        fs::write(
+            pack.join("pack.toml"),
+            "name = \"demo\"\ndescription = \"test\"\nskills = [\"alpha\"]\n",
+        )
+        .unwrap();
+        fs::write(
+            pack.join("skills/alpha/SKILL.md"),
+            "---\nname: alpha\ndescription: does a thing\n---\n\nbody\n",
+        )
+        .unwrap();
+        fs::write(
+            pack.join("agents/Explore.md"),
+            "---\nname: explore\n---\n\nbody\n",
+        )
+        .unwrap();
+        fs::write(
+            root.join("repo/profiles.toml"),
+            "[unit_hold]\nclaude = [\"demo/agents/\"]\n",
+        )
+        .unwrap();
+
+        let agents_dest = root.join("agents-dest");
+        let config = DeployConfig {
+            axon_root: root.join("repo"),
+            pack_roots: None,
+            destination: root.join("dest"),
+            state_file: root.join("state.json"),
+            adapter: "claude".to_owned(),
+            state_env_var: None,
+            tree_convention: Some(crate::harnesses::engine::TreeConvention {
+                source_dir: "agents".to_owned(),
+                destination_root: agents_dest.clone(),
+            }),
+            flat_file_convention: None,
+            skip_manifest_skills: false,
+            validate_adapter_files: None,
+        };
+
+        let messages = deploy_pack(&config, "demo", None).unwrap();
+        assert!(
+            config.destination.join("alpha").exists(),
+            "the skill in the same Pack still deploys"
+        );
+        assert!(
+            !agents_dest.join("demo").exists(),
+            "the held agents/ tree must not be written"
+        );
+        let state = read_state(&config).unwrap();
+        assert!(state.packs["demo"].skills.contains_key("alpha"));
+        assert!(
+            !state.packs["demo"].skills.contains_key("agents/"),
+            "a held unit must not enter the ledger: {:?}",
+            state.packs["demo"].skills.keys().collect::<Vec<_>>()
+        );
+        assert!(
+            messages.iter().any(|m| m.contains("held back from claude")),
+            "{messages:?}"
+        );
+
+        let mut state = read_state(&config).unwrap();
+        let record = state.packs["demo"].skills["alpha"].clone();
+        state
+            .packs
+            .get_mut("demo")
+            .unwrap()
+            .skills
+            .insert("agents/".to_owned(), record);
+        write_state(&config, &state).unwrap();
+        let messages = sync_pack(&config, "demo").unwrap();
+        assert!(
+            messages.iter().any(|m| m.contains("held back from claude")),
+            "{messages:?}"
+        );
+        let state = read_state(&config).unwrap();
+        assert!(
+            state.packs["demo"].skills.contains_key("agents/"),
+            "sync must not silently delete a unit a hold covers"
+        );
+        let _ = fs::remove_dir_all(&root);
     }
 
     /// A migration removes the generated artifacts a legacy deployment copied in and re-records

@@ -185,6 +185,8 @@ manager and the web access every session uses.
 
 The file is Claude-native like every other agent source in the repo, but it is deployed to pi only, deliberately: Claude Code is Anthropic-native, so the built-in pin resolves there and there is nothing to fix — deploying it would *remove* a working Haiku tier from that harness. The `agents/` row for `harness` in `tools/harnesses status` therefore stays empty in every column, and that is a recorded state rather than an unfinished one.
 
+That decision was prose until 2026-10-09, and prose does not stop a deploy: `tools/packs-claude sync harness` writes every unit a Pack carries, so running it to ship an edit to `harness-sync` also put `Explore.md` into `~/.claude/agents/harness/` — the exact harm above, done by the routine verb. It is now declared in `profiles.toml`'s `[unit_hold]` table as `claude = ["harness/agents/"]`: `deploy` and `sync` skip the unit and say why, and `tools/doctor` reports it as held back instead of warning that it is missing — and as a violation if it is ever deployed anyway. A held unit is never removed by `sync` either, so the override is reported rather than silently undone.
+
 **Known drift, measured 2026-10-01.** The pi SDK devDependencies here pin `0.84.2`, the version
 upstream developed against, while this machine runs Pi `1.0.0`. Raising them to `0.99.2` makes
 `bun run typecheck` fail in `src/mention-clone.ts` — `ExtensionContext` is no longer assignable to

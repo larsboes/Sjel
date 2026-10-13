@@ -168,6 +168,25 @@ impl Registry {
             validate_adapter_files: None,
         };
 
+        let mut agent_roots = vec![root.join("Packs")];
+        with_overlay(&mut agent_roots);
+        let agent_destination = overlay
+            .as_ref()
+            .map(|o| o.join("config").join("agent.toml"))
+            .unwrap_or_else(|| root.join("config").join("agent.toml"));
+        let agent = DeployConfig {
+            axon_root: root.to_path_buf(),
+            pack_roots: Some(agent_roots),
+            destination: agent_destination.clone(),
+            state_file: resolved(state_dir.join("sjel-agent.json")),
+            adapter: "sjel-agent".to_owned(),
+            state_env_var: None,
+            tree_convention: None,
+            flat_file_convention: None,
+            skip_manifest_skills: false,
+            validate_adapter_files: None,
+        };
+
         Self {
             harnesses: vec![
                 Harness {
@@ -202,6 +221,14 @@ impl Registry {
                     cli: "tools/packs-pi",
                     config: pi,
                 },
+                Harness {
+                    id: "sjel-agent",
+                    label: "sjel-agent",
+                    marker: agent_destination,
+                    model: Model::Registry,
+                    cli: "tools/harnesses",
+                    config: agent,
+                },
             ],
             unsupported: vec![Unsupported {
                 id: "antigravity",
@@ -230,10 +257,10 @@ mod tests {
     use super::*;
 
     #[test]
-    fn four_harnesses_and_one_unsupported_row() {
+    fn five_harnesses_and_one_unsupported_row() {
         let registry = Registry::new(Path::new("/tmp/sjel-registry-test"));
         let ids: Vec<&str> = registry.harnesses.iter().map(|h| h.id).collect();
-        assert_eq!(ids, vec!["claude", "codex", "opencode", "pi"]);
+        assert_eq!(ids, vec!["claude", "codex", "opencode", "pi", "sjel-agent"]);
         assert_eq!(registry.unsupported.len(), 1);
         assert!(registry.by_id("nope").is_err());
     }

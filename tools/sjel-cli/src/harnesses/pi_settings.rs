@@ -16,7 +16,9 @@ use std::path::{Path, PathBuf};
 use serde::{Deserialize, Serialize};
 
 use super::agentfile::translate_agent_for_pi;
-use super::engine::{self, read_pack_skills, read_state, DeployConfig, FlatFileConvention, StatusRow};
+use super::engine::{
+    self, read_pack_skills, read_state, DeployConfig, FlatFileConvention, StatusRow,
+};
 use super::mutate::{self, Profile};
 
 // ---- locations -----------------------------------------------------------------------------
@@ -233,7 +235,10 @@ fn paths_for_pack(
 /// Extensions a Pack carries. A top-level `*.ts` file is one extension; a DIRECTORY is one too
 /// when it has an `index.ts`, for an extension whose entry imports sidecars it must keep
 /// together. Sorted, so the settings ledger is stable across runs.
-fn extensions_for_pack(config: &DeployConfig, pack: &str) -> Result<Vec<String>, String> {
+pub(super) fn extensions_for_pack(
+    config: &DeployConfig,
+    pack: &str,
+) -> Result<Vec<String>, String> {
     let roots = config.pack_roots.clone().unwrap_or_default();
     let mut names: BTreeSet<String> = BTreeSet::new();
     for root in &roots {
@@ -271,7 +276,7 @@ fn extensions_for_pack(config: &DeployConfig, pack: &str) -> Result<Vec<String>,
 /// Vendored pi packages a Pack carries, one directory each under `pi-packages/`. A directory is
 /// a package only if its package.json declares a `pi` manifest, because that manifest is what pi
 /// reads to find the entry points; without it pi would accept the path and load nothing.
-fn packages_for_pack(config: &DeployConfig, pack: &str) -> Result<Vec<String>, String> {
+pub(super) fn packages_for_pack(config: &DeployConfig, pack: &str) -> Result<Vec<String>, String> {
     let roots = config.pack_roots.clone().unwrap_or_default();
     let mut found = Vec::new();
     for root in &roots {
@@ -304,8 +309,81 @@ fn packages_for_pack(config: &DeployConfig, pack: &str) -> Result<Vec<String>, S
     Ok(found)
 }
 
-fn canonical_path(path: &str) -> PathBuf {
+pub(super) fn canonical_path(path: &str) -> PathBuf {
     engine::resolve(&expand_home(path))
+}
+
+/// A settings entry as an absolute path. `~/` expands to HOME, and a relative entry resolves from
+/// the settings file's own directory — `pi install <path>` writes that form (`~/.pi/agent` holds
+/// the file), and pi resolves it there (docs/packages.md). Comparing the strings as written reads
+/// a registered package as unregistered, and makes `prune_dead_owned_paths` run against the cwd.
+pub(super) fn registered_path(entry: &str) -> PathBuf {
+    match entry.strip_prefix("~/") {
+        Some(rest) => engine::resolve(&home().join(rest)),
+        None => {
+            let expanded = expand_home(entry);
+            if expanded.is_absolute() {
+                engine::resolve(&expanded)
+            } else {
+                engine::resolve(&home().join(".pi").join("agent").join(expanded))
+            }
+        }
+    }
+}
+
+/// The `[unit_hold]` entries for this harness, as `(key, absolute path)`.
+///
+/// A hold is written `<pack>/<path from the Pack root>` — `harness/pi-packages/accordion` —
+/// because a path is the only form that names a pi unit: all three channels this adapter writes
+/// (skills, extensions, vendored packages) are registered by path. `mutate::held_units` owns the
+/// read, so `profiles.toml` stays the operator's file and this adapter only obeys it.
+fn held_for(config: &DeployConfig) -> Result<Vec<(String, String)>, String> {
+    let roots = config.pack_roots.clone().unwrap_or_default();
+    let mut out = Vec::new();
+    for key in mutate::held_units(config)? {
+        for root in &roots {
+            out.push((
+                key.clone(),
+                engine::resolve(&root.join(&key)).display().to_string(),
+            ));
+        }
+    }
+    Ok(out)
+}
+
+/// One channel's paths, with the held ones dropped. A hold removes the unit the Pack names and
+/// nothing else, so the rest of that Pack still deploys.
+fn without_held(paths: Vec<String>, held: &[(String, String)]) -> Vec<String> {
+    paths
+        .into_iter()
+        .filter(|path| !is_held(path, held))
+        .collect()
+}
+
+/// Whether a path is one a `[unit_hold]` entry names, compared the way the registry compares
+/// paths (`canonical_path`), so `~/…` and an absolute path are one hold.
+fn is_held(path: &str, held: &[(String, String)]) -> bool {
+    let resolved = canonical_path(path).display().to_string();
+    held.iter().any(|(_, held_path)| *held_path == resolved)
+}
+
+/// One line per held unit this Pack carries, so an absent unit reads as a decision rather than as
+/// a failure — the same voice `mutate::held_messages` uses for the materialized harnesses.
+fn held_notes(
+    pack: &str,
+    carried: &[String],
+    held: &[(String, String)],
+    harness: &str,
+) -> Vec<String> {
+    held.iter()
+        .filter(|(key, _)| key.starts_with(&format!("{pack}/")))
+        .filter(|(_, held_path)| {
+            carried
+                .iter()
+                .any(|path| canonical_path(path).display().to_string() == *held_path)
+        })
+        .map(|(key, _)| format!("- {key} held back from {harness} (profiles.toml [unit_hold])"))
+        .collect()
 }
 
 fn dedupe_canonical(paths: Vec<String>) -> Vec<String> {
@@ -410,11 +488,21 @@ pub fn activate_profile_on_pi(
     let mut skills: Vec<String> = Vec::new();
     let mut extensions: Vec<String> = Vec::new();
     let mut packages: Vec<String> = Vec::new();
+    let held = held_for(skill_config)?;
     for pack in target.iter() {
         let subset = subsets.get(pack).cloned().flatten();
         let paths = paths_for_pack(skill_config, pack, subset.as_ref())?;
         let ext_paths = extensions_for_pack(skill_config, pack)?;
         let pkg_paths = packages_for_pack(skill_config, pack)?;
+        let carried: Vec<String> = paths
+            .iter()
+            .chain(ext_paths.iter())
+            .chain(pkg_paths.iter())
+            .cloned()
+            .collect();
+        let paths = without_held(paths, &held);
+        let ext_paths = without_held(ext_paths, &held);
+        let pkg_paths = without_held(pkg_paths, &held);
         skills.extend(paths.iter().cloned());
         extensions.extend(ext_paths.iter().cloned());
         packages.extend(pkg_paths.iter().cloned());
@@ -425,6 +513,7 @@ pub fn activate_profile_on_pi(
             ext_paths.len(),
             pkg_paths.len()
         ));
+        messages.extend(held_notes(pack, &carried, &held, &skill_config.adapter));
     }
     let removed: String = state
         .packs
@@ -450,12 +539,20 @@ pub fn activate_profile_on_pi(
     let mut pkg_state = BTreeMap::new();
     for pack in &active {
         let subset = subsets.get(pack).cloned().flatten();
+        // The ledger records what was registered, so a held unit never enters it: otherwise
+        // `remove` would later be asked to remove a path this adapter never wrote.
         packs.insert(
             pack.clone(),
-            paths_for_pack(skill_config, pack, subset.as_ref())?,
+            without_held(paths_for_pack(skill_config, pack, subset.as_ref())?, &held),
         );
-        ext_state.insert(pack.clone(), extensions_for_pack(skill_config, pack)?);
-        pkg_state.insert(pack.clone(), packages_for_pack(skill_config, pack)?);
+        ext_state.insert(
+            pack.clone(),
+            without_held(extensions_for_pack(skill_config, pack)?, &held),
+        );
+        pkg_state.insert(
+            pack.clone(),
+            without_held(packages_for_pack(skill_config, pack)?, &held),
+        );
     }
     state.packs = packs;
     state.extensions = ext_state;
@@ -519,12 +616,12 @@ fn setting_strings(
     }
 }
 
-fn last_segment(path: &str) -> String {
+pub(super) fn last_segment(path: &str) -> String {
     path.rsplit('/').next().unwrap_or(path).to_string()
 }
 
 /// An extension's name in a status row: a directory extension is its own name, not `index.ts`.
-fn extension_label(path: &str) -> String {
+pub(super) fn extension_label(path: &str) -> String {
     let parts: Vec<&str> = path.split('/').collect();
     let base = parts.last().copied().unwrap_or(path);
     let parent = parts
@@ -571,7 +668,7 @@ fn prune_dead_owned_paths(paths: Vec<String>, config: &DeployConfig) -> Vec<Stri
     paths
         .into_iter()
         .filter(|path| {
-            let absolute = engine::resolve(&expand_home(path));
+            let absolute = registered_path(path);
             let ours = roots
                 .iter()
                 .any(|root| absolute.display().to_string().starts_with(root));
@@ -608,22 +705,38 @@ pub fn status_lines(config: &DeployConfig, packs: &[String]) -> Result<Vec<Strin
             .is_some_and(|paths| paths.iter().any(|p| p == path))
     };
 
+    // Read here, not enforced — status writes nothing — so a held unit prints as the decision it
+    // is rather than as the "not-deployed" warning a reader would act on.
+    let held = held_for(config).unwrap_or_default();
+    let state_of = |path: &str, label: &'static str| -> &'static str {
+        if is_held(path, &held) {
+            "held"
+        } else {
+            label
+        }
+    };
     let mut out = Vec::new();
     for pack in &selected {
         for path in paths_for_pack(config, pack, None)? {
             out.push(format!(
                 "{pack}/{}: {}",
                 last_segment(&path),
-                label(skills.contains(&path), owned(&state.packs, pack, &path))
+                state_of(
+                    &path,
+                    label(skills.contains(&path), owned(&state.packs, pack, &path))
+                )
             ));
         }
         for path in extensions_for_pack(config, pack)? {
             out.push(format!(
                 "{pack}/extensions/{}: {}",
                 extension_label(&path),
-                label(
-                    extensions.contains(&path),
-                    owned(&state.extensions, pack, &path)
+                state_of(
+                    &path,
+                    label(
+                        extensions.contains(&path),
+                        owned(&state.extensions, pack, &path)
+                    )
                 )
             ));
         }
@@ -631,9 +744,12 @@ pub fn status_lines(config: &DeployConfig, packs: &[String]) -> Result<Vec<Strin
             out.push(format!(
                 "{pack}/pi-packages/{}: {}",
                 last_segment(&path),
-                label(
-                    packages.contains(&path),
-                    owned(&state.packages, pack, &path)
+                state_of(
+                    &path,
+                    label(
+                        packages.contains(&path),
+                        owned(&state.packages, pack, &path)
+                    )
                 )
             ));
         }
@@ -701,10 +817,20 @@ pub fn deploy_packs(config: &DeployConfig, packs: &[String]) -> Result<Vec<Strin
     let mut state = read_pi_state()?;
     let mut out = Vec::new();
 
+    let held = held_for(config)?;
     for pack in packs {
         let paths = paths_for_pack(config, pack, None)?;
         let ext_paths = extensions_for_pack(config, pack)?;
         let pkg_paths = packages_for_pack(config, pack)?;
+        let carried: Vec<String> = paths
+            .iter()
+            .chain(ext_paths.iter())
+            .chain(pkg_paths.iter())
+            .cloned()
+            .collect();
+        let paths = without_held(paths, &held);
+        let ext_paths = without_held(ext_paths, &held);
+        let pkg_paths = without_held(pkg_paths, &held);
         register_into(&mut skills, &paths);
         register_into(&mut extensions, &ext_paths);
         register_into(&mut packages, &pkg_paths);
@@ -717,6 +843,7 @@ pub fn deploy_packs(config: &DeployConfig, packs: &[String]) -> Result<Vec<Strin
             ext_paths.len(),
             pkg_paths.len()
         ));
+        out.extend(held_notes(pack, &carried, &held, &config.adapter));
     }
 
     // Pi treats equivalent absolute and ~/ paths as the same source, so one path is kept; the
@@ -820,4 +947,69 @@ pub fn remove_packs(config: &DeployConfig, packs: &[String]) -> Result<Vec<Strin
         }
     }
     Ok(out)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// A `<pack>/<unit>` hold written the way `profiles.toml` writes one reaches the path pi would
+    /// register, that path is what all three channels filter on, and the note names the decision.
+    /// The sibling package in the same Pack is untouched: a hold names a unit, not a Pack, and a
+    /// hold scoped to another harness does not reach this one.
+    #[test]
+    fn a_unit_hold_keeps_one_vendored_package_out_of_pis_registry() {
+        let root = std::env::temp_dir().join(format!("sjel-pi-hold-{}", std::process::id()));
+        let _ = fs::remove_dir_all(&root);
+        let pack_root = root.join("Packs");
+        let accordion = pack_root.join("harness/pi-packages/accordion");
+        let subagents = pack_root.join("harness/pi-packages/pi-subagents");
+        fs::create_dir_all(&accordion).unwrap();
+        fs::create_dir_all(&subagents).unwrap();
+        fs::write(
+            root.join("profiles.toml"),
+            "[unit_hold]\npi = [\"harness/pi-packages/accordion\"]\nclaude = [\"harness/agents/\"]\n",
+        )
+        .unwrap();
+        let config = DeployConfig {
+            axon_root: root.clone(),
+            pack_roots: Some(vec![pack_root.clone()]),
+            destination: root.join("dest"),
+            state_file: root.join("state.json"),
+            adapter: "pi".to_owned(),
+            state_env_var: None,
+            tree_convention: None,
+            flat_file_convention: None,
+            skip_manifest_skills: false,
+            validate_adapter_files: None,
+        };
+
+        let held = held_for(&config).unwrap();
+        assert_eq!(
+            held,
+            vec![(
+                "harness/pi-packages/accordion".to_owned(),
+                accordion.display().to_string()
+            )],
+            "the claude-only hold must not reach pi"
+        );
+
+        let carried = vec![
+            accordion.display().to_string(),
+            subagents.display().to_string(),
+        ];
+        assert_eq!(
+            without_held(carried.clone(), &held),
+            vec![subagents.display().to_string()],
+            "the held package leaves, its sibling stays"
+        );
+        assert_eq!(
+            held_notes("harness", &carried, &held, "pi"),
+            vec![
+                "- harness/pi-packages/accordion held back from pi (profiles.toml [unit_hold])"
+                    .to_owned()
+            ]
+        );
+        let _ = fs::remove_dir_all(&root);
+    }
 }

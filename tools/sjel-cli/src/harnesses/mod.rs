@@ -19,6 +19,7 @@ use std::fs;
 use std::path::{Path, PathBuf};
 use std::process::{Command, ExitCode};
 
+pub(crate) mod agent;
 mod agentfile;
 pub mod engine;
 mod frontmatter;
@@ -138,7 +139,11 @@ fn use_profile(registry: &Registry, root: &Path, args: &[String]) -> Result<(), 
     };
     for harness in selected_harnesses(registry, args)? {
         println!("── {}", harness.label);
-        if harness.model == Model::Registry {
+        if harness.id == "sjel-agent" {
+            for line in agent::activate_profile_on_agent(&harness.config, name)? {
+                println!("{line}");
+            }
+        } else if harness.model == Model::Registry {
             for line in pi_settings::activate_profile_on_pi(&harness.config, name)? {
                 println!("{line}");
             }
@@ -379,6 +384,9 @@ pub(crate) fn statuses_for(
     harness: &Harness,
     selected: Option<&str>,
 ) -> Result<Vec<StatusRow>, String> {
+    if harness.id == "sjel-agent" {
+        return agent::registry_statuses(&harness.config, selected);
+    }
     match harness.model {
         // pi's rows are two channels: the settings registry, and the agent files it copies to a
         // flat destination. Both belong in the matrix — the registry alone reports a Pack current
@@ -521,8 +529,8 @@ fn status(registry: &Registry, args: &[String]) -> Result<(), String> {
                     detail: row.detail,
                 })
                 .collect();
-            let discovered = match h.model {
-                Model::Registry => {
+            let discovered = match (h.model, h.id) {
+                (Model::Registry, "pi") => {
                     let d = pi::pi_discovery()?;
                     Some(DiscoveryView {
                         entries: d
@@ -545,7 +553,7 @@ fn status(registry: &Registry, args: &[String]) -> Result<(), String> {
                             .collect(),
                     })
                 }
-                Model::Materialized => None,
+                _ => None,
             };
             harnesses.push(HarnessView {
                 id: h.id,

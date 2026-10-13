@@ -72,7 +72,11 @@ a row still showing `D` afterwards means the copy and the source still differ.
 - **Registry** (pi): the harness reads the Pack source in place through a path list in its own
   settings. There is no copy, so there is no drift — the only defect is a registered path that no
   longer exists, which `status` reports as `missing`. `promote` and `accept` are meaningless there
-  and refuse.
+  and refuse. pi additionally auto-discovers `~/.agents/skills` and every `.agents/skills` up to
+  the repository root, so a skill placed there by anybody else is loaded too. `status` lists those
+  as `~` discovered; a *system-wide* one that no Pack owns is a policy violation, not a promote
+  candidate, because the same name can also be registered and pi keeps the first. `tools/skills
+  audit` names them, and `tools/skills add` installs a non-Pack skill project-scoped instead.
 
 ## When the hooks fire
 

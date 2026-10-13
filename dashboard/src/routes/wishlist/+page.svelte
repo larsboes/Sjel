@@ -1,5 +1,5 @@
 <script lang="ts">
-  import InteriorPage from "../interior/+page.svelte";
+  import InventoryPage from "$lib/inventory/InventoryPage.svelte";
 </script>
 
-<InteriorPage initialView="wishlist" />
+<InventoryPage view="wishlist" />

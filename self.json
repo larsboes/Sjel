@@ -423,6 +423,10 @@
       "kind": "lib"
     },
     {
+      "name": "skill-metadata",
+      "kind": "lib"
+    },
+    {
       "name": "soundscape",
       "kind": "capability",
       "service": {
@@ -521,6 +525,16 @@
   "coupling": [
     {
       "from": "agent",
+      "to": "extraction",
+      "kinds": [
+        "cargo-dep"
+      ],
+      "evidence": [
+        "libs/agent/Cargo.toml"
+      ]
+    },
+    {
+      "from": "agent",
       "to": "inference",
       "kinds": [
         "cargo-dep"
@@ -542,6 +556,16 @@
     {
       "from": "agent",
       "to": "sjel-http",
+      "kinds": [
+        "cargo-dep"
+      ],
+      "evidence": [
+        "libs/agent/Cargo.toml"
+      ]
+    },
+    {
+      "from": "agent",
+      "to": "skill-metadata",
       "kinds": [
         "cargo-dep"
       ],
@@ -1754,6 +1778,16 @@
       ]
     },
     {
+      "from": "tools",
+      "to": "skill-metadata",
+      "kinds": [
+        "cargo-dep"
+      ],
+      "evidence": [
+        "tools/sjel-cli/Cargo.toml"
+      ]
+    },
+    {
       "from": "transit",
       "to": "extraction",
       "kinds": [
@@ -2198,6 +2232,14 @@
       "verdict": "watch"
     },
     {
+      "name": "gpui-kit",
+      "verdict": "watch"
+    },
+    {
+      "name": "gpui-mobile",
+      "verdict": "watch"
+    },
+    {
       "name": "graphify",
       "verdict": "adopt"
     },
@@ -2378,6 +2420,10 @@
       "verdict": "reject"
     },
     {
+      "name": "proptest",
+      "verdict": "adopt"
+    },
+    {
       "name": "r2d2",
       "verdict": "adopt"
     },
@@ -2527,6 +2573,10 @@
     },
     {
       "name": "vega-lite",
+      "verdict": "adopt"
+    },
+    {
+      "name": "vercel-labs-skills",
       "verdict": "adopt"
     },
     {

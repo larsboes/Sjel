@@ -1744,7 +1744,14 @@ fn data_freshness(ctx: &mut Ctx) {
             format!("{}h", to_fixed(hours, 1))
         };
         if stale.is_finite() && hours >= stale {
-            ctx.bad(format!("{name} — nothing has arrived for {age} (stale past {}h); its producer is not running", js_num(stale)));
+            // "its producer is not running" was an inference this check never took: it measures
+            // the age of the newest successful delivery, and a producer that runs and fails looks
+            // identical to one that stopped. Say what was measured; `/sources` carries the class
+            // and the streak for a reader who wants the reason.
+            ctx.bad(format!(
+                "{name} — no successful delivery for {age} (stale past {}h)",
+                js_num(stale)
+            ));
         } else if advise.is_finite() && hours >= advise {
             ctx.warn(format!(
                 "{name} — last arrival {age} ago (due past {}h)",

@@ -32,6 +32,16 @@ lines. Do not retell history, ISC numbers or PRD questions in code; git log keep
 is the contract of its unit and nothing else. Ideas and open questions go in `PLAN.md`.
 When you edit a module, trim its comments to this rule. Do not run a separate sweep.
 
+## Interaction and output style (ADHD-friendly / low cognitive load)
+
+Format responses to minimize cognitive load, following `attention-control` doctrine:
+
+- **Lead with the bottom line**: State the overall outcome and verification state in the first line.
+- **Structured and chunked**: Use numbered headings and bullet points with **bold lead-ins**. Avoid narrative paragraphs.
+- **Hard metrics and paths**: State exact measurements, test counts (`17/17 gates`, `0 fail`), commit SHAs, and clickable file links.
+- **Isolate human-only actions**: Put manual tasks the operator must perform into their own dedicated block with a concrete time estimate (e.g. `2 minutes, manual`).
+- **Zero conversational fluff**: Cut pleasantries, apologetic hedging, recaps, and meta-commentary. State results and facts flatly.
+
 ## graphify
 
 This project has a knowledge graph at graphify-out/ with god nodes, community structure, and cross-file relationships.

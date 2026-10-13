@@ -85,6 +85,8 @@ impl Registry {
         with_overlay(&mut pi_roots);
         let mut opencode_roots = vec![root.join("Packs")];
         with_overlay(&mut opencode_roots);
+        let mut codex_roots = vec![root.join("Packs")];
+        with_overlay(&mut codex_roots);
 
         let env_path = |name: &str| -> Option<PathBuf> {
             std::env::var(name)
@@ -119,9 +121,14 @@ impl Registry {
         };
         let codex = DeployConfig {
             axon_root: root.to_path_buf(),
-            pack_roots: None,
+            pack_roots: Some(codex_roots),
+            // `$CODEX_HOME/skills`, not `~/.agents/skills`. That shared directory is one of pi's
+            // automatic global discovery roots (pi.rs::discovery_roots), so a Pack deployed there
+            // was loaded by pi a second time — and any skill pi did not register fell back to
+            // Codex's copy, which is how `gpui` loaded stale. Codex reads this directory (it is
+            // where Codex installs skills itself, and where `.system/` lives), and pi does not.
             destination: resolved(
-                env_path("CODEX_SKILLS_DIR").unwrap_or_else(|| home.join(".agents").join("skills")),
+                env_path("CODEX_SKILLS_DIR").unwrap_or_else(|| home.join(".codex").join("skills")),
             ),
             state_file: resolved(
                 env_path("SJEL_CODEX_STATE_FILE").unwrap_or_else(|| state_dir.join("codex.json")),

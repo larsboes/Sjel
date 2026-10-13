@@ -10,7 +10,7 @@ use std::path::{Path, PathBuf};
 
 use super::engine::{self, available_packs, pack_units, DeployConfig, SkillStatus, StatusRow};
 use super::mutate::{
-    held_units, read_profiles, resolve_profile_packs, resolve_profile_skills, Profile,
+    held_units, hold_matches, read_profiles, resolve_profile_packs, resolve_profile_skills, Profile,
 };
 
 /// Reads `[skills] paths = [...]` from the target `agent.toml`.
@@ -148,7 +148,7 @@ pub fn activate_profile_on_agent(
                 continue;
             }
             let label = format!("{pack}/{}", unit.key);
-            if held.contains(&label) {
+            if hold_matches(&held, &label) {
                 continue;
             }
             if let Some(sub) = &subset {

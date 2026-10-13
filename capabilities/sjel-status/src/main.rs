@@ -113,6 +113,11 @@ const ROUTES: &[route_manifest::Route] = &[
         "Every Pack skill against every agent harness: deployed, drifted, or unowned at the destination.",
     ),
     r(
+        "POST",
+        "/api/sjel-status/packs",
+        "Deploy, sync or remove Packs on one harness. Owner-only: this surface admits no agent token.",
+    ),
+    r(
         "GET",
         "/api/sjel-status/storage",
         "What fills the disk: the volume, every reclaimable class, and what the overlay's policy protects from reclaim. From tools/storage's own report --json.",
@@ -403,7 +408,10 @@ fn build_router(shell: proxy::Proxy) -> Router {
             post(backup_verify_handler),
         )
         .route("/api/sjel-status/host-watch", get(host_watch_handler))
-        .route("/api/sjel-status/packs", get(packs_handler))
+        .route(
+            "/api/sjel-status/packs",
+            get(packs_handler).post(packs_write_handler),
+        )
         .route(
             "/api/sjel-status/upstreams/watch",
             post(upstream_watch_handler),
@@ -889,6 +897,49 @@ mod origin_tests {
             .await
             .expect("the router answers")
             .status()
+    }
+
+    /// The Packs write route is mounted above the guard line and answers through the real
+    /// router. A request this surface will not act on is refused as input BEFORE `SJEL_ROOT`
+    /// is consulted, so this asserts the wiring without a live service and without deploying
+    /// anything: every body below is one the handler never runs a launcher for.
+    #[tokio::test]
+    async fn the_packs_write_route_is_wired_and_refuses_what_it_will_not_act_on() {
+        async fn post(body: &'static str) -> StatusCode {
+            router()
+                .oneshot(
+                    Request::builder()
+                        .method("POST")
+                        .uri("/api/sjel-status/packs")
+                        .header("content-type", "application/json")
+                        .body(Body::from(body))
+                        .unwrap(),
+                )
+                .await
+                .expect("the router answers")
+                .status()
+        }
+
+        // A name that would have to become a path under `tools/`: refused, never resolved.
+        assert_eq!(
+            post(r#"{"action":"deploy","harness":"claude","packs":["../../etc"]}"#).await,
+            StatusCode::BAD_REQUEST,
+            "a pack name that could leave the directory is input, not a command"
+        );
+        // A leading dash would be read as an option by the launcher.
+        assert_eq!(
+            post(r#"{"action":"deploy","harness":"--all","packs":["coding"]}"#).await,
+            StatusCode::BAD_REQUEST
+        );
+        // An action this surface does not have, and a sync with nothing to sync.
+        assert_eq!(
+            post(r#"{"action":"drop","harness":"claude","packs":["coding"]}"#).await,
+            StatusCode::BAD_REQUEST
+        );
+        assert_eq!(
+            post(r#"{"action":"sync","harness":"claude","packs":[]}"#).await,
+            StatusCode::BAD_REQUEST
+        );
     }
 
     /// The shell was axon-status until 2026-09-27, and an app installed before then calls its old

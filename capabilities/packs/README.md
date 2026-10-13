@@ -33,11 +33,22 @@ at all.
   somebody is editing it, which is the one failure the whole drift design exists to
   prevent. A timed read-only *check* would be safe, and is not built until something needs
   it.
-- **It serves no HTTP of its own.** `sjel-status` answers `GET /api/sjel-status/packs` by
-  shelling `tools/harnesses status --json`, the same way it already shells
+- **It serves no HTTP of its own.** `sjel-status` answers `GET /api/sjel-status/packs` (the
+  matrix) and `POST /api/sjel-status/packs` (`deploy`, `sync`, `remove`) by shelling
+  `tools/harnesses` and `tools/packs-<harness>`, the same way it already shells
   `tools/capability.sh registry`, `tools/repos`, `tools/backup.sh` and
   `tools/service-runner.sh`. A second server for a JSON passthrough would be a port and a
   process to keep alive for nothing.
+
+  The write is **owner-only**, and that was the deciding fact on 2026-10-13 when the
+  dashboard's Packs page grew its buttons. Agent reach looked like it needed a route, and a
+  route with agent admission looked like it needed a capability that admits agents —
+  `sjel-status` deliberately does not (`status/runtime.rs`), so the third option was this
+  capability taking a port. Measured instead of assumed: the agent deny policy
+  (`tools/templates/claude-code/settings.base.json`) covers `secrets/**`, `.ssh`, `.aws` and
+  `.env`, and does **not** cover `~/.claude/**` or `~/.agents/**`, so an agent already deploys
+  Packs by running `tools/harnesses` in its own shell, under its own permission gate. The
+  port would have bought reach that already existed.
 - **It holds no copy of the engine.** `tools/sjel-cli/src/harnesses/` owns the ledger format and
   the mutating half — deploy, sync, remove, adopt, and the lock they hold — and
   `tools/sjel-cli/src/harnesses/` reads the same ledger for `tools/harnesses list|status|drift`
@@ -80,3 +91,10 @@ Promote it to a process capability with its own port and panel only when `sjel-s
 starts needing logic that is specific to Packs rather than a passthrough. Until then, a
 process here would be a port, a binary, a health check and a dashboard mount bought for a
 JSON file that another service already hands over for free.
+
+Checked against this line on 2026-10-13, when the write route was added: the condition is
+still not met. `deploy`, `sync` and `remove` are argv this capability hands to a launcher
+that owns the verb, which is the same passthrough the read is — it re-implements nothing, and
+the `packs` ledger format still has exactly one owner in `tools/sjel-cli/src/harnesses/`. The
+line would be met by a rule that has to look at the ledger itself, not by a verb that shells a
+tool which does.

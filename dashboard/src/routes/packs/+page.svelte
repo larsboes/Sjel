@@ -1,9 +1,14 @@
 <script lang="ts">
-  // What Sjel has put into each agent harness on this machine.
+  // What Sjel has put into each agent harness on this machine, and the three buttons that
+  // change it.
   //
-  // The whole page is one GET. sjel-status shells `tools/harnesses status --json`, which
-  // is the same code path the CLI and the session hook read, so this view and the terminal
-  // can never disagree about what is deployed.
+  // The read is one GET. sjel-status shells `tools/harnesses status --json`, which is the same
+  // code path the CLI and the session hook read, so this view and the terminal cannot disagree
+  // about what is deployed. The write is a POST to the same path, which shells the launcher
+  // that owns the verb — so a refusal here is the tool's own reason, shown as it wrote it.
+  //
+  // An agent cannot reach either: sjel-status admits no agent token. An agent that wants a
+  // deploy runs `tools/harnesses` in its own shell, under its own permission gate.
   import { onMount } from "svelte";
   import Icon from "$lib/Icon.svelte";
   import PageHeader from "$lib/PageHeader.svelte";
@@ -18,6 +23,14 @@
   let view = $state<PacksView | null>(null);
   let error = $state<string | null>(null);
   let loading = $state(true);
+
+  /** Which card or cell is mid-write, so the whole page locks rather than racing itself. */
+  let busy = $state<string | null>(null);
+  /** The launcher's own output after a write, and its one-line refusal when it declines. */
+  let notice = $state<string | null>(null);
+  let writeError = $state<string | null>(null);
+  /** The Pack each harness card has selected for deploy and remove. */
+  let chosen = $state<Record<string, string>>({});
 
   const shown = $derived(view?.harnesses.filter((h) => h.installed) ?? []);
 
@@ -87,6 +100,47 @@
     const timer = setInterval(() => void load(), 30_000);
     return () => clearInterval(timer);
   });
+
+  /** Every Pack the matrix knows, in the order the table groups them. */
+  const allPacks = $derived([...new Set(rows.map((r) => r.pack))]);
+
+  /**
+   * Ask sjel-status to change a harness, then re-read the matrix whatever happened.
+   *
+   * The re-read is the point: the ledger just changed, and a page that only updated its own
+   * button would be guessing at what the launcher did. `detail` is the launcher's own words,
+   * because it knows which units it moved and this page does not.
+   */
+  async function write(
+    action: "deploy" | "sync" | "remove",
+    harness: string,
+    packs: string[],
+  ): Promise<void> {
+    busy = `${harness}:${packs.join(",")}`;
+    notice = null;
+    writeError = null;
+    try {
+      const result = await axonStatus.writePack({ action, harness, packs });
+      notice = `${action} ${result.harness} ${packs.join(", ")} — ${result.detail || "done"}`;
+    } catch (e) {
+      // A refusal from the launcher is the answer, not a broken page: it names the drifted
+      // copy, or the Pack that already owns the destination.
+      writeError = `${action} ${harness}: ${e instanceof Error ? e.message : String(e)}`;
+    } finally {
+      busy = null;
+      await load();
+    }
+  }
+
+  /** The Packs a harness holds, deduped: the units are per skill, the verbs take Pack names. */
+  function heldPacks(harness: HarnessView): string[] {
+    return [...new Set(deployed(harness).map((u) => u.pack))];
+  }
+
+  /** The selection a harness card is acting on, defaulting to the first Pack in the table. */
+  function pick(harness: HarnessView): string {
+    return chosen[harness.id] ?? allPacks[0] ?? "";
+  }
 </script>
 
 {#snippet packCell(row: Row)}<span class="pack">{row.pack}</span>{/snippet}
@@ -94,7 +148,18 @@
 {#snippet harnessCell(row: Row, column: Column<Row>)}
   {@const harness = shown.find((h) => `h:${h.id}` === column.id)}
   {@const status = harness ? statusOf(harness, row.pack, row.skill) : "not-deployed"}
-  {#if needsAttention(status)}<Chip label={status} tone="warning" />{:else if status === "current"}<span class="cell">·</span>{/if}
+  {#if harness && (status === "outdated" || status === "missing")}
+    <!-- The fix for a Pack this harness already holds, offered where the defect is. A
+         drifted copy gets no button: `sync` refuses it by design, and the decision there is
+         `accept` or discarding the edit, which is not a one-click act. -->
+    <button
+      class="btn btn-soft cell-act"
+      disabled={busy !== null}
+      onclick={() => write(status === "missing" ? "deploy" : "sync", harness.id, [row.pack])}
+    >
+      {status === "missing" ? "Deploy" : "Sync"}
+    </button>
+  {:else if needsAttention(status)}<Chip label={status} tone="warning" />{:else if status === "current"}<span class="cell">·</span>{/if}
 {/snippet}
 
 <PageHeader badge="Packs" title="Packs across harnesses" />
@@ -123,6 +188,36 @@
           {#if harness.unowned.length}· <strong>{harness.unowned.length}</strong> unowned{/if}
         </p>
         <p class="path">{harness.destination ?? harness.marker}</p>
+        {#if harness.installed}
+          <div class="acts">
+            <!-- Every Pack this harness holds, named. `sync --all` is not used: it exists on
+                 some launchers and not others, and the page knows the set anyway. -->
+            <button
+              class="btn btn-outline"
+              disabled={busy !== null || heldPacks(harness).length === 0}
+              onclick={() => write("sync", harness.id, heldPacks(harness))}
+            >
+              <Icon name="refresh" size={12} /> Sync all
+            </button>
+            <!-- Deploy and remove take a Pack name and cannot be inferred from the matrix,
+                 which is per skill: `tools/harnesses` has no deploy verb, and the launcher
+                 takes Pack names. -->
+            <select
+              aria-label={`Pack for ${harness.label}`}
+              onchange={(e) => (chosen[harness.id] = (e.currentTarget as HTMLSelectElement).value)}
+            >
+              {#each allPacks as pack (pack)}
+                <option value={pack} selected={pick(harness) === pack}>{pack}</option>
+              {/each}
+            </select>
+            <button class="btn btn-soft" disabled={busy !== null} onclick={() => write("deploy", harness.id, [pick(harness)])}>
+              Deploy
+            </button>
+            <button class="btn btn-danger" disabled={busy !== null} onclick={() => write("remove", harness.id, [pick(harness)])}>
+              Remove
+            </button>
+          </div>
+        {/if}
       </div>
     {/each}
   </div>
@@ -141,6 +236,14 @@
   {/each}
 
   <h2>The matrix</h2>
+  {#if notice}
+    <div class="card outcome ok-outcome"><p class="outcome-text">{notice}</p></div>
+  {/if}
+  {#if writeError}
+    <div class="card outcome err-outcome">
+      <p class="outcome-text"><Icon name="alert" size={12} /> {writeError}</p>
+    </div>
+  {/if}
   <Collection id="matrix" {rows} {fields} key={(r) => `${r.pack}/${r.skill}`} title={(r) => r.skill} defaults={{ group: "pack" }} />
 
   {#each view.harnesses as harness (harness.id)}
@@ -220,6 +323,42 @@
   .counts { font-size: 0.8rem; margin: 0.35rem 0 0.2rem; color: var(--text-secondary); }
   .path { font-family: var(--font-mono); font-size: 0.68rem; color: var(--text-tertiary); margin: 0; word-break: break-all; }
   .meta { font-size: 0.72rem; color: var(--text-secondary); margin: 0.15rem 0 0; }
+
+  /* ── The card's own controls ───────────────────────────────── */
+  .acts {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 0.3rem;
+    margin: 0.55rem 0 0;
+  }
+  .acts select {
+    font-size: 0.68rem;
+    padding: 0.12rem 0.3rem;
+    background: var(--input-bg);
+    color: var(--text-primary);
+    border: 1px solid var(--card-border);
+    border-radius: var(--radius-sm);
+  }
+  .acts .btn { font-size: 0.68rem; padding: 0.14rem 0.45rem; }
+
+  /* One button per matrix cell that needs a decision, so it stays smaller than the card's. */
+  .cell-act { font-size: 0.65rem; padding: 0.08rem 0.35rem; }
+
+  /* ── What the last write did ───────────────────────────────── */
+  .outcome { padding: 0.5rem 0.7rem; margin: 0 0 0.6rem; }
+  .outcome-text {
+    display: flex;
+    align-items: baseline;
+    gap: 0.35rem;
+    font-size: var(--text-xs);
+    margin: 0;
+    white-space: pre-wrap;
+  }
+  .ok-outcome { border-color: var(--success); }
+  .ok-outcome .outcome-text { color: var(--success); }
+  .err-outcome { border-color: var(--warning); }
+  .err-outcome .outcome-text { color: var(--warning-ink); }
 
   /* ── The orphan card ────────────────────────────────────────── */
   .alarm { padding: 0.8rem 0.9rem; margin: 0 0 1rem; border-color: var(--warning); }

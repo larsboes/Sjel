@@ -48,7 +48,7 @@ so nothing changed about what loads.
 "$SJEL_ROOT/tools/packs.sh" link writing
 # → ~/.claude/skills/{human-writing,academic-writing,unslop,skill-creator}
 # → ~/.claude/agents/writing/ (the 8 Claude-Code-native subagents)
-"$SJEL_ROOT/tools/packs-codex" deploy writing  # → ~/.agents/skills/… (skills only; agents skipped)
+"$SJEL_ROOT/tools/packs-codex" deploy writing  # → ~/.codex/skills/… (skills only; agents skipped)
 "$SJEL_ROOT/tools/packs-pi" deploy writing     # → registered in ~/.pi/agent/settings.json
 ```
 

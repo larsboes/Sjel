@@ -9,7 +9,7 @@ Works with **any** Klipper/Moonraker printer. Printer host, model, nozzle, mater
 ## Activate
 ```bash
 "$SJEL_ROOT/tools/packs.sh" link 3d-printing   # → ~/.claude/skills/home-3d-printing
-"$SJEL_ROOT/tools/packs-codex" deploy 3d-printing  # → ~/.agents/skills/home-3d-printing
+"$SJEL_ROOT/tools/packs-codex" deploy 3d-printing  # → ~/.codex/skills/home-3d-printing
 cp "$SJEL_ROOT/capabilities/printing/printctl.config.example.json" \
    "$SJEL_PERSONAL_ROOT/config/printing.json"   # then fill in your printer
 ```

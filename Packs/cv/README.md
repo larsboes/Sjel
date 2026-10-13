@@ -13,7 +13,7 @@ Master CV content lives in the overlay (`$SJEL_PERSONAL_ROOT/data/cv/master_cv.y
 
 ```bash
 "$SJEL_ROOT/tools/packs.sh" link cv   # → ~/.claude/skills/cv-builder
-"$SJEL_ROOT/tools/packs-codex" deploy cv  # → ~/.agents/skills/cv-builder
+"$SJEL_ROOT/tools/packs-codex" deploy cv  # → ~/.codex/skills/cv-builder
 mkdir -p "$SJEL_PERSONAL_ROOT/data/cv"
 cp "$SJEL_ROOT/capabilities/cv/master_cv.schema.yaml" \
    "$SJEL_PERSONAL_ROOT/data/cv/master_cv.yaml"        # then fill in your real content

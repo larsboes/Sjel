@@ -532,6 +532,22 @@ export interface PacksView {
   unsupported: { id: string; label: string; why: string }[];
 }
 
+/** What the Packs page asks sjel-status to do. */
+export interface PackWrite {
+  action: 'deploy' | 'sync' | 'remove';
+  harness: string;
+  packs: string[];
+}
+
+/** The launcher's own output on success; a refusal arrives as a thrown error carrying its
+ *  one-line reason, the same reading `upstreams/watch` gives its tool. */
+export interface PackWriteResult {
+  action: string;
+  harness: string;
+  packs: string[];
+  detail: string;
+}
+
 export const axonStatus = {
   health: () => request<AxonStatusHealth>('/sjel-status/api/sjel-status/health'),
   capabilities: () => request<CapabilityView[]>('/sjel-status/api/sjel-status/capabilities'),
@@ -639,6 +655,14 @@ export const axonStatus = {
    *  nothing starts, so it has no port. Same reason as `hostWatch()` above. */
   packs: (signal?: AbortSignal) =>
     request<PacksView>('/sjel-status/api/sjel-status/packs', signal ? { signal } : undefined),
+  /** Deploy, sync or remove Packs on one harness. Owner-only: sjel-status admits no agent
+   *  token, so a refusal here is the launcher's own one-line reason, not an authz failure. */
+  writePack: (write: PackWrite) =>
+    request<PackWriteResult>('/sjel-status/api/sjel-status/packs', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(write),
+    }),
   /** Append a `watch` row to upstreams.toml. A 400 carries the tool's one-line refusal. */
   watchUpstream: (url: string, summary: string, name?: string) =>
     request<{ name: string; url: string; verdict: string; license: string; summary: string }>(

@@ -49,7 +49,7 @@ tools/packs-codex — materialize Axon Packs.
   tools/packs-codex use [<profile>]        activate a profile (or pick interactively)
 
 Environment:
-  CODEX_SKILLS_DIR       destination (default: $HOME/.agents/skills)
+  CODEX_SKILLS_DIR       destination (default: $HOME/.codex/skills)
   SJEL_CODEX_STATE_FILE ownership ledger override (mainly for tests)
 ";
 
@@ -358,8 +358,10 @@ fn codex(registry: &Registry, args: &[String]) -> Result<(), String> {
                 return Err("usage: tools/packs-codex remove <pack>...".to_string());
             }
             remove(&config, rest, false)?;
-            // ~/.agents/skills is also pi's global discovery root, so on a machine with pi
-            // installed the destination has two readers and this removal costs pi those skills.
+            // Fires only when the destination is the shared root, which the default no longer is:
+            // Codex now writes ~/.codex/skills. It stays because CODEX_SKILLS_DIR can point back
+            // at ~/.agents/skills, and that directory IS pi's global discovery root — so there the
+            // destination has two readers and this removal costs pi those skills.
             let shared = engine::resolve(&home().join(".agents").join("skills"));
             if config.destination == shared && home().join(".pi/agent/settings.json").exists() {
                 println!(

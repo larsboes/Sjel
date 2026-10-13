@@ -104,13 +104,22 @@ fn sync(registry: &Registry, args: &[String]) -> Result<(), String> {
     for harness in selected_harnesses(registry, args)? {
         println!("{}:", harness.label);
         if harness.model == Model::Registry {
-            // A registry harness deploys one pack per invocation, so this line is a hint to run
-            // per pack rather than a loop this command could perform.
-            println!(
-                "  registry harness — run: {} deploy {}",
-                harness.cli,
-                if all { "<pack>" } else { pack.unwrap_or("") }
-            );
+            // A registry harness has no per-Pack deploy, and the advice differs by which one it is.
+            // pi has `tools/packs-pi`, which takes one Pack per invocation. sjel-agent has no
+            // launcher at all: its skill set IS a profile, written as `[skills] paths` in the
+            // overlay's config/agent.toml by `agent::activate_profile_on_agent`, so `use` is the
+            // verb. This line used to print `tools/harnesses deploy <pack>` for sjel-agent, and
+            // `tools/harnesses` has no `deploy` verb — the same predicate `use_profile` keys on.
+            let advice = if harness.id == "sjel-agent" {
+                format!("tools/harnesses use <profile> --harness {}", harness.id)
+            } else {
+                format!(
+                    "{} deploy {}",
+                    harness.cli,
+                    if all { "<pack>" } else { pack.unwrap_or("") }
+                )
+            };
+            println!("  registry harness — run: {advice}");
             continue;
         }
         let config = &harness.config;

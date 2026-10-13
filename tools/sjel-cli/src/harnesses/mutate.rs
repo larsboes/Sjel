@@ -455,7 +455,18 @@ fn remove_owned_unit(
         let mut record = record;
         adopt_digest_policy_if_safe(config, &mut record, &destination, unit_key)
             .map_err(|e| format!("{e}; refusing to remove"))?;
-        fs::remove_dir_all(&destination).map_err(|e| format!("{}: {e}", destination.display()))?;
+        // A unit is a directory in every materialized channel except pi's agents, which are flat
+        // `.md` files under `~/.pi/agent/agents/` (pi_settings.rs, `pi_agents_root`).
+        // `remove_dir_all` on a file fails with ENOTDIR, and the `?` here used to skip the ledger
+        // update below — so the Pack stayed recorded, the files stayed on disk and live to
+        // pi-subagents, and every agent file reported an error instead. Measured 2026-10-13:
+        // `tools/packs-pi remove writing` left eight academic-writing agents in place.
+        let outcome = if destination.is_dir() {
+            fs::remove_dir_all(&destination)
+        } else {
+            fs::remove_file(&destination)
+        };
+        outcome.map_err(|e| format!("{}: {e}", destination.display()))?;
     }
     if let Some(record) = state.packs.get_mut(pack) {
         record.skills.remove(unit_key);
@@ -473,7 +484,7 @@ pub fn sync_pack(config: &DeployConfig, pack: &str) -> Result<Vec<String>, Strin
         let held = held_units(config)?;
         let (units, held_here): (Vec<Unit>, Vec<Unit>) = pack_units(config, pack)?
             .into_iter()
-            .partition(|u| !held.contains(&format!("{pack}/{}", u.key)));
+            .partition(|u| !hold_matches(&held, &format!("{pack}/{}", u.key)));
         let mut state = read_state(config)?;
         if !state.packs.contains_key(pack) {
             return Err(format!("{pack}: not deployed; deploy it first"));
@@ -513,7 +524,7 @@ pub fn sync_pack(config: &DeployConfig, pack: &str) -> Result<Vec<String>, Strin
         let stale: Vec<String> = state.packs[pack]
             .skills
             .keys()
-            .filter(|k| !desired.contains(*k) && !held.contains(&format!("{pack}/{k}")))
+            .filter(|k| !desired.contains(*k) && !hold_matches(&held, &format!("{pack}/{k}")))
             .cloned()
             .collect();
         for unit_key in stale {
@@ -627,7 +638,7 @@ pub fn deploy_pack(
         let (units, held_here): (Vec<Unit>, Vec<Unit>) = pack_units(config, pack)?
             .into_iter()
             .filter(|u| skill_subset.is_none_or(|s| !u.is_skill || s.contains(&u.key)))
-            .partition(|u| !held.contains(&format!("{pack}/{}", u.key)));
+            .partition(|u| !hold_matches(&held, &format!("{pack}/{}", u.key)));
         let mut state = read_state(config)?;
         // Validate every source and collision before the first write so a bad unit cannot leave
         // a normally-failing Pack only partially deployed.
@@ -981,6 +992,22 @@ pub fn held_units(config: &DeployConfig) -> Result<BTreeSet<String>, String> {
         .collect())
 }
 
+/// Whether a `[unit_hold]` entry names this unit, where the key is `<pack>/<unit>`.
+///
+/// An exact key names one unit. A key ending in `/` names everything under it, because one
+/// intent has a different unit shape per harness: claude carries a Pack's `agents/` tree as a
+/// single unit, while pi materializes that same tree as `agents/<file>.md` per file
+/// (pi_settings.rs, `pi_agents_root`). Matching exactly meant the operator had to spell one
+/// decision eight times for pi and once for claude — and got no warning for the eight, because a
+/// hold that matches nothing looks identical to a hold that works. Measured 2026-10-13: with
+/// `writing/agents/` held, claude dropped the tree and pi silently redeployed all eight files.
+pub fn hold_matches(held: &BTreeSet<String>, key: &str) -> bool {
+    held.iter().any(|hold| match hold.strip_suffix('/') {
+        Some(prefix) => key == hold || key.starts_with(&format!("{prefix}/")),
+        None => hold == key,
+    })
+}
+
 /// The note a deploy or sync prints for each unit a hold kept out, so an absent unit reads as a
 /// decision rather than as a failure.
 fn held_messages(pack: &str, harness: &str, held: &[Unit]) -> Vec<String> {
@@ -1306,6 +1333,39 @@ mod tests {
     /// leaves an already-recorded held unit alone, so doctor can report an override rather than
     /// sync silently undoing one.
     #[test]
+    /// One hold line, two unit shapes. claude carries a Pack's `agents/` tree as a single unit;
+    /// pi materializes the same tree as `agents/<file>.md` per file. Both are named by one
+    /// `writing/agents/` entry. The bug this closes: with that entry in place, claude dropped the
+    /// tree and pi silently redeployed all eight files, and nothing reported the difference
+    /// because a hold that matches nothing looks exactly like a hold that works.
+    #[test]
+    fn a_trailing_slash_hold_names_every_unit_under_it() {
+        let held: BTreeSet<String> = [
+            "writing/agents/".to_owned(),
+            "harness/pi-packages/accordion".to_owned(),
+        ]
+        .into_iter()
+        .collect();
+
+        // The tree shape: the whole `agents/` directory is one unit.
+        assert!(hold_matches(&held, "writing/agents/"));
+        // The per-file shape: the same directory, one unit per agent file.
+        assert!(hold_matches(
+            &held,
+            "writing/agents/academic-writing-layout-auditor.md"
+        ));
+        // A sibling in the same Pack is not swept up by the prefix.
+        assert!(!hold_matches(&held, "writing/skills/human-writing"));
+        // The prefix stops at a path boundary, not mid-name.
+        assert!(!hold_matches(&held, "writing/agents-extra/file.md"));
+        // A key with no trailing slash stays an exact match.
+        assert!(hold_matches(&held, "harness/pi-packages/accordion"));
+        assert!(!hold_matches(
+            &held,
+            "harness/pi-packages/accordion/extension"
+        ));
+    }
+
     fn a_held_unit_is_never_deployed_and_never_enters_the_ledger() {
         let root = std::env::temp_dir().join(format!("sjel-harnesses-hold-{}", std::process::id()));
         let _ = fs::remove_dir_all(&root);

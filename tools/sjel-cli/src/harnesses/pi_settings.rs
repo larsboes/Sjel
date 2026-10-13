@@ -449,12 +449,16 @@ fn activate_agents_for_profile(
             continue;
         }
         let deployed = agents_ledger_owns(&config, pack);
-        let count = if deployed {
+        let lines = if deployed {
             mutate::sync_pack(&config, pack)?
         } else {
             mutate::deploy_pack(&config, pack, None)?
         };
-        messages.push(format!("  → agents: {pack} ({} file(s))", count.len()));
+        // The engine's own lines, not a count of them. `sync_pack` returns one line per unit
+        // moved AND one per unit a hold kept out, so reporting `lines.len()` as "file(s)" said
+        // "8 file(s)" for a Pack whose eight files were all held back — the opposite of what
+        // happened. Measured 2026-10-13, twice.
+        messages.extend(lines.into_iter().map(|l| format!("  → agents: {l}")));
     }
     Ok(messages)
 }
@@ -903,16 +907,23 @@ pub fn remove_packs(config: &DeployConfig, packs: &[String]) -> Result<Vec<Strin
     }
     let mut settings = read_settings()?;
     let mut state = read_pi_state()?;
+    let agents = agents_config(config);
     let mut remove_paths: BTreeSet<String> = BTreeSet::new();
     let mut remove_extensions: BTreeSet<String> = BTreeSet::new();
     let mut remove_packages: BTreeSet<String> = BTreeSet::new();
     let mut out = Vec::new();
 
     for pack in packs {
-        let Some(paths) = state.packs.get(pack).cloned() else {
+        // A Pack can be recorded in the skill ledger, the agent ledger, or both: they are separate
+        // files with separate destinations, and one failed removal can leave one without the
+        // other. Requiring the skill ledger here made such a Pack unremovable — its agent files
+        // stayed on disk and live to pi-subagents, and the error named a Pack the caller could see
+        // deployed. Either ledger owning it is enough to remove it. Measured 2026-10-13: a
+        // `remove writing` whose agent step failed left exactly this state.
+        if !state.packs.contains_key(pack) && !agents_ledger_owns(&agents, pack) {
             return Err(format!("{pack}: not owned by Axon Pi deployment"));
-        };
-        remove_paths.extend(paths);
+        }
+        remove_paths.extend(state.packs.get(pack).cloned().unwrap_or_default());
         remove_extensions.extend(state.extensions.get(pack).cloned().unwrap_or_default());
         remove_packages.extend(state.packages.get(pack).cloned().unwrap_or_default());
         state.packs.remove(pack);
@@ -939,7 +950,6 @@ pub fn remove_packs(config: &DeployConfig, packs: &[String]) -> Result<Vec<Strin
     write_settings(&settings)?;
     write_pi_state(&state)?;
 
-    let agents = agents_config(config);
     for pack in packs {
         let removed = remove_agents_for(&agents, pack)?;
         if removed > 0 {

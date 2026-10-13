@@ -5,7 +5,7 @@
 #   tools/harnesses use <name> [--harness <id>]   apply to every installed harness
 #   tools/packs-claude use <name>                 apply to Claude Code
 #   tools/packs-pi use <name>                     apply to pi (rewrites settings.json)
-#   tools/packs-codex use <name>                  apply to Codex (declined on this host)
+#   tools/packs-codex use <name>                  apply to Codex
 #
 # ── 2026-10-09: Codex's 21 deployed skills were removed, and this is why ─────────────
 #
@@ -26,6 +26,33 @@
 # Codex itself stays installed and usable; it simply carries no Sjel skills now. Its
 # superseded state is undone with `tools/packs-codex deploy <pack>...` per Pack.
 #
+# ── 2026-10-13: SUPERSEDED. Codex's root moved and it carries Packs again ────────────
+#
+# The paragraph above is why Codex was emptied, not a permanent rule. The defect was never
+# Codex: it was that Codex's destination WAS a pi discovery root. Measured 2026-10-13: Codex
+# reads `$CODEX_HOME/skills` (defaults to `~/.codex/skills`) -- its own binary says "Installs
+# into $CODEX_HOME/skills/<skill-name>", that is where `.system/` and the skill-installer
+# live, and `codex exec` in a neutral directory resolves skills no other root on this machine
+# supplies. pi reads `~/.pi/agent/skills`, `~/.agents/skills` and project `.agents/skills`
+# (pi.rs, discovery_roots) and does NOT read `~/.codex/skills`.
+#
+# So `registry.rs` now defaults the Codex destination to `$HOME/.codex/skills`. One channel,
+# one reader, no collision, and Codex holds the same Pack set as Claude Code. `~/.agents/skills`
+# keeps its other readers and its `npx skills --global` policy (tools/skills) unchanged.
+#
+# MIGRATING A MACHINE THAT HAD CODEX DEPLOYED: the ledger records the destination it belongs to
+# and `read_state` refuses a mismatch ("state file belongs to X, not Y"), so the move is not
+# silent and not automatic. In order: deploy the Packs to the new root (`tools/packs-codex
+# deploy <pack>...`), confirm Codex loads them, and only then remove the old copies at
+# `~/.agents/skills` -- they are also pi's, so removing first would strip pi. Where the old
+# ledger holds no rows (as here), repointing its `destination` field is the whole migration.
+# `codex.json` is backed up daily under `capabilities/packs`, so the pre-move file is
+# recoverable.
+#
+# The old note's own warning is what still applies to an OVERRIDE: set CODEX_SKILLS_DIR back to
+# `~/.agents/skills` by hand and the 21 collisions return. The guards that say so are keyed on
+# the configured destination, not on a hardcoded path, so they stay true either way --
+# `tools/harnesses <verb>`, `tools/packs-codex remove`, and the doctor's absent-harness check.
 # A profile is a SELECTION, not a recommendation: activating it replaces what the
 # harness loads with exactly this set. What is deployed, and what is not, is the
 # operator's decision and it is written HERE — see `full` below, and see the note on
@@ -100,18 +127,60 @@
 # from re-registering accordion, because both rediscover it from `pi-packages/` alone. The tree
 # stays in the Pack: accordion is vendored and deliberately owned (upstreams.toml [accordion]),
 # and a hold is a decision not to write a path, not a deletion.
+#
+# codex: `writing/skill-creator` is the one name Codex already has. Codex ships its own
+# `skill-creator` at `$CODEX_HOME/skills/.system/skill-creator`, and it resolves BOTH
+# `~/.codex/skills` and `~/.codex/skills/.system` as skill roots (measured 2026-10-13 with
+# `codex exec`, which listed two skills named exactly `skill-creator`). Two different skills
+# under one name is the same defect the pi/codex collision above was: one name, one channel.
+# Codex's own copy cannot be removed — it is a system skill and an update restores it — so the
+# hold is what gives that name one owner. Measured 2026-10-13: the collision existed only after
+# Codex's destination moved to `~/.codex/skills` and the writing Pack was deployed there, and
+# no other harness had it (claude's root and pi's two roots had no duplicate names).
+#
+# A hold does not delete what is already written (mutate.rs, sync_pack: "the hold means never
+# write this, not delete what is there"), so clearing this one was `tools/packs-codex remove
+# writing` followed by `deploy writing` — remove takes every recorded unit, deploy then skips
+# this one and prints why.
+#
+# defuddle: held from every harness (2026-10-13, owner decision). The skill's own first
+# instruction is "In pi, use the built-in `fetch_content` tool", and both other harnesses carry a
+# native page fetch — so it is a second path to something already built in, and it says so
+# itself. Held rather than deleted for the same reason as the 2026-10-13 trim in `full`: the Pack
+# source stays, and `everything` or a direct deploy brings it back.
+#
+# THE KEY SHAPE DIFFERS BY CHANNEL, and this is the trap. A materialized channel matches a UNIT
+# KEY (`knowledge/defuddle`), while pi's settings channels are registered by PATH and match a path
+# from the Pack root (`knowledge/skills/defuddle`) — see pi_settings.rs, `held_for`. So the same
+# decision is spelled two ways, and getting it wrong is silent: a hold that matches nothing looks
+# exactly like one that works. Measured 2026-10-13: `knowledge/defuddle` held it from claude and
+# codex and left pi still registering it, which only `tools/harnesses status` showed.
+#
+# writing/agents/: all eight files in that tree are academic-writing subagents, so this is the
+# agents half of the same 2026-10-13 decision that narrowed academic-writing out of `full`. It
+# has to be a hold rather than a profile narrowing, because the profile `skills` map names SKILLS
+# and the agents channel ignores it by design — `activate_agents_for_profile` calls sync_pack,
+# which takes every agent unit in the Pack. A hold is absolute, so unlike the skill, these agents
+# are NOT restored by activating `everything`; restore them by removing this line. codex needs no
+# entry: it has no agents channel at all (`tree_convention: None`).
 
 [unit_hold]
-claude = ["harness/agents/"]
-pi = ["harness/pi-packages/accordion"]
+claude = ["harness/agents/", "knowledge/defuddle", "writing/agents/"]
+pi = [
+    "harness/pi-packages/accordion",
+    "knowledge/skills/defuddle",
+    "writing/agents/",
+]
+codex = ["writing/skill-creator", "knowledge/defuddle"]
 
 [[profile]]
 name = "productive"
-description = "Daily driver — coding, prose, academic writing, decks, deliberation, orientation, focus"
+description = "Daily driver — coding, prose, decks, deliberation, orientation, focus"
 packs = ["writing", "presentations", "deliberation", "cognitive-load", "harness"]
 # harness narrowed: this profile wants sjel (repo orientation), not the three
 # maintenance skills. See the 2026-09-17 note above.
-skills = { "harness" = ["sjel"] }
+# writing narrowed: academic-writing left the daily set on 2026-10-13 (see that note below).
+skills = { "harness" = ["sjel"], "writing" = ["human-writing", "skill-creator", "unslop"] }
 # writing: human-writing 15 runs (430 audit-era) + skill-creator 12 runs · academic-writing 7
 #   runs (45 audit-era) + unslop 0 script runs (code-quality review pass by role). One Pack now;
 #   all four skills load, which is the same set this profile already carried.
@@ -167,7 +236,21 @@ packs = ["*"]
 # ytalbum, which lives in the private overlay and does not exist on another machine, and
 # it would silently stop deploying every Pack added later. `everything` below is the raw,
 # unfiltered set for the case where the dormant Packs are wanted too.
-except = ["home-automation"]
+#
+except = [
+    "home-automation",
+    "3d-printing",
+    "cv",
+    "design",
+    "travel",
+    "ytalbum",
+]
+# The 2026-10-13 trim, and it is a DEPLOYMENT decision: every Pack named above stays in the
+# repository, un-deployed, and `everything` puts all of them back in one command. `design` is
+# ui-craftsmanship alone; it had the highest measured demand of anything removed here (116
+# uses in a month), so its removal is a deliberate call and not a measurement's conclusion.
+# Sources are recoverable by re-activating a profile; nothing was deleted.
+skills = { "writing" = ["human-writing", "skill-creator", "unslop"] }
 
 [[profile]]
 name = "everything"

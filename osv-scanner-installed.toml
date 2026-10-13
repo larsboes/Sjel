@@ -183,3 +183,49 @@ reason = "rustybuzz 0.20.1 is unmaintained. No vulnerability and no fixed versio
 id = "GHSA-rj75-hqrm-r3gf"
 ignoreUntil = 2027-01-01
 reason = "Quadratic complexity in postcss-selector-parser's flat-selector parsing (CVE-2026-104844): `.a.a.a...` reaches itself as one word token carrying n indexes, and three passes scan those arrays per index, so a 400 KB selector costs ~34 s of one thread. Fixed in 7.1.6. Reach: the tree npm 12.2.0 bundles for itself (npm/node_modules/@npmcli/arborist <- @npmcli/query), not a package this machine installed, and 12.2.0 is the newest published release while still carrying 7.1.4 — so no install command here moves it. The exposure needs a caller to hand that parser an attacker-controlled selector; nothing in this repository or its CI does, and the audit's second pass is what reads it at all. Ends when npm republishes against a refreshed tree, or when npm is dropped. Accepted 2026-10-08 after `sjel update apply --only npm --re-resolve postcss-selector-parser` reported the package as one this plan does not move."
+
+# ── Inside cargo-installed build tools ───────────────────────────────────────────
+#
+# `cargo install --locked` resolves the Cargo.lock PUBLISHED inside each crate, so these
+# transitive versions are the maintainer's to move. Measured 2026-10-13: a forced reinstall of
+# tauri-cli 2.12.2 re-resolved the build tree and left this pass reporting the same eight,
+# because the pass reads that published file and not the resolved one. That is also why
+# `sjel update apply --only cargo --re-resolve <crate>` cannot clear one: it re-does a step the
+# plan already has, and a crate that is current has no step.
+#
+# Nothing Sjel ships links these. Every chain below is inside tauri-cli's or xberg-cli's own
+# published lock, and the exposure is a request or a file one of those tools handles.
+[[IgnoredVulns]]
+id = "RUSTSEC-2026-0338"
+ignoreUntil = 2027-01-01
+reason = "quinn-proto 0.11.15, fixed in 0.11.18, the QUIC implementation under reqwest. Reach: the published locks of `tauri-cli@2.12.2` and `xberg-cli@1.3.9`, quinn-proto <- quinn <- reqwest in each. Both are build tools, so what is exposed is a connection one of them makes, not one Sjel serves. Ends when either crate republishes against a fixed quinn-proto."
+
+[[IgnoredVulns]]
+id = "RUSTSEC-2026-0339"
+ignoreUntil = 2027-01-01
+reason = "quinn-proto 0.11.15, fixed in 0.11.17. Same reach and same end as RUSTSEC-2026-0338."
+
+[[IgnoredVulns]]
+id = "RUSTSEC-2026-0340"
+ignoreUntil = 2027-01-01
+reason = "quinn-proto 0.11.15, fixed in 0.11.18. Same reach and same end as RUSTSEC-2026-0338."
+
+[[IgnoredVulns]]
+id = "RUSTSEC-2026-0341"
+ignoreUntil = 2027-01-01
+reason = "quinn-proto 0.11.15, fixed in 0.11.17. Same reach and same end as RUSTSEC-2026-0338."
+
+[[IgnoredVulns]]
+id = "RUSTSEC-2026-0342"
+ignoreUntil = 2027-01-01
+reason = "quinn-proto 0.11.15, fixed in 0.11.17. Same reach and same end as RUSTSEC-2026-0338."
+
+[[IgnoredVulns]]
+id = "RUSTSEC-2026-0344"
+ignoreUntil = 2027-01-01
+reason = "ruzstd 0.7.3, fixed in 0.9.1, a zstd decoder. Reach: the published lock of `tauri-cli@2.12.2`, ruzstd <- object <- apple-codesign (and backtrace), so it decompresses an object or debug section of a binary tauri-cli is reading or signing — tauri-cli's own input, not Sjel's. Ends when tauri-cli republishes with object on ruzstd >= 0.9.1."
+
+[[IgnoredVulns]]
+id = "RUSTSEC-2024-0449"
+ignoreUntil = 2027-01-01
+reason = "Unmaintained unsafe-libyaml 0.2.11, no fixed version, runtime. Type INFO, not a vulnerability: the unsoundness, RUSTSEC-2023-0075, was fixed in 0.2.10 and both crates are well past it. Reach: `tauri-cli@2.12.2` (unsafe-libyaml <- serde_yaml 0.9.34+deprecated <- apple-codesign) and `xberg-cli@1.3.9` (<- serde_yaml_ng <- xberg). Accepted for the same reason as in osv-scanner.toml, and immovable here for the same reason: the version is the parent's published pin. Ends when apple-codesign or xberg drops the deprecated serde_yaml."

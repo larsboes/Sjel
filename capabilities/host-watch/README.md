@@ -147,8 +147,12 @@ stops working. Raising `min_cpu_ratio` is nearly always the better answer.
 - **Killing the runaway.** Detection only. A scheduled job with kill authority over
   arbitrary host processes is a blast radius nobody asked for, and the diagnosis of
   "stuck" versus "working hard" is exactly the judgement a threshold cannot make.
-- **Running `storage --apply` on a schedule.** Reclaiming stays a deliberate human
-  command. Deleting a build cache mid-compile is a cure worse than a full disk.
+- **Running `storage --apply` from the watcher.** Reclaiming stays a deliberate human
+  command here, and detection and action stay separate jobs. The two reasons this bullet
+  used to give are handled elsewhere now: the tool refuses a directory a live process
+  holds, so a build cache cannot be deleted mid-compile, and a class acts from a schedule
+  only when the policy itself bounds it by size or age (`cap_gb`, `older_than_days`) —
+  which is what `capabilities/cargo-trim` runs daily.
 - **A dashboard panel.** The decision ladder on home already ranks these findings, beside
   everything else waiting on a call. A second place to look is the failure this exists to
   prevent.

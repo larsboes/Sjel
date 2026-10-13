@@ -2435,10 +2435,11 @@ fn build_artifacts(ctx: &mut Ctx) {
     let short = |k: &str| jstr(tc.get(k)).chars().take(9).collect::<String>();
     if tc.get("matches") == Some(&Json::Bool(false)) {
         ctx.warn(format!(
-            "target/.rustc_info.json records rustc {} but this machine runs {} — {} of deps and fingerprints was built by a compiler that is gone; sjel storage prune --target",
+            "target/.rustc_info.json records rustc {} but this machine runs {} — {} of deps and fingerprints was built by a compiler that is gone. Reclaiming it means removing the whole target dir ({}), not only that subset, and that dir may hold a binary a live process runs",
             short("recorded"),
             short("current"),
-            gb(num(tc.get("stale_candidate_bytes")))
+            gb(num(tc.get("stale_candidate_bytes"))),
+            gb(num(data.get("bytes")))
         ));
     } else if truthy(tc.get("recorded")) {
         ctx.ok(format!(

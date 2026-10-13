@@ -29,34 +29,15 @@ A group with one constraint for all its items ("travel-friendly, fewer but bette
 
 ## Storage: what is still open
 
-2026-10-13. `prune` now refuses a directory a live process holds (`tools/storage/src/inuse.rs`)
-and defers to the overlay policy on any path the policy names or protects (`Authority` in
-`tools/storage/src/prune.rs`), so `report` and `prune` give one answer about `~/.cargo-target`
-instead of two. The policy was trimmed to what is on the machine; the reasons removed from it are
-the section below.
+2026-10-13. The crate has **one reporting surface and one reclaim surface**. `report`,
+`discover` and `target` read; `reclaim` is the only thing that removes, with `apply` and `prune`
+kept as spellings of it so a finding already written that says `--apply` still resolves. Every
+removal goes through one guard (`guard.rs`): canonicalise, scope, git, the policy's protection
+and ownership, then the live-process probe. The policy gained a size axis (`cap_gb`,
+`older_than_days`), which is what let `capabilities/cargo-trim` stop being a shell script with its
+own `du`, its own `pgrep` guard and its own 50 GB cap — it runs `reclaim --scheduled` now.
 
-### Three reclaimers, and only one of them runs
-
-| who | removes | guard | size rule |
-|---|---|---|---|
-| `sjel storage apply` | every class with `apply = true` | the policy | **none** |
-| `sjel storage prune` | target dirs, node_modules | canonicalise, git, in-use, policy | none |
-| `capabilities/cargo-trim` (overlay, launchd, 1d) | `~/.cargo-target/debug` | its own `pgrep -xq cargo/rustc` | 50 GB cap |
-
-`cargo-trim` is the only one that runs unattended, and it exists because `apply` is size-blind —
-its own `service.toml` says a daily apply "would also clear the browser payloads and app caches
-every day". So the one reclaim that happens carries its own guard, its own `du`, its own cap, and
-its own knowledge that `release/` is live: everything the tool already has, rebuilt in 40 lines of
-shell. Either the tool absorbs it — a cap per class, and `apply` becomes schedulable — or the
-policy should stop presenting itself as the reclaim surface.
-
-### No class has a size axis
-
-The policy expresses *may I* (`apply`, `protected`) and never *is it too big*. Every incident that
-built this tool was about size — 46 GB of cache, 149 GB of target, 130 GB of debug — and the one
-size threshold, `class_flag_gb = 20`, fires on `rust-shared-target` most days and nothing acts on
-it on purpose (`tools/sjel-cli/src/host_watch/pure.rs`). That axis is what would make reclaim
-schedulable rather than a thing a person decides.
+Still open:
 
 ### `discover` stops at `$HOME`, and nothing runs it
 

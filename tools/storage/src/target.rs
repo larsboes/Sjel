@@ -42,7 +42,7 @@ pub const R6_MAX_RATIO: f64 = 3.0;
 /// Cargo stamps its target dir with a `CACHEDIR.TAG`, so this finds them by that marker
 /// rather than by guessing directory names. The case that produced it, measured 2026-09-30:
 /// Xcode's build phase launches `cargo` without the shell environment, so `CARGO_TARGET_DIR`
-/// is unset and cargo falls back to the workspace-local `target/`. `prune --target` runs
+/// is unset and cargo falls back to the workspace-local `target/`. `reclaim --repo --target` runs
 /// `cargo clean`, which honours that same variable, so it could only ever clean the one
 /// directory — and `dashboard/src-tauri/target` reached 15 GB unremarked.
 #[derive(Debug, Clone, Serialize)]

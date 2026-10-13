@@ -9,7 +9,7 @@ Discover Sjel:
   doctor                          Check this Sjel installation
   context with [capability]      Emit bounded current operating context
   context on [unit-or-path]      Emit bounded current repository context
-  storage <report|apply|target|prune>
+  storage <report|discover|reclaim|target>
                                  What is filling this disk, and what is safe to reclaim
   update [--json|--offline]      Software installed outside this checkout, and what is stale
   update apply [--only <class>]  Move what Sjel owns, and delegate the rest

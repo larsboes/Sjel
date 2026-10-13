@@ -355,7 +355,7 @@ pub fn storage_finding(report: &StorageReport) -> Option<Finding> {
         note: format!(
             "Free space crossed the {state} threshold in the overlay's storage-policy.toml.\n\
              What is filling it, and what is safe to reclaim: tools/sysmon storage\n\
-             Reclaim the applicable classes: tools/sysmon storage --apply"
+             Reclaim what the policy allows: sjel storage reclaim"
         ),
     })
 }

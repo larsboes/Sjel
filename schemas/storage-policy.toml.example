@@ -22,6 +22,18 @@ class_flag_gb = 5
 # The rule that keeps --apply safe: never `rm -rf` what a tool can clean itself. A
 # named tool's own verb runs verbatim; the literal string `rm -rf` is special-cased
 # to delete only the paths tools/storage measured, never a path the policy named.
+#
+# `cap_gb` is the size axis, and it is a GATE on `apply` rather than a separate verb:
+# the class acts only when it is measured above the cap, and a class with no cap acts
+# whenever it is asked (which is what every class did before this existed). It is also
+# what makes a class safe to run unattended — `sjel storage reclaim --scheduled` acts
+# only on classes whose own declaration bounds them, by size or by age, because an
+# unbounded class is a person's decision.
+#
+# `older_than_days` removes the entries INSIDE each path that are older than N days,
+# rather than the path itself. That is the cheap way to hold a build cache down: the
+# alternative for a debug directory is dropping all of it at the cap, one full rebuild,
+# every time it reaches the cap.
 
 [[class]]
 name = "package manager cache"
@@ -38,6 +50,24 @@ paths = ["<projects-root>/*/target"]
 # class, never by default.
 reclaim = "rm -rf"
 apply = true
+
+[[class]]
+name = "<build-system> debug cache"
+paths = ["~/<shared-target>/debug", "~/<shared-target>/*/debug"]
+# Bounded by size, so this one may run from a schedule. `[[protected]]` the sibling
+# that a running process execs from (release/) and the guard keeps the sweep off it.
+reclaim = "rm -rf"
+apply = true
+cap_gb = 50
+
+[[class]]
+name = "<build-system> incremental state"
+paths = ["~/<shared-target>/debug/incremental"]
+# Bounded by age, so this may also run unattended. Keeps the cap above from being
+# reached at all, which is the difference between a rare full rebuild and a regular one.
+reclaim = "rm -rf"
+apply = true
+older_than_days = 3
 
 [[class]]
 name = "<model-server> KV cache"
@@ -57,8 +87,18 @@ path = "<path-holding-state-you-cannot-regenerate>"
 reason = "<why losing this would be unrecoverable>"
 
 # Long-running services this host expects to find. Reported so a cache that belongs
-# to a service that is no longer installed is visible as an orphan.
+# to a service that is no longer installed is visible as an orphan. Each one is CHECKED
+# against the machine, so `kind` picks the probe and `name` is what the probe matches on:
+#
+#   process         pgrep -f <name>          full command line, so argv[0] need not be the name
+#   launchagent     launchctl print gui/<uid>/<name>   `name` is the launchd label
+#   apple-container `container list`, matched by <name>  unverifiable if no `container` CLI
+#
+# Any other `kind` is unverifiable rather than absent, so a policy written for another init
+# system does not read as a stopped service. A service already declared by systems.toml or a
+# capability's service.toml does NOT belong here — tools/doctor checks those, and restating it
+# is the second source of truth this file exists to avoid.
 [[expected_service]]
 name = "<service>"
-kind = "<launchd|systemd|container>"
+kind = "<process|launchagent|apple-container>"
 note = "<what it owns on disk>"

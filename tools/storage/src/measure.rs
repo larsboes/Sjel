@@ -72,14 +72,78 @@ pub fn parse_du(text: &str) -> u64 {
         .sum()
 }
 
-pub fn size_of(paths: &[String]) -> u64 {
-    if paths.is_empty() {
-        return 0;
+/// What `du` answered, and whether it answered completely.
+///
+/// `du` exits non-zero when it meets a path it cannot read and still prints a total for
+/// what it did read. That partial total was indistinguishable from a directory's real size,
+/// so a class the measuring user could not read reported a confident number that was too
+/// small. `complete` is the difference, and `error` is the first line `du` wrote to stderr.
+///
+/// A path that is not there is not a measurement failure: `du` omits it from its output and
+/// exits 0, and the report already has its own word for a path that is gone (`paths` empty).
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Sizing {
+    pub bytes: u64,
+    pub complete: bool,
+    pub error: String,
+}
+
+impl Sizing {
+    fn absent() -> Self {
+        Self {
+            bytes: 0,
+            complete: true,
+            error: String::new(),
+        }
     }
-    let out = Command::new("du").arg("-sx").arg("-k").args(paths).output();
-    match out {
-        Ok(o) => parse_du(&String::from_utf8_lossy(&o.stdout)),
-        Err(_) => 0,
+}
+
+/// What the report can say about one class, from the two facts it has: whether a path
+/// answered, and whether `du` read all of it.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum MeasuredState {
+    /// Nothing on the machine answers to any of the class's paths.
+    Absent,
+    /// The path is here and `du` failed, so no size (or only a partial one) is available.
+    /// This is the state the old report dropped entirely: it was not "absent" because the
+    /// path existed, and the size list skipped it because the size was zero.
+    Unmeasured,
+    /// A complete size.
+    Sized,
+}
+
+pub fn measured_state(present: bool, complete: bool) -> MeasuredState {
+    match (present, complete) {
+        (false, _) => MeasuredState::Absent,
+        (true, false) => MeasuredState::Unmeasured,
+        (true, true) => MeasuredState::Sized,
+    }
+}
+
+/// The first non-empty line of a tool's stderr, for a report that has one line to spend.
+pub fn first_line(text: &str) -> String {
+    text.lines()
+        .find(|l| !l.trim().is_empty())
+        .unwrap_or_default()
+        .trim()
+        .to_string()
+}
+
+pub fn size_of(paths: &[String]) -> Sizing {
+    if paths.is_empty() {
+        return Sizing::absent();
+    }
+    match Command::new("du").arg("-sx").arg("-k").args(paths).output() {
+        Ok(o) => Sizing {
+            bytes: parse_du(&String::from_utf8_lossy(&o.stdout)),
+            complete: o.status.success(),
+            error: first_line(&String::from_utf8_lossy(&o.stderr)),
+        },
+        Err(e) => Sizing {
+            bytes: 0,
+            complete: false,
+            error: e.to_string(),
+        },
     }
 }
 
@@ -180,6 +244,25 @@ mod tests {
     #[test]
     fn parse_du_treats_absent_paths_as_zero_since_du_omits_them_entirely() {
         assert_eq!(parse_du(""), 0);
+    }
+
+    #[test]
+    fn a_present_path_that_could_not_be_read_is_unmeasured_not_absent() {
+        assert_eq!(measured_state(false, true), MeasuredState::Absent);
+        // A path that is gone and a `du` that failed are the same thing to a reader: nothing
+        // to size, and no measurement error to report.
+        assert_eq!(measured_state(false, false), MeasuredState::Absent);
+        assert_eq!(measured_state(true, false), MeasuredState::Unmeasured);
+        assert_eq!(measured_state(true, true), MeasuredState::Sized);
+    }
+
+    #[test]
+    fn first_line_skips_blank_stderr_and_trims_the_rest() {
+        assert_eq!(
+            first_line("\n  du: /x: Permission denied\nmore\n"),
+            "du: /x: Permission denied"
+        );
+        assert_eq!(first_line(""), "");
     }
 
     #[test]

@@ -52,6 +52,31 @@ pub struct StorageClass {
     pub regrows: bool,
     #[allow(dead_code)] // Read by an operator in the policy file; the report prints sizes.
     pub note: Option<String>,
+    /// The size axis, which the policy otherwise does not have. `apply` answers "may I" and
+    /// never "is it too big", and every incident that built this tool was the second question:
+    /// 46 GB of KV cache, 149 GB of target, 130 GB of debug. With a cap, a class acts only
+    /// above it and the class becomes something a machine may run unattended.
+    pub cap_gb: Option<f64>,
+    /// Remove entries *inside* each path older than this many days, rather than the path.
+    /// The cheap way to keep a directory bounded without a full rebuild: the alternative for
+    /// `~/.cargo-target/debug` is dropping all of it at the cap, one rebuild, repeatedly.
+    pub older_than_days: Option<u32>,
+}
+
+impl StorageClass {
+    /// A class a machine may act on unattended, because its own declaration bounds what it
+    /// can do: by size (`cap_gb`) or by age (`older_than_days`). An unbounded class is a
+    /// person's decision, which is exactly what `reclaim` without `--scheduled` is for.
+    pub fn bounded(&self) -> bool {
+        self.cap_gb.is_some() || self.older_than_days.is_some()
+    }
+
+    /// Is this class over the cap it declared? A class with no cap is never over one, so the
+    /// caller needs no second branch for the common case.
+    pub fn over_cap(&self, bytes: u64) -> bool {
+        self.cap_gb
+            .is_some_and(|cap| (bytes as f64) > cap * GB as f64)
+    }
 }
 
 #[derive(Debug, Clone, Deserialize)]
@@ -79,10 +104,13 @@ pub fn load(path: &Path) -> Result<Policy, String> {
     toml::from_str(&text).map_err(|e| format!("{}: {e}", path.display()))
 }
 
-/// A class is only touchable by `apply` when the policy both allows it and says how.
-/// `apply = true` with no reclaim command is a policy bug, not a licence to guess.
+/// A class is only touchable by `reclaim` when the policy both allows it and says how.
+/// `apply = true` with nothing that says how is a policy bug, not a licence to guess — and
+/// `older_than_days` counts as saying how, because removing entries by age is a mechanism this
+/// tool owns rather than a command the policy hands over. A class with an age therefore needs
+/// no `reclaim` of its own.
 pub fn is_applicable(c: &StorageClass) -> bool {
-    c.apply && c.reclaim.as_deref().is_some_and(|r| !r.is_empty())
+    c.apply && (c.reclaim.as_deref().is_some_and(|r| !r.is_empty()) || c.older_than_days.is_some())
 }
 
 /// The safety boundary. A policy-supplied string is data, not code — the one case where it
@@ -94,7 +122,13 @@ pub fn reclaim_argv(c: &StorageClass, measured_paths: &[String]) -> Option<Vec<S
     if !is_applicable(c) {
         return None;
     }
+    // An age-only class is applicable and has no command, and the caller handles it before
+    // getting here. Returning `None` rather than an argv built from an empty string is what
+    // stops a policy typo from becoming a command named "".
     let reclaim = c.reclaim.as_deref().unwrap_or_default();
+    if reclaim.is_empty() {
+        return None;
+    }
     if reclaim == "rm -rf" {
         // Never a bare `rm -rf`. The failure this guards: argv collapsing to two elements
         // and the command inheriting a cwd, or a policy path expanding to "" and taking
@@ -223,6 +257,8 @@ mod tests {
             apply,
             regrows: false,
             note: None,
+            cap_gb: None,
+            older_than_days: None,
         }
     }
 
@@ -411,5 +447,35 @@ mod tests {
         assert!(!is_applicable(&policy.classes[0]));
         assert!(!policy.classes[0].regrows);
         assert_eq!(policy.thresholds.class_flag_gb, None);
+    }
+
+    // ── the size axis ───────────────────────────────────────────────────────────
+
+    #[test]
+    fn a_cap_is_a_gate_and_absent_means_no_gate() {
+        const GB_U: u64 = GB;
+        let capped: StorageClass = toml::from_str(
+            "name = \"c\"\npaths = [\"/t\"]\nreclaim = \"rm -rf\"\napply = true\ncap_gb = 50\n",
+        )
+        .unwrap();
+        // At the cap is not over it: a class sitting exactly on its limit is doing what it was
+        // told, and firing there would make the boundary a coin toss.
+        assert!(!capped.over_cap(50 * GB_U));
+        assert!(capped.over_cap(50 * GB_U + 1));
+
+        // No cap is not a cap of zero. This is what keeps every class written before the
+        // axis existed behaving exactly as it did.
+        let uncapped: StorageClass = toml::from_str("name = \"c\"\npaths = [\"/t\"]\n").unwrap();
+        assert!(!uncapped.over_cap(u64::MAX));
+    }
+
+    #[test]
+    fn only_a_bounded_class_may_be_acted_on_unattended() {
+        let read = |toml_text: &str| -> StorageClass { toml::from_str(toml_text).unwrap() };
+        assert!(!read("name = \"c\"\npaths = [\"/t\"]\n").bounded());
+        assert!(read("name = \"c\"\npaths = [\"/t\"]\ncap_gb = 50\n").bounded());
+        // Age alone bounds it: removing entries older than N days cannot run away, which is
+        // the property `--scheduled` is asking about.
+        assert!(read("name = \"c\"\npaths = [\"/t\"]\nolder_than_days = 3\n").bounded());
     }
 }

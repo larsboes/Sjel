@@ -1,11 +1,12 @@
 //! `prune` — repo-scoped, policy-free reclaim.
 //!
 //! `report` and `apply` answer "what is filling this machine" and act on the overlay's
-//! policy. This verb answers a narrower question with no policy at all: what can this
-//! checkout give back right now. Nothing here reads `storage-policy.toml`, so it works on a
-//! clone with no overlay, which is exactly when someone needs the disk back.
+//! policy. This verb answers a narrower question: what can this checkout give back right
+//! now. Nothing here reads `storage-policy.toml`, so it works on a clone with no overlay,
+//! which is exactly when someone needs the disk back — the caller translates the overlay
+//! into an [`Authority`] and hands it over, and a machine with no policy passes none.
 //!
-//! Three refusals hold it inside the checkout:
+//! Four refusals hold it:
 //!
 //! 1. Every path is canonicalised and must sit under the repo root or the Cargo target dir.
 //!    A symlink pointing out of the tree fails this after resolution, not before.
@@ -14,11 +15,22 @@
 //!    `git ls-files` per path so a tracked file can never be an argument.
 //! 3. The repo root and the target dir are never themselves removed — only their contents,
 //!    or `cargo clean` for the target dir, which is cargo's own verb for it.
+//! 4. A directory a live process has open, because removing it breaks that process or the
+//!    build it is in; `inuse.rs` carries what that cost on 2026-10-12.
+//!
+//! And a fifth when the machine has a policy: a path the policy names, or that *holds* a
+//! path it names, is the policy's to decide and not this verb's. On 2026-10-13 the policy
+//! class `rust-shared-target` called `~/.cargo-target` report-only because `release/` holds a
+//! binary that session was running, while `--target` offered to `cargo clean` all 18.1 GB of
+//! it. Two answers to one question, and the sweep was the wrong one — so the policy's answer
+//! wins and `--force` is the only way past it.
 
 use std::path::{Path, PathBuf};
 use std::process::Command;
 
+use crate::guard::{git, Caller, Guard};
 use crate::measure::{fmt_bytes, Walk};
+use crate::reclaim::Outcome;
 
 /// The three ignored directory names this verb removes.
 ///
@@ -53,52 +65,6 @@ pub fn ignored_purgeable(status_z: &str) -> Vec<String> {
         })
         .map(str::to_string)
         .collect()
-}
-
-fn git(repo_root: &Path, args: &[&str]) -> Option<String> {
-    let out = Command::new("git")
-        .arg("-C")
-        .arg(repo_root)
-        .args(args)
-        .output()
-        .ok()?;
-    out.status
-        .success()
-        .then(|| String::from_utf8_lossy(&out.stdout).into_owned())
-}
-
-/// Is this path one `prune` may remove? The answer has to survive a symlink, so it is asked
-/// of the canonical path and of git, never of the string that was passed in.
-pub fn removable(path: &Path, repo_root: &Path, target_dir: &Path) -> Result<PathBuf, String> {
-    let real = path
-        .canonicalize()
-        .map_err(|e| format!("{}: {e}", path.display()))?;
-    let repo = repo_root
-        .canonicalize()
-        .unwrap_or_else(|_| repo_root.into());
-    let target = target_dir
-        .canonicalize()
-        .unwrap_or_else(|_| target_dir.into());
-    if !(real.starts_with(&repo) || real.starts_with(&target)) {
-        return Err(format!(
-            "{} resolves outside the repo ({}) and the target dir ({}) — refusing",
-            real.display(),
-            repo.display(),
-            target.display()
-        ));
-    }
-    if real == repo || real == target {
-        return Err(format!("{} is the root itself — refusing", real.display()));
-    }
-    // The second half of refusal 2: the `--node-modules` list is derived from what git
-    // calls ignored, and this re-asks per path so nothing tracked can be an argument.
-    // A path under an external `CARGO_TARGET_DIR` is in no index at all — git exits
-    // non-zero, `git` returns `None`, and "not tracked" is the correct answer.
-    let tracked = git(&repo, &["ls-files", "--", &real.to_string_lossy()]).unwrap_or_default();
-    if !tracked.trim().is_empty() {
-        return Err(format!("{} is tracked by git — refusing", real.display()));
-    }
-    Ok(real)
 }
 
 fn measure(paths: Vec<PathBuf>) -> Vec<Candidate> {
@@ -180,56 +146,90 @@ impl Plan {
             },
         }
     }
-
-    pub fn bytes(&self) -> u64 {
-        self.incremental.iter().map(|c| c.bytes).sum::<u64>()
-            + self.node_modules.iter().map(|c| c.bytes).sum::<u64>()
-            + self.target.as_ref().map_or(0, |c| c.bytes)
-            + self.secondary_targets.iter().map(|s| s.bytes).sum::<u64>()
-    }
 }
 
-/// Run the plan. Returns the lines to print and the number of refusals, which the caller
-/// turns into an exit code.
-pub fn run(
-    plan: &Plan,
-    repo_root: &Path,
-    target_dir: &Path,
-    dry_run: bool,
-) -> (Vec<String>, usize) {
+/// The bytes a set of candidates gives back, and what it leaves out because a larger
+/// candidate in that same set covers it.
+///
+/// `incremental_dirs` reads `target/<profile>/incremental`, so under `--target` every
+/// incremental candidate is inside the target candidate, and summing both reported 210.9 GB
+/// reclaimable for roughly 150 GB on 2026-10-11 — a 40% overstatement of the one number that
+/// decides whether anyone acts. A secondary target dir nested inside another is the same
+/// shape, so the rule is written on the paths rather than special cased for the pair that
+/// happened to fail. Two candidates on one path are one removal: without that each would see
+/// the other as a non-strict prefix and both would survive.
+///
+/// Pure, and the caller passes the candidates that survived its refusals — an incremental dir
+/// stops being nested the moment the target dir holding it is refused.
+fn totals(candidates: &[(u64, PathBuf)]) -> (u64, u64) {
+    let mut all = candidates.to_vec();
+    all.sort_by(|a, b| a.1.cmp(&b.1));
+    all.dedup_by(|a, b| a.1 == b.1);
+    let nested: Vec<bool> = all
+        .iter()
+        .map(|(_, p)| all.iter().any(|(_, q)| q != p && p.starts_with(q)))
+        .collect();
+    let naive: u64 = all.iter().map(|(bytes, _)| bytes).sum();
+    let top: u64 = all
+        .iter()
+        .zip(&nested)
+        .filter_map(|((bytes, _), nested)| (!nested).then_some(bytes))
+        .sum();
+    (top, naive.saturating_sub(top))
+}
+
+/// Run the plan.
+///
+/// Every refusal is decided before anything is removed, so a dry run reports the plan that
+/// would really run rather than the one the flags asked for.
+pub fn run(plan: &Plan, repo_root: &Path, guard: &Guard, dry_run: bool) -> Outcome {
     let mut lines = Vec::new();
     let mut refused = 0;
+    // Rebuilt as candidates survive, so the total below the lines cannot claim bytes a
+    // refusal left on disk. The nesting rule is applied to the survivors, because an
+    // incremental dir stops being nested once the target dir holding it has been refused.
+    let mut survivors: Vec<(u64, PathBuf)> = Vec::new();
 
     for group in [
         ("incremental", &plan.incremental),
         ("node_modules", &plan.node_modules),
     ] {
         for candidate in group.1 {
-            match removable(&candidate.path, repo_root, target_dir) {
+            let real = match guard.check(&candidate.path, Caller::Checkout) {
                 Err(why) => {
-                    lines.push(format!("  refused  {why}"));
+                    // `check` returns a bare sentence for a structural refusal and a formatted
+                    // one for a judgement call, so the marker is added only when it is missing.
+                    lines.push(if why.starts_with("  refused") {
+                        why
+                    } else {
+                        format!("  refused  {why}")
+                    });
                     refused += 1;
+                    continue;
                 }
-                Ok(real) => {
-                    if dry_run {
-                        lines.push(format!(
-                            "  {:>9}  {} (dry run)",
-                            fmt_bytes(candidate.bytes),
-                            real.display()
-                        ));
-                        continue;
-                    }
-                    match std::fs::remove_dir_all(&real) {
-                        Ok(()) => lines.push(format!(
-                            "  {:>9}  {}",
-                            fmt_bytes(candidate.bytes),
-                            real.display()
-                        )),
-                        Err(e) => {
-                            lines.push(format!("  failed   {}: {e}", real.display()));
-                            refused += 1;
-                        }
-                    }
+                Ok(real) => real,
+            };
+            if dry_run {
+                lines.push(format!(
+                    "  {:>9}  {} (dry run)",
+                    fmt_bytes(candidate.bytes),
+                    real.display()
+                ));
+                survivors.push((candidate.bytes, real));
+                continue;
+            }
+            match std::fs::remove_dir_all(&real) {
+                Ok(()) => {
+                    lines.push(format!(
+                        "  {:>9}  {}",
+                        fmt_bytes(candidate.bytes),
+                        real.display()
+                    ));
+                    survivors.push((candidate.bytes, real));
+                }
+                Err(e) => {
+                    lines.push(format!("  failed   {}: {e}", real.display()));
+                    refused += 1;
                 }
             }
         }
@@ -239,12 +239,16 @@ pub fn run(
         // `cargo clean` rather than a recursive delete, for the reason the policy schema
         // already states: never `rm -rf` what a tool can clean itself. Cargo owns the
         // layout, including the lock file it keeps in there.
-        if dry_run {
+        if let Err(why) = guard.check(&target.path, Caller::Target) {
+            lines.push(why);
+            refused += 1;
+        } else if dry_run {
             lines.push(format!(
                 "  {:>9}  {} via cargo clean (dry run)",
                 fmt_bytes(target.bytes),
                 target.path.display()
             ));
+            survivors.push((target.bytes, target.path.clone()));
         } else {
             let status = Command::new("cargo")
                 .arg("clean")
@@ -252,11 +256,14 @@ pub fn run(
                 .arg(repo_root.join("Cargo.toml"))
                 .status();
             match status {
-                Ok(s) if s.success() => lines.push(format!(
-                    "  {:>9}  {} via cargo clean",
-                    fmt_bytes(target.bytes),
-                    target.path.display()
-                )),
+                Ok(s) if s.success() => {
+                    lines.push(format!(
+                        "  {:>9}  {} via cargo clean",
+                        fmt_bytes(target.bytes),
+                        target.path.display()
+                    ));
+                    survivors.push((target.bytes, target.path.clone()));
+                }
                 Ok(s) => {
                     lines.push(format!("  failed   cargo clean exited {s}"));
                     refused += 1;
@@ -270,12 +277,19 @@ pub fn run(
     }
 
     for secondary in &plan.secondary_targets {
+        let path = PathBuf::from(&secondary.path);
+        if let Err(why) = guard.check(&path, Caller::Target) {
+            lines.push(why);
+            refused += 1;
+            continue;
+        }
         if dry_run {
             lines.push(format!(
                 "  {:>9}  {} via cargo clean (dry run)",
                 fmt_bytes(secondary.bytes),
                 secondary.path
             ));
+            survivors.push((secondary.bytes, path));
             continue;
         }
         // `--target-dir` rather than a scrubbed environment: CARGO_TARGET_DIR is not the only
@@ -291,11 +305,14 @@ pub fn run(
             .arg(&secondary.path)
             .status();
         match status {
-            Ok(s) if s.success() => lines.push(format!(
-                "  {:>9}  {} via cargo clean",
-                fmt_bytes(secondary.bytes),
-                secondary.path
-            )),
+            Ok(s) if s.success() => {
+                lines.push(format!(
+                    "  {:>9}  {} via cargo clean",
+                    fmt_bytes(secondary.bytes),
+                    secondary.path
+                ));
+                survivors.push((secondary.bytes, path));
+            }
             Ok(s) => {
                 lines.push(format!(
                     "  failed   cargo clean exited {s} for {}",
@@ -310,12 +327,21 @@ pub fn run(
         }
     }
 
-    (lines, refused)
+    let (bytes, nested_bytes) = totals(&survivors);
+    Outcome {
+        lines,
+        refused,
+        skipped: 0,
+        bytes,
+        nested_bytes,
+    }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::guard::Authority;
+    use crate::inuse::{self, Usage};
 
     #[test]
     fn purgeable_directories_are_read_out_of_the_ignored_status() {
@@ -324,7 +350,7 @@ mod tests {
             "!! dashboard/.svelte-kit/\0",
             "!! capabilities/comms/ui/dist/\0",
             "!! target/\0",
-            "!! .env\0",
+            "!! notes.txt\0",
             " M README.md\0",
         );
         assert_eq!(
@@ -354,12 +380,12 @@ mod tests {
     #[test]
     fn nothing_ignored_means_nothing_to_prune() {
         assert!(ignored_purgeable("").is_empty());
-        assert!(ignored_purgeable(" M tools/storage/src/prune.rs\0").is_empty());
+        assert!(ignored_purgeable(" M tools/storage/src/checkout.rs\0").is_empty());
     }
 
     #[test]
     fn incremental_dirs_are_found_per_profile_and_only_when_they_exist() {
-        let root = crate::testutil::tempdir("prune-incremental");
+        let root = crate::testutil::tempdir("checkout-incremental");
         std::fs::create_dir_all(root.join("debug/incremental")).unwrap();
         std::fs::create_dir_all(root.join("release/deps")).unwrap();
         assert_eq!(
@@ -369,76 +395,154 @@ mod tests {
     }
 
     #[test]
-    fn a_path_outside_the_repo_and_the_target_dir_is_refused() {
-        let root = crate::testutil::tempdir("prune-scope");
-        let repo = root.join("repo");
-        let target = root.join("target");
-        let outside = root.join("elsewhere");
-        for d in [&repo, &target, &outside] {
-            std::fs::create_dir_all(d).unwrap();
-        }
-        let err = removable(&outside, &repo, &target).unwrap_err();
-        assert!(err.contains("outside the repo"), "{err}");
+    fn a_candidate_inside_another_candidate_is_counted_once() {
+        // The measured failure: `--incremental --target` reported 210.9 GB would be freed where
+        // the truth was about 150 GB, because the incremental subtotal was added on top of the
+        // target directory that already contains it — a 40% overstatement of the one number a
+        // reader decides on.
+        const GB_U: u64 = 1024 * 1024 * 1024;
+        let with_target = [
+            (60 * GB_U, PathBuf::from("/t/debug/incremental")),
+            (GB_U / 2, PathBuf::from("/repo/dashboard/node_modules")),
+            (140 * GB_U, PathBuf::from("/t")),
+        ];
+        // The incremental dir is still a line `run` prints; only the arithmetic drops it.
+        let (bytes, nested) = totals(&with_target);
+        assert_eq!(nested, 60 * GB_U);
+        assert_eq!(bytes, 140 * GB_U + GB_U / 2);
+
+        // Without the target dir the incremental dir is the whole plan, and nothing is nested.
+        let (bytes, nested) = totals(&with_target[..2]);
+        assert_eq!(nested, 0);
+        assert_eq!(bytes, 60 * GB_U + GB_U / 2);
     }
 
     #[test]
-    fn a_symlink_pointing_out_of_the_repo_is_refused_after_resolution_not_before() {
-        // The failure this guards: `dashboard/node_modules` being a symlink to a shared
-        // store, and the prefix check passing on the un-resolved path.
-        let root = crate::testutil::tempdir("prune-symlink");
-        let repo = root.join("repo");
-        let target = root.join("target");
-        let outside = root.join("elsewhere");
-        for d in [&repo, &target, &outside] {
-            std::fs::create_dir_all(d).unwrap();
-        }
-        let link = repo.join("node_modules");
-        #[cfg(unix)]
-        std::os::unix::fs::symlink(&outside, &link).unwrap();
-        let err = removable(&link, &repo, &target).unwrap_err();
-        assert!(err.contains("outside the repo"), "{err}");
+    fn a_sibling_whose_name_shares_a_prefix_is_not_nested() {
+        // `/t/debug` is inside `/t`; `/tb` is not. `Path::starts_with` compares components,
+        // and this test is what fails if that ever becomes a string comparison.
+        let candidates = [
+            (1024, PathBuf::from("/t/debug/incremental")),
+            (2048, PathBuf::from("/tb/node_modules")),
+            (4096, PathBuf::from("/t")),
+        ];
+        let (bytes, nested) = totals(&candidates);
+        assert_eq!(nested, 1024);
+        assert_eq!(bytes, 4096 + 2048);
     }
 
-    #[test]
-    fn the_repo_root_and_the_target_dir_are_never_themselves_removable() {
-        let root = crate::testutil::tempdir("prune-roots");
-        let repo = root.join("repo");
-        let target = root.join("target");
-        for d in [&repo, &target] {
-            std::fs::create_dir_all(d).unwrap();
+    /// Run `body` with a live process whose working directory is inside `dir`, so the probe has
+    /// something real to find and the test does not depend on whatever happens to be running on
+    /// the machine.
+    ///
+    /// `usage` is a snapshot, so this waits for the holder to appear before calling `body`
+    /// rather than assuming a process that has just been spawned is already visible. The holder
+    /// is killed and reaped on every path.
+    fn with_holder(dir: &Path, body: impl FnOnce()) {
+        let mut child = Command::new("sleep")
+            .arg("30")
+            .current_dir(dir)
+            .spawn()
+            .expect("sleep");
+        let mut visible = false;
+        for _ in 0..40 {
+            if !matches!(inuse::usage(dir), Usage::Free) {
+                visible = true;
+                break;
+            }
+            std::thread::sleep(std::time::Duration::from_millis(50));
         }
-        assert!(removable(&repo, &repo, &target)
-            .unwrap_err()
-            .contains("root itself"));
-        assert!(removable(&target, &repo, &target)
-            .unwrap_err()
-            .contains("root itself"));
+        if visible {
+            body();
+        }
+        let _ = child.kill();
+        let _ = child.wait();
+        assert!(visible, "the holder never showed up in {}", dir.display());
     }
 
-    #[test]
-    fn a_path_inside_the_repo_is_removable() {
-        let root = crate::testutil::tempdir("prune-inside");
+    /// A one-candidate plan over `modules`, for the tests below.
+    fn held_plan(modules: &Path) -> Plan {
+        Plan {
+            incremental: vec![],
+            node_modules: vec![Candidate {
+                path: modules.to_path_buf(),
+                bytes: 4096,
+            }],
+            target: None,
+            secondary_targets: vec![],
+        }
+    }
+
+    /// A repo with one `node_modules` holding one file, and the paths to hand a Guard.
+    fn fixture(name: &str) -> (PathBuf, PathBuf, PathBuf) {
+        let root = crate::testutil::tempdir(name);
         let repo = root.join("repo");
-        let target = root.join("target");
-        let inside = repo.join("dashboard/node_modules");
-        std::fs::create_dir_all(&inside).unwrap();
+        let target = repo.join("target");
+        let modules = repo.join("node_modules");
+        std::fs::create_dir_all(&modules).unwrap();
         std::fs::create_dir_all(&target).unwrap();
-        assert!(removable(&inside, &repo, &target).is_ok());
+        std::fs::write(modules.join("f"), vec![0u8; 4096]).unwrap();
+        (repo, target, modules)
     }
 
     #[test]
-    fn a_missing_path_is_refused_rather_than_removed_blind() {
-        let root = crate::testutil::tempdir("prune-missing");
-        let repo = root.join("repo");
-        let target = root.join("target");
-        std::fs::create_dir_all(&repo).unwrap();
-        std::fs::create_dir_all(&target).unwrap();
-        assert!(removable(&repo.join("gone"), &repo, &target).is_err());
+    fn a_candidate_a_live_process_holds_is_refused() {
+        let (repo, target, modules) = fixture("checkout-held");
+        let authority = Authority::default();
+        with_holder(&modules, || {
+            let guard = Guard::new(&authority, &repo, &target, false);
+            let outcome = run(&held_plan(&modules), &repo, &guard, false);
+            assert_eq!(outcome.refused, 1, "{:?}", outcome.lines);
+            // The number a reader acts on. A refusal that still counted the bytes would print
+            // "4 KB freed" for a directory that is still there.
+            assert_eq!(outcome.bytes, 0);
+            assert!(modules.exists(), "a held directory must survive");
+            assert!(
+                outcome.lines[0].contains("is held by 1 live process"),
+                "{:?}",
+                outcome.lines
+            );
+        });
+    }
+
+    #[test]
+    fn force_removes_what_the_probe_refused() {
+        let (repo, target, modules) = fixture("checkout-forced");
+        let authority = Authority::default();
+        with_holder(&modules, || {
+            let guard = Guard::new(&authority, &repo, &target, true);
+            let outcome = run(&held_plan(&modules), &repo, &guard, false);
+            assert_eq!(outcome.refused, 0, "{:?}", outcome.lines);
+            assert_eq!(outcome.bytes, 4096);
+            assert!(!modules.exists(), "--force is the way past the probe");
+        });
+    }
+
+    #[test]
+    fn the_policy_refuses_what_force_removes() {
+        let (repo, target, modules) = fixture("checkout-authority");
+        let plan = held_plan(&modules);
+
+        let named = Authority::new(
+            vec![],
+            vec![(modules.clone(), "the policy protects it".to_string())],
+        );
+        let guard = Guard::new(&named, &repo, &target, false);
+        let outcome = run(&plan, &repo, &guard, false);
+        assert_eq!(outcome.refused, 1, "{:?}", outcome.lines);
+        assert_eq!(outcome.bytes, 0);
+        assert!(modules.exists(), "the policy's answer must win");
+
+        let guard = Guard::new(&named, &repo, &target, true);
+        let outcome = run(&plan, &repo, &guard, false);
+        assert_eq!(outcome.refused, 0, "{:?}", outcome.lines);
+        assert_eq!(outcome.bytes, 4096);
+        assert!(!modules.exists(), "--force is the way past the policy");
     }
 
     #[test]
     fn a_dry_run_removes_nothing() {
-        let root = crate::testutil::tempdir("prune-dry");
+        let root = crate::testutil::tempdir("checkout-dry");
         let repo = root.join("repo");
         let target = repo.join("target");
         let incremental = target.join("debug/incremental");
@@ -447,14 +551,17 @@ mod tests {
 
         let plan = Plan::build(&repo, &target, true, false, false);
         assert_eq!(plan.incremental.len(), 1);
-        assert!(plan.bytes() >= 16 * 1024);
-        let (lines, refused) = run(&plan, &repo, &target, true);
-        assert_eq!(refused, 0);
-        assert!(lines[0].contains("dry run"), "{lines:?}");
+        assert!(plan.incremental[0].bytes >= 16 * 1024);
+        let authority = Authority::default();
+        let guard = Guard::new(&authority, &repo, &target, false);
+
+        let outcome = run(&plan, &repo, &guard, true);
+        assert_eq!(outcome.refused, 0);
+        assert!(outcome.lines[0].contains("dry run"), "{:?}", outcome.lines);
         assert!(incremental.exists(), "a dry run must leave the tree alone");
 
-        let (_, refused) = run(&plan, &repo, &target, false);
-        assert_eq!(refused, 0);
+        let outcome = run(&plan, &repo, &guard, false);
+        assert_eq!(outcome.refused, 0);
         assert!(!incremental.exists(), "the real run must remove it");
     }
 }

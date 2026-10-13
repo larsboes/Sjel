@@ -937,6 +937,30 @@ claim yet, and the watch rows they name are in `upstreams.toml` with the questio
 
 ## Decisions
 
+- **2026-10-11 — GPUI is the goal for every Sjel client, and Tauri and Svelte go when a port
+  proves it** (principal's call, all recommendations accepted). This widens the 2026-10-09 GPUI
+  entry below. The palette stays the first surface. The reason is the stack, not speed, because
+  DSH-8 still shows that rendering is not where Sjel waits. One language and one build (`cargo`)
+  replace Svelte, TypeScript, Bun and the Tauri CLI. The plan has four steps, and the switch
+  waits for the last one:
+  0. A toolchain test. One Cargo workspace builds `gpui-pre`, `gpui-kit` and `gpui-mobile` on
+     one GPUI snapshot, and shows one gpui-kit list, fed over loopback HTTP, on the Mac and in
+     the iOS simulator. If it fails, the iPhone half of this decision is reopened.
+  1. The command palette, with start time and resident memory measured against the Tauri
+     webview.
+  2. A port of the dashboard's 20 routes (`dashboard/src/routes`) into one isolated app under
+     `apps/`, not used day to day. Svelte and Tauri stay live, the iOS build included. Charts
+     are drawn in GPUI. The map comes last, and gpui-kit's `gpui-webview` crate is its fallback.
+  3. A test of the port and a review of what to rethink. Then a decision: switch, keep both, or
+     stop.
+
+  The base is the upstream Zed snapshot that gpui-kit follows. gpui-kit 0.7.1 depends on
+  `gpui-pre` 0.3.8, which crates.io describes as a snapshot of `zed@279fe07`, published weekly.
+  gpui-mobile pins Zed `5688167d` and `apps/gpui-prototype` pins `5f8a7413`. Both move to the
+  same snapshot, because two GPUI copies in one build are two sets of types. `gpui-ce` is not a
+  base, because neither gpui-kit nor gpui-mobile builds on it. Two risks are reported, not
+  measured here: gpui-mobile has one maintainer and no release, and gpui-kit's author reports
+  40–60% CPU while a complex GPUI view scrolls (`upstreams.toml`, `gpui-mobile` and `gpui-kit`).
 - **2026-10-09 — the vault keeps knowledge, and Sjel takes projects, tasks and habits**
   (principal's call, all recommendations accepted). Obsidian keeps Knowledge, Atlas, Journal and
   Reflections. Projects, tasks and habits get a Sjel owner, because their value is the join with
@@ -959,7 +983,8 @@ claim yet, and the watch rows they name are in `upstreams.toml` with the questio
   command palette. Svelte keeps maps (`maplibre-gl-js`), charts (`vega`), forms, and every view
   the iPhone needs through Tauri, because GPUI has no iOS target. The Swift menu bar keeps
   Keychain, CloudKit and the global hotkey. `gpui` stays `watch` in `upstreams.toml` until the
-  palette ships. The memory gap between a GPUI window and a webview is not measured.
+  palette ships. The memory gap between a GPUI window and a webview is not measured. Widened
+  on 2026-10-11 (above): Svelte and the Tauri iOS build stay only until a GPUI port replaces them.
 - **2026-10-05 — clothing is a row, and a link is an intake** (principal's call, overruling the
   recommendation twice). Two questions, both answered against the smaller option. First: the
   three fields a garment needs (`category`, `groesse`, `farbe`, `saison`) go **on the same
@@ -1047,6 +1072,10 @@ claim yet, and the watch rows they name are in `upstreams.toml` with the questio
 ## Log
 
 Entries before 2026-10-08 are in [`ISA-archive.md`](ISA-archive.md#log).
+
+- 2026-10-11 · GPUI becomes the goal for every client, iPhone included through gpui-mobile.
+  The first step is a toolchain test, and the switch waits for a full port and a review.
+  `upstreams.toml` updates `gpui` and `gpui-kit` and adds `gpui-mobile`.
 
 - 2026-10-09 · Two decisions: projects, tasks and habits leave the vault for a Sjel owner,
   reversing Q48, and GPUI gets resident keyboard surfaces while Svelte keeps the rest. The

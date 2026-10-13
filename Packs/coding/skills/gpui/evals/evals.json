@@ -5,7 +5,6 @@
       "id": 1,
       "prompt": "Add a refreshable status list to apps/gpui-prototype using the existing Sjel capability API. Keep it read-only and use the pinned GPUI version.",
       "expected_output": "A GPUI implementation grounded in the prototype's pinned Zed revision, with the endpoint auth reviewed before network integration and UI work kept off the render thread.",
-      "files": ["apps/gpui-prototype/Cargo.toml", "apps/gpui-prototype/src/main.rs"],
       "assertions": [
         "Reads the dependency pin before using GPUI APIs",
         "Does not send credentials to an endpoint without reviewing its auth contract",
@@ -17,7 +16,6 @@
       "id": 2,
       "prompt": "Add Linux support to the standalone GPUI app and verify it builds.",
       "expected_output": "The platform feature set is checked against the pinned GPUI revision, Sjel's build toolchain gate is run, and the correct target is compiled without claiming runtime verification from compile success.",
-      "files": ["apps/gpui-prototype/Cargo.toml", "apps/gpui-prototype/README.md"],
       "assertions": [
         "Checks the pinned gpui_platform feature definitions",
         "Runs tools/toolchain-check --workflow build before building",

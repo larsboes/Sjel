@@ -4,7 +4,7 @@
   import { tip } from "$lib/tip";
   import PageHeader from "$lib/PageHeader.svelte";
   import { axonStatus, macmon, type MacmonSample, type StorageHistory, type StorageReport, type UpdatesReport } from "$lib/api";
-  import { datedAbsences, formatBytes, storageTrend, storageView } from "$lib/systems/storage";
+  import { classTrends, datedAbsences, formatBytes, storageTrend, storageView } from "$lib/systems/storage";
   import AgentPanel from "$lib/systems/AgentPanel.svelte";
   import RuntimeProfile from "$lib/systems/RuntimeProfile.svelte";
   import { applySummary, auditNeedsAttention, updatesView, versionLabel } from "$lib/systems/updates";
@@ -27,6 +27,7 @@
   // completed an hour under sjel-status has no history, and that is not a fault.
   let history = $state<StorageHistory | null>(null);
   const trend = $derived(storageTrend(history));
+  const classTrendMap = $derived(classTrends(history));
 
   // Updates, fetched on demand rather than on macmon's 3 s beat for a stronger reason than
   // storage's: `report` asks three registries and one crate registry per crate, so polling it
@@ -404,7 +405,14 @@
                     style="width: {Math.min(100, (row.bytes / view.classes[0].bytes) * 100)}%"
                   ></span>
                 </span>
-                <span class="stor-bytes mono">{formatBytes(row.bytes)}</span>
+                <span class="stor-bytes mono">
+                  {formatBytes(row.bytes)}
+                  {#if classTrendMap.get(row.name)}
+                    <span class="dim" use:tip={`Growth: ${classTrendMap.get(row.name)?.deltaLabel}`}>
+                      ({classTrendMap.get(row.name)?.deltaLabel})
+                    </span>
+                  {/if}
+                </span>
               </li>
             {/each}
           </ul>
@@ -993,7 +1001,7 @@
 
   .stor-row {
     display: grid;
-    grid-template-columns: minmax(7rem, 1.2fr) 1.5fr 4.5rem;
+    grid-template-columns: minmax(7rem, 1.2fr) 1.5fr minmax(4.5rem, auto);
     align-items: center;
     gap: 0.5rem;
     font-size: 0.72rem;

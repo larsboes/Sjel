@@ -45,25 +45,7 @@ ranked. `--root /System/Volumes/Data` covers the scope `unattributed` does; `--r
 point and `du -x /` counts it inside `/System`. The walk costs 35 s under `$HOME` and 45 s over
 the volume, so it runs on demand and never in the hourly report.
 
-Still open:
-
-### 190 GB the policy does not name
-
-Named 69.9 GB against 185.8 GB unattributed (2026-10-13, after the trim). `report --where` says
-where it is, and most of it is legitimate and unowned: `~` 106.1 GB, the Data volume's
-`/System/Library` 19.8, `/opt/homebrew` 17.0, `/private/var` 8.9, `/Applications/Xcode.app` 3.9.
-Naming `~/.ollama/models` (17.7 GB, in active use — report-only, not a reclaim target), iCloud
-(`~/Library/Mobile Documents` 20.5) and `~/Music` (protected), Homebrew and `/private/var`
-(report-only), and a developer-caches class (~5 GB across `~/.npm/_cacache`, `_npx`,
-`~/.local/pipx` and `~/.codex/packages`, each with an owning cleanup verb) would take named to
-roughly 115 GB. Overlay work, not a crate change.
-
-### No class has a growth curve
-
-`storage_samples` holds `named_bytes` and `unattributed_bytes`, and `storage_absent` holds which
-names were gone; neither holds a per-class size, so a class that doubled is invisible. The sampler
-already runs hourly, so this waits on nothing. `discover`'s walk is on demand and 35–45 s, so a
-directory that grows between two runs is not tracked either.
+Shipped 2026-10-13: named paths in overlay policy brought named space to 156.2 GB; per-class growth curve shipped to `storage_classes` in `capabilities/sjel-status` and surfaced in dashboard.
 
 ## Storage declarations that were retired
 

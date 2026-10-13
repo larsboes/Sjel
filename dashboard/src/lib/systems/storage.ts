@@ -280,3 +280,46 @@ function sparkline(values: number[], width = 100, height = 24): string {
     )
     .join(" ");
 }
+
+export interface ClassTrend {
+  name: string;
+  delta: number;
+  deltaLabel: string;
+  line: string;
+}
+
+/** Reduce per-class hourly size history to trends over the given window. */
+export function classTrends(
+  history: StorageHistory | null,
+  windowHours = TREND_WINDOW_HOURS,
+): Map<string, ClassTrend> {
+  const map = new Map<string, ClassTrend>();
+  const all = history?.classes ?? [];
+  if (all.length === 0) return map;
+
+  const byName = new Map<string, Array<{ hour: string; bytes: number }>>();
+  for (const entry of all) {
+    let list = byName.get(entry.name);
+    if (!list) {
+      list = [];
+      byName.set(entry.name, list);
+    }
+    list.push({ hour: entry.hour, bytes: entry.bytes });
+  }
+
+  for (const [name, rows] of byName.entries()) {
+    const windowRows = rows.slice(-windowHours);
+    if (windowRows.length < 2) continue;
+    const first = windowRows[0];
+    const last = windowRows[windowRows.length - 1];
+    const delta = last.bytes - first.bytes;
+    map.set(name, {
+      name,
+      delta,
+      deltaLabel: signedBytes(delta),
+      line: sparkline(windowRows.map((r) => r.bytes), 40, 14),
+    });
+  }
+
+  return map;
+}

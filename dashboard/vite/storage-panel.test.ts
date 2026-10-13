@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import type { StorageAbsent, StorageHistory, StorageReport, StorageSample } from "../src/lib/api";
-import { datedAbsences, dayLabel, formatBytes, severity, signedBytes, storageTrend, storageView } from "../src/lib/systems/storage";
+import { classTrends, datedAbsences, dayLabel, formatBytes, severity, signedBytes, storageTrend, storageView } from "../src/lib/systems/storage";
 
 const report = (over: Partial<StorageReport> = {}): StorageReport => ({
   disk: { used: 271_100_000_000, free: 164_000_000_000, total: 460_000_000_000, target: "/System/Volumes/Data" },
@@ -322,5 +322,22 @@ describe("signedBytes", () => {
     expect(signedBytes(-1_000_000_000)).toBe("-954 MB");
     expect(signedBytes(0)).toBe("±0 MB");
     expect(signedBytes(1024)).toBe("±0 MB");
+  });
+});
+
+describe("classTrends", () => {
+  test("computes growth per class across samples", () => {
+    const h: StorageHistory = {
+      retention_days: 90,
+      samples: [],
+      classes: [
+        { hour: "2026-10-12 10:00:00.000+00:00", name: "rust-debug-cache", bytes: 10_000_000_000 },
+        { hour: "2026-10-12 11:00:00.000+00:00", name: "rust-debug-cache", bytes: 12_000_000_000 },
+        { hour: "2026-10-12 11:00:00.000+00:00", name: "ollama-models", bytes: 18_000_000_000 },
+      ],
+    };
+    const trends = classTrends(h);
+    expect(trends.get("rust-debug-cache")?.deltaLabel).toBe("+1.9 GB");
+    expect(trends.has("ollama-models")).toBe(false);
   });
 });

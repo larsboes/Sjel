@@ -1222,7 +1222,13 @@
             <div>
               <p class="lead">{sourceLabel(source)}</p>
               <p class="meta mono">
-                {sourceRunLabel(source.last_run_at)} · max. {source.limit}
+                {#if source.consecutive_failures > 0}
+                  <span class="source-warn">failed {source.consecutive_failures}× ({source.last_error ?? "error"})</span> ·
+                  last attempt {runTimeLabel(source.last_run_at)} ·
+                  {sourceRunLabel(source.last_success_at)}
+                {:else}
+                  {sourceRunLabel(source.last_success_at ?? source.last_run_at)} · max. {source.limit}
+                {/if}
               </p>
             </div>
             <a class="btn" href={source.source_url} target="_blank" rel="noreferrer">
@@ -1451,6 +1457,11 @@
 
   .source-notice {
     margin: 0 0 0.75rem;
+  }
+
+  .source-warn {
+    color: var(--warning-ink, var(--warning));
+    font-weight: 600;
   }
 
   .vault-list li {

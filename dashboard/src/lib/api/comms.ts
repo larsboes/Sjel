@@ -532,6 +532,9 @@ export interface FeedSource {
   query_configured: boolean;
   limit: number;
   last_run_at: string | null;
+  last_success_at: string | null;
+  last_error: string | null;
+  consecutive_failures: number;
 }
 
 export interface FeedSourceScan {

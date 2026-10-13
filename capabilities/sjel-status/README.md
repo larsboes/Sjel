@@ -71,19 +71,20 @@ A new installation stays Normal until a selection is saved. See
 `tools/storage report` is a point measurement; it cannot answer "is it growing". The
 record lives here because `host-watch` — which already reads that report hourly —
 states its own contract as "most runs print one line and write nothing, and that silence
-is the product", and this is the one always-up surface. `src/storage_history.rs` owns a
-`storage_samples` table under this capability's prefix in the shared database and samples
-on its own hourly timer; the endpoint above reads it back. The hour is the primary key,
-so a restart inside an hour replaces its row rather than adding a second — a trend that
-rose on every restart would be an artefact of restarts, not a measurement. The wait between
-samples is anchored on the next wall-clock `:00`, not on a monotonic hour: a monotonic timer on
-macOS does not advance while the system is asleep, so a laptop that sleeps nightly would
-silently lose hour keys.
+is the product", and this is the one always-up surface. `src/storage_history.rs` owns
+`storage_samples`, `storage_absent` and `storage_classes` tables under this capability's
+prefix in the shared database and samples on its own hourly timer; the endpoint above
+reads them back. The hour is the primary key, so a restart inside an hour replaces its row
+rather than adding a second — a trend that rose on every restart would be an artefact of
+restarts, not a measurement. The wait between samples is anchored on the next wall-clock `:00`,
+not on a monotonic hour: a monotonic timer on macOS does not advance while the system is asleep,
+so a laptop that sleeps nightly would silently lose hour keys.
 
-A second table, `storage_absent`, holds one row per gone name per hour, written in the same
-transaction as the sample it belongs to. `report` answers "is this path there"; only the record
-can answer "since when", and the names are the policy's own three lists — a class, a protected
-path, a service — so a reader never has to guess which one a name came from. The endpoint
+`storage_classes` holds one row per class per hour, capturing each class size trend across
+the 90-day retention window. A second table, `storage_absent`, holds one row per gone name
+per hour, written in the same transaction as the sample it belongs to. `report` answers "is this
+path there"; only the record can answer "since when", and the names are the policy's own three lists —
+a class, a protected path, a service — so a reader never has to guess which one a name came from. The endpoint
 returns the run each name is still in, with `capped` marking a run that reaches the oldest
 sample kept: there the date is a floor rather than the hour the name went, and the panel says
 "or earlier" instead of printing a day that would read as a death. A run breaks on a sample in

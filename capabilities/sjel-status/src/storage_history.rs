@@ -7,10 +7,10 @@
 //! one line and write nothing, and that silence is the product". So the record is kept here,
 //! by the one surface that is always up, on its own hourly timer.
 //!
-//! The tables are `storage_samples` and `storage_absent` in the shared database, under this
-//! capability's own prefix (`capabilities/store/README.md`, "one file, table prefixes").
-//! This file owns the prefix, the sampler is their only writer, and `status/storage.rs` reads
-//! them back.
+//! The tables are `storage_samples`, `storage_absent` and `storage_classes` in the shared
+//! database, under this capability's own prefix (`capabilities/store/README.md`, "one file,
+//! table prefixes"). This file owns the prefix, the sampler is their only writer, and
+//! `status/storage.rs` reads them back.
 //!
 //! ## Why the hour is the primary key
 //!
@@ -117,6 +117,21 @@ pub(crate) struct Absence {
     pub name: String,
 }
 
+/// One class measured by `tools/storage report --json`.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+pub(crate) struct ClassSample {
+    pub name: String,
+    pub bytes: i64,
+}
+
+/// One class size observation for one hour.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+pub(crate) struct ClassHistoryEntry {
+    pub hour: String,
+    pub name: String,
+    pub bytes: i64,
+}
+
 /// The measurement, before it is stamped and stored. Kept apart from [`Sample`] because the
 /// hour and the clock are SQLite's to decide, not this process's.
 #[derive(Debug, Clone, PartialEq)]
@@ -130,6 +145,7 @@ pub(crate) struct Measurement {
     pub state: String,
     /// Every name this reading found gone. Empty is the ordinary case.
     pub absent: Vec<Absence>,
+    pub classes: Vec<ClassSample>,
 }
 
 impl Measurement {
@@ -161,6 +177,23 @@ impl Measurement {
                     .sum()
             })
             .unwrap_or(0);
+        let mut classes = report
+            .get("classes")
+            .and_then(serde_json::Value::as_array)
+            .map(|rows| {
+                rows.iter()
+                    .filter_map(|row| {
+                        let name = row.get("name").and_then(serde_json::Value::as_str)?;
+                        let bytes = row.get("bytes").and_then(serde_json::Value::as_i64)?;
+                        Some(ClassSample {
+                            name: name.to_string(),
+                            bytes,
+                        })
+                    })
+                    .collect::<Vec<_>>()
+            })
+            .unwrap_or_default();
+        classes.sort_by(|a, b| a.name.cmp(&b.name));
         Ok(Self {
             used: int(disk, "used")?,
             free: int(disk, "free")?,
@@ -174,6 +207,7 @@ impl Measurement {
                 .unwrap_or("unknown")
                 .to_string(),
             absent: absent_from_report(report),
+            classes,
         })
     }
 }
@@ -297,10 +331,23 @@ impl StorageHistory {
             )
             .map_err(|e| e.to_string())?;
         }
-        // One cutoff, one transaction, both tables. Rows swept from one and kept in the other
-        // would leave the absence table naming hours no sample covers.
+        // This hour's class sizes are replaced in the same transaction.
+        tx.execute(
+            &format!("DELETE FROM {PREFIX}_classes WHERE hour = ?1"),
+            sjel_store::rusqlite::params![hour],
+        )
+        .map_err(|e| e.to_string())?;
+        for class in &m.classes {
+            tx.execute(
+                &format!("INSERT INTO {PREFIX}_classes (hour, name, bytes) VALUES (?1, ?2, ?3)"),
+                sjel_store::rusqlite::params![hour, class.name, class.bytes],
+            )
+            .map_err(|e| e.to_string())?;
+        }
+        // One cutoff, one transaction, all tables. Rows swept from one and kept in the other
+        // would leave the secondary tables naming hours no sample covers.
         let cutoff = sjel_store::now_offset(&format!("'-{RETENTION_DAYS} days'"));
-        for table in ["samples", "absent"] {
+        for table in ["samples", "absent", "classes"] {
             tx.execute(
                 &format!("DELETE FROM {PREFIX}_{table} WHERE hour < {cutoff}"),
                 [],
@@ -312,10 +359,11 @@ impl StorageHistory {
     }
 }
 
-/// Everything the endpoint serves: the samples, and the absence runs that are still open.
+/// Everything the endpoint serves: the samples, the absence runs that are still open, and class curves.
 pub(crate) struct Snapshot {
     pub samples: Vec<Sample>,
     pub absent_since: Vec<AbsentSince>,
+    pub classes: Vec<ClassHistoryEntry>,
 }
 
 /// One name that was missing in the newest sample and has been missing in every sample since.
@@ -343,9 +391,11 @@ pub(crate) fn snapshot(database: &Path) -> Result<Snapshot, String> {
     let conn = pool.get().map_err(|e| e.to_string())?;
     let samples = read_samples(&conn)?;
     let absent = read_absent(&conn)?;
+    let classes = read_classes(&conn)?;
     Ok(Snapshot {
         absent_since: open_runs(&samples, &absent),
         samples,
+        classes,
     })
 }
 
@@ -400,6 +450,32 @@ fn read_absent(conn: &sjel_store::rusqlite::Connection) -> Result<Vec<(String, A
                     name: row.get(2)?,
                 },
             ))
+        })
+        .map_err(|e| e.to_string())?
+        .collect::<Result<Vec<_>, _>>()
+        .map_err(|e| e.to_string())?;
+    Ok(rows)
+}
+
+/// Every class size observation, oldest first.
+///
+/// A missing table is a machine whose sjel-status predates it — empty is returned rather than
+/// an error, matching `read_absent`.
+fn read_classes(conn: &sjel_store::rusqlite::Connection) -> Result<Vec<ClassHistoryEntry>, String> {
+    let mut statement = match conn.prepare(&format!(
+        "SELECT hour, name, bytes FROM {PREFIX}_classes ORDER BY hour ASC, name ASC"
+    )) {
+        Ok(statement) => statement,
+        Err(error) if error.to_string().contains("no such table") => return Ok(Vec::new()),
+        Err(error) => return Err(error.to_string()),
+    };
+    let rows = statement
+        .query_map([], |row| {
+            Ok(ClassHistoryEntry {
+                hour: row.get(0)?,
+                name: row.get(1)?,
+                bytes: row.get(2)?,
+            })
         })
         .map_err(|e| e.to_string())?
         .collect::<Result<Vec<_>, _>>()
@@ -529,6 +605,16 @@ fn migrate(
             name TEXT NOT NULL,
             PRIMARY KEY (hour, kind, name)
         );
+
+        -- One row per class per hour, capturing each class size trend.
+        CREATE TABLE IF NOT EXISTS {prefix}_classes (
+            hour  TEXT NOT NULL,
+            name  TEXT NOT NULL,
+            bytes INTEGER NOT NULL,
+            PRIMARY KEY (hour, name)
+        );
+        CREATE INDEX IF NOT EXISTS idx_{prefix}_classes_name
+            ON {prefix}_classes(name);
         "
     ))?;
     Ok(())
@@ -605,6 +691,7 @@ mod tests {
             reclaimable: 5,
             state: "ok".into(),
             absent,
+            classes: Vec::new(),
         }
     }
 
@@ -859,5 +946,50 @@ mod tests {
         let snap = snapshot(&db).unwrap();
         assert_eq!(snap.samples.len(), 1);
         assert_eq!(snap.absent_since, Vec::new());
+    }
+
+    #[test]
+    fn class_sizes_are_recorded_and_retrieved() {
+        let db = temp_database("classes");
+        let history = StorageHistory::open(&db).unwrap();
+        let mut m = measurement(1);
+        m.classes = vec![
+            ClassSample {
+                name: "rust-debug-cache".into(),
+                bytes: 20_000_000_000,
+            },
+            ClassSample {
+                name: "ollama-models".into(),
+                bytes: 18_000_000_000,
+            },
+        ];
+        history.record_at(&hour(1, 10), &m).unwrap();
+        let snap = snapshot(&db).unwrap();
+        assert_eq!(snap.classes.len(), 2);
+        assert_eq!(snap.classes[0].name, "ollama-models");
+        assert_eq!(snap.classes[0].bytes, 18_000_000_000);
+        assert_eq!(snap.classes[1].name, "rust-debug-cache");
+        assert_eq!(snap.classes[1].bytes, 20_000_000_000);
+    }
+
+    #[test]
+    fn a_restart_in_the_same_hour_replaces_class_sizes() {
+        let db = temp_database("classes-replace");
+        let history = StorageHistory::open(&db).unwrap();
+        let mut m1 = measurement(1);
+        m1.classes = vec![ClassSample {
+            name: "a".into(),
+            bytes: 100,
+        }];
+        history.record_at(&hour(1, 10), &m1).unwrap();
+        let mut m2 = measurement(2);
+        m2.classes = vec![ClassSample {
+            name: "a".into(),
+            bytes: 200,
+        }];
+        history.record_at(&hour(1, 10), &m2).unwrap();
+        let snap = snapshot(&db).unwrap();
+        assert_eq!(snap.classes.len(), 1);
+        assert_eq!(snap.classes[0].bytes, 200);
     }
 }

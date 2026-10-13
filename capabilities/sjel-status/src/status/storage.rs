@@ -58,6 +58,7 @@ pub(crate) async fn storage_history_handler() -> (StatusCode, Json<Value>) {
                 // since (`since`). The three `kind`s are the policy's own three lists, so a
                 // reader never has to guess whether a name is a class or a path.
                 "absent": history.absent_since,
+                "classes": history.classes,
             })),
         ),
         Ok(Err(error)) => (StatusCode::BAD_GATEWAY, Json(json!({ "error": error }))),

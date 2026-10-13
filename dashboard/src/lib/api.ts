@@ -415,6 +415,12 @@ export interface StorageAbsent {
   capped: boolean;
 }
 
+export interface StorageClassSample {
+  hour: string;
+  name: string;
+  bytes: number;
+}
+
 /** The disk's history, oldest sample first. `samples` is empty on a machine that has not
  *  yet completed an hour under sjel-status — that is "no history", not an error. */
 export interface StorageHistory {
@@ -424,6 +430,7 @@ export interface StorageHistory {
    *  sjel-status was built before the absence table existed — which is "not known", and is
    *  why the panel prints a bare name rather than a date it does not have. */
   absent?: StorageAbsent[];
+  classes?: StorageClassSample[];
 }
 
 /** Who owns moving one class of installed software. The tool's own vocabulary, verbatim:

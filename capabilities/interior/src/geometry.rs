@@ -1,20 +1,15 @@
-//! Raster, Distanzfeld, Wegsuche.
+//! Grid, distance field, path search, all in centimetres.
 //!
-//! Alles in Zentimetern. Zwei Primitive tragen die Arbeit:
-//!   * eine exakte euklidische Distanztransformation, die jedem freien Punkt seinen Abstand
-//!     zum naechsten belegten Punkt gibt, und
-//!   * eine Maximum-Bottleneck-Suche, die die engste Stelle des breitesten Weges liefert.
-//!
-//! Ein Korridor der Breite W hat auf seiner Mittellinie die Freiheit W/2 — die verdoppelte
-//! Engstelle ist deshalb die Breite, die ein Mensch tatsaechlich bekommt.
+//! Two primitives do the work: an exact Euclidean distance transform, which gives every free point
+//! its distance to the nearest occupied one, and a maximum-bottleneck search, which gives the
+//! narrowest point of the widest path. A corridor of width W has clearance W/2 on its centre line,
+//! so the doubled bottleneck is the width a person actually gets.
 
 use crate::model::{Pt, Rect};
 use std::collections::BinaryHeap;
 
-/// Rasterweite in cm. 5 cm ist die Aufloesung, in der die Vorlaeuferimplementierung gemessen
-/// hat; die aufgezeichneten Routenbreiten der Baseline gelten fuer genau diesen Wert. Wer ihn
-/// aendert, aendert die Zahlen und muss die Baseline neu begruenden. Sie liegt im Overlay
-/// neben der Wohnung, die sie beschreibt — siehe tests/live_parity.rs.
+/// Grid step in cm. The recorded route widths in the overlay's baseline hold for exactly this
+/// value; changing it changes the numbers (tests/live_parity.rs).
 pub const RES: i32 = 5;
 
 pub fn polygon_area_m2(poly: &[Pt]) -> f64 {
@@ -43,7 +38,7 @@ pub fn point_in_polygon(p: [f64; 2], poly: &[Pt]) -> bool {
 pub struct Grid {
     pub cols: usize,
     pub rows: usize,
-    /// 1, wo ein Mensch stehen kann: im Wohnpolygon und nicht belegt.
+    /// 1 where a person can stand: inside the flat's polygon and not occupied.
     pub free: Vec<u8>,
 }
 
@@ -96,7 +91,7 @@ impl Grid {
     }
 }
 
-/// Exakte 1D-Distanztransformation (Felzenszwalb/Huttenlocher) — die Bausteine der 2D-Variante.
+/// Exact 1D distance transform (Felzenszwalb/Huttenlocher), the building block of the 2D one.
 fn edt_1d(f: &[f64], out: &mut [f64]) {
     let n = f.len();
     let mut v = vec![0usize; n];
@@ -123,7 +118,7 @@ fn edt_1d(f: &[f64], out: &mut [f64]) {
             }
         }
         if k == 0 && z[1].is_infinite() && v[0] != q {
-            // Der Rueckwaertslauf ist bis zur Wurzel gelaufen: q loest die bisherige Parabel ab.
+            // The backward pass reached the root: q replaces the current parabola.
             v[0] = q;
             z[0] = f64::NEG_INFINITY;
             z[1] = f64::INFINITY;
@@ -140,9 +135,8 @@ fn edt_1d(f: &[f64], out: &mut [f64]) {
     }
 }
 
-/// Abstand in cm von jeder freien Zelle zur naechsten belegten Zelle oder Wand. Exakt, nicht
-/// genaehert: eine Chamfer-Naeherung verschiebt Korridorbreiten um mehrere Zentimeter, und
-/// genau an diesen Zentimetern entscheidet sich hier Bestehen oder Verstoss.
+/// Distance in cm from every free cell to the nearest occupied cell or wall. Exact: a chamfer
+/// approximation shifts corridor widths by centimetres, and those centimetres decide pass or fail.
 pub fn clearance_field(grid: &Grid) -> Vec<f64> {
     const INF: f64 = 1e12;
     let (cols, rows) = (grid.cols, grid.rows);
@@ -176,10 +170,9 @@ pub fn clearance_field(grid: &Grid) -> Vec<f64> {
     f
 }
 
-/// Naechste Zelle, in der ein Mensch tatsaechlich stehen koennte. Wegpunkte kommen aus
-/// Oeffnungen und liegen deshalb per Definition in einer Wand.
-/// Radius 70 cm wie in der Vorlage. Kleiner gewaehlt findet die Suche neben einer breiten
-/// Tuer keine offene Zelle mehr, und der Tuerrahmen wird zur Engstelle jeder Route.
+/// The nearest cell a person could actually stand in. Waypoints come from openings and so lie in
+/// a wall. A 70 cm radius: smaller, and next to a wide door no open cell is found and the door frame
+/// becomes every route's bottleneck.
 pub fn nearest_free(grid: &Grid, field: Option<&[f64]>, p: Pt, radius_cm: i32) -> Option<usize> {
     let radius_cells = (radius_cm as f64 / RES as f64).ceil() as i32;
     let (c0, r0) = grid.cell_of(p);
@@ -195,8 +188,7 @@ pub fn nearest_free(grid: &Grid, field: Option<&[f64]>, p: Pt, radius_cm: i32) -
             if grid.free[i] == 0 {
                 continue;
             }
-            // Die offenste Zelle in der Naehe, nicht die naechstgelegene: die Anlaufzone einer
-            // Tuer ist der Ort, an dem man steht, nicht ihr Rahmen.
+            // The most open cell nearby, not the nearest: one stands in front of a door, not in its frame.
             let score = match field {
                 Some(f) => f[i],
                 None => -(((dc * dc + dr * dr) as f64).sqrt()),
@@ -225,12 +217,8 @@ impl PartialOrd for HeapEntry {
     }
 }
 
-/// Engste Stelle des breitesten Weges, in cm — hoeher ist besser.
-///
-/// Max-Heap, nicht linearer Scan. Die TypeScript-Vorlage suchte das Maximum bei jeder Entnahme
-/// mit einem Durchlauf ueber alle ~10.000 Zellen; das ist O(N²) je Route und war am 2026-08-30
-/// mit 67,7 ms pro Layoutpruefung messbar. Mit Heap: 2,7 ms. Der Kommentar dort behauptete,
-/// der Scan schlage einen Heap "in both clarity and speed" — nachgemessen hat das nie jemand.
+/// Narrowest point of the widest path in cm; higher is better. A max-heap: a linear scan per pop
+/// was O(N²) per route, measured at 67.7 ms per layout check against 2.7 ms with the heap.
 pub fn widest_path(grid: &Grid, field: &[f64], from: Pt, to: Pt) -> Option<f64> {
     let start = nearest_free(grid, Some(field), from, 70)?;
     let goal = nearest_free(grid, Some(field), to, 70)?;
@@ -244,7 +232,7 @@ pub fn widest_path(grid: &Grid, field: &[f64], from: Pt, to: Pt) -> Option<f64> 
 
     while let Some(HeapEntry(cur_val, cur)) = heap.pop() {
         if seen[cur] == 1 {
-            continue; // veralteter Eintrag; ein BinaryHeap kennt kein decrease-key
+            continue; // stale entry; BinaryHeap has no decrease-key
         }
         if cur_val <= 0.0 {
             return None;
@@ -274,27 +262,17 @@ pub fn widest_path(grid: &Grid, field: &[f64], from: Pt, to: Pt) -> Option<f64> 
     None
 }
 
-/// Ein Mensch braucht einen Platz zum Stehen, und ungefaehr 60 cm Laenge, um darin zu stehen.
+/// A person needs about 60 cm of length to stand in a strip.
 pub const STANDING_RUN_CM: i32 = 60;
 
-/// Wie weit ueber eine Schwelle hinaus noch gemessen wird, damit eine Reserve eine Zahl hat.
-///
-/// `free_depth_on_side` deckelt auf die geforderte Tiefe — richtig fuer ein Verdikt, das nur
-/// wissen muss, ob es reicht, und **ruinoes fuer eine Reserve**: die knappste und die
-/// grosszuegigste Aufstellung meldeten beide genau die Schwelle, also ueberall null Luft.
-///
-/// Gemessen wird deshalb bis eine Standtiefe darueber hinaus. Weiter nicht, weil es teuer ist
-/// und weil die Frage, ob vor dem Schrank 165 oder 210 cm frei sind, keine Raeumungsfrage mehr
-/// ist. Wo der Deckel greift, sagt die Reserve `gedeckelt` und die Oberflaeche schreibt „ab".
+/// How far past a threshold is still measured, so a reserve has a number. Capping at the threshold
+/// would report zero air for both the tightest and the roomiest arrangement. Where the cap hits,
+/// the reserve says `capped`.
 pub const RESERVE_HORIZON: i32 = 100;
 
-/// Freie Tiefe an einer Side eines Rechtecks, gedeckelt auf `want`.
-///
-/// Geprueft wird ein ZUSAMMENHAENGENDER Lauf, nicht jede Zelle und kein Prozentsatz. Ein
-/// Schreibtisch am Kopfende eines Betts blockiert einen Teil dieser Laengsseite, ohne das Bett
-/// unerreichbar zu machen; was den Zugang entscheidet, ist ein durchgehender Streifen, der
-/// lang genug zum Stehen ist. Die Forderung "ganzer Streifen frei" meldete ein voellig
-/// benutzbares Bett als zugangslos.
+/// Free depth on one side of a rect, capped at `want`. A contiguous run long enough to stand in
+/// counts, not every cell: a desk at a bed's head blocks part of the long side without making the
+/// bed unreachable.
 pub fn free_depth_on_side(grid: &Grid, r: &Rect, side: Side, want: i32) -> i32 {
     let step = RES;
     let mut d = step;
@@ -334,7 +312,7 @@ pub fn free_depth_on_side(grid: &Grid, r: &Rect, side: Side, want: i32) -> i32 {
     want
 }
 
-/// Laengste ununterbrochene Strecke stehbarer Zellen entlang eines Streifens, in cm.
+/// Longest uninterrupted run of standable cells along a strip, in cm.
 pub fn longest_free_run(grid: &Grid, s: &Rect, along_x: bool) -> i32 {
     let floor_div = |v: i32| (v as f64 / RES as f64).floor() as i32;
     let ceil_div = |v: i32| (v as f64 / RES as f64).ceil() as i32;
@@ -366,15 +344,9 @@ pub fn overlap_area(a: &Rect, b: &Rect) -> i32 {
     w * h
 }
 
-/// Der vorzeichenbehaftete Abstand zweier Rechtecke in cm.
-///
-/// **Positiv** ist der Luftspalt: so weit stehen sie auseinander, euklidisch, also ueber Eck
-/// gemessen und nicht nur entlang einer Achse. **Negativ** ist die Eindringtiefe: um so viele
-/// cm muesste man eines verschieben, damit sie sich nicht mehr beruehren — die kleinere der
-/// beiden Ueberlappungsachsen, weil das die billigste Richtung heraus ist.
-///
-/// Das ist die Reserve einer Zonenregel. `overlaps()` beantwortet ja/nein, und ja/nein ist
-/// genau die Antwort, aus der niemand ablesen kann, ob ein Layout um 2 cm besteht oder um 40.
+/// The signed distance of two rects in cm. Positive is the air gap, Euclidean, so measured across
+/// corners. Negative is the penetration depth along the cheaper axis out. This is a zone rule's
+/// reserve: `overlaps()` only answers yes or no.
 pub fn rect_gap(a: &Rect, b: &Rect) -> i32 {
     let ux = (a.right().min(b.right()) - a.x.max(b.x)).max(0);
     let uy = (a.bottom().min(b.bottom()) - a.y.max(b.y)).max(0);
@@ -400,36 +372,30 @@ mod gap_tests {
         assert_eq!(rect_gap(&r(0, 0, 100, 100), &r(130, 0, 50, 50)), 30);
     }
 
-    /// Ueber Eck ist der Abstand die Diagonale und nicht die groessere Achse — sonst meldete
-    /// ein Stueck, das schraeg 30/40 danebensteht, 40 cm Luft, wo 50 sind.
+    /// Across a corner the gap is the diagonal, not the larger axis.
     #[test]
     fn across_a_corner_the_diagonal_counts() {
         assert_eq!(rect_gap(&r(0, 0, 100, 100), &r(130, 140, 50, 50)), 50);
     }
 
-    /// Beruehrung ist null Reserve und kein Verstoss: die Zonen sind halboffen wie `overlaps`.
+    /// Touching is zero reserve and no violation: zones are half-open like `overlaps`.
     #[test]
     fn touching_is_zero() {
         assert_eq!(rect_gap(&r(0, 0, 100, 100), &r(100, 0, 50, 50)), 0);
     }
 
-    /// Die Eindringtiefe ist die kuerzeste Strecke heraus, nicht die laengste.
+    /// The penetration depth is the shortest way out, not the longest.
     #[test]
     fn overlap_is_negative_and_takes_the_cheaper_axis() {
         assert_eq!(rect_gap(&r(0, 0, 100, 100), &r(90, 50, 100, 100)), -10);
     }
 }
 
-/// Wie tief ein Rechteck im Polygon liegt, in cm. **Negativ heisst: es ragt heraus.**
+/// How deep a rect lies inside the polygon, in cm; negative means it sticks out.
 ///
-/// Gemessen an denselben vier Ecken, die `check_layout` auf Zugehoerigkeit prueft, und mit
-/// demselben Zentimeter Einzug. Das ist Absicht: eine Reserve, die genauer misst als die
-/// Regel, meldet Verstoesse, die die Regel nicht kennt, und dann streiten zwei Fassungen
-/// derselben Frage — genau das, wogegen diese Capability existiert.
-///
-/// Die gemeinsame Grenze beider: bei einem konkaven Polygon koennen alle vier Ecken innen
-/// liegen und eine Kante trotzdem durch die Einbuchtung schneiden. Wer das aendert, aendert
-/// die Regel und diese Messung zusammen.
+/// Measured at the same four corners `check_layout` tests, with the same 1 cm inset, so the reserve
+/// never reports what the rule does not. Both share one limit: in a concave polygon all four
+/// corners can be inside while an edge cuts the notch; change the rule and this together.
 pub fn rect_in_polygon_cm(r: &Rect, poly: &[Pt]) -> i32 {
     let corners = [
         [r.x + 1, r.y + 1],
@@ -446,14 +412,14 @@ pub fn rect_in_polygon_cm(r: &Rect, poly: &[Pt]) -> i32 {
             let b = poly[(i + 1) % poly.len()];
             nearest = nearest.min(point_to_segment(p, a, b));
         }
-        let drin = point_in_polygon(p, poly);
-        let signed = if drin { nearest } else { -nearest };
+        let inside = point_in_polygon(p, poly);
+        let signed = if inside { nearest } else { -nearest };
         worst = worst.min(signed);
     }
     worst.round() as i32
 }
 
-/// Abstand eines Punktes zu einer Strecke.
+/// Distance of a point to a segment.
 fn point_to_segment(p: [f64; 2], a: Pt, b: Pt) -> f64 {
     let (ax, ay) = (a[0] as f64, a[1] as f64);
     let (bx, by) = (b[0] as f64, b[1] as f64);
@@ -475,13 +441,12 @@ mod polygon_tests {
     use super::rect_in_polygon_cm;
     use crate::model::Rect;
 
-    /// Ein Quadrat von 400 x 400, damit sich jede Zahl im Kopf nachrechnen laesst.
+    /// A 400 x 400 square, so every number can be checked in one's head.
     fn room() -> Vec<[i32; 2]> {
         vec![[0, 0], [400, 0], [400, 400], [0, 400]]
     }
 
-    /// Mittig: der Abstand zur naechsten Wand, minus dem einen Zentimeter Einzug, den auch die
-    /// Regel benutzt.
+    /// Centred: the gap to the nearest wall, minus the 1 cm inset the rule uses too.
     #[test]
     fn centred_is_the_gap_to_the_nearest_wall() {
         let r = Rect {
@@ -493,7 +458,7 @@ mod polygon_tests {
         assert_eq!(rect_in_polygon_cm(&r, &room()), 101);
     }
 
-    /// An der Wand ist die Reserve null und kein Verstoss.
+    /// Against the wall the reserve is zero, not a violation.
     #[test]
     fn against_the_wall_the_reserve_is_zero() {
         let r = Rect {
@@ -505,7 +470,7 @@ mod polygon_tests {
         assert_eq!(rect_in_polygon_cm(&r, &room()), 1);
     }
 
-    /// Herausragend ist die Zahl negativ und nennt die Tiefe des Ueberstands.
+    /// Sticking out gives a negative number naming the depth.
     #[test]
     fn outside_is_negative_and_names_the_depth() {
         let r = Rect {

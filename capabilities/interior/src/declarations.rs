@@ -1,35 +1,19 @@
-//! Wer wird noch am Namen gemessen, und was kostet es, das zu aendern?
+//! Which items are still judged by their name, and what changes if they declare themselves?
 //!
-//! PRD Q61 hat die Namensheuristik abgeloest — `bett*` ist ein Bett, `schrank*` ein Schrank —,
-//! und B26 hat sie **absichtlich stehen lassen**: wer nichts erklaert, wird weiter am Namen
-//! gemessen. Der Grund war gut und ist es geblieben. 42 Zeilen an einem Tag umzustellen waere
-//! ein Stichtag, an dem sich Verdikte aendern, ohne dass jemand die Zahlen dahinter geprueft
-//! hat.
+//! The name heuristic (`bett*` is a bed) stays for items that declare nothing, so no verdict moves
+//! without someone checking the numbers. This shows per item: whether it declares itself, else what
+//! the heuristic takes it for and which thresholds it inherits; the declaration that writes down
+//! exactly that, as TOML; and which layout verdicts move if it is adopted.
 //!
-//! Die Folge davon war trotzdem ein Stillstand: die Maschine ist seit dem 31. August klueger
-//! als ihre Daten, und niemand konnte sehen, wie viel klueger. Diese Datei beantwortet das in
-//! drei Zahlen je Eintrag:
-//!
-//! 1. **Erklaert er sich schon?** Sonst: wofuer haelt die Heuristik ihn, und welche Schwellen
-//!    erbt er damit aus `rules.toml`.
-//! 2. **Was waere die Deklaration?** Ein Vorschlag, der genau das aufschreibt, was die
-//!    Maschine ohnehin schon annimmt — als TOML zum Einfuegen.
-//! 3. **Was aendert sie?** Dieselbe Rechnung, die `POST /api/items/:id/impact` fuer eine
-//!    beliebige Aenderung fuehrt: alle Layouts vorher, alle nachher, und die Liste derer, bei
-//!    denen sich das Verdikt bewegt.
-//!
-//! **Der Vorschlag ist keine Empfehlung, und er ist nicht wirkungsfrei.** Die Namensfassung
-//! prueft an einem Bett die beiden Laengsseiten, die deklarierte Fassung zaehlt jede Side,
-//! die tief genug ist; das ist nicht dieselbe Frage, und Punkt 3 sagt deshalb bei jedem
-//! Eintrag, was sich bewegt. Wer die Zeile uebernimmt, uebernimmt eine Entscheidung — und das
-//! ist der Grund, warum diese Datei nichts schreibt.
+//! A proposal is not neutral: the name version checks a bed's two long sides, the declared version
+//! counts every deep enough side. Adopting it is a decision, which is why this writes nothing.
 
 use crate::clearance::{check_layout, kind_of_name, Kind};
 use crate::model::{Model, ModelError};
 use crate::store::Item;
 use serde::Serialize;
 
-/// Die Zeilen, die ein Stueck ueber sich selbst sagen kann (PRD Q61).
+/// The fields a piece can state about itself.
 #[derive(Debug, Clone, Default, Serialize)]
 pub struct Proposal {
     pub open_clear: Option<i32>,
@@ -37,17 +21,17 @@ pub struct Proposal {
     pub access_clear: Option<i32>,
     pub expands_dir: Option<String>,
     pub expands_to: Option<i32>,
-    /// Dieselben Felder als TOML, direkt zum Einfuegen in `inventory/*.toml`.
+    /// The same fields as TOML, ready to paste into `inventory/*.toml`.
     pub toml: String,
 }
 
-/// Was sich an den Verdikten bewegt, wenn der Vorschlag uebernommen wird.
+/// What moves in the verdicts if the proposal is adopted.
 #[derive(Debug, Clone, Serialize)]
 pub struct Consequences {
     pub layouts: usize,
     pub passing_before: usize,
     pub passing_after: usize,
-    /// Die Layouts, deren Verstossliste sich aendert — auch wenn das Verdikt gleich bleibt.
+    /// Layouts whose violation list changes, even if the verdict stays.
     pub changed: Vec<String>,
 }
 
@@ -55,13 +39,13 @@ pub struct Consequences {
 pub struct Stand {
     pub id: String,
     pub label: String,
-    /// Erklaert dieses Stueck schon selbst, was es braucht?
+    /// Does the piece already declare what it needs?
     pub declared: bool,
-    /// Wofuer die Namensheuristik es haelt, solange es das nicht tut.
+    /// What the name heuristic takes it for while it does not.
     pub guessed_as: &'static str,
-    /// Welche Schwellen aus `rules.toml` es damit erbt.
+    /// The `rules.toml` thresholds it inherits that way.
     pub inherited_thresholds: Vec<(String, i32)>,
-    /// In welchen Layouts es steht — so viele Verdikte haengen daran.
+    /// Layouts it stands in: that many verdicts depend on it.
     pub in_layouts: Vec<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub proposal: Option<Proposal>,
@@ -82,46 +66,41 @@ fn kind_name(k: Kind) -> &'static str {
     }
 }
 
-/// Erklaert dieses Stueck sich schon selbst? Dieselbe Bedingung wie in `clearance.rs`.
+/// Same condition as in `clearance.rs`.
 pub fn declared(i: &Item) -> bool {
     i.open_clear.is_some() || i.access_sides.is_some() || i.expands_to.is_some()
 }
 
-/// Die Zeilen, die aufschreiben, was die Heuristik ohnehin annimmt.
-///
-/// `None` fuer `Kind::CoffeeTable`, `Kind::Shelf` und `Kind::Other`: fuer die nimmt die
-/// Heuristik nichts an, also gaebe es nichts abzuschreiben. Ein erfundener Vorschlag waere
-/// dort eine neue Regel und keine Uebersetzung einer bestehenden.
+/// The fields that write down what the heuristic already assumes. `None` for coffee tables,
+/// shelves and others: the heuristic assumes nothing there, and a proposal would be a new rule.
 pub fn proposal(model: &Model, i: &Item) -> Option<Proposal> {
     let r = &model.rules;
     let mut v = Proposal::default();
     match kind_of_name(&i.id) {
         Kind::Bed => {
-            let lengthwise = r.abstand("bett_zugang_laengsseite").ok()?;
-            let second = r.abstand("bett_zugang_zweite_seite").ok()?;
+            let lengthwise = r.threshold("bett_zugang_laengsseite").ok()?;
+            let second = r.threshold("bett_zugang_zweite_seite").ok()?;
             v.access_clear = Some(lengthwise);
-            // Verlangt die Wohnung an der zweiten Laengsseite nichts, ist das eine Aussage
-            // ueber Einzelbelegung — eine Side genuegt.
+            // A flat that asks nothing of the second long side means single occupancy: one side is enough.
             v.access_sides = Some(if second > 0 { 2 } else { 1 });
         }
         Kind::Desk => {
             v.access_sides = Some(1);
-            v.access_clear = Some(r.abstand("schreibtisch_stuhlzone").ok()?);
+            v.access_clear = Some(r.threshold("schreibtisch_stuhlzone").ok()?);
         }
-        Kind::Wardrobe => v.open_clear = Some(r.abstand("schrank_tuer_oeffnen").ok()?),
+        Kind::Wardrobe => v.open_clear = Some(r.threshold("schrank_tuer_oeffnen").ok()?),
         Kind::Table => {
             v.access_sides = Some(2);
-            v.access_clear = Some(r.abstand("esstisch_stuhl_ausziehen").ok()?);
+            v.access_clear = Some(r.threshold("esstisch_stuhl_ausziehen").ok()?);
         }
         Kind::Couch => {
-            // Die Ausklapptiefe kennt das Stueck selbst, wo sie gemessen wurde; sonst die
-            // Norm aus der Wohnung, als Gesamttiefe und nicht als Zuwachs.
-            let tiefe = i.depth.unwrap_or(0);
+            // The unfolded depth from the piece where measured, else the flat's norm, as a total.
+            let depth = i.depth.unwrap_or(0);
             v.expands_to = Some(
                 i.depth_unfolded
-                    .unwrap_or(tiefe + r.abstand("couch_ausklapptiefe").ok()?),
+                    .unwrap_or(depth + r.threshold("couch_ausklapptiefe").ok()?),
             );
-            v.expands_dir = Some("sued".into());
+            v.expands_dir = Some("south".into());
         }
         Kind::CoffeeTable | Kind::Shelf | Kind::Other => return None,
     }
@@ -160,20 +139,16 @@ fn applied(i: &Item, v: &Proposal) -> Item {
     n
 }
 
-/// Ein Layout, sein Verdikt und die Kennungen dessen, was daran auffiel.
-///
-/// Nur die Kennungen und nicht die vollen Verstoesse: verglichen wird, ob sich das Ergebnis
-/// bewegt, und dafuer ist der Text unerheblich — er ist fuer jede Instanz derselben Regel
-/// derselbe.
+/// A layout, its verdict and the ids of what it flagged; the texts do not matter for comparing.
 #[derive(PartialEq)]
 struct Verdict {
     layout: String,
     pass: bool,
     hart: Vec<String>,
-    weich: Vec<String>,
+    soft: Vec<String>,
 }
 
-/// Alle Verdikte dieser Wohnung, als Vergleichsgrundlage.
+/// Every verdict of this flat, as the baseline.
 fn verdicts(model: &Model) -> Result<Vec<Verdict>, ModelError> {
     let mut out = Vec::new();
     for name in model.layout_names()? {
@@ -183,13 +158,13 @@ fn verdicts(model: &Model) -> Result<Vec<Verdict>, ModelError> {
             layout: name,
             pass: r.pass,
             hart: r.hard.iter().map(|v| v.rule.clone()).collect(),
-            weich: r.soft.iter().map(|v| v.rule.clone()).collect(),
+            soft: r.soft.iter().map(|v| v.rule.clone()).collect(),
         });
     }
     Ok(out)
 }
 
-/// Wie weit das Inventar der Maschine hinterherhaengt, Eintrag fuer Eintrag.
+/// How far the inventory lags behind the checker, item by item.
 pub fn overview(model: &Model) -> Result<Vec<Stand>, ModelError> {
     let before = verdicts(model)?;
     let mut in_layouts: std::collections::BTreeMap<String, Vec<String>> = Default::default();
@@ -211,8 +186,7 @@ pub fn overview(model: &Model) -> Result<Vec<Stand>, ModelError> {
         let consequences = match &v {
             None => None,
             Some(v) => {
-                // Dieselbe Rechnung wie `POST /api/items/:id/impact`, nur fuer den Vorschlag
-                // statt fuer eine getippte Aenderung.
+                // The same computation as `POST /api/items/:id/impact`, for the proposal.
                 let mut probe = Model {
                     room: model.room.clone(),
                     rules: model.rules.clone(),
@@ -251,7 +225,7 @@ pub fn overview(model: &Model) -> Result<Vec<Stand>, ModelError> {
     Ok(out)
 }
 
-/// Welche Schwellen aus `rules.toml` ein Stueck ueber seinen Namen erbt.
+/// The `rules.toml` thresholds a piece inherits through its name.
 fn inherited_thresholds(model: &Model, k: Kind) -> Vec<(String, i32)> {
     let names: &[&str] = match k {
         Kind::Bed => &["bett_zugang_laengsseite", "bett_zugang_zweite_seite"],
@@ -264,6 +238,6 @@ fn inherited_thresholds(model: &Model, k: Kind) -> Vec<(String, i32)> {
     };
     names
         .iter()
-        .filter_map(|n| model.rules.abstand(n).ok().map(|v| (n.to_string(), v)))
+        .filter_map(|n| model.rules.threshold(n).ok().map(|v| (n.to_string(), v)))
         .collect()
 }

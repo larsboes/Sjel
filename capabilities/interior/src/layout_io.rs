@@ -1,33 +1,18 @@
-//! Ein Layout zurueckschreiben, ohne seine Begruendung zu verlieren.
+//! Writing a layout back without losing its reasoning.
 //!
-//! ## Warum das eine eigene Datei ist
+//! Layouts are files, not rows: their header carries the argument for a decision (why a table was
+//! rejected, say), and the overlay is a git repository, so every change has a diff. The one
+//! requirement on this writer is that the prose survives.
 //!
-//! Layouts sind Dateien und keine Zeilen (PRD Q60, bestaetigt 2026-08-31). Die Regel dort ist
-//! *hat die Zahl eine Begruendung, die mitwandern muss* — und bei einem Layout hat sie das:
-//! `h-esstisch-offen` traegt drei Absaetze darueber, warum die Klappe im Ostschlauch nicht
-//! aufgeht, und genau diese Absaetze sind der Grund, aus dem der PINNTORP verworfen wurde. Eine
-//! Tabelle hat dafuer keine Spalte, und das Overlay ist ein Git-Repository: als Datei hat jede
-//! Umstellung eine Geschichte und einen Diff.
-//!
-//! Daraus folgt die einzige Anforderung an diesen Schreiber: **die Prosa ueberlebt.** Ein
-//! Serialisierer, der die Datei aus der Struktur neu erzeugt, wirft jeden Kommentar weg — und
-//! damit das Wertvollste an ihr.
-//!
-//! ## Warum das ohne `toml_edit` geht
-//!
-//! Gemessen statt vermutet, 2026-08-31: in **keinem** der Layouts steht ein Kommentar hinter dem
-//! ersten `[[item]]`, und die ganze Datei kennt fuenf Schluessel — `name`, und je Eintrag `ref`,
-//! `x`, `y`, `rot`, `size`. Damit reicht ein Schnitt am ersten `[[item]]`: der Kopf bleibt Zeichen
-//! fuer Zeichen stehen, die Eintraege werden neu geschrieben. Eine Abhaengigkeit fuer
-//! Kommentarerhalt waere Aufwand fuer ein Problem, das die Dateien nicht haben.
-//!
-//! Sollte je ein Kommentar zwischen den Eintraegen stehen, geht er verloren — deshalb prueft
-//! `pruefe_kopf_genuegt` das vorher und verweigert die Arbeit, statt still zu kuerzen.
+//! No `toml_edit`: measured 2026-08-31, no layout has a comment after the first `[[item]]`, and the
+//! file knows five keys. So the file is cut at the first `[[item]]`, the header stays character for
+//! character, and the entries are rewritten. `check_header_suffices` refuses a file where that would
+//! lose a comment.
 
 use crate::model::{Layout, Model, ModelError, PlacedItem};
 use std::path::Path;
 
-/// Der Kopf einer Layoutdatei: alles vor dem ersten `[[item]]`.
+/// The header of a layout file: everything before the first `[[item]]`.
 fn header(text: &str) -> &str {
     match text.find("[[item]]") {
         Some(i) => &text[..i],
@@ -35,11 +20,9 @@ fn header(text: &str) -> &str {
     }
 }
 
-/// Steht hinter dem ersten `[[item]]` noch ein Kommentar, waere er nach dem Schreiben weg.
-///
-/// Dann bricht der Schreiber ab. Eine Datei stillschweigend zu kuerzen ist genau der
-/// Datenverlust, gegen den `deny_unknown_fields` im Import steht.
-fn check_header_suffices(text: &str, pfad: &Path) -> Result<(), ModelError> {
+/// A comment after the first `[[item]]` would be gone after writing, so the writer stops instead
+/// of truncating silently.
+fn check_header_suffices(text: &str, path: &Path) -> Result<(), ModelError> {
     let Some(i) = text.find("[[item]]") else {
         return Ok(());
     };
@@ -47,17 +30,17 @@ fn check_header_suffices(text: &str, pfad: &Path) -> Result<(), ModelError> {
         let z = line.trim();
         if z.starts_with('#') {
             return Err(ModelError::Missing(format!(
-                "{}: hinter dem ersten [[item]] steht ein Kommentar ({z:?}). \
-                 Dieser Schreiber erhaelt nur den Kopf und wuerde ihn verlieren — \
-                 verschiebe ihn nach oben oder schreib die Datei von Hand",
-                pfad.display()
+                "{}: there is a comment after the first [[item]] ({z:?}). \
+                 This writer keeps only the header and would lose it; \
+                 move it up or edit the file by hand",
+                path.display()
             )));
         }
     }
     Ok(())
 }
 
-/// Die Eintraege als TOML, in der Reihenfolge, in der sie stehen.
+/// The entries as TOML, in their order.
 fn entries(items: &[PlacedItem]) -> String {
     let mut s = String::new();
     for it in items {
@@ -75,23 +58,20 @@ fn entries(items: &[PlacedItem]) -> String {
     s
 }
 
-/// Ein bestehendes Layout mit neuen Positionen zurueckschreiben. Der Kopf bleibt.
+/// Write new positions into an existing layout. The header stays.
 pub fn update(model: &Model, id: &str, items: &[PlacedItem]) -> Result<(), ModelError> {
-    let pfad = model.layouts_dir().join(format!("{id}.toml"));
-    let text = std::fs::read_to_string(&pfad).map_err(|source| ModelError::Read {
-        path: pfad.clone(),
+    let path = model.layouts_dir().join(format!("{id}.toml"));
+    let text = std::fs::read_to_string(&path).map_err(|source| ModelError::Read {
+        path: path.clone(),
         source,
     })?;
-    check_header_suffices(&text, &pfad)?;
-    let neu = format!("{}{}", header(&text), entries(items));
-    std::fs::write(&pfad, neu).map_err(|source| ModelError::Read { path: pfad, source })
+    check_header_suffices(&text, &path)?;
+    let content = format!("{}{}", header(&text), entries(items));
+    std::fs::write(&path, content).map_err(|source| ModelError::Read { path: path, source })
 }
 
-/// Ein Layoutname, der eine Datei sein darf.
-///
-/// Der Name wird zu einem Dateinamen, also entscheidet diese Pruefung, was ein Aufrufer ueber
-/// HTTP in das Overlay schreiben kann. Ein Punkt oder ein Trennzeichen ist deshalb kein
-/// Schoenheitsfehler, sondern der Weg aus dem Verzeichnis heraus.
+/// A layout name that may be a file name. This decides what a caller can write into the overlay
+/// over HTTP, so a dot or a separator is a way out of the directory.
 pub fn check_id(id: &str) -> Result<(), ModelError> {
     if id.is_empty()
         || !id
@@ -99,18 +79,15 @@ pub fn check_id(id: &str) -> Result<(), ModelError> {
             .all(|c| c.is_ascii_alphanumeric() || c == '-' || c == '_')
     {
         return Err(ModelError::Missing(format!(
-            "`{id}` ist kein Layoutname — erlaubt sind Buchstaben, Ziffern, - und _"
+            "`{id}` is no layout name; allowed are letters, digits, - and _"
         )));
     }
     Ok(())
 }
 
-/// Die Notiz als Kommentarblock, Zeile fuer Zeile.
-///
-/// Mehrzeilig, weil die Herkunft eines Layouts ein Absatz ist und keine Zeile davon: `interior
-/// compose` hat drei Saetze zu sagen, die API einen.
-fn as_comment(notiz: &str) -> String {
-    notiz
+/// The note as a comment block, line by line: a layout's origin is a paragraph.
+fn as_comment(note: &str) -> String {
+    note
         .lines()
         .map(|z| {
             let z = z.trim_end();
@@ -123,84 +100,66 @@ fn as_comment(notiz: &str) -> String {
         .collect()
 }
 
-/// Ein neues Layout anlegen. Der Kopf sagt, woher es kommt.
-///
-/// **Was hier NICHT steht, ist der Punkt.** Bis 2026-08-31 schrieb dieser Kopf in jede neue
-/// Datei „Von einer Maschine gesetzt … jede Position hat die volle Raeumungspruefung
-/// durchlaufen". Fuer `interior compose` stimmt das; fuer einen leeren Plan, den jemand ueber
-/// `POST /api/layouts` anlegt und danach von Hand zieht, ist es schlicht falsch — und eine
-/// Datei, die ihre eigene Herkunft falsch behauptet, ist schlimmer als eine ohne Kopf. Wer
-/// etwas ueber die Herkunft zu sagen hat, sagt es in `notiz`.
-pub fn create(model: &Model, id: &str, layout: &Layout, notiz: &str) -> Result<(), ModelError> {
+/// Create a new layout; the header says where it came from, in `note`. It claims nothing else: a
+/// file that misstates its own origin is worse than one without a header.
+pub fn create(model: &Model, id: &str, layout: &Layout, note: &str) -> Result<(), ModelError> {
     check_id(id)?;
-    let pfad = model.layouts_dir().join(format!("{id}.toml"));
-    if pfad.exists() {
+    let path = model.layouts_dir().join(format!("{id}.toml"));
+    if path.exists() {
         return Err(ModelError::Missing(format!(
-            "`{id}` gibt es schon; ein bestehendes Layout wird nicht ueberschrieben"
+            "`{id}` exists already; an existing layout is not overwritten"
         )));
     }
     let header = format!(
         "{}#\n\
-         # Dieser Kopf ist der Platz fuer das WARUM: wofuer diese Aufstellung steht und wogegen\n\
-         # sie entschieden wurde. Er ueberlebt jedes spaetere Verschieben — die Eintraege\n\
-         # darunter werden neu geschrieben, dieser Absatz nicht.\n\n\
+         # This header is the place for the WHY: what this arrangement stands for and what it was\n\
+         # decided against. It survives every later move; the entries below are rewritten,\n\
+         # this paragraph is not.\n\n\
          name = \"{}\"\n\n",
-        as_comment(notiz),
+        as_comment(note),
         layout.name.replace('"', "'")
     );
-    if let Some(dir) = pfad.parent() {
+    if let Some(dir) = path.parent() {
         std::fs::create_dir_all(dir).map_err(|source| ModelError::Read {
             path: dir.to_path_buf(),
             source,
         })?;
     }
-    std::fs::write(&pfad, format!("{header}{}", entries(&layout.items)))
-        .map_err(|source| ModelError::Read { path: pfad, source })
+    std::fs::write(&path, format!("{header}{}", entries(&layout.items)))
+        .map_err(|source| ModelError::Read { path: path, source })
 }
 
-/// Wohin ein zurueckgelegtes Layout wandert. Ein Unterverzeichnis, kein Muelleimer.
+/// Where an archived layout goes: a subdirectory, not a bin. The name is a directory in the
+/// overlay, so it stays as existing machines have it.
 pub const ARCHIVE: &str = "archiv";
 
-/// Ein Layout aus der Liste nehmen, ohne es zu verlieren.
-///
-/// **Geloescht wird nicht.** Der Kopf einer Layoutdatei traegt die Begruendung, aus der ein
-/// Moebel verworfen wurde (PRD Q60) — `h-esstisch-offen` traegt drei Absaetze darueber, warum
-/// eine Klappe nicht aufgeht, und das ist der einzige Ort, an dem dieses Argument steht. Ein
-/// `DELETE`, das die Datei entfernt, entfernt die Begruendung mit; wer sie spaeter braucht,
-/// braucht sie genau dann, wenn dasselbe Moebel wieder zur Debatte steht.
-///
-/// `layouts/archiv/` faellt aus `Model::layout_names` heraus, weil ein Verzeichnis keine
-/// `.toml`-Endung hat. Das Layout verschwindet also aus jeder Liste und bleibt auf der Platte,
-/// mit seiner Geschichte im Git des Overlays.
+/// Take a layout out of the list without losing it. Its header can be the only place an argument
+/// for rejecting a piece is written, so nothing is deleted: `archiv/` has no `.toml` ending and
+/// drops out of `Model::layout_names`, and the file stays in the overlay's git.
 pub fn archive_layout(model: &Model, id: &str) -> Result<String, ModelError> {
     check_id(id)?;
-    let von = model.layouts_dir().join(format!("{id}.toml"));
-    if !von.exists() {
-        return Err(ModelError::Missing(format!("kein Layout `{id}`")));
+    let from = model.layouts_dir().join(format!("{id}.toml"));
+    if !from.exists() {
+        return Err(ModelError::Missing(format!("no layout `{id}`")));
     }
     let archive = model.layouts_dir().join(ARCHIVE);
     std::fs::create_dir_all(&archive).map_err(|source| ModelError::Read {
         path: archive.clone(),
         source,
     })?;
-    let nach = archive.join(format!("{id}.toml"));
-    if nach.exists() {
+    let to = archive.join(format!("{id}.toml"));
+    if to.exists() {
         return Err(ModelError::Missing(format!(
-            "im Archiv liegt schon ein `{id}` — zwei Fassungen unter einem Namen waeren eine \
-             verlorene Begruendung"
+            "the archive already holds a `{id}`; two versions under one name would lose a reason"
         )));
     }
-    std::fs::rename(&von, &nach).map_err(|source| ModelError::Read { path: von, source })?;
-    // Relativ zum Layoutverzeichnis: der absolute Pfad zeigt in das private Overlay und hat in
-    // einer HTTP-Antwort nichts verloren.
+    std::fs::rename(&from, &to).map_err(|source| ModelError::Read { path: from, source })?;
+    // Relative to the layouts dir: the absolute path points into the private overlay.
     Ok(format!("{ARCHIVE}/{id}.toml"))
 }
 
-/// Das heutige Datum als `JJJJ-MM-TT`, aus der Uhr statt aus dem Quelltext.
-///
-/// Ein Kopf, der sein Datum nennt, ist der Unterschied zwischen „ueber die API angelegt" und
-/// einer Aussage, die jemand nachschlagen kann.
-pub fn heute() -> String {
+/// Today as `YYYY-MM-DD`, from the clock.
+pub fn today() -> String {
     let seconds = std::time::SystemTime::now()
         .duration_since(std::time::UNIX_EPOCH)
         .map_or(0, |d| d.as_secs() as i64);
@@ -208,11 +167,8 @@ pub fn heute() -> String {
     format!("{j:04}-{m:02}-{t:02}")
 }
 
-/// Tage seit 1970-01-01 als Kalenderdatum, nach Howard Hinnants `civil_from_days`.
-///
-/// Von Hand gerechnet und nicht aus einer Kalenderbibliothek: fuer ein Datum in einem Kommentar
-/// waere das eine Abhaengigkeit zu viel. `sonne.rs` traegt dieselbe Rechnung fuer die Jahreszahl
-/// aus demselben Grund.
+/// Days since 1970-01-01 as a calendar date, after Howard Hinnant's `civil_from_days`; one date in
+/// a comment does not justify a calendar dependency.
 fn date_from_days(days: i64) -> (i64, i64, i64) {
     let z = days + 719_468;
     let era = if z >= 0 { z } else { z - 146_096 } / 146_097;
@@ -221,7 +177,7 @@ fn date_from_days(days: i64) -> (i64, i64, i64) {
     let doy = doe - (365 * yoe + yoe / 4 - yoe / 100);
     let mp = (5 * doy + 2) / 153;
     let tag = doy - (153 * mp + 2) / 5 + 1;
-    // Hinnants Jahr beginnt im Maerz, damit der Schalttag ans Ende faellt.
+    // Hinnant's year starts in March, so the leap day falls at its end.
     let month = if mp < 10 { mp + 3 } else { mp - 9 };
     let year = yoe + era * 400 + i64::from(month <= 2);
     (year, month, tag)
@@ -233,16 +189,16 @@ mod tests {
     use crate::model::PlacedItem;
     use std::path::Path;
 
-    const FILE: &str = "# Variante K — Bett quer an der Nordwand.\n\
+    const FILE: &str = "# Variant K: bed across the north wall.\n\
                          #\n\
-                         # Drei Absaetze Begruendung, die kein Serialisierer kennt.\n\n\
+                         # Three paragraphs of reasoning no serialiser knows.\n\n\
                          name = \"K\"\n\n\
                          [[item]]\nref = \"bett\"\nx = 0\ny = 0\nrot = 0\n\n";
 
     #[test]
     fn the_header_survives_character_for_character() {
         let k = header(FILE);
-        assert!(k.contains("Drei Absaetze Begruendung"));
+        assert!(k.contains("Three paragraphs of reasoning"));
         assert!(k.contains("name = \"K\""));
         assert!(!k.contains("[[item]]"));
     }
@@ -261,17 +217,17 @@ mod tests {
         assert!(s.contains("ref = \"bett\""));
         assert!(s.contains("x = 120"));
         assert!(s.contains("rot = 90"));
-        assert!(!s.contains("size"), "kein size, wenn keins gesetzt ist");
+        assert!(!s.contains("size"), "no size when none is set");
     }
 
-    /// Ein Kommentar zwischen den Eintraegen bricht ab, statt still verloren zu gehen.
+    /// A comment between entries stops the write instead of being lost.
     #[test]
     fn a_comment_after_the_entries_prevents_writing() {
         let with =
-            format!("{FILE}# ein spaeter Gedanke\n[[item]]\nref = \"x\"\nx = 1\ny = 1\nrot = 0\n");
+            format!("{FILE}# a late thought\n[[item]]\nref = \"x\"\nx = 1\ny = 1\nrot = 0\n");
         let e = check_header_suffices(&with, Path::new("k.toml"))
-            .expect_err("der Kommentar wuerde verloren gehen");
-        assert!(e.to_string().contains("spaeter Gedanke"), "{e}");
+            .expect_err("the comment would be lost");
+        assert!(e.to_string().contains("late thought"), "{e}");
     }
 
     #[test]
@@ -279,23 +235,23 @@ mod tests {
         assert!(check_header_suffices(FILE, Path::new("k.toml")).is_ok());
     }
 
-    /// Ein Absatz bleibt ein Absatz, und die Leerzeile bleibt eine Zeile.
+    /// A paragraph stays a paragraph, and the empty line stays a line.
     #[test]
     fn a_multi_line_note_becomes_a_comment_block() {
-        let k = as_comment("Erste Zeile.\n\nDritte Zeile.");
-        assert_eq!(k, "# Erste Zeile.\n#\n# Dritte Zeile.\n");
+        let k = as_comment("First line.\n\nThird line.");
+        assert_eq!(k, "# First line.\n#\n# Third line.\n");
     }
 
-    /// Der Name wird zu einem Dateinamen. Was hier durchkommt, darf ins Overlay schreiben.
+    /// The name becomes a file name; what passes here may write into the overlay.
     #[test]
     fn a_layout_name_cannot_point_out_of_the_dir() {
         assert!(check_id("p-gerechnet_2").is_ok());
         for bad in ["", "../heim", "a/b", "a.toml", "a b"] {
-            assert!(check_id(bad).is_err(), "`{bad}` darf keine Datei sein");
+            assert!(check_id(bad).is_err(), "`{bad}` must not be a file");
         }
     }
 
-    /// Gegen zwei Tage, die von Hand nachschlagbar sind, und gegen den Schalttag.
+    /// Against two days checkable by hand, and against the leap day.
     #[test]
     fn days_since_the_epoch_become_the_calendar_date() {
         assert_eq!(date_from_days(0), (1970, 1, 1));

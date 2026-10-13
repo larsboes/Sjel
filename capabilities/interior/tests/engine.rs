@@ -159,7 +159,7 @@ fn a_rotation_by_90_degrees_swaps_width_and_depth() {
 fn the_area_comes_from_the_polygon_not_the_file() {
     let m = model();
     assert_eq!(
-        m.room.main_room.flaeche_m2, 99.0,
+        m.room.main_room.area_m2, 99.0,
         "die Falle muss in der Datei stehen"
     );
     assert!(
@@ -220,7 +220,7 @@ fn unmeasured_sizes_go_into_the_report_of_the_layout_using_them() {
     let with = check("e-gedreht");
     assert_eq!(with.uncertainties.len(), 1);
     assert_eq!(with.uncertainties[0].reference, "sideboard");
-    assert_eq!(with.uncertainties[0].fields, ["b", "t"]);
+    assert_eq!(with.uncertainties[0].fields, ["width", "depth"]);
     assert!(check("a-frei").uncertainties.is_empty());
 }
 
@@ -325,10 +325,10 @@ fn a_coffee_table_is_no_sofa() {
 #[test]
 fn the_flat_thresholds_come_from_its_file() {
     let m = model();
-    assert_eq!(m.rules.abstand("vor_kuechenzeile").unwrap(), 100);
-    assert_eq!(m.rules.abstand("bett_zugang_zweite_seite").unwrap(), 40);
+    assert_eq!(m.rules.threshold("vor_kuechenzeile").unwrap(), 100);
+    assert_eq!(m.rules.threshold("bett_zugang_zweite_seite").unwrap(), 40);
     assert!(
-        m.rules.abstand("gibt_es_nicht").is_err(),
+        m.rules.threshold("gibt_es_nicht").is_err(),
         "ein unbekannter Abstand ist ein Fehler, kein Standardwert"
     );
 
@@ -362,7 +362,7 @@ fn a_piece_that_declares_its_space_is_no_longer_judged_by_name() {
     // Genau diese Verwechslung ist der Grund, aus dem das Feld ans Moebel gehoert.
     assert_eq!((v.measured, v.required), (Some(0), Some(65)));
     let m = model();
-    assert_eq!(m.rules.abstand("schrank_tuer_oeffnen").unwrap(), 90);
+    assert_eq!(m.rules.threshold("schrank_tuer_oeffnen").unwrap(), 90);
 }
 
 /// Die alte Fassung laeuft daneben weiter, und das ist Absicht: 42 Zeilen an einem Tag
@@ -436,8 +436,8 @@ fn an_approach_zone_is_on_the_side_the_flat_names() {
 fn a_route_to_an_unknown_waypoint_is_an_error() {
     let mut m = model();
     m.room.routes.push(Route {
-        von: "eingangstuer".into(),
-        nach: "kellerabgang".into(),
+        from: "eingangstuer".into(),
+        to: "kellerabgang".into(),
     });
     let l = m.load_layout("a-frei").unwrap();
     let err = check_layout(&m, &l).expect_err("eine unbekannte Tuer muss auffallen");

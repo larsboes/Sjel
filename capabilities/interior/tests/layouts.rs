@@ -171,7 +171,7 @@ fn an_existing_layout_is_not_overwritten() {
     let before = file(&m, TEMPLATE);
     let e = layout_io::create(&m, TEMPLATE, &plan("Neu", vec![]), "Zweiter Versuch.")
         .expect_err("den Namen gibt es schon");
-    assert!(e.to_string().contains("gibt es schon"), "{e}");
+    assert!(e.to_string().contains("exists already"), "{e}");
     assert_eq!(file(&m, TEMPLATE), before, "und die Datei ist unberuehrt");
 }
 
@@ -238,7 +238,7 @@ fn archiving_twice_under_one_name_is_refused() {
     layout_io::create(&m, "doppelt", &plan("Dann", vec![]), "Zweite Fassung.").expect("zweite");
 
     let e = layout_io::archive_layout(&m, "doppelt").expect_err("das Archiv ist belegt");
-    assert!(e.to_string().contains("Archiv"), "{e}");
+    assert!(e.to_string().contains("archive"), "{e}");
     assert!(
         file(&m, "doppelt").contains("Zweite Fassung"),
         "und die zweite steht noch da, statt still ueber die erste zu wandern"

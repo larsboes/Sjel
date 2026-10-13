@@ -142,7 +142,7 @@ impl Raw {
             length: self.length,
             count: self.count,
             fold_states: self.fold_states,
-            estimated: self.estimated,
+            estimated: crate::store::english_estimated(self.estimated),
             clearance_zone: self.clearance_zone,
             clearance_block: self.clearance_block,
             price_cents: self.price_eur.map(cents),

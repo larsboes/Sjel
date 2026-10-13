@@ -1,64 +1,46 @@
-//! Wo die Sonne im Laufe des Jahres auf den Boden faellt.
+//! Where sun falls on the floor through the year.
 //!
-//! R5 fragt bisher, ob der Schreibtisch mit dem Gesicht oder dem Ruecken zur Verglasung
-//! steht — eine Aussage ueber die Achse, und keine ueber Licht. Sie kommt ohne Ort, ohne
-//! Datum und ohne Uhrzeit aus, und deshalb kann sie nicht beantworten, was jemand am
-//! Schreibtisch wirklich wissen will: *faellt mir im Maerz um neun die Sonne auf den
-//! Bildschirm?*
+//! Two steps, both plain geometry:
 //!
-//! Diese Datei rechnet das. Zwei Schritte, beide gewoehnliche Geometrie:
+//! 1. Where the sun stands: azimuth and altitude from date, time and place, after the NOAA method.
+//! 2. Where its light falls: glazing is a vertical surface between two heights, and the light
+//!    through it draws a parallelogram on the floor, offset by `height / tan(altitude)`. A piece
+//!    inside it lies in the sun.
 //!
-//! 1. **Wo steht die Sonne** — Azimut und Hoehe aus Datum, Uhrzeit und Ort, nach dem Verfahren
-//!    der NOAA. Reine Trigonometrie, keine Tabelle, keine Naeherung ueber Mittelwerte.
-//! 2. **Wohin faellt ihr Licht** — die Verglasung ist eine senkrechte Flaeche zwischen zwei
-//!    Hoehen; das Licht durch sie zeichnet auf dem Boden ein Parallelogramm, dessen Versatz
-//!    `hoehe / tan(sonnenhoehe)` betraegt. Steht ein Moebel darin, liegt es in der Sonne.
-//!
-//! ## Was die Wohnung dafuer sagen muss, und was passiert, wenn sie schweigt
+//! What the flat must state:
 //!
 //! ```toml
-//! [lage]
-//! breite = 50.7            # Grad Nord
-//! laenge = 7.1             # Grad Ost
-//! utc_offset_h = 2         # die Zeitzone MIT Sommerzeit, wenn die Uhrzeiten Sommerzeit sind
-//! nordrichtung_grad = 0    # welche Kompassrichtung im Plan nach oben zeigt
+//! [lage]                   # or [location]
+//! breite = 50.7            # latitude, degrees north
+//! laenge = 7.1             # longitude, degrees east
+//! utc_offset_h = 2         # including daylight saving time if the hours are summer time
+//! nordrichtung_grad = 0    # which compass direction points up in the plan
 //!
 //! [[oeffnungen]]
 //! id = "terrassentuer"
-//! glas_von_cm = 0          # Unterkante ueber dem Boden
-//! glas_bis_cm = 210        # Oberkante
+//! glas_von_cm = 0          # lower edge above the floor
+//! glas_bis_cm = 210        # upper edge
 //! ```
 //!
-//! Fehlt `[lage]`, wird **nicht gerechnet**. Ein erfundener Standort ergaebe einen Schattenwurf
-//! auf den Zentimeter genau, der auf nichts beruht — das waere schlimmer als keine Antwort.
-//! Dasselbe gilt fuer eine Verglasung ohne Hoehen: die Ausdehnung des Lichtflecks haengt
-//! linear an ihnen. Beides meldet der Bericht als Luecke, wie es `CheckResult::nicht_geprueft`
-//! seit PRD B31 fuer jede nicht messbare Regel tut.
-//!
-//! ## Wo dieses Modell zu grob ist, und in welche Richtung
-//!
-//! Der Lichtfleck ist der **ungehinderte** Wurf: was zwischen Fenster und Boden steht, wirft
-//! keinen Schatten. Damit meldet die Rechnung eher zu viel Sonne als zu wenig — die
-//! vorsichtige Richtung fuer eine Blendungsfrage. Nachbarhaeuser, Baeume und Balkonplatten
-//! kennt sie nicht; ein Nordbalkon ueber der Terrassentuer wuerde jede Zahl hier senken.
+//! Without the location nothing is computed, and glazing without heights throws no light; the
+//! report names both as gaps. The patch is the unobstructed throw: nothing between window and floor
+//! casts a shadow, so the result errs towards too much sun, the safe side for glare. Neighbouring
+//! buildings, trees and balconies are not modelled.
 
 use crate::model::{Model, ModelError, Opening, Pt, Rect};
 use serde::Serialize;
 
-/// Wo die Sonne steht.
+/// Where the sun stands.
 #[derive(Debug, Clone, Copy, PartialEq, Serialize)]
 pub struct SunPosition {
-    /// Grad ueber dem Horizont. Negativ heisst: unter dem Horizont.
+    /// Degrees above the horizon; negative is below it.
     pub altitude_deg: f64,
-    /// Kompassgrad, von Nord im Uhrzeigersinn.
+    /// Compass degrees, clockwise from north.
     pub azimuth_deg: f64,
 }
 
-/// Sonnenstand nach dem Verfahren der NOAA (General Solar Position Calculations).
-///
-/// `tag_im_jahr` und `stunde_utc` statt eines Datumstyps: diese Capability haengt an keiner
-/// Kalenderbibliothek, und die Frage hier ist eine astronomische, keine kalendarische.
-/// `jahr` geht nur ueber die Julianische Tageszahl ein.
+/// Sun position after the NOAA General Solar Position Calculations. Day of year and UTC hour rather
+/// than a date type: the question is astronomical, and the year enters only through the Julian day.
 pub fn sun_position(
     year: i32,
     day_of_year: u32,
@@ -66,8 +48,7 @@ pub fn sun_position(
     width: f64,
     length: f64,
 ) -> SunPosition {
-    // Julianische Tageszahl fuer den Jahresanfang, plus der Tag. Genauigkeit im Bereich von
-    // Sekunden reicht: gefragt ist, ob die Sonne auf einen Schreibtisch faellt.
+    // Julian day of the year start plus the day. Seconds of accuracy are enough here.
     let a = ((14 - 1) / 12) as f64;
     let y = year as f64 + 4800.0 - a;
     let m = 1.0 + 12.0 * a - 3.0;
@@ -95,7 +76,7 @@ pub fn sun_position(
         .asin()
         .to_degrees();
 
-    // Zeitgleichung: der Unterschied zwischen wahrer und mittlerer Sonnenzeit, in Minuten.
+    // Equation of time: true minus mean solar time, in minutes.
     let var_y = (eps.to_radians() / 2.0).tan().powi(2);
     let equation_of_time = 4.0
         * (var_y * (2.0 * l0.to_radians()).sin() - 2.0 * e * m_rad.sin()
@@ -121,8 +102,8 @@ pub fn sun_position(
         .acos();
     let height = 90.0 - zenith.to_degrees();
 
-    // Azimut aus dem Zenitwinkel. Der Nenner wird null, wenn die Sonne im Zenit steht; dann
-    // ist der Azimut nicht definiert und jede Antwort gleich richtig.
+    // Azimuth from the zenith angle. The denominator is zero with the sun at the zenith, where the
+    // azimuth is undefined and any answer is right.
     let denominator = b.cos() * zenith.sin();
     let azimuth = if denominator.abs() < 1e-9 {
         180.0
@@ -142,28 +123,24 @@ pub fn sun_position(
     }
 }
 
-/// Der Lichtfleck einer Verglasung auf dem Boden: ein Parallelogramm in Raumkoordinaten.
+/// A glazing's light patch on the floor: a parallelogram in room coordinates.
 #[derive(Debug, Clone, Serialize)]
 pub struct LightPatch {
     pub opening: String,
-    /// Vier Ecken, gegen den Uhrzeigersinn oder mit — fuer den Ueberschneidungstest egal.
+    /// Four corners, either winding; the overlap test does not care.
     pub corners: [[f64; 2]; 4],
 }
 
-/// Die Richtung, in die das Licht laeuft, in Plankoordinaten.
-///
-/// `azimut` ist ein Kompasswinkel; der Plan haengt ueber `nordrichtung_grad` daran. Das Licht
-/// laeuft von der Sonne WEG, also in die Gegenrichtung ihres Azimuts.
+/// The direction the light travels in plan coordinates: away from the sun, so opposite its
+/// azimuth, rotated by `north_deg`.
 fn light_direction(azimuth_deg: f64, north_deg: f64) -> [f64; 2] {
     let b = (azimuth_deg + 180.0 - north_deg).to_radians();
-    // Plan: +x nach Osten, +y nach Sueden. Norden ist also -y.
+    // Plan: +x east, +y south, so north is -y.
     [b.sin(), -b.cos()]
 }
 
-/// Wohin das Licht durch diese Oeffnung faellt — oder `None`, wenn es das nicht tut.
-///
-/// Drei Gruende fuer `None`, und keiner davon ist ein Fehler: die Sonne steht unter dem
-/// Horizont, sie steht hinter der Wand, oder die Oeffnung sagt ihre Glashoehen nicht.
+/// Where light falls through this opening, or `None`: the sun is below the horizon, behind the
+/// wall, or the opening states no glass heights.
 pub fn light_patch(
     model: &Model,
     o: &Opening,
@@ -172,21 +149,20 @@ pub fn light_patch(
 ) -> Option<LightPatch> {
     let (from_cm, bis_cm) = (o.glass_from_cm?, o.glass_to_cm?);
     if stand.altitude_deg <= 0.5 {
-        // Unter einem halben Grad ist der Versatz groesser als jede Wohnung, und die Rechnung
-        // liefe gegen unendlich statt gegen eine Aussage.
+        // Below half a degree the offset exceeds any flat and runs towards infinity.
         return None;
     }
     let seg = crate::clearance::opening_segment(&model.room, o)?;
     let d = light_direction(stand.azimuth_deg, north_deg);
-    // Scheint sie ueberhaupt auf diese Fassade? Das Licht muss nach innen laufen.
+    // Does it shine on this facade at all? The light must travel inwards.
     if d[0] * seg.normal[0] + d[1] * seg.normal[1] <= 0.0 {
         return None;
     }
     let tan_h = stand.altitude_deg.to_radians().tan();
     let offset = |z: f64| z / tan_h;
     let (near, fern) = (offset(bis_cm as f64), offset(from_cm as f64));
-    // Die OBERkante wirft am weitesten? Nein — sie steht am hoechsten, also faellt ihr Strahl
-    // am weitesten in den Raum. Die Unterkante zeichnet den nahen Rand.
+    // The upper edge stands highest, so its ray reaches furthest into the room; the lower edge draws
+    // the near border.
     let point = |p: Pt, w: f64| [p[0] as f64 + d[0] * w, p[1] as f64 + d[1] * w];
     Some(LightPatch {
         opening: o.id.clone(),
@@ -199,11 +175,8 @@ pub fn light_patch(
     })
 }
 
-/// Ueberschneiden sich ein Rechteck und ein Parallelogramm?
-///
-/// Trennachsensatz ueber die Kantennormalen beider Formen. Beide sind konvex, also ist eine
-/// trennende Achse gleichbedeutend mit „beruehren sich nicht" — kein Naeherungsverfahren,
-/// sondern ein Beweis in beide Richtungen.
+/// Do a rect and a parallelogram overlap? Separating axis theorem over both shapes' edge normals;
+/// both are convex, so this is exact in both directions.
 pub fn touch(r: &Rect, l: &LightPatch) -> bool {
     let rect = [
         [r.x as f64, r.y as f64],
@@ -239,14 +212,14 @@ pub fn touch(r: &Rect, l: &LightPatch) -> bool {
     true
 }
 
-/// Ein geprueftes Datum mit seiner Uhrzeit.
+/// A checked date with its hour.
 #[derive(Debug, Clone, Serialize)]
 pub struct SunHour {
     pub tag: &'static str,
     pub hour_local: u32,
     pub altitude_deg: f64,
     pub azimuth_deg: f64,
-    /// Welche Stuecke in diesem Moment im direkten Licht liegen.
+    /// Which pieces lie in direct light at this moment.
     pub hit: Vec<String>,
 }
 
@@ -254,39 +227,27 @@ pub struct SunHour {
 pub struct SunReport {
     pub layout: String,
     pub hours: Vec<SunHour>,
-    /// Je Stueck: in wie vielen der geprueften Stunden es im direkten Licht liegt.
+    /// Per piece: in how many checked hours it lies in direct light.
     pub hits_per_piece: std::collections::BTreeMap<String, usize>,
-    /// Verglasungen, deren Hoehen fehlen — sie werfen hier kein Licht und muessten es.
+    /// Glazings without heights: they throw no light here and should.
     pub without_glass_heights: Vec<String>,
 }
 
-/// Die vier Tage, an denen sich das Jahr entscheidet.
-///
-/// Wintersonnenwende und Sommersonnenwende sind die Extreme, die Tagundnachtgleichen der
-/// Mittelwert. Wer diese vier kennt, kennt die Spanne — jeder weitere Tag liegt dazwischen.
-/// Die Tagesnummern sind fuer ein Gemeinjahr und koennen im Schaltjahr um einen Tag danebe
-/// liegen; auf den Sonnenstand wirkt sich das um Bruchteile eines Grades aus.
+/// The four days that decide the year: the solstices are the extremes, the equinoxes the mean.
+/// Day numbers are for a common year; in a leap year the sun moves a fraction of a degree.
 pub const DAYS: &[(&str, u32)] = &[
-    ("21. Maerz", 80),
-    ("21. Juni", 172),
-    ("23. September", 266),
-    ("21. Dezember", 355),
+    ("21 March", 80),
+    ("21 June", 172),
+    ("23 September", 266),
+    ("21 December", 355),
 ];
 
-/// Von wann bis wann geprueft wird, in lokaler Uhrzeit.
+/// The checked hours, local time.
 pub const HOURS: std::ops::RangeInclusive<u32> = 8..=18;
 
-/// Das laufende Kalenderjahr, aus der Uhr statt aus dem Quelltext.
-///
-/// Bis 2026-08-31 stand hier die Zahl 2026. Ein Bericht, der jedes Jahr denselben Sonnenstand
-/// rechnet, laeuft mit dem Kalender auseinander — und zwar lautlos, weil seine Zahlen weiter
-/// auf die Kommastelle genau aussehen.
-///
-/// Einmal ermittelt und behalten: `stunden_in_der_sonne` haengt in der Suchschleife ueber
-/// Millionen Aufstellungen, und ein Systemaufruf je Stunde je Kandidat waere dort teuer. Ein
-/// Prozess, der ueber den Jahreswechsel laeuft, rechnet also mit dem Jahr seines Starts weiter
-/// — der Unterschied liegt bei Bruchteilen eines Grades, derselbe Bereich, in dem `TAGE` das
-/// Schaltjahr ignoriert.
+/// The current calendar year, from the clock. Read once and kept: `hours_in_sun` runs inside a
+/// search over millions of arrangements. A process running across New Year keeps its start year,
+/// a difference of fractions of a degree.
 fn year_now() -> i32 {
     static YEAR: std::sync::OnceLock<i32> = std::sync::OnceLock::new();
     *YEAR.get_or_init(|| {
@@ -297,31 +258,25 @@ fn year_now() -> i32 {
     })
 }
 
-/// Tage seit 1970-01-01 zum Kalenderjahr, nach Howard Hinnants `civil_from_days`.
-///
-/// Von Hand gerechnet und nicht aus einer Kalenderbibliothek: fuer eine einzige Jahreszahl
-/// waere das eine Abhaengigkeit zu viel, und `capabilities/transit/src/main.rs` traegt
-/// dieselbe Rechnung aus demselben Grund.
+/// Days since 1970-01-01 to the calendar year, after Howard Hinnant's `civil_from_days`, to avoid a
+/// calendar dependency for one number.
 fn year_from_days(days: i64) -> i32 {
     let z = days + 719_468;
     let era = if z >= 0 { z } else { z - 146_096 } / 146_097;
     let doe = z - era * 146_097;
     let yoe = (doe - doe / 1460 + doe / 36_524 - doe / 146_096) / 365;
     let doy = doe - (365 * yoe + yoe / 4 - yoe / 100);
-    // Hinnants Jahr beginnt im Maerz, damit der Schalttag ans Ende faellt. Die beiden Monate
-    // davor gehoeren deshalb schon ins naechste Kalenderjahr.
+    // Hinnant's year starts in March, so the two months before belong to the next calendar year.
     let march_year = yoe + era * 400;
     (march_year + i64::from((5 * doy + 2) / 153 >= 10)) as i32
 }
 
-/// In wie vielen der geprueften Stunden liegt dieses Rechteck im direkten Licht?
-///
-/// Die schmale Fassung fuer `clearance.rs`: eine Regel braucht eine Zahl und keinen Bericht,
-/// und sie wird in einer Schleife aufgerufen, die Millionen Aufstellungen prueft.
+/// In how many checked hours does this rect lie in direct light? The lean version for
+/// `clearance.rs`, called in a loop over millions of arrangements.
 pub fn hours_in_sun(model: &Model, r: &Rect) -> Result<usize, ModelError> {
     let Some(location) = model.room.location else {
         return Err(ModelError::Missing(
-            "room.toml fuehrt kein [lage] — ohne Ort gibt es keinen Sonnenstand".into(),
+            "room.toml has no [lage]; without a location there is no sun position".into(),
         ));
     };
     let mut n = 0;
@@ -331,17 +286,17 @@ pub fn hours_in_sun(model: &Model, r: &Rect) -> Result<usize, ModelError> {
                 year_now(),
                 *tag,
                 h as f64 - location.utc_offset_h,
-                location.width,
-                location.length,
+                location.latitude,
+                location.longitude,
             );
             let hit = model
                 .room
                 .openings
                 .iter()
                 .filter(|o| {
-                    o.typ
+                    o.kind
                         .as_deref()
-                        .is_some_and(|t| t.starts_with("glastuer") || t.starts_with("fenster"))
+                        .is_some_and(|t| t.starts_with("glass_door") || t.starts_with("window"))
                 })
                 .filter_map(|o| light_patch(model, o, stand, location.north_deg))
                 .any(|f| touch(r, &f));
@@ -353,17 +308,17 @@ pub fn hours_in_sun(model: &Model, r: &Rect) -> Result<usize, ModelError> {
     Ok(n)
 }
 
-/// Wie viele Stunden dieser Bericht ueberhaupt prueft. Der Nenner zu jeder Trefferzahl.
+/// How many hours the report checks: the denominator of every hit count.
 pub fn checked_hours() -> usize {
     DAYS.len() * HOURS.count()
 }
 
-/// Wann im Jahr welches Moebel in der Sonne steht.
-pub fn bericht(model: &Model, layout: &crate::model::Layout) -> Result<SunReport, ModelError> {
+/// When in the year which piece stands in the sun.
+pub fn report(model: &Model, layout: &crate::model::Layout) -> Result<SunReport, ModelError> {
     let location = model.room.location.ok_or_else(|| {
         ModelError::Missing(
-            "room.toml fuehrt kein [lage] — ohne Breite, Laenge und Nordrichtung ist ein \
-             Sonnenstand eine erfundene Zahl"
+            "room.toml has no [lage]; without latitude, longitude and north direction a sun position is \
+             an invented number"
                 .into(),
         )
     })?;
@@ -373,9 +328,9 @@ pub fn bericht(model: &Model, layout: &crate::model::Layout) -> Result<SunReport
         .openings
         .iter()
         .filter(|o| {
-            o.typ
+            o.kind
                 .as_deref()
-                .is_some_and(|t| t.starts_with("glastuer") || t.starts_with("fenster"))
+                .is_some_and(|t| t.starts_with("glass_door") || t.starts_with("window"))
         })
         .collect();
     let without_glass_heights: Vec<String> = glazings
@@ -390,7 +345,7 @@ pub fn bericht(model: &Model, layout: &crate::model::Layout) -> Result<SunReport
     for (name, tag) in DAYS {
         for h in HOURS {
             let utc = h as f64 - location.utc_offset_h;
-            let stand = sun_position(year_now(), *tag, utc, location.width, location.length);
+            let stand = sun_position(year_now(), *tag, utc, location.latitude, location.longitude);
             let flecken: Vec<LightPatch> = glazings
                 .iter()
                 .filter_map(|o| light_patch(model, o, stand, location.north_deg))
@@ -431,18 +386,18 @@ pub fn bericht(model: &Model, layout: &crate::model::Layout) -> Result<SunReport
 mod year_tests {
     use super::{year_now, year_from_days};
 
-    /// Feste Tageszahlen statt der Uhr: ein Test, der `jahr_jetzt()` gegen ein Literal haelt,
-    /// waere genau der Fehler, den diese Aenderung behebt.
+    /// Fixed day numbers instead of the clock: a test holding `year_now()` against a literal would be
+    /// the bug this fixes.
     #[test]
     fn the_year_boundary_is_on_the_right_day() {
-        assert_eq!(year_from_days(0), 1970, "1970-01-01 ist Tag null");
-        // 56 Jahre a 365 Tage plus 14 Schalttage (2000 zaehlt mit, es ist durch 400 teilbar).
+        assert_eq!(year_from_days(0), 1970, "1970-01-01 is day zero");
+        // 56 years of 365 days plus 14 leap days (2000 counts: divisible by 400).
         assert_eq!(year_from_days(20_454), 2026, "2026-01-01");
-        assert_eq!(year_from_days(20_453), 2025, "der Tag davor");
-        assert_eq!(year_from_days(-1), 1969, "und rueckwaerts kippt es auch");
+        assert_eq!(year_from_days(20_453), 2025, "the day before");
+        assert_eq!(year_from_days(-1), 1969, "and it tips backwards too");
     }
 
-    /// Die Uhr liefert ueberhaupt ein Jahr aus diesem Jahrhundert.
+    /// The clock gives a year of this century.
     #[test]
     fn the_clock_gives_a_plausible_year() {
         let j = year_now();

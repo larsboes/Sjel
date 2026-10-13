@@ -255,7 +255,7 @@ fn the_sample_flat_declares_every_rule_the_checker_knows() {
     let m = variant("vollstaendig", &[]);
     for id in RULE_IDS {
         m.rules
-            .regel(id)
+            .rule(id)
             .unwrap_or_else(|e| panic!("REGEL_IDS nennt `{id}`, die Musterwohnung nicht: {e}"));
     }
 }

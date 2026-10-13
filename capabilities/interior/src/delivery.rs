@@ -1,76 +1,61 @@
-//! Kommt das Stueck ueberhaupt herein und bis an seinen Platz?
+//! Does the piece get in at all, and as far as its place?
 //!
-//! Jede andere Pruefung dieser Capability fragt, ob ein Moebel an einer Stelle **stehen** darf.
-//! Keine fragte, ob es dorthin **gelangt**. Das ist keine akademische Luecke: ein Schrank, der
-//! an seinem Platz jede Regel erfuellt und nicht durch die Wohnungstuer passt, ist gekauftes
-//! Geld — und die Zahl, die das entscheidet, steht laengst in der Zeile (`b`, `t`) und in
-//! `room.toml` (`breite` der Oeffnung). Zusammengerechnet hat sie nie jemand.
+//! Every other check asks whether a piece may stand somewhere; this one asks whether it gets
+//! there. A wardrobe that passes every rule at its place and does not fit through the door is money
+//! spent.
 //!
-//! ## Das Modell, und wo es bewusst zu streng ist
+//! The search runs in configuration space: position and orientation together, `(x, y, across |
+//! lengthwise)`, since a rect looks the same after 180°. Three simplifications, all strict, so a yes
+//! holds and a no is a warning:
 //!
-//! Gesucht wird ein Weg im **Konfigurationsraum**: nicht wo das Moebel steht, sondern jede
-//! Lage, die es einnehmen kann — Position und Drehung zugleich. Zwei Drehungen genuegen, denn
-//! ein Rechteck sieht nach 180 Grad aus wie vorher; die Zustaende sind also
-//! `(x, y, quer|laengs)`.
+//! 1. Rotation only where the whole swept circle is free; a no means "not without tilting".
+//! 2. Only fixtures are obstacles: on moving day the flat is empty.
+//! 3. Door height is not checked: `room.toml` has no height, and inventing one is worse than
+//!    naming the gap.
 //!
-//! Drei Vereinfachungen, alle in dieselbe Richtung, damit ein Ja belastbar ist und ein Nein
-//! eine Warnung:
-//!
-//! 1. **Gedreht wird nur, wo der Umkreis frei ist.** Ein Mensch kippt einen Schrank auf die
-//!    Ecke und dreht ihn auf der Stelle; diese Maschine verlangt den ganzen Kreis, den das
-//!    Stueck beim Drehen ueberstreicht. Damit ist jedes gefundene Manoever wirklich moeglich,
-//!    und ein „geht nicht" heisst „nicht ohne Kippen".
-//! 2. **Hindernisse sind nur die festen Einbauten.** Am Einzugstag ist die Wohnung leer, und
-//!    in welcher Reihenfolge die uebrigen Stuecke hineingehen, entscheidet nicht diese Datei.
-//! 3. **Die Tuerhoehe wird nicht geprueft.** `room.toml` fuehrt Oeffnungen mit `breite` und
-//!    ohne Hoehe. Eine Hoehe zu erfinden waere schlimmer als die Luecke zu nennen.
-//!
-//! Die Tuer selbst liegt in der Wand und damit ausserhalb des begehbaren Polygons. Der Weg
-//! beginnt deshalb an der ersten Lage **innerhalb** des Raums vor der Oeffnung, und dass das
-//! Stueck durch die Oeffnung passt, ist eine eigene Frage mit einer eigenen Antwort.
+//! The door lies in the wall, outside the walkable polygon, so the path starts at the first
+//! position inside the room in front of it; fitting through the opening is its own question.
 
 use crate::geometry::{Grid, RES};
 use crate::model::{footprint, Layout, Model, ModelError, Rect};
 use serde::Serialize;
 use std::collections::VecDeque;
 
-/// Passt das Stueck durch die Wohnungstuer?
+/// Does the piece fit through the entrance door?
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 #[serde(tag = "art", rename_all = "snake_case")]
 pub enum DoorFit {
-    /// Die schmale Side passt, mit so vielen cm Luft.
+    /// The narrow side fits, with this much air in cm.
     Fits { air_cm: i32, door_cm: i32 },
-    /// Die schmale Side ist breiter als die Oeffnung.
+    /// The narrow side is wider than the opening.
     DoesNotFit { missing_cm: i32, door_cm: i32 },
-    /// Passt nicht am Stueck, kommt aber zerlegt herein — die Zeile sagt es (`zerlegbar`).
-    ///
-    /// Der Unterschied zu `Passt` ist keine Formalie: er sagt, dass hier jemand geschraubt
-    /// hat, und dass die Aussage aus einer Deklaration stammt und nicht aus der Geometrie.
+    /// Does not fit assembled, but comes apart (`disassembles` on the row). This comes from a
+    /// declaration, not from geometry.
     CarriedApart { missing_cm: i32, door_cm: i32 },
-    /// Keine Oeffnung dieser Wohnung ist als Eingang deklariert (`eingang = true`).
+    /// No opening of this flat is declared the entrance (`eingang = true`).
     NoEntrance,
 }
 
-/// Wie das Stueck an seinen Platz kommt — oder warum nicht.
+/// How the piece reaches its place, or why not.
 #[derive(Debug, Clone, Serialize)]
 pub struct Delivery {
     pub reference: String,
-    pub b: i32,
-    pub t: i32,
+    pub width: i32,
+    pub depth: i32,
     pub door: DoorFit,
-    /// Gibt es einen Weg von der Tuer bis zum Zielplatz.
+    /// Whether a path leads from the door to the target place.
     pub affordable: bool,
-    /// Wie viele Rasterschritte der kuerzeste Weg braucht, Drehungen eingerechnet.
+    /// Grid steps of the shortest path, rotations included.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub steps: Option<usize>,
-    /// Ob der Weg das Stueck mindestens einmal drehen muss.
+    /// Whether the path has to rotate the piece at least once.
     pub rotates: bool,
-    /// Im Klartext, was fehlt — leer, wenn nichts fehlt.
+    /// What is missing, in words; empty when nothing is.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub reason: Option<String>,
 }
 
-/// Die Lagen, die ein Rechteck einnehmen kann: Zelle und Ausrichtung.
+/// A position a rect can take: cell and orientation.
 #[derive(Clone, Copy, PartialEq, Eq, Hash)]
 struct Location {
     c: i32,
@@ -78,7 +63,7 @@ struct Location {
     across: bool,
 }
 
-/// Das Raster der Wohnung ohne die beweglichen Moebel: Polygon minus feste Einbauten.
+/// The flat's grid without movable pieces: polygon minus fixtures.
 fn empty_room(model: &Model) -> Grid {
     let mut g = Grid::new(&model.room.main_room.polygon);
     for f in &model.room.fixed_furniture {
@@ -87,8 +72,8 @@ fn empty_room(model: &Model) -> Grid {
     g
 }
 
-/// Ist die Grundflaeche an dieser Lage vollstaendig frei?
-fn frei(g: &Grid, l: Location, w: i32, d: i32) -> bool {
+/// Is the footprint at this position entirely free?
+fn is_free(g: &Grid, l: Location, w: i32, d: i32) -> bool {
     let (w, d) = if l.across { (d, w) } else { (w, d) };
     let cw = (w as f64 / RES as f64).ceil() as i32;
     let cd = (d as f64 / RES as f64).ceil() as i32;
@@ -105,10 +90,8 @@ fn frei(g: &Grid, l: Location, w: i32, d: i32) -> bool {
     true
 }
 
-/// Darf an dieser Lage gedreht werden? Der ueberstrichene Kreis muss frei sein.
-///
-/// Genaehert durch sein umschriebenes Quadrat mit der Diagonalen als Kantenlaenge, um die
-/// Mitte des Stuecks. Konservativ und absichtlich: was hier durchgeht, geht wirklich.
+/// May the piece rotate here? The swept circle must be free, approximated by the square around
+/// it with the diagonal as its side. Conservative on purpose: what passes here really passes.
 fn may_rotate(g: &Grid, l: Location, w: i32, d: i32) -> bool {
     let diag = (((w * w + d * d) as f64).sqrt().ceil()) as i32;
     let (bw, bd) = if l.across { (d, w) } else { (w, d) };
@@ -119,10 +102,10 @@ fn may_rotate(g: &Grid, l: Location, w: i32, d: i32) -> bool {
         r: (centre_y - diag / 2).div_euclid(RES),
         across: false,
     };
-    frei(g, kreis, diag, diag)
+    is_free(g, kreis, diag, diag)
 }
 
-/// Dieselbe Lage, um die eigene Mitte gedreht.
+/// The same position, rotated about its own centre.
 fn rotated(l: Location, w: i32, d: i32) -> Location {
     let (bw, bd) = if l.across { (d, w) } else { (w, d) };
     let centre_x = l.c * RES + bw / 2;
@@ -135,10 +118,8 @@ fn rotated(l: Location, w: i32, d: i32) -> Location {
     }
 }
 
-/// Passt das Stueck durch die Wohnungstuer?
-///
-/// `zerlegbar` kommt aus der Zeile des Stuecks und nicht aus einer Vermutung ueber Betten.
-pub fn through_the_door(model: &Model, b: i32, t: i32, disassembles: bool) -> DoorFit {
+/// Does the piece fit through the entrance door? `disassembles` comes from the piece's row.
+pub fn through_the_door(model: &Model, width: i32, depth: i32, disassembles: bool) -> DoorFit {
     let Some(e) = model
         .room
         .openings
@@ -147,8 +128,8 @@ pub fn through_the_door(model: &Model, b: i32, t: i32, disassembles: bool) -> Do
     else {
         return DoorFit::NoEntrance;
     };
-    // Die schmale Side entscheidet: durch eine Tuer geht ein Schrank hochkant.
-    let narrow = b.min(t);
+    // The narrow side decides: a wardrobe goes through a door upright.
+    let narrow = width.min(depth);
     if narrow <= e.width {
         DoorFit::Fits {
             air_cm: e.width - narrow,
@@ -167,26 +148,25 @@ pub fn through_the_door(model: &Model, b: i32, t: i32, disassembles: bool) -> Do
     }
 }
 
-/// Kommt ein Stueck dieser Groesse von der Tuer bis auf dieses Rechteck?
+/// Can a piece of this size get from the door onto this rect?
 pub fn path_to_place(
     model: &Model,
-    b: i32,
-    t: i32,
+    width: i32,
+    depth: i32,
     target: Rect,
     disassembles: bool,
 ) -> Result<Delivery, ModelError> {
-    let door = through_the_door(model, b, t, disassembles);
+    let door = through_the_door(model, width, depth, disassembles);
     let g = empty_room(model);
 
     let target_location = Location {
         c: target.x.div_euclid(RES),
         r: target.y.div_euclid(RES),
-        across: target.w != b,
+        across: target.w != width,
     };
 
-    // Startlagen: alles, was unmittelbar vor der Eingangsoeffnung im Raum liegt. Welche Zelle
-    // das genau ist, haengt an der Wand, in der die Tuer sitzt — deshalb wird die ganze
-    // Spanne der Oeffnung als moeglicher Eintritt genommen und nicht ein gewaehlter Punkt.
+    // Start positions: everything right in front of the entrance opening, over its whole span,
+    // because which cell that is depends on the wall the door sits in.
     let Some(e) = model
         .room
         .openings
@@ -195,14 +175,14 @@ pub fn path_to_place(
     else {
         return Ok(Delivery {
             reference: String::new(),
-            b,
-            t,
+            width,
+            depth,
             door,
             affordable: false,
             steps: None,
             rotates: false,
             reason: Some(
-                "keine Oeffnung ist als Eingang deklariert (`eingang = true` in room.toml)".into(),
+                "no opening is declared the entrance (`eingang = true` in room.toml)".into(),
             ),
         });
     };
@@ -213,17 +193,15 @@ pub fn path_to_place(
         )));
     };
 
-    // Der Eintritt ist der Punkt eine Rasterzelle INNERHALB der Tuermitte. Startlagen sind
-    // alle Lagen, deren Grundflaeche diesen Punkt ueberdeckt — also jede Art, wie das Stueck
-    // in der Tuer stehen kann. Einen einzelnen Ankerpunkt zu waehlen hiesse, eine Haltung
-    // vorzuschreiben, und die falsche Haltung waere ein Nein, das nur vom Raster kommt.
+    // Entry is one cell inside the door's middle. Every position whose footprint covers it is a
+    // start, so no single posture is prescribed and the grid alone cannot say no.
     let ex = ((seg.a[0] + seg.b[0]) as f64 / 2.0 + seg.normal[0] * RES as f64) as i32;
     let ey = ((seg.a[1] + seg.b[1]) as f64 / 2.0 + seg.normal[1] * RES as f64) as i32;
     let (ec, er) = (ex.div_euclid(RES), ey.div_euclid(RES));
 
     let mut start: Vec<Location> = Vec::new();
     for across in [false, true] {
-        let (bw, bd) = if across { (t, b) } else { (b, t) };
+        let (bw, bd) = if across { (depth, width) } else { (width, depth) };
         let (cw, cd) = (
             (bw as f64 / RES as f64).ceil() as i32,
             (bd as f64 / RES as f64).ceil() as i32,
@@ -231,24 +209,24 @@ pub fn path_to_place(
         for r in (er - cd + 1)..=er {
             for c in (ec - cw + 1)..=ec {
                 let l = Location { c, r, across };
-                if frei(&g, l, b, t) {
+                if is_free(&g, l, width, depth) {
                     start.push(l);
                 }
             }
         }
     }
 
-    if !frei(&g, target_location, b, t) {
+    if !is_free(&g, target_location, width, depth) {
         return Ok(Delivery {
             reference: String::new(),
-            b,
-            t,
+            width,
+            depth,
             door,
             affordable: false,
             steps: None,
             rotates: false,
             reason: Some(
-                "der Zielplatz selbst ist im leeren Raum nicht frei — ein fester Einbau steht dort"
+                "the target place itself is not free in the empty room: a fixture stands there"
                     .into(),
             ),
         });
@@ -256,20 +234,20 @@ pub fn path_to_place(
     if start.is_empty() {
         return Ok(Delivery {
             reference: String::new(),
-            b,
-            t,
+            width,
+            depth,
             door,
             affordable: false,
             steps: None,
             rotates: false,
             reason: Some(
-                "direkt hinter der Tuer ist keine Lage frei, in der das Stueck steht".into(),
+                "right behind the door there is no free position the piece fits".into(),
             ),
         });
     }
 
-    // Breitensuche: vier Nachbarzellen plus die Drehung auf der Stelle. Alle Schritte kosten
-    // gleich viel, also findet die erste Ankunft den kuerzesten Weg.
+    // Breadth-first: four neighbours plus rotating in place, all at equal cost, so the first arrival
+    // is the shortest path.
     let mut seen: std::collections::HashSet<Location> = std::collections::HashSet::new();
     let mut queue: VecDeque<(Location, usize, bool)> = VecDeque::new();
     for s in start {
@@ -281,8 +259,8 @@ pub fn path_to_place(
         if l == target_location {
             return Ok(Delivery {
                 reference: String::new(),
-                b,
-                t,
+                width,
+                depth,
                 door,
                 affordable: true,
                 steps: Some(n),
@@ -296,13 +274,13 @@ pub fn path_to_place(
                 r: l.r + dr,
                 across: l.across,
             };
-            if frei(&g, n2, b, t) && seen.insert(n2) {
+            if is_free(&g, n2, width, depth) && seen.insert(n2) {
                 queue.push_back((n2, n + 1, rotates));
             }
         }
-        if may_rotate(&g, l, b, t) {
-            let n2 = rotated(l, b, t);
-            if frei(&g, n2, b, t) && seen.insert(n2) {
+        if may_rotate(&g, l, width, depth) {
+            let n2 = rotated(l, width, depth);
+            if is_free(&g, n2, width, depth) && seen.insert(n2) {
                 queue.push_back((n2, n + 1, true));
             }
         }
@@ -310,21 +288,20 @@ pub fn path_to_place(
 
     Ok(Delivery {
         reference: String::new(),
-        b,
-        t,
+        width,
+        depth,
         door,
         affordable: false,
         steps: None,
         rotates: false,
         reason: Some(
-            "kein Weg von der Tuer bis zum Platz, ohne das Stueck zu kippen oder einen Einbau zu \
-             beruehren"
+            "no path from the door to the place without tilting the piece or touching a fixture"
                 .into(),
         ),
     })
 }
 
-/// Dieselbe Frage fuer ein Stueck, das in einem Layout schon einen Platz hat.
+/// The same question for a piece that already has a place in a layout.
 pub fn delivery(
     model: &Model,
     layout: &Layout,
@@ -336,7 +313,7 @@ pub fn delivery(
         .find(|i| i.reference == reference)
         .ok_or_else(|| {
             ModelError::Missing(format!(
-                "`{reference}` steht nicht in \"{}\" — nichts einzubringen",
+                "`{reference}` is not in \"{}\": nothing to deliver",
                 layout.name
             ))
         })?;

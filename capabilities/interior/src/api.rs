@@ -218,7 +218,7 @@ async fn api_model(
     State(s): State<Arc<AppState>>,
 ) -> Result<impl IntoResponse, (StatusCode, String)> {
     let m = load(&s)?;
-    let (b, t) = m.room.masse();
+    let (b, t) = m.room.dimensions();
     Ok(Json(serde_json::json!({
         "flat": m.room.flat,
         "area_m2": m.room.area_m2(),
@@ -227,12 +227,12 @@ async fn api_model(
         "masse": { "b": b, "t": t },
         "hoehe": m.room.main_room.height,
         "polygon": m.room.main_room.polygon,
-        "bad": m.room.bad,
+        "bad": m.room.bathroom,
         "terrasse": m.room.terrace,
         "waende": m.room.walls,
         "oeffnungen": m.room.openings,
         "fix_moebel": m.room.fixed_furniture,
-        "todo": m.room.todo.offen,
+        "todo": m.room.todo.open,
         "katalog_groesse": m.catalogue.len(),
         "ungemessen": m.uncertainties().into_iter()
             .map(|(id, label, f)| serde_json::json!({ "id": id, "label": label, "felder": f }))
@@ -852,9 +852,9 @@ async fn api_post_layout(
     let notiz = body.notiz.unwrap_or_else(|| match &body.von {
         Some(v) => format!(
             "Erstellt {} ueber die API, als Kopie von `{v}`.",
-            crate::layout_io::heute()
+            crate::layout_io::today()
         ),
-        None => format!("Erstellt {} ueber die API.", crate::layout_io::heute()),
+        None => format!("Erstellt {} ueber die API.", crate::layout_io::today()),
     });
     let layout = crate::model::Layout {
         name: body.name.unwrap_or_else(|| body.id.clone()),
@@ -1460,7 +1460,7 @@ async fn api_sun(
 ) -> Result<impl IntoResponse, (StatusCode, String)> {
     let model = load(&s)?;
     let l = model.load_layout(&name).map_err(not_found)?;
-    Ok(Json(crate::sun::bericht(&model, &l).map_err(boom)?))
+    Ok(Json(crate::sun::report(&model, &l).map_err(boom)?))
 }
 
 async fn api_delivery(
@@ -1514,7 +1514,7 @@ async fn api_purchase_order(
     let conn = st.borrow_connection().map_err(boom)?;
     let balance = crate::budget::monthly_balance(&conn).map_err(boom)?;
     Ok(Json(
-        crate::budget::kaufreihenfolge(&model, balance).map_err(boom)?,
+        crate::budget::purchase_order(&model, balance).map_err(boom)?,
     ))
 }
 

@@ -17,7 +17,7 @@
 //! ## Zwei Klassen von Kennungen, und die Grenze dazwischen
 //!
 //! `REGEL_IDS` sind **Hausregeln**: die Wohnung deklariert sie in `rules.toml` mit Schwere und
-//! Text, und dieser Pruefer schlaegt beides ueber `rules.regel(id)` nach. Fehlt die Kennung
+//! Text, und dieser Pruefer schlaegt beides ueber `rules.rule(id)` nach. Fehlt die Kennung
 //! dort, ist das ein Fehler und kein textloser Verstoss.
 //!
 //! Die uebrigen Kennungen — `kollision`, `raumgrenze`, `zugang`, `laufweg` und die anderen —
@@ -100,10 +100,10 @@ fn house_rule(
     measured: Option<i32>,
     required: Option<i32>,
 ) -> Result<Violation, ModelError> {
-    let regel = rules.regel(id)?;
+    let regel = rules.rule(id)?;
     Ok(Violation {
         rule: regel.id.clone(),
-        severity: regel.severity()?,
+        severity: regel.level()?,
         item,
         message,
         text: Some(regel.text.clone()),
@@ -133,7 +133,7 @@ pub fn hard_zones(room: &Room, rules: &Rules) -> Result<Vec<Rect>, ModelError> {
     }
     for f in &room.fixed_furniture {
         if let Some(z) = &f.approach_zone {
-            out.push(anlauf_rect(&f.rect(), z.side, rules.abstand(&z.abstand)?));
+            out.push(anlauf_rect(&f.rect(), z.side, rules.threshold(&z.threshold)?));
         }
     }
     Ok(out)
@@ -284,7 +284,7 @@ fn horizon(want: i32) -> i32 {
 
 /// Ob eine Hausregel hart ist — aus der Wohnung, nicht aus dem Code.
 fn ist_hart(rules: &Rules, id: &str) -> Result<bool, ModelError> {
-    Ok(rules.regel(id)?.severity()? == Severity::Hard)
+    Ok(rules.rule(id)?.level()? == Severity::Hard)
 }
 
 /// Legt einen Verstoss in `hart` oder `weich`, je nach seiner eigenen Schwere.
@@ -1030,7 +1030,7 @@ fn r7_fixture_approach_zones(ctx: &Check, out: &mut Findings) -> Result<(), Mode
         let Some(zone_decl) = &f.approach_zone else {
             continue;
         };
-        let depth = rules.abstand(&zone_decl.abstand)?;
+        let depth = rules.threshold(&zone_decl.threshold)?;
         let zone = anlauf_rect(&f.rect(), zone_decl.side, depth);
         if let Some(next) = placed.iter().min_by_key(|p| rect_gap(&p.rect, &zone)) {
             remember(
@@ -1147,7 +1147,7 @@ fn r4_bed_head(ctx: &Check, out: &mut Findings) -> Result<(), ModelError> {
     if let Some(glaz) = room
         .openings
         .iter()
-        .find(|o| o.typ.as_deref().is_some_and(|t| t.starts_with("glastuer")))
+        .find(|o| o.kind.as_deref().is_some_and(|t| t.starts_with("glass_door")))
     {
         if let Some(seg) = opening_segment(room, glaz) {
             let band = approach_rect(&seg, 20);
@@ -1208,7 +1208,7 @@ fn r5_side_light(ctx: &Check, out: &mut Findings) -> Result<(), ModelError> {
         let glass = room
             .openings
             .iter()
-            .find(|o| o.typ.as_deref().is_some_and(|t| t.starts_with("glastuer")));
+            .find(|o| o.kind.as_deref().is_some_and(|t| t.starts_with("glass_door")));
         let desks = placed.iter().filter(|p| p.kind == Kind::Desk).count();
         match glass.and_then(|g| opening_segment(room, g)) {
             None if desks > 0 => out.fell_out.push((
@@ -1341,7 +1341,7 @@ fn r9_lasting_sun(ctx: &Check, out: &mut Findings) -> Result<(), ModelError> {
     let rules = ctx.rules;
     let placed = &ctx.placed;
 
-    if rules.regel("R9").is_ok() {
+    if rules.rule("R9").is_ok() {
         let desks: Vec<&Placed> = placed.iter().filter(|p| p.kind == Kind::Desk).collect();
         match (model.room.location, rules.sun, desks.is_empty()) {
             (_, _, true) => {}
@@ -1424,8 +1424,8 @@ fn bed_access(ctx: &Check, p: &Placed, out: &mut Findings) -> Result<(), ModelEr
     let rules = ctx.rules;
     let grid = &ctx.grid;
 
-    let want = rules.abstand("bett_zugang_laengsseite")?;
-    let second = rules.abstand("bett_zugang_zweite_seite")?;
+    let want = rules.threshold("bett_zugang_laengsseite")?;
+    let second = rules.threshold("bett_zugang_zweite_seite")?;
     let long = if p.w >= p.d {
         [Side::North, Side::South]
     } else {
@@ -1499,7 +1499,7 @@ fn chair_zone(ctx: &Check, p: &Placed, out: &mut Findings) -> Result<(), ModelEr
     let rules = ctx.rules;
     let grid = &ctx.grid;
 
-    let want = rules.abstand("schreibtisch_stuhlzone")?;
+    let want = rules.threshold("schreibtisch_stuhlzone")?;
     let deckel = horizon(want);
     let best = SIDES
         .iter()
@@ -1541,7 +1541,7 @@ fn wardrobe_door(ctx: &Check, p: &Placed, out: &mut Findings) -> Result<(), Mode
     let rules = ctx.rules;
     let grid = &ctx.grid;
 
-    let want = rules.abstand("schrank_tuer_oeffnen")?;
+    let want = rules.threshold("schrank_tuer_oeffnen")?;
     let deckel = horizon(want);
     let best = SIDES
         .iter()
@@ -1585,7 +1585,7 @@ fn r8_couch_unfold(ctx: &Check, p: &Placed, out: &mut Findings) -> Result<(), Mo
     let rules = ctx.rules;
     let grid = &ctx.grid;
 
-    if let Ok(want) = rules.abstand("couch_ausklapptiefe") {
+    if let Ok(want) = rules.threshold("couch_ausklapptiefe") {
         let long = if p.w >= p.d {
             [Side::North, Side::South]
         } else {
@@ -1640,7 +1640,7 @@ fn table_chair(ctx: &Check, p: &Placed, out: &mut Findings) -> Result<(), ModelE
     let rules = ctx.rules;
     let grid = &ctx.grid;
 
-    let want = rules.abstand("esstisch_stuhl_ausziehen")?;
+    let want = rules.threshold("esstisch_stuhl_ausziehen")?;
     let deckel = horizon(want);
     let sides: Vec<i32> = SIDES
         .iter()
@@ -1707,7 +1707,7 @@ fn coffee_table_gap(ctx: &Check, p: &Placed, out: &mut Findings) -> Result<(), M
     let rules = ctx.rules;
     let placed = &ctx.placed;
 
-    let want = rules.abstand("couchtisch_vor_sofa")?;
+    let want = rules.threshold("couchtisch_vor_sofa")?;
     for c in placed.iter().filter(|q| q.kind == Kind::Couch) {
         let dx = (c.rect.x - p.rect.right())
             .max(p.rect.x - c.rect.right())
@@ -1754,7 +1754,7 @@ fn walkways(ctx: &Check, out: &mut Findings) -> Result<Vec<Corridor>, ModelError
     let field = clearance_field(grid);
     let mut waypoints: Vec<(String, Pt)> = Vec::new();
     for o in &room.openings {
-        if o.typ.as_deref() == Some("fenster") {
+        if o.kind.as_deref() == Some("window") {
             continue;
         }
         let Some(seg) = opening_segment(room, o) else {
@@ -1782,7 +1782,7 @@ fn walkways(ctx: &Check, out: &mut Findings) -> Result<Vec<Corridor>, ModelError
 
     let mut corridors = Vec::new();
     for r in &room.routes {
-        let (from, to) = (r.von.as_str(), r.nach.as_str());
+        let (from, to) = (r.from.as_str(), r.to.as_str());
         // Ein Wegpunkt, den es nicht gibt, ist ein Fehler und kein uebersprungener Weg. Bis
         // 2026-08-30 hat diese Stelle still weitergemacht: eine vertippte Oeffnung kostete eine
         // Route, und der Bericht sah danach aus wie einer ueber eine Wohnung mit weniger Wegen.
@@ -1936,7 +1936,7 @@ fn bericht(ctx: &Check, layout: &Layout, out: Findings, corridors: Vec<Corridor>
             })
             .chain(fell_out.into_iter().map(|(id, reason)| UncheckedRule {
                 rule: id.clone(),
-                text: rules.regel(&id).map(|r| r.text.clone()).unwrap_or_default(),
+                text: rules.rule(&id).map(|r| r.text.clone()).unwrap_or_default(),
                 reason,
             }))
             .collect(),

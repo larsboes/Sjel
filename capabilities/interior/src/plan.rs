@@ -333,7 +333,7 @@ pub fn svg(model: &Model, layout: &Layout) -> Result<String, ModelError> {
     // unbekannt ist, steht damit im Bild und nicht in einer Fussnote.
     let mut xs: Vec<i32> = poly.iter().map(|p| p[0]).collect();
     let mut ys: Vec<i32> = poly.iter().map(|p| p[1]).collect();
-    if let Some(b) = &room.bad {
+    if let Some(b) = &room.bathroom {
         xs.extend(b.x);
         ys.extend(b.y);
     }
@@ -396,7 +396,7 @@ pub fn svg(model: &Model, layout: &Layout) -> Result<String, ModelError> {
                 ));
             }
             let (cx, cy) = (x0 + w / 2, y0 + h / 2);
-            let name = format!("TERRASSE{}", if t.geschaetzt { " (ca.)" } else { "" });
+            let name = format!("TERRASSE{}", if t.estimated { " (ca.)" } else { "" });
             set.push(centred(cx, cy, name.chars().count(), 20, 1, true));
             p.push_str(&format!(
                 r##"<text x="{cx}" y="{cy}" transform="rotate(-90 {cx} {cy})" font-family="Helvetica,Arial" font-size="20" fill="#5B5F63" text-anchor="middle" dominant-baseline="central" letter-spacing="1">{name}</text>"##
@@ -413,7 +413,7 @@ pub fn svg(model: &Model, layout: &Layout) -> Result<String, ModelError> {
         .join(" ");
     p.push_str(&format!(r##"<polygon points="{pts}" fill="#F4F1EB"/>"##));
 
-    if let Some(b) = &room.bad {
+    if let Some(b) = &room.bathroom {
         let (w, h) = (b.x[1] - b.x[0], b.y[1] - b.y[0]);
         p.push_str(&format!(
             r##"<rect x="{}" y="{}" width="{w}" height="{h}" fill="#E2DDD2" stroke="#9A968E" stroke-width="3"/>"##,
@@ -460,7 +460,7 @@ pub fn svg(model: &Model, layout: &Layout) -> Result<String, ModelError> {
         ));
     }
     let mut obstacles: Vec<Rect> = pieces.iter().map(|(_, r, _)| *r).collect();
-    if let Some(b) = &room.bad {
+    if let Some(b) = &room.bathroom {
         obstacles.push(Rect {
             x: b.x[0],
             y: b.y[0],
@@ -549,9 +549,9 @@ pub fn svg(model: &Model, layout: &Layout) -> Result<String, ModelError> {
         let Some((a, b)) = room.opening_span(o) else {
             continue;
         };
-        let (stroke, dash) = match o.typ.as_deref() {
-            Some("tuer") => ("#5B5F63", r##" stroke-dasharray="16 10""##),
-            Some("fenster") => ("#B0764A", r##" stroke-dasharray="4 6""##),
+        let (stroke, dash) = match o.kind.as_deref() {
+            Some("door") => ("#5B5F63", r##" stroke-dasharray="16 10""##),
+            Some("window") => ("#B0764A", r##" stroke-dasharray="4 6""##),
             _ => ("#B0764A", ""),
         };
         p.push_str(&format!(

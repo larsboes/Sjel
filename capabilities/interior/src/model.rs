@@ -1,15 +1,8 @@
-//! Das gemessene Modell: Wohnung, Regeln, Inventar, Layouts.
+//! The measured model: flat, rules, inventory, layouts.
 //!
-//! Alles in Zentimetern, Ursprung innere Nordwest-Ecke, x nach Osten, y nach Sueden — genau
-//! wie `room.toml` es festlegt. Meter kommen in diesem Programm nirgends vor.
-//!
-//! Die Daten liegen im privaten Overlay unter `<overlay>/data/interior` und werden nur
-//! gelesen. Sie sind auf Papier mit einem Bandmass entstanden; dieser Code ist nicht befugt,
-//! sie zu korrigieren.
-//!
-//! Aufteilung nach Lebensdauer, nicht nach Dateigroesse:
-//!   inventory/        Moebel, die jeden Umzug ueberleben
-//!   flats/<id>/       Geometrie und Regeln, die ihn nicht ueberleben
+//! Centimetres throughout, origin at the inner north-west corner, x east, y south, as `room.toml`
+//! defines it. The data lives in the private overlay under `<overlay>/data/interior`, was measured
+//! on paper with a tape, and is only read: this code may not correct it.
 
 use serde::{Deserialize, Serialize};
 use std::collections::BTreeMap;
@@ -31,11 +24,11 @@ pub enum ModelError {
     },
     #[error("{path}: {detail}")]
     Config { path: PathBuf, detail: String },
-    #[error("SJEL_PERSONAL_ROOT ist nicht gesetzt — ohne Overlay gibt es keine Wohnungsdaten")]
+    #[error("SJEL_PERSONAL_ROOT is not set; without an overlay there is no flat data")]
     NoOverlay,
     #[error("{0}")]
     Missing(String),
-    #[error("Inventar nicht lesbar: {0}")]
+    #[error("inventory not readable: {0}")]
     Store(String),
 }
 
@@ -50,20 +43,17 @@ fn read_toml<T: serde::de::DeserializeOwned>(path: &Path) -> Result<T, ModelErro
     })
 }
 
-/// `<overlay>/data/interior`. Kein Fallback auf ein Verzeichnis im Repo: eine Planung gegen
-/// erfundene Masse waere schlimmer als gar keine.
+/// `<overlay>/data/interior`. No fallback into the repository: planning against invented sizes is
+/// worse than none.
 pub fn data_dir() -> Result<PathBuf, ModelError> {
     sjel_config::overlay_data_dir("interior").ok_or(ModelError::NoOverlay)
 }
 
 /// Private, human-facing interior assets such as photos and RoomPlan captures.
 ///
-/// The machine model stays in `data/interior`; the asset root may be declared by the
-/// private overlay as `assets_root` in `config/interior.json`. A missing file, or a file
-/// without `assets_root`, falls back to `data/interior`, which keeps the public test
-/// shape self-contained. A file that exists but cannot be read or parsed is an error:
-/// the README's rule is "bricht ab statt zu raten", and a silent fallback would serve
-/// photos from a directory nobody chose.
+/// The overlay may declare `assets_root` in `config/interior.json`; a missing file or key falls back
+/// to `data/interior`. A file that exists but does not parse is an error rather than a guess, so no
+/// photos are served from a directory nobody chose.
 pub fn assets_dir() -> Result<PathBuf, ModelError> {
     let fallback = data_dir()?;
     match sjel_config::overlay_config("interior.json") {
@@ -89,54 +79,51 @@ fn assets_dir_from(config: &Path, fallback: PathBuf) -> Result<PathBuf, ModelErr
         detail,
     };
     let value = serde_json::from_str::<serde_json::Value>(&text)
-        .map_err(|e| malformed(format!("kein gueltiges JSON: {e}")))?;
+        .map_err(|e| malformed(format!("not valid JSON: {e}")))?;
     let object = value
         .as_object()
-        .ok_or_else(|| malformed("erwartet ein JSON-Objekt".into()))?;
+        .ok_or_else(|| malformed("expected a JSON object".into()))?;
     match object.get("assets_root") {
         None => Ok(fallback),
         Some(serde_json::Value::String(root)) if !root.trim().is_empty() => {
             Ok(sjel_config::expand_tilde(root))
         }
         Some(other) => Err(malformed(format!(
-            "assets_root muss ein nicht leerer Pfad sein, steht aber als {other}"
+            "assets_root must be a non-empty path, but is {other}"
         ))),
     }
 }
 
-// ---------------------------------------------------------------- Wohnung
+// ---------------------------------------------------------------- Flat
 
 #[derive(Debug, Clone, Deserialize, Serialize)]
 pub struct Opening {
     pub id: String,
-    pub wand: String,
-    /// Absolute Koordinate entlang der Wandachse, kein Versatz zum Wandanfang.
-    pub von: i32,
-    pub bis: i32,
+    #[serde(alias = "wand")]
+    pub wall: String,
+    /// Absolute coordinate along the wall axis, not an offset from the wall start.
+    #[serde(alias = "von")]
+    pub from: i32,
+    #[serde(alias = "bis")]
+    pub to: i32,
     #[serde(alias = "breite")]
     pub width: i32,
-    #[serde(default)]
-    pub typ: Option<String>,
+    /// `door`, `glass_door` or `window`; German words in the file are translated on load.
+    #[serde(default, alias = "typ")]
+    pub kind: Option<String>,
     #[serde(default)]
     #[serde(alias = "freihaltezone")]
     pub keep_clear_zone: Option<i32>,
     #[serde(default)]
     #[serde(alias = "sperrflaeche")]
     pub blocked_area: Option<Zone>,
-    /// Ist dies die Tuer, durch die man die Wohnung betritt?
-    ///
-    /// Die Wohnung sagt es, nicht der Code. `badtuer` und `eingangstuer` fuehren beide
-    /// `typ = "tuer"`, und sie am Namen zu unterscheiden waere derselbe Fehler, den B26a mit
-    /// der nach Norden festverdrahteten Kuechen-Anlaufzone geschlossen hat. Fehlt die Angabe,
-    /// laeuft R6 nicht und der Bericht sagt, dass sie fehlt.
+    /// Whether this is the door one enters the flat by. The flat says so, not the name: the
+    /// bathroom and entrance doors are both doors. Without it R6 does not run and the report says so.
     #[serde(default)]
     #[serde(alias = "eingang")]
     pub entrance: Option<bool>,
-    /// Unter- und Oberkante der Verglasung ueber dem Boden, in cm.
-    ///
-    /// Nur fuer `sonne.rs`, und dort unverzichtbar: die Ausdehnung eines Lichtflecks haengt
-    /// linear an beiden. Eine Fensterhoehe anzunehmen hiesse, den Schattenwurf auf den
-    /// Zentimeter genau aus einer Erfindung zu rechnen.
+    /// Lower and upper edge of the glazing above the floor, in cm. Only `sun.rs` needs them, and a
+    /// light patch scales linearly with both, so none is assumed.
     #[serde(default)]
     #[serde(alias = "glas_von_cm")]
     pub glass_from_cm: Option<i32>,
@@ -149,8 +136,8 @@ pub struct Opening {
     #[serde(default)]
     #[serde(alias = "schwenk_nach_innen")]
     pub swings_inward: Option<bool>,
-    #[serde(default)]
-    pub notiz: Option<String>,
+    #[serde(default, alias = "notiz")]
+    pub note: Option<String>,
 }
 
 #[derive(Debug, Clone, Copy, Deserialize, Serialize)]
@@ -172,52 +159,46 @@ impl Zone {
 
 #[derive(Debug, Clone, Deserialize, Serialize)]
 pub struct Wall {
-    pub von: Pt,
-    pub bis: Pt,
+    #[serde(alias = "von")]
+    pub from: Pt,
+    #[serde(alias = "bis")]
+    pub to: Pt,
     #[serde(alias = "laenge")]
     pub length: i32,
-    #[serde(default)]
-    pub frei: bool,
-    #[serde(default)]
-    pub notiz: Option<String>,
+    #[serde(default, alias = "frei")]
+    pub free: bool,
+    #[serde(default, alias = "notiz")]
+    pub note: Option<String>,
 }
 
 impl Wall {
-    /// Waagerecht heisst: die Wand laeuft entlang x. Wird gebraucht, um eine Oeffnung auf die
-    /// richtige Achse zu legen — `west` und `sued_hauptraum` laufen entgegen der Kantenrichtung
-    /// des Polygons, deshalb wird die Achse aus den Koordinaten bestimmt und nicht angenommen.
+    /// Horizontal means the wall runs along x. Derived from the coordinates, because some walls run
+    /// against the polygon's edge direction.
     pub fn horizontal(&self) -> bool {
-        (self.bis[0] - self.von[0]).abs() > (self.bis[1] - self.von[1]).abs()
+        (self.to[0] - self.from[0]).abs() > (self.to[1] - self.from[1]).abs()
     }
 }
 
 pub use crate::store::Side;
 
-/// Der Platz, den ein Mensch vor einem festen Einbau braucht, damit dieser benutzbar bleibt.
-///
-/// `seite` ist Geometrie und steht deshalb hier. `abstand` ist der NAME einer Schwelle in
-/// `rules.toml` und nicht die Zahl selbst: wie viel Platz man vor einer Kuechenzeile braucht,
-/// ist eine Norm und keine Eigenschaft dieser Wohnung. Eine hier ausgeschriebene Zahl waere
-/// eine zweite Fassung derselben Regel, und zwei Fassungen stimmen genau bis zur ersten
-/// Aenderung ueberein.
+/// The space a person needs in front of a fixture to use it. `threshold` names a value in
+/// `rules.toml` rather than holding one, so the norm has one source.
 #[derive(Debug, Clone, Deserialize, Serialize)]
-pub struct Anlaufzone {
+pub struct ApproachZone {
     #[serde(alias = "seite")]
     pub side: Side,
-    pub abstand: String,
+    #[serde(alias = "abstand")]
+    pub threshold: String,
 }
 
-/// Ein Weg, der begehbar bleiben muss.
-///
-/// `von` und `nach` nennen Wegpunkte: eine Oeffnung, die kein Fenster ist, oder ein festes
-/// Moebel mit `anlaufzone`. Bis 2026-08-30 stand diese Liste als Literal in `clearance.rs` und
-/// nannte drei Oeffnungen dieser einen Wohnung beim Namen (PRD B26a). Eine Wohnung mit einem
-/// Flur, zwei Zimmern oder ohne Badtuer bekam damit gar keine Route gemessen und meldete
-/// nichts — nicht einmal einen Fehler. Welche Wege zaehlen, weiss die Wohnung.
+/// A path that must stay walkable between two waypoints: an opening that is not a window, or a
+/// fixture with an `approach_zone`. Which paths count is the flat's to say.
 #[derive(Debug, Clone, Deserialize, Serialize)]
 pub struct Route {
-    pub von: String,
-    pub nach: String,
+    #[serde(alias = "von")]
+    pub from: String,
+    #[serde(alias = "nach")]
+    pub to: String,
 }
 
 #[derive(Debug, Clone, Deserialize, Serialize)]
@@ -227,18 +208,17 @@ pub struct FixedFurniture {
     pub y: [i32; 2],
     #[serde(default)]
     pub zone: Option<String>,
-    #[serde(default)]
-    pub tiefe: Option<i32>,
+    #[serde(default, alias = "tiefe")]
+    pub depth: Option<i32>,
     #[serde(default)]
     #[serde(alias = "laenge")]
     pub length: Option<i32>,
-    #[serde(default)]
-    pub enthaelt: Vec<String>,
-    /// Ohne diese Angabe ist der Einbau nur ein Hindernis: er belegt Flaeche, verlangt aber
-    /// keinen freien Platz davor und taugt nicht als Ziel eines Laufwegs.
+    #[serde(default, alias = "enthaelt")]
+    pub contains: Vec<String>,
+    /// Without it the fixture is only an obstacle and no walkway target.
     #[serde(default)]
     #[serde(alias = "anlaufzone")]
-    pub approach_zone: Option<Anlaufzone>,
+    pub approach_zone: Option<ApproachZone>,
 }
 
 impl FixedFurniture {
@@ -255,19 +235,19 @@ impl FixedFurniture {
 #[derive(Debug, Clone, Deserialize, Serialize)]
 pub struct MainRoom {
     pub polygon: Vec<Pt>,
-    /// 0 bedeutet "nicht gemessen". Siehe `todo.offen` — es gibt hier keinen Platzhalterwert,
-    /// weil eine erfundene Raumhoehe still in jede Hoehenpruefung durchschlaegt.
+    /// 0 means not measured; see `todo.open`. An invented ceiling height would leak into every height
+    /// check.
     #[serde(default)]
     #[serde(alias = "hoehe")]
     pub height: i32,
-    #[serde(default)]
-    pub flaeche_m2: f64,
+    #[serde(default, alias = "flaeche_m2")]
+    pub area_m2: f64,
 }
 
 #[derive(Debug, Clone, Deserialize, Serialize)]
 pub struct Terrace {
-    #[serde(default)]
-    pub geschaetzt: bool,
+    #[serde(default, alias = "geschaetzt")]
+    pub estimated: bool,
     pub x: [i32; 2],
     pub y: [i32; 2],
     #[serde(default)]
@@ -277,31 +257,25 @@ pub struct Terrace {
 
 #[derive(Debug, Clone, Deserialize, Serialize, Default)]
 pub struct Todo {
-    #[serde(default)]
-    pub offen: Vec<String>,
+    #[serde(default, alias = "offen")]
+    pub open: Vec<String>,
 }
 
-/// Wo die Wohnung auf der Erde steht und wie ihr Plan zur Himmelsrichtung liegt.
-///
-/// Ohne diesen Block rechnet `sonne.rs` nicht. Das ist Absicht: ein erfundener Standort
-/// ergaebe einen Lichtfleck auf den Zentimeter genau, der auf nichts beruht.
+/// Where the flat is on Earth and how its plan is oriented. Without it `sun.rs` does not compute:
+/// an invented location would give a centimetre-exact light patch based on nothing.
 #[derive(Debug, Clone, Copy, Deserialize, Serialize)]
 pub struct Location {
-    /// Geographische Breite in Grad, Nord positiv.
+    /// Latitude in degrees, north positive.
     #[serde(alias = "breite")]
-    pub width: f64,
-    /// Geographische Laenge in Grad, Ost positiv.
+    pub latitude: f64,
+    /// Longitude in degrees, east positive.
     #[serde(alias = "laenge")]
-    pub length: f64,
-    /// Der Abstand der Ortszeit zu UTC in Stunden, **einschliesslich Sommerzeit**.
-    ///
-    /// Eine Zahl und keine Zeitzonendatenbank: diese Capability haengt an keiner solchen, und
-    /// wer die Uhrzeiten als Sommerzeit meint, traegt hier die Sommerzeit ein.
+    pub longitude: f64,
+    /// Offset of local time from UTC in hours, including daylight saving time. A number, not a time
+    /// zone database.
     pub utc_offset_h: f64,
-    /// Welche Kompassrichtung im Plan nach oben zeigt (Richtung -y), in Grad.
-    ///
-    /// 0 heisst: oben ist Norden. Ohne diese Zahl waere jede Himmelsrichtung im Plan geraten,
-    /// und `room.toml` haelt bereits `nord`, `ost`, `sued`, `west` als reine PLANrichtungen.
+    /// The compass direction that points up in the plan (towards -y), in degrees; 0 means north. The
+    /// wall names in `room.toml` are plan directions only.
     #[serde(default)]
     #[serde(alias = "nordrichtung_grad")]
     pub north_deg: f64,
@@ -318,7 +292,8 @@ pub struct Room {
     #[serde(default)]
     #[serde(alias = "zonen")]
     pub zones: BTreeMap<String, ZoneNamed>,
-    pub bad: Option<BadRoom>,
+    #[serde(alias = "bad")]
+    pub bathroom: Option<Bathroom>,
     #[serde(default)]
     #[serde(alias = "terrasse")]
     pub terrace: Option<Terrace>,
@@ -330,9 +305,7 @@ pub struct Room {
     #[serde(default)]
     #[serde(alias = "fix_moebel")]
     pub fixed_furniture: Vec<FixedFurniture>,
-    /// Welche Wege gemessen werden. Leer heisst: keiner — und das ist eine Aussage, keine
-    /// Voreinstellung. Ein stiller Standard waere hier genau der Weg, auf dem eine Wohnung
-    /// besteht, weil niemand nachgesehen hat, ob jemand durch sie hindurchkommt.
+    /// Which paths are measured. Empty means none, stated rather than defaulted.
     #[serde(default)]
     #[serde(alias = "routen")]
     pub routes: Vec<Route>,
@@ -350,54 +323,48 @@ pub struct FlatMeta {
 pub struct ZoneNamed {
     pub x: [i32; 2],
     pub y: [i32; 2],
-    #[serde(default)]
-    pub flaeche_m2: f64,
+    #[serde(default, alias = "flaeche_m2")]
+    pub area_m2: f64,
 }
 
 #[derive(Debug, Clone, Deserialize, Serialize)]
-pub struct BadRoom {
+pub struct Bathroom {
     pub x: [i32; 2],
     pub y: [i32; 2],
-    #[serde(default)]
-    pub flaeche_m2: f64,
+    #[serde(default, alias = "flaeche_m2")]
+    pub area_m2: f64,
 }
 
 impl Room {
-    /// Aus dem Polygon gerechnet, nicht aus der Datei gelesen — so kann die angegebene Flaeche
-    /// nicht unbemerkt von der Geometrie abdriften, aus der jede Pruefung sie ableitet.
+    /// Computed from the polygon, not read from the file, so the stated area cannot drift from the
+    /// geometry every check uses.
     pub fn area_m2(&self) -> f64 {
         crate::geometry::polygon_area_m2(&self.main_room.polygon)
     }
 
-    /// Die aeusseren Masse des Hauptraums, in derselben Sprache wie ein Moebel: `b` nach Osten,
-    /// `t` nach Sueden.
-    ///
-    /// Aus dem Polygon gerechnet und nicht aus `[flat.aufmass...]` gelesen, aus demselben Grund
-    /// wie `area_m2`: die angegebene Zahl kann von der Geometrie abdriften, aus der jede
-    /// Pruefung rechnet. Sie steht hier, damit die Oberflaeche die Raummasse anzeigen kann,
-    /// ohne sich eine zweite Fassung des Polygons zu halten.
-    pub fn masse(&self) -> (i32, i32) {
+    /// Outer dimensions of the main room as `(width, depth)`, computed from the polygon for the same
+    /// reason as `area_m2`.
+    pub fn dimensions(&self) -> (i32, i32) {
         let span = |f: fn(&Pt) -> i32| {
-            let werte = self.main_room.polygon.iter().map(f);
-            werte.clone().max().unwrap_or(0) - werte.min().unwrap_or(0)
+            let values = self.main_room.polygon.iter().map(f);
+            values.clone().max().unwrap_or(0) - values.min().unwrap_or(0)
         };
         (span(|p| p[0]), span(|p| p[1]))
     }
 
-    /// Wo eine Oeffnung physisch sitzt. `von`/`bis` sind absolute Koordinaten entlang der
-    /// Wandachse; fuer nord/ost/west faellt das mit einem Versatz zusammen, fuer `badtuer`
-    /// nicht — als Versatz gelesen laege sie ausserhalb ihrer eigenen Wand.
+    /// Where an opening physically sits. `from`/`to` are absolute coordinates along the wall axis, not
+    /// an offset from the wall start.
     pub fn opening_span(&self, o: &Opening) -> Option<(Pt, Pt)> {
-        let w = self.walls.get(&o.wand)?;
+        let w = self.walls.get(&o.wall)?;
         Some(if w.horizontal() {
-            ([o.von, w.von[1]], [o.bis, w.von[1]])
+            ([o.from, w.from[1]], [o.to, w.from[1]])
         } else {
-            ([w.von[0], o.von], [w.von[0], o.bis])
+            ([w.from[0], o.from], [w.from[0], o.to])
         })
     }
 }
 
-// ---------------------------------------------------------------- Regeln
+// ---------------------------------------------------------------- Rules
 
 #[derive(Debug, Clone, Deserialize, Serialize)]
 pub struct Walkways {
@@ -417,12 +384,8 @@ pub struct LightCorridor {
     pub max_height: i32,
 }
 
-/// Wie schwer ein Verstoss wiegt. `hart` blockiert, `weich` warnt.
-///
-/// Steht hier und nicht in `clearance.rs`, weil die Wohnung sie deklariert und der Pruefer sie
-/// nur nachschlaegt. Bis 2026-08-31 war es umgekehrt: `clearance.rs` trug die Schwere an jeder
-/// der 21 Ausgabestellen als Literal, waehrend `rules.toml` ein `schwere`-Feld fuehrte, das
-/// nichts las. Der Modulkopf dort behauptete trotzdem "Schwere folgt rules.toml".
+/// How much a violation weighs: `hard` blocks, `soft` warns. The flat declares it; the checker only
+/// looks it up.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
 #[serde(rename_all = "lowercase")]
 pub enum Severity {
@@ -433,80 +396,70 @@ pub enum Severity {
 #[derive(Debug, Clone, Deserialize, Serialize)]
 pub struct Rule {
     pub id: String,
-    pub schwere: String,
+    #[serde(alias = "schwere")]
+    pub severity: String,
     pub text: String,
 }
 
 impl Rule {
-    /// Die deklarierte Schwere, oder ein Fehler.
-    ///
-    /// Ein unbekanntes Wort ist absichtlich kein stillschweigendes `weich`: eine Wohnung, die
-    /// sich vertippt, bekaeme sonst eine Regel, die nie blockiert, und der Bericht saehe aus
-    /// wie einer ueber eine Wohnung, in der alles erlaubt ist.
-    pub fn severity(&self) -> Result<Severity, ModelError> {
-        match self.schwere.as_str() {
-            "hart" => Ok(Severity::Hard),
-            "weich" => Ok(Severity::Soft),
+    /// The declared severity, or an error. An unknown word is not silently `soft`, or a typo would
+    /// make a rule that never blocks.
+    pub fn level(&self) -> Result<Severity, ModelError> {
+        match self.severity.as_str() {
+            "hard" | "hart" => Ok(Severity::Hard),
+            "soft" | "weich" => Ok(Severity::Soft),
             other => Err(ModelError::Missing(format!(
-                "rules.toml: Regel `{}` hat die Schwere `{other}` — erlaubt sind `hart` und `weich`",
+                "rules.toml: rule `{}` has severity `{other}`; allowed are `hard` and `soft`",
                 self.id
             ))),
         }
     }
 }
 
-/// Was die Wohnung ueber Sonne am Arbeitsplatz sagt (Regel R9).
-///
-/// Eigener Block und keine Zeile in `[abstaende]`: dort stehen Zentimeter, und das hier sind
-/// Stunden. Eine Schwelle in der falschen Einheit ist die Sorte Zahl, die beim Lesen stimmt
-/// und beim Rechnen nicht.
+/// What the flat says about sun at the desk (rule R9). Its own block because these are hours,
+/// not the centimetres of `[thresholds]`.
 #[derive(Debug, Clone, Copy, Deserialize, Serialize)]
 pub struct SunRule {
-    /// Wie viele der geprueften Stunden ein Schreibtisch hoechstens in direkter Sonne liegen
-    /// darf. Der Nenner ist `sonne::gepruefte_stunden()`.
+    /// How many of the checked hours a desk may lie in direct sun at most; the denominator is
+    /// `sun::checked_hours()`.
     #[serde(alias = "max_stunden_am_schreibtisch")]
     pub max_hours_at_desk: usize,
 }
 
 #[derive(Debug, Clone, Deserialize, Serialize)]
 pub struct Rules {
-    /// Nur gesetzt, wenn die Wohnung R9 fuehrt. Fehlt sie, laeuft die Regel nicht und sagt das.
+    /// Set only when the flat has R9; otherwise the rule does not run and says so.
     #[serde(default)]
     #[serde(alias = "sonne")]
     pub sun: Option<SunRule>,
     #[serde(alias = "laufwege")]
     pub walkways: Walkways,
-    /// Absichtlich eine Map: jede Distanz wird ueber ihren Namen gelesen, damit eine Regel,
-    /// die einen Wert erfindet statt ihn nachzuschlagen, beim Lesen auffaellt.
+    /// A map on purpose: every distance is read by name, so a rule that invents a value shows up.
     #[serde(alias = "abstaende")]
-    pub gaps: BTreeMap<String, i32>,
+    pub thresholds: BTreeMap<String, i32>,
     #[serde(alias = "lichtkorridor")]
     pub light_corridor: LightCorridor,
-    #[serde(default)]
-    pub regeln: Vec<Rule>,
+    #[serde(default, alias = "regeln")]
+    pub rules: Vec<Rule>,
 }
 
 impl Rules {
-    pub fn abstand(&self, key: &str) -> Result<i32, ModelError> {
-        self.gaps
+    pub fn threshold(&self, key: &str) -> Result<i32, ModelError> {
+        self.thresholds
             .get(key)
             .copied()
-            .ok_or_else(|| ModelError::Missing(format!("rules.toml kennt keinen Abstand `{key}`")))
+            .ok_or_else(|| ModelError::Missing(format!("rules.toml has no threshold `{key}`")))
     }
 
-    /// Die deklarierte Regel zu einer Kennung, oder ein Fehler.
-    ///
-    /// Dieselbe Form wie `abstand`, aus demselben Grund: eine Regel, die ihren Text oder ihre
-    /// Schwere erfindet, statt sie nachzuschlagen, faellt beim Lesen auf. Der Pruefer ruft das
-    /// an jeder Stelle, an der er eine R-Kennung ausgibt — eine Kennung, die die Wohnung nicht
-    /// fuehrt, ist damit ein Fehler und kein Verstoss ohne Text.
-    pub fn regel(&self, id: &str) -> Result<&Rule, ModelError> {
-        self.regeln.iter().find(|r| r.id == id).ok_or_else(|| {
-            let known: Vec<&str> = self.regeln.iter().map(|r| r.id.as_str()).collect();
+    /// The declared rule for an id, or an error: an id the flat does not declare is an error, not a
+    /// violation without text.
+    pub fn rule(&self, id: &str) -> Result<&Rule, ModelError> {
+        self.rules.iter().find(|r| r.id == id).ok_or_else(|| {
+            let known: Vec<&str> = self.rules.iter().map(|r| r.id.as_str()).collect();
             ModelError::Missing(format!(
-                "rules.toml deklariert keine Regel `{id}` — deklariert sind: {}",
+                "rules.toml declares no rule `{id}`; declared are: {}",
                 if known.is_empty() {
-                    "keine".to_string()
+                    "none".to_string()
                 } else {
                     known.join(", ")
                 }
@@ -514,26 +467,19 @@ impl Rules {
         })
     }
 
-    /// Deklarierte Kennungen, die diese Maschine nicht pruefen kann.
-    ///
-    /// **Kein Fehler, sondern ein Bericht.** Die reale Wohnung fuehrt R5 (Schreibtisch weder
-    /// frontal noch mit dem Ruecken zur Verglasung) und R6 (der Blick vom Eingang faellt nicht
-    /// zuerst aufs Bett) — beides Hausregeln, die hier niemand prueft. Bis 2026-08-31 fielen
-    /// sie stumm heraus, und ein Bericht ohne sie sah aus wie ein vollstaendiger. Er nennt sie
-    /// jetzt, damit die Luecke sichtbar bleibt, statt sich als Bestehen auszugeben.
+    /// Declared ids this checker cannot check. A report, not an error, so the gap stays visible instead
+    /// of passing as a pass.
     pub fn unchecked(&self, checked: &[&str]) -> Vec<&Rule> {
-        self.regeln
+        self.rules
             .iter()
             .filter(|r| !checked.contains(&r.id.as_str()))
             .collect()
     }
 }
 
-// ---------------------------------------------------------------- Inventar
+// ---------------------------------------------------------------- Inventory
 
-/// Der Katalog ist keine Datei mehr. Seit PRD B25 (2026-08-31) sind Moebel Zeilen in der
-/// geteilten SQLite-Datei; `inventory/*.toml` war die Migrationsquelle und ist jetzt das
-/// Herkunftsprotokoll. Q60 zieht die Grenze: ein Moebel ist eine Zeile, ein Raum nicht.
+/// Furniture is rows in the shared store, read through inventory.
 pub type Catalogue = BTreeMap<String, crate::store::Item>;
 
 // ---------------------------------------------------------------- Layout
@@ -546,7 +492,7 @@ pub struct PlacedItem {
     pub y: i32,
     #[serde(default)]
     pub rot: i32,
-    /// Ueberschreibt die Katalogmasse — fuer den zweiten Zustand eines Klappmoebels.
+    /// Overrides the catalogue size, e.g. for the unfolded state of a folding piece.
     #[serde(default)]
     pub size: Option<[i32; 2]>,
     #[serde(default)]
@@ -583,41 +529,51 @@ impl Rect {
     }
 }
 
-/// Grundflaeche nach Drehung. Eine Drehung nahe 90 Grad tauscht Breite und Tiefe; alles
-/// andere laesst sie stehen. `size` im Layout schlaegt den Katalog.
+/// Footprint after rotation: near 90° width and depth swap. `size` in the layout beats the
+/// catalogue.
 pub fn footprint(p: &PlacedItem, cat: &Catalogue) -> Result<(i32, i32, Option<i32>), ModelError> {
     let item = cat.get(&p.reference);
-    let (b, t) = match p.size {
-        Some([b, t]) => (Some(b), Some(t)),
+    let (w, d) = match p.size {
+        Some([w, d]) => (Some(w), Some(d)),
         None => (item.and_then(|i| i.width), item.and_then(|i| i.depth)),
     };
-    let (b, t) = match (b, t) {
-        (Some(b), Some(t)) => (b, t),
+    let (w, d) = match (w, d) {
+        (Some(w), Some(d)) => (w, d),
         _ => {
             return Err(ModelError::Missing(format!(
-                "kein Grundriss fuer `{}` — weder im Inventar noch als size: im Layout",
+                "no footprint for `{}`: neither in the inventory nor as size: in the layout",
                 p.reference
             )))
         }
     };
     let swap = ((p.rot.rem_euclid(180)) - 90).abs() < 45;
     let h = item.and_then(|i| i.height);
-    Ok(if swap { (t, b, h) } else { (b, t, h) })
+    Ok(if swap { (d, w, h) } else { (w, d, h) })
 }
 
-// ---------------------------------------------------------------- Laden
+// ---------------------------------------------------------------- Loading
+
+/// Opening kinds in English; older `room.toml` files use German words.
+/// The kind may carry a suffix after the word (`glastuer_schiebe`), which is kept.
+fn english_opening_kind(kind: &str) -> String {
+    for (old, new) in [("glastuer", "glass_door"), ("tuer", "door"), ("fenster", "window")] {
+        if let Some(rest) = kind.strip_prefix(old) {
+            return format!("{new}{rest}");
+        }
+    }
+    kind.to_string()
+}
 
 pub struct Model {
     pub room: Room,
     pub rules: Rules,
     pub catalogue: Catalogue,
-    /// Besitz je Eintrag, getrennt gehalten statt als Feld auf dem Item: der Zustand hat eine
-    /// Geschichte (`interior_item_state`) und das Item hat keine.
+    /// Ownership per item, kept apart from the item: the state has a history, the item does not.
     pub states: BTreeMap<String, crate::store::State>,
     pub flat_dir: PathBuf,
 }
 
-/// Welche Wohnungen unter `data/interior/flats/` liegen.
+/// The flats under `data/interior/flats/`.
 pub fn flats() -> Result<Vec<String>, ModelError> {
     let dir = data_dir()?.join("flats");
     let rd = std::fs::read_dir(&dir).map_err(|source| ModelError::Read { path: dir, source })?;
@@ -630,11 +586,8 @@ pub fn flats() -> Result<Vec<String>, ModelError> {
     Ok(out)
 }
 
-/// Die Wohnung, gegen die gerechnet wird: `SJEL_INTERIOR_FLAT`, sonst die einzige vorhandene.
-///
-/// Gibt es mehrere und keine ist gewaehlt, ist das ein Fehler und keine Vorauswahl. Sobald ein
-/// zweiter Raum zum Vergleich existiert (PRD B28), waere ein stiller Standard genau der Weg, auf
-/// dem ein Plan der falschen Wohnung als der richtige durchgeht.
+/// The flat to compute against: `SJEL_INTERIOR_FLAT`, else the only one. Several without a choice
+/// is an error, never a default.
 pub fn default_flat() -> Result<String, ModelError> {
     if let Ok(v) = sjel_config::env_var("SJEL_INTERIOR_FLAT") {
         if !v.trim().is_empty() {
@@ -644,12 +597,12 @@ pub fn default_flat() -> Result<String, ModelError> {
     let all = flats()?;
     match all.len() {
         0 => Err(ModelError::Missing(
-            "keine Wohnung unter data/interior/flats/ — ohne Geometrie gibt es nichts zu rechnen"
+            "no flat under data/interior/flats/; without geometry there is nothing to compute"
                 .into(),
         )),
         1 => Ok(all.into_iter().next().unwrap()),
         _ => Err(ModelError::Missing(format!(
-            "mehrere Wohnungen ({}) — waehle eine mit SJEL_INTERIOR_FLAT oder --flat",
+            "several flats ({}); choose one with SJEL_INTERIOR_FLAT or --flat",
             all.join(", ")
         ))),
     }
@@ -659,14 +612,14 @@ impl Model {
     pub fn load(flat: &str) -> Result<Self, ModelError> {
         let root = data_dir()?;
         let flat_dir = root.join("flats").join(flat);
-        let room: Room = read_toml(&flat_dir.join("room.toml"))?;
+        let mut room: Room = read_toml(&flat_dir.join("room.toml"))?;
+        for o in &mut room.openings {
+            o.kind = o.kind.take().map(|k| english_opening_kind(&k));
+        }
         let rules: Rules = read_toml(&flat_dir.join("rules.toml"))?;
 
-        // Der Katalog kommt aus der Datenbank, nicht mehr aus `inventory/*.toml` (B25). Der
-        // Pfad ist derselbe, den jede andere Capability nimmt: SJEL_DB_PATH, sonst das
-        // Overlay. Ein leerer Katalog ist kein Fehler beim Laden — er faellt dort auf, wo
-        // ein Layout ein Stueck nennt, das es nicht gibt, und das ist die Stelle mit dem
-        // besseren Fehlertext.
+        // The catalogue comes from the store (SJEL_DB_PATH, else the overlay). An empty one is no error
+        // here; it fails where a layout names a missing piece, with the better message.
         let store = crate::store::Store::open(&sjel_config::database_path())
             .map_err(|e| ModelError::Store(e.to_string()))?;
         let rows = store
@@ -690,9 +643,7 @@ impl Model {
         })
     }
 
-    /// Die Wunschliste: alles, was `wanted` ist, in Katalogreihenfolge. Der Anschluss, den
-    /// PRD B29 an `finance` legt — ein gewuenschtes Stueck traegt einen Preis, und Geld
-    /// gehoert `finance`.
+    /// Everything `wanted`, in catalogue order.
     pub fn wishlist(&self) -> Vec<&crate::store::Item> {
         self.catalogue
             .values()
@@ -726,8 +677,7 @@ impl Model {
         Ok(out)
     }
 
-    /// Jedes Moebel im Katalog, dessen Masse nicht gemessen sind. Wandert unveraendert in jeden
-    /// Pruefbericht.
+    /// Every catalogue piece with unmeasured sizes; carried into every report.
     pub fn uncertainties(&self) -> Vec<(&str, &str, &[String])> {
         let mut v: Vec<_> = self
             .catalogue
@@ -780,7 +730,7 @@ mod assets_dir_tests {
         );
     }
 
-    /// "bricht ab statt zu raten": a file that exists and does not parse is an error.
+    /// A file that exists and does not parse is an error, not a guess.
     #[test]
     fn an_unparsable_or_malformed_file_is_an_error() {
         let dir = scratch("malformed");

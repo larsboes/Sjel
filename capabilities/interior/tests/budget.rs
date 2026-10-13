@@ -31,7 +31,7 @@ fn model() -> interior::model::Model {
 #[test]
 fn urgency_comes_before_price() {
     let m = model();
-    let r = interior::budget::kaufreihenfolge(&m, None).expect("Reihenfolge");
+    let r = interior::budget::purchase_order(&m, None).expect("Reihenfolge");
     let ids: Vec<&str> = r.posten.iter().map(|p| p.id.as_str()).collect();
     let pos = |id: &str| ids.iter().position(|x| *x == id).expect(id);
     assert!(
@@ -54,7 +54,7 @@ fn urgency_comes_before_price() {
 #[test]
 fn a_made_decision_comes_before_a_deferred_one() {
     let m = model();
-    let r = interior::budget::kaufreihenfolge(&m, None).expect("Reihenfolge");
+    let r = interior::budget::purchase_order(&m, None).expect("Reihenfolge");
     let ids: Vec<&str> = r.posten.iter().map(|p| p.id.as_str()).collect();
     let pos = |id: &str| ids.iter().position(|x| *x == id).expect(id);
     assert_eq!(ids[0], "deckenlampe", "das Gesetzte zuerst: {ids:?}");
@@ -76,7 +76,7 @@ fn an_unknown_priority_word_is_reported() {
     if let Some(i) = m.catalogue.get_mut("wandregal") {
         i.priority = Some("vielleicht-irgendwann".into());
     }
-    let r = interior::budget::kaufreihenfolge(&m, None).expect("Reihenfolge");
+    let r = interior::budget::purchase_order(&m, None).expect("Reihenfolge");
     assert_eq!(
         r.unknown_priorities,
         vec!["vielleicht-irgendwann".to_string()]
@@ -93,7 +93,7 @@ fn an_unknown_priority_word_is_reported() {
 #[test]
 fn a_replaced_need_drops_out() {
     let m = model();
-    let r = interior::budget::kaufreihenfolge(&m, None).expect("Reihenfolge");
+    let r = interior::budget::purchase_order(&m, None).expect("Reihenfolge");
     assert!(r
         .posten
         .iter()
@@ -105,7 +105,7 @@ fn a_replaced_need_drops_out() {
 #[test]
 fn the_cumulative_total_really_adds_up() {
     let m = model();
-    let r = interior::budget::kaufreihenfolge(&m, None).expect("Reihenfolge");
+    let r = interior::budget::purchase_order(&m, None).expect("Reihenfolge");
     let mut letzte = 0;
     for p in &r.posten {
         assert!(p.cumulative_cents >= letzte, "die Summe faellt: {:?}", p.id);
@@ -123,7 +123,7 @@ fn the_cumulative_total_really_adds_up() {
 #[test]
 fn a_need_without_a_price_is_in_no_order() {
     let m = model();
-    let r = interior::budget::kaufreihenfolge(&m, None).expect("Reihenfolge");
+    let r = interior::budget::purchase_order(&m, None).expect("Reihenfolge");
     assert!(
         r.posten.iter().all(|p| p.price_cents.is_some()),
         "in der Reihenfolge steht nur, was einen Preis hat"
@@ -138,7 +138,7 @@ fn a_need_without_a_price_is_in_no_order() {
 #[test]
 fn without_a_balance_there_is_no_timeline() {
     let m = model();
-    let r = interior::budget::kaufreihenfolge(&m, None).expect("Reihenfolge");
+    let r = interior::budget::purchase_order(&m, None).expect("Reihenfolge");
     assert!(
         r.posten.iter().all(|p| p.affordable_after_months.is_none()),
         "eine Zeitachse ohne Messung waere eine erfundene Zahl"

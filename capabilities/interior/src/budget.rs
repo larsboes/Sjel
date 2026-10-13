@@ -1,47 +1,30 @@
-//! The purchase order of the open needs. The monthly balance it is measured against is
-//! inventory's, read from the same store.
+//! The purchase order of the open needs, measured against inventory's monthly balance.
 
 
 pub use sjel_inventory::budget::{months_to_pay, monthly_balance, MonthlyBalance};
 
 
-// ---------------------------------------------------------------- die Reihenfolge
 
-/// Wie dringend ein Bedarf ist, aus dem Feld `prioritaet` der Zeile.
+/// Urgency of a need, from its `priority`.
 ///
-/// Die Woerter stehen im Inventar seit es das Inventar gibt; gelesen hat sie bis 2026-08-31
-/// nur die Anzeige. Eine Rangfolge, die sie ignoriert, sortiert nach Preis — und macht damit
-/// aus einer Entscheidung ueber Dringlichkeit eine ueber Guenstigkeit.
-///
-/// **Ein Wort, zwei Achsen, und beide stehen wirklich in den Daten.** Ein `[[slot]]` sagt, wie
-/// dringend das BEDUERFNIS ist (`pflicht`, `empfehlung`, `konzept`); ein `[[produkt]]` sagt,
-/// wie weit die ENTSCHEIDUNG ist (`gesetzt`, `kandidat`, `zurueckgestellt`, `verworfen`,
-/// `ersetzt`). Sie in eine Ordnung zu bringen ist zulaessig, weil beide dieselbe Frage
-/// beantworten — was als naechstes gekauft wird —, und ein gesetztes Produkt steht vorn, weil
-/// die Entscheidung daran schon gefallen ist.
-///
-/// Die Liste ist aus dem Inventar der echten Wohnung gelesen und nicht aus dem PRD abgeschrieben.
-/// Der erste Entwurf kannte nur `pflicht`, `empfehlung` und `konzept` — drei der acht Woerter,
-/// die dort wirklich vorkommen —, und die uebrigen fielen still auf denselben Rang: ein
-/// **gesetztes** Produkt und ein **zurueckgestelltes** standen gleichauf, und was am Ende
-/// zwischen ihnen entschied, war der Preis.
-fn rang(priority: Option<&str>) -> u8 {
+/// Two axes in one word, both real in the data: a slot says how urgent the need is (`required`,
+/// `recommended`, `concept`), a product how far the decision went (`decided`, `candidate`,
+/// `deferred`). Both answer what to buy next, so one order is valid; a decided product leads.
+fn rank(priority: Option<&str>) -> u8 {
     match priority {
         Some("decided") => 0,
         Some("required") => 1,
         Some("recommended") => 2,
         Some("candidate") => 3,
         Some("concept") => 4,
-        // Ohne Angabe ist die Dringlichkeit unbekannt und nicht niedrig: sie steht hinter allem
-        // Eingeordneten und trotzdem VOR dem ausdruecklich Verschobenen. Schweigen ist keine
-        // Entscheidung, `zurueckgestellt` ist eine.
+        // Unknown urgency is not low: after everything ranked, but before the explicitly deferred.
         None => 5,
         Some("deferred") => 6,
         Some(_) => 7,
     }
 }
 
-/// Die Woerter, die diese Rangfolge kennt. Wer hier fehlt, wird gemeldet statt einsortiert.
+/// The words this order knows. Any other word is reported, not sorted in.
 pub const KNOWN_PRIORITIES: &[&str] = &[
     "decided",
     "required",
@@ -49,7 +32,7 @@ pub const KNOWN_PRIORITIES: &[&str] = &[
     "candidate",
     "concept",
     "deferred",
-    // Nicht in der Reihenfolge, aber bekannt: gegen beide ist entschieden.
+    // Known, but outside the order: both mean decided against.
     "rejected",
     "replaced",
 ];
@@ -59,49 +42,34 @@ pub struct PurchaseLine {
     pub id: String,
     pub label: String,
     pub priority: Option<String>,
-    /// Der Preis, mit dem gerechnet wird: `preis_cent`, sonst die untere Kante der Schaetzung.
+    /// The price used: `price_cents`, else the low end of the estimate.
     pub price_cents: Option<i64>,
-    /// In welchen Layouts dieses Stueck schon eingeplant ist.
-    ///
-    /// Ein Bedarf, auf den ein Entwurf baut, ist ein anderer als eine Idee: ohne ihn ist das
-    /// Layout kein Plan, sondern eine Zeichnung. Deshalb steht er vor gleich dringenden.
+    /// Layouts that already plan this piece. A need a layout builds on ranks before an equally
+    /// urgent idea.
     pub in_layouts: Vec<String>,
-    /// Die Summe aller Posten bis hierher, diesen eingeschlossen.
+    /// The total of all lines up to and including this one.
     pub cumulative_cents: i64,
-    /// Nach wie vielen Monatssalden dieser Posten erreicht ist.
-    ///
-    /// `None`, wenn kein Saldo vorliegt oder er nicht positiv ist — dieselbe Haltung wie
-    /// `monate_bis_bezahlt`: aus einem Saldo, aus dem nichts uebrig bleibt, spart niemand an.
+    /// After how many monthly balances this line is affordable. `None` without a positive balance.
     pub affordable_after_months: Option<f64>,
 }
 
 #[derive(Debug, Clone, serde::Serialize)]
 pub struct PurchaseOrder {
     pub posten: Vec<PurchaseLine>,
-    /// Bedarfe ohne jeden Preis. Sie stehen NICHT in der Reihenfolge.
-    ///
-    /// Sie mit null anzusetzen hiesse, sie zuerst zu kaufen, weil sie nichts kosten. Die
-    /// Wunschliste zaehlt sie schon als Warnung (PRD B29); hier sind sie das, was einer
-    /// Planung im Weg steht, und die Handlung dazu ist ein Preis und kein Kauf.
+    /// Needs without any price. Not in the order: at zero they would rank first.
     pub unpriced: Vec<PurchaseLine>,
     pub balance: Option<MonthlyBalance>,
-    /// Prioritaetswoerter aus den Daten, die diese Rangfolge nicht kennt.
-    ///
-    /// Sie stehen hinten und werden **gemeldet**, statt still auf einem Rang zu landen. Genau
-    /// das ist am 2026-08-31 passiert: drei der acht Woerter der echten Wohnung fehlten in
-    /// `rang`, und die Reihenfolge sah trotzdem sortiert aus.
+    /// Priority words from the data that `rank` does not know, reported instead of silently ranked.
     pub unknown_priorities: Vec<String>,
 }
 
-/// Was zuerst, was danach — und wann es erreicht ist.
-///
-/// Kein Budget und keine Empfehlung: eine Reihenfolge aus den Feldern, die schon da sind, und
-/// eine Zeitachse aus einer Messung. Was davon gekauft wird, entscheidet niemand hier.
-pub fn kaufreihenfolge(
+/// What first, what next, and when it is affordable. An order from existing fields and a timeline
+/// from one measurement; no budget and no advice.
+pub fn purchase_order(
     model: &crate::model::Model,
     balance: Option<MonthlyBalance>,
 ) -> Result<PurchaseOrder, crate::model::ModelError> {
-    // Welcher Bedarf in einem Entwurf schon steht. Einmal gelesen, nicht je Posten.
+    // Which needs a layout already places, read once.
     let mut in_layouts: std::collections::BTreeMap<String, Vec<String>> = Default::default();
     for name in model.layout_names()? {
         let l = model.load_layout(&name)?;
@@ -117,10 +85,8 @@ pub fn kaufreihenfolge(
     let mut unpriced: Vec<PurchaseLine> = Vec::new();
     let mut unknown: std::collections::BTreeSet<String> = Default::default();
     for i in model.wishlist() {
-        // Zwei Woerter bedeuten "dagegen entschieden", und beide gehoeren in keine
-        // Kaufreihenfolge: `verworfen` ist abgelehnt, `ersetzt` ist von etwas anderem
-        // abgeloest. Das zweite wird beim Import ohnehin zu `gone` — hier steht es, damit die
-        // Liste vollstaendig ist und nicht von einer anderen Datei abhaengt.
+        // Both words mean decided against and belong in no purchase order. `replaced` becomes `gone` on
+        // import anyway; it is listed so this does not depend on another file.
         if matches!(i.priority.as_deref(), Some("rejected") | Some("replaced")) {
             continue;
         }
@@ -146,19 +112,18 @@ pub fn kaufreihenfolge(
         }
     }
 
-    // Dringlichkeit, dann ob ein Entwurf darauf baut, dann der Preis. Der Preis steht zuletzt
-    // und nicht zuerst: er entscheidet zwischen gleich dringenden Posten und nicht darueber,
-    // was dringend ist.
+    // Urgency, then whether a layout builds on it, then price: price decides between equally urgent
+    // lines, not what is urgent.
     priced.sort_by(|a, b| {
-        rang(a.priority.as_deref())
-            .cmp(&rang(b.priority.as_deref()))
+        rank(a.priority.as_deref())
+            .cmp(&rank(b.priority.as_deref()))
             .then(b.in_layouts.len().cmp(&a.in_layouts.len()))
             .then(a.price_cents.cmp(&b.price_cents))
             .then(a.id.cmp(&b.id))
     });
     unpriced.sort_by(|a, b| {
-        rang(a.priority.as_deref())
-            .cmp(&rang(b.priority.as_deref()))
+        rank(a.priority.as_deref())
+            .cmp(&rank(b.priority.as_deref()))
             .then(a.id.cmp(&b.id))
     });
 

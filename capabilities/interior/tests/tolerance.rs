@@ -54,8 +54,8 @@ fn an_estimated_size_gets_a_number_instead_of_a_verdict() {
         "das Layout besteht mit den eingetragenen Massen"
     );
     match r.holds {
-        Holds::Bis { cm } => assert_eq!(cm, 5, "fuenf cm Luft, also fuenf cm Toleranz"),
-        other => panic!("erwartet Bis {{ cm: 5 }}, bekommen {other:?}"),
+        Holds::UpTo { cm } => assert_eq!(cm, 5, "fuenf cm Luft, also fuenf cm Toleranz"),
+        other => panic!("expected UpTo {{ cm: 5 }}, bekommen {other:?}"),
     }
     assert_eq!(
         r.tips_at,
@@ -72,7 +72,7 @@ fn an_estimated_size_gets_a_number_instead_of_a_verdict() {
 #[test]
 fn reserve_and_bisection_reach_the_same_number() {
     let r = robust("j-sideboard-knapp");
-    let Holds::Bis { cm } = r.holds else {
+    let Holds::UpTo { cm } = r.holds else {
         panic!("dieses Layout kippt innerhalb des Horizonts")
     };
     assert_eq!(

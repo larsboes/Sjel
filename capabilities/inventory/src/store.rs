@@ -113,6 +113,21 @@ const LEGACY_VALUES: [(&str, &str, &str); 15] = [
     ("on_move", "offen", "undecided"),
 ];
 
+/// Field names in an `estimated` list, in English. `modell` (the product model is unknown) is
+/// the one word there that is no field.
+pub fn english_estimated(names: Vec<String>) -> Vec<String> {
+    names
+        .into_iter()
+        .map(|n| match n.as_str() {
+            "modell" => "model".to_string(),
+            _ => LEGACY_FIELDS
+                .iter()
+                .find(|(old, _)| *old == n)
+                .map_or(n.clone(), |(_, new)| (*new).to_string()),
+        })
+        .collect()
+}
+
 /// The English word for a legacy priority or on-move word; anything else is returned unchanged.
 pub fn english_value(column: &str, value: &str) -> String {
     LEGACY_VALUES
@@ -663,6 +678,21 @@ impl Store {
                 &format!("UPDATE {prefix}_item SET {column} = ?2 WHERE {column} = ?1"),
                 params![old, new],
             )?;
+        }
+        // `estimated` lists field names, so it follows the field rename.
+        let rows: Vec<(String, String)> = conn
+            .prepare(&format!("SELECT id, estimated FROM {prefix}_item WHERE estimated <> '[]'"))?
+            .query_map([], |row| Ok((row.get(0)?, row.get(1)?)))?
+            .collect::<Result<_, _>>()?;
+        for (id, raw) in rows {
+            let names: Vec<String> = serde_json::from_str(&raw)?;
+            let english = english_estimated(names.clone());
+            if english != names {
+                conn.execute(
+                    &format!("UPDATE {prefix}_item SET estimated = ?2 WHERE id = ?1"),
+                    params![id, serde_json::to_string(&english)?],
+                )?;
+            }
         }
         Ok(())
     }
@@ -1224,9 +1254,9 @@ mod tests {
             }
             conn.execute_batch(
                 "INSERT INTO inventory_item (id, kind, label, b, preis_cent, groesse, prioritaet,
-                    expands_dir, mitnahme, saison, created_at, updated_at, revision)
+                    expands_dir, mitnahme, saison, unsicher, created_at, updated_at, revision)
                  VALUES ('mantel','piece','Mantel',60,19900,'M','pflicht','sued','offen',
-                    '[\"winter\"]','2026-01-01','2026-01-01',4);
+                    '[\"winter\"]','[\"h\",\"groesse\",\"modell\"]','2026-01-01','2026-01-01',4);
                  INSERT INTO inventory_item_state (item_id, state, since) VALUES
                     ('mantel','wanted','2026-01-01');",
             )
@@ -1241,6 +1271,7 @@ mod tests {
         assert_eq!(item.expands_dir, Some(Side::South));
         assert_eq!(item.on_move.as_deref(), Some("undecided"));
         assert_eq!(item.seasons, vec!["winter".to_string()]);
+        assert_eq!(item.estimated, vec!["height", "size", "model"]);
         assert_eq!(item.revision, 4);
         assert_eq!(state, Some(State::Wanted));
         let _ = std::fs::remove_file(&path);

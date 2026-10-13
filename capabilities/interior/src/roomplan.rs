@@ -741,7 +741,7 @@ impl Diff {
 /// `innen_gemessen_m2` in `room.toml` ist genau diese Summe; gelesen wird sie hier trotzdem
 /// nicht.
 fn model_inner_area_m2(room: &Room) -> f64 {
-    room.area_m2() + room.bad.as_ref().map_or(0.0, |bad| bad.flaeche_m2)
+    room.area_m2() + room.bathroom.as_ref().map_or(0.0, |bad| bad.area_m2)
 }
 
 /// Der Scan gegen das gemessene Modell. Rechnet, schreibt nichts.

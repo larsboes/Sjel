@@ -111,7 +111,7 @@ fn at_midnight_it_is_below_the_horizon() {
 // ---------------------------------------------------------------- der Lichtfleck
 
 use interior::model::{Model, Rect};
-use interior::sun::{bericht, touch, light_patch, SunPosition};
+use interior::sun::{report, touch, light_patch, SunPosition};
 use std::sync::Once;
 
 fn model() -> Model {
@@ -296,7 +296,7 @@ fn the_separating_axis_theorem_really_separates() {
 fn the_year_report_names_hours_and_gaps() {
     let m = model();
     let l = m.load_layout("a-frei").unwrap();
-    let b = bericht(&m, &l).unwrap();
+    let b = report(&m, &l).unwrap();
     assert_eq!(
         b.hours.len(),
         interior::sun::DAYS.len() * interior::sun::HOURS.count(),

@@ -130,7 +130,7 @@ fn the_estimated_terrace_does_not_widen_the_sheet() {
         .terrace
         .as_ref()
         .expect("die Fixture fuehrt eine Terrasse");
-    assert!(t.geschaetzt, "diese Pruefung gilt der geschaetzten Flaeche");
+    assert!(t.estimated, "diese Pruefung gilt der geschaetzten Flaeche");
     let svg = draw("a-frei");
     let [min_x, _, width, _] = crop(&svg);
 
@@ -151,7 +151,7 @@ fn the_estimated_terrace_does_not_widen_the_sheet() {
         "vom Band der Terrasse ist nichts zu sehen ({min_x} statt links von {links})"
     );
 
-    let gemessen = m.room.bad.as_ref().map_or(links, |b| b.x[1]).max(
+    let gemessen = m.room.bathroom.as_ref().map_or(links, |b| b.x[1]).max(
         m.room
             .main_room
             .polygon

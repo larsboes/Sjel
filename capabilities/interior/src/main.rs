@@ -227,9 +227,9 @@ async fn main() {
                     .join(", ")
             );
             println!("  Katalog    {} Eintraege", model.catalogue.len());
-            if !model.room.todo.offen.is_empty() {
+            if !model.room.todo.open.is_empty() {
                 println!("\n{}", yellow(&bold("  noch zu messen")));
-                for t in &model.room.todo.offen {
+                for t in &model.room.todo.open {
                     println!("    · {t}");
                 }
             }
@@ -634,7 +634,7 @@ fn cmd_compose(model: &Model, argv: &[String]) -> i32 {
              Von einer Maschine gesetzt, nicht von Hand. Jede Position hat die volle\n\
              Raeumungspruefung durchlaufen; was sie ergeben hat, steht im Verdikt daneben und\n\
              nicht hier.",
-            interior::layout_io::heute(),
+            interior::layout_io::today(),
             refs.len(),
             spec.step,
             spec.beam
@@ -669,7 +669,7 @@ fn tolerance_report(r: &interior::tolerance::Robustness) {
                 "haelt auch {horizon_cm} cm Messfehler noch aus (weiter wurde nicht gesucht)"
             ))
         ),
-        Holds::Bis { cm } => {
+        Holds::UpTo { cm } => {
             println!("  {}", green(&format!("haelt bis {cm} cm Messfehler")));
             println!(
                 "  {}",
@@ -736,8 +736,8 @@ fn cmd_delivery(model: &Model, argv: &[String]) -> i32 {
         println!(
             "  {:26} {:>3}×{:<3}  {door}  {weg}",
             bold(&e.reference),
-            e.b,
-            e.t
+            e.width,
+            e.depth
         );
         if let Some(g) = &e.reason {
             println!("      {}", dim(g));
@@ -836,7 +836,7 @@ fn cmd_sun(model: &Model, argv: &[String]) -> i32 {
             return 2;
         }
     };
-    let b = match interior::sun::bericht(model, &layout) {
+    let b = match interior::sun::report(model, &layout) {
         Ok(b) => b,
         Err(e) => {
             eprintln!("{}", red(&e.to_string()));
@@ -973,7 +973,7 @@ fn cmd_purchase_order(model: &Model, argv: &[String]) -> i32 {
         .ok()
         .and_then(|s| s.borrow_connection().ok())
         .and_then(|conn| interior::budget::monthly_balance(&conn).ok().flatten());
-    let r = match interior::budget::kaufreihenfolge(model, balance) {
+    let r = match interior::budget::purchase_order(model, balance) {
         Ok(r) => r,
         Err(e) => {
             eprintln!("{}", red(&e.to_string()));

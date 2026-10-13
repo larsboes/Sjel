@@ -37,6 +37,37 @@ pub(crate) async fn storage_handler() -> Result<Json<Value>, (StatusCode, Json<V
         .map_err(bad_gateway)
 }
 
+/// The disk's own history: one sample per hour, oldest first, so a trend has something to
+/// draw, plus the absence runs that are still open, so "the policy names a path that is gone"
+/// can say since when. Read-only here — `src/storage_history.rs` owns both tables and their
+/// sampler — and a machine that has never sampled has no table, which is "no history" rather
+/// than an error.
+pub(crate) async fn storage_history_handler() -> (StatusCode, Json<Value>) {
+    let database = sjel_config::database_path();
+    // Blocking file I/O off the async runtime, the same rule every other store reader in
+    // this capability follows.
+    let read =
+        tokio::task::spawn_blocking(move || crate::storage_history::snapshot(&database)).await;
+    match read {
+        Ok(Ok(history)) => (
+            StatusCode::OK,
+            Json(json!({
+                "retention_days": crate::storage_history::RETENTION_DAYS,
+                "samples": history.samples,
+                // One entry per name that is missing now and has been missing in every sample
+                // since (`since`). The three `kind`s are the policy's own three lists, so a
+                // reader never has to guess whether a name is a class or a path.
+                "absent": history.absent_since,
+            })),
+        ),
+        Ok(Err(error)) => (StatusCode::BAD_GATEWAY, Json(json!({ "error": error }))),
+        Err(error) => (
+            StatusCode::BAD_GATEWAY,
+            Json(json!({ "error": error.to_string() })),
+        ),
+    }
+}
+
 /// The handler's whole decision lives in [`super::interpret_tool_report`], shared with
 /// `updates.rs` because the rule is the same rule: a parseable report is the answer whatever
 /// the exit code says, and the exit code and stderr are context for the failure when it is not.

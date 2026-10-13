@@ -12,10 +12,11 @@ name = "sjel-status"
 path = "src/main.rs"
 
 [dependencies]
-# The shared SQLite file, for one read: host-watch's findings. That capability is a
-# scheduled job with no port of its own (the manifest schema refuses one), so the
-# machine's always-on status surface publishes them — the same shape /backups already
-# has with tools/backup.sh's receipts. Read-only: host-watch owns the table.
+# The shared SQLite file. Read for host-watch's findings and the backup tables; written
+# for this capability's own `storage_samples`, the disk's hourly history
+# (src/storage_history.rs). host-watch is a scheduled job with no port of its own (the
+# manifest schema refuses one), so the machine's always-on status surface publishes its
+# rows — the same shape /backups already has with tools/backup.sh's receipts.
 sjel-config = { path = "../../libs/sjel-config" }
 sjel-runtime = { path = "../../libs/runtime" }
 sjel-store = { path = "../../libs/sjel-store" }

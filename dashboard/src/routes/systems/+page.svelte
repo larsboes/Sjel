@@ -3,8 +3,8 @@
   import Icon from "$lib/Icon.svelte";
   import { tip } from "$lib/tip";
   import PageHeader from "$lib/PageHeader.svelte";
-  import { axonStatus, macmon, type MacmonSample, type StorageReport, type UpdatesReport } from "$lib/api";
-  import { formatBytes, storageView } from "$lib/systems/storage";
+  import { axonStatus, macmon, type MacmonSample, type StorageHistory, type StorageReport, type UpdatesReport } from "$lib/api";
+  import { datedAbsences, formatBytes, storageTrend, storageView } from "$lib/systems/storage";
   import AgentPanel from "$lib/systems/AgentPanel.svelte";
   import RuntimeProfile from "$lib/systems/RuntimeProfile.svelte";
   import { applySummary, auditNeedsAttention, updatesView, versionLabel } from "$lib/systems/updates";
@@ -21,6 +21,12 @@
   let storage = $state<StorageReport | null>(null);
   let storageErr = $state<string | null>(null);
   const view = $derived(storage ? storageView(storage) : null);
+
+  // The disk's own history, fetched once beside the report. Null while in flight, and a
+  // failure leaves it null rather than painting an error: a machine that has not yet
+  // completed an hour under sjel-status has no history, and that is not a fault.
+  let history = $state<StorageHistory | null>(null);
+  const trend = $derived(storageTrend(history));
 
   // Updates, fetched on demand rather than on macmon's 3 s beat for a stronger reason than
   // storage's: `report` asks three registries and one crate registry per crate, so polling it
@@ -105,6 +111,11 @@
       .storage()
       .then((d) => { storage = d; storageErr = null; })
       .catch((e) => { storageErr = e instanceof Error ? e.message : String(e); });
+
+    axonStatus
+      .storageHistory()
+      .then((d) => { history = d; })
+      .catch(() => { history = null; });
 
     loadUpdates();
 
@@ -340,6 +351,34 @@
       </p>
     </div>
 
+    {#if view.hasReconciliation}
+      <!-- The tool's own blind-spot figure: `used` minus everything a class or a protection
+           accounts for. A ceiling on the gap, not a measurement of one thing — the report
+           says the same, because `used` covers the OS and other users too. -->
+      <p class="vol-line recon">
+        <span class="mono dim">{view.named} named by policy</span>
+        <span class="mono dim">{view.unattributed} unattributed</span>
+      </p>
+    {/if}
+
+    {#if trend && trend.enough}
+      <!-- The disk's own history, one sample an hour. A report says what fills the disk now;
+           only a slope says whether it is still filling. -->
+      <div class="trend">
+        <svg class="trend-line" viewBox="0 0 100 24" preserveAspectRatio="none" aria-hidden="true">
+          <polyline points={trend.line} />
+        </svg>
+        <span class="mono dim"
+          >{trend.deltaLabel} used · {trend.unattributedDeltaLabel} unattributed over {trend.spanLabel}</span
+        >
+      </div>
+    {:else if history}
+      <p class="mem-hint">
+        Growth history starts after the first hourly sample; {history.retention_days} days are
+        kept.
+      </p>
+    {/if}
+
     <div class="stor-cols">
       <div>
         <h3 class="col-head">Reclaimable by class</h3>
@@ -356,6 +395,7 @@
                   <span class="mono" use:tip={row.name}>{row.name}</span>
                   {#if !row.applicable}<span class="tag">report-only</span>{/if}
                   {#if row.flagged}<span class="tag warn">over flag</span>{/if}
+                  {#if row.measured === false}<span class="tag warn">partial</span>{/if}
                 </span>
                 <span class="stor-bar">
                   <span
@@ -372,6 +412,31 @@
             {view.reclaimableLabel} reclaimable — <code class="mono">sjel storage apply</code>
           </p>
         {/if}
+        <!-- Outside the branch above: a machine where every class is unmeasured has an empty
+             `classes` list, and the names still have to appear or the section says nothing. -->
+        {#if view.unmeasured.length > 0}
+          <p class="mem-hint">
+            {view.unmeasured.length} class{view.unmeasured.length === 1 ? "" : "es"} name a path
+            that is here and could not be read at all — <span class="mono"
+              >{view.unmeasured.map((row) => row.name).join(", ")}</span
+            > — so no size is reported for {view.unmeasured.length === 1 ? "it" : "them"}
+            rather than a zero.
+          </p>
+        {/if}
+        {#if view.classesAbsent.length > 0}
+          <!-- Dated from the disk's own history, which the report cannot supply: `report` says
+               the path is not there, and only the hourly sample says since when. -->
+          <p class="mem-hint">
+            {view.classesAbsent.length} class{view.classesAbsent.length === 1 ? "" : "es"} name a path
+            that is no longer on this machine — <span class="mono"
+              >{datedAbsences(
+                view.classesAbsent.map((row) => row.name),
+                "class",
+                history,
+              ).join(", ")}</span
+            > — so the policy is naming something that is not there.
+          </p>
+        {/if}
       </div>
 
       <div>
@@ -385,14 +450,38 @@
             </li>
           {/each}
         </ul>
-        {#if view.protectedUnmeasured > 0}
+        {#if view.protectedAbsent > 0}
           <p class="mem-hint">
-            {view.protectedUnmeasured} of these could not be read by the measuring user, so
+            {view.protectedAbsent} of these name a path that is no longer on this machine —
+            <span class="mono"
+              >{datedAbsences(view.protectedAbsentPaths, "protected", history).join(", ")}</span
+            > — so the reason beside them was written when it still existed.
+          </p>
+        {/if}
+        {#if view.protectedUnreadable > 0}
+          <p class="mem-hint">
+            {view.protectedUnreadable} of these could not be read by the measuring user, so
             their size reads 0 MB.
           </p>
         {/if}
       </div>
     </div>
+
+    <!-- Outside the two columns because a declared service is neither: it is not a class to
+         reclaim and not a path to protect. The policy names it, the report says whether it is
+         running, and only the history says since when it has not been. -->
+    {#if view.servicesAbsent.length > 0}
+      <p class="mem-hint">
+        {view.servicesAbsent.length} declared service{view.servicesAbsent.length === 1 ? "" : "s"} not
+        running — <span class="mono"
+          >{datedAbsences(
+            view.servicesAbsent.map((row) => row.name),
+            "service",
+            history,
+          ).join(", ")}</span
+        > — so the policy is expecting something the machine is not running.
+      </p>
+    {/if}
   {/if}
 </section>
 
@@ -852,6 +941,30 @@
 
   .dim {
     color: var(--text-tertiary);
+  }
+
+  .recon {
+    margin-top: 0.15rem;
+  }
+
+  .trend {
+    display: flex;
+    align-items: center;
+    gap: 0.6rem;
+    margin: 0.35rem 0 0;
+  }
+
+  .trend-line {
+    width: 6rem;
+    height: 1.5rem;
+    flex: none;
+  }
+
+  .trend-line polyline {
+    fill: none;
+    stroke: var(--text-tertiary);
+    stroke-width: 1.5;
+    vector-effect: non-scaling-stroke;
   }
 
   .stor-cols {

@@ -30,6 +30,7 @@ mod lan;
 mod proxy;
 mod session;
 mod status;
+mod storage_history;
 
 use status::*;
 
@@ -115,6 +116,11 @@ const ROUTES: &[route_manifest::Route] = &[
         "GET",
         "/api/sjel-status/storage",
         "What fills the disk: the volume, every reclaimable class, and what the overlay's policy protects from reclaim. From tools/storage's own report --json.",
+    ),
+    r(
+        "GET",
+        "/api/sjel-status/storage-history",
+        "One sample per hour of what fills the disk, oldest first, so growth has something to draw. Kept 90 days; sampled by this capability, not by the tool.",
     ),
     r(
         "GET",
@@ -254,6 +260,19 @@ async fn main() {
         );
     }
     dashboard_freshness::spawn(std::path::PathBuf::from(&ui_dir));
+
+    // The disk's history: one sample an hour, so "is it growing" has an answer a single
+    // report cannot give. It runs here because this is the one always-up surface, and it
+    // writes its own table in the shared database (src/storage_history.rs).
+    match (axon_root(), sjel_config::overlay_root()) {
+        (Ok(root), Some(_)) => storage_history::spawn(sjel_config::database_path(), root),
+        (Err(error), _) => {
+            eprintln!("[sjel-status] storage history not started: {error}");
+        }
+        (_, None) => {
+            eprintln!("[sjel-status] storage history not started: no overlay root");
+        }
+    }
     let shell = proxy::Proxy::new(&services, &port.to_string(), ui_dir);
     eprintln!(
         "[sjel-status] shell: {} capability route(s)",
@@ -390,6 +409,10 @@ fn build_router(shell: proxy::Proxy) -> Router {
             post(upstream_watch_handler),
         )
         .route("/api/sjel-status/storage", get(storage_handler))
+        .route(
+            "/api/sjel-status/storage-history",
+            get(storage_history_handler),
+        )
         .route("/api/sjel-status/updates", get(updates_handler))
         .route(
             "/api/sjel-status/updates/apply",

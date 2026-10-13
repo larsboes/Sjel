@@ -292,13 +292,27 @@ export interface StorageClass {
   /** Over the policy's `class_flag_gb`. Loud on this machine, not necessarily wrong: a
    *  class can be over the flag with the disk nowhere near full. */
   flagged: boolean;
+  /** False when `du` returned a partial or empty answer, so `bytes` is a lower bound rather
+   *  than the directory's size. Absent from a report an older build produced, where a class
+   *  that could not be read was skipped silently instead. */
+  measured?: boolean;
+  /** False when nothing on the machine answers to the class's paths — "Declared but
+   *  absent" in the report's own words. Separates that from a path that is here and measures
+   *  0 bytes, the pair `protected` gained on 2026-10-11. Absent from an older report. */
+  present?: boolean;
 }
 
-/** A path the policy reports and never reclaims, with the reason it is safe to leave. */
+/** A path the policy reports and never reclaims, with the reason it is safe to leave.
+ *
+ *  `present` is false when nothing on the machine answers to the path. The tool measures an
+ *  entry rather than trusting it, so "this is gone" and "this measures 0 MB" stopped being
+ *  the same number on 2026-10-11 — four of six entries were the former, each still carrying
+ *  the reason written when the path existed. Absent from a report an older build produced. */
 export interface StorageProtected {
   path: string;
   bytes: number;
   reason: string;
+  present?: boolean;
 }
 
 /** `sjel storage report --json`, passed through verbatim.
@@ -351,7 +365,65 @@ export interface StorageReport {
   state: string;
   classes: StorageClass[];
   protected: StorageProtected[];
-  expected_service: Array<{ kind: string; name: string; note: string }>;
+  /** Each declared service with the machine's answer. `presence` is the tool's stable key
+   *  (`running` · `absent` · `unverifiable`); `running` is the same answer as a boolean, and
+   *  null when the probe could not run. Absent from a report an older build produced, which
+   *  printed the declaration unchecked. */
+  expected_service: Array<{
+    kind: string;
+    name: string;
+    note: string;
+    presence?: 'running' | 'absent' | 'unverifiable';
+    running?: boolean | null;
+    reason?: string | null;
+  }>;
+  /** `used` minus everything a class or a protection accounts for — the tool's ceiling on
+   *  what the policy does not name. Absent from a report an older build produced. */
+  named_bytes?: number;
+  unattributed_bytes?: number;
+}
+
+/** One hourly reading of the volume, kept by sjel-status rather than by the tool. */
+export interface StorageSample {
+  /** The hour this reading belongs to, canonical UTC. One row per hour. */
+  hour: string;
+  /** When the reading was actually taken. */
+  at: string;
+  used: number;
+  free: number;
+  total: number;
+  named: number;
+  unattributed: number;
+  reclaimable: number;
+  state: string;
+}
+
+/** One name the machine no longer answers for, and since when.
+ *
+ * Written by `capabilities/sjel-status/src/storage_history.rs`'s hourly sampler, one row per
+ * name per hour, and reduced there to the run that is still open — so this is "missing now",
+ * not "was missing once". `absent` is absent from a response an older sjel-status produced. */
+export interface StorageAbsent {
+  /** Which of the policy's three lists the name came from. A class name, a protected path and
+   *  a service name can be the same string, so the kind is what tells them apart. */
+  kind: 'class' | 'protected' | 'service';
+  name: string;
+  /** The oldest hour of the still-open run, canonical UTC like `StorageSample.hour`. */
+  since: string;
+  /** True when the run reaches the oldest kept sample: the name was already gone when the
+   *  record began, so `since` is a floor and not the hour it went. */
+  capped: boolean;
+}
+
+/** The disk's history, oldest sample first. `samples` is empty on a machine that has not
+ *  yet completed an hour under sjel-status — that is "no history", not an error. */
+export interface StorageHistory {
+  retention_days: number;
+  samples: StorageSample[];
+  /** Names missing in the newest sample and in every sample since. Empty on a machine whose
+   *  sjel-status was built before the absence table existed — which is "not known", and is
+   *  why the panel prints a bare name rather than a date it does not have. */
+  absent?: StorageAbsent[];
 }
 
 /** Who owns moving one class of installed software. The tool's own vocabulary, verbatim:
@@ -521,6 +593,14 @@ export const axonStatus = {
    *  how `report` says free space is below the policy's critical threshold. */
   storage: (signal?: AbortSignal) =>
     request<StorageReport>('/sjel-status/api/sjel-status/storage', signal ? { signal } : undefined),
+  /** The disk's own history, one sample an hour, so a trend has something to draw. Kept by
+   *  sjel-status on its own timer rather than by `tools/storage`, which is a point
+   *  measurement with no memory; the sampler is the only writer of the table this reads. */
+  storageHistory: (signal?: AbortSignal) =>
+    request<StorageHistory>(
+      '/sjel-status/api/sjel-status/storage-history',
+      signal ? { signal } : undefined,
+    ),
   /** Software installed outside this checkout, from the tool's own `report --json`.
    *
    *  A non-zero exit is not an error here either: `report` exits 1 whenever anything is

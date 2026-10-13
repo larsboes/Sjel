@@ -9,6 +9,12 @@ pub(super) struct FeedSourceOut {
     query_configured: bool,
     limit: usize,
     last_run_at: Option<String>,
+    /// Additive, and the reason a bare `last_run_at` is not enough: a source that has failed
+    /// every attempt for a week has a `last_run_at` seconds old. `last_success_at` is when it
+    /// last WORKED, and the class plus the streak is why it has not since.
+    last_success_at: Option<String>,
+    last_error: Option<String>,
+    consecutive_failures: i32,
 }
 
 pub(super) async fn sources_handler() -> HttpResponse {
@@ -31,7 +37,14 @@ pub(super) async fn sources_handler() -> HttpResponse {
                         .as_deref()
                         .is_some_and(|query| !query.trim().is_empty()),
                     limit: source.limit,
-                    last_run_at: state.map(|state| state.last_run_at),
+                    last_run_at: state.as_ref().map(|state| state.last_run_at.clone()),
+                    last_success_at: state
+                        .as_ref()
+                        .and_then(|state| state.last_success_at.clone()),
+                    last_error: state.as_ref().and_then(|state| state.last_error.clone()),
+                    consecutive_failures: state
+                        .as_ref()
+                        .map_or(0, |state| state.consecutive_failures),
                 })
             })
             .collect()
@@ -91,9 +104,19 @@ pub(super) async fn source_scan_handler(Json(body): Json<SourceScanBody>) -> Htt
                     eprintln!("source {}: {error}", source.id);
                     source_errors += 1;
                     // Reported per source rather than only logged, so a surface can say WHICH one
-                    // is failing. `record_run` is deliberately not called: the source did not run,
-                    // and moving its timestamp forward would make a source that has been dead for
-                    // a week look like it was collected minutes ago.
+                    // is failing -- and recorded, which this path did not do. `record_run` stays
+                    // uncalled because it would write a cursor for a collector that never ran;
+                    // `record_sweep_failure` is the call for a source that ran and failed, and it
+                    // leaves `last_success_at` alone, so `/__axon/freshness` still reads this
+                    // source as stale while `GET /sources` gains the class and the streak.
+                    //
+                    // `last_run_at` moves here, which is the convention the inbox sweep's own
+                    // failure path already set: it means "last attempt". That is exactly why the
+                    // reader needs `last_success_at` beside it.
+                    let class = sweep_error_class(&error);
+                    store
+                        .record_sweep_failure(&source.id, class)
+                        .map_err(|error| error.to_string())?;
                     results.push(json!({
                         "source_id": source.id,
                         "adapter": source.adapter,

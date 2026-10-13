@@ -118,7 +118,59 @@ build, and it carries the span label, which is the part that says what to change
 tests and examples. `cargo deny` is not offered: it does not speak the compiler's JSON, and
 this repository has no `deny.toml`.
 
-Everything else in wave 1 — MCP and compaction — is still to come.
+## MCP (Model Context Protocol)
+
+The `mcp` extension discovers and registers tools from external MCP servers, not on by default.
+It speaks JSON-RPC 2.0 over both stdio child processes and HTTP endpoints via `sjel-http`:
+
+```toml
+[agent]
+extensions = ["guard", "mcp"]
+
+[mcp.servers.sjel]
+command = "sjel"
+args = ["mcp"]
+timeout = 120
+
+[mcp.servers.remote]
+url = "http://localhost:8080/mcp"
+timeout = 30
+```
+
+Discovered tools are exposed as `<server>__<tool>`. Calls support configurable timeouts and cleanly handle Ctrl-C by returning a stopped result in under 1 second without terminating the server.
+
+## Compaction
+
+The `compaction` extension summarizes older complete turns when estimated tokens exceed the role's
+`max_input_tokens` (or `[compaction] max_tokens` in `agent.toml`), not on by default.
+
+```toml
+[agent]
+extensions = ["guard", "compaction"]
+
+[compaction]
+max_tokens = 16384 # optional override; defaults to role's limit
+```
+
+It replaces the oldest complete turns with a single summary message before each completion. A turn
+is never split between tool calls and their results (AGT-17), and the session file is updated so
+`--continue` resumes from the compacted summary (AGT-18).
+
+## Web Access
+
+The `web` extension provides read-only outbound web access (`web_fetch` and `web_search`), not on by default.
+
+```toml
+[agent]
+extensions = ["guard", "web"]
+
+[web]
+timeout = 30 # optional timeout in seconds (default 30, max 120)
+```
+
+- **`web_fetch`**: Fetches an HTTP(S) URL and parses its content into structured text using `sjel-extraction`, capped at 20,000 characters.
+- **`web_search`**: Searches DuckDuckGo HTML without external browser daemons or API keys, returning title, URL, and snippet links.
+- **Security**: Guarded by `sjel-http::guard` to reject non-http(s) schemes (`file://`) and block requests resolving to loopback or private networks (SSRF prevention). Respects turn stop signals.
 
 ## Run it
 

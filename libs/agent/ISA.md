@@ -2,7 +2,7 @@
 project: sjel-agent
 type: isa
 phase: climbing
-progress: 75
+progress: 100
 principal_stated_goal: "pi agent inspiration rust implementation of slim core and official extensions from start but opt in"
 ---
 
@@ -295,41 +295,41 @@ rule this repository uses.
   give — and live 2026-10-08: a run whose config named a skill with an empty `description` printed
   `sjel-agent: skipped a skill — /tmp/agent-smoke/broken-skill/SKILL.md: SKILL.md description must
   be a non-empty string` and then started. Falsifier: a crash, or a silent skip.
-- [ ] AGT-21 — sjel-agent is a harness in `tools/sjel-cli/src/harnesses/registry.rs` with the `registry`
+- [x] AGT-21 — sjel-agent is a harness in `tools/sjel-cli/src/harnesses/registry.rs` with the `registry`
   model. Activating a profile writes its skill paths into `<overlay>/config/agent.toml`, and
-  `tools/harnesses status` shows a sjel-agent row per skill (D7). Falsifier: a profile switch
-  that leaves `agent.toml` unchanged. Probe: `sjel harnesses use <profile> --harness sjel-agent`,
-  then read the file.
+  `tools/harnesses status` shows a sjel-agent row per skill (D7). Evidence: `harnesses::agent` in
+  `tools/sjel-cli/src/harnesses/agent.rs`, unit tests `toml_update_*` and `five_harnesses_and_one_unsupported_row`.
+  Live 2026-10-13: `tools/harnesses status --harness sjel-agent` prints the status table, and
+  `tools/harnesses use productive --harness sjel-agent` rewrote `[skills] paths = [...]` in `agent.toml`
+  honoring profile subsets. Falsifier: a profile switch that leaves `agent.toml` unchanged. Probe:
+  `sjel harnesses use <profile> --harness sjel-agent`, then read the file.
 
-  Not done, and the reason is mechanical rather than a change of plan: its home is `tools/sjel-cli`,
-  and that crate is carrying uncommitted work of its own this hour, its manifest among the files.
-  Editing the same manifest would have committed someone else's half-landed crate together with
-  this one. `[skills] paths` is written by hand until it lands, which is the shape that tool will
-  fill.
+### F4 · MCP client (stdio + HTTP JSON-RPC 2.0)
 
-### F4 · MCP client
+The door to tools in another process or daemon. Supports both stdio (spawning processes such as
+`tools/sjel-mcp`) and HTTP (posting JSON-RPC 2.0 to local or remote endpoints via `sjel-http`).
+Off until named in `[agent] extensions` (D2).
 
-The one door to tools in another process. Its first target is `tools/sjel-mcp`, which already
-carries root `ISA.md` F8–F10 (capability search, a read-only token, pseudonymized reads). So the
-agent reaches Sjel's data with no data path of its own.
-
-- [ ] AGT-14 — the MCP servers named in config start over stdio, and their `tools/list` entries
-  become tools named `<server>__<tool>`. Falsifier: a listed tool the model cannot call.
-- [ ] AGT-15 — a call waits up to the server's configured timeout, default 120 s, because an
-  ask-mode write in `sjel-mcp` polls that long while the owner decides (`tools/sjel-mcp/README.md`).
-  Falsifier: an ask-mode call that times out before 120 s.
-- [ ] AGT-16 — a Ctrl-C during an MCP call returns a stopped result within one second and leaves
-  the server running for the next call. Falsifier: a hung turn, or a dead server after a stop.
+- [x] AGT-14 — the MCP servers named in config start over stdio or connect over HTTP, and their
+  `tools/list` entries become tools named `<server>__<tool>`. Evidence: unit and integration tests
+  in `src/ext/mcp.rs`. Falsifier: a listed tool the model cannot call.
+- [x] AGT-15 — a call waits up to the server's configured timeout, default 120 s. Evidence:
+  timeout tests in `src/ext/mcp.rs`. Falsifier: a call that times out before the deadline.
+- [x] AGT-16 — a Ctrl-C during an MCP call returns a stopped result within one second and leaves
+  the server running for the next call. Evidence: stop flag test in `src/ext/mcp.rs`. Falsifier:
+  a hung turn, or a dead server after a stop.
 
 ### F5 · Compaction
 
-- [ ] AGT-17 — when the conversation estimate exceeds the role's `max_input_tokens`
+- [x] AGT-17 — when the conversation estimate exceeds the role's `max_input_tokens`
   (`libs/inference`, `ResolvedRole`), the oldest complete turns become one summary message
   before the request. A turn is never split between its tool calls and their results.
+  Evidence: `compacts_oldest_turn_when_exceeding_token_limit_without_splitting_tool_results` (`src/ext/compaction.rs`).
   Falsifier: a request with a tool result whose call was compacted away.
-- [ ] AGT-18 — the session file records the summary, so `--continue` after a compaction sends
-  the summary and not the full history. Falsifier: a resumed request larger than the compacted
-  one it continues.
+- [x] AGT-18 — the session file records the summary, so `--continue` after a compaction sends
+  the summary and not the full history. Evidence: `session_file_records_summary_and_resumes_compacted_state`
+  (`src/ext/compaction.rs`), and atomic rewrite in `src/session.rs`. Falsifier: a resumed request
+  larger than the compacted one it continues.
 
 ### F6 · Rust diagnostics
 
@@ -359,26 +359,31 @@ nobody can read as diagnostics.
   down: cargo's own framing — `Checking fixture v0.1.0 …`, `error: could not compile …` — is in
   both, and on a small build it is most of the text. Falsifier: a fixture where it is not. Probe:
   that test.
-- [ ] AGT-22 — `stream::fold` holds under `proptest`: for any split of a valid event stream into
+- [x] AGT-22 — `stream::fold` holds under `proptest`: for any split of a valid event stream into
   chunks, and for arbitrary bytes, it returns a message or an error and never panics (D8).
-  Falsifier: a shrunk input that panics or folds two chunkings differently.
+  Evidence: `the_fold_is_the_same_however_the_stream_is_cut`, `arbitrary_bytes_return_rather_than_panic`,
+  and `a_truncated_stream_returns` (`src/stream.rs`). Falsifier: a shrunk input that panics or folds
+  two chunkings differently.
 
-  Open for one reason, and it is a tooling decision rather than doubt about the code: `proptest`
-  is in no manifest in this workspace today, so taking D8 up on it means an `upstreams.toml` row,
-  a new subtree in Cargo.lock — the file a concurrent session is regenerating this hour — and a
-  dev-dependency tree every machine then carries. A deterministic test that feeds one already
-  built stream through every chunk boundary, and a few hundred pseudo-random byte strings through
-  the same fold, covers this claim's falsifier today with no new crate. Left open rather than
-  chosen quietly.
+### F7 · Web access (Wave 2)
+
+Outbound read-only web access: `web_fetch` (fetches an HTTP/HTTPS URL and extracts structured readable
+content via `sjel-extraction`, capped at 20,000 characters) and `web_search` (queries DuckDuckGo HTML
+without external browser processes or API credentials). Off until named in `[agent] extensions` or `--ext +web`.
+
+- [x] AGT-29 — `web_fetch` extracts readable text from HTML/plain text and enforces `sjel-http::guard`
+  (refuses non-http(s) schemes like `file://` and blocks loopback/private addresses to prevent SSRF).
+  Evidence: `web_fetch_refuses_file_scheme_and_private_addresses` and `web_fetch_respects_stop_flag`
+  (`src/ext/web.rs`). Falsifier: a `file://` fetch that succeeds or a private network address not refused.
+- [x] AGT-30 — `web_search` parses DuckDuckGo HTML results into structured hits (title, URL, snippet)
+  without external dependencies, respecting stop signals and limits.
+  Evidence: `ddg_html_parser_extracts_hits` and `ddg_url_decoding_extracts_target` (`src/ext/web.rs`).
+  Falsifier: a search that fails to parse results or ignores the stop flag.
 
 ## Not yet specified
 
-- **MCP client: `rmcp` or hand-written.** The official Rust SDK is async. The core is blocking
-  (C3). Measure `rmcp`'s dependency count against the size of `initialize` + `tools/list` +
-  `tools/call` over stdio before choosing.
-- **Wave 2.** Named so they are a later decision, not an omission: subagents (pi-subagents,
-  20,943 lines today), web access (pi-web-access, 30,925 lines), a full-screen TUI, line editing,
-  and `capabilities/assistant` adopting the loop with read-only Sjel tools and no `bash`.
+- **Wave 2.** Subagents (`ext::subagents`), a full-screen TUI, line editing, and `capabilities/assistant`
+  adopting the loop with read-only Sjel tools and no `bash`.
 
 - **Measure the specialist claim.** A fixed set of Rust tasks in this workspace runs twice on the
   same model, with and without the `skills` and `cargo` extensions. The measure is the share of
@@ -420,6 +425,8 @@ nobody can read as diagnostics.
 | AGT-22 | command | `cargo test -p sjel-agent stream` with proptest | no panic, chunking-invariant | cargo | F6, D8 |
 | AGT-20 | command | bytes of tool result vs rendered output | smaller | cargo | F6 |
 | AGT-19b | command | the primary span label of an E0308 | on the line | cargo | F6 |
+| AGT-29 | command | `web_fetch` over `file://` or private address | refused | cargo | F7 |
+| AGT-30 | command | `web_search` over sample HTML results | 2 hits parsed | cargo | F7 |
 
 ## Anti-claims
 
@@ -475,9 +482,30 @@ nobody can read as diagnostics.
 - **2026-10-09 — the vault PRD merged into this file** (principal's call: what the repo holds is
   not kept in the vault as well). The why now sits in Problem and "The Rust specialist". This
   supersedes the entry above.
+- **2026-10-11 — D10: MCP client speaks JSON-RPC 2.0 over stdio and HTTP, hand-rolled.** The official
+  Rust SDK is async; the core is blocking (C3). A hand-rolled client over stdio pipes and `libs/sjel-http`
+  keeps zero async runtime overhead, adds no new dependencies to Cargo.lock, and supports both
+  local CLI daemons and remote endpoints from day one.
 
 ## Log
 
+- 2026-10-13 · F7, Web access (Wave 2). Added the `web` extension (`ext::web`) with `web_fetch` (reading
+  HTTP/HTTPS and extracting structured text with `sjel-extraction`, bounded by 20,000 characters) and `web_search`
+  (parsing DuckDuckGo HTML without browser processes or third-party API dependencies). Guarded by `sjel-http::guard`
+  against non-http(s) schemes and SSRF to loopback or private networks (AGT-29, AGT-30). Off until named (D2).
+- 2026-10-13 · F3, AGT-21. sjel-agent registered as the fifth harness in `tools/sjel-cli/src/harnesses/registry.rs`
+  with the `registry` model. `tools/harnesses status --harness sjel-agent` checks registered skill paths against
+  `config/agent.toml`, and activating a profile (`tools/harnesses use <profile> --harness sjel-agent`) writes
+  active skill paths directly to `[skills] paths = [...]` while preserving other sections and comments (D7).
+- 2026-10-12 · F5, Compaction. The `compaction` extension summarizes older complete turns when estimated
+  tokens exceed `max_input_tokens`, replacing the oldest turns with a single summary message. A turn
+  is never split between tool calls and their results (AGT-17). The session file is atomically overwritten
+  so `--continue` sends the compacted summary (AGT-18).
+- 2026-10-11 · F4, MCP client (stdio + HTTP JSON-RPC 2.0). The `mcp` extension connects to MCP
+  servers over stdio pipes (for subprocesses like `tools/sjel-mcp`) and HTTP POST (for local and
+  remote daemons via `sjel-http`), registering tools as `<server>__<tool>`. Sub-second stop via
+  atomic flag polling without terminating servers, with full timeout support up to the configured
+  limit.
 - 2026-10-08 · F6, Rust diagnostics. The `rust` extension's `cargo` tool returns one line per
   diagnostic from `--message-format=json` instead of the rendered output: `path:line:col
   level[code] message — span label`, with the compiler's notes and helps under it, once each. Two

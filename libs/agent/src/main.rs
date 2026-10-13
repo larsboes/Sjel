@@ -117,8 +117,22 @@ fn run(args: Args) -> Result<ExitCode, String> {
     // startup with nothing else to wait for (AGT-8), and a skill that will not read is named
     // there too (AGT-13).
     let config = agent_toml()?;
-    let chosen = chosen_extensions(&config, &args.ext, &stop)?;
-    eprintln!("{DIM}{}{RESET}", extension_line(&chosen.names));
+    let configured = config
+        .agent
+        .extensions
+        .clone()
+        .unwrap_or_else(default_extensions);
+    let names = extension::select(&configured, &args.ext)?;
+    for name in &names {
+        if !BUILT_IN.iter().any(|b| b == name) {
+            return Err(format!(
+                "unknown extension `{name}`; this build carries {}",
+                BUILT_IN.join(", ")
+            ));
+        }
+    }
+    eprintln!("{DIM}{}{RESET}", extension_line(&names));
+
     let role = sjel_inference::InferenceConfig::load(sjel_config::overlay_config)
         .role(&args.role)
         .ok_or_else(|| {
@@ -128,12 +142,20 @@ fn run(args: Args) -> Result<ExitCode, String> {
                 args.role
             )
         })?;
+
+    let mut extensions: Vec<Box<dyn Extension>> = Vec::with_capacity(names.len());
+    for name in &names {
+        if let Some(extension) = built_in(name, &config, &stop, role.max_input_tokens) {
+            extensions.push(extension);
+        }
+    }
+
     let cwd = std::env::current_dir().map_err(|e| format!("no working directory: {e}"))?;
 
     let agent = Agent::new(
         role,
         tools::coding(&cwd, &stop),
-        chosen.extensions,
+        extensions,
         Arc::clone(&stop),
     )
     .map_err(|e| e.to_string())?;
@@ -171,11 +193,21 @@ fn run(args: Args) -> Result<ExitCode, String> {
     }
     let mut save = |messages: &[Message]| {
         if let Some(path) = &session_path {
-            if let Err(e) = session::append(path, &messages[saved..]) {
-                eprintln!(
-                    "sjel-agent: could not save the session to {}: {e}",
-                    path.display()
-                );
+            if messages.len() >= saved {
+                if let Err(e) = session::append(path, &messages[saved..]) {
+                    eprintln!(
+                        "sjel-agent: could not save the session to {}: {e}",
+                        path.display()
+                    );
+                }
+            } else {
+                // Compaction replaced earlier messages with a summary (AGT-18)
+                if let Err(e) = session::overwrite(path, messages) {
+                    eprintln!(
+                        "sjel-agent: could not rewrite the session to {}: {e}",
+                        path.display()
+                    );
+                }
             }
         }
         saved = messages.len();
@@ -226,49 +258,30 @@ fn run(args: Args) -> Result<ExitCode, String> {
     }
 }
 
-/// What a run starts with: the names it was given, and the extensions they resolved to.
-struct Chosen {
-    names: Vec<String>,
-    extensions: Vec<Box<dyn Extension>>,
-}
-
-/// The extension set for this run (AGT-8): `agent.toml` first, then the `--ext` flags in the
-/// order they were given, each name resolved against what this binary carries.
-fn chosen_extensions(
-    config: &AgentFile,
-    flags: &[String],
-    stop: &Arc<AtomicBool>,
-) -> Result<Chosen, String> {
-    let configured = config
-        .agent
-        .extensions
-        .clone()
-        .unwrap_or_else(default_extensions);
-    let names = extension::select(&configured, flags)?;
-    let mut extensions: Vec<Box<dyn Extension>> = Vec::with_capacity(names.len());
-    for name in &names {
-        let Some(extension) = built_in(name, config, stop) else {
-            return Err(format!(
-                "unknown extension `{name}`; this build carries {}",
-                BUILT_IN.join(", ")
-            ));
-        };
-        extensions.push(extension);
-    }
-    Ok(Chosen { names, extensions })
-}
 
 /// The extensions this binary carries (D1: first-party crates, compiled in, no store). Wave 1
 /// fills this list — the guard (F2), skills (F3) and rust diagnostics (F6) are here; `mcp`
 /// (F4) and `compaction` (F5) are next. It is only used to name what exists when a name does
 /// not.
-const BUILT_IN: &[&str] = &[ext::guard::NAME, ext::skills::NAME, ext::rust::NAME];
+const BUILT_IN: &[&str] = &[
+    ext::guard::NAME,
+    ext::skills::NAME,
+    ext::rust::NAME,
+    ext::mcp::NAME,
+    ext::compaction::NAME,
+    ext::web::NAME,
+];
 
 /// The extension a name resolves to, or `None` when this build does not carry it. `stop` is
 /// handed in because an extension can carry a tool that runs a command, and that command has to
 /// end with the turn; the config is handed in because an extension's own settings are not the
 /// core's business to interpret.
-fn built_in(name: &str, config: &AgentFile, stop: &Arc<AtomicBool>) -> Option<Box<dyn Extension>> {
+fn built_in(
+    name: &str,
+    config: &AgentFile,
+    stop: &Arc<AtomicBool>,
+    max_input_tokens: Option<u32>,
+) -> Option<Box<dyn Extension>> {
     match name {
         ext::guard::NAME => Some(Box::new(ext::guard::Guard::new(stop))),
         ext::rust::NAME => Some(Box::new(ext::rust::Rust::new(stop))),
@@ -282,6 +295,18 @@ fn built_in(name: &str, config: &AgentFile, stop: &Arc<AtomicBool>) -> Option<Bo
             }
             Some(Box::new(skills))
         }
+        ext::mcp::NAME => {
+            let (mcp, problems) = ext::mcp::Mcp::load(&config.mcp.servers, stop);
+            for problem in problems {
+                eprintln!("{DIM}sjel-agent: skipped an MCP server — {problem}{RESET}");
+            }
+            Some(Box::new(mcp))
+        }
+        ext::compaction::NAME => {
+            let limit = config.compaction.max_tokens.or(max_input_tokens);
+            Some(Box::new(ext::compaction::Compaction::new(limit)))
+        }
+        ext::web::NAME => Some(Box::new(ext::web::Web::new(stop, config.web.timeout))),
         _ => None,
     }
 }
@@ -330,6 +355,30 @@ struct AgentFile {
     agent: AgentSection,
     #[serde(default)]
     skills: SkillsSection,
+    #[serde(default)]
+    mcp: McpSection,
+    #[serde(default)]
+    compaction: CompactionSection,
+    #[serde(default)]
+    web: WebSection,
+}
+
+#[derive(serde::Deserialize, Default)]
+struct WebSection {
+    #[serde(default)]
+    timeout: Option<u64>,
+}
+
+#[derive(serde::Deserialize, Default)]
+struct CompactionSection {
+    #[serde(default)]
+    max_tokens: Option<u32>,
+}
+
+#[derive(serde::Deserialize, Default)]
+struct McpSection {
+    #[serde(default)]
+    servers: std::collections::HashMap<String, ext::mcp::ServerConfig>,
 }
 
 #[derive(serde::Deserialize, Default)]

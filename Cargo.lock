@@ -4330,6 +4330,7 @@ dependencies = [
  "serde_json",
  "signal-hook",
  "sjel-config",
+ "sjel-extraction",
  "sjel-http",
  "sjel-inference",
  "sjel-skill-metadata",

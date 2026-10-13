@@ -96,8 +96,8 @@ pub enum Event<'a> {
 /// non-unique edit is something the model reads and corrects on its next turn. Nothing a
 /// tool returns stops the loop.
 pub trait Tool: Send + Sync {
-    fn name(&self) -> &'static str;
-    fn description(&self) -> &'static str;
+    fn name(&self) -> &str;
+    fn description(&self) -> &str;
     /// JSON Schema for the arguments object.
     fn parameters(&self) -> Value;
     fn run(&self, args: &Value) -> Result<String, String>;

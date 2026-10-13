@@ -36,6 +36,31 @@ pub fn append(path: &Path, messages: &[Message]) -> std::io::Result<()> {
         .write_all(out.as_bytes())
 }
 
+/// Atomically replaces the contents of `path` with `messages` (excluding system prompt).
+/// Used after conversation compaction rewrites the session history (AGT-18).
+pub fn overwrite(path: &Path, messages: &[Message]) -> std::io::Result<()> {
+    if let Some(dir) = path.parent() {
+        std::fs::create_dir_all(dir)?;
+    }
+    let mut out = String::new();
+    for message in messages
+        .iter()
+        .filter(|m| !matches!(m, Message::System { .. }))
+    {
+        out.push_str(&serde_json::to_string(message)?);
+        out.push('\n');
+    }
+    let tmp = path.with_extension(format!("tmp-{}", std::process::id()));
+    OpenOptions::new()
+        .create(true)
+        .truncate(true)
+        .write(true)
+        .mode(0o600)
+        .open(&tmp)?
+        .write_all(out.as_bytes())?;
+    std::fs::rename(&tmp, path)
+}
+
 /// Reads a session back. A line that does not parse is an error with its line number, not a
 /// skipped line: a conversation with a hole in it sends tool results without their calls.
 pub fn load(path: &Path) -> Result<Vec<Message>, String> {

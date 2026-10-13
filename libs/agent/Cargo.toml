@@ -21,6 +21,7 @@ path = "src/main.rs"
 # Outbound HTTP goes through one factory (libs/sjel-http), and it is blocking: an async caller
 # such as capabilities/assistant runs the loop inside `spawn_blocking`.
 sjel-http = { path = "../sjel-http" }
+sjel-extraction = { path = "../extraction", default-features = false }
 sjel-inference = { path = "../inference" }
 sjel-config = { path = "../sjel-config" }
 sjel-skill-metadata = { path = "../skill-metadata" }

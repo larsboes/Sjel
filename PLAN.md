@@ -49,14 +49,14 @@ Still open:
 
 ### 190 GB the policy does not name
 
-Named 54.0 GB against 190.7 GB unattributed (2026-10-13). `report --where` says where it is, and
-most of it is legitimate and unowned: `~` 106.1 GB (50.9 GB of it named), the Data volume's
+Named 69.9 GB against 185.8 GB unattributed (2026-10-13, after the trim). `report --where` says
+where it is, and most of it is legitimate and unowned: `~` 106.1 GB, the Data volume's
 `/System/Library` 19.8, `/opt/homebrew` 17.0, `/private/var` 8.9, `/Applications/Xcode.app` 3.9.
 Naming `~/.ollama/models` (17.7 GB, in active use — report-only, not a reclaim target), iCloud
 (`~/Library/Mobile Documents` 20.5) and `~/Music` (protected), Homebrew and `/private/var`
 (report-only), and a developer-caches class (~5 GB across `~/.npm/_cacache`, `_npx`,
 `~/.local/pipx` and `~/.codex/packages`, each with an owning cleanup verb) would take named to
-roughly 100 GB. Overlay work, not a crate change.
+roughly 115 GB. Overlay work, not a crate change.
 
 ### No class has a growth curve
 
@@ -64,14 +64,6 @@ roughly 100 GB. Overlay work, not a crate change.
 names were gone; neither holds a per-class size, so a class that doubled is invisible. The sampler
 already runs hourly, so this waits on nothing. `discover`'s walk is on demand and 35–45 s, so a
 directory that grows between two runs is not tracked either.
-
-### The storage-history surface is live but uncommitted
-
-On this machine `sjel-status` samples the report hourly and serves `/storage-history` — 11 rows,
-2026-10-12 07:00 to 2026-10-13 14:00 — but the source
-(`capabilities/sjel-status/src/storage_history.rs`, the route, the dashboard panel and its test)
-is uncommitted in a worktree, while committed docs describe the surface. Decide whether that work
-is committed as one change or the claims come out until it is.
 
 ## Storage declarations that were retired
 

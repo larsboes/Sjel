@@ -1456,7 +1456,6 @@ fn bind_policy(ctx: &mut Ctx) {
         return;
     }
     let router = Regex::new(r"\bRouter::new\s*\(").expect("pattern");
-    let serve = Regex::new(r"sjel_server::serve(_local)?\s*\(").expect("pattern");
     let (mut checked, mut offenders) = (0, 0);
     for (caps, label) in &roots {
         if !caps.exists() {
@@ -1480,7 +1479,7 @@ fn bind_policy(ctx: &mut Ctx) {
                 }
                 checked += 1;
                 if pure::find_production_listener_constructs(&text).is_empty() {
-                    if !serve.is_match(&production) {
+                    if !pure::serves_via_sjel_server(&production) {
                         ctx.warn(format!("{label}/{cap}/src/{rel} builds a Router but neither serves it nor uses sjel_server"));
                     }
                     continue;

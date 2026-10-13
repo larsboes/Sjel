@@ -251,6 +251,17 @@ pub fn strip_rust_cfg_test_items(source: &str) -> String {
 
 /// Listener constructs in production code: a capability binds through sjel_server, never by
 /// hand.
+/// True when a file serves through one of `sjel_server`'s own helpers, which is what the bind
+/// policy asks before it warns.
+///
+/// The whole `serve*` family counts. A pattern allowing only `serve` and `serve_local` reported
+/// the one capability using `serve_local_with` as building a Router and "neither serv[ing] it nor
+/// us[ing] sjel_server", while that file called exactly that helper.
+pub fn serves_via_sjel_server(source: &str) -> bool {
+    static P: OnceLock<Regex> = OnceLock::new();
+    re(&P, r"sjel_server::serve\w*\s*\(").is_match(source)
+}
+
 pub fn find_production_listener_constructs(source: &str) -> Vec<&'static str> {
     static SERVE: OnceLock<Regex> = OnceLock::new();
     static BIND: OnceLock<Regex> = OnceLock::new();
@@ -1134,6 +1145,22 @@ mod tests {
         );
     }
 
+    #[test]
+    fn every_sjel_server_serve_helper_counts_as_serving() {
+        for call in [
+            "sjel_server::serve(",
+            "sjel_server::serve_local(",
+            "sjel_server::serve_local_with(",
+            "sjel_server::serve_unix(",
+            "sjel_server::serve_lan(",
+        ] {
+            assert!(serves_via_sjel_server(call), "{call} must count as serving");
+        }
+        // The check's whole point: building a Router is not serving it.
+        assert!(!serves_via_sjel_server("let app = Router::new();"));
+        assert!(!serves_via_sjel_server("axum::serve(listener, app)"));
+    }
+
     // ---- checkStateMountCoverage
 
     #[test]
@@ -1790,10 +1817,15 @@ mod tests {
             parse_launchd_schedule("<dict><key>KeepAlive</key><true/></dict>").interval,
             None
         );
-        let slot = |h: u32| format!("<dict><key>Hour</key><integer>{h}</integer><key>Minute</key><integer>7</integer></dict>");
+        let slot = |h: u32| {
+            format!("<dict><key>Hour</key><integer>{h}</integer><key>Minute</key><integer>7</integer></dict>")
+        };
         let six_hourly: String = [0, 6, 12, 18].map(slot).concat();
         assert_eq!(
-            parse_launchd_schedule(&format!("<key>StartCalendarInterval</key><array>{six_hourly}</array>")).interval,
+            parse_launchd_schedule(&format!(
+                "<key>StartCalendarInterval</key><array>{six_hourly}</array>"
+            ))
+            .interval,
             Some(21600.0)
         );
         assert_eq!(

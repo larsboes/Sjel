@@ -1,9 +1,9 @@
 <script lang="ts">
   // The wishlist as one collection: table or board, grouped by category, edited in a side peek.
-  // Every edit goes through `onPatch`, which is the page's offline-aware `interior.patchItem`.
+  // Every edit goes through `onPatch`, which is the page's offline-aware `inventory.patchItem`.
   import Icon from "$lib/Icon.svelte";
   import { tip } from "$lib/tip";
-  import type { InteriorItem } from "$lib/api";
+  import type { InventoryItem } from "$lib/api";
   import Chip from "$lib/ui/Chip.svelte";
   import Collection from "$lib/ui/Collection.svelte";
   import SidePeek from "$lib/ui/SidePeek.svelte";
@@ -20,11 +20,11 @@
     onBought,
     onFullEditor,
   }: {
-    items: InteriorItem[];
+    items: InventoryItem[];
     pending: Set<string>;
     conflicts: Set<string>;
     busy?: boolean;
-    onPatch: (item: InteriorItem, patch: Partial<InteriorItem>) => Promise<void>;
+    onPatch: (item: InventoryItem, patch: Partial<InventoryItem>) => Promise<void>;
     onBought: (id: string) => void;
     onFullEditor: (id: string) => void;
   } = $props();
@@ -33,9 +33,9 @@
   let error = $state<string | null>(null);
   const open = $derived(items.find((i) => i.id === peek) ?? null);
 
-  const price = (i: InteriorItem) => i.preis_cent ?? i.kosten_min_cent;
+  const price = (i: InventoryItem) => i.preis_cent ?? i.kosten_min_cent;
 
-  const fields: Field<InteriorItem>[] = [
+  const fields: Field<InventoryItem>[] = [
     { id: "label", label: "Item", value: (i) => i.label, cell: labelCell },
     { id: "category", label: "Category", kind: "select", width: "8rem", value: (i) => i.category ?? "none", display: (v) => (v === "none" ? "No category" : v), tone: (v) => (v === "none" ? "muted" : "neutral") },
     { id: "priority", label: "Priority", kind: "select", width: "8rem", value: (i) => i.prioritaet ?? "none", display: (v) => (v === "none" ? "—" : v), tone: (v) => (v === "pflicht" ? "warning" : v === "none" ? "muted" : "neutral") },
@@ -43,7 +43,7 @@
     { id: "kind", label: "Kind", kind: "select", column: false, value: (i) => i.kind, display: (v) => (v === "slot" ? "Flat need" : v === "gear" ? "Gear" : "Thing") },
   ];
 
-  async function patch(item: InteriorItem, change: Partial<InteriorItem>) {
+  async function patch(item: InventoryItem, change: Partial<InventoryItem>) {
     error = null;
     try {
       await onPatch(item, change);
@@ -52,14 +52,14 @@
     }
   }
 
-  function commitPrice(item: InteriorItem, text: string | null) {
+  function commitPrice(item: InventoryItem, text: string | null) {
     const cents = centsFrom(text);
     if (cents === undefined) error = `"${text}" is not a price. Write it like 39,90.`;
     else void patch(item, { preis_cent: cents });
   }
 </script>
 
-{#snippet labelCell(i: InteriorItem)}
+{#snippet labelCell(i: InventoryItem)}
   <span class="label">
     {i.label}
     {#if i.link}<a href={i.link} target="_blank" rel="noreferrer" aria-label="Product page" onclick={(e) => e.stopPropagation()}><Icon name="external" size={12} /></a>{/if}
@@ -68,7 +68,7 @@
   </span>
 {/snippet}
 
-{#snippet priceCell(i: InteriorItem)}
+{#snippet priceCell(i: InventoryItem)}
   {#if i.preis_cent !== null}
     <span class="mono">{euro(i.preis_cent)}</span>
   {:else if i.kosten_min_cent !== null}
@@ -78,7 +78,7 @@
   {/if}
 {/snippet}
 
-{#snippet rowActions(i: InteriorItem)}
+{#snippet rowActions(i: InventoryItem)}
   <button class="icon" disabled={busy} aria-label="Mark bought" use:tip={"Mark bought"} onclick={() => onBought(i.id)}><Icon name="check" size={13} /></button>
 {/snippet}
 

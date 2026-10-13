@@ -4,8 +4,9 @@
   import { bridgedSrc } from "$lib/bridged-url";
   import {
     interior,
+    inventory,
     trips,
-    type InteriorItem,
+    type InventoryItem,
     type PackItem,
     type PackView,
   } from "$lib/api";
@@ -13,7 +14,7 @@
   let { planId }: { planId: string } = $props();
 
   let view = $state<PackView | null>(null);
-  let owned = $state<InteriorItem[]>([]);
+  let owned = $state<InventoryItem[]>([]);
   let error = $state<string | null>(null);
   let busy = $state(false);
   /** The card whose details are open, and the group whose add-picker is open. */
@@ -79,7 +80,7 @@
   );
 
   /** Stated traits plus the two the booleans already say, without repeats. */
-  function traitsOf(item: InteriorItem | undefined): string[] {
+  function traitsOf(item: InventoryItem | undefined): string[] {
     if (!item) return [];
     const out = [...(item.traits ?? [])];
     if (item.waterproof && !out.includes("rain")) out.push("rain");
@@ -93,7 +94,7 @@
       const [pack, rows] = await Promise.all([
         trips.pack(id),
         // Inventory adds pictures, traits and the add-picker; the list still reads without it.
-        interior.inventory().catch(() => []),
+        inventory.rows().catch(() => []),
       ]);
       view = pack;
       owned = rows.filter((row) => row.state === "owned").map((row) => row.item);
@@ -131,7 +132,7 @@
     void save(list.items.filter((r) => r.item_ref !== ref));
   }
 
-  function add(item: InteriorItem) {
+  function add(item: InventoryItem) {
     if (!list) return;
     void save([
       ...list.items,

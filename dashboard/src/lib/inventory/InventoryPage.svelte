@@ -9,11 +9,12 @@
   import {
     axonStatus,
     interior,
-    InteriorConflict,
-    type InteriorItem,
-    type InteriorInventoryRow,
-    type InteriorState,
-    type InteriorWishlist,
+    inventory,
+    InventoryConflict,
+    type InventoryItem,
+    type InventoryRow,
+    type InventoryState,
+    type InventoryWishlist,
     type InteriorImpact,
   } from "$lib/api";
   import { capabilities } from "$lib/capabilities.svelte";
@@ -31,15 +32,15 @@
   let error = $state<string | null>(null);
   let phoneOnly = $state(false);
   let starting = $state(false);
-  let inventory = $state<InteriorInventoryRow[]>([]);
-  let wishlist = $state<InteriorWishlist | null>(null);
+  let rows = $state<InventoryRow[]>([]);
+  let wishlist = $state<InventoryWishlist | null>(null);
 
-  const size = (i: InteriorItem): string =>
+  const size = (i: InventoryItem): string =>
     i.b !== null && i.t !== null ? `${i.b} × ${i.t}${i.h !== null ? ` × ${i.h}` : ""} cm` : "—";
 
   /** The same measurement for a card's meta line, where an unknown size is left out rather
       than printed as a lone "—" on a line of its own. */
-  const knownSize = (i: InteriorItem): string | null => (i.b !== null && i.t !== null ? size(i) : null);
+  const knownSize = (i: InventoryItem): string | null => (i.b !== null && i.t !== null ? size(i) : null);
 
   /**
    * Phone width, by the phone breakpoint `app.css` names (38rem). Below it the item editor
@@ -56,21 +57,21 @@
   });
 
   // A garment carries its own `category`; furniture predates the field and is told by `kind`.
-  const groupOf = (i: InteriorItem): string =>
+  const groupOf = (i: InventoryItem): string =>
     i.category ?? (i.kind === "slot" ? "bedarf" : i.kind === "gear" ? "ausruestung" : "moebel");
   let group = $state("alle");
-  const allOwned = $derived(inventory.filter((r) => r.state === "owned"));
+  const allOwned = $derived(rows.filter((r) => r.state === "owned"));
   const ownedGroups = $derived.by(() => {
     const counts = new Map<string, number>();
     for (const r of allOwned) counts.set(groupOf(r.item), (counts.get(groupOf(r.item)) ?? 0) + 1);
     return [...counts.entries()].sort(([a], [b]) => a.localeCompare(b));
   });
   const owned = $derived(group === "alle" ? allOwned : allOwned.filter((r) => groupOf(r.item) === group));
-  const gone = $derived(inventory.filter((r) => r.state === "gone"));
+  const gone = $derived(rows.filter((r) => r.state === "gone"));
   /** Owned id → label of the wanted item that names it in `ersetzt`. */
   const replacedBy = $derived(
     new Map(
-      inventory
+      rows
         .filter((r) => r.state === "wanted")
         .flatMap((r) => (r.item.ersetzt ?? []).map((id) => [id, r.item.label] as const)),
     ),
@@ -139,14 +140,14 @@
   /** The revision the open form was read at; sent as If-Match so a newer save elsewhere is not overwritten. */
   let editingRevision = $state<number | undefined>(undefined);
   /** A save that lost the race (409): what this form tried to change, and the values that stand now. */
-  let conflict = $state<{ patch: Record<string, unknown>; current: InteriorItem | null } | null>(null);
-  let history = $state<{ state: InteriorState; since: string; note: string | null }[]>([]);
+  let conflict = $state<{ patch: Record<string, unknown>; current: InventoryItem | null } | null>(null);
+  let history = $state<{ state: InventoryState; since: string; note: string | null }[]>([]);
   let creating = $state(false);
   let draftNew = $state({
     id: "",
     label: "",
     kind: "piece" as "piece" | "slot",
-    state: "wanted" as InteriorState,
+    state: "wanted" as InventoryState,
     b: "",
     t: "",
     h: "",
@@ -158,28 +159,21 @@
     saison: "",
   });
 
-  const byId = $derived(new Map(inventory.map((r) => [r.item.id, r])));
-  /**
-   * The branches that exist, from the rows themselves.
-   *
-   * A list written here would be a second truth about the same thing and the first one somebody
-   * forgets when a branch appears — the same rule `budget::BEKANNTE_PRIORITAETEN` follows by
-   * reading the inventory instead of declaring the words. `interior inventory` prints the same
-   * set, and names two spellings of one branch when they have drifted apart.
-   */
+  const byId = $derived(new Map(rows.map((r) => [r.item.id, r])));
+  /** Categories come from the rows; a list written here would drift from them. */
   const kategorien = $derived(
-    [...new Set(inventory.map((r) => r.item.category).filter((c): c is string => !!c))].sort(),
+    [...new Set(rows.map((r) => r.item.category).filter((c): c is string => !!c))].sort(),
   );
   /**
    * Items whose shown values include an edit that has not reached the Mac, and items whose
    * queued edit the Mac refused as stale. Both are set only in the app, by the device's
    * outbox (`src-tauri/src/sync.rs`); the web shell never sees them.
    */
-  const pendingIds = $derived(new Set(inventory.filter((r) => r.pending).map((r) => r.item.id)));
-  const conflictIds = $derived(new Set(inventory.filter((r) => r.conflict).map((r) => r.item.id)));
+  const pendingIds = $derived(new Set(rows.filter((r) => r.pending).map((r) => r.item.id)));
+  const conflictIds = $derived(new Set(rows.filter((r) => r.conflict).map((r) => r.item.id)));
 
   /** Which placement fields a piece fills in, if any. Empty means the name heuristic still judges it. */
-  const declares = (i: InteriorItem): string =>
+  const declares = (i: InventoryItem): string =>
     [
       i.opens !== null && i.opens !== undefined ? "opens" : null,
       i.open_clear !== null && i.open_clear !== undefined ? "open_clear" : null,
@@ -247,7 +241,7 @@
       });
     }
     try {
-      history = await interior.stateHistory(id);
+      history = await inventory.stateHistory(id);
     } catch {
       // A missing history is not a reason to refuse the edit; the panel says so itself.
     }
@@ -343,7 +337,7 @@
     conflict = null;
     try {
       const id = editing;
-      await interior.patchItem(id, patch, editingRevision);
+      await inventory.patchItem(id, patch, editingRevision);
       editing = null;
       impact = null;
       await load();
@@ -352,13 +346,13 @@
     } catch (caught) {
       saveError = caught instanceof Error ? caught.message : String(caught);
       void showInSheet("top");
-      if (caught instanceof InteriorConflict) {
+      if (caught instanceof InventoryConflict) {
         // Show what stands now and keep the form open. Nothing is retried: saving again is a
         // deliberate overwrite, measured against the fresh values and their revision.
         conflict = { patch, current: caught.current?.item ?? null };
         const fresh = caught.current;
         if (fresh) {
-          inventory = inventory.map((r) => (r.item.id === fresh.item.id ? fresh : r));
+          rows = rows.map((r) => (r.item.id === fresh.item.id ? fresh : r));
           editingRevision = fresh.item.revision;
         }
       }
@@ -368,21 +362,21 @@
   }
 
   /** One field from the wishlist's side peek. A conflict reloads, so the peek shows what stands now. */
-  async function patchWish(item: InteriorItem, patch: Partial<InteriorItem>): Promise<void> {
+  async function patchWish(item: InventoryItem, patch: Partial<InventoryItem>): Promise<void> {
     try {
-      await interior.patchItem(item.id, patch, item.revision);
+      await inventory.patchItem(item.id, patch, item.revision);
     } finally {
       // Not `load()`: its loading flag unmounts the list and closes the peek mid-edit.
-      [inventory, wishlist] = await Promise.all([interior.inventory(), interior.wishlist()]);
+      [rows, wishlist] = await Promise.all([inventory.rows(), inventory.wishlist()]);
     }
   }
 
-  async function move(id: string, to: InteriorState): Promise<void> {
+  async function move(id: string, to: InventoryState): Promise<void> {
     saving = true;
     saveError = null;
     try {
-      await interior.setState(id, to);
-      if (editing === id) history = await interior.stateHistory(id);
+      await inventory.setState(id, to);
+      if (editing === id) history = await inventory.stateHistory(id);
       await load();
     } catch (caught) {
       saveError = caught instanceof Error ? caught.message : String(caught);
@@ -395,7 +389,7 @@
     saving = true;
     saveError = null;
     try {
-      await interior.createItem({
+      await inventory.createItem({
         id: draftNew.id.trim(),
         kind: draftNew.kind,
         label: draftNew.label.trim(),
@@ -443,7 +437,7 @@
     loading = true;
     error = null;
     try {
-      [inventory, wishlist] = await Promise.all([interior.inventory(), interior.wishlist()]);
+      [rows, wishlist] = await Promise.all([inventory.rows(), inventory.wishlist()]);
     } catch (caught) {
       error = caught instanceof Error ? caught.message : String(caught);
     } finally {
@@ -468,9 +462,9 @@
   // The outbox sent or dropped an edit: show the canonical node's answer instead of the pending values.
   onMount(() => {
     const reload = () => {
-      if (inventory.length === 0) return;
-      void interior.inventory().then((rows) => (inventory = rows)).catch(() => {});
-      void interior.wishlist().then((w) => (wishlist = w)).catch(() => {});
+      if (rows.length === 0) return;
+      void inventory.rows().then((r) => (rows = r)).catch(() => {});
+      void inventory.wishlist().then((w) => (wishlist = w)).catch(() => {});
     };
     window.addEventListener(SYNC_CHANGED_EVENT, reload);
     return () => window.removeEventListener(SYNC_CHANGED_EVENT, reload);

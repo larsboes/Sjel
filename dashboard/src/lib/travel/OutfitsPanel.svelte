@@ -2,13 +2,13 @@
   import Icon from "$lib/Icon.svelte";
   import { bridgedSrc } from "$lib/bridged-url";
   import { tip } from "$lib/tip";
-  import { interior, trips, type InteriorItem, type Outfit, type OutfitInput } from "$lib/api";
+  import { interior, inventory, trips, type InventoryItem, type Outfit, type OutfitInput } from "$lib/api";
 
   let { planId, dateStart, dateEnd }: { planId: string; dateStart: string; dateEnd: string } =
     $props();
 
   let outfits = $state<Outfit[]>([]);
-  let wardrobe = $state<InteriorItem[]>([]);
+  let wardrobe = $state<InventoryItem[]>([]);
   let error = $state<string | null>(null);
   let loaded = $state(false);
   /** Index of the outfit being edited, and whether its piece picker is open. */
@@ -39,7 +39,7 @@
     try {
       const [res, rows] = await Promise.all([
         trips.outfits(id),
-        interior.inventory().catch(() => []),
+        inventory.rows().catch(() => []),
       ]);
       outfits = res.outfits;
       wardrobe = rows
@@ -93,7 +93,7 @@
       .sort((a, b) => (a.category ?? "").localeCompare(b.category ?? "") || a.label.localeCompare(b.label));
 </script>
 
-{#snippet thumb(item: InteriorItem | undefined, ref: string, size: string)}
+{#snippet thumb(item: InventoryItem | undefined, ref: string, size: string)}
   {#if item?.bild}
     <img use:bridgedSrc={interior.mediaUrl(item.bild)} alt={item.label} use:tip={item.label} loading="lazy" style:width={size} style:height={size} />
   {:else}

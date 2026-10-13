@@ -92,7 +92,7 @@ describe('fieldDiff', () => {
 
 describe('a queued item edit', () => {
   test('resolves with queued: true instead of failing, and sends If-Match across the bridge', async () => {
-    const { interior } = await import('../src/lib/api');
+    const { inventory } = await import('../src/lib/api');
     const g = globalThis as unknown as { window?: Record<string, unknown> };
     const seen: Record<string, unknown>[] = [];
     g.window = {
@@ -109,7 +109,7 @@ describe('a queued item edit', () => {
       },
     };
     try {
-      const result = await interior.patchItem('schrank', { b: 120 }, 1);
+      const result = await inventory.patchItem('schrank', { b: 120 }, 1);
       expect(result).toEqual({ queued: true, outbox_id: 7, state: 'pending' });
       const request = seen[0].request as { headers: [string, string][] };
       expect(request.headers).toContainEqual(['If-Match', '"1"']);

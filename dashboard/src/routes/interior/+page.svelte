@@ -17,13 +17,14 @@
   import {
     axonStatus,
     interior,
-    InteriorConflict,
-    type InteriorItem,
-    type InteriorInventoryRow,
+    inventory,
+    InventoryConflict,
+    type InventoryItem,
+    type InventoryRow,
     type InteriorLayoutDetail,
     type InteriorLayoutSummary,
-    type InteriorState,
-    type InteriorWishlist,
+    type InventoryState,
+    type InventoryWishlist,
     type InteriorImpact,
     type InteriorPlacedItem,
     type InteriorAllowed,
@@ -45,7 +46,6 @@
   import { bridgedSrc } from "$lib/bridged-url";
   import { getConnectionSettings } from "$lib/mac-bridge";
   import { modal } from "$lib/modal";
-  import Wishlist from "$lib/inventory/Wishlist.svelte";
 
   type View = "plans" | "solve" | "buy";
 
@@ -60,7 +60,7 @@
   let detail = $state<InteriorLayoutDetail | null>(null);
   let detailError = $state<string | null>(null);
 
-  let inventory = $state<InteriorInventoryRow[]>([]);
+  let rows = $state<InventoryRow[]>([]);
   /** The flat itself: its name, its outer measurements, its area. Measured, not drawn from. */
   let room = $state<InteriorModel | null>(null);
   let roomplanReference = $state<InteriorRoomPlanReference | null>(null);
@@ -100,7 +100,7 @@
   const euro = (cents: number): string =>
     (cents / 100).toLocaleString("de-DE", { style: "currency", currency: "EUR" });
 
-  const size = (i: InteriorItem): string =>
+  const size = (i: InventoryItem): string =>
     i.b !== null && i.t !== null ? `${i.b} × ${i.t}${i.h !== null ? ` × ${i.h}` : ""} cm` : "—";
 
   // ─── Dragging on the plan ──────────────────────────────────────────────────
@@ -548,8 +548,8 @@
   // guessing. A second implementation of a clearance rule is the drift this whole thing exists
   // to prevent (PRD B27).
 
-  const byId = $derived(new Map(inventory.map((r) => [r.item.id, r])));
-  const allOwned = $derived(inventory.filter((r) => r.state === "owned"));
+  const byId = $derived(new Map(rows.map((r) => [r.item.id, r])));
+  const allOwned = $derived(rows.filter((r) => r.state === "owned"));
 
   async function loadRoomplanReference(): Promise<void> {
     try {
@@ -568,9 +568,9 @@
     loading = true;
     error = null;
     try {
-      const [l, inv, m] = await Promise.all([interior.layouts(), interior.inventory(), interior.model()]);
+      const [l, inv, m] = await Promise.all([interior.layouts(), inventory.rows(), interior.model()]);
       layouts = l;
-      inventory = inv;
+      rows = inv;
       room = m;
       asisItems = (await interior.placements(m.flat.id)).map((p) => ({
         ref: p.item_id,
@@ -834,7 +834,7 @@
     <button class:active={view === "plans"} aria-pressed={view === "plans"} onclick={() => (view = "plans")}>
       Plans <span class="count">{layouts.length}</span>
     </button>
-    <a href={link("/inventory")}>Inventory <span class="count">{inventory.length}</span></a>
+    <a href={link("/inventory")}>Inventory <span class="count">{rows.length}</span></a>
     <button
       class:active={view === "solve"}
       aria-pressed={view === "solve"}

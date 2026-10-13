@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, test } from 'bun:test';
-import { interior, InteriorConflict } from '../src/lib/api';
+import { inventory, InventoryConflict } from '../src/lib/api';
 
 // PRD §10 A5: the phone and the Mac edit the same interior items. A write that carries a stale
 // revision gets 409 from the capability, and the page must show the values that stand now
@@ -35,7 +35,7 @@ function serve(answers: Record<string, () => Response>): Call[] {
 const current = { id: 'schrank', kind: 'piece', label: 'vom Mac', b: 120, revision: 2 };
 
 describe('interior item writes', () => {
-  test('a 409 surfaces as InteriorConflict with the current values and is not retried', async () => {
+  test('a 409 surfaces as InventoryConflict with the current values and is not retried', async () => {
     const calls = serve({
       'PATCH /inventory/api/items/schrank': () =>
         new Response(
@@ -49,9 +49,9 @@ describe('interior item writes', () => {
         new Response(JSON.stringify([{ item: current, state: 'owned' }]), { status: 200 }),
     });
 
-    const failure = await interior.patchItem('schrank', { b: 90 }, 1).catch((cause) => cause);
+    const failure = await inventory.patchItem('schrank', { b: 90 }, 1).catch((cause) => cause);
 
-    expect(failure).toBeInstanceOf(InteriorConflict);
+    expect(failure).toBeInstanceOf(InventoryConflict);
     expect(failure.status).toBe(409);
     expect(failure.message).toContain('inzwischen geaendert');
     expect(failure.current.item.label).toBe('vom Mac');
@@ -67,7 +67,7 @@ describe('interior item writes', () => {
         new Response(JSON.stringify({ id: 'schrank', ok: true, revision: 3 }), { status: 200 }),
     });
 
-    const result = await interior.saveItem('schrank', current as never, 2);
+    const result = await inventory.saveItem('schrank', current as never, 2);
 
     expect(result.revision).toBe(3);
     expect(calls).toEqual([{ method: 'PUT', path: '/inventory/api/items/schrank', ifMatch: '"2"' }]);
@@ -79,7 +79,7 @@ describe('interior item writes', () => {
         new Response(JSON.stringify({ id: 'schrank', ok: true, revision: 4 }), { status: 200 }),
     });
 
-    await interior.patchItem('schrank', { b: 80 });
+    await inventory.patchItem('schrank', { b: 80 });
 
     expect(calls[0].ifMatch).toBeNull();
   });

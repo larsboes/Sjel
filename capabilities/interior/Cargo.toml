@@ -28,6 +28,8 @@ route-manifest = { path = "../../libs/route-manifest" }
 # Capability liest sie aus derselben Datei — ohne sie ist kein Layout zu rechnen. Der eigene
 # Praefix traegt nur noch `interior_placement`. libs/sjel-store/README.md hat das Warum.
 sjel-store = { path = "../../libs/sjel-store" }
+# The monthly balance the purchase order is measured against is inventory's (`budget::monatssaldo`).
+sjel-inventory = { path = "../inventory" }
 # Der Tag, an dem ein Entwurf entsteht. Vier Capabilities hatten diese zwoelf Zeilen
 # abgeschrieben, statt eine zu teilen — libs/civil-date/README begruendet, warum das
 # Teilen keinen Datumsabhaengigkeit kostet, und genau darum geht es hier.
@@ -55,14 +57,6 @@ rayon.workspace = true
 # `ServiceExt::oneshot`, damit der Origin-Test den verdrahteten Router ohne Listener und
 # ohne Port fahren kann. Dasselbe Muster nutzt capabilities/sjel-status bereits.
 tower = { workspace = true, features = ["util"] }
-# **Nur fuer die Fixture, und das ist keine Service-Kopplung.** Neun Tests hier brauchen die
-# Zeilen der Musterwohnung in einer Temp-Datei, und die Zeilen gehoeren `capabilities/inventory`
-# (ISA F13). `tests/engine.rs` begruendet, warum sie den echten Importeur nehmen und keinen
-# zweiten Seed daneben: eine zweite Art, Zeilen anzulegen, ist eine zweite Art, sie falsch
-# anzulegen. Diese Zeile ist der Preis dafuer. Gelesen wird ueber die geteilte Datei, nicht
-# ueber HTTP — `interior` laeuft in Tests ohne Dienst, und ein geteilter Store ist laut
-# `capabilities/inventory/src/lib.rs` ausdruecklich kein geteilter Lesevertrag.
-sjel-inventory = { path = "../inventory" }
 
 [lints]
 workspace = true

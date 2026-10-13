@@ -213,6 +213,7 @@ pub fn command(root: &Path, args: &[String]) -> ExitCode {
             }
             _ => usage_error("usage: sjel capability ingest <url>"),
         },
+        "capture" => capture(root, rest),
         "feed" => {
             let days = rest.first().map_or("7", String::as_str);
             if days.is_empty() || !days.bytes().all(|b| b.is_ascii_digit()) {
@@ -596,5 +597,42 @@ mod tests {
             r.probe_url().as_deref(),
             Some("http://127.0.0.1:8082/health")
         );
+    }
+}
+
+/// `sjel capture [url] [text] [#tag]`: a link or a note into the comms capture inbox. With no
+/// words it lists what is still unsorted.
+fn capture(root: &Path, words: &[String]) -> Result<ExitCode, String> {
+    if words.is_empty() {
+        return call(root, "comms", "get", "/captures?status=new", &[]);
+    }
+    let body = capture_body(words).to_string();
+    call(root, "comms", "post", "/captures", &[body])
+}
+
+fn capture_body(words: &[String]) -> serde_json::Value {
+    let (url, text): (Vec<&String>, Vec<&String>) = words
+        .iter()
+        .partition(|w| w.starts_with("https://") || w.starts_with("http://"));
+    let text = text.iter().map(|w| w.as_str()).collect::<Vec<_>>().join(" ");
+    serde_json::json!({
+        "url": url.first(),
+        "text": (!text.is_empty()).then_some(text),
+        "client": "cli",
+    })
+}
+
+#[cfg(test)]
+mod capture_tests {
+    use super::capture_body;
+
+    #[test]
+    fn the_first_link_is_the_url_and_the_rest_is_text() {
+        let words = ["#buy", "https://a.example/x", "rain", "jacket"].map(String::from);
+        let body = capture_body(&words);
+        assert_eq!(body["url"], "https://a.example/x");
+        assert_eq!(body["text"], "#buy rain jacket");
+        let body = capture_body(&["https://a.example".to_string()]);
+        assert!(body["text"].is_null());
     }
 }

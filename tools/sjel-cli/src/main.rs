@@ -139,6 +139,7 @@ fn sjel(root: &Path, command: &str, rest: &[String]) -> ExitCode {
         ),
         "cargo" => exec(Command::new(tool("tools/cargo-hermetic")).args(rest)),
         "capability" => capability::command(root, rest),
+        "capture" => capability::command(root, &[&["capture".to_string()], rest].concat()),
         "runtime" => runtime::run(root, rest),
         "agent" => match rest.first().map(String::as_str) {
             Some("enroll") => {
@@ -173,6 +174,7 @@ fn help(topic: &str) -> ExitCode {
         "cargo" => help::CARGO,
         "doctor" => "Usage: sjel doctor",
         "search" => "Usage: sjel search <words...>",
+        "capture" => "Usage: sjel capture [url] [text] [#buy|#look|#go|#learn]  (no words: list unsorted)",
         other => return fail(&format!("sjel: no help for '{other}'")),
     };
     println!("{text}");

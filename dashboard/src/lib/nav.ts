@@ -72,6 +72,7 @@ export const PRIMARY_NAV: NavItem[] = [
   // Like Home it draws from several capabilities and degrades, so it names none.
   { href: "/context", label: "Today", icon: "clock", starts: ["calendar", "trips", "finance"] },
   { href: "/calendar", label: "Calendar", icon: "calendar", capability: "calendar" },
+  { href: "/inbox", label: "Inbox", icon: "plus", capability: "comms" },
   { href: "/feed", label: "Feed", icon: "feed", capability: "comms" },
   { href: "/travel", label: "Travel", icon: "map-pin", capability: "transit", starts: ["transit", "trips"], warmsMap: true },
   { href: "/map", label: "Map", icon: "globe", capability: "places", warmsMap: true },

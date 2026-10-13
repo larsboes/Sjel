@@ -807,6 +807,7 @@ fn cloud_job_id(request: &CloudQueueRequest) -> String {
     )
 }
 
+mod captures;
 mod cloud;
 mod evaluation;
 mod feed;
@@ -847,6 +848,7 @@ pub struct OriginSummary {
     pub last_seen: Option<String>,
 }
 
+pub use captures::{split_tag, Capture, CapturePatch};
 use rows::{epoch_now, row_to_feed_full, row_to_feed_list, row_to_triage};
 
 #[cfg(test)]

@@ -27,6 +27,7 @@ Operate capabilities:
   capability health              Probe registered capability health endpoints
   capability url <capability>    Print a registered capability's HTTP base URL
   capability call <name> <get|post|put|patch|delete> <path> [body] [curl-args...]
+  capture [url] [text] [#tag]    Put a link or a note in the capture inbox; no words lists it
   capability ingest <url>        Ingest a URL through comms
   capability feed [days]         Read the comms feed
   capability mail [status]       Read mail triage without Secret rows; pseudonymized for an agent

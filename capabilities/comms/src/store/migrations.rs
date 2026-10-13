@@ -568,6 +568,18 @@ impl Store {
             CREATE INDEX IF NOT EXISTS idx_{prefix}_triage_evaluations_score
                 ON {prefix}_triage_evaluations(overall_score DESC);
             -- end feed-personalization 2026-09-03 -----------------------------
+
+            CREATE TABLE IF NOT EXISTS {prefix}_captures (
+                id TEXT PRIMARY KEY,
+                text TEXT,
+                url TEXT,
+                tag TEXT CHECK (tag IS NULL OR tag IN ('buy','look','go','learn')),
+                status TEXT NOT NULL DEFAULT 'new' CHECK (status IN ('new','done','dismissed')),
+                routed_to TEXT,
+                client TEXT,
+                created_at TEXT NOT NULL DEFAULT ({now}),
+                CHECK (text IS NOT NULL OR url IS NOT NULL)
+            );
             ",
             prefix = prefix,
             now = sjel_store::NOW,

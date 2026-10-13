@@ -13,7 +13,7 @@ use axum::{
     extract::{DefaultBodyLimit, Path, Query},
     http::StatusCode,
     response::Json,
-    routing::{get, post},
+    routing::{get, patch, post},
     Router,
 };
 use serde::{Deserialize, Serialize};
@@ -48,6 +48,7 @@ use comms::travel;
 use comms::vault_links;
 
 mod background;
+mod captures;
 mod cloud;
 mod content;
 mod contracts;
@@ -58,6 +59,7 @@ mod triage;
 mod vault;
 
 use background::*;
+use captures::*;
 use cloud::*;
 use content::*;
 use contracts::*;
@@ -143,6 +145,9 @@ const ROUTES: &[route_manifest::Route] = &[
     ),
     r("GET", "/feed", "Feed entries. Optional status filter."),
     r("POST", "/ingest", "Ingest one URL into the feed."),
+    r("GET", "/captures", "Capture inbox, newest first. Optional status filter."),
+    r("POST", "/captures", "Store a link or a note; #buy, #look, #go, #learn set the tag."),
+    r("PATCH", "/captures/{id}", "Edit a capture's text, tag, status or route."),
     r("GET", "/feed/{id}", "One feed entry."),
     r(
         "POST",
@@ -371,6 +376,7 @@ fn build_router(dashboard_origin: &str) -> Router {
     // was the whole boundary.
     let read_routes = Router::new()
         .route("/routes", get(routes))
+        .route("/captures", get(captures_handler))
         .route("/api/links", get(links_handler))
         .route(
             "/api/people/open",
@@ -459,7 +465,9 @@ fn build_router(dashboard_origin: &str) -> Router {
         // and nowhere else, so a route added here is covered by the same
         // sentence that covers every other mutation.
         .route("/feed/{id}/interactions", post(feed_interactions_handler))
-        .route("/feed/model/train", post(model_train_handler));
+        .route("/feed/model/train", post(model_train_handler))
+        .route("/captures", post(capture_post_handler))
+        .route("/captures/{id}", patch(capture_patch_handler));
 
     Router::new()
         .merge(read_routes)

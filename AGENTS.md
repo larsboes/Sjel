@@ -25,6 +25,13 @@ with a service already held down.
 Keep public code and doctrine in Sjel. Keep private values, machine state and secrets in the active
 overlay or Vaultwarden. Never generate, expose or change a secret without explicit authorization.
 
+## Code and docs
+
+The code says what it does. A comment says only a reason the code cannot show, in one or two
+lines. Do not retell history, ISC numbers or PRD questions in code; git log keeps them. An `ISA.md`
+is the contract of its unit and nothing else. Ideas and open questions go in `PLAN.md`.
+When you edit a module, trim its comments to this rule. Do not run a separate sweep.
+
 ## graphify
 
 This project has a knowledge graph at graphify-out/ with god nodes, community structure, and cross-file relationships.

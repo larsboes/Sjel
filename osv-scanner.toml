@@ -68,3 +68,10 @@ reason = "Unmaintained proc-macro-error2 2.0.1, build-time only, via stacksafe-m
 id = "RUSTSEC-2026-0206"
 ignoreUntil = 2026-12-01
 reason = "Unmaintained rustybuzz 0.20.1, runtime, via usvg 0.46 <- gpui (Zed 5f8a7413) <- apps/gpui-prototype. It shapes text inside SVGs; apps/gpui-prototype/src loads no SVG and no asset (grep, 2026-10-11), so nothing reaches it. No affected functions, CVSS, or fixed version. The successor is harfrust; revisit when Zed moves usvg to it or the prototype bumps its Zed pin."
+
+# Runtime-reachable, and accepted for that reason rather than waved through as build-time: this
+# one parses YAML. What it is not is a known vulnerability — see the type in the reason.
+[[IgnoredVulns]]
+id = "RUSTSEC-2024-0449"
+ignoreUntil = 2026-12-01
+reason = "Unmaintained unsafe-libyaml 0.2.11, runtime, via xberg 1.3.0 <- serde_yaml_ng 0.10.0 <- sjel-extraction (`cargo tree -i serde_yaml_ng`, 2026-10-13: xberg is the only path). Type INFO, not a vulnerability: the unsoundness, RUSTSEC-2023-0075, was fixed in 0.2.10 and this tree is on 0.2.11. Upstream was archived 2024-03-25 at that release and no patched version exists, so the remedy is xberg moving off serde_yaml_ng or off serde_yaml_ng's libyaml backend — nothing here can patch a c2rust translation of libyaml. Revisit when xberg changes its YAML parser."

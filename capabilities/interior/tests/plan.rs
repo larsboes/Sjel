@@ -36,7 +36,7 @@ fn model() -> Model {
     Model::load(FLAT).unwrap_or_else(|e| panic!("{FLAT}: {e}"))
 }
 
-fn zeichne(layout: &str) -> String {
+fn draw(layout: &str) -> String {
     let m = model();
     let l = m
         .load_layout(layout)
@@ -45,7 +45,7 @@ fn zeichne(layout: &str) -> String {
 }
 
 /// Die viewBox als vier Zahlen.
-fn ausschnitt(svg: &str) -> [i32; 4] {
+fn crop(svg: &str) -> [i32; 4] {
     let von = svg.find("viewBox=\"").expect("das SVG traegt eine viewBox") + 9;
     let bis = von + svg[von..].find('"').expect("die viewBox endet");
     let mut it = svg[von..bis].split_whitespace().map(|n| {
@@ -61,16 +61,16 @@ fn ausschnitt(svg: &str) -> [i32; 4] {
 }
 
 /// Jeder Text zwischen `>` und `</text>`.
-fn texte(svg: &str) -> Vec<String> {
+fn texts(svg: &str) -> Vec<String> {
     let mut out = Vec::new();
     let mut rest = svg;
     while let Some(i) = rest.find("<text") {
         rest = &rest[i..];
-        let Some(auf) = rest.find('>') else { break };
+        let Some(onto) = rest.find('>') else { break };
         let Some(zu) = rest.find("</text>") else {
             break;
         };
-        out.push(rest[auf + 1..zu].to_string());
+        out.push(rest[onto + 1..zu].to_string());
         rest = &rest[zu + 7..];
     }
     out
@@ -79,21 +79,21 @@ fn texte(svg: &str) -> Vec<String> {
 /// Der Katalogtext gehoert an die Oberflaeche und nicht ins Rechteck. Geprueft an dem Layout,
 /// dessen drei Stuecke im Musterinventar bewusst lange Bezeichnungen tragen.
 #[test]
-fn im_moebel_steht_der_kurze_name() {
-    let svg = zeichne("a-frei");
+fn the_piece_shows_the_short_name() {
+    let svg = draw("a-frei");
     let m = model();
     for ref_ in ["kleiderschrank", "schreibtisch", "bett"] {
-        let lang = &m.catalogue.get(ref_).expect("im Katalog").label;
+        let long = &m.catalogue.get(ref_).expect("im Katalog").label;
         assert!(
-            !svg.contains(lang.as_str()),
-            "der Plan traegt den Katalogtext {lang:?} von {ref_}"
+            !svg.contains(long.as_str()),
+            "der Plan traegt den Katalogtext {long:?} von {ref_}"
         );
     }
-    for kurz in ["Schrank", "Schreibtisch", "Bett"] {
+    for short in ["Schrank", "Schreibtisch", "Bett"] {
         assert!(
-            texte(&svg).iter().any(|t| t == kurz),
-            "der Plan traegt {kurz:?} nicht: {:?}",
-            texte(&svg)
+            texts(&svg).iter().any(|t| t == short),
+            "der Plan traegt {short:?} nicht: {:?}",
+            texts(&svg)
         );
     }
 }
@@ -101,17 +101,17 @@ fn im_moebel_steht_der_kurze_name() {
 /// Ein Stueck, eine Beschriftung. Der Fehler vom 2026-08-31 war nicht, dass ein Name falsch war,
 /// sondern dass zwei Kaesten denselben trugen und uebereinander lagen.
 #[test]
-fn jedes_stueck_traegt_genau_einen_text() {
-    let svg = zeichne("a-frei");
+fn every_piece_carries_exactly_one_text() {
+    let svg = draw("a-frei");
     let m = model();
     let l = m.load_layout("a-frei").expect("das Musterlayout");
-    for gruppe in svg.split("<g data-ref=\"").skip(1) {
-        let ende = gruppe.find("</g>").expect("jede Gruppe schliesst");
+    for group in svg.split("<g data-ref=\"").skip(1) {
+        let end = group.find("</g>").expect("jede Gruppe schliesst");
         assert_eq!(
-            gruppe[..ende].matches("<text").count(),
+            group[..end].matches("<text").count(),
             1,
             "eine Gruppe traegt nicht genau einen Text: {}",
-            &gruppe[..ende.min(120)]
+            &group[..end.min(120)]
         );
     }
     assert_eq!(svg.matches("<g data-ref=\"").count(), l.items.len());
@@ -123,20 +123,20 @@ fn jedes_stueck_traegt_genau_einen_text() {
 /// Bildausschnitt darf links nur den Zeichenrand zeigen und nicht ihre geschaetzte Tiefe —
 /// gezeichnet wird sie trotzdem, sonst waere aus dem Plan nicht zu erkennen, dass es sie gibt.
 #[test]
-fn die_geschaetzte_terrasse_spannt_das_blatt_nicht_auf() {
+fn the_estimated_terrace_does_not_widen_the_sheet() {
     let m = model();
     let t = m
         .room
-        .terrasse
+        .terrace
         .as_ref()
         .expect("die Fixture fuehrt eine Terrasse");
     assert!(t.geschaetzt, "diese Pruefung gilt der geschaetzten Flaeche");
-    let svg = zeichne("a-frei");
-    let [min_x, _, breite, _] = ausschnitt(&svg);
+    let svg = draw("a-frei");
+    let [min_x, _, width, _] = crop(&svg);
 
     let links = m
         .room
-        .hauptraum
+        .main_room
         .polygon
         .iter()
         .map(|p| p[0])
@@ -153,7 +153,7 @@ fn die_geschaetzte_terrasse_spannt_das_blatt_nicht_auf() {
 
     let gemessen = m.room.bad.as_ref().map_or(links, |b| b.x[1]).max(
         m.room
-            .hauptraum
+            .main_room
             .polygon
             .iter()
             .map(|p| p[0])
@@ -161,12 +161,12 @@ fn die_geschaetzte_terrasse_spannt_das_blatt_nicht_auf() {
             .unwrap_or(links),
     );
     assert!(
-        (gemessen - links) * 2 > breite,
-        "das Gemessene nimmt weniger als die halbe Blattbreite ein ({} von {breite})",
+        (gemessen - links) * 2 > width,
+        "das Gemessene nimmt weniger als die halbe Blattbreite ein ({} von {width})",
         gemessen - links
     );
     assert!(
-        texte(&svg).iter().any(|t| t.starts_with("TERRASSE")),
+        texts(&svg).iter().any(|t| t.starts_with("TERRASSE")),
         "die Terrasse ist nicht mehr beschriftet"
     );
 }

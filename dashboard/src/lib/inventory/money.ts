@@ -1,4 +1,4 @@
-// Inventory keeps money in cents (capabilities/inventory/src/store.rs, `preis_cent`).
+// Inventory keeps money in cents (capabilities/inventory/src/store.rs, `price_cents`).
 
 const EUR = new Intl.NumberFormat('de-DE', { style: 'currency', currency: 'EUR' });
 

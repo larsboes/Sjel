@@ -47,16 +47,16 @@ fn usage() -> ! {
                                  Platz hat [--plan f] [--json]
   {layouts}                      Layouts auf der Platte
   {check} <layout> [--json]      gegen rules.toml pruefen (Exit 1 bei hartem Verstoss)
-  {toleranz} <layout> [--json]   bis zu welchem Messfehler das Verdikt haelt
-  {sonne} <layout> [--json]      wann im Jahr welches Stueck in der Sonne steht
-  {einbringung} <layout>         kommt jedes Stueck durch die Tuer und an seinen Platz
+  {tolerance} <layout> [--json]   bis zu welchem Messfehler das Verdikt haelt
+  {sun} <layout> [--json]      wann im Jahr welches Stueck in der Sonne steht
+  {delivery} <layout>         kommt jedes Stueck durch die Tuer und an seinen Platz
                                  [--b 120 --t 60] stattdessen ein gedachtes Stueck
   {compose} --pieces a,b,c       eine Wohnung von Grund auf stellen (Strahlsuche)
   {search} <layout> --move a,b   Positionen rastern, bis nichts mehr verletzt ist
                                  [--step 20] [--limit 6] [--band id=x0,x1,y0,y1]
                                  [--out <name>]  besten Treffer als Layout schreiben
   {plan} [layout...] [--out f]   Plaene als HTML mit Verdikt; ohne Layouts: alle
-  {deklaration} [--json]         wer noch am Namen gemessen wird, und was es kostet
+  {declarations} [--json]         wer noch am Namen gemessen wird, und was es kostet
   {kaufen} [--json]              welcher Bedarf zuerst, und wann er erreicht ist
   {serve}                        HTTP-API fuer die Oberflaeche
 
@@ -70,12 +70,12 @@ Was da ist und was fehlt, steht nicht mehr hier: die Zeilen sind `capabilities/i
         placements = bold("placements"),
         layouts = bold("layouts"),
         plan = bold("plan"),
-        deklaration = bold("deklaration"),
+        declarations = bold("deklaration"),
         kaufen = bold("kaufen"),
         check = bold("check"),
-        toleranz = bold("toleranz"),
-        einbringung = bold("einbringung"),
-        sonne = bold("sonne"),
+        tolerance = bold("toleranz"),
+        delivery = bold("einbringung"),
+        sun = bold("sonne"),
         search = bold("search"),
         compose = bold("compose"),
         serve = bold("serve"),
@@ -200,17 +200,17 @@ async fn main() {
             );
             println!(
                 "  Hoehe      {}",
-                if model.room.hauptraum.hoehe == 0 {
+                if model.room.main_room.height == 0 {
                     red("nicht gemessen")
                 } else {
-                    model.room.hauptraum.hoehe.to_string()
+                    model.room.main_room.height.to_string()
                 }
             );
             println!(
                 "  Waende     {}",
                 model
                     .room
-                    .waende
+                    .walls
                     .keys()
                     .cloned()
                     .collect::<Vec<_>>()
@@ -220,7 +220,7 @@ async fn main() {
                 "  Oeffnungen {}",
                 model
                     .room
-                    .oeffnungen
+                    .openings
                     .iter()
                     .map(|o| o.id.clone())
                     .collect::<Vec<_>>()
@@ -273,10 +273,10 @@ async fn main() {
             }
             std::process::exit(if r.pass { 0 } else { 1 });
         }
-        "einbringung" => std::process::exit(cmd_einbringung(&model, &argv)),
-        "sonne" => std::process::exit(cmd_sonne(&model, &argv)),
-        "deklaration" => std::process::exit(cmd_deklaration(&model, &argv)),
-        "kaufen" => std::process::exit(cmd_kaufen(&model, &argv)),
+        "einbringung" => std::process::exit(cmd_delivery(&model, &argv)),
+        "sonne" => std::process::exit(cmd_sun(&model, &argv)),
+        "deklaration" => std::process::exit(cmd_declarations(&model, &argv)),
+        "kaufen" => std::process::exit(cmd_purchase_order(&model, &argv)),
         "toleranz" => {
             let Some(name) = argv.get(1) else { usage() };
             let layout = match model.load_layout(name) {
@@ -286,7 +286,7 @@ async fn main() {
                     std::process::exit(2);
                 }
             };
-            let r = match interior::toleranz::robustheit(&model, &layout) {
+            let r = match interior::tolerance::robustness(&model, &layout) {
                 Ok(r) => r,
                 Err(e) => {
                     eprintln!("{}", red(&e.to_string()));
@@ -296,7 +296,7 @@ async fn main() {
             if argv.contains(&"--json".to_string()) {
                 println!("{}", serde_json::to_string_pretty(&r).unwrap());
             } else {
-                toleranz_report(&r);
+                tolerance_report(&r);
             }
             std::process::exit(if r.nominal_pass { 0 } else { 1 });
         }
@@ -394,10 +394,10 @@ async fn main() {
                         tag,
                         dim(&format!(
                             "Reserve {} · Wandkontakt {} cm · engste Route {} cm",
-                            h.engste_reserve_cm
+                            h.tightest_reserve_cm
                                 .map(|r| format!("{r} cm"))
                                 .unwrap_or_else(|| "—".into()),
-                            h.wandkontakt_cm,
+                            h.wall_contact_cm,
                             h.bottleneck_cm
                         ))
                     );
@@ -424,7 +424,7 @@ async fn main() {
                         items,
                         id: out.clone(),
                     };
-                    let note = format!("Bester Treffer der Suche in \"{}\": {} Warnungen, {} cm Wandkontakt, engste Route {} cm, knappste harte Reserve {}.", rep.base, best.soft, best.wandkontakt_cm, best.bottleneck_cm, best.engste_reserve_cm.map(|r| format!("{r} cm")).unwrap_or_else(|| "nicht gemessen".into()));
+                    let note = format!("Bester Treffer der Suche in \"{}\": {} Warnungen, {} cm Wandkontakt, engste Route {} cm, knappste harte Reserve {}.", rep.base, best.soft, best.wall_contact_cm, best.bottleneck_cm, best.tightest_reserve_cm.map(|r| format!("{r} cm")).unwrap_or_else(|| "nicht gemessen".into()));
                     match write_layout(&model, &out, &l, &note) {
                         Ok(()) => println!(
                             "\n  {} {}",
@@ -467,7 +467,7 @@ async fn main() {
                     }
                 }
             }
-            let html = match plan::page(&model, &layouts, plan::Herkunft::Vorschlag) {
+            let html = match plan::page(&model, &layouts, plan::Origin::Proposal) {
                 Ok(h) => h,
                 Err(e) => {
                     eprintln!("{}", red(&e.to_string()));
@@ -574,11 +574,11 @@ fn cmd_compose(model: &Model, argv: &[String]) -> i32 {
             if c.pareto { "★ " } else { "" },
             status,
             c.soft.len(),
-            c.engste_reserve_cm
+            c.tightest_reserve_cm
                 .map(|r| format!("{r} cm"))
                 .unwrap_or_else(|| "—".into()),
             c.bottleneck_cm,
-            c.wandkontakt_cm,
+            c.wall_contact_cm,
             c.free_m2
         );
         if !c.hard.is_empty() {
@@ -651,40 +651,40 @@ fn cmd_compose(model: &Model, argv: &[String]) -> i32 {
 }
 
 /// Was ein Verdikt aushaelt, in Worten.
-fn toleranz_report(r: &interior::toleranz::Robustheit) {
-    use interior::toleranz::Haltbarkeit;
+fn tolerance_report(r: &interior::tolerance::Robustness) {
+    use interior::tolerance::Holds;
     println!("\n{}", bold(&r.layout));
-    match &r.haelt {
-        Haltbarkeit::FaelltDurch => println!(
+    match &r.holds {
+        Holds::Fails => println!(
             "  {}",
             red("faellt schon bei den eingetragenen Massen durch — ein Messfehler ist hier nicht die Frage")
         ),
-        Haltbarkeit::NichtsGeraten => println!(
+        Holds::NothingGuessed => println!(
             "  {}",
             dim("kein Mass in diesem Layout ist als geschaetzt gefuehrt — es gibt nichts zu variieren")
         ),
-        Haltbarkeit::UeberHorizont { horizont_cm } => println!(
+        Holds::BeyondHorizon { horizon_cm } => println!(
             "  {}",
             green(&format!(
-                "haelt auch {horizont_cm} cm Messfehler noch aus (weiter wurde nicht gesucht)"
+                "haelt auch {horizon_cm} cm Messfehler noch aus (weiter wurde nicht gesucht)"
             ))
         ),
-        Haltbarkeit::Bis { cm } => {
+        Holds::Bis { cm } => {
             println!("  {}", green(&format!("haelt bis {cm} cm Messfehler")));
             println!(
                 "  {}",
                 yellow(&format!(
                     "bei {} cm reisst zuerst: {}",
                     cm + 1,
-                    r.kippt_an.join(", ")
+                    r.tips_at.join(", ")
                 ))
             );
         }
     }
-    if let Some(cm) = r.engste_reserve_cm {
+    if let Some(cm) = r.tightest_reserve_cm {
         println!("  {}", dim(&format!("knappste harte Messung: {cm} cm")));
     }
-    for u in &r.geraten {
+    for u in &r.guessed {
         println!(
             "  {}",
             dim(&format!(
@@ -694,7 +694,7 @@ fn toleranz_report(r: &interior::toleranz::Robustheit) {
             ))
         );
     }
-    for n in &r.nicht_variiert {
+    for n in &r.not_varied {
         println!(
             "  {}",
             dim(&format!(
@@ -706,40 +706,40 @@ fn toleranz_report(r: &interior::toleranz::Robustheit) {
 }
 
 /// Kommt es herein? Fuer jedes Stueck eines Layouts, oder fuer ein gedachtes.
-fn cmd_einbringung(model: &Model, argv: &[String]) -> i32 {
-    use interior::einbringung::{
-        durch_die_tuer, einbringung, weg_zum_platz, Einbringung, Tuerpass,
+fn cmd_delivery(model: &Model, argv: &[String]) -> i32 {
+    use interior::delivery::{
+        through_the_door, delivery, path_to_place, Delivery, DoorFit,
     };
 
-    let zeile = |e: &Einbringung| {
-        let tuer = match &e.tuer {
-            Tuerpass::Passt { luft_cm, tuer_cm } => {
-                green(&format!("durch die {tuer_cm} cm Tuer, {luft_cm} cm Luft"))
+    let line = |e: &Delivery| {
+        let door = match &e.door {
+            DoorFit::Fits { air_cm, door_cm } => {
+                green(&format!("durch die {door_cm} cm Tuer, {air_cm} cm Luft"))
             }
-            Tuerpass::PasstNicht { fehlen_cm, tuer_cm } => red(&format!(
-                "passt NICHT durch die {tuer_cm} cm Tuer — {fehlen_cm} cm zu breit"
+            DoorFit::DoesNotFit { missing_cm, door_cm } => red(&format!(
+                "passt NICHT durch die {door_cm} cm Tuer — {missing_cm} cm zu breit"
             )),
-            Tuerpass::ZerlegtGetragen { fehlen_cm, tuer_cm } => yellow(&format!(
-                "{fehlen_cm} cm breiter als die {tuer_cm} cm Tuer, kommt laut Zeile zerlegt herein"
+            DoorFit::CarriedApart { missing_cm, door_cm } => yellow(&format!(
+                "{missing_cm} cm breiter als die {door_cm} cm Tuer, kommt laut Zeile zerlegt herein"
             )),
-            Tuerpass::KeinEingang => yellow("keine Tuer als Eingang deklariert"),
+            DoorFit::NoEntrance => yellow("keine Tuer als Eingang deklariert"),
         };
-        let weg = if e.erreichbar {
+        let weg = if e.affordable {
             green(&format!(
                 "Weg frei ({} Schritte{})",
-                e.schritte.unwrap_or(0),
-                if e.dreht { ", mit Drehung" } else { "" }
+                e.steps.unwrap_or(0),
+                if e.rotates { ", mit Drehung" } else { "" }
             ))
         } else {
             red("kein Weg bis zum Platz")
         };
         println!(
-            "  {:26} {:>3}×{:<3}  {tuer}  {weg}",
+            "  {:26} {:>3}×{:<3}  {door}  {weg}",
             bold(&e.reference),
             e.b,
             e.t
         );
-        if let Some(g) = &e.grund {
+        if let Some(g) = &e.reason {
             println!("      {}", dim(g));
         }
     };
@@ -749,23 +749,23 @@ fn cmd_einbringung(model: &Model, argv: &[String]) -> i32 {
         flag(argv, "b").and_then(|v| v.parse::<i32>().ok()),
         flag(argv, "t").and_then(|v| v.parse::<i32>().ok()),
     ) {
-        let zerlegbar = argv.contains(&"--zerlegbar".to_string());
+        let disassembles = argv.contains(&"--zerlegbar".to_string());
         println!("\n{}  {b}×{t} cm\n", bold("einbringung"));
-        match durch_die_tuer(model, b, t, zerlegbar) {
-            Tuerpass::Passt { luft_cm, tuer_cm } => {
+        match through_the_door(model, b, t, disassembles) {
+            DoorFit::Fits { air_cm, door_cm } => {
                 println!(
                     "  {}",
                     green(&format!(
-                        "passt hochkant durch die {tuer_cm} cm Tuer, {luft_cm} cm Luft"
+                        "passt hochkant durch die {door_cm} cm Tuer, {air_cm} cm Luft"
                     ))
                 );
                 0
             }
-            Tuerpass::PasstNicht { fehlen_cm, tuer_cm } => {
+            DoorFit::DoesNotFit { missing_cm, door_cm } => {
                 println!(
                     "  {}",
                     red(&format!(
-                        "passt nicht: die schmale Seite ist {fehlen_cm} cm breiter als die {tuer_cm} cm Tuer"
+                        "fits nicht: die schmale Side ist {missing_cm} cm breiter als die {door_cm} cm Tuer"
                     ))
                 );
                 println!(
@@ -776,16 +776,16 @@ fn cmd_einbringung(model: &Model, argv: &[String]) -> i32 {
                 );
                 1
             }
-            Tuerpass::ZerlegtGetragen { fehlen_cm, tuer_cm } => {
+            DoorFit::CarriedApart { missing_cm, door_cm } => {
                 println!(
                     "  {}",
                     yellow(&format!(
-                        "{fehlen_cm} cm breiter als die {tuer_cm} cm Tuer — zerlegt erklaert, also herein"
+                        "{missing_cm} cm breiter als die {door_cm} cm Tuer — zerlegt erklaert, also herein"
                     ))
                 );
                 0
             }
-            Tuerpass::KeinEingang => {
+            DoorFit::NoEntrance => {
                 println!(
                     "  {}",
                     yellow("keine Oeffnung ist als Eingang deklariert (`eingang = true`)")
@@ -803,31 +803,31 @@ fn cmd_einbringung(model: &Model, argv: &[String]) -> i32 {
             }
         };
         println!("\n{}  \"{}\"\n", bold("einbringung"), layout.name);
-        let mut schlecht = 0;
+        let mut worse = 0;
         for it in &layout.items {
-            match einbringung(model, &layout, &it.reference) {
+            match delivery(model, &layout, &it.reference) {
                 Ok(e) => {
-                    if !e.erreichbar || matches!(e.tuer, Tuerpass::PasstNicht { .. }) {
+                    if !e.affordable || matches!(e.door, DoorFit::DoesNotFit { .. }) {
                         // `ZerlegtGetragen` zaehlt hier bewusst nicht: die Wohnung hat eine
                         // Antwort darauf, und ein Exit-Code, der bei einer beantworteten
                         // Frage rot wird, wird abgeschaltet.
-                        schlecht += 1;
+                        worse += 1;
                     }
-                    zeile(&e);
+                    line(&e);
                 }
                 Err(e) => eprintln!("  {} {e}", red(&it.reference)),
             }
         }
         // Verhindert, dass `weg_zum_platz` als tote Ausfuhr gilt, und ist die Zeile, die den
         // Unterschied zwischen "steht dort" und "kommt dorthin" ueberhaupt sichtbar macht.
-        let _ = weg_zum_platz;
+        let _ = path_to_place;
         println!();
-        i32::from(schlecht > 0)
+        i32::from(worse > 0)
     }
 }
 
 /// Wann im Jahr welches Stueck in der Sonne steht.
-fn cmd_sonne(model: &Model, argv: &[String]) -> i32 {
+fn cmd_sun(model: &Model, argv: &[String]) -> i32 {
     let Some(name) = argv.get(1) else { usage() };
     let layout = match model.load_layout(name) {
         Ok(l) => l,
@@ -836,7 +836,7 @@ fn cmd_sonne(model: &Model, argv: &[String]) -> i32 {
             return 2;
         }
     };
-    let b = match interior::sonne::bericht(model, &layout) {
+    let b = match interior::sun::bericht(model, &layout) {
         Ok(b) => b,
         Err(e) => {
             eprintln!("{}", red(&e.to_string()));
@@ -851,44 +851,44 @@ fn cmd_sonne(model: &Model, argv: &[String]) -> i32 {
     println!("\n{}  \"{}\"\n", bold("sonne"), b.layout);
     // Eine Zeile je Tag, eine Spalte je Stunde. Ein Jahr passt so auf vier Zeilen, und die
     // Form zeigt, was eine Liste verbirgt: die Sonne wandert.
-    for (tag, _) in interior::sonne::TAGE {
-        let stunden: Vec<&interior::sonne::Sonnenstunde> =
-            b.stunden.iter().filter(|s| s.tag == *tag).collect();
-        let kopf: String = stunden
+    for (tag, _) in interior::sun::DAYS {
+        let hours: Vec<&interior::sun::SunHour> =
+            b.hours.iter().filter(|s| s.tag == *tag).collect();
+        let header: String = hours
             .iter()
-            .map(|s| format!("{:>3}", s.stunde_lokal))
+            .map(|s| format!("{:>3}", s.hour_local))
             .collect();
-        let zeile: String = stunden
+        let line: String = hours
             .iter()
             .map(|s| {
-                if s.hoehe_grad <= 0.0 {
+                if s.altitude_deg <= 0.0 {
                     "  ·".to_string()
-                } else if s.getroffen.is_empty() {
+                } else if s.hit.is_empty() {
                     "  -".to_string()
                 } else {
-                    format!("{:>3}", s.getroffen.len())
+                    format!("{:>3}", s.hit.len())
                 }
             })
             .collect();
         // Erst auffuellen, dann faerben: die Escape-Sequenzen zaehlen sonst als Breite mit,
         // und die Spalten wandern je nach Laenge des Tagesnamens.
-        println!("  {}{}", bold(&format!("{tag:<16}")), dim(&kopf));
-        println!("  {:<16}{}", "", yellow(&zeile));
+        println!("  {}{}", bold(&format!("{tag:<16}")), dim(&header));
+        println!("  {:<16}{}", "", yellow(&line));
     }
     println!(
         "\n  {}",
         dim("· unter dem Horizont · - kein Stueck in der Sonne · Zahl = getroffene Stuecke")
     );
-    if !b.treffer_je_stueck.is_empty() {
+    if !b.hits_per_piece.is_empty() {
         println!("\n  {}", bold("Stunden in direkter Sonne"));
-        for (k, n) in &b.treffer_je_stueck {
+        for (k, n) in &b.hits_per_piece {
             println!(
                 "    {k:26} {n:>3} von {}",
-                interior::sonne::gepruefte_stunden()
+                interior::sun::checked_hours()
             );
         }
     }
-    for o in &b.ohne_glashoehen {
+    for o in &b.without_glass_heights {
         println!(
             "  {}",
             yellow(&format!(
@@ -901,8 +901,8 @@ fn cmd_sonne(model: &Model, argv: &[String]) -> i32 {
 }
 
 /// Wer wird noch am Namen gemessen — und was aendert sich, wenn er sich erklaert.
-fn cmd_deklaration(model: &Model, argv: &[String]) -> i32 {
-    let stand = match interior::deklaration::uebersicht(model) {
+fn cmd_declarations(model: &Model, argv: &[String]) -> i32 {
+    let stand = match interior::declarations::overview(model) {
         Ok(s) => s,
         Err(e) => {
             eprintln!("{}", red(&e.to_string()));
@@ -914,44 +914,44 @@ fn cmd_deklaration(model: &Model, argv: &[String]) -> i32 {
         return 0;
     }
 
-    let erklaert = stand.iter().filter(|s| s.erklaert).count();
+    let declared = stand.iter().filter(|s| s.declared).count();
     println!(
         "\n{}  {} von {} Eintraegen erklaeren sich selbst\n",
         bold("deklaration"),
-        erklaert,
+        declared,
         stand.len()
     );
     for s in &stand {
-        if s.erklaert {
+        if s.declared {
             println!("  {} {}", green("erklaert "), bold(&s.id));
             continue;
         }
-        let Some(v) = &s.vorschlag else {
+        let Some(v) = &s.proposal else {
             println!(
                 "  {} {}  {}",
                 dim("am Namen"),
                 bold(&s.id),
                 dim(&format!(
                     "als {} eingestuft, und daraus folgt keine Schwelle",
-                    s.geraten_als
+                    s.guessed_as
                 ))
             );
             continue;
         };
-        let f = s.folgen.as_ref();
-        let wirkung = match f {
-            Some(f) if f.geaendert.is_empty() => green("aendert kein Verdikt"),
-            Some(f) => yellow(&format!("aendert: {}", f.geaendert.join(", "))),
+        let f = s.consequences.as_ref();
+        let effect = match f {
+            Some(f) if f.changed.is_empty() => green("aendert kein Verdikt"),
+            Some(f) => yellow(&format!("aendert: {}", f.changed.join(", "))),
             None => dim("nicht gerechnet"),
         };
         println!(
-            "  {} {}  {}  {wirkung}",
+            "  {} {}  {}  {effect}",
             yellow("am Namen"),
             bold(&s.id),
-            dim(&format!("als {} eingestuft", s.geraten_als))
+            dim(&format!("als {} eingestuft", s.guessed_as))
         );
-        for zeile in v.toml.lines() {
-            println!("      {}", dim(zeile));
+        for line in v.toml.lines() {
+            println!("      {}", dim(line));
         }
         if !s.in_layouts.is_empty() {
             println!(
@@ -965,15 +965,15 @@ fn cmd_deklaration(model: &Model, argv: &[String]) -> i32 {
 }
 
 /// Welcher Bedarf zuerst, und wann er erreicht ist.
-fn cmd_kaufen(model: &Model, argv: &[String]) -> i32 {
+fn cmd_purchase_order(model: &Model, argv: &[String]) -> i32 {
     // Ohne Saldo laeuft die Reihenfolge trotzdem: sie ist eine Ordnung und keine Zeitachse,
     // und die Zeitachse ist der Zusatz. Ein `finance`, das hier nichts geschrieben hat, ist
     // kein Grund, die Frage nach dem Was-zuerst unbeantwortet zu lassen.
-    let saldo = interior::store::Store::open(&sjel_config::database_path())
+    let balance = interior::store::Store::open(&sjel_config::database_path())
         .ok()
         .and_then(|s| s.borrow_connection().ok())
-        .and_then(|conn| interior::budget::monatssaldo(&conn).ok().flatten());
-    let r = match interior::budget::kaufreihenfolge(model, saldo) {
+        .and_then(|conn| interior::budget::monthly_balance(&conn).ok().flatten());
+    let r = match interior::budget::kaufreihenfolge(model, balance) {
         Ok(r) => r,
         Err(e) => {
             eprintln!("{}", red(&e.to_string()));
@@ -994,17 +994,17 @@ fn cmd_kaufen(model: &Model, argv: &[String]) -> i32 {
         // „es gibt keinen Saldo" ist eine fehlende Messung, „der Saldo ist nicht positiv" ist
         // eine Antwort. Die erste Fassung schrieb beidem „ohne Saldo" hin, an einer Wohnung,
         // deren Median gemessen -269,98 € betraegt.
-        let wann = match (p.erreichbar_nach_monaten, &r.saldo) {
+        let when = match (p.affordable_after_months, &r.balance) {
             (Some(m), _) => green(&format!("nach {m:.1} Monaten")),
             (None, Some(_)) => dim("aus diesem Saldo nicht ansparbar"),
             (None, None) => dim("kein Monatssaldo gemessen"),
         };
         println!(
-            "  {:>2}. {:28} {:>9}  {:>10} kumuliert  {wann}",
+            "  {:>2}. {:28} {:>9}  {:>10} kumuliert  {when}",
             n + 1,
             bold(&p.label),
-            euro(p.preis_cent.unwrap_or(0)),
-            euro(p.kumuliert_cent)
+            euro(p.price_cents.unwrap_or(0)),
+            euro(p.cumulative_cents)
         );
         if !p.in_layouts.is_empty() {
             println!(
@@ -1013,43 +1013,43 @@ fn cmd_kaufen(model: &Model, argv: &[String]) -> i32 {
             );
         }
     }
-    if !r.ohne_preis.is_empty() {
+    if !r.unpriced.is_empty() {
         println!(
             "\n  {}",
             yellow(&format!(
                 "{} Bedarfe ohne Preis — sie stehen in keiner Reihenfolge",
-                r.ohne_preis.len()
+                r.unpriced.len()
             ))
         );
-        for p in &r.ohne_preis {
+        for p in &r.unpriced {
             println!("      {}", dim(&p.label));
         }
     }
-    if !r.unbekannte_prioritaeten.is_empty() {
+    if !r.unknown_priorities.is_empty() {
         println!(
             "\n  {}",
             yellow(&format!(
                 "unbekannte Prioritaet, hinten einsortiert und hier genannt: {}",
-                r.unbekannte_prioritaeten.join(", ")
+                r.unknown_priorities.join(", ")
             ))
         );
     }
-    match &r.saldo {
-        Some(s) if s.median_cent > 0 => println!(
+    match &r.balance {
+        Some(s) if s.median_cents > 0 => println!(
             "\n  {}",
             dim(&format!(
                 "Median des Monatssaldos {} ueber {} Monate ({} bis {})",
-                euro(s.median_cent),
-                s.monate,
-                s.von,
-                s.bis
+                euro(s.median_cents),
+                s.months,
+                s.from,
+                s.to
             ))
         ),
         Some(s) => println!(
             "\n  {}",
             yellow(&format!(
                 "Median des Monatssaldos {} — daraus laesst sich nichts ansparen, also gibt es keine Monatszahl",
-                euro(s.median_cent)
+                euro(s.median_cents)
             ))
         ),
         None => println!("\n  {}", dim("kein Monatssaldo verfuegbar (finance hat hier nichts geschrieben)")),
@@ -1091,36 +1091,36 @@ fn roomplan_show(model: &Model, argv: &[String]) -> i32 {
             return 2;
         }
     };
-    let d = roomplan::vergleiche(&scan, model);
+    let d = roomplan::compare(&scan, model);
 
     if argv.iter().any(|a| a == "--json") {
-        let inhalt = serde_json::json!({
+        let content = serde_json::json!({
             "capture": verzeichnis.display().to_string(),
             "sha256": scan.sha256,
             "byte_length": scan.byte_length,
             "mesh_assets": scan.mesh_assets,
             "room_groups": scan.room_groups,
             "capture_finished_at": scan.capture_finished_at,
-            "kategorien": scan.kategorien(),
-            "scan_wandhoehe_cm": d.scan_wandhoehe_cm,
-            "scan_wandstaerke_cm": scan.wandstaerke_m().map(|m| m * 100.0),
-            "modell_hoehe_cm": d.modell_hoehe_cm,
-            "scan_wandlaenge_cm": d.scan_wandlaenge_cm,
-            "scan_oeffnungen": d.scan_oeffnungen.iter().map(|(id, cat, b, h)| serde_json::json!({
+            "kategorien": scan.categories(),
+            "scan_wandhoehe_cm": d.scan_wall_height_cm,
+            "scan_wandstaerke_cm": scan.wall_thickness_m().map(|m| m * 100.0),
+            "modell_hoehe_cm": d.model_height_cm,
+            "scan_wandlaenge_cm": d.scan_wall_length_cm,
+            "scan_oeffnungen": d.scan_openings.iter().map(|(id, cat, b, h)| serde_json::json!({
                 "id": id, "category": cat, "breite_cm": b, "hoehe_cm": h
             })).collect::<Vec<_>>(),
-            "modell_oeffnungen": d.modell_oeffnungen.iter().map(|(id, b)| serde_json::json!({
+            "modell_oeffnungen": d.model_openings.iter().map(|(id, b)| serde_json::json!({
                 "id": id, "breite_cm": b
             })).collect::<Vec<_>>(),
-            "scan_grundflaeche_m2": d.scan_grundflaeche_m2,
-            "modell_innenflaeche_m2": d.modell_innenflaeche_m2,
-            "scan_objekte": d.scan_objekte.iter().map(|(n, m)| serde_json::json!({
+            "scan_grundflaeche_m2": d.scan_floor_area_m2,
+            "modell_innenflaeche_m2": d.model_inner_area_m2,
+            "scan_objekte": d.scan_objects.iter().map(|(n, m)| serde_json::json!({
                 "element": n, "cm": m
             })).collect::<Vec<_>>(),
         });
         println!(
             "{}",
-            serde_json::to_string_pretty(&inhalt).unwrap_or_default()
+            serde_json::to_string_pretty(&content).unwrap_or_default()
         );
         return 0;
     }
@@ -1147,10 +1147,10 @@ fn roomplan_show(model: &Model, argv: &[String]) -> i32 {
     );
 
     println!("\n  {}", bold("Wandhoehe"));
-    match d.scan_wandhoehe_cm {
+    match d.scan_wall_height_cm {
         Some(cm) => {
             println!("    {:.2} cm   {}", cm, dim("alle Waende einig"));
-            if d.modell_hoehe_cm == 0 {
+            if d.model_height_cm == 0 {
                 println!(
                     "    room.toml fuehrt 0 {} — {}",
                     dim("= nicht gemessen"),
@@ -1159,8 +1159,8 @@ fn roomplan_show(model: &Model, argv: &[String]) -> i32 {
             } else {
                 println!(
                     "    room.toml fuehrt {} cm   Abweichung {:+.2} cm",
-                    d.modell_hoehe_cm,
-                    cm - d.modell_hoehe_cm as f64
+                    d.model_height_cm,
+                    cm - d.model_height_cm as f64
                 );
             }
         }
@@ -1169,7 +1169,7 @@ fn roomplan_show(model: &Model, argv: &[String]) -> i32 {
             red("die Waende widersprechen sich, also keine Zahl")
         ),
     }
-    match scan.wandstaerke_m() {
+    match scan.wall_thickness_m() {
         Some(m) => println!(
             "  Wandstaerke {:.2} cm   {}",
             m * 100.0,
@@ -1182,8 +1182,8 @@ fn roomplan_show(model: &Model, argv: &[String]) -> i32 {
     }
     println!(
         "  Waende      {}, Gesamtlaenge {:.1} cm",
-        scan.flaechen().filter(|e| e.category == "Wall").count(),
-        d.scan_wandlaenge_cm
+        scan.surfaces().filter(|e| e.category == "Wall").count(),
+        d.scan_wall_length_cm
     );
     println!(
         "              {}",
@@ -1191,11 +1191,11 @@ fn roomplan_show(model: &Model, argv: &[String]) -> i32 {
     );
 
     println!("\n  {}", bold("Oeffnungen im Scan"));
-    for (id, cat, b, h) in &d.scan_oeffnungen {
+    for (id, cat, b, h) in &d.scan_openings {
         println!("    {:<9} {:<24} {:>7.1} x{:>6.1} cm", id, cat, b, h);
     }
     println!("\n  {}", bold("Oeffnungen in room.toml"));
-    for (id, b) in &d.modell_oeffnungen {
+    for (id, b) in &d.model_openings {
         println!("    {:<26} breit {:>5} cm", id, b);
     }
     println!(
@@ -1208,31 +1208,31 @@ fn roomplan_show(model: &Model, argv: &[String]) -> i32 {
     );
 
     println!("\n  {}", bold("Bodenflaeche"));
-    match d.scan_grundflaeche_m2 {
+    match d.scan_floor_area_m2 {
         Some(m2) => {
-            let delta = m2 - d.modell_innenflaeche_m2;
-            let prozent = if d.modell_innenflaeche_m2 > 0.0 {
-                delta / d.modell_innenflaeche_m2 * 100.0
+            let delta = m2 - d.model_inner_area_m2;
+            let percent = if d.model_inner_area_m2 > 0.0 {
+                delta / d.model_inner_area_m2 * 100.0
             } else {
                 0.0
             };
             println!(
                 "    Scan        {:.2} m²  {}",
                 m2,
-                dim("obere Seite der Bodenplatte, aus ihren Dreiecken")
+                dim("obere Side der Bodenplatte, aus ihren Dreiecken")
             );
             println!(
                 "    room.toml   {:.2} m²  {}",
-                d.modell_innenflaeche_m2,
+                d.model_inner_area_m2,
                 dim("Hauptraum + Bad, aus dem Polygon gerechnet")
             );
-            println!("    Abweichung  {:+.2} m²  ({:+.1} %)", delta, prozent);
+            println!("    Abweichung  {:+.2} m²  ({:+.1} %)", delta, percent);
         }
         None => println!("    {}", dim("der Scan traegt keine Bodenplatte")),
     }
 
     println!("\n  {}", bold("Moebel und Geraete im Scan"));
-    for (name, m) in &d.scan_objekte {
+    for (name, m) in &d.scan_objects {
         println!(
             "    {:<34} {:>6.1} x{:>6.1} x{:>6.1} cm",
             name, m[0], m[1], m[2]
@@ -1281,16 +1281,16 @@ fn placements_show(model: &Model, argv: &[String]) -> i32 {
     // Erst schreiben, dann lesen: die Ausgabe soll den Zustand NACH den Argumenten zeigen und
     // nicht den davor. Ein Bericht, der die Zeile noch nicht kennt, die gerade geschrieben wurde,
     // liest sich wie ein Schreibfehler.
-    let mut geschrieben = 0usize;
+    let mut written = 0usize;
     let mut i = 0usize;
     while i < argv.len() {
         if argv[i] == "--set" {
-            let Some(roh) = argv.get(i + 1) else {
+            let Some(raw) = argv.get(i + 1) else {
                 eprintln!("{}", red("--set braucht id=x,y[,rot]"));
                 return 2;
             };
-            let Some((id, x, y, rot)) = parse_platzierung(roh) else {
-                eprintln!("{}", red(&format!("--set {roh} ist nicht id=x,y[,rot]")));
+            let Some((id, x, y, rot)) = parse_placement(raw) else {
+                eprintln!("{}", red(&format!("--set {raw} ist nicht id=x,y[,rot]")));
                 return 2;
             };
             if !model.catalogue.contains_key(&id) {
@@ -1312,14 +1312,14 @@ fn placements_show(model: &Model, argv: &[String]) -> i32 {
                 eprintln!("{}", red(&format!("nicht geschrieben: {e}")));
                 return 2;
             }
-            geschrieben += 1;
+            written += 1;
             i += 2;
             continue;
         }
         i += 1;
     }
 
-    let platziert = match st.placements(&flat) {
+    let placed = match st.placements(&flat) {
         Ok(p) => p,
         Err(e) => {
             eprintln!("{}", red(&format!("Platzierungen laden nicht: {e}")));
@@ -1327,42 +1327,42 @@ fn placements_show(model: &Model, argv: &[String]) -> i32 {
         }
     };
     let nach_id: std::collections::BTreeMap<&str, &interior::store::Placement> =
-        platziert.iter().map(|p| (p.item_id.as_str(), p)).collect();
+        placed.iter().map(|p| (p.item_id.as_str(), p)).collect();
 
     // Nur Besitz: ein Wunsch hat keinen Platz, er hat eine Begruendung.
-    let mut besessen: Vec<(&String, &interior::store::Item)> = model
+    let mut owned: Vec<(&String, &interior::store::Item)> = model
         .catalogue
         .iter()
         .filter(|(id, _)| model.states.get(*id).copied() == Some(interior::store::State::Owned))
         .collect();
-    besessen.sort_by(|a, b| a.0.cmp(b.0));
+    owned.sort_by(|a, b| a.0.cmp(b.0));
 
-    let mut gesetzt: Vec<(&String, &interior::store::Placement)> = Vec::new();
-    let mut ohne: Vec<(&String, &interior::store::Item)> = Vec::new();
-    for (id, item) in &besessen {
+    let mut set: Vec<(&String, &interior::store::Placement)> = Vec::new();
+    let mut without: Vec<(&String, &interior::store::Item)> = Vec::new();
+    for (id, item) in &owned {
         match nach_id.get(id.as_str()) {
-            Some(p) => gesetzt.push((id, p)),
-            None => ohne.push((id, item)),
+            Some(p) => set.push((id, p)),
+            None => without.push((id, item)),
         }
     }
     // Eine Platzierung fuer ein Stueck, das nicht mehr im Besitz ist, ist keine Kleinigkeit —
     // sie zeigt auf etwas, das nicht mehr da ist, und keine Liste oben haette sie genannt.
-    let verwaist: Vec<&&str> = nach_id
+    let orphaned: Vec<&&str> = nach_id
         .iter()
-        .filter(|(id, _)| !besessen.iter().any(|(b, _)| b.as_str() == **id))
+        .filter(|(id, _)| !owned.iter().any(|(b, _)| b.as_str() == **id))
         .map(|(id, _)| id)
         .collect();
 
     if argv.iter().any(|a| a == "--json") {
         let wert = serde_json::json!({
             "flat": flat,
-            "geschrieben": geschrieben,
-            "besessen": besessen.len(),
-            "platziert": gesetzt.iter().map(|(id, p)| serde_json::json!({
+            "geschrieben": written,
+            "besessen": owned.len(),
+            "platziert": set.iter().map(|(id, p)| serde_json::json!({
                 "id": id, "x": p.x, "y": p.y, "rot": p.rot
             })).collect::<Vec<_>>(),
-            "ohne_platz": ohne.iter().map(|(id, _)| id.to_string()).collect::<Vec<_>>(),
-            "verwaist": verwaist,
+            "ohne_platz": without.iter().map(|(id, _)| id.to_string()).collect::<Vec<_>>(),
+            "verwaist": orphaned,
         });
         println!(
             "{}",
@@ -1374,11 +1374,11 @@ fn placements_show(model: &Model, argv: &[String]) -> i32 {
     println!("\n{}\n", bold("Ist-Zustand"));
     println!(
         "  besessen   {}   {}",
-        besessen.len(),
+        owned.len(),
         dim("Plaetze sind eine Zeile je Stueck; ein Layout ist ein Vorschlag und eine Datei")
     );
-    println!("  gesetzt    {}", bold(&gesetzt.len().to_string()));
-    for (id, p) in &gesetzt {
+    println!("  gesetzt    {}", bold(&set.len().to_string()));
+    for (id, p) in &set {
         println!(
             "    {:<28} x={:<5} y={:<5} rot={:<4} {}",
             id,
@@ -1390,27 +1390,27 @@ fn placements_show(model: &Model, argv: &[String]) -> i32 {
     }
     println!(
         "\n  {} {}",
-        bold(&format!("ohne Platz {}", ohne.len())),
+        bold(&format!("ohne Platz {}", without.len())),
         dim("(davon weiss der Plan noch nichts)")
     );
-    for (id, item) in &ohne {
+    for (id, item) in &without {
         println!("    {:<28} {}", id, dim(&item.label));
     }
-    if !verwaist.is_empty() {
+    if !orphaned.is_empty() {
         println!(
             "\n  {}",
             yellow(&format!(
                 "Platzierungen ohne Stueck im Besitz: {} — sie zeigen auf etwas, das nicht mehr da ist",
-                verwaist.iter().map(|s| **s).collect::<Vec<_>>().join(", ")
+                orphaned.iter().map(|s| **s).collect::<Vec<_>>().join(", ")
             ))
         );
     }
 
-    if let Some(datei) = flag(argv, "plan") {
+    if let Some(file) = flag(argv, "plan") {
         let layout = interior::model::Layout {
             name: "ist-zustand".to_string(),
             id: "ist-zustand".to_string(),
-            items: gesetzt
+            items: set
                 .iter()
                 .map(|(id, p)| interior::model::PlacedItem {
                     reference: (*id).clone(),
@@ -1425,12 +1425,12 @@ fn placements_show(model: &Model, argv: &[String]) -> i32 {
         match plan::page(
             model,
             std::slice::from_ref(&layout),
-            plan::Herkunft::IstZustand,
+            plan::Origin::AsIs,
         ) {
-            Ok(html) => match std::fs::write(&datei, &html) {
-                Ok(()) => println!("\n  {} {}", green("Ist-Plan geschrieben:"), datei),
+            Ok(html) => match std::fs::write(&file, &html) {
+                Ok(()) => println!("\n  {} {}", green("Ist-Plan geschrieben:"), file),
                 Err(e) => {
-                    eprintln!("{}", red(&format!("{datei}: {e}")));
+                    eprintln!("{}", red(&format!("{file}: {e}")));
                     return 1;
                 }
             },
@@ -1445,18 +1445,18 @@ fn placements_show(model: &Model, argv: &[String]) -> i32 {
 }
 
 /// `id=x,y` oder `id=x,y,rot`. Die Kennung darf kein `=` enthalten, weil `=` das Feld trennt.
-fn parse_platzierung(roh: &str) -> Option<(String, i32, i32, i32)> {
-    let (id, rest) = roh.split_once('=')?;
+fn parse_placement(raw: &str) -> Option<(String, i32, i32, i32)> {
+    let (id, rest) = raw.split_once('=')?;
     if id.is_empty() {
         return None;
     }
-    let teile: Vec<&str> = rest.split(',').map(str::trim).collect();
-    if teile.len() < 2 || teile.len() > 3 {
+    let parts: Vec<&str> = rest.split(',').map(str::trim).collect();
+    if parts.len() < 2 || parts.len() > 3 {
         return None;
     }
-    let x = teile[0].parse::<i32>().ok()?;
-    let y = teile[1].parse::<i32>().ok()?;
-    let rot = match teile.get(2) {
+    let x = parts[0].parse::<i32>().ok()?;
+    let y = parts[1].parse::<i32>().ok()?;
+    let rot = match parts.get(2) {
         Some(r) => r.parse::<i32>().ok()?,
         None => 0,
     };

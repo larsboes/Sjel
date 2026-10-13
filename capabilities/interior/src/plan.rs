@@ -22,13 +22,13 @@ const GRADE: [i32; 4] = [19, 16, 14, 12];
 /// gemessen — das SVG traegt keine Schrift mit sich, also kann hier niemand die wirkliche
 /// Breite kennen. Eher zu gross gewaehlt: ein zu klein geschaetzter Text laeuft ueber seine
 /// Kante, ein zu gross geschaetzter kostet nur einen Schriftgrad.
-const GLYPHE: f64 = 0.58;
+const GLYPH: f64 = 0.58;
 
 /// Luft zwischen Text und Moebelkante.
-const LUFT: i32 = 4;
+const AIR: i32 = 4;
 
 /// Abstand zwischen Moebelkante und einer aussen gesetzten Beschriftung.
-const ABSTAND: i32 = 8;
+const GAP: i32 = 8;
 
 fn esc(s: &str) -> String {
     s.replace('&', "&amp;")
@@ -45,7 +45,7 @@ fn esc(s: &str) -> String {
 ///
 /// Die Liste ist eine Abkuerzung und keine Bedingung: ein Bezeichner, der hier nicht vorkommt,
 /// bekommt sein eigenes Wort gross geschrieben und bleibt lesbar.
-const KOPFWOERTER: &[(&str, &str)] = &[
+const HEADER_WORDS: &[(&str, &str)] = &[
     ("saugroboter", "Sauger"),
     ("beistelltisch", "Beistelltisch"),
     ("couchtisch", "Couchtisch"),
@@ -109,41 +109,41 @@ fn gross(s: &str) -> String {
 /// zuerst stand im Plan bis 2026-08-31 ein zweites "Schreibtisch" auf dem Buerostuhl — zwei
 /// Kaesten, ein Wort, und eines davon gelogen. Die geerbte Art bleibt richtig; nur das WORT
 /// kommt jetzt vom Stueck selbst.
-pub fn short_label(reference: &str, deklariert: Option<Kind>) -> String {
-    let mut teile: Vec<&str> = reference.split('_').filter(|s| !s.is_empty()).collect();
-    let nummer = match teile.last() {
-        Some(l) if teile.len() > 1 && l.chars().all(|c| c.is_ascii_digit()) => teile.pop(),
+pub fn short_label(reference: &str, declared: Option<Kind>) -> String {
+    let mut parts: Vec<&str> = reference.split('_').filter(|s| !s.is_empty()).collect();
+    let number = match parts.last() {
+        Some(l) if parts.len() > 1 && l.chars().all(|c| c.is_ascii_digit()) => parts.pop(),
         _ => None,
     };
-    let wort = teile
+    let wort = parts
         .first()
         .copied()
         .unwrap_or(reference)
         .to_ascii_lowercase();
-    let kopf = KOPFWOERTER
+    let header = HEADER_WORDS
         .iter()
-        .filter(|(endung, _)| wort.ends_with(endung))
-        .max_by_key(|(endung, _)| endung.len())
-        .map(|(_, kurz)| (*kurz).to_string())
-        .or_else(|| deklariert.and_then(art_wort).map(str::to_string))
+        .filter(|(ending, _)| wort.ends_with(ending))
+        .max_by_key(|(ending, _)| ending.len())
+        .map(|(_, short)| (*short).to_string())
+        .or_else(|| declared.and_then(art_wort).map(str::to_string))
         .unwrap_or_else(|| gross(&wort));
-    match nummer {
-        Some(n) => format!("{kopf} {n}"),
-        None => kopf,
+    match number {
+        Some(n) => format!("{header} {n}"),
+        None => header,
     }
 }
 
 /// Wie breit ein Text auf dem Blatt wird. Siehe `GLYPHE`: eine Schaetzung, absichtlich zu gross.
-fn breite(zeichen: usize, grad: i32) -> i32 {
-    (zeichen as f64 * GLYPHE * grad as f64).ceil() as i32
+fn width(zeichen: usize, grad: i32) -> i32 {
+    (zeichen as f64 * GLYPH * grad as f64).ceil() as i32
 }
 
 /// Die Flaeche eines mittig gesetzten Textes. Fuer die Beschriftungen des RAUMS — Bad, Einbau,
 /// Terrasse —, damit die Moebelbeschriftungen ihnen ausweichen statt sie zuzudecken. `sperrung`
 /// ist das `letter-spacing`, das diese drei tragen und das die Schaetzung sonst unterschlaegt.
-fn mittig(cx: i32, cy: i32, zeichen: usize, grad: i32, sperrung: i32, quer: bool) -> Rect {
-    let lang = breite(zeichen, grad) + zeichen as i32 * sperrung;
-    let (w, d) = if quer { (grad, lang) } else { (lang, grad) };
+fn centred(cx: i32, cy: i32, zeichen: usize, grad: i32, blocking: i32, across: bool) -> Rect {
+    let long = width(zeichen, grad) + zeichen as i32 * blocking;
+    let (w, d) = if across { (grad, long) } else { (long, grad) };
     Rect {
         x: cx - w / 2,
         y: cy - d / 2,
@@ -154,23 +154,23 @@ fn mittig(cx: i32, cy: i32, zeichen: usize, grad: i32, sperrung: i32, quer: bool
 
 /// Eine gesetzte Beschriftung: wo sie steht, wie gross, wie herum, und welche Flaeche sie damit
 /// belegt. Die Flaeche ist der Punkt — sie ist es, gegen die die naechste Beschriftung prueft.
-struct Schrift {
+struct PlacedText {
     x: i32,
     y: i32,
     grad: i32,
     anker: &'static str,
-    quer: bool,
-    fuehrung: Option<[i32; 4]>,
-    flaeche: Rect,
+    across: bool,
+    leader: Option<[i32; 4]>,
+    area: Rect,
 }
 
-fn frei(f: &Rect, hindernisse: &[Rect], gesetzt: &[Rect], blatt: &Rect) -> bool {
-    f.x >= blatt.x
-        && f.y >= blatt.y
-        && f.right() <= blatt.right()
-        && f.bottom() <= blatt.bottom()
-        && !hindernisse.iter().any(|h| h.overlaps(f))
-        && !gesetzt.iter().any(|g| g.overlaps(f))
+fn frei(f: &Rect, obstacles: &[Rect], set: &[Rect], sheet: &Rect) -> bool {
+    f.x >= sheet.x
+        && f.y >= sheet.y
+        && f.right() <= sheet.right()
+        && f.bottom() <= sheet.bottom()
+        && !obstacles.iter().any(|h| h.overlaps(f))
+        && !set.iter().any(|g| g.overlaps(f))
 }
 
 /// Wohin die Beschriftung eines Moebels gehoert.
@@ -192,26 +192,26 @@ fn frei(f: &Rect, hindernisse: &[Rect], gesetzt: &[Rect], blatt: &Rect) -> bool 
 /// seinem Stueck wird in den Kern geschoben statt mittig ueber die Aussenwand zu rutschen —
 /// sonst steht die Beschriftung eines Stuecks an der Fensterwand halb auf der Terrasse, also auf
 /// einer geschaetzten Flaeche.
-fn setze(
+fn set_value(
     r: &Rect,
     zeichen: usize,
-    hindernisse: &[Rect],
-    gesetzt: &[Rect],
-    blatt: &Rect,
+    obstacles: &[Rect],
+    set: &[Rect],
+    sheet: &Rect,
     kern: &Rect,
-) -> Schrift {
+) -> PlacedText {
     let (cx, cy) = (r.x + r.w / 2, r.y + r.d / 2);
     for grad in GRADE {
-        let tw = breite(zeichen, grad);
-        if tw + 2 * LUFT <= r.w && grad + 2 * LUFT <= r.d {
-            return Schrift {
+        let tw = width(zeichen, grad);
+        if tw + 2 * AIR <= r.w && grad + 2 * AIR <= r.d {
+            return PlacedText {
                 x: cx,
                 y: cy,
                 grad,
                 anker: "middle",
-                quer: false,
-                fuehrung: None,
-                flaeche: Rect {
+                across: false,
+                leader: None,
+                area: Rect {
                     x: cx - tw / 2,
                     y: cy - grad / 2,
                     w: tw,
@@ -219,15 +219,15 @@ fn setze(
                 },
             };
         }
-        if tw + 2 * LUFT <= r.d && grad + 2 * LUFT <= r.w {
-            return Schrift {
+        if tw + 2 * AIR <= r.d && grad + 2 * AIR <= r.w {
+            return PlacedText {
                 x: cx,
                 y: cy,
                 grad,
                 anker: "middle",
-                quer: true,
-                fuehrung: None,
-                flaeche: Rect {
+                across: true,
+                leader: None,
+                area: Rect {
                     x: cx - grad / 2,
                     y: cy - tw / 2,
                     w: grad,
@@ -237,68 +237,68 @@ fn setze(
         }
     }
 
-    let aussen = |grad: i32| -> [Schrift; 4] {
-        let tw = breite(zeichen, grad);
-        let halb = grad / 2;
+    let outside = |grad: i32| -> [PlacedText; 4] {
+        let tw = width(zeichen, grad);
+        let half = grad / 2;
         // Waagerecht in den Kern geschoben, solange der Text ueberhaupt hineinpasst.
-        let laengs = if tw <= kern.w {
+        let lengthwise = if tw <= kern.w {
             (cx - tw / 2).clamp(kern.x, kern.right() - tw)
         } else {
             cx - tw / 2
         };
         [
-            Schrift {
-                x: r.right() + ABSTAND,
+            PlacedText {
+                x: r.right() + GAP,
                 y: cy,
                 grad,
                 anker: "start",
-                quer: false,
-                fuehrung: Some([r.right(), cy, r.right() + ABSTAND - 2, cy]),
-                flaeche: Rect {
-                    x: r.right() + ABSTAND,
-                    y: cy - halb,
+                across: false,
+                leader: Some([r.right(), cy, r.right() + GAP - 2, cy]),
+                area: Rect {
+                    x: r.right() + GAP,
+                    y: cy - half,
                     w: tw,
                     d: grad,
                 },
             },
-            Schrift {
-                x: r.x - ABSTAND,
+            PlacedText {
+                x: r.x - GAP,
                 y: cy,
                 grad,
                 anker: "end",
-                quer: false,
-                fuehrung: Some([r.x, cy, r.x - ABSTAND + 2, cy]),
-                flaeche: Rect {
-                    x: r.x - ABSTAND - tw,
-                    y: cy - halb,
+                across: false,
+                leader: Some([r.x, cy, r.x - GAP + 2, cy]),
+                area: Rect {
+                    x: r.x - GAP - tw,
+                    y: cy - half,
                     w: tw,
                     d: grad,
                 },
             },
-            Schrift {
-                x: laengs + tw / 2,
-                y: r.bottom() + ABSTAND + halb,
+            PlacedText {
+                x: lengthwise + tw / 2,
+                y: r.bottom() + GAP + half,
                 grad,
                 anker: "middle",
-                quer: false,
-                fuehrung: Some([cx, r.bottom(), cx, r.bottom() + ABSTAND - 2]),
-                flaeche: Rect {
-                    x: laengs,
-                    y: r.bottom() + ABSTAND,
+                across: false,
+                leader: Some([cx, r.bottom(), cx, r.bottom() + GAP - 2]),
+                area: Rect {
+                    x: lengthwise,
+                    y: r.bottom() + GAP,
                     w: tw,
                     d: grad,
                 },
             },
-            Schrift {
-                x: laengs + tw / 2,
-                y: r.y - ABSTAND - halb,
+            PlacedText {
+                x: lengthwise + tw / 2,
+                y: r.y - GAP - half,
                 grad,
                 anker: "middle",
-                quer: false,
-                fuehrung: Some([cx, r.y, cx, r.y - ABSTAND + 2]),
-                flaeche: Rect {
-                    x: laengs,
-                    y: r.y - ABSTAND - grad,
+                across: false,
+                leader: Some([cx, r.y, cx, r.y - GAP + 2]),
+                area: Rect {
+                    x: lengthwise,
+                    y: r.y - GAP - grad,
                     w: tw,
                     d: grad,
                 },
@@ -307,19 +307,19 @@ fn setze(
     };
 
     for grad in GRADE {
-        for kandidat in aussen(grad) {
-            if frei(&kandidat.flaeche, hindernisse, gesetzt, blatt) {
-                return kandidat;
+        for candidate in outside(grad) {
+            if frei(&candidate.area, obstacles, set, sheet) {
+                return candidate;
             }
         }
     }
-    let [osten, ..] = aussen(GRADE[GRADE.len() - 1]);
-    osten
+    let [east, ..] = outside(GRADE[GRADE.len() - 1]);
+    east
 }
 
 pub fn svg(model: &Model, layout: &Layout) -> Result<String, ModelError> {
     let room = &model.room;
-    let poly = &room.hauptraum.polygon;
+    let poly = &room.main_room.polygon;
     // Nur GEMESSENES spannt das Blatt auf.
     //
     // Bis 2026-08-31 lief auch die Terrasse in die Ausdehnung ein. Sie ist geschaetzt — das
@@ -362,7 +362,7 @@ pub fn svg(model: &Model, layout: &Layout) -> Result<String, ModelError> {
     ));
 
     // Jeder Text, der schon auf dem Blatt steht. Die Moebelbeschriftungen weichen ihm aus.
-    let mut gesetzt: Vec<Rect> = Vec::new();
+    let mut set: Vec<Rect> = Vec::new();
 
     // Terrasse zuerst, damit die Aussenwand darueber liegt. Schraffiert, an den Laengsseiten
     // gestrichelt, nach aussen offen und mit "ca." beschriftet — vier Signaturen fuer dieselbe
@@ -371,14 +371,14 @@ pub fn svg(model: &Model, layout: &Layout) -> Result<String, ModelError> {
     //
     // Das Band selbst sperrt nichts: es ist Schraffur, und ein Name darueber bleibt lesbar. Sein
     // TEXT sperrt, wie jeder andere auch.
-    if let Some(t) = &room.terrasse {
+    if let Some(t) = &room.terrace {
         let (x0, x1) = (t.x[0].max(min_x), t.x[1].min(max_x));
         let (y0, y1) = (t.y[0].max(min_y), t.y[1].min(max_y));
         if x1 > x0 && y1 > y0 {
             let (w, h) = (x1 - x0, y1 - y0);
             // Schraffur statt Flaeche, und je Strich an das Band geschnitten. Ein `<pattern>`
-            // waere kuerzer und traegt eine Kennung: mehrere Plaene auf einer Seite — die
-            // CLI-Seite zeigt alle — teilten sie sich dann.
+            // waere kuerzer und traegt eine Kennung: mehrere Plaene auf einer Side — die
+            // CLI-Side zeigt alle — teilten sie sich dann.
             let mut s = x0 - h;
             while s < x1 {
                 let lo = (x0 - s).max(0);
@@ -390,14 +390,14 @@ pub fn svg(model: &Model, layout: &Layout) -> Result<String, ModelError> {
                 }
                 s += 30;
             }
-            for kante in [y0, y1] {
+            for edge in [y0, y1] {
                 p.push_str(&format!(
-                    r##"<line x1="{x0}" y1="{kante}" x2="{x1}" y2="{kante}" stroke="#9A968E" stroke-width="3" stroke-dasharray="18 12"/>"##
+                    r##"<line x1="{x0}" y1="{edge}" x2="{x1}" y2="{edge}" stroke="#9A968E" stroke-width="3" stroke-dasharray="18 12"/>"##
                 ));
             }
             let (cx, cy) = (x0 + w / 2, y0 + h / 2);
             let name = format!("TERRASSE{}", if t.geschaetzt { " (ca.)" } else { "" });
-            gesetzt.push(mittig(cx, cy, name.chars().count(), 20, 1, true));
+            set.push(centred(cx, cy, name.chars().count(), 20, 1, true));
             p.push_str(&format!(
                 r##"<text x="{cx}" y="{cy}" transform="rotate(-90 {cx} {cy})" font-family="Helvetica,Arial" font-size="20" fill="#5B5F63" text-anchor="middle" dominant-baseline="central" letter-spacing="1">{name}</text>"##
             ));
@@ -419,13 +419,13 @@ pub fn svg(model: &Model, layout: &Layout) -> Result<String, ModelError> {
             r##"<rect x="{}" y="{}" width="{w}" height="{h}" fill="#E2DDD2" stroke="#9A968E" stroke-width="3"/>"##,
             b.x[0], b.y[0]));
         let (cx, cy) = (b.x[0] + w / 2, b.y[0] + h / 2);
-        gesetzt.push(mittig(cx, cy, 3, 20, 1, false));
+        set.push(centred(cx, cy, 3, 20, 1, false));
         p.push_str(&format!(
             r##"<text x="{cx}" y="{cy}" font-family="Helvetica,Arial" font-size="20" fill="#5B5F63" text-anchor="middle" dominant-baseline="central" letter-spacing="1">BAD</text>"##
         ));
     }
 
-    for f in &room.fix_moebel {
+    for f in &room.fixed_furniture {
         let (w, h) = (f.x[1] - f.x[0], f.y[1] - f.y[0]);
         p.push_str(&format!(
             r##"<rect x="{}" y="{}" width="{w}" height="{h}" fill="none" stroke="#6E655A" stroke-width="3" stroke-dasharray="12 8"/>"##,
@@ -435,7 +435,7 @@ pub fn svg(model: &Model, layout: &Layout) -> Result<String, ModelError> {
         // die Beschriftung damit AUS der Wohnung heraus.
         let name = f.id.to_uppercase();
         let (cx, cy) = (f.x[0] + w / 2, f.y[0] + h / 2);
-        gesetzt.push(mittig(cx, cy, name.chars().count(), 20, 1, false));
+        set.push(centred(cx, cy, name.chars().count(), 20, 1, false));
         p.push_str(&format!(
             r##"<text x="{cx}" y="{cy}" font-family="Helvetica,Arial" font-size="20" fill="#5B5F63" text-anchor="middle" dominant-baseline="central" letter-spacing="1">{}</text>"##,
             esc(&name)));
@@ -444,11 +444,11 @@ pub fn svg(model: &Model, layout: &Layout) -> Result<String, ModelError> {
     // Erst alle Grundflaechen, dann die Beschriftungen. Eine Beschriftung, die nach aussen
     // muss, braucht die Stuecke, die NACH ihr kommen — in einem Durchgang wuesste sie nur von
     // denen davor und legte sich auf das naechste Moebel.
-    let mut stuecke: Vec<(&PlacedItem, Rect, String)> = Vec::with_capacity(layout.items.len());
+    let mut pieces: Vec<(&PlacedItem, Rect, String)> = Vec::with_capacity(layout.items.len());
     for it in &layout.items {
         let (w, d, _) = footprint(it, &model.catalogue)?;
         let label = short_label(&it.reference, it.kind.as_ref().map(|_| kind_of(it)));
-        stuecke.push((
+        pieces.push((
             it,
             Rect {
                 x: it.x,
@@ -459,24 +459,24 @@ pub fn svg(model: &Model, layout: &Layout) -> Result<String, ModelError> {
             label,
         ));
     }
-    let mut hindernisse: Vec<Rect> = stuecke.iter().map(|(_, r, _)| *r).collect();
+    let mut obstacles: Vec<Rect> = pieces.iter().map(|(_, r, _)| *r).collect();
     if let Some(b) = &room.bad {
-        hindernisse.push(Rect {
+        obstacles.push(Rect {
             x: b.x[0],
             y: b.y[0],
             w: b.x[1] - b.x[0],
             d: b.y[1] - b.y[0],
         });
     }
-    for f in &room.fix_moebel {
-        hindernisse.push(Rect {
+    for f in &room.fixed_furniture {
+        obstacles.push(Rect {
             x: f.x[0],
             y: f.y[0],
             w: f.x[1] - f.x[0],
             d: f.y[1] - f.y[0],
         });
     }
-    let blatt = Rect {
+    let sheet = Rect {
         x: min_x,
         y: min_y,
         w: vw,
@@ -489,7 +489,7 @@ pub fn svg(model: &Model, layout: &Layout) -> Result<String, ModelError> {
         d: vh - 2 * PAD,
     };
 
-    for (it, r, label) in &stuecke {
+    for (it, r, label) in &pieces {
         let (w, d) = (r.w, r.d);
         // Rechteck und Beschriftung in EINER Gruppe, mit dem Ref als Griff.
         //
@@ -504,23 +504,23 @@ pub fn svg(model: &Model, layout: &Layout) -> Result<String, ModelError> {
         p.push_str(&format!(
             r##"<rect x="{}" y="{}" width="{w}" height="{d}" fill="#DAD2C4" stroke="#6E655A" stroke-width="3"/>"##,
             r.x, r.y));
-        let s = setze(
+        let s = set_value(
             r,
             label.chars().count(),
-            &hindernisse,
-            &gesetzt,
-            &blatt,
+            &obstacles,
+            &set,
+            &sheet,
             &kern,
         );
-        gesetzt.push(s.flaeche);
-        if let Some([x1, y1, x2, y2]) = s.fuehrung {
+        set.push(s.area);
+        if let Some([x1, y1, x2, y2]) = s.leader {
             p.push_str(&format!(
                 r##"<line x1="{x1}" y1="{y1}" x2="{x2}" y2="{y2}" stroke="#6E655A" stroke-width="2"/>"##
             ));
         }
         // Nur `rotate(-90)`, nie `+90`: quer heisst von unten nach oben lesbar. Ein Text, der
         // mit der zweiten Drehrichtung gesetzt wird, steht auf dem Kopf.
-        let dreh = if s.quer {
+        let dreh = if s.across {
             format!(r##" transform="rotate(-90 {} {})""##, s.x, s.y)
         } else {
             String::new()
@@ -545,7 +545,7 @@ pub fn svg(model: &Model, layout: &Layout) -> Result<String, ModelError> {
     p.push_str(&format!(
         r##"<polygon points="{pts}" fill="none" stroke="#16181A" stroke-width="5" stroke-linejoin="miter"/>"##
     ));
-    for o in &room.oeffnungen {
+    for o in &room.openings {
         let Some((a, b)) = room.opening_span(o) else {
             continue;
         };
@@ -573,14 +573,14 @@ pub fn svg(model: &Model, layout: &Layout) -> Result<String, ModelError> {
 /// Ein Blatt, das seine eigene Herkunft falsch nennt, ist genau die Sorte Aussage, gegen die der
 /// Rest dieser Datei gebaut ist: es sieht aus wie ein gerechnetes Ergebnis und ist eine Eingabe.
 #[derive(Debug, Clone, Copy, PartialEq)]
-pub enum Herkunft {
+pub enum Origin {
     /// Ein Vorschlag: die Positionen stehen in `layouts/*.toml`, alle Zahlen aus dem Modell.
-    Vorschlag,
+    Proposal,
     /// Der Zustand: die Positionen stehen in `interior_placement` und sind gesetzt worden.
-    IstZustand,
+    AsIs,
 }
 
-pub fn page(model: &Model, layouts: &[Layout], herkunft: Herkunft) -> Result<String, ModelError> {
+pub fn page(model: &Model, layouts: &[Layout], origin: Origin) -> Result<String, ModelError> {
     // Der Titel kommt aus dem Modell. Hier stand der Name dieser einen Wohnung im Quelltext.
     let mut h = String::from(
         r##"<!doctype html><meta charset="utf-8"><title>Wohnung — Plaene</title>
@@ -604,9 +604,9 @@ ul{margin:8px 0;padding-left:20px}
         .replace("{TITEL}", &esc(&model.room.flat.name))
         .replace(
             "{HERKUNFT}",
-            match herkunft {
-                Herkunft::Vorschlag => "nichts auf dieser Seite ist von Hand gesetzt.",
-                Herkunft::IstZustand => "die Positionen des Ist-Zustands hat ein Mensch gesetzt, \
+            match origin {
+                Origin::Proposal => "nichts onto dieser Side ist von Hand set.",
+                Origin::AsIs => "die Positionen des Ist-Zustands hat ein Mensch gesetzt, \
                      das Modell liefert dazu nur den Raum und die Masse der Stuecke.",
             },
         );
@@ -685,8 +685,8 @@ mod tests {
     /// Die Faelle, die am 2026-08-31 im Bild standen, und was statt ihrer dort stehen soll.
     /// Jeder faellt aus einer der drei Regeln von `short_label` und nicht aus einer Tabelle.
     #[test]
-    fn ein_kurzer_name_kommt_aus_dem_bezeichner() {
-        for (bezeichner, erwartet) in [
+    fn a_short_name_comes_from_the_identifier() {
+        for (identifier, expected) in [
             // Beiwerk faellt weg, eine abschliessende Zahl bleibt.
             ("pflanze_boden_1", "Pflanze 1"),
             ("bett_bestand", "Bett"),
@@ -704,12 +704,12 @@ mod tests {
             ("kallax_regale", "Kallax"),
             ("luftreiniger", "Luftreiniger"),
         ] {
-            assert_eq!(short_label(bezeichner, None), erwartet, "{bezeichner}");
+            assert_eq!(short_label(identifier, None), expected, "{identifier}");
         }
     }
 
     #[test]
-    fn eine_deklarierte_art_traegt_einen_unbekannten_namen() {
+    fn a_declared_kind_carries_an_unknown_name() {
         assert_eq!(short_label("pinntorp", Some(Kind::Table)), "Tisch");
         // `other` ist die Aussage "keine der bekannten Arten" und darf kein Wort stellen.
         assert_eq!(short_label("pinntorp", Some(Kind::Other)), "Pinntorp");
@@ -717,7 +717,7 @@ mod tests {
         assert_eq!(short_label("buerostuhl", Some(Kind::Desk)), "Stuhl");
     }
 
-    fn blatt() -> Rect {
+    fn sheet() -> Rect {
         Rect {
             x: -100,
             y: -100,
@@ -727,77 +727,77 @@ mod tests {
     }
 
     #[test]
-    fn eine_beschriftung_die_hineinpasst_bleibt_drin() {
+    fn a_label_that_fits_stays_inside() {
         let r = Rect {
             x: 0,
             y: 0,
             w: 140,
             d: 80,
         };
-        let s = setze(&r, "Bett".chars().count(), &[r], &[], &blatt(), &blatt());
+        let s = set_value(&r, "Bett".chars().count(), &[r], &[], &sheet(), &sheet());
         assert_eq!(
             s.grad, GRADE[0],
             "ein weites Rechteck traegt den grossen Grad"
         );
-        assert!(!s.quer);
-        assert!(s.fuehrung.is_none(), "innen braucht keine Fuehrungslinie");
+        assert!(!s.across);
+        assert!(s.leader.is_none(), "innen braucht keine Fuehrungslinie");
         assert_eq!((s.x, s.y), (70, 40));
     }
 
     /// Ein Rechteck, das tiefer als breit ist, traegt seinen Text stehend statt ihn zu
     /// verlieren — und nimmt dafuer einen kleineren Grad in Kauf.
     #[test]
-    fn ein_schmales_tiefes_rechteck_beschriftet_quer() {
+    fn a_narrow_deep_rect_labels_across() {
         let r = Rect {
             x: 0,
             y: 0,
             w: 45,
             d: 50,
         };
-        let s = setze(&r, "Stuhl".chars().count(), &[r], &[], &blatt(), &blatt());
-        assert!(s.quer);
+        let s = set_value(&r, "Stuhl".chars().count(), &[r], &[], &sheet(), &sheet());
+        assert!(s.across);
         assert!(s.grad < GRADE[0]);
-        assert!(breite(5, s.grad) + 2 * LUFT <= r.d);
-        assert!(s.fuehrung.is_none());
+        assert!(width(5, s.grad) + 2 * AIR <= r.d);
+        assert!(s.leader.is_none());
     }
 
     /// Zu klein fuer jeden Grad: der Name geht nach draussen, haengt an einer Fuehrungslinie und
     /// legt sich auf kein Moebel.
     #[test]
-    fn ein_zu_kleines_stueck_beschriftet_nach_aussen_ohne_etwas_zu_treffen() {
+    fn a_too_small_piece_labels_outside_without_hitting_anything() {
         let r = Rect {
             x: 200,
             y: 200,
             w: 35,
             d: 35,
         };
-        let nachbar = Rect {
+        let neighbour = Rect {
             x: 243,
             y: 180,
             w: 90,
             d: 90,
         };
-        let s = setze(
+        let s = set_value(
             &r,
             "Sauger".chars().count(),
-            &[r, nachbar],
+            &[r, neighbour],
             &[],
-            &blatt(),
-            &blatt(),
+            &sheet(),
+            &sheet(),
         );
-        assert!(s.fuehrung.is_some(), "aussen braucht eine Fuehrungslinie");
-        assert!(!s.flaeche.overlaps(&r));
+        assert!(s.leader.is_some(), "aussen braucht eine Fuehrungslinie");
+        assert!(!s.area.overlaps(&r));
         assert!(
-            !s.flaeche.overlaps(&nachbar),
+            !s.area.overlaps(&neighbour),
             "die Stelle nach Osten ist belegt, also darf sie nicht genommen werden"
         );
-        assert!(frei(&s.flaeche, &[r, nachbar], &[], &blatt()));
+        assert!(frei(&s.area, &[r, neighbour], &[], &sheet()));
     }
 
     /// Zwei gleiche Stuecke nebeneinander sind der Fall, an dem die alte Fassung zerbrach:
     /// beide trugen denselben Text an derselben Stelle.
     #[test]
-    fn zwei_gleiche_nachbarn_bekommen_zwei_stellen() {
+    fn two_equal_neighbours_get_two_places() {
         let a = Rect {
             x: 0,
             y: 300,
@@ -810,23 +810,23 @@ mod tests {
             w: 40,
             d: 40,
         };
-        let hindernisse = [a, b];
-        let erste = setze(
+        let obstacles = [a, b];
+        let erste = set_value(
             &a,
             "Pflanze 1".chars().count(),
-            &hindernisse,
+            &obstacles,
             &[],
-            &blatt(),
-            &blatt(),
+            &sheet(),
+            &sheet(),
         );
-        let zweite = setze(
+        let second = set_value(
             &b,
             "Pflanze 2".chars().count(),
-            &hindernisse,
-            &[erste.flaeche],
-            &blatt(),
-            &blatt(),
+            &obstacles,
+            &[erste.area],
+            &sheet(),
+            &sheet(),
         );
-        assert!(!erste.flaeche.overlaps(&zweite.flaeche));
+        assert!(!erste.area.overlaps(&second.area));
     }
 }

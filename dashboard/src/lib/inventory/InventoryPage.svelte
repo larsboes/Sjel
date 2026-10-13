@@ -36,11 +36,11 @@
   let wishlist = $state<InventoryWishlist | null>(null);
 
   const size = (i: InventoryItem): string =>
-    i.b !== null && i.t !== null ? `${i.b} × ${i.t}${i.h !== null ? ` × ${i.h}` : ""} cm` : "—";
+    i.width !== null && i.depth !== null ? `${i.width} × ${i.depth}${i.height !== null ? ` × ${i.height}` : ""} cm` : "—";
 
   /** The same measurement for a card's meta line, where an unknown size is left out rather
       than printed as a lone "—" on a line of its own. */
-  const knownSize = (i: InventoryItem): string | null => (i.b !== null && i.t !== null ? size(i) : null);
+  const knownSize = (i: InventoryItem): string | null => (i.width !== null && i.depth !== null ? size(i) : null);
 
   /**
    * Phone width, by the phone breakpoint `app.css` names (38rem). Below it the item editor
@@ -58,22 +58,22 @@
 
   // A garment carries its own `category`; furniture predates the field and is told by `kind`.
   const groupOf = (i: InventoryItem): string =>
-    i.category ?? (i.kind === "slot" ? "bedarf" : i.kind === "gear" ? "ausruestung" : "moebel");
-  let group = $state("alle");
+    i.category ?? (i.kind === "slot" ? "needs" : i.kind === "gear" ? "gear" : "furniture");
+  let group = $state("all");
   const allOwned = $derived(rows.filter((r) => r.state === "owned"));
   const ownedGroups = $derived.by(() => {
     const counts = new Map<string, number>();
     for (const r of allOwned) counts.set(groupOf(r.item), (counts.get(groupOf(r.item)) ?? 0) + 1);
     return [...counts.entries()].sort(([a], [b]) => a.localeCompare(b));
   });
-  const owned = $derived(group === "alle" ? allOwned : allOwned.filter((r) => groupOf(r.item) === group));
+  const owned = $derived(group === "all" ? allOwned : allOwned.filter((r) => groupOf(r.item) === group));
   const gone = $derived(rows.filter((r) => r.state === "gone"));
-  /** Owned id → label of the wanted item that names it in `ersetzt`. */
+  /** Owned id → label of the wanted item that names it in `replaces`. */
   const replacedBy = $derived(
     new Map(
       rows
         .filter((r) => r.state === "wanted")
-        .flatMap((r) => (r.item.ersetzt ?? []).map((id) => [id, r.item.label] as const)),
+        .flatMap((r) => (r.item.replaces ?? []).map((id) => [id, r.item.label] as const)),
     ),
   );
 
@@ -107,31 +107,31 @@
   /** Form values are strings while they are being typed; `patchFrom` converts on the way out. */
   type Draft = {
     label: string;
-    b: string | number;
-    t: string | number;
-    h: string | number;
-    preis_cent: string | number;
-    prioritaet: string;
-    hinweis: string;
-    begruendung: string;
+    width: string | number;
+    depth: string | number;
+    height: string | number;
+    price_cents: string | number;
+    priority: string;
+    notes: string;
+    reason: string;
     opens: string;
     open_clear: string | number;
     wall_ok: string;
     access_sides: string | number;
     access_clear: string | number;
-    raumtrenner: boolean;
-    bild: string;
+    room_divider: boolean;
+    image: string;
     category: string;
     link: string;
-    groesse: string;
-    farbe: string;
-    saison: string;
+    size: string;
+    color: string;
+    seasons: string;
   };
   let draft = $state<Draft>({
-    label: "", b: "", t: "", h: "", preis_cent: "", prioritaet: "", hinweis: "",
-    begruendung: "", opens: "", open_clear: "", wall_ok: "", access_sides: "",
-    access_clear: "", raumtrenner: false, bild: "", category: "", link: "",
-    groesse: "", farbe: "", saison: "",
+    label: "", width: "", depth: "", height: "", price_cents: "", priority: "", notes: "",
+    reason: "", opens: "", open_clear: "", wall_ok: "", access_sides: "",
+    access_clear: "", room_divider: false, image: "", category: "", link: "",
+    size: "", color: "", seasons: "",
   });
   let impact = $state<InteriorImpact | null>(null);
   let impactBusy = $state(false);
@@ -148,15 +148,15 @@
     label: "",
     kind: "piece" as "piece" | "slot",
     state: "wanted" as InventoryState,
-    b: "",
-    t: "",
-    h: "",
-    preis: "",
+    width: "",
+    depth: "",
+    height: "",
+    price: "",
     category: "",
     link: "",
-    groesse: "",
-    farbe: "",
-    saison: "",
+    size: "",
+    color: "",
+    seasons: "",
   });
 
   const byId = $derived(new Map(rows.map((r) => [r.item.id, r])));
@@ -179,7 +179,7 @@
       i.open_clear !== null && i.open_clear !== undefined ? "open_clear" : null,
       i.expands_to !== null && i.expands_to !== undefined ? "expands" : null,
       i.access_sides !== null && i.access_sides !== undefined ? "access" : null,
-      i.raumtrenner ? "raumtrenner" : null,
+      i.room_divider ? "room_divider" : null,
     ]
       .filter(Boolean)
       .join(" · ");
@@ -203,27 +203,27 @@
     editingRevision = i.revision;
     draft = {
       label: i.label,
-      b: i.b ?? "",
-      t: i.t ?? "",
-      h: i.h ?? "",
-      preis_cent: i.preis_cent ?? "",
-      prioritaet: i.prioritaet ?? "",
-      hinweis: i.hinweis ?? "",
-      begruendung: i.begruendung ?? "",
+      width: i.width ?? "",
+      depth: i.depth ?? "",
+      height: i.height ?? "",
+      price_cents: i.price_cents ?? "",
+      priority: i.priority ?? "",
+      notes: i.notes ?? "",
+      reason: i.reason ?? "",
       opens: i.opens ?? "",
       open_clear: i.open_clear ?? "",
       wall_ok: i.wall_ok === null ? "" : String(i.wall_ok),
       access_sides: i.access_sides ?? "",
       access_clear: i.access_clear ?? "",
-      raumtrenner: i.raumtrenner ?? false,
-      bild: i.bild ?? "",
+      room_divider: i.room_divider ?? false,
+      image: i.image ?? "",
       category: i.category ?? "",
       link: i.link ?? "",
-      groesse: i.groesse ?? "",
-      farbe: i.farbe ?? "",
+      size: i.size ?? "",
+      color: i.color ?? "",
       // A list in the row, one comma-separated field in the form. The row keeps the list.
       // `?? []` because the app can talk to an interior build older than this field.
-      saison: (i.saison ?? []).join(", "),
+      seasons: (i.seasons ?? []).join(", "),
     };
     history = [];
     await tick();
@@ -276,31 +276,31 @@
       if (v !== was) out[k] = v;
     };
     put("label", String(draft.label ?? "").trim(), i.label);
-    put("b", num(draft.b), i.b);
-    put("t", num(draft.t), i.t);
-    put("h", num(draft.h), i.h);
-    put("preis_cent", num(draft.preis_cent), i.preis_cent);
-    put("prioritaet", String(draft.prioritaet ?? "").trim() || null, i.prioritaet);
-    put("hinweis", String(draft.hinweis ?? "").trim() || null, i.hinweis);
-    put("begruendung", String(draft.begruendung ?? "").trim() || null, i.begruendung);
+    put("width", num(draft.width), i.width);
+    put("depth", num(draft.depth), i.depth);
+    put("height", num(draft.height), i.height);
+    put("price_cents", num(draft.price_cents), i.price_cents);
+    put("priority", String(draft.priority ?? "").trim() || null, i.priority);
+    put("notes", String(draft.notes ?? "").trim() || null, i.notes);
+    put("reason", String(draft.reason ?? "").trim() || null, i.reason);
     put("opens", String(draft.opens ?? "") || null, i.opens);
     put("open_clear", num(draft.open_clear), i.open_clear);
     put("wall_ok", draft.wall_ok === "" ? null : draft.wall_ok === "true", i.wall_ok);
     put("access_sides", num(draft.access_sides), i.access_sides);
     put("access_clear", num(draft.access_clear), i.access_clear);
-    put("raumtrenner", draft.raumtrenner ? true : null, i.raumtrenner);
-    put("bild", String(draft.bild ?? "").trim() || null, i.bild);
+    put("room_divider", draft.room_divider ? true : null, i.room_divider);
+    put("image", String(draft.image ?? "").trim() || null, i.image);
     put("category", String(draft.category ?? "").trim() || null, i.category);
     put("link", String(draft.link ?? "").trim() || null, i.link);
-    put("groesse", String(draft.groesse ?? "").trim() || null, i.groesse);
-    put("farbe", String(draft.farbe ?? "").trim() || null, i.farbe);
+    put("size", String(draft.size ?? "").trim() || null, i.size);
+    put("color", String(draft.color ?? "").trim() || null, i.color);
     put(
-      "saison",
-      String(draft.saison ?? "")
+      "seasons",
+      String(draft.seasons ?? "")
         .split(",")
         .map((s) => s.trim())
         .filter(Boolean),
-      i.saison,
+      i.seasons,
     );
     return out;
   }
@@ -394,16 +394,16 @@
         kind: draftNew.kind,
         label: draftNew.label.trim(),
         state: draftNew.state,
-        b: num(draftNew.b),
-        t: num(draftNew.t),
-        h: num(draftNew.h),
-        preis_cent: num(draftNew.preis),
+        width: num(draftNew.width),
+        depth: num(draftNew.depth),
+        height: num(draftNew.height),
+        price_cents: num(draftNew.price),
         // Blank means blank: `""` would store an empty string that looks like a value.
         category: draftNew.category.trim() || null,
         link: draftNew.link.trim() || null,
-        groesse: draftNew.groesse.trim() || null,
-        farbe: draftNew.farbe.trim() || null,
-        saison: draftNew.saison
+        size: draftNew.size.trim() || null,
+        color: draftNew.color.trim() || null,
+        seasons: draftNew.seasons
           .split(",")
           .map((s) => s.trim())
           .filter(Boolean),
@@ -414,15 +414,15 @@
         label: "",
         kind: "piece",
         state: "wanted",
-        b: "",
-        t: "",
-        h: "",
-        preis: "",
+        width: "",
+        depth: "",
+        height: "",
+        price: "",
         category: "",
         link: "",
-        groesse: "",
-        farbe: "",
-        saison: "",
+        size: "",
+        color: "",
+        seasons: "",
       };
       await load();
     } catch (caught) {
@@ -522,29 +522,29 @@
     <section class="card budget">
       <h2>What is still missing</h2>
       <p class="sum">
-        <strong>{euro(wishlist.summe_untere_kante_cent)}</strong>
-        {#if wishlist.summe_obere_kante_cent > wishlist.summe_untere_kante_cent}
-          <span class="upper">to {euro(wishlist.summe_obere_kante_cent)}</span>
+        <strong>{euro(wishlist.total_low_cents)}</strong>
+        {#if wishlist.total_high_cents > wishlist.total_low_cents}
+          <span class="upper">to {euro(wishlist.total_high_cents)}</span>
         {/if}
         <span class="over">across {wishlist.items.length} open items</span>
       </p>
-      {#if wishlist.posten_ohne_preis > 0}
+      {#if wishlist.unpriced_count > 0}
         <p class="caveat">
           <Icon name="alert" size={14} />
-          {wishlist.posten_ohne_preis} of them carry no price at all and count as zero — the
+          {wishlist.unpriced_count} of them carry no price at all and count as zero — the
           total is a floor, not an estimate.
         </p>
       {/if}
-      {#if wishlist.monatssaldo}
+      {#if wishlist.monthly_balance}
         <p class="finance">
           Finance measures a median monthly balance of
-          <strong class:negative={wishlist.monatssaldo.median_cent < 0}>
-            {euro(wishlist.monatssaldo.median_cent)}
+          <strong class:negative={wishlist.monthly_balance.median_cents < 0}>
+            {euro(wishlist.monthly_balance.median_cents)}
           </strong>
-          over {wishlist.monatssaldo.monate} complete months
-          ({wishlist.monatssaldo.von} – {wishlist.monatssaldo.bis}).
-          {#if wishlist.monate_bis_bezahlt !== null}
-            That is <strong>{wishlist.monate_bis_bezahlt.toFixed(1)} months</strong> of surplus.
+          over {wishlist.monthly_balance.months} complete months
+          ({wishlist.monthly_balance.from} – {wishlist.monthly_balance.to}).
+          {#if wishlist.months_to_pay !== null}
+            That is <strong>{wishlist.months_to_pay.toFixed(1)} months</strong> of surplus.
           {:else}
             Nothing accrues out of a balance that is not positive, so there is no number of
             months to give.
@@ -570,7 +570,7 @@
   {#if view === "inventory"}
   <h3 class="group">Owned <span class="count">{owned.length}</span></h3>
   <div class="group-chips" role="group" aria-label="Filter owned by group">
-    <button type="button" class:active={group === "alle"} onclick={() => (group = "alle")}>
+    <button type="button" class:active={group === "all"} onclick={() => (group = "all")}>
       All <span class="count">{allOwned.length}</span>
     </button>
     {#each ownedGroups as [g, n] (g)}
@@ -581,24 +581,24 @@
   </div>
   <ul class="items">
     {#each owned as { item: i } (i.id)}
-      <li class="card item" class:has-shot={!!i.bild}>
+      <li class="card item" class:has-shot={!!i.image}>
         <div class="head">
           <span class="label">{i.label}</span>
-          {#if i.mitnahme}<span class="tag">{i.mitnahme}</span>{/if}
+          {#if i.on_move}<span class="tag">{i.on_move}</span>{/if}
           {#if replacedBy.has(i.id)}<span class="tag" use:tip={`On the wishlist: ${replacedBy.get(i.id)}`}>replacement wanted</span>{/if}
           {#if pendingIds.has(i.id)}<span class="tag pending" use:tip={"Saved on this device; not on the canonical node yet."}>not synced</span>{/if}
           {#if conflictIds.has(i.id)}<span class="tag conflict" use:tip={"The canonical node changed this item too. Review it in the sync line at the top."}>conflict</span>{/if}
         </div>
-        {#if i.bild}
-          <img class="shot" use:bridgedSrc={interior.mediaUrl(i.bild)} alt={i.label} loading="lazy" />
+        {#if i.image}
+          <img class="shot" use:bridgedSrc={interior.mediaUrl(i.image)} alt={i.label} loading="lazy" />
         {/if}
-        {#if knownSize(i) || i.unsicher.length > 0 || i.gemessen_am}
+        {#if knownSize(i) || i.estimated.length > 0 || i.measured_at}
           <p class="meta">
             {#if knownSize(i)}<span class="dims mono">{knownSize(i)}</span>{/if}
-            {#if i.unsicher.length > 0}
-              <span class="guess" use:tip={"measured? no."}>~ {i.unsicher.join(", ")}</span>
-            {:else if i.gemessen_am}
-              <span class="measured mono">measured {i.gemessen_am.slice(0, 10)}</span>
+            {#if i.estimated.length > 0}
+              <span class="guess" use:tip={"measured? no."}>~ {i.estimated.join(", ")}</span>
+            {:else if i.measured_at}
+              <span class="measured mono">measured {i.measured_at.slice(0, 10)}</span>
             {/if}
           </p>
         {/if}
@@ -607,8 +607,8 @@
             declares {declares(i)}
           </span>
         {/if}
-        {#if i.category || i.farbe || i.groesse}
-          <p class="meta">{[i.category, i.farbe, i.groesse].filter(Boolean).join(" · ")}</p>
+        {#if i.category || i.color || i.size}
+          <p class="meta">{[i.category, i.color, i.size].filter(Boolean).join(" · ")}</p>
         {/if}
         <div class="actions">
           <button class="ghost" data-edit={i.id} onclick={() => openEditor(i.id)}>Edit</button>
@@ -650,30 +650,30 @@
 
     <div class="grid">
       <label class="f-full">label <input bind:this={firstField} bind:value={draft.label} /></label>
-      <label class="f-third">width cm <input bind:value={draft.b} inputmode="numeric" /></label>
-      <label class="f-third">depth cm <input bind:value={draft.t} inputmode="numeric" /></label>
-      <label class="f-third">height cm <input bind:value={draft.h} inputmode="numeric" /></label>
-      <label class="f-half">price ct <input bind:value={draft.preis_cent} inputmode="numeric" /></label>
-      <label class="f-half">priority <input bind:value={draft.prioritaet} /></label>
+      <label class="f-third">width cm <input bind:value={draft.width} inputmode="numeric" /></label>
+      <label class="f-third">depth cm <input bind:value={draft.depth} inputmode="numeric" /></label>
+      <label class="f-third">height cm <input bind:value={draft.height} inputmode="numeric" /></label>
+      <label class="f-half">price ct <input bind:value={draft.price_cents} inputmode="numeric" /></label>
+      <label class="f-half">priority <input bind:value={draft.priority} /></label>
       <label class="f-half">category <input bind:value={draft.category} placeholder="kleidung" list="interior-categories" /></label>
-      <label class="f-half">size <input bind:value={draft.groesse} placeholder="M" /></label>
-      <label class="f-half">colour <input bind:value={draft.farbe} placeholder="weiss" /></label>
-      <label class="f-half">season <input bind:value={draft.saison} placeholder="winter, uebergang" /></label>
+      <label class="f-half">size <input bind:value={draft.size} placeholder="M" /></label>
+      <label class="f-half">colour <input bind:value={draft.color} placeholder="weiss" /></label>
+      <label class="f-half">season <input bind:value={draft.seasons} placeholder="winter, uebergang" /></label>
       <label class="f-full">link <input bind:value={draft.link} placeholder="https://…" inputmode="url" /></label>
     </div>
 
     <label class="wide">
-      picture <input bind:value={draft.bild} placeholder="produkt/…-01-….png" />
+      picture <input bind:value={draft.image} placeholder="produkt/…-01-….png" />
     </label>
     <p class="note">
       A path below the private interior asset root. Kept out of the bundle and fetched only
       when shown.
     </p>
-    {#if draft.bild}
-      <img class="shot big" use:bridgedSrc={interior.mediaUrl(String(draft.bild))} alt="" />
+    {#if draft.image}
+      <img class="shot big" use:bridgedSrc={interior.mediaUrl(String(draft.image))} alt="" />
     {/if}
-    <label class="wide">note <textarea rows="2" bind:value={draft.hinweis}></textarea></label>
-    <label class="wide">reasoning <textarea rows="2" bind:value={draft.begruendung}></textarea></label>
+    <label class="wide">note <textarea rows="2" bind:value={draft.notes}></textarea></label>
+    <label class="wide">reasoning <textarea rows="2" bind:value={draft.reason}></textarea></label>
 
     <h5>What this piece needs</h5>
     <p class="note">
@@ -686,9 +686,9 @@
         opens
         <select bind:value={draft.opens}>
           <option value="">— not stated —</option>
-          <option value="nord">nord</option>
-          <option value="sued">sued</option>
-          <option value="ost">ost</option>
+          <option value="north">north</option>
+          <option value="south">south</option>
+          <option value="east">east</option>
           <option value="west">west</option>
         </select>
       </label>
@@ -704,7 +704,7 @@
       <label class="f-half">access_sides <input bind:value={draft.access_sides} inputmode="numeric" /></label>
       <label class="f-half">access_clear cm <input bind:value={draft.access_clear} inputmode="numeric" /></label>
       <label class="check">
-        <input type="checkbox" bind:checked={draft.raumtrenner} />
+        <input type="checkbox" bind:checked={draft.room_divider} />
         raumtrenner — meant to stand free
       </label>
     </div>
@@ -837,10 +837,10 @@
             <option value="owned">owned</option>
           </select>
         </label>
-        <label class="f-third">width cm <input bind:value={draftNew.b} inputmode="numeric" /></label>
-        <label class="f-third">depth cm <input bind:value={draftNew.t} inputmode="numeric" /></label>
-        <label class="f-third">height cm <input bind:value={draftNew.h} inputmode="numeric" /></label>
-        <label>price ct <input bind:value={draftNew.preis} inputmode="numeric" /></label>
+        <label class="f-third">width cm <input bind:value={draftNew.width} inputmode="numeric" /></label>
+        <label class="f-third">depth cm <input bind:value={draftNew.depth} inputmode="numeric" /></label>
+        <label class="f-third">height cm <input bind:value={draftNew.height} inputmode="numeric" /></label>
+        <label>price ct <input bind:value={draftNew.price} inputmode="numeric" /></label>
         <label>
           category
           <input bind:value={draftNew.category} placeholder="kleidung" list="interior-categories" />
@@ -848,9 +848,9 @@
         <datalist id="interior-categories">
           {#each kategorien as c}<option value={c}></option>{/each}
         </datalist>
-        <label class="f-third">size <input bind:value={draftNew.groesse} placeholder="M" /></label>
-        <label class="f-third">colour <input bind:value={draftNew.farbe} placeholder="weiss" /></label>
-        <label class="f-third">season <input bind:value={draftNew.saison} placeholder="winter, uebergang" /></label>
+        <label class="f-third">size <input bind:value={draftNew.size} placeholder="M" /></label>
+        <label class="f-third">colour <input bind:value={draftNew.color} placeholder="weiss" /></label>
+        <label class="f-third">season <input bind:value={draftNew.seasons} placeholder="winter, uebergang" /></label>
         <label class="f-full">
           link
           <input bind:value={draftNew.link} placeholder="https://…" inputmode="url" />

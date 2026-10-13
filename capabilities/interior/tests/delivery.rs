@@ -5,7 +5,7 @@
 //! breiter ist als die Wohnungstuer. Bis 2026-08-31 hat diese Capability darauf `BESTANDEN`
 //! geantwortet — richtig gerechnet, falsche Frage.
 
-use interior::einbringung::{durch_die_tuer, einbringung, Tuerpass};
+use interior::delivery::{through_the_door, delivery, DoorFit};
 use interior::model::Model;
 use std::sync::Once;
 
@@ -38,42 +38,42 @@ fn fixture_overlay() {
 /// Das ist der ganze Grund fuer dieses Modul. Wuerde `check_layout` hier durchfallen, waere
 /// die Frage schon beantwortet und `einbringung.rs` ueberfluessig.
 #[test]
-fn ein_regelkonformes_layout_kann_an_der_tuer_scheitern() {
+fn a_rule_abiding_layout_can_fail_at_the_door() {
     let m = model();
     let l = m.load_layout("k-vitrine").unwrap();
-    let verdikt = interior::clearance::check_layout(&m, &l).unwrap();
+    let verdict = interior::clearance::check_layout(&m, &l).unwrap();
     assert!(
-        verdikt.pass,
+        verdict.pass,
         "die Vitrine steht regelkonform: {:?}",
-        verdikt.hard
+        verdict.hard
     );
 
-    let e = einbringung(&m, &l, "glasvitrine").unwrap();
+    let e = delivery(&m, &l, "glasvitrine").unwrap();
     assert_eq!(
-        e.tuer,
-        Tuerpass::PasstNicht {
-            fehlen_cm: 10,
-            tuer_cm: 100
+        e.door,
+        DoorFit::DoesNotFit {
+            missing_cm: 10,
+            door_cm: 100
         },
         "110 cm in beiden Richtungen an einer 100 cm breiten Tuer"
     );
 }
 
-/// Die schmale Seite entscheidet: ein Schrank geht hochkant durch die Tuer.
+/// Die schmale Side entscheidet: ein Schrank geht hochkant durch die Tuer.
 ///
 /// Ohne diese Regel waere jedes Stueck breiter als 100 cm ein Problem, und das ist offenkundig
 /// falsch — der 120 x 60 cm Kleiderschrank kommt durch jede Wohnungstuer.
 #[test]
-fn die_schmale_seite_entscheidet_und_nicht_die_breite() {
+fn the_narrow_side_decides_not_the_width() {
     let m = model();
     assert!(
-        matches!(durch_die_tuer(&m, 120, 60, false), Tuerpass::Passt { .. }),
+        matches!(through_the_door(&m, 120, 60, false), DoorFit::Fits { .. }),
         "120 x 60 passt hochkant durch 100 cm"
     );
     assert!(
         matches!(
-            durch_die_tuer(&m, 120, 110, false),
-            Tuerpass::PasstNicht { .. }
+            through_the_door(&m, 120, 110, false),
+            DoorFit::DoesNotFit { .. }
         ),
         "120 x 110 passt in keiner Lage"
     );
@@ -84,36 +84,36 @@ fn die_schmale_seite_entscheidet_und_nicht_die_breite() {
 /// Das Bett ist 140 cm breit und steht trotzdem in jedem Schlafzimmer. Die Auskunft kommt aus
 /// seiner Zeile (`zerlegbar = true`) und nicht aus einer Vermutung ueber Betten.
 #[test]
-fn ein_zerlegbares_stueck_wird_an_der_tuer_nicht_gemessen() {
+fn a_piece_that_comes_apart_is_not_measured_at_the_door() {
     let m = model();
     let l = m.load_layout("a-frei").unwrap();
-    let e = einbringung(&m, &l, "bett").unwrap();
+    let e = delivery(&m, &l, "bett").unwrap();
     assert_eq!(
-        e.tuer,
-        Tuerpass::ZerlegtGetragen {
-            fehlen_cm: 40,
-            tuer_cm: 100
+        e.door,
+        DoorFit::CarriedApart {
+            missing_cm: 40,
+            door_cm: 100
         }
     );
     assert!(
-        !matches!(durch_die_tuer(&m, 140, 200, false), Tuerpass::Passt { .. }),
+        !matches!(through_the_door(&m, 140, 200, false), DoorFit::Fits { .. }),
         "ohne die Deklaration bliebe es ein Verstoss"
     );
 }
 
 /// Ein Platz, den es gibt, ist ein Platz, zu dem es einen Weg gibt.
 #[test]
-fn jedes_stueck_eines_bestandenen_layouts_erreicht_seinen_platz() {
+fn every_piece_of_a_passing_layout_reaches_its_place() {
     let m = model();
     let l = m.load_layout("a-frei").unwrap();
     for it in &l.items {
-        let e = einbringung(&m, &l, &it.reference).unwrap();
+        let e = delivery(&m, &l, &it.reference).unwrap();
         assert!(
-            e.erreichbar,
+            e.affordable,
             "{} kommt nicht an seinen Platz: {:?}",
-            it.reference, e.grund
+            it.reference, e.reason
         );
-        assert!(e.schritte.is_some_and(|n| n > 0));
+        assert!(e.steps.is_some_and(|n| n > 0));
     }
 }
 
@@ -122,10 +122,10 @@ fn jedes_stueck_eines_bestandenen_layouts_erreicht_seinen_platz() {
 /// Dieselbe Haltung wie bei R6: `badtuer` und `eingangstuer` tragen denselben `typ`, und sie
 /// am Namen zu unterscheiden waere der Fehler, den PRD B26a einmal geschlossen hat.
 #[test]
-fn ohne_deklarierten_eingang_wird_nicht_geraten() {
+fn without_a_declared_entrance_nothing_is_guessed() {
     let mut m = model();
-    for o in m.room.oeffnungen.iter_mut() {
-        o.eingang = None;
+    for o in m.room.openings.iter_mut() {
+        o.entrance = None;
     }
-    assert_eq!(durch_die_tuer(&m, 50, 50, false), Tuerpass::KeinEingang);
+    assert_eq!(through_the_door(&m, 50, 50, false), DoorFit::NoEntrance);
 }

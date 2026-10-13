@@ -49,7 +49,7 @@ use std::collections::BTreeMap;
 use std::path::{Path, PathBuf};
 
 /// Verfahren 0 im ZIP. Alles andere kann dieses Modul nicht und sagt das.
-const VERFAHREN_GESPEICHERT: u16 = 0;
+const METHOD_STORED: u16 = 0;
 
 #[derive(Debug, thiserror::Error)]
 pub enum ScanError {
@@ -59,18 +59,18 @@ pub enum ScanError {
         source: std::io::Error,
     },
     #[error("{path} ist kein lesbares ZIP: {detail}")]
-    KeinZip { path: PathBuf, detail: String },
+    NotZip { path: PathBuf, detail: String },
     #[error(
-        "{path}: `{name}` liegt mit Verfahren {verfahren} vor — dieses Modul entpackt nicht, \
+        "{path}: `{name}` liegt mit Verfahren {method} vor — dieses Modul entpackt nicht, \
          und ein halb gelesener Scan waere schlimmer als kein Scan"
     )]
-    Komprimiert {
+    Compressed {
         path: PathBuf,
         name: String,
-        verfahren: u16,
+        method: u16,
     },
     #[error("{path}: `{name}` fehlt im Archiv")]
-    Fehlt { path: PathBuf, name: String },
+    Missing { path: PathBuf, name: String },
     #[error("{path}: `{name}` ist kein lesbares USDA: {detail}")]
     Form {
         path: PathBuf,
@@ -78,7 +78,7 @@ pub enum ScanError {
         detail: String,
     },
     #[error("kein Aufnahmeverzeichnis: {0}")]
-    KeineAufnahme(String),
+    NoCapture(String),
     #[error("{0}")]
     Assets(String),
 }
@@ -113,25 +113,25 @@ impl Element {
         [self.transform[12], self.transform[13], self.transform[14]]
     }
 
-    pub fn ist_flaeche(&self) -> bool {
+    pub fn is_surface(&self) -> bool {
         matches!(self.category.as_str(), "Wall" | "Floor")
     }
 
     /// Apples Kategorie traegt bei Tueren den Zustand mit (`Door(Isopen: False)`), deshalb wird
     /// auf den Anfang geprueft und nicht auf Gleichheit.
-    pub fn ist_oeffnung(&self) -> bool {
+    pub fn is_opening(&self) -> bool {
         self.category.starts_with("Door")
             || self.category.starts_with("Window")
             || self.category.starts_with("Opening")
     }
 
-    pub fn ist_tuer(&self) -> bool {
+    pub fn is_door(&self) -> bool {
         self.category.starts_with("Door") || self.category.starts_with("Opening")
     }
 
     /// Alles, was weder Flaeche noch Oeffnung ist: Moebelstuecke und Geraete.
-    pub fn ist_objekt(&self) -> bool {
-        !self.ist_flaeche() && !self.ist_oeffnung()
+    pub fn is_object(&self) -> bool {
+        !self.is_surface() && !self.is_opening()
     }
 }
 
@@ -155,17 +155,17 @@ pub struct Scan {
 }
 
 impl Scan {
-    pub fn flaechen(&self) -> impl Iterator<Item = &Element> {
-        self.elements.iter().filter(|e| e.ist_flaeche())
+    pub fn surfaces(&self) -> impl Iterator<Item = &Element> {
+        self.elements.iter().filter(|e| e.is_surface())
     }
-    pub fn oeffnungen(&self) -> impl Iterator<Item = &Element> {
-        self.elements.iter().filter(|e| e.ist_oeffnung())
+    pub fn openings(&self) -> impl Iterator<Item = &Element> {
+        self.elements.iter().filter(|e| e.is_opening())
     }
-    pub fn objekte(&self) -> impl Iterator<Item = &Element> {
-        self.elements.iter().filter(|e| e.ist_objekt())
+    pub fn objects(&self) -> impl Iterator<Item = &Element> {
+        self.elements.iter().filter(|e| e.is_object())
     }
 
-    pub fn kategorien(&self) -> BTreeMap<String, usize> {
+    pub fn categories(&self) -> BTreeMap<String, usize> {
         let mut out = BTreeMap::new();
         for e in &self.elements {
             *out.entry(e.category.clone()).or_insert(0) += 1;
@@ -173,11 +173,11 @@ impl Scan {
         out
     }
 
-    fn einheitlich(&self, achse: usize, kategorie: &str) -> Option<f64> {
+    fn uniform(&self, axis: usize, kategorie: &str) -> Option<f64> {
         let werte: Vec<f64> = self
-            .flaechen()
+            .surfaces()
             .filter(|e| e.category == kategorie)
-            .map(|e| e.dimensions_m[achse])
+            .map(|e| e.dimensions_m[axis])
             .collect();
         let erste = *werte.first()?;
         // Ein Mikrometer und nicht Gleichheit: die Maschenausgabe traegt Werte wie -0,15999998
@@ -195,18 +195,18 @@ impl Scan {
     ///
     /// `None`, wenn sich die Waende widersprechen. Ein einzelner Wert aus einem widerspruechigen
     /// Scan waere die Zahl, die am Ende niemand mehr nachpruefen kann.
-    pub fn wandhoehe_m(&self) -> Option<f64> {
-        self.einheitlich(1, "Wall")
+    pub fn wall_height_m(&self) -> Option<f64> {
+        self.uniform(1, "Wall")
     }
 
     /// Die Wandstaerke in Metern, wenn alle Waende dieselbe tragen, sonst `None`.
-    pub fn wandstaerke_m(&self) -> Option<f64> {
-        self.einheitlich(2, "Wall")
+    pub fn wall_thickness_m(&self) -> Option<f64> {
+        self.uniform(2, "Wall")
     }
 
     /// Flaeche der oberen Bodenseite in Quadratmetern.
-    pub fn bodenflaeche_m2(&self) -> Option<f64> {
-        obere_flaeche_m2(self.boden_usda.as_deref()?)
+    pub fn floor_area_m2(&self) -> Option<f64> {
+        top_area_m2(self.boden_usda.as_deref()?)
     }
 }
 
@@ -225,25 +225,25 @@ fn u32_at(b: &[u8], i: usize) -> u32 {
 /// herauskommt, ist die Uhrzeit des aufnehmenden Geraets und **nicht** als UTC ausgewiesen — das
 /// Feld existiert im Archiv nicht, und eine Zone zu erfinden waere eine Genauigkeit, die die
 /// Quelle nicht hat.
-fn dos_zeit(datum: u16, zeit: u16) -> Option<String> {
-    let jahr = 1980 + ((datum >> 9) & 0x7f) as i64;
-    let monat = ((datum >> 5) & 0x0f) as u32;
+fn dos_time(datum: u16, time: u16) -> Option<String> {
+    let year = 1980 + ((datum >> 9) & 0x7f) as i64;
+    let month = ((datum >> 5) & 0x0f) as u32;
     let tag = (datum & 0x1f) as u32;
-    let stunde = (zeit >> 11) as u32;
-    let minute = ((zeit >> 5) & 0x3f) as u32;
-    let sekunde = ((zeit & 0x1f) * 2) as u32;
-    if !(1..=12).contains(&monat) || !(1..=31).contains(&tag) {
+    let hour = (time >> 11) as u32;
+    let minute = ((time >> 5) & 0x3f) as u32;
+    let second = ((time & 0x1f) * 2) as u32;
+    if !(1..=12).contains(&month) || !(1..=31).contains(&tag) {
         return None;
     }
     Some(format!(
-        "{jahr:04}-{monat:02}-{tag:02}T{stunde:02}:{minute:02}:{sekunde:02}"
+        "{year:04}-{month:02}-{tag:02}T{hour:02}:{minute:02}:{second:02}"
     ))
 }
 
-struct Eintrag<'a> {
+struct Entry<'a> {
     name: String,
-    daten: &'a [u8],
-    zeit: Option<String>,
+    data: &'a [u8],
+    time: Option<String>,
 }
 
 /// Liest die Eintraege eines ZIP, sofern sie alle gespeichert sind.
@@ -252,61 +252,61 @@ struct Eintrag<'a> {
 /// Groessen verlaesslich. Ein lokaler Kopf darf sie als null fuehren und die Zahlen in einem
 /// Datenbeschreiber hinter den Nutzdaten nachreichen, und ein Leser, der das annimmt, liest
 /// stillschweigend zu kurz.
-fn zip_eintraege<'a>(bytes: &'a [u8], path: &Path) -> Result<Vec<Eintrag<'a>>, ScanError> {
-    let kein_zip = |detail: &str| ScanError::KeinZip {
+fn zip_entries<'a>(bytes: &'a [u8], path: &Path) -> Result<Vec<Entry<'a>>, ScanError> {
+    let not_zip = |detail: &str| ScanError::NotZip {
         path: path.to_path_buf(),
         detail: detail.to_string(),
     };
     // Das EOCD steht am Ende, hinter einem Kommentar von hoechstens 65535 Bytes.
-    let suche_ab = bytes.len().saturating_sub(65_557);
-    let eocd = (suche_ab..bytes.len().saturating_sub(3))
+    let search_from = bytes.len().saturating_sub(65_557);
+    let eocd = (search_from..bytes.len().saturating_sub(3))
         .rev()
         .find(|&i| u32_at(bytes, i) == 0x0605_4b50)
-        .ok_or_else(|| kein_zip("kein End-of-Central-Directory gefunden"))?;
+        .ok_or_else(|| not_zip("kein End-of-Central-Directory gefunden"))?;
     let anzahl = u16_at(bytes, eocd + 10) as usize;
     let mut pos = u32_at(bytes, eocd + 16) as usize;
 
     let mut out = Vec::with_capacity(anzahl);
     for _ in 0..anzahl {
         if pos + 46 > bytes.len() || u32_at(bytes, pos) != 0x0201_4b50 {
-            return Err(kein_zip("zentrales Verzeichnis endet vorzeitig"));
+            return Err(not_zip("zentrales Verzeichnis endet vorzeitig"));
         }
-        let verfahren = u16_at(bytes, pos + 10);
-        let zeit_roh = u16_at(bytes, pos + 12);
-        let datum_roh = u16_at(bytes, pos + 14);
-        let groesse = u32_at(bytes, pos + 24) as usize;
+        let method = u16_at(bytes, pos + 10);
+        let time_raw = u16_at(bytes, pos + 12);
+        let date_raw = u16_at(bytes, pos + 14);
+        let size = u32_at(bytes, pos + 24) as usize;
         let name_len = u16_at(bytes, pos + 28) as usize;
         let extra_len = u16_at(bytes, pos + 30) as usize;
-        let kommentar_len = u16_at(bytes, pos + 32) as usize;
-        let lokal = u32_at(bytes, pos + 42) as usize;
+        let comment_len = u16_at(bytes, pos + 32) as usize;
+        let local = u32_at(bytes, pos + 42) as usize;
         let name = String::from_utf8_lossy(&bytes[pos + 46..pos + 46 + name_len]).into_owned();
-        pos += 46 + name_len + extra_len + kommentar_len;
+        pos += 46 + name_len + extra_len + comment_len;
 
         if name.ends_with('/') {
             continue;
         }
-        if verfahren != VERFAHREN_GESPEICHERT {
-            return Err(ScanError::Komprimiert {
+        if method != METHOD_STORED {
+            return Err(ScanError::Compressed {
                 path: path.to_path_buf(),
                 name,
-                verfahren,
+                method,
             });
         }
         // Der lokale Kopf traegt eigene Namens- und Extra-Laengen, und sie duerfen von den
         // Werten im zentralen Verzeichnis abweichen.
-        if lokal + 30 > bytes.len() || u32_at(bytes, lokal) != 0x0403_4b50 {
-            return Err(kein_zip("lokaler Kopf fehlt"));
+        if local + 30 > bytes.len() || u32_at(bytes, local) != 0x0403_4b50 {
+            return Err(not_zip("lokaler Kopf fehlt"));
         }
-        let l_name = u16_at(bytes, lokal + 26) as usize;
-        let l_extra = u16_at(bytes, lokal + 28) as usize;
-        let start = lokal + 30 + l_name + l_extra;
-        if start + groesse > bytes.len() {
-            return Err(kein_zip("Eintrag reicht ueber das Archiv hinaus"));
+        let l_name = u16_at(bytes, local + 26) as usize;
+        let l_extra = u16_at(bytes, local + 28) as usize;
+        let start = local + 30 + l_name + l_extra;
+        if start + size > bytes.len() {
+            return Err(not_zip("Eintrag reicht ueber das Archiv hinaus"));
         }
-        out.push(Eintrag {
+        out.push(Entry {
             name,
-            daten: &bytes[start..start + groesse],
-            zeit: dos_zeit(datum_roh, zeit_roh),
+            data: &bytes[start..start + size],
+            time: dos_time(date_raw, time_raw),
         });
     }
     Ok(out)
@@ -318,20 +318,20 @@ fn zip_eintraege<'a>(bytes: &'a [u8], path: &Path) -> Result<Vec<Eintrag<'a>>, S
 ///
 /// Gesucht wird der Feldname und danach die **erste** oeffnende Klammer. Beim Feldnamen
 /// `point3f[] points` liegt das `[]` noch davor, das erste `[` nach ihm ist also die echte Liste.
-fn tripel(text: &str, feld: &str) -> Option<Vec<[f64; 3]>> {
-    let start = text.find(feld)? + feld.len();
+fn tripel(text: &str, field: &str) -> Option<Vec<[f64; 3]>> {
+    let start = text.find(field)? + field.len();
     let rest = &text[start..];
-    let auf = rest.find('[')?;
-    let zu = rest[auf..].find(']')? + auf;
+    let onto = rest.find('[')?;
+    let zu = rest[onto..].find(']')? + onto;
     let mut out = Vec::new();
-    for gruppe in rest[auf + 1..zu].split('(').skip(1) {
-        let ende = gruppe.find(')')?;
-        let zahlen: Vec<f64> = gruppe[..ende]
+    for group in rest[onto + 1..zu].split('(').skip(1) {
+        let end = group.find(')')?;
+        let numbers: Vec<f64> = group[..end]
             .split(',')
             .filter_map(|z| z.trim().parse::<f64>().ok())
             .collect();
-        if zahlen.len() == 3 {
-            out.push([zahlen[0], zahlen[1], zahlen[2]]);
+        if numbers.len() == 3 {
+            out.push([numbers[0], numbers[1], numbers[2]]);
         }
     }
     Some(out)
@@ -341,13 +341,13 @@ fn tripel(text: &str, feld: &str) -> Option<Vec<[f64; 3]>> {
 ///
 /// Der Feldname darf das `[]` nicht enthalten, sonst findet `find('[')` die Klammer des Typs und
 /// liefert eine leere Liste — still, und damit sieht jede Flaeche danach wie null aus.
-fn zahlen(text: &str, feld: &str) -> Option<Vec<usize>> {
-    let start = text.find(feld)? + feld.len();
+fn numbers(text: &str, field: &str) -> Option<Vec<usize>> {
+    let start = text.find(field)? + field.len();
     let rest = &text[start..];
-    let auf = rest.find('[')?;
-    let zu = rest[auf..].find(']')? + auf;
+    let onto = rest.find('[')?;
+    let zu = rest[onto..].find(']')? + onto;
     Some(
-        rest[auf + 1..zu]
+        rest[onto + 1..zu]
             .split(',')
             .filter_map(|z| z.trim().parse::<usize>().ok())
             .collect(),
@@ -355,12 +355,12 @@ fn zahlen(text: &str, feld: &str) -> Option<Vec<usize>> {
 }
 
 /// Ein `string NAME = "…"` aus dem Kopf einer USDA.
-fn zeichenkette(text: &str, feld: &str) -> Option<String> {
-    let start = text.find(feld)? + feld.len();
+fn string(text: &str, field: &str) -> Option<String> {
+    let start = text.find(field)? + field.len();
     let rest = &text[start..];
-    let auf = rest.find('"')? + 1;
-    let zu = rest[auf..].find('"')? + auf;
-    Some(rest[auf..zu].to_string())
+    let onto = rest.find('"')? + 1;
+    let zu = rest[onto..].find('"')? + onto;
+    Some(rest[onto..zu].to_string())
 }
 
 /// Die `matrix4d xformOp:transform`, **ohne** Umsetzung.
@@ -380,29 +380,29 @@ fn zeichenkette(text: &str, feld: &str) -> Option<String> {
 fn transform(text: &str) -> Option<[f64; 16]> {
     let start = text.find("matrix4d xformOp:transform")?;
     let rest = &text[start..];
-    let auf = rest.find('(')? + 1;
+    let onto = rest.find('(')? + 1;
     // Die Matrix steht in vier Klammergruppen; die fuenfte Klammer schliesst das Feld. Gesucht
     // werden die Gruppen, nicht das erste `)`.
-    let mut zeilen = Vec::new();
-    for zeile in rest[auf..].split('(').skip(1) {
-        let ende = zeile.find(')')?;
-        let zahlen: Vec<f64> = zeile[..ende]
+    let mut lines = Vec::new();
+    for line in rest[onto..].split('(').skip(1) {
+        let end = line.find(')')?;
+        let numbers: Vec<f64> = line[..end]
             .split(',')
             .filter_map(|z| z.trim().parse::<f64>().ok())
             .collect();
-        if zahlen.len() == 4 {
-            zeilen.push(zahlen);
+        if numbers.len() == 4 {
+            lines.push(numbers);
         }
-        if zeilen.len() == 4 {
+        if lines.len() == 4 {
             break;
         }
     }
-    if zeilen.len() != 4 {
+    if lines.len() != 4 {
         return None;
     }
     let mut out = [0.0f64; 16];
-    for (z, zeile) in zeilen.iter().enumerate() {
-        for (s, wert) in zeile.iter().enumerate() {
+    for (z, line) in lines.iter().enumerate() {
+        for (s, wert) in line.iter().enumerate() {
             out[z * 4 + s] = *wert;
         }
     }
@@ -415,22 +415,22 @@ fn transform(text: &str) -> Option<[f64; 16]> {
 /// das Element vor seiner Verschiebung hat, und damit die einzige, die unveraendert bleibt, wenn
 /// dieselbe Aufnahme spaeter anders ausgerichtet wird.
 pub fn parse_usda(name: &str, text: &str) -> Option<Element> {
-    let punkte = tripel(text, "point3f[] points")?;
-    if punkte.is_empty() {
+    let points = tripel(text, "point3f[] points")?;
+    if points.is_empty() {
         return None;
     }
     let transform = transform(text)?;
-    let mut spanne = [0.0f64; 3];
-    for achse in 0..3 {
-        let min = punkte
+    let mut span = [0.0f64; 3];
+    for axis in 0..3 {
+        let min = points
             .iter()
-            .map(|p| p[achse])
+            .map(|p| p[axis])
             .fold(f64::INFINITY, f64::min);
-        let max = punkte
+        let max = points
             .iter()
-            .map(|p| p[achse])
+            .map(|p| p[axis])
             .fold(f64::NEG_INFINITY, f64::max);
-        spanne[achse] = max - min;
+        span[axis] = max - min;
     }
     Some(Element {
         id: name
@@ -439,15 +439,15 @@ pub fn parse_usda(name: &str, text: &str) -> Option<Element> {
             .unwrap_or(name)
             .trim_end_matches(".usda")
             .to_string(),
-        category: zeichenkette(text, "string Category").unwrap_or_else(|| "Unknown".to_string()),
-        dimensions_m: spanne,
+        category: string(text, "string Category").unwrap_or_else(|| "Unknown".to_string()),
+        dimensions_m: span,
         transform,
         confidence: "low",
-        source_id: zeichenkette(text, "string UUID").unwrap_or_default(),
+        source_id: string(text, "string UUID").unwrap_or_default(),
     })
 }
 
-/// Die Flaeche der **oberen** Seite eines flachen Koerpers, aus seinen Dreiecken.
+/// Die Flaeche der **oberen** Side eines flachen Koerpers, aus seinen Dreiecken.
 ///
 /// Nicht `x * y`: die Bodenplatte ist eine L-Form, und ihr Rahmen misst die Huelle, nicht die
 /// Flaeche. Ebenso wenig aus einem Ring ihrer Randpunkte — der Boden traegt 28 Facetten, davon 6
@@ -455,42 +455,42 @@ pub fn parse_usda(name: &str, text: &str) -> Option<Element> {
 /// ein Ring aus acht Randpunkten ergab 32,99 statt 31,57 m², weil die L-Form dabei zu ihrer
 /// Huelle wird). Gerechnet wird deshalb ueber genau die Dreiecke, deren Normale im lokalen Rahmen
 /// nach oben zeigt: bei der Bodenplatte ist das die lokale z-Achse, weil sie flach liegt.
-pub fn obere_flaeche_m2(text: &str) -> Option<f64> {
-    let punkte = tripel(text, "point3f[] points")?;
-    let normalen = tripel(text, "normal3f[] normals")?;
-    let ecken_je_flaeche = zahlen(text, "faceVertexCounts")?;
-    let indizes = zahlen(text, "faceVertexIndices")?;
+pub fn top_area_m2(text: &str) -> Option<f64> {
+    let points = tripel(text, "point3f[] points")?;
+    let normals = tripel(text, "normal3f[] normals")?;
+    let corners_per_surface = numbers(text, "faceVertexCounts")?;
+    let indices = numbers(text, "faceVertexIndices")?;
 
-    let mut summe = 0.0;
+    let mut total = 0.0;
     let mut o = 0usize;
-    for n in ecken_je_flaeche {
-        if o + n > indizes.len() {
+    for n in corners_per_surface {
+        if o + n > indices.len() {
             return None;
         }
-        let ecken = &indizes[o..o + n];
+        let corners = &indices[o..o + n];
         o += n;
-        let hoch = ecken
+        let up = corners
             .iter()
-            .filter_map(|&i| normalen.get(i))
+            .filter_map(|&i| normals.get(i))
             .map(|n| n[2])
             .sum::<f64>()
             / n as f64;
-        if hoch <= 0.9 {
+        if up <= 0.9 {
             continue;
         }
         for k in 1..n.saturating_sub(1) {
-            let (a, b, c) = (punkte[ecken[0]], punkte[ecken[k]], punkte[ecken[k + 1]]);
+            let (a, b, c) = (points[corners[0]], points[corners[k]], points[corners[k + 1]]);
             let u = [b[0] - a[0], b[1] - a[1], b[2] - a[2]];
             let v = [c[0] - a[0], c[1] - a[1], c[2] - a[2]];
-            let kreuz = [
+            let cross = [
                 u[1] * v[2] - u[2] * v[1],
                 u[2] * v[0] - u[0] * v[2],
                 u[0] * v[1] - u[1] * v[0],
             ];
-            summe += (kreuz[0] * kreuz[0] + kreuz[1] * kreuz[1] + kreuz[2] * kreuz[2]).sqrt() / 2.0;
+            total += (cross[0] * cross[0] + cross[1] * cross[1] + cross[2] * cross[2]).sqrt() / 2.0;
         }
     }
-    Some(summe)
+    Some(total)
 }
 
 /// Eine USDZ lesen. Bekommt den Pfad, nicht den Inhalt: die Aufnahme ist gross und bleibt liegen,
@@ -507,19 +507,19 @@ pub fn read_usdz(path: &Path) -> Result<Scan, ScanError> {
             .map(|byte| format!("{byte:02x}"))
             .collect::<String>()
     };
-    let eintraege = zip_eintraege(&bytes, path)?;
+    let entries = zip_entries(&bytes, path)?;
 
     let mut elements = Vec::new();
     let mut mesh_assets = 0usize;
     let mut boden_usda = None;
-    for e in &eintraege {
+    for e in &entries {
         if e.name.starts_with("assets/Mesh/") {
             mesh_assets += 1;
         }
         if !e.name.ends_with(".usda") || !e.name.starts_with("assets/Mesh/") {
             continue;
         }
-        let text = std::str::from_utf8(e.daten).map_err(|err| ScanError::Form {
+        let text = std::str::from_utf8(e.data).map_err(|err| ScanError::Form {
             path: path.to_path_buf(),
             name: e.name.clone(),
             detail: format!("kein UTF-8: {err}"),
@@ -535,26 +535,26 @@ pub fn read_usdz(path: &Path) -> Result<Scan, ScanError> {
         elements.push(element);
     }
 
-    let kopf = eintraege
+    let header = entries
         .iter()
         .find(|e| e.name == "CapturedRoom.usda")
-        .ok_or_else(|| ScanError::Fehlt {
+        .ok_or_else(|| ScanError::Missing {
             path: path.to_path_buf(),
             name: "CapturedRoom.usda".to_string(),
         })?;
-    let kopf_text = std::str::from_utf8(kopf.daten).map_err(|err| ScanError::Form {
+    let header_text = std::str::from_utf8(header.data).map_err(|err| ScanError::Form {
         path: path.to_path_buf(),
-        name: kopf.name.clone(),
+        name: header.name.clone(),
         detail: format!("kein UTF-8: {err}"),
     })?;
     // Jede Raumgruppe fuehrt neben sich einen Mittelpunkt `…_centerTop`. Deren Anzahl ist die
     // Anzahl der Gruppen, ohne die Klammerstruktur der Datei nachzubauen.
-    let room_groups = kopf_text.matches("_centerTop").count();
+    let room_groups = header_text.matches("_centerTop").count();
 
     elements.sort_by(|a, b| a.id.cmp(&b.id));
     Ok(Scan {
         elements,
-        capture_finished_at: kopf.zeit.clone(),
+        capture_finished_at: header.time.clone(),
         mesh_assets,
         room_groups,
         sha256,
@@ -574,7 +574,7 @@ pub fn captures_root(flat: &str) -> Result<PathBuf, ScanError> {
     if root.is_dir() {
         Ok(root)
     } else {
-        Err(ScanError::KeineAufnahme(root.display().to_string()))
+        Err(ScanError::NoCapture(root.display().to_string()))
     }
 }
 
@@ -605,7 +605,7 @@ pub fn latest_capture(flat: &str) -> Result<PathBuf, ScanError> {
             return Ok(dir);
         }
     }
-    Err(ScanError::KeineAufnahme(format!(
+    Err(ScanError::NoCapture(format!(
         "unter {} liegt keine vollstaendige Aufnahme",
         captures_root(flat)?.display()
     )))
@@ -623,8 +623,8 @@ pub fn write_draft(
     heute: &str,
 ) -> std::io::Result<PathBuf> {
     let pfad = verzeichnis.join("draft.json");
-    let inhalt = draft(scan, flat, heute);
-    std::fs::write(&pfad, serde_json::to_vec_pretty(&inhalt)?)?;
+    let content = draft(scan, flat, heute);
+    std::fs::write(&pfad, serde_json::to_vec_pretty(&content)?)?;
     Ok(pfad)
 }
 
@@ -646,22 +646,22 @@ pub fn draft(scan: &Scan, flat: &str, created_at: &str) -> serde_json::Value {
             "source_id": e.source_id,
         })
     };
-    let mut flaechen = Vec::new();
-    let mut oeffnungen = Vec::new();
-    let mut objekte = Vec::new();
+    let mut surfaces = Vec::new();
+    let mut openings = Vec::new();
+    let mut objects = Vec::new();
     for e in &scan.elements {
-        if e.ist_flaeche() {
-            flaechen.push(als_json(e));
-        } else if e.ist_oeffnung() {
-            oeffnungen.push(als_json(e));
+        if e.is_surface() {
+            surfaces.push(als_json(e));
+        } else if e.is_opening() {
+            openings.push(als_json(e));
         } else {
-            objekte.push(als_json(e));
+            objects.push(als_json(e));
         }
     }
-    let kurz = &scan.sha256[..16.min(scan.sha256.len())];
+    let short = &scan.sha256[..16.min(scan.sha256.len())];
     serde_json::json!({
         "schema_version": "roomplan-capture/v1",
-        "draft_id": format!("raw-{kurz}"),
+        "draft_id": format!("raw-{short}"),
         "created_at": created_at,
         "source": {
             "platform": "macos",
@@ -671,12 +671,12 @@ pub fn draft(scan: &Scan, flat: &str, created_at: &str) -> serde_json::Value {
         "coordinate_system": { "units": "meters", "up_axis": "Y" },
         "room": {
             "id": flat,
-            "surfaces": flaechen,
-            "openings": oeffnungen,
-            "objects": objekte,
+            "surfaces": surfaces,
+            "openings": openings,
+            "objects": objects,
         },
         "assets": [{
-            "asset_id": format!("usdz-{kurz}"),
+            "asset_id": format!("usdz-{short}"),
             "role": "mesh",
             "format": "usdz",
             "byte_length": scan.byte_length,
@@ -704,31 +704,31 @@ pub fn draft(scan: &Scan, flat: &str, created_at: &str) -> serde_json::Value {
 #[derive(Debug, Clone, PartialEq)]
 pub struct Diff {
     /// Die Wandhoehe in Zentimetern, wenn alle Waende einig sind.
-    pub scan_wandhoehe_cm: Option<f64>,
+    pub scan_wall_height_cm: Option<f64>,
     /// Was `room.toml` als Hoehe fuehrt. `0` heisst dort „nicht gemessen" und nicht „null".
-    pub modell_hoehe_cm: i32,
+    pub model_height_cm: i32,
     /// Tueren und Fenster aus dem Scan: Kennung, Kategorie, Breite und Hoehe in Zentimetern.
-    pub scan_oeffnungen: Vec<(String, String, f64, f64)>,
+    pub scan_openings: Vec<(String, String, f64, f64)>,
     /// Tueren und Fenster aus `room.toml`: Kennung, Breite in Zentimetern.
-    pub modell_oeffnungen: Vec<(String, i32)>,
+    pub model_openings: Vec<(String, i32)>,
     /// Der Boden, den die Aufnahme zeigt, als Flaeche der oberen Bodenseite.
-    pub scan_grundflaeche_m2: Option<f64>,
+    pub scan_floor_area_m2: Option<f64>,
     /// Die innere Grundflaeche, die `room.toml` kennt.
-    pub modell_innenflaeche_m2: f64,
+    pub model_inner_area_m2: f64,
     /// Gesamtlaenge aller Waende aus dem Scan, in Zentimetern. Nicht die Summe aus `room.toml`:
     /// der Scan trennt Waende an ihren Oeffnungen, `room.toml` fuehrt eine Wand mit einer
     /// Oeffnung darin, und die beiden Summen sind deshalb nicht dieselbe Groesse. Der Wert steht
     /// zum Nachsehen hier und geht in kein Urteil ein.
-    pub scan_wandlaenge_cm: f64,
+    pub scan_wall_length_cm: f64,
     /// Moebelstuecke und Geraete aus dem Scan: `Element (Kategorie)` und die Aussenmasse in
     /// Zentimetern, in der Reihenfolge des lokalen Rahmens.
-    pub scan_objekte: Vec<(String, [f64; 3])>,
+    pub scan_objects: Vec<(String, [f64; 3])>,
 }
 
 impl Diff {
     /// Wo der Scan eine Zahl hat, die `room.toml` als offen fuehrt.
-    pub fn offene_frage_beantwortet(&self) -> bool {
-        self.scan_wandhoehe_cm.is_some() && self.modell_hoehe_cm == 0
+    pub fn open_question_answered(&self) -> bool {
+        self.scan_wall_height_cm.is_some() && self.model_height_cm == 0
     }
 }
 
@@ -740,14 +740,14 @@ impl Diff {
 /// sie ableitet. Die Aufnahme zeigt die ganze Wohnung und nicht nur einen Raum, und
 /// `innen_gemessen_m2` in `room.toml` ist genau diese Summe; gelesen wird sie hier trotzdem
 /// nicht.
-fn modell_innenflaeche_m2(room: &Room) -> f64 {
+fn model_inner_area_m2(room: &Room) -> f64 {
     room.area_m2() + room.bad.as_ref().map_or(0.0, |bad| bad.flaeche_m2)
 }
 
 /// Der Scan gegen das gemessene Modell. Rechnet, schreibt nichts.
 pub fn diff(scan: &Scan, room: &Room) -> Diff {
-    let mut oeffnungen: Vec<(String, String, f64, f64)> = scan
-        .oeffnungen()
+    let mut openings: Vec<(String, String, f64, f64)> = scan
+        .openings()
         .map(|e| {
             (
                 e.id.clone(),
@@ -757,9 +757,9 @@ pub fn diff(scan: &Scan, room: &Room) -> Diff {
             )
         })
         .collect();
-    oeffnungen.sort_by(|a, b| a.2.partial_cmp(&b.2).unwrap_or(std::cmp::Ordering::Equal));
-    let mut objekte: Vec<(String, [f64; 3])> = scan
-        .objekte()
+    openings.sort_by(|a, b| a.2.partial_cmp(&b.2).unwrap_or(std::cmp::Ordering::Equal));
+    let mut objects: Vec<(String, [f64; 3])> = scan
+        .objects()
         .map(|e| {
             (
                 format!("{} ({})", e.id, e.category),
@@ -771,29 +771,29 @@ pub fn diff(scan: &Scan, room: &Room) -> Diff {
             )
         })
         .collect();
-    objekte.sort_by(|a, b| a.0.cmp(&b.0));
+    objects.sort_by(|a, b| a.0.cmp(&b.0));
     Diff {
-        scan_wandhoehe_cm: scan.wandhoehe_m().map(|m| m * 100.0),
-        modell_hoehe_cm: room.hauptraum.hoehe,
-        scan_oeffnungen: oeffnungen,
-        modell_oeffnungen: room
-            .oeffnungen
+        scan_wall_height_cm: scan.wall_height_m().map(|m| m * 100.0),
+        model_height_cm: room.main_room.height,
+        scan_openings: openings,
+        model_openings: room
+            .openings
             .iter()
-            .map(|o| (o.id.clone(), o.breite))
+            .map(|o| (o.id.clone(), o.width))
             .collect(),
-        scan_grundflaeche_m2: scan.bodenflaeche_m2(),
-        modell_innenflaeche_m2: modell_innenflaeche_m2(room),
-        scan_wandlaenge_cm: scan
-            .flaechen()
+        scan_floor_area_m2: scan.floor_area_m2(),
+        model_inner_area_m2: model_inner_area_m2(room),
+        scan_wall_length_cm: scan
+            .surfaces()
             .filter(|e| e.category == "Wall")
             .map(|e| e.dimensions_m[0] * 100.0)
             .sum(),
-        scan_objekte: objekte,
+        scan_objects: objects,
     }
 }
 
 /// Der Scan gegen ein geladenes Modell.
-pub fn vergleiche(scan: &Scan, model: &Model) -> Diff {
+pub fn compare(scan: &Scan, model: &Model) -> Diff {
     diff(scan, &model.room)
 }
 
@@ -803,54 +803,54 @@ mod tests {
 
     /// Ein ZIP mit gespeicherten Eintraegen, wie `zip -0` es schreibt. Nur so viel Format, wie
     /// der Leser oben behauptet zu verstehen.
-    fn zip(eintraege: &[(&str, &str)]) -> Vec<u8> {
+    fn zip(entries: &[(&str, &str)]) -> Vec<u8> {
         let mut out = Vec::new();
-        let mut zentral = Vec::new();
+        let mut central = Vec::new();
         // Ein fester Zeitstempel: 1980-01-01 00:00, damit der Test nicht von der Uhr abhaengt.
-        for (name, inhalt) in eintraege {
+        for (name, content) in entries {
             let offset = out.len() as u32;
             out.extend_from_slice(&0x0403_4b50u32.to_le_bytes());
             out.extend_from_slice(&20u16.to_le_bytes()); // Version
             out.extend_from_slice(&0u16.to_le_bytes()); // Flags
-            out.extend_from_slice(&VERFAHREN_GESPEICHERT.to_le_bytes());
+            out.extend_from_slice(&METHOD_STORED.to_le_bytes());
             out.extend_from_slice(&0u16.to_le_bytes()); // Zeit
             out.extend_from_slice(&0x0021u16.to_le_bytes()); // Datum: 1980-01-01
             out.extend_from_slice(&0u32.to_le_bytes()); // CRC, hier nicht geprueft
-            out.extend_from_slice(&(inhalt.len() as u32).to_le_bytes());
-            out.extend_from_slice(&(inhalt.len() as u32).to_le_bytes());
+            out.extend_from_slice(&(content.len() as u32).to_le_bytes());
+            out.extend_from_slice(&(content.len() as u32).to_le_bytes());
             out.extend_from_slice(&(name.len() as u16).to_le_bytes());
             out.extend_from_slice(&0u16.to_le_bytes()); // Extra
             out.extend_from_slice(name.as_bytes());
-            out.extend_from_slice(inhalt.as_bytes());
+            out.extend_from_slice(content.as_bytes());
 
-            zentral.extend_from_slice(&0x0201_4b50u32.to_le_bytes());
-            zentral.extend_from_slice(&20u16.to_le_bytes()); // Version, die es schrieb
-            zentral.extend_from_slice(&20u16.to_le_bytes()); // Version, die es braucht
-            zentral.extend_from_slice(&0u16.to_le_bytes()); // Flags
-            zentral.extend_from_slice(&VERFAHREN_GESPEICHERT.to_le_bytes());
-            zentral.extend_from_slice(&0u16.to_le_bytes());
-            zentral.extend_from_slice(&0x0021u16.to_le_bytes());
-            zentral.extend_from_slice(&0u32.to_le_bytes());
-            zentral.extend_from_slice(&(inhalt.len() as u32).to_le_bytes());
-            zentral.extend_from_slice(&(inhalt.len() as u32).to_le_bytes());
-            zentral.extend_from_slice(&(name.len() as u16).to_le_bytes());
-            zentral.extend_from_slice(&0u16.to_le_bytes()); // Extra
-            zentral.extend_from_slice(&0u16.to_le_bytes()); // Kommentar
-            zentral.extend_from_slice(&0u16.to_le_bytes()); // Platte
-            zentral.extend_from_slice(&0u16.to_le_bytes()); // Attribute
-            zentral.extend_from_slice(&0u32.to_le_bytes()); // extern
-            zentral.extend_from_slice(&offset.to_le_bytes());
-            zentral.extend_from_slice(name.as_bytes());
+            central.extend_from_slice(&0x0201_4b50u32.to_le_bytes());
+            central.extend_from_slice(&20u16.to_le_bytes()); // Version, die es schrieb
+            central.extend_from_slice(&20u16.to_le_bytes()); // Version, die es braucht
+            central.extend_from_slice(&0u16.to_le_bytes()); // Flags
+            central.extend_from_slice(&METHOD_STORED.to_le_bytes());
+            central.extend_from_slice(&0u16.to_le_bytes());
+            central.extend_from_slice(&0x0021u16.to_le_bytes());
+            central.extend_from_slice(&0u32.to_le_bytes());
+            central.extend_from_slice(&(content.len() as u32).to_le_bytes());
+            central.extend_from_slice(&(content.len() as u32).to_le_bytes());
+            central.extend_from_slice(&(name.len() as u16).to_le_bytes());
+            central.extend_from_slice(&0u16.to_le_bytes()); // Extra
+            central.extend_from_slice(&0u16.to_le_bytes()); // Kommentar
+            central.extend_from_slice(&0u16.to_le_bytes()); // Platte
+            central.extend_from_slice(&0u16.to_le_bytes()); // Attribute
+            central.extend_from_slice(&0u32.to_le_bytes()); // extern
+            central.extend_from_slice(&offset.to_le_bytes());
+            central.extend_from_slice(name.as_bytes());
         }
-        let zentral_start = out.len() as u32;
-        out.extend_from_slice(&zentral);
+        let central_start = out.len() as u32;
+        out.extend_from_slice(&central);
         out.extend_from_slice(&0x0605_4b50u32.to_le_bytes());
         out.extend_from_slice(&0u16.to_le_bytes());
         out.extend_from_slice(&0u16.to_le_bytes());
-        out.extend_from_slice(&(eintraege.len() as u16).to_le_bytes());
-        out.extend_from_slice(&(eintraege.len() as u16).to_le_bytes());
-        out.extend_from_slice(&(zentral.len() as u32).to_le_bytes());
-        out.extend_from_slice(&zentral_start.to_le_bytes());
+        out.extend_from_slice(&(entries.len() as u16).to_le_bytes());
+        out.extend_from_slice(&(entries.len() as u16).to_le_bytes());
+        out.extend_from_slice(&(central.len() as u32).to_le_bytes());
+        out.extend_from_slice(&central_start.to_le_bytes());
         out.extend_from_slice(&0u16.to_le_bytes());
         out
     }
@@ -882,15 +882,15 @@ def Xform "Wall0" (
     }
 
     #[test]
-    fn ein_gespeicherter_eintrag_wird_gelesen_und_sein_zeitstempel_erkannt() {
+    fn a_stored_entry_is_read_and_its_timestamp_recognised() {
         let bytes = zip(&[("CapturedRoom.usda", "def Xform \"Section_grp\"\n")]);
         let path = std::env::temp_dir().join(format!("interior-zip-{}.usdz", std::process::id()));
         std::fs::write(&path, &bytes).expect("Testdatei");
-        let eintraege = zip_eintraege(&bytes, &path).expect("gelesen");
-        assert_eq!(eintraege.len(), 1);
-        assert_eq!(eintraege[0].name, "CapturedRoom.usda");
+        let entries = zip_entries(&bytes, &path).expect("gelesen");
+        assert_eq!(entries.len(), 1);
+        assert_eq!(entries[0].name, "CapturedRoom.usda");
         assert_eq!(
-            eintraege[0].zeit.as_deref(),
+            entries[0].time.as_deref(),
             Some("1980-01-01T00:00:00"),
             "das Datum 0x0021 ist der 1.1.1980"
         );
@@ -900,23 +900,23 @@ def Xform "Wall0" (
     /// Ein komprimierter Eintrag ist ein Fehler und keine leere Antwort. Ohne diesen Test waere
     /// die Regel „kein Entpacker" eine Behauptung im Modulkopf.
     #[test]
-    fn ein_komprimierter_eintrag_ist_ein_fehler() {
+    fn a_compressed_entry_is_an_error() {
         let mut bytes = zip(&[("CapturedRoom.usda", "leer")]);
         // Verfahren im lokalen UND im zentralen Kopf auf 8 (deflate) setzen.
-        let lokal = bytes.iter().position(|_| true).unwrap();
-        bytes[lokal + 8] = 8;
-        let zentral_start = u32::from_le_bytes([
+        let local = bytes.iter().position(|_| true).unwrap();
+        bytes[local + 8] = 8;
+        let central_start = u32::from_le_bytes([
             bytes[bytes.len() - 6],
             bytes[bytes.len() - 5],
             bytes[bytes.len() - 4],
             bytes[bytes.len() - 3],
         ]) as usize;
-        bytes[zentral_start + 10] = 8;
+        bytes[central_start + 10] = 8;
         let path =
             std::env::temp_dir().join(format!("interior-deflate-{}.usdz", std::process::id()));
         std::fs::write(&path, &bytes).expect("Testdatei");
-        match zip_eintraege(&bytes, &path) {
-            Err(ScanError::Komprimiert { verfahren, .. }) => assert_eq!(verfahren, 8),
+        match zip_entries(&bytes, &path) {
+            Err(ScanError::Compressed { method, .. }) => assert_eq!(method, 8),
             Err(other) => panic!("erwartet Komprimiert, bekommen: {other:?}"),
             // Kein `{:?}` auf dem Erfolgsfall: der traegt die Nutzdaten, und ein Test, der bei
             // einem Fehlschlag ein Archiv ausdruckt, ist beim Lesen schlimmer als nutzlos.
@@ -931,7 +931,7 @@ def Xform "Wall0" (
     /// Die Verschiebung muss in `[12..15]` landen. USD schreibt sie in die vierte Zeile; steht sie
     /// nach der Umsetzung dort, liest der Client sie falsch, ohne dass irgendetwas fehlschlaegt.
     #[test]
-    fn die_verschiebung_landet_in_der_vierten_spalte() {
+    fn the_translation_lands_in_the_fourth_column() {
         let e = parse_usda("assets/Mesh/Walls/Wall0/Wall0.usda", &wand_usda()).expect("Element");
         assert_eq!(e.id, "Wall0");
         assert_eq!(e.category, "Wall");
@@ -944,7 +944,7 @@ def Xform "Wall0" (
     }
 
     #[test]
-    fn die_ausdehnung_kommt_aus_dem_lokalen_rahmen_in_metern() {
+    fn the_extent_comes_from_the_local_frame_in_metres() {
         let e = parse_usda("assets/Mesh/Walls/Wall0/Wall0.usda", &wand_usda()).expect("Element");
         // Punkte in Zentimetern geschrieben und durch metersPerUnit = 1 als Meter gemeint: die
         // Spanne ist die Differenz der Punkte, unveraendert.
@@ -952,29 +952,29 @@ def Xform "Wall0" (
     }
 
     #[test]
-    fn kategorien_werden_getrennt() {
-        let fenster = r#"def Xform "Window0" ( customData = { string Category = "Window" } )
+    fn categories_are_separated() {
+        let window = r#"def Xform "Window0" ( customData = { string Category = "Window" } )
 { def Mesh "Window0" {
     point3f[] points = [(0, 0, 0), (90, 0, 0), (90, 120, 0)]
     matrix4d xformOp:transform = ( (1, 0, 0, 0), (0, 1, 0, 0), (0, 0, 1, 0), (0, 0, 0, 1) )
 } }"#;
         let w = parse_usda("Wall0.usda", &wand_usda()).expect("Wand");
-        let f = parse_usda("Window0.usda", fenster).expect("Fenster");
-        assert!(w.ist_flaeche() && !w.ist_oeffnung() && !w.ist_objekt());
-        assert!(f.ist_oeffnung() && !f.ist_tuer());
+        let f = parse_usda("Window0.usda", window).expect("Fenster");
+        assert!(w.is_surface() && !w.is_opening() && !w.is_object());
+        assert!(f.is_opening() && !f.is_door());
         assert!(f.dimensions_m[0] > 0.0);
     }
 
     #[test]
-    fn eine_geschlossene_tuer_ist_immer_noch_eine_tuer() {
-        let tuer = r#"def Xform "Door0" ( customData = { string Category = "Door(Isopen: False)" } )
+    fn a_closed_door_is_still_a_door() {
+        let door = r#"def Xform "Door0" ( customData = { string Category = "Door(Isopen: False)" } )
 { def Mesh "Door0" {
     point3f[] points = [(0, 0, 0), (90, 0, 0), (90, 200, 0)]
     matrix4d xformOp:transform = ( (1, 0, 0, 0), (0, 1, 0, 0), (0, 0, 1, 0), (0, 0, 0, 1) )
 } }"#;
-        let t = parse_usda("Door0.usda", tuer).expect("Tuer");
+        let t = parse_usda("Door0.usda", door).expect("Tuer");
         assert!(
-            t.ist_tuer(),
+            t.is_door(),
             "der Zustand in der Kategorie macht sie nicht zu etwas anderem"
         );
     }
@@ -983,7 +983,7 @@ def Xform "Wall0" (
     /// Unterschied fest: die Dreieckssumme zweier gleich grosser Platten ist ihre Summe, waehrend
     /// die Spanne desselben Koerpers doppelt so gross waere.
     #[test]
-    fn die_bodenflaeche_kommt_aus_den_dreiecken_und_nicht_aus_der_spanne() {
+    fn the_floor_area_comes_from_the_triangles_not_the_span() {
         // Zwei Platten von je 2 x 3, nebeneinander: die Gesamtspanne ist 4 x 3, die Flaeche 12.
         let text = r#"def Xform "Floor0" {
     def Mesh "Floor0"
@@ -994,10 +994,10 @@ def Xform "Wall0" (
         point3f[] points = [(0, 0, 0), (2, 0, 0), (2, 3, 0), (0, 3, 0), (2, 0, 0), (4, 0, 0), (4, 3, 0), (2, 3, 0)]
     }
 }"#;
-        let flaeche = obere_flaeche_m2(text).expect("Flaeche");
+        let area = top_area_m2(text).expect("Flaeche");
         assert!(
-            (flaeche - 12.0).abs() < 1e-9,
-            "erwartet 12, bekommen {flaeche}"
+            (area - 12.0).abs() < 1e-9,
+            "erwartet 12, bekommen {area}"
         );
     }
 
@@ -1008,7 +1008,7 @@ def Xform "Wall0" (
     /// fuehren, sonst traegt ein Punkt zwei Normalen zugleich. Die echte Bodenplatte tut das auch —
     /// sie traegt 28 Facetten auf 84 Punkte.
     #[test]
-    fn die_unterseite_zaehlt_nicht_mit() {
+    fn the_underside_does_not_count() {
         let text = r#"def Mesh "Floor0"
 {
     int[] faceVertexCounts = [3, 3]
@@ -1016,17 +1016,17 @@ def Xform "Wall0" (
     normal3f[] normals = [(0, 0, 1), (0, 0, 1), (0, 0, 1), (0, 0, -1), (0, 0, -1), (0, 0, -1)]
     point3f[] points = [(0, 0, 0), (2, 0, 0), (0, 3, 0), (0, 0, 0), (2, 0, 0), (0, 3, 0)]
 }"#;
-        let flaeche = obere_flaeche_m2(text).expect("Flaeche");
+        let area = top_area_m2(text).expect("Flaeche");
         assert!(
-            (flaeche - 3.0).abs() < 1e-9,
-            "erwartet 3, bekommen {flaeche}"
+            (area - 3.0).abs() < 1e-9,
+            "erwartet 3, bekommen {area}"
         );
     }
 
     /// Ein widerspruechiger Scan gibt keine Zahl heraus. Eine Wandhoehe aus zwoelf Waenden, von
     /// denen zwei anderer Meinung sind, ist die Zahl, die niemand mehr nachpruefen kann.
     #[test]
-    fn widersprechende_waende_ergeben_keine_hoehe() {
+    fn contradicting_walls_give_no_height() {
         let mut a = parse_usda("Wall0.usda", &wand_usda()).expect("Wand");
         let mut b = a.clone();
         b.dimensions_m[1] = 111.0;
@@ -1035,18 +1035,18 @@ def Xform "Wall0" (
             elements: vec![a, b],
             ..Default::default()
         };
-        assert_eq!(scan.wandhoehe_m(), None);
-        let eines = Scan {
+        assert_eq!(scan.wall_height_m(), None);
+        let one = Scan {
             elements: vec![parse_usda("Wall0.usda", &wand_usda()).expect("Wand")],
             ..Default::default()
         };
-        assert_eq!(eines.wandhoehe_m(), Some(250.0));
+        assert_eq!(one.wall_height_m(), Some(250.0));
     }
 
     /// Der Entwurf muss die Form tragen, die `roomplan.ts` liest. Ein falsch geschriebenes
     /// `schema_version` faellt dort nirgends auf, es kommt nur kein Entwurf an.
     #[test]
-    fn der_entwurf_traegt_die_form_des_clients() {
+    fn the_draft_has_the_client_shape() {
         let scan = Scan {
             elements: vec![
                 parse_usda("Wall0.usda", &wand_usda()).expect("Wand"),

@@ -1,15 +1,11 @@
-//! Die Naht zwischen `inventory` und `finance` (PRD B29), gegen erfundene Buchungen.
-//!
-//! Die echten Zahlen stehen im Overlay und werden hier nicht angefasst. Was geprueft wird, ist
-//! die Rechnung: welcher Monat zaehlt, welche Buchung zaehlt, und was passiert, wenn am Ende
-//! nichts uebrig bleibt.
+//! The monthly balance against invented bookings. Real numbers stay in the overlay; this checks
+//! which month and which booking counts, and what happens when nothing is left.
 
-use sjel_inventory::budget::{monate_bis_bezahlt, monatssaldo};
 use rusqlite::Connection;
+use sjel_inventory::budget::{monthly_balance, months_to_pay};
 
-/// Eine leere Datenbank mit finance' Projektionstabelle, so wie finance sie anlegt — die
-/// Spalten, die diese Abfrage liest, und keine mehr.
-fn db_mit_finance() -> Connection {
+/// An empty database with finance's projection table, only the columns this query reads.
+fn db_with_finance() -> Connection {
     let conn = Connection::open_in_memory().expect("in-memory");
     conn.execute_batch(
         "CREATE TABLE finance_transaction_projection (
@@ -20,44 +16,39 @@ fn db_mit_finance() -> Connection {
     conn
 }
 
-/// Euro rein, Cent raus. Die Schreibweise mit dem Unterstrich vor den letzten zwei Stellen
-/// waere lesbarer und ist genau die, die clippys `inconsistent_digit_grouping` verbietet —
-/// also einmal umrechnen, statt an jeder Stelle Nullen zu zaehlen.
-fn eur(betrag: i64) -> i64 {
-    betrag * 100
+/// Euro in, cents out; clippy's `inconsistent_digit_grouping` forbids writing `100_00`.
+fn eur(amount: i64) -> i64 {
+    amount * 100
 }
 
-fn buchen(conn: &Connection, id: &str, tag: &str, kind: &str, cents: i64) {
+fn book(conn: &Connection, id: &str, day: &str, kind: &str, cents: i64) {
     conn.execute(
         "INSERT INTO finance_transaction_projection (id, booked_at, kind, amount_cents)
          VALUES (?1, ?2, ?3, ?4)",
-        rusqlite::params![id, tag, kind, cents],
+        rusqlite::params![id, day, kind, cents],
     )
     .unwrap();
 }
 
-/// Ohne finance gibt es keine Zahl — und das ist `None` und keine Null. Eine Null waere die
-/// Behauptung, es bleibe genau nichts uebrig, gemessen.
+/// Without finance there is no number, which is `None` and not zero.
 #[test]
-fn ohne_finance_gibt_es_keinen_saldo() {
+fn without_finance_there_is_no_balance() {
     let conn = Connection::open_in_memory().unwrap();
-    assert!(monatssaldo(&conn).unwrap().is_none());
+    assert!(monthly_balance(&conn).unwrap().is_none());
 }
 
 #[test]
-fn eine_leere_projektion_ergibt_auch_keinen_saldo() {
-    let conn = db_mit_finance();
-    assert!(monatssaldo(&conn).unwrap().is_none());
+fn an_empty_projection_gives_no_balance_either() {
+    let conn = db_with_finance();
+    assert!(monthly_balance(&conn).unwrap().is_none());
 }
 
-/// Der Median, nicht der Mittelwert. Ein Monat mit einer Jahreszahlung darin verschiebt einen
-/// Mittelwert um Hunderte Euro; der Median haelt still. Hier: elf Monate mit +100, einer mit
-/// -5000 — Mittelwert waere negativ, Median ist 100.
+/// Eleven months at +100 and one at -5000: the mean would be negative, the median is 100.
 #[test]
-fn ein_einzelner_ausreisser_kippt_den_median_nicht() {
-    let conn = db_mit_finance();
+fn one_outlier_does_not_tip_the_median() {
+    let conn = db_with_finance();
     for m in 1..=11 {
-        buchen(
+        book(
             &conn,
             &format!("e{m}"),
             &format!("2025-{m:02}-15"),
@@ -65,68 +56,61 @@ fn ein_einzelner_ausreisser_kippt_den_median_nicht() {
             eur(100),
         );
     }
-    buchen(&conn, "krach", "2025-12-15", "expense", eur(5000));
+    book(&conn, "crash", "2025-12-15", "expense", eur(5000));
 
-    let s = monatssaldo(&conn).unwrap().expect("zwoelf Monate");
-    assert_eq!(s.monate, 12);
-    // Zwoelf Werte: elfmal +10000, einmal -500000. Sortiert liegt die Mitte zwischen zwei
-    // Plusmonaten, also bleibt der Median positiv.
-    assert_eq!(s.median_cent, eur(100));
+    let b = monthly_balance(&conn).unwrap().expect("twelve months");
+    assert_eq!(b.months, 12);
+    assert_eq!(b.median_cents, eur(100));
 }
 
-/// Eine Umbuchung zwischen eigenen Konten ist kein Einkommen und keine Ausgabe. Zaehlte sie
-/// mit, waere ein Monat mit einer Kreditkartenabrechnung darin doppelt falsch.
+/// A transfer between own accounts is neither income nor expense.
 #[test]
-fn eine_umbuchung_zaehlt_nicht() {
-    let conn = db_mit_finance();
-    buchen(&conn, "a", "2025-05-01", "income", eur(200));
-    buchen(&conn, "b", "2025-05-02", "expense", eur(50));
-    buchen(&conn, "c", "2025-05-03", "transfer", eur(900));
+fn a_transfer_does_not_count() {
+    let conn = db_with_finance();
+    book(&conn, "a", "2025-05-01", "income", eur(200));
+    book(&conn, "b", "2025-05-02", "expense", eur(50));
+    book(&conn, "c", "2025-05-03", "transfer", eur(900));
 
-    let s = monatssaldo(&conn).unwrap().unwrap();
-    assert_eq!(s.monate, 1);
-    assert_eq!(s.median_cent, eur(150));
+    let b = monthly_balance(&conn).unwrap().unwrap();
+    assert_eq!(b.months, 1);
+    assert_eq!(b.median_cents, eur(150));
 }
 
-/// Der laufende Monat ist unvollstaendig. Ein halber Monat mit ganzen Fixkosten und halbem
-/// Einkommen ist keine Messung, sondern eine Verzerrung mit Nachkommastellen.
+/// The current month is incomplete and is no measurement.
 #[test]
-fn der_laufende_monat_zaehlt_nicht_mit() {
-    let conn = db_mit_finance();
-    let heute: String = conn
+fn the_current_month_does_not_count() {
+    let conn = db_with_finance();
+    let today: String = conn
         .query_row("SELECT strftime('%Y-%m-15','now')", [], |r| r.get(0))
         .unwrap();
-    buchen(&conn, "jetzt", &heute, "expense", eur(9999));
+    book(&conn, "now", &today, "expense", eur(9999));
     assert!(
-        monatssaldo(&conn).unwrap().is_none(),
-        "nur der laufende Monat hat Buchungen, also gibt es nichts Abgeschlossenes zu messen"
+        monthly_balance(&conn).unwrap().is_none(),
+        "only the current month has bookings, so nothing completed is left to measure"
     );
 
-    buchen(&conn, "vorher", "2025-03-10", "income", eur(300));
-    let s = monatssaldo(&conn).unwrap().unwrap();
-    assert_eq!((s.monate, s.median_cent), (1, eur(300)));
-    assert_eq!((s.von.as_str(), s.bis.as_str()), ("2025-03", "2025-03"));
-}
-
-/// Aus einem Saldo, der nicht positiv ist, laesst sich nichts ansparen. `None` ist hier die
-/// Antwort und kein fehlender Wert — "-3,2 Monate" waere eine Rechnung, die so tut, als
-/// beantworte sie etwas.
-#[test]
-fn ein_negativer_saldo_ergibt_keine_monatszahl() {
-    let conn = db_mit_finance();
-    buchen(&conn, "a", "2025-05-01", "income", eur(100));
-    buchen(&conn, "b", "2025-05-02", "expense", eur(400));
-    let s = monatssaldo(&conn).unwrap().unwrap();
-    assert_eq!(s.median_cent, -eur(300));
-    assert_eq!(monate_bis_bezahlt(eur(1000), &s), None);
+    book(&conn, "before", "2025-03-10", "income", eur(300));
+    let b = monthly_balance(&conn).unwrap().unwrap();
+    assert_eq!((b.months, b.median_cents), (1, eur(300)));
+    assert_eq!((b.from.as_str(), b.to.as_str()), ("2025-03", "2025-03"));
 }
 
 #[test]
-fn ein_positiver_saldo_ergibt_die_zahl_der_monate() {
-    let conn = db_mit_finance();
-    buchen(&conn, "a", "2025-05-01", "income", eur(500));
-    buchen(&conn, "b", "2025-05-02", "expense", eur(250));
-    let s = monatssaldo(&conn).unwrap().unwrap();
-    assert_eq!(s.median_cent, eur(250));
-    assert_eq!(monate_bis_bezahlt(eur(1000), &s), Some(4.0));
+fn a_negative_balance_gives_no_month_count() {
+    let conn = db_with_finance();
+    book(&conn, "a", "2025-05-01", "income", eur(100));
+    book(&conn, "b", "2025-05-02", "expense", eur(400));
+    let b = monthly_balance(&conn).unwrap().unwrap();
+    assert_eq!(b.median_cents, -eur(300));
+    assert_eq!(months_to_pay(eur(1000), &b), None);
+}
+
+#[test]
+fn a_positive_balance_gives_the_month_count() {
+    let conn = db_with_finance();
+    book(&conn, "a", "2025-05-01", "income", eur(500));
+    book(&conn, "b", "2025-05-02", "expense", eur(250));
+    let b = monthly_balance(&conn).unwrap().unwrap();
+    assert_eq!(b.median_cents, eur(250));
+    assert_eq!(months_to_pay(eur(1000), &b), Some(4.0));
 }

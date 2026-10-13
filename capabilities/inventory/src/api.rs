@@ -1,23 +1,7 @@
-//! HTTP-Oberflaeche der Capability.
+//! The capability's HTTP surface. Every endpoint returns JSON; the dashboard renders it.
 //!
-//! Die Rechnung passiert hier, die Anzeige nicht: jeder Endpunkt liefert JSON, und das
-//! Dashboard rendert es. Ein Frontend, das eigene Regeln auslegt, waere die Drift, die dieses
-//! Programm verhindern soll.
-//!
-//! Gebunden wird ueber `sjel_server::serve_local` — Loopback, wie es die Bind-Policy von
-//! `tools/doctor` fuer jede Capability in beiden Roots verlangt.
-//!
-//! ## Was hier NICHT steht, und warum
-//!
-//! **`/api/media`** (die Bilder unter `bild`) bleibt vorerst in `interior`. Es gehoert
-//! hierher — ein Bild ist ein Feld einer Zeile —, aber der Medienpfad loest eine private
-//! Asset-Wurzel auf, die `interior` auch fuer die RoomPlan-Aufnahmen benutzt. Ihn mitzunehmen,
-//! ohne ihn zu verifizieren, waere ein Umzug mit einem stillen Verlust darin (ISA F13,
-//! Schritt 3).
-//!
-//! **`/api/sync` gehoert hierher und liegt hier.** Der Geraete-Eingang traegt
-//! Item-Mutationen; bis 2026-10-05 sass er in `interior`, womit eine zweite Capability in
-//! dieselbe Tabelle schrieb (ISC-65).
+//! Item images stay on `interior`'s `/api/media` for now: the media path resolves a private asset
+//! root that interior also uses for RoomPlan captures.
 
 use axum::body::{to_bytes, Body};
 use axum::extract::{Extension, Path, Request, State};
@@ -32,80 +16,66 @@ use serde::Deserialize;
 use std::path::PathBuf;
 use std::sync::Arc;
 
+use crate::store::{Item, Store, WriteOutcome, LEGACY_FIELDS};
+
 pub struct AppState {
-    /// Das Geraeteregister, aus dem dieselbe Datei gelesen wird wie die Zeilen. Ein Feld und
-    /// kein Aufruf je Anfrage, wie [`AppState::database`].
     pub device_store: devices::store::DevicesStore,
-    /// Die SQLite-Datei, einmal beim Start aufgeloest. Ein Feld und kein Aufruf je Anfrage,
-    /// damit ein Test den verdrahteten Router gegen eine Temp-Datei fahren kann statt gegen
-    /// die Datenbank der Installation.
+    /// Resolved once at start, so a test can point the router at a temp file.
     pub database: PathBuf,
 }
 
-fn store(s: &AppState) -> Result<crate::store::Store, (axum::http::StatusCode, String)> {
-    crate::store::Store::open(&s.database)
-        .map_err(|e| (axum::http::StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))
+type HttpError = (StatusCode, String);
+
+fn store(s: &AppState) -> Result<Store, HttpError> {
+    Store::open(&s.database).map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))
 }
 
-fn boom<E: std::fmt::Display>(e: E) -> (axum::http::StatusCode, String) {
-    (axum::http::StatusCode::INTERNAL_SERVER_ERROR, e.to_string())
+fn boom<E: std::fmt::Display>(e: E) -> HttpError {
+    (StatusCode::INTERNAL_SERVER_ERROR, e.to_string())
 }
 
 async fn health() -> &'static str {
     "ok"
 }
 
-/// Was diese Capability beantwortet, als Daten neben `/health`. Ein veralteter Katalog waere
-/// schlimmer als keiner, weil er geglaubt wird; `route_manifest::undeclared_routes` liest
-/// deshalb den Router aus diesem Quelltext und faellt um, wenn eine Route hier fehlt.
+/// What this capability answers. `route_manifest::undeclared_routes` reads the router from this
+/// source and fails when a route is missing here.
 const ROUTES: &[route_manifest::Route] = &[
-    r(
-        "GET",
-        "/",
-        "Alle Eintraege als Seite, bei jeder Anfrage aus den Zeilen erzeugt.",
-    ),
+    r("GET", "/", "Every entry as a page, rendered from the rows."),
     r("GET", "/health", "Liveness."),
-    r("GET", "/routes", "Dieser Katalog."),
-    r("GET", "/api/inventory", "Jeder Eintrag mit seinem Zustand."),
+    r("GET", "/routes", "This catalogue."),
+    r("GET", "/api/inventory", "Every entry with its state."),
     r(
         "GET",
         "/api/wishlist",
-        "Der offene Bedarf und was er in Monatssalden kostet.",
+        "The open wishlist and what it costs in monthly balances.",
     ),
     r(
         "POST",
         "/api/items",
-        "Ein Stueck oder einen Bedarf anlegen. `state` ist Pflicht.",
+        "Create a piece or a need. `state` is required.",
     ),
     r(
         "PUT",
         "/api/items/{id}",
-        "Ein Stueck ersetzen. Nimmt die Item-Form, die /api/inventory liefert.",
+        "Replace an entry. Takes the item shape /api/inventory returns.",
     ),
     r(
         "PATCH",
         "/api/items/{id}",
-        "Genannte Felder aendern, ungenannte in Ruhe lassen.",
+        "Change the named fields and leave the rest.",
     ),
-    r(
-        "GET",
-        "/api/items/{id}/state",
-        "Die Zustandsgeschichte eines Eintrags.",
-    ),
-    r(
-        "POST",
-        "/api/items/{id}/state",
-        "Einen Zustandswechsel anhaengen.",
-    ),
+    r("GET", "/api/items/{id}/state", "The state history of an entry."),
+    r("POST", "/api/items/{id}/state", "Append a state change."),
     r(
         "POST",
         "/api/vault/writeback",
-        "Slots in die markierte Region des Vaults schreiben.",
+        "Write slots into their marked region in the vault.",
     ),
     r(
         "POST",
         "/api/sync",
-        "Signierte axon-sync/v1-Mutationen eines gepaarten Geraets.",
+        "Signed axon-sync/v1 mutations from a paired device.",
     ),
 ];
 
@@ -121,17 +91,14 @@ async fn routes() -> Json<serde_json::Value> {
     Json(route_manifest::manifest("inventory", ROUTES))
 }
 
-/// Die Seite ohne Shell — ein Blick direkt auf den Port, und der Weg fuer einen Menschen ohne
-/// Dashboard. Sie rendert und rechnet nicht: was hier steht, steht in den Zeilen.
-async fn index(
-    State(s): State<Arc<AppState>>,
-) -> Result<Html<String>, (axum::http::StatusCode, String)> {
+/// A page without the shell, for a look straight at the port.
+async fn index(State(s): State<Arc<AppState>>) -> Result<Html<String>, HttpError> {
     let rows = store(&s)?.catalogue().map_err(boom)?;
     let mut html = String::from(
         "<!doctype html><meta charset=\"utf-8\"><title>inventory</title>\
          <style>body{font:14px/1.5 -apple-system,sans-serif;margin:2rem;max-width:60rem}\
          td{padding:.2rem .6rem .2rem 0;vertical-align:top}code{color:#555}</style>\
-         <h1>inventory</h1><p>Was ich besitze. Die Zeilen, keine Anzeige.</p><table>",
+         <h1>inventory</h1><p>What the household owns.</p><table>",
     );
     for (item, state) in rows.values() {
         html.push_str(&format!(
@@ -151,9 +118,7 @@ fn escape(s: &str) -> String {
         .replace('>', "&gt;")
 }
 
-async fn api_inventory(
-    State(s): State<Arc<AppState>>,
-) -> Result<impl IntoResponse, (axum::http::StatusCode, String)> {
+async fn api_inventory(State(s): State<Arc<AppState>>) -> Result<impl IntoResponse, HttpError> {
     let rows = store(&s)?.catalogue().map_err(boom)?;
     let out: Vec<_> = rows
         .into_values()
@@ -164,67 +129,61 @@ async fn api_inventory(
     Ok(Json(out))
 }
 
-/// Der offene Bedarf, und was er in Monatssalden kostet — die Naht zu `finance` (PRD B29).
-/// Beide Zahlen kommen aus derselben Datei und keine ueber HTTP.
+/// The open wishlist and what it costs in monthly balances.
 ///
-/// Zwei Summen statt einer, weil die Daten zwei Arten von Preis kennen: ein Produkt hat einen,
-/// ein Slot hat eine Schaetzspanne. Sie in eine Zahl zu falten hiesse, eine Spanne als Preis
-/// auszugeben, und das ist die Praezision, die sie nicht hat.
-async fn api_wishlist(
-    State(s): State<Arc<AppState>>,
-) -> Result<impl IntoResponse, (axum::http::StatusCode, String)> {
+/// Two totals, because a product has a price and a slot has an estimate range; folding them into
+/// one number would present a range as a price.
+async fn api_wishlist(State(s): State<Arc<AppState>>) -> Result<impl IntoResponse, HttpError> {
     let st = store(&s)?;
     let rows = st.catalogue().map_err(boom)?;
-    let offen: Vec<_> = rows
+    let open: Vec<_> = rows
         .values()
         .filter(|(_, s)| *s == Some(crate::store::State::Wanted))
         .map(|(i, _)| i)
         .collect();
 
-    let untere: i64 = offen
+    let total_low: i64 = open
         .iter()
-        .map(|i| i.preis_cent.or(i.kosten_min_cent).unwrap_or(0))
+        .map(|i| i.price_cents.or(i.cost_min_cents).unwrap_or(0))
         .sum();
-    let obere: i64 = offen
+    let total_high: i64 = open
         .iter()
-        .map(|i| i.preis_cent.or(i.kosten_max_cent).unwrap_or(0))
+        .map(|i| i.price_cents.or(i.cost_max_cents).unwrap_or(0))
         .sum();
-    let ohne_preis = offen
+    let unpriced = open
         .iter()
-        .filter(|i| i.preis_cent.is_none() && i.kosten_min_cent.is_none())
+        .filter(|i| i.price_cents.is_none() && i.cost_min_cents.is_none())
         .count();
 
     let conn = st.borrow_connection().map_err(boom)?;
-    let saldo = crate::budget::monatssaldo(&conn).map_err(boom)?;
-    let monate = saldo
+    let balance = crate::budget::monthly_balance(&conn).map_err(boom)?;
+    let months = balance
         .as_ref()
-        .and_then(|s| crate::budget::monate_bis_bezahlt(untere, s));
+        .and_then(|b| crate::budget::months_to_pay(total_low, b));
 
     Ok(Json(serde_json::json!({
-        "items": offen,
-        "summe_untere_kante_cent": untere,
-        "summe_obere_kante_cent": obere,
-        // Ein Posten ohne Preis zaehlt mit 0 in die Summe. Die Summe waere sonst still zu
-        // klein, und diese Zahl ist die Warnung davor.
-        "posten_ohne_preis": ohne_preis,
-        "monatssaldo": saldo,
-        "monate_bis_bezahlt": monate,
+        "items": open,
+        "total_low_cents": total_low,
+        "total_high_cents": total_high,
+        // An unpriced item counts as 0, so the total is a floor; this count says so.
+        "unpriced_count": unpriced,
+        "monthly_balance": balance,
+        "months_to_pay": months,
     })))
 }
 
 async fn api_vault_writeback(
     State(s): State<Arc<AppState>>,
-) -> Result<impl IntoResponse, (axum::http::StatusCode, String)> {
+) -> Result<impl IntoResponse, HttpError> {
     let rows = store(&s)?.catalogue().map_err(boom)?;
-    let Some(ergebnis) = crate::obsidian::writeback(&rows) else {
+    let Some(outcome) = crate::obsidian::writeback(&rows) else {
         return Err((
-            axum::http::StatusCode::NOT_IMPLEMENTED,
-            "keine Vault-Wurzel erklaert: obsidian.root in <overlay>/config/inventory.json setzen"
+            StatusCode::NOT_IMPLEMENTED,
+            "no vault root declared: set obsidian.root in <overlay>/config/inventory.json"
                 .to_string(),
         ));
     };
-    let report =
-        ergebnis.map_err(|e| (axum::http::StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
+    let report = outcome.map_err(boom)?;
     Ok(Json(serde_json::json!({
         "ok": report.conflicts.is_empty(),
         "seeded": report.seeded,
@@ -237,11 +196,10 @@ async fn api_vault_writeback(
 #[derive(Deserialize)]
 struct NewItem {
     #[serde(flatten)]
-    item: crate::store::Item,
-    /// Pflicht, und deshalb kein `Option`: ein Eintrag ohne Zustand taucht in keiner Liste auf,
-    /// weil jede Abfrage auf den letzten Zustand joint. Ihn beim Anlegen zu vergessen hiesse,
-    /// eine Zeile zu schreiben, die niemand je sieht.
+    item: Item,
+    /// Required: every list joins on the latest state, so a row without one is invisible.
     state: crate::store::State,
+    /// The note on the first state row, not the item's `notes`.
     #[serde(default)]
     note: Option<String>,
 }
@@ -249,40 +207,38 @@ struct NewItem {
 async fn api_post_item(
     State(s): State<Arc<AppState>>,
     Json(body): Json<NewItem>,
-) -> Result<impl IntoResponse, (axum::http::StatusCode, String)> {
+) -> Result<impl IntoResponse, HttpError> {
     let st = store(&s)?;
     if body.item.id.trim().is_empty() {
-        return Err((axum::http::StatusCode::BAD_REQUEST, "`id` fehlt".into()));
+        return Err((StatusCode::BAD_REQUEST, "`id` is missing".into()));
     }
     if st.item(&body.item.id).map_err(boom)?.is_some() {
         return Err((
-            axum::http::StatusCode::CONFLICT,
-            format!("`{}` gibt es schon — PATCH aendert ihn", body.item.id),
+            StatusCode::CONFLICT,
+            format!("`{}` exists already; PATCH changes it", body.item.id),
         ));
     }
     let revision = st.upsert_item(&body.item).map_err(boom)?;
     st.record_state(
         &body.item.id,
         body.state,
-        body.note.as_deref().or(Some("in der Oberflaeche angelegt")),
+        body.note.as_deref().or(Some("created in the dashboard")),
     )
     .map_err(boom)?;
     Ok((
-        axum::http::StatusCode::CREATED,
+        StatusCode::CREATED,
         Json(serde_json::json!({
             "id": body.item.id, "state": body.state.as_str(), "ok": true, "revision": revision
         })),
     ))
 }
 
-/// Die erwartete Revision aus `If-Match` oder aus dem Rumpf (PRD §10 A5).
-///
-/// Nennen beide eine Zahl und nicht dieselbe, ist das ein Fehler und keine Vorauswahl.
-fn erwartete_revision(
+/// The expected revision from `If-Match` or the body. Two different numbers are an error.
+fn expected_revision(
     headers: &axum::http::HeaderMap,
     body: &mut serde_json::Value,
-) -> Result<Option<i64>, (axum::http::StatusCode, String)> {
-    let aus_header = headers
+) -> Result<Option<i64>, HttpError> {
+    let from_header = headers
         .get(axum::http::header::IF_MATCH)
         .and_then(|v| v.to_str().ok())
         .map(|v| v.trim().trim_matches('"').to_string())
@@ -290,28 +246,31 @@ fn erwartete_revision(
         .map(|v| {
             v.parse::<i64>().map_err(|_| {
                 (
-                    axum::http::StatusCode::BAD_REQUEST,
-                    format!("If-Match ist keine Zahl: `{v}`"),
+                    StatusCode::BAD_REQUEST,
+                    format!("If-Match is not a number: `{v}`"),
                 )
             })
         })
         .transpose()?;
-    let aus_rumpf = body
-        .get("expected_revision")
-        .and_then(|v| v.as_i64())
-        .map(Some)
-        .unwrap_or(None);
-    if let Some(im_rumpf) = body.as_object_mut() {
-        im_rumpf.remove("expected_revision");
+    let from_body = body.get("expected_revision").and_then(|v| v.as_i64());
+    if let Some(object) = body.as_object_mut() {
+        object.remove("expected_revision");
     }
-    match (aus_header, aus_rumpf) {
+    match (from_header, from_body) {
         (Some(a), Some(b)) if a != b => Err((
-            axum::http::StatusCode::BAD_REQUEST,
-            format!("If-Match sagt {a}, expected_revision sagt {b}"),
+            StatusCode::BAD_REQUEST,
+            format!("If-Match says {a}, expected_revision says {b}"),
         )),
         (Some(a), _) => Ok(Some(a)),
         (None, b) => Ok(b),
     }
+}
+
+fn not_an_entry(e: serde_json::Error) -> HttpError {
+    (
+        StatusCode::BAD_REQUEST,
+        format!("the body does not fit an entry: {e}"),
+    )
 }
 
 async fn api_put_item(
@@ -319,102 +278,76 @@ async fn api_put_item(
     Path(id): Path<String>,
     headers: axum::http::HeaderMap,
     Json(mut body): Json<serde_json::Value>,
-) -> Result<impl IntoResponse, (axum::http::StatusCode, String)> {
-    let erwartet = erwartete_revision(&headers, &mut body)?;
+) -> Result<impl IntoResponse, HttpError> {
+    let expected = expected_revision(&headers, &mut body)?;
     let st = store(&s)?;
-    let mut item: crate::store::Item = serde_json::from_value(body).map_err(|e| {
-        (
-            axum::http::StatusCode::BAD_REQUEST,
-            format!("Rumpf passt nicht auf einen Eintrag: {e}"),
-        )
-    })?;
+    let mut item: Item = serde_json::from_value(body).map_err(not_an_entry)?;
     item.id = id;
-    match erwartet {
-        Some(e) => bedingt_schreiben(&st, &item, e),
-        None => {
-            let revision = st.upsert_item(&item).map_err(boom)?;
-            Ok(geschrieben(&item.id, revision))
-        }
-    }
+    write(&st, &item, expected)
 }
 
-/// Genannte Felder aendern, ungenannte in Ruhe lassen.
-///
-/// `PUT` daneben ersetzt den ganzen Eintrag und ist damit fuer ein Formular die falsche Form:
-/// `Item` fuehrt 53 Felder, eine Maske zeigt sechs, und was sie nicht schickt, waere weg. Das
-/// ist derselbe stille Verlust, den `deny_unknown_fields` beim Import verhindert — nur in die
-/// andere Richtung.
-///
-/// Zusammengefuehrt wird auf JSON-Ebene und nicht ueber eine zweite Struktur mit lauter
-/// `Option<Option<_>>`: die Zeile ist die Wahrheit, also wird sie gelesen, mit dem Rumpf
-/// ueberschrieben und zurueckgeschrieben. Ein ausdrueckliches `null` loescht ein Feld, ein
-/// fehlender Schluessel laesst es stehen — der Unterschied, den ein Formular braucht.
+/// Change the named fields and leave the rest. `PUT` would blank every field a form does not
+/// send. An explicit `null` clears a field; a missing key leaves it.
 async fn api_patch_item(
     State(s): State<Arc<AppState>>,
     Path(id): Path<String>,
     headers: axum::http::HeaderMap,
     Json(mut patch): Json<serde_json::Value>,
-) -> Result<impl IntoResponse, (axum::http::StatusCode, String)> {
-    let erwartet = erwartete_revision(&headers, &mut patch)?;
+) -> Result<impl IntoResponse, HttpError> {
+    let expected = expected_revision(&headers, &mut patch)?;
     let st = store(&s)?;
-    let (item, _) = st.item(&id).map_err(boom)?.ok_or((
-        axum::http::StatusCode::NOT_FOUND,
-        format!("kein Eintrag `{id}`"),
-    ))?;
+    let (item, _) = st
+        .item(&id)
+        .map_err(boom)?
+        .ok_or((StatusCode::NOT_FOUND, format!("no entry `{id}`")))?;
     let mut item = merge_patch(&item, patch)?;
     item.id = id;
-    match erwartet {
-        Some(e) => bedingt_schreiben(&st, &item, e),
+    write(&st, &item, expected)
+}
+
+fn write(st: &Store, item: &Item, expected: Option<i64>) -> Result<Response, HttpError> {
+    match expected {
+        Some(e) => write_if_revision(st, item, e),
         None => {
-            let revision = st.upsert_item(&item).map_err(boom)?;
-            Ok(geschrieben(&item.id, revision))
+            let revision = st.upsert_item(item).map_err(boom)?;
+            Ok(written(&item.id, revision))
         }
     }
 }
 
-fn merge_patch(
-    alt: &crate::store::Item,
-    patch: serde_json::Value,
-) -> Result<crate::store::Item, (axum::http::StatusCode, String)> {
+/// The item with `patch` applied: unknown keys are refused, legacy German keys translated.
+pub fn merge_patch(current: &Item, patch: serde_json::Value) -> Result<Item, HttpError> {
     let serde_json::Value::Object(patch) = patch else {
-        return Err((
-            axum::http::StatusCode::BAD_REQUEST,
-            "Rumpf ist kein Objekt".into(),
-        ));
+        return Err((StatusCode::BAD_REQUEST, "the body is not an object".into()));
     };
-    let mut merged = match serde_json::to_value(alt).map_err(|e| boom(e.to_string()))? {
+    let mut merged = match serde_json::to_value(current).map_err(boom)? {
         serde_json::Value::Object(m) => m,
-        _ => unreachable!("Item serialisiert als Objekt"),
+        _ => unreachable!("an Item serialises as an object"),
     };
     for (k, v) in patch {
         if k == "id" || k == "revision" {
-            // Der Pfad gewinnt, wie bei PUT. Die Revision gehoert dem Server; wer sie als
-            // Bedingung meint, schickt `If-Match`.
+            // The path wins, as with PUT; the revision belongs to the server.
             continue;
         }
+        // A phone may still hold an edit queued under a German field name.
+        let k = LEGACY_FIELDS
+            .iter()
+            .find(|(old, _)| *old == k)
+            .map_or(k, |(_, new)| (*new).to_string());
         if !merged.contains_key(&k) {
             return Err((
-                axum::http::StatusCode::BAD_REQUEST,
-                format!("`{k}` ist kein Feld eines Eintrags"),
+                StatusCode::BAD_REQUEST,
+                format!("`{k}` is not a field of an entry"),
             ));
         }
         merged.insert(k, v);
     }
-    serde_json::from_value(serde_json::Value::Object(merged)).map_err(|e| {
-        (
-            axum::http::StatusCode::BAD_REQUEST,
-            format!("Rumpf passt nicht auf einen Eintrag: {e}"),
-        )
-    })
+    serde_json::from_value(serde_json::Value::Object(merged)).map_err(not_an_entry)
 }
 
-/// Die Antwort auf ein gelungenes Schreiben: die neue Revision im Rumpf **und** als `ETag`.
-///
-/// Das `ETag` ist keine Verzierung und stand bis 2026-10-05 nur in `capabilities/interior`,
-/// obwohl die Zeilen schon hier lagen. Die Revision gehoert dem Server, und ein Client, der
-/// sie als ETag weiterreicht, schickt sie beim naechsten Schreiben als `If-Match` zurueck —
-/// genau der Kreis, den `api_patch_item` liest.
-fn geschrieben(id: &str, revision: i64) -> Response {
+/// A successful write: the new revision in the body and as `ETag`, which a client sends back as
+/// `If-Match`.
+fn written(id: &str, revision: i64) -> Response {
     (
         [(axum::http::header::ETAG, format!("\"{revision}\""))],
         Json(serde_json::json!({ "id": id, "ok": true, "revision": revision })),
@@ -422,35 +355,25 @@ fn geschrieben(id: &str, revision: i64) -> Response {
         .into_response()
 }
 
-/// Schreiben gegen die gelesene Revision. Veraltet heisst 409 **mit** dem Stand, der jetzt
-/// gilt: ein Client, der offline sein kann, muss ihn zeigen und den Menschen entscheiden
-/// lassen, statt ihn mit einer neuen Revision automatisch zu wiederholen.
-fn bedingt_schreiben(
-    st: &crate::store::Store,
-    item: &crate::store::Item,
-    erwartet: i64,
-) -> Result<Response, (axum::http::StatusCode, String)> {
-    match st.update_item_if_revision(item, erwartet).map_err(boom)? {
-        crate::store::Schreibergebnis::Geschrieben(revision) => Ok(geschrieben(&item.id, revision)),
-        crate::store::Schreibergebnis::Fehlt => Err((
-            axum::http::StatusCode::NOT_FOUND,
-            format!("kein Eintrag `{}`", item.id),
-        )),
-        // Die Meldung nennt beide Revisionen und was zu tun ist, und das ist keine
-        // Freundlichkeit: die Oberflaeche zeigt sie einem Menschen an, der entscheiden soll.
-        // `dashboard/src/lib/api.ts` liest genau `error` aus diesem Rumpf, und der
-        // Konflikttest in `dashboard/vite/interior-conflict.test.ts` haengt an dem Wort.
-        crate::store::Schreibergebnis::Veraltet(aktuell, zustand) => Ok((
-            axum::http::StatusCode::CONFLICT,
+/// Write against the revision the client read. Stale is 409 with the current row, so a client
+/// that can be offline shows it and lets a person decide instead of retrying.
+fn write_if_revision(st: &Store, item: &Item, expected: i64) -> Result<Response, HttpError> {
+    match st.update_item_if_revision(item, expected).map_err(boom)? {
+        WriteOutcome::Written(revision) => Ok(written(&item.id, revision)),
+        WriteOutcome::Missing => Err((StatusCode::NOT_FOUND, format!("no entry `{}`", item.id))),
+        // The dashboard shows `error` to the person who decides
+        // (dashboard/vite/inventory-conflict.test.ts).
+        WriteOutcome::Stale(current, state) => Ok((
+            StatusCode::CONFLICT,
             Json(serde_json::json!({
                 "error": format!(
-                    "`{}` wurde inzwischen geaendert: erwartet Revision {erwartet}, aktuell {} — \
-                     neu laden und die Aenderung auf den aktuellen Stand anwenden",
-                    item.id, aktuell.revision
+                    "`{}` was changed meanwhile: expected revision {expected}, current {}; \
+                     reload and apply the change to the current values",
+                    item.id, current.revision
                 ),
                 "current": {
-                    "item": aktuell,
-                    "state": zustand.map(|s| s.as_str()),
+                    "item": current,
+                    "state": state.map(|s| s.as_str()),
                 },
             })),
         )
@@ -465,22 +388,15 @@ struct StateBody {
     note: Option<String>,
 }
 
-/// Einen Zustandswechsel anhaengen.
-///
-/// Anhaengen und nicht setzen: ein Wunsch, der gekauft wird, ist eine Zeile mehr und kein
-/// ueberschriebenes Feld (PRD B25). Genau diese Spanne verbindet die Wunschliste mit `finance`,
-/// und ein `UPDATE` haette sie gekostet.
+/// Append a state change; a bought wish is a second row, not an overwritten field.
 async fn api_post_state(
     State(s): State<Arc<AppState>>,
     Path(id): Path<String>,
     Json(body): Json<StateBody>,
-) -> Result<impl IntoResponse, (axum::http::StatusCode, String)> {
+) -> Result<impl IntoResponse, HttpError> {
     let st = store(&s)?;
     if st.item(&id).map_err(boom)?.is_none() {
-        return Err((
-            axum::http::StatusCode::NOT_FOUND,
-            format!("kein Eintrag `{id}`"),
-        ));
+        return Err((StatusCode::NOT_FOUND, format!("no entry `{id}`")));
     }
     let changed = st
         .record_state(&id, body.state, body.note.as_deref())
@@ -493,7 +409,7 @@ async fn api_post_state(
 async fn api_state_history(
     State(s): State<Arc<AppState>>,
     Path(id): Path<String>,
-) -> Result<impl IntoResponse, (axum::http::StatusCode, String)> {
+) -> Result<impl IntoResponse, HttpError> {
     let rows = store(&s)?.state_history(&id).map_err(boom)?;
     let out: Vec<_> = rows
         .into_iter()
@@ -502,18 +418,14 @@ async fn api_state_history(
     Ok(Json(out))
 }
 
-// ─── Der Geraete-Eingang ──────────────────────────────────────────────────────
+// ─── Device sync ─────────────────────────────────────────────────────────────
 
 fn node_id() -> String {
     sjel_config::env_var("SJEL_NODE_ID").unwrap_or_else(|_| "node_mac".to_string())
 }
 
-/// Die Signatur des Geraets pruefen, bevor der Handler laeuft.
-///
-/// Der Rumpf wird dabei vollstaendig gelesen und weitergereicht: die Signatur deckt Methode,
-/// Pfad **und** Rumpf, also kann sie nicht gegen einen Rumpf geprueft werden, den der Handler
-/// spaeter liest. Ohne diese Middleware waere `/api/sync` ein unauthentifizierter
-/// Schreibzugriff auf jede Zeile.
+/// Verify the device signature before the handler runs. The signature covers method, path and
+/// body, so the body is read here and passed on.
 async fn signed_sync_auth(
     State(state): State<Arc<AppState>>,
     request: Request,
@@ -571,22 +483,16 @@ async fn signed_sync_auth(
     next.run(request).await
 }
 
-/// Ein Buendel Mutationen von einem gepaarten Geraet annehmen.
+/// Apply a batch of mutations from a paired device.
 ///
-/// **Die Entitaet heisst weiter `interior.item`.** Der Name stammt aus der Zeit, in der die
-/// Zeilen `interior` gehoerten, und er ist Teil des Drahtformats: ein Telefon mit gefuellter
-/// Outbox schickt ihn noch, und ein Umbenennen hier wuerde diese Mutationen abweisen, ohne
-/// dass jemand es merkt — das stille Verlieren, das dieser Umzug vermeiden soll. Ein neuer
-/// Name ist eine Protokollversion, kein Umbenennen.
-///
-/// Die Wiederholungssperre liegt in `{prefix}_sync_operation`: dieselbe `operation_id` ein
-/// zweites Mal trifft einen Primaerschluessel und wird als `duplicate` beantwortet, statt die
-/// Aenderung ein zweites Mal anzuwenden.
+/// The entity stays `interior.item`: it is part of the wire format, and a phone with a queued
+/// outbox still sends it. A new name would be a new protocol version. A repeated `operation_id`
+/// is answered `duplicate` instead of being applied twice.
 async fn api_sync(
     State(state): State<Arc<AppState>>,
     Extension(device): Extension<devices::store::Device>,
     Json(envelope): Json<sync::Envelope>,
-) -> Result<impl IntoResponse, (StatusCode, String)> {
+) -> Result<impl IntoResponse, HttpError> {
     let now = std::time::SystemTime::now()
         .duration_since(std::time::UNIX_EPOCH)
         .map_or(0, |duration| duration.as_secs() as i64);
@@ -613,6 +519,13 @@ async fn api_sync(
     for mutation in envelope.mutations {
         let operation_id = mutation.operation_id.clone();
         let processed_at = now;
+        let rejected = |error: &str| sync::Acknowledgement {
+            operation_id: mutation.operation_id.clone(),
+            status: "rejected",
+            revision: None,
+            processed_at,
+            error: Some(error.into()),
+        };
         if let Some(revision) = st.sync_operation_revision(&operation_id).map_err(boom)? {
             response.acknowledgements.push(sync::Acknowledgement {
                 operation_id,
@@ -624,51 +537,30 @@ async fn api_sync(
             continue;
         }
         if mutation.actor_device_id != device.id {
-            response.acknowledgements.push(sync::Acknowledgement {
-                operation_id,
-                status: "rejected",
-                revision: None,
-                processed_at,
-                error: Some("mutation actor does not match the signed device".into()),
-            });
+            response
+                .acknowledgements
+                .push(rejected("mutation actor does not match the signed device"));
             continue;
         }
         if mutation.entity_type != "interior.item"
             || !matches!(mutation.action.as_str(), "patch" | "upsert")
         {
-            response.acknowledgements.push(sync::Acknowledgement {
-                operation_id,
-                status: "rejected",
-                revision: None,
-                processed_at,
-                error: Some(
-                    "initial sync supports only interior.item patch or upsert mutations".into(),
-                ),
-            });
+            response.acknowledgements.push(rejected(
+                "initial sync supports only interior.item patch or upsert mutations",
+            ));
             continue;
         }
         let Some(base_revision) = mutation.base_revision.as_deref() else {
-            response.acknowledgements.push(sync::Acknowledgement {
-                operation_id,
-                status: "rejected",
-                revision: None,
-                processed_at,
-                error: Some("base_revision is required for an offline mutation".into()),
-            });
+            response
+                .acknowledgements
+                .push(rejected("base_revision is required for an offline mutation"));
             continue;
         };
-        let expected = match base_revision.parse::<i64>() {
-            Ok(value) => value,
-            Err(_) => {
-                response.acknowledgements.push(sync::Acknowledgement {
-                    operation_id,
-                    status: "rejected",
-                    revision: None,
-                    processed_at,
-                    error: Some("base_revision must be a decimal revision".into()),
-                });
-                continue;
-            }
+        let Ok(expected) = base_revision.parse::<i64>() else {
+            response
+                .acknowledgements
+                .push(rejected("base_revision must be a decimal revision"));
+            continue;
         };
         let current = st.item(&mutation.entity_id).map_err(boom)?.ok_or_else(|| {
             (
@@ -681,11 +573,8 @@ async fn api_sync(
             serde_json::Value::Object(mutation.fields.clone()),
         )?;
         merged.id = mutation.entity_id.clone();
-        match st
-            .update_item_if_revision(&merged, expected)
-            .map_err(boom)?
-        {
-            crate::store::Schreibergebnis::Geschrieben(revision) => {
+        match st.update_item_if_revision(&merged, expected).map_err(boom)? {
+            WriteOutcome::Written(revision) => {
                 st.record_sync_operation(&mutation.operation_id, revision)
                     .map_err(boom)?;
                 response.acknowledgements.push(sync::Acknowledgement {
@@ -696,16 +585,10 @@ async fn api_sync(
                     error: None,
                 });
             }
-            crate::store::Schreibergebnis::Fehlt => {
-                response.acknowledgements.push(sync::Acknowledgement {
-                    operation_id,
-                    status: "rejected",
-                    revision: None,
-                    processed_at,
-                    error: Some("item does not exist".into()),
-                })
-            }
-            crate::store::Schreibergebnis::Veraltet(actual, state) => {
+            WriteOutcome::Missing => response
+                .acknowledgements
+                .push(rejected("item does not exist")),
+            WriteOutcome::Stale(actual, _) => {
                 let canonical = serde_json::to_value(&*actual).unwrap_or(serde_json::Value::Null);
                 response.conflicts.push(serde_json::json!({
                     "conflict_id": mutation.operation_id,
@@ -726,25 +609,22 @@ async fn api_sync(
                     processed_at,
                     error: Some(format!("canonical revision is {}", actual.revision)),
                 });
-                let _ = state;
             }
         }
     }
     Ok(Json(response))
 }
 
-/// Der Name dieser Capability, fuer die Umgebungsvariable der Origin-Sperre
-/// (`SJEL_INVENTORY_ALLOWED_ORIGIN_HOSTS`).
+/// Names the origin allowlist variable, `SJEL_INVENTORY_ALLOWED_ORIGIN_HOSTS`.
 const CAPABILITY: &str = "inventory";
 
 pub fn build_router(state: Arc<AppState>) -> Router {
-    let signed_sync =
-        Router::new()
-            .route("/api/sync", post(api_sync))
-            .layer(middleware::from_fn_with_state(
-                Arc::clone(&state),
-                signed_sync_auth,
-            ));
+    let signed_sync = Router::new()
+        .route("/api/sync", post(api_sync))
+        .layer(middleware::from_fn_with_state(
+            Arc::clone(&state),
+            signed_sync_auth,
+        ));
     Router::new()
         .route("/", get(index))
         .route("/health", get(health))
@@ -759,14 +639,9 @@ pub fn build_router(state: Arc<AppState>) -> Router {
         )
         .route("/api/vault/writeback", post(api_vault_writeback))
         .merge(signed_sync)
-        // Die Sperre liegt unter allen Routen, weil axum nur die Routen umhuellt, die VOR
-        // einem `.layer()`-Aufruf registriert wurden (axum 0.7 `src/docs/routing/layer.md`).
-        //
-        // Sie ist mit `POST /api/vault/writeback` hierher gezogen und nicht freiwillig: diese
-        // Route nimmt keinen Request-Body, ist damit eine *einfache* Anfrage im Sinne von
-        // CORS und laeuft ohne Preflight. Eine fremde Seite konnte sie also ausloesen, und ob
-        // der Browser die Antwort danach weiterreicht, ist fuer einen Schreibvorgang
-        // gleichgueltig. `capabilities/interior` trug die Sperre, solange die Route dort lag.
+        // Last, because axum wraps only routes registered before `.layer()`. Needed because
+        // `POST /api/vault/writeback` has no body, so a foreign page can send it without a
+        // CORS preflight.
         .layer(axum::middleware::from_fn_with_state(
             CAPABILITY,
             sjel_server::origin::refuse_foreign_origins,
@@ -774,7 +649,6 @@ pub fn build_router(state: Arc<AppState>) -> Router {
         .with_state(state)
 }
 
-/// Baut den Zustand aus der Installation und bindet Loopback.
 pub async fn serve() {
     let port: u16 = sjel_config::env_var("SJEL_PORT")
         .ok()
@@ -792,15 +666,12 @@ pub async fn serve() {
 
 #[cfg(test)]
 mod route_manifest_tests {
-    /// Ein Katalog, der luegt, wird geglaubt. Das hier liest den Router aus seinem eigenen
-    /// Quelltext, also faellt ein `.route()` ohne Zusammenfassung hier um, statt eine
-    /// Oberflaeche auszuliefern, die sich selbst falsch beschreibt.
     #[test]
-    fn der_katalog_nennt_jede_ausgelieferte_route() {
-        let fehlend = route_manifest::undeclared_routes(include_str!("api.rs"), super::ROUTES);
+    fn the_catalogue_names_every_served_route() {
+        let missing = route_manifest::undeclared_routes(include_str!("api.rs"), super::ROUTES);
         assert!(
-            fehlend.is_empty(),
-            "diese Routen stehen nicht im Katalog: {fehlend:?}"
+            missing.is_empty(),
+            "these routes are not in the catalogue: {missing:?}"
         );
     }
 }
@@ -808,52 +679,51 @@ mod route_manifest_tests {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::store::Item;
     use serde_json::json;
 
-    fn hemd() -> Item {
+    fn shirt() -> Item {
         Item {
-            id: "hemd".into(),
-            label: "Ein Hemd".into(),
+            id: "shirt".into(),
+            label: "A shirt".into(),
             category: Some("kleidung".into()),
-            preis_cent: Some(7990),
+            price_cents: Some(7990),
             ..Default::default()
         }
     }
 
-    /// Der eigentliche Punkt von PATCH: ein Formular zeigt sechs Felder, der Eintrag hat 53,
-    /// und die ungenannten 47 muessen den Vorgang ueberleben.
     #[test]
-    fn ein_benanntes_feld_aendert_sich_und_die_uebrigen_bleiben() {
-        let neu = merge_patch(&hemd(), json!({ "preis_cent": 8990 })).expect("Patch passt");
-        assert_eq!(neu.preis_cent, Some(8990));
-        assert_eq!(neu.label, "Ein Hemd");
-        assert_eq!(neu.category.as_deref(), Some("kleidung"));
+    fn a_named_field_changes_and_the_others_stay() {
+        let new = merge_patch(&shirt(), json!({ "price_cents": 8990 })).expect("patch fits");
+        assert_eq!(new.price_cents, Some(8990));
+        assert_eq!(new.label, "A shirt");
+        assert_eq!(new.category.as_deref(), Some("kleidung"));
     }
 
     #[test]
-    fn ein_unbekanntes_feld_wird_abgelehnt_und_nicht_ignoriert() {
-        let e = merge_patch(&hemd(), json!({ "tiefe": 42 })).expect_err("`tiefe` gibt es nicht");
+    fn an_unknown_field_is_refused_not_ignored() {
+        let e = merge_patch(&shirt(), json!({ "tiefe": 42 })).expect_err("`tiefe` is no field");
         assert!(e.1.contains("tiefe"));
     }
 
-    /// `null` loescht, ein fehlender Schluessel laesst stehen — der Unterschied, den ein
-    /// Formular braucht.
+    /// An edit queued on a phone before the English schema still lands on the right field.
     #[test]
-    fn null_loescht_und_ein_fehlender_schluessel_nicht() {
-        let geloescht = merge_patch(&hemd(), json!({ "preis_cent": null })).expect("null ist ok");
-        assert_eq!(geloescht.preis_cent, None);
-        let unberuehrt = merge_patch(&hemd(), json!({ "label": "Anders" })).expect("ok");
-        assert_eq!(unberuehrt.preis_cent, Some(7990));
+    fn a_german_field_name_is_translated() {
+        let new = merge_patch(&shirt(), json!({ "preis_cent": 100, "groesse": "M" })).expect("ok");
+        assert_eq!(new.price_cents, Some(100));
+        assert_eq!(new.size.as_deref(), Some("M"));
+    }
+
+    #[test]
+    fn null_clears_and_a_missing_key_does_not() {
+        let cleared = merge_patch(&shirt(), json!({ "price_cents": null })).expect("null is ok");
+        assert_eq!(cleared.price_cents, None);
+        let untouched = merge_patch(&shirt(), json!({ "label": "Other" })).expect("ok");
+        assert_eq!(untouched.price_cents, Some(7990));
     }
 }
 
-/// Der HTTP-Vertrag von PRD §10 A5 am verdrahteten Router, gegen eine Temp-Datei.
-///
-/// Die Rennbedingung selbst prueft `tests/revision.rs` mit echten Faeden; hier geht es darum,
-/// was ein Client sieht: welcher Status, welcher Rumpf, welcher Header. Der Test ist am
-/// 2026-10-05 mit der Item-Oberflaeche aus `capabilities/interior` hierher gezogen, samt dem
-/// `ETag`, den diese Capability bis dahin nicht gesetzt hat.
+/// The revision contract as a client sees it: status, body and header, against a temp file.
+/// The race itself is in `tests/revision.rs`.
 #[cfg(test)]
 mod revision_tests {
     use super::*;
@@ -863,175 +733,170 @@ mod revision_tests {
     use tower::ServiceExt;
 
     fn router(name: &str) -> (Router, PathBuf) {
-        let pfad = std::env::temp_dir().join(format!(
+        let path = std::env::temp_dir().join(format!(
             "inventory-api-revision-{name}-{}.db",
             std::process::id()
         ));
-        let _ = std::fs::remove_file(&pfad);
-        let device_store = devices::store::DevicesStore::open(&pfad).unwrap();
+        let _ = std::fs::remove_file(&path);
+        let device_store = devices::store::DevicesStore::open(&path).unwrap();
         let r = build_router(Arc::new(AppState {
             device_store,
-            database: pfad.clone(),
+            database: path.clone(),
         }));
-        (r, pfad)
+        (r, path)
     }
 
-    async fn senden(
+    async fn send(
         r: &Router,
-        methode: &str,
-        pfad: &str,
+        method: &str,
+        path: &str,
         if_match: Option<&str>,
-        rumpf: Value,
+        body: Value,
     ) -> (StatusCode, HeaderMap, Value) {
-        let mut anfrage = Request::builder()
-            .method(methode)
-            .uri(pfad)
+        let mut request = Request::builder()
+            .method(method)
+            .uri(path)
             .header("content-type", "application/json");
         if let Some(v) = if_match {
-            anfrage = anfrage.header("if-match", v);
+            request = request.header("if-match", v);
         }
-        let antwort = r
+        let response = r
             .clone()
-            .oneshot(anfrage.body(Body::from(rumpf.to_string())).unwrap())
+            .oneshot(request.body(Body::from(body.to_string())).unwrap())
             .await
-            .expect("der Router antwortet");
-        let status = antwort.status();
-        let headers = antwort.headers().clone();
-        let bytes = axum::body::to_bytes(antwort.into_body(), usize::MAX)
+            .expect("the router answers");
+        let status = response.status();
+        let headers = response.headers().clone();
+        let bytes = axum::body::to_bytes(response.into_body(), usize::MAX)
             .await
             .unwrap();
-        let wert = serde_json::from_slice(&bytes)
+        let value = serde_json::from_slice(&bytes)
             .unwrap_or_else(|_| Value::String(String::from_utf8_lossy(&bytes).into_owned()));
-        (status, headers, wert)
+        (status, headers, value)
     }
 
-    fn schrank(label: &str) -> Value {
-        json!({ "id": "schrank", "kind": "piece", "label": label, "b": 100 })
+    fn wardrobe(label: &str) -> Value {
+        json!({ "id": "wardrobe", "kind": "piece", "label": label, "width": 100 })
     }
 
     #[tokio::test]
-    async fn ohne_bedingung_bleibt_alles_wie_vorher_und_die_revision_steht_in_jeder_antwort() {
-        let (r, pfad) = router("ohne");
-        let (s, h, v) = senden(&r, "PUT", "/api/items/schrank", None, schrank("a")).await;
+    async fn without_a_condition_every_answer_carries_the_revision() {
+        let (r, path) = router("none");
+        let (s, h, v) = send(&r, "PUT", "/api/items/wardrobe", None, wardrobe("a")).await;
         assert_eq!(s, StatusCode::OK);
         assert_eq!(v["revision"], 1);
         assert_eq!(h[header::ETAG], "\"1\"");
 
-        let (s, _, v) = senden(&r, "PATCH", "/api/items/schrank", None, json!({"b": 120})).await;
+        let (s, _, v) = send(&r, "PATCH", "/api/items/wardrobe", None, json!({"width": 120})).await;
         assert_eq!(s, StatusCode::OK);
         assert_eq!(v["revision"], 2);
 
-        let (s, _, v) = senden(&r, "GET", "/api/inventory", None, Value::Null).await;
+        let (s, _, v) = send(&r, "GET", "/api/inventory", None, Value::Null).await;
         assert_eq!(s, StatusCode::OK);
         assert_eq!(v[0]["item"]["revision"], 2, "{v}");
-        let _ = std::fs::remove_file(&pfad);
+        assert_eq!(v[0]["item"]["width"], 120, "{v}");
+        let _ = std::fs::remove_file(&path);
     }
 
     #[tokio::test]
-    async fn eine_passende_revision_schreibt_und_erhoeht_um_eins() {
-        let (r, pfad) = router("passt");
-        senden(&r, "PUT", "/api/items/schrank", None, schrank("a")).await;
+    async fn a_matching_revision_writes_and_raises_it_by_one() {
+        let (r, path) = router("match");
+        send(&r, "PUT", "/api/items/wardrobe", None, wardrobe("a")).await;
 
-        // Wie ein ETag, in Anfuehrungszeichen.
-        let (s, h, v) = senden(&r, "PUT", "/api/items/schrank", Some("\"1\""), schrank("b")).await;
+        let (s, h, v) = send(&r, "PUT", "/api/items/wardrobe", Some("\"1\""), wardrobe("b")).await;
         assert_eq!(s, StatusCode::OK, "{v}");
         assert_eq!(v["revision"], 2);
         assert_eq!(h[header::ETAG], "\"2\"");
 
-        // Und ohne, von Hand.
-        let (s, _, v) = senden(
+        let (s, _, v) = send(
             &r,
             "PATCH",
-            "/api/items/schrank",
+            "/api/items/wardrobe",
             Some("2"),
-            json!({"b": 90}),
+            json!({"width": 90}),
         )
         .await;
         assert_eq!(s, StatusCode::OK, "{v}");
         assert_eq!(v["revision"], 3);
 
-        // Das Rumpffeld ist der Ersatzweg und wird nicht als Eintragsfeld abgewiesen.
-        let (s, _, v) = senden(
+        // The body field is the fallback and is not refused as an entry field.
+        let (s, _, v) = send(
             &r,
             "PATCH",
-            "/api/items/schrank",
+            "/api/items/wardrobe",
             None,
-            json!({"b": 80, "expected_revision": 3}),
+            json!({"width": 80, "expected_revision": 3}),
         )
         .await;
         assert_eq!(s, StatusCode::OK, "{v}");
         assert_eq!(v["revision"], 4);
-        let _ = std::fs::remove_file(&pfad);
+        let _ = std::fs::remove_file(&path);
     }
 
     #[tokio::test]
-    async fn eine_veraltete_revision_bekommt_409_mit_dem_aktuellen_stand() {
-        let (r, pfad) = router("veraltet");
-        senden(&r, "PUT", "/api/items/schrank", None, schrank("a")).await;
-        senden(
+    async fn a_stale_revision_gets_409_with_the_current_values() {
+        let (r, path) = router("stale");
+        send(&r, "PUT", "/api/items/wardrobe", None, wardrobe("a")).await;
+        send(
             &r,
             "PUT",
-            "/api/items/schrank",
+            "/api/items/wardrobe",
             Some("1"),
-            schrank("vom Mac"),
+            wardrobe("from the Mac"),
         )
         .await;
 
-        for (methode, rumpf) in [
-            ("PUT", schrank("vom Telefon")),
-            ("PATCH", json!({"label": "vom Telefon"})),
+        for (method, body) in [
+            ("PUT", wardrobe("from the phone")),
+            ("PATCH", json!({"label": "from the phone"})),
         ] {
-            let (s, _, v) = senden(&r, methode, "/api/items/schrank", Some("\"1\""), rumpf).await;
-            assert_eq!(s, StatusCode::CONFLICT, "{methode}: {v}");
-            assert_eq!(v["current"]["item"]["label"], "vom Mac");
+            let (s, _, v) = send(&r, method, "/api/items/wardrobe", Some("\"1\""), body).await;
+            assert_eq!(s, StatusCode::CONFLICT, "{method}: {v}");
+            assert_eq!(v["current"]["item"]["label"], "from the Mac");
             assert_eq!(v["current"]["item"]["revision"], 2);
-            let fehler = v["error"].as_str().expect("error ist ein Text");
-            assert!(fehler.contains("inzwischen geaendert"), "{fehler}");
+            let error = v["error"].as_str().expect("error is text");
+            assert!(error.contains("changed meanwhile"), "{error}");
         }
-        // Dasselbe ueber das Rumpffeld.
-        let (s, _, v) = senden(
+        let (s, _, v) = send(
             &r,
             "PATCH",
-            "/api/items/schrank",
+            "/api/items/wardrobe",
             None,
             json!({"label": "x", "expected_revision": 1}),
         )
         .await;
         assert_eq!(s, StatusCode::CONFLICT, "{v}");
 
-        let (_, _, v) = senden(&r, "GET", "/api/inventory", None, Value::Null).await;
-        assert_eq!(
-            v[0]["item"]["label"], "vom Mac",
-            "nichts wurde ueberschrieben"
-        );
-        let _ = std::fs::remove_file(&pfad);
+        let (_, _, v) = send(&r, "GET", "/api/inventory", None, Value::Null).await;
+        assert_eq!(v[0]["item"]["label"], "from the Mac", "nothing was overwritten");
+        let _ = std::fs::remove_file(&path);
     }
 
     #[tokio::test]
-    async fn ein_fehlender_eintrag_bleibt_404() {
-        let (r, pfad) = router("fehlt");
-        let (s, _, _) = senden(&r, "PATCH", "/api/items/nichts", None, json!({"b": 1})).await;
+    async fn a_missing_entry_stays_404() {
+        let (r, path) = router("missing");
+        let (s, _, _) = send(&r, "PATCH", "/api/items/none", None, json!({"width": 1})).await;
         assert_eq!(s, StatusCode::NOT_FOUND);
-        let (s, _, _) = senden(&r, "PATCH", "/api/items/nichts", Some("1"), json!({"b": 1})).await;
+        let (s, _, _) = send(&r, "PATCH", "/api/items/none", Some("1"), json!({"width": 1})).await;
         assert_eq!(s, StatusCode::NOT_FOUND);
-        // PUT mit Bedingung legt nichts an: eine Revision fuer eine Zeile, die es nicht gibt.
-        let (s, _, _) = senden(&r, "PUT", "/api/items/schrank", Some("1"), schrank("a")).await;
+        // A conditional PUT creates nothing.
+        let (s, _, _) = send(&r, "PUT", "/api/items/wardrobe", Some("1"), wardrobe("a")).await;
         assert_eq!(s, StatusCode::NOT_FOUND);
-        let (_, _, v) = senden(&r, "GET", "/api/inventory", None, Value::Null).await;
+        let (_, _, v) = send(&r, "GET", "/api/inventory", None, Value::Null).await;
         assert_eq!(v, json!([]));
-        let _ = std::fs::remove_file(&pfad);
+        let _ = std::fs::remove_file(&path);
     }
 
     #[tokio::test]
-    async fn eine_unlesbare_oder_widerspruechliche_bedingung_wird_abgewiesen() {
-        let (r, pfad) = router("unlesbar");
-        senden(&r, "PUT", "/api/items/schrank", None, schrank("a")).await;
-        let (s, _, _) = senden(&r, "PUT", "/api/items/schrank", Some("*"), schrank("b")).await;
+    async fn an_unreadable_or_contradicting_condition_is_refused() {
+        let (r, path) = router("unreadable");
+        send(&r, "PUT", "/api/items/wardrobe", None, wardrobe("a")).await;
+        let (s, _, _) = send(&r, "PUT", "/api/items/wardrobe", Some("*"), wardrobe("b")).await;
         assert_eq!(s, StatusCode::BAD_REQUEST);
-        let mut rumpf = schrank("b");
-        rumpf["expected_revision"] = json!(2);
-        let (s, _, _) = senden(&r, "PUT", "/api/items/schrank", Some("1"), rumpf).await;
+        let mut body = wardrobe("b");
+        body["expected_revision"] = json!(2);
+        let (s, _, _) = send(&r, "PUT", "/api/items/wardrobe", Some("1"), body).await;
         assert_eq!(s, StatusCode::BAD_REQUEST);
-        let _ = std::fs::remove_file(&pfad);
+        let _ = std::fs::remove_file(&path);
     }
 }

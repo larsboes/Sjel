@@ -36,15 +36,15 @@ fn model() -> Model {
 ///
 /// Beide Layouts stellen ihr Brett auf dieselben Koordinaten, also unterscheiden sich die zwei
 /// Laeufe in einer einzigen Sache: ob das Inventar `raumtrenner = true` fuehrt.
-fn suche(m: &Model, variante: &str) -> interior::search::SearchReport {
+fn search_state(m: &Model, variant: &str) -> interior::search::SearchReport {
     let base = m
-        .load_layout(&format!("g-trenner-{variante}"))
-        .unwrap_or_else(|e| panic!("g-trenner-{variante}: {e}"));
+        .load_layout(&format!("g-trenner-{variant}"))
+        .unwrap_or_else(|e| panic!("g-trenner-{variant}: {e}"));
     search(
         m,
         &base,
         &Spec {
-            move_refs: vec![format!("trenner_{variante}")],
+            move_refs: vec![format!("trenner_{variant}")],
             step: 50,
             bands: BTreeMap::new(),
             limit: 0,
@@ -63,33 +63,33 @@ fn suche(m: &Model, variante: &str) -> interior::search::SearchReport {
 /// Ohne den Vergleich waere der Test wertlos: eine Wandsumme von 0 kann auch heissen, dass die
 /// Suche keinen Platz an einer Wand gefunden hat.
 #[test]
-fn ein_erklaerter_raumtrenner_wird_nicht_fuer_freies_stehen_bestraft() {
+fn a_declared_room_divider_is_not_penalised_for_standing_free() {
     let m = model();
 
-    let stumm = suche(&m, "stumm");
+    let quiet = search_state(&m, "stumm");
     assert!(
-        !stumm.hits.is_empty(),
+        !quiet.hits.is_empty(),
         "die Suche findet Plaetze fuer das stumme Brett"
     );
-    let beste_wand = stumm
+    let best_wall = quiet
         .hits
         .iter()
-        .map(|h| h.wandkontakt_cm)
+        .map(|h| h.wall_contact_cm)
         .max()
         .unwrap_or(0);
     assert!(
-        beste_wand > 0,
+        best_wall > 0,
         "ein Brett, das nichts erklaert, findet eine Wand und bekommt sie angerechnet — \
          sonst prueft der Vergleich unten nichts"
     );
 
-    let erklaert = suche(&m, "erklaert");
+    let declared = search_state(&m, "erklaert");
     assert!(
-        !erklaert.hits.is_empty(),
+        !declared.hits.is_empty(),
         "und Plaetze fuer das erklaerte Brett"
     );
     assert!(
-        erklaert.hits.iter().all(|h| h.wandkontakt_cm == 0),
+        declared.hits.iter().all(|h| h.wall_contact_cm == 0),
         "ein erklaerter Raumtrenner zaehlt gar nicht in die Wandsumme — er soll die Bewertung \
          der uebrigen Stuecke weder heben noch senken"
     );
@@ -105,9 +105,9 @@ fn ein_erklaerter_raumtrenner_wird_nicht_fuer_freies_stehen_bestraft() {
 /// dominierter Treffer ist unter JEDER Gewichtung der vier Ziele schlechter als ein bestimmter
 /// anderer. Innerhalb einer Klasse gilt die Rangfolge vom 2026-08-30 unveraendert weiter.
 #[test]
-fn die_rangfolge_sortiert_front_vor_warnungen_vor_wand_vor_engpass() {
+fn the_ranking_sorts_front_then_warnings_then_wall_then_bottleneck() {
     let m = model();
-    let r = suche(&m, "stumm");
+    let r = search_state(&m, "stumm");
     assert!(
         r.hits.len() > 1,
         "fuer eine Rangfolge braucht es mehr als einen Treffer"
@@ -118,16 +118,16 @@ fn die_rangfolge_sortiert_front_vor_warnungen_vor_wand_vor_engpass() {
         let a_key = (
             !a.pareto,
             a.soft,
-            -a.wandkontakt_cm,
+            -a.wall_contact_cm,
             -a.bottleneck_cm,
-            std::cmp::Reverse(a.engste_reserve_cm),
+            std::cmp::Reverse(a.tightest_reserve_cm),
         );
         let b_key = (
             !b.pareto,
             b.soft,
-            -b.wandkontakt_cm,
+            -b.wall_contact_cm,
             -b.bottleneck_cm,
-            std::cmp::Reverse(b.engste_reserve_cm),
+            std::cmp::Reverse(b.tightest_reserve_cm),
         );
         assert!(a_key <= b_key, "Rangfolge verletzt: {a:?} steht vor {b:?}");
     }
@@ -138,9 +138,9 @@ fn die_rangfolge_sortiert_front_vor_warnungen_vor_wand_vor_engpass() {
 /// Ein Flag, das ueberall `true` steht, sortiert nichts und meldet trotzdem Erfolg — genau die
 /// Art von stiller Nulloperation, die diese Datei bei `raumtrenner` schon einmal gefunden hat.
 #[test]
-fn die_front_ist_echt_kleiner_als_die_treffermenge() {
+fn the_front_is_strictly_smaller_than_the_hits() {
     let m = model();
-    let r = suche(&m, "stumm");
+    let r = search_state(&m, "stumm");
     let front = r.hits.iter().filter(|h| h.pareto).count();
     assert!(front > 0, "ohne Front gibt es keine beste Antwort");
     assert!(
@@ -156,24 +156,24 @@ fn die_front_ist_echt_kleiner_als_die_treffermenge() {
 /// hier an den Zahlen geprueft statt am Flag: ein falsch gesetztes Flag bestuende den Test
 /// oben und diesen nicht.
 #[test]
-fn kein_treffer_steht_vor_einem_der_ihn_in_allem_schlaegt() {
+fn no_hit_ranks_before_one_that_beats_it_everywhere() {
     let m = model();
-    let r = suche(&m, "stumm");
-    let ziel = |h: &interior::search::Hit| {
+    let r = search_state(&m, "stumm");
+    let target = |h: &interior::search::Hit| {
         [
-            h.engste_reserve_cm.unwrap_or(i32::MIN),
-            h.wandkontakt_cm,
+            h.tightest_reserve_cm.unwrap_or(i32::MIN),
+            h.wall_contact_cm,
             h.bottleneck_cm,
             -(h.soft as i32),
         ]
     };
     for (i, a) in r.hits.iter().enumerate() {
         for b in r.hits.iter().skip(i + 1) {
-            let (za, zb) = (ziel(a), ziel(b));
-            let dominiert = zb.iter().zip(za.iter()).all(|(x, y)| x >= y)
+            let (za, zb) = (target(a), target(b));
+            let dominates = zb.iter().zip(za.iter()).all(|(x, y)| x >= y)
                 && zb.iter().zip(za.iter()).any(|(x, y)| x > y);
             assert!(
-                !dominiert,
+                !dominates,
                 "{b:?} schlaegt {a:?} in allem und steht dahinter"
             );
         }
@@ -183,12 +183,12 @@ fn kein_treffer_steht_vor_einem_der_ihn_in_allem_schlaegt() {
 /// Ein harter Verstoss kommt nie als Treffer zurueck.
 ///
 /// Die Suche schlaegt Plaetze vor, und ein Vorschlag, der eine harte Regel verletzt, ist kein
-/// Vorschlag. `clearance.rs` sagt dasselbe von der anderen Seite: es gibt keinen Weg, ein
+/// Vorschlag. `clearance.rs` sagt dasselbe von der anderen Side: es gibt keinen Weg, ein
 /// Bestehen zu melden, solange ein harter Verstoss offen ist.
 #[test]
-fn kein_treffer_verletzt_eine_harte_regel() {
+fn no_hit_breaks_a_hard_rule() {
     let m = model();
-    let r = suche(&m, "stumm");
+    let r = search_state(&m, "stumm");
     let base = m.load_layout("g-trenner-stumm").expect("g-trenner-stumm");
 
     for h in &r.hits {
@@ -224,7 +224,7 @@ fn kein_treffer_verletzt_eine_harte_regel() {
 /// im Browser. Die Musterwohnung hat dafuer eine Kuechenzeile und einen Tuerschwenkbereich; die
 /// echte Wohnung ist obendrein ein Sechseck.
 #[test]
-fn erlaubte_positionen_liegen_im_raum_und_nicht_in_einem_einbau() {
+fn allowed_positions_lie_in_the_room_not_in_a_fixture() {
     use interior::model::{Layout, PlacedItem};
     let m = model();
     let base = m.load_layout("g-trenner-stumm").expect("g-trenner-stumm");
@@ -235,7 +235,7 @@ fn erlaubte_positionen_liegen_im_raum_und_nicht_in_einem_einbau() {
     assert_eq!(a.step, 5);
 
     // Jede erlaubte Position ueberlebt die Raumgrenze.
-    let mut geprueft = 0;
+    let mut checked = 0;
     for row in &a.rows {
         for [lo, hi] in &row.x {
             for x in [*lo, *hi] {
@@ -257,29 +257,29 @@ fn erlaubte_positionen_liegen_im_raum_und_nicht_in_einem_einbau() {
                     "erlaubte Position {x},{} liegt ausserhalb des Raums",
                     row.y
                 );
-                geprueft += 1;
+                checked += 1;
             }
         }
     }
-    assert!(geprueft > 50, "nur {geprueft} Kanten geprueft");
+    assert!(checked > 50, "nur {checked} Kanten geprueft");
 
     // Und die Liste ist enger als das umschliessende Rechteck. Die Kuechenzeile liegt bei
     // x 0..250, y 390..450: eine Zeile, die sie beruehrt, darf nicht bei x = 0 anfangen, eine
     // freie Zeile schon. Genau diese Verengung waere in einer Rechteck-Fassung verschwunden —
     // und die Rechteck-Fassung ist die, die im Browser naheliegt.
-    let anfang = |y: i32| -> Option<i32> { a.rows.iter().find(|r| r.y == y).map(|r| r.x[0][0]) };
-    assert_eq!(anfang(0), Some(0), "oben ist die Wand die einzige Grenze");
-    let unten = anfang(380).expect("es gibt eine Zeile bei y = 380");
+    let start = |y: i32| -> Option<i32> { a.rows.iter().find(|r| r.y == y).map(|r| r.x[0][0]) };
+    assert_eq!(start(0), Some(0), "oben ist die Wand die einzige Grenze");
+    let down = start(380).expect("es gibt eine Zeile bei y = 380");
     assert!(
-        unten > 0,
+        down > 0,
         "bei y = 380 reicht das Brett in die Kuechenzeile, also darf x = 0 nicht erlaubt sein \
-         (bekommen: {unten})"
+         (bekommen: {down})"
     );
 }
 
 /// Eine Position IM Einbau steht nicht auf der Liste.
 #[test]
-fn eine_position_in_der_kuechenzeile_ist_nicht_erlaubt() {
+fn a_position_in_the_kitchen_run_is_not_allowed() {
     let m = model();
     let base = m.load_layout("g-trenner-stumm").expect("g-trenner-stumm");
     let a = interior::search::allowed_positions(&m, &base, "trenner_stumm", 0)

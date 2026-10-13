@@ -86,16 +86,16 @@ macro_rules! live_or_skip {
 /// Grenze, die einen Schreiber aus dem Netz in diesem Verzeichnis haelt. Ein Name mit `/` waere
 /// die Ausnahme, die sie aufweicht. Wo eine Datei liegt, ist eine Frage des Ladens, also loest
 /// dieser Test den Pfad selbst auf.
-fn aufgezeichnetes_layout(model: &Model, id: &str) -> Result<Layout, ModelError> {
+fn recorded_layout(model: &Model, id: &str) -> Result<Layout, ModelError> {
     let dir = model.layouts_dir();
-    let datei = format!("{id}.toml");
-    let pfad = [dir.join(&datei), dir.join(layout_io::ARCHIV).join(&datei)]
+    let file = format!("{id}.toml");
+    let pfad = [dir.join(&file), dir.join(layout_io::ARCHIVE).join(&file)]
         .into_iter()
         .find(|p| p.is_file())
         .ok_or_else(|| {
             ModelError::Missing(format!(
-                "weder layouts/{datei} noch layouts/{}/{datei}",
-                layout_io::ARCHIV
+                "weder layouts/{file} noch layouts/{}/{file}",
+                layout_io::ARCHIVE
             ))
         })?;
     let text = std::fs::read_to_string(&pfad).map_err(|source| ModelError::Read {
@@ -110,19 +110,19 @@ fn aufgezeichnetes_layout(model: &Model, id: &str) -> Result<Layout, ModelError>
 }
 
 #[test]
-fn jedes_layout_faellt_gleich_aus_wie_in_der_vorlage() {
+fn every_layout_matches_the_template_result() {
     let (model, base) = live_or_skip!();
     let layouts = base["layouts"].as_object().expect("layouts");
-    let mut geprueft = 0;
-    let mut abweichungen: Vec<String> = Vec::new();
+    let mut checked = 0;
+    let mut deviations: Vec<String> = Vec::new();
 
     for (name, want) in layouts {
-        let layout = aufgezeichnetes_layout(&model, name).unwrap_or_else(|e| panic!("{name}: {e}"));
+        let layout = recorded_layout(&model, name).unwrap_or_else(|e| panic!("{name}: {e}"));
         let got = check_layout(&model, &layout).unwrap_or_else(|e| panic!("{name}: {e}"));
 
         let want_pass = want["pass"].as_bool().unwrap();
         if got.pass != want_pass {
-            abweichungen.push(format!("{name}: pass {} statt {}", got.pass, want_pass));
+            deviations.push(format!("{name}: pass {} statt {}", got.pass, want_pass));
         }
         // Kennungen und nicht nur Anzahlen, seit 2026-08-31.
         //
@@ -151,7 +151,7 @@ fn jedes_layout_faellt_gleich_aus_wie_in_der_vorlage() {
         // nicht hier. Sie beschreiben eine Wohnung, und dieser Test steht in einem oeffentlichen
         // Repository. Die Vorlage bleibt dabei unveraendert: `abweichungen` ist ein zweiter
         // Schluessel daneben, kein korrigierter Messwert.
-        let erlaubt = |key: &str| -> Vec<String> {
+        let allowed = |key: &str| -> Vec<String> {
             base["abweichungen"][name][format!("{key}_zusaetzlich")]
                 .as_array()
                 .map(|a| {
@@ -163,10 +163,10 @@ fn jedes_layout_faellt_gleich_aus_wie_in_der_vorlage() {
         };
         for (key, got_v) in [("hard", &got.hard), ("soft", &got.soft)] {
             let (a, mut b) = (ids(got_v), want_ids(key));
-            b.extend(erlaubt(key));
+            b.extend(allowed(key));
             b.sort();
             if a != b {
-                abweichungen.push(format!(
+                deviations.push(format!(
                     "{name}: {key} meldet [{}] statt [{}]",
                     a.join(", "),
                     b.join(", ")
@@ -178,38 +178,38 @@ fn jedes_layout_faellt_gleich_aus_wie_in_der_vorlage() {
         let want_c = want["corridors"].as_array().unwrap();
         for (i, wc) in want_c.iter().enumerate() {
             let Some(gc) = got.metrics.corridors.get(i) else {
-                abweichungen.push(format!("{name}: Korridor {i} fehlt"));
+                deviations.push(format!("{name}: Korridor {i} fehlt"));
                 continue;
             };
             let w = wc["widthCm"].as_i64().map(|v| v as i32);
             if gc.width_cm != w {
-                abweichungen.push(format!(
+                deviations.push(format!(
                     "{name}: Route {} → {} misst {:?} cm statt {:?}",
                     gc.from, gc.to, gc.width_cm, w
                 ));
             }
         }
-        geprueft += 1;
+        checked += 1;
     }
 
-    assert!(geprueft == 10, "10 Layouts erwartet, {geprueft} geprueft");
+    assert!(checked == 10, "10 Layouts erwartet, {checked} geprueft");
     assert!(
-        abweichungen.is_empty(),
+        deviations.is_empty(),
         "Abweichungen zur Vorlage:\n  {}",
-        abweichungen.join("\n  ")
+        deviations.join("\n  ")
     );
 }
 
 #[test]
-fn der_katalog_ist_vollstaendig_uebernommen() {
+fn the_catalogue_is_taken_over_completely() {
     let (model, base) = live_or_skip!();
     let want = base["catalogue"].as_object().unwrap();
-    let mut fehlend: Vec<&String> = want
+    let mut missing: Vec<&String> = want
         .keys()
         .filter(|k| !model.catalogue.contains_key(*k))
         .collect();
-    fehlend.sort();
-    assert!(fehlend.is_empty(), "im TOML-Inventar fehlen: {fehlend:?}");
+    missing.sort();
+    assert!(missing.is_empty(), "im TOML-Inventar fehlen: {missing:?}");
     assert_eq!(
         model.catalogue.len(),
         want.len(),
@@ -220,22 +220,22 @@ fn der_katalog_ist_vollstaendig_uebernommen() {
 }
 
 #[test]
-fn die_masse_jedes_moebels_sind_unveraendert() {
+fn every_piece_keeps_its_size() {
     let (model, base) = live_or_skip!();
     let want = base["catalogue"].as_object().unwrap();
-    let mut abw = Vec::new();
+    let mut dev = Vec::new();
     for (id, w) in want {
         let Some(item) = model.catalogue.get(id) else {
             continue;
         };
         let wb = w["b"].as_i64().map(|v| v as i32);
         let wt = w["t"].as_i64().map(|v| v as i32);
-        if item.b != wb || item.t != wt {
-            abw.push(format!(
+        if item.width != wb || item.depth != wt {
+            dev.push(format!(
                 "{id}: {:?}×{:?} statt {:?}×{:?}",
-                item.b, item.t, wb, wt
+                item.width, item.depth, wb, wt
             ));
         }
     }
-    assert!(abw.is_empty(), "Masse weichen ab:\n  {}", abw.join("\n  "));
+    assert!(dev.is_empty(), "Masse weichen ab:\n  {}", dev.join("\n  "));
 }

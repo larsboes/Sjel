@@ -42,68 +42,68 @@ use serde::Serialize;
 ///
 /// Wer ein Layout hat, das 50 cm Messfehler ueberlebt, hat keine Messfrage mehr, sondern einen
 /// leeren Raum. Der Horizont wird gemeldet und nicht als Ergebnis ausgegeben.
-pub const HORIZONT_CM: i32 = 50;
+pub const HORIZON_CM: i32 = 50;
 
 /// Wie viel Messfehler ein Verdikt aushaelt.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 #[serde(tag = "art", rename_all = "snake_case")]
-pub enum Haltbarkeit {
+pub enum Holds {
     /// Faellt schon bei den eingetragenen Massen durch. Ein Messfehler ist hier nicht die Frage.
-    FaelltDurch,
+    Fails,
     /// Kein Mass in diesem Layout ist als geschaetzt gekennzeichnet.
     ///
     /// Kein Freibrief: es heisst, dass das Inventar nichts als unsicher fuehrt, nicht, dass
     /// alles nachgemessen wurde.
-    NichtsGeraten,
+    NothingGuessed,
     /// Besteht bis zu diesem Fehler in cm, und bei einem cm mehr nicht mehr.
     Bis { cm: i32 },
     /// Besteht auch bei `HORIZONT_CM` noch.
-    UeberHorizont { horizont_cm: i32 },
+    BeyondHorizon { horizon_cm: i32 },
 }
 
 #[derive(Debug, Clone, Serialize)]
-pub struct Robustheit {
+pub struct Robustness {
     pub layout: String,
     pub nominal_pass: bool,
     /// Die knappste harte Messung bei den eingetragenen Massen.
-    pub engste_reserve_cm: Option<i32>,
-    pub haelt: Haltbarkeit,
+    pub tightest_reserve_cm: Option<i32>,
+    pub holds: Holds,
     /// Welche Regeln als erste reissen, einen Zentimeter jenseits von `haelt`.
     ///
     /// Das ist der Teil, der eine Handlung nach sich zieht: nicht „irgendwann wird es eng",
     /// sondern „nachmessen musst du den Schrank, und zwar wegen R7".
-    pub kippt_an: Vec<String>,
+    pub tips_at: Vec<String>,
     /// Die Stuecke, deren Masse geschaetzt sind — sie tragen das Risiko.
-    pub geraten: Vec<Uncertainty>,
+    pub guessed: Vec<Uncertainty>,
     /// Stuecke mit `size:` im Layout: sie tragen ihr Mass selbst und werden nicht variiert.
-    pub nicht_variiert: Vec<String>,
+    pub not_varied: Vec<String>,
 }
 
 /// Dasselbe Modell mit vergroesserten Massen, dort wo sie als geschaetzt gelten.
 ///
 /// Nur `b`, `t` und `h`, und nur, wenn `unsicher` sie nennt. `unsicher = ["h"]` heisst, dass
 /// die Hoehe geraten ist, und **nicht**, dass das ganze Stueck unbekannt ist.
-fn gestoert(model: &Model, tol: i32) -> Model {
+fn disturbed(model: &Model, tol: i32) -> Model {
     let mut catalogue = model.catalogue.clone();
     for it in catalogue.values_mut() {
         // Was nicht in `unsicher` steht, bleibt. Ein pauschaler Aufschlag auf alle Masse waere
         // eine andere Frage — er wuerde messen, was passiert, wenn ALLES falsch ist, und nicht,
         // was passiert, wenn das Geratene falsch ist.
-        let unsicher = std::mem::take(&mut it.unsicher);
-        for feld in &unsicher {
-            let ziel = match feld.as_str() {
-                "b" => &mut it.b,
-                "t" => &mut it.t,
-                "h" => &mut it.h,
+        let unsicher = std::mem::take(&mut it.estimated);
+        for field in &unsicher {
+            let target = match field.as_str() {
+                "b" => &mut it.width,
+                "t" => &mut it.depth,
+                "h" => &mut it.height,
                 // `unsicher` darf jeden Feldnamen tragen; variiert wird, was eine Ausdehnung
                 // ist. Ein unsicherer Preis aendert keine Raeumung.
                 _ => continue,
             };
-            if let Some(x) = ziel.as_mut() {
+            if let Some(x) = target.as_mut() {
                 *x += tol;
             }
         }
-        it.unsicher = unsicher;
+        it.estimated = unsicher;
     }
     Model {
         room: model.room.clone(),
@@ -115,8 +115,8 @@ fn gestoert(model: &Model, tol: i32) -> Model {
 }
 
 /// Besteht dieses Layout noch, wenn jedes geschaetzte Mass um `tol` cm daneben liegt?
-fn besteht_bei(model: &Model, layout: &Layout, tol: i32) -> Result<bool, ModelError> {
-    Ok(check_layout(&gestoert(model, tol), layout)?.pass)
+fn passes_at(model: &Model, layout: &Layout, tol: i32) -> Result<bool, ModelError> {
+    Ok(check_layout(&disturbed(model, tol), layout)?.pass)
 }
 
 /// Derselbe Aufruf, oeffentlich, damit ein Test die Monotonie an den Zahlen pruefen kann.
@@ -124,16 +124,16 @@ fn besteht_bei(model: &Model, layout: &Layout, tol: i32) -> Result<bool, ModelEr
 /// Die Bisektion oben steht und faellt damit, und ein Kommentar, der Monotonie behauptet, ist
 /// keine Pruefung. Der Aufruf bleibt ansonsten privat: er ist ein Schritt eines Verfahrens und
 /// keine Frage, die jemand stellt.
-pub fn besteht_bei_fuer_test(model: &Model, layout: &Layout, tol: i32) -> Result<bool, ModelError> {
-    besteht_bei(model, layout, tol)
+pub fn passes_at_for_test(model: &Model, layout: &Layout, tol: i32) -> Result<bool, ModelError> {
+    passes_at(model, layout, tol)
 }
 
-pub fn robustheit(model: &Model, layout: &Layout) -> Result<Robustheit, ModelError> {
+pub fn robustness(model: &Model, layout: &Layout) -> Result<Robustness, ModelError> {
     let nominal = check_layout(model, layout)?;
     let refs: Vec<&str> = layout.items.iter().map(|i| i.reference.as_str()).collect();
 
-    let geraten: Vec<Uncertainty> = nominal.uncertainties.clone();
-    let nicht_variiert: Vec<String> = layout
+    let guessed: Vec<Uncertainty> = nominal.uncertainties.clone();
+    let not_varied: Vec<String> = layout
         .items
         .iter()
         .filter(|i| i.size.is_some())
@@ -141,37 +141,37 @@ pub fn robustheit(model: &Model, layout: &Layout) -> Result<Robustheit, ModelErr
         .collect();
     // Ein geschaetztes Mass an einem Stueck, das sein Mass im Layout mitbringt, wird von der
     // Stoerung nicht erreicht — `footprint` liest dann `size:` und nicht den Katalog.
-    let wirksam: Vec<&Uncertainty> = geraten
+    let effective: Vec<&Uncertainty> = guessed
         .iter()
-        .filter(|u| !nicht_variiert.contains(&u.reference) && refs.contains(&u.reference.as_str()))
+        .filter(|u| !not_varied.contains(&u.reference) && refs.contains(&u.reference.as_str()))
         .collect();
 
-    let haelt = if !nominal.pass {
-        Haltbarkeit::FaelltDurch
-    } else if wirksam.is_empty() {
-        Haltbarkeit::NichtsGeraten
-    } else if besteht_bei(model, layout, HORIZONT_CM)? {
-        Haltbarkeit::UeberHorizont {
-            horizont_cm: HORIZONT_CM,
+    let holds = if !nominal.pass {
+        Holds::Fails
+    } else if effective.is_empty() {
+        Holds::NothingGuessed
+    } else if passes_at(model, layout, HORIZON_CM)? {
+        Holds::BeyondHorizon {
+            horizon_cm: HORIZON_CM,
         }
     } else {
         // Halbierung ueber [0, HORIZONT]: `lo` besteht immer, `hi` nie. Beide Enden sind oben
         // schon gemessen, also ist die Schleife eine Verfeinerung und keine Suche ins Blaue.
-        let (mut lo, mut hi) = (0, HORIZONT_CM);
+        let (mut lo, mut hi) = (0, HORIZON_CM);
         while hi - lo > 1 {
             let mid = lo + (hi - lo) / 2;
-            if besteht_bei(model, layout, mid)? {
+            if passes_at(model, layout, mid)? {
                 lo = mid;
             } else {
                 hi = mid;
             }
         }
-        Haltbarkeit::Bis { cm: lo }
+        Holds::Bis { cm: lo }
     };
 
-    let kippt_an = match haelt {
-        Haltbarkeit::Bis { cm } => {
-            let mut ids: Vec<String> = check_layout(&gestoert(model, cm + 1), layout)?
+    let tips_at = match holds {
+        Holds::Bis { cm } => {
+            let mut ids: Vec<String> = check_layout(&disturbed(model, cm + 1), layout)?
                 .hard
                 .into_iter()
                 .map(|v| v.rule)
@@ -183,13 +183,13 @@ pub fn robustheit(model: &Model, layout: &Layout) -> Result<Robustheit, ModelErr
         _ => Vec::new(),
     };
 
-    Ok(Robustheit {
+    Ok(Robustness {
         layout: layout.name.clone(),
         nominal_pass: nominal.pass,
-        engste_reserve_cm: nominal.engste_reserve_cm,
-        haelt,
-        kippt_an,
-        geraten,
-        nicht_variiert,
+        tightest_reserve_cm: nominal.tightest_reserve_cm,
+        holds,
+        tips_at,
+        guessed,
+        not_varied,
     })
 }

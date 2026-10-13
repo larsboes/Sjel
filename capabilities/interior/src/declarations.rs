@@ -19,7 +19,7 @@
 //!    denen sich das Verdikt bewegt.
 //!
 //! **Der Vorschlag ist keine Empfehlung, und er ist nicht wirkungsfrei.** Die Namensfassung
-//! prueft an einem Bett die beiden Laengsseiten, die deklarierte Fassung zaehlt jede Seite,
+//! prueft an einem Bett die beiden Laengsseiten, die deklarierte Fassung zaehlt jede Side,
 //! die tief genug ist; das ist nicht dieselbe Frage, und Punkt 3 sagt deshalb bei jedem
 //! Eintrag, was sich bewegt. Wer die Zeile uebernimmt, uebernimmt eine Entscheidung — und das
 //! ist der Grund, warum diese Datei nichts schreibt.
@@ -31,7 +31,7 @@ use serde::Serialize;
 
 /// Die Zeilen, die ein Stueck ueber sich selbst sagen kann (PRD Q61).
 #[derive(Debug, Clone, Default, Serialize)]
-pub struct Vorschlag {
+pub struct Proposal {
     pub open_clear: Option<i32>,
     pub access_sides: Option<i32>,
     pub access_clear: Option<i32>,
@@ -43,12 +43,12 @@ pub struct Vorschlag {
 
 /// Was sich an den Verdikten bewegt, wenn der Vorschlag uebernommen wird.
 #[derive(Debug, Clone, Serialize)]
-pub struct Folgen {
+pub struct Consequences {
     pub layouts: usize,
-    pub bestanden_vorher: usize,
-    pub bestanden_nachher: usize,
+    pub passing_before: usize,
+    pub passing_after: usize,
     /// Die Layouts, deren Verstossliste sich aendert — auch wenn das Verdikt gleich bleibt.
-    pub geaendert: Vec<String>,
+    pub changed: Vec<String>,
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -56,17 +56,17 @@ pub struct Stand {
     pub id: String,
     pub label: String,
     /// Erklaert dieses Stueck schon selbst, was es braucht?
-    pub erklaert: bool,
+    pub declared: bool,
     /// Wofuer die Namensheuristik es haelt, solange es das nicht tut.
-    pub geraten_als: &'static str,
+    pub guessed_as: &'static str,
     /// Welche Schwellen aus `rules.toml` es damit erbt.
-    pub geerbte_schwellen: Vec<(String, i32)>,
+    pub inherited_thresholds: Vec<(String, i32)>,
     /// In welchen Layouts es steht — so viele Verdikte haengen daran.
     pub in_layouts: Vec<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub vorschlag: Option<Vorschlag>,
+    pub proposal: Option<Proposal>,
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub folgen: Option<Folgen>,
+    pub consequences: Option<Consequences>,
 }
 
 fn kind_name(k: Kind) -> &'static str {
@@ -83,7 +83,7 @@ fn kind_name(k: Kind) -> &'static str {
 }
 
 /// Erklaert dieses Stueck sich schon selbst? Dieselbe Bedingung wie in `clearance.rs`.
-pub fn erklaert(i: &Item) -> bool {
+pub fn declared(i: &Item) -> bool {
     i.open_clear.is_some() || i.access_sides.is_some() || i.expands_to.is_some()
 }
 
@@ -92,17 +92,17 @@ pub fn erklaert(i: &Item) -> bool {
 /// `None` fuer `Kind::CoffeeTable`, `Kind::Shelf` und `Kind::Other`: fuer die nimmt die
 /// Heuristik nichts an, also gaebe es nichts abzuschreiben. Ein erfundener Vorschlag waere
 /// dort eine neue Regel und keine Uebersetzung einer bestehenden.
-pub fn vorschlag(model: &Model, i: &Item) -> Option<Vorschlag> {
+pub fn proposal(model: &Model, i: &Item) -> Option<Proposal> {
     let r = &model.rules;
-    let mut v = Vorschlag::default();
+    let mut v = Proposal::default();
     match kind_of_name(&i.id) {
         Kind::Bed => {
-            let laengs = r.abstand("bett_zugang_laengsseite").ok()?;
-            let zweite = r.abstand("bett_zugang_zweite_seite").ok()?;
-            v.access_clear = Some(laengs);
+            let lengthwise = r.abstand("bett_zugang_laengsseite").ok()?;
+            let second = r.abstand("bett_zugang_zweite_seite").ok()?;
+            v.access_clear = Some(lengthwise);
             // Verlangt die Wohnung an der zweiten Laengsseite nichts, ist das eine Aussage
-            // ueber Einzelbelegung — eine Seite genuegt.
-            v.access_sides = Some(if zweite > 0 { 2 } else { 1 });
+            // ueber Einzelbelegung — eine Side genuegt.
+            v.access_sides = Some(if second > 0 { 2 } else { 1 });
         }
         Kind::Desk => {
             v.access_sides = Some(1);
@@ -116,20 +116,20 @@ pub fn vorschlag(model: &Model, i: &Item) -> Option<Vorschlag> {
         Kind::Couch => {
             // Die Ausklapptiefe kennt das Stueck selbst, wo sie gemessen wurde; sonst die
             // Norm aus der Wohnung, als Gesamttiefe und nicht als Zuwachs.
-            let tiefe = i.t.unwrap_or(0);
+            let tiefe = i.depth.unwrap_or(0);
             v.expands_to = Some(
-                i.t_ausgeklappt
+                i.depth_unfolded
                     .unwrap_or(tiefe + r.abstand("couch_ausklapptiefe").ok()?),
             );
             v.expands_dir = Some("sued".into());
         }
         Kind::CoffeeTable | Kind::Shelf | Kind::Other => return None,
     }
-    v.toml = toml_zeilen(&v);
+    v.toml = toml_lines(&v);
     Some(v)
 }
 
-fn toml_zeilen(v: &Vorschlag) -> String {
+fn toml_lines(v: &Proposal) -> String {
     let mut z = Vec::new();
     if let Some(x) = v.open_clear {
         z.push(format!("open_clear = {x}"));
@@ -146,7 +146,7 @@ fn toml_zeilen(v: &Vorschlag) -> String {
     z.join("\n")
 }
 
-fn angewandt(i: &Item, v: &Vorschlag) -> Item {
+fn applied(i: &Item, v: &Proposal) -> Item {
     let mut n = i.clone();
     n.open_clear = v.open_clear.or(n.open_clear);
     n.access_sides = v.access_sides.or(n.access_sides);
@@ -155,7 +155,7 @@ fn angewandt(i: &Item, v: &Vorschlag) -> Item {
     n.expands_dir = v
         .expands_dir
         .as_deref()
-        .and_then(crate::model::Seite::parse)
+        .and_then(crate::model::Side::parse)
         .or(n.expands_dir);
     n
 }
@@ -166,7 +166,7 @@ fn angewandt(i: &Item, v: &Vorschlag) -> Item {
 /// bewegt, und dafuer ist der Text unerheblich — er ist fuer jede Instanz derselben Regel
 /// derselbe.
 #[derive(PartialEq)]
-struct Verdikt {
+struct Verdict {
     layout: String,
     pass: bool,
     hart: Vec<String>,
@@ -174,12 +174,12 @@ struct Verdikt {
 }
 
 /// Alle Verdikte dieser Wohnung, als Vergleichsgrundlage.
-fn verdikte(model: &Model) -> Result<Vec<Verdikt>, ModelError> {
+fn verdicts(model: &Model) -> Result<Vec<Verdict>, ModelError> {
     let mut out = Vec::new();
     for name in model.layout_names()? {
         let l = model.load_layout(&name)?;
         let r = check_layout(model, &l)?;
-        out.push(Verdikt {
+        out.push(Verdict {
             layout: name,
             pass: r.pass,
             hart: r.hard.iter().map(|v| v.rule.clone()).collect(),
@@ -190,8 +190,8 @@ fn verdikte(model: &Model) -> Result<Vec<Verdikt>, ModelError> {
 }
 
 /// Wie weit das Inventar der Maschine hinterherhaengt, Eintrag fuer Eintrag.
-pub fn uebersicht(model: &Model) -> Result<Vec<Stand>, ModelError> {
-    let vorher = verdikte(model)?;
+pub fn overview(model: &Model) -> Result<Vec<Stand>, ModelError> {
+    let before = verdicts(model)?;
     let mut in_layouts: std::collections::BTreeMap<String, Vec<String>> = Default::default();
     for name in model.layout_names()? {
         for it in &model.load_layout(&name)?.items {
@@ -205,10 +205,10 @@ pub fn uebersicht(model: &Model) -> Result<Vec<Stand>, ModelError> {
     let mut out = Vec::new();
     for i in model.catalogue.values() {
         let k = kind_of_name(&i.id);
-        let schon = erklaert(i);
-        let v = if schon { None } else { vorschlag(model, i) };
+        let already = declared(i);
+        let v = if already { None } else { proposal(model, i) };
 
-        let folgen = match &v {
+        let consequences = match &v {
             None => None,
             Some(v) => {
                 // Dieselbe Rechnung wie `POST /api/items/:id/impact`, nur fuer den Vorschlag
@@ -220,19 +220,19 @@ pub fn uebersicht(model: &Model) -> Result<Vec<Stand>, ModelError> {
                     states: model.states.clone(),
                     flat_dir: model.flat_dir.clone(),
                 };
-                probe.catalogue.insert(i.id.clone(), angewandt(i, v));
-                let nachher = verdikte(&probe)?;
-                let geaendert = vorher
+                probe.catalogue.insert(i.id.clone(), applied(i, v));
+                let after = verdicts(&probe)?;
+                let changed = before
                     .iter()
-                    .zip(nachher.iter())
+                    .zip(after.iter())
                     .filter(|(a, b)| a != b)
                     .map(|(a, _)| a.layout.clone())
                     .collect();
-                Some(Folgen {
-                    layouts: vorher.len(),
-                    bestanden_vorher: vorher.iter().filter(|x| x.pass).count(),
-                    bestanden_nachher: nachher.iter().filter(|x| x.pass).count(),
-                    geaendert,
+                Some(Consequences {
+                    layouts: before.len(),
+                    passing_before: before.iter().filter(|x| x.pass).count(),
+                    passing_after: after.iter().filter(|x| x.pass).count(),
+                    changed,
                 })
             }
         };
@@ -240,20 +240,20 @@ pub fn uebersicht(model: &Model) -> Result<Vec<Stand>, ModelError> {
         out.push(Stand {
             id: i.id.clone(),
             label: i.label.clone(),
-            erklaert: schon,
-            geraten_als: kind_name(k),
-            geerbte_schwellen: geerbte_schwellen(model, k),
+            declared: already,
+            guessed_as: kind_name(k),
+            inherited_thresholds: inherited_thresholds(model, k),
             in_layouts: in_layouts.get(&i.id).cloned().unwrap_or_default(),
-            vorschlag: v,
-            folgen,
+            proposal: v,
+            consequences,
         });
     }
     Ok(out)
 }
 
 /// Welche Schwellen aus `rules.toml` ein Stueck ueber seinen Namen erbt.
-fn geerbte_schwellen(model: &Model, k: Kind) -> Vec<(String, i32)> {
-    let namen: &[&str] = match k {
+fn inherited_thresholds(model: &Model, k: Kind) -> Vec<(String, i32)> {
+    let names: &[&str] = match k {
         Kind::Bed => &["bett_zugang_laengsseite", "bett_zugang_zweite_seite"],
         Kind::Desk => &["schreibtisch_stuhlzone"],
         Kind::Wardrobe => &["schrank_tuer_oeffnen"],
@@ -262,7 +262,7 @@ fn geerbte_schwellen(model: &Model, k: Kind) -> Vec<(String, i32)> {
         Kind::CoffeeTable => &["couchtisch_vor_sofa"],
         Kind::Shelf | Kind::Other => &[],
     };
-    namen
+    names
         .iter()
         .filter_map(|n| model.rules.abstand(n).ok().map(|v| (n.to_string(), v)))
         .collect()

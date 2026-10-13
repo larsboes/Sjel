@@ -50,7 +50,7 @@ const ROUTES: &[route_manifest::Route] = &[
     r(
         "GET",
         "/",
-        "Alle Layouts als Seite, bei jeder Anfrage aus dem Modell erzeugt.",
+        "Alle Layouts als Side, bei jeder Anfrage aus dem Modell erzeugt.",
     ),
     r("GET", "/health", "Liveness."),
     r(
@@ -225,13 +225,13 @@ async fn api_model(
         // Die aeusseren Masse, damit die Oberflaeche sie neben den Plan schreiben kann, ohne
         // sich das Polygon selbst auszumessen.
         "masse": { "b": b, "t": t },
-        "hoehe": m.room.hauptraum.hoehe,
-        "polygon": m.room.hauptraum.polygon,
+        "hoehe": m.room.main_room.height,
+        "polygon": m.room.main_room.polygon,
         "bad": m.room.bad,
-        "terrasse": m.room.terrasse,
-        "waende": m.room.waende,
-        "oeffnungen": m.room.oeffnungen,
-        "fix_moebel": m.room.fix_moebel,
+        "terrasse": m.room.terrace,
+        "waende": m.room.walls,
+        "oeffnungen": m.room.openings,
+        "fix_moebel": m.room.fixed_furniture,
         "todo": m.room.todo.offen,
         "katalog_groesse": m.catalogue.len(),
         "ungemessen": m.uncertainties().into_iter()
@@ -308,43 +308,6 @@ async fn api_placements(
     Ok(Json(store(&s)?.placements(&flat).map_err(boom)?))
 }
 
-/// Einen Rumpf ueber einen bestehenden Eintrag legen.
-///
-/// Herausgezogen, weil `PATCH` und die Vorschau dieselbe Regel brauchen und zwei Fassungen
-/// davon genau die Drift waeren, gegen die diese Capability existiert.
-fn merge_patch(
-    alt: &crate::store::Item,
-    patch: serde_json::Value,
-) -> Result<crate::store::Item, (StatusCode, String)> {
-    let serde_json::Value::Object(patch) = patch else {
-        return Err((StatusCode::BAD_REQUEST, "Rumpf ist kein Objekt".into()));
-    };
-    let mut merged = match serde_json::to_value(alt).map_err(|e| boom(e.to_string()))? {
-        serde_json::Value::Object(m) => m,
-        _ => unreachable!("Item serialisiert als Objekt"),
-    };
-    for (k, v) in patch {
-        if k == "id" || k == "revision" {
-            // Der Pfad gewinnt, wie bei PUT. Die Revision gehoert dem Server; wer sie als
-            // Bedingung meint, schickt `If-Match`.
-            continue;
-        }
-        if !merged.contains_key(&k) {
-            return Err((
-                StatusCode::BAD_REQUEST,
-                format!("`{k}` ist kein Feld eines Eintrags"),
-            ));
-        }
-        merged.insert(k, v);
-    }
-    serde_json::from_value(serde_json::Value::Object(merged)).map_err(|e| {
-        (
-            StatusCode::BAD_REQUEST,
-            format!("Rumpf passt nicht auf einen Eintrag: {e}"),
-        )
-    })
-}
-
 /// Was eine Aenderung mit den Verdikten machen WUERDE, ohne sie zu schreiben.
 ///
 /// Der Grund, aus dem das ein Endpunkt ist und kein Kommentar in einer Anleitung: die
@@ -360,25 +323,25 @@ async fn api_item_impact(
     Json(patch): Json<serde_json::Value>,
 ) -> Result<impl IntoResponse, (StatusCode, String)> {
     let model = load(&s)?;
-    let vorher = verdikte(&model)?;
+    let before = verdicts(&model)?;
 
     let alt = model
         .catalogue
         .get(&id)
         .ok_or((StatusCode::NOT_FOUND, format!("kein Eintrag `{id}`")))?;
-    let neu = merge_patch(alt, patch)?;
+    let neu = sjel_inventory::api::merge_patch(alt, patch)?;
 
     let mut model = load(&s)?;
     model.catalogue.insert(id.clone(), neu);
-    let nachher = verdikte(&model)?;
+    let after = verdicts(&model)?;
 
-    let mut geaendert = Vec::new();
-    for (name, (pass, hard, soft)) in &vorher {
-        let Some((p2, h2, s2)) = nachher.get(name) else {
+    let mut changed = Vec::new();
+    for (name, (pass, hard, soft)) in &before {
+        let Some((p2, h2, s2)) = after.get(name) else {
             continue;
         };
         if pass != p2 || hard != h2 || soft != s2 {
-            geaendert.push(serde_json::json!({
+            changed.push(serde_json::json!({
                 "layout": name,
                 "vorher": { "pass": pass, "hard": hard, "soft": soft },
                 "nachher": { "pass": p2, "hard": h2, "soft": s2 },
@@ -387,17 +350,17 @@ async fn api_item_impact(
     }
     Ok(Json(serde_json::json!({
         "item": id,
-        "layouts": vorher.len(),
-        "bestanden_vorher": vorher.values().filter(|(p, _, _)| *p).count(),
-        "bestanden_nachher": nachher.values().filter(|(p, _, _)| *p).count(),
-        "geaendert": geaendert,
+        "layouts": before.len(),
+        "bestanden_vorher": before.values().filter(|(p, _, _)| *p).count(),
+        "bestanden_nachher": after.values().filter(|(p, _, _)| *p).count(),
+        "geaendert": changed,
     })))
 }
 
-type Verdikt = std::collections::BTreeMap<String, (bool, Vec<String>, Vec<String>)>;
+type Verdict = std::collections::BTreeMap<String, (bool, Vec<String>, Vec<String>)>;
 
-fn verdikte(model: &Model) -> Result<Verdikt, (StatusCode, String)> {
-    let mut out = Verdikt::new();
+fn verdicts(model: &Model) -> Result<Verdict, (StatusCode, String)> {
+    let mut out = Verdict::new();
     for name in model.layout_names().map_err(|e| boom(e.to_string()))? {
         let Ok(l) = model.load_layout(&name) else {
             continue;
@@ -636,6 +599,7 @@ async fn api_roomplan_revisions(
 struct RoomPlanReviewRequest {
     decision: String,
     #[serde(default)]
+    #[serde(alias = "notiz")]
     note: Option<String>,
 }
 
@@ -712,20 +676,20 @@ async fn api_media(Path(pfad): Path<String>) -> Result<impl IntoResponse, (Statu
     let wurzel = tokio::fs::canonicalize(&wurzel)
         .await
         .map_err(|_| (StatusCode::NOT_FOUND, "kein media-Verzeichnis".to_string()))?;
-    let ziel = tokio::fs::canonicalize(wurzel.join(&pfad))
+    let target = tokio::fs::canonicalize(wurzel.join(&pfad))
         .await
         .map_err(|_| (StatusCode::NOT_FOUND, format!("kein Medium `{pfad}`")))?;
-    let ist_datei = tokio::fs::metadata(&ziel)
+    let ist_datei = tokio::fs::metadata(&target)
         .await
         .map(|m| m.is_file())
         .unwrap_or(false);
-    if !ziel.starts_with(&wurzel) || !ist_datei {
+    if !target.starts_with(&wurzel) || !ist_datei {
         return Err((
             StatusCode::FORBIDDEN,
             format!("`{pfad}` liegt nicht unter media/"),
         ));
     }
-    let typ = match ziel
+    let typ = match target
         .extension()
         .and_then(|e| e.to_str())
         .map(str::to_ascii_lowercase)
@@ -738,7 +702,7 @@ async fn api_media(Path(pfad): Path<String>) -> Result<impl IntoResponse, (Statu
         // Kein Standardtyp: was hier unbekannt ist, wird nicht geraten und nicht geliefert.
         _ => return Err((StatusCode::UNSUPPORTED_MEDIA_TYPE, "kein Bildformat".into())),
     };
-    let bytes = tokio::fs::read(&ziel).await.map_err(boom)?;
+    let bytes = tokio::fs::read(&target).await.map_err(boom)?;
     Ok(([(axum::http::header::CONTENT_TYPE, typ)], bytes))
 }
 
@@ -778,7 +742,7 @@ struct AllowedQuery {
 /// keinen Kopf — sie ist der Zustand und eine Zeile, nicht der Vorschlag und eine Datei. Zwei
 /// Endpunkte, weil zwei Dinge hereinkommen, und nicht weil zwei Dinge herauskommen: Plan und
 /// Verdikt sind dieselben und werden von derselben Funktion gerechnet.
-fn ist_zustand(items: Vec<crate::model::PlacedItem>) -> crate::model::Layout {
+fn as_is(items: Vec<crate::model::PlacedItem>) -> crate::model::Layout {
     crate::model::Layout {
         name: "ist-zustand".to_string(),
         id: "ist-zustand".to_string(),
@@ -791,7 +755,7 @@ async fn api_preview_placements(
     Json(body): Json<LayoutBody>,
 ) -> Result<impl IntoResponse, (StatusCode, String)> {
     let model = load(&s)?;
-    let l = ist_zustand(body.items);
+    let l = as_is(body.items);
     let r = check_layout(&model, &l).map_err(|e| (StatusCode::BAD_REQUEST, e.to_string()))?;
     let svg = plan::svg(&model, &l).map_err(boom)?;
     Ok(Json(
@@ -809,7 +773,7 @@ async fn api_placements_allowed(
     Json(body): Json<PlacementsAllowedBody>,
 ) -> Result<impl IntoResponse, (StatusCode, String)> {
     let model = load(&s)?;
-    let base = ist_zustand(body.items);
+    let base = as_is(body.items);
     let a = crate::search::allowed_positions(&model, &base, &body.reference, body.rot)
         .map_err(|e| (StatusCode::BAD_REQUEST, e.to_string()))?;
     Ok(Json(a))
@@ -829,7 +793,7 @@ struct PlacementsAllowedBody {
 /// Verschieben kann die Oberflaeche selbst zeichnen: eine Verschiebung ist eine Translation und
 /// aendert an der Grundflaeche nichts. **Drehen kann sie nicht** — bei 90 Grad tauschen Breite
 /// und Tiefe, und `opens` und `expands_dir` drehen mit. Das im Browser nachzubauen waere eine
-/// zweite Fassung von `footprint` und `Seite::gedreht`, also genau die Doppelung, gegen die
+/// zweite Fassung von `footprint` und `Side::gedreht`, also genau die Doppelung, gegen die
 /// diese Capability existiert. Sie fragt stattdessen hier nach.
 async fn api_preview_layout(
     State(s): State<Arc<AppState>>,
@@ -837,11 +801,11 @@ async fn api_preview_layout(
     Json(body): Json<LayoutBody>,
 ) -> Result<impl IntoResponse, (StatusCode, String)> {
     let model = load(&s)?;
-    let vorlage = model
+    let template = model
         .load_layout(&id)
         .map_err(|e| (StatusCode::NOT_FOUND, e.to_string()))?;
     let l = crate::model::Layout {
-        name: vorlage.name,
+        name: template.name,
         items: body.items,
         id: id.clone(),
     };
@@ -869,8 +833,8 @@ async fn api_post_layout(
     // Ein unbrauchbarer Name ist eine schlechte Anfrage und kein Konflikt. Beides auf 409 zu
     // legen hiesse, einem Aufrufer „gibt es schon" zu melden, wo „so darf es nicht heissen"
     // gemeint ist.
-    crate::layout_io::pruefe_id(&body.id).map_err(|e| (StatusCode::BAD_REQUEST, e.to_string()))?;
-    let vorlage = match &body.von {
+    crate::layout_io::check_id(&body.id).map_err(|e| (StatusCode::BAD_REQUEST, e.to_string()))?;
+    let template = match &body.von {
         // Der Name der Vorlage und nicht der Lesefehler: der traegt den Pfad im privaten
         // Overlay, und der Aufrufer hat nach einem Layout gefragt, nicht nach einer Datei.
         Some(v) => Some(
@@ -880,8 +844,8 @@ async fn api_post_layout(
         ),
         None => None,
     };
-    let items = match (body.items, &vorlage) {
-        (Some(eigene), _) => eigene,
+    let items = match (body.items, &template) {
+        (Some(own), _) => own,
         (None, Some(v)) => v.items.clone(),
         (None, None) => Vec::new(),
     };
@@ -940,13 +904,13 @@ async fn api_delete_layout(
     Path(id): Path<String>,
 ) -> Result<impl IntoResponse, (StatusCode, String)> {
     let model = load(&s)?;
-    crate::layout_io::pruefe_id(&id).map_err(|e| (StatusCode::BAD_REQUEST, e.to_string()))?;
+    crate::layout_io::check_id(&id).map_err(|e| (StatusCode::BAD_REQUEST, e.to_string()))?;
     // Ueber die Namensliste und nicht ueber `load_layout`: die liest die Datei, und ein Layout
     // mit einem Tippfehler im TOML ist genau eins, das jemand wegraeumen will.
     if !model.layout_names().map_err(boom)?.iter().any(|n| n == &id) {
         return Err((StatusCode::NOT_FOUND, format!("kein Layout `{id}`")));
     }
-    let nach = crate::layout_io::archiviere(&model, &id)
+    let nach = crate::layout_io::archive_layout(&model, &id)
         .map_err(|e| (StatusCode::CONFLICT, e.to_string()))?;
     Ok(Json(
         serde_json::json!({ "id": id, "archiviert": nach, "geloescht": false }),
@@ -984,7 +948,7 @@ async fn index(State(s): State<Arc<AppState>>) -> Result<Html<String>, (StatusCo
         .layout_names()
         .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
     let layouts: Vec<_> = names.iter().filter_map(|n| m.load_layout(n).ok()).collect();
-    plan::page(&m, &layouts, plan::Herkunft::Vorschlag)
+    plan::page(&m, &layouts, plan::Origin::Proposal)
         .map(Html)
         .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))
 }
@@ -1003,7 +967,7 @@ const CAPABILITY: &str = "interior";
 
 /// Der verdrahtete Router, damit ein Test das echte Ding fahren kann statt einen Handler.
 ///
-/// Diese Capability traegt keine CORS-Schicht, also kann eine fremde Seite die Antwort
+/// Diese Capability traegt keine CORS-Schicht, also kann eine fremde Side die Antwort
 /// nicht lesen — und genau das hat eine Luecke verdeckt, die bis 2026-10-05 hier stand:
 /// `POST /api/vault/writeback` nahm keinen Request-Body, war damit eine *einfache* Anfrage
 /// im Sinne von CORS, lief ohne Preflight und schrieb in die Obsidian-Vault. Ob der Browser
@@ -1050,15 +1014,15 @@ fn build_router(state: Arc<AppState>) -> Router {
         // und sie schreibt nichts.
         .route("/api/items/{id}/impact", post(api_item_impact))
         .route("/api/placements/{flat}/{item}", put(api_put_placement))
-        .route("/api/layouts/{name}/toleranz", get(api_toleranz))
-        .route("/api/layouts/{name}/sonne", get(api_sonne))
-        .route("/api/layouts/{name}/einbringung", get(api_einbringung))
-        .route("/api/passt", get(api_passt))
-        .route("/api/deklaration", get(api_deklaration))
-        .route("/api/kaufen", get(api_kaufen))
+        .route("/api/layouts/{name}/toleranz", get(api_tolerance))
+        .route("/api/layouts/{name}/sonne", get(api_sun))
+        .route("/api/layouts/{name}/einbringung", get(api_delivery))
+        .route("/api/passt", get(api_fits))
+        .route("/api/deklaration", get(api_declarations))
+        .route("/api/kaufen", get(api_purchase_order))
         .route("/api/search", post(api_search))
         .route("/api/compose", post(api_compose))
-        .route("/api/auftraege/{id}", get(api_auftrag))
+        .route("/api/auftraege/{id}", get(api_job))
         // NEUE ROUTEN UEBER DIESE ZEILE. Darunter verlieren sie die Origin-Sperre.
         .layer(axum::middleware::from_fn_with_state(
             CAPABILITY,
@@ -1073,18 +1037,18 @@ mod route_manifest_tests {
     /// Quelltext, also faellt ein `.route()` ohne Zusammenfassung hier um, statt eine
     /// Oberflaeche auszuliefern, die sich selbst falsch beschreibt.
     #[test]
-    fn der_katalog_nennt_jede_ausgelieferte_route() {
-        let fehlend = route_manifest::undeclared_routes(include_str!("api.rs"), super::ROUTES);
+    fn the_catalogue_names_every_served_route() {
+        let missing = route_manifest::undeclared_routes(include_str!("api.rs"), super::ROUTES);
         assert!(
-            fehlend.is_empty(),
-            "ausgeliefert, aber nicht beschrieben: {fehlend:?}"
+            missing.is_empty(),
+            "ausgeliefert, aber nicht beschrieben: {missing:?}"
         );
     }
 }
 
 /// Der Beweis auf Router-Ebene, den die Praedikat-Tests in `libs/sjel-server` nicht fuehren
 /// koennen: eine Route UNTER dem `.layer()`-Aufruf besteht jeden Test von
-/// `origin_allowed_by` und antwortet einer fremden Seite trotzdem.
+/// `origin_allowed_by` und antwortet einer fremden Side trotzdem.
 ///
 /// `tower::ServiceExt::oneshot` statt eines Loopback-Listeners, damit der Test weder einen
 /// Port noch einen HTTP-Client braucht.
@@ -1099,13 +1063,13 @@ mod origin_tests {
     use axum::http::Request;
     use tower::ServiceExt;
 
-    async fn antwort(methode: &str, pfad: &str, origin: Option<&str>) -> StatusCode {
+    async fn answer(methode: &str, pfad: &str, origin: Option<&str>) -> StatusCode {
         let mut anfrage = Request::builder().method(methode).uri(pfad);
         if let Some(origin) = origin {
             anfrage = anfrage.header("origin", origin);
         }
         build_router(Arc::new(AppState {
-            flat: "wohnung".to_string(),
+            flat: "flat".to_string(),
             database: sjel_config::database_path(),
         }))
         .oneshot(anfrage.body(Body::empty()).unwrap())
@@ -1118,7 +1082,7 @@ mod origin_tests {
     /// Verdikte einer Wohnung. Genau deshalb weist die Sperre die Anfrage zurueck, statt nur
     /// einen Antwort-Header wegzulassen.
     #[tokio::test]
-    async fn eine_fremde_seite_erreicht_keinen_datenhandler() {
+    async fn a_foreign_page_reaches_no_data_handler() {
         for (methode, pfad) in [
             ("GET", "/api/model"),
             ("GET", "/api/layouts"),
@@ -1127,7 +1091,7 @@ mod origin_tests {
             ("POST", "/api/items/schrank/impact"),
         ] {
             assert_eq!(
-                antwort(methode, pfad, Some("https://evil.example")).await,
+                answer(methode, pfad, Some("https://evil.example")).await,
                 StatusCode::FORBIDDEN,
                 "{methode} {pfad} hat einer fremden Herkunft geantwortet — die Route steht unter der Sperre"
             );
@@ -1136,14 +1100,14 @@ mod origin_tests {
 
     /// Die andere Haelfte. 200 von `/routes` heisst: ein Handler hat geantwortet.
     #[tokio::test]
-    async fn das_dashboard_und_ein_nicht_browser_aufrufer_erreichen_den_handler() {
+    async fn the_dashboard_and_a_non_browser_caller_reach_the_handler() {
         for origin in [
             None,
             Some("http://localhost:47117"),
             Some("https://mac.tailnet.ts.net"),
         ] {
             assert_eq!(
-                antwort("GET", "/routes", origin).await,
+                answer("GET", "/routes", origin).await,
                 StatusCode::OK,
                 "die Sperre hat einen Aufrufer zurueckgewiesen, den sie zulassen muss: {origin:?}"
             );
@@ -1153,86 +1117,18 @@ mod origin_tests {
 
 #[cfg(test)]
 mod tests {
-    use super::{merge_patch, Auftraege, Auftragsstand, AUFTRAEGE_MAX};
-    use crate::store::Item;
+    use super::{Jobs, JobState, JOBS_MAX};
     use serde_json::json;
 
-    fn schrank() -> Item {
-        Item {
-            id: "schrank".into(),
-            label: "Ein Schrank".into(),
-            b: Some(100),
-            t: Some(60),
-            h: Some(200),
-            open_clear: Some(65),
-            unsicher: vec!["h".into()],
-            ..Default::default()
-        }
-    }
-
-    /// Der eigentliche Punkt von PATCH: ein Formular zeigt sechs Felder, der Eintrag hat 40,
-    /// und die ungenannten 34 muessen den Vorgang ueberleben. `PUT` konnte das nie.
-    #[test]
-    fn ein_genanntes_feld_aendert_sich_und_die_uebrigen_bleiben() {
-        let neu = merge_patch(&schrank(), json!({ "b": 120 })).expect("Patch passt");
-        assert_eq!(neu.b, Some(120));
-        assert_eq!(neu.t, Some(60), "ungenannt, also unveraendert");
-        assert_eq!(neu.h, Some(200));
-        assert_eq!(neu.label, "Ein Schrank");
-        assert_eq!(neu.open_clear, Some(65));
-        assert_eq!(
-            neu.unsicher,
-            vec!["h".to_string()],
-            "Listen ueberleben auch"
-        );
-    }
-
-    /// Ein ausdrueckliches `null` loescht. Das ist der Unterschied zu "nicht geschickt", und
-    /// ohne ihn koennte die Oberflaeche ein Feld setzen, aber nie zuruecknehmen.
-    #[test]
-    fn ein_ausdrueckliches_null_loescht_ein_feld() {
-        let neu = merge_patch(&schrank(), json!({ "open_clear": null })).expect("Patch passt");
-        assert_eq!(neu.open_clear, None);
-        assert_eq!(neu.b, Some(100), "der Rest bleibt");
-    }
-
-    /// Ein Tippfehler im Feldnamen ist ein Fehler und keine stille Nulloperation.
-    ///
-    /// Dieselbe Haltung wie `deny_unknown_fields` beim Import, aus demselben Anlass: dort hat
-    /// serde neun Felder jahrelang stumm verworfen (PRD B25). Ein PATCH, der `tiefe` statt `t`
-    /// schickt und `ok` zurueckgibt, ist genau dieser Fehler mit umgekehrtem Vorzeichen.
-    #[test]
-    fn ein_unbekanntes_feld_ist_ein_fehler() {
-        let e = merge_patch(&schrank(), json!({ "tiefe": 42 })).expect_err("`tiefe` gibt es nicht");
-        assert!(e.1.contains("tiefe"), "die Meldung nennt das Feld: {}", e.1);
-    }
-
-    /// Die Id aus dem Rumpf wird ignoriert; der Pfad gewinnt.
-    ///
-    /// Sonst legt ein Formular, das eine fremde Id mitschickt, still eine zweite Zeile an,
-    /// statt die gemeinte zu aendern.
-    #[test]
-    fn der_rumpf_kann_die_id_nicht_umschreiben() {
-        let neu = merge_patch(&schrank(), json!({ "id": "etwas_anderes", "b": 110 }))
-            .expect("Patch passt");
-        assert_eq!(neu.id, "schrank");
-        assert_eq!(neu.b, Some(110));
-    }
-
-    #[test]
-    fn ein_rumpf_der_kein_objekt_ist_wird_abgelehnt() {
-        assert!(merge_patch(&schrank(), json!([1, 2, 3])).is_err());
-    }
-
     /// Zehn Auftraege anlegen und die jungen davon fertig melden.
-    fn volle_karte(laufen: u64) -> Auftraege {
-        let mut a = Auftraege::default();
-        for _ in 0..AUFTRAEGE_MAX {
+    fn full_map(run: u64) -> Jobs {
+        let mut a = Jobs::default();
+        for _ in 0..JOBS_MAX {
             a.anlegen().expect("unter der Grenze");
         }
-        for id in laufen..AUFTRAEGE_MAX as u64 {
-            a.stand.get_mut(&id).expect("gerade angelegt").1 = Auftragsstand::Fertig {
-                ergebnis: json!(null),
+        for id in run..JOBS_MAX as u64 {
+            a.stand.get_mut(&id).expect("gerade angelegt").1 = JobState::Done {
+                outcome: json!(null),
             };
         }
         a
@@ -1244,8 +1140,8 @@ mod tests {
     /// rechnete, schrieb sein Hintergrundfaden das Ergebnis in eine Nummer, die es nicht mehr
     /// gab — und der Abholer bekam 404 auf eine Suche, die Minuten gelaufen war.
     #[test]
-    fn ein_laufender_auftrag_wird_nicht_verdraengt() {
-        let mut a = volle_karte(1);
+    fn a_running_job_is_not_evicted() {
+        let mut a = full_map(1);
         let neu = a.anlegen().expect("neun fertige machen Platz");
         assert!(a.stand.contains_key(&0), "der laufende steht noch da");
         assert!(
@@ -1253,17 +1149,17 @@ mod tests {
             "der aelteste fertige ist gewichen"
         );
         assert!(a.stand.contains_key(&neu));
-        assert_eq!(a.stand.len(), AUFTRAEGE_MAX);
+        assert_eq!(a.stand.len(), JOBS_MAX);
     }
 
     /// Rechnen alle zehn, ist die Absage die einzige ehrliche Antwort.
     #[test]
-    fn eine_volle_karte_aus_laufenden_lehnt_ab() {
-        let mut a = volle_karte(AUFTRAEGE_MAX as u64);
-        let grund = a.anlegen().expect_err("es gibt nichts zu verdraengen");
-        assert!(grund.contains("rechnen bereits"), "{grund}");
-        assert_eq!(a.stand.len(), AUFTRAEGE_MAX, "und keiner ist verschwunden");
-        assert!((0..AUFTRAEGE_MAX as u64).all(|id| a.stand.contains_key(&id)));
+    fn a_map_full_of_running_jobs_refuses() {
+        let mut a = full_map(JOBS_MAX as u64);
+        let reason = a.anlegen().expect_err("es gibt nichts zu verdraengen");
+        assert!(reason.contains("rechnen bereits"), "{reason}");
+        assert_eq!(a.stand.len(), JOBS_MAX, "und keiner ist verschwunden");
+        assert!((0..JOBS_MAX as u64).all(|id| a.stand.contains_key(&id)));
     }
 
     /// Eine einzige Panik unter der Sperre beendete bis hierher die drei Wege, die
@@ -1275,19 +1171,19 @@ mod tests {
     /// Test in dieser Binaerdatei danach weiterlaeuft, ist die Zusage unter den
     /// ausgeschriebenen.
     #[test]
-    fn eine_vergiftete_auftragskarte_legt_weiter_an_und_liest_weiter() {
-        let vergiften = std::thread::spawn(|| {
-            let _sperre = super::auftraege();
+    fn a_poisoned_job_map_still_creates_and_reads() {
+        let poison = std::thread::spawn(|| {
+            let _lock = super::jobs();
             panic!("jemand ist mit der Auftragskarte in der Hand gestuerzt");
         })
         .join();
-        assert!(vergiften.is_err(), "der Hilfsfaden muss wirklich stuerzen");
+        assert!(poison.is_err(), "der Hilfsfaden muss wirklich stuerzen");
 
-        let id = super::auftraege()
+        let id = super::jobs()
             .anlegen()
             .expect("die Karte legt weiter an");
         assert!(
-            super::auftraege().stand.contains_key(&id),
+            super::jobs().stand.contains_key(&id),
             "eine erholte Sperre muss den Eintrag noch zeigen"
         );
     }
@@ -1311,16 +1207,16 @@ mod tests {
 /// will, schreibt ihn als Layout.
 #[derive(Debug, Clone, Serialize)]
 #[serde(tag = "zustand", rename_all = "snake_case")]
-pub enum Auftragsstand {
-    Laeuft { seit_ms: u128 },
-    Fertig { ergebnis: serde_json::Value },
-    Gescheitert { grund: String },
+pub enum JobState {
+    Running { seit_ms: u128 },
+    Done { outcome: serde_json::Value },
+    Failed { reason: String },
 }
 
 #[derive(Default)]
-struct Auftraege {
-    naechste: u64,
-    stand: std::collections::BTreeMap<u64, (std::time::Instant, Auftragsstand)>,
+struct Jobs {
+    nearest: u64,
+    stand: std::collections::BTreeMap<u64, (std::time::Instant, JobState)>,
 }
 
 /// Wie viele fertige Auftraege aufgehoben werden.
@@ -1328,9 +1224,9 @@ struct Auftraege {
 /// Ohne Grenze waechst die Karte mit jeder Suche, und ein Prozess, der wochenlang laeuft,
 /// haelt jedes Ergebnis fest, das je jemand angesehen hat. Zehn, weil die Oberflaeche das
 /// letzte abholt und die davor nur noch Verlauf sind.
-const AUFTRAEGE_MAX: usize = 10;
+const JOBS_MAX: usize = 10;
 
-impl Auftraege {
+impl Jobs {
     /// Platz schaffen und die naechste Nummer ziehen — oder ablehnen.
     ///
     /// Verdraengt wird nur, was schon fertig ist. Ein laufender Auftrag hat seinen Schreiber
@@ -1338,27 +1234,27 @@ impl Auftraege {
     /// bekommt 404 auf eine Rechnung, die minutenlang lief. Sind alle zehn belegt, ist die
     /// ehrliche Antwort eine Absage und keine stillschweigend verlorene Suche.
     fn anlegen(&mut self) -> Result<u64, String> {
-        while self.stand.len() >= AUFTRAEGE_MAX {
+        while self.stand.len() >= JOBS_MAX {
             // Die Schluessel steigen, also ist der erste verdraengbare auch der aelteste.
             let Some(alt) = self
                 .stand
                 .iter()
-                .find(|(_, (_, s))| !matches!(s, Auftragsstand::Laeuft { .. }))
+                .find(|(_, (_, s))| !matches!(s, JobState::Running { .. }))
                 .map(|(id, _)| *id)
             else {
                 return Err(format!(
-                    "{AUFTRAEGE_MAX} Auftraege rechnen bereits — warte, bis einer fertig ist"
+                    "{JOBS_MAX} Auftraege rechnen bereits — warte, bis einer fertig ist"
                 ));
             };
             self.stand.remove(&alt);
         }
-        let id = self.naechste;
-        self.naechste += 1;
+        let id = self.nearest;
+        self.nearest += 1;
         self.stand.insert(
             id,
             (
                 std::time::Instant::now(),
-                Auftragsstand::Laeuft { seit_ms: 0 },
+                JobState::Running { seit_ms: 0 },
             ),
         );
         Ok(id)
@@ -1388,11 +1284,11 @@ impl Auftraege {
 ///
 /// Was das ausdruecklich NICHT tut: die erste Panik verstecken. Die laeuft weiter auf, landet
 /// in der Standardfehlerausgabe des Runners und bleibt das, was man liest.
-fn auftraege() -> std::sync::MutexGuard<'static, Auftraege> {
-    static A: std::sync::OnceLock<std::sync::Mutex<Auftraege>> = std::sync::OnceLock::new();
-    A.get_or_init(|| std::sync::Mutex::new(Auftraege::default()))
+fn jobs() -> std::sync::MutexGuard<'static, Jobs> {
+    static A: std::sync::OnceLock<std::sync::Mutex<Jobs>> = std::sync::OnceLock::new();
+    A.get_or_init(|| std::sync::Mutex::new(Jobs::default()))
         .lock()
-        .unwrap_or_else(|vergiftet| vergiftet.into_inner())
+        .unwrap_or_else(|poisoned| poisoned.into_inner())
 }
 
 /// Eine Rechnung im Hintergrund starten und sofort ihre Nummer zurueckgeben.
@@ -1400,28 +1296,28 @@ fn auftraege() -> std::sync::MutexGuard<'static, Auftraege> {
 /// `spawn_blocking`, weil `search` und `compose` rayon benutzen und minutenlang rechnen: auf
 /// einem async-Thread wuerde das jede andere Anfrage dieses Prozesses anhalten. Dieselbe
 /// Begruendung, aus der `punctuality` und `finance` ihre schweren Wege dorthin legen (PRD B20).
-fn im_hintergrund<F>(f: F) -> Result<u64, (StatusCode, String)>
+fn in_the_background<F>(f: F) -> Result<u64, (StatusCode, String)>
 where
     F: FnOnce() -> Result<serde_json::Value, String> + Send + 'static,
 {
-    let id = auftraege()
+    let id = jobs()
         .anlegen()
         .map_err(|e| (StatusCode::SERVICE_UNAVAILABLE, e))?;
     tokio::task::spawn_blocking(move || {
-        let ergebnis = f();
-        let mut a = auftraege();
+        let outcome = f();
+        let mut a = jobs();
         if let Some((_, stand)) = a.stand.get_mut(&id) {
-            *stand = match ergebnis {
-                Ok(v) => Auftragsstand::Fertig { ergebnis: v },
-                Err(e) => Auftragsstand::Gescheitert { grund: e },
+            *stand = match outcome {
+                Ok(v) => JobState::Done { outcome: v },
+                Err(e) => JobState::Failed { reason: e },
             };
         }
     });
     Ok(id)
 }
 
-async fn api_auftrag(Path(id): Path<u64>) -> Result<impl IntoResponse, (StatusCode, String)> {
-    let a = auftraege();
+async fn api_job(Path(id): Path<u64>) -> Result<impl IntoResponse, (StatusCode, String)> {
+    let a = jobs();
     let (start, stand) = a
         .stand
         .get(&id)
@@ -1429,22 +1325,22 @@ async fn api_auftrag(Path(id): Path<u64>) -> Result<impl IntoResponse, (StatusCo
     // Die Laufzeit wird beim Lesen gerechnet und nicht fortgeschrieben: ein Auftrag, der sie
     // selbst zaehlen muesste, braeuchte einen zweiten Faden fuer nichts.
     let stand = match stand {
-        Auftragsstand::Laeuft { .. } => Auftragsstand::Laeuft {
+        JobState::Running { .. } => JobState::Running {
             seit_ms: start.elapsed().as_millis(),
         },
-        fertig => fertig.clone(),
+        done => done.clone(),
     };
     Ok(Json(serde_json::json!({ "id": id, "stand": stand })))
 }
 
 #[derive(serde::Deserialize)]
-struct SucheAnfrage {
+struct SearchRequest {
     layout: String,
     #[serde(default)]
     move_refs: Vec<String>,
     #[serde(default = "raster_standard")]
     step: i32,
-    #[serde(default = "suche_grenze")]
+    #[serde(default = "search_limit")]
     limit: usize,
 }
 
@@ -1454,14 +1350,14 @@ fn raster_standard() -> i32 {
 /// Dieselbe Zahl wie `--limit` auf der Kommandozeile (`main.rs`, `cmd_search`). Ohne sie stand
 /// hier `usize::default()`, und die Null heisst in `search::search` *unbegrenzt*: dieselbe
 /// Anfrage lieferte auf der Oberflaeche Tausende Treffer und im Terminal sechs.
-fn suche_grenze() -> usize {
+fn search_limit() -> usize {
     6
 }
 
 /// Eine Suche anstossen. Antwortet mit der Auftragsnummer, nicht mit dem Ergebnis.
 async fn api_search(
     State(s): State<Arc<AppState>>,
-    Json(anfrage): Json<SucheAnfrage>,
+    Json(anfrage): Json<SearchRequest>,
 ) -> Result<impl IntoResponse, (StatusCode, String)> {
     if anfrage.move_refs.is_empty() {
         return Err((
@@ -1470,7 +1366,7 @@ async fn api_search(
         ));
     }
     let flat = s.flat.clone();
-    let id = im_hintergrund(move || {
+    let id = in_the_background(move || {
         let model = Model::load(&flat).map_err(|e| e.to_string())?;
         let base = model
             .load_layout(&anfrage.layout)
@@ -1491,36 +1387,36 @@ async fn api_search(
 }
 
 #[derive(serde::Deserialize)]
-struct ComposeAnfrage {
+struct ComposeRequest {
     refs: Vec<String>,
     #[serde(default = "compose_raster")]
     step: i32,
-    #[serde(default = "compose_strahl")]
+    #[serde(default = "compose_beam")]
     beam: usize,
-    #[serde(default = "compose_grenze")]
+    #[serde(default = "compose_limit")]
     limit: usize,
-    #[serde(default = "compose_drehungen")]
+    #[serde(default = "compose_rotations")]
     rotations: Vec<i32>,
 }
 
 fn compose_raster() -> i32 {
     25
 }
-fn compose_strahl() -> usize {
+fn compose_beam() -> usize {
     60
 }
 /// Dieselbe Zahl wie `--limit` auf der Kommandozeile (`main.rs`, `cmd_compose`).
-fn compose_grenze() -> usize {
+fn compose_limit() -> usize {
     5
 }
-fn compose_drehungen() -> Vec<i32> {
+fn compose_rotations() -> Vec<i32> {
     vec![0, 90]
 }
 
 /// Eine ganze Wohnung stellen lassen. Ebenfalls ein Auftrag: die Strahlsuche rechnet Minuten.
 async fn api_compose(
     State(s): State<Arc<AppState>>,
-    Json(anfrage): Json<ComposeAnfrage>,
+    Json(anfrage): Json<ComposeRequest>,
 ) -> Result<impl IntoResponse, (StatusCode, String)> {
     if anfrage.refs.is_empty() {
         return Err((
@@ -1529,7 +1425,7 @@ async fn api_compose(
         ));
     }
     let flat = s.flat.clone();
-    let id = im_hintergrund(move || {
+    let id = in_the_background(move || {
         let model = Model::load(&flat).map_err(|e| e.to_string())?;
         let spec = crate::search::ComposeSpec {
             refs: anfrage.refs,
@@ -1549,78 +1445,79 @@ async fn api_compose(
 
 // ---------------------------------------------------------------- die neuen Auskuenfte
 
-async fn api_toleranz(
+async fn api_tolerance(
     State(s): State<Arc<AppState>>,
     Path(name): Path<String>,
 ) -> Result<impl IntoResponse, (StatusCode, String)> {
     let model = load(&s)?;
-    let l = model.load_layout(&name).map_err(nicht_gefunden)?;
-    Ok(Json(crate::toleranz::robustheit(&model, &l).map_err(boom)?))
+    let l = model.load_layout(&name).map_err(not_found)?;
+    Ok(Json(crate::tolerance::robustness(&model, &l).map_err(boom)?))
 }
 
-async fn api_sonne(
+async fn api_sun(
     State(s): State<Arc<AppState>>,
     Path(name): Path<String>,
 ) -> Result<impl IntoResponse, (StatusCode, String)> {
     let model = load(&s)?;
-    let l = model.load_layout(&name).map_err(nicht_gefunden)?;
-    Ok(Json(crate::sonne::bericht(&model, &l).map_err(boom)?))
+    let l = model.load_layout(&name).map_err(not_found)?;
+    Ok(Json(crate::sun::bericht(&model, &l).map_err(boom)?))
 }
 
-async fn api_einbringung(
+async fn api_delivery(
     State(s): State<Arc<AppState>>,
     Path(name): Path<String>,
 ) -> Result<impl IntoResponse, (StatusCode, String)> {
     let model = load(&s)?;
-    let l = model.load_layout(&name).map_err(nicht_gefunden)?;
+    let l = model.load_layout(&name).map_err(not_found)?;
     let mut out = Vec::new();
     for it in &l.items {
-        out.push(crate::einbringung::einbringung(&model, &l, &it.reference).map_err(boom)?);
+        out.push(crate::delivery::delivery(&model, &l, &it.reference).map_err(boom)?);
     }
     Ok(Json(out))
 }
 
 #[derive(serde::Deserialize)]
-struct StueckMasse {
+struct PieceSize {
     b: i32,
     t: i32,
     #[serde(default)]
-    zerlegbar: bool,
+    #[serde(alias = "zerlegbar")]
+    disassembles: bool,
 }
 
 /// Passt ein gedachtes Stueck durch die Tuer? Die Frage VOR dem Kauf.
-async fn api_passt(
+async fn api_fits(
     State(s): State<Arc<AppState>>,
-    axum::extract::Query(q): axum::extract::Query<StueckMasse>,
+    axum::extract::Query(q): axum::extract::Query<PieceSize>,
 ) -> Result<impl IntoResponse, (StatusCode, String)> {
     let model = load(&s)?;
-    Ok(Json(crate::einbringung::durch_die_tuer(
+    Ok(Json(crate::delivery::through_the_door(
         &model,
         q.b,
         q.t,
-        q.zerlegbar,
+        q.disassembles,
     )))
 }
 
-async fn api_deklaration(
+async fn api_declarations(
     State(s): State<Arc<AppState>>,
 ) -> Result<impl IntoResponse, (StatusCode, String)> {
     let model = load(&s)?;
-    Ok(Json(crate::deklaration::uebersicht(&model).map_err(boom)?))
+    Ok(Json(crate::declarations::overview(&model).map_err(boom)?))
 }
 
-async fn api_kaufen(
+async fn api_purchase_order(
     State(s): State<Arc<AppState>>,
 ) -> Result<impl IntoResponse, (StatusCode, String)> {
     let model = load(&s)?;
     let st = store(&s)?;
     let conn = st.borrow_connection().map_err(boom)?;
-    let saldo = crate::budget::monatssaldo(&conn).map_err(boom)?;
+    let balance = crate::budget::monthly_balance(&conn).map_err(boom)?;
     Ok(Json(
-        crate::budget::kaufreihenfolge(&model, saldo).map_err(boom)?,
+        crate::budget::kaufreihenfolge(&model, balance).map_err(boom)?,
     ))
 }
 
-fn nicht_gefunden(e: crate::model::ModelError) -> (StatusCode, String) {
+fn not_found(e: crate::model::ModelError) -> (StatusCode, String) {
     (StatusCode::NOT_FOUND, e.to_string())
 }

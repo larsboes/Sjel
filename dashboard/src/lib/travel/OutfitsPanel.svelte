@@ -94,8 +94,8 @@
 </script>
 
 {#snippet thumb(item: InventoryItem | undefined, ref: string, size: string)}
-  {#if item?.bild}
-    <img use:bridgedSrc={interior.mediaUrl(item.bild)} alt={item.label} use:tip={item.label} loading="lazy" style:width={size} style:height={size} />
+  {#if item?.image}
+    <img use:bridgedSrc={interior.mediaUrl(item.image)} alt={item.label} use:tip={item.label} loading="lazy" style:width={size} style:height={size} />
   {:else}
     <span class="thumb" use:tip={item?.label ?? ref} style:width={size} style:height={size}><Icon name="boxes" size={14} /></span>
   {/if}

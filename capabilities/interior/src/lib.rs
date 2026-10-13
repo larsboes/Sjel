@@ -1,8 +1,8 @@
 pub mod api;
 pub mod budget;
 pub mod clearance;
-pub mod deklaration;
-pub mod einbringung;
+pub mod declarations;
+pub mod delivery;
 pub mod geometry;
 pub mod layout_io;
 pub mod model;
@@ -12,10 +12,10 @@ pub mod plan;
 // Beleg bleiben darf.
 pub mod roomplan;
 pub mod search;
-pub mod sonne;
+pub mod sun;
 // Liest die Zeilen aus `capabilities/inventory` und schreibt sie nie: was hier bleibt, ist
 // `interior_placement` (wo ein Stueck steht — das ist raeumlich) und der Lesepfad, ohne den
 // kein Layout zu rechnen ist. Die Schreibhaelfte, `import`, `wunsch` und die Vault-Bruecke
 // sind am 2026-10-05 mit der Item-Oberflaeche nach `capabilities/inventory` gezogen (ISA F13).
 pub mod store;
-pub mod toleranz;
+pub mod tolerance;

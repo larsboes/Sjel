@@ -29,7 +29,7 @@ fn model() -> interior::model::Model {
 /// billigsten. Eine Sortierung nach Preis kaeme genau umgekehrt heraus — deshalb ist diese
 /// Reihenfolge eine Pruefung und keine Aufzeichnung.
 #[test]
-fn dringlichkeit_steht_vor_preis() {
+fn urgency_comes_before_price() {
     let m = model();
     let r = interior::budget::kaufreihenfolge(&m, None).expect("Reihenfolge");
     let ids: Vec<&str> = r.posten.iter().map(|p| p.id.as_str()).collect();
@@ -52,7 +52,7 @@ fn dringlichkeit_steht_vor_preis() {
 /// entschied, war der Preis. Hier ist der teure Posten der gesetzte und der billige der
 /// zurueckgestellte, damit eine Preissortierung genau umgekehrt herauskaeme.
 #[test]
-fn eine_gefallene_entscheidung_steht_vor_einer_verschobenen() {
+fn a_made_decision_comes_before_a_deferred_one() {
     let m = model();
     let r = interior::budget::kaufreihenfolge(&m, None).expect("Reihenfolge");
     let ids: Vec<&str> = r.posten.iter().map(|p| p.id.as_str()).collect();
@@ -71,14 +71,14 @@ fn eine_gefallene_entscheidung_steht_vor_einer_verschobenen() {
 /// Das ist die Lehre aus dem Fehler selbst: die erste Fassung kannte drei der acht Woerter und
 /// sah trotzdem sortiert aus. Ein neues Wort in den Daten muss auffallen.
 #[test]
-fn ein_unbekanntes_prioritaetswort_wird_gemeldet() {
+fn an_unknown_priority_word_is_reported() {
     let mut m = model();
     if let Some(i) = m.catalogue.get_mut("wandregal") {
-        i.prioritaet = Some("vielleicht-irgendwann".into());
+        i.priority = Some("vielleicht-irgendwann".into());
     }
     let r = interior::budget::kaufreihenfolge(&m, None).expect("Reihenfolge");
     assert_eq!(
-        r.unbekannte_prioritaeten,
+        r.unknown_priorities,
         vec!["vielleicht-irgendwann".to_string()]
     );
     let ids: Vec<&str> = r.posten.iter().map(|p| p.id.as_str()).collect();
@@ -91,28 +91,28 @@ fn ein_unbekanntes_prioritaetswort_wird_gemeldet() {
 
 /// Was abgeloest wurde, steht in keiner Kaufreihenfolge.
 #[test]
-fn ein_ersetzter_bedarf_faellt_heraus() {
+fn a_replaced_need_drops_out() {
     let m = model();
     let r = interior::budget::kaufreihenfolge(&m, None).expect("Reihenfolge");
     assert!(r
         .posten
         .iter()
-        .chain(r.ohne_preis.iter())
-        .all(|p| p.prioritaet.as_deref() != Some("ersetzt")));
+        .chain(r.unpriced.iter())
+        .all(|p| p.priority.as_deref() != Some("replaced")));
 }
 
 /// Die kumulierte Summe waechst monoton und endet auf der Gesamtsumme.
 #[test]
-fn die_kumulierte_summe_zaehlt_wirklich_zusammen() {
+fn the_cumulative_total_really_adds_up() {
     let m = model();
     let r = interior::budget::kaufreihenfolge(&m, None).expect("Reihenfolge");
     let mut letzte = 0;
     for p in &r.posten {
-        assert!(p.kumuliert_cent >= letzte, "die Summe faellt: {:?}", p.id);
-        letzte = p.kumuliert_cent;
+        assert!(p.cumulative_cents >= letzte, "die Summe faellt: {:?}", p.id);
+        letzte = p.cumulative_cents;
     }
-    let summe: i64 = r.posten.iter().map(|p| p.preis_cent.unwrap_or(0)).sum();
-    assert_eq!(letzte, summe);
+    let total: i64 = r.posten.iter().map(|p| p.price_cents.unwrap_or(0)).sum();
+    assert_eq!(letzte, total);
 }
 
 /// Ein Bedarf ohne Preis steht nicht in der Reihenfolge — und schon gar nicht vorn.
@@ -121,26 +121,26 @@ fn die_kumulierte_summe_zaehlt_wirklich_zusammen() {
 /// Kaufempfehlung, die aus einer fehlenden Zahl folgt. PRD B29 zaehlt sie in der Wunschliste
 /// schon als Warnung, und hier ist die Handlung dazu ein Preis und kein Kauf.
 #[test]
-fn ein_bedarf_ohne_preis_steht_in_keiner_reihenfolge() {
+fn a_need_without_a_price_is_in_no_order() {
     let m = model();
     let r = interior::budget::kaufreihenfolge(&m, None).expect("Reihenfolge");
     assert!(
-        r.posten.iter().all(|p| p.preis_cent.is_some()),
+        r.posten.iter().all(|p| p.price_cents.is_some()),
         "in der Reihenfolge steht nur, was einen Preis hat"
     );
     assert!(
-        r.ohne_preis.iter().any(|p| p.id == "teppich"),
+        r.unpriced.iter().any(|p| p.id == "teppich"),
         "und der Teppich steht daneben, mit Namen"
     );
 }
 
 /// Ohne positiven Saldo gibt es keine Monatszahl — dieselbe Haltung wie `monate_bis_bezahlt`.
 #[test]
-fn ohne_saldo_gibt_es_keine_zeitachse() {
+fn without_a_balance_there_is_no_timeline() {
     let m = model();
     let r = interior::budget::kaufreihenfolge(&m, None).expect("Reihenfolge");
     assert!(
-        r.posten.iter().all(|p| p.erreichbar_nach_monaten.is_none()),
+        r.posten.iter().all(|p| p.affordable_after_months.is_none()),
         "eine Zeitachse ohne Messung waere eine erfundene Zahl"
     );
 }

@@ -101,7 +101,7 @@
     (cents / 100).toLocaleString("de-DE", { style: "currency", currency: "EUR" });
 
   const size = (i: InventoryItem): string =>
-    i.b !== null && i.t !== null ? `${i.b} × ${i.t}${i.h !== null ? ` × ${i.h}` : ""} cm` : "—";
+    i.width !== null && i.depth !== null ? `${i.width} × ${i.depth}${i.height !== null ? ` × ${i.height}` : ""} cm` : "—";
 
   // ─── Dragging on the plan ──────────────────────────────────────────────────
   //
@@ -981,10 +981,10 @@
               {/if}
               {#if it}
                 <span class="of mono">
-                  h {it.h ?? "—"}{it.h_min !== null ? ` · h_min ${it.h_min}` : ""} cm
+                  h {it.height ?? "—"}{it.height_min !== null ? ` · h_min ${it.height_min}` : ""} cm
                 </span>
-                {#if it.b !== null && it.t !== null}
-                  <span class="of mono">catalogue {it.b} × {it.t}</span>
+                {#if it.width !== null && it.depth !== null}
+                  <span class="of mono">catalogue {it.width} × {it.depth}</span>
                 {/if}
                 {#if it.open_clear !== null}
                   <span class="needs mono">
@@ -1003,9 +1003,9 @@
                     expands {it.expands_dir ?? "?"} to {it.expands_to} cm
                   </span>
                 {/if}
-                {#if it.raumtrenner}<span class="needs mono">raumtrenner</span>{/if}
-                {#if it.unsicher.length > 0}
-                  <span class="guess" use:tip={"measured? no."}>~ {it.unsicher.join(", ")}</span>
+                {#if it.room_divider}<span class="needs mono">raumtrenner</span>{/if}
+                {#if it.estimated.length > 0}
+                  <span class="guess" use:tip={"measured? no."}>~ {it.estimated.join(", ")}</span>
                 {/if}
               {:else}
                 <span class="of">no inventory row — the plan draws it from its own size</span>

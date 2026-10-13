@@ -113,13 +113,16 @@ pub struct Opening {
     /// Absolute Koordinate entlang der Wandachse, kein Versatz zum Wandanfang.
     pub von: i32,
     pub bis: i32,
-    pub breite: i32,
+    #[serde(alias = "breite")]
+    pub width: i32,
     #[serde(default)]
     pub typ: Option<String>,
     #[serde(default)]
-    pub freihaltezone: Option<i32>,
+    #[serde(alias = "freihaltezone")]
+    pub keep_clear_zone: Option<i32>,
     #[serde(default)]
-    pub sperrflaeche: Option<Zone>,
+    #[serde(alias = "sperrflaeche")]
+    pub blocked_area: Option<Zone>,
     /// Ist dies die Tuer, durch die man die Wohnung betritt?
     ///
     /// Die Wohnung sagt es, nicht der Code. `badtuer` und `eingangstuer` fuehren beide
@@ -127,20 +130,25 @@ pub struct Opening {
     /// der nach Norden festverdrahteten Kuechen-Anlaufzone geschlossen hat. Fehlt die Angabe,
     /// laeuft R6 nicht und der Bericht sagt, dass sie fehlt.
     #[serde(default)]
-    pub eingang: Option<bool>,
+    #[serde(alias = "eingang")]
+    pub entrance: Option<bool>,
     /// Unter- und Oberkante der Verglasung ueber dem Boden, in cm.
     ///
     /// Nur fuer `sonne.rs`, und dort unverzichtbar: die Ausdehnung eines Lichtflecks haengt
     /// linear an beiden. Eine Fensterhoehe anzunehmen hiesse, den Schattenwurf auf den
     /// Zentimeter genau aus einer Erfindung zu rechnen.
     #[serde(default)]
-    pub glas_von_cm: Option<i32>,
+    #[serde(alias = "glas_von_cm")]
+    pub glass_from_cm: Option<i32>,
     #[serde(default)]
-    pub glas_bis_cm: Option<i32>,
+    #[serde(alias = "glas_bis_cm")]
+    pub glass_to_cm: Option<i32>,
     #[serde(default)]
-    pub schwenk: Option<String>,
+    #[serde(alias = "schwenk")]
+    pub swing: Option<String>,
     #[serde(default)]
-    pub schwenk_nach_innen: Option<bool>,
+    #[serde(alias = "schwenk_nach_innen")]
+    pub swings_inward: Option<bool>,
     #[serde(default)]
     pub notiz: Option<String>,
 }
@@ -166,7 +174,8 @@ impl Zone {
 pub struct Wall {
     pub von: Pt,
     pub bis: Pt,
-    pub laenge: i32,
+    #[serde(alias = "laenge")]
+    pub length: i32,
     #[serde(default)]
     pub frei: bool,
     #[serde(default)]
@@ -182,56 +191,7 @@ impl Wall {
     }
 }
 
-/// Welche Seite eines Rechtecks gemeint ist. Deutsch wie der Rest des Modells.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Deserialize, Serialize)]
-#[serde(rename_all = "lowercase")]
-pub enum Seite {
-    Nord,
-    Sued,
-    Ost,
-    West,
-}
-
-impl Seite {
-    pub fn as_str(self) -> &'static str {
-        match self {
-            Seite::Nord => "nord",
-            Seite::Sued => "sued",
-            Seite::Ost => "ost",
-            Seite::West => "west",
-        }
-    }
-
-    pub fn parse(s: &str) -> Option<Seite> {
-        match s {
-            "nord" => Some(Seite::Nord),
-            "sued" => Some(Seite::Sued),
-            "ost" => Some(Seite::Ost),
-            "west" => Some(Seite::West),
-            _ => None,
-        }
-    }
-
-    /// Dieselbe Seite, nachdem das Stueck gedreht wurde.
-    ///
-    /// `rot` zaehlt im Uhrzeigersinn, und y waechst nach Sueden — auf dem Plan ist das die
-    /// Richtung, in die ein Zeiger dreht. Nord wird also zu Ost, Ost zu Sued, und so weiter.
-    /// Nur Vielfache von 90 Grad; alles andere bleibt, wo es ist, weil `footprint` eine
-    /// Grundflaeche auch nur bei nahe 90 Grad tauscht und zwei verschiedene Rundungen fuer
-    /// dieselbe Drehung die Art von Fehler sind, die niemand sucht.
-    pub fn gedreht(self, rot: i32) -> Seite {
-        const IM_UHRZEIGERSINN: [Seite; 4] = [Seite::Nord, Seite::Ost, Seite::Sued, Seite::West];
-        let schritte = rot.rem_euclid(360) / 90;
-        if rot.rem_euclid(90) != 0 {
-            return self;
-        }
-        let i = IM_UHRZEIGERSINN
-            .iter()
-            .position(|s| *s == self)
-            .unwrap_or(0);
-        IM_UHRZEIGERSINN[(i + schritte as usize) % 4]
-    }
-}
+pub use crate::store::Side;
 
 /// Der Platz, den ein Mensch vor einem festen Einbau braucht, damit dieser benutzbar bleibt.
 ///
@@ -242,7 +202,8 @@ impl Seite {
 /// Aenderung ueberein.
 #[derive(Debug, Clone, Deserialize, Serialize)]
 pub struct Anlaufzone {
-    pub seite: Seite,
+    #[serde(alias = "seite")]
+    pub side: Side,
     pub abstand: String,
 }
 
@@ -269,13 +230,15 @@ pub struct FixedFurniture {
     #[serde(default)]
     pub tiefe: Option<i32>,
     #[serde(default)]
-    pub laenge: Option<i32>,
+    #[serde(alias = "laenge")]
+    pub length: Option<i32>,
     #[serde(default)]
     pub enthaelt: Vec<String>,
     /// Ohne diese Angabe ist der Einbau nur ein Hindernis: er belegt Flaeche, verlangt aber
     /// keinen freien Platz davor und taugt nicht als Ziel eines Laufwegs.
     #[serde(default)]
-    pub anlaufzone: Option<Anlaufzone>,
+    #[serde(alias = "anlaufzone")]
+    pub approach_zone: Option<Anlaufzone>,
 }
 
 impl FixedFurniture {
@@ -290,24 +253,26 @@ impl FixedFurniture {
 }
 
 #[derive(Debug, Clone, Deserialize, Serialize)]
-pub struct Hauptraum {
+pub struct MainRoom {
     pub polygon: Vec<Pt>,
     /// 0 bedeutet "nicht gemessen". Siehe `todo.offen` — es gibt hier keinen Platzhalterwert,
     /// weil eine erfundene Raumhoehe still in jede Hoehenpruefung durchschlaegt.
     #[serde(default)]
-    pub hoehe: i32,
+    #[serde(alias = "hoehe")]
+    pub height: i32,
     #[serde(default)]
     pub flaeche_m2: f64,
 }
 
 #[derive(Debug, Clone, Deserialize, Serialize)]
-pub struct Terrasse {
+pub struct Terrace {
     #[serde(default)]
     pub geschaetzt: bool,
     pub x: [i32; 2],
     pub y: [i32; 2],
     #[serde(default)]
-    pub flaeche_geschaetzt_m2: f64,
+    #[serde(alias = "flaeche_geschaetzt_m2")]
+    pub area_estimated_m2: f64,
 }
 
 #[derive(Debug, Clone, Deserialize, Serialize, Default)]
@@ -321,11 +286,13 @@ pub struct Todo {
 /// Ohne diesen Block rechnet `sonne.rs` nicht. Das ist Absicht: ein erfundener Standort
 /// ergaebe einen Lichtfleck auf den Zentimeter genau, der auf nichts beruht.
 #[derive(Debug, Clone, Copy, Deserialize, Serialize)]
-pub struct Lage {
+pub struct Location {
     /// Geographische Breite in Grad, Nord positiv.
-    pub breite: f64,
+    #[serde(alias = "breite")]
+    pub width: f64,
     /// Geographische Laenge in Grad, Ost positiv.
-    pub laenge: f64,
+    #[serde(alias = "laenge")]
+    pub length: f64,
     /// Der Abstand der Ortszeit zu UTC in Stunden, **einschliesslich Sommerzeit**.
     ///
     /// Eine Zahl und keine Zeitzonendatenbank: diese Capability haengt an keiner solchen, und
@@ -336,30 +303,39 @@ pub struct Lage {
     /// 0 heisst: oben ist Norden. Ohne diese Zahl waere jede Himmelsrichtung im Plan geraten,
     /// und `room.toml` haelt bereits `nord`, `ost`, `sued`, `west` als reine PLANrichtungen.
     #[serde(default)]
-    pub nordrichtung_grad: f64,
+    #[serde(alias = "nordrichtung_grad")]
+    pub north_deg: f64,
 }
 
 #[derive(Debug, Clone, Deserialize, Serialize)]
 pub struct Room {
     pub flat: FlatMeta,
     #[serde(default)]
-    pub lage: Option<Lage>,
-    pub hauptraum: Hauptraum,
+    #[serde(alias = "lage")]
+    pub location: Option<Location>,
+    #[serde(alias = "hauptraum")]
+    pub main_room: MainRoom,
     #[serde(default)]
-    pub zonen: BTreeMap<String, ZoneNamed>,
+    #[serde(alias = "zonen")]
+    pub zones: BTreeMap<String, ZoneNamed>,
     pub bad: Option<BadRoom>,
     #[serde(default)]
-    pub terrasse: Option<Terrasse>,
-    pub waende: BTreeMap<String, Wall>,
+    #[serde(alias = "terrasse")]
+    pub terrace: Option<Terrace>,
+    #[serde(alias = "waende")]
+    pub walls: BTreeMap<String, Wall>,
     #[serde(default)]
-    pub oeffnungen: Vec<Opening>,
+    #[serde(alias = "oeffnungen")]
+    pub openings: Vec<Opening>,
     #[serde(default)]
-    pub fix_moebel: Vec<FixedFurniture>,
+    #[serde(alias = "fix_moebel")]
+    pub fixed_furniture: Vec<FixedFurniture>,
     /// Welche Wege gemessen werden. Leer heisst: keiner — und das ist eine Aussage, keine
     /// Voreinstellung. Ein stiller Standard waere hier genau der Weg, auf dem eine Wohnung
     /// besteht, weil niemand nachgesehen hat, ob jemand durch sie hindurchkommt.
     #[serde(default)]
-    pub routen: Vec<Route>,
+    #[serde(alias = "routen")]
+    pub routes: Vec<Route>,
     #[serde(default)]
     pub todo: Todo,
 }
@@ -390,7 +366,7 @@ impl Room {
     /// Aus dem Polygon gerechnet, nicht aus der Datei gelesen — so kann die angegebene Flaeche
     /// nicht unbemerkt von der Geometrie abdriften, aus der jede Pruefung sie ableitet.
     pub fn area_m2(&self) -> f64 {
-        crate::geometry::polygon_area_m2(&self.hauptraum.polygon)
+        crate::geometry::polygon_area_m2(&self.main_room.polygon)
     }
 
     /// Die aeusseren Masse des Hauptraums, in derselben Sprache wie ein Moebel: `b` nach Osten,
@@ -401,18 +377,18 @@ impl Room {
     /// Pruefung rechnet. Sie steht hier, damit die Oberflaeche die Raummasse anzeigen kann,
     /// ohne sich eine zweite Fassung des Polygons zu halten.
     pub fn masse(&self) -> (i32, i32) {
-        let spanne = |f: fn(&Pt) -> i32| {
-            let werte = self.hauptraum.polygon.iter().map(f);
+        let span = |f: fn(&Pt) -> i32| {
+            let werte = self.main_room.polygon.iter().map(f);
             werte.clone().max().unwrap_or(0) - werte.min().unwrap_or(0)
         };
-        (spanne(|p| p[0]), spanne(|p| p[1]))
+        (span(|p| p[0]), span(|p| p[1]))
     }
 
     /// Wo eine Oeffnung physisch sitzt. `von`/`bis` sind absolute Koordinaten entlang der
     /// Wandachse; fuer nord/ost/west faellt das mit einem Versatz zusammen, fuer `badtuer`
     /// nicht — als Versatz gelesen laege sie ausserhalb ihrer eigenen Wand.
     pub fn opening_span(&self, o: &Opening) -> Option<(Pt, Pt)> {
-        let w = self.waende.get(&o.wand)?;
+        let w = self.walls.get(&o.wand)?;
         Some(if w.horizontal() {
             ([o.von, w.von[1]], [o.bis, w.von[1]])
         } else {
@@ -424,17 +400,21 @@ impl Room {
 // ---------------------------------------------------------------- Regeln
 
 #[derive(Debug, Clone, Deserialize, Serialize)]
-pub struct Laufwege {
-    pub haupt_soll: i32,
-    pub haupt_min: i32,
-    pub neben_min: i32,
+pub struct Walkways {
+    #[serde(alias = "haupt_soll")]
+    pub main_target: i32,
+    #[serde(alias = "haupt_min")]
+    pub main_min: i32,
+    #[serde(alias = "neben_min")]
+    pub side_min: i32,
 }
 
 #[derive(Debug, Clone, Deserialize, Serialize)]
-pub struct Lichtkorridor {
+pub struct LightCorridor {
     pub x: [i32; 2],
     pub y: [i32; 2],
-    pub max_hoehe: i32,
+    #[serde(alias = "max_hoehe")]
+    pub max_height: i32,
 }
 
 /// Wie schwer ein Verstoss wiegt. `hart` blockiert, `weich` warnt.
@@ -446,18 +426,18 @@ pub struct Lichtkorridor {
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
 #[serde(rename_all = "lowercase")]
 pub enum Severity {
-    Hart,
-    Weich,
+    Hard,
+    Soft,
 }
 
 #[derive(Debug, Clone, Deserialize, Serialize)]
-pub struct Regel {
+pub struct Rule {
     pub id: String,
     pub schwere: String,
     pub text: String,
 }
 
-impl Regel {
+impl Rule {
     /// Die deklarierte Schwere, oder ein Fehler.
     ///
     /// Ein unbekanntes Wort ist absichtlich kein stillschweigendes `weich`: eine Wohnung, die
@@ -465,8 +445,8 @@ impl Regel {
     /// wie einer ueber eine Wohnung, in der alles erlaubt ist.
     pub fn severity(&self) -> Result<Severity, ModelError> {
         match self.schwere.as_str() {
-            "hart" => Ok(Severity::Hart),
-            "weich" => Ok(Severity::Weich),
+            "hart" => Ok(Severity::Hard),
+            "weich" => Ok(Severity::Soft),
             other => Err(ModelError::Missing(format!(
                 "rules.toml: Regel `{}` hat die Schwere `{other}` — erlaubt sind `hart` und `weich`",
                 self.id
@@ -481,29 +461,34 @@ impl Regel {
 /// Stunden. Eine Schwelle in der falschen Einheit ist die Sorte Zahl, die beim Lesen stimmt
 /// und beim Rechnen nicht.
 #[derive(Debug, Clone, Copy, Deserialize, Serialize)]
-pub struct Sonnenregel {
+pub struct SunRule {
     /// Wie viele der geprueften Stunden ein Schreibtisch hoechstens in direkter Sonne liegen
     /// darf. Der Nenner ist `sonne::gepruefte_stunden()`.
-    pub max_stunden_am_schreibtisch: usize,
+    #[serde(alias = "max_stunden_am_schreibtisch")]
+    pub max_hours_at_desk: usize,
 }
 
 #[derive(Debug, Clone, Deserialize, Serialize)]
 pub struct Rules {
     /// Nur gesetzt, wenn die Wohnung R9 fuehrt. Fehlt sie, laeuft die Regel nicht und sagt das.
     #[serde(default)]
-    pub sonne: Option<Sonnenregel>,
-    pub laufwege: Laufwege,
+    #[serde(alias = "sonne")]
+    pub sun: Option<SunRule>,
+    #[serde(alias = "laufwege")]
+    pub walkways: Walkways,
     /// Absichtlich eine Map: jede Distanz wird ueber ihren Namen gelesen, damit eine Regel,
     /// die einen Wert erfindet statt ihn nachzuschlagen, beim Lesen auffaellt.
-    pub abstaende: BTreeMap<String, i32>,
-    pub lichtkorridor: Lichtkorridor,
+    #[serde(alias = "abstaende")]
+    pub gaps: BTreeMap<String, i32>,
+    #[serde(alias = "lichtkorridor")]
+    pub light_corridor: LightCorridor,
     #[serde(default)]
-    pub regeln: Vec<Regel>,
+    pub regeln: Vec<Rule>,
 }
 
 impl Rules {
     pub fn abstand(&self, key: &str) -> Result<i32, ModelError> {
-        self.abstaende
+        self.gaps
             .get(key)
             .copied()
             .ok_or_else(|| ModelError::Missing(format!("rules.toml kennt keinen Abstand `{key}`")))
@@ -515,15 +500,15 @@ impl Rules {
     /// Schwere erfindet, statt sie nachzuschlagen, faellt beim Lesen auf. Der Pruefer ruft das
     /// an jeder Stelle, an der er eine R-Kennung ausgibt — eine Kennung, die die Wohnung nicht
     /// fuehrt, ist damit ein Fehler und kein Verstoss ohne Text.
-    pub fn regel(&self, id: &str) -> Result<&Regel, ModelError> {
+    pub fn regel(&self, id: &str) -> Result<&Rule, ModelError> {
         self.regeln.iter().find(|r| r.id == id).ok_or_else(|| {
-            let bekannt: Vec<&str> = self.regeln.iter().map(|r| r.id.as_str()).collect();
+            let known: Vec<&str> = self.regeln.iter().map(|r| r.id.as_str()).collect();
             ModelError::Missing(format!(
                 "rules.toml deklariert keine Regel `{id}` — deklariert sind: {}",
-                if bekannt.is_empty() {
+                if known.is_empty() {
                     "keine".to_string()
                 } else {
-                    bekannt.join(", ")
+                    known.join(", ")
                 }
             ))
         })
@@ -536,10 +521,10 @@ impl Rules {
     /// zuerst aufs Bett) — beides Hausregeln, die hier niemand prueft. Bis 2026-08-31 fielen
     /// sie stumm heraus, und ein Bericht ohne sie sah aus wie ein vollstaendiger. Er nennt sie
     /// jetzt, damit die Luecke sichtbar bleibt, statt sich als Bestehen auszugeben.
-    pub fn nicht_geprueft(&self, geprueft: &[&str]) -> Vec<&Regel> {
+    pub fn unchecked(&self, checked: &[&str]) -> Vec<&Rule> {
         self.regeln
             .iter()
-            .filter(|r| !geprueft.contains(&r.id.as_str()))
+            .filter(|r| !checked.contains(&r.id.as_str()))
             .collect()
     }
 }
@@ -565,6 +550,7 @@ pub struct PlacedItem {
     #[serde(default)]
     pub size: Option<[i32; 2]>,
     #[serde(default)]
+    #[serde(alias = "typ")]
     pub kind: Option<String>,
 }
 
@@ -603,7 +589,7 @@ pub fn footprint(p: &PlacedItem, cat: &Catalogue) -> Result<(i32, i32, Option<i3
     let item = cat.get(&p.reference);
     let (b, t) = match p.size {
         Some([b, t]) => (Some(b), Some(t)),
-        None => (item.and_then(|i| i.b), item.and_then(|i| i.t)),
+        None => (item.and_then(|i| i.width), item.and_then(|i| i.depth)),
     };
     let (b, t) = match (b, t) {
         (Some(b), Some(t)) => (b, t),
@@ -615,7 +601,7 @@ pub fn footprint(p: &PlacedItem, cat: &Catalogue) -> Result<(i32, i32, Option<i3
         }
     };
     let swap = ((p.rot.rem_euclid(180)) - 90).abs() < 45;
-    let h = item.and_then(|i| i.h);
+    let h = item.and_then(|i| i.height);
     Ok(if swap { (t, b, h) } else { (b, t, h) })
 }
 
@@ -747,7 +733,7 @@ impl Model {
             .catalogue
             .values()
             .filter(|i| i.is_uncertain())
-            .map(|i| (i.id.as_str(), i.label.as_str(), i.unsicher.as_slice()))
+            .map(|i| (i.id.as_str(), i.label.as_str(), i.estimated.as_slice()))
             .collect();
         v.sort_by_key(|(id, _, _)| *id);
         v

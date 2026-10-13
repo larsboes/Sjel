@@ -1,42 +1,9 @@
-//! Der Weg eines Slots in den Vault, und der eine Block, den Axon darin besitzt.
+//! A slot's way into the vault, and the one block Axon owns there.
 //!
-//! ## Warum diese Capability ueberhaupt in den Vault schreibt
-//!
-//! PRD Q58 (2026-08-30) hat Moebel auf Muster A gestellt: eine Zeile, kein Vault-Objekt, weil
-//! Masse, Preis und Zustand durchgaengig schema-foermig sind. Fuer ein `piece` stimmt das und
-//! bleibt so. Fuer einen `slot` stimmt es nicht, und die Messung sagt es deutlich: **13 der 18
-//! Slots tragen eine `begruendung`, aber nur 3 der 29 Pieces** (gezaehlt 2026-09-06). Ein Slot ist
-//! kein Ding — er ist eine offene Entscheidung mit Zielmassen, und §5.1b weist "Entscheidung"
-//! nicht einer Tabelle zu, sondern dem Vault.
-//!
-//! §8.3 formuliert dieselbe Grenze von der anderen Seite: *"ein Dokument, das argumentiert, geht
-//! in den Vault; eine Zahl, die abgefragt wird, geht nach Axon; eine Zahl, die ihr Argument
-//! braucht, bleibt eine Datei in Axon"*. Der Slot-Text ist der erste Fall, die Masse sind der
-//! zweite, und genau an dieser Naht schneidet dieses Modul.
-//!
-//! ## Warum `Atlas/`, und nicht `Resources/Sjel/`
-//!
-//! Q31 (2026-08-23) gibt Muster B genau ein Zuhause: `Resources/Sjel/`. Dieses Modul schreibt
-//! nach `Atlas/Interior/`, und das ist **kein** Verstoss, weil es kein Muster B ist. Lars hat am
-//! 2026-09-07 entschieden, dass eine Wohnungseinrichtung dauerhaft ist statt temporaer und
-//! deshalb in den Atlas gehoert — und Q31s eigene Regel lautet *"prefer C"*: sobald eine
-//! menschliche Notiz existiert, schreibt die Maschine eine markierte Region hinein und sonst
-//! nichts. Diese Datei stellt genau das her.
-//!
-//! Der Bootstrap ist der einzige Sonderfall und er passiert **einmal pro Slot**: existiert keine
-//! Notiz, wird eine angelegt, deren Prosa (`ziel`, `begruendung`, `hinweis`,
-//! `entscheidung_offen`) **ausserhalb** der Marker landet und ab diesem Moment dem Menschen
-//! gehoert. Danach fasst dieses Modul nur noch die Region an. Eine bestehende Notiz wird nie
-//! ueberschrieben — §5.5 nennt das "Promotion, never demotion", und eine einmal geschriebene
-//! menschliche Zeile ist genau die Sorte Satz, die kein Generator zurueckholen darf.
-//!
-//! ## Was in der Region steht, und was nicht
-//!
-//! In der Region stehen ausschliesslich Maschinenzahlen: Zielmasse, Platzbedarf, Preisspanne,
-//! Prioritaet, Zustand, ersetzte Eintraege, Varianten, welche Masse geschaetzt sind. Nicht in der
-//! Region steht ein einziges Wort, das ein Mensch geschrieben hat. Das ist dieselbe Trennung, die
-//! `capabilities/finance/src/obsidian.rs` fuehrt — *"Neither writes the other's fields"* — und
-//! der Grund, warum ein Konflikt hier ueberhaupt entscheidbar ist.
+//! A slot is an open decision with target sizes, and decisions live in the vault. On the first
+//! run a note is seeded; its prose sits outside the markers and belongs to the person from then
+//! on. Every later run touches only the marked region, which holds machine numbers and never a
+//! sentence a person wrote. Pieces stay rows and get no note.
 
 use std::collections::BTreeMap;
 use std::path::PathBuf;
@@ -45,58 +12,48 @@ use markdown_root::{region, MarkdownRoot, RegionOutcome, RegionSpec, RootError};
 
 use crate::store::{Item, Kind, State};
 
-/// Der Besitzer der Marker. Fuer immer stabil: eine Aenderung macht jede bereits
-/// geschriebene Region fremd, und der naechste Lauf haengt eine zweite daneben.
+/// The marker owner. Stable forever: a change makes every region already written foreign.
 pub const REGION_OWNER: &str = "interior";
 
-/// Wird erhoeht, wenn sich die Form des gerenderten Blocks aendert, damit ein spaeterer
-/// Generator seine eigene alte Ausgabe von einer Form unterscheiden kann, die er nicht mehr
-/// erzeugt.
+/// Raised when the rendered block changes shape.
 pub const REGION_VERSION: u32 = 1;
 
-/// Vault-relativ und nicht konfigurierbar, aus demselben Grund, den `trips::projection::DIR`
-/// nennt: eine zweite Erklaerung, wohin Maschinenausgabe geht, ist der Weg, auf dem zwei Hosts
-/// in zwei Ordner schreiben und es keiner merkt.
+/// Vault-relative and fixed, so two hosts cannot write into two folders.
 pub const DIR: &str = "Atlas/Interior";
 
-/// Was ein Lauf getan hat. Jede Zeile ist eine Datei, damit der Bericht ohne Logdatei lesbar ist.
 #[derive(Debug, Default)]
 pub struct Report {
-    /// Notizen, die es noch nicht gab und die einmalig angelegt wurden.
+    /// Notes created on this run.
     pub seeded: Vec<String>,
-    /// Notizen, deren Region neu geschrieben wurde.
+    /// Notes whose region was rewritten.
     pub written: Vec<String>,
-    /// Notizen, deren Region schon stimmte. Kein Schreibvorgang, also kein Commit im Vault.
+    /// Notes whose region was already current; nothing written.
     pub unchanged: Vec<String>,
-    /// Notizen, deren Region ein Mensch angefasst hat. Nichts wurde geschrieben.
+    /// Notes whose region a person edited; nothing written.
     pub conflicts: Vec<String>,
 }
 
 #[derive(Debug, thiserror::Error)]
-pub enum Fehler {
-    #[error("Vault-Wurzel: {0}")]
+pub enum Error {
+    #[error("vault root: {0}")]
     Root(#[from] RootError),
-    #[error("{pfad}: {quelle}")]
+    #[error("{path}: {source}")]
     Io {
-        pfad: PathBuf,
+        path: PathBuf,
         #[source]
-        quelle: std::io::Error,
+        source: std::io::Error,
     },
-    #[error("Region in {pfad}: {quelle}")]
+    #[error("region in {path}: {source}")]
     Region {
-        pfad: PathBuf,
+        path: PathBuf,
         #[source]
-        quelle: region::RegionError,
+        source: region::RegionError,
     },
 }
 
-/// Der Dateiname eines Slots.
-///
-/// Aus dem `label` und nicht aus der `id`, weil ein Mensch die Notiz aufmacht und `[[Vorhang /
-/// Verdunkelung Terrassentuer]]` lesbar ist, wo `[[vorhang_terrassentuer]]` es nicht ist. Der
-/// Schraegstrich muss trotzdem weg — er ist auf jedem Dateisystem ein Verzeichnistrenner, und
-/// ein Label darf keinen Ordner erfinden.
-pub fn dateiname(item: &Item) -> String {
+/// A slot's file name, from the label because a person opens the note. A slash would invent a
+/// folder, so it becomes a dash.
+pub fn file_name(item: &Item) -> String {
     let mut out = String::with_capacity(item.label.len());
     for ch in item.label.chars() {
         match ch {
@@ -105,117 +62,111 @@ pub fn dateiname(item: &Item) -> String {
             c => out.push(c),
         }
     }
-    let getrimmt = out.split_whitespace().collect::<Vec<_>>().join(" ");
-    if getrimmt.is_empty() {
+    let trimmed = out.split_whitespace().collect::<Vec<_>>().join(" ");
+    if trimmed.is_empty() {
         item.id.clone()
     } else {
-        getrimmt
+        trimmed
     }
 }
 
-fn zeile(out: &mut String, label: &str, wert: &str) {
-    if !wert.is_empty() {
-        out.push_str(&format!("> **{label}:** {wert}\n"));
+fn line(out: &mut String, label: &str, value: &str) {
+    if !value.is_empty() {
+        out.push_str(&format!("> **{label}:** {value}\n"));
     }
 }
 
-fn masse(item: &Item) -> String {
-    let mut teile: Vec<String> = Vec::new();
-    if let Some(b) = item.b {
-        teile.push(format!("B {b}"));
+fn dimensions(item: &Item) -> String {
+    let mut parts: Vec<String> = Vec::new();
+    if let Some(w) = item.width {
+        parts.push(format!("W {w}"));
     }
-    if let Some(t) = item.t {
-        teile.push(format!("T {t}"));
+    if let Some(d) = item.depth {
+        parts.push(format!("D {d}"));
     }
-    if let Some(h) = item.h {
-        teile.push(format!("H {h}"));
+    if let Some(h) = item.height {
+        parts.push(format!("H {h}"));
     }
-    if let Some(h) = item.h_min {
-        teile.push(format!("H min {h}"));
+    if let Some(h) = item.height_min {
+        parts.push(format!("H min {h}"));
     }
-    if teile.is_empty() {
+    if parts.is_empty() {
         String::new()
     } else {
-        format!("{} cm", teile.join(" × "))
+        format!("{} cm", parts.join(" × "))
     }
 }
 
-fn euro(cent: i64) -> String {
-    format!("{},{:02} €", cent / 100, (cent % 100).abs())
+fn euro(cents: i64) -> String {
+    format!("{},{:02} €", cents / 100, (cents % 100).abs())
 }
 
-fn preis(item: &Item) -> String {
-    match (item.preis_cent, item.kosten_min_cent, item.kosten_max_cent) {
+fn price(item: &Item) -> String {
+    match (item.price_cents, item.cost_min_cents, item.cost_max_cents) {
         (Some(p), _, _) => euro(p),
-        (None, Some(min), Some(max)) if min != max => format!("{} bis {}", euro(min), euro(max)),
-        (None, Some(min), _) => format!("ab {}", euro(min)),
-        (None, None, Some(max)) => format!("bis {}", euro(max)),
+        (None, Some(min), Some(max)) if min != max => format!("{} to {}", euro(min), euro(max)),
+        (None, Some(min), _) => format!("from {}", euro(min)),
+        (None, None, Some(max)) => format!("up to {}", euro(max)),
         _ => String::new(),
     }
 }
 
-/// Der Block, den Axon besitzt. Ausschliesslich Zahlen — kein Satz, den ein Mensch geschrieben
-/// hat, wird hier reproduziert.
-pub fn render_block(item: &Item, zustand: Option<State>) -> String {
+/// The block Axon owns: numbers only, never a sentence a person wrote.
+pub fn render_block(item: &Item, state: Option<State>) -> String {
     let mut out = String::new();
-    out.push_str("> [!info] Von Axon abgeleitet — innerhalb dieses Blocks nichts eintragen\n");
+    out.push_str("> [!info] Derived by Axon. Do not edit inside this block\n");
 
-    zeile(&mut out, "Zielmasse", &masse(item));
-    zeile(&mut out, "Preis", &preis(item));
-    if let Some(p) = item.prioritaet.as_deref().filter(|s| !s.trim().is_empty()) {
-        zeile(&mut out, "Prioritaet", p);
+    let text = |v: &Option<String>| v.as_deref().filter(|s| !s.trim().is_empty()).map(str::to_string);
+    line(&mut out, "Target size", &dimensions(item));
+    line(&mut out, "Price", &price(item));
+    if let Some(p) = text(&item.priority) {
+        line(&mut out, "Priority", &p);
     }
-    if let Some(z) = zustand {
-        zeile(&mut out, "Zustand", z.as_str());
+    if let Some(s) = state {
+        line(&mut out, "State", s.as_str());
     }
-    if let Some(zone) = item.platzbedarf_zone {
-        zeile(&mut out, "Platzbedarf Zone", &format!("{zone} cm"));
+    if let Some(zone) = item.clearance_zone {
+        line(&mut out, "Clearance zone", &format!("{zone} cm"));
     }
-    if let Some(block) = item.platzbedarf_block {
-        zeile(&mut out, "Platzbedarf Block", &format!("{block} cm"));
+    if let Some(block) = item.clearance_block {
+        line(&mut out, "Clearance block", &format!("{block} cm"));
     }
-    if let Some(a) = item.anzahl.filter(|n| *n != 1) {
-        zeile(&mut out, "Anzahl", &a.to_string());
+    if let Some(c) = item.count.filter(|n| *n != 1) {
+        line(&mut out, "Count", &c.to_string());
     }
-    if !item.ersetzt.is_empty() {
-        zeile(&mut out, "Ersetzt", &item.ersetzt.join(", "));
+    if !item.replaces.is_empty() {
+        line(&mut out, "Replaces", &item.replaces.join(", "));
     }
-    if !item.varianten.is_empty() {
-        zeile(&mut out, "Varianten", &item.varianten.join(", "));
+    if !item.variants.is_empty() {
+        line(&mut out, "Variants", &item.variants.join(", "));
     }
-    if let Some(b) = item.basiert_auf.as_deref().filter(|s| !s.trim().is_empty()) {
-        zeile(&mut out, "Basiert auf", b);
+    if let Some(b) = text(&item.based_on) {
+        line(&mut out, "Based on", &b);
     }
-    if let Some(l) = item.link.as_deref().filter(|s| !s.trim().is_empty()) {
-        zeile(&mut out, "Link", l);
+    if let Some(l) = text(&item.link) {
+        line(&mut out, "Link", &l);
     }
-    if let Some(q) = item.quelle.as_deref().filter(|s| !s.trim().is_empty()) {
-        zeile(&mut out, "Quelle der Masse", q);
+    if let Some(s) = text(&item.source) {
+        line(&mut out, "Measured from", &s);
     }
-    if let Some(g) = item.gemessen_am.as_deref().filter(|s| !s.trim().is_empty()) {
-        zeile(&mut out, "Gemessen am", g);
+    if let Some(m) = text(&item.measured_at) {
+        line(&mut out, "Measured on", &m);
     }
-
-    // Welche Masse geschaetzt sind, steht hier und nicht im Fliesstext: es ist der Vorbehalt,
-    // unter dem jede Zahl darueber gelesen werden muss, und ein Vorbehalt, den ein Mensch
-    // versehentlich loeschen kann, ist keiner.
-    if !item.unsicher.is_empty() {
-        zeile(&mut out, "Geschaetzt", &item.unsicher.join(", "));
+    // In the region, not the prose: a caveat a person can delete by accident is none.
+    if !item.estimated.is_empty() {
+        line(&mut out, "Estimated", &item.estimated.join(", "));
     }
 
     out.push_str(&format!(
-        "\n> `{}` · aus der interior-Tabelle, nicht von Hand gepflegt.\n",
+        "\n> `{}` · from the inventory table, not maintained by hand.\n",
         item.id
     ));
     out
 }
 
-/// Die einmalige Saat: eine Notiz, deren Prosa dem Menschen gehoert.
-///
-/// Wird nur aufgerufen, wenn die Datei nicht existiert. Der Text aus `ziel`, `begruendung`,
-/// `hinweis` und `entscheidung_offen` wird **ausserhalb** der Marker abgelegt und ist ab dann
-/// nicht mehr Sache dieses Moduls.
-fn saat(item: &Item, zustand: Option<State>) -> String {
+/// The one-time seed of a note whose prose belongs to the person. The frontmatter keys and values
+/// are kept as earlier notes have them, so vault queries keep matching.
+fn seed(item: &Item) -> String {
     let mut out = String::new();
     out.push_str("---\n");
     out.push_str("type: interior-slot\n");
@@ -225,91 +176,81 @@ fn saat(item: &Item, zustand: Option<State>) -> String {
     out.push_str("---\n\n");
     out.push_str(&format!("# {}\n\n", item.label));
 
-    let mut abschnitt = |titel: &str, text: Option<&String>| {
+    let mut section = |heading: &str, text: Option<&String>| {
         if let Some(t) = text.map(|s| s.trim()).filter(|s| !s.is_empty()) {
-            out.push_str(&format!("## {titel}\n\n{t}\n\n"));
+            out.push_str(&format!("## {heading}\n\n{t}\n\n"));
         }
     };
-    abschnitt("Ziel", item.ziel.as_ref());
-    abschnitt("Begruendung", item.begruendung.as_ref());
-    abschnitt("Hinweis", item.hinweis.as_ref());
-    abschnitt("Offene Entscheidung", item.entscheidung_offen.as_ref());
+    section("Target", item.target.as_ref());
+    section("Reason", item.reason.as_ref());
+    section("Notes", item.notes.as_ref());
+    section("Open question", item.open_question.as_ref());
 
     out.push_str(
-        "> [!tip] Ab hier gehoert der Text dir\n\
-         > Diese Notiz wurde einmalig aus der interior-Tabelle erzeugt. Alles ausserhalb des\n\
-         > Axon-Blocks unten kannst du frei aendern — es wird nie ueberschrieben.\n\n",
+        "> [!tip] The text from here on is yours\n\
+         > This note was created once from the inventory table. Everything outside the Axon\n\
+         > block below is yours to change; it is never overwritten.\n\n",
     );
-
-    // Die Region wird nicht hier gerendert: `region::apply` haengt sie an und traegt dabei den
-    // Hash ein, der die Konflikterkennung traegt. Sie zweimal zu erzeugen hiesse, zwei Stellen
-    // muessten sich ueber das Marker-Format einig sein.
-    let _ = zustand;
+    // The region is appended by `region::apply`, which also writes the hash conflict detection
+    // relies on.
     out
 }
 
-/// Jeden Slot in den Vault bringen: einmal saeen, danach nur noch die Region pflegen.
-///
-/// Pieces bleiben aussen vor. Sie sind Zeilen, und Q58 hat das entschieden — hier wird die
-/// Entscheidung nur nicht heimlich aufgeweicht.
+/// Bring every slot into the vault: seed once, then maintain only the region.
 pub fn write_all(
     root: &MarkdownRoot,
-    katalog: &BTreeMap<String, (Item, Option<State>)>,
-) -> Result<Report, Fehler> {
+    catalogue: &BTreeMap<String, (Item, Option<State>)>,
+) -> Result<Report, Error> {
     let mut report = Report::default();
     let spec = RegionSpec::new(REGION_OWNER, REGION_VERSION);
 
-    let verzeichnis = root.path().join(DIR);
-    std::fs::create_dir_all(&verzeichnis).map_err(|quelle| Fehler::Io {
-        pfad: verzeichnis.clone(),
-        quelle,
+    let dir = root.path().join(DIR);
+    std::fs::create_dir_all(&dir).map_err(|source| Error::Io {
+        path: dir.clone(),
+        source,
     })?;
 
-    for (item, zustand) in katalog.values() {
+    for (item, state) in catalogue.values() {
         if item.kind != Kind::Slot {
             continue;
         }
 
-        let relativ = format!("{DIR}/{}.md", dateiname(item));
-        let pfad = root.locate(&relativ)?;
-        let name = relativ.clone();
+        let relative = format!("{DIR}/{}.md", file_name(item));
+        let path = root.locate(&relative)?;
+        let name = relative.clone();
 
-        let vorhanden = pfad.exists();
-        if !vorhanden {
-            std::fs::write(&pfad, saat(item, *zustand)).map_err(|quelle| Fehler::Io {
-                pfad: pfad.clone(),
-                quelle,
+        let existed = path.exists();
+        if !existed {
+            std::fs::write(&path, seed(item)).map_err(|source| Error::Io {
+                path: path.clone(),
+                source,
             })?;
             report.seeded.push(name.clone());
         }
 
-        let original = std::fs::read_to_string(&pfad).map_err(|quelle| Fehler::Io {
-            pfad: pfad.clone(),
-            quelle,
+        let original = std::fs::read_to_string(&path).map_err(|source| Error::Io {
+            path: path.clone(),
+            source,
         })?;
-        let (aktualisiert, ausgang) =
-            region::apply(&original, &spec, &render_block(item, *zustand)).map_err(|quelle| {
-                Fehler::Region {
-                    pfad: pfad.clone(),
-                    quelle,
-                }
+        let (updated, outcome) = region::apply(&original, &spec, &render_block(item, *state))
+            .map_err(|source| Error::Region {
+                path: path.clone(),
+                source,
             })?;
 
-        match ausgang {
+        match outcome {
             RegionOutcome::Created | RegionOutcome::Updated => {
-                std::fs::write(&pfad, aktualisiert).map_err(|quelle| Fehler::Io {
-                    pfad: pfad.clone(),
-                    quelle,
+                std::fs::write(&path, updated).map_err(|source| Error::Io {
+                    path: path.clone(),
+                    source,
                 })?;
-                // Eine frisch gesaete Notiz zaehlt als `seeded`, nicht zusaetzlich als
-                // `written`: der Bericht soll sagen, was neu ist, nicht wie oft die Datei
-                // im selben Lauf angefasst wurde.
-                if vorhanden {
+                // A note seeded on this run counts as `seeded` only.
+                if existed {
                     report.written.push(name);
                 }
             }
             RegionOutcome::Unchanged => {
-                if vorhanden {
+                if existed {
                     report.unchanged.push(name);
                 }
             }
@@ -320,15 +261,8 @@ pub fn write_all(
     Ok(report)
 }
 
-/// Die Vault-Wurzel dieser Maschine, falls eine erklaert ist.
-///
-/// `None` heisst: keine Bruecke, und das ist die richtige Antwort fuer einen Host ohne Vault —
-/// kein Vault, keine Schreibvorgaenge, und die Zeilen bleiben trotzdem der Bestand.
-///
-/// **Zwei Konfigurationsnamen, in dieser Reihenfolge.** `inventory.json` ist der eigene Name
-/// seit 2026-10-05; `interior.json` bleibt der Rueckfall, weil die Wurzel dort auf jeder
-/// bestehenden Maschine schon steht und ein Umzug, der eine Konfigurationsdatei umbenennt,
-/// nichts gewinnt. Dasselbe fuer die Umgebungsvariable.
+/// This machine's vault root, if one is declared; `None` means no vault and no writes.
+/// `inventory.json` first, then `interior.json`, where existing machines already declare it.
 pub fn vault_root() -> Option<PathBuf> {
     for name in [
         "SJEL_INVENTORY_OBSIDIAN_ROOT",
@@ -340,17 +274,17 @@ pub fn vault_root() -> Option<PathBuf> {
             }
         }
     }
-    for datei in ["inventory.json", "interior.json"] {
-        let Some(pfad) = sjel_config::overlay_config(datei) else {
+    for file in ["inventory.json", "interior.json"] {
+        let Some(path) = sjel_config::overlay_config(file) else {
             continue;
         };
-        let Some(text) = std::fs::read_to_string(pfad).ok() else {
+        let Some(text) = std::fs::read_to_string(path).ok() else {
             continue;
         };
-        let Some(wert) = serde_json::from_str::<serde_json::Value>(&text).ok() else {
+        let Some(value) = serde_json::from_str::<serde_json::Value>(&text).ok() else {
             continue;
         };
-        if let Some(root) = wert
+        if let Some(root) = value
             .get("obsidian")
             .and_then(|o| o.get("root"))
             .and_then(|r| r.as_str())
@@ -361,15 +295,15 @@ pub fn vault_root() -> Option<PathBuf> {
     None
 }
 
-/// `write_all` gegen die erklaerte Wurzel, oder `None`, wenn keine erklaert ist.
+/// `write_all` against the declared root, or `None` when none is declared.
 pub fn writeback(
-    katalog: &BTreeMap<String, (Item, Option<State>)>,
-) -> Option<Result<Report, Fehler>> {
-    let root_pfad = vault_root()?;
+    catalogue: &BTreeMap<String, (Item, Option<State>)>,
+) -> Option<Result<Report, Error>> {
+    let root_path = vault_root()?;
     Some(
-        MarkdownRoot::declare(root_pfad)
-            .map_err(Fehler::Root)
-            .and_then(|root| write_all(&root, katalog)),
+        MarkdownRoot::declare(root_path)
+            .map_err(Error::Root)
+            .and_then(|root| write_all(&root, catalogue)),
     )
 }
 
@@ -386,159 +320,128 @@ mod tests {
         }
     }
 
-    /// Ein Label mit Schraegstrich darf keinen Ordner erfinden. `Vorhang / Verdunkelung
-    /// Terrassentuer` ist ein echter Eintrag, und ohne diese Ersetzung landet er in einem
-    /// Unterverzeichnis `Vorhang `, das niemand erklaert hat.
     #[test]
-    fn ein_schraegstrich_im_label_wird_kein_verzeichnis() {
+    fn a_slash_in_the_label_is_no_folder() {
         let it = slot("vorhang", "Vorhang / Verdunkelung Terrassentuer");
-        let name = dateiname(&it);
+        let name = file_name(&it);
         assert!(!name.contains('/'), "got: {name}");
         assert_eq!(name, "Vorhang - Verdunkelung Terrassentuer");
     }
 
-    /// Faellt das Label ganz weg, ist die id der Name. Eine Datei `.md` ohne Stamm waere in
-    /// Obsidian unsichtbar, was schlimmer ist als ein haesslicher Name.
+    /// A `.md` without a stem would be invisible in Obsidian.
     #[test]
-    fn ein_leeres_label_faellt_auf_die_id_zurueck() {
+    fn an_empty_label_falls_back_to_the_id() {
         let it = slot("kleiderschrank", "   ");
-        assert_eq!(dateiname(&it), "kleiderschrank");
+        assert_eq!(file_name(&it), "kleiderschrank");
     }
 
-    /// Der Kern der Trennung: kein menschlicher Satz wird in die Region kopiert. Steht die
-    /// Begruendung erst einmal in beiden Haelften, entscheidet der naechste Lauf zwischen zwei
-    /// Fassungen — und genau das soll die Region nie muessen.
+    /// No human sentence is copied into the region; otherwise a later run would have to decide
+    /// between two versions of it.
     #[test]
-    fn die_region_reproduziert_keinen_menschlichen_satz() {
-        let mut it = slot("stuhl", "Zweiter Stuhl");
-        it.begruendung = Some("Ein zweiter Stuhl ist eine Garderobe mit Beinen.".into());
-        it.ziel = Some("Klappbar, unter 40 cm tief.".into());
-        it.hinweis = Some("Erst nach der Tisch-Entscheidung.".into());
-        it.entscheidung_offen = Some("Klappbar oder gar nicht?".into());
-        it.b = Some(45);
+    fn the_region_reproduces_no_human_sentence() {
+        let mut it = slot("chair", "Second chair");
+        it.reason = Some("A second chair is a coat stand with legs.".into());
+        it.target = Some("Foldable, under 40 cm deep.".into());
+        it.notes = Some("Only after the table decision.".into());
+        it.open_question = Some("Foldable or not at all?".into());
+        it.width = Some(45);
 
         let block = render_block(&it, Some(State::Wanted));
-        for satz in [
-            "Garderobe mit Beinen",
-            "Klappbar, unter 40",
-            "Erst nach der Tisch",
-            "Klappbar oder gar nicht",
+        for sentence in [
+            "coat stand with legs",
+            "Foldable, under 40",
+            "Only after the table",
+            "Foldable or not at all",
         ] {
-            assert!(!block.contains(satz), "Region traegt Prosa: {satz}");
+            assert!(!block.contains(sentence), "region carries prose: {sentence}");
         }
-        assert!(block.contains("B 45 cm"), "got: {block}");
+        assert!(block.contains("W 45 cm"), "got: {block}");
         assert!(block.contains("wanted"), "got: {block}");
     }
 
-    /// Die Saat traegt die Prosa, und zwar ausserhalb jedes Markers. Sie ist der einzige
-    /// Moment, in dem dieses Modul einen menschlichen Satz schreibt.
     #[test]
-    fn die_saat_traegt_die_prosa_und_keinen_marker() {
-        let mut it = slot("stuhl", "Zweiter Stuhl");
-        it.begruendung = Some("Ein zweiter Stuhl ist eine Garderobe mit Beinen.".into());
-        let text = saat(&it, Some(State::Wanted));
-        assert!(text.contains("Garderobe mit Beinen"), "got: {text}");
-        assert!(
-            !text.contains("axon:begin"),
-            "die Saat rendert keine Region"
-        );
-        assert!(text.contains("axon_interior_id: \"stuhl\""), "got: {text}");
+    fn the_seed_carries_the_prose_and_no_marker() {
+        let mut it = slot("chair", "Second chair");
+        it.reason = Some("A second chair is a coat stand with legs.".into());
+        let text = seed(&it);
+        assert!(text.contains("coat stand with legs"), "got: {text}");
+        assert!(!text.contains("axon:begin"), "the seed renders no region");
+        assert!(text.contains("axon_interior_id: \"chair\""), "got: {text}");
     }
 
-    /// Ein Piece ist eine Zeile. Q58 hat das entschieden, und ein Lauf, der still doch eine
-    /// Notiz anlegt, weicht die Entscheidung auf, ohne sie zu widerrufen.
     #[test]
-    fn ein_piece_bekommt_keine_notiz() {
+    fn a_piece_gets_no_note() {
         let dir = std::env::temp_dir().join(format!("axon-interior-{}", std::process::id()));
         std::fs::create_dir_all(&dir).unwrap();
         let root = MarkdownRoot::declare(&dir).unwrap();
 
-        let mut katalog: BTreeMap<String, (Item, Option<State>)> = BTreeMap::new();
+        let mut catalogue: BTreeMap<String, (Item, Option<State>)> = BTreeMap::new();
         let mut piece = slot("tisch_bestand", "Tisch vorhanden");
         piece.kind = Kind::Piece;
-        katalog.insert("tisch_bestand".into(), (piece, Some(State::Owned)));
-        katalog.insert(
+        catalogue.insert("tisch_bestand".into(), (piece, Some(State::Owned)));
+        catalogue.insert(
             "vorhang".into(),
-            (
-                slot("vorhang", "Vorhang Terrassentuer"),
-                Some(State::Wanted),
-            ),
+            (slot("vorhang", "Vorhang Terrassentuer"), Some(State::Wanted)),
         );
 
-        let report = write_all(&root, &katalog).unwrap();
-        assert_eq!(
-            report.seeded,
-            vec!["Atlas/Interior/Vorhang Terrassentuer.md"]
-        );
+        let report = write_all(&root, &catalogue).unwrap();
+        assert_eq!(report.seeded, vec!["Atlas/Interior/Vorhang Terrassentuer.md"]);
         assert!(!dir.join(DIR).join("Tisch vorhanden.md").exists());
 
         std::fs::remove_dir_all(&dir).unwrap();
     }
 
-    /// Der zweite Lauf schreibt nichts. Ein No-Op-Schreibvorgang waere ein Commit im Vault,
-    /// der nichts sagt, und der Vault ist ein Git-Repository.
+    /// The vault is a git repository; a no-op write would be a commit that says nothing.
     #[test]
-    fn ein_zweiter_lauf_ohne_aenderung_schreibt_nicht() {
+    fn a_second_run_without_change_writes_nothing() {
         let dir = std::env::temp_dir().join(format!("axon-interior-2-{}", std::process::id()));
         std::fs::create_dir_all(&dir).unwrap();
         let root = MarkdownRoot::declare(&dir).unwrap();
 
-        let mut katalog: BTreeMap<String, (Item, Option<State>)> = BTreeMap::new();
-        katalog.insert(
+        let mut catalogue: BTreeMap<String, (Item, Option<State>)> = BTreeMap::new();
+        catalogue.insert(
             "vorhang".into(),
-            (
-                slot("vorhang", "Vorhang Terrassentuer"),
-                Some(State::Wanted),
-            ),
+            (slot("vorhang", "Vorhang Terrassentuer"), Some(State::Wanted)),
         );
 
-        let erst = write_all(&root, &katalog).unwrap();
-        assert_eq!(erst.seeded.len(), 1);
-        let zweit = write_all(&root, &katalog).unwrap();
-        assert!(zweit.seeded.is_empty(), "got: {:?}", zweit.seeded);
-        assert!(zweit.written.is_empty(), "got: {:?}", zweit.written);
-        assert_eq!(zweit.unchanged.len(), 1);
+        let first = write_all(&root, &catalogue).unwrap();
+        assert_eq!(first.seeded.len(), 1);
+        let second = write_all(&root, &catalogue).unwrap();
+        assert!(second.seeded.is_empty(), "got: {:?}", second.seeded);
+        assert!(second.written.is_empty(), "got: {:?}", second.written);
+        assert_eq!(second.unchanged.len(), 1);
 
         std::fs::remove_dir_all(&dir).unwrap();
     }
 
-    /// Eine vom Menschen geaenderte Region wird nicht ueberschrieben, und die Prosa daneben
-    /// ueberlebt jeden Lauf. Das ist die Zusage, unter der diese Notizen im Atlas stehen
-    /// duerfen statt in `Resources/Sjel/`.
     #[test]
-    fn menschliche_prosa_und_eine_beruehrte_region_ueberleben() {
+    fn human_prose_and_an_edited_region_survive() {
         let dir = std::env::temp_dir().join(format!("axon-interior-3-{}", std::process::id()));
         std::fs::create_dir_all(&dir).unwrap();
         let root = MarkdownRoot::declare(&dir).unwrap();
 
-        let mut katalog: BTreeMap<String, (Item, Option<State>)> = BTreeMap::new();
-        katalog.insert(
+        let mut catalogue: BTreeMap<String, (Item, Option<State>)> = BTreeMap::new();
+        catalogue.insert(
             "vorhang".into(),
-            (
-                slot("vorhang", "Vorhang Terrassentuer"),
-                Some(State::Wanted),
-            ),
+            (slot("vorhang", "Vorhang Terrassentuer"), Some(State::Wanted)),
         );
-        write_all(&root, &katalog).unwrap();
+        write_all(&root, &catalogue).unwrap();
 
-        let pfad = dir.join(DIR).join("Vorhang Terrassentuer.md");
-        let mit_prosa = std::fs::read_to_string(&pfad)
+        let path = dir.join(DIR).join("Vorhang Terrassentuer.md");
+        let with_prose = std::fs::read_to_string(&path)
             .unwrap()
             .replace(
                 "# Vorhang Terrassentuer",
-                "# Vorhang Terrassentuer\n\nMein eigener Satz.",
+                "# Vorhang Terrassentuer\n\nMy own sentence.",
             )
-            .replace("wanted", "von Hand veraendert");
-        std::fs::write(&pfad, &mit_prosa).unwrap();
+            .replace("wanted", "changed by hand");
+        std::fs::write(&path, &with_prose).unwrap();
 
-        let report = write_all(&root, &katalog).unwrap();
-        assert_eq!(
-            report.conflicts,
-            vec!["Atlas/Interior/Vorhang Terrassentuer.md"]
-        );
-        let danach = std::fs::read_to_string(&pfad).unwrap();
-        assert_eq!(danach, mit_prosa, "nichts wurde geschrieben");
-        assert!(danach.contains("Mein eigener Satz."));
+        let report = write_all(&root, &catalogue).unwrap();
+        assert_eq!(report.conflicts, vec!["Atlas/Interior/Vorhang Terrassentuer.md"]);
+        let after = std::fs::read_to_string(&path).unwrap();
+        assert_eq!(after, with_prose, "nothing was written");
+        assert!(after.contains("My own sentence."));
 
         std::fs::remove_dir_all(&dir).unwrap();
     }

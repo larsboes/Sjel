@@ -1,112 +1,93 @@
-//! Was der offene Bedarf kostet, gemessen an dem, was am Monatsende uebrig bleibt (PRD B29).
+//! What the open wishlist costs, measured against what is left at the end of a month.
 //!
-//! ## Warum das eine SQL-Abfrage ist und kein HTTP-Aufruf
+//! Read straight from `finance_transaction_projection` in the shared store: finance requires an
+//! inbound token over HTTP, and the number sits in the same file.
 //!
-//! `finance` und `interior` schreiben in **dieselbe Datei** — das ist der Grund, aus dem die
-//! geteilte Instanz ueberhaupt existiert (`capabilities/store/README.md`: "Cross-schema joins
-//! were the reason the shared instance existed"). `capabilities/places/src/backfill.rs` liest
-//! `finance_*` schon genauso. Der HTTP-Weg waere schlechter und nicht nur umstaendlicher:
-//! `finance` verlangt einen Inbound-Token, also haette `interior` ein Geheimnis zu halten, um
-//! eine Zahl zu lesen, die einen Meter weiter in derselben Datei steht.
-//!
-//! ## Was hier NICHT behauptet wird
-//!
-//! Es gibt kein Budget. Niemand hat eine Obergrenze gesetzt, und diese Datei erfindet keine.
-//! Sie meldet **eine Messung** — den Median des Monatssaldos ueber die letzten
-//! abgeschlossenen Monate — und ueberlaesst das Urteil dem Menschen. Median und nicht
-//! Mittelwert: ein einzelner Monat mit einer Jahreszahlung darin verschiebt einen Mittelwert
-//! um Hunderte Euro, und der Median haelt still.
-//!
-//! Der **laufende Kalendermonat faellt heraus.** Er ist unvollstaendig, und ein halber Monat
-//! mit ganzen Fixkosten und halbem Einkommen ist kein Datenpunkt, sondern eine Verzerrung mit
-//! Nachkommastellen.
+//! There is no budget here. Nobody set a ceiling; this reports one measurement and leaves the
+//! judgement to the reader.
 
 use rusqlite::Connection;
 
-type Fehler = Box<dyn std::error::Error>;
+type Error = Box<dyn std::error::Error>;
 
-/// Wie viele abgeschlossene Monate das Fenster umfasst. Zwoelf, damit ein Jahreszyklus einmal
-/// vollstaendig darin liegt: Versicherungen, Weihnachten und die Nebenkostenabrechnung sind
-/// keine Ausreisser, sie sind der Jahresrhythmus.
-pub const FENSTER_MONATE: usize = 12;
+/// Completed months in the window. Twelve, so one yearly cycle (insurance, holidays, utility
+/// settlements) is inside it once.
+pub const WINDOW_MONTHS: usize = 12;
 
 #[derive(Debug, Clone, serde::Serialize)]
-pub struct Saldo {
-    /// Median des Monatssaldos in Cent. Negativ heisst: es bleibt nichts uebrig.
-    pub median_cent: i64,
-    /// Wie viele abgeschlossene Monate tatsaechlich gemessen wurden.
-    pub monate: usize,
-    /// Der erste und der letzte Monat im Fenster, als `YYYY-MM`.
-    pub von: String,
-    pub bis: String,
+pub struct MonthlyBalance {
+    /// Median of income minus expenses per month, in cents. Negative means nothing is left.
+    pub median_cents: i64,
+    /// How many completed months were actually measured.
+    pub months: usize,
+    /// First and last month in the window, as `YYYY-MM`.
+    pub from: String,
+    pub to: String,
 }
 
-/// Der Monatssaldo aus `finance_transaction_projection`, oder `None`, wenn finance auf dieser
-/// Maschine nichts geschrieben hat.
+/// The monthly balance from finance's projection, or `None` when finance has written nothing on
+/// this machine.
 ///
-/// `transfer` zaehlt nicht mit. Eine Umbuchung zwischen eigenen Konten ist kein Einkommen und
-/// keine Ausgabe; sie beidseitig mitzuzaehlen faelscht beide Seiten und hebt sich nur dann auf,
-/// wenn beide Haelften im selben Monat liegen — was bei einer Kreditkartenabrechnung selten ist.
-pub fn monatssaldo(conn: &Connection) -> Result<Option<Saldo>, Fehler> {
-    let vorhanden: i64 = conn.query_row(
+/// Transfers are left out: a move between own accounts is neither income nor expense. The current
+/// month is left out because it is incomplete. The median, not the mean, so one month with a
+/// yearly payment does not move the answer by hundreds of euros.
+pub fn monthly_balance(conn: &Connection) -> Result<Option<MonthlyBalance>, Error> {
+    let present: i64 = conn.query_row(
         "SELECT count(*) FROM sqlite_master
           WHERE type='table' AND name='finance_transaction_projection'",
         [],
         |row| row.get(0),
     )?;
-    if vorhanden == 0 {
+    if present == 0 {
         return Ok(None);
     }
 
     let mut stmt = conn.prepare(
-        "SELECT substr(booked_at, 1, 7) AS monat,
+        "SELECT substr(booked_at, 1, 7) AS month,
                 sum(CASE WHEN kind = 'income'  THEN amount_cents ELSE 0 END)
-              - sum(CASE WHEN kind = 'expense' THEN amount_cents ELSE 0 END) AS saldo
+              - sum(CASE WHEN kind = 'expense' THEN amount_cents ELSE 0 END) AS balance
            FROM finance_transaction_projection
           WHERE kind IN ('income', 'expense')
             AND substr(booked_at, 1, 7) < strftime('%Y-%m', 'now')
-          GROUP BY monat
-          ORDER BY monat DESC
+          GROUP BY month
+          ORDER BY month DESC
           LIMIT ?1",
     )?;
-    let rows = stmt.query_map([FENSTER_MONATE as i64], |row| {
+    let rows = stmt.query_map([WINDOW_MONTHS as i64], |row| {
         Ok((row.get::<_, String>(0)?, row.get::<_, i64>(1)?))
     })?;
-    let mut monate: Vec<(String, i64)> = rows.collect::<Result<_, _>>()?;
-    if monate.is_empty() {
+    let mut months: Vec<(String, i64)> = rows.collect::<Result<_, _>>()?;
+    if months.is_empty() {
         return Ok(None);
     }
-    monate.sort_by(|a, b| a.0.cmp(&b.0));
-    let von = monate.first().unwrap().0.clone();
-    let bis = monate.last().unwrap().0.clone();
+    months.sort_by(|a, b| a.0.cmp(&b.0));
+    let from = months.first().unwrap().0.clone();
+    let to = months.last().unwrap().0.clone();
 
-    let mut salden: Vec<i64> = monate.iter().map(|(_, s)| *s).collect();
-    salden.sort_unstable();
-    // Bei gerader Anzahl das Mittel der beiden mittleren, damit zwoelf Monate nicht still auf
-    // den sechsten oder siebten Wert kippen, je nachdem wie gerundet wird.
-    let n = salden.len();
-    let median_cent = if n % 2 == 1 {
-        salden[n / 2]
+    let mut balances: Vec<i64> = months.iter().map(|(_, b)| *b).collect();
+    balances.sort_unstable();
+    let n = balances.len();
+    let median_cents = if n % 2 == 1 {
+        balances[n / 2]
     } else {
-        (salden[n / 2 - 1] + salden[n / 2]) / 2
+        (balances[n / 2 - 1] + balances[n / 2]) / 2
     };
 
-    Ok(Some(Saldo {
-        median_cent,
-        monate: n,
-        von,
-        bis,
+    Ok(Some(MonthlyBalance {
+        median_cents,
+        months: n,
+        from,
+        to,
     }))
 }
 
-/// Wie viele Monatssalden der offene Bedarf kostet.
+/// How many monthly balances the open wishlist costs.
 ///
-/// `None`, wenn der Median null oder negativ ist. Das ist kein fehlender Wert, sondern die
-/// Antwort: aus einem Saldo, der nicht positiv ist, laesst sich nichts ansparen, und eine Zahl
-/// wie "-3,2 Monate" hinzuschreiben waere eine Rechnung, die so tut, als beantworte sie etwas.
-pub fn monate_bis_bezahlt(offen_cent: i64, saldo: &Saldo) -> Option<f64> {
-    if saldo.median_cent <= 0 {
+/// `None` when the median is zero or negative: nothing accrues from a balance that is not
+/// positive, and "-3.2 months" would be a number that answers nothing.
+pub fn months_to_pay(open_cents: i64, balance: &MonthlyBalance) -> Option<f64> {
+    if balance.median_cents <= 0 {
         return None;
     }
-    Some(offen_cent as f64 / saldo.median_cent as f64)
+    Some(open_cents as f64 / balance.median_cents as f64)
 }

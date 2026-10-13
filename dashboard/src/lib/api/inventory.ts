@@ -1,89 +1,61 @@
 import { ApiError, jsonInit, request } from './core';
 
-/** One measured or wanted thing. Mirrors `capabilities/interior/src/store.rs::Item`. */
+export type Side = 'north' | 'south' | 'east' | 'west';
+
+/** One owned or wanted thing; lengths in cm, money in cents. Mirrors `capabilities/inventory/src/store.rs::Item`. */
 export interface InventoryItem {
   id: string;
   kind: 'piece' | 'slot' | 'gear';
   label: string;
-  b: number | null;
-  t: number | null;
-  h: number | null;
-  h_min: number | null;
-  laenge: number | null;
-  anzahl: number | null;
-  unsicher: string[];
-  zustaende: string[];
-  preis_cent: number | null;
-  kosten_min_cent: number | null;
-  kosten_max_cent: number | null;
+  width: number | null;
+  depth: number | null;
+  height: number | null;
+  height_min: number | null;
+  length: number | null;
+  count: number | null;
+  /** Which dimensions are guesses. */
+  estimated: string[];
+  fold_states: string[];
+  price_cents: number | null;
+  cost_min_cents: number | null;
+  cost_max_cents: number | null;
   link: string | null;
-  quelle: string | null;
-  gemessen_am: string | null;
-  mitnahme: string | null;
-  prioritaet: string | null;
-  ziel: string | null;
-  hinweis: string | null;
-  begruendung: string | null;
-  /** Ids of the items this one makes redundant: a wanted phone names the owned phone it replaces. */
-  ersetzt: string[];
+  source: string | null;
+  measured_at: string | null;
+  on_move: string | null;
+  priority: string | null;
+  target: string | null;
+  notes: string | null;
+  reason: string | null;
+  /** Ids of the items this one makes redundant. */
+  replaces: string[];
 
-  /**
-   * What this piece states it needs (PRD Q61 / B26).
-   *
-   * Fill any of them and the clearance check measures the piece against exactly these and stops
-   * guessing from its name — the guess that once checked a coffee table against a sofa's rules,
-   * because `^couch` caught `couchtisch`. Leave them null and the name still decides.
-   *
-   * `opens` and `expands_dir` are in the piece's own orientation and turn with `rot`.
-   */
-  opens: 'nord' | 'sued' | 'ost' | 'west' | null;
+  // What the piece needs around it; null leaves the name heuristic in charge. Sides are in the
+  // piece's own orientation and turn with `rot`.
+  opens: Side | null;
   open_clear: number | null;
   wall_ok: boolean | null;
-  expands_dir: 'nord' | 'sued' | 'ost' | 'west' | null;
-  /** Total extent when unfolded, not the increase — a product page names the total. */
+  expands_dir: Side | null;
+  /** Total extent unfolded, not the increase. */
   expands_to: number | null;
   access_sides: number | null;
   access_clear: number | null;
-  /** Meant to stand free. Affects the search ranking only, never a verdict. */
-  raumtrenner: boolean | null;
-  /**
-   * A picture of this piece, as a path below the private interior asset root.
-   *
-   * Served by `GET /interior/api/media/<path>` on request only — the reason the capability may
-   * sit in a public repository is that the bundle carries no photograph.
-   */
-  bild: string | null;
+  /** Meant to stand free. Affects search ranking only. */
+  room_divider: boolean | null;
+  /** A path below the private interior asset root, served on request only. */
+  image: string | null;
 
-  /**
-   * What the piece is FOR — `kleidung`, `schlafen`, `kochen`, `elektronik`. Free text: the list
-   * comes from the notes and no rule runs on it. This is what makes a garment a garment; the
-   * `kind` stays `piece`, because a shirt is a thing you own and not a need with target sizes.
-   */
+  /** Free text, e.g. `kleidung`, `elektronik`. */
   category: string | null;
-  /**
-   * Clothing, as the label writes it — `M`, `42`, `60x60`. Free text on purpose: an invented
-   * scale (`S..XXL`) would be the next shop that does not fit it.
-   */
-  groesse: string | null;
-  /** `weiss`, `dunkelblau`, `gestreift`. Free, for the same reason. */
-  farbe: string | null;
-  /**
-   * When it is worn — `["ganzjahr"]`, `["winter"]`, `["uebergang"]`. A list, because a coat
-   * is winter AND transition, not one or the other.
-   */
-  saison: string[];
-  /** What it does on a trip — `style`, `comfort`, `warm`, `rain`. Free words, shown not ruled. */
+  size: string | null;
+  color: string | null;
+  seasons: string[];
   traits?: string[];
-  /** Equipment fields (B51); optional because rows older than that never set them. */
   weight_g?: number | null;
   waterproof?: boolean | null;
   quick_dry?: boolean | null;
   pack_location?: string | null;
-  /**
-   * How often the row was written; the server owns it (PRD §10 A5). Send the value you read as
-   * `revision` to `saveItem`/`patchItem`, and a write that raced another device fails with
-   * `InventoryConflict` instead of overwriting it.
-   */
+  /** Owned by the server. Send it back to `saveItem`/`patchItem` so a raced write fails with `InventoryConflict`. */
   revision: number;
 }
 
@@ -144,13 +116,20 @@ async function writeItem(id: string, init: RequestInit, revision: number | undef
 
 export type InventoryState = 'owned' | 'wanted' | 'gone';
 
+export interface MonthlyBalance {
+  median_cents: number;
+  months: number;
+  from: string;
+  to: string;
+}
+
 export interface InventoryWishlist {
   items: InventoryItem[];
-  summe_untere_kante_cent: number;
-  summe_obere_kante_cent: number;
-  posten_ohne_preis: number;
-  monatssaldo: { median_cent: number; monate: number; von: string; bis: string } | null;
-  monate_bis_bezahlt: number | null;
+  total_low_cents: number;
+  total_high_cents: number;
+  unpriced_count: number;
+  monthly_balance: MonthlyBalance | null;
+  months_to_pay: number | null;
 }
 
 /** The household's rows (capabilities/inventory): owned, wanted and gone, and the wishlist budget. */
@@ -167,13 +146,8 @@ export const inventory = {
   /**
    * Change named fields and leave the rest alone.
    *
-   * Prefer this over `saveItem` from a form. `PUT` replaces the whole row, and an entry has 40
-   * fields while a form shows six — everything it does not send would be blanked. An explicit
-   * `null` clears a field; an absent key leaves it. An unknown key is refused rather than
-   * ignored, which is the same stance `deny_unknown_fields` takes on import.
-   *
-   * Pass the `revision` the form was opened with. If another device saved in between, this
-   * throws `InventoryConflict` with the current values and writes nothing.
+   * Prefer this over `saveItem` from a form: `PUT` blanks every field the form does not send.
+   * An explicit `null` clears a field, an absent key leaves it, an unknown key is refused.
    */
   patchItem: (id: string, patch: Partial<InventoryItem>, revision?: number) =>
     writeItem(id, jsonInit('PATCH', patch), revision),
@@ -186,10 +160,8 @@ export const inventory = {
     ),
 
   /**
-   * Append a state change. Appends, never overwrites — a wish that gets bought is a second row,
-   * and that span is what the wishlist later joins to money with.
-   *
-   * `changed: false` means the state already held: not an error, and not an invented second row.
+   * Append a state change; a bought wish is a second row. `changed: false` means the state
+   * already held.
    */
   setState: (id: string, state: InventoryState, note?: string) =>
     request<{ id: string; state: InventoryState; changed: boolean }>(

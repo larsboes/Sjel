@@ -17,7 +17,7 @@ use std::sync::Once;
 const FLAT: &str = "muster";
 /// Dieselbe Maschine, ein gespiegelter Grundriss: die Kueche steht an der Nordwand und wird
 /// von Sueden angelaufen.
-const FLAT_NORD: &str = "muster-nordkueche";
+const FLAT_NORTH: &str = "muster-nordkueche";
 
 /// Die Capability loest ihre Daten ueber `SJEL_PERSONAL_ROOT` auf. Der Test setzt genau diese
 /// Variable, statt `src/` einen Testpfad unterzuschieben: ein Codeweg, den kein Deployment
@@ -70,8 +70,8 @@ fn check_in(flat: &str, layout: &str) -> CheckResult {
 
 fn rules(r: &CheckResult, severity: Severity) -> Vec<&str> {
     let list = match severity {
-        Severity::Hart => &r.hard,
-        Severity::Weich => &r.soft,
+        Severity::Hard => &r.hard,
+        Severity::Soft => &r.soft,
     };
     list.iter().map(|v| v.rule.as_str()).collect()
 }
@@ -79,9 +79,9 @@ fn rules(r: &CheckResult, severity: Severity) -> Vec<&str> {
 // ---------------------------------------------------------------- die Verdikte
 
 #[test]
-fn ein_freies_layout_besteht_ohne_eine_einzige_warnung() {
+fn a_free_layout_passes_without_a_single_warning() {
     let r = check("a-frei");
-    assert!(r.pass, "harte Verstoesse: {:?}", rules(&r, Severity::Hart));
+    assert!(r.pass, "harte Verstoesse: {:?}", rules(&r, Severity::Hard));
     assert!(r.hard.is_empty());
     assert!(
         r.soft.is_empty(),
@@ -94,10 +94,10 @@ fn ein_freies_layout_besteht_ohne_eine_einzige_warnung() {
 /// gleich behandelt, ist unbrauchbar — deshalb wird hier BEIDES geprueft: dass R3 meldet, und
 /// dass das Layout trotzdem besteht.
 #[test]
-fn eine_weiche_regel_meldet_und_laesst_bestehen() {
+fn a_soft_rule_reports_and_lets_pass() {
     let r = check("b-lichtkorridor");
     assert!(r.pass, "R3 ist weich und darf nicht durchfallen lassen");
-    assert_eq!(rules(&r, Severity::Weich), ["R3"]);
+    assert_eq!(rules(&r, Severity::Soft), ["R3"]);
     let v = &r.soft[0];
     assert_eq!(v.item.as_deref(), Some("kleiderschrank"));
     // Die Schwelle kommt aus rules.toml, nicht aus dem Code. Steht hier je eine andere Zahl,
@@ -106,19 +106,19 @@ fn eine_weiche_regel_meldet_und_laesst_bestehen() {
 }
 
 #[test]
-fn eine_harte_regel_laesst_durchfallen() {
+fn a_hard_rule_fails_the_layout() {
     let r = check("c-terrassentuer");
     assert!(!r.pass);
-    assert!(rules(&r, Severity::Hart).contains(&"R1"), "{:?}", r.hard);
+    assert!(rules(&r, Severity::Hard).contains(&"R1"), "{:?}", r.hard);
     assert_eq!(r.hard[0].item.as_deref(), Some("kleiderschrank"));
 }
 
 #[test]
-fn ein_moebel_ausserhalb_des_raums_ist_kein_knapper_fall() {
+fn a_piece_outside_the_room_is_no_close_call() {
     let r = check("d-ausserhalb");
     assert!(!r.pass);
     assert!(
-        rules(&r, Severity::Hart).contains(&"raumgrenze"),
+        rules(&r, Severity::Hard).contains(&"raumgrenze"),
         "{:?}",
         r.hard
     );
@@ -127,7 +127,7 @@ fn ein_moebel_ausserhalb_des_raums_ist_kein_knapper_fall() {
 /// Drehung tauscht Breite und Tiefe — sonst nichts. D und E stellen dasselbe Bett an fast
 /// dieselbe Stelle; D ragt heraus, E passt, und `rot = 90` ist der ganze Unterschied.
 #[test]
-fn eine_drehung_um_90_grad_tauscht_breite_und_tiefe() {
+fn a_rotation_by_90_degrees_swaps_width_and_depth() {
     let m = model();
     let mut it = PlacedItem {
         reference: "bett".into(),
@@ -147,7 +147,7 @@ fn eine_drehung_um_90_grad_tauscht_breite_und_tiefe() {
     assert!(
         r.pass,
         "quer passt das Bett: {:?}",
-        rules(&r, Severity::Hart)
+        rules(&r, Severity::Hard)
     );
 }
 
@@ -156,10 +156,10 @@ fn eine_drehung_um_90_grad_tauscht_breite_und_tiefe() {
 /// `Room::area_m2` behauptet, die Flaeche aus dem Polygon zu rechnen statt sie zu lesen.
 /// `room.toml` fuehrt deshalb absichtlich 99,0 — wer die Datei liest, faellt hier auf.
 #[test]
-fn die_flaeche_kommt_aus_dem_polygon_und_nicht_aus_der_datei() {
+fn the_area_comes_from_the_polygon_not_the_file() {
     let m = model();
     assert_eq!(
-        m.room.hauptraum.flaeche_m2, 99.0,
+        m.room.main_room.flaeche_m2, 99.0,
         "die Falle muss in der Datei stehen"
     );
     assert!(
@@ -173,16 +173,16 @@ fn die_flaeche_kommt_aus_dem_polygon_und_nicht_aus_der_datei() {
 /// `kuechenfenster` ist eine Oeffnung und trotzdem kein Wegpunkt — sonst misst der Pruefer den
 /// Weg zu etwas, durch das niemand geht.
 #[test]
-fn routen_laufen_zu_tueren_und_nicht_zu_fenstern() {
+fn routes_run_to_doors_not_windows() {
     let r = check("a-frei");
-    let paare: Vec<(&str, &str)> = r
+    let pairs: Vec<(&str, &str)> = r
         .metrics
         .corridors
         .iter()
         .map(|c| (c.from.as_str(), c.to.as_str()))
         .collect();
     assert_eq!(
-        paare,
+        pairs,
         [
             ("eingangstuer", "terrassentuer"),
             ("eingangstuer", "kuechenzeile"),
@@ -200,14 +200,14 @@ fn routen_laufen_zu_tueren_und_nicht_zu_fenstern() {
 /// Ein Moebel, das den Weg verengt, verengt die gemessene Zahl. Ohne diese Kopplung waere die
 /// Wegsuche eine Konstante mit Nachkommastellen.
 #[test]
-fn ein_hindernis_verengt_die_route_die_es_verstellt() {
+fn an_obstacle_narrows_the_route_it_blocks() {
     let frei = check("a-frei");
-    let versperrt = check("c-terrassentuer");
+    let blocked = check("c-terrassentuer");
     let w = |r: &CheckResult| r.metrics.corridors[0].width_cm.unwrap();
     assert!(
-        w(&versperrt) < w(&frei),
+        w(&blocked) < w(&frei),
         "Schrank vor der Tuer: {} cm, ohne ihn {} cm",
-        w(&versperrt),
+        w(&blocked),
         w(&frei)
     );
 }
@@ -216,11 +216,11 @@ fn ein_hindernis_verengt_die_route_die_es_verstellt() {
 /// existiert. Sie muss bis in den Bericht durchschlagen — und nur dort auftauchen, wo das
 /// geschaetzte Stueck wirklich steht.
 #[test]
-fn ungemessene_masse_wandern_in_den_bericht_des_layouts_das_sie_benutzt() {
-    let mit = check("e-gedreht");
-    assert_eq!(mit.uncertainties.len(), 1);
-    assert_eq!(mit.uncertainties[0].reference, "sideboard");
-    assert_eq!(mit.uncertainties[0].fields, ["b", "t"]);
+fn unmeasured_sizes_go_into_the_report_of_the_layout_using_them() {
+    let with = check("e-gedreht");
+    assert_eq!(with.uncertainties.len(), 1);
+    assert_eq!(with.uncertainties[0].reference, "sideboard");
+    assert_eq!(with.uncertainties[0].fields, ["b", "t"]);
     assert!(check("a-frei").uncertainties.is_empty());
 }
 
@@ -231,7 +231,7 @@ fn ungemessene_masse_wandern_in_den_bericht_des_layouts_das_sie_benutzt() {
 /// Vorher war es eine: eine `group` von `owned` / `slot` / `produkt`, die Besitz und Bauart
 /// in ein Wort presste, sodass "ein Produkt, das ich schon habe" nicht sagbar war.
 #[test]
-fn kind_und_zustand_sind_zwei_tatsachen_und_nicht_eine() {
+fn kind_and_state_are_two_facts_not_one() {
     use interior::store::{Kind, State};
     let m = model();
     // 12 seit 2026-08-31: `trenner_erklaert` und `trenner_stumm` kamen mit B31 dazu, zwei
@@ -279,17 +279,17 @@ fn kind_und_zustand_sind_zwei_tatsachen_und_nicht_eine() {
 /// Preise wandern in Cent, weil `finance` in Cent rechnet. 49,99 EUR sind 4999 Cent und nicht
 /// 4998 — `as i64` allein liefert genau das, und der Fehler ist ein Cent je Position.
 #[test]
-fn ein_preis_wird_gerundet_und_nicht_abgeschnitten() {
+fn a_price_is_rounded_not_truncated() {
     let m = model();
-    let lampe = m.catalogue.get("stehlampe").expect("die Stehleuchte");
-    assert_eq!(lampe.preis_cent, Some(8900));
+    let lamp = m.catalogue.get("stehlampe").expect("die Stehleuchte");
+    assert_eq!(lamp.price_cents, Some(8900));
 }
 
 /// Der Fehler, der die Namensheuristik zum Abschuss freigegeben hat (PRD Q61): `^couch` fing
 /// `couchtisch`, und ein Couchtisch wurde gegen die Regeln eines Sofas geprueft. Gefunden wurde
 /// er erst, als ein echter Esstisch dazukam. Solange die Heuristik lebt, gehoert sie geprueft.
 #[test]
-fn ein_couchtisch_ist_kein_sofa() {
+fn a_coffee_table_is_no_sofa() {
     let k = |r: &str| {
         kind_of(&PlacedItem {
             reference: r.into(),
@@ -323,7 +323,7 @@ fn ein_couchtisch_ist_kein_sofa() {
 /// Jede Schwelle wird ueber ihren Namen aus `rules.toml` gelesen — die, die der Wohnung
 /// gehoeren. Ein unbekannter Name ist ein Fehler und kein Standardwert.
 #[test]
-fn die_schwellen_der_wohnung_kommen_aus_ihrer_datei() {
+fn the_flat_thresholds_come_from_its_file() {
     let m = model();
     assert_eq!(m.rules.abstand("vor_kuechenzeile").unwrap(), 100);
     assert_eq!(m.rules.abstand("bett_zugang_zweite_seite").unwrap(), 40);
@@ -333,7 +333,7 @@ fn die_schwellen_der_wohnung_kommen_aus_ihrer_datei() {
     );
 
     // Und sie schlaegt bis in die Meldung durch.
-    let r = check_in(FLAT_NORD, "b-vor-der-kueche");
+    let r = check_in(FLAT_NORTH, "b-vor-der-kueche");
     let v = r.hard.iter().find(|v| v.rule == "R7").expect("R7");
     assert_eq!(v.required, Some(100));
 }
@@ -347,12 +347,12 @@ fn die_schwellen_der_wohnung_kommen_aus_ihrer_datei() {
 /// Die Namensfassung konnte das nicht sehen. Sie nahm die BESTE von vier Seiten, also war ein
 /// Schrank mit dem Ruecken zum Raum genauso richtig wie einer mit den Tueren zum Raum.
 #[test]
-fn ein_stueck_das_seinen_platz_erklaert_wird_nicht_mehr_am_namen_gemessen() {
+fn a_piece_that_declares_its_space_is_no_longer_judged_by_name() {
     assert!(check("a-frei").pass);
 
-    let gedreht = check("f-schrank-zur-wand");
-    assert!(!gedreht.pass);
-    let v = gedreht
+    let rotated = check("f-schrank-zur-wand");
+    assert!(!rotated.pass);
+    let v = rotated
         .hard
         .iter()
         .find(|v| v.rule == "oeffnen")
@@ -369,14 +369,14 @@ fn ein_stueck_das_seinen_platz_erklaert_wird_nicht_mehr_am_namen_gemessen() {
 /// umzustellen waere ein Stichtag, an dem sich Verdikte aendern, ohne dass jemand die Zahlen
 /// dahinter geprueft hat. `sideboard` erklaert nichts und wird weiter am Namen gemessen.
 #[test]
-fn wer_nichts_erklaert_wird_weiter_am_namen_gemessen() {
+fn who_declares_nothing_is_still_judged_by_name() {
     let m = model();
-    let erklaert = m.catalogue.get("kleiderschrank").unwrap();
-    let stumm = m.catalogue.get("sideboard").unwrap();
-    assert_eq!(erklaert.open_clear, Some(65));
-    assert_eq!(erklaert.opens, Some(interior::model::Seite::Sued));
+    let declared = m.catalogue.get("kleiderschrank").unwrap();
+    let quiet = m.catalogue.get("sideboard").unwrap();
+    assert_eq!(declared.open_clear, Some(65));
+    assert_eq!(declared.opens, Some(interior::model::Side::South));
     assert_eq!(
-        (stumm.open_clear, stumm.access_sides, stumm.expands_to),
+        (quiet.open_clear, quiet.access_sides, quiet.expands_to),
         (None, None, None)
     );
 
@@ -385,20 +385,20 @@ fn wer_nichts_erklaert_wird_weiter_am_namen_gemessen() {
     assert!(check("e-gedreht").pass);
 }
 
-/// Eine Drehung dreht die erklaerte Seite mit. Im Uhrzeigersinn, weil y nach Sueden waechst
+/// Eine Drehung dreht die erklaerte Side mit. Im Uhrzeigersinn, weil y nach Sueden waechst
 /// und das auf dem Plan die Richtung ist, in die ein Zeiger laeuft.
 #[test]
-fn eine_drehung_dreht_die_erklaerte_seite_mit() {
-    use interior::model::Seite;
-    assert_eq!(Seite::Sued.gedreht(0), Seite::Sued);
-    assert_eq!(Seite::Sued.gedreht(90), Seite::West);
-    assert_eq!(Seite::Sued.gedreht(180), Seite::Nord);
-    assert_eq!(Seite::Sued.gedreht(270), Seite::Ost);
-    assert_eq!(Seite::Nord.gedreht(360), Seite::Nord);
-    assert_eq!(Seite::Ost.gedreht(-90), Seite::Nord);
+fn a_rotation_rotates_the_declared_side() {
+    use interior::model::Side;
+    assert_eq!(Side::South.rotated(0), Side::South);
+    assert_eq!(Side::South.rotated(90), Side::West);
+    assert_eq!(Side::South.rotated(180), Side::North);
+    assert_eq!(Side::South.rotated(270), Side::East);
+    assert_eq!(Side::North.rotated(360), Side::North);
+    assert_eq!(Side::East.rotated(-90), Side::North);
     // Keine Vielfachen von 90: `footprint` tauscht die Grundflaeche auch nur nahe 90 Grad, und
     // zwei verschiedene Rundungen fuer dieselbe Drehung waeren ein Fehler, den niemand sucht.
-    assert_eq!(Seite::Sued.gedreht(45), Seite::Sued);
+    assert_eq!(Side::South.rotated(45), Side::South);
 }
 
 // ---------------------------------------------------------------- die Wege
@@ -406,36 +406,36 @@ fn eine_drehung_dreht_die_erklaerte_seite_mit() {
 /// **Der Fund, der B26a ausgeloest hat.** Bis 2026-08-30 rechnete `clearance.rs` die Anlaufzone
 /// der Kueche als Rechteck OBERHALB des Einbaus und fand den Einbau ueber den Namen
 /// `kuechenzeile`. Beides stimmte fuer genau eine Wohnung. Diese beiden Musterwohnungen
-/// unterscheiden sich in nichts als der Seite, die ihre `room.toml` nennt.
+/// unterscheiden sich in nichts als der Side, die ihre `room.toml` nennt.
 #[test]
-fn eine_anlaufzone_liegt_auf_der_seite_die_die_wohnung_nennt() {
-    let nord = check_in(FLAT_NORD, "b-vor-der-kueche");
-    let treffer: Vec<&str> = nord.hard.iter().map(|v| v.rule.as_str()).collect();
+fn an_approach_zone_is_on_the_side_the_flat_names() {
+    let north = check_in(FLAT_NORTH, "b-vor-der-kueche");
+    let hits: Vec<&str> = north.hard.iter().map(|v| v.rule.as_str()).collect();
     assert_eq!(
-        treffer,
+        hits,
         ["R7"],
         "erwartet genau R7, bekommen {:?}",
-        nord.hard
+        north.hard
     );
-    assert_eq!(nord.hard[0].required, Some(100));
+    assert_eq!(north.hard[0].required, Some(100));
     assert!(
-        nord.hard[0].message.contains("kuechenzeile"),
+        north.hard[0].message.contains("kuechenzeile"),
         "die Meldung nennt den Einbau, nicht eine Kategorie: {}",
-        nord.hard[0].message
+        north.hard[0].message
     );
 
     // Dieselbe Wohnung ohne den Tisch davor: kein Verstoss, also ist es die Position und nicht
     // die blosse Anwesenheit einer Kueche.
-    assert!(check_in(FLAT_NORD, "a-frei").pass);
+    assert!(check_in(FLAT_NORTH, "a-frei").pass);
 }
 
 /// Ein Wegpunkt, den es nicht gibt, ist ein Fehler. Die Stelle hat bis 2026-08-30 still
 /// weitergemacht: ein Tippfehler kostete eine Route, und der Bericht sah danach aus wie einer
 /// ueber eine Wohnung mit weniger Wegen.
 #[test]
-fn eine_route_zu_einem_unbekannten_wegpunkt_ist_ein_fehler() {
+fn a_route_to_an_unknown_waypoint_is_an_error() {
     let mut m = model();
-    m.room.routen.push(Route {
+    m.room.routes.push(Route {
         von: "eingangstuer".into(),
         nach: "kellerabgang".into(),
     });
@@ -451,10 +451,10 @@ fn eine_route_zu_einem_unbekannten_wegpunkt_ist_ein_fehler() {
 /// Wegpunkt und Anlaufzone sind dieselbe Deklaration. Ein fester Einbau ohne sie belegt
 /// Flaeche und sonst nichts — er verlangt keinen freien Platz und taugt nicht als Ziel.
 #[test]
-fn ein_fester_einbau_ohne_anlaufzone_ist_kein_ziel() {
+fn a_fixture_without_an_approach_zone_is_no_target() {
     let mut m = model();
-    for f in m.room.fix_moebel.iter_mut() {
-        f.anlaufzone = None;
+    for f in m.room.fixed_furniture.iter_mut() {
+        f.approach_zone = None;
     }
     let l = m.load_layout("a-frei").unwrap();
     let err = check_layout(&m, &l).expect_err("die Route zur Kueche hat kein Ziel mehr");
@@ -464,9 +464,9 @@ fn ein_fester_einbau_ohne_anlaufzone_ist_kein_ziel() {
 /// Leer heisst keiner, und das ist eine Aussage. Ein stiller Standard waere hier der Weg, auf
 /// dem eine Wohnung besteht, weil niemand nachgesehen hat, ob jemand hindurchkommt.
 #[test]
-fn eine_wohnung_ohne_erklaerte_wege_bekommt_keine_gemessen() {
+fn a_flat_without_declared_routes_gets_none_measured() {
     let mut m = model();
-    m.room.routen.clear();
+    m.room.routes.clear();
     let l = m.load_layout("a-frei").unwrap();
     let r = check_layout(&m, &l).expect("kein Weg ist kein Fehler");
     assert!(r.metrics.corridors.is_empty());
@@ -480,14 +480,14 @@ fn eine_wohnung_ohne_erklaerte_wege_bekommt_keine_gemessen() {
 /// Raum zum Vergleich stellt, waere ein stiller Standard genau der Weg, auf dem ein Plan der
 /// falschen Wohnung als der richtige durchgeht.
 #[test]
-fn mehrere_wohnungen_ohne_wahl_sind_ein_fehler() {
+fn several_flats_without_a_choice_are_an_error() {
     fixture_overlay();
     let alle = flats().expect("flats/ ist lesbar");
-    assert_eq!(alle, [FLAT, FLAT_NORD]);
+    assert_eq!(alle, [FLAT, FLAT_NORTH]);
 
     let err = default_flat().expect_err("zwei Wohnungen, keine gewaehlt");
     let text = err.to_string();
-    assert!(text.contains(FLAT) && text.contains(FLAT_NORD), "{text}");
+    assert!(text.contains(FLAT) && text.contains(FLAT_NORTH), "{text}");
     assert!(
         text.contains("SJEL_INTERIOR_FLAT"),
         "nennt den Ausweg: {text}"
@@ -503,19 +503,19 @@ fn mehrere_wohnungen_ohne_wahl_sind_ein_fehler() {
 /// dasselbe Wort. Geprueft wird die Eigenschaft, nicht der Wert — ein aufgeschriebener
 /// Zentimeterstand waere ein Protokoll dessen, was der Code tut, und kein Anspruch an ihn.
 #[test]
-fn ein_bestandenes_layout_sagt_um_wie_viel_es_besteht() {
+fn a_passing_layout_says_by_how_much_it_passes() {
     let r = check("a-frei");
     assert!(r.pass);
     assert!(
-        !r.reserven.is_empty(),
+        !r.reserves.is_empty(),
         "keine einzige Messung festgehalten — dann misst der Pruefer nichts, was er nennt"
     );
-    let engste = r
-        .engste_reserve_cm
+    let tightest = r
+        .tightest_reserve_cm
         .expect("ein bestehendes Layout hat eine knappste harte Messung");
     assert!(
-        engste >= 0,
-        "bestanden, aber die knappste harte Reserve ist {engste} cm"
+        tightest >= 0,
+        "bestanden, aber die knappste harte Reserve ist {tightest} cm"
     );
 }
 
@@ -525,11 +525,11 @@ fn ein_bestandenes_layout_sagt_um_wie_viel_es_besteht() {
 /// zugehoerige Reserve muss die Eindringtiefe tragen, sonst ist sie eine Zahl, die nur im
 /// guten Fall stimmt.
 #[test]
-fn ein_harter_verstoss_macht_seine_reserve_negativ() {
+fn a_hard_violation_makes_its_reserve_negative() {
     let r = check("c-terrassentuer");
     assert!(!r.pass);
     let r1 = r
-        .reserven
+        .reserves
         .iter()
         .find(|x| x.rule == "R1")
         .expect("R1 wird gemessen, ob sie greift oder nicht");
@@ -539,7 +539,7 @@ fn ein_harter_verstoss_macht_seine_reserve_negativ() {
         r1.slack
     );
     assert!(
-        r.engste_reserve_cm.is_some_and(|c| c < 0),
+        r.tightest_reserve_cm.is_some_and(|c| c < 0),
         "die knappste Reserve eines durchgefallenen Layouts kann nicht positiv sein"
     );
 }
@@ -551,11 +551,11 @@ fn ein_harter_verstoss_macht_seine_reserve_negativ() {
 /// diesen Test koennte die Reserve still ihre eigene Geometrie entwickeln, und genau das ist
 /// der Fehler, gegen den diese Capability existiert.
 #[test]
-fn keine_harte_reserve_widerspricht_ihrem_verdikt() {
+fn no_hard_reserve_contradicts_its_verdict() {
     let m = model();
     for name in m.layout_names().unwrap() {
         let r = check(&name);
-        for res in r.reserven.iter().filter(|x| x.hart && x.slack < 0) {
+        for res in r.reserves.iter().filter(|x| x.hart && x.slack < 0) {
             assert!(
                 r.hard.iter().any(|v| v.rule == res.rule),
                 "{name}: Reserve {} meldet {} cm zu wenig, aber kein harter Verstoss nennt sie",
@@ -569,25 +569,25 @@ fn keine_harte_reserve_widerspricht_ihrem_verdikt() {
 /// Wo die Messung ihren Horizont erreicht, sagt sie das, statt eine Schranke als Messwert
 /// auszugeben.
 ///
-/// In einem 600 x 450 cm grossen Raum mit drei Stuecken hat mindestens eine Seite mehr Luft,
+/// In einem 600 x 450 cm grossen Raum mit drei Stuecken hat mindestens eine Side mehr Luft,
 /// als `RESERVE_HORIZONT` weit gezaehlt wird. Ohne `gedeckelt` stuende dort eine exakte Zahl,
 /// die keine ist.
 #[test]
-fn eine_gedeckelte_messung_gibt_sich_als_untere_schranke_zu_erkennen() {
+fn a_capped_measurement_shows_itself_as_a_lower_bound() {
     let r = check("a-frei");
-    let gedeckelt: Vec<&str> = r
-        .reserven
+    let capped: Vec<&str> = r
+        .reserves
         .iter()
-        .filter(|x| x.gedeckelt)
+        .filter(|x| x.capped)
         .map(|x| x.rule.as_str())
         .collect();
     assert!(
-        !gedeckelt.is_empty(),
+        !capped.is_empty(),
         "in diesem Raum muss mindestens eine Seitentiefe an den Horizont stossen"
     );
-    for res in r.reserven.iter().filter(|x| x.gedeckelt) {
+    for res in r.reserves.iter().filter(|x| x.capped) {
         assert!(
-            res.slack >= interior::geometry::RESERVE_HORIZONT,
+            res.slack >= interior::geometry::RESERVE_HORIZON,
             "{} ist als gedeckelt gemeldet, liegt aber unter dem Horizont",
             res.rule
         );
@@ -606,20 +606,20 @@ fn eine_gedeckelte_messung_gibt_sich_als_untere_schranke_zu_erkennen() {
 /// beide koennen reissen, ohne dass ein Zentimeter negativ wird — deshalb ist die Aussage eine
 /// Oder-Aussage und keine Aufweichung.
 #[test]
-fn ein_durchgefallenes_layout_hat_keine_positive_knappste_reserve() {
+fn a_failing_layout_has_no_positive_tightest_reserve() {
     let m = model();
     for name in m.layout_names().unwrap() {
         let r = check(&name);
         if r.pass {
             continue;
         }
-        let in_cm = r.engste_reserve_cm.is_some_and(|c| c < 0);
-        let anders = r
-            .reserven
+        let in_cm = r.tightest_reserve_cm.is_some_and(|c| c < 0);
+        let other = r
+            .reserves
             .iter()
-            .any(|x| x.hart && x.einheit != "cm" && x.slack < 0);
+            .any(|x| x.hart && x.unit != "cm" && x.slack < 0);
         assert!(
-            in_cm || anders,
+            in_cm || other,
             "{name} faellt durch, aber keine harte Reserve ist negativ: {:?}",
             r.hard.iter().map(|v| &v.rule).collect::<Vec<_>>()
         );
@@ -628,11 +628,11 @@ fn ein_durchgefallenes_layout_hat_keine_positive_knappste_reserve() {
 
 /// Ein Stueck, das aus dem Raum ragt, meldet die Tiefe seines Ueberstands.
 #[test]
-fn die_raumgrenze_misst_wie_weit_ein_stueck_heraussteht() {
+fn the_room_boundary_measures_how_far_a_piece_sticks_out() {
     let r = check("d-ausserhalb");
     assert!(!r.pass);
     let g = r
-        .reserven
+        .reserves
         .iter()
         .find(|x| x.rule == "raumgrenze")
         .expect("die Raumgrenze wird gemessen");
@@ -654,11 +654,11 @@ fn die_raumgrenze_misst_wie_weit_ein_stueck_heraussteht() {
 /// Ein NEGATIVER Wert zaehlt weiter — herausragen ist ein Verstoss. Das prueft der Test
 /// darueber.
 #[test]
-fn eine_wand_im_ruecken_zieht_die_knappste_reserve_nicht_herunter() {
+fn a_wall_behind_does_not_lower_the_tightest_reserve() {
     let r = check("k-vitrine");
     assert!(r.pass);
     let g = r
-        .reserven
+        .reserves
         .iter()
         .find(|x| x.rule == "raumgrenze")
         .expect("die Raumgrenze wird gemessen");
@@ -666,10 +666,10 @@ fn eine_wand_im_ruecken_zieht_die_knappste_reserve_nicht_herunter() {
         g.slack, 1,
         "buendig an der Wand, also ein Zentimeter Einzug"
     );
-    assert!(!g.bindend, "eine Wand im Ruecken ist kein knapper Platz");
+    assert!(!g.binding, "eine Wand im Ruecken ist kein knapper Platz");
     assert!(
-        r.engste_reserve_cm.is_some_and(|c| c > 1),
+        r.tightest_reserve_cm.is_some_and(|c| c > 1),
         "die knappste Reserve darf nicht die Wand sein: {:?}",
-        r.engste_reserve_cm
+        r.tightest_reserve_cm
     );
 }

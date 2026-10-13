@@ -1,104 +1,160 @@
-//! Das Inventar als Zeilen, in der einen geteilten SQLite-Datei.
+//! The inventory as rows in the one shared SQLite file.
 //!
-//! PRD Q58 (2026-08-30): **eine Item-Tabelle, zwei Konsumenten.** Ein Zelt und ein
-//! Kleiderschrank sind dieselbe Zeilenform — ein Ding mit Massen, einem Preis, einer Herkunft
-//! und einem Zustand. Was sich unterscheidet, ist die Platzierung, und die ist eine zweite
-//! Tabelle, keine zweite Kopie. Der Tabellenname `interior_item` ist deshalb heute schon
-//! falsch und die Tabelle richtig: wenn Ausruestung dazukommt, wird umbenannt, nicht geforkt.
-//!
-//! ## Was hier liegt und was nicht
-//!
-//! Q60 zieht die Grenze bei *hat die Zahl eine Begruendung, die mitwandern muss*. Ein Moebel
-//! ist eine Zeile: Masse, Preis, welche Seite sich oeffnet. Ein Raum ist keine —
-//! `room.toml` traegt datierte Korrekturkommentare, und drei davon sind das Protokoll eines
-//! Bugs, der einen falschen Plan erzeugt hat. Dafuer hat eine Tabelle keine Spalte.
-//!
-//! Geometrie bleibt also Datei. Das Inventar wird Zeile.
-//!
-//! ## Drei Tabellen, und warum der Zustand eine eigene ist
-//!
-//! Ein Wunsch, der gekauft wird, und ein Moebel, das weggegeben wird, sind **zwei Zeilen und
-//! nicht eine ueberschriebene**. Ein `state`-Feld auf dem Item wuerde beim ersten Kauf
-//! vergessen, wann etwas ein Wunsch war — und genau diese Spanne ist das, was die Wunschliste
-//! spaeter mit `finance` verbindet.
+//! State is its own table: a wish that gets bought is a second row, not an overwritten field, and
+//! that span is what joins the wishlist to finance.
 
 use rusqlite::{params, Connection, OptionalExtension};
 use serde::{Deserialize, Serialize};
 use std::collections::BTreeMap;
 use std::path::Path;
 
-/// Die Seite eines Stuecks, in der Ausrichtung des Stuecks selbst.
-///
-/// Sie stand bis 2026-10-05 in `interior::model`. Sie steht hier, weil `opens` und
-/// `expands_dir` Spalten dieser Tabelle sind: ein Feld, das ein Ding beschreibt, hat nichts in
-/// einem Modul zu suchen, das einen Raum beschreibt. `interior` behaelt seine eigene Fassung
-/// fuer den Plan — was die beiden verbindet, ist der **Text** in der Spalte (`"nord"`), und
-/// das ist der Vertrag.
+/// A side of a piece, in the piece's own orientation. `interior` reads the same text from the
+/// column, so the stored word is the contract.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Deserialize, Serialize)]
 #[serde(rename_all = "lowercase")]
-pub enum Seite {
-    Nord,
-    Sued,
-    Ost,
+pub enum Side {
+    #[serde(alias = "nord")]
+    North,
+    #[serde(alias = "sued")]
+    South,
+    #[serde(alias = "ost")]
+    East,
     West,
 }
 
-impl Seite {
+impl Side {
     pub fn as_str(self) -> &'static str {
         match self {
-            Seite::Nord => "nord",
-            Seite::Sued => "sued",
-            Seite::Ost => "ost",
-            Seite::West => "west",
+            Side::North => "north",
+            Side::South => "south",
+            Side::East => "east",
+            Side::West => "west",
         }
     }
 
-    pub fn parse(s: &str) -> Option<Seite> {
+    pub fn parse(s: &str) -> Option<Side> {
         match s {
-            "nord" => Some(Seite::Nord),
-            "sued" => Some(Seite::Sued),
-            "ost" => Some(Seite::Ost),
-            "west" => Some(Seite::West),
+            "north" | "nord" => Some(Side::North),
+            "south" | "sued" => Some(Side::South),
+            "east" | "ost" => Some(Side::East),
+            "west" => Some(Side::West),
             _ => None,
         }
     }
+
+    /// The same side after the piece is rotated clockwise by `rot` degrees (y grows south).
+    /// Only multiples of 90 move it, matching `footprint`, which swaps sizes only near 90°.
+    pub fn rotated(self, rot: i32) -> Side {
+        const CLOCKWISE: [Side; 4] = [Side::North, Side::East, Side::South, Side::West];
+        if rot.rem_euclid(90) != 0 {
+            return self;
+        }
+        let steps = (rot.rem_euclid(360) / 90) as usize;
+        let i = CLOCKWISE.iter().position(|s| *s == self).unwrap_or(0);
+        CLOCKWISE[(i + steps) % 4]
+    }
 }
 
-/// Jede Spalte von `{prefix}_item`, in der Reihenfolge, in der `widen_kind_check` sie neu
-/// anlegt. Ausgeschrieben, damit ein spaeteres Feld beim Umbau auffaellt: `SELECT *` haette
-/// die Zeilen still in die falschen Spalten kopiert, sobald sich eine Reihenfolge aendert.
+/// Field and column names of the German schema, and their English names. One table for both,
+/// because a column and its JSON field share a name. Old databases are renamed in place, and old
+/// clients (a phone with a queued edit, an overlay TOML file) are still understood.
+pub const LEGACY_FIELDS: [(&str, &str); 33] = [
+    ("b", "width"),
+    ("t", "depth"),
+    ("h", "height"),
+    ("h_min", "height_min"),
+    ("b_aufgeklappt", "width_unfolded"),
+    ("t_ausgeklappt", "depth_unfolded"),
+    ("laenge", "length"),
+    ("anzahl", "count"),
+    ("zustaende", "fold_states"),
+    ("unsicher", "estimated"),
+    ("platzbedarf_zone", "clearance_zone"),
+    ("platzbedarf_block", "clearance_block"),
+    ("preis_cent", "price_cents"),
+    ("kosten_min_cent", "cost_min_cents"),
+    ("kosten_max_cent", "cost_max_cents"),
+    ("artikelnummer", "sku"),
+    ("quelle", "source"),
+    ("gemessen_am", "measured_at"),
+    ("mitnahme", "on_move"),
+    ("prioritaet", "priority"),
+    ("basiert_auf", "based_on"),
+    ("ersetzt", "replaces"),
+    ("varianten", "variants"),
+    ("ziel", "target"),
+    ("hinweis", "notes"),
+    ("begruendung", "reason"),
+    ("entscheidung_offen", "open_question"),
+    ("raumtrenner", "room_divider"),
+    ("zerlegbar", "disassembles"),
+    ("bild", "image"),
+    ("groesse", "size"),
+    ("farbe", "color"),
+    ("saison", "seasons"),
+];
+
+/// Stored words of the German vocabulary and their English replacements, per column.
+const LEGACY_VALUES: [(&str, &str, &str); 15] = [
+    ("opens", "nord", "north"),
+    ("opens", "sued", "south"),
+    ("opens", "ost", "east"),
+    ("expands_dir", "nord", "north"),
+    ("expands_dir", "sued", "south"),
+    ("expands_dir", "ost", "east"),
+    ("priority", "gesetzt", "decided"),
+    ("priority", "pflicht", "required"),
+    ("priority", "empfehlung", "recommended"),
+    ("priority", "kandidat", "candidate"),
+    ("priority", "konzept", "concept"),
+    ("priority", "zurueckgestellt", "deferred"),
+    ("priority", "verworfen", "rejected"),
+    ("priority", "ersetzt", "replaced"),
+    ("on_move", "offen", "undecided"),
+];
+
+/// The English word for a legacy priority or on-move word; anything else is returned unchanged.
+pub fn english_value(column: &str, value: &str) -> String {
+    LEGACY_VALUES
+        .iter()
+        .find(|(c, old, _)| *c == column && *old == value)
+        .map_or_else(|| value.to_string(), |(_, _, new)| (*new).to_string())
+}
+
+/// Every column of `{prefix}_item`, in the order `widen_kind_check` recreates them. Spelled out so
+/// a copy cannot silently shift values into the wrong column.
 const ITEM_COLUMNS: [&str; 54] = [
     "id",
     "kind",
     "label",
-    "b",
-    "t",
-    "h",
-    "h_min",
-    "b_aufgeklappt",
-    "t_ausgeklappt",
-    "laenge",
-    "anzahl",
-    "zustaende",
-    "unsicher",
-    "platzbedarf_zone",
-    "platzbedarf_block",
-    "preis_cent",
-    "kosten_min_cent",
-    "kosten_max_cent",
+    "width",
+    "depth",
+    "height",
+    "height_min",
+    "width_unfolded",
+    "depth_unfolded",
+    "length",
+    "count",
+    "fold_states",
+    "estimated",
+    "clearance_zone",
+    "clearance_block",
+    "price_cents",
+    "cost_min_cents",
+    "cost_max_cents",
     "link",
-    "artikelnummer",
-    "quelle",
-    "gemessen_am",
-    "mitnahme",
-    "prioritaet",
-    "basiert_auf",
-    "ersetzt",
-    "varianten",
-    "ziel",
-    "hinweis",
-    "begruendung",
-    "entscheidung_offen",
+    "sku",
+    "source",
+    "measured_at",
+    "on_move",
+    "priority",
+    "based_on",
+    "replaces",
+    "variants",
+    "target",
+    "notes",
+    "reason",
+    "open_question",
     "opens",
     "open_clear",
     "wall_ok",
@@ -106,9 +162,9 @@ const ITEM_COLUMNS: [&str; 54] = [
     "expands_to",
     "access_sides",
     "access_clear",
-    "raumtrenner",
-    "zerlegbar",
-    "bild",
+    "room_divider",
+    "disassembles",
+    "image",
     "weight_g",
     "category",
     "packable",
@@ -116,209 +172,145 @@ const ITEM_COLUMNS: [&str; 54] = [
     "quick_dry",
     "pack_location",
     "trip_types",
-    "groesse",
-    "farbe",
-    "saison",
+    "size",
+    "color",
+    "seasons",
     "traits",
     "created_at",
     "updated_at",
 ];
 
-/// Alles, was ein Ding ausmacht — ob es schon da ist oder erst gewuenscht.
+/// One thing, owned or wanted. Lengths are in cm, money in cents.
 ///
-/// Die Feldnamen folgen den TOML-Dateien, aus denen die Zeilen stammen, statt sie zu
-/// uebersetzen: ein zweites Vokabular fuer dieselbe Sache ist die teure Version dieses Fehlers.
-/// Die vier Listenfelder tragen `#[serde(default)]`, `id`, `kind` und `label` nicht.
-///
-/// Das ist der Vertrag fuer `POST /api/items`: sag, was es ist und wie es heisst, alles andere
-/// ist freiwillig. Ein leeres `zustaende` von einem Formular zu verlangen waere Schikane; ein
-/// Stueck ohne Namen anzulegen waere eine Zeile, die niemand wiederfindet.
-///
-/// Betrifft den Import NICHT — der liest `import::Roh` mit `deny_unknown_fields`, und dort ist
-/// jedes Feld weiterhin genau so streng wie seit B25.
+/// The contract for `POST /api/items`: `id`, `kind` and `label` are required, everything else is
+/// optional.
 #[derive(Debug, Clone, Default, Deserialize, Serialize)]
 pub struct Item {
     pub id: String,
-    /// `piece` = ein Ding (besessen oder ein konkretes Produkt). `slot` = ein BEDARF mit
-    /// Zielmassen und noch ohne Produkt. Der Unterschied ueberlebt den Import, weil er der
-    /// Grund ist, warum eine Wunschliste mehr ist als eine Einkaufsliste.
+    /// `piece` is a thing, `slot` is a need with target sizes and no product yet.
     pub kind: Kind,
     pub label: String,
-    pub b: Option<i32>,
-    pub t: Option<i32>,
-    pub h: Option<i32>,
-    pub h_min: Option<i32>,
-    pub b_aufgeklappt: Option<i32>,
-    pub t_ausgeklappt: Option<i32>,
-    pub laenge: Option<i32>,
-    pub anzahl: Option<i32>,
-    /// Benannte Zustaende eines Klappmoebels, z. B. `["zu", "ausgeklappt"]`.
-    #[serde(default)]
-    pub zustaende: Vec<String>,
-    /// Welche Masse geschaetzt sind. Wandert unveraendert in jeden Pruefbericht.
-    #[serde(default)]
-    pub unsicher: Vec<String>,
-    pub platzbedarf_zone: Option<i32>,
-    pub platzbedarf_block: Option<i32>,
-    /// In Cent, nicht Euro. `finance` rechnet in Cent, und die Wunschliste trifft dort auf ein
-    /// Budget (PRD B29) — zwei Einheiten fuer denselben Betrag ist die Naht, an der das reisst.
-    pub preis_cent: Option<i64>,
-    pub kosten_min_cent: Option<i64>,
-    pub kosten_max_cent: Option<i64>,
+    #[serde(alias = "b")]
+    pub width: Option<i32>,
+    #[serde(alias = "t")]
+    pub depth: Option<i32>,
+    #[serde(alias = "h")]
+    pub height: Option<i32>,
+    #[serde(alias = "h_min")]
+    pub height_min: Option<i32>,
+    #[serde(alias = "b_aufgeklappt")]
+    pub width_unfolded: Option<i32>,
+    #[serde(alias = "t_ausgeklappt")]
+    pub depth_unfolded: Option<i32>,
+    #[serde(alias = "laenge")]
+    pub length: Option<i32>,
+    #[serde(alias = "anzahl")]
+    pub count: Option<i32>,
+    /// Named states of a folding piece, e.g. `["closed", "unfolded"]`.
+    #[serde(default, alias = "zustaende")]
+    pub fold_states: Vec<String>,
+    /// Which dimensions are guesses. Carried into every report that uses them.
+    #[serde(default, alias = "unsicher")]
+    pub estimated: Vec<String>,
+    #[serde(alias = "platzbedarf_zone")]
+    pub clearance_zone: Option<i32>,
+    #[serde(alias = "platzbedarf_block")]
+    pub clearance_block: Option<i32>,
+    #[serde(alias = "preis_cent")]
+    pub price_cents: Option<i64>,
+    #[serde(alias = "kosten_min_cent")]
+    pub cost_min_cents: Option<i64>,
+    #[serde(alias = "kosten_max_cent")]
+    pub cost_max_cents: Option<i64>,
     pub link: Option<String>,
-    pub artikelnummer: Option<String>,
-    pub quelle: Option<String>,
-    pub gemessen_am: Option<String>,
-    /// `bring` / `weg` / … — was beim Umzug mit diesem Stueck passiert.
-    pub mitnahme: Option<String>,
-    /// Dringlichkeit eines Bedarfs: `pflicht`, `empfehlung`, `konzept`, `ersetzt`.
-    pub prioritaet: Option<String>,
-    /// Ein Slot, der aus einem anderen Eintrag hervorgeht.
-    pub basiert_auf: Option<String>,
-    /// Welche Eintraege dieses Produkt ueberfluessig macht. Eine Beziehung, als Liste
-    /// gehalten und nicht als Tabelle, weil sie hoechstens zwei Eintraege lang ist und
-    /// nichts darauf joint. Sobald B29 die Wunschliste auf das Budget trifft und daraus ein
-    /// Join wird, wird es eine Tabelle.
-    #[serde(default)]
-    pub ersetzt: Vec<String>,
-    #[serde(default)]
-    pub varianten: Vec<String>,
-    pub ziel: Option<String>,
-    pub hinweis: Option<String>,
-    pub begruendung: Option<String>,
-    pub entscheidung_offen: Option<String>,
+    #[serde(alias = "artikelnummer")]
+    pub sku: Option<String>,
+    /// Where the measurements came from.
+    #[serde(alias = "quelle")]
+    pub source: Option<String>,
+    #[serde(alias = "gemessen_am")]
+    pub measured_at: Option<String>,
+    /// What happens to the piece on a move: `bring`, `leave`, `undecided`.
+    #[serde(alias = "mitnahme")]
+    pub on_move: Option<String>,
+    /// Urgency of a need: `decided`, `required`, `recommended`, `candidate`, `concept`,
+    /// `deferred`, `rejected`, `replaced`.
+    #[serde(alias = "prioritaet")]
+    pub priority: Option<String>,
+    /// A slot derived from another entry.
+    #[serde(alias = "basiert_auf")]
+    pub based_on: Option<String>,
+    /// Entries this product makes redundant.
+    #[serde(default, alias = "ersetzt")]
+    pub replaces: Vec<String>,
+    #[serde(default, alias = "varianten")]
+    pub variants: Vec<String>,
+    #[serde(alias = "ziel")]
+    pub target: Option<String>,
+    #[serde(alias = "hinweis")]
+    pub notes: Option<String>,
+    #[serde(alias = "begruendung")]
+    pub reason: Option<String>,
+    #[serde(alias = "entscheidung_offen")]
+    pub open_question: Option<String>,
 
-    // --- Was dieses Stueck an Platz verlangt (PRD Q61 / B26) ---
-    //
-    // Bis 2026-08-31 riet die Pruefung aus dem Namen: `bett*` war ein Bett, `schrank*` ein
-    // Schrank, und mit der Vermutung kam jede Schwelle mit. Das ist einmal teuer danebengegangen
-    // — `^couch` fing `couchtisch`, also wurde ein Couchtisch gegen die Regeln eines Sofas
-    // geprueft, und gefunden wurde es erst, als ein echter Esstisch dazukam.
-    //
-    // Diese Felder sind der Ersatz. Sie stehen am STUECK, nicht an der Wohnung: `open_clear`
-    // ist am eigenen Schrank gemessen und schlaegt die Faustregel, und wie viele Seiten ein
-    // Bett braucht, ist eine Aussage ueber die Nutzung. Ein Feld, das ein Ding beschreibt, das
-    // mir gehoert, hat nichts in einer Datei zu suchen, die eine Wohnung beschreibt, die ich
-    // miete.
-    //
-    // Alle optional, und leer heisst: der Name entscheidet weiter. Ein Umschalten am selben Tag
-    // fuer alle 42 Zeilen waere ein Stichtag, an dem sich Verdikte aendern, ohne dass jemand
-    // die Zahlen dahinter geprueft hat.
-    /// Welche Seite Tueren oder Schubladen braucht, in der Ausrichtung des Stuecks selbst.
-    pub opens: Option<Seite>,
-    /// Wie viel davor frei bleiben muss, in cm. Ohne `opens` gilt es fuer die beste Seite.
+    // What the piece needs around it. All optional: an empty field leaves the name heuristic in
+    // charge, so no verdict changes before someone checked the numbers.
+    /// The side that needs doors or drawers opened.
+    pub opens: Option<Side>,
+    /// Clearance in front of that side, in cm. Without `opens` it applies to the best side.
     pub open_clear: Option<i32>,
-    /// Darf die sich oeffnende Seite an einer Wand liegen. `false` heisst: dort ist sie nutzlos.
+    /// Whether the opening side may face a wall.
     pub wall_ok: Option<bool>,
-    /// Zweiter Zustand: Schlafsofa, Klapptisch. `dir` ist die Seite, `to` die Gesamttiefe
-    /// AUSGEKLAPPT — nicht der Zuwachs, weil die Produktseite die Gesamttiefe nennt.
-    pub expands_dir: Option<Seite>,
+    /// A second, unfolded state: the side, and the total depth unfolded (not the increase).
+    pub expands_dir: Option<Side>,
     pub expands_to: Option<i32>,
-    /// Wie viele Seiten begehbar sein muessen. Ein Bett fuer eine Person braucht eine.
+    /// How many sides must stay walkable, and how deep each must be.
     pub access_sides: Option<i32>,
-    /// Wie tief eine solche Seite sein muss, in cm.
     pub access_clear: Option<i32>,
-    /// Ein Bild zu diesem Stueck, als Pfad UNTERHALB des privaten Asset-Verzeichnisses.
-    ///
-    /// Nur der relative Pfad, nie ein absoluter: die Zeilen liegen in der geteilten Datenbank
-    /// und beschreiben ein Moebel, nicht diese Maschine. Wo `media/` liegt, erklaert die
-    /// private Interior-Konfiguration.
-    ///
-    /// Ausgeliefert wird es ueber `GET /api/media/{*pfad}` und nur auf Anfrage — service.toml
-    /// nennt genau das als Grund, warum diese Capability oeffentlich stehen darf: im Bundle
-    /// steckt kein Foto.
-    pub bild: Option<String>,
-    /// Dieses Stueck soll frei im Raum stehen und teilt ihn.
-    ///
-    /// Betrifft nur die **Rangfolge** der Suche, nie ein Verdikt: `search::wandkontakt_cm`
-    /// belohnt eine Wand im Ruecken, weil der Raeumungspruefer einen Esstisch mitten im Raum
-    /// fuer genauso richtig haelt wie einen an der Wand. Ein Regal quer im Raum bekam damit 0 cm
-    /// und sank — bestraft dafuer, dass es seine Aufgabe erfuellt. Gesetzt faellt es aus der
-    /// Wandsumme heraus.
-    ///
-    /// Wie jedes Feld aus PRD Q61 ist es eine Aussage ueber das Stueck und nicht ueber die
-    /// Wohnung, und wie sie alle ist es freiwillig: wer nichts erklaert, wird weiter an der
-    /// Wand gemessen.
-    pub raumtrenner: Option<bool>,
-    /// Kommt zerlegt an oder laesst sich zum Tragen zerlegen.
-    ///
-    /// Betrifft genau eine Frage: `einbringung::durch_die_tuer`. Ein 140 cm breites Bett
-    /// passt nicht durch eine 100 cm breite Tuer und steht trotzdem in jedem Schlafzimmer —
-    /// es kommt in Teilen herein. Ohne diese Zeile meldet die Pruefung dort einen Verstoss,
-    /// der keiner ist, und wird deshalb nach dem dritten Mal nicht mehr gelesen.
-    ///
-    /// Freiwillig wie jedes Feld aus PRD Q61: wer nichts sagt, wird als ein Stueck getragen.
-    /// Das ist die vorsichtige Richtung — eine falsche Warnung kostet ein Nachdenken, eine
-    /// fehlende kostet den Schrank.
-    pub zerlegbar: Option<bool>,
+    /// A path below the private asset root, served by `interior` on request only.
+    #[serde(alias = "bild")]
+    pub image: Option<String>,
+    /// Meant to stand free and divide the room. Affects only search ranking, never a verdict.
+    #[serde(alias = "raumtrenner")]
+    pub room_divider: Option<bool>,
+    /// Comes apart for carrying, so the door check does not apply to its assembled size.
+    #[serde(alias = "zerlegbar")]
+    pub disassembles: Option<bool>,
 
-    // --- Ausruestung (PRD Q92 / B51) ---
-    //
-    // Sieben Felder, die nur ein `kind = "gear"` je fuellt. Sie stehen hier und nicht in einer
-    // zweiten Tabelle, weil Q58 genau diese Frage schon entschieden hat: eine Gegenstandstabelle
-    // fuer Moebel UND Ausruestung. Die Packliste in `trips` bindet gegen diese Spalten; ohne sie
-    // wurde jedes Gewicht als null mit einem Grund ausgeliefert, und die Haelfte wurde vor dem
-    // Merge zurueckgenommen (815750c) statt eine halbe Form in die Datei zu schreiben.
-    //
-    // Englisch benannt wie `opens`, `wall_ok` und `access_sides`: es ist das Vokabular, in dem
-    // die Entscheidung getroffen wurde, und ein zweites fuer dieselbe Sache ist der teure Fehler,
-    // vor dem der Kopf dieser Datei warnt.
-    /// Gewicht in Gramm. Gramm und nicht Kilo, aus demselben Grund, aus dem Preise in Cent
-    /// stehen: eine Packliste addiert, und eine Kommazahl addiert sich falsch.
+    // Gear, read by trips' packing lists.
+    /// Grams, so a packing list adds integers.
     pub weight_g: Option<i64>,
-    /// Wozu das Stueck gehoert — `schlafen`, `kochen`, `kleidung`, `elektronik`. Frei, weil die
-    /// Liste aus den Notizen kommt und keine Regel darauf laeuft.
+    /// Free text, e.g. `kleidung`, `elektronik`; nothing computes on it.
     pub category: Option<String>,
-    /// Laesst sich klein zusammenlegen. Eine Aussage ueber das Stueck, keine ueber die Reise.
     pub packable: Option<bool>,
     pub waterproof: Option<bool>,
     pub quick_dry: Option<bool>,
-    /// Wo es im Gepaeck liegt — `rucksack`, `koffer`, `am koerper`. Ordnet die gedruckte Liste.
     pub pack_location: Option<String>,
-    /// Fuer welche Reisearten es in Frage kommt, z. B. `["hiking", "city"]`. Leer heisst: fuer
-    /// jede. Liste und keine Tabelle, aus demselben Grund wie `ersetzt` daneben.
+    /// Trip kinds it suits, e.g. `["hiking", "city"]`. Empty means all.
     #[serde(default)]
     pub trip_types: Vec<String>,
 
-    // --- Kleidung (2026-10-05) ---
-    //
-    // Drei Felder, und die Entscheidung dahinter ist dieselbe wie bei der Ausruestung: sie
-    // stehen hier und nicht in einer zweiten Tabelle, weil Q58 genau diese Frage entschieden
-    // hat — eine Gegenstandstabelle fuer alles, was mir gehoert. Ein Hemd ist eine Zeile mit
-    // einer Groesse, kein eigenes Schema.
-    //
-    // Alle drei sind freiwillig. Ein Kleidungsstueck ohne Groesse ist keine kaputte Zeile:
-    // eine Groesse, die niemand nachgeschlagen hat, waere schlimmer als keine.
-    /// Wie es im Etikett steht — `M`, `42`, `60x60`. Freier Text und keine Aufzaehlung: eine
-    /// erfundene Skala (`S..XXL`) waere die naechste Marke, die nicht hineinpasst.
-    pub groesse: Option<String>,
-    /// Was es beschreibt — `weiss`, `dunkelblau`, `gestreift`. Frei, aus demselben Grund.
-    pub farbe: Option<String>,
-    /// Wann es getragen wird, z. B. `["ganzjahr"]`, `["winter"]`. Liste wie `trip_types`:
-    /// ein Mantel ist nicht Winter ODER Uebergang, er ist beides.
-    #[serde(default)]
-    pub saison: Vec<String>,
-    /// Was es auf einer Reise leistet — `style`, `comfort`, `warm`, `rain`, `odor-resistant`.
-    /// Frei wie `trip_types`: die Packliste zeigt die Woerter, keine Regel rechnet darauf.
-    /// Englisch wie die Ausruestungsfelder, weil die Packliste in diesem Vokabular spricht.
+    // Clothing. Free text, as printed on the label.
+    #[serde(alias = "groesse")]
+    pub size: Option<String>,
+    #[serde(alias = "farbe")]
+    pub color: Option<String>,
+    #[serde(default, alias = "saison")]
+    pub seasons: Vec<String>,
+    /// What it does on a trip: `style`, `rain`, `warm`, …
     #[serde(default)]
     pub traits: Vec<String>,
 
-    /// Wie oft diese Zeile geschrieben wurde; bestehende Zeilen beginnen bei 1 (PRD §10 A5).
-    ///
-    /// Gehoert dem Server. Jedes Schreiben erhoeht sie im selben Statement, und ein Wert im
-    /// Rumpf von `PUT`/`PATCH` wird nie geschrieben. Wer sie als Bedingung schicken will,
-    /// schickt sie als `If-Match` — siehe README, Abschnitt Gleichzeitiges Bearbeiten.
+    /// Owned by the server and raised by every write. A client that wants a conditional write
+    /// sends it back as `If-Match`.
     #[serde(default)]
     pub revision: i64,
 }
 
 impl Item {
-    /// Wahr, wenn irgendein Mass geraten ist. Das Flag wandert in jeden Bericht, der auf
-    /// diesem Moebel beruht — eine Schaetzung, die unterwegs zur Messung wird, ist der
-    /// Fehler, gegen den dieses Feld existiert.
     pub fn is_uncertain(&self) -> bool {
-        !self.unsicher.is_empty()
+        !self.estimated.is_empty()
     }
 }
 
@@ -328,8 +320,6 @@ pub enum Kind {
     #[default]
     Piece,
     Slot,
-    /// Ausruestung: was mitreist statt zu stehen. Dieselbe Tabelle nach Q58, weil ein Zelt und
-    /// ein Regal dieselben Fragen beantworten — was ist es, wie schwer, wem gehoert es.
     Gear,
 }
 
@@ -345,14 +335,12 @@ impl Kind {
         match s {
             "slot" => Kind::Slot,
             "gear" => Kind::Gear,
-            // Alles andere ist ein Stueck. Ein unbekanntes Wort still zu Ausruestung zu machen
-            // waere die teurere Vermutung: es faellt dann aus jeder Moebelpruefung heraus.
+            // An unknown word as gear would drop it from every furniture check.
             _ => Kind::Piece,
         }
     }
 }
 
-/// Besitzt er es, will er es, oder ist es weg.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Deserialize, Serialize)]
 #[serde(rename_all = "lowercase")]
 pub enum State {
@@ -379,43 +367,40 @@ impl State {
     }
 }
 
-/// Die Spalten, die ein Schreiben aus einem `Item` setzt, in der Reihenfolge der Parameter
-/// `?1` bis `?51` von [`write_params`]. `id` steht vorn und wird nie ueberschrieben.
-///
-/// Nicht dabei: `revision`, `created_at`, `updated_at`. Die drei setzt der Server, nie der
-/// Rumpf — ein Client, der seine gelesene Revision zurueckschickt, darf damit nichts setzen.
+/// Columns a write sets, in the order of [`write_params`]. `revision`, `created_at` and
+/// `updated_at` belong to the server.
 const WRITE_COLUMNS: [&str; 52] = [
     "id",
     "kind",
     "label",
-    "b",
-    "t",
-    "h",
-    "h_min",
-    "b_aufgeklappt",
-    "t_ausgeklappt",
-    "laenge",
-    "anzahl",
-    "zustaende",
-    "unsicher",
-    "platzbedarf_zone",
-    "platzbedarf_block",
-    "preis_cent",
-    "kosten_min_cent",
-    "kosten_max_cent",
+    "width",
+    "depth",
+    "height",
+    "height_min",
+    "width_unfolded",
+    "depth_unfolded",
+    "length",
+    "count",
+    "fold_states",
+    "estimated",
+    "clearance_zone",
+    "clearance_block",
+    "price_cents",
+    "cost_min_cents",
+    "cost_max_cents",
     "link",
-    "artikelnummer",
-    "quelle",
-    "gemessen_am",
-    "mitnahme",
-    "prioritaet",
-    "basiert_auf",
-    "ersetzt",
-    "varianten",
-    "ziel",
-    "hinweis",
-    "begruendung",
-    "entscheidung_offen",
+    "sku",
+    "source",
+    "measured_at",
+    "on_move",
+    "priority",
+    "based_on",
+    "replaces",
+    "variants",
+    "target",
+    "notes",
+    "reason",
+    "open_question",
     "opens",
     "open_clear",
     "wall_ok",
@@ -423,9 +408,9 @@ const WRITE_COLUMNS: [&str; 52] = [
     "expands_to",
     "access_sides",
     "access_clear",
-    "raumtrenner",
-    "bild",
-    "zerlegbar",
+    "room_divider",
+    "image",
+    "disassembles",
     "weight_g",
     "category",
     "packable",
@@ -433,46 +418,45 @@ const WRITE_COLUMNS: [&str; 52] = [
     "quick_dry",
     "pack_location",
     "trip_types",
-    "groesse",
-    "farbe",
-    "saison",
+    "size",
+    "color",
+    "seasons",
     "traits",
 ];
 
-/// Die Werte zu [`WRITE_COLUMNS`], Stelle fuer Stelle.
-fn write_params(it: &Item) -> Result<Vec<Box<dyn rusqlite::ToSql>>, Fehler> {
+fn write_params(it: &Item) -> Result<Vec<Box<dyn rusqlite::ToSql>>, Error> {
     Ok(vec![
         Box::new(it.id.clone()),
         Box::new(it.kind.as_str()),
         Box::new(it.label.clone()),
-        Box::new(it.b),
-        Box::new(it.t),
-        Box::new(it.h),
-        Box::new(it.h_min),
-        Box::new(it.b_aufgeklappt),
-        Box::new(it.t_ausgeklappt),
-        Box::new(it.laenge),
-        Box::new(it.anzahl),
-        Box::new(serde_json::to_string(&it.zustaende)?),
-        Box::new(serde_json::to_string(&it.unsicher)?),
-        Box::new(it.platzbedarf_zone),
-        Box::new(it.platzbedarf_block),
-        Box::new(it.preis_cent),
-        Box::new(it.kosten_min_cent),
-        Box::new(it.kosten_max_cent),
+        Box::new(it.width),
+        Box::new(it.depth),
+        Box::new(it.height),
+        Box::new(it.height_min),
+        Box::new(it.width_unfolded),
+        Box::new(it.depth_unfolded),
+        Box::new(it.length),
+        Box::new(it.count),
+        Box::new(serde_json::to_string(&it.fold_states)?),
+        Box::new(serde_json::to_string(&it.estimated)?),
+        Box::new(it.clearance_zone),
+        Box::new(it.clearance_block),
+        Box::new(it.price_cents),
+        Box::new(it.cost_min_cents),
+        Box::new(it.cost_max_cents),
         Box::new(it.link.clone()),
-        Box::new(it.artikelnummer.clone()),
-        Box::new(it.quelle.clone()),
-        Box::new(it.gemessen_am.clone()),
-        Box::new(it.mitnahme.clone()),
-        Box::new(it.prioritaet.clone()),
-        Box::new(it.basiert_auf.clone()),
-        Box::new(serde_json::to_string(&it.ersetzt)?),
-        Box::new(serde_json::to_string(&it.varianten)?),
-        Box::new(it.ziel.clone()),
-        Box::new(it.hinweis.clone()),
-        Box::new(it.begruendung.clone()),
-        Box::new(it.entscheidung_offen.clone()),
+        Box::new(it.sku.clone()),
+        Box::new(it.source.clone()),
+        Box::new(it.measured_at.clone()),
+        Box::new(it.on_move.clone()),
+        Box::new(it.priority.clone()),
+        Box::new(it.based_on.clone()),
+        Box::new(serde_json::to_string(&it.replaces)?),
+        Box::new(serde_json::to_string(&it.variants)?),
+        Box::new(it.target.clone()),
+        Box::new(it.notes.clone()),
+        Box::new(it.reason.clone()),
+        Box::new(it.open_question.clone()),
         Box::new(it.opens.map(|s| s.as_str())),
         Box::new(it.open_clear),
         Box::new(it.wall_ok),
@@ -480,9 +464,9 @@ fn write_params(it: &Item) -> Result<Vec<Box<dyn rusqlite::ToSql>>, Fehler> {
         Box::new(it.expands_to),
         Box::new(it.access_sides),
         Box::new(it.access_clear),
-        Box::new(it.raumtrenner),
-        Box::new(it.bild.clone()),
-        Box::new(it.zerlegbar),
+        Box::new(it.room_divider),
+        Box::new(it.image.clone()),
+        Box::new(it.disassembles),
         Box::new(it.weight_g),
         Box::new(it.category.clone()),
         Box::new(it.packable),
@@ -490,23 +474,22 @@ fn write_params(it: &Item) -> Result<Vec<Box<dyn rusqlite::ToSql>>, Fehler> {
         Box::new(it.quick_dry),
         Box::new(it.pack_location.clone()),
         Box::new(serde_json::to_string(&it.trip_types)?),
-        Box::new(it.groesse.clone()),
-        Box::new(it.farbe.clone()),
-        Box::new(serde_json::to_string(&it.saison)?),
+        Box::new(it.size.clone()),
+        Box::new(it.color.clone()),
+        Box::new(serde_json::to_string(&it.seasons)?),
         Box::new(serde_json::to_string(&it.traits)?),
     ])
 }
 
-/// Was ein Schreiben mit erwarteter Revision ergab.
+/// The result of a write against an expected revision.
 #[derive(Debug)]
-pub enum Schreibergebnis {
-    /// Geschrieben; die Zeile traegt jetzt diese Revision.
-    Geschrieben(i64),
-    /// Den Eintrag gibt es nicht.
-    Fehlt,
-    /// Jemand hat inzwischen geschrieben. Der aktuelle Stand, damit der Aufrufer ihn zeigen
-    /// kann statt ihn zu ueberschreiben.
-    Veraltet(Box<Item>, Option<State>),
+pub enum WriteOutcome {
+    /// Written; the row now carries this revision.
+    Written(i64),
+    Missing,
+    /// Someone wrote in between. The current row, so the caller can show it instead of
+    /// overwriting it.
+    Stale(Box<Item>, Option<State>),
 }
 
 pub struct Store {
@@ -514,11 +497,10 @@ pub struct Store {
     prefix: String,
 }
 
-type Fehler = Box<dyn std::error::Error>;
+type Error = Box<dyn std::error::Error>;
 
-/// Der Praefix wird in DDL und jedes Statement interpoliert, also wird er geprueft statt
-/// gebunden — dieselbe Vorsichtsmassnahme wie in `capabilities/trips/src/store.rs`.
-fn validate_prefix(prefix: &str) -> Result<(), Fehler> {
+/// The prefix is interpolated into DDL, so it is validated instead of bound.
+fn validate_prefix(prefix: &str) -> Result<(), Error> {
     if !prefix
         .chars()
         .all(|c| c.is_ascii_alphanumeric() || c == '_')
@@ -530,11 +512,11 @@ fn validate_prefix(prefix: &str) -> Result<(), Fehler> {
 }
 
 impl Store {
-    pub fn open(database_path: &Path) -> Result<Self, Fehler> {
+    pub fn open(database_path: &Path) -> Result<Self, Error> {
         Self::open_with_prefix(database_path, "inventory")
     }
 
-    pub fn open_with_prefix(database_path: &Path, prefix: &str) -> Result<Self, Fehler> {
+    pub fn open_with_prefix(database_path: &Path, prefix: &str) -> Result<Self, Error> {
         validate_prefix(prefix)?;
         let pool = sjel_store::open_pool(database_path, prefix, |conn| {
             Self::run_migration(conn, prefix)
@@ -545,59 +527,54 @@ impl Store {
         })
     }
 
-    fn conn(&self) -> Result<sjel_store::PooledClient, Fehler> {
+    fn conn(&self) -> Result<sjel_store::PooledClient, Error> {
         Ok(self.pool.get()?)
     }
 
-    /// Eine Verbindung fuer eine Abfrage, die ueber den eigenen Praefix hinausgeht.
-    ///
-    /// Genau ein Konsument: `budget::monatssaldo` liest `finance_transaction_projection`. Das
-    /// ist erlaubt und der Grund fuer die eine geteilte Datei; es ist nur nichts, das
-    /// versehentlich passieren soll, deshalb hat es einen eigenen, benannten Weg.
-    pub fn borrow_connection(&self) -> Result<sjel_store::PooledClient, Fehler> {
+    /// A connection for a query beyond this prefix: `budget::monthly_balance` reads finance.
+    pub fn borrow_connection(&self) -> Result<sjel_store::PooledClient, Error> {
         self.conn()
     }
 
-    /// Die Tabellen, wie sie sind — nicht die Geschichte, die zu ihnen gefuehrt hat.
-    ///
-    /// Zuletzt steht **der Umzug**: diese Tabelle hat bis 2026-10-05 `interior_item` geheissen
-    /// und in `capabilities/interior` gewohnt, hinter einem Prozess, der absichtlich schlaeft
-    /// (ISA F13). Er laeuft nach den `CREATE TABLE`s, weil er in sie hineinschreibt.
-    fn run_migration(conn: &Connection, prefix: &str) -> Result<(), Fehler> {
+    fn run_migration(conn: &Connection, prefix: &str) -> Result<(), Error> {
+        // Before anything else: an old file has German columns, and `CREATE TABLE IF NOT EXISTS`
+        // and `add_column_if_missing` would otherwise add empty English ones beside them.
+        Self::rename_legacy_columns(conn, &format!("{prefix}_item"))?;
+        Self::rename_legacy_columns(conn, "interior_item")?;
         conn.execute_batch(&format!(
             "
             CREATE TABLE IF NOT EXISTS {prefix}_item (
                 id                 TEXT PRIMARY KEY,
                 kind               TEXT NOT NULL CHECK (kind IN ('piece','slot','gear')),
                 label              TEXT NOT NULL,
-                b                  INTEGER,
-                t                  INTEGER,
-                h                  INTEGER,
-                h_min              INTEGER,
-                b_aufgeklappt      INTEGER,
-                t_ausgeklappt      INTEGER,
-                laenge             INTEGER,
-                anzahl             INTEGER,
-                zustaende          TEXT NOT NULL DEFAULT '[]',
-                unsicher           TEXT NOT NULL DEFAULT '[]',
-                platzbedarf_zone   INTEGER,
-                platzbedarf_block  INTEGER,
-                preis_cent         INTEGER,
-                kosten_min_cent    INTEGER,
-                kosten_max_cent    INTEGER,
+                width              INTEGER,
+                depth              INTEGER,
+                height             INTEGER,
+                height_min         INTEGER,
+                width_unfolded     INTEGER,
+                depth_unfolded     INTEGER,
+                length             INTEGER,
+                count              INTEGER,
+                fold_states        TEXT NOT NULL DEFAULT '[]',
+                estimated          TEXT NOT NULL DEFAULT '[]',
+                clearance_zone     INTEGER,
+                clearance_block    INTEGER,
+                price_cents        INTEGER,
+                cost_min_cents     INTEGER,
+                cost_max_cents     INTEGER,
                 link               TEXT,
-                artikelnummer      TEXT,
-                quelle             TEXT,
-                gemessen_am        TEXT,
-                mitnahme           TEXT,
-                prioritaet         TEXT,
-                basiert_auf        TEXT,
-                ersetzt            TEXT NOT NULL DEFAULT '[]',
-                varianten          TEXT NOT NULL DEFAULT '[]',
-                ziel               TEXT,
-                hinweis            TEXT,
-                begruendung        TEXT,
-                entscheidung_offen TEXT,
+                sku                TEXT,
+                source             TEXT,
+                measured_at        TEXT,
+                on_move            TEXT,
+                priority           TEXT,
+                based_on           TEXT,
+                replaces           TEXT NOT NULL DEFAULT '[]',
+                variants           TEXT NOT NULL DEFAULT '[]',
+                target             TEXT,
+                notes              TEXT,
+                reason             TEXT,
+                open_question      TEXT,
                 opens              TEXT,
                 open_clear         INTEGER,
                 wall_ok            INTEGER,
@@ -605,9 +582,9 @@ impl Store {
                 expands_to         INTEGER,
                 access_sides       INTEGER,
                 access_clear       INTEGER,
-                raumtrenner        INTEGER,
-                zerlegbar          INTEGER,
-                bild               TEXT,
+                room_divider       INTEGER,
+                disassembles       INTEGER,
+                image              TEXT,
                 weight_g           INTEGER,
                 category           TEXT,
                 packable           INTEGER,
@@ -615,9 +592,9 @@ impl Store {
                 quick_dry          INTEGER,
                 pack_location      TEXT,
                 trip_types         TEXT NOT NULL DEFAULT '[]',
-                groesse            TEXT,
-                farbe              TEXT,
-                saison             TEXT NOT NULL DEFAULT '[]',
+                size               TEXT,
+                color              TEXT,
+                seasons            TEXT NOT NULL DEFAULT '[]',
                 traits             TEXT NOT NULL DEFAULT '[]',
                 created_at         TEXT NOT NULL,
                 updated_at         TEXT NOT NULL,
@@ -640,90 +617,88 @@ impl Store {
             ",
             prefix = prefix
         ))?;
-        Self::add_column_if_missing(conn, prefix, "raumtrenner", "INTEGER")?;
-        Self::add_column_if_missing(conn, prefix, "zerlegbar", "INTEGER")?;
-        Self::add_column_if_missing(conn, prefix, "bild", "TEXT")?;
-        // Ausruestung (B51). Die sieben Spalten zuerst, dann der CHECK — der Umbau kopiert sie
-        // mit, also muessen sie vorher da sein.
-        Self::add_column_if_missing(conn, prefix, "weight_g", "INTEGER")?;
-        Self::add_column_if_missing(conn, prefix, "category", "TEXT")?;
-        Self::add_column_if_missing(conn, prefix, "packable", "INTEGER")?;
-        Self::add_column_if_missing(conn, prefix, "waterproof", "INTEGER")?;
-        Self::add_column_if_missing(conn, prefix, "quick_dry", "INTEGER")?;
-        Self::add_column_if_missing(conn, prefix, "pack_location", "TEXT")?;
-        Self::add_column_if_missing(conn, prefix, "trip_types", "TEXT NOT NULL DEFAULT '[]'")?;
-        // Kleidung (2026-10-05). Aus demselben Grund wie die sieben Ausruestungsspalten ueber
-        // dem CHECK: `widen_kind_check` kopiert `ITEM_COLUMNS`, also muss jede Spalte vorher
-        // existieren, sonst faellt der Umbau einer alten Datei ueber eine Spalte, die sie
-        // noch nicht hat.
-        Self::add_column_if_missing(conn, prefix, "groesse", "TEXT")?;
-        Self::add_column_if_missing(conn, prefix, "farbe", "TEXT")?;
-        Self::add_column_if_missing(conn, prefix, "saison", "TEXT NOT NULL DEFAULT '[]'")?;
-        // Was ein Stueck auf einer Reise leistet (2026-10-07), vor dem CHECK aus demselben Grund.
-        Self::add_column_if_missing(conn, prefix, "traits", "TEXT NOT NULL DEFAULT '[]'")?;
+        // Columns added after the first schema, oldest first. All before `widen_kind_check`,
+        // which copies `ITEM_COLUMNS` and needs each of them to exist.
+        for (column, typ) in [
+            ("room_divider", "INTEGER"),
+            ("disassembles", "INTEGER"),
+            ("image", "TEXT"),
+            ("weight_g", "INTEGER"),
+            ("category", "TEXT"),
+            ("packable", "INTEGER"),
+            ("waterproof", "INTEGER"),
+            ("quick_dry", "INTEGER"),
+            ("pack_location", "TEXT"),
+            ("trip_types", "TEXT NOT NULL DEFAULT '[]'"),
+            ("size", "TEXT"),
+            ("color", "TEXT"),
+            ("seasons", "TEXT NOT NULL DEFAULT '[]'"),
+            ("traits", "TEXT NOT NULL DEFAULT '[]'"),
+        ] {
+            Self::add_column_if_missing(conn, prefix, column, typ)?;
+        }
         Self::widen_kind_check(conn, prefix)?;
-        // Nach dem Umbau und nicht davor: `widen_kind_check` kopiert nur `ITEM_COLUMNS`, und
-        // eine Datei, die den Umbau noch braucht, hat diese Spalte ohnehin nicht. `DEFAULT 1`
-        // gibt jeder bestehenden Zeile die Revision 1 (PRD §10 A5).
+        // After the rebuild, which does not copy it.
         Self::add_column_if_missing(conn, prefix, "revision", "INTEGER NOT NULL DEFAULT 1")?;
-        // Zuletzt: die Zeilen aus `interior_item`, falls die alte Tabelle noch steht.
         Self::move_from_interior(conn)?;
+        Self::translate_legacy_values(conn, prefix)?;
         Ok(())
     }
 
-    /// Die Zeilen aus `interior_item` herueberholen — der Umzug, mit dem diese Capability aus
-    /// `interior` herausgeloest wurde (ISA F13, 2026-10-05).
+    /// German column names to English, in place, so ids, revisions and state history survive.
+    fn rename_legacy_columns(conn: &Connection, table: &str) -> Result<(), Error> {
+        let existing = Self::columns_of(conn, table)?;
+        for (old, new) in LEGACY_FIELDS {
+            if existing.iter().any(|c| c == old) && !existing.iter().any(|c| c == new) {
+                conn.execute_batch(&format!("ALTER TABLE {table} RENAME COLUMN {old} TO {new};"))?;
+            }
+        }
+        Ok(())
+    }
+
+    /// German vocabulary words in stored values to English. A no-op once translated.
+    fn translate_legacy_values(conn: &Connection, prefix: &str) -> Result<(), Error> {
+        for (column, old, new) in LEGACY_VALUES {
+            conn.execute(
+                &format!("UPDATE {prefix}_item SET {column} = ?2 WHERE {column} = ?1"),
+                params![old, new],
+            )?;
+        }
+        Ok(())
+    }
+
+    /// One-time move of the rows out of `interior_item`, where they lived before inventory was
+    /// its own capability. The old table is dropped afterwards so there is one truth.
     ///
-    /// **Einmalig, und die Bedingung ist das Vorhandensein der alten Tabelle.** Danach wird sie
-    /// fallen gelassen: zwei Tabellen mit denselben Zeilen sind zwei Wahrheiten, und gelesen
-    /// wird die, die niemand mehr schreibt. Ein `INSERT OR IGNORE` bei jedem Start waere
-    /// derselbe Fehler mit einem anderen Namen.
-    ///
-    /// **`interior_placement` wird dabei geloest.** Es zeigt mit `ON DELETE CASCADE` auf
-    /// `interior_item`, und ein `DROP` der Elterntabelle nimmt seine Zeilen mit — der Fall, den
-    /// `widen_kind_check` in `capabilities/interior` schon einmal beschreibt und dort mit einer
-    /// Sicherungstabelle loest. Hier wird der Fremdschluessel **entfernt** statt gesichert: die
-    /// Zeilen gehoeren von jetzt an zu einer anderen Capability, und ein FK ueber zwei Praefixe
-    /// liesse spaeter jeden Loeschvorgang der einen an einer Zeile der anderen scheitern.
-    /// `trips/src/pack.rs` begruendet dieselbe Entscheidung fuer seinen `item_ref`.
-    ///
-    /// Dass diese Capability dabei eine Tabelle anfasst, die `interior` gehoert, ist der Preis
-    /// dafuer, dass sie die ist, die beim Boot laeuft: der Umzug muss geschehen, bevor die
-    /// erste Platzierung durch ein `DROP` verschwindet, und `interior` laeuft zu diesem
-    /// Zeitpunkt vielleicht nicht.
-    fn move_from_interior(conn: &Connection) -> Result<(), Fehler> {
-        let alt: Option<String> = conn
+    /// `interior_placement` loses its foreign key first: it pointed at `interior_item` with
+    /// `ON DELETE CASCADE`, and dropping the parent would delete every placement.
+    fn move_from_interior(conn: &Connection) -> Result<(), Error> {
+        let old: Option<String> = conn
             .query_row(
                 "SELECT name FROM sqlite_master WHERE type = 'table' AND name = 'interior_item'",
                 [],
                 |row| row.get(0),
             )
             .optional()?;
-        if alt.is_none() {
+        if old.is_none() {
             return Ok(());
         }
 
-        // Erst die Platzierungen, solange die Elterntabelle noch steht.
-        Self::loese_placement_von_interior(conn)?;
+        Self::detach_placement_from_interior(conn)?;
 
-        // Nur die Spalten, die beide Tabellen haben: eine Datei, die vor B51 oder vor den
-        // Kleidungsspalten geschrieben wurde, hat sie nicht, und ein `INSERT` ueber eine
-        // fehlende Spalte faellt um statt zu heilen. Was fehlt, bekommt den Vorgabewert.
-        let vorhanden = Self::spalten_von(conn, "interior_item")?;
-        let mut spalten: Vec<&str> = ITEM_COLUMNS
+        // Only the columns both tables have; an older file lacks some, and the rest default.
+        let present = Self::columns_of(conn, "interior_item")?;
+        let mut columns: Vec<&str> = ITEM_COLUMNS
             .iter()
             .copied()
-            .filter(|c| vorhanden.iter().any(|v| v == c))
+            .filter(|c| present.iter().any(|v| v == c))
             .collect();
-        // `revision` gehoert dem Server und steht nicht in `ITEM_COLUMNS`. Sie wandert mit,
-        // damit ein Telefon mit einem gelesenen Stand nicht einmal grundlos einen Konflikt
-        // sieht (PRD §10 A5).
-        if vorhanden.iter().any(|v| v == "revision") {
-            spalten.push("revision");
+        if present.iter().any(|v| v == "revision") {
+            columns.push("revision");
         }
-        let liste = spalten.join(", ");
+        let list = columns.join(", ");
         conn.execute_batch(&format!(
-            "INSERT INTO inventory_item ({liste}) SELECT {liste} FROM interior_item;
+            "INSERT INTO inventory_item ({list}) SELECT {list} FROM interior_item;
              INSERT INTO inventory_item_state (item_id, state, since, note)
                  SELECT item_id, state, since, note FROM interior_item_state;
              DROP TABLE interior_item_state;
@@ -732,10 +707,7 @@ impl Store {
         Ok(())
     }
 
-    /// Die Platzierungen von `interior_item` loesen, ohne eine Zeile zu verlieren.
-    ///
-    /// Laeuft nur, solange der gespeicherte DDL-Text den Fremdschluessel noch nennt.
-    fn loese_placement_von_interior(conn: &Connection) -> Result<(), Fehler> {
+    fn detach_placement_from_interior(conn: &Connection) -> Result<(), Error> {
         let ddl: Option<String> = conn
             .query_row(
                 "SELECT sql FROM sqlite_master WHERE type = 'table' AND name = 'interior_placement'",
@@ -748,7 +720,7 @@ impl Store {
             return Ok(());
         }
         conn.execute_batch(
-            "CREATE TABLE interior_placement_neu (
+            "CREATE TABLE interior_placement_new (
                 id      INTEGER PRIMARY KEY AUTOINCREMENT,
                 item_id TEXT NOT NULL,
                 flat    TEXT NOT NULL,
@@ -758,45 +730,35 @@ impl Store {
                 since   TEXT NOT NULL,
                 UNIQUE (item_id, flat)
              );
-             INSERT INTO interior_placement_neu (id, item_id, flat, x, y, rot, since)
+             INSERT INTO interior_placement_new (id, item_id, flat, x, y, rot, since)
                  SELECT id, item_id, flat, x, y, rot, since FROM interior_placement;
              DROP TABLE interior_placement;
-             ALTER TABLE interior_placement_neu RENAME TO interior_placement;
+             ALTER TABLE interior_placement_new RENAME TO interior_placement;
              CREATE INDEX IF NOT EXISTS interior_idx_placement_flat ON interior_placement(flat);",
         )?;
         Ok(())
     }
 
-    /// Die Spaltennamen einer Tabelle, in der Reihenfolge, in der die Tabelle sie fuehrt.
-    fn spalten_von(conn: &Connection, tabelle: &str) -> Result<Vec<String>, Fehler> {
+    /// Column names of a table in table order; empty when the table does not exist.
+    fn columns_of(conn: &Connection, table: &str) -> Result<Vec<String>, Error> {
         let mut stmt = conn.prepare("SELECT name FROM pragma_table_info(?1)")?;
-        let rows = stmt.query_map(params![tabelle], |row| row.get::<_, String>(0))?;
+        let rows = stmt.query_map(params![table], |row| row.get::<_, String>(0))?;
         Ok(rows.collect::<Result<Vec<_>, _>>()?)
     }
 
-    /// `ALTER TABLE ... ADD COLUMN`, idempotent, weil SQLite kein `IF NOT EXISTS` dafuer hat.
-    ///
-    /// Der Kommentar ueber `run_migration` sagt, eine Datei beginne leer und es gebe keine
-    /// ALTER-Kette zu bewahren. Das galt bis 2026-08-31 und gilt seit B25 nicht mehr: die
-    /// Tabelle traegt importierte Zeilen, und `CREATE TABLE IF NOT EXISTS` erreicht eine
-    /// bestehende Tabelle nicht. Die Zeilen einfach neu zu importieren waere kein Ausweg —
-    /// `{prefix}_item_state` haelt die Zustandsgeschichte, und die ist der Grund, aus dem
-    /// B25 sie als eigene Tabelle angelegt hat.
-    ///
-    /// `pragma_table_info` ist die Sonde, die `capabilities/places/src/backfill.rs:396` fuer
-    /// dieselbe Frage benutzt.
+    /// `ALTER TABLE ... ADD COLUMN`, idempotent, because SQLite has no `IF NOT EXISTS` for it.
     fn add_column_if_missing(
         conn: &Connection,
         prefix: &str,
         column: &str,
         typ: &str,
-    ) -> Result<(), Fehler> {
-        let vorhanden: i64 = conn.query_row(
+    ) -> Result<(), Error> {
+        let present: i64 = conn.query_row(
             "SELECT COUNT(*) FROM pragma_table_info(?1) WHERE name = ?2",
             params![format!("{prefix}_item"), column],
             |row| row.get(0),
         )?;
-        if vorhanden == 0 {
+        if present == 0 {
             conn.execute_batch(&format!(
                 "ALTER TABLE {prefix}_item ADD COLUMN {column} {typ};"
             ))?;
@@ -804,25 +766,13 @@ impl Store {
         Ok(())
     }
 
-    /// Den `kind`-CHECK auf `gear` erweitern, indem die Tabelle neu gebaut wird.
-    /// SQLite haelt einen CHECK im gespeicherten DDL-Text; `ALTER TABLE` kann ihn nicht
-    /// anfassen. Der Zwoelf-Schritte-Weg aus der SQLite-Dokumentation ist der einzige: neue
-    /// Tabelle, Zeilen kopieren, alte fallen lassen, umbenennen. Er laeuft nur, wenn der
-    /// gespeicherte Text `gear` noch nicht nennt — eine leere oder frische Datei hat den
-    /// weiten CHECK schon aus `CREATE TABLE` oben, und ein zweiter Lauf faende nichts zu tun.
+    /// Widens the `kind` CHECK to include `gear` by rebuilding the table, the only way SQLite
+    /// allows. Runs only while the stored DDL lacks `gear`.
     ///
-    /// **Die Kinder werden gesichert und zurueckgeschrieben, und das ist der Kern.**
-    /// `{prefix}_item_state` und `{prefix}_placement` zeigen mit `ON DELETE CASCADE` auf
-    /// `{prefix}_item(id)`; ein DROP der Elterntabelle loescht sie deshalb mit. Der uebliche
-    /// Ausweg — `PRAGMA foreign_keys = off` vor dem `BEGIN` — steht hier nicht offen: dieser
-    /// Code laeuft in der Transaktion, die `sjel_store::migrate_once` schon geoeffnet hat, und
-    /// die Pragma ist innerhalb einer Transaktion wirkungslos (libs/sjel-store/src/lib.rs:328).
-    /// Also werden beide Tabellen vorher kopiert und hinterher wieder gefuellt, im selben
-    /// Umlauf: faellt irgendetwas davon aus, nimmt der Rollback alles mit.
-    ///
-    /// Die Spaltenliste ist ausgeschrieben und nicht `SELECT *`, damit ein spaeteres Feld hier
-    /// auffaellt statt still in der falschen Spalte zu landen.
-    fn widen_kind_check(conn: &Connection, prefix: &str) -> Result<(), Fehler> {
+    /// The state rows are copied out and back: they cascade on the item table, and
+    /// `PRAGMA foreign_keys = off` has no effect inside the migration's transaction
+    /// (libs/sjel-store/src/lib.rs). A failure anywhere rolls the whole rebuild back.
+    fn widen_kind_check(conn: &Connection, prefix: &str) -> Result<(), Error> {
         let ddl: Option<String> = conn
             .query_row(
                 "SELECT sql FROM sqlite_master WHERE type = 'table' AND name = ?1",
@@ -836,38 +786,38 @@ impl Store {
         }
         let columns = ITEM_COLUMNS.join(", ");
         conn.execute_batch(&format!(
-            "CREATE TABLE {prefix}_item_neu (
+            "CREATE TABLE {prefix}_item_new (
                 id                 TEXT PRIMARY KEY,
                 kind               TEXT NOT NULL CHECK (kind IN ('piece','slot','gear')),
                 label              TEXT NOT NULL,
-                b                  INTEGER,
-                t                  INTEGER,
-                h                  INTEGER,
-                h_min              INTEGER,
-                b_aufgeklappt      INTEGER,
-                t_ausgeklappt      INTEGER,
-                laenge             INTEGER,
-                anzahl             INTEGER,
-                zustaende          TEXT NOT NULL DEFAULT '[]',
-                unsicher           TEXT NOT NULL DEFAULT '[]',
-                platzbedarf_zone   INTEGER,
-                platzbedarf_block  INTEGER,
-                preis_cent         INTEGER,
-                kosten_min_cent    INTEGER,
-                kosten_max_cent    INTEGER,
+                width              INTEGER,
+                depth              INTEGER,
+                height             INTEGER,
+                height_min         INTEGER,
+                width_unfolded     INTEGER,
+                depth_unfolded     INTEGER,
+                length             INTEGER,
+                count              INTEGER,
+                fold_states        TEXT NOT NULL DEFAULT '[]',
+                estimated          TEXT NOT NULL DEFAULT '[]',
+                clearance_zone     INTEGER,
+                clearance_block    INTEGER,
+                price_cents        INTEGER,
+                cost_min_cents     INTEGER,
+                cost_max_cents     INTEGER,
                 link               TEXT,
-                artikelnummer      TEXT,
-                quelle             TEXT,
-                gemessen_am        TEXT,
-                mitnahme           TEXT,
-                prioritaet         TEXT,
-                basiert_auf        TEXT,
-                ersetzt            TEXT NOT NULL DEFAULT '[]',
-                varianten          TEXT NOT NULL DEFAULT '[]',
-                ziel               TEXT,
-                hinweis            TEXT,
-                begruendung        TEXT,
-                entscheidung_offen TEXT,
+                sku                TEXT,
+                source             TEXT,
+                measured_at        TEXT,
+                on_move            TEXT,
+                priority           TEXT,
+                based_on           TEXT,
+                replaces           TEXT NOT NULL DEFAULT '[]',
+                variants           TEXT NOT NULL DEFAULT '[]',
+                target             TEXT,
+                notes              TEXT,
+                reason             TEXT,
+                open_question      TEXT,
                 opens              TEXT,
                 open_clear         INTEGER,
                 wall_ok            INTEGER,
@@ -875,9 +825,9 @@ impl Store {
                 expands_to         INTEGER,
                 access_sides       INTEGER,
                 access_clear       INTEGER,
-                raumtrenner        INTEGER,
-                zerlegbar          INTEGER,
-                bild               TEXT,
+                room_divider       INTEGER,
+                disassembles       INTEGER,
+                image              TEXT,
                 weight_g           INTEGER,
                 category           TEXT,
                 packable           INTEGER,
@@ -885,46 +835,41 @@ impl Store {
                 quick_dry          INTEGER,
                 pack_location      TEXT,
                 trip_types         TEXT NOT NULL DEFAULT '[]',
-                groesse            TEXT,
-                farbe              TEXT,
-                saison             TEXT NOT NULL DEFAULT '[]',
+                size               TEXT,
+                color              TEXT,
+                seasons            TEXT NOT NULL DEFAULT '[]',
                 traits             TEXT NOT NULL DEFAULT '[]',
                 created_at         TEXT NOT NULL,
                 updated_at         TEXT NOT NULL
              );
-             INSERT INTO {prefix}_item_neu ({columns})
+             INSERT INTO {prefix}_item_new ({columns})
                  SELECT {columns} FROM {prefix}_item;
-             CREATE TABLE {prefix}_state_sicherung AS SELECT * FROM {prefix}_item_state;
+             CREATE TABLE {prefix}_state_backup AS SELECT * FROM {prefix}_item_state;
              DROP TABLE {prefix}_item;
-             ALTER TABLE {prefix}_item_neu RENAME TO {prefix}_item;
-             INSERT INTO {prefix}_item_state SELECT * FROM {prefix}_state_sicherung;
-             DROP TABLE {prefix}_state_sicherung;"
+             ALTER TABLE {prefix}_item_new RENAME TO {prefix}_item;
+             INSERT INTO {prefix}_item_state SELECT * FROM {prefix}_state_backup;
+             DROP TABLE {prefix}_state_backup;"
         ))?;
         Ok(())
     }
 
-    pub fn ping(&self) -> Result<(), Fehler> {
+    pub fn ping(&self) -> Result<(), Error> {
         let conn = self.conn()?;
         conn.query_row("SELECT 1", [], |row| row.get::<_, i64>(0))?;
         Ok(())
     }
 
-    /// Anlegen oder aktualisieren. `created_at` ueberlebt ein Update — wann eine Zeile
-    /// entstanden ist, ist eine andere Tatsache als wann sie zuletzt stimmte.
-    ///
-    /// Bedingungslos: der spaetere Schreiber gewinnt. Das ist der Weg fuer den Import und fuer
-    /// jeden Aufrufer, der keine Revision nennt. Die Revision steigt trotzdem, im selben
-    /// Statement, damit ein Client mit einer aelteren Revision danach sicher abgewiesen wird.
-    /// Zurueck kommt die Revision, die die Zeile jetzt traegt.
-    pub fn upsert_item(&self, it: &Item) -> Result<i64, Fehler> {
+    /// Insert or update; the later writer wins. `created_at` survives an update. Returns the
+    /// revision the row now carries, raised in the same statement so an older client is refused.
+    pub fn upsert_item(&self, it: &Item) -> Result<i64, Error> {
         let p = &self.prefix;
         let now = sjel_store::now_offset("'+0 seconds'");
-        let spalten = WRITE_COLUMNS.join(", ");
-        let platzhalter = (1..=WRITE_COLUMNS.len())
+        let columns = WRITE_COLUMNS.join(", ");
+        let placeholders = (1..=WRITE_COLUMNS.len())
             .map(|i| format!("?{i}"))
             .collect::<Vec<_>>()
             .join(", ");
-        let uebernehmen = WRITE_COLUMNS[1..]
+        let take = WRITE_COLUMNS[1..]
             .iter()
             .map(|c| format!("{c}=excluded.{c}"))
             .collect::<Vec<_>>()
@@ -932,9 +877,9 @@ impl Store {
         let conn = self.conn()?;
         let revision = conn.query_row(
             &format!(
-                "INSERT INTO {p}_item ({spalten}, revision, created_at, updated_at)
-                 VALUES ({platzhalter}, 1, {now}, {now})
-                 ON CONFLICT(id) DO UPDATE SET {uebernehmen},
+                "INSERT INTO {p}_item ({columns}, revision, created_at, updated_at)
+                 VALUES ({placeholders}, 1, {now}, {now})
+                 ON CONFLICT(id) DO UPDATE SET {take},
                     revision = {p}_item.revision + 1, updated_at = {now}
                  RETURNING revision"
             ),
@@ -944,66 +889,48 @@ impl Store {
         Ok(revision)
     }
 
-    /// Ueberschreiben, aber nur, wenn die Zeile noch die Revision traegt, die der Aufrufer
-    /// gelesen hat (PRD §10 A5, Q110: Telefon und Mac bearbeiten dieselben Eintraege).
+    /// Overwrite only while the row still carries the revision the caller read.
     ///
-    /// Vergleich und Schreiben sind EIN Statement: `UPDATE ... WHERE id = ? AND revision = ?`.
-    /// Ein Lesen vorher und ein Schreiben danach waere genau das Fenster, in dem der zweite
-    /// Schreiber still gewinnt. Ein einzelnes Statement im Autocommit nimmt die Schreibsperre
-    /// schon beim Start, bevor es liest; das Upgrade-Problem der verzoegerten Transaktion
-    /// (`sjel_store::write_transaction`, PRD 0.19) entsteht erst mit einem zweiten Statement
-    /// davor und tritt hier nicht auf.
-    ///
-    /// Trifft das Statement keine Zeile, sagt erst das Lesen danach, warum: gibt es den Eintrag
-    /// nicht, oder traegt er eine andere Revision. Dieses Lesen schreibt nichts und braucht
-    /// deshalb keine Transaktion; es liefert den Stand, den der Aufrufer sehen muss.
-    pub fn update_item_if_revision(
-        &self,
-        it: &Item,
-        erwartet: i64,
-    ) -> Result<Schreibergebnis, Fehler> {
+    /// Compare and write are one statement, so there is no window in which a second writer wins
+    /// silently. When it matches no row, a read afterwards tells missing from stale.
+    pub fn update_item_if_revision(&self, it: &Item, expected: i64) -> Result<WriteOutcome, Error> {
         let p = &self.prefix;
         let now = sjel_store::now_offset("'+0 seconds'");
-        let setzen = WRITE_COLUMNS
+        let set = WRITE_COLUMNS
             .iter()
             .enumerate()
             .skip(1)
             .map(|(i, c)| format!("{c} = ?{}", i + 1))
             .collect::<Vec<_>>()
             .join(", ");
-        let mut werte = write_params(it)?;
-        werte.push(Box::new(erwartet));
+        let mut values = write_params(it)?;
+        values.push(Box::new(expected));
         let conn = self.conn()?;
-        let neu: Option<i64> = conn
+        let written: Option<i64> = conn
             .query_row(
                 &format!(
-                    "UPDATE {p}_item SET {setzen}, revision = revision + 1, updated_at = {now}
+                    "UPDATE {p}_item SET {set}, revision = revision + 1, updated_at = {now}
                      WHERE id = ?1 AND revision = ?{n}
                      RETURNING revision",
                     n = WRITE_COLUMNS.len() + 1
                 ),
-                rusqlite::params_from_iter(werte.iter()),
+                rusqlite::params_from_iter(values.iter()),
                 |row| row.get(0),
             )
             .optional()?;
         drop(conn);
-        if let Some(revision) = neu {
-            return Ok(Schreibergebnis::Geschrieben(revision));
+        if let Some(revision) = written {
+            return Ok(WriteOutcome::Written(revision));
         }
         Ok(match self.item(&it.id)? {
-            Some((aktuell, zustand)) => Schreibergebnis::Veraltet(Box::new(aktuell), zustand),
-            None => Schreibergebnis::Fehlt,
+            Some((current, state)) => WriteOutcome::Stale(Box::new(current), state),
+            None => WriteOutcome::Missing,
         })
     }
 
-    /// Einen Zustandswechsel festhalten. Schreibt NICHT, wenn der aktuelle Zustand schon
-    /// derselbe ist: ein wiederholter Import darf keine Geschichte erfinden.
-    pub fn record_state(
-        &self,
-        item_id: &str,
-        state: State,
-        note: Option<&str>,
-    ) -> Result<bool, Fehler> {
+    /// Append a state change. Writes nothing when the current state is already `state`, so a
+    /// repeated import does not invent history.
+    pub fn record_state(&self, item_id: &str, state: State, note: Option<&str>) -> Result<bool, Error> {
         if self.current_state(item_id)? == Some(state) {
             return Ok(false);
         }
@@ -1021,10 +948,8 @@ impl Store {
         Ok(true)
     }
 
-    /// Wie viele Eintraege es gibt. Die Frage, an der `interior import` entscheidet, ob es
-    /// eine Migration ist oder ein Ueberschreiben (PRD Q64).
-    /// Returns the canonical revision recorded for a previously applied sync operation.
-    pub fn sync_operation_revision(&self, operation_id: &str) -> Result<Option<i64>, Fehler> {
+    /// The revision recorded for a sync operation that was already applied.
+    pub fn sync_operation_revision(&self, operation_id: &str) -> Result<Option<i64>, Error> {
         let conn = self.conn()?;
         Ok(conn
             .query_row(
@@ -1040,7 +965,7 @@ impl Store {
 
     /// Records an applied operation. The primary key makes a retry visible instead of applying
     /// the same mutation twice.
-    pub fn record_sync_operation(&self, operation_id: &str, revision: i64) -> Result<(), Fehler> {
+    pub fn record_sync_operation(&self, operation_id: &str, revision: i64) -> Result<(), Error> {
         let conn = self.conn()?;
         conn.execute(
             &format!(
@@ -1053,26 +978,18 @@ impl Store {
         Ok(())
     }
 
-    pub fn item_count(&self) -> Result<i64, Fehler> {
+    pub fn item_count(&self) -> Result<i64, Error> {
         let p = &self.prefix;
         let conn = self.conn()?;
         Ok(conn.query_row(&format!("SELECT COUNT(*) FROM {p}_item"), [], |r| r.get(0))?)
     }
 
-    /// Ein einzelner Eintrag mit seinem aktuellen Zustand.
-    pub fn item(&self, id: &str) -> Result<Option<(Item, Option<State>)>, Fehler> {
+    pub fn item(&self, id: &str) -> Result<Option<(Item, Option<State>)>, Error> {
         Ok(self.catalogue()?.remove(id))
     }
 
-    /// Die ganze Zustandsgeschichte eines Eintrags, aelteste zuerst.
-    ///
-    /// Die Oberflaeche zeigt sie, weil sie der Grund ist, warum `interior_item_state` eine
-    /// Tabelle ist und keine Spalte: „gekauft" ist eine Zeile mehr und kein ueberschriebenes
-    /// Feld, und wer das nicht sieht, haelt die Trennung fuer Umstaendlichkeit.
-    pub fn state_history(
-        &self,
-        item_id: &str,
-    ) -> Result<Vec<(State, String, Option<String>)>, Fehler> {
+    /// The whole state history of an entry, oldest first.
+    pub fn state_history(&self, item_id: &str) -> Result<Vec<(State, String, Option<String>)>, Error> {
         let p = &self.prefix;
         let conn = self.conn()?;
         let mut stmt = conn.prepare(&format!(
@@ -1096,7 +1013,7 @@ impl Store {
         Ok(out)
     }
 
-    pub fn current_state(&self, item_id: &str) -> Result<Option<State>, Fehler> {
+    pub fn current_state(&self, item_id: &str) -> Result<Option<State>, Error> {
         let p = &self.prefix;
         let conn = self.conn()?;
         let raw: Option<String> = conn
@@ -1112,32 +1029,32 @@ impl Store {
         Ok(raw.as_deref().and_then(State::parse))
     }
 
-    /// Jedes Item mit seinem aktuellen Zustand. Der Katalog, den die Pruefung liest.
-    pub fn catalogue(&self) -> Result<BTreeMap<String, (Item, Option<State>)>, Fehler> {
+    /// Every item with its current state.
+    pub fn catalogue(&self) -> Result<BTreeMap<String, (Item, Option<State>)>, Error> {
         let p = &self.prefix;
         let conn = self.conn()?;
         let mut stmt = conn.prepare(&format!(
-            "SELECT i.id, i.kind, i.label, i.b, i.t, i.h, i.h_min, i.b_aufgeklappt,
-                    i.t_ausgeklappt, i.laenge, i.anzahl, i.zustaende, i.unsicher,
-                    i.platzbedarf_zone, i.platzbedarf_block, i.preis_cent, i.kosten_min_cent,
-                    i.kosten_max_cent, i.link, i.artikelnummer, i.quelle, i.gemessen_am,
-                    i.mitnahme, i.prioritaet, i.basiert_auf, i.ersetzt, i.varianten, i.ziel,
-                    i.hinweis, i.begruendung, i.entscheidung_offen,
+            "SELECT i.id, i.kind, i.label, i.width, i.depth, i.height, i.height_min,
+                    i.width_unfolded, i.depth_unfolded, i.length, i.count, i.fold_states,
+                    i.estimated, i.clearance_zone, i.clearance_block, i.price_cents,
+                    i.cost_min_cents, i.cost_max_cents, i.link, i.sku, i.source, i.measured_at,
+                    i.on_move, i.priority, i.based_on, i.replaces, i.variants, i.target,
+                    i.notes, i.reason, i.open_question,
                     i.opens, i.open_clear, i.wall_ok, i.expands_dir, i.expands_to,
-                    i.access_sides, i.access_clear, i.raumtrenner, i.bild, i.zerlegbar,
+                    i.access_sides, i.access_clear, i.room_divider, i.image, i.disassembles,
                     i.weight_g, i.category, i.packable, i.waterproof, i.quick_dry,
-                    i.pack_location, i.trip_types, i.groesse, i.farbe, i.saison, i.traits, i.revision,
+                    i.pack_location, i.trip_types, i.size, i.color, i.seasons, i.traits, i.revision,
                     (SELECT s.state FROM {p}_item_state s
                       WHERE s.item_id = i.id ORDER BY s.since DESC, s.id DESC LIMIT 1)
              FROM {p}_item i ORDER BY i.id"
         ))?;
         let rows = stmt.query_map([], |row| {
             let kind: String = row.get(1)?;
-            let seite = |i: usize| -> rusqlite::Result<Option<Seite>> {
+            let side = |i: usize| -> rusqlite::Result<Option<Side>> {
                 Ok(row
                     .get::<_, Option<String>>(i)?
                     .as_deref()
-                    .and_then(Seite::parse))
+                    .and_then(Side::parse))
             };
             let state: Option<String> = row.get(53)?;
             Ok((
@@ -1145,44 +1062,44 @@ impl Store {
                     id: row.get(0)?,
                     kind: Kind::parse(&kind),
                     label: row.get(2)?,
-                    b: row.get(3)?,
-                    t: row.get(4)?,
-                    h: row.get(5)?,
-                    h_min: row.get(6)?,
-                    b_aufgeklappt: row.get(7)?,
-                    t_ausgeklappt: row.get(8)?,
-                    laenge: row.get(9)?,
-                    anzahl: row.get(10)?,
-                    zustaende: sjel_store::json_column(row, 11)?,
-                    unsicher: sjel_store::json_column(row, 12)?,
-                    platzbedarf_zone: row.get(13)?,
-                    platzbedarf_block: row.get(14)?,
-                    preis_cent: row.get(15)?,
-                    kosten_min_cent: row.get(16)?,
-                    kosten_max_cent: row.get(17)?,
+                    width: row.get(3)?,
+                    depth: row.get(4)?,
+                    height: row.get(5)?,
+                    height_min: row.get(6)?,
+                    width_unfolded: row.get(7)?,
+                    depth_unfolded: row.get(8)?,
+                    length: row.get(9)?,
+                    count: row.get(10)?,
+                    fold_states: sjel_store::json_column(row, 11)?,
+                    estimated: sjel_store::json_column(row, 12)?,
+                    clearance_zone: row.get(13)?,
+                    clearance_block: row.get(14)?,
+                    price_cents: row.get(15)?,
+                    cost_min_cents: row.get(16)?,
+                    cost_max_cents: row.get(17)?,
                     link: row.get(18)?,
-                    artikelnummer: row.get(19)?,
-                    quelle: row.get(20)?,
-                    gemessen_am: row.get(21)?,
-                    mitnahme: row.get(22)?,
-                    prioritaet: row.get(23)?,
-                    basiert_auf: row.get(24)?,
-                    ersetzt: sjel_store::json_column(row, 25)?,
-                    varianten: sjel_store::json_column(row, 26)?,
-                    ziel: row.get(27)?,
-                    hinweis: row.get(28)?,
-                    begruendung: row.get(29)?,
-                    entscheidung_offen: row.get(30)?,
-                    opens: seite(31)?,
+                    sku: row.get(19)?,
+                    source: row.get(20)?,
+                    measured_at: row.get(21)?,
+                    on_move: row.get(22)?,
+                    priority: row.get(23)?,
+                    based_on: row.get(24)?,
+                    replaces: sjel_store::json_column(row, 25)?,
+                    variants: sjel_store::json_column(row, 26)?,
+                    target: row.get(27)?,
+                    notes: row.get(28)?,
+                    reason: row.get(29)?,
+                    open_question: row.get(30)?,
+                    opens: side(31)?,
                     open_clear: row.get(32)?,
                     wall_ok: row.get(33)?,
-                    expands_dir: seite(34)?,
+                    expands_dir: side(34)?,
                     expands_to: row.get(35)?,
                     access_sides: row.get(36)?,
                     access_clear: row.get(37)?,
-                    raumtrenner: row.get(38)?,
-                    bild: row.get(39)?,
-                    zerlegbar: row.get(40)?,
+                    room_divider: row.get(38)?,
+                    image: row.get(39)?,
+                    disassembles: row.get(40)?,
                     weight_g: row.get(41)?,
                     category: row.get(42)?,
                     packable: row.get(43)?,
@@ -1190,9 +1107,9 @@ impl Store {
                     quick_dry: row.get(45)?,
                     pack_location: row.get(46)?,
                     trip_types: sjel_store::json_column(row, 47)?,
-                    groesse: row.get(48)?,
-                    farbe: row.get(49)?,
-                    saison: sjel_store::json_column(row, 50)?,
+                    size: row.get(48)?,
+                    color: row.get(49)?,
+                    seasons: sjel_store::json_column(row, 50)?,
                     traits: sjel_store::json_column(row, 51)?,
                     revision: row.get(52)?,
                 },
@@ -1207,17 +1124,9 @@ impl Store {
         Ok(out)
     }
 
-    /// Die Zweige, die wirklich vorkommen — `category` und wie oft er dasteht.
-    ///
-    /// **Gelesen und nicht deklariert**, dieselbe Regel wie `budget::BEKANNTE_PRIORITAETEN`
-    /// und aus demselben Grund: eine im Quelltext abgeschriebene Liste ist eine zweite
-    /// Wahrheit, und die erste, die jemand beim naechsten Zweig vergisst. Das Formular in
-    /// `/interior` baut seine Vorschlaege aus denselben Zeilen, statt eine eigene Liste zu
-    /// fuehren.
-    ///
-    /// Leer und nur aus Weissraum zaehlt nicht: ein Feld, das niemand gefuellt hat, ist kein
-    /// Zweig.
-    pub fn kategorien(&self) -> Result<Vec<(String, i64)>, Fehler> {
+    /// The categories that occur, with counts. Read from the rows, never declared, so a new
+    /// category needs no code change. Empty and whitespace-only values do not count.
+    pub fn categories(&self) -> Result<Vec<(String, i64)>, Error> {
         let p = &self.prefix;
         let conn = self.conn()?;
         let mut stmt = conn.prepare(&format!(
@@ -1233,30 +1142,19 @@ impl Store {
     }
 }
 
-/// Schreibweisen, die sich nur in Gross-/Kleinschreibung oder Weissraum unterscheiden.
-///
-/// `kleidung` und `Kleidung` sind **zwei Zweige**, und niemand hat das entschieden — sie sind
-/// entstanden, weil das Feld frei ist. Diese Funktion spaltet nicht auf und normalisiert
-/// nichts: sie nennt die Gruppe, und wer sie sieht, entscheidet. Ein stilles Kleinschreiben
-/// waere eine Aenderung an dem, was jemand getippt hat, und damit genau die stille Korrektur,
-/// die dieses Haus an Zahlen verbietet.
-///
-/// Je Gruppe steht der haeufigste Wert vorn, damit der naheliegende Vorschlag offensichtlich
-/// ist, ohne dass ihn jemand aussprechen muss.
-pub fn kollisionen(kategorien: &[(String, i64)]) -> Vec<Vec<String>> {
-    let mut gruppen: BTreeMap<String, Vec<(String, i64)>> = BTreeMap::new();
-    for (name, anzahl) in kategorien {
-        let schluessel = name
+/// Spellings of one category that differ only in case or whitespace, most frequent first.
+/// Reported, never normalised: silently lower-casing would change what someone typed.
+pub fn collisions(categories: &[(String, i64)]) -> Vec<Vec<String>> {
+    let mut groups: BTreeMap<String, Vec<(String, i64)>> = BTreeMap::new();
+    for (name, count) in categories {
+        let key = name
             .split_whitespace()
             .collect::<Vec<_>>()
             .join(" ")
             .to_lowercase();
-        gruppen
-            .entry(schluessel)
-            .or_default()
-            .push((name.clone(), *anzahl));
+        groups.entry(key).or_default().push((name.clone(), *count));
     }
-    let mut out: Vec<Vec<String>> = gruppen
+    let mut out: Vec<Vec<String>> = groups
         .into_values()
         .filter(|g| g.len() > 1)
         .map(|mut g| {
@@ -1272,20 +1170,20 @@ pub fn kollisionen(kategorien: &[(String, i64)]) -> Vec<Vec<String>> {
 mod tests {
     use super::*;
 
-    fn zweig(name: &str, anzahl: i64) -> (String, i64) {
-        (name.to_string(), anzahl)
+    fn category(name: &str, count: i64) -> (String, i64) {
+        (name.to_string(), count)
     }
 
     #[test]
-    fn zwei_schreibweisen_eines_zweigs_werden_gemeldet() {
+    fn two_spellings_of_one_category_are_reported() {
         let k = vec![
-            zweig("kleidung", 5),
-            zweig("Kleidung", 2),
-            zweig("kleidung ", 1),
-            zweig("schlafen", 3),
+            category("kleidung", 5),
+            category("Kleidung", 2),
+            category("kleidung ", 1),
+            category("schlafen", 3),
         ];
         assert_eq!(
-            kollisionen(&k),
+            collisions(&k),
             vec![vec![
                 "kleidung".to_string(),
                 "Kleidung".to_string(),
@@ -1295,21 +1193,56 @@ mod tests {
     }
 
     #[test]
-    fn ein_eindeutiger_zweig_ist_keine_kollision() {
-        assert!(kollisionen(&[zweig("kleidung", 5)]).is_empty());
-        assert!(kollisionen(&[]).is_empty());
+    fn a_single_spelling_is_no_collision() {
+        assert!(collisions(&[category("kleidung", 5)]).is_empty());
+        assert!(collisions(&[]).is_empty());
     }
 
-    /// Der Unterschied, auf den es ankommt: `Kochen` und `kochen` sind dieselbe Sache,
-    /// `kochen` und `kochen-und-backen` sind zwei.
     #[test]
-    fn nur_dieselbe_sache_ist_eine_kollision() {
+    fn only_the_same_word_collides() {
         let k = vec![
-            zweig("Kochen", 1),
-            zweig("kochen", 1),
-            zweig("kochen-und-backen", 1),
+            category("Kochen", 1),
+            category("kochen", 1),
+            category("kochen-und-backen", 1),
         ];
-        assert_eq!(kollisionen(&k).len(), 1);
-        assert_eq!(kollisionen(&k)[0], vec!["Kochen", "kochen"]);
+        assert_eq!(collisions(&k).len(), 1);
+        assert_eq!(collisions(&k)[0], vec!["Kochen", "kochen"]);
+    }
+
+    /// A file written by the German schema keeps every value and its history through the rename.
+    #[test]
+    fn a_german_schema_is_renamed_without_losing_a_value() {
+        let path = std::env::temp_dir().join(format!("inventory-legacy-{}.db", std::process::id()));
+        let _ = std::fs::remove_file(&path);
+        {
+            // The current schema with every column renamed back: what an old file looks like.
+            let conn = Connection::open(&path).unwrap();
+            Store::run_migration(&conn, "inventory").unwrap();
+            for (old, new) in LEGACY_FIELDS {
+                conn.execute_batch(&format!("ALTER TABLE inventory_item RENAME COLUMN {new} TO {old};"))
+                    .unwrap();
+            }
+            conn.execute_batch(
+                "INSERT INTO inventory_item (id, kind, label, b, preis_cent, groesse, prioritaet,
+                    expands_dir, mitnahme, saison, created_at, updated_at, revision)
+                 VALUES ('mantel','piece','Mantel',60,19900,'M','pflicht','sued','offen',
+                    '[\"winter\"]','2026-01-01','2026-01-01',4);
+                 INSERT INTO inventory_item_state (item_id, state, since) VALUES
+                    ('mantel','wanted','2026-01-01');",
+            )
+            .unwrap();
+        }
+        let store = Store::open(&path).unwrap();
+        let (item, state) = store.item("mantel").unwrap().unwrap();
+        assert_eq!(item.width, Some(60));
+        assert_eq!(item.price_cents, Some(19900));
+        assert_eq!(item.size.as_deref(), Some("M"));
+        assert_eq!(item.priority.as_deref(), Some("required"));
+        assert_eq!(item.expands_dir, Some(Side::South));
+        assert_eq!(item.on_move.as_deref(), Some("undecided"));
+        assert_eq!(item.seasons, vec!["winter".to_string()]);
+        assert_eq!(item.revision, 4);
+        assert_eq!(state, Some(State::Wanted));
+        let _ = std::fs::remove_file(&path);
     }
 }

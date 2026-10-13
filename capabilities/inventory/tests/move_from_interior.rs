@@ -1,23 +1,17 @@
-//! Der Umzug aus `interior_item` (ISA F13, 2026-10-05).
+//! The one-time move out of `interior_item`, from a file in the old German schema: rows, state
+//! history and placements arrive, the column names become English, and the old table is gone.
 //!
-//! Was hier geprueft wird, ist nicht "gibt es die Spalten", sondern: **eine Datei, die noch
-//! `interior_item` heisst, kommt mit ihren Zeilen, ihrer Zustandsgeschichte und ihren
-//! Platzierungen herueber — und die alte Tabelle ist danach weg.**
-//!
-//! Die Platzierungen sind der eigentliche Grund fuer diesen Test. `interior_placement` zeigt mit
-//! `ON DELETE CASCADE` auf `interior_item`; ein `DROP` der Elterntabelle nimmt sie mit, und
-//! `libs/sjel-store` schaltet Fremdschluessel auf jeder Verbindung ein. Der Umzug baut die
-//! Kindtabelle deshalb vorher ohne Fremdschluessel neu. Ohne diesen Test waere der Verlust
-//! still: die Zeilen sind weg, und niemand hat eine Zahl, gegen die er es merkt.
+//! Placements are why this exists: `interior_placement` cascades on `interior_item`, so dropping
+//! the parent without rebuilding the child first would lose them silently.
 
 use rusqlite::Connection;
 use sjel_inventory::store::{Item, Kind, State, Store};
 use std::path::Path;
 
-/// Die Form, in der die Tabelle bis 2026-10-05 auf der Platte lag: unter `interior_item`, mit
-/// dem Fremdschluessel in `interior_placement` und mit einem Zustand und einer Platzierung.
-fn datei_vor_dem_umzug(pfad: &Path) {
-    let conn = Connection::open(pfad).unwrap();
+/// The table as it lay on disk until 2026-10-05: German columns, under `interior_item`, with the
+/// foreign key in `interior_placement`.
+fn file_before_the_move(path: &Path) {
+    let conn = Connection::open(path).unwrap();
     conn.execute_batch(
         "CREATE TABLE interior_item (
             id                 TEXT PRIMARY KEY,
@@ -112,48 +106,45 @@ fn datei_vor_dem_umzug(pfad: &Path) {
     .unwrap();
 }
 
-fn tempdatei(name: &str) -> std::path::PathBuf {
-    let pfad =
-        std::env::temp_dir().join(format!("inventory-umzug-{name}-{}.db", std::process::id()));
-    let _ = std::fs::remove_file(&pfad);
-    pfad
+fn temp_file(name: &str) -> std::path::PathBuf {
+    let path =
+        std::env::temp_dir().join(format!("inventory-move-{name}-{}.db", std::process::id()));
+    let _ = std::fs::remove_file(&path);
+    path
 }
 
 #[test]
-fn der_umzug_haelt_zeilen_zustand_und_platzierung() {
-    let pfad = tempdatei("voll");
-    datei_vor_dem_umzug(&pfad);
+fn the_move_keeps_rows_state_and_placement() {
+    let path = temp_file("full");
+    file_before_the_move(&path);
 
-    let store = Store::open(&pfad).unwrap();
+    let store = Store::open(&path).unwrap();
 
-    // Die Zeilen sind da, mit allem, was sie trugen.
-    let (hemd, zustand) = store.item("hemd").unwrap().expect("Hemd ueberlebt");
-    assert_eq!(hemd.label, "Hemd");
-    assert_eq!(hemd.category.as_deref(), Some("kleidung"));
-    assert_eq!(hemd.groesse.as_deref(), Some("M"));
-    assert_eq!(hemd.saison, vec!["ganzjahr".to_string()]);
-    assert_eq!(hemd.preis_cent, Some(7990));
-    // Die Revision gehoert dem Server und wandert mit: ein Telefon mit einem gelesenen Stand
-    // soll nicht einmal grundlos einen Konflikt sehen (PRD §10 A5).
-    assert_eq!(hemd.revision, 7);
-    assert_eq!(zustand, Some(State::Owned));
+    let (shirt, state) = store.item("hemd").unwrap().expect("the shirt survives");
+    assert_eq!(shirt.label, "Hemd");
+    assert_eq!(shirt.category.as_deref(), Some("kleidung"));
+    assert_eq!(shirt.size.as_deref(), Some("M"));
+    assert_eq!(shirt.seasons, vec!["ganzjahr".to_string()]);
+    assert_eq!(shirt.price_cents, Some(7990));
+    // The revision moves too, so a phone holding a read row sees no false conflict.
+    assert_eq!(shirt.revision, 7);
+    assert_eq!(state, Some(State::Owned));
 
-    let (regal, _) = store.item("regal").unwrap().expect("Regal ueberlebt");
-    assert_eq!((regal.b, regal.t, regal.h), (Some(80), Some(30), Some(200)));
+    let (shelf, _) = store.item("regal").unwrap().expect("the shelf survives");
+    assert_eq!(
+        (shelf.width, shelf.depth, shelf.height),
+        (Some(80), Some(30), Some(200))
+    );
 
-    // Die Zustandsgeschichte ist eine Geschichte und keine Zeile: zwei Eintraege, in der
-    // Reihenfolge, in der sie geschehen sind.
-    let verlauf = store.state_history("hemd").unwrap();
-    assert_eq!(verlauf.len(), 2);
-    assert_eq!(verlauf[0].0, State::Wanted);
-    assert_eq!(verlauf[1].0, State::Owned);
-    assert_eq!(verlauf[1].1, "2026-03-04");
+    let history = store.state_history("hemd").unwrap();
+    assert_eq!(history.len(), 2);
+    assert_eq!(history[0].0, State::Wanted);
+    assert_eq!(history[1].0, State::Owned);
+    assert_eq!(history[1].1, "2026-03-04");
 
-    // Und die Platzierung — der Grund, aus dem dieser Test existiert. Sie wird direkt aus der
-    // Tabelle gelesen und nicht ueber diesen Store: `interior_placement` gehoert
-    // `capabilities/interior`, und diese Capability fasst sie nur im Umzug an.
-    let conn = Connection::open(&pfad).unwrap();
-    let platz: Vec<(String, String, i32, i32)> = {
+    // Read from the table directly: `interior_placement` belongs to interior.
+    let conn = Connection::open(&path).unwrap();
+    let placements: Vec<(String, String, i32, i32)> = {
         let mut stmt = conn
             .prepare("SELECT item_id, flat, x, y FROM interior_placement ORDER BY item_id")
             .unwrap();
@@ -162,56 +153,49 @@ fn der_umzug_haelt_zeilen_zustand_und_platzierung() {
             .unwrap();
         rows.collect::<Result<Vec<_>, _>>().unwrap()
     };
-    assert_eq!(platz.len(), 1, "die Platzierung hat den DROP ueberlebt");
-    assert_eq!(platz[0].0, "regal");
-    assert_eq!(platz[0].1, "wohnung");
+    assert_eq!(placements.len(), 1, "the placement survived the DROP");
+    assert_eq!(placements[0].0, "regal");
+    assert_eq!(placements[0].1, "wohnung");
 
-    let _ = std::fs::remove_file(&pfad);
+    let _ = std::fs::remove_file(&path);
 }
 
 #[test]
-fn die_alte_tabelle_ist_danach_weg() {
-    // Zwei Tabellen mit denselben Zeilen waeren zwei Wahrheiten, und gelesen wuerde die, die
-    // niemand mehr schreibt. Der Umzug laesst die alte fallen.
-    let pfad = tempdatei("weg");
-    datei_vor_dem_umzug(&pfad);
-    let _ = Store::open(&pfad).unwrap();
+fn the_old_table_is_gone_afterwards() {
+    let path = temp_file("gone");
+    file_before_the_move(&path);
+    let _ = Store::open(&path).unwrap();
 
-    let conn = Connection::open(&pfad).unwrap();
-    let alt: i64 = conn
+    let conn = Connection::open(&path).unwrap();
+    let old: i64 = conn
         .query_row(
             "SELECT COUNT(*) FROM sqlite_master WHERE type='table' AND name IN ('interior_item','interior_item_state')",
             [],
             |r| r.get(0),
         )
         .unwrap();
-    assert_eq!(
-        alt, 0,
-        "interior_item und interior_item_state sind gefallen"
-    );
-    let neu: i64 = conn
+    assert_eq!(old, 0, "interior_item and interior_item_state are dropped");
+    let new: i64 = conn
         .query_row(
             "SELECT COUNT(*) FROM sqlite_master WHERE type='table' AND name='inventory_item'",
             [],
             |r| r.get(0),
         )
         .unwrap();
-    assert_eq!(neu, 1);
+    assert_eq!(new, 1);
 
-    let _ = std::fs::remove_file(&pfad);
+    let _ = std::fs::remove_file(&path);
 }
 
-/// Der Fremdschluessel in `interior_placement` zeigt danach auf **keine** Tabelle. Das ist
-/// Absicht und keine Nachlaessigkeit: die Zeilen gehoeren einer anderen Capability, und ein FK
-/// ueber zwei Praefixe liesse spaeter jeden Loeschvorgang der einen an einer Zeile der anderen
-/// scheitern. `trips/src/pack.rs` begruendet dieselbe Entscheidung fuer seinen `item_ref`.
+/// On purpose: a foreign key across two prefixes would make one capability's deletes fail on the
+/// other's rows.
 #[test]
-fn die_platzierung_traegt_keinen_fremdschluessel_mehr() {
-    let pfad = tempdatei("fk");
-    datei_vor_dem_umzug(&pfad);
-    let _ = Store::open(&pfad).unwrap();
+fn the_placement_has_no_foreign_key_anymore() {
+    let path = temp_file("fk");
+    file_before_the_move(&path);
+    let _ = Store::open(&path).unwrap();
 
-    let conn = Connection::open(&pfad).unwrap();
+    let conn = Connection::open(&path).unwrap();
     let ddl: String = conn
         .query_row(
             "SELECT sql FROM sqlite_master WHERE type='table' AND name='interior_placement'",
@@ -219,19 +203,16 @@ fn die_platzierung_traegt_keinen_fremdschluessel_mehr() {
             |r| r.get(0),
         )
         .unwrap();
-    assert!(!ddl.contains("REFERENCES"), "kein FK mehr: {ddl}");
+    assert!(!ddl.contains("REFERENCES"), "no FK anymore: {ddl}");
 
-    let _ = std::fs::remove_file(&pfad);
+    let _ = std::fs::remove_file(&path);
 }
 
 #[test]
-fn ein_zweiter_start_holt_nichts_noch_einmal() {
-    // Der Umzug haengt am Vorhandensein der alten Tabelle. Ohne diese Bedingung kopierte jeder
-    // Start die Zeilen erneut — und beim zweiten Mal waere die alte Tabelle schon weg, also
-    // faellt es hier auf, wenn die Bedingung fehlt.
-    let pfad = tempdatei("idempotent");
-    datei_vor_dem_umzug(&pfad);
-    let store = Store::open(&pfad).unwrap();
+fn a_second_start_moves_nothing_again() {
+    let path = temp_file("idempotent");
+    file_before_the_move(&path);
+    let store = Store::open(&path).unwrap();
     store
         .upsert_item(&Item {
             id: "mantel".into(),
@@ -242,21 +223,20 @@ fn ein_zweiter_start_holt_nichts_noch_einmal() {
         .unwrap();
     drop(store);
 
-    let store = Store::open(&pfad).unwrap();
+    let store = Store::open(&path).unwrap();
     assert_eq!(store.item_count().unwrap(), 3);
     assert!(store.item("mantel").unwrap().is_some());
     assert_eq!(store.state_history("hemd").unwrap().len(), 2);
 
-    let _ = std::fs::remove_file(&pfad);
+    let _ = std::fs::remove_file(&path);
 }
 
-/// Eine Datei, die **auch** die Ausruestungs- und Kleidungsspalten noch nicht hat. Der Umzug
-/// kopiert dann nur die Spalten, die beide Tabellen fuehren, und die neuen bekommen ihren
-/// Vorgabewert — ein `INSERT` ueber eine fehlende Spalte faellt um statt zu heilen.
+/// A file without the gear and clothing columns: only shared columns are copied, the rest get
+/// their default.
 #[test]
-fn eine_aeltere_datei_verliert_durch_den_umzug_nichts() {
-    let pfad = tempdatei("alt");
-    let conn = Connection::open(&pfad).unwrap();
+fn an_older_file_loses_nothing_in_the_move() {
+    let path = temp_file("old");
+    let conn = Connection::open(&path).unwrap();
     conn.execute_batch(
         "CREATE TABLE interior_item (
             id                 TEXT PRIMARY KEY,
@@ -283,14 +263,16 @@ fn eine_aeltere_datei_verliert_durch_den_umzug_nichts() {
     .unwrap();
     drop(conn);
 
-    let store = Store::open(&pfad).unwrap();
-    let (regal, zustand) = store.item("regal").unwrap().expect("Regal ueberlebt");
-    assert_eq!((regal.b, regal.t, regal.h), (Some(80), Some(30), Some(200)));
-    assert_eq!(zustand, Some(State::Owned));
-    // Was die alte Datei nicht hatte, kommt als leerer Vorgabewert an — nicht als Fehler.
-    assert_eq!(regal.category, None);
-    assert_eq!(regal.saison, Vec::<String>::new());
-    assert_eq!(regal.revision, 1);
+    let store = Store::open(&path).unwrap();
+    let (shelf, state) = store.item("regal").unwrap().expect("the shelf survives");
+    assert_eq!(
+        (shelf.width, shelf.depth, shelf.height),
+        (Some(80), Some(30), Some(200))
+    );
+    assert_eq!(state, Some(State::Owned));
+    assert_eq!(shelf.category, None);
+    assert_eq!(shelf.seasons, Vec::<String>::new());
+    assert_eq!(shelf.revision, 1);
 
-    let _ = std::fs::remove_file(&pfad);
+    let _ = std::fs::remove_file(&path);
 }

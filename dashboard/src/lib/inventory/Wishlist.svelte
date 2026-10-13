@@ -33,12 +33,12 @@
   let error = $state<string | null>(null);
   const open = $derived(items.find((i) => i.id === peek) ?? null);
 
-  const price = (i: InventoryItem) => i.preis_cent ?? i.kosten_min_cent;
+  const price = (i: InventoryItem) => i.price_cents ?? i.cost_min_cents;
 
   const fields: Field<InventoryItem>[] = [
     { id: "label", label: "Item", value: (i) => i.label, cell: labelCell },
     { id: "category", label: "Category", kind: "select", width: "8rem", value: (i) => i.category ?? "none", display: (v) => (v === "none" ? "No category" : v), tone: (v) => (v === "none" ? "muted" : "neutral") },
-    { id: "priority", label: "Priority", kind: "select", width: "8rem", value: (i) => i.prioritaet ?? "none", display: (v) => (v === "none" ? "—" : v), tone: (v) => (v === "pflicht" ? "warning" : v === "none" ? "muted" : "neutral") },
+    { id: "priority", label: "Priority", kind: "select", width: "8rem", value: (i) => i.priority ?? "none", display: (v) => (v === "none" ? "—" : v), tone: (v) => (v === "pflicht" ? "warning" : v === "none" ? "muted" : "neutral") },
     { id: "price", label: "Price", kind: "number", width: "9rem", align: "end", value: price, cell: priceCell },
     { id: "kind", label: "Kind", kind: "select", column: false, value: (i) => i.kind, display: (v) => (v === "slot" ? "Flat need" : v === "gear" ? "Gear" : "Thing") },
   ];
@@ -55,7 +55,7 @@
   function commitPrice(item: InventoryItem, text: string | null) {
     const cents = centsFrom(text);
     if (cents === undefined) error = `"${text}" is not a price. Write it like 39,90.`;
-    else void patch(item, { preis_cent: cents });
+    else void patch(item, { price_cents: cents });
   }
 </script>
 
@@ -69,10 +69,10 @@
 {/snippet}
 
 {#snippet priceCell(i: InventoryItem)}
-  {#if i.preis_cent !== null}
-    <span class="mono">{euro(i.preis_cent)}</span>
-  {:else if i.kosten_min_cent !== null}
-    <span class="mono">{euro(i.kosten_min_cent)}–{euro(i.kosten_max_cent ?? i.kosten_min_cent)}</span>
+  {#if i.price_cents !== null}
+    <span class="mono">{euro(i.price_cents)}</span>
+  {:else if i.cost_min_cents !== null}
+    <span class="mono">{euro(i.cost_min_cents)}–{euro(i.cost_max_cents ?? i.cost_min_cents)}</span>
   {:else}
     <Chip label="no price" tone="muted" />
   {/if}
@@ -104,14 +104,14 @@
   <SidePeek title={i.label} eyebrow={i.kind === "slot" ? "Flat need" : "Wanted"} onClose={() => { peek = null; error = null; }}>
     {@render errorLine()}
     <Property label="Label" value={i.label} onCommit={(v) => v && patch(i, { label: v })} />
-    <Property label="Price" value={i.preis_cent === null ? null : euro(i.preis_cent)} placeholder="39,90" onCommit={(v) => commitPrice(i, v)} />
+    <Property label="Price" value={i.price_cents === null ? null : euro(i.price_cents)} placeholder="39,90" onCommit={(v) => commitPrice(i, v)} />
     <Property label="Category" value={i.category} placeholder="kleidung" onCommit={(v) => patch(i, { category: v })} />
-    <Property label="Priority" value={i.prioritaet} placeholder="pflicht, empfehlung, kandidat" onCommit={(v) => patch(i, { prioritaet: v })} />
-    <Property label="Size" value={i.groesse} onCommit={(v) => patch(i, { groesse: v })} />
-    <Property label="Colour" value={i.farbe} onCommit={(v) => patch(i, { farbe: v })} />
+    <Property label="Priority" value={i.priority} placeholder="required, recommended, candidate" onCommit={(v) => patch(i, { priority: v })} />
+    <Property label="Size" value={i.size} onCommit={(v) => patch(i, { size: v })} />
+    <Property label="Colour" value={i.color} onCommit={(v) => patch(i, { color: v })} />
     <Property label="Link" value={i.link} placeholder="https://…" onCommit={(v) => patch(i, { link: v })} />
-    <Property label="Note" kind="textarea" value={i.hinweis} onCommit={(v) => patch(i, { hinweis: v })} />
-    {#if i.ziel}<Property label="Goal" value={i.ziel} readonly />{/if}
+    <Property label="Note" kind="textarea" value={i.notes} onCommit={(v) => patch(i, { notes: v })} />
+    {#if i.target}<Property label="Goal" value={i.target} readonly />{/if}
     {#snippet footer()}
       <button class="act" disabled={busy} onclick={() => { onBought(i.id); peek = null; }}>Mark bought</button>
       <button class="act" onclick={() => { onFullEditor(i.id); peek = null; }}>Sizes, picture, history…</button>

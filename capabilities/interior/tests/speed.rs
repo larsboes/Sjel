@@ -12,7 +12,7 @@ use interior::clearance::check_layout;
 use interior::model::Model;
 
 #[test]
-fn eine_layoutpruefung_kostet_wenige_millisekunden() {
+fn a_layout_check_costs_a_few_milliseconds() {
     let fixture = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/fixtures/overlay");
     let db = std::env::temp_dir().join(format!("interior-speed-{}.db", std::process::id()));
     let _ = std::fs::remove_file(&db);

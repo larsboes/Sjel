@@ -16,7 +16,7 @@ use std::sync::Once;
 
 const MUSTER: &str = "muster";
 /// Eins der Layouts der Musterwohnung, als Vorlage zum Kopieren.
-const VORLAGE: &str = "a-frei";
+const TEMPLATE: &str = "a-frei";
 
 fn fixture() -> PathBuf {
     Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/fixtures/overlay")
@@ -24,7 +24,7 @@ fn fixture() -> PathBuf {
 
 /// Setzt die Umgebung genau einmal je Binary und fuellt das Inventar ueber denselben Import,
 /// den `interior import` fuehrt — kein zweiter Weg, Zeilen anzulegen.
-fn einmalige_wurzel() -> PathBuf {
+fn unique_root() -> PathBuf {
     static ONCE: Once = Once::new();
     let wurzel = std::env::temp_dir().join(format!("interior-layouts-{}", std::process::id()));
     ONCE.call_once(|| {
@@ -45,29 +45,29 @@ fn einmalige_wurzel() -> PathBuf {
 ///
 /// Jeder Test hier schreibt Dateien, und `SJEL_PERSONAL_ROOT` ist prozessweit: zwei Tests, die
 /// sich eine Wohnung teilen, zaehlen die Layouts des jeweils anderen mit.
-fn wohnung(name: &str) -> Model {
-    let wurzel = einmalige_wurzel();
-    let ziel = wurzel.join("data/interior/flats").join(name);
-    if !ziel.exists() {
-        kopiere(&fixture().join("data/interior/flats").join(MUSTER), &ziel);
+fn flat(name: &str) -> Model {
+    let wurzel = unique_root();
+    let target = wurzel.join("data/interior/flats").join(name);
+    if !target.exists() {
+        copy_layout(&fixture().join("data/interior/flats").join(MUSTER), &target);
     }
     Model::load(name).unwrap_or_else(|e| panic!("{name}: {e}"))
 }
 
-fn kopiere(von: &Path, nach: &Path) {
+fn copy_layout(von: &Path, nach: &Path) {
     std::fs::create_dir_all(nach).expect("Zielverzeichnis");
     for e in std::fs::read_dir(von).expect("Quellverzeichnis") {
         let e = e.expect("Eintrag");
-        let ziel = nach.join(e.file_name());
+        let target = nach.join(e.file_name());
         if e.file_type().expect("Typ").is_dir() {
-            kopiere(&e.path(), &ziel);
+            copy_layout(&e.path(), &target);
         } else {
-            std::fs::copy(e.path(), &ziel).expect("Datei kopieren");
+            std::fs::copy(e.path(), &target).expect("Datei kopieren");
         }
     }
 }
 
-fn datei(m: &Model, id: &str) -> String {
+fn file(m: &Model, id: &str) -> String {
     std::fs::read_to_string(m.layouts_dir().join(format!("{id}.toml")))
         .unwrap_or_else(|e| panic!("{id}.toml: {e}"))
 }
@@ -82,8 +82,8 @@ fn plan(name: &str, items: Vec<PlacedItem>) -> Layout {
 
 /// Ein leerer Plan ist der Anfang jeder Planung von Hand und kein Sonderfall.
 #[test]
-fn ein_neuer_plan_darf_leer_sein() {
-    let m = wohnung("leer");
+fn a_new_plan_may_be_empty() {
+    let m = flat("leer");
     layout_io::create(
         &m,
         "noch-nichts",
@@ -113,12 +113,12 @@ fn ein_neuer_plan_darf_leer_sein() {
 /// falsch — und eine Datei, die ihre eigene Herkunft falsch behauptet, ist schlimmer als eine
 /// ohne Kopf, weil sie geglaubt wird.
 #[test]
-fn der_kopf_behauptet_keine_pruefung_die_nicht_stattgefunden_hat() {
-    let m = wohnung("herkunft");
+fn the_header_claims_no_check_that_did_not_happen() {
+    let m = flat("herkunft");
     let notiz = "Erstellt 2026-08-31 ueber die API.\n\nZweiter Absatz.";
     layout_io::create(&m, "von-hand", &plan("Von Hand", vec![]), notiz).expect("geschrieben");
 
-    let text = datei(&m, "von-hand");
+    let text = file(&m, "von-hand");
     assert!(
         text.contains("# Erstellt 2026-08-31 ueber die API."),
         "die Notiz steht als Kommentar im Kopf:\n{text}"
@@ -135,30 +135,30 @@ fn der_kopf_behauptet_keine_pruefung_die_nicht_stattgefunden_hat() {
 
 /// Eine Vorlage wird gelesen, nicht angefasst.
 #[test]
-fn eine_vorlage_wird_kopiert_und_bleibt_wie_sie_war() {
-    let m = wohnung("kopie");
-    let vorher = datei(&m, VORLAGE);
-    let vorlage = m.load_layout(VORLAGE).expect("die Vorlage");
+fn a_template_is_copied_and_stays_as_it_was() {
+    let m = flat("kopie");
+    let before = file(&m, TEMPLATE);
+    let template = m.load_layout(TEMPLATE).expect("die Vorlage");
 
     layout_io::create(
         &m,
         "abgeschrieben",
-        &plan("Abgeschrieben", vorlage.items.clone()),
+        &plan("Abgeschrieben", template.items.clone()),
         "Kopie.",
     )
     .expect("geschrieben");
 
     let neu = m.load_layout("abgeschrieben").expect("die Kopie");
-    assert_eq!(neu.items.len(), vorlage.items.len());
-    for (a, b) in neu.items.iter().zip(&vorlage.items) {
+    assert_eq!(neu.items.len(), template.items.len());
+    for (a, b) in neu.items.iter().zip(&template.items) {
         assert_eq!(
             (&a.reference, a.x, a.y, a.rot),
             (&b.reference, b.x, b.y, b.rot)
         );
     }
     assert_eq!(
-        datei(&m, VORLAGE),
-        vorher,
+        file(&m, TEMPLATE),
+        before,
         "die Vorlage hat Zeichen fuer Zeichen ueberlebt"
     );
 }
@@ -166,37 +166,37 @@ fn eine_vorlage_wird_kopiert_und_bleibt_wie_sie_war() {
 /// Ein bestehender Plan wird nicht ueberschrieben, und zwar auch dann nicht, wenn der neue
 /// besser ist: der Kopf des alten ist das Argument, das ihn ersetzt hat.
 #[test]
-fn ein_bestehendes_layout_wird_nicht_ueberschrieben() {
-    let m = wohnung("kein-ueberschreiben");
-    let vorher = datei(&m, VORLAGE);
-    let e = layout_io::create(&m, VORLAGE, &plan("Neu", vec![]), "Zweiter Versuch.")
+fn an_existing_layout_is_not_overwritten() {
+    let m = flat("kein-ueberschreiben");
+    let before = file(&m, TEMPLATE);
+    let e = layout_io::create(&m, TEMPLATE, &plan("Neu", vec![]), "Zweiter Versuch.")
         .expect_err("den Namen gibt es schon");
     assert!(e.to_string().contains("gibt es schon"), "{e}");
-    assert_eq!(datei(&m, VORLAGE), vorher, "und die Datei ist unberuehrt");
+    assert_eq!(file(&m, TEMPLATE), before, "und die Datei ist unberuehrt");
 }
 
 /// Der Name wird zu einem Dateinamen. Ueber die API kommt er von aussen.
 #[test]
-fn ein_layoutname_kann_nicht_aus_dem_verzeichnis_zeigen() {
-    let m = wohnung("namen");
-    let anfangs = m.layout_names().expect("Liste").len();
-    for boese in ["../room", "unter/plan", "plan.toml", ""] {
+fn a_layout_name_cannot_point_out_of_the_dir() {
+    let m = flat("namen");
+    let starts = m.layout_names().expect("Liste").len();
+    for bad in ["../room", "unter/plan", "plan.toml", ""] {
         assert!(
-            layout_io::create(&m, boese, &plan("X", vec![]), "n").is_err(),
-            "`{boese}` darf keine Datei werden"
+            layout_io::create(&m, bad, &plan("X", vec![]), "n").is_err(),
+            "`{bad}` darf keine Datei werden"
         );
     }
     assert_eq!(
         m.layout_names().expect("Liste").len(),
-        anfangs,
+        starts,
         "und keiner davon hat sich an der Pruefung vorbei eine Datei geschrieben"
     );
 }
 
 /// Archivieren heisst: aus der Liste, nicht von der Platte.
 #[test]
-fn ein_archiviertes_layout_faellt_aus_der_liste_und_nicht_von_der_platte() {
-    let m = wohnung("archiv");
+fn an_archived_layout_leaves_the_list_not_the_disk() {
+    let m = flat("archiv");
     layout_io::create(
         &m,
         "verworfen",
@@ -204,50 +204,50 @@ fn ein_archiviertes_layout_faellt_aus_der_liste_und_nicht_von_der_platte() {
         "Drei Absaetze Begruendung.",
     )
     .expect("geschrieben");
-    let vorher = datei(&m, "verworfen");
+    let before = file(&m, "verworfen");
 
-    let wohin = layout_io::archiviere(&m, "verworfen").expect("archiviert");
+    let whither = layout_io::archive_layout(&m, "verworfen").expect("archiviert");
     assert_eq!(
-        wohin, "archiv/verworfen.toml",
+        whither, "archiv/verworfen.toml",
         "und die Antwort nennt keinen Pfad des Overlays"
     );
 
-    let namen = m.layout_names().expect("Liste");
+    let names = m.layout_names().expect("Liste");
     assert!(
-        !namen.contains(&"verworfen".to_string()),
-        "aus der Liste: {namen:?}"
+        !names.contains(&"verworfen".to_string()),
+        "aus der Liste: {names:?}"
     );
     assert!(
-        !namen.contains(&"archiv".to_string()),
-        "und das Verzeichnis selbst ist kein Layout: {namen:?}"
+        !names.contains(&"archiv".to_string()),
+        "und das Verzeichnis selbst ist kein Layout: {names:?}"
     );
-    let abgelegt = m.layouts_dir().join(&wohin);
+    let stored = m.layouts_dir().join(&whither);
     assert_eq!(
-        std::fs::read_to_string(&abgelegt).expect("die Datei liegt im Archiv"),
-        vorher,
+        std::fs::read_to_string(&stored).expect("die Datei liegt im Archiv"),
+        before,
         "mit ihrer Begruendung, Zeichen fuer Zeichen"
     );
 }
 
 /// Zwei Fassungen unter einem Namen waeren eine verlorene Begruendung.
 #[test]
-fn zweimal_archivieren_unter_einem_namen_wird_abgelehnt() {
-    let m = wohnung("archiv-zweimal");
+fn archiving_twice_under_one_name_is_refused() {
+    let m = flat("archiv-zweimal");
     layout_io::create(&m, "doppelt", &plan("Erst", vec![]), "Erste Fassung.").expect("erste");
-    layout_io::archiviere(&m, "doppelt").expect("erste archiviert");
+    layout_io::archive_layout(&m, "doppelt").expect("erste archiviert");
     layout_io::create(&m, "doppelt", &plan("Dann", vec![]), "Zweite Fassung.").expect("zweite");
 
-    let e = layout_io::archiviere(&m, "doppelt").expect_err("das Archiv ist belegt");
+    let e = layout_io::archive_layout(&m, "doppelt").expect_err("das Archiv ist belegt");
     assert!(e.to_string().contains("Archiv"), "{e}");
     assert!(
-        datei(&m, "doppelt").contains("Zweite Fassung"),
+        file(&m, "doppelt").contains("Zweite Fassung"),
         "und die zweite steht noch da, statt still ueber die erste zu wandern"
     );
 }
 
 #[test]
-fn ein_layout_das_es_nicht_gibt_wird_nicht_archiviert() {
-    let m = wohnung("archiv-leer");
-    let e = layout_io::archiviere(&m, "gab-es-nie").expect_err("es gibt nichts wegzuraeumen");
+fn a_layout_that_does_not_exist_is_not_archived() {
+    let m = flat("archiv-leer");
+    let e = layout_io::archive_layout(&m, "gab-es-nie").expect_err("es gibt nichts wegzuraeumen");
     assert!(e.to_string().contains("gab-es-nie"), "{e}");
 }

@@ -286,9 +286,9 @@ pub const STANDING_RUN_CM: i32 = 60;
 /// Gemessen wird deshalb bis eine Standtiefe darueber hinaus. Weiter nicht, weil es teuer ist
 /// und weil die Frage, ob vor dem Schrank 165 oder 210 cm frei sind, keine Raeumungsfrage mehr
 /// ist. Wo der Deckel greift, sagt die Reserve `gedeckelt` und die Oberflaeche schreibt „ab".
-pub const RESERVE_HORIZONT: i32 = 100;
+pub const RESERVE_HORIZON: i32 = 100;
 
-/// Freie Tiefe an einer Seite eines Rechtecks, gedeckelt auf `want`.
+/// Freie Tiefe an einer Side eines Rechtecks, gedeckelt auf `want`.
 ///
 /// Geprueft wird ein ZUSAMMENHAENGENDER Lauf, nicht jede Zelle und kein Prozentsatz. Ein
 /// Schreibtisch am Kopfende eines Betts blockiert einen Teil dieser Laengsseite, ohne das Bett
@@ -396,26 +396,26 @@ mod gap_tests {
     }
 
     #[test]
-    fn getrennt_liefert_den_luftspalt() {
+    fn apart_gives_the_air_gap() {
         assert_eq!(rect_gap(&r(0, 0, 100, 100), &r(130, 0, 50, 50)), 30);
     }
 
     /// Ueber Eck ist der Abstand die Diagonale und nicht die groessere Achse — sonst meldete
     /// ein Stueck, das schraeg 30/40 danebensteht, 40 cm Luft, wo 50 sind.
     #[test]
-    fn ueber_eck_zaehlt_die_diagonale() {
+    fn across_a_corner_the_diagonal_counts() {
         assert_eq!(rect_gap(&r(0, 0, 100, 100), &r(130, 140, 50, 50)), 50);
     }
 
     /// Beruehrung ist null Reserve und kein Verstoss: die Zonen sind halboffen wie `overlaps`.
     #[test]
-    fn beruehrung_ist_null() {
+    fn touching_is_zero() {
         assert_eq!(rect_gap(&r(0, 0, 100, 100), &r(100, 0, 50, 50)), 0);
     }
 
     /// Die Eindringtiefe ist die kuerzeste Strecke heraus, nicht die laengste.
     #[test]
-    fn ueberlapp_ist_negativ_und_nimmt_die_billigere_achse() {
+    fn overlap_is_negative_and_takes_the_cheaper_axis() {
         assert_eq!(rect_gap(&r(0, 0, 100, 100), &r(90, 50, 100, 100)), -10);
     }
 }
@@ -431,30 +431,30 @@ mod gap_tests {
 /// liegen und eine Kante trotzdem durch die Einbuchtung schneiden. Wer das aendert, aendert
 /// die Regel und diese Messung zusammen.
 pub fn rect_in_polygon_cm(r: &Rect, poly: &[Pt]) -> i32 {
-    let ecken = [
+    let corners = [
         [r.x + 1, r.y + 1],
         [r.right() - 1, r.y + 1],
         [r.x + 1, r.bottom() - 1],
         [r.right() - 1, r.bottom() - 1],
     ];
-    let mut schlimmste = f64::MAX;
-    for c in ecken {
+    let mut worst = f64::MAX;
+    for c in corners {
         let p = [c[0] as f64, c[1] as f64];
-        let mut naechste = f64::MAX;
+        let mut nearest = f64::MAX;
         for i in 0..poly.len() {
             let a = poly[i];
             let b = poly[(i + 1) % poly.len()];
-            naechste = naechste.min(punkt_zu_strecke(p, a, b));
+            nearest = nearest.min(point_to_segment(p, a, b));
         }
         let drin = point_in_polygon(p, poly);
-        let signiert = if drin { naechste } else { -naechste };
-        schlimmste = schlimmste.min(signiert);
+        let signed = if drin { nearest } else { -nearest };
+        worst = worst.min(signed);
     }
-    schlimmste.round() as i32
+    worst.round() as i32
 }
 
 /// Abstand eines Punktes zu einer Strecke.
-fn punkt_zu_strecke(p: [f64; 2], a: Pt, b: Pt) -> f64 {
+fn point_to_segment(p: [f64; 2], a: Pt, b: Pt) -> f64 {
     let (ax, ay) = (a[0] as f64, a[1] as f64);
     let (bx, by) = (b[0] as f64, b[1] as f64);
     let (dx, dy) = (bx - ax, by - ay);
@@ -466,13 +466,7 @@ fn punkt_zu_strecke(p: [f64; 2], a: Pt, b: Pt) -> f64 {
     ((p[0] - (ax + t * dx)).powi(2) + (p[1] - (ay + t * dy)).powi(2)).sqrt()
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum Side {
-    North,
-    South,
-    East,
-    West,
-}
+pub use crate::store::Side;
 
 pub const SIDES: [Side; 4] = [Side::North, Side::South, Side::East, Side::West];
 
@@ -482,44 +476,44 @@ mod polygon_tests {
     use crate::model::Rect;
 
     /// Ein Quadrat von 400 x 400, damit sich jede Zahl im Kopf nachrechnen laesst.
-    fn raum() -> Vec<[i32; 2]> {
+    fn room() -> Vec<[i32; 2]> {
         vec![[0, 0], [400, 0], [400, 400], [0, 400]]
     }
 
     /// Mittig: der Abstand zur naechsten Wand, minus dem einen Zentimeter Einzug, den auch die
     /// Regel benutzt.
     #[test]
-    fn mittig_ist_der_abstand_zur_naechsten_wand() {
+    fn centred_is_the_gap_to_the_nearest_wall() {
         let r = Rect {
             x: 100,
             y: 100,
             w: 100,
             d: 100,
         };
-        assert_eq!(rect_in_polygon_cm(&r, &raum()), 101);
+        assert_eq!(rect_in_polygon_cm(&r, &room()), 101);
     }
 
     /// An der Wand ist die Reserve null und kein Verstoss.
     #[test]
-    fn an_der_wand_ist_die_reserve_null() {
+    fn against_the_wall_the_reserve_is_zero() {
         let r = Rect {
             x: 0,
             y: 0,
             w: 100,
             d: 100,
         };
-        assert_eq!(rect_in_polygon_cm(&r, &raum()), 1);
+        assert_eq!(rect_in_polygon_cm(&r, &room()), 1);
     }
 
     /// Herausragend ist die Zahl negativ und nennt die Tiefe des Ueberstands.
     #[test]
-    fn heraus_ist_negativ_und_nennt_die_tiefe() {
+    fn outside_is_negative_and_names_the_depth() {
         let r = Rect {
             x: 350,
             y: 100,
             w: 100,
             d: 100,
         };
-        assert_eq!(rect_in_polygon_cm(&r, &raum()), -49);
+        assert_eq!(rect_in_polygon_cm(&r, &room()), -49);
     }
 }

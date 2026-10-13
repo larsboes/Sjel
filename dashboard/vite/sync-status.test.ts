@@ -60,12 +60,12 @@ describe('statusLine', () => {
 describe('fieldDiff', () => {
   test('shows each named field that differs, mine next to the canonical node value', () => {
     const diff = fieldDiff({
-      body: { b: 120, label: 'Schrank', hinweis: null },
-      current: { item: { id: 'schrank', b: 90, label: 'Schrank', hinweis: 'alt', revision: 2 }, state: 'owned' },
+      body: { width: 120, label: 'Wardrobe', notes: null },
+      current: { item: { id: 'wardrobe', width: 90, label: 'Wardrobe', notes: 'old', revision: 2 }, state: 'owned' },
     });
     expect(diff).toEqual([
-      { field: 'b', mine: 120, theirs: 90 },
-      { field: 'hinweis', mine: null, theirs: 'alt' },
+      { field: 'width', mine: 120, theirs: 90 },
+      { field: 'notes', mine: null, theirs: 'old' },
     ]);
   });
 
@@ -78,7 +78,7 @@ describe('fieldDiff', () => {
   });
 
   test('without the canonical node item every field shows with theirs null', () => {
-    expect(fieldDiff({ body: { b: 1 }, current: null })).toEqual([{ field: 'b', mine: 1, theirs: null }]);
+    expect(fieldDiff({ body: { width: 1 }, current: null })).toEqual([{ field: 'width', mine: 1, theirs: null }]);
   });
 
   test('showValue prints empty as a dash and structures as JSON', () => {

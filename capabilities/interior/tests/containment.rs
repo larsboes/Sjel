@@ -20,18 +20,18 @@ use std::path::{Path, PathBuf};
 /// Masse dieser Wohnung, die in diesem Repository nichts zu suchen haben. Bewusst als Literale
 /// gefuehrt: die Liste IST die Behauptung, und sie muss mitwachsen, wenn das Modell Zahlen
 /// dazugewinnt.
-const VERBOTENE_MASSE: &[&str] = &["420", "460", "590", "263", "196", "329"];
-const VERBOTENE_NAMEN: &[&str] = &["Beuel", "beuel-sued", "Petersbergweg"];
+const FORBIDDEN_SIZES: &[&str] = &["420", "460", "590", "263", "196", "329"];
+const FORBIDDEN_NAMES: &[&str] = &["Beuel", "beuel-sued", "Petersbergweg"];
 
 /// Nur Text. Ein Verzeichnis, in dem eine Wohnung stehen koennte, wird durchsucht, nicht
 /// ausgenommen — `tests/fixtures/` ist erfundene Geometrie und muss das beweisen koennen.
-const ENDUNGEN: &[&str] = &["rs", "toml", "json", "md"];
+const ENDINGS: &[&str] = &["rs", "toml", "json", "md"];
 
 /// `unter` ist ein Unterverzeichnis oder "." fuer das Wurzelverzeichnis der Capability.
 /// Das Wurzelverzeichnis gehoert dazu: die README nannte bis zum Umzug das Verzeichnis der
 /// echten Wohnung beim Namen, und ein Test, der nur Quelltext liest, haette das durchgelassen.
-fn dateien(unter: &str) -> Vec<(String, String)> {
-    let wurzel = Path::new(env!("CARGO_MANIFEST_DIR")).join(unter);
+fn files(below: &str) -> Vec<(String, String)> {
+    let wurzel = Path::new(env!("CARGO_MANIFEST_DIR")).join(below);
     let mut offen = vec![wurzel.clone()];
     let mut out = Vec::new();
     while let Some(dir) = offen.pop() {
@@ -46,11 +46,11 @@ fn dateien(unter: &str) -> Vec<(String, String)> {
                 }
                 continue;
             }
-            let passt = p
+            let fits = p
                 .extension()
                 .and_then(|x| x.to_str())
-                .is_some_and(|x| ENDUNGEN.contains(&x));
-            if !passt {
+                .is_some_and(|x| ENDINGS.contains(&x));
+            if !fits {
                 continue;
             }
             let Ok(text) = fs::read_to_string(&p) else {
@@ -71,7 +71,7 @@ fn dateien(unter: &str) -> Vec<(String, String)> {
 /// In Rust duerfen Kommentare die Zahlen nennen — dort erklaeren sie, warum etwas so ist, und
 /// dieser Test selbst ist das Beispiel. In Daten gibt es diese Trennung nicht: eine TOML- oder
 /// JSON-Datei, die eine Wandlaenge nennt, nennt sie, ob mit `#` davor oder ohne.
-fn pruefbar(name: &str, src: &str) -> String {
+fn checkable(name: &str, src: &str) -> String {
     if !name.ends_with(".rs") {
         return src.to_string();
     }
@@ -85,22 +85,22 @@ fn pruefbar(name: &str, src: &str) -> String {
 }
 
 /// Als eigenstaendige Zahl, nicht als Teilfolge: 460 in 1460 ist keine Wandlaenge.
-fn nennt_zahl(zeile: &str, mass: &str) -> bool {
-    zeile.match_indices(mass).any(|(i, _)| {
-        let davor = i == 0 || !zeile.as_bytes()[i - 1].is_ascii_digit();
+fn names_number(line: &str, mass: &str) -> bool {
+    line.match_indices(mass).any(|(i, _)| {
+        let before = i == 0 || !line.as_bytes()[i - 1].is_ascii_digit();
         let j = i + mass.len();
-        let danach = j >= zeile.len() || !zeile.as_bytes()[j].is_ascii_digit();
-        davor && danach
+        let after = j >= line.len() || !line.as_bytes()[j].is_ascii_digit();
+        before && after
     })
 }
 
 #[test]
-fn keine_wohnungsdaten_im_repository() {
-    let mut funde = Vec::new();
-    let alle = dateien("src")
+fn no_flat_data_in_the_repository() {
+    let mut found = Vec::new();
+    let alle = files("src")
         .into_iter()
-        .chain(dateien("tests"))
-        .chain(dateien("."));
+        .chain(files("tests"))
+        .chain(files("."));
     for (name, src) in alle {
         // Eine Datei, deren Aufgabe das Erkennen von Markern ist, muss sie enthalten. Genau
         // diese Ausnahme, mit genau dieser Begruendung, fuehrt `tools/check-publication-
@@ -111,39 +111,39 @@ fn keine_wohnungsdaten_im_repository() {
         }
         // Der Name der Wohnung ist auch in einem Kommentar ein Leck, sobald das Repo
         // oeffentlich ist — und dieses ist es.
-        for verboten in VERBOTENE_NAMEN {
-            if src.contains(verboten) {
-                funde.push(format!("{name}: nennt \"{verboten}\""));
+        for forbidden in FORBIDDEN_NAMES {
+            if src.contains(forbidden) {
+                found.push(format!("{name}: nennt \"{forbidden}\""));
             }
         }
-        let text = pruefbar(&name, &src);
-        for (n, zeile) in text.lines().enumerate() {
-            for mass in VERBOTENE_MASSE {
-                if nennt_zahl(zeile, mass) {
-                    funde.push(format!(
+        let text = checkable(&name, &src);
+        for (n, line) in text.lines().enumerate() {
+            for mass in FORBIDDEN_SIZES {
+                if names_number(line, mass) {
+                    found.push(format!(
                         "{name}:{}: Literal {mass} — {}",
                         n + 1,
-                        zeile.trim()
+                        line.trim()
                     ));
                 }
             }
         }
     }
     assert!(
-        funde.is_empty(),
+        found.is_empty(),
         "Wohnungsdaten im oeffentlichen Repository. Sie gehoeren in das Overlay, unter \
          data/interior/, nicht hierher:\n  {}",
-        funde.join("\n  ")
+        found.join("\n  ")
     );
 }
 
 /// Der Test muss die Dateien auch wirklich sehen. Ein Verzeichniswanderer, der nichts findet,
 /// besteht jede Behauptung.
 #[test]
-fn der_test_liest_alle_drei_baeume() {
-    let src = dateien("src");
-    let tests = dateien("tests");
-    let wurzel = dateien(".");
+fn the_test_reads_all_three_trees() {
+    let src = files("src");
+    let tests = files("tests");
+    let wurzel = files(".");
     assert!(src.len() >= 8, "src/ hat {} Dateien", src.len());
     assert!(
         tests.iter().any(|(n, _)| n.contains("fixtures")),
@@ -164,7 +164,7 @@ fn der_test_liest_alle_drei_baeume() {
 /// falsche — sie versagt still, sobald ein Symlink aus dem Verzeichnis zeigt, und genau das
 /// prueft der letzte Fall hier.
 #[test]
-fn ein_medienpfad_fuehrt_nicht_aus_dem_verzeichnis_heraus() {
+fn a_media_path_does_not_lead_out_of_the_dir() {
     let tmp = std::env::temp_dir().join(format!("interior-media-{}", std::process::id()));
     let media = tmp.join("media");
     let _ = std::fs::remove_dir_all(&tmp);
@@ -173,27 +173,27 @@ fn ein_medienpfad_fuehrt_nicht_aus_dem_verzeichnis_heraus() {
     std::fs::write(tmp.join("geheim.txt"), b"x").expect("Datei daneben");
 
     // Dieselbe Aufloesung, die `api_media` fuehrt.
-    let erlaubt = |pfad: &str| -> bool {
+    let allowed = |pfad: &str| -> bool {
         let wurzel = match media.canonicalize() {
             Ok(w) => w,
             Err(_) => return false,
         };
         match wurzel.join(pfad).canonicalize() {
-            Ok(ziel) => ziel.starts_with(&wurzel) && ziel.is_file(),
+            Ok(target) => target.starts_with(&wurzel) && target.is_file(),
             Err(_) => false,
         }
     };
 
     assert!(
-        erlaubt("produkt/bild.png"),
+        allowed("produkt/bild.png"),
         "das Bild selbst wird geliefert"
     );
-    assert!(!erlaubt("../geheim.txt"), "eine Ebene hoeher: nein");
+    assert!(!allowed("../geheim.txt"), "eine Ebene hoeher: nein");
     assert!(
-        !erlaubt("produkt/../../geheim.txt"),
+        !allowed("produkt/../../geheim.txt"),
         "ueber einen Umweg: nein"
     );
-    assert!(!erlaubt("produkt"), "ein Verzeichnis ist keine Datei");
+    assert!(!allowed("produkt"), "ein Verzeichnis ist keine Datei");
 
     // Der Fall, den eine `..`-Pruefung durchliesse: ein Symlink ohne einen einzigen Punkt.
     #[cfg(unix)]
@@ -201,7 +201,7 @@ fn ein_medienpfad_fuehrt_nicht_aus_dem_verzeichnis_heraus() {
         let link = media.join("raus.txt");
         std::os::unix::fs::symlink(tmp.join("geheim.txt"), &link).expect("Symlink");
         assert!(
-            !erlaubt("raus.txt"),
+            !allowed("raus.txt"),
             "ein Symlink aus dem Verzeichnis heraus wird nicht geliefert"
         );
     }

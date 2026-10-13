@@ -15,7 +15,7 @@
 
 use crate::clearance::{check_layout, CheckResult};
 use crate::geometry::{point_in_polygon, RES};
-use crate::model::{footprint, Layout, Model, ModelError, PlacedItem, Rect, Seite};
+use crate::model::{footprint, Layout, Model, ModelError, PlacedItem, Rect, Side};
 use rayon::prelude::*;
 use serde::Serialize;
 use std::collections::BTreeMap;
@@ -37,7 +37,7 @@ pub struct Spec {
 /// Vier, und keines von ihnen ist der Sieger: mehr Wand im Ruecken kostet Laufbreite, mehr
 /// Reserve kostet Wand. Eine einzelne Zahl aus vieren zu machen hiesse, drei Gewichte zu
 /// erfinden, die niemand gemessen hat.
-pub const ZIELE: usize = 4;
+pub const TARGETS: usize = 4;
 
 /// Welche Kandidaten unter KEINER Gewichtung der Ziele die besten sein koennen.
 ///
@@ -52,24 +52,24 @@ pub const ZIELE: usize = 4;
 /// zehntausend Aufstellungen fallen typisch auf einige hundert verschiedene Vierlinge
 /// zusammen, und der quadratische Vergleich laeuft dann auf denen. Ohne das waere die Front
 /// bei einer erschoepfenden Suche teurer als die Suche.
-pub fn pareto_front(punkte: &[[i32; ZIELE]]) -> Vec<bool> {
-    let dominiert = |a: &[i32; ZIELE], b: &[i32; ZIELE]| {
+pub fn pareto_front(points: &[[i32; TARGETS]]) -> Vec<bool> {
+    let dominates = |a: &[i32; TARGETS], b: &[i32; TARGETS]| {
         a.iter().zip(b.iter()).all(|(x, y)| x >= y) && a.iter().zip(b.iter()).any(|(x, y)| x > y)
     };
-    let mut verschieden: Vec<[i32; ZIELE]> = punkte.to_vec();
-    verschieden.sort_unstable_by(|a, b| b.cmp(a));
-    verschieden.dedup();
+    let mut different: Vec<[i32; TARGETS]> = points.to_vec();
+    different.sort_unstable_by(|a, b| b.cmp(a));
+    different.dedup();
 
-    let mut front: Vec<[i32; ZIELE]> = Vec::new();
-    for t in verschieden {
-        if front.iter().any(|f| dominiert(f, &t)) {
+    let mut front: Vec<[i32; TARGETS]> = Vec::new();
+    for t in different {
+        if front.iter().any(|f| dominates(f, &t)) {
             continue;
         }
-        front.retain(|f| !dominiert(&t, f));
+        front.retain(|f| !dominates(&t, f));
         front.push(t);
     }
-    let front: std::collections::BTreeSet<[i32; ZIELE]> = front.into_iter().collect();
-    punkte.iter().map(|p| front.contains(p)).collect()
+    let front: std::collections::BTreeSet<[i32; TARGETS]> = front.into_iter().collect();
+    points.iter().map(|p| front.contains(p)).collect()
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -82,7 +82,7 @@ pub struct Hit {
     ///
     /// Zwei Treffer koennen beide bestehen und dabei 2 cm und 30 cm Luft haben. Bis diese
     /// Zahl hier stand, waren sie in jedem Bericht dasselbe Wort.
-    pub engste_reserve_cm: Option<i32>,
+    pub tightest_reserve_cm: Option<i32>,
     /// Auf der Pareto-Front: unter keiner Gewichtung der Ziele schlechter als ein anderer.
     pub pareto: bool,
     /// Wie viele Zentimeter der bewegten Moebel an einer Wand anliegen.
@@ -91,7 +91,7 @@ pub struct Hit {
     /// im Raum fuer genauso richtig wie einen an der Wand, solange die Laufwege stimmen. Die
     /// ersten Suchlaeufe am 2026-08-30 lieferten deshalb lauter formal fehlerfreie Layouts,
     /// die niemand so einrichten wuerde. Diese Zahl ist die fehlende Haelfte des Urteils.
-    pub wandkontakt_cm: i32,
+    pub wall_contact_cm: i32,
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -110,8 +110,8 @@ pub struct SearchReport {
 /// Geprueft wird knapp ausserhalb der Kante: liegt der Punkt nicht mehr im Wohnpolygon, ist
 /// dort eine Wand. Freistehende Moebel bekommen 0 und sinken damit in der Rangfolge — nicht
 /// weil sie regelwidrig waeren, sondern weil sie schlechter sind.
-fn wandkontakt_cm(model: &Model, r: &Rect) -> i32 {
-    let poly = &model.room.hauptraum.polygon;
+fn wall_contact_cm(model: &Model, r: &Rect) -> i32 {
+    let poly = &model.room.main_room.polygon;
     let outside = |x: f64, y: f64| !point_in_polygon([x, y], poly);
     let probe = 4.0;
     let step = 10;
@@ -148,16 +148,16 @@ fn wandkontakt_cm(model: &Model, r: &Rect) -> i32 {
 ///
 /// Freiwillig wie jedes Feld aus PRD Q61. Ein Stueck ohne die Angabe wird weiter an der Wand
 /// gemessen, also aendert sich kein bestehender Rang, bis jemand eine Zeile fuellt.
-fn ist_raumtrenner(model: &Model, reference: &str) -> bool {
+fn is_room_divider(model: &Model, reference: &str) -> bool {
     model
         .catalogue
         .get(reference)
-        .and_then(|i| i.raumtrenner)
+        .and_then(|i| i.room_divider)
         .unwrap_or(false)
 }
 
 fn inside_room(model: &Model, r: &Rect) -> bool {
-    let poly = &model.room.hauptraum.polygon;
+    let poly = &model.room.main_room.polygon;
     let xs = [r.x + 1, r.x + r.w / 2, r.right() - 1];
     let ys = [r.y + 1, r.y + r.d / 2, r.bottom() - 1];
     xs.iter().all(|x| {
@@ -179,8 +179,8 @@ fn blockers(model: &Model, fixed: &[&PlacedItem]) -> Result<Vec<Rect>, ModelErro
             d,
         });
     }
-    for o in &model.room.oeffnungen {
-        if let Some(sp) = o.sperrflaeche {
+    for o in &model.room.openings {
+        if let Some(sp) = o.blocked_area {
             out.push(sp.rect());
         }
     }
@@ -191,10 +191,10 @@ fn blockers(model: &Model, fixed: &[&PlacedItem]) -> Result<Vec<Rect>, ModelErro
 ///
 /// Eine fehlende Reserve zaehlt als `i32::MIN`, damit eine Aufstellung, an der nichts gemessen
 /// wurde, nicht durch Schweigen die Front gewinnt.
-fn hit_ziele(h: &Hit) -> [i32; ZIELE] {
+fn hit_targets(h: &Hit) -> [i32; TARGETS] {
     [
-        h.engste_reserve_cm.unwrap_or(i32::MIN),
-        h.wandkontakt_cm,
+        h.tightest_reserve_cm.unwrap_or(i32::MIN),
+        h.wall_contact_cm,
         h.bottleneck_cm,
         -(h.soft as i32),
     ]
@@ -234,7 +234,7 @@ pub fn search(model: &Model, base: &Layout, spec: &Spec) -> Result<SearchReport,
         // [0, 420, 0, 590] — die Masse dieser einen Wohnung, fest im Code einer Bibliothek,
         // die keine Wohnung kennen darf.
         let b = spec.bands.get(&m.reference).copied().unwrap_or_else(|| {
-            let poly = &model.room.hauptraum.polygon;
+            let poly = &model.room.main_room.polygon;
             [
                 poly.iter().map(|q| q[0]).min().unwrap_or(0),
                 poly.iter().map(|q| q[0]).max().unwrap_or(0),
@@ -301,12 +301,12 @@ pub fn search(model: &Model, base: &Layout, spec: &Spec) -> Result<SearchReport,
                 places: combo.iter().map(|(k, p, _)| (k.clone(), *p)).collect(),
                 soft: r.soft.len(),
                 bottleneck_cm: bottleneck,
-                engste_reserve_cm: r.engste_reserve_cm,
+                tightest_reserve_cm: r.tightest_reserve_cm,
                 pareto: false,
-                wandkontakt_cm: combo
+                wall_contact_cm: combo
                     .iter()
-                    .filter(|(reference, _, _)| !ist_raumtrenner(model, reference))
-                    .map(|(_, _, rect)| wandkontakt_cm(model, rect))
+                    .filter(|(reference, _, _)| !is_room_divider(model, reference))
+                    .map(|(_, _, rect)| wall_contact_cm(model, rect))
                     .sum(),
             })
         })
@@ -317,8 +317,8 @@ pub fn search(model: &Model, base: &Layout, spec: &Spec) -> Result<SearchReport,
     // Antwort nicht sein. Innerhalb der Front gilt weiter die Rangfolge von 2026-08-30 — erst
     // keine Warnungen, dann Wand im Ruecken, dann der breiteste Engpass —, weil eine Front
     // ungeordnet ist und eine Liste trotzdem eine Reihenfolge braucht.
-    let ziele: Vec<[i32; ZIELE]> = hits.iter().map(hit_ziele).collect();
-    for (h, front) in hits.iter_mut().zip(pareto_front(&ziele)) {
+    let targets: Vec<[i32; TARGETS]> = hits.iter().map(hit_targets).collect();
+    for (h, front) in hits.iter_mut().zip(pareto_front(&targets)) {
         h.pareto = front;
     }
     // Die Reserve steht als LETZTE Stufe und nicht weiter vorn, und das ist der Unterschied
@@ -331,9 +331,9 @@ pub fn search(model: &Model, base: &Layout, spec: &Spec) -> Result<SearchReport,
         b.pareto
             .cmp(&a.pareto)
             .then(a.soft.cmp(&b.soft))
-            .then(b.wandkontakt_cm.cmp(&a.wandkontakt_cm))
+            .then(b.wall_contact_cm.cmp(&a.wall_contact_cm))
             .then(b.bottleneck_cm.cmp(&a.bottleneck_cm))
-            .then(b.engste_reserve_cm.cmp(&a.engste_reserve_cm))
+            .then(b.tightest_reserve_cm.cmp(&a.tightest_reserve_cm))
     });
     if spec.limit > 0 {
         hits.truncate(spec.limit);
@@ -358,40 +358,40 @@ pub fn search(model: &Model, base: &Layout, spec: &Spec) -> Result<SearchReport,
 /// Unterschied ist, dass `check_layout` prueft, ob die Flaeche frei IST, und dieser Platzierer
 /// sie von vornherein mitreserviert.
 ///
-/// `access_sides` bleibt draussen, weil es keine Seite nennt: welche Laengsseite eines Bettes
+/// `access_sides` bleibt draussen, weil es keine Side nennt: welche Laengsseite eines Bettes
 /// begehbar sein soll, entscheidet erst die Aufstellung. Das faengt die Schlusspruefung.
-fn dauerflaeche(model: &Model, reference: &str, rot: i32, r: Rect) -> Rect {
+fn lasting_area(model: &Model, reference: &str, rot: i32, r: Rect) -> Rect {
     let Some(it) = model.catalogue.get(reference) else {
         return r;
     };
     let mut out = r;
-    let mut wachsen = |seite: Seite, zusatz: i32| {
-        if zusatz <= 0 {
+    let mut grow = |side: Side, extra: i32| {
+        if extra <= 0 {
             return;
         }
-        match seite {
-            Seite::Nord => {
-                out.y -= zusatz;
-                out.d += zusatz;
+        match side {
+            Side::North => {
+                out.y -= extra;
+                out.d += extra;
             }
-            Seite::Sued => out.d += zusatz,
-            Seite::West => {
-                out.x -= zusatz;
-                out.w += zusatz;
+            Side::South => out.d += extra,
+            Side::West => {
+                out.x -= extra;
+                out.w += extra;
             }
-            Seite::Ost => out.w += zusatz,
+            Side::East => out.w += extra,
         }
     };
     if let (Some(dir), Some(to)) = (it.expands_dir, it.expands_to) {
-        let seite = dir.gedreht(rot);
-        let jetzt = match seite {
-            Seite::Nord | Seite::Sued => r.d,
-            Seite::Ost | Seite::West => r.w,
+        let side = dir.rotated(rot);
+        let jetzt = match side {
+            Side::North | Side::South => r.d,
+            Side::East | Side::West => r.w,
         };
-        wachsen(seite, to - jetzt);
+        grow(side, to - jetzt);
     }
     if let (Some(dir), Some(frei)) = (it.opens, it.open_clear) {
-        wachsen(dir.gedreht(rot), frei);
+        grow(dir.rotated(rot), frei);
     }
     out
 }
@@ -426,21 +426,21 @@ pub fn allowed_positions(
             ModelError::Missing(format!("`{reference}` steht nicht in \"{}\"", base.name))
         })?;
     // Die Grundflaeche fuer die GEFRAGTE Drehung, nicht fuer die aktuelle.
-    let gedreht = PlacedItem { rot, ..it.clone() };
-    let (w, d, _) = footprint(&gedreht, &model.catalogue)?;
+    let rotated = PlacedItem { rot, ..it.clone() };
+    let (w, d, _) = footprint(&rotated, &model.catalogue)?;
 
     // Was sich NICHT bewegen laesst: feste Einbauten und Tuerschwenkbereiche. Beides steht in
     // room.toml, beides wird hier gelesen statt abgetippt.
-    let mut sperr: Vec<Rect> = model.room.fix_moebel.iter().map(|f| f.rect()).collect();
+    let mut sperr: Vec<Rect> = model.room.fixed_furniture.iter().map(|f| f.rect()).collect();
     sperr.extend(
         model
             .room
-            .oeffnungen
+            .openings
             .iter()
-            .filter_map(|o| o.sperrflaeche.map(|z| z.rect())),
+            .filter_map(|o| o.blocked_area.map(|z| z.rect())),
     );
 
-    let poly = &model.room.hauptraum.polygon;
+    let poly = &model.room.main_room.polygon;
     let (mut min_x, mut min_y) = (i32::MAX, i32::MAX);
     let (mut max_x, mut max_y) = (i32::MIN, i32::MIN);
     for p in poly {
@@ -454,22 +454,22 @@ pub fn allowed_positions(
     let mut y = min_y;
     while y + d <= max_y {
         let mut runs: Vec<[i32; 2]> = Vec::new();
-        let mut lauf: Option<i32> = None;
+        let mut run: Option<i32> = None;
         let mut x = min_x;
         while x + w <= max_x {
             let r = Rect { x, y, w, d };
             let frei = inside_room(model, &r) && !sperr.iter().any(|b| r.overlaps(b));
-            match (frei, lauf) {
-                (true, None) => lauf = Some(x),
+            match (frei, run) {
+                (true, None) => run = Some(x),
                 (false, Some(start)) => {
                     runs.push([start, x - RES]);
-                    lauf = None;
+                    run = None;
                 }
                 _ => {}
             }
             x += RES;
         }
-        if let Some(start) = lauf {
+        if let Some(start) = run {
             runs.push([start, x - RES]);
         }
         if !runs.is_empty() {
@@ -527,11 +527,11 @@ pub struct Composed {
     pub pass: bool,
     pub hard: Vec<String>,
     pub soft: Vec<String>,
-    pub wandkontakt_cm: i32,
+    pub wall_contact_cm: i32,
     pub bottleneck_cm: i32,
     pub free_m2: f64,
     /// Die knappste harte Messung dieser Aufstellung in cm: um so viel besteht sie.
-    pub engste_reserve_cm: Option<i32>,
+    pub tightest_reserve_cm: Option<i32>,
     /// Auf der Pareto-Front der vier Ziele.
     pub pareto: bool,
 }
@@ -558,13 +558,13 @@ pub fn compose(model: &Model, spec: &ComposeSpec) -> Result<Vec<Composed>, Model
     // Terrassentuer ist nie gueltig, und ein Platzierer, der sie erst am Ende verwirft, hat den
     // ganzen Strahl mit Kandidaten gefuellt, die nicht bestehen koennen. Genau das ist beim
     // ersten Lauf passiert — alle drei Vorschlaege scheiterten an R1 und R7.
-    let sperr = crate::clearance::harte_zonen(&model.room, &model.rules)?;
+    let sperr = crate::clearance::hard_zones(&model.room, &model.rules)?;
 
     // Zulaessige Plaetze je (Stueck, Drehung), einmal gegen Waende und feste Einbauten gerechnet.
     // Was gegen die Nachbarn kollidiert, faellt beim Erweitern weg — das haengt an der
     // Teilaufstellung und laesst sich nicht vorher wissen.
-    type Platz = ([i32; 2], i32, Rect);
-    let mut plaetze: BTreeMap<String, Vec<Platz>> = BTreeMap::new();
+    type Place = ([i32; 2], i32, Rect);
+    let mut plaetze: BTreeMap<String, Vec<Place>> = BTreeMap::new();
     for r in &spec.refs {
         let mut alle = Vec::new();
         for rot in &spec.rotations {
@@ -577,7 +577,7 @@ pub fn compose(model: &Model, spec: &ComposeSpec) -> Result<Vec<Composed>, Model
                 kind: None,
             };
             let (w, d, _) = footprint(&probe, &model.catalogue)?;
-            let poly = &model.room.hauptraum.polygon;
+            let poly = &model.room.main_room.polygon;
             let (min_x, max_x) = (
                 poly.iter().map(|q| q[0]).min().unwrap_or(0),
                 poly.iter().map(|q| q[0]).max().unwrap_or(0),
@@ -594,9 +594,9 @@ pub fn compose(model: &Model, spec: &ComposeSpec) -> Result<Vec<Composed>, Model
                     // Der Platz muss fuer die DAUERFLAECHE reichen, nicht nur fuer das Moebel:
                     // die Klappe des Esstischs und die Schranktuer sind dauerhaft freizuhalten,
                     // also darf dort von vornherein nichts hin.
-                    let belegt = dauerflaeche(model, r, *rot, rect);
-                    if inside_room(model, &rect) && !sperr.iter().any(|b| belegt.overlaps(b)) {
-                        alle.push(([x, y], *rot, belegt));
+                    let occupied = lasting_area(model, r, *rot, rect);
+                    if inside_room(model, &rect) && !sperr.iter().any(|b| occupied.overlaps(b)) {
+                        alle.push(([x, y], *rot, occupied));
                     }
                     x += spec.step;
                 }
@@ -613,13 +613,13 @@ pub fn compose(model: &Model, spec: &ComposeSpec) -> Result<Vec<Composed>, Model
     }
 
     // Runde fuer Runde erweitern, dann auf die besten `beam` kuerzen.
-    let mut strahl: Vec<Vec<Platz>> = vec![Vec::new()];
+    let mut strahl: Vec<Vec<Place>> = vec![Vec::new()];
     for r in &spec.refs {
-        let optionen = &plaetze[r];
-        let mut naechste: Vec<(i32, Vec<Platz>)> = strahl
+        let options = &plaetze[r];
+        let mut nearest: Vec<(i32, Vec<Place>)> = strahl
             .par_iter()
             .flat_map(|teil| {
-                optionen
+                options
                     .par_iter()
                     .filter(|(_, _, rect)| !teil.iter().any(|(_, _, q)| rect.overlaps(q)))
                     .map(|p| {
@@ -631,7 +631,7 @@ pub fn compose(model: &Model, spec: &ComposeSpec) -> Result<Vec<Composed>, Model
                         let score: i32 = c
                             .iter()
                             .zip(spec.refs.iter())
-                            .filter(|(_, name)| !ist_raumtrenner(model, name))
+                            .filter(|(_, name)| !is_room_divider(model, name))
                             .filter_map(|((pos, rot, _), name)| {
                                 let probe = PlacedItem {
                                     reference: name.clone(),
@@ -642,7 +642,7 @@ pub fn compose(model: &Model, spec: &ComposeSpec) -> Result<Vec<Composed>, Model
                                     kind: None,
                                 };
                                 let (w, d, _) = footprint(&probe, &model.catalogue).ok()?;
-                                Some(wandkontakt_cm(
+                                Some(wall_contact_cm(
                                     model,
                                     &Rect {
                                         x: pos[0],
@@ -658,7 +658,7 @@ pub fn compose(model: &Model, spec: &ComposeSpec) -> Result<Vec<Composed>, Model
                     .collect::<Vec<_>>()
             })
             .collect();
-        if naechste.is_empty() {
+        if nearest.is_empty() {
             return Err(ModelError::Missing(format!(
                 "nach `{r}` bleibt keine Aufstellung uebrig — Schritt zu grob oder zu viele Stuecke"
             )));
@@ -667,19 +667,19 @@ pub fn compose(model: &Model, spec: &ComposeSpec) -> Result<Vec<Composed>, Model
         // Teilaufstellung. Ohne das fuellt sich der Strahl mit Varianten derselben Idee — der
         // erste Lauf lieferte drei Vorschlaege, die sich in einer einzigen Koordinate
         // unterschieden, und verwarf dafuer jede andere Anordnung.
-        naechste.sort_by_key(|(score, _)| std::cmp::Reverse(*score));
-        let mut gesehen: std::collections::HashSet<[i32; 2]> = std::collections::HashSet::new();
-        naechste.retain(|(_, c)| {
+        nearest.sort_by_key(|(score, _)| std::cmp::Reverse(*score));
+        let mut seen: std::collections::HashSet<[i32; 2]> = std::collections::HashSet::new();
+        nearest.retain(|(_, c)| {
             c.last()
-                .map(|(pos, _, _)| gesehen.insert(*pos))
+                .map(|(pos, _, _)| seen.insert(*pos))
                 .unwrap_or(false)
         });
-        naechste.truncate(spec.beam);
-        strahl = naechste.into_iter().map(|(_, c)| c).collect();
+        nearest.truncate(spec.beam);
+        strahl = nearest.into_iter().map(|(_, c)| c).collect();
     }
 
     // Erst jetzt die volle Pruefung, auf ganzen Wohnungen.
-    let mut fertig: Vec<Composed> = strahl
+    let mut done: Vec<Composed> = strahl
         .par_iter()
         .filter_map(|c| {
             let items: Vec<PlacedItem> = c
@@ -709,12 +709,12 @@ pub fn compose(model: &Model, spec: &ComposeSpec) -> Result<Vec<Composed>, Model
                 pass: r.pass,
                 hard: r.hard.iter().map(|v| v.rule.clone()).collect(),
                 soft: r.soft.iter().map(|v| v.rule.clone()).collect(),
-                wandkontakt_cm: l
+                wall_contact_cm: l
                     .items
                     .iter()
                     .filter_map(|i| {
                         let (w, d, _) = footprint(i, &model.catalogue).ok()?;
-                        Some(wandkontakt_cm(
+                        Some(wall_contact_cm(
                             model,
                             &Rect {
                                 x: i.x,
@@ -733,7 +733,7 @@ pub fn compose(model: &Model, spec: &ComposeSpec) -> Result<Vec<Composed>, Model
                     .min()
                     .unwrap_or(0),
                 free_m2: r.metrics.free_area_m2,
-                engste_reserve_cm: r.engste_reserve_cm,
+                tightest_reserve_cm: r.tightest_reserve_cm,
                 pareto: false,
             })
         })
@@ -747,72 +747,72 @@ pub fn compose(model: &Model, spec: &ComposeSpec) -> Result<Vec<Composed>, Model
     // Die Front wird nur unter den BESTEHENDEN gebildet. Eine durchgefallene Aufstellung mit
     // viel Wandkontakt waere sonst nicht dominiert und stuende vorn — auf einer Liste, deren
     // erste Frage ist, ob man so einziehen kann.
-    let ziele: Vec<[i32; ZIELE]> = fertig
+    let targets: Vec<[i32; TARGETS]> = done
         .iter()
         .map(|c| {
             [
-                c.engste_reserve_cm.unwrap_or(i32::MIN),
-                c.wandkontakt_cm,
+                c.tightest_reserve_cm.unwrap_or(i32::MIN),
+                c.wall_contact_cm,
                 c.bottleneck_cm,
                 -(c.soft.len() as i32),
             ]
         })
         .collect();
-    let front = pareto_front(&ziele);
-    for (c, f) in fertig.iter_mut().zip(front) {
+    let front = pareto_front(&targets);
+    for (c, f) in done.iter_mut().zip(front) {
         c.pareto = c.pass && f;
     }
-    fertig.sort_by(|a, b| {
+    done.sort_by(|a, b| {
         b.pass
             .cmp(&a.pass)
             .then(b.pareto.cmp(&a.pareto))
             .then(a.soft.len().cmp(&b.soft.len()))
-            .then(b.wandkontakt_cm.cmp(&a.wandkontakt_cm))
+            .then(b.wall_contact_cm.cmp(&a.wall_contact_cm))
             .then(b.bottleneck_cm.cmp(&a.bottleneck_cm))
-            .then(b.engste_reserve_cm.cmp(&a.engste_reserve_cm))
+            .then(b.tightest_reserve_cm.cmp(&a.tightest_reserve_cm))
     });
     if spec.limit > 0 {
-        fertig.truncate(spec.limit);
+        done.truncate(spec.limit);
     }
-    Ok(fertig)
+    Ok(done)
 }
 
 #[cfg(test)]
 mod pareto_tests {
-    use super::{pareto_front, ZIELE};
+    use super::{pareto_front, TARGETS};
 
     /// Ein Punkt, der in allem schlechter ist, gehoert nicht auf die Front.
     #[test]
-    fn ein_in_allem_schlechterer_punkt_faellt_heraus() {
-        let p: Vec<[i32; ZIELE]> = vec![[10, 10, 10, 0], [9, 9, 9, -1]];
+    fn a_point_worse_in_everything_drops_out() {
+        let p: Vec<[i32; TARGETS]> = vec![[10, 10, 10, 0], [9, 9, 9, -1]];
         assert_eq!(pareto_front(&p), vec![true, false]);
     }
 
     /// Ein Tausch ist keine Niederlage: wer ein Ziel aufgibt und ein anderes gewinnt, bleibt.
     #[test]
-    fn ein_tausch_haelt_beide_auf_der_front() {
-        let p: Vec<[i32; ZIELE]> = vec![[10, 0, 5, 0], [0, 10, 5, 0]];
+    fn a_trade_off_keeps_both_on_the_front() {
+        let p: Vec<[i32; TARGETS]> = vec![[10, 0, 5, 0], [0, 10, 5, 0]];
         assert_eq!(pareto_front(&p), vec![true, true]);
     }
 
     /// Gleiche Punkte dominieren einander nicht — sonst faengt die Front an, Duplikate zu
     /// verwerfen, und zwei gleich gute Aufstellungen an verschiedenen Orten waeren eine.
     #[test]
-    fn identische_punkte_bleiben_beide() {
-        let p: Vec<[i32; ZIELE]> = vec![[3, 3, 3, 3], [3, 3, 3, 3]];
+    fn identical_points_both_stay() {
+        let p: Vec<[i32; TARGETS]> = vec![[3, 3, 3, 3], [3, 3, 3, 3]];
         assert_eq!(pareto_front(&p), vec![true, true]);
     }
 
     /// Gleich in drei Zielen, besser im vierten: das ist Dominanz und kein Gleichstand.
     #[test]
-    fn ein_einziges_besseres_ziel_reicht_zur_dominanz() {
-        let p: Vec<[i32; ZIELE]> = vec![[5, 5, 5, 5], [5, 5, 5, 6]];
+    fn one_better_target_is_enough_to_dominate() {
+        let p: Vec<[i32; TARGETS]> = vec![[5, 5, 5, 5], [5, 5, 5, 6]];
         assert_eq!(pareto_front(&p), vec![false, true]);
     }
 
     /// Die Front eines leeren Feldes ist leer und kein Absturz.
     #[test]
-    fn leer_bleibt_leer() {
+    fn empty_stays_empty() {
         assert!(pareto_front(&[]).is_empty());
     }
 }

@@ -181,13 +181,13 @@
     {/if}
     {#each options as item (item.id)}
       <button type="button" class="pick" onclick={() => add(item)}>
-        {#if item.bild}
-          <img use:bridgedSrc={interior.mediaUrl(item.bild)} alt="" loading="lazy" />
+        {#if item.image}
+          <img use:bridgedSrc={interior.mediaUrl(item.image)} alt="" loading="lazy" />
         {:else}
           <span class="thumb"><Icon name="boxes" size={14} /></span>
         {/if}
         <span class="pick-label">{item.label}</span>
-        {#if item.farbe}<small>{item.farbe}</small>{/if}
+        {#if item.color}<small>{item.color}</small>{/if}
         <Icon name="plus" size={12} />
       </button>
     {/each}
@@ -251,8 +251,8 @@
                 aria-expanded={open}
                 onclick={() => (openRef = open ? null : row.item_ref)}
               >
-                {#if item?.bild}
-                  <img use:bridgedSrc={interior.mediaUrl(item.bild)} alt="" loading="lazy" />
+                {#if item?.image}
+                  <img use:bridgedSrc={interior.mediaUrl(item.image)} alt="" loading="lazy" />
                 {:else}
                   <span class="thumb"><Icon name="boxes" size={16} /></span>
                 {/if}
@@ -271,12 +271,12 @@
             {#if open}
               <div class="details">
                 <dl>
-                  {#if item?.farbe}<dt>Colour</dt><dd>{item.farbe}</dd>{/if}
-                  {#if item?.groesse}<dt>Size</dt><dd>{item.groesse}</dd>{/if}
-                  {#if item?.saison?.length}<dt>Season</dt><dd>{item.saison.join(", ")}</dd>{/if}
+                  {#if item?.color}<dt>Colour</dt><dd>{item.color}</dd>{/if}
+                  {#if item?.size}<dt>Size</dt><dd>{item.size}</dd>{/if}
+                  {#if item?.seasons?.length}<dt>Season</dt><dd>{item.seasons.join(", ")}</dd>{/if}
                   {#if item?.weight_g}<dt>Weight</dt><dd>{item.weight_g} g</dd>{/if}
-                  {#if item?.quelle}<dt>Brand</dt><dd>{item.quelle}</dd>{/if}
-                  {#if item?.hinweis}<dt>Note</dt><dd>{item.hinweis}</dd>{/if}
+                  {#if item?.source}<dt>Brand</dt><dd>{item.source}</dd>{/if}
+                  {#if item?.notes}<dt>Note</dt><dd>{item.notes}</dd>{/if}
                 </dl>
                 <label class="why-edit">
                   <span>Why it comes along</span>

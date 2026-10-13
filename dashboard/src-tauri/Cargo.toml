@@ -45,7 +45,7 @@ rustls = "0.23"
 rusqlite = { version = "0.40", features = ["bundled"] }
 # Local notifications for a new Sparpreis low (PRD Q115 follow-up, 2026-09-25). Local
 # only: no APNs, no push key. Pinned exactly, per upstreams.toml [tauri-plugin-notification].
-tauri-plugin-notification = "=2.4.0"
+tauri-plugin-notification = "=2.5.0"
 
 # The phone scans the node's pairing QR code (dashboard/src/lib/setup/SetupSjel.svelte). Mobile
 # only: the plugin has no desktop implementation. The lockfile took 2.4.6 (2026-08-31) because

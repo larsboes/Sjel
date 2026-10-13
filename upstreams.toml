@@ -822,7 +822,7 @@ url = "https://github.com/tauri-apps/plugins-workspace/tree/v2/plugins/notificat
 verdict = "adopt"
 license = "MIT OR Apache-2.0"
 summary = "Official Tauri plugin the phone app uses for local alerts on a new fare low"
-why = "Local notifications in the phone app for a new Sparpreis low (dashboard/src/lib/travel/fare-alerts.ts). The official Tauri plugin, so adopt rather than a hand-written UNUserNotificationCenter bridge. Crate pinned =2.4.0 in dashboard/src-tauri/Cargo.toml and the JS binding @tauri-apps/plugin-notification 2.4.0 in dashboard/package.json. Local only: no APNs entitlement and no push key, ruled 2026-09-25 over real push, which needs a paid developer team and a C3 key on the Mac. The cost of that choice is latency: an alert waits until the app is opened or foregrounded"
+why = "Local notifications in the phone app for a new Sparpreis low (dashboard/src/lib/travel/fare-alerts.ts). The official Tauri plugin, so adopt rather than a hand-written UNUserNotificationCenter bridge. Crate pinned =2.5.0 in dashboard/src-tauri/Cargo.toml and the JS binding @tauri-apps/plugin-notification 2.5.0 in dashboard/package.json; tauri refuses to build when their minor versions differ. Local only: no APNs entitlement and no push key, ruled 2026-09-25 over real push, which needs a paid developer team and a C3 key on the Mac. The cost of that choice is latency: an alert waits until the app is opened or foregrounded"
 
 [rcgen]
 url = "https://github.com/rustls/rcgen"

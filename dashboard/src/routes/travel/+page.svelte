@@ -33,6 +33,8 @@
   import PackingPanel from "$lib/travel/PackingPanel.svelte";
   import OutfitsPanel from "$lib/travel/OutfitsPanel.svelte";
   import RetrospectiveForm from "$lib/travel/RetrospectiveForm.svelte";
+  import TravelBoard from "$lib/travel/TravelBoard.svelte";
+  import TripResultColumns from "$lib/travel/TripResultColumns.svelte";
   import {
     climateFor,
     planCost,
@@ -1382,149 +1384,24 @@
        beside it, the same way /calendar keeps its review lists. -->
   <div class="hub">
     <div class="hub-main">
-      {#if plans.length > 0}
-        <section class="journey-index" aria-label="Trip overview">
-          <div>
-            <span class="index-value">{upcomingPlans.length}</span>
-            <span class="index-label">upcoming</span>
-          </div>
-          <div>
-            <span class="index-value">{pastPlans.length}</span>
-            <span class="index-label">past</span>
-          </div>
-          {#if upcomingPlans[0]}
-            <button type="button" onclick={() => void openPlan(upcomingPlans[0])}>
-              <span class="index-label">up next</span>
-              <strong>{upcomingPlans[0].title}</strong>
-              <small>{shortDate(upcomingPlans[0].date_start)}</small>
-            </button>
-          {:else}
-            <div class="next-empty">
-              <span class="index-label">up next</span>
-              <strong>Still open</strong>
-            </div>
-          {/if}
-        </section>
-
-        <section class="travel-board">
-          <header class="board-toolbar">
-            <div>
-              <h2>Trips on the map</h2>
-              <p>The markers and list show the same saved plans.</p>
-            </div>
-            <div class="board-actions">
-              <div class="plan-filters" aria-label="Filter trips">
-                <button
-                  type="button"
-                  class:active={planFilter === "upcoming"}
-                  onclick={() => {
-                    planFilter = "upcoming";
-                    highlightedPlanId = null;
-                  }}>Upcoming <span>{upcomingPlans.length}</span></button
-                >
-                <button
-                  type="button"
-                  class:active={planFilter === "past"}
-                  onclick={() => {
-                    planFilter = "past";
-                    highlightedPlanId = null;
-                  }}>Past <span>{pastPlans.length}</span></button
-                >
-                <button
-                  type="button"
-                  class:active={planFilter === "all"}
-                  onclick={() => {
-                    planFilter = "all";
-                    highlightedPlanId = null;
-                  }}>All <span>{plans.length}</span></button
-                >
-              </div>
-              <button class="btn btn-primary" type="button" onclick={openPlanner}>
-                <Icon name="plus" size={14} /> New trip
-              </button>
-            </div>
-          </header>
-
-          <div class="board-layout">
-            <div class="overview-map">
-              <div class="map-top-bar">
-                <a class="map-link-btn" href={link("/map")} use:tip={"Explore in Master Life Map"}>
-                  <Icon name="globe" size={12} />
-                  <span>Master Life Map</span>
-                </a>
-              </div>
-              <MapSurface
-                sources={overviewMapSources}
-                layers={TRIP_LAYERS}
-                fitKey={overviewMapFitKey}
-                interactive={["trip-points"]}
-                onFeatureClick={(_, feature) => {
-                  const groupId = feature.properties?.groupId;
-                  if (typeof groupId === "string") highlightedPlanId = groupId;
-                }}
-                deferredLabel="Trips"
-                eager
-              />
-              <div class="map-legend" aria-label="Map legend">
-                <span><i class="upcoming"></i> upcoming</span>
-                <span><i class="past"></i> past</span>
-                <span><i class="selected"></i> selected</span>
-              </div>
-            </div>
-
-            <div class="trip-options" aria-live="polite">
-              {#if filteredPlans.length === 0}
-                <p class="empty-history">
-                  {planFilter === "past"
-                    ? "Completed trips appear here automatically."
-                    : "There are no trips for this filter yet."}
-                </p>
-              {:else}
-                <ol>
-                  {#each filteredPlans as plan (plan.id)}
-                    <li>
-                      <button
-                        type="button"
-                        class:highlighted={highlightedPlanId === plan.id}
-                        onmouseenter={() => (highlightedPlanId = plan.id)}
-                        onfocus={() => (highlightedPlanId = plan.id)}
-                        onclick={() => void openPlan(plan)}
-                      >
-                        <span class="option-date">
-                          <strong>{shortDate(plan.date_start)}</strong>
-                          <small>{shortDate(plan.date_end)}</small>
-                        </span>
-                        <span class="option-route">
-                          <span class:past={planPhase(plan) === "Past"} class="phase">
-                            {planPhase(plan)}
-                          </span>
-                          <strong>{placeName(plan.origin)} → {plan.destinations.map(placeName).join(" → ")}</strong>
-                          <small>
-                            {plan.destinations.length} {plan.destinations.length === 1 ? "destination" : "destinations"}
-                            · {plan.status === "saved" ? "Itinerary saved" : "Draft"}
-                          </small>
-                        </span>
-                        <Icon name="arrow-right" size={15} />
-                      </button>
-                    </li>
-                  {/each}
-                </ol>
-              {/if}
-            </div>
-          </div>
-        </section>
-      {:else}
-        <!-- With the planner behind a button, a first-time page needs its own way in. -->
-        <section class="board-empty">
-          <div>
-            <h2>No trips planned yet</h2>
-            <p>Start one from scratch, plan around a candidate in the rail, or import from Obsidian.</p>
-          </div>
-          <button class="btn btn-primary" type="button" onclick={openPlanner}>
-            <Icon name="plus" size={14} /> New trip
-          </button>
-        </section>
-      {/if}
+      <TravelBoard
+        {plans}
+        {upcomingPlans}
+        {pastPlans}
+        {filteredPlans}
+        {planFilter}
+        {highlightedPlanId}
+        {overviewMapSources}
+        {overviewMapFitKey}
+        {todayKey}
+        onSelectFilter={(filter) => {
+          planFilter = filter;
+          highlightedPlanId = null;
+        }}
+        onOpenPlan={(plan) => void openPlan(plan)}
+        onOpenPlanner={openPlanner}
+        onHighlightPlan={(id) => (highlightedPlanId = id)}
+      />
 
       <RelatedTools
         context="travel-planning"
@@ -2187,178 +2064,19 @@
             <Icon name="loader" size={18} /> Combining connections and events.
           </div>
         {:else}
-          {#if selected.notices.length > 0}
-            <p class="source-notice">{selected.notices.join(" · ")}</p>
-          {/if}
-
-          <div class="results-grid">
-            <section class="result-column">
-              <div class="section-heading">
-                <h3>Outbound journey</h3>
-                <div class="journey-sort" aria-label="Sort connections">
-                  <button
-                    class:active={journeySort === "ranked"}
-                    type="button"
-                    onclick={() => (journeySort = "ranked")}
-                  >
-                    Ranked
-                  </button>
-                  <button
-                    class:active={journeySort === "price"}
-                    type="button"
-                    onclick={() => (journeySort = "price")}
-                  >
-                    Price
-                  </button>
-                  <button
-                    class:active={journeySort === "duration"}
-                    type="button"
-                    onclick={() => (journeySort = "duration")}
-                  >
-                    Duration
-                  </button>
-                  <button
-                    class:active={journeySort === "departure"}
-                    type="button"
-                    onclick={() => (journeySort = "departure")}
-                  >
-                    Departure
-                  </button>
-                </div>
-              </div>
-              <div class="priority-bar">
-                <span class="priority-label">Rank by</span>
-                <div class="sort-options">
-                  <button
-                    class:active={!journeyPriority && !journeyPhrase.trim()}
-                    type="button"
-                    use:tip={"the weights stored on your profile"}
-                    onclick={() => {
-                      journeyPriority = "";
-                      journeyPhrase = "";
-                    }}
-                  >
-                    My usual
-                  </button>
-                  {#each JOURNEY_PRIORITIES as preset (preset.id)}
-                    <button
-                      class:active={journeyPriority === preset.id && !journeyPhrase.trim()}
-                      type="button"
-                      use:tip={preset.hint}
-                      onclick={() => {
-                        journeyPriority = preset.id;
-                        journeyPhrase = "";
-                      }}
-                    >
-                      {preset.label}
-                    </button>
-                  {/each}
-                </div>
-                <input
-                  class="input priority-phrase"
-                  bind:value={journeyPhrase}
-                  aria-label="Rank journeys by a sentence"
-                  placeholder="or say it: cheapest, direct, schnell und zuverlässig"
-                />
-              </div>
-
-              {#if selected.journeys.length === 0}
-                <p class="empty">
-                  No suitable connection received.
-                  <a href={link("/travel/connections")}>Open connection search</a>
-                </p>
-              {:else}
-                <ol class="journey-list">
-                  {#each orderedJourneys(selected.journeys) as journey (journey.id)}
-                    <JourneyOption
-                      {journey}
-                      expanded={expandedJourneyId === journey.id}
-                      saved={itemSaved("transport", journey.id)}
-                      onToggle={() =>
-                        (expandedJourneyId =
-                          expandedJourneyId === journey.id ? null : journey.id)}
-                      onSave={() => void saveJourney(journey, selected.place)}
-                    />
-                  {/each}
-                </ol>
-              {/if}
-            </section>
-
-            <section class="result-column">
-              <div class="section-heading">
-                <h3>Other events</h3>
-                <span>{dateRangeLabel(activePlan.date_start, activePlan.date_end)}</span>
-              </div>
-              {#if selected.events.length === 0}
-                <p class="empty">Nothing else was found during the trip period.</p>
-              {:else}
-                <ol class="event-list">
-                  {#each selected.events as event (event.url)}
-                    <li>
-                      <time>{shortDate(event.date)}</time>
-                      <div>
-                        <a href={event.url} target="_blank" rel="noreferrer">{event.title}</a>
-                        <span>{event.city ?? event.location ?? selected.city}</span>
-                        <details class="event-why">
-                          <summary>Why this result?</summary>
-                          <p>{event.rationale}</p>
-                        </details>
-                      </div>
-                      <button
-                        class="save"
-                        type="button"
-                        disabled={itemSaved("event", event.url)}
-                        onclick={() => void saveEvent(event)}
-                        aria-label={`Save ${event.title}`}
-                      >
-                        <Icon name={itemSaved("event", event.url) ? "check" : "plus"} size={13} />
-                      </button>
-                    </li>
-                  {/each}
-                </ol>
-              {/if}
-            </section>
-
-            <section class="result-column activity-column">
-              <div class="section-heading">
-                <h3>Places and activities</h3>
-                <span>Wikipedia · nearby</span>
-              </div>
-              {#if selected.activities.length === 0}
-                <p class="empty">
-                  This place has no coordinates, or no nearby places were found.
-                </p>
-              {:else}
-                <ol class="activity-list">
-                  {#each selected.activities as activity (activity.id)}
-                    <li>
-                      {#if activity.imageUrl}
-                        <img src={activity.imageUrl} alt="" />
-                      {:else}
-                        <span class="activity-image"><Icon name="compass" size={18} /></span>
-                      {/if}
-                      <div>
-                        <a href={activity.url} target="_blank" rel="noreferrer">{activity.title}</a>
-                        <p>{activity.description || "Place worth seeing nearby"}</p>
-                      </div>
-                      <button
-                        class="save"
-                        type="button"
-                        disabled={itemSaved("activity", activity.id)}
-                        onclick={() => void savePlace(activity)}
-                        aria-label={`Save ${activity.title}`}
-                      >
-                        <Icon
-                          name={itemSaved("activity", activity.id) ? "check" : "plus"}
-                          size={13}
-                        />
-                      </button>
-                    </li>
-                  {/each}
-                </ol>
-              {/if}
-            </section>
-          </div>
+          <TripResultColumns
+            {selected}
+            {activePlan}
+            bind:journeySort
+            bind:journeyPriority
+            bind:journeyPhrase
+            bind:expandedJourneyId
+            {itemSaved}
+            {orderedJourneys}
+            onSaveJourney={(journey, place) => void saveJourney(journey, place)}
+            onSaveEvent={(event) => void saveEvent(event)}
+            onSavePlace={(place) => void savePlace(place)}
+          />
         {/if}
       {/if}
     </div>
@@ -2515,37 +2233,6 @@
 
   .hub-main {
     min-width: 0;
-  }
-
-  .board-actions {
-    display: flex;
-    align-items: center;
-    gap: 0.5rem;
-  }
-
-  .board-empty {
-    display: flex;
-    flex-wrap: wrap;
-    align-items: center;
-    justify-content: space-between;
-    gap: 1rem;
-    margin-bottom: 1rem;
-    padding: 1.5rem;
-    border: 1px solid var(--card-border);
-    border-radius: var(--radius);
-    background: var(--card-bg);
-    box-shadow: var(--card-shadow);
-  }
-
-  .board-empty h2 {
-    margin: 0;
-    font-size: 0.95rem;
-  }
-
-  .board-empty p {
-    margin: 0.2rem 0 0;
-    color: var(--text-tertiary);
-    font-size: var(--text-xs);
   }
 
   /* Candidate rows in the rail: when and where, what it is, why it surfaced, then
@@ -2713,129 +2400,6 @@
     cursor: not-allowed;
   }
 
-  .journey-index {
-    display: grid;
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-    margin-bottom: 0.75rem;
-    border-block: 1px solid var(--card-border);
-  }
-
-  .journey-index > div,
-  .journey-index > button {
-    min-width: 0;
-    padding: 0.8rem;
-    border: 0;
-    border-right: 1px solid var(--card-border);
-    background: transparent;
-    color: var(--text-primary);
-    font: inherit;
-    text-align: left;
-  }
-
-  .journey-index > button,
-  .journey-index .next-empty {
-    grid-column: 1 / -1;
-    border-top: 1px solid var(--card-border);
-    border-right: 0;
-  }
-
-  .journey-index > button {
-    cursor: pointer;
-  }
-
-  .journey-index > button:hover strong {
-    color: var(--primary);
-  }
-
-  .index-value,
-  .index-label,
-  .journey-index strong,
-  .journey-index small {
-    display: block;
-  }
-
-  .index-value {
-    font-family: var(--font-mono);
-    font-size: 1.15rem;
-  }
-
-  .index-label,
-  .journey-index small {
-    color: var(--text-tertiary);
-    font-size: 0.625rem;
-    text-transform: uppercase;
-    letter-spacing: 0.05em;
-  }
-
-  .travel-board {
-    margin-bottom: 1rem;
-    overflow: hidden;
-    border: 1px solid var(--card-border);
-    border-radius: var(--radius);
-    background: var(--card-bg);
-    box-shadow: var(--card-shadow);
-  }
-
-  .board-toolbar {
-    display: flex;
-    flex-direction: column;
-    gap: 0.75rem;
-    padding: 0.9rem 1rem;
-    border-bottom: 1px solid var(--card-border);
-  }
-
-  .board-toolbar h2 {
-    margin: 0;
-    font-size: 0.875rem;
-  }
-
-  .board-toolbar p {
-    margin: 0.1rem 0 0;
-    color: var(--text-tertiary);
-    font-size: var(--text-2xs);
-  }
-
-  .plan-filters {
-    display: flex;
-    align-items: center;
-    gap: 0.2rem;
-  }
-
-  .plan-filters button {
-    padding: 0.35rem 0.5rem;
-    border: 0;
-    border-radius: var(--radius-sm);
-    background: transparent;
-    color: var(--text-secondary);
-    font: inherit;
-    font-size: var(--text-2xs);
-    cursor: pointer;
-  }
-
-  .plan-filters button:hover,
-  .plan-filters button.active {
-    background: var(--primary-soft);
-    color: var(--primary);
-  }
-
-  .plan-filters span {
-    margin-left: 0.2rem;
-    font-family: var(--font-mono);
-    font-size: 0.5625rem;
-  }
-
-  .board-layout {
-    display: grid;
-    min-width: 0;
-  }
-
-  .overview-map {
-    position: relative;
-    min-width: 0;
-    padding: 0.75rem;
-    border-bottom: 1px solid var(--card-border);
-  }
-
   .map-top-bar {
     position: absolute;
     top: 1.25rem;
@@ -2868,123 +2432,6 @@
   .past-map-wrap {
     position: relative;
     grid-column: 1 / -1;
-  }
-
-  .map-legend {
-    position: absolute;
-    left: 1.4rem;
-    bottom: 1.4rem;
-    z-index: 2;
-    display: flex;
-    gap: 0.6rem;
-    padding: 0.35rem 0.5rem;
-    border: 1px solid rgb(255 255 255 / 65%);
-    border-radius: var(--radius-sm);
-    background: rgb(255 255 255 / 90%);
-    color: #3f3f46;
-    font-size: 0.5625rem;
-    box-shadow: 0 1px 4px rgb(0 0 0 / 15%);
-  }
-
-  .map-legend span {
-    display: inline-flex;
-    align-items: center;
-    gap: 0.25rem;
-  }
-
-  .map-legend i {
-    width: 0.45rem;
-    height: 0.45rem;
-    border-radius: 50%;
-    background: #0891b2;
-  }
-
-  .map-legend i.past {
-    background: #71717a;
-  }
-
-  .map-legend i.selected {
-    background: #d97706;
-  }
-
-  .trip-options {
-    min-width: 0;
-    max-height: 28rem;
-    overflow-y: auto;
-  }
-
-  .trip-options ol {
-    margin: 0;
-    padding: 0;
-    list-style: none;
-  }
-
-  .trip-options li + li {
-    border-top: 1px solid var(--card-border);
-  }
-
-  .trip-options button {
-    display: grid;
-    grid-template-columns: 4.25rem minmax(0, 1fr) auto;
-    gap: 0.7rem;
-    align-items: center;
-    width: 100%;
-    padding: 0.85rem;
-    border: 0;
-    border-left: 2px solid transparent;
-    background: transparent;
-    color: var(--text-primary);
-    font: inherit;
-    text-align: left;
-    cursor: pointer;
-  }
-
-  .trip-options button:hover,
-  .trip-options button.highlighted {
-    border-left-color: var(--primary);
-    background: var(--primary-soft);
-  }
-
-  .option-date strong,
-  .option-date small,
-  .option-route strong,
-  .option-route small {
-    display: block;
-  }
-
-  .option-date strong {
-    font-family: var(--font-mono);
-    font-size: var(--text-2xs);
-  }
-
-  .option-date small,
-  .option-route small {
-    color: var(--text-tertiary);
-    font-size: 0.625rem;
-  }
-
-  .option-route {
-    min-width: 0;
-  }
-
-  .option-route strong {
-    overflow: hidden;
-    margin: 0.15rem 0;
-    font-size: var(--text-xs);
-    text-overflow: ellipsis;
-    white-space: nowrap;
-  }
-
-  .phase {
-    color: var(--primary);
-    font-size: 0.5625rem;
-    font-weight: 700;
-    text-transform: uppercase;
-    letter-spacing: 0.06em;
-  }
-
-  .phase.past {
-    color: var(--text-tertiary);
   }
 
   /* The planner is a dialog now — `$lib/Overlay.svelte` carries its frame, so what
@@ -3343,31 +2790,6 @@
     color: var(--text-tertiary);
     font-family: var(--font-mono);
     font-size: 0.625rem;
-  }
-
-  .journey-sort {
-    display: inline-flex;
-    padding: 0.15rem;
-    border: 1px solid var(--card-border);
-    border-radius: var(--radius-sm);
-    background: var(--surface);
-  }
-
-  .journey-sort button {
-    padding: 0.25rem 0.4rem;
-    border: 0;
-    border-radius: calc(var(--radius-sm) - 2px);
-    background: transparent;
-    color: var(--text-tertiary);
-    font: inherit;
-    font-size: 0.625rem;
-    cursor: pointer;
-  }
-
-  .journey-sort button.active {
-    background: var(--card-bg);
-    color: var(--text-primary);
-    box-shadow: 0 1px 2px rgb(0 0 0 / 8%);
   }
 
   .trip-head {
@@ -3733,199 +3155,10 @@
     font-size: var(--text-sm);
   }
 
-  .source-notice {
-    margin: 0 0 0.75rem;
-    color: var(--warning-ink);
-    font-size: var(--text-2xs);
-  }
-
-  .results-grid {
-    display: grid;
-    gap: 1rem;
-  }
-
-  .result-column {
-    min-width: 0;
-  }
-
-  /* The rank-by bar: the presets as buttons, then a sentence for anything they do
-     not cover. It sits above the sort control on purpose -- this decides what the
-     server ranks by, and the sort control only decides how the answer is read. */
-  .priority-bar {
-    display: flex;
-    flex-wrap: wrap;
-    align-items: center;
-    gap: 0.5rem;
-    margin-bottom: 0.75rem;
-  }
-
-  .priority-label {
-    font-size: var(--text-xs);
-    color: var(--text-tertiary);
-    text-transform: uppercase;
-    letter-spacing: 0.04em;
-  }
-
-  .priority-phrase {
-    flex: 1 1 16rem;
-    min-width: 12rem;
-  }
-
-  .journey-list,
-  .event-list,
-  .activity-list,
   .itinerary-list {
     list-style: none;
     margin: 0;
     padding: 0;
-  }
-
-  .journey-list,
-  .event-list,
-  .activity-list {
-    border: 1px solid var(--card-border);
-    border-radius: var(--radius);
-    background: var(--card-bg);
-  }
-
-  .event-list li:last-child,
-  .activity-list li:last-child {
-    border-bottom: 0;
-  }
-
-  .save {
-    display: inline-flex;
-    align-items: center;
-    gap: 0.25rem;
-    margin-top: 0.2rem;
-    padding: 0.2rem 0.35rem;
-    border: 0;
-    border-radius: var(--radius-sm);
-    background: var(--primary-soft);
-    color: var(--primary);
-    font: inherit;
-    font-size: 0.625rem;
-    font-weight: 600;
-    cursor: pointer;
-  }
-
-  .save:disabled {
-    color: var(--success);
-    cursor: default;
-  }
-
-  .event-list li {
-    grid-template-columns: 3rem 1fr auto;
-    gap: 0.65rem;
-    align-items: start;
-    padding: 0.75rem;
-    border-bottom: 1px solid var(--card-border);
-  }
-
-  .event-list time {
-    color: var(--primary);
-    font-family: var(--font-mono);
-    font-size: 0.625rem;
-    font-weight: 600;
-  }
-
-  .event-list a {
-    font-size: var(--text-xs);
-    font-weight: 600;
-  }
-
-  .event-list a:hover {
-    color: var(--primary);
-  }
-
-  .event-list p {
-    display: -webkit-box;
-    overflow: hidden;
-    margin: 0.15rem 0;
-    color: var(--text-secondary);
-    font-size: var(--text-2xs);
-    -webkit-box-orient: vertical;
-    -webkit-line-clamp: 2;
-    line-clamp: 2;
-  }
-
-  .event-list span {
-    color: var(--text-tertiary);
-    font-size: 0.625rem;
-  }
-
-  .event-why {
-    margin-top: 0.25rem;
-  }
-
-  .event-why summary {
-    color: var(--text-tertiary);
-    font-size: 0.625rem;
-    cursor: pointer;
-  }
-
-  .event-why p {
-    margin-top: 0.25rem;
-  }
-
-  .event-list .save {
-    margin: 0;
-  }
-
-  .activity-list li {
-    display: grid;
-    grid-template-columns: 4.5rem minmax(0, 1fr) auto;
-    gap: 0.65rem;
-    align-items: start;
-    min-height: 4.5rem;
-    padding: 0.65rem;
-    border-bottom: 1px solid var(--card-border);
-  }
-
-  .activity-list img,
-  .activity-image {
-    width: 4.5rem;
-    height: 3.6rem;
-    border-radius: var(--radius-sm);
-    object-fit: cover;
-  }
-
-  .activity-image {
-    display: grid;
-    place-items: center;
-    background: var(--primary-soft);
-    color: var(--primary);
-  }
-
-  .activity-list a {
-    font-size: var(--text-xs);
-    font-weight: 600;
-  }
-
-  .activity-list p {
-    display: -webkit-box;
-    overflow: hidden;
-    margin: 0.2rem 0 0;
-    color: var(--text-secondary);
-    font-size: var(--text-2xs);
-    -webkit-box-orient: vertical;
-    -webkit-line-clamp: 2;
-    line-clamp: 2;
-  }
-
-  .empty {
-    margin: 0;
-    padding: 1rem;
-    border: 1px solid var(--card-border);
-    border-radius: var(--radius);
-    color: var(--text-tertiary);
-    font-size: var(--text-xs);
-  }
-
-  .empty a {
-    display: inline-block;
-    margin-left: 0.25rem;
-    color: var(--primary);
   }
 
   .itinerary {
@@ -4077,22 +3310,6 @@
       grid-column: auto;
     }
 
-    .board-toolbar {
-      flex-direction: row;
-      align-items: center;
-      justify-content: space-between;
-    }
-
-    .journey-index {
-      grid-template-columns: 8rem 8rem 1fr;
-    }
-
-    .journey-index > button,
-    .journey-index .next-empty {
-      grid-column: auto;
-      border-top: 0;
-    }
-
     .route-fields {
       grid-template-columns: repeat(2, minmax(0, 1fr));
     }
@@ -4122,19 +3339,6 @@
   }
 
   @media (width >= 54rem) {
-    .board-layout {
-      grid-template-columns: minmax(0, 1.35fr) minmax(18rem, 0.85fr);
-    }
-
-    .overview-map {
-      border-right: 1px solid var(--card-border);
-      border-bottom: 0;
-    }
-
-    .trip-options {
-      max-height: 23.5rem;
-    }
-
     .past-view {
       grid-template-columns: minmax(15rem, 0.75fr) minmax(0, 1.25fr);
     }
@@ -4166,14 +3370,6 @@
     .itinerary {
       position: sticky;
       top: 7.25rem;
-    }
-
-    .results-grid {
-      grid-template-columns: repeat(2, minmax(0, 1fr));
-    }
-
-    .activity-column {
-      grid-column: 1 / -1;
     }
   }
 

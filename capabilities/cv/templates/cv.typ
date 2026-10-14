@@ -46,7 +46,7 @@
 // The application's override of a top-level text-variant map, else the profile's variant.
 #let text-for(key) = if key in app { loc(app.at(key)) } else { variant-for(data.at(key)) }
 
-#let section-title(txt) = [
+#let section-title(txt) = block(sticky: true)[
   #v(0.3em)
   #text(fill: accent, weight: "bold", size: 11.5pt, tracking: 0.5pt)[#upper(txt)]
   #v(-0.55em)
@@ -86,8 +86,9 @@
   if entries.len() > 0 {
     section-title(if lang == "de" { "Berufserfahrung" } else { "Experience" })
     for e in entries {
-      let bullets = e.bullets.filter(included)
-      if bullets.len() > 0 {
+      let bullets = e.at("bullets", default: ()).filter(included)
+      // An entry whose bullets were all filtered out is hidden. One with none is a header line.
+      if bullets.len() > 0 or e.at("bullets", default: ()).len() == 0 {
         grid(
           columns: (1fr, auto),
           text(weight: "bold", size: 9.8pt)[

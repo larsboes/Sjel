@@ -76,8 +76,8 @@
     <h3>Build</h3>
     <p class="hint">Master: <code>{view.master}</code>, edited {ago(view.master_mtime)}</p>
     <div class="row">
-      <select bind:value={profile}>{#each view.profiles as p}<option>{p}</option>{/each}</select>
-      <select bind:value={lang}><option>en</option><option>de</option></select>
+      <select aria-label="Profile" bind:value={profile}>{#each view.profiles as p}<option>{p}</option>{/each}</select>
+      <select aria-label="Language" bind:value={lang}><option>en</option><option>de</option></select>
       <button class="btn btn-soft" disabled={busy} onclick={() => run({ action: "build", profile, lang })}>Build</button>
       <button class="btn btn-outline" disabled={busy} onclick={() => run({ action: "build-all" })}>Build all</button>
     </div>
@@ -94,6 +94,7 @@
             <td class="hint">{app.profile} · {app.lang}</td>
             <td>
               <select
+                aria-label="Application status"
                 value={app.status}
                 disabled={busy}
                 onchange={(e) => run({ action: "app-status", slug: app.slug, status: e.currentTarget.value }, false)}
@@ -111,11 +112,11 @@
       </tbody>
     </table>
     <div class="row">
-      <input placeholder="Company" bind:value={draft.company} />
-      <input placeholder="Role" bind:value={draft.role} />
-      <input placeholder="Posting URL" bind:value={draft.url} />
-      <select bind:value={draft.profile}>{#each view.profiles as p}<option>{p}</option>{/each}</select>
-      <select bind:value={draft.lang}><option>en</option><option>de</option></select>
+      <input aria-label="Company" placeholder="Company" bind:value={draft.company} />
+      <input aria-label="Role" placeholder="Role" bind:value={draft.role} />
+      <input aria-label="Posting URL" placeholder="Posting URL" bind:value={draft.url} />
+      <select aria-label="Draft profile" bind:value={draft.profile}>{#each view.profiles as p}<option>{p}</option>{/each}</select>
+      <select aria-label="Draft language" bind:value={draft.lang}><option>en</option><option>de</option></select>
       <button class="btn btn-soft" disabled={busy || !draft.company || !draft.role} onclick={addApplication}>
         <Icon name="plus" size={12} /> Add
       </button>
@@ -169,7 +170,7 @@
   .err { display: flex; gap: 0.45rem; font-size: 0.85rem; color: var(--warning-ink); }
   .row { display: flex; flex-wrap: wrap; align-items: center; gap: 0.35rem; margin: 0.4rem 0 0; }
   input, select {
-    font-size: 0.75rem;
+    font-size: var(--text-xs);
     padding: 0.15rem 0.35rem;
     background: var(--input-bg);
     color: var(--text-primary);

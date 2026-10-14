@@ -19,7 +19,7 @@
 #let accent = rgb("#117A65")
 
 #set document(title: data.name + " — CV")
-#set page(paper: "a4", margin: (x: 1.8cm, y: 1.6cm))
+#set page(paper: "a4", margin: (x: 1.8cm, y: 1.4cm))
 #set text(font: "Helvetica Neue", size: 10pt, lang: lang)
 #set par(leading: 0.55em, justify: false)
 

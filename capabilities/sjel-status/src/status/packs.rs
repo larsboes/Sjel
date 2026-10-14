@@ -155,7 +155,7 @@ fn plan_pack_write(
 /// A name that reaches an argv, and for deploy and remove one that also reaches a path under
 /// `tools/`. The first character is alphanumeric so a leading `-` cannot be read as an option
 /// by the launcher, and the rest cannot leave the directory or the argument.
-fn plain_name(name: &str, what: &str) -> Result<(), String> {
+pub(crate) fn plain_name(name: &str, what: &str) -> Result<(), String> {
     let head = name
         .chars()
         .next()
@@ -173,7 +173,7 @@ fn plain_name(name: &str, what: &str) -> Result<(), String> {
 
 /// A refusal from the launcher is the caller's input, not a broken host — the same reading
 /// `upstreams/watch` gives its own tool.
-fn bad_request(msg: impl Into<String>) -> (StatusCode, Json<Value>) {
+pub(crate) fn bad_request(msg: impl Into<String>) -> (StatusCode, Json<Value>) {
     (
         StatusCode::BAD_REQUEST,
         Json(json!({ "error": msg.into() })),

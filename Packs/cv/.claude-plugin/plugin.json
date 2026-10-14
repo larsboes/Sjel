@@ -1,6 +1,6 @@
 {
   "name": "cv",
-  "description": "Build job-tailored CV PDFs from one profile-tagged master file, via Typst.",
+  "description": "Build tailored CV PDFs from one master file, track applications, and compare the master with LinkedIn.",
   "author": {
     "name": "Lars Boes",
     "url": "https://github.com/larsboes/Sjel"

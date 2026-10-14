@@ -555,6 +555,45 @@ export interface PackWriteResult {
   detail: string;
 }
 
+/** One application file from `cv app list --json`. */
+export interface CvApplication {
+  slug: string;
+  company: string;
+  role: string;
+  url?: string;
+  profile: string;
+  lang: 'en' | 'de';
+  status: string;
+  log: { date: string; status: string; note?: string }[];
+  notes?: string;
+}
+
+/** `cv status --json`: everything the CV page shows. */
+export interface CvView {
+  master: string;
+  master_mtime: number;
+  profiles: string[];
+  statuses: string[];
+  applications: CvApplication[];
+  pdfs: { name: string; path: string; mtime: number; stale: boolean }[];
+  linkedin_pulled: string | null;
+}
+
+/** One `cv` verb. Fields an action does not use are ignored by sjel-status. */
+export interface CvWrite {
+  action:
+    | 'build' | 'build-all' | 'app-new' | 'app-build' | 'app-status'
+    | 'linkedin-pull' | 'linkedin-diff' | 'linkedin-sheet';
+  profile?: string;
+  lang?: 'en' | 'de';
+  slug?: string;
+  company?: string;
+  role?: string;
+  url?: string;
+  status?: string;
+  note?: string;
+}
+
 export const axonStatus = {
   health: () => request<AxonStatusHealth>('/sjel-status/api/sjel-status/health'),
   capabilities: () => request<CapabilityView[]>('/sjel-status/api/sjel-status/capabilities'),
@@ -670,6 +709,16 @@ export const axonStatus = {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(write),
     }),
+  /** CV profiles, applications and built PDFs, from `capabilities/cv/cv status --json`. */
+  cv: () => request<CvView>('/sjel-status/api/sjel-status/cv'),
+  /** Run one `cv` verb. A 400 carries the launcher's own refusal. */
+  writeCv: (write: CvWrite) =>
+    request<{ action: string; detail: string; warnings: string }>(
+      '/sjel-status/api/sjel-status/cv',
+      jsonInit('POST', write),
+    ),
+  /** Same-origin URL of one built PDF; the Tauri bridge carries text only, so web only. */
+  cvPdfUrl: (name: string) => `/sjel-status/api/sjel-status/cv/pdf?name=${encodeURIComponent(name)}`,
   /** Append a `watch` row to upstreams.toml. A 400 carries the tool's one-line refusal. */
   watchUpstream: (url: string, summary: string, name?: string) =>
     request<{ name: string; url: string; verdict: string; license: string; summary: string }>(

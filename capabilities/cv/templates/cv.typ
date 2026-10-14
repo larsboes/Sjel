@@ -13,6 +13,8 @@
 #let profile = sys.inputs.at("profile", default: "default")
 #let lang = sys.inputs.at("lang", default: "en")
 #let data = yaml(sys.inputs.master)
+// An application file (`cv app build`) may override `title` and `summary` with `{en, de}`.
+#let app = if "app" in sys.inputs { yaml(sys.inputs.app) } else { (:) }
 
 #let accent = rgb("#117A65")
 
@@ -41,6 +43,9 @@
 // text-variant map, falling back to `default`
 #let variant-for(map) = loc(map.at(profile, default: map.default))
 
+// The application's override of a top-level text-variant map, else the profile's variant.
+#let text-for(key) = if key in app { loc(app.at(key)) } else { variant-for(data.at(key)) }
+
 #let section-title(txt) = [
   #v(0.3em)
   #text(fill: accent, weight: "bold", size: 11.5pt, tracking: 0.5pt)[#upper(txt)]
@@ -53,7 +58,7 @@
 
 #align(center)[
   #text(size: 20pt, weight: "bold")[#data.name] \
-  #text(size: 11.5pt, fill: accent, weight: "medium")[#variant-for(data.title)]
+  #text(size: 11.5pt, fill: accent, weight: "medium")[#text-for("title")]
 ]
 
 #v(0.3em)
@@ -72,7 +77,7 @@
 
 // ---- Summary ----
 
-#text(size: 9.3pt)[#variant-for(data.summary)]
+#text(size: 9.3pt)[#text-for("summary")]
 
 // ---- Experience ----
 
@@ -85,7 +90,9 @@
       if bullets.len() > 0 {
         grid(
           columns: (1fr, auto),
-          text(weight: "bold", size: 9.8pt)[#e.company #sym.dot.c #e.location],
+          text(weight: "bold", size: 9.8pt)[
+            #if "role" in e [#loc(e.role) #sym.dash.en ]#e.company #sym.dot.c #e.location
+          ],
           text(size: 8.6pt, style: "italic")[#e.date],
         )
         for b in bullets {

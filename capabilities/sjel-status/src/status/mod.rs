@@ -2,6 +2,7 @@ use super::*;
 
 mod agent;
 mod backup;
+mod cv;
 mod health;
 mod host_watch;
 mod lifecycle;
@@ -16,6 +17,7 @@ mod upstreams;
 
 pub(crate) use agent::*;
 pub(crate) use backup::*;
+pub(crate) use cv::*;
 pub(crate) use health::*;
 pub(crate) use host_watch::*;
 pub(crate) use lifecycle::*;

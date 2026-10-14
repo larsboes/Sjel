@@ -37,8 +37,15 @@ summary:
   default: {en: "One or two sentences describing you, used when no profile-specific summary exists.", de: "..."}
   swe: {en: "A summary variant tuned for SWE applications.", de: "..."}
 
+# Optional. LinkedIn's own headline and About text; `cv linkedin sheet` and `cv linkedin diff`
+# fall back to title.default and summary.default when absent.
+# linkedin:
+#   headline: {en: "Headline as LinkedIn shows it", de: "..."}
+#   about: {en: "About section", de: "..."}
+
 experience:
   - company: "Employer Name"
+    # role: {en: "Job title", de: "Berufsbezeichnung"}   # optional; rendered before the company
     location: "City, Country"
     date: "Mon. YYYY - Present"
     # profiles: [swe, general]   # omit to include this experience entry in every build
@@ -96,3 +103,19 @@ sections:
         text: {en: "the evidence for it.", de: "..."}
   - title: {en: "Interests", de: "Interessen"}
     prose: {en: "A sentence or two; no list structure needed.", de: "..."}
+
+# ---- Applications ---------------------------------------------------------------------------
+# Not part of this file. Each application is its own file at
+# $SJEL_PERSONAL_ROOT/data/cv/applications/<slug>.yaml, created by `cv app new`:
+#
+#   company: "Acme GmbH"
+#   role: "Platform Engineer"
+#   url: "https://..."
+#   profile: swe                 # which profile filter to build with
+#   lang: en
+#   status: applied              # draft applied interview offer accepted rejected withdrawn
+#   log:                         # appended by `cv app status`
+#     - {date: 2026-10-14, status: draft}
+#   title: {en: "...", de: "..."}    # optional override of the profile's title
+#   summary: {en: "...", de: "..."}  # optional override of the profile's summary
+#   notes: |                     # free text: job-description fit, gaps, contacts

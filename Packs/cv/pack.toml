@@ -1,6 +1,6 @@
 # See schemas/pack.toml.example for the field reference.
 name         = "cv"
-description  = "Build job-tailored CV PDFs from one profile-tagged master file, via Typst."
+description  = "Build tailored CV PDFs from one master file, track applications, and compare the master with LinkedIn."
 skills       = ["cv-builder"]
 license      = "MIT"
 capabilities = ["cv"]

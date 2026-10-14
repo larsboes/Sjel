@@ -50,15 +50,47 @@ The actual content (`master_cv.yaml`, real name/employer/contact info) and every
 live only in `axon-overlay/data/cv/` — never in this repo. This directory ships templates and
 tooling only; nothing here is a personal-data file.
 
+## Applications, LinkedIn and the dashboard
+
+```mermaid
+flowchart LR
+  M[master_cv.yaml] --> B[cv build] --> P[dist/CV_profile_lang.pdf]
+  A[applications/slug.yaml] --> AB[cv app build] --> AP[dist/apps/CV_slug_lang.pdf]
+  M --> AB
+  L[LinkedIn Member Snapshot API] --> LP[cv linkedin pull] --> J[linkedin/DOMAIN.json]
+  J --> D[cv linkedin diff]
+  M --> D
+  M --> S[cv linkedin sheet]
+  S -. paste by hand .-> L
+```
+
+- **Applications.** One file per application overrides `title` and `summary` and carries a
+  status log, so the same files are the application tracker. Shape: the tail of
+  `master_cv.schema.yaml`.
+- **LinkedIn is read-only.** The Member Data Portability API (EU/EEA and Switzerland only) has
+  no write path. `cv linkedin pull` reads the token from the keychain item
+  `sjel-linkedin-dma`; create it with the OAuth token generator and scope
+  `r_dma_portability_self_serve` (learn.microsoft.com/linkedin/dma/member-data-portability/member-data-portability-member).
+  Updating the profile stays manual, from `cv linkedin sheet`.
+- **Dashboard.** `/cv` drives the same verbs through `GET|POST /api/sjel-status/cv`
+  (`capabilities/sjel-status/src/status/cv.rs`). The inline PDF preview works in the browser
+  only; the Tauri bridge carries text bodies.
+
+`capabilities/cv/check` runs every verb against a throwaway overlay built from the schema.
+
 ## Run it
 
-Requires `typst` and `yq` on PATH (`brew install typst yq`) — `cv` checks both up front and
+Requires `typst` and `yq` on PATH (`brew install typst yq`); `jq` and `curl` for applications, status and LinkedIn — `cv` checks both up front and
 errors clearly if either is missing.
 
 ```bash
 capabilities/cv/cv build --profile swe --lang en   # -> axon-overlay/data/cv/dist/
 capabilities/cv/cv build --all                     # full profile x lang matrix
 capabilities/cv/cv list-profiles                    # tags in use, read from master_cv.yaml
+capabilities/cv/cv app new acme --company Acme --role "Platform Engineer" --profile swe
+capabilities/cv/cv app build acme                  # -> dist/apps/CV_acme_en.pdf
+capabilities/cv/cv app status acme applied "via portal"
+capabilities/cv/cv linkedin pull && capabilities/cv/cv linkedin diff
 ```
 
 Config: copy `master_cv.schema.yaml`'s shape into

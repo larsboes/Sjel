@@ -99,6 +99,7 @@ export const UTILITY_NAV: NavItem[] = [
   { href: "/capabilities", label: "Capabilities", icon: "boxes", capability: "sjel-status" },
   { href: "/backup", label: "Backup", icon: "database", capability: "sjel-status" },
   { href: "/self", label: "Self-model", icon: "compass", capability: "sjel-status" },
+  { href: "/cv", label: "CV", icon: "pencil", capability: "sjel-status" },
   { href: "/packs", label: "Packs", icon: "boxes", capability: "sjel-status" },
   { href: "/docs", label: "Docs", icon: "book" },
 ];

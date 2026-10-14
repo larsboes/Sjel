@@ -119,6 +119,21 @@ const ROUTES: &[route_manifest::Route] = &[
     ),
     r(
         "GET",
+        "/api/sjel-status/cv",
+        "CV profiles, applications and built PDFs with staleness. From capabilities/cv/cv status --json.",
+    ),
+    r(
+        "POST",
+        "/api/sjel-status/cv",
+        "Run one cv verb: build, build-all, app-new, app-build, app-status, linkedin-pull, linkedin-diff, linkedin-sheet. 400 carries the refusal.",
+    ),
+    r(
+        "GET",
+        "/api/sjel-status/cv/pdf",
+        "One built CV PDF by the name GET /api/sjel-status/cv lists. Query: name.",
+    ),
+    r(
+        "GET",
         "/api/sjel-status/storage",
         "What fills the disk: the volume, every reclaimable class, and what the overlay's policy protects from reclaim. From tools/storage's own report --json.",
     ),
@@ -416,6 +431,11 @@ fn build_router(shell: proxy::Proxy) -> Router {
             "/api/sjel-status/upstreams/watch",
             post(upstream_watch_handler),
         )
+        .route(
+            "/api/sjel-status/cv",
+            get(cv_handler).post(cv_write_handler),
+        )
+        .route("/api/sjel-status/cv/pdf", get(cv_pdf_handler))
         .route("/api/sjel-status/storage", get(storage_handler))
         .route(
             "/api/sjel-status/storage-history",

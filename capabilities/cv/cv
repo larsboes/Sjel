@@ -10,6 +10,15 @@ source "$_dir/../../tools/lib/paths.sh"
 MASTER="$SJEL_PERSONAL_ROOT/data/cv/master_cv.yaml"
 DIST="$SJEL_PERSONAL_ROOT/data/cv/dist"
 TEMPLATE="$_dir/templates/cv.typ"
+APPS="$SJEL_PERSONAL_ROOT/data/cv/applications"
+LINKEDIN="$SJEL_PERSONAL_ROOT/data/cv/linkedin"
+# Keychain item that holds the LinkedIn Member Data Portability token (scope
+# r_dma_portability_self_serve). The token is read per call and never written to disk.
+LI_KEYCHAIN_SERVICE="sjel-linkedin-dma"
+# CV-relevant domains of the Member Snapshot API, plus JOB_APPLICATIONS for the tracker.
+# Full list: learn.microsoft.com/linkedin/dma/member-data-portability/shared/snapshot-domain
+LI_DOMAINS="PROFILE POSITIONS EDUCATION SKILLS LANGUAGES CERTIFICATIONS PROJECTS HONORS VOLUNTEERING_EXPERIENCES JOB_APPLICATIONS"
+APP_STATUSES="draft applied interview offer accepted rejected withdrawn"
 
 usage() {
   cat <<'EOF'
@@ -19,6 +28,16 @@ Usage:
   cv watch --profile <tag> --lang <en|de> [--out <path>]
                                       # rebuild on every save of the master file
   cv list-profiles                    # profile tags currently in use, read from master_cv.yaml
+  cv status --json                    # profiles, applications, PDFs and staleness, for the dashboard
+
+  cv app new <slug> --company <name> --role <title> [--profile <tag>] [--lang <en|de>] [--url <url>]
+  cv app build <slug>                 # CV for one application -> dist/apps/CV_<slug>_<lang>.pdf
+  cv app list [--json]                # every application with its status
+  cv app status <slug> <status> [note]  # status: draft applied interview offer accepted rejected withdrawn
+
+  cv linkedin pull [DOMAIN...]        # Member Snapshot API -> data/cv/linkedin/<DOMAIN>.json
+  cv linkedin diff                    # what LinkedIn says vs what master_cv.yaml says
+  cv linkedin sheet [--lang <en|de>]  # headline, about and roles from the master, ready to paste
 EOF
 }
 
@@ -30,6 +49,15 @@ require_deps() {
         *)      hint="install '$bin' via your package manager (cargo/snap/apt, etc.)" ;;
       esac
       echo "cv: '$bin' not found — $hint" >&2
+      exit 1
+    fi
+  done
+}
+
+require_bin() {
+  for bin in "$@"; do
+    if ! command -v "$bin" >/dev/null 2>&1; then
+      echo "cv: '$bin' not found on PATH" >&2
       exit 1
     fi
   done
@@ -64,6 +92,8 @@ list_profiles() {
 
 # `default` is always buildable — it is the fallback every text-variant map declares, not a tag
 # anyone writes in a `profiles:` list, so it never appears in list_profiles output.
+known_list() { printf 'default\n%s\n' "$(list_profiles)" | sort -u | tr '\n' ' '; }
+
 known_profile() {
   candidate="$1"
   if [ "$candidate" = "default" ]; then return 0; fi
@@ -84,13 +114,11 @@ langs_for_profile() {
 }
 
 build_one() {
-  profile="$1"; lang="$2"; out="$3"
+  profile="$1"; lang="$2"; out="$3"; app="${4:-}"
   mkdir -p "$(dirname "$out")"
-  typst compile --root / \
-    --input master="$MASTER" \
-    --input profile="$profile" \
-    --input lang="$lang" \
-    "$TEMPLATE" "$out"
+  set -- --input master="$MASTER" --input profile="$profile" --input lang="$lang"
+  if [ -n "$app" ]; then set -- "$@" --input app="$app"; fi
+  typst compile --root / "$@" "$TEMPLATE" "$out"
   echo "cv: $out"
 }
 
@@ -116,7 +144,7 @@ cmd_build() {
     # the loop below would compare against whatever the previous build set, which silently
     # dropped every German variant after the first PDF.
     want_lang="$lang"
-    profiles="$(printf 'default\n%s\n' "$(list_profiles)" | sort -u | tr '\n' ' ')"
+    profiles="$(known_list)"
     for p in $profiles; do
       for l in $(langs_for_profile "$p"); do
         # an explicit --lang narrows the matrix; it never overrides a profile's own restriction
@@ -136,7 +164,7 @@ cmd_build() {
   # result was a thin baseline CV that looked like a successful build. A typo is a build error.
   if ! known_profile "$profile"; then
     echo "cv: unknown profile '$profile'" >&2
-    echo "cv: known profiles: default $(list_profiles | tr '\n' ' ')" >&2
+    echo "cv: known profiles: $(known_list)" >&2
     exit 1
   fi
   if [ -z "$lang" ]; then lang="en"; fi
@@ -166,7 +194,7 @@ cmd_watch() {
   fi
   if ! known_profile "$profile"; then
     echo "cv: unknown profile '$profile'" >&2
-    echo "cv: known profiles: default $(list_profiles | tr '\n' ' ')" >&2
+    echo "cv: known profiles: $(known_list)" >&2
     exit 1
   fi
   if [ -z "$lang" ]; then lang="en"; fi
@@ -186,8 +214,272 @@ cmd_watch() {
     "$TEMPLATE" "$out"
 }
 
+# ---- Applications ----------------------------------------------------------------------------
+# One YAML file per application in $APPS. It names the profile and language to build, may
+# override title and summary, and carries the status log that makes it a tracker.
+
+valid_slug() {
+  case "$1" in
+    ""|-*|*[!a-z0-9-]*) echo "cv: slug must be lowercase letters, digits and dashes: '$1'" >&2; exit 1 ;;
+  esac
+}
+
+app_path() {
+  valid_slug "$1"
+  f="$APPS/$1.yaml"
+  if [ ! -f "$f" ]; then
+    echo "cv: no application '$1' at $f" >&2
+    exit 1
+  fi
+  echo "$f"
+}
+
+app_new() {
+  slug="${1:-}"; shift || true
+  valid_slug "$slug"
+  company=""; role=""; profile="default"; lang="en"; url=""
+  while [ $# -gt 0 ]; do
+    case "$1" in
+      --company) company="$2"; shift 2 ;;
+      --role) role="$2"; shift 2 ;;
+      --profile) profile="$2"; shift 2 ;;
+      --lang) lang="$2"; shift 2 ;;
+      --url) url="$2"; shift 2 ;;
+      *) echo "cv: unknown option $1" >&2; usage; exit 1 ;;
+    esac
+  done
+  if [ -z "$company" ] || [ -z "$role" ]; then
+    echo "cv: app new needs --company and --role" >&2
+    exit 1
+  fi
+  if ! known_profile "$profile"; then
+    echo "cv: unknown profile '$profile'; known: $(known_list)" >&2
+    exit 1
+  fi
+  f="$APPS/$slug.yaml"
+  if [ -e "$f" ]; then
+    echo "cv: application '$slug' already exists at $f" >&2
+    exit 1
+  fi
+  mkdir -p "$APPS"
+  COMPANY="$company" ROLE="$role" URL="$url" PROFILE="$profile" CVLANG="$lang" TODAY="$(date +%F)" \
+    yq -n '.company = strenv(COMPANY) | .role = strenv(ROLE) | .url = strenv(URL) |
+      .profile = strenv(PROFILE) | .lang = strenv(CVLANG) | .status = "draft" |
+      .log = [{"date": strenv(TODAY), "status": "draft"}]' > "$f"
+  cat >>"$f" <<'EOF'
+# Optional overrides, each {en: ..., de: ...}. Omit a key to keep the profile's own text.
+# title: {en: "", de: ""}
+# summary: {en: "", de: ""}
+# notes: |
+#   Job-description fit, gaps, contacts, interview prep.
+EOF
+  echo "cv: $f"
+}
+
+app_build() {
+  f="$(app_path "${1:-}")"
+  profile="$(yq -r '.profile // "default"' "$f")"
+  lang="$(yq -r '.lang // "en"' "$f")"
+  if ! known_profile "$profile"; then
+    echo "cv: $f names unknown profile '$profile'" >&2
+    exit 1
+  fi
+  build_one "$profile" "$lang" "$DIST/apps/CV_${1}_${lang}.pdf" "$f"
+}
+
+app_json() {
+  for f in "$APPS"/*.yaml; do
+    [ -f "$f" ] || continue
+    slug="$(basename "$f" .yaml)"
+    SLUG="$slug" yq -o json -I0 '.slug = strenv(SLUG)' "$f"
+  done | jq -s .
+}
+
+app_list() {
+  if [ "${1:-}" = "--json" ]; then require_bin jq; app_json; return; fi
+  printf '%-24s %-10s %-11s %s\n' SLUG STATUS UPDATED "COMPANY / ROLE"
+  for f in "$APPS"/*.yaml; do
+    [ -f "$f" ] || continue
+    printf '%-24s %s\n' "$(basename "$f" .yaml)" \
+      "$(yq -r '(.status | . + "          " | .[0:10]) + " " + ((.log[-1].date // "") + "           " | .[0:11]) + .company + " / " + .role' "$f")"
+  done
+}
+
+app_set_status() {
+  f="$(app_path "${1:-}")"
+  status="${2:-}"
+  note="${3:-}"
+  case " $APP_STATUSES " in
+    *" $status "*) ;;
+    *) echo "cv: status must be one of: $APP_STATUSES" >&2; exit 1 ;;
+  esac
+  STATUS="$status" NOTE="$note" TODAY="$(date +%F)" yq -i '
+    .status = strenv(STATUS) |
+    .log += [{"date": strenv(TODAY), "status": strenv(STATUS)} + (strenv(NOTE) | select(. != "") | {"note": .}) // {}]
+  ' "$f"
+  echo "cv: $1 -> $status"
+}
+
+cmd_app() {
+  require_deps
+  require_master
+  case "${1:-}" in
+    new) shift; app_new "$@" ;;
+    build) shift; app_build "$@" ;;
+    list) shift; app_list "$@" ;;
+    status) shift; app_set_status "$@" ;;
+    *) usage; exit 1 ;;
+  esac
+}
+
+# ---- LinkedIn ---------------------------------------------------------------------------------
+# Read-only: the Member Data Portability API has no write path, so the profile is updated by
+# hand from `cv linkedin sheet`. API reference:
+# learn.microsoft.com/linkedin/dma/member-data-portability/shared/member-snapshot-api
+
+linkedin_token() {
+  case "$(uname -s)" in
+    Darwin) security find-generic-password -s "$LI_KEYCHAIN_SERVICE" -a "$USER" -w 2>/dev/null && return ;;
+    *) secret-tool lookup service "$LI_KEYCHAIN_SERVICE" 2>/dev/null && return ;;
+  esac
+  echo "cv: no LinkedIn token in the keychain (service '$LI_KEYCHAIN_SERVICE')" >&2
+  echo "cv: store it with: security add-generic-password -U -s $LI_KEYCHAIN_SERVICE -a \"\$USER\" -w" >&2
+  exit 1
+}
+
+li_pull() {
+  require_bin curl jq
+  token="$(linkedin_token)"
+  domains="${*:-$LI_DOMAINS}"
+  mkdir -p "$LINKEDIN"
+  for domain in $domains; do
+    case "$domain" in *[!A-Z_]*) echo "cv: not a snapshot domain: $domain" >&2; exit 1 ;; esac
+    rows="$(mktemp)"
+    start=0
+    # The API's `total` is unreliable; its docs say to page until a request fails.
+    while [ "$start" -lt 100 ]; do
+      # The header goes in on stdin so the token never appears in the process list.
+      resp="$(printf 'Authorization: Bearer %s\n' "$token" | curl -sS -H @- \
+        -H 'Linkedin-Version: 202312' -w '\n%{http_code}' \
+        "https://api.linkedin.com/rest/memberSnapshotData?q=criteria&domain=$domain&start=$start")"
+      code="${resp##*$'\n'}"
+      body="${resp%$'\n'*}"
+      if [ "$code" != "200" ]; then
+        if [ "$start" -eq 0 ] && [ "$code" != "404" ]; then
+          echo "cv: $domain: HTTP $code $(printf '%s' "$body" | jq -r '.message // empty' 2>/dev/null)" >&2
+          rm -f "$rows"
+          if [ "$code" = "401" ]; then exit 1; fi
+          continue 2
+        fi
+        break
+      fi
+      count="$(printf '%s' "$body" | jq '[.elements[]?.snapshotData[]?] | length')"
+      if [ "$count" -eq 0 ]; then break; fi
+      printf '%s' "$body" | jq -c '.elements[]?.snapshotData[]?' >> "$rows"
+      start=$((start + 1))
+    done
+    jq -s . "$rows" > "$LINKEDIN/$domain.json"
+    echo "cv: $domain: $(jq length "$LINKEDIN/$domain.json") record(s)"
+    rm -f "$rows"
+  done
+  date +%F > "$LINKEDIN/PULLED_ON"
+}
+
+li_file() {
+  f="$LINKEDIN/$1.json"
+  if [ ! -f "$f" ]; then echo "cv: $f missing; run 'cv linkedin pull' first" >&2; exit 1; fi
+  echo "$f"
+}
+
+# Skill names lowercased with any "(...)" qualifier removed, one per line, sorted.
+normalize_skills() { sed -E 's/ *\(.*\)//' | tr '[:upper:]' '[:lower:]' | sort -u; }
+
+li_diff() {
+  require_bin jq
+  profile_json="$(li_file PROFILE)"
+  positions_json="$(li_file POSITIONS)"
+  skills_json="$(li_file SKILLS)"
+  echo "LinkedIn pulled on $(cat "$LINKEDIN/PULLED_ON" 2>/dev/null || echo '?')"
+  echo
+  echo "== Headline"
+  echo "  linkedin: $(jq -r '.[0].Headline // ""' "$profile_json")"
+  echo "  master:   $(yq -r '(.linkedin.headline // .title.default).en' "$MASTER")"
+  echo
+  echo "== About differs: $(
+    a="$(jq -r '.[0].Summary // ""' "$profile_json")"
+    b="$(yq -r '(.linkedin.about // .summary.default).en' "$MASTER")"
+    if [ "$a" = "$b" ]; then echo no; else echo yes; fi)"
+  echo
+  echo "== Positions on LinkedIn"
+  jq -r '.[] | "  \(.["Started On"] // "?") - \(.["Finished On"] // "now")  \(.Title // "?") @ \(.["Company Name"] // "?")"' "$positions_json"
+  echo "== Positions in master"
+  yq -r '.experience[] | "  " + .date + "  " + (.role // "?") + " @ " + .company' "$MASTER"
+  echo
+  li_skills="$(jq -r '.[].Name // empty' "$skills_json" | normalize_skills)"
+  cv_skills="$(yq -r '.skills[].items | (select(tag == "!!seq") // .en) | .[]' "$MASTER" | normalize_skills)"
+  echo "== Skills only on LinkedIn"
+  comm -23 <(echo "$li_skills") <(echo "$cv_skills") | sed 's/^/  /'
+  echo "== Skills only in master"
+  comm -13 <(echo "$li_skills") <(echo "$cv_skills") | sed 's/^/  /'
+}
+
+li_sheet() {
+  lang="en"
+  if [ "${1:-}" = "--lang" ]; then lang="${2:-en}"; fi
+  CVLANG="$lang" yq -r '
+    "HEADLINE\n" + (.linkedin.headline // .title.default)[strenv(CVLANG)] +
+    "\n\nABOUT\n" + (.linkedin.about // .summary.default)[strenv(CVLANG)] +
+    "\n\nEXPERIENCE\n" +
+    ([.experience[] |
+      (.role // "") + " @ " + .company + " | " + .location + " | " + .date + "\n" +
+      ([.bullets[] | "- " + .text[strenv(CVLANG)]] | join("\n"))
+    ] | join("\n\n"))
+  ' "$MASTER"
+}
+
+cmd_linkedin() {
+  require_deps
+  require_master
+  case "${1:-}" in
+    pull) shift; li_pull "$@" ;;
+    diff) li_diff ;;
+    sheet) shift; li_sheet "$@" ;;
+    *) usage; exit 1 ;;
+  esac
+}
+
+# ---- Status -----------------------------------------------------------------------------------
+
+mtime() { date -r "$1" +%s; }
+
+cmd_status() {
+  require_deps
+  require_master
+  require_bin jq
+  if [ "${1:-}" != "--json" ]; then usage; exit 1; fi
+  master_mtime="$(mtime "$MASTER")"
+  pdfs="$(for f in "$DIST"/*.pdf "$DIST"/apps/*.pdf; do
+    [ -f "$f" ] || continue
+    jq -nc --arg path "$f" --arg name "${f#"$DIST"/}" --argjson mtime "$(mtime "$f")" \
+      --argjson master "$master_mtime" '{name: $name, path: $path, mtime: $mtime, stale: ($mtime < $master)}'
+  done | jq -s .)"
+  jq -n \
+    --arg master "$MASTER" --argjson master_mtime "$master_mtime" \
+    --argjson profiles "$(printf 'default\n%s\n' "$(list_profiles)" | sort -u | jq -R . | jq -s .)" \
+    --argjson applications "$(app_json)" \
+    --argjson pdfs "$pdfs" \
+    --arg linkedin_pulled "$(cat "$LINKEDIN/PULLED_ON" 2>/dev/null || true)" \
+    --arg statuses "$APP_STATUSES" \
+    '{master: $master, master_mtime: $master_mtime, profiles: $profiles,
+      statuses: ($statuses | split(" ")), applications: $applications, pdfs: $pdfs,
+      linkedin_pulled: (if $linkedin_pulled == "" then null else $linkedin_pulled end)}'
+}
+
 case "${1:-}" in
   build) shift; cmd_build "$@" ;;
+  app) shift; cmd_app "$@" ;;
+  linkedin) shift; cmd_linkedin "$@" ;;
+  status) shift; cmd_status "$@" ;;
   watch) shift; cmd_watch "$@" ;;
   list-profiles) list_profiles ;;
   *) usage; exit 1 ;;

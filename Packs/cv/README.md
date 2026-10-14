@@ -1,10 +1,11 @@
 # cv pack
 
-Build job-tailored CV PDFs from one profile-tagged master file, via Typst.
+Build tailored CV PDFs from one master file, track applications, and compare the master with LinkedIn.
 
-- **`cv-builder`** — runbook over the `cv` capability (`capabilities/cv/cv`): pick a profile
-  tag, pick a language, build, hand back the PDF path. No content-generation or AI-tailoring —
-  every build is a deterministic filter over the master file.
+- **`cv-builder`**: runbook over the `cv` capability (`capabilities/cv/cv`). It builds a
+  profile or a per-application CV, keeps the application tracker, compares the master with
+  LinkedIn, and gives career guidance from that data. Application overrides reword facts from
+  the master. They never add a fact.
 
 Master CV content lives in the overlay (`$SJEL_PERSONAL_ROOT/data/cv/master_cv.yaml`, shape:
 `capabilities/cv/master_cv.schema.yaml`) — nothing personal is baked into the skill.

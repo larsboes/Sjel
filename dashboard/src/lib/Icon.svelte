@@ -14,7 +14,7 @@
     | "refresh" | "sun" | "moon" | "menu" | "close" | "clock" | "alert" | "wifi-off"
     | "check" | "loader" | "plus" | "search" | "swap" | "calendar" | "ticket"
     | "git-branch" | "thermometer" | "cpu" | "activity" | "chevron" | "mail" | "globe"
-    | "layout" | "wallet" | "history" | "sparkles" | "message" | "send" | "users" | "pencil";
+    | "layout" | "wallet" | "history" | "sparkles" | "message" | "send" | "users" | "pencil" | "book";
 
   let { name, size = 16 }: { name: Name; size?: number } = $props();
 
@@ -69,6 +69,7 @@
     "message": "M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z",
     "send": "M22 2 11 13 M22 2 15 22 11 13 2 9z",
     "pencil": "M17 3a2.85 2.83 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5Z",
+    "book": "M2 3h6a4 4 0 0 1 4 4v14a3 3 0 0 0-3-3H2z M22 3h-6a4 4 0 0 0-4 4v14a3 3 0 0 1 3-3h7z",
   };
 </script>
 

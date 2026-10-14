@@ -11,6 +11,7 @@ import {
 } from "./vite/comms-proxy-auth.ts";
 import { authorizedProxy, loadInboundProxyCredential } from "./vite/inbound-proxy-auth.ts";
 import { research } from "./vite/research.ts";
+import { docs } from "./vite/docs.ts";
 
 const SJEL_ROOT = resolve(fileURLToPath(new URL(".", import.meta.url)), "..");
 const port = Number(process.env.SJEL_PORT ?? 47117);
@@ -360,7 +361,7 @@ export default defineConfig(({ command }) => ({
   define: {
     "import.meta.env.VITE_SJEL_DEMO": JSON.stringify(process.env.SJEL_DEMO === "1" ? "1" : "0"),
   },
-  plugins: [sveltekit(), bundleGuard(), research(SJEL_ROOT), {
+  plugins: [sveltekit(), bundleGuard(), research(SJEL_ROOT), docs(SJEL_ROOT), {
     name: "top-processes",
     configureServer(server) {
       server.middlewares.use(guardProtectedMutations);

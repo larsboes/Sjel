@@ -101,7 +101,7 @@ All capability clients are in one file. Candidate: one file per capability under
 
 ### Root documents
 
-`ISA.md` 1,090 lines, `ISA-archive.md` 952, `CONTRIBUTING.md` 1,065, `dashboard/README.md` 781.
+`ISA.md` 1,090 lines, `ISA-archive.md` 952, `CONTRIBUTING.md` 1,065, `dashboard/README.md` 781. Shipped 2026-10-14: introduced clean modular `docs/` technical documentation structure (Vector / Rust Reference standard) across architecture, capabilities, and operations, with in-app `/docs` viewer route in dashboard via `virtual:sjel-docs`. Decouples historical narrative from current interface contracts.
 
 ### Giant pages
 

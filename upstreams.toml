@@ -459,6 +459,13 @@ license = "MIT"
 summary = "Apple Silicon power and thermal monitor that serves as the power backend for Sjel's sysmon tool"
 why = "tools/sysmon power/thermal backend -- sudoless powermetrics wrapper for Apple Silicon (GPU/ANE utilization, package power draw, thermal pressure) that bottom and Activity Monitor don't surface. arm64-only; tools/sysmon gates the `power` subcommand on `uname -m`"
 
+[tabler-icons]
+url = "https://github.com/tabler/tabler-icons"
+verdict = "adopt"
+license = "MIT"
+summary = "Outline icons on the CV's contact line"
+why = "capabilities/cv/templates/icons: five SVGs (map-pin, phone, mail, brand-linkedin, brand-github) vendored from @tabler/icons 3.49.0 with its LICENSE. Vendored files instead of a Typst package or an icon font: no network at render time and no font install on the host"
+
 [typst]
 url = "https://github.com/typst/typst"
 verdict = "adopt"

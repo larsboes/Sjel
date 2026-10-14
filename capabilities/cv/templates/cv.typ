@@ -76,15 +76,23 @@
 
 #v(0.3em)
 
-#align(center)[
-  #text(size: 8.8pt)[
-    #data.contact.location
-    #if "phone" in data.contact [ #sym.bullet #data.contact.phone ]
-    #sym.bullet #link("mailto:" + data.contact.email)[#data.contact.email]
-    #sym.bullet #link("https://" + data.contact.linkedin)[#data.contact.linkedin]
-    #sym.bullet #link("https://" + data.contact.github)[#data.contact.github]
-  ]
-]
+// Tabler outline icons (MIT, templates/icons/LICENSE), recoloured to the accent.
+#let icon(name) = box(baseline: 0.18em, image(
+  bytes(read("icons/" + name + ".svg").replace("currentColor", accent.to-hex())),
+  format: "svg",
+  height: 1em,
+))
+#let contact-item(name, body) = box[#icon(name)#h(0.3em)#body]
+
+#align(center, text(size: 8.8pt, {
+  let c = data.contact
+  let items = (contact-item("map-pin", c.location),)
+  if "phone" in c { items.push(contact-item("phone", c.phone)) }
+  items.push(contact-item("mail", link("mailto:" + c.email, c.email)))
+  items.push(contact-item("brand-linkedin", link("https://" + c.linkedin, c.linkedin.split("/").last())))
+  items.push(contact-item("brand-github", link("https://" + c.github, c.github.split("/").last())))
+  items.join(h(1.1em))
+}))
 
 #v(0.6em)
 

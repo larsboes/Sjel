@@ -64,6 +64,11 @@ flowchart LR
   S -. paste by hand .-> L
 ```
 
+- **One page by default.** The master is an append-only superset. Each item may carry a
+  `priority` (1 keeps longest, 3 drops first). `cv build` drops priority 3, then 2, until the CV
+  fits its `page_limit`, and fails when priority-1 items alone do not fit. `general` has no
+  limit: it is the full CV and the reference for LinkedIn. The page count comes from the
+  template itself (`typst eval 'query(<pages>)…'`), so no PDF tool is needed.
 - **Applications.** One file per application overrides `title` and `summary` and carries a
   status log, so the same files are the application tracker. Shape: the tail of
   `master_cv.schema.yaml`.

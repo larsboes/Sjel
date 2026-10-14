@@ -27,6 +27,16 @@ if command -v pdftotext >/dev/null; then
   pdftotext "$tmp/data/cv/dist/apps/CV_acme_en.pdf" - | grep -q "OVERRIDE TITLE" || fail "title override not rendered"
 fi
 
+# hide and pin: an application hides one item by id and pins a priority-3 item past auto-fit.
+yq -i '.sections[0].entries[0].id = "ev1" | .sections[0].entries[0].label = "HIDE ME" |
+  .sections[0].entries += [{"id": "ev2", "label": "PIN ME", "priority": 3}]' "$tmp/data/cv/master_cv.yaml"
+"$cv" build --profile default >/dev/null
+pdftotext "$tmp/data/cv/dist/CV_default_en.pdf" - | grep -q "PIN ME" || fail "priority-3 item dropped from a CV that fits"
+printf 'hide: [ev1]\npin: [ev2]\n' >> "$tmp/data/cv/applications/acme.yaml"
+"$cv" app build acme >/dev/null
+pdftotext "$tmp/data/cv/dist/apps/CV_acme_en.pdf" - | grep -q "HIDE ME" && fail "hidden item rendered"
+pdftotext "$tmp/data/cv/dist/apps/CV_acme_en.pdf" - | grep -q "PIN ME" || fail "pinned item missing"
+
 "$cv" app status acme applied "via portal" >/dev/null
 "$cv" app status acme interview >/dev/null
 if "$cv" app status acme bogus >/dev/null 2>&1; then fail "bogus status accepted"; fi

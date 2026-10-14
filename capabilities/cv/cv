@@ -113,13 +113,35 @@ langs_for_profile() {
   fi
 }
 
+# Page limit of a profile: `page_limit: {<tag>: 2}` in the master, else 1. 0 = no limit: the
+# full CV, which keeps every item and stays in step with LinkedIn.
+page_limit() { yq -r ".page_limit.\"$1\" // 1" "$MASTER"; }
+
+# Build at the highest priority level that fits the page limit: keep 3, then 2, then 1.
+# ponytail: drops a whole priority level per step; per-item dropping if a level cuts too much.
 build_one() {
   profile="$1"; lang="$2"; out="$3"; app="${4:-}"
   mkdir -p "$(dirname "$out")"
   set -- --input master="$MASTER" --input profile="$profile" --input lang="$lang"
   if [ -n "$app" ]; then set -- "$@" --input app="$app"; fi
-  typst compile --root / "$@" "$TEMPLATE" "$out"
-  echo "cv: $out"
+  limit="$(page_limit "$profile")"
+  keep=3
+  while :; do
+    pages="$(typst eval 'query(<pages>).first().value' --in "$TEMPLATE" --root / "$@" --input keep="$keep")"
+    if [ "$limit" -eq 0 ] || [ "$pages" -le "$limit" ]; then break; fi
+    if [ "$keep" -eq 1 ]; then
+      echo "cv: $profile/$lang is $pages page(s) with priority-1 items only; limit is $limit." >&2
+      echo "cv: give more items priority 2 or 3, or hide items in the application file." >&2
+      return 1
+    fi
+    keep=$((keep - 1))
+  done
+  typst compile --root / "$@" --input keep="$keep" "$TEMPLATE" "$out"
+  if [ "$keep" -lt 3 ]; then
+    echo "cv: $out ($pages page(s), kept priority <= $keep)"
+  else
+    echo "cv: $out ($pages page(s))"
+  fi
 }
 
 cmd_build() {
@@ -149,10 +171,10 @@ cmd_build() {
       for l in $(langs_for_profile "$p"); do
         # an explicit --lang narrows the matrix; it never overrides a profile's own restriction
         if [ -n "$want_lang" ] && [ "$want_lang" != "$l" ]; then continue; fi
-        build_one "$p" "$l" "$DIST/CV_${p}_${l}.pdf"
+        build_one "$p" "$l" "$DIST/CV_${p}_${l}.pdf" || failed=1
       done
     done
-    return
+    return "${failed:-0}"
   fi
 
   if [ -z "$profile" ]; then

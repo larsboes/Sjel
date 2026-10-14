@@ -29,10 +29,22 @@ verbs for the user.
 
 1. Run `$CV app new <slug> --company <name> --role <title> --profile <tag> --lang <en|de> --url <posting>`.
    The slug contains only lowercase letters, digits and dashes.
-2. If the user gives a posting, read it. Write `title` and `summary` overrides into the
+2. If the user gives a posting, read it. To include or exclude specific items, add their `id`s
+   to `pin:` or `hide:` in the application file. Write `title` and `summary` overrides into the
    application file, each as `{en: ..., de: ...}`. Use only facts that are in `$MASTER`.
 3. Write the fit into `notes`: which requirements the master covers, and which it does not.
 4. Run `$CV app build <slug>`. Show the user the overrides and the PDF path.
+
+## Curate the master
+
+The master holds every fact. Focused profiles are one page. `general` is the full CV and the
+reference for LinkedIn.
+
+1. Add a new fact to `$MASTER` with `profiles:` tags and a `priority`. Do not delete old facts for space.
+2. Run `$CV build --all`. Each line reports the page count and the priority level it kept.
+3. If a build fails because priority-1 items do not fit, lower the priority of the least
+   relevant item for that profile, e.g. `priority: {default: 1, hackathon: 2}`. Ask the user which item.
+4. To reword bullets, edit the text in place. Git keeps the old wording.
 
 ## Track applications
 

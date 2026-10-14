@@ -23,12 +23,25 @@
 #set text(font: "Helvetica Neue", size: 10pt, lang: lang)
 #set par(leading: 0.55em, justify: false)
 
-// true if an item (an experience/skills entry, or a bullet/detail within one) applies to the
-// active profile — no `profiles` key (or an empty list) means "always included"
+// Highest `priority` kept (1 = most important; an item without one counts as 1). `cv` lowers
+// it from 3 until the CV fits its page limit.
+#let keep = int(sys.inputs.at("keep", default: "3"))
+#let pins = app.at("pin", default: ())
+#let hides = app.at("hide", default: ())
+
+// true if an item applies to the active profile and priority level. An application's `hide`
+// and `pin` lists name item `id`s and override both. No `profiles` key (or an empty list)
+// means "every profile".
 #let included(item) = {
-  if "profiles" not in item { true }
-  else if item.profiles.len() == 0 { true }
-  else { profile in item.profiles }
+  let id = item.at("id", default: none)
+  if id != none and id in hides { return false }
+  if id != none and id in pins { return true }
+  let profiles = item.at("profiles", default: ())
+  let tagged = profiles.len() == 0 or profile in profiles
+  // `priority` is a number, or `{default: n, <profile>: n}` where importance differs per profile.
+  let priority = item.at("priority", default: 1)
+  if type(priority) == dictionary { priority = priority.at(profile, default: priority.at("default", default: 1)) }
+  tagged and priority <= keep
 }
 
 // pick the `{en, de}` text variant for the active language. A bare string passes through
@@ -159,7 +172,7 @@
 #{
   for s in data.at("sections", default: ()).filter(included) {
     section-title(loc(s.title))
-    if "intro" in s { [#loc(s.intro)]; v(0.35em) }
+    if "intro" in s and included(s.intro) { [#loc(s.intro)]; v(0.35em) }
     for e in s.at("entries", default: ()).filter(included) {
       grid(
         columns: (1fr, auto),
@@ -181,3 +194,6 @@
     if "prose" in s { [#loc(s.prose)] }
   }
 }
+
+// Read by `cv` through `typst query` to fit the page limit.
+#context [#metadata(counter(page).final().first()) <pages>]

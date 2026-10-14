@@ -20,6 +20,18 @@
 profile_langs:
   # hackathon: [en]
 
+# Optional. Every profile is one page unless listed here; 0 means no limit. The unlimited
+# profile is the full CV and should match LinkedIn. A limited build drops priority-3 items,
+# then priority-2, until it fits, and fails if priority-1 items alone do not fit.
+page_limit:
+  general: 0
+
+# Any item (experience entry, bullet, education entry, skill category, section, section entry,
+# section bullet, section intro) may carry:
+#   id: some-slug          # lets an application file `pin:` or `hide:` it
+#   priority: 2            # 1 = keep longest (default), 3 = drop first
+#   priority: {default: 2, hackathon: 1}   # when importance differs per profile
+
 name: "Firstname Lastname"
 
 contact:
@@ -118,4 +130,6 @@ sections:
 #     - {date: 2026-10-14, status: draft}
 #   title: {en: "...", de: "..."}    # optional override of the profile's title
 #   summary: {en: "...", de: "..."}  # optional override of the profile's summary
+#   pin: [some-id]               # always include these items, whatever their priority
+#   hide: [other-id]             # never include these items
 #   notes: |                     # free text: job-description fit, gaps, contacts

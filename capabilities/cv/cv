@@ -29,6 +29,8 @@ Usage:
                                       # rebuild on every save of the master file
   cv list-profiles                    # profile tags currently in use, read from master_cv.yaml
   cv status --json                    # profiles, applications, PDFs and staleness, for the dashboard
+  cv edit get [slug]                  # print the master, or one application file
+  cv edit put [slug] < file           # replace it after a parse and render check, then commit it
 
   cv app new <slug> --company <name> --role <title> [--profile <tag>] [--lang <en|de>] [--url <url>]
   cv app build <slug>                 # CV for one application -> dist/apps/CV_<slug>_<lang>.pdf
@@ -435,7 +437,7 @@ li_diff() {
   echo "== Positions on LinkedIn"
   jq -r '.[] | "  \(.["Started On"] // "?") - \(.["Finished On"] // "now")  \(.Title // "?") @ \(.["Company Name"] // "?")"' "$positions_json"
   echo "== Positions in master"
-  yq -r '.experience[] | "  " + .date + "  " + (.role // "?") + " @ " + .company' "$MASTER"
+  yq -r '.experience[] | "  " + .date + "  " + ((.role // "?") | select(tag == "!!map") |= .en) + " @ " + .company' "$MASTER"
   echo
   li_skills="$(jq -r '.[].Name // empty' "$skills_json" | normalize_skills)"
   cv_skills="$(yq -r '.skills[].items | (select(tag == "!!seq") // .en) | .[]' "$MASTER" | normalize_skills)"
@@ -453,7 +455,7 @@ li_sheet() {
     "\n\nABOUT\n" + (.linkedin.about // .summary.default)[strenv(CVLANG)] +
     "\n\nEXPERIENCE\n" +
     ([.experience[] |
-      (.role // "") + " @ " + .company + " | " + .location + " | " + .date + "\n" +
+      ((.role // "") | select(tag == "!!map") |= .[strenv(CVLANG)]) + " @ " + .company + " | " + .location + " | " + .date + "\n" +
       ([.bullets[] | "- " + .text[strenv(CVLANG)]] | join("\n"))
     ] | join("\n\n"))
   ' "$MASTER"
@@ -468,6 +470,55 @@ cmd_linkedin() {
     sheet) shift; li_sheet "$@" ;;
     *) usage; exit 1 ;;
   esac
+}
+
+# ---- Edit -------------------------------------------------------------------------------------
+# The dashboard's editor. A put is parsed and rendered before it replaces the file, and each
+# accepted put is committed in the overlay's git, so every rewording can be read back or undone.
+
+cmd_edit() {
+  require_deps
+  require_master
+  verb="${1:-}"
+  slug="${2:-}"
+  if [ -n "$slug" ]; then f="$(app_path "$slug")"; else f="$MASTER"; fi
+  case "$verb" in
+    get) cat "$f" ;;
+    put) edit_put "$f" "$slug" ;;
+    *) usage; exit 1 ;;
+  esac
+}
+
+edit_put() {
+  f="$1"; slug="$2"
+  # Same directory as the target, so the final mv is an atomic rename.
+  tmp="$(mktemp "$(dirname "$f")/.edit.XXXXXX")"
+  pdf="$(mktemp -d)/check.pdf"
+  cat > "$tmp"
+  if ! err="$(yq eval '.' "$tmp" 2>&1 >/dev/null)"; then
+    rm -f "$tmp"; echo "cv: not valid YAML: $err" >&2; exit 1
+  fi
+  if [ -z "$slug" ]; then
+    set -- --input master="$tmp" --input profile=default
+  else
+    set -- --input master="$MASTER" --input app="$tmp" --input profile="$(yq -r '.profile // "default"' "$tmp")"
+  fi
+  if ! err="$(typst compile --root / "$@" --input lang=en "$TEMPLATE" "$pdf" 2>&1)"; then
+    rm -f "$tmp"; echo "cv: does not render: $err" >&2; exit 1
+  fi
+  if cmp -s "$tmp" "$f"; then rm -f "$tmp"; echo "cv: no change"; return; fi
+  # mktemp creates 0600; keep the target's own mode.
+  chmod "$(stat -f %Lp "$f" 2>/dev/null || stat -c %a "$f")" "$tmp"
+  mv "$tmp" "$f"
+  if git -C "$SJEL_PERSONAL_ROOT" rev-parse --git-dir >/dev/null 2>&1; then
+    rel="${f#"$SJEL_PERSONAL_ROOT"/}"
+    git -C "$SJEL_PERSONAL_ROOT" add -- "$rel"
+    # The pathspec limits the commit to this file, so other uncommitted overlay work stays out.
+    git -C "$SJEL_PERSONAL_ROOT" commit -q -m "cv: edit $rel" -- "$rel"
+    echo "cv: saved $f ($(git -C "$SJEL_PERSONAL_ROOT" rev-parse --short HEAD))"
+  else
+    echo "cv: saved $f"
+  fi
 }
 
 # ---- Status -----------------------------------------------------------------------------------
@@ -502,6 +553,7 @@ case "${1:-}" in
   app) shift; cmd_app "$@" ;;
   linkedin) shift; cmd_linkedin "$@" ;;
   status) shift; cmd_status "$@" ;;
+  edit) shift; cmd_edit "$@" ;;
   watch) shift; cmd_watch "$@" ;;
   list-profiles) list_profiles ;;
   *) usage; exit 1 ;;

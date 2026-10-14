@@ -717,6 +717,14 @@ export const axonStatus = {
       '/sjel-status/api/sjel-status/cv',
       jsonInit('POST', write),
     ),
+  /** Raw YAML of the master (empty slug) or one application. */
+  cvFile: (slug = '') =>
+    request<{ slug: string; content: string }>(
+      `/sjel-status/api/sjel-status/cv/file?slug=${encodeURIComponent(slug)}`,
+    ),
+  /** Replace it. The launcher parses and renders first; a 400 carries its refusal. */
+  saveCvFile: (slug: string, content: string) =>
+    request<{ slug: string; detail: string }>('/sjel-status/api/sjel-status/cv/file', jsonInit('PUT', { slug, content })),
   /** Same-origin URL of one built PDF; the Tauri bridge carries text only, so web only. */
   cvPdfUrl: (name: string) => `/sjel-status/api/sjel-status/cv/pdf?name=${encodeURIComponent(name)}`,
   /** Append a `watch` row to upstreams.toml. A 400 carries the tool's one-line refusal. */

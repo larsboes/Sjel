@@ -131,7 +131,7 @@
         text(weight: "bold", size: 9.8pt)[#e.institution #sym.dot.c #loc(e.degree)],
         text(size: 8.6pt, style: "italic")[#e.date],
       )
-      for d in e.details {
+      for d in e.at("details", default: ()).filter(included) {
         [#sym.bullet #loc(d)]
         linebreak()
       }

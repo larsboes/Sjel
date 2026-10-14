@@ -49,7 +49,9 @@ json="$("$cv" status --json)"
 [ "$(echo "$json" | jq '.applications | length')" = 1 ] || fail "status --json applications"
 [ "$(echo "$json" | jq '[.pdfs[].name] | index("apps/CV_acme_en.pdf") != null')" = true ] || fail "status --json pdfs"
 
+yq -i '.experience[0].role = {"en": "Role EN", "de": "Rolle DE"}' "$tmp/data/cv/master_cv.yaml"
 "$cv" linkedin sheet | grep -q '^HEADLINE' || fail "sheet has no headline"
+"$cv" linkedin sheet --lang de | grep -q '^Rolle DE @' || fail "sheet did not localize the role"
 
 echo '[{"Headline": "Old headline", "Summary": "x"}]' > "$tmp/data/cv/linkedin/PROFILE.json"
 echo '[{"Company Name": "Employer Name", "Title": "Dev", "Started On": "Jan 2024"}]' > "$tmp/data/cv/linkedin/POSITIONS.json"
@@ -57,5 +59,14 @@ echo '[{"Name": "Item A"}, {"Name": "Only On LinkedIn"}]' > "$tmp/data/cv/linked
 diff_out="$("$cv" linkedin diff)"
 echo "$diff_out" | grep -q "linkedin: Old headline" || fail "diff headline"
 echo "$diff_out" | sed -n '/only on LinkedIn/,/only in master/p' | grep -q "only on linkedin" || fail "diff skills"
+
+# edit: a broken put leaves the file unchanged, a good put replaces it.
+before="$(cat "$tmp/data/cv/master_cv.yaml")"
+if printf 'name: [unclosed\n' | "$cv" edit put >/dev/null 2>&1; then fail "invalid YAML accepted"; fi
+if printf 'name: "X"\n' | "$cv" edit put >/dev/null 2>&1; then fail "unrenderable master accepted"; fi
+[ "$(cat "$tmp/data/cv/master_cv.yaml")" = "$before" ] || fail "rejected put changed the master"
+"$cv" edit get | sed 's/Firstname Lastname/Edited Name/' | "$cv" edit put >/dev/null
+"$cv" edit get | grep -q "Edited Name" || fail "edit put did not save"
+[ "$(stat -f %Lp "$tmp/data/cv/master_cv.yaml" 2>/dev/null || stat -c %a "$tmp/data/cv/master_cv.yaml")" = 644 ] || fail "edit put changed the file mode"
 
 echo "check: ok"

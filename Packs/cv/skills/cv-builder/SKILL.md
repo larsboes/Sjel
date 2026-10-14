@@ -45,6 +45,8 @@ reference for LinkedIn.
 3. If a build fails because priority-1 items do not fit, lower the priority of the least
    relevant item for that profile, e.g. `priority: {default: 1, hackathon: 2}`. Ask the user which item.
 4. To reword bullets, edit the text in place. Git keeps the old wording.
+5. Write every change through `$CV edit get | <change> | $CV edit put`. It refuses YAML that does
+   not parse or render, and it commits the change in the overlay's git.
 
 ## Track applications
 

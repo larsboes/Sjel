@@ -134,6 +134,16 @@ const ROUTES: &[route_manifest::Route] = &[
     ),
     r(
         "GET",
+        "/api/sjel-status/cv/file",
+        "Raw YAML of the CV master, or of one application with ?slug=.",
+    ),
+    r(
+        "PUT",
+        "/api/sjel-status/cv/file",
+        "Replace the CV master or one application. Body: { slug?, content }. Parsed and rendered first; 400 carries the refusal. Committed in the overlay's git.",
+    ),
+    r(
+        "GET",
         "/api/sjel-status/storage",
         "What fills the disk: the volume, every reclaimable class, and what the overlay's policy protects from reclaim. From tools/storage's own report --json.",
     ),
@@ -436,6 +446,10 @@ fn build_router(shell: proxy::Proxy) -> Router {
             get(cv_handler).post(cv_write_handler),
         )
         .route("/api/sjel-status/cv/pdf", get(cv_pdf_handler))
+        .route(
+            "/api/sjel-status/cv/file",
+            get(cv_file_handler).put(cv_file_write_handler),
+        )
         .route("/api/sjel-status/storage", get(storage_handler))
         .route(
             "/api/sjel-status/storage-history",

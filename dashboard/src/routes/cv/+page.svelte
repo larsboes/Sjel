@@ -53,6 +53,41 @@
     if (!writeError) draft = { ...draft, company: "", role: "", url: "" };
   }
 
+  /** The editor: "" is the master, otherwise an application slug. */
+  let editing = $state<string | null>(null);
+  let text = $state("");
+  let saved = $state("");
+  let editNote = $state<string | null>(null);
+  const dirty = $derived(editing !== null && text !== saved);
+
+  async function openFile(slug: string): Promise<void> {
+    if (dirty && !confirm("Discard unsaved changes?")) return;
+    editNote = null;
+    try {
+      const file = await axonStatus.cvFile(slug);
+      editing = slug;
+      text = saved = file.content;
+    } catch (e) {
+      editNote = e instanceof Error ? e.message : String(e);
+    }
+  }
+
+  async function saveFile(): Promise<void> {
+    if (editing === null) return;
+    busy = true;
+    editNote = null;
+    try {
+      const result = await axonStatus.saveCvFile(editing, text);
+      saved = text;
+      editNote = result.detail;
+    } catch (e) {
+      editNote = e instanceof Error ? e.message : String(e);
+    } finally {
+      busy = false;
+      await load();
+    }
+  }
+
   const last = (log: { date: string }[]) => log.at(-1)?.date ?? "";
   const ago = (mtime: number) => new Date(mtime * 1000).toISOString().slice(0, 10);
 
@@ -81,6 +116,33 @@
       <button class="btn btn-soft" disabled={busy} onclick={() => run({ action: "build", profile, lang })}>Build</button>
       <button class="btn btn-outline" disabled={busy} onclick={() => run({ action: "build-all" })}>Build all</button>
     </div>
+  </section>
+
+  <section class="card pad">
+    <h3>Edit</h3>
+    <p class="hint">
+      Each save is parsed and rendered first, then committed in the overlay's git. Shape and
+      fields: <code>capabilities/cv/master_cv.schema.yaml</code>. A new section is a new entry
+      under <code>sections:</code>.
+    </p>
+    <div class="row">
+      <select aria-label="File to edit" value={editing ?? ""} onchange={(e) => openFile(e.currentTarget.value)}>
+        {#if editing === null}<option value="" disabled selected>Choose a file…</option>{/if}
+        <option value="">master_cv.yaml</option>
+        {#each view.applications as app (app.slug)}<option value={app.slug}>applications/{app.slug}.yaml</option>{/each}
+      </select>
+      {#if editing === null}
+        <button class="btn btn-soft" onclick={() => openFile("")}>Open master</button>
+      {:else}
+        <button class="btn btn-soft" disabled={busy || !dirty} onclick={saveFile}>Save</button>
+        <button class="btn btn-outline" disabled={busy || !dirty} onclick={() => (text = saved)}>Revert</button>
+        {#if dirty}<Chip label="unsaved" tone="warning" />{/if}
+      {/if}
+    </div>
+    {#if editNote}<pre class="note">{editNote}</pre>{/if}
+    {#if editing !== null}
+      <textarea aria-label="YAML" spellcheck="false" bind:value={text}></textarea>
+    {/if}
   </section>
 
   <section class="card pad">
@@ -183,5 +245,20 @@
   li { display: flex; align-items: center; gap: 0.4rem; padding: 0.12rem 0; }
   .link { background: none; border: 0; padding: 0; color: var(--text-primary); text-decoration: underline; cursor: pointer; }
   pre { font-size: 0.72rem; white-space: pre-wrap; margin: 0.4rem 0 0; max-height: 28rem; overflow: auto; }
+  textarea {
+    width: 100%;
+    min-height: 60vh;
+    margin: 0.5rem 0 0;
+    font-family: var(--font-mono);
+    font-size: 0.72rem;
+    line-height: 1.45;
+    tab-size: 2;
+    background: var(--input-bg);
+    color: var(--text-primary);
+    border: 1px solid var(--card-border);
+    border-radius: var(--radius-sm);
+    padding: 0.5rem;
+  }
+  .note { margin: 0.4rem 0 0; }
   iframe { width: 100%; height: 80vh; border: 1px solid var(--card-border); border-radius: var(--radius-sm); margin: 0.5rem 0 0; }
 </style>

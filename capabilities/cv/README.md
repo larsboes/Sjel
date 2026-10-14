@@ -77,6 +77,9 @@ flowchart LR
   `sjel-linkedin-dma`; create it with the OAuth token generator and scope
   `r_dma_portability_self_serve` (learn.microsoft.com/linkedin/dma/member-data-portability/member-data-portability-member).
   Updating the profile stays manual, from `cv linkedin sheet`.
+- **Editing.** `cv edit get|put [slug]` reads or replaces the master or one application file.
+  A put must parse and render before it replaces the file, and each accepted put is committed
+  in the overlay's git, so every rewording stays in history. The `/cv` page edits through it.
 - **Dashboard.** `/cv` drives the same verbs through `GET|POST /api/sjel-status/cv`
   (`capabilities/sjel-status/src/status/cv.rs`). The inline PDF preview works in the browser
   only; the Tauri bridge carries text bodies.

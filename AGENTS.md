@@ -28,6 +28,12 @@ overlay or Vaultwarden. Never generate, expose or change a secret without explic
 ## Code, documentation, and planning doctrine (Vector & Rust Reference standard)
 
 - **Code is the source of truth**: Code, tests, and AST knowledge graphs (`graphify`) are the ground truth for humans and AI agents. Avoid sprawling markdown decision logs or PR retrospectives in the tree.
+- **Technical documentation structure**:
+  - Technical manuals live under `docs/capabilities/<name>.md` (interface contracts, data flows, Mermaid diagrams, operational guarantees).
+  - Capability `README.md` files are lean entrypoints containing Why-blocks and point to `docs/capabilities/<name>.md`.
+- **UI component modularity**:
+  - Route views in `dashboard/src/routes/` are thin orchestrators. Avoid multi-thousand-line page monoliths.
+  - Extract self-contained boards, search columns, solver panels, cards, and modal sheets into `dashboard/src/lib/<domain>/<Component>.svelte`.
 - **Short, precise planning & claims**: Issues and open claims in `PLAN.md` or `ISA.md` must be short, falsifiable, and precise specifications, never narrative essays.
 - **Self-explanatory code over prose comments**:
   - Write expressive, strongly typed code (Newtypes, type-state pattern, explicit enums).

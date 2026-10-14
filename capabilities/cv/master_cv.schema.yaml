@@ -17,7 +17,7 @@
 # in every language. Only `cv build --all` consults it — an explicit
 # `cv build --profile x --lang de` still builds what you asked for. Added 2026-08-16, when the
 # full matrix was producing variants that existed only because it multiplied them out.
-profile_langs:
+profile_langs: {}
   # hackathon: [en]
 
 # Optional. Every profile is one page unless listed here; 0 means no limit. The unlimited

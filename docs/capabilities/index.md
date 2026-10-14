@@ -30,4 +30,5 @@ Capabilities declare their execution type in `service.toml`:
 - **[Contracts & Health](contracts.md)**: Freshness contracts, heartbeat requirements, and sweep semantics.
 - **[Feed & Communications](feed-and-comms.md)**: Intake pipeline, `content-item-v2`, and privacy redaction ladder.
 - **[Calendar Architecture](calendar.md)**: Materialized forward-only rhythms and two-way Google Calendar synchronization.
+- **[CV](cv.md)**: Typed master file, priority auto-fit to one page, form editor, LinkedIn snapshot diff.
 - **[Travel & Routing](travel.md)**: Multi-modal journey planning, intent drafting, and reservation parsing.

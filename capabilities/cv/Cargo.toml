@@ -1,0 +1,32 @@
+[package]
+name = "sjel-cv"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+description = "Typed model of the CV master and application files, profile filtering, auto-fit builds through Typst, and the LinkedIn snapshot diff."
+publish = false
+
+[lib]
+name = "cv"
+path = "src/lib.rs"
+
+# cv-cli, not cv: capabilities/cv/cv is the entry point on PATH and execs this binary.
+# Same reason capabilities/punctuality names its binary punctuality-cli.
+[[bin]]
+name = "cv-cli"
+path = "src/main.rs"
+
+[dependencies]
+sjel-config = { path = "../../libs/sjel-config" }
+serde = { workspace = true, features = ["derive"] }
+serde_json.workspace = true
+# Both were already in the workspace lock (serde_yaml_ng 0.10 via libs/extraction's xberg,
+# indexmap 2 via serde_json), so this crate resolves no new external crate. IndexMap keeps
+# the master's key order on every save. upstreams.toml [serde_yaml_ng].
+serde_yaml_ng = "0.10"
+indexmap = { version = "2", features = ["serde"] }
+chrono.workspace = true
+
+[lints]
+workspace = true

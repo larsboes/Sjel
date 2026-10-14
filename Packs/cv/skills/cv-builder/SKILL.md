@@ -45,8 +45,11 @@ reference for LinkedIn.
 3. If a build fails because priority-1 items do not fit, lower the priority of the least
    relevant item for that profile, e.g. `priority: {default: 1, hackathon: 2}`. Ask the user which item.
 4. To reword bullets, edit the text in place. Git keeps the old wording.
-5. Write every change through `$CV edit get | <change> | $CV edit put`. It refuses YAML that does
-   not parse or render, and it commits the change in the overlay's git.
+5. Write every change through `$CV model get | jq '<change>' | $CV model put` (typed JSON) or
+   `$CV edit get | <change> | $CV edit put` (raw YAML). Both refuse what does not parse or
+   render, and commit the change in the overlay's git.
+6. Record where a new fact comes from in the item's `source` field. YAML comments do not survive
+   a form save.
 
 ## Track applications
 

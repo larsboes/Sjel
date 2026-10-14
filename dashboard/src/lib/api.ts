@@ -725,6 +725,12 @@ export const axonStatus = {
   /** Replace it. The launcher parses and renders first; a 400 carries its refusal. */
   saveCvFile: (slug: string, content: string) =>
     request<{ slug: string; detail: string }>('/sjel-status/api/sjel-status/cv/file', jsonInit('PUT', { slug, content })),
+  /** The master (empty slug) or one application as typed JSON, for the form editor. */
+  cvModel: <T = unknown>(slug = '') =>
+    request<T>(`/sjel-status/api/sjel-status/cv/model?slug=${encodeURIComponent(slug)}`),
+  /** Replace it from typed JSON. Same checks and commit as `saveCvFile`. */
+  saveCvModel: (slug: string, model: unknown) =>
+    request<{ slug: string; detail: string }>('/sjel-status/api/sjel-status/cv/model', jsonInit('PUT', { slug, model })),
   /** Same-origin URL of one built PDF; the Tauri bridge carries text only, so web only. */
   cvPdfUrl: (name: string) => `/sjel-status/api/sjel-status/cv/pdf?name=${encodeURIComponent(name)}`,
   /** Append a `watch` row to upstreams.toml. A 400 carries the tool's one-line refusal. */

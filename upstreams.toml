@@ -466,12 +466,19 @@ license = "Apache-2.0"
 summary = "Typesetting engine that renders Sjel's CVs, replacing LaTeX"
 why = "capabilities/cv rendering -- LaTeX replacement for CV typesetting. Plain-text templates with real scripting (array filter/map) instead of awesome-cv.cls's `\\ifx\\cvtarget` macro chains; single Rust-built binary, no TeX Live install, git-diffable output. Adopt over build: a typesetting engine is exactly the kind of thing not to hand-roll"
 
+[serde_yaml_ng]
+url = "https://github.com/acatton/serde-yaml-ng"
+verdict = "adopt"
+license = "MIT"
+summary = "YAML serde backend for the typed CV master in capabilities/cv"
+why = "capabilities/cv parses and writes master_cv.yaml through serde. Already in the workspace lock through libs/extraction's xberg, so taking it directly resolves no new crate. Chosen over the archived serde_yaml it forks"
+
 [yq]
 url = "https://github.com/mikefarah/yq"
 verdict = "adopt"
 license = "MIT"
 summary = "YAML command-line processor the CV tool uses to read profiles from the master CV file"
-why = "capabilities/cv/cv's `list-profiles` (and any future bash-side master_cv.yaml introspection) -- master_cv.yaml has real nesting (profiles arrays inside list items), past what tools/lib/toml.sh's single-line grep/sed contract or a hand-rolled grep scan can parse reliably. Typst reads the YAML directly, so yq never touches rendering -- but `cv build` still hard-requires it (require_deps), and `cv build --all` enumerates profiles through it"
+why = "test fixtures only: capabilities/cv/check edits its throwaway master with yq. The cv tool itself reads YAML through serde (see [serde_yaml_ng]) and no longer needs yq at run time"
 
 [vibecoded-design-tells]
 url = "https://github.com/JCarterJohnson/vibecoded-design-tells"

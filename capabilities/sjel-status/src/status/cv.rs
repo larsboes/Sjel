@@ -137,8 +137,9 @@ pub(crate) struct CvFile {
     pub(crate) content: String,
 }
 
-fn edit_args(verb: &str, slug: &str) -> Result<Vec<String>, String> {
-    let mut args = vec!["edit".to_string(), verb.to_string()];
+/// `kind` is `edit` (raw YAML) or `model` (typed JSON).
+fn edit_args(kind: &str, verb: &str, slug: &str) -> Result<Vec<String>, String> {
+    let mut args = vec![kind.to_string(), verb.to_string()];
     if !slug.is_empty() {
         plain_name(slug, "slug")?;
         args.push(slug.to_string());
@@ -150,7 +151,7 @@ fn edit_args(verb: &str, slug: &str) -> Result<Vec<String>, String> {
 pub(crate) async fn cv_file_handler(
     Query(query): Query<CvFile>,
 ) -> Result<Json<Value>, (StatusCode, Json<Value>)> {
-    let args = edit_args("get", &query.slug).map_err(bad_request)?;
+    let args = edit_args("edit", "get", &query.slug).map_err(bad_request)?;
     let (ok, stdout, stderr) = run_cv(&args).await?;
     if !ok {
         return Err(bad_request(stderr));
@@ -163,12 +164,47 @@ pub(crate) async fn cv_file_handler(
 pub(crate) async fn cv_file_write_handler(
     Json(file): Json<CvFile>,
 ) -> Result<Json<Value>, (StatusCode, Json<Value>)> {
-    let args = edit_args("put", &file.slug).map_err(bad_request)?;
+    let args = edit_args("edit", "put", &file.slug).map_err(bad_request)?;
     let (ok, stdout, stderr) = run_cv_with_input(&args, Some(&file.content)).await?;
     if !ok {
         return Err(bad_request(stderr));
     }
     Ok(Json(json!({ "slug": file.slug, "detail": stdout })))
+}
+
+/// Body of `PUT /api/sjel-status/cv/model`.
+#[derive(Deserialize, Default)]
+#[serde(default)]
+pub(crate) struct CvModel {
+    pub(crate) slug: String,
+    pub(crate) model: Value,
+}
+
+/// `GET /api/sjel-status/cv/model?slug=` — the master, or one application, as typed JSON.
+pub(crate) async fn cv_model_handler(
+    Query(query): Query<CvFile>,
+) -> Result<Json<Value>, (StatusCode, Json<Value>)> {
+    let args = edit_args("model", "get", &query.slug).map_err(bad_request)?;
+    let (ok, stdout, stderr) = run_cv(&args).await?;
+    if !ok {
+        return Err(bad_request(stderr));
+    }
+    serde_json::from_str(&stdout)
+        .map(Json)
+        .map_err(|e| bad_gateway(format!("{CV} model get did not emit JSON: {e}")))
+}
+
+/// `PUT /api/sjel-status/cv/model` — replace the file from typed JSON. Same checks and commit
+/// as the raw editor; the launcher writes the YAML.
+pub(crate) async fn cv_model_write_handler(
+    Json(body): Json<CvModel>,
+) -> Result<Json<Value>, (StatusCode, Json<Value>)> {
+    let args = edit_args("model", "put", &body.slug).map_err(bad_request)?;
+    let (ok, stdout, stderr) = run_cv_with_input(&args, Some(&body.model.to_string())).await?;
+    if !ok {
+        return Err(bad_request(stderr));
+    }
+    Ok(Json(json!({ "slug": body.slug, "detail": stdout })))
 }
 
 #[derive(Deserialize)]
@@ -247,9 +283,9 @@ mod tests {
 
     #[test]
     fn edit_targets_the_master_or_a_plain_slug() {
-        assert_eq!(edit_args("get", "").unwrap(), ["edit", "get"]);
-        assert_eq!(edit_args("put", "acme").unwrap(), ["edit", "put", "acme"]);
-        assert!(edit_args("put", "../master").is_err());
+        assert_eq!(edit_args("edit", "get", "").unwrap(), ["edit", "get"]);
+        assert_eq!(edit_args("model", "put", "acme").unwrap(), ["model", "put", "acme"]);
+        assert!(edit_args("edit", "put", "../master").is_err());
     }
 
     #[test]

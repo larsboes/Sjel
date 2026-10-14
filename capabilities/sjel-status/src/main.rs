@@ -144,6 +144,16 @@ const ROUTES: &[route_manifest::Route] = &[
     ),
     r(
         "GET",
+        "/api/sjel-status/cv/model",
+        "The CV master, or one application with ?slug=, as typed JSON for the form editor.",
+    ),
+    r(
+        "PUT",
+        "/api/sjel-status/cv/model",
+        "Replace the CV master or one application from typed JSON. Body: { slug?, model }. Same checks and commit as /cv/file.",
+    ),
+    r(
+        "GET",
         "/api/sjel-status/storage",
         "What fills the disk: the volume, every reclaimable class, and what the overlay's policy protects from reclaim. From tools/storage's own report --json.",
     ),
@@ -449,6 +459,10 @@ fn build_router(shell: proxy::Proxy) -> Router {
         .route(
             "/api/sjel-status/cv/file",
             get(cv_file_handler).put(cv_file_write_handler),
+        )
+        .route(
+            "/api/sjel-status/cv/model",
+            get(cv_model_handler).put(cv_model_write_handler),
         )
         .route("/api/sjel-status/storage", get(storage_handler))
         .route(

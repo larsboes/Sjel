@@ -69,4 +69,12 @@ if printf 'name: "X"\n' | "$cv" edit put >/dev/null 2>&1; then fail "unrenderabl
 "$cv" edit get | grep -q "Edited Name" || fail "edit put did not save"
 [ "$(stat -f %Lp "$tmp/data/cv/master_cv.yaml" 2>/dev/null || stat -c %a "$tmp/data/cv/master_cv.yaml")" = 644 ] || fail "edit put changed the file mode"
 
+# model: the typed JSON round-trips without a change, and a JSON edit lands in the YAML.
+"$cv" model get | "$cv" model put >/dev/null   # first put normalizes the hand-written fixture
+[ "$("$cv" model get | "$cv" model put)" = "cv: no change" ] || fail "model round-trip changed the master"
+[ "$("$cv" model get acme | "$cv" model put acme)" = "cv: no change" ] || fail "model round-trip changed the application"
+"$cv" model get | jq '.name = "JSON Name"' | "$cv" model put >/dev/null
+grep -q 'JSON Name' "$tmp/data/cv/master_cv.yaml" || fail "model put did not save"
+if "$cv" model get | jq '.skills[0].priority = 7' | "$cv" model put >/dev/null 2>&1; then fail "priority 7 accepted"; fi
+
 echo "check: ok"

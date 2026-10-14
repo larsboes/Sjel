@@ -746,103 +746,11 @@ which key, which file, and what to do about it. An HTTP failure from Google
 names the likely cause (401 → revoked, 403 → missing scope or unshared
 calendar, 404 → wrong `calendar_id`, 429 → rate limit).
 
-## Phases
+## Architecture & Verification
 
-### A — Luma live‑verify
-- [x] Add an explicit “add to Calendar” action for dated Scouting
-      opportunities in Feed > Discover; confirm in the calendar entry form and
-      promote through an idempotent source/external-id upsert
-- [x] Run the existing `capabilities/scouting` luma adapter against the calendars
-      you actually track. Done 2026-07-30 — **the adapter did not work.** What
-      broke and what fixed it is written up in `capabilities/scouting/README.md`
-      § Verdict. One calendar is tracked so far (Claude Community Events);
-      which others to track is still open, see below.
-- [x] Decide per calendar: ICS feed (Luma offers per‑calendar ICS subscribe)
-      vs. fixing the scrape adapter. **Not a mix, as it turned out — fix the
-      scrape, for both surfaces.** Evidence below.
-- [x] When a Luma event is saved in scouting, promote into a `calendar.entry`
-      with `source = luma` and `event` kind — that completes the pipeline from
-      discovery to availability annotation. `scout --promote-calendar`; see
-      `capabilities/scouting/README.md` § Calendar promotion for the contract.
+Detailed data models, forward-only rhythm invariants, soft conflict resolution, and Google Calendar two-way synchronization contracts are documented in [Calendar Architecture](../../docs/capabilities/calendar.md).
 
-#### ICS vs. scrape: why scrape won
-
-Luma offers both for a calendar and both work. They were compared on the one
-axis this capability cares about — can an entry be created without guessing?
-
-| | `GET /calendar/get-items` (JSON) | `GET /ics/get?entity=calendar&id=…` (ICS) |
-|---|---|---|
-| Dedupe key | `api_id` (`evt-…`), the id the adapter already mints | `UID` (`evt-…@events.lu.ma`) — recoverable, one parse further away |
-| Schedule | UTC instant **plus** the event's IANA `timezone` | `DTSTART`/`DTEND` in UTC, no `TZID`, no `VTIMEZONE` |
-| Location | structured `city`/`country`/`address` | one free‑text `LOCATION` line, `GEO` on most |
-| Scope | future events only | the whole history — 290 VEVENTs for 62 future ones |
-| Parser cost | the shape the adapter already deserializes | a new ICS parser (line unfolding, escaping, property params) |
-
-The JSON endpoint returns the **same `entries[].event` object** as the discover
-feed the adapter already read, so supporting it cost one URL and no new parsing.
-ICS would have cost a parser and still delivered less: with no per‑event zone,
-turning `DTSTART` into local wall time needs a geo→timezone lookup Sjel does not
-have — precisely the guessing this capability refuses. ICS stays the fallback
-for a calendar `get-items` does not serve; none encountered yet.
-
-#### Still open: which calendars to track
-
-One is tracked (`claude-community` / `cal-TOpA5LAFfuDeFpu`, the public Claude
-Community Events calendar — 62 future events, every one with usable schedule
-metadata). Declare more as `luma-calendar` entries in `scouting.json`'s
-`sources[]`; each needs the calendar's `cal-…` api id, since Luma publishes no
-public slug lookup.
-
-### B — Core capability + dashboard month-grid
-- [x] Store tables (entries, rhythms, indexes, dedupe)
-- [x] HTTP CRUD for entries and rhythms
-- [x] Rhythm materialization (forward‑only, idempotent)
-- [x] Dashboard month‑grid view — paint timeframes, create rhythms (see Dashboard surface above)
-- [x] Entry edit/delete from the month grid (entry chip → edit dialog)
-- [x] Drag‑to‑paint multi‑day blocks across the grid
-
-### C — Correlation
-- [x] Feasibility verdicts on dated candidates — kind→impact mapping, evidence,
-      unknown kinds neutral, the candidate's own promoted entry excluded
-- [x] Constrain transit fare search to feasible windows — calendar publishes the
-      days, `transit plan --dates` searches exactly those (see the why‑block)
-- [x] Verdict endpoint in the correlation layer — `POST /api/verdicts` (batch)
-      and `GET /api/windows`
-- [x] Discover renders the batch verdict as a soft badge with evidence; a
-      conflict never hides the opportunity or blocks calendar promotion
-
-### D — Combining + trip assembly
-- [x] Geo/time clustering of saved events
-- [x] Reviewed draft trip → `trips.plans` through Calendar's HTTP boundary
-- [x] Materialised plan opens directly in the existing Travel workspace
-- [ ] Dashboard Trips workspace renders combined trip
-
-### E — Google Calendar sync (two‑way)
-- [x] Import: new events tagged `source = google`, dedupe by external_id;
-      imported events arrive as drafts you confirm/re‑kind/dismiss. See
-      § Google sync contract and § Drafts.
-- [x] Export: per‑event opt‑in → push to Google Calendar. The
-      `calendar.google_exports` ledger is the opt‑in; nothing exports by default.
-- [x] Conflict policy: Sjel is the source of truth; sync resolves toward Sjel.
-      Implemented in `google::decide`, table in § Conflict policy.
-- [x] Real offset handling, both directions, both DST edges — § Time model >
-      What Phase E settled.
-- [x] **Connect a real account.** OAuth refresh and a live, read-only preview
-      against the configured account were verified on 2026-08-01. Import remains
-      explicit; no bulk entries were written during that check.
-- [x] Dashboard surface for a date-bounded Google import review: it explains
-      existing entries and likely exact-title/time duplicates, then imports only
-      explicit, revision-checked selections as drafts.
-- [x] Dashboard draft inbox: 90-day Google-source/possible queue, with
-      re-kind + planned adoption or Sjel-only removal.
-- [x] Per-entry Google export toggle plus a dry-run review and explicit push.
-      The toggle writes only the opt-in ledger; the separate sync review is
-      the only dashboard action that contacts Google.
-- [ ] Watch/incremental sync (`syncToken`, push notifications). This build
-      re‑lists the window every run, which is fine at one operator's volume and
-      wrong at scale.
-
-#### Connecting an account
+### Connecting an account
 
 The credential is a configured input, never something this capability acquires
 on its own. In order:

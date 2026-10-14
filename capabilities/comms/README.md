@@ -690,33 +690,9 @@ matched the query language, including four weaker same-language candidates ahead
 intended cross-language match. It is therefore not a Comms replacement. The deterministic
 evaluator and lexical fallback remain the control in every run.
 
-### First embedding smoke test
+### Model Evaluation Baseline
 
-On 2026-07-29 the exact registered E5 snapshot was loaded through oMLX 0.5.0 and called through
-the authenticated `/v1/embeddings` endpoint. It returned four 384-dimensional vectors for
-synthetic German/English inputs. One German local-AI query scored `0.876` against the matching
-English passage and `0.845` against the matching German passage, versus `0.753` for an
-unrelated ceramics passage. This proves protocol/model compatibility and gives a first
-cross-language separation signal; it is deliberately not presented as a quality benchmark.
-It therefore did not decide adoption; that required the fixed, manually judged item–TELOS set
-described above. With this initial E5-small setup, the first normal 30-day Comms refresh
-evaluated 35 stored items semantically against five configured lenses with zero lexical
-fallbacks. Repeating the same non-forced refresh evaluated zero items and skipped all 35 as
-revision-current, confirming that the normal cache path does not spend a second model pass.
-
-The repeatable public baseline lives in [`eval/`](eval/README.md): six manually judged,
-synthetic DE/EN rankings, explicit 0–3 rationales, fixed acceptance thresholds and a runner
-that calls only the loopback oMLX endpoint. It complements rather than exports the private
-TELOS/Feed evaluation. E5-small failed at 4/6 useful top-1, `0.765` pairwise accuracy and
-`0.865` mean nDCG. E5-base passed without changing the corpus at 6/6, `0.882` and `0.986`,
-respectively. Its observed 30-vector run took 1.14 seconds; the local model uses 547 MiB on
-disk and raised oMLX RSS to about 1.16 GB immediately after the batch, bounded by a 60-second
-per-model idle TTL. The compiled Apple contextual runner took 0.75 seconds and peaked near
-85 MiB RSS for the same 30 vectors; `NLEmbedding` took 0.67 seconds and peaked near 73 MiB.
-Both resource wins are outweighed by their large quality losses.
-After E5-base became the configured model, the first normal refresh semantically evaluated all
-35 stored items; the immediate second non-forced refresh evaluated zero and skipped all 35 as
-revision-current.
+The repeatable public baseline lives in [`eval/`](eval/README.md): manually judged DE/EN rankings with explicit rationales and acceptance thresholds evaluated against the loopback model endpoint. The full inference architecture and privacy redaction ladder are documented in [Feed & Communications Architecture](../../docs/capabilities/feed-and-comms.md).
 
 ## Gmail mutation boundary
 

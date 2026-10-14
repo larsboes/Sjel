@@ -31,16 +31,14 @@
     type InteriorRobustness,
     type InteriorSun,
     type InteriorDelivery,
-    type InteriorDeclaration,
-    type InteriorPurchaseOrder,
-    type InteriorSearchReport,
-    type InteriorComposed,
     type InteriorModel,
     type InteriorRoomPlanReference,
   } from "$lib/api";
   import { capabilities } from "$lib/capabilities.svelte";
   import RoomCapturePanel from "$lib/interior/RoomCapturePanel.svelte";
   import RoomPlanRevisionReview from "$lib/interior/RoomPlanRevisionReview.svelte";
+  import InteriorSolverView from "$lib/interior/InteriorSolverView.svelte";
+  import InteriorPurchaseView from "$lib/interior/InteriorPurchaseView.svelte";
   import { isRoomPlanPhone } from "$lib/roomplan";
   import { SYNC_CHANGED_EVENT } from "$lib/sync-status";
   import { bridgedSrc } from "$lib/bridged-url";
@@ -79,26 +77,6 @@
   let sunError = $state<string | null>(null);
   let moveIn = $state<InteriorDelivery[]>([]);
 
-  let declarations = $state<InteriorDeclaration[]>([]);
-  let order = $state<InteriorPurchaseOrder | null>(null);
-
-  /** A hypothetical piece, measured against the entrance before anyone buys it. */
-  let probeB = $state(120);
-  let probeT = $state(60);
-  let probeZerlegbar = $state(false);
-  let probeAnswer = $state<string | null>(null);
-
-  let solverBusy = $state(false);
-  let solverError = $state<string | null>(null);
-  let solverElapsed = $state(0);
-  let searchResult = $state<InteriorSearchReport | null>(null);
-  let composeResult = $state<InteriorComposed[] | null>(null);
-  let moveRefs = $state<string[]>([]);
-  let composeRefs = $state<string[]>([]);
-  let step = $state(20);
-
-  const euro = (cents: number): string =>
-    (cents / 100).toLocaleString("de-DE", { style: "currency", currency: "EUR" });
 
   const size = (i: InventoryItem): string =>
     i.width !== null && i.depth !== null ? `${i.width} × ${i.depth}${i.height !== null ? ` × ${i.height}` : ""} cm` : "—";
@@ -671,93 +649,6 @@
     }
   };
 
-  async function loadDeclarations(): Promise<void> {
-    try {
-      declarations = await interior.declarations();
-    } catch (caught) {
-      error = caught instanceof Error ? caught.message : String(caught);
-    }
-  }
-
-  async function loadOrder(): Promise<void> {
-    try {
-      order = await interior.purchaseOrder();
-    } catch (caught) {
-      error = caught instanceof Error ? caught.message : String(caught);
-    }
-  }
-
-  async function probeDoor(): Promise<void> {
-    probeAnswer = null;
-    try {
-      const t = await interior.fits(probeB, probeT, probeZerlegbar);
-      probeAnswer = doorLine({
-        reference: "",
-        width: probeB,
-        depth: probeT,
-        door: t,
-        affordable: false,
-        rotates: false,
-      });
-    } catch (caught) {
-      probeAnswer = caught instanceof Error ? caught.message : String(caught);
-    }
-  }
-
-  /**
-   * Wait for a job, then hand back its result.
-   *
-   * Polling and not a socket: the answer arrives once, minutes from now, and a second
-   * transport for one message would be more machinery than the message is worth. The interval
-   * is a second because the job takes minutes — a tighter loop would ask the same question
-   * sixty times for one answer.
-   */
-  async function awaitJob<T>(id: number): Promise<T> {
-    const started = Date.now();
-    for (;;) {
-      const { state } = await interior.job(id);
-      if (state.state === "done") return state.outcome as T;
-      if (state.state === "failed") throw new Error(state.reason);
-      solverElapsed = Math.round((Date.now() - started) / 1000);
-      await new Promise((r) => setTimeout(r, 1000));
-    }
-  }
-
-  async function runSearch(): Promise<void> {
-    if (selected === null || moveRefs.length === 0) return;
-    solverBusy = true;
-    solverError = null;
-    searchResult = null;
-    composeResult = null;
-    try {
-      const { job } = await interior.search(selected, moveRefs, step, 12);
-      searchResult = await awaitJob<InteriorSearchReport>(job);
-    } catch (caught) {
-      solverError = caught instanceof Error ? caught.message : String(caught);
-    } finally {
-      solverBusy = false;
-    }
-  }
-
-  async function runCompose(): Promise<void> {
-    if (composeRefs.length === 0) return;
-    solverBusy = true;
-    solverError = null;
-    searchResult = null;
-    composeResult = null;
-    try {
-      const { job } = await interior.compose(composeRefs, 25, 60, 5);
-      composeResult = await awaitJob<InteriorComposed[]>(job);
-    } catch (caught) {
-      solverError = caught instanceof Error ? caught.message : String(caught);
-    } finally {
-      solverBusy = false;
-    }
-  }
-
-  function toggle(list: string[], id: string): string[] {
-    return list.includes(id) ? list.filter((x) => x !== id) : [...list, id];
-  }
 
   async function start(): Promise<void> {
     starting = true;
@@ -845,11 +736,7 @@
     <button
       class:active={view === "buy"}
       aria-pressed={view === "buy"}
-      onclick={() => {
-        view = "buy";
-        if (order === null) void loadOrder();
-        if (declarations.length === 0) void loadDeclarations();
-      }}
+      onclick={() => (view = "buy")}
     >
       Buy &amp; declare
     </button>
@@ -1230,209 +1117,12 @@
   <!--
     The most expensive calculation in the capability, finally reachable from the surface that
     needs it. It runs as a job because it takes minutes: the page asks for a number and comes
-    back for the answer (PRD B36).
-  -->
-  <section class="card solver">
-    <h2>Move pieces in {selected ?? "a layout"}</h2>
-    {#if selected === null}
-      <p class="empty">Pick a layout under Plans first.</p>
-    {:else}
-      <p class="note">
-        Every position on the grid is checked, not the first that works. A ★ marks the Pareto
-        front: under no weighting of the four goals is such a hit worse than another.
-      </p>
-      <div class="picks">
-        {#each detail?.layout.item ?? [] as it (JSON.stringify(it))}
-          {@const ref = (it as { ref: string }).ref}
-          <label>
-            <input
-              type="checkbox"
-              checked={moveRefs.includes(ref)}
-              onchange={() => (moveRefs = toggle(moveRefs, ref))}
-            />
-            {ref}
-          </label>
-        {/each}
-      </div>
-      <label class="stepper">
-        grid <input type="number" min="5" max="50" step="5" bind:value={step} /> cm
-      </label>
-      <button disabled={solverBusy || moveRefs.length === 0} onclick={runSearch}>
-        {solverBusy ? `Searching… ${solverElapsed}s` : "Search"}
-      </button>
-    {/if}
-  </section>
-
-  <section class="card solver">
-    <h2>Lay out the flat from nothing</h2>
-    <p class="note">
-      A beam search, and it says so: only the best partial arrangements survive each round, so
-      the answer is computed and reproducible — not proven optimal.
-    </p>
-    <div class="picks">
-      {#each allOwned as row (row.item.id)}
-        <label>
-          <input
-            type="checkbox"
-            checked={composeRefs.includes(row.item.id)}
-            onchange={() => (composeRefs = toggle(composeRefs, row.item.id))}
-          />
-          {row.item.label}
-        </label>
-      {/each}
-    </div>
-    <button disabled={solverBusy || composeRefs.length === 0} onclick={runCompose}>
-      {solverBusy ? `Placing… ${solverElapsed}s` : "Lay it out"}
-    </button>
-  </section>
-
-  {#if solverError}<p class="error"><Icon name="alert" size={15} /> {solverError}</p>{/if}
-
-  {#if searchResult}
-    <section class="card">
-      <h2>
-        {searchResult.hits.length} of {searchResult.fully_checked.toLocaleString()} checked
-        <span class="note">in {(searchResult.elapsed_ms / 1000).toFixed(1)} s</span>
-      </h2>
-      <table class="corridors">
-        <tbody>
-          {#each searchResult.hits as h, i (i)}
-            <tr>
-              <th scope="row">{h.pareto ? "★" : ""} {Object.entries(h.places).map(([k, p]) => `${k} ${p[0]},${p[1]}`).join(" · ")}</th>
-              <td class="mono">{h.tightest_reserve_cm ?? "—"} cm spare</td>
-              <td class="mono">{h.wall_contact_cm} cm wall</td>
-              <td class="mono">{h.bottleneck_cm} cm walk</td>
-              <td class="mono">{h.soft} soft</td>
-            </tr>
-          {/each}
-        </tbody>
-      </table>
-    </section>
-  {/if}
-
-  {#if composeResult}
-    <section class="card">
-      <h2>{composeResult.length} arrangements</h2>
-      {#each composeResult as c, i (i)}
-        <article class="composed">
-          <h3>
-            #{i + 1} {c.pareto ? "★" : ""}
-            <span class="verdict" class:pass={c.pass}>{c.pass ? "passes" : "fails"}</span>
-          </h3>
-          <p class="mono">
-            {c.tightest_reserve_cm ?? "—"} cm spare · {c.wall_contact_cm} cm wall ·
-            {c.bottleneck_cm} cm walk · {c.free_m2.toFixed(2)} m² free
-          </p>
-          {#if c.hard.length > 0}<p class="note">hard: {c.hard.join(", ")}</p>{/if}
-          <ul class="places mono">
-            {#each c.places as [ref, p, rot] (ref)}
-              <li>{ref} — x {p[0]}, y {p[1]}, {rot}°</li>
-            {/each}
-          </ul>
-        </article>
-      {/each}
-    </section>
-  {/if}
+{#if !loading && !error && view === "solve"}
+  <InteriorSolverView {selected} {detail} {allOwned} />
 {/if}
 
 {#if !loading && !error && view === "buy"}
-  <section class="card">
-    <h2>Does it even fit through the door?</h2>
-    <p class="note">The question before buying, answered from the flat's own entrance width.</p>
-    <div class="probe">
-      <label>width <input type="number" bind:value={probeB} /></label>
-      <label>depth <input type="number" bind:value={probeT} /></label>
-      <label>
-        <input type="checkbox" bind:checked={probeZerlegbar} /> comes in parts
-      </label>
-      <button onclick={probeDoor}>Check</button>
-    </div>
-    {#if probeAnswer}<p class="reserve">{probeAnswer}</p>{/if}
-  </section>
-
-  {#if order}
-    <section class="card">
-      <h2>What to buy first</h2>
-      <p class="note">
-        Urgency, then whether a layout already builds on it, then price. No budget: nobody set a
-        ceiling and this page does not invent one.
-      </p>
-      <table class="corridors">
-        <tbody>
-          {#each order.lines as p, i (p.id)}
-            <tr>
-              <th scope="row">{i + 1}. {p.label}</th>
-              <td class="mono">{p.priority ?? "—"}</td>
-              <td class="mono">{euro(p.price_cents ?? 0)}</td>
-              <td class="mono">{euro(p.cumulative_cents)}</td>
-              <!--
-                Two reasons for no month count, and they must not read the same: "no balance"
-                is a missing measurement, "the balance is not positive" is an answer.
-              -->
-              <td class="mono">
-                {p.affordable_after_months !== null
-                  ? `${p.affordable_after_months.toFixed(1)} months`
-                  : order.balance
-                    ? "not out of this balance"
-                    : "no balance measured"}
-              </td>
-            </tr>
-          {/each}
-        </tbody>
-      </table>
-      {#if order.unpriced.length > 0}
-        <p class="unchecked">
-          <Icon name="alert" size={14} />
-          {order.unpriced.length} needs carry no price and stand in no order:
-          {order.unpriced.map((p) => p.label).join(", ")} — the move here is a price, not a
-          purchase.
-        </p>
-      {/if}
-      {#if order.unknown_priorities.length > 0}
-        <p class="unchecked">
-          <Icon name="alert" size={14} />
-          Priority words this ranking does not know, sorted last:
-          {order.unknown_priorities.join(", ")}
-        </p>
-      {/if}
-      {#if order.balance && order.balance.median_cents <= 0}
-        <p class="note">
-          Median monthly balance {euro(order.balance.median_cents)} over {order.balance.months}
-          months — nothing accrues out of that, so there is no month count.
-        </p>
-      {/if}
-    </section>
-  {/if}
-
-  {#if declarations.length > 0}
-    <section class="card">
-      <h2>
-        Still judged by name
-        <span class="count">{declarations.filter((d) => !d.declared).length}</span>
-      </h2>
-      <p class="note">
-        The engine has been cleverer than its data since 2026-08-31. Each line below is what the
-        machine already assumes, written in the vocabulary the piece can carry itself — and what
-        accepting it would change.
-      </p>
-      <ul class="declarations">
-        {#each declarations.filter((d) => !d.declared && d.proposal) as d (d.id)}
-          <li>
-            <span class="mono">{d.id}</span>
-            <span class="of">read as {d.guessed_as}, in {d.in_layouts.length} layouts</span>
-            <pre class="mono">{d.proposal?.toml}</pre>
-            {#if d.consequences}
-              <span class="holds" class:tight={d.consequences.changed.length > 0}>
-                {d.consequences.changed.length === 0
-                  ? "changes no verdict"
-                  : `changes ${d.consequences.changed.join(", ")}`}
-              </span>
-            {/if}
-          </li>
-        {/each}
-      </ul>
-    </section>
-  {/if}
+  <InteriorPurchaseView />
 {/if}
 
 <style>
@@ -1975,72 +1665,6 @@
     padding: 0;
   }
 
-  .solver h2 {
-    font-size: var(--text-base);
-    margin: 0 0 0.5rem;
-  }
-  .picks {
-    display: flex;
-    flex-wrap: wrap;
-    gap: 0.5rem 1rem;
-    margin: 0.6rem 0;
-  }
-  .picks label,
-  .probe label,
-  .stepper {
-    align-items: center;
-    color: var(--text-secondary);
-    display: inline-flex;
-    font-size: var(--text-sm);
-    gap: 0.35rem;
-  }
-  .stepper input,
-  .probe input[type="number"] {
-    width: 4.5rem;
-  }
-  .probe {
-    align-items: center;
-    display: flex;
-    flex-wrap: wrap;
-    gap: 0.75rem;
-    margin: 0.6rem 0;
-  }
-
-  .composed {
-    border-top: 1px solid var(--card-border);
-    padding: 0.6rem 0;
-  }
-  .composed h3 {
-    font-size: var(--text-sm);
-    margin: 0 0 0.3rem;
-  }
-  .places {
-    color: var(--text-tertiary);
-    font-size: var(--text-xs);
-    list-style: none;
-    margin: 0.35rem 0 0;
-    padding: 0;
-  }
-
-  .declarations {
-    list-style: none;
-    margin: 0.6rem 0 0;
-    padding: 0;
-  }
-  .declarations li {
-    border-top: 1px solid var(--card-border);
-    padding: 0.5rem 0;
-  }
-  .declarations pre {
-    background: var(--surface);
-    border-radius: var(--radius-sm);
-    color: var(--text-secondary);
-    font-size: var(--text-xs);
-    margin: 0.35rem 0;
-    padding: 0.4rem 0.6rem;
-    white-space: pre-wrap;
-  }
-
   /* ─── The editor as a bottom sheet (rendered only below the phone breakpoint) ─── */
 
   /* Above the header (50) and the bottom tab bar (45): a modal covers the shell. */
@@ -2111,11 +1735,6 @@
     }
     section.card + section.card {
       margin-top: var(--space-4);
-    }
-    .probe input[type="number"],
-    .stepper input {
-      font-size: var(--text-base);
-      min-height: 2.75rem;
     }
     /* A wide table scrolls inside its card instead of pushing the page sideways. */
     .corridors {

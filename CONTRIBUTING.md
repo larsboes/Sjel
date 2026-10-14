@@ -72,11 +72,6 @@ its own. Run them alone with:
 cargo test --workspace --locked -- db_tests::
 ~~~
 
-Until PRD Q45 (2026-08-27) these suites needed a running Postgres and six
-`*_TEST_DATABASE_URL` variables, so the hermetic command carried
-`--skip postgres_tests::` and CI ran a second job with a service container.
-Both are gone; a checkout with no overlay and no server runs everything.
-
 Run `bun run check` in `dashboard/` when dashboard code changes. Manifest or
 generated-architecture changes also require:
 
@@ -87,34 +82,18 @@ tools/check-architecture-fresh.sh
 
 Do not describe a skipped or unavailable check as passing.
 
-**`SJEL_DB_PATH` isolates the database and nothing else.** It does not isolate a vault
-projection. `capabilities/trips`' `project_after_write` runs as a router layer after any
-successful non-GET request and takes its root from the overlay config, which that variable
-never touches — so a live check on 2026-09-05 that redirected only the database passed every
-assertion while re-exporting thirteen real plan notes into the operator's Obsidian vault and
-creating a fourteenth. `finance` and `comms` project too. Before running a server against a
-copy, export every projection root as well: `SJEL_TRIPS_OBSIDIAN_ROOT`,
-`SJEL_FINANCE_OBSIDIAN_ROOT`, `SJEL_FINANCE_DECISIONS_ROOT`, and a scratch `SJEL_COMMS_CONFIG`
-(comms resolves its config file from that variable, so a scratch file is what redirects it).
-Overriding `SJEL_PERSONAL_ROOT` instead is not the fix: it redirects the config *read* too, so
-the run tests a configuration nobody is operating.
+**`SJEL_DB_PATH` isolates the database only.** Vault projections (`comms`, `finance`, `trips`)
+resolve their roots from overlay configurations. When testing against a copy, export isolated
+projection roots as well: `SJEL_TRIPS_OBSIDIAN_ROOT`, `SJEL_FINANCE_OBSIDIAN_ROOT`,
+`SJEL_FINANCE_DECISIONS_ROOT`, and a scratch `SJEL_COMMS_CONFIG`.
 
-**Do not `cargo build --release` in a worktree that shares the repository's `target/`.** That
-build writes `target/release/<bin>`, which is the exact artifact the supervisor runs, and on
-Apple Silicon a running process dies when its own binary changes underneath it. On 2026-09-05
-a worktree release build therefore killed a live service, the supervisor restarted it from the
-new artifact, and the branch's migration ran against the real database — leaving eight empty
-tables no merged commit had put there. The build reported success and nothing anywhere
-reported the restart. `tools/service-runner.sh`'s `maybe_build` is the function that makes the
-artifact load-bearing. For a live check from a worktree, build a debug binary, run it on a free
-port and point it at a copy; use a separate `CARGO_TARGET_DIR` if a release build is
-unavoidable.
+**Do not `cargo build --release` in a worktree sharing the root `target/`.** That build overwrites
+`target/release/<bin>`, which is the binary supervised by `tools/service-runner.sh`. When testing
+from a worktree, build debug binaries or set an isolated `CARGO_TARGET_DIR`.
 
-The same rule applies inside a test. An assertion that needs something only one platform has —
-`/dev/full`, a container runtime, a specific filesystem — may be given up on a developer machine
-and never in an automated run, where "it runs in CI" would otherwise be an assumption nobody can
-see failing. Guard it with `skippable` from `tools/lib/test-support.sh`: outside CI it prints what
-coverage was lost, and inside CI it fails.
+Assertions requiring platform-specific resources (`/dev/full`, container runtimes) must use
+`skippable` from `tools/lib/test-support.sh`: skippable tests print omitted coverage locally and fail
+in CI.
 
 ## Open the pull request
 
@@ -209,12 +188,9 @@ contract, install, or review decision.
    decision state. Agents rank and explain; anything irreversible still goes through the
    capability contract, and leaves a trace.
 5. **Security is continuous observation.** An audit gate is a start, never the property itself.
-   Nothing here is held at a version any more: Q74 and Q77 (2026-09-02) removed the adoption
-   cooldown and every `pin`, so a fix outside the npm ecosystem lands the day it exists and
-   reporting stands where the hold stood ([Patch first](#patch-first)). Q109 (2026-09-22)
-   restores a 24-hour resolution hold for Bun/npm packages only, because that registry's threat
-   model is different; it is an age window, not a version pin. Egress, access and agent touches
-   stay observable after install; their logs live privately.
+   Dependencies track their upstream's latest release ([Patch first](#patch-first)). Bun/npm
+   packages maintain a 24-hour resolution window to mitigate rapid publish-compromise attacks.
+   Egress, access and agent touches stay observable; telemetry lives in the private overlay.
 6. **Replaceable edges, stable contracts.** Agent harnesses, model providers, visual renderers
    and deployment substrates are adapters. Adopt first and record why. Re-open the call when
    its stated flip condition comes true.
@@ -235,149 +211,81 @@ future source that fits the same typed observation contract. Each item keeps its
 observed time, evidence link, kind and decision state. The originating capability keeps any
 domain-specific payload.
 
-`comms` currently supplies the feed store, manual link ingest and mail triage. Its present
-extractors do not define the feed's future scope. Its first bounded recurring collectors are
-GitHub Trending and configurable arXiv queries. A new source belongs in the general feed when
-its first job is awareness or reading.
+`comms` currently supplies the feed store, manual link ingest and mail triage. A new source
+belongs in the general feed when its first job is awareness or reading.
 
-Mail triage has a second classification rung: a local model, run explicitly, over exactly the
-threads the deterministic rules left at the conservative fallback (PRD Q85, 2026-09-05). It reads
-the sender's domain, the already-redacted subject and the already-redacted preview, refuses a
-Secret mail before a prompt is built, and never leaves the machine. It ships in shadow: it stores
-a verdict beside the rule's and moves no category until a frozen labelled corpus has been
-measured and the overlay declares it. Even then it never raises a mail's data class, because
-that write is irreversible on two axes, so a proposal that would raise it is held for a person.
+Mail triage uses deterministic rules with an optional local model fallback over unresolved threads.
+It reads the sender's domain, redacted subject, and preview, refusing Secret mail before prompt
+assembly. Proposals that would raise a mail's data class are held for operator review.
 
-Personal relevance is a Feed annotation, not a new ownership boundary. Comms scores an item
-against explicitly configured TELOS focus notes, stores the matches separately from the item
-and labels whether the comparison was semantic or a lexical fallback. The dashboard can sort
-by a revisioned deterministic evaluation whose visible factors cover TELOS fit, upcoming
-travel, freshness, content basis, and — once it has enough evidence to be worth anything — what
-the operator's own keeps and dismissals imply (PRD Q88, 2026-09-05). That fifth factor is learned
-from an append-only interaction ledger, is capped at fifteen points of a hundred, and never
-writes a decision of its own. What must be re-embedded and what must merely be re-ranked are two
-separate revisions, so a changed ranking input re-evaluates from stored matches instead of
-calling a model again. Mail is evaluated the same way, on its own factors, and publishes one
-score (PRD Q89). `/feed/[id]` remains one dynamic reader for every item instead of generating
-one application page per link.
+Personal relevance is a Feed annotation, not a new ownership boundary. Comms scores items
+against explicitly configured focus notes, storing matches separately and labeling whether the
+comparison was semantic or lexical. Sorting combines focus fit, upcoming travel, freshness, and
+operator keep/dismissal history. Ranking inputs re-evaluate from stored matches rather than
+re-prompting models. `/feed/[id]` provides a unified dynamic reader across all item kinds.
 
 The dashboard shows passive intake and active discovery as two views of one `/feed` workspace.
 That is a UI integration and never a database merge: each capability keeps its own contract and
-provenance, and `dashboard/README.md` owns which view calls which.
+provenance.
 
-Narrower by design, `scouting` searches for and scores opportunities such as
-scholarships, hackathons, events, calls for papers or travel deals against an interest
-profile. It may accept a feed item as a candidate and may publish a scored result back to the
-feed, but it does not own security updates, system changes, watched repositories, general news
-or interesting articles. Those remain valid feed items without ever entering Scouting.
+Narrower by design, `scouting` searches for and scores opportunities such as scholarships,
+hackathons, events, calls for papers, or travel deals against an interest profile.
 
 Obsidian is an external personal writing surface, not a second Sjel-wide database. Each
-capability owns its own explicit vault contract: `comms` can discover links only in configured
-exact notes or headings and can export a distilled keeper, `scouting` can read typed
-opportunity notes and link matches, and `trips` can import or later synchronize trip plans.
-Each capability's README states what its own scan reads and what it refuses. These integrations
-may share schemas and source references, but one must never scan or rewrite another
-capability's notes by implication.
+capability owns its own explicit vault contract: `comms` discovers links in configured headings,
+`scouting` reads opportunity notes, and `trips` synchronizes trip plans. Integrations share schemas
+and contracts, but never mutate another capability's notes by implication.
 
-The harness-swappable, public-core-plus-private-overlay shape isn't invented from nothing. It
-descends from Daniel Miessler's [LifeOS](https://github.com/danielmiessler/LifeOS), the upstream
-AI-operator project. Sjel carried a reviewed delta against a LifeOS installation until
-2026-08-25, when that delta and its sync tooling were deleted; the shape it taught stayed. See
-`upstreams.toml`'s `[lifeos]` entry for what was consumed and why it stopped.
+Lineage: Sjel's public-core and private-overlay separation draws inspiration from upstream AI-operator
+patterns (see `upstreams.toml` [lifeos]).
 
 ## Architecture and ownership
 
 ### Public core and private overlays
 
-Sjel contains everything that can be public. Private data, vault contents, backups and deployment
-configuration live in one selected overlay. A host, residence or user account is not automatically
-a repository boundary: split overlays only when their trust, lifecycle or ownership genuinely
-cannot be managed together. Access control belongs at the service and data-contract boundary.
+Sjel contains public code, schemas, renderers, and engine logic. Private data, vault contents,
+backups, and deployment configuration live in the active overlay. See [docs/architecture/security.md](docs/architecture/security.md).
 
-Nothing private or secret enters this repository. Explicitly published work and its reviewed
-public data may; unreviewed personal material may not. This is a commit-level property, not a
-cleanup step before release.
-
-"Private" is not only about values. A set of entries can identify a place or a person while
-every single one of them is harmless on its own: which third-party integrations a deployment
-consumes, which automations it has, which services it runs. Each one points at a public
-repository and each template holds nothing but placeholders, and the list still describes the
-hardware in one building. Filenames do it too, with no value in them at all. So a capability
-here keeps the mechanism — how a service runs, how templates are filled, how upstreams are
-audited — while the selected overlay keeps the inventory of what a particular
-installation actually has. `tools/check-publication-hygiene.sh` catches repository names and
-workstation paths; it cannot see aggregation, which is why this is a rule rather than a gate.
-`tools/isa-hygiene.sh` is the advisory companion: it sweeps the tracked `ISA.md` files for
-volume names, hostnames, private addresses and uncommon path roots, and reports rather than
-fails, because an ISA is an evidence log and whether a given measurement may be published is
-the operator's judgement. Set `SJEL_PRIVATE_NAMES` to this machine's volume and drive labels —
-the overlay owns them — so a bare backticked label is caught too.
+Mechanism stays in Sjel; instance inventory and values stay in the overlay.
+`tools/check-publication-hygiene.sh` gates against committed workstation paths and deployment
+markers. `tools/isa-hygiene.sh` sweeps tracked documentation for machine-private references.
 
 ### What the installer owns in an agent harness
 
-`~/.claude` belongs to its operator, not to Sjel, and the installer's authority over it stops at an
-additive merge of a baseline Sjel owns, plus offers. Stated here because the discipline was already
-implemented in three separate tools and written down in none, which is the shape a boundary erodes
-in.
-
-`tools/claude-code-config/claude-code-config` is the one write that happens without being asked, on every install
-including a non-interactive one. It merges the USER layer into `settings.json` with existing keys
-winning, so it can add a default and can never remove or overwrite one the operator set, and it
-refuses to touch a `settings.json` it cannot parse rather than replacing it. There is no MANAGED
-layer: the principal retired it on 2026-10-02, after asking what it bought against what it cost
-— sudo on every device for every change, and an MCP allowlist that had quietly blocked a server
-this machine had configured. The floor now lands in the same user-level file, which is why the
-merge rules above matter more than they did: they are what makes the write additive over a file
-that also holds the operator's own decisions. What the retirement gave up is that the floor is
-now editable by the agent sessions that run as that operator; `sjel claude check` reports drift
-instead, because a policy that arrives unasked is still not one anybody chose, but a policy
-nobody can re-read is not one they can maintain either.
-
-Nothing else writes unasked. The installer lists Packs and prints the activation command; it never
-links one. Agent-harness integrations are read for status, then installed only behind a TTY and an
-explicit prompt that defaults to no. Every destination is a default rather than an assumption:
-`CLAUDE_CONFIG_DIR`, `CLAUDE_SKILLS_DIR` and `CLAUDE_AGENTS_DIR` move them, and a harness that is
-not present is reported and skipped.
+Agent configuration directories (`~/.claude`, `~/.codex`, `~/.pi`) belong to the operator.
+Installer authority is strictly additive:
+- `tools/claude-code-config/claude-code-config` merges Sjel baseline settings into `settings.json` without
+  removing or clobbering existing operator keys. Refuses unparseable files rather than overwriting.
+- Drift is detected and reported via `sjel claude check`.
+- Packs are offered rather than force-linked during installation.
 
 ### Integrate-first topology
 
-A personal or self-authored project folds into Sjel by default. It stays separate only when it has
-an independent product identity, a device-sync lifecycle of its own, collaborators, or is itself
-an overlay. Separate projects integrate through declared contracts and state mounts. They are
-never left as invisible local dependencies. The overlay relationship recurses: a capability with
-more than one non-interchangeable deployment still gets exactly one shared pattern in Sjel, and
-several hosts may consume one overlay when they form one operational trust boundary.
-
-Base-plus-plugin and repository topology are separate decisions. The base defines contracts and
-extensions implement them; integrate-first decides where a project lives. Neither implies the
-other.
+Personal and self-authored components integrate into Sjel by default. Standalone repositories are
+reserved for independent products with distinct lifecycles, external collaborators, or distinct
+overlays. Integration occurs via declared contracts and state mounts.
 
 ### Three architectural nouns
 
-Sjel uses three nouns and no residual category:
+Sjel organizes all code into three nouns:
 
-- **Spine** is the fresh-install core: root manifests, `schemas/`, `tools/`, `libs/` and the
-  `dashboard/` shell. There is no literal `spine/` directory.
-- **Capability** owns a bounded domain, external system or data store under
-  `capabilities/<name>/`, whether or not it has a container or another capability consumes it.
-- **Pack** holds public agent know-how under `Packs/` and drives capabilities through their
-  contracts.
+- **Spine**: The core runtime and developer surface: root manifests, `schemas/`, `tools/`, `libs/`,
+  and the `dashboard/` shell.
+- **Capability**: Autonomous domain units under `capabilities/<name>/`, declared via `service.toml`.
+- **Pack**: Modular agent know-how and workflows under `Packs/<name>/`.
 
-Shared code with no domain belongs in `libs/`; shared contracts belong in `schemas/`; operator
-machinery belongs in `tools/`. If a piece fits none of them, its boundary is wrong. Do not create
-`utils/`, a fourth top-level noun, or a parent directory grouping capabilities merely because they
-run on the same host.
+See [docs/architecture/index.md](docs/architecture/index.md) for full topology and boundary rules.
+Shared utilities belong in `libs/`; contracts belong in `schemas/`; operator tools belong in `tools/`.
+Do not introduce unstructured `utils/` catch-alls.
 
 ### Schemas and dependency direction
 
-`schemas/` is law: import shared contracts, never redefine them. Compile-time dependencies point
-downward from capability to spine. A capability that needs another service declares
-`requires = [...]` and uses its HTTP surface and schema, never its implementation. Promote code to
-`libs/` at the second real consumer, provided it owns no domain of its own.
+`schemas/` defines shared contracts: import them, never redefine them. Dependencies point downward:
+Packs -> Spine -> Capabilities -> Libraries (`libs/`).
+Capabilities interact with other capabilities via loopback HTTP contracts and declared schemas, never
+via direct database mutation.
 
-The dashboard is presentation only. It discovers and mounts capability surfaces but owns no
-domain state or business logic. A UI serving one capability lives under that capability and
-arrives or leaves with it.
+The dashboard is strictly presentation: it mounts capability surfaces but owns zero domain state.
 
 ## Dependencies and build
 
@@ -389,63 +297,16 @@ and drifts for the same reason duplicated configuration does.
 
 ### Cargo and bun are the build path
 
-`cargo` builds and tests the Rust workspace: one root workspace, one `Cargo.lock`, and each member
-manifest owning its own direct dependencies. A service manifest names its `target/release` binary,
-and `tools/service-runner.sh` builds that binary on demand. `bun` owns TypeScript and the UI
-bundles. Generated-architecture freshness is a script gate, `tools/check-architecture-fresh.sh`,
-not a build-graph target. PRD Q44 (2026-08-25) decided this and retired the Bazel graph that held
-the same jobs before it.
+`cargo` builds and tests the Rust workspace: one root workspace, one `Cargo.lock`, with each member
+manifest managing its own direct dependencies. A service manifest declares its `target/release` binary,
+and `tools/service-runner.sh` compiles it on demand. `bun` powers TypeScript tooling and UI bundles.
+Freshness of generated artifacts is enforced via `tools/check-architecture-fresh.sh`.
 
-A tool may be a Cargo member too. `tools/storage` is one: generalized operator tooling is built
-in Rust before shell, before Python, before TypeScript, and the placement guide already sends
-operator machinery to `tools/`. Its launcher builds the release binary on demand, the same
-on-demand build `tools/service-runner.sh` does from a service manifest.
+Operator machinery is unified in `tools/sjel-cli` and `tools/storage` in Rust for fast parallel execution,
+with lightweight wrapper scripts maintaining stable paths.
 
-Existing scripts move into one crate, `tools/sjel-cli`, rather than one crate each, so that
-repository, overlay and manifest resolution are written once (decided 2026-10-02). A moved
-script keeps its path as a launcher that calls `sjel_cli_exec` from `tools/lib/sjel-cli.sh`, so
-its callers do not change. `tools/toolchain-check` was the first, then `sjel` itself,
-`tools/capability.sh`, `tools/service-runner.sh` and `tools/doctor`, and then `tools/harnesses`
-(the read verbs on 2026-10-02, `sync`/`use`/`promote`/`accept` with the pack-deploy mutation
-engine and pi's settings registry on 2026-10-04), and then `tools/updates` (2026-10-04), and
-then the four `packs-*` adapters with `tools/pack-drift-hook` (2026-10-04, which is what let
-`tools/lib/pack-deploy.ts` and `tools/lib/harness-registry.ts` be deleted — the engine had been
-Rust since 2026-10-02 and the adapters were its last reason to exist in two languages), and then
-`tools/self` with `tools/lib/self-model.ts` (2026-10-04, which the doctor runs on every
-invocation), and then `tools/audit` (2026-10-04 — `sjel update apply` runs it, and `tools/doctor`
-reads the verdict its exit code leaves in the host-patch receipt), and then `tools/host-watch`
-with its test (2026-10-04, which is what let the hourly job stop starting an interpreter. It is
-also the first tool in this crate to open the shared store, so that crate now links
-`libs/sjel-store` — and `libs/sjel-config` with it, because the database path has one owner and
-it is not this one), and then `tools/feed-sweep` and `tools/sparpreis-watch` (2026-10-04, the last
-two `bun run` jobs in the repository: both manifests now name the built binary with a `build`
-line, so no timer starts an interpreter — which is also what took `sjel-http` and `sjel-server`
-into this crate, the one client factory and the one inbound-credential helper), and then
-`tools/model-check` (2026-10-04, which is what stopped `tools/doctor` starting an interpreter: it
-ran `bun tools/model-check.ts --local --json` on every invocation and that leg was 6.9 s of the
-doctor's 20.6 s, which fell to 11.8 s once the doctor called the same crate in-process).
-`tools/sjel-mcp.ts` is the one exception and not a second crate: the `tools/sjel-mcp` crate
-already held its registration half, so the server moved in beside it on 2026-10-04 rather than
-into `sjel-cli` and a second MCP implementation.
-Because of this, `cargo` is a core host
-requirement in `toolchain.toml`, together with `rg` and `fd`.
-
-Any build layer above those two is argued per case, never assumed. Name what it buys and what
-toolchain cost it adds. `tools/doctor` stayed an interpreted command until 2026-10-02, on the
-argument that wrapping it would add machinery without improving correctness. It moved into
-`tools/sjel-cli` with the rest of the tooling once that machinery existed for other reasons, and
-the move paid for itself on a measurement: the doctor spends its time waiting on the tools it
-delegates to, and the Rust version runs independent sections at once (26 s to 16 s on the build
-host, the same report line for line). The dashboard build was deliberately reopened when
-production began consuming capability-owned UI bundles; its README records that trigger.
-
-Build artifacts are not state. `sjel storage target` measures `target/` per profile and per
-bucket and checks PRD §9's R6 — `target/debug` may not exceed `target/release` by more than 3× —
-and `tools/doctor` reports the verdict. `sjel storage reclaim --repo` gives the space back:
-`--incremental` for the cache that always regrows, `--target` for a `cargo clean`, and
-`--node-modules` for every ignored `node_modules`, `.svelte-kit` and `dist` in the checkout. The
-`[profile.dev.package."*"]` stanza in the root `Cargo.toml` is the measurement that produced the
-rule; its comment states what it trades.
+Build artifacts are ephemeral. `sjel storage target` bounds debug-to-release ratio (`target/debug` within
+3× of `target/release`), verified by `tools/doctor`. Space is reclaimed via `sjel storage reclaim --repo`.
 
 ### Implementation languages and intelligence
 
@@ -455,7 +316,7 @@ not a substitute for a deterministic baseline it has not beaten.
 
 ### One manifest per concern
 
-Configuration has one owner per concern:
+Configuration has one owner per concern (see [docs/capabilities/manifest.md](docs/capabilities/manifest.md)):
 
 | Manifest | Owns |
 | --- | --- |
@@ -981,6 +842,7 @@ standing specification type.
 | Host executable required by Sjel | `toolchain.toml` | Add `upstream = <id>` only when it is also consumed code |
 | Machine fact or private state | Active overlay | Resolve it dynamically; never copy it into public prose |
 | Shared operator logic | `tools/lib/` | Source it from every caller |
+| Technical manual & specs | `docs/` | Bounded interface specifications and architecture diagrams |
 | Interesting unjudged lead | The owning ISA's `## Not yet specified` | Promote to a claim through the provenance gate when adopted |
 | Unfinished work, plan or todo | A claim in the owning `ISA.md` | Reasoning that outlives the work moves into the owning README |
 
@@ -1007,6 +869,7 @@ One web app is the visible form of the gluing layer: **installer, maintainer, an
 | `profiles.toml` | named Pack sets (`tools/packs-codex use <profile>`). Tracked and shared: a profile says which Packs belong together, while which machine deploys them stays in the overlay |
 | `upstreams.toml` | every external project: url, verdict, license, why |
 | `README.md` | human-facing architecture and durable repository doctrine |
+| `docs/` | technical documentation hierarchy: architecture, capabilities, and operations manuals |
 | `AGENTS.md` | minimal cross-harness bootstrap that routes assistants into the `sjel` skill |
 | `CLAUDE.md` | Claude Code adapter; imports `AGENTS.md` and adds no second doctrine |
 | `ARCHITECTURE.md` | generated snapshot of capabilities/Packs/upstreams/systems — never hand-edited, see `tools/generate-architecture.sh`. State mounts are machine-local and deliberately absent; `tools/doctor` reports those |

@@ -722,6 +722,12 @@ claim yet, and the watch rows they name are in `upstreams.toml` with the questio
 
 Entries before 2026-10-08 are in [`ISA-archive.md`](ISA-archive.md#log).
 
+- 2026-10-15 · The travel design snapshots retired. `Packs/travel/design/` held three dated
+documents (2026-08-11/12); their still-live content — backend fragility, the do-not-build list, the
+four open questions and the missing parquet-reader test — moved to `docs/capabilities/travel.md`
+§4–6, and their open items were already in the Packs/travel list above. 1,216 lines of dated prose
+that nothing read are gone.
+
 - 2026-10-15 · Media F3 closed: the ledger has a read-only HTTP surface and a page that reads it.
   `media serve` answers `GET /api/status`, `/api/ingests` and `/api/ingests/{id}` on port 8102
   behind the shared inbound credential; `capabilities/media/service.toml` declares `proxy_api_only`,

@@ -145,6 +145,20 @@ final class SjelMacViewModel: ObservableObject {
         }
     }
 
+    /// Opens the native desktop app, or brings it forward. `apps/gpui-prototype/install` puts it
+    /// in ~/Applications under this bundle identifier.
+    func openDesktopApp() {
+        guard let url = NSWorkspace.shared.urlForApplication(withBundleIdentifier: "dev.sjel.desktop") else {
+            openProblem = "The desktop app is not installed (apps/gpui-prototype/install)."
+            return
+        }
+        NSWorkspace.shared.openApplication(at: url, configuration: .init()) { _, error in
+            Task { @MainActor in
+                self.openProblem = error.map { "Could not open the desktop app: \($0.localizedDescription)" }
+            }
+        }
+    }
+
     /// Start this app when the user logs in. `SMAppService` works only from an app bundle,
     /// which is what `apps/mac/install` builds.
     func setLaunchesAtLogin(_ enabled: Bool) {
@@ -303,7 +317,7 @@ struct SjelMenuBarView: View {
         }
     }
 
-    /// Always both buttons, always here: nothing above them comes and goes.
+    /// Always every button, always here: nothing above them comes and goes.
     private var actions: some View {
         HStack {
             Button {
@@ -314,6 +328,10 @@ struct SjelMenuBarView: View {
             .buttonStyle(.borderedProminent)
             .keyboardShortcut("d", modifiers: .command)
             .help("Open the dashboard in the browser, logged in (⌘D)")
+
+            Button("Open App") { model.openDesktopApp() }
+                .keyboardShortcut("o", modifiers: .command)
+                .help("Open the native desktop app (⌘O)")
 
             Button("Ask") { model.showAsk() }
                 .help("Ask Sjel from any app with ⌃⌥Space")

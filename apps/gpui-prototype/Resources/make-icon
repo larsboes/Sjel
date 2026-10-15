@@ -1,0 +1,28 @@
+#!/usr/bin/env bash
+# Resources/make-icon — build AppIcon.icns from brand/sjel-icon-maskable.svg.
+#
+# macOS icon grid: a 1024 canvas, an 824 px body with a 185 px corner radius, and a soft shadow.
+# The maskable source keeps the mark inside the centre 70%, so the rounded body crops only the
+# field. Needs rsvg-convert and ImageMagick; the output is committed, so install does not.
+set -euo pipefail
+HERE="$(cd "$(dirname "$0")" && pwd)"
+SRC="$HERE/../../../brand/sjel-icon-maskable.svg"
+work="$(mktemp -d)"
+trap 'rm -rf "$work"' EXIT
+
+rsvg-convert -w 824 -h 824 "$SRC" -o "$work/field.png"
+magick -size 824x824 xc:none -fill white -draw "roundrectangle 0,0,823,823,185,185" "$work/mask.png"
+magick "$work/field.png" "$work/mask.png" -alpha off -compose CopyOpacity -composite "$work/body.png"
+magick "$work/body.png" \( +clone -background black -shadow 28x12+0+10 \) +swap \
+  -background none -layers merge +repage "$work/shadowed.png"
+magick -size 1024x1024 xc:none "$work/shadowed.png" -gravity center -composite "$work/icon-1024.png"
+
+set_dir="$work/AppIcon.iconset"
+mkdir "$set_dir"
+for size in 16 32 128 256 512; do
+  sips -z "$size" "$size" "$work/icon-1024.png" --out "$set_dir/icon_${size}x${size}.png" >/dev/null
+  double=$((size * 2))
+  sips -z "$double" "$double" "$work/icon-1024.png" --out "$set_dir/icon_${size}x${size}@2x.png" >/dev/null
+done
+iconutil -c icns "$set_dir" -o "$HERE/AppIcon.icns"
+echo "Resources/make-icon: wrote $HERE/AppIcon.icns"

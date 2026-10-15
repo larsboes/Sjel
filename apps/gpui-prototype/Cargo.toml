@@ -10,10 +10,24 @@ description = "Evaluation prototype for a native GPUI desktop surface"
 [workspace]
 
 [dependencies]
-gpui = { git = "https://github.com/zed-industries/zed", rev = "5f8a7413a31769e0882357f90dc424b3962ac72d" }
-gpui_platform = { git = "https://github.com/zed-industries/zed", rev = "5f8a7413a31769e0882357f90dc424b3962ac72d", features = ["font-kit"] }
+gpui-kit = { version = "=0.6.0", default-features = false, features = ["component", "assets"] }
+chrono = { version = "0.4", default-features = false, features = ["clock"] }
 futures = "0.3"
 reqwest = { version = "0.13", default-features = false, features = ["json"] }
 serde = { version = "1", features = ["derive"] }
+serde_json = "1"
 tokio = { version = "1", features = ["rt", "time", "net"] }
+
+[target.'cfg(target_os = "macos")'.dependencies]
+objc2 = "=0.6.5"
+objc2-app-kit = { version = "=0.3.2", default-features = false, features = ["NSControl", "NSGlassEffectView", "NSResponder", "NSText", "NSTextField", "NSView"] }
+objc2-foundation = { version = "=0.3.2", default-features = false, features = ["NSGeometry", "NSString"] }
+raw-window-handle = "=0.6.2"
+
+[dev-dependencies]
+# Same crate gpui-kit resolves; the name `gpui` is what the #[gpui::test] macro expands to.
+gpui = { package = "gpui-pre", version = "=0.3.6", features = ["test-support"] }
+
+[lints.rust]
+unsafe_code = "deny"
 

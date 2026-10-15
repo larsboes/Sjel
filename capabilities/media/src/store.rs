@@ -10,6 +10,23 @@ pub struct Ledger {
     pool: sjel_store::Pool,
 }
 
+fn ingest_row(row: &rusqlite::Row<'_>) -> rusqlite::Result<IngestRow> {
+    Ok(IngestRow {
+        id: row.get(0)?,
+        source: row.get(1)?,
+        staging: row.get(2)?,
+        started: row.get(3)?,
+        finished: row.get(4)?,
+        considered: row.get(5)?,
+        imported: row.get(6)?,
+        duplicates: row.get(7)?,
+        refused: row.get(8)?,
+        failed: row.get(9)?,
+        resumed: row.get(10)?,
+        verified: row.get(11)?,
+    })
+}
+
 pub struct Outcome<'a> {
     pub kind: &'static str,
     pub reason: &'a str,
@@ -40,6 +57,47 @@ pub struct Location {
     pub digest: String,
     pub size: i64,
     pub mtime_ns: i64,
+}
+
+/// One mounted volume as the ledger knows it: what it is called, how many of its paths are
+/// indexed, how many bytes those are, and when a verb last saw it.
+#[derive(Debug, Serialize)]
+pub struct VolumeRow {
+    pub uuid: String,
+    pub label: String,
+    pub locations: i64,
+    pub bytes: i64,
+    pub last_seen: String,
+}
+
+/// One ingest run's counts. `finished` is null while a run is still going.
+#[derive(Debug, Serialize)]
+pub struct IngestRow {
+    pub id: i64,
+    pub source: String,
+    pub staging: String,
+    pub started: String,
+    pub finished: Option<String>,
+    pub considered: i64,
+    pub imported: i64,
+    pub duplicates: i64,
+    pub refused: i64,
+    pub failed: i64,
+    pub resumed: i64,
+    pub verified: i64,
+}
+
+/// One path's disposition inside a run. These are the rows the counts above are made of; a
+/// refusal names the path and the reason, which the counts alone cannot.
+#[derive(Debug, Serialize)]
+pub struct ItemRow {
+    pub relpath: String,
+    pub digest: Option<String>,
+    pub size: Option<i64>,
+    pub disposition: String,
+    pub reason: String,
+    pub imported_relpath: Option<String>,
+    pub verified: bool,
 }
 
 impl Ledger {
@@ -166,6 +224,70 @@ impl Ledger {
             [],
             |row| Ok((row.get(0)?, row.get(1)?)),
         )?)
+    }
+
+    pub fn volumes(&self) -> Result<Vec<VolumeRow>> {
+        let conn = self.pool.get()?;
+        let mut stmt = conn.prepare(
+            "SELECT v.uuid, v.label, v.last_seen,
+                    (SELECT count(*) FROM media_locations l WHERE l.uuid = v.uuid),
+                    (SELECT coalesce(sum(size),0) FROM media_locations l WHERE l.uuid = v.uuid)
+             FROM media_volumes v ORDER BY v.label, v.uuid",
+        )?;
+        let rows = stmt.query_map([], |row| {
+            Ok(VolumeRow {
+                uuid: row.get(0)?,
+                label: row.get(1)?,
+                last_seen: row.get(2)?,
+                locations: row.get(3)?,
+                bytes: row.get(4)?,
+            })
+        })?;
+        Ok(rows.collect::<rusqlite::Result<Vec<_>>>()?)
+    }
+
+    pub fn recent_ingests(&self, limit: i64) -> Result<Vec<IngestRow>> {
+        let conn = self.pool.get()?;
+        let mut stmt = conn.prepare(
+            "SELECT id, source, staging, started, finished, considered, imported, duplicates,
+                    refused, failed, resumed, verified
+             FROM media_ingests ORDER BY id DESC LIMIT ?1",
+        )?;
+        let rows = stmt.query_map([limit], ingest_row)?;
+        Ok(rows.collect::<rusqlite::Result<Vec<_>>>()?)
+    }
+
+    pub fn ingest(&self, id: i64) -> Result<Option<IngestRow>> {
+        let conn = self.pool.get()?;
+        Ok(conn
+            .query_row(
+                "SELECT id, source, staging, started, finished, considered, imported, duplicates,
+                        refused, failed, resumed, verified
+                 FROM media_ingests WHERE id = ?1",
+                [id],
+                ingest_row,
+            )
+            .optional()?)
+    }
+
+    pub fn ingest_items(&self, id: i64) -> Result<Vec<ItemRow>> {
+        let conn = self.pool.get()?;
+        let mut stmt = conn.prepare(
+            "SELECT relpath, digest, size, disposition, reason, imported_relpath, verified
+             FROM media_ingest_items WHERE ingest_id = ?1 ORDER BY disposition, relpath",
+        )?;
+        let rows = stmt.query_map([id], |row| {
+            Ok(ItemRow {
+                relpath: row.get(0)?,
+                digest: row.get(1)?,
+                size: row.get(2)?,
+                disposition: row.get(3)?,
+                reason: row.get(4)?,
+                imported_relpath: row.get(5)?,
+                verified: row.get::<_, i64>(6)? != 0,
+            })
+        })?;
+        Ok(rows.collect::<rusqlite::Result<Vec<_>>>()?)
     }
 
     // A file and its location commit together; a crashed indexer cannot leave an orphaned digest.

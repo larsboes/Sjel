@@ -291,10 +291,8 @@ below are still real, the rest are recorded as superseded at the end.
 unnumbered §13 question about `fn erklaert` and the `.base` folder references are vault-side and
 stay in the PRD's history.
 
-### media · F3–F4 and three ingest gaps
+### media · F4 and three open items
 
-- **F3 — HTTP surface and dashboard panel.** `media` declares no `service.toml`; its README
-  says it offers no HTTP/UI surface. Falsifier: the panel exists and reads the index over HTTP.
 - **F4 — perceptual layer, advisory.** No `media_phashes` or `media_reviews` table exists.
   Falsifier: a near-duplicate is proposed from a phash and reviewed.
 - **Interrupted multi-file ingest and orphans.** A crash between path reservation and link, or
@@ -723,6 +721,15 @@ claim yet, and the watch rows they name are in `upstreams.toml` with the questio
 ## Log
 
 Entries before 2026-10-08 are in [`ISA-archive.md`](ISA-archive.md#log).
+
+- 2026-10-15 · Media F3 closed: the ledger has a read-only HTTP surface and a page that reads it.
+  `media serve` answers `GET /api/status`, `/api/ingests` and `/api/ingests/{id}` on port 8102
+  behind the shared inbound credential; `capabilities/media/service.toml` declares `proxy_api_only`,
+  and `dashboard/src/routes/media/` reads it over the shell proxy. Verified through a fresh
+  dev-server proxy (`/media/api/status` → 200 against a seeded ledger, a refusal returned named with
+  its reason) and at the router (`every_read_route_answers_with_the_ledger_shape`). Contract:
+  `docs/capabilities/media.md`. `media` is enabled on this machine; the manifest's arrival also
+  retires the README's "a server manifest may come later" note.
 
 - 2026-10-15 · Media's per-file pre-classification claim closed. A symlink, non-regular file,
   non-UTF-8 path or unreadable file is refused and recorded as a `refused` item instead of

@@ -14,6 +14,7 @@ entities         0
 finance         19
 interior        11
 inventory        6
+media            0
 operator-profile 0
 places           5
 punctuality      1

@@ -4,9 +4,11 @@ use media::ingest::{self, IngestOptions};
 use media::store::{Ledger, Result};
 use media::{audit, index, verify_mirror, volume_uuid};
 
+mod server;
+
 fn usage() {
     eprintln!("media — exact-byte index, ingest gate and mirror verification\n\
-        usage:\n  media volume-id --root PATH\n  media index --root PATH --uuid UUID [--db PATH]\n  media audit --root PATH --uuid UUID --sample N [--db PATH]\n  media ingest --staging PATH --library PATH --uuid UUID [--apply] [--prune] [--db PATH]\n  media classify (--digest SHA256 | --digests-file PATH) [--db PATH]\n  media verify-mirror --left-root PATH --left-uuid UUID --right-root PATH --right-uuid UUID [--paths] [--db PATH]\n  media status [--db PATH]\n  media duplicates --uuid UUID [--legacy PREFIX] [--resolve-inside PREFIX --root PATH --metadata] [--list PATH] [--db PATH]\n  media supersede --root PATH --uuid UUID --list PATH --quarantine PATH --journal PATH [--apply]\n  media reconcile --root PATH --uuid UUID [--apply] [--db PATH]\n  media relabel --from DIR --to DIR --uuid UUID --journal PATH [--library PATH] [--apply] [--settled-for SECONDS] [--plan FILE]\n  media preview --structure FILE [--metadata]\n  media organize --structure FILE [--apply --journal PATH] [--settled-for SECONDS] [--only COLLECTION]\n  media mirror --from PATH --from-uuid UUID --to PATH --to-uuid UUID [--path REL] [--exclude REL] [--consume PREFIX] [--journal PATH] [--settled-for SECONDS] [--apply | --check]
+        usage:\n  media volume-id --root PATH\n  media index --root PATH --uuid UUID [--db PATH]\n  media audit --root PATH --uuid UUID --sample N [--db PATH]\n  media ingest --staging PATH --library PATH --uuid UUID [--apply] [--prune] [--db PATH]\n  media classify (--digest SHA256 | --digests-file PATH) [--db PATH]\n  media verify-mirror --left-root PATH --left-uuid UUID --right-root PATH --right-uuid UUID [--paths] [--db PATH]\n  media status [--db PATH]\n  media serve\n  media duplicates --uuid UUID [--legacy PREFIX] [--resolve-inside PREFIX --root PATH --metadata] [--list PATH] [--db PATH]\n  media supersede --root PATH --uuid UUID --list PATH --quarantine PATH --journal PATH [--apply]\n  media reconcile --root PATH --uuid UUID [--apply] [--db PATH]\n  media relabel --from DIR --to DIR --uuid UUID --journal PATH [--library PATH] [--apply] [--settled-for SECONDS] [--plan FILE]\n  media preview --structure FILE [--metadata]\n  media organize --structure FILE [--apply --journal PATH] [--settled-for SECONDS] [--only COLLECTION]\n  media mirror --from PATH --from-uuid UUID --to PATH --to-uuid UUID [--path REL] [--exclude REL] [--consume PREFIX] [--journal PATH] [--settled-for SECONDS] [--apply | --check]
   media sync --from PATH --from-uuid UUID --to PATH --to-uuid UUID [--path REL] [--exclude REL] [--consume PREFIX] [--journal PATH] [--settled-for SECONDS]\n  media reclaim --from PATH --from-uuid UUID --to PATH --to-uuid UUID [--path REL] [--exclude REL] [--list PATH] [--quarantine PATH] [--journal PATH] [--apply]\n\n\
         ingest is a dry run unless --apply is set. --prune additionally removes staging/originals\n\
         only after every new import verifies; neither verb deletes library content.");
@@ -122,6 +124,11 @@ fn run(args: &[String]) -> Result<i32> {
         };
     }
     let (keys, flags): (&[&str], &[&str]) = match verb.as_str() {
+        "serve" => {
+            allowed(opts, &[], &[])?;
+            server::serve();
+            return Ok(0);
+        }
         "volume-id" => (&["--root"], &[]),
         "index" => (&["--root", "--uuid", "--db"], &[]),
         "audit" => (&["--root", "--uuid", "--sample", "--db"], &[]),

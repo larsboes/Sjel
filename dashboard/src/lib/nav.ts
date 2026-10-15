@@ -93,6 +93,7 @@ export const PRIMARY_NAV: NavItem[] = [
 export const UTILITY_NAV: NavItem[] = [
   // Ein Ziel in der Shell und nicht nur ein Panel (PRD Q59) — jetzt eine Ansicht des Inventars.
   { href: "/interior", label: "Interior", icon: "layout", capability: "interior" },
+  { href: "/media", label: "Media", icon: "hard-drive", capability: "media" },
   { href: "/projects", label: "Projects", icon: "graduation" },
   { href: "/research", label: "Research", icon: "sparkles" },
   { href: "/systems", label: "Systems", icon: "server", capability: "sjel-status" },

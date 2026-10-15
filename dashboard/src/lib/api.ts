@@ -10,6 +10,7 @@ export * from './api/vault';
 export * from './api/entities';
 export * from './api/finance';
 export * from './api/places';
+export * from './api/media';
 import { jsonInit, request } from './api/core';
 
 export interface AxonStatusHealth {

@@ -32,4 +32,5 @@ Capabilities declare their execution type in `service.toml`:
 - **[Feed & Communications](feed-and-comms.md)**: Intake pipeline, `content-item-v2`, and privacy redaction ladder.
 - **[Calendar Architecture](calendar.md)**: Materialized forward-only rhythms and two-way Google Calendar synchronization.
 - **[CV](cv.md)**: Typed master file, priority auto-fit to one page, form editor, LinkedIn snapshot diff.
+- **[Media Ledger](media.md)**: Exact-byte ingest gate, volume integrity ledger, per-path ingest disposition, and the read-only HTTP surface the `/media` page reads.
 - **[Travel & Routing](travel.md)**: Multi-modal journey planning, intent drafting, and reservation parsing.

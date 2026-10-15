@@ -1,0 +1,23 @@
+# media — the exact-byte ingest gate and volume integrity ledger, plus a read-only HTTP surface
+# over it. Shape: schemas/service.toml.example.
+#
+# `serve` is a verb of the one media binary rather than a second server binary: this capability
+# already builds exactly one artifact on first use (capabilities/media/media), and the HTTP surface
+# reads the same `Ledger` the verbs write. Two binaries would be two things to build and one more
+# place for the port to live.
+#
+# The surface is read-only by construction: every route calls a `Ledger` reader, so nothing behind
+# the port can move a file, drop a row or change a library byte. The verbs that act on the library
+# — organize, supersede, relabel, reclaim, mirror — stay operator-invoked commands with their own
+# approval lists, and this manifest does not expose them.
+#
+# `proxy_api_only`: the dashboard owns /media as a page (dashboard/src/routes/media/), so mounting
+# the capability under /media would shadow the page with its own API. Only /media/api is proxied,
+# and the prefix is stripped, so the routes below are what a caller writes.
+kind         = "process"
+name         = "media"
+command      = ["target/release/media", "serve"]
+build        = ["cargo", "build", "--locked", "--release", "--bin", "media"]
+port         = "8102"
+health_path  = "/health"
+proxy_api_only = "true"

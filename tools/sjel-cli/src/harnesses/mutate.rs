@@ -1332,7 +1332,6 @@ mod tests {
     /// while a sibling unit in the same Pack still deploys. sync honours the same hold and
     /// leaves an already-recorded held unit alone, so doctor can report an override rather than
     /// sync silently undoing one.
-    #[test]
     /// One hold line, two unit shapes. claude carries a Pack's `agents/` tree as a single unit;
     /// pi materializes the same tree as `agents/<file>.md` per file. Both are named by one
     /// `writing/agents/` entry. The bug this closes: with that entry in place, claude dropped the
@@ -1366,6 +1365,7 @@ mod tests {
         ));
     }
 
+    #[test]
     fn a_held_unit_is_never_deployed_and_never_enters_the_ledger() {
         let root = std::env::temp_dir().join(format!("sjel-harnesses-hold-{}", std::process::id()));
         let _ = fs::remove_dir_all(&root);

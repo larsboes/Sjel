@@ -237,12 +237,12 @@ fn render(
 /// StartInterval and its caveat. The minute comes from the name, so jobs do not all start at :00.
 fn launchd_trigger(secs: u64, cap: &str) -> String {
     let minute = cap.bytes().map(u64::from).sum::<u64>() % 60;
-    let slots: Vec<String> = if secs % 3600 == 0 && 86_400 % secs == 0 {
+    let slots: Vec<String> = if secs.is_multiple_of(3600) && 86_400u64.is_multiple_of(secs) {
         (0..24)
             .step_by((secs / 3600) as usize)
             .map(|h| format!("    <dict><key>Hour</key><integer>{h}</integer><key>Minute</key><integer>{minute}</integer></dict>"))
             .collect()
-    } else if secs % 60 == 0 && 3600 % secs == 0 {
+    } else if secs.is_multiple_of(60) && 3600u64.is_multiple_of(secs) {
         (0..60)
             .step_by((secs / 60) as usize)
             .map(|m| format!("    <dict><key>Minute</key><integer>{m}</integer></dict>"))

@@ -60,6 +60,21 @@ diff_out="$("$cv" linkedin diff)"
 echo "$diff_out" | grep -q "linkedin: Old headline" || fail "diff headline"
 echo "$diff_out" | sed -n '/only on LinkedIn/,/only in master/p' | grep -q "only on linkedin" || fail "diff skills"
 
+# import: a CSV export fills the same snapshot without a token.
+mkdir -p "$tmp/export"
+printf 'Name\nPython\n' > "$tmp/export/Skills.csv"
+cat > "$tmp/export/Positions.csv" <<'CSV'
+Company Name,Title,Location,Started On,Finished On,Description
+Acme,Dev,Bonn,Jan 2024,,"Line one, with a comma
+line two"
+CSV
+"$cv" linkedin import "$tmp/export" | grep -q "POSITIONS: 1 record(s)" || fail "import positions"
+[ "$(jq -r '.[0].Description' "$tmp/data/cv/linkedin/POSITIONS.json")" = "Line one, with a comma
+line two" ] || fail "import lost a quoted description"
+[ "$(cat "$tmp/data/cv/linkedin/SOURCE")" = export ] || fail "import did not record its source"
+[ "$(jq -r '.[0].Name' "$tmp/data/cv/linkedin/SKILLS.json")" = Python ] || fail "import skills"
+if "$cv" linkedin import "$tmp" >/dev/null 2>&1; then fail "import accepted a directory with no export"; fi
+
 # edit: a broken put leaves the file unchanged, a good put replaces it.
 before="$(cat "$tmp/data/cv/master_cv.yaml")"
 if printf 'name: [unclosed\n' | "$cv" edit put >/dev/null 2>&1; then fail "invalid YAML accepted"; fi

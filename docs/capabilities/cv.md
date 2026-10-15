@@ -20,6 +20,7 @@ flowchart LR
   A --> T
   T --> P[dist/*.pdf]
   LI[LinkedIn Member Snapshot API] -->|cv linkedin pull| L
+  X[LinkedIn CSV export] -->|cv linkedin import| L
   L --> D[cv linkedin diff]
   M --> D
 ```
@@ -30,7 +31,7 @@ flowchart LR
 |---|---|
 | `capabilities/cv/src/model.rs` | Typed master and application. Unknown keys are parse errors. |
 | `capabilities/cv/src/lib.rs` | Auto-fit build, applications, checked writes, status. |
-| `capabilities/cv/src/linkedin.rs` | Snapshot pull, diff, paste sheet. Read-only. |
+| `capabilities/cv/src/linkedin.rs` | Snapshot pull, CSV-export import, diff, paste sheet. Read-only. |
 | `capabilities/cv/templates/cv.typ` | Filtering by profile, priority, pin and hide; the layout. |
 | `capabilities/cv/cv` | Launcher on PATH. Rebuilds `cv-cli` when a source is newer, then execs it. |
 | `capabilities/cv/check` | Every verb against a throwaway overlay built from the schema. |
@@ -79,6 +80,20 @@ comments do not survive it. Provenance lives in each item's `source` field.
 
 ## LinkedIn
 
-The Member Data Portability API is read-only and EU/EEA/CH only. `cv linkedin pull` reads the
-token from keychain item `sjel-linkedin-dma` per call and passes it to curl on stdin. Open
-work: `capabilities/cv/ISA.md`.
+The Member Data Portability API is read-only and EU/EEA/CH only. Two sources fill the same
+snapshot at `data/cv/linkedin/`, in the same row shape:
+
+| Verb | Source | Needs |
+|---|---|---|
+| `cv linkedin pull [DOMAIN...]` | Member Snapshot API | a keychain token |
+| `cv linkedin import <dir>` | an extracted "Get a copy of your data" CSV export | nothing |
+
+`pull` reads the token from keychain item `sjel-linkedin-dma` per call and passes it to curl on
+stdin. `import` reads `Profile.csv`, `Positions.csv`, `Education.csv`, `Skills.csv`,
+`Languages.csv` and `Organizations.csv`, and takes About from `Profile Summary.csv`, which the
+export keeps separate and often leaves empty. Both write `PULLED_ON` and `SOURCE`, so `diff`
+names the date and origin it compared. Neither commits to the overlay's git.
+
+A CSV export is a snapshot from a manual download, not a live read, and its domains do not all
+match [`DOMAINS`]: it carries no certifications, projects or honors. `import` is the fallback
+while `pull`'s token is unset up; open work: `ISA.md` (cv, ISC-67).

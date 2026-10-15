@@ -59,14 +59,20 @@ reference for LinkedIn.
 
 ## LinkedIn
 
-LinkedIn has no write API. The user changes the profile by hand.
+LinkedIn has no write API. The user changes the profile by hand. Two sources fill the same
+snapshot: the Member Snapshot API (live, needs a token) and a "Get a copy of your data" CSV
+export (a manual download from LinkedIn, no token).
 
-1. Run `$CV linkedin pull`. It reads the token from the keychain item `sjel-linkedin-dma`.
-   If the token is missing or expired (HTTP 401), tell the user to create one: LinkedIn
-   developer portal, OAuth token generator, scope `r_dma_portability_self_serve`. Then the
-   user stores it with `security add-generic-password -U -s sjel-linkedin-dma -a "$USER" -w`.
-   Do not ask for the token in the chat.
-2. Run `$CV linkedin diff`. Report the differences in headline, positions and skills.
+1. Prefer `$CV linkedin import <dir>`, where `<dir>` is the extracted export. It needs no token
+   and no developer app. Otherwise run `$CV linkedin pull`, which reads the token from the
+   keychain item `sjel-linkedin-dma`. If the token is missing or expired (HTTP 401), tell the
+   user to create one: LinkedIn developer portal, OAuth token generator, scope
+   `r_dma_portability_self_serve`. Then the user stores it with
+   `security add-generic-password -U -s sjel-linkedin-dma -a "$USER" -w`.
+   Do not ask for the token in the chat. A CSV export carries no About text, so `diff` reports
+   About as absent rather than as different.
+2. Run `$CV linkedin diff`. Report the differences in headline, positions and skills. Its second
+   line names the snapshot's date and whether it came from the API or an export.
 3. Run `$CV linkedin sheet --lang en`. Give the user the text to paste.
 
 ## Career guidance

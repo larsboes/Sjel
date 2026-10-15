@@ -3,7 +3,7 @@
 use cv::model::{Application, Lang, Master, Status};
 use cv::{linkedin, Built, NewApp, Paths, Res, Saved, Target};
 use std::io::Read as _;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::process::ExitCode;
 
 const USAGE: &str = "Usage:
@@ -24,6 +24,7 @@ const USAGE: &str = "Usage:
   cv model put [slug] < file.json     # replace it from typed JSON; same checks
 
   cv linkedin pull [DOMAIN...]        # Member Snapshot API -> data/cv/linkedin/<DOMAIN>.json
+  cv linkedin import <dir>            # a LinkedIn data export (CSV) -> the same
   cv linkedin diff
   cv linkedin sheet [--lang <en|de>]";
 
@@ -47,7 +48,11 @@ struct Flags {
 
 impl Flags {
     fn parse(args: &[String], with_value: &[&str], switches: &[&str]) -> Res<Flags> {
-        let mut flags = Flags { values: Vec::new(), switches: Vec::new(), rest: Vec::new() };
+        let mut flags = Flags {
+            values: Vec::new(),
+            switches: Vec::new(),
+            rest: Vec::new(),
+        };
         let mut it = args.iter();
         while let Some(a) = it.next() {
             if with_value.contains(&a.as_str()) {
@@ -64,7 +69,11 @@ impl Flags {
         Ok(flags)
     }
     fn get(&self, name: &str) -> Option<&str> {
-        self.values.iter().rev().find(|(k, _)| k == name).map(|(_, v)| v.as_str())
+        self.values
+            .iter()
+            .rev()
+            .find(|(k, _)| k == name)
+            .map(|(_, v)| v.as_str())
     }
     fn on(&self, name: &str) -> bool {
         self.switches.iter().any(|s| s == name)
@@ -76,13 +85,19 @@ fn lang_flag(flags: &Flags) -> Res<Lang> {
 }
 
 fn report(built: &Built) -> String {
-    let fit = if built.keep < 3 { format!(", kept priority <= {}", built.keep) } else { String::new() };
+    let fit = if built.keep < 3 {
+        format!(", kept priority <= {}", built.keep)
+    } else {
+        String::new()
+    };
     format!("{} ({} page(s){fit})", built.path.display(), built.pages)
 }
 
 fn stdin() -> Res<String> {
     let mut text = String::new();
-    std::io::stdin().read_to_string(&mut text).map_err(|e| e.to_string())?;
+    std::io::stdin()
+        .read_to_string(&mut text)
+        .map_err(|e| e.to_string())?;
     Ok(text)
 }
 
@@ -99,7 +114,9 @@ fn target(slug: Option<&String>) -> Target<'_> {
 }
 
 fn run(args: &[String]) -> Res<()> {
-    let Some(verb) = args.first() else { return Err(USAGE.into()) };
+    let Some(verb) = args.first() else {
+        return Err(USAGE.into());
+    };
     let paths = Paths::from_env()?;
     let tail = &args[1..];
     match verb.as_str() {
@@ -117,10 +134,21 @@ fn run(args: &[String]) -> Res<()> {
                         }
                     }
                 }
-                return if failed { Err("some builds failed".into()) } else { Ok(()) };
+                return if failed {
+                    Err("some builds failed".into())
+                } else {
+                    Ok(())
+                };
             }
-            let profile = f.get("--profile").ok_or(format!("--profile is required (or use --all)\n{USAGE}"))?;
-            let built = cv::build_profile(&paths, profile, lang_flag(&f)?, f.get("--out").map(PathBuf::from))?;
+            let profile = f
+                .get("--profile")
+                .ok_or(format!("--profile is required (or use --all)\n{USAGE}"))?;
+            let built = cv::build_profile(
+                &paths,
+                profile,
+                lang_flag(&f)?,
+                f.get("--out").map(PathBuf::from),
+            )?;
             println!("cv: {}", report(&built));
         }
         "watch" => {
@@ -132,13 +160,24 @@ fn run(args: &[String]) -> Res<()> {
                 return Err(format!("unknown profile '{profile}'"));
             }
             let out = f.get("--out").map(PathBuf::from).unwrap_or_else(|| {
-                paths.dist().join(format!("CV_{profile}_{}.pdf", lang.code()))
+                paths
+                    .dist()
+                    .join(format!("CV_{profile}_{}.pdf", lang.code()))
             });
-            println!("cv: watching {} -> {} (ctrl-c to stop)", paths.master().display(), out.display());
+            println!(
+                "cv: watching {} -> {} (ctrl-c to stop)",
+                paths.master().display(),
+                out.display()
+            );
             let status = std::process::Command::new("typst")
                 .args(["watch", "--root", "/"])
                 .args(["--input", &format!("master={}", paths.master().display())])
-                .args(["--input", &format!("profile={profile}"), "--input", &format!("lang={}", lang.code())])
+                .args([
+                    "--input",
+                    &format!("profile={profile}"),
+                    "--input",
+                    &format!("lang={}", lang.code()),
+                ])
                 .arg(&paths.template)
                 .arg(&out)
                 .status()
@@ -165,7 +204,10 @@ fn run(args: &[String]) -> Res<()> {
             let target = target(slug);
             let path = target.path(&paths)?;
             match (sub, json) {
-                (Some("get"), false) => print!("{}", std::fs::read_to_string(&path).map_err(|e| e.to_string())?),
+                (Some("get"), false) => print!(
+                    "{}",
+                    std::fs::read_to_string(&path).map_err(|e| e.to_string())?
+                ),
                 (Some("get"), true) => {
                     let value = match target {
                         Target::Master => serde_json::to_value(cv::load_master(&paths)?),
@@ -174,22 +216,29 @@ fn run(args: &[String]) -> Res<()> {
                     println!("{}", value.map_err(|e| e.to_string())?);
                 }
                 (Some("put"), false) => {
-                    println!("cv: {}", saved(&path, cv::write_checked(&paths, &path, &stdin()?, target)?));
+                    println!(
+                        "cv: {}",
+                        saved(&path, cv::write_checked(&paths, &path, &stdin()?, target)?)
+                    );
                 }
                 (Some("put"), true) => {
                     let input = stdin()?;
                     let yaml = match target {
                         Target::Master => {
-                            let m: Master = serde_json::from_str(&input).map_err(|e| format!("master: {e}"))?;
+                            let m: Master =
+                                serde_json::from_str(&input).map_err(|e| format!("master: {e}"))?;
                             m.to_yaml()?
                         }
                         Target::App(_) => {
-                            let a: Application =
-                                serde_json::from_str(&input).map_err(|e| format!("application: {e}"))?;
+                            let a: Application = serde_json::from_str(&input)
+                                .map_err(|e| format!("application: {e}"))?;
                             a.to_yaml()?
                         }
                     };
-                    println!("cv: {}", saved(&path, cv::write_checked(&paths, &path, &yaml, target)?));
+                    println!(
+                        "cv: {}",
+                        saved(&path, cv::write_checked(&paths, &path, &yaml, target)?)
+                    );
                 }
                 _ => return Err(USAGE.into()),
             }
@@ -202,10 +251,19 @@ fn run(args: &[String]) -> Res<()> {
                         println!("cv: {line}");
                     }
                 }
+                Some("import") => {
+                    let dir = tail.get(1).ok_or("cv linkedin import <dir>")?;
+                    for line in linkedin::import(&paths, Path::new(dir))? {
+                        println!("cv: {line}");
+                    }
+                }
                 Some("diff") => print!("{}", linkedin::diff(&paths, &cv::load_master(&paths)?)?),
                 Some("sheet") => {
                     let f = Flags::parse(&tail[1..], &["--lang"], &[])?;
-                    println!("{}", linkedin::sheet(&cv::load_master(&paths)?, lang_flag(&f)?));
+                    println!(
+                        "{}",
+                        linkedin::sheet(&cv::load_master(&paths)?, lang_flag(&f)?)
+                    );
                 }
                 _ => return Err(USAGE.into()),
             }
@@ -218,7 +276,11 @@ fn run(args: &[String]) -> Res<()> {
 fn app(paths: &Paths, tail: &[String]) -> Res<()> {
     match tail.first().map(String::as_str) {
         Some("new") => {
-            let f = Flags::parse(&tail[1..], &["--company", "--role", "--profile", "--lang", "--url"], &[])?;
+            let f = Flags::parse(
+                &tail[1..],
+                &["--company", "--role", "--profile", "--lang", "--url"],
+                &[],
+            )?;
             let slug = f.rest.first().cloned().unwrap_or_default();
             let path = cv::new_app(
                 paths,
@@ -251,10 +313,18 @@ fn app(paths: &Paths, tail: &[String]) -> Res<()> {
                 println!("{}", serde_json::Value::Array(all));
                 return Ok(());
             }
-            println!("{:<24} {:<10} {:<11} COMPANY / ROLE", "SLUG", "STATUS", "UPDATED");
+            println!(
+                "{:<24} {:<10} {:<11} COMPANY / ROLE",
+                "SLUG", "STATUS", "UPDATED"
+            );
             for (slug, a) in apps {
                 let updated = a.log.last().map_or("", |l| l.date.as_str()).to_string();
-                println!("{slug:<24} {:<10} {updated:<11} {} / {}", a.status.name(), a.company, a.role);
+                println!(
+                    "{slug:<24} {:<10} {updated:<11} {} / {}",
+                    a.status.name(),
+                    a.company,
+                    a.role
+                );
             }
         }
         Some("status") => {

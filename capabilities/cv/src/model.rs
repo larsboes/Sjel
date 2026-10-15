@@ -757,7 +757,10 @@ mod tests {
 
     #[test]
     fn missing_german_falls_back_to_english() {
-        let l = Localized { en: "Hi".into(), de: None };
+        let l = Localized {
+            en: "Hi".into(),
+            de: None,
+        };
         assert_eq!(l.get(Lang::De), "Hi");
     }
 }

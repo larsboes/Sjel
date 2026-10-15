@@ -75,11 +75,15 @@ impl Paths {
 pub fn valid_slug(slug: &str) -> Res<()> {
     let ok = !slug.is_empty()
         && !slug.starts_with('-')
-        && slug.chars().all(|c| c.is_ascii_lowercase() || c.is_ascii_digit() || c == '-');
+        && slug
+            .chars()
+            .all(|c| c.is_ascii_lowercase() || c.is_ascii_digit() || c == '-');
     if ok {
         Ok(())
     } else {
-        Err(format!("slug must be lowercase letters, digits and dashes: '{slug}'"))
+        Err(format!(
+            "slug must be lowercase letters, digits and dashes: '{slug}'"
+        ))
     }
 }
 
@@ -119,13 +123,18 @@ pub fn load_app(paths: &Paths, slug: &str) -> Res<Application> {
 /// # Errors
 /// The directory cannot be read, or one file does not parse.
 pub fn list_apps(paths: &Paths) -> Res<Vec<(String, Application)>> {
-    let Ok(dir) = fs::read_dir(paths.apps()) else { return Ok(Vec::new()) };
+    let Ok(dir) = fs::read_dir(paths.apps()) else {
+        return Ok(Vec::new());
+    };
     let mut slugs: Vec<String> = dir
         .filter_map(|e| e.ok()?.file_name().into_string().ok())
         .filter_map(|n| n.strip_suffix(".yaml").map(str::to_string))
         .collect();
     slugs.sort();
-    slugs.into_iter().map(|s| Ok((s.clone(), load_app(paths, &s)?))).collect()
+    slugs
+        .into_iter()
+        .map(|s| Ok((s.clone(), load_app(paths, &s)?)))
+        .collect()
 }
 
 fn known_profile(master: &Master, profile: &str) -> Res<()> {
@@ -133,7 +142,10 @@ fn known_profile(master: &Master, profile: &str) -> Res<()> {
     if known.iter().any(|p| p == profile) {
         Ok(())
     } else {
-        Err(format!("unknown profile '{profile}'; known profiles: {}", known.join(" ")))
+        Err(format!(
+            "unknown profile '{profile}'; known profiles: {}",
+            known.join(" ")
+        ))
     }
 }
 
@@ -195,7 +207,8 @@ pub fn pages(paths: &Paths, render: &Render, keep: u8) -> Res<u32> {
     ];
     args.extend(render.inputs(keep));
     let out = typst(&args)?;
-    out.parse().map_err(|_| format!("typst reported '{out}' as the page count"))
+    out.parse()
+        .map_err(|_| format!("typst reported '{out}' as the page count"))
 }
 
 /// What a build produced.
@@ -235,9 +248,16 @@ pub fn build(paths: &Paths, render: &Render, limit: u32, out: &Path) -> Res<Buil
     }
     let mut args = vec!["compile".to_string()];
     args.extend(render.inputs(keep));
-    args.extend([paths.template.display().to_string(), out.display().to_string()]);
+    args.extend([
+        paths.template.display().to_string(),
+        out.display().to_string(),
+    ]);
     typst(&args)?;
-    Ok(Built { path: out.to_path_buf(), pages, keep })
+    Ok(Built {
+        path: out.to_path_buf(),
+        pages,
+        keep,
+    })
 }
 
 /// Build one profile in one language into `dist/`, or into `out`.
@@ -247,8 +267,17 @@ pub fn build(paths: &Paths, render: &Render, limit: u32, out: &Path) -> Res<Buil
 pub fn build_profile(paths: &Paths, profile: &str, lang: Lang, out: Option<PathBuf>) -> Res<Built> {
     let master = load_master(paths)?;
     known_profile(&master, profile)?;
-    let out = out.unwrap_or_else(|| paths.dist().join(format!("CV_{profile}_{}.pdf", lang.code())));
-    let render = Render { master: &paths.master(), profile, lang, app: None };
+    let out = out.unwrap_or_else(|| {
+        paths
+            .dist()
+            .join(format!("CV_{profile}_{}.pdf", lang.code()))
+    });
+    let render = Render {
+        master: &paths.master(),
+        profile,
+        lang,
+        app: None,
+    };
     build(paths, &render, master.page_limit(profile), &out)
 }
 
@@ -276,9 +305,16 @@ pub fn build_app(paths: &Paths, slug: &str) -> Res<Built> {
     let app = load_app(paths, slug)?;
     let master = load_master(paths)?;
     known_profile(&master, &app.profile)?;
-    let out = paths.dist().join(format!("apps/CV_{slug}_{}.pdf", app.lang.code()));
+    let out = paths
+        .dist()
+        .join(format!("apps/CV_{slug}_{}.pdf", app.lang.code()));
     let app_path = paths.app(slug)?;
-    let render = Render { master: &paths.master(), profile: &app.profile, lang: app.lang, app: Some(&app_path) };
+    let render = Render {
+        master: &paths.master(),
+        profile: &app.profile,
+        lang: app.lang,
+        app: Some(&app_path),
+    };
     build(paths, &render, master.page_limit(&app.profile), &out)
 }
 
@@ -314,7 +350,11 @@ pub fn new_app(paths: &Paths, new: NewApp) -> Res<PathBuf> {
     }
     known_profile(&load_master(paths)?, &new.profile)?;
     if path.exists() {
-        return Err(format!("application '{}' already exists at {}", new.slug, path.display()));
+        return Err(format!(
+            "application '{}' already exists at {}",
+            new.slug,
+            path.display()
+        ));
     }
     let app = Application {
         company: new.company,
@@ -323,7 +363,11 @@ pub fn new_app(paths: &Paths, new: NewApp) -> Res<PathBuf> {
         profile: new.profile,
         lang: new.lang,
         status: Status::Draft,
-        log: vec![LogEntry { date: today(), status: Status::Draft, note: None }],
+        log: vec![LogEntry {
+            date: today(),
+            status: Status::Draft,
+            note: None,
+        }],
         title: None,
         summary: None,
         pin: Vec::new(),
@@ -341,7 +385,11 @@ pub fn new_app(paths: &Paths, new: NewApp) -> Res<PathBuf> {
 pub fn set_status(paths: &Paths, slug: &str, status: Status, note: Option<String>) -> Res<()> {
     let mut app = load_app(paths, slug)?;
     app.status = status;
-    app.log.push(LogEntry { date: today(), status, note: note.filter(|n| !n.is_empty()) });
+    app.log.push(LogEntry {
+        date: today(),
+        status,
+        note: note.filter(|n| !n.is_empty()),
+    });
     write_checked(paths, &paths.app(slug)?, &app.to_yaml()?, Target::App(slug)).map(|_| ())
 }
 
@@ -409,7 +457,9 @@ pub fn write_checked(paths: &Paths, path: &Path, text: &str, target: Target) -> 
         fs::set_permissions(&tmp, meta.permissions()).map_err(|e| e.to_string())?;
     }
     fs::rename(&tmp, path).map_err(|e| e.to_string())?;
-    Ok(Saved::Written { commit: commit(paths, path)? })
+    Ok(Saved::Written {
+        commit: commit(paths, path)?,
+    })
 }
 
 fn render_check(paths: &Paths, candidate: &Path, target: Target) -> Res<()> {
@@ -417,38 +467,68 @@ fn render_check(paths: &Paths, candidate: &Path, target: Target) -> Res<()> {
     let master_path = paths.master();
     let profile;
     let render = match target {
-        Target::Master => Render { master: candidate, profile: "default", lang: Lang::En, app: None },
+        Target::Master => Render {
+            master: candidate,
+            profile: "default",
+            lang: Lang::En,
+            app: None,
+        },
         Target::App(_) => {
             profile = Application::from_yaml(&read(candidate)?)?.profile;
-            Render { master: &master_path, profile: &profile, lang: Lang::En, app: Some(candidate) }
+            Render {
+                master: &master_path,
+                profile: &profile,
+                lang: Lang::En,
+                app: Some(candidate),
+            }
         }
     };
     let mut args = vec!["compile".to_string()];
     args.extend(render.inputs(3));
-    args.extend([paths.template.display().to_string(), out.display().to_string()]);
+    args.extend([
+        paths.template.display().to_string(),
+        out.display().to_string(),
+    ]);
     let result = typst(&args).map(|_| ());
     let _ = fs::remove_file(&out);
     result
 }
 
 fn commit(paths: &Paths, path: &Path) -> Res<Option<String>> {
-    let git = |args: &[&str]| Command::new("git").arg("-C").arg(&paths.overlay).args(args).output();
+    let git = |args: &[&str]| {
+        Command::new("git")
+            .arg("-C")
+            .arg(&paths.overlay)
+            .args(args)
+            .output()
+    };
     let is_repo = git(&["rev-parse", "--git-dir"]).is_ok_and(|o| o.status.success());
     if !is_repo {
         return Ok(None);
     }
-    let rel = path.strip_prefix(&paths.overlay).map_err(|_| "file is outside the overlay")?;
+    let rel = path
+        .strip_prefix(&paths.overlay)
+        .map_err(|_| "file is outside the overlay")?;
     let rel = rel.to_string_lossy().to_string();
     let message = format!("cv: edit {rel}");
     // The pathspec limits the commit to this file, so other uncommitted overlay work stays out.
-    for args in [vec!["add", "--", &rel], vec!["commit", "-q", "-m", &message, "--", &rel]] {
+    for args in [
+        vec!["add", "--", &rel],
+        vec!["commit", "-q", "-m", &message, "--", &rel],
+    ] {
         let out = git(&args).map_err(|e| e.to_string())?;
         if !out.status.success() {
-            return Err(format!("git {}: {}", args[0], String::from_utf8_lossy(&out.stderr).trim()));
+            return Err(format!(
+                "git {}: {}",
+                args[0],
+                String::from_utf8_lossy(&out.stderr).trim()
+            ));
         }
     }
     let out = git(&["rev-parse", "--short", "HEAD"]).map_err(|e| e.to_string())?;
-    Ok(Some(String::from_utf8_lossy(&out.stdout).trim().to_string()))
+    Ok(Some(
+        String::from_utf8_lossy(&out.stdout).trim().to_string(),
+    ))
 }
 
 fn mtime(path: &Path) -> u64 {
@@ -468,7 +548,9 @@ pub fn status(paths: &Paths) -> Res<Value> {
     let master_mtime = mtime(&paths.master());
     let mut pdfs = Vec::new();
     for (dir, prefix) in [(paths.dist(), ""), (paths.dist().join("apps"), "apps/")] {
-        let Ok(entries) = fs::read_dir(&dir) else { continue };
+        let Ok(entries) = fs::read_dir(&dir) else {
+            continue;
+        };
         let mut names: Vec<String> = entries
             .filter_map(|e| e.ok()?.file_name().into_string().ok())
             .filter(|n| n.ends_with(".pdf"))
@@ -493,7 +575,9 @@ pub fn status(paths: &Paths) -> Res<Value> {
             v
         })
         .collect();
-    let pulled = fs::read_to_string(paths.linkedin().join("PULLED_ON")).ok().map(|s| s.trim().to_string());
+    let pulled = fs::read_to_string(paths.linkedin().join("PULLED_ON"))
+        .ok()
+        .map(|s| s.trim().to_string());
     Ok(json!({
         "master": paths.master(),
         "master_mtime": master_mtime,

@@ -337,7 +337,7 @@ stay in the PRD's history.
   destination-half reader both shipped — `transit/ranking.rs` `override_weights`,
   `trips/plan_search.rs` `FACTOR_RETROSPECTIVE`.)*
 
-### Packs/travel · eight open items
+### Packs/travel · seven open items
 
 - **L1 — one outcome record.** `POST /api/plans/:id/outcome` after the next real trip. Not code.
   Gates L3's transfer-buffer calibration and the journey-reliability independence assumption.
@@ -351,8 +351,6 @@ stay in the PRD's history.
   number→label resolution would make dbweb scorable. Nothing holds the mapping today.
 - **The cancellation flag end to end.** `originCancelled`/`destinationCancelled` are
   fixture-tested; no cancelled train has appeared live. Opportunistic.
-- **`bodies_without_schemas` as a build gate.** Fourteen routes have undeclared bodies; failing
-  on all fourteen today blocks work rather than directing it.
 - **Obsidian export.** Gated on there being something machine-derived worth exporting (L1).
 - **An open segment has no home in the plan model.** A stage names a destination and date, an
   item a day, and status is draft/saved/archived — none says "this part is undecided, here are
@@ -728,6 +726,13 @@ claim yet, and the watch rows they name are in `upstreams.toml` with the questio
 ## Log
 
 Entries before 2026-10-08 are in [`ISA-archive.md`](ISA-archive.md#log).
+
+- 2026-10-15 · Planning folded into one surface. Eleven per-unit `ISA.md` files and the root
+  `PLAN.md` retired; open work is the section above, closed history is in `ISA-archive.md`, and the
+  typed-id / `/api/links` contract moved to `docs/capabilities/links.md`. The vault PRD `Axon`
+  (already archived) had its still-real §13 rows folded in. The route-schema ratchet shipped
+  (`tools/check-route-schemas.sh`, wired into the repo gates): **92** undeclared write bodies
+  baselined down-only — not the "fourteen" the travel ISA recorded on 2026-08-12.
 
 - 2026-10-11 · GPUI becomes the goal for every client, iPhone included through gpui-mobile.
   The first step is a toolchain test, and the switch waits for a full port and a review.

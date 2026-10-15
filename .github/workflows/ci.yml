@@ -288,6 +288,8 @@ jobs:
         run: tools/check-marketplace-fresh.sh
       - name: service.toml manifests are well-formed
         run: tools/check-service-tomls.sh
+      - name: No capability gained an undeclared write body
+        run: tools/check-route-schemas.sh
       - name: Manifest requires= references resolve
         run: tools/check-manifest-integrity.sh
       - name: No document cites its own path

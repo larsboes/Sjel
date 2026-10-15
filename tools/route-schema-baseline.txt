@@ -1,0 +1,26 @@
+# Undeclared write bodies per capability, 2026-10-15.
+#
+# A capability's number is how many POST/PUT/PATCH routes it declares without a
+# `request_schema`. tools/check-route-schemas.sh fails when one rises.
+#
+# The count is 92, not the "fourteen" the travel ISA recorded on 2026-08-12 —
+# re-measured when the gate was built. Raise nothing here without a reason; the
+# point of the file is that the number can only fall.
+#
+#   capability  undeclared_write_bodies
+calendar        18
+devices          4
+entities         0
+finance         19
+interior        11
+inventory        6
+operator-profile 0
+places           5
+punctuality      1
+scouting         3
+sjel-status     16
+soundscape       2
+transit          1
+traveler         0
+trips            6
+vault            0

@@ -608,6 +608,14 @@ claim yet, and the watch rows they name are in `upstreams.toml` with the questio
 
 ## Decisions
 
+- **2026-10-15 — step 0 runs on the Longbridge gpui-mobile fork** (principal's call). The fork,
+  `gpui-pre-mobile` (`upstreams.toml`, `gpui-mobile`), moved to `gpui-pre =0.3.9` on
+  2026-10-13. That is the snapshot gpui-kit 0.7.3 uses, so step 0 does not force a pin. Step 0
+  bumps `apps/gpui-prototype` from `gpui-pre 0.3.6` and gpui-kit 0.6.0 to that snapshot. Both
+  clients use one split: the OS draws the chrome (AppKit or UIKit sidebar, toolbar, menus,
+  glass), and GPUI draws the content. gpui-kit's `website/docs/mobile.md` describes the iOS
+  side, and `apps/gpui-prototype/src/macos_glass.rs` tries the Mac side. Step 2 ports `context`,
+  `calendar` and `inbox` first, and finishes the native `capabilities` page as the reference.
 - **2026-10-11 — GPUI is the goal for every Sjel client, and Tauri and Svelte go when a port
   proves it** (principal's call, all recommendations accepted). This widens the 2026-10-09 GPUI
   entry below. The palette stays the first surface. The reason is the stack, not speed, because

@@ -25,6 +25,11 @@ declares its own build in `service.toml` (`build = ["cargo", "build", ...]`) and
 Generated-architecture freshness is `tools/check-architecture-fresh.sh`, and
 `tools/generate-architecture.sh` fixes a stale one.
 
+Host requirements follow a machine's enabled capabilities. Before a backup, restore, audit, or
+build, run `tools/toolchain-check --workflow <name>`, so a missing dependency shows before a
+service is down. After you change a machine's enabled capabilities, run `tools/toolchain-check`
+again.
+
 Any build layer above those two is argued per case: name what it buys and what toolchain cost it
 adds. An interpreted tool stays interpreted when wrapping it adds machinery without improving
 correctness. Record the reason beside the tool that enforces the decision. See

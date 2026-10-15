@@ -12,5 +12,10 @@ Use `tools/self explain <unit>` for ownership and local coupling, and `tools/sel
 relationship question. Use `rg` and tracked source for exact implementation evidence. Use
 Graphify only for symbol-level traversal when a current graph is available.
 
+Before you conclude that Sjel does not do something, read `capabilities = [...]` in the
+overlay's `config/machine.toml` (resolved by `tools/lib/paths.sh`) and list
+`<overlay>/capabilities/`. Many capabilities live only in the overlay, so a search of this
+repository gives false negatives.
+
 State the intended file and change scope before editing. Do not absorb nearby cleanup merely
 because doctor, status, or a search exposed it.

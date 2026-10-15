@@ -15,8 +15,11 @@ capability boundaries.
 
 ## Secrets
 
-- Store secret values in Vaultwarden. Repository and overlay notes may contain references, never
-  values.
+- Store secret values in the OS keychain, set up per user (ISA ISC-37). Vaultwarden is optional
+  and serves only the container capabilities that still keep a vault item. Repository and
+  overlay notes may contain references, never values.
+- When a tool needs a secret, read it from the keychain on demand. Do not put it in config files,
+  exported variables, or command-line arguments.
 - Do not generate, paste, rotate, or expose a secret on a general continuation instruction.
 - `tools/setup-secret.sh` requires the user to run the interactive operation after specific
   authorization.

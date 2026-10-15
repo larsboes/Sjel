@@ -885,7 +885,7 @@ url = "https://github.com/itsbalamurali/gpui-mobile"
 verdict = "watch"
 license = "GPL-3.0-or-later OR AGPL-3.0-or-later OR Apache-2.0"
 summary = "GPUI platform crate for iOS and Android; the candidate that puts the iPhone client on GPUI"
-why = "noted 2026-10-11 for ISA.md Decisions 2026-10-11. Its README claims iOS 13+ through wgpu and Metal, touch with momentum scrolling, keyboard and safe areas, and says nothing about text input or accessibility. One maintainer, 108 commits, no release, last commit 2026-09-25. Its Cargo.toml pins Zed rev 5688167d, so it has to move to the gpui-pre snapshot gpui-kit uses before both build together. License per its README, at the user's option. Not audited. The toolchain test in that decision is the audit"
+why = "noted 2026-10-11 for ISA.md Decisions 2026-10-11. Its README claims iOS 13+ through wgpu and Metal, touch with momentum scrolling, keyboard and safe areas, and says nothing about text input or accessibility. One maintainer, 108 commits, no release, last commit 2026-09-25. Its Cargo.toml pins Zed rev 5688167d, so it has to move to the gpui-pre snapshot gpui-kit uses before both build together. License per its README, at the user's option. Not audited. The toolchain test in that decision is the audit. 2026-10-15: Longbridge keeps a compatibility fork, https://github.com/longbridge/gpui-mobile, published as `gpui-pre-mobile` (lib `gpui_mobile`), on `gpui-pre =0.3.9` since 2026-10-13. gpui-kit's website/docs/mobile.md calls mobile experimental and not a primary target, validates only a chat area of components on iOS and Android, and lets UIKit own the window, navigation and safe areas. ISA.md Decisions 2026-10-15 takes the fork as the step 0 base"
 
 [nimble]
 url = "https://ollama.com/library/nimble"

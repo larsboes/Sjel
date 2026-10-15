@@ -2,6 +2,7 @@
   /** A `Text`: one string for both languages, or split into EN and DE. */
   import type { Localized, Text } from "./model";
   import LocField from "./LocField.svelte";
+  import { tip } from "$lib/tip";
 
   let { value = $bindable(), label }: { value: Text | undefined; label: string } = $props();
 
@@ -12,13 +13,13 @@
 {#if typeof value === "object"}
   <div class="row">
     <div class="grow"><LocField bind:value={value as Localized} {label} /></div>
-    <button class="btn btn-outline" title="Same text in both languages" onclick={join}>1 lang</button>
+    <button class="btn btn-outline" use:tip={"Same text in both languages"} onclick={join}>1 lang</button>
   </div>
 {:else}
   <div class="row">
     <span class="lbl">{label}</span>
     <input class="grow" aria-label={label} bind:value={() => value ?? "", (v) => (value = v)} />
-    <button class="btn btn-outline" title="Separate EN and DE text" onclick={split}>EN/DE</button>
+    <button class="btn btn-outline" use:tip={"Separate EN and DE text"} onclick={split}>EN/DE</button>
   </div>
 {/if}
 

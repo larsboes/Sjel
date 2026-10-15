@@ -51,7 +51,7 @@
 <style>
   .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(12rem, 1fr)); gap: 0.35rem; }
   label { display: flex; flex-direction: column; gap: 0.1rem; font-size: var(--text-xs); color: var(--text-secondary); }
-  h5 { font-size: 0.75rem; margin: 0.7rem 0 0.25rem; color: var(--text-secondary); }
+  h5 { font-size: var(--text-xs); margin: 0.7rem 0 0.25rem; color: var(--text-secondary); }
   .hint { font-weight: normal; color: var(--text-tertiary); font-size: var(--text-xs); }
   .ids { display: flex; flex-wrap: wrap; gap: 0.3rem; font-size: 0.7rem; }
   .id { display: inline-flex; gap: 0.2rem; align-items: center; padding: 0.05rem 0.3rem; border: 1px solid var(--card-border); border-radius: var(--radius-sm); }

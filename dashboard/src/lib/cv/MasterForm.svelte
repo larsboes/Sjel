@@ -167,7 +167,7 @@
   details { margin: 0.35rem 0; }
   summary { cursor: pointer; font-size: 0.82rem; font-weight: 600; }
   summary.head { font-weight: 500; }
-  h5 { font-size: 0.75rem; margin: 0.6rem 0 0.2rem; color: var(--text-secondary); }
+  h5 { font-size: var(--text-xs); margin: 0.6rem 0 0.2rem; color: var(--text-secondary); }
   .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(14rem, 1fr)); gap: 0.35rem; margin: 0.35rem 0; }
   label { display: flex; flex-direction: column; gap: 0.1rem; font-size: var(--text-xs); color: var(--text-secondary); }
   label.wide { margin: 0.25rem 0; }

@@ -65,7 +65,7 @@
 {/if}
 
 <style>
-  h5 { font-size: 0.75rem; margin: 0.7rem 0 0.25rem; color: var(--text-secondary); }
+  h5 { font-size: var(--text-xs); margin: 0.7rem 0 0.25rem; color: var(--text-secondary); }
   .item { border-left: 2px solid var(--card-border); padding: 0.2rem 0 0.4rem 0.6rem; margin: 0.4rem 0; }
   .head { display: flex; align-items: center; gap: 0.4rem; font-size: 0.78rem; }
   .hint { font-weight: normal; color: var(--text-tertiary); font-size: var(--text-xs); }

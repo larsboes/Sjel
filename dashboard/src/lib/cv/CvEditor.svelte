@@ -117,7 +117,7 @@
   .hint { font-size: var(--text-xs); color: var(--text-secondary); margin: 0.4rem 0 0; }
   textarea { width: 100%; min-height: 60vh; margin: 0.4rem 0 0; font-family: var(--font-mono); font-size: 0.72rem; line-height: 1.45; tab-size: 2; }
   .form :global(input), .form :global(select), .form :global(textarea), .bar select {
-    font-size: 0.75rem; padding: 0.15rem 0.35rem; background: var(--input-bg); color: var(--text-primary);
+    font-size: var(--text-xs); padding: 0.15rem 0.35rem; background: var(--input-bg); color: var(--text-primary);
     border: 1px solid var(--card-border); border-radius: var(--radius-sm);
   }
 </style>

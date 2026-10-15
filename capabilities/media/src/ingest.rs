@@ -8,7 +8,10 @@ use std::time::UNIX_EPOCH;
 use serde::Serialize;
 
 use crate::store::{Ledger, Location, Outcome, Result};
-use crate::{copy_checked, files, hash, stamp};
+use crate::{copy_checked, files_with_refusals, hash, stamp, Refusal};
+
+/// A staged row per readable path, plus the paths that could not be read.
+type StagedHashes = (Vec<(String, PathBuf, String, i64)>, Vec<Refusal>);
 
 #[derive(Default, Debug, Serialize)]
 pub struct IngestReport {
@@ -197,7 +200,7 @@ fn staged_hashes(
     originals: &Path,
     paths: &[(String, PathBuf)],
     output: &Path,
-) -> Result<Vec<(String, PathBuf, String, i64)>> {
+) -> Result<StagedHashes> {
     match fs::symlink_metadata(output) {
         Ok(meta) if !meta.file_type().is_file() => {
             return Err("staging-hashes.tsv must be a regular file, not a symlink".into())
@@ -217,12 +220,34 @@ fn staged_hashes(
             }
         })
         .ok_or("no collision-free temporary hash report")??;
-    let result = (|| -> Result<Vec<(String, PathBuf, String, i64)>> {
+    let result = (|| -> Result<StagedHashes> {
         let mut rows = Vec::new();
+        let mut refused = Vec::new();
         writeln!(tsv, "sha256\tsize\tmtime_ns\trelpath_json")?;
         for (rel, path) in paths {
-            let (size, mtime) = stamp(path)?;
-            let digest = hash(path)?;
+            // A file this run cannot read is refused, not fatal: one unreadable path
+            // must not deny every other path its disposition.
+            let (size, mtime) = match stamp(path) {
+                Ok(v) => v,
+                Err(e) => {
+                    refused.push(Refusal {
+                        label: rel.clone(),
+                        reason: format!("unreadable: {e}"),
+                    });
+                    continue;
+                }
+            };
+            let digest = match hash(path) {
+                Ok(d) => d,
+                Err(e) => {
+                    refused.push(Refusal {
+                        label: rel.clone(),
+                        reason: format!("unreadable: {e}"),
+                    });
+                    continue;
+                }
+            };
+            // A file that changes mid-hash is a race, not a refusal; stop the batch.
             if stamp(path)? != (size, mtime) {
                 return Err(format!("changed while hashing: {rel}").into());
             }
@@ -237,7 +262,7 @@ fn staged_hashes(
         if !originals.is_dir() {
             return Err("originals disappeared".into());
         }
-        Ok(rows)
+        Ok((rows, refused))
     })();
     drop(tsv);
     if result.is_err() {
@@ -305,14 +330,15 @@ pub fn ingest(ledger: &Ledger, opts: &IngestOptions<'_>) -> Result<IngestReport>
             refusals.insert(path.to_string(), format!("{reason}: {evidence}"));
         }
     }
-    let paths = files(&originals)?;
+    let (paths, enumeration_refusals) = files_with_refusals(&originals)?;
     if refusals
         .keys()
         .any(|key| !paths.iter().any(|(rel, _)| rel == key))
     {
         return Err("manifest refusal names a file absent from originals".into());
     }
-    let rows = staged_hashes(&originals, &paths, &staging.join("staging-hashes.tsv"))?;
+    let (rows, unreadable_refusals) =
+        staged_hashes(&originals, &paths, &staging.join("staging-hashes.tsv"))?;
     let dates = exif_dates(&originals)?;
     let id = if opts.apply {
         Some(ledger.start_ingest(source, &staging.to_string_lossy(), &manifest)?)
@@ -321,6 +347,25 @@ pub fn ingest(ledger: &Ledger, opts: &IngestOptions<'_>) -> Result<IngestReport>
     };
     let mut seen = BTreeSet::new();
     let mut report = IngestReport::default();
+    // A path the walk could not name or read is recorded, not dropped: a run that
+    // silently loses one file is the failure this gate exists to prevent. Counted as
+    // considered because it was looked at, and refused because it got no row.
+    for refusal in enumeration_refusals
+        .iter()
+        .chain(unreadable_refusals.iter())
+    {
+        report.considered += 1;
+        report.refused += 1;
+        if let Some(id) = id {
+            ledger.item(
+                id,
+                &refusal.label,
+                None,
+                None,
+                Outcome::new("refused", &refusal.reason, None, false),
+            )?;
+        }
+    }
     // Temporary writes are outside Library; only a verified copy gets linked into it.
     let incoming = library
         .parent()
@@ -599,6 +644,54 @@ mod db_tests {
         let repeat = ingest(&db, &opts).unwrap();
         assert_eq!(repeat.resumed, 1);
         assert_eq!(repeat.imported, 0);
+        fs::remove_dir_all(&root).unwrap();
+    }
+
+    /// The F1 falsifier: one path the walk cannot name must not deny every other path
+    /// its disposition. A symlink is refused and recorded; the good file still imports.
+    #[test]
+    fn a_refused_path_does_not_deny_the_rest_its_disposition() {
+        let root =
+            std::env::temp_dir().join(format!("media-ingest-refusal-{}", std::process::id()));
+        let _ = fs::remove_dir_all(&root);
+        let library = root.join("library");
+        let staging = root.join("staging");
+        fs::create_dir_all(library.join("by-date/2020-01")).unwrap();
+        fs::create_dir_all(staging.join("originals")).unwrap();
+        fs::write(staging.join("originals/good.jpg"), b"good!").unwrap();
+        fs::write(
+            staging.join("export-manifest.json"),
+            r#"{"source":"fixture"}"#,
+        )
+        .unwrap();
+        std::os::unix::fs::symlink(
+            staging.join("originals/good.jpg"),
+            staging.join("originals/link.jpg"),
+        )
+        .unwrap();
+        let db = Ledger::open(&root.join("db.sqlite")).unwrap();
+        index(&db, &library, "scratch", "scratch").unwrap();
+        let opts = IngestOptions {
+            staging: &staging,
+            library: &library,
+            uuid: "scratch",
+            apply: true,
+            prune: false,
+            fail_before_verify: false,
+        };
+        let report = ingest(&db, &opts).unwrap();
+        assert_eq!(report.imported, 1, "the good file still imports");
+        assert_eq!(report.refused, 1, "the symlink is refused, not fatal");
+        assert_eq!(report.considered, 2, "both paths were looked at");
+        let conn = rusqlite::Connection::open(root.join("db.sqlite")).unwrap();
+        let refused: i64 = conn
+            .query_row(
+                "SELECT count(*) FROM media_ingest_items WHERE disposition='refused'",
+                [],
+                |row| row.get(0),
+            )
+            .unwrap();
+        assert_eq!(refused, 1, "the refused path has a durable row");
         fs::remove_dir_all(&root).unwrap();
     }
 }

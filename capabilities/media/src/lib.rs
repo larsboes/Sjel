@@ -92,9 +92,29 @@ pub fn is_macos_metadata(name: &str) -> bool {
         )
 }
 
-pub fn files(root: &Path) -> Result<Vec<(String, PathBuf)>> {
+/// A path the tree walk could not turn into an indexed row, and why.
+///
+/// The label is lossy on purpose: a non-UTF-8 path has no `String`, and a refusal
+/// nobody can name is a refusal nobody can act on.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Refusal {
+    pub label: String,
+    pub reason: String,
+}
+
+/// A named walk: the files that became rows, and the paths that did not.
+pub type Walk = (Vec<(String, PathBuf)>, Vec<Refusal>);
+
+/// Every regular, UTF-8-named file under `root`, plus one [`Refusal`] per path that
+/// is not one.
+///
+/// The walk does not follow symlinks and does not stop at the first path it cannot
+/// name. `files` is the strict wrapper that turns a refusal into an error, for the
+/// verbs where a partial tree is worse than none; ingest is not one of them.
+pub fn files_with_refusals(root: &Path) -> Result<Walk> {
     let mut pending = vec![root.to_path_buf()];
     let mut found = Vec::new();
+    let mut refused = Vec::new();
     while let Some(dir) = pending.pop() {
         for item in fs::read_dir(&dir)? {
             let item = item?;
@@ -104,23 +124,38 @@ pub fn files(root: &Path) -> Result<Vec<(String, PathBuf)>> {
             }
             let ty = item.file_type()?;
             if ty.is_symlink() {
-                return Err(format!("symlink in media tree: {}", path.display()).into());
-            }
-            if ty.is_dir() {
+                refused.push(Refusal {
+                    label: path.to_string_lossy().into_owned(),
+                    reason: "symlink in media tree".into(),
+                });
+            } else if ty.is_dir() {
                 pending.push(path);
             } else if ty.is_file() {
-                let rel = path
-                    .strip_prefix(root)?
-                    .to_str()
-                    .ok_or("non-UTF-8 media path")?
-                    .to_owned();
-                found.push((rel, path));
+                match path.strip_prefix(root).ok().and_then(|p| p.to_str()) {
+                    Some(rel) => found.push((rel.to_owned(), path)),
+                    None => refused.push(Refusal {
+                        label: path.to_string_lossy().into_owned(),
+                        reason: "non-UTF-8 media path".into(),
+                    }),
+                }
             } else {
-                return Err(format!("not a regular file: {}", path.display()).into());
+                refused.push(Refusal {
+                    label: path.to_string_lossy().into_owned(),
+                    reason: "not a regular file".into(),
+                });
             }
         }
     }
     found.sort_by(|a, b| a.0.cmp(&b.0));
+    refused.sort_by(|a, b| a.label.cmp(&b.label));
+    Ok((found, refused))
+}
+
+pub fn files(root: &Path) -> Result<Vec<(String, PathBuf)>> {
+    let (found, refused) = files_with_refusals(root)?;
+    if let Some(first) = refused.first() {
+        return Err(format!("{}: {}", first.reason, first.label).into());
+    }
     Ok(found)
 }
 
@@ -543,6 +578,45 @@ fn verify_indexed(
 #[cfg(test)]
 mod db_tests {
     use super::*;
+
+    /// The walk names every path it will not turn into a row, and returns the rest.
+    #[test]
+    fn a_walk_refuses_a_symlink_without_stopping() {
+        let dir = std::env::temp_dir().join(format!("media-walk-{}", std::process::id()));
+        let _ = fs::remove_dir_all(&dir);
+        let tree = dir.join("tree");
+        fs::create_dir_all(&tree).unwrap();
+        fs::write(tree.join("good.jpg"), b"media").unwrap();
+        std::os::unix::fs::symlink(tree.join("good.jpg"), tree.join("link.jpg")).unwrap();
+
+        let (found, refused) = files_with_refusals(&tree).unwrap();
+        assert_eq!(found.len(), 1, "only the good file becomes a row");
+        assert_eq!(found[0].0, "good.jpg");
+        assert_eq!(refused.len(), 1, "the symlink is named");
+        assert_eq!(refused[0].reason, "symlink in media tree");
+        // The strict wrapper still refuses the whole tree, for the verbs that need it.
+        assert!(files(&tree).is_err());
+        fs::remove_dir_all(&dir).unwrap();
+    }
+
+    /// A name that is not UTF-8 has no `String` relpath. Linux lets one be created;
+    /// macOS's VFS refuses the bytes, so this branch runs only where it can be exercised.
+    #[cfg(target_os = "linux")]
+    #[test]
+    fn a_walk_names_a_non_utf8_path() {
+        use std::ffi::OsStr;
+        use std::os::unix::ffi::OsStrExt;
+        let dir = std::env::temp_dir().join(format!("media-walk-bad-{}", std::process::id()));
+        let _ = fs::remove_dir_all(&dir);
+        let tree = dir.join("tree");
+        fs::create_dir_all(&tree).unwrap();
+        fs::write(tree.join(OsStr::from_bytes(b"bad-\xff.jpg")), b"media").unwrap();
+        let (found, refused) = files_with_refusals(&tree).unwrap();
+        assert!(found.is_empty(), "a non-UTF-8 name is not a row");
+        assert_eq!(refused.len(), 1);
+        assert_eq!(refused[0].reason, "non-UTF-8 media path");
+        fs::remove_dir_all(&dir).unwrap();
+    }
     #[test]
     fn macos_metadata_is_not_media_and_a_recorded_row_is_pruned_rather_than_left_absent() {
         let dir = std::env::temp_dir().join(format!("media-noise-{}", std::process::id()));

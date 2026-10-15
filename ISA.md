@@ -291,15 +291,12 @@ below are still real, the rest are recorded as superseded at the end.
 unnumbered §13 question about `fn erklaert` and the `.base` folder references are vault-side and
 stay in the PRD's history.
 
-### media · F3–F4 and four ingest gaps
+### media · F3–F4 and three ingest gaps
 
 - **F3 — HTTP surface and dashboard panel.** `media` declares no `service.toml`; its README
   says it offers no HTTP/UI surface. Falsifier: the panel exists and reads the index over HTTP.
 - **F4 — perceptual layer, advisory.** No `media_phashes` or `media_reviews` table exists.
   Falsifier: a near-duplicate is proposed from a phash and reviewed.
-- **Per-file pre-classification failures.** A symlink, unreadable stream or non-UTF-8 path
-  refuses the whole preflight before an ingest run exists. Falsifier: one such input staged
-  among regular files still leaves every path a durable disposition.
 - **Interrupted multi-file ingest and orphans.** A crash between path reservation and link, or
   an orphan in `.media-incoming`, still needs manual inspection. Falsifier: kill at each
   filesystem/SQLite boundary and find no unverified final file.
@@ -726,6 +723,11 @@ claim yet, and the watch rows they name are in `upstreams.toml` with the questio
 ## Log
 
 Entries before 2026-10-08 are in [`ISA-archive.md`](ISA-archive.md#log).
+
+- 2026-10-15 · Media's per-file pre-classification claim closed. A symlink, non-regular file,
+  non-UTF-8 path or unreadable file is refused and recorded as a `refused` item instead of
+  aborting the whole run (`files_with_refusals`, `staged_hashes`), so every path has a durable
+  disposition. Test: `a_refused_path_does_not_deny_the_rest_its_disposition`.
 
 - 2026-10-15 · Planning folded into one surface. Eleven per-unit `ISA.md` files and the root
   `PLAN.md` retired; open work is the section above, closed history is in `ISA-archive.md`, and the

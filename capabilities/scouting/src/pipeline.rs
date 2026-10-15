@@ -25,7 +25,9 @@ pub fn run(
     sjel_runtime::require(sjel_runtime::Category::BulkIndexing)?;
     let role = crate::embed::embedding_role();
     if opp_embeddings.is_none() {
-        if let Some(role) = &role { role.runtime_admission()?; }
+        if let Some(role) = &role {
+            role.runtime_admission()?;
+        }
     }
     let opportunities = adapter.search(query)?;
 
@@ -39,7 +41,9 @@ pub fn run(
         (None, None) => None,
     };
     if opp_embeddings.is_none() {
-        if let Some(role) = &role { role.runtime_admission()?; }
+        if let Some(role) = &role {
+            role.runtime_admission()?;
+        }
     }
     let vectors = opp_embeddings.or(live.as_ref());
     // Labelled by what happened, not by what was configured. Deriving this

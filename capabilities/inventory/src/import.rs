@@ -128,7 +128,8 @@ fn cents(eur: f64) -> i64 {
 
 impl Raw {
     fn into_item(self, kind: Kind) -> Item {
-        let english = |column: &str, v: Option<String>| v.map(|v| crate::store::english_value(column, &v));
+        let english =
+            |column: &str, v: Option<String>| v.map(|v| crate::store::english_value(column, &v));
         Item {
             id: self.id,
             kind,
@@ -210,7 +211,11 @@ pub fn inventory(store: &Store, dir: &Path) -> Result<Report, Error> {
         .item
         .into_iter()
         .map(|r| (r, Kind::Piece, State::Owned))
-        .chain(wish.slot.into_iter().map(|r| (r, Kind::Slot, State::Wanted)))
+        .chain(
+            wish.slot
+                .into_iter()
+                .map(|r| (r, Kind::Slot, State::Wanted)),
+        )
         .chain(
             wish.product
                 .into_iter()

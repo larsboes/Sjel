@@ -201,7 +201,11 @@ pub fn path_to_place(
 
     let mut start: Vec<Location> = Vec::new();
     for across in [false, true] {
-        let (bw, bd) = if across { (depth, width) } else { (width, depth) };
+        let (bw, bd) = if across {
+            (depth, width)
+        } else {
+            (width, depth)
+        };
         let (cw, cd) = (
             (bw as f64 / RES as f64).ceil() as i32,
             (bd as f64 / RES as f64).ceil() as i32,
@@ -240,9 +244,7 @@ pub fn path_to_place(
             affordable: false,
             steps: None,
             rotates: false,
-            reason: Some(
-                "right behind the door there is no free position the piece fits".into(),
-            ),
+            reason: Some("right behind the door there is no free position the piece fits".into()),
         });
     }
 
@@ -302,11 +304,7 @@ pub fn path_to_place(
 }
 
 /// The same question for a piece that already has a place in a layout.
-pub fn delivery(
-    model: &Model,
-    layout: &Layout,
-    reference: &str,
-) -> Result<Delivery, ModelError> {
+pub fn delivery(model: &Model, layout: &Layout, reference: &str) -> Result<Delivery, ModelError> {
     let it = layout
         .items
         .iter()

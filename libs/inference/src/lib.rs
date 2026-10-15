@@ -652,10 +652,16 @@ impl FromStr for InferenceConfig {
 pub fn afm_available(base_url: &str) -> bool {
     let base = base_url.trim_end_matches('/');
     let origin = base.strip_suffix("/v1").unwrap_or(base);
-    let Ok(client) = sjel_http::client(sjel_http::Purpose::new("afm-health"), std::time::Duration::from_secs(2)) else {
+    let Ok(client) = sjel_http::client(
+        sjel_http::Purpose::new("afm-health"),
+        std::time::Duration::from_secs(2),
+    ) else {
         return false;
     };
-    client.get(format!("{origin}/health")).send().ok()
+    client
+        .get(format!("{origin}/health"))
+        .send()
+        .ok()
         .filter(|response| response.status().is_success())
         .and_then(|response| response.json::<serde_json::Value>().ok())
         .is_some_and(|body| body.get("model_available").and_then(|v| v.as_bool()) == Some(true))
@@ -669,14 +675,17 @@ impl ResolvedRole {
             .and_then(|url| url.host_str().map(str::to_owned))
             .is_some_and(|host| {
                 host == "localhost"
-                    || host.trim_matches(['[', ']']).parse::<std::net::IpAddr>()
+                    || host
+                        .trim_matches(['[', ']'])
+                        .parse::<std::net::IpAddr>()
                         .is_ok_and(|ip| ip.is_loopback())
             });
         sjel_runtime::admit_model(&self.backend_name, &self.model, local)
     }
 
     pub fn is_afm(&self) -> bool {
-        self.backend_name == "foundation-models" && self.model == "apple-foundationmodel"
+        self.backend_name == "foundation-models"
+            && self.model == "apple-foundationmodel"
             && self.is_loopback()
     }
 
@@ -688,10 +697,19 @@ impl ResolvedRole {
         }
         if self.is_afm() {
             let window = self.max_input_tokens.unwrap_or(4096).min(4096) as usize;
-            let input_bytes = body.get("messages").map_or(0, |v| v.to_string().len())
+            let input_bytes = body
+                .get("messages")
+                .map_or(0, |v| v.to_string().len())
                 .saturating_add(body.get("tools").map_or(0, |v| v.to_string().len()));
-            let reply = body.get("max_tokens").and_then(|v| v.as_u64()).unwrap_or(1024);
-            if input_bytes.saturating_add(usize::try_from(reply).unwrap_or(usize::MAX)).saturating_add(256) > window {
+            let reply = body
+                .get("max_tokens")
+                .and_then(|v| v.as_u64())
+                .unwrap_or(1024);
+            if input_bytes
+                .saturating_add(usize::try_from(reply).unwrap_or(usize::MAX))
+                .saturating_add(256)
+                > window
+            {
                 return Err("deferred by runtime profile: AFM request exceeds its input-plus-reply context; no request was sent".into());
             }
             if !afm_available(&self.backend.base_url) {
@@ -866,7 +884,9 @@ impl ResolvedRole {
             Err(_) => return false,
         };
         let base = self.backend.base_url.trim_end_matches('/');
-        if self.is_afm() && !afm_available(base) { return false; }
+        if self.is_afm() && !afm_available(base) {
+            return false;
+        }
         let endpoint = match self.backend.api {
             Api::OpenAi => format!("{base}/models"),
             Api::Ollama => format!("{base}/api/tags"),

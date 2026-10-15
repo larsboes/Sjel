@@ -23,18 +23,14 @@ fn live() -> Option<(Model, Value)> {
     let flat = match default_flat() {
         Ok(f) => f,
         Err(e) => {
-            eprintln!(
-                "SJEL_PERSONAL_ROOT is set, but no flat can be chosen ({e}); skipped"
-            );
+            eprintln!("SJEL_PERSONAL_ROOT is set, but no flat can be chosen ({e}); skipped");
             return None;
         }
     };
     let model = match Model::load(&flat) {
         Ok(m) => m,
         Err(e) => {
-            eprintln!(
-                "SJEL_PERSONAL_ROOT is set, but the model does not load ({e}); skipped"
-            );
+            eprintln!("SJEL_PERSONAL_ROOT is set, but the model does not load ({e}); skipped");
             return None;
         }
     };
@@ -181,7 +177,10 @@ fn the_catalogue_is_taken_over_completely() {
         .collect();
     missing.sort();
     // A superset, not an equal count: the catalogue grows with every wish and garment.
-    assert!(missing.is_empty(), "missing from the catalogue: {missing:?}");
+    assert!(
+        missing.is_empty(),
+        "missing from the catalogue: {missing:?}"
+    );
 }
 
 #[test]

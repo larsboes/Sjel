@@ -87,10 +87,7 @@ fn a_declared_room_divider_is_not_penalised_for_standing_free() {
 fn the_ranking_sorts_front_then_warnings_then_wall_then_bottleneck() {
     let m = model();
     let r = search_state(&m, "stumm");
-    assert!(
-        r.hits.len() > 1,
-        "a ranking needs more than one hit"
-    );
+    assert!(r.hits.len() > 1, "a ranking needs more than one hit");
 
     for paar in r.hits.windows(2) {
         let (a, b) = (&paar[0], &paar[1]);

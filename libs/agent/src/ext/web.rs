@@ -347,12 +347,21 @@ pub fn parse_ddg_html(html: &str, limit: usize) -> Vec<SearchHit> {
                 // Snippet from class="result__snippet"
                 let snippet = if let Some(snip_pos) = block.find("result__snippet") {
                     let snip_chunk = &block[snip_pos..];
-                    snip_chunk.find('>').and_then(|gt| {
-                        let content = &snip_chunk[gt + 1..];
-                        content.find("</a>").or_else(|| content.find("</td>")).map(|end| &content[..end])
-                    }).map(|raw_snip| {
-                        sjel_extraction::collapse_ws(&sjel_extraction::decode_basic_entities(&strip_tags(raw_snip)))
-                    }).unwrap_or_default()
+                    snip_chunk
+                        .find('>')
+                        .and_then(|gt| {
+                            let content = &snip_chunk[gt + 1..];
+                            content
+                                .find("</a>")
+                                .or_else(|| content.find("</td>"))
+                                .map(|end| &content[..end])
+                        })
+                        .map(|raw_snip| {
+                            sjel_extraction::collapse_ws(&sjel_extraction::decode_basic_entities(
+                                &strip_tags(raw_snip),
+                            ))
+                        })
+                        .unwrap_or_default()
                 } else {
                     String::new()
                 };
@@ -424,7 +433,9 @@ fn percent_decode(s: &str) -> String {
     let mut i = 0;
     while i < bytes.len() {
         if bytes[i] == b'%' && i + 2 < bytes.len() {
-            if let Ok(byte) = u8::from_str_radix(std::str::from_utf8(&bytes[i + 1..i + 3]).unwrap_or(""), 16) {
+            if let Ok(byte) =
+                u8::from_str_radix(std::str::from_utf8(&bytes[i + 1..i + 3]).unwrap_or(""), 16)
+            {
                 out.push(byte);
                 i += 3;
                 continue;

@@ -89,7 +89,10 @@ impl Store {
         let conn = self.conn()?;
         Ok(conn
             .query_row(
-                &format!("SELECT {CAPTURE_COLUMNS} FROM {}_captures WHERE id = ?1", self.prefix),
+                &format!(
+                    "SELECT {CAPTURE_COLUMNS} FROM {}_captures WHERE id = ?1",
+                    self.prefix
+                ),
                 params![id],
                 row_to_capture,
             )
@@ -97,7 +100,10 @@ impl Store {
     }
 
     /// Newest first. `status` of `None` returns every capture.
-    pub fn captures(&self, status: Option<&str>) -> Result<Vec<Capture>, Box<dyn std::error::Error>> {
+    pub fn captures(
+        &self,
+        status: Option<&str>,
+    ) -> Result<Vec<Capture>, Box<dyn std::error::Error>> {
         let conn = self.conn()?;
         let mut stmt = conn.prepare(&format!(
             "SELECT {CAPTURE_COLUMNS} FROM {}_captures
@@ -182,7 +188,10 @@ mod tests {
 
     #[test]
     fn a_known_hashtag_becomes_the_tag() {
-        assert_eq!(split_tag("#buy Proper shoes"), (Some("buy".into()), "Proper shoes".into()));
+        assert_eq!(
+            split_tag("#buy Proper shoes"),
+            (Some("buy".into()), "Proper shoes".into())
+        );
         assert_eq!(split_tag("shoes #Go"), (Some("go".into()), "shoes".into()));
         assert_eq!(split_tag("C# #rust"), (None, "C# #rust".into()));
     }
@@ -191,7 +200,9 @@ mod tests {
     fn a_capture_round_trips_and_patches() {
         let store = open_test_store("captures");
         assert!(store.add_capture(None, Some("  "), None, None).is_err());
-        assert!(store.add_capture(Some("x"), None, Some("eat"), None).is_err());
+        assert!(store
+            .add_capture(Some("x"), None, Some("eat"), None)
+            .is_err());
 
         let c = store
             .add_capture(Some("Proper shoes"), None, Some("buy"), Some("cli"))
@@ -215,8 +226,17 @@ mod tests {
         assert_eq!(store.capture(&c.id).unwrap().unwrap(), patched);
         assert!(store.captures(Some("new")).unwrap().is_empty());
         assert!(store
-            .patch_capture(&c.id, CapturePatch { text: Some(" ".into()), ..Default::default() })
+            .patch_capture(
+                &c.id,
+                CapturePatch {
+                    text: Some(" ".into()),
+                    ..Default::default()
+                }
+            )
             .is_err());
-        assert!(store.patch_capture("nope", CapturePatch::default()).unwrap().is_none());
+        assert!(store
+            .patch_capture("nope", CapturePatch::default())
+            .unwrap()
+            .is_none());
     }
 }

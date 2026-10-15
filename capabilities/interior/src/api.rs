@@ -418,12 +418,9 @@ async fn latest_roomplan_capture(
         .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?
         .join("captures")
         .join(flat);
-    let mut entries = tokio::fs::read_dir(&root).await.map_err(|_| {
-        (
-            StatusCode::NOT_FOUND,
-            "no RoomPlan captures".to_string(),
-        )
-    })?;
+    let mut entries = tokio::fs::read_dir(&root)
+        .await
+        .map_err(|_| (StatusCode::NOT_FOUND, "no RoomPlan captures".to_string()))?;
     let mut dates = Vec::new();
     while let Some(entry) = entries.next_entry().await.map_err(boom)? {
         if entry.file_type().await.map_err(boom)?.is_dir() {
@@ -581,12 +578,9 @@ async fn api_roomplan_review(
         .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?
         .join("captures")
         .join(&s.flat);
-    let mut dates = tokio::fs::read_dir(&root).await.map_err(|_| {
-        (
-            StatusCode::NOT_FOUND,
-            "no RoomPlan captures".to_string(),
-        )
-    })?;
+    let mut dates = tokio::fs::read_dir(&root)
+        .await
+        .map_err(|_| (StatusCode::NOT_FOUND, "no RoomPlan captures".to_string()))?;
     while let Some(date) = dates.next_entry().await.map_err(boom)? {
         if !date.file_type().await.map_err(boom)?.is_dir() {
             continue;
@@ -632,7 +626,9 @@ async fn api_roomplan_review(
     ))
 }
 
-async fn api_media(Path(media_path): Path<String>) -> Result<impl IntoResponse, (StatusCode, String)> {
+async fn api_media(
+    Path(media_path): Path<String>,
+) -> Result<impl IntoResponse, (StatusCode, String)> {
     let wurzel = crate::model::assets_dir()
         .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?
         .join("media");
@@ -663,7 +659,12 @@ async fn api_media(Path(media_path): Path<String>) -> Result<impl IntoResponse, 
         Some("webp") => "image/webp",
         Some("gif") => "image/gif",
         // No default type: what is unknown here is neither guessed nor served.
-        _ => return Err((StatusCode::UNSUPPORTED_MEDIA_TYPE, "not an image format".into())),
+        _ => {
+            return Err((
+                StatusCode::UNSUPPORTED_MEDIA_TYPE,
+                "not an image format".into(),
+            ))
+        }
     };
     let bytes = tokio::fs::read(&target).await.map_err(boom)?;
     Ok(([(axum::http::header::CONTENT_TYPE, content_type)], bytes))
@@ -950,10 +951,7 @@ mod route_manifest_tests {
     #[test]
     fn the_catalogue_names_every_served_route() {
         let missing = route_manifest::undeclared_routes(include_str!("api.rs"), super::ROUTES);
-        assert!(
-            missing.is_empty(),
-            "served but not described: {missing:?}"
-        );
+        assert!(missing.is_empty(), "served but not described: {missing:?}");
     }
 }
 
@@ -1020,7 +1018,7 @@ mod origin_tests {
 
 #[cfg(test)]
 mod tests {
-    use super::{Jobs, JobState, JOBS_MAX};
+    use super::{JobState, Jobs, JOBS_MAX};
     use serde_json::json;
 
     /// Create ten jobs and mark the younger ones done.
@@ -1044,10 +1042,7 @@ mod tests {
         let mut a = full_map(1);
         let created = a.start().expect("neun fertige machen Platz");
         assert!(a.by_id.contains_key(&0), "the running one is still there");
-        assert!(
-            !a.by_id.contains_key(&1),
-            "the oldest done one gave way"
-        );
+        assert!(!a.by_id.contains_key(&1), "the oldest done one gave way");
         assert!(a.by_id.contains_key(&created));
         assert_eq!(a.by_id.len(), JOBS_MAX);
     }
@@ -1074,9 +1069,7 @@ mod tests {
         .join();
         assert!(poison.is_err(), "the helper thread must really crash");
 
-        let id = super::jobs()
-            .start()
-            .expect("the map still creates");
+        let id = super::jobs().start().expect("the map still creates");
         assert!(
             super::jobs().by_id.contains_key(&id),
             "a recovered lock must still show the entry"
@@ -1130,10 +1123,7 @@ impl Jobs {
         self.next_id += 1;
         self.by_id.insert(
             id,
-            (
-                std::time::Instant::now(),
-                JobState::Running { since_ms: 0 },
-            ),
+            (std::time::Instant::now(), JobState::Running { since_ms: 0 }),
         );
         Ok(id)
     }
@@ -1225,9 +1215,7 @@ async fn api_search(
     let flat = s.flat.clone();
     let id = in_the_background(move || {
         let model = Model::load(&flat).map_err(|e| e.to_string())?;
-        let base = model
-            .load_layout(&req.layout)
-            .map_err(|e| e.to_string())?;
+        let base = model.load_layout(&req.layout).map_err(|e| e.to_string())?;
         let spec = crate::search::Spec {
             move_refs: req.move_refs,
             step: req.step,
@@ -1237,10 +1225,7 @@ async fn api_search(
         let rep = crate::search::search(&model, &base, &spec).map_err(|e| e.to_string())?;
         serde_json::to_value(rep).map_err(|e| e.to_string())
     })?;
-    Ok((
-        StatusCode::ACCEPTED,
-        Json(serde_json::json!({ "job": id })),
-    ))
+    Ok((StatusCode::ACCEPTED, Json(serde_json::json!({ "job": id }))))
 }
 
 #[derive(serde::Deserialize)]
@@ -1294,10 +1279,7 @@ async fn api_compose(
         let out = crate::search::compose(&model, &spec).map_err(|e| e.to_string())?;
         serde_json::to_value(out).map_err(|e| e.to_string())
     })?;
-    Ok((
-        StatusCode::ACCEPTED,
-        Json(serde_json::json!({ "job": id })),
-    ))
+    Ok((StatusCode::ACCEPTED, Json(serde_json::json!({ "job": id }))))
 }
 
 // ---------------------------------------------------------------- reports
@@ -1308,7 +1290,9 @@ async fn api_tolerance(
 ) -> Result<impl IntoResponse, (StatusCode, String)> {
     let model = load(&s)?;
     let l = model.load_layout(&name).map_err(not_found)?;
-    Ok(Json(crate::tolerance::robustness(&model, &l).map_err(boom)?))
+    Ok(Json(
+        crate::tolerance::robustness(&model, &l).map_err(boom)?,
+    ))
 }
 
 async fn api_sun(

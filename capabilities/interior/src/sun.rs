@@ -345,7 +345,8 @@ pub fn report(model: &Model, layout: &crate::model::Layout) -> Result<SunReport,
     for (name, day) in DAYS {
         for h in HOURS {
             let utc = h as f64 - location.utc_offset_h;
-            let position = sun_position(year_now(), *day, utc, location.latitude, location.longitude);
+            let position =
+                sun_position(year_now(), *day, utc, location.latitude, location.longitude);
             let flecken: Vec<LightPatch> = glazings
                 .iter()
                 .filter_map(|o| light_patch(model, o, position, location.north_deg))
@@ -384,7 +385,7 @@ pub fn report(model: &Model, layout: &crate::model::Layout) -> Result<SunReport,
 
 #[cfg(test)]
 mod year_tests {
-    use super::{year_now, year_from_days};
+    use super::{year_from_days, year_now};
 
     /// Fixed day numbers instead of the clock: a test holding `year_now()` against a literal would be
     /// the bug this fixes.

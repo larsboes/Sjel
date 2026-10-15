@@ -37,8 +37,13 @@ pub(super) async fn capture_post_handler(Json(body): Json<CaptureBody>) -> HttpR
     };
     let tag = body.tag.or(hashtag);
     match with_store(move |s| {
-        s.add_capture(text.as_deref(), body.url.as_deref(), tag.as_deref(), body.client.as_deref())
-            .map_err(|e| e.to_string())
+        s.add_capture(
+            text.as_deref(),
+            body.url.as_deref(),
+            tag.as_deref(),
+            body.client.as_deref(),
+        )
+        .map_err(|e| e.to_string())
     })
     .await
     {

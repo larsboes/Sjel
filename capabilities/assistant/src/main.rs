@@ -60,7 +60,8 @@ async fn ready() -> Result<Json<Value>, (StatusCode, Json<Value>)> {
     })?;
     let checked = role.clone();
     tokio::task::spawn_blocking(move || checked.runtime_admission())
-        .await.map_err(|error| failure(StatusCode::INTERNAL_SERVER_ERROR, error.to_string()))?
+        .await
+        .map_err(|error| failure(StatusCode::INTERNAL_SERVER_ERROR, error.to_string()))?
         .map_err(|reason| failure(StatusCode::CONFLICT, reason.to_string()))?;
     if role.max_input_tokens.is_none() {
         return Err(failure(
@@ -142,11 +143,15 @@ fn fits_role(
             <= MAX_PROMPT_BYTES
 }
 
-async fn admit_request(role: &sjel_inference::ResolvedRole, body: &Value) -> Result<(), (StatusCode, Json<Value>)> {
+async fn admit_request(
+    role: &sjel_inference::ResolvedRole,
+    body: &Value,
+) -> Result<(), (StatusCode, Json<Value>)> {
     let role = role.clone();
     let body = body.clone();
     tokio::task::spawn_blocking(move || role.admit_chat_request(&body))
-        .await.map_err(|error| failure(StatusCode::INTERNAL_SERVER_ERROR, error.to_string()))?
+        .await
+        .map_err(|error| failure(StatusCode::INTERNAL_SERVER_ERROR, error.to_string()))?
         .map_err(|reason| failure(StatusCode::CONFLICT, reason))
 }
 

@@ -250,7 +250,10 @@ mod tests {
             &store,
             &plan,
             &[
-                OutfitInput { proposed: true, ..outfit("Sat", Some("2026-10-10"), &["a"]) },
+                OutfitInput {
+                    proposed: true,
+                    ..outfit("Sat", Some("2026-10-10"), &["a"])
+                },
                 outfit("Any evening", None, &["b"]),
                 outfit("Fri", Some("2026-10-09"), &["a", " ", "c"]),
             ],

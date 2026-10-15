@@ -1,9 +1,6 @@
 //! The purchase order of the open needs, measured against inventory's monthly balance.
 
-
-pub use sjel_inventory::budget::{months_to_pay, monthly_balance, MonthlyBalance};
-
-
+pub use sjel_inventory::budget::{monthly_balance, months_to_pay, MonthlyBalance};
 
 /// Urgency of a need, from its `priority`.
 ///

@@ -13,7 +13,9 @@ fn policy(root: &Path, allow: &[&str]) {
 
 #[test]
 fn runtime_child() {
-    let Ok(root) = std::env::var("SJEL_RUNTIME_TEST_CHILD") else { return };
+    let Ok(root) = std::env::var("SJEL_RUNTIME_TEST_CHILD") else {
+        return;
+    };
     let root = Path::new(&root);
     let port = std::env::var("SJEL_RUNTIME_TEST_PORT").unwrap();
     let config: InferenceConfig = serde_json::json!({
@@ -31,10 +33,20 @@ fn runtime_child() {
     }).to_string().parse().unwrap();
     let cached = config.role("embedding").unwrap();
     let input = ["text".to_owned()];
-    assert!(cached.embed(&input, TextRole::Document).unwrap_err().starts_with("deferred by runtime profile:"));
-    assert!(cached.rerank("query", &input).unwrap_err().starts_with("deferred by runtime profile:"));
+    assert!(cached
+        .embed(&input, TextRole::Document)
+        .unwrap_err()
+        .starts_with("deferred by runtime profile:"));
+    assert!(cached
+        .rerank("query", &input)
+        .unwrap_err()
+        .starts_with("deferred by runtime profile:"));
     assert!(!cached.model_reachable());
-    assert!(config.role("summarization_light").unwrap().runtime_admission().is_err());
+    assert!(config
+        .role("summarization_light")
+        .unwrap()
+        .runtime_admission()
+        .is_err());
     assert!(config.role("peer").unwrap().runtime_admission().is_err());
     let afm = config.role("afm").unwrap();
     assert!(afm.runtime_admission().is_ok());
@@ -52,7 +64,10 @@ fn runtime_child() {
     assert!(cached.runtime_admission().is_err());
     policy(root, &["bulk-indexing", "other-local-models"]);
     assert!(cached.runtime_admission().is_ok());
-    assert_eq!(cached.embed(&input, TextRole::Document).unwrap(), vec![vec![1.0, 0.0]]);
+    assert_eq!(
+        cached.embed(&input, TextRole::Document).unwrap(),
+        vec![vec![1.0, 0.0]]
+    );
     policy(root, &[]);
     assert!(cached.runtime_admission().is_err());
 }
@@ -69,7 +84,9 @@ fn afm_health_requires_explicit_model_availability() {
         let base = format!("http://{}/v1", listener.local_addr().unwrap());
         let server = std::thread::spawn(move || {
             let (mut stream, _) = listener.accept().unwrap();
-            stream.set_read_timeout(Some(std::time::Duration::from_secs(2))).unwrap();
+            stream
+                .set_read_timeout(Some(std::time::Duration::from_secs(2)))
+                .unwrap();
             let mut reader = BufReader::new(stream.try_clone().unwrap());
             let mut line = String::new();
             reader.read_line(&mut line).unwrap();
@@ -77,7 +94,9 @@ fn afm_health_requires_explicit_model_availability() {
             loop {
                 line.clear();
                 reader.read_line(&mut line).unwrap();
-                if line == "\r\n" { break }
+                if line == "\r\n" {
+                    break;
+                }
             }
             write!(stream, "HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{payload}", payload.len()).unwrap();
         });
@@ -88,7 +107,14 @@ fn afm_health_requires_explicit_model_availability() {
 
 #[test]
 fn profile_prevents_probes_and_requests_until_explicitly_enabled() {
-    let root = std::env::temp_dir().join(format!("sjel-inference-runtime-{}-{}", std::process::id(), SystemTime::now().duration_since(UNIX_EPOCH).unwrap().as_nanos()));
+    let root = std::env::temp_dir().join(format!(
+        "sjel-inference-runtime-{}-{}",
+        std::process::id(),
+        SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .unwrap()
+            .as_nanos()
+    ));
     policy(&root, &[]);
     let listener = TcpListener::bind("127.0.0.1:0").unwrap();
     listener.set_nonblocking(true).unwrap();
@@ -99,7 +125,9 @@ fn profile_prevents_probes_and_requests_until_explicitly_enabled() {
         while std::time::Instant::now() < until {
             match listener.accept() {
                 Ok((mut stream, _)) => {
-                    stream.set_read_timeout(Some(std::time::Duration::from_secs(2))).unwrap();
+                    stream
+                        .set_read_timeout(Some(std::time::Duration::from_secs(2)))
+                        .unwrap();
                     let mut reader = BufReader::new(stream.try_clone().unwrap());
                     let mut line = String::new();
                     reader.read_line(&mut line).unwrap();
@@ -108,9 +136,13 @@ fn profile_prevents_probes_and_requests_until_explicitly_enabled() {
                     loop {
                         line.clear();
                         reader.read_line(&mut line).unwrap();
-                        if line == "\r\n" { break }
+                        if line == "\r\n" {
+                            break;
+                        }
                         if let Some((key, value)) = line.split_once(':') {
-                            if key.eq_ignore_ascii_case("content-length") { length = value.trim().parse().unwrap(); }
+                            if key.eq_ignore_ascii_case("content-length") {
+                                length = value.trim().parse().unwrap();
+                            }
                         }
                     }
                     let mut body = vec![0; length];
@@ -121,7 +153,9 @@ fn profile_prevents_probes_and_requests_until_explicitly_enabled() {
                     write!(stream, "HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{response}", response.len()).unwrap();
                     return requests;
                 }
-                Err(e) if e.kind() == std::io::ErrorKind::WouldBlock => std::thread::sleep(std::time::Duration::from_millis(10)),
+                Err(e) if e.kind() == std::io::ErrorKind::WouldBlock => {
+                    std::thread::sleep(std::time::Duration::from_millis(10))
+                }
                 Err(e) => panic!("mock server: {e}"),
             }
         }
@@ -134,8 +168,17 @@ fn profile_prevents_probes_and_requests_until_explicitly_enabled() {
         .env("SJEL_MACHINE_TOML", root.join("config/machines/test.toml"))
         .env("SJEL_RUNTIME_TEST_PORT", port.to_string())
         .env_remove("SJEL_INFERENCE_BACKEND")
-        .output().unwrap();
-    assert!(output.status.success(), "{}\n{}", String::from_utf8_lossy(&output.stdout), String::from_utf8_lossy(&output.stderr));
-    assert_eq!(server.join().unwrap(), vec!["POST /v1/embeddings HTTP/1.1\r\n"]);
+        .output()
+        .unwrap();
+    assert!(
+        output.status.success(),
+        "{}\n{}",
+        String::from_utf8_lossy(&output.stdout),
+        String::from_utf8_lossy(&output.stderr)
+    );
+    assert_eq!(
+        server.join().unwrap(),
+        vec!["POST /v1/embeddings HTTP/1.1\r\n"]
+    );
     std::fs::remove_dir_all(root).unwrap();
 }

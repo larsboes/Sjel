@@ -258,7 +258,6 @@ fn run(args: Args) -> Result<ExitCode, String> {
     }
 }
 
-
 /// The extensions this binary carries (D1: first-party crates, compiled in, no store). Wave 1
 /// fills this list — the guard (F2), skills (F3) and rust diagnostics (F6) are here; `mcp`
 /// (F4) and `compaction` (F5) are next. It is only used to name what exists when a name does

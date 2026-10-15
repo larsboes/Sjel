@@ -366,15 +366,18 @@ pub fn allowed_positions(
         .items
         .iter()
         .find(|i| i.reference == reference)
-        .ok_or_else(|| {
-            ModelError::Missing(format!("`{reference}` is not in \"{}\"", base.name))
-        })?;
+        .ok_or_else(|| ModelError::Missing(format!("`{reference}` is not in \"{}\"", base.name)))?;
     // The footprint for the requested rotation, not the current one.
     let rotated = PlacedItem { rot, ..it.clone() };
     let (w, d, _) = footprint(&rotated, &model.catalogue)?;
 
     // What cannot move: fixtures and door swings, read from room.toml.
-    let mut blocked: Vec<Rect> = model.room.fixed_furniture.iter().map(|f| f.rect()).collect();
+    let mut blocked: Vec<Rect> = model
+        .room
+        .fixed_furniture
+        .iter()
+        .map(|f| f.rect())
+        .collect();
     blocked.extend(
         model
             .room

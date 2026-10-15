@@ -363,10 +363,7 @@ pub fn parse_usda(name: &str, text: &str) -> Option<Element> {
     let transform = transform(text)?;
     let mut span = [0.0f64; 3];
     for axis in 0..3 {
-        let min = points
-            .iter()
-            .map(|p| p[axis])
-            .fold(f64::INFINITY, f64::min);
+        let min = points.iter().map(|p| p[axis]).fold(f64::INFINITY, f64::min);
         let max = points
             .iter()
             .map(|p| p[axis])
@@ -416,7 +413,11 @@ pub fn top_area_m2(text: &str) -> Option<f64> {
             continue;
         }
         for k in 1..n.saturating_sub(1) {
-            let (a, b, c) = (points[corners[0]], points[corners[k]], points[corners[k + 1]]);
+            let (a, b, c) = (
+                points[corners[0]],
+                points[corners[k]],
+                points[corners[k + 1]],
+            );
             let u = [b[0] - a[0], b[1] - a[1], b[2] - a[2]];
             let v = [c[0] - a[0], c[1] - a[1], c[2] - a[2]];
             let cross = [
@@ -832,10 +833,7 @@ def Xform "Wall0" (
             Err(ScanError::Compressed { method, .. }) => assert_eq!(method, 8),
             Err(other) => panic!("expected Compressed, got: {other:?}"),
             // No `{:?}` on success: it carries the payload.
-            Ok(read_entries) => panic!(
-                "expected an error, read {} entries",
-                read_entries.len()
-            ),
+            Ok(read_entries) => panic!("expected an error, read {} entries", read_entries.len()),
         }
         let _ = std::fs::remove_file(&path);
     }
@@ -905,10 +903,7 @@ def Xform "Wall0" (
     }
 }"#;
         let area = top_area_m2(text).expect("area");
-        assert!(
-            (area - 12.0).abs() < 1e-9,
-            "expected 12, got {area}"
-        );
+        assert!((area - 12.0).abs() < 1e-9, "expected 12, got {area}");
     }
 
     /// Only upward triangles count, or the area doubles. The second triangle uses points 3 to 5:
@@ -924,10 +919,7 @@ def Xform "Wall0" (
     point3f[] points = [(0, 0, 0), (2, 0, 0), (0, 3, 0), (0, 0, 0), (2, 0, 0), (0, 3, 0)]
 }"#;
         let area = top_area_m2(text).expect("area");
-        assert!(
-            (area - 3.0).abs() < 1e-9,
-            "expected 3, got {area}"
-        );
+        assert!((area - 3.0).abs() < 1e-9, "expected 3, got {area}");
     }
 
     /// A contradicting scan gives no number.

@@ -346,19 +346,18 @@ impl Mcp {
 
         for (name, config) in servers {
             let timeout = Duration::from_secs(config.timeout);
-            let transport: Result<Arc<dyn McpTransport>, String> = if let Some(ref cmd) =
-                config.command
-            {
-                StdioTransport::spawn(cmd, &config.args, &config.env)
-                    .map(|t| Arc::new(t) as Arc<dyn McpTransport>)
-            } else if let Some(ref url) = config.url {
-                HttpTransport::new(url.clone(), config.headers.clone(), timeout)
-                    .map(|t| Arc::new(t) as Arc<dyn McpTransport>)
-            } else {
-                Err(format!(
-                    "server `{name}` must define either `command` or `url`"
-                ))
-            };
+            let transport: Result<Arc<dyn McpTransport>, String> =
+                if let Some(ref cmd) = config.command {
+                    StdioTransport::spawn(cmd, &config.args, &config.env)
+                        .map(|t| Arc::new(t) as Arc<dyn McpTransport>)
+                } else if let Some(ref url) = config.url {
+                    HttpTransport::new(url.clone(), config.headers.clone(), timeout)
+                        .map(|t| Arc::new(t) as Arc<dyn McpTransport>)
+                } else {
+                    Err(format!(
+                        "server `{name}` must define either `command` or `url`"
+                    ))
+                };
 
             let transport = match transport {
                 Ok(t) => t,
@@ -688,7 +687,9 @@ for line in sys.stdin:
                                 "id": id,
                                 "result": {"content": [{"type": "text", "text": "pong"}]}
                             }),
-                            _ => json!({"jsonrpc": "2.0", "id": id, "error": {"code": -32601, "message": "not found"}}),
+                            _ => {
+                                json!({"jsonrpc": "2.0", "id": id, "error": {"code": -32601, "message": "not found"}})
+                            }
                         };
                         let body_bytes = serde_json::to_vec(&resp_body).unwrap();
                         let header = format!(

@@ -146,7 +146,10 @@ fn show() -> i32 {
     let store = or_exit!(open());
     let rows = or_exit!(store.catalogue());
     if rows.is_empty() {
-        println!("\n  {}\n", yellow("empty; `inventory import` fills the tables"));
+        println!(
+            "\n  {}\n",
+            yellow("empty; `inventory import` fills the tables")
+        );
         return 0;
     }
     let mut open_total: i64 = 0;
@@ -159,7 +162,10 @@ fn show() -> i32 {
         if group.is_empty() {
             continue;
         }
-        println!("\n{}", bold(&format!("  {} ({})", state.as_str(), group.len())));
+        println!(
+            "\n{}",
+            bold(&format!("  {} ({})", state.as_str(), group.len()))
+        );
         for i in group {
             if state == State::Wanted {
                 open_total += i.price_cents.or(i.cost_min_cents).unwrap_or(0);
@@ -268,7 +274,10 @@ async fn add(argv: &[String]) -> i32 {
         Some("slot") => Kind::Slot,
         Some("gear") => Kind::Gear,
         Some(other) => {
-            eprintln!("{}", red(&format!("`{other}` is no kind: piece, slot or gear")));
+            eprintln!(
+                "{}",
+                red(&format!("`{other}` is no kind: piece, slot or gear"))
+            );
             return 2;
         }
     };
@@ -303,7 +312,9 @@ async fn add(argv: &[String]) -> i32 {
         Some(id) if catalogue.contains_key(&id) => {
             eprintln!(
                 "{}",
-                red(&format!("`{id}` exists already; without --id the next free id is used"))
+                red(&format!(
+                    "`{id}` exists already; without --id the next free id is used"
+                ))
             );
             return 2;
         }
@@ -334,7 +345,12 @@ async fn add(argv: &[String]) -> i32 {
         return 2;
     }
 
-    println!("\n  {} {}  {}\n", green("created:"), bold(&id), dim("wanted"));
+    println!(
+        "\n  {} {}  {}\n",
+        green("created:"),
+        bold(&id),
+        dim("wanted")
+    );
     println!("    label     {label}");
     match price_cents {
         Some(c) => {
@@ -395,7 +411,10 @@ fn vault_writeback() -> i32 {
         println!("  {} {path}", green("region rewritten:"));
     }
     if !report.unchanged.is_empty() {
-        println!("  {}", dim(&format!("{} unchanged", report.unchanged.len())));
+        println!(
+            "  {}",
+            dim(&format!("{} unchanged", report.unchanged.len()))
+        );
     }
     if !report.conflicts.is_empty() {
         eprintln!("  {} {}", red("conflicts:"), report.conflicts.len());

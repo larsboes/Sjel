@@ -129,7 +129,10 @@ fn report(r: &CheckResult) {
         for u in &r.uncertainties {
             println!("    · {} — {}", u.label, u.fields.join(", "));
         }
-        println!("{}", dim("    Every number above inherits these estimates."));
+        println!(
+            "{}",
+            dim("    Every number above inherits these estimates.")
+        );
     }
     println!();
 }
@@ -640,10 +643,12 @@ fn tolerance_report(r: &interior::tolerance::Robustness) {
     use interior::tolerance::Holds;
     println!("\n{}", bold(&r.layout));
     match &r.holds {
-        Holds::Fails => println!(
+        Holds::Fails => {
+            println!(
             "  {}",
             red("fails with the recorded sizes already; measurement error is not the question here")
-        ),
+        )
+        }
         Holds::NothingGuessed => println!(
             "  {}",
             dim("no size in this layout is marked estimated; there is nothing to vary")
@@ -655,7 +660,10 @@ fn tolerance_report(r: &interior::tolerance::Robustness) {
             ))
         ),
         Holds::UpTo { cm } => {
-            println!("  {}", green(&format!("holds up to {cm} cm of measurement error")));
+            println!(
+                "  {}",
+                green(&format!("holds up to {cm} cm of measurement error"))
+            );
             println!(
                 "  {}",
                 yellow(&format!(
@@ -672,11 +680,7 @@ fn tolerance_report(r: &interior::tolerance::Robustness) {
     for u in &r.guessed {
         println!(
             "  {}",
-            dim(&format!(
-                "estimated: {}: {}",
-                u.label,
-                u.fields.join(", ")
-            ))
+            dim(&format!("estimated: {}: {}", u.label, u.fields.join(", ")))
         );
     }
     for n in &r.not_varied {
@@ -692,19 +696,23 @@ fn tolerance_report(r: &interior::tolerance::Robustness) {
 
 /// Does it get in? For every piece of a layout, or for an imagined one.
 fn cmd_delivery(model: &Model, argv: &[String]) -> i32 {
-    use interior::delivery::{
-        through_the_door, delivery, path_to_place, Delivery, DoorFit,
-    };
+    use interior::delivery::{delivery, path_to_place, through_the_door, Delivery, DoorFit};
 
     let line = |e: &Delivery| {
         let door = match &e.door {
             DoorFit::Fits { air_cm, door_cm } => {
                 green(&format!("through the {door_cm} cm door, {air_cm} cm air"))
             }
-            DoorFit::DoesNotFit { missing_cm, door_cm } => red(&format!(
+            DoorFit::DoesNotFit {
+                missing_cm,
+                door_cm,
+            } => red(&format!(
                 "does NOT fit through the {door_cm} cm door: {missing_cm} cm too wide"
             )),
-            DoorFit::CarriedApart { missing_cm, door_cm } => yellow(&format!(
+            DoorFit::CarriedApart {
+                missing_cm,
+                door_cm,
+            } => yellow(&format!(
                 "{missing_cm} cm wider than the {door_cm} cm door, comes apart according to its row"
             )),
             DoorFit::NoEntrance => yellow("no door declared as the entrance"),
@@ -731,10 +739,16 @@ fn cmd_delivery(model: &Model, argv: &[String]) -> i32 {
 
     // An imagined piece: the question before buying.
     if let (Some(width), Some(depth)) = (
-        flag(argv, "width").or_else(|| flag(argv, "b")).and_then(|v| v.parse::<i32>().ok()),
-        flag(argv, "depth").or_else(|| flag(argv, "t")).and_then(|v| v.parse::<i32>().ok()),
+        flag(argv, "width")
+            .or_else(|| flag(argv, "b"))
+            .and_then(|v| v.parse::<i32>().ok()),
+        flag(argv, "depth")
+            .or_else(|| flag(argv, "t"))
+            .and_then(|v| v.parse::<i32>().ok()),
     ) {
-        let disassembles = argv.iter().any(|a| a == "--disassembles" || a == "--zerlegbar");
+        let disassembles = argv
+            .iter()
+            .any(|a| a == "--disassembles" || a == "--zerlegbar");
         println!("\n{}  {width}×{depth} cm\n", bold("delivery"));
         match through_the_door(model, width, depth, disassembles) {
             DoorFit::Fits { air_cm, door_cm } => {
@@ -746,7 +760,10 @@ fn cmd_delivery(model: &Model, argv: &[String]) -> i32 {
                 );
                 0
             }
-            DoorFit::DoesNotFit { missing_cm, door_cm } => {
+            DoorFit::DoesNotFit {
+                missing_cm,
+                door_cm,
+            } => {
                 println!(
                     "  {}",
                     red(&format!(
@@ -761,7 +778,10 @@ fn cmd_delivery(model: &Model, argv: &[String]) -> i32 {
                 );
                 1
             }
-            DoorFit::CarriedApart { missing_cm, door_cm } => {
+            DoorFit::CarriedApart {
+                missing_cm,
+                door_cm,
+            } => {
                 println!(
                     "  {}",
                     yellow(&format!(
@@ -864,10 +884,7 @@ fn cmd_sun(model: &Model, argv: &[String]) -> i32 {
     if !b.hits_per_piece.is_empty() {
         println!("\n  {}", bold("Hours in direct sun"));
         for (k, n) in &b.hits_per_piece {
-            println!(
-                "    {k:26} {n:>3} of {}",
-                interior::sun::checked_hours()
-            );
+            println!("    {k:26} {n:>3} of {}", interior::sun::checked_hours());
         }
     }
     for o in &b.without_glass_heights {
@@ -1030,7 +1047,10 @@ fn cmd_purchase_order(model: &Model, argv: &[String]) -> i32 {
                 euro(s.median_cents)
             ))
         ),
-        None => println!("\n  {}", dim("no monthly balance available (finance wrote nothing here)")),
+        None => println!(
+            "\n  {}",
+            dim("no monthly balance available (finance wrote nothing here)")
+        ),
     }
     println!();
     0
@@ -1149,10 +1169,7 @@ fn roomplan_show(model: &Model, argv: &[String]) -> i32 {
             m * 100.0,
             dim("all equal, so a constant and no measurement; not part of the comparison")
         ),
-        None => println!(
-            "  Wall thickness {}",
-            dim("the walls differ, so measured")
-        ),
+        None => println!("  Wall thickness {}", dim("the walls differ, so measured")),
     }
     println!(
         "  Walls       {}, total length {:.1} cm",
@@ -1262,9 +1279,7 @@ fn placements_show(model: &Model, argv: &[String]) -> i32 {
             if !model.catalogue.contains_key(&id) {
                 eprintln!(
                     "{}",
-                    red(&format!(
-                        "`{id}` is not in the catalogue; nothing written"
-                    ))
+                    red(&format!("`{id}` is not in the catalogue; nothing written"))
                 );
                 return 2;
             }
@@ -1388,11 +1403,7 @@ fn placements_show(model: &Model, argv: &[String]) -> i32 {
                 })
                 .collect(),
         };
-        match plan::page(
-            model,
-            std::slice::from_ref(&layout),
-            plan::Origin::AsIs,
-        ) {
+        match plan::page(model, std::slice::from_ref(&layout), plan::Origin::AsIs) {
             Ok(html) => match std::fs::write(&file, &html) {
                 Ok(()) => println!("\n  {} {}", green("as-is plan written:"), file),
                 Err(e) => {

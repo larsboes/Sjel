@@ -53,7 +53,10 @@ fn a_matching_revision_writes_and_a_stale_one_does_not() {
         WriteOutcome::Written(r) => assert_eq!(r, 2),
         other => panic!("expected written, got {other:?}"),
     }
-    match store.update_item_if_revision(&wardrobe("too late"), 1).unwrap() {
+    match store
+        .update_item_if_revision(&wardrobe("too late"), 1)
+        .unwrap()
+    {
         WriteOutcome::Stale(current, _) => {
             assert_eq!(current.revision, 2);
             assert_eq!(current.label, "new", "the stale writer changed nothing");

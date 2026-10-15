@@ -233,7 +233,10 @@ mod tests {
             .await
             .unwrap();
         let _ = std::fs::remove_file(&db);
-        (status, serde_json::from_slice(&bytes).unwrap_or(Value::Null))
+        (
+            status,
+            serde_json::from_slice(&bytes).unwrap_or(Value::Null),
+        )
     }
 
     #[tokio::test]

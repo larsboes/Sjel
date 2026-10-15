@@ -116,7 +116,11 @@ pub fn render_block(item: &Item, state: Option<State>) -> String {
     let mut out = String::new();
     out.push_str("> [!info] Derived by Axon. Do not edit inside this block\n");
 
-    let text = |v: &Option<String>| v.as_deref().filter(|s| !s.trim().is_empty()).map(str::to_string);
+    let text = |v: &Option<String>| {
+        v.as_deref()
+            .filter(|s| !s.trim().is_empty())
+            .map(str::to_string)
+    };
     line(&mut out, "Target size", &dimensions(item));
     line(&mut out, "Price", &price(item));
     if let Some(p) = text(&item.priority) {
@@ -353,7 +357,10 @@ mod tests {
             "Only after the table",
             "Foldable or not at all",
         ] {
-            assert!(!block.contains(sentence), "region carries prose: {sentence}");
+            assert!(
+                !block.contains(sentence),
+                "region carries prose: {sentence}"
+            );
         }
         assert!(block.contains("W 45 cm"), "got: {block}");
         assert!(block.contains("wanted"), "got: {block}");
@@ -381,11 +388,17 @@ mod tests {
         catalogue.insert("tisch_bestand".into(), (piece, Some(State::Owned)));
         catalogue.insert(
             "vorhang".into(),
-            (slot("vorhang", "Vorhang Terrassentuer"), Some(State::Wanted)),
+            (
+                slot("vorhang", "Vorhang Terrassentuer"),
+                Some(State::Wanted),
+            ),
         );
 
         let report = write_all(&root, &catalogue).unwrap();
-        assert_eq!(report.seeded, vec!["Atlas/Interior/Vorhang Terrassentuer.md"]);
+        assert_eq!(
+            report.seeded,
+            vec!["Atlas/Interior/Vorhang Terrassentuer.md"]
+        );
         assert!(!dir.join(DIR).join("Tisch vorhanden.md").exists());
 
         std::fs::remove_dir_all(&dir).unwrap();
@@ -401,7 +414,10 @@ mod tests {
         let mut catalogue: BTreeMap<String, (Item, Option<State>)> = BTreeMap::new();
         catalogue.insert(
             "vorhang".into(),
-            (slot("vorhang", "Vorhang Terrassentuer"), Some(State::Wanted)),
+            (
+                slot("vorhang", "Vorhang Terrassentuer"),
+                Some(State::Wanted),
+            ),
         );
 
         let first = write_all(&root, &catalogue).unwrap();
@@ -423,7 +439,10 @@ mod tests {
         let mut catalogue: BTreeMap<String, (Item, Option<State>)> = BTreeMap::new();
         catalogue.insert(
             "vorhang".into(),
-            (slot("vorhang", "Vorhang Terrassentuer"), Some(State::Wanted)),
+            (
+                slot("vorhang", "Vorhang Terrassentuer"),
+                Some(State::Wanted),
+            ),
         );
         write_all(&root, &catalogue).unwrap();
 
@@ -438,7 +457,10 @@ mod tests {
         std::fs::write(&path, &with_prose).unwrap();
 
         let report = write_all(&root, &catalogue).unwrap();
-        assert_eq!(report.conflicts, vec!["Atlas/Interior/Vorhang Terrassentuer.md"]);
+        assert_eq!(
+            report.conflicts,
+            vec!["Atlas/Interior/Vorhang Terrassentuer.md"]
+        );
         let after = std::fs::read_to_string(&path).unwrap();
         assert_eq!(after, with_prose, "nothing was written");
         assert!(after.contains("My own sentence."));

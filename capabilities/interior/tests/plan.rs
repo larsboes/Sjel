@@ -110,11 +110,7 @@ fn every_piece_carries_exactly_one_text() {
 #[test]
 fn the_estimated_terrace_does_not_widen_the_sheet() {
     let m = model();
-    let t = m
-        .room
-        .terrace
-        .as_ref()
-        .expect("the fixture has a terrace");
+    let t = m.room.terrace.as_ref().expect("the fixture has a terrace");
     assert!(t.estimated, "this check is about the estimated area");
     let svg = draw("a-frei");
     let [min_x, _, width, _] = crop(&svg);

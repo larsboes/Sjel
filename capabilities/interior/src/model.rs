@@ -556,7 +556,11 @@ pub fn footprint(p: &PlacedItem, cat: &Catalogue) -> Result<(i32, i32, Option<i3
 /// Opening kinds in English; older `room.toml` files use German words.
 /// The kind may carry a suffix after the word (`glastuer_schiebe`), which is kept.
 fn english_opening_kind(kind: &str) -> String {
-    for (old, new) in [("glastuer", "glass_door"), ("tuer", "door"), ("fenster", "window")] {
+    for (old, new) in [
+        ("glastuer", "glass_door"),
+        ("tuer", "door"),
+        ("fenster", "window"),
+    ] {
         if let Some(rest) = kind.strip_prefix(old) {
             return format!("{new}{rest}");
         }

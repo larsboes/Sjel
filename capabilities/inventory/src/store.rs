@@ -665,7 +665,9 @@ impl Store {
         let existing = Self::columns_of(conn, table)?;
         for (old, new) in LEGACY_FIELDS {
             if existing.iter().any(|c| c == old) && !existing.iter().any(|c| c == new) {
-                conn.execute_batch(&format!("ALTER TABLE {table} RENAME COLUMN {old} TO {new};"))?;
+                conn.execute_batch(&format!(
+                    "ALTER TABLE {table} RENAME COLUMN {old} TO {new};"
+                ))?;
             }
         }
         Ok(())
@@ -681,7 +683,9 @@ impl Store {
         }
         // `estimated` lists field names, so it follows the field rename.
         let rows: Vec<(String, String)> = conn
-            .prepare(&format!("SELECT id, estimated FROM {prefix}_item WHERE estimated <> '[]'"))?
+            .prepare(&format!(
+                "SELECT id, estimated FROM {prefix}_item WHERE estimated <> '[]'"
+            ))?
             .query_map([], |row| Ok((row.get(0)?, row.get(1)?)))?
             .collect::<Result<_, _>>()?;
         for (id, raw) in rows {
@@ -960,7 +964,12 @@ impl Store {
 
     /// Append a state change. Writes nothing when the current state is already `state`, so a
     /// repeated import does not invent history.
-    pub fn record_state(&self, item_id: &str, state: State, note: Option<&str>) -> Result<bool, Error> {
+    pub fn record_state(
+        &self,
+        item_id: &str,
+        state: State,
+        note: Option<&str>,
+    ) -> Result<bool, Error> {
         if self.current_state(item_id)? == Some(state) {
             return Ok(false);
         }
@@ -1019,7 +1028,10 @@ impl Store {
     }
 
     /// The whole state history of an entry, oldest first.
-    pub fn state_history(&self, item_id: &str) -> Result<Vec<(State, String, Option<String>)>, Error> {
+    pub fn state_history(
+        &self,
+        item_id: &str,
+    ) -> Result<Vec<(State, String, Option<String>)>, Error> {
         let p = &self.prefix;
         let conn = self.conn()?;
         let mut stmt = conn.prepare(&format!(
@@ -1249,8 +1261,10 @@ mod tests {
             let conn = Connection::open(&path).unwrap();
             Store::run_migration(&conn, "inventory").unwrap();
             for (old, new) in LEGACY_FIELDS {
-                conn.execute_batch(&format!("ALTER TABLE inventory_item RENAME COLUMN {new} TO {old};"))
-                    .unwrap();
+                conn.execute_batch(&format!(
+                    "ALTER TABLE inventory_item RENAME COLUMN {new} TO {old};"
+                ))
+                .unwrap();
             }
             conn.execute_batch(
                 "INSERT INTO inventory_item (id, kind, label, b, preis_cent, groesse, prioritaet,

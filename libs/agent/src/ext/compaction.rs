@@ -47,8 +47,8 @@ pub fn estimate_tokens(messages: &[Message]) -> usize {
                 }
                 if let Some(calls) = tool_calls {
                     for call in calls {
-                        total +=
-                            (call.function.name.len() + call.function.arguments.len() + 10).div_ceil(4);
+                        total += (call.function.name.len() + call.function.arguments.len() + 10)
+                            .div_ceil(4);
                     }
                 }
             }
@@ -184,7 +184,9 @@ impl Extension for Compaction {
             let summary_tokens = summary_text.len().div_ceil(4) + 4;
             let turns_tokens = estimate_tokens(&messages[start..end]);
             let current_total = estimate_tokens(messages);
-            let estimated_after = current_total.saturating_sub(turns_tokens).saturating_add(summary_tokens);
+            let estimated_after = current_total
+                .saturating_sub(turns_tokens)
+                .saturating_add(summary_tokens);
             if estimated_after <= self.limit {
                 break;
             }
@@ -326,8 +328,8 @@ mod tests {
 
     #[test]
     fn session_file_records_summary_and_resumes_compacted_state() {
-        let dir = std::env::temp_dir()
-            .join(format!("sjel-agent-compaction-{}", std::process::id()));
+        let dir =
+            std::env::temp_dir().join(format!("sjel-agent-compaction-{}", std::process::id()));
         let _ = std::fs::remove_dir_all(&dir);
         let path = crate::session::new_path(&dir);
 

@@ -18,7 +18,10 @@ fn traits_survive_write_and_read() {
     };
     store.upsert_item(&jacket).unwrap();
     let (read, _) = store.item("jacket").unwrap().unwrap();
-    assert_eq!(read.traits, vec!["rain".to_string(), "packable".to_string()]);
+    assert_eq!(
+        read.traits,
+        vec!["rain".to_string(), "packable".to_string()]
+    );
 
     // Without a value the list stays empty, not null.
     let shirt = Item {

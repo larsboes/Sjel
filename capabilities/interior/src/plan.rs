@@ -445,14 +445,7 @@ pub fn svg(model: &Model, layout: &Layout) -> Result<String, ModelError> {
         p.push_str(&format!(
             r##"<rect x="{}" y="{}" width="{w}" height="{d}" fill="#DAD2C4" stroke="#6E655A" stroke-width="3"/>"##,
             r.x, r.y));
-        let s = set_value(
-            r,
-            label.chars().count(),
-            &obstacles,
-            &set,
-            &sheet,
-            &core,
-        );
+        let s = set_value(r, label.chars().count(), &obstacles, &set, &sheet, &core);
         set.push(s.area);
         if let Some([x1, y1, x2, y2]) = s.leader {
             p.push_str(&format!(
@@ -662,10 +655,7 @@ mod tests {
             d: 80,
         };
         let s = set_value(&r, "Bed".chars().count(), &[r], &[], &sheet(), &sheet());
-        assert_eq!(
-            s.grad, GRADE[0],
-            "a wide rect carries the large size"
-        );
+        assert_eq!(s.grad, GRADE[0], "a wide rect carries the large size");
         assert!(!s.across);
         assert!(s.leader.is_none(), "inside needs no leader line");
         assert_eq!((s.x, s.y), (70, 40));

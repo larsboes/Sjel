@@ -3,7 +3,7 @@
 //! The cases are constructed. `k-vitrine` is the core: a layout meeting every clearance rule that
 //! can never happen, because the piece is 10 cm wider than the entrance door.
 
-use interior::delivery::{through_the_door, delivery, DoorFit};
+use interior::delivery::{delivery, through_the_door, DoorFit};
 use interior::model::Model;
 use std::sync::Once;
 

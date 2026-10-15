@@ -396,7 +396,6 @@ pub fn opening_segment(room: &Room, o: &Opening) -> Option<Segment> {
     })
 }
 
-
 /// What a piece demands, when it says so itself. Returns `false` when it declares nothing, and the
 /// caller falls back to `kind_of`.
 ///
@@ -412,8 +411,7 @@ fn own_needs(
     reserves: &mut Vec<Reserve>,
 ) -> bool {
     let Some(it) = p.item else { return false };
-    let declared =
-        it.open_clear.is_some() || it.access_sides.is_some() || it.expands_to.is_some();
+    let declared = it.open_clear.is_some() || it.access_sides.is_some() || it.expands_to.is_some();
     if !declared {
         return false;
     }
@@ -455,9 +453,7 @@ fn own_needs(
                 rule: "open".into(),
                 severity: Severity::Hard,
                 item: Some(name.into()),
-                message: format!(
-                    "\"{name}\" has {got} cm to open at {place}, needs {want}"
-                ),
+                message: format!("\"{name}\" has {got} cm to open at {place}, needs {want}"),
                 text: None,
                 measured: Some(got),
                 required: Some(want),
@@ -1016,11 +1012,11 @@ fn r4_bed_head(ctx: &Check, out: &mut Findings) -> Result<(), ModelError> {
     let rules = ctx.rules;
     let placed = &ctx.placed;
 
-    if let Some(glaz) = room
-        .openings
-        .iter()
-        .find(|o| o.kind.as_deref().is_some_and(|t| t.starts_with("glass_door")))
-    {
+    if let Some(glaz) = room.openings.iter().find(|o| {
+        o.kind
+            .as_deref()
+            .is_some_and(|t| t.starts_with("glass_door"))
+    }) {
         if let Some(seg) = opening_segment(room, glaz) {
             let band = approach_rect(&seg, 20);
             if let Some(next) = placed
@@ -1071,16 +1067,16 @@ fn r5_side_light(ctx: &Check, out: &mut Findings) -> Result<(), ModelError> {
     let placed = &ctx.placed;
 
     {
-        let glass = room
-            .openings
-            .iter()
-            .find(|o| o.kind.as_deref().is_some_and(|t| t.starts_with("glass_door")));
+        let glass = room.openings.iter().find(|o| {
+            o.kind
+                .as_deref()
+                .is_some_and(|t| t.starts_with("glass_door"))
+        });
         let desks = placed.iter().filter(|p| p.kind == Kind::Desk).count();
         match glass.and_then(|g| opening_segment(room, g)) {
             None if desks > 0 => out.fell_out.push((
                 "R5".to_string(),
-                "the room has no glazing a desk could face"
-                    .to_string(),
+                "the room has no glazing a desk could face".to_string(),
             )),
             Some(seg) => {
                 // The direction light comes from is the glazing's normal, not the line between two centres: the
@@ -1131,8 +1127,7 @@ fn r6_view_from_entrance(ctx: &Check, out: &mut Findings) -> Result<(), ModelErr
         match entrance.and_then(|e| opening_segment(room, e)) {
             None if beds > 0 => out.fell_out.push((
                 "R6".to_string(),
-                "no opening is declared the entrance (`eingang = true` in room.toml)"
-                    .to_string(),
+                "no opening is declared the entrance (`eingang = true` in room.toml)".to_string(),
             )),
             Some(seg) => {
                 let mut x = (seg.a[0] + seg.b[0]) as f64 / 2.0;
@@ -1568,7 +1563,10 @@ fn coffee_table_gap(ctx: &Check, p: &Placed, out: &mut Findings) -> Result<(), M
                 rule: "coffee_table_gap".into(),
                 severity: Severity::Soft,
                 item: Some(p.it.reference.clone()),
-                message: format!("coffee table stands {} cm from the sofa, wants {}", gap, want),
+                message: format!(
+                    "coffee table stands {} cm from the sofa, wants {}",
+                    gap, want
+                ),
                 text: None,
                 measured: Some(gap),
                 required: Some(want),

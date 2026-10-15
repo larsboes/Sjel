@@ -65,7 +65,11 @@ const ROUTES: &[route_manifest::Route] = &[
         "/api/items/{id}",
         "Change the named fields and leave the rest.",
     ),
-    r("GET", "/api/items/{id}/state", "The state history of an entry."),
+    r(
+        "GET",
+        "/api/items/{id}/state",
+        "The state history of an entry.",
+    ),
     r("POST", "/api/items/{id}/state", "Append a state change."),
     r(
         "POST",
@@ -551,9 +555,9 @@ async fn api_sync(
             continue;
         }
         let Some(base_revision) = mutation.base_revision.as_deref() else {
-            response
-                .acknowledgements
-                .push(rejected("base_revision is required for an offline mutation"));
+            response.acknowledgements.push(rejected(
+                "base_revision is required for an offline mutation",
+            ));
             continue;
         };
         let Ok(expected) = base_revision.parse::<i64>() else {
@@ -573,7 +577,10 @@ async fn api_sync(
             serde_json::Value::Object(mutation.fields.clone()),
         )?;
         merged.id = mutation.entity_id.clone();
-        match st.update_item_if_revision(&merged, expected).map_err(boom)? {
+        match st
+            .update_item_if_revision(&merged, expected)
+            .map_err(boom)?
+        {
             WriteOutcome::Written(revision) => {
                 st.record_sync_operation(&mutation.operation_id, revision)
                     .map_err(boom)?;
@@ -619,12 +626,13 @@ async fn api_sync(
 const CAPABILITY: &str = "inventory";
 
 pub fn build_router(state: Arc<AppState>) -> Router {
-    let signed_sync = Router::new()
-        .route("/api/sync", post(api_sync))
-        .layer(middleware::from_fn_with_state(
-            Arc::clone(&state),
-            signed_sync_auth,
-        ));
+    let signed_sync =
+        Router::new()
+            .route("/api/sync", post(api_sync))
+            .layer(middleware::from_fn_with_state(
+                Arc::clone(&state),
+                signed_sync_auth,
+            ));
     Router::new()
         .route("/", get(index))
         .route("/health", get(health))
@@ -787,7 +795,14 @@ mod revision_tests {
         assert_eq!(v["revision"], 1);
         assert_eq!(h[header::ETAG], "\"1\"");
 
-        let (s, _, v) = send(&r, "PATCH", "/api/items/wardrobe", None, json!({"width": 120})).await;
+        let (s, _, v) = send(
+            &r,
+            "PATCH",
+            "/api/items/wardrobe",
+            None,
+            json!({"width": 120}),
+        )
+        .await;
         assert_eq!(s, StatusCode::OK);
         assert_eq!(v["revision"], 2);
 
@@ -803,7 +818,14 @@ mod revision_tests {
         let (r, path) = router("match");
         send(&r, "PUT", "/api/items/wardrobe", None, wardrobe("a")).await;
 
-        let (s, h, v) = send(&r, "PUT", "/api/items/wardrobe", Some("\"1\""), wardrobe("b")).await;
+        let (s, h, v) = send(
+            &r,
+            "PUT",
+            "/api/items/wardrobe",
+            Some("\"1\""),
+            wardrobe("b"),
+        )
+        .await;
         assert_eq!(s, StatusCode::OK, "{v}");
         assert_eq!(v["revision"], 2);
         assert_eq!(h[header::ETAG], "\"2\"");
@@ -868,7 +890,10 @@ mod revision_tests {
         assert_eq!(s, StatusCode::CONFLICT, "{v}");
 
         let (_, _, v) = send(&r, "GET", "/api/inventory", None, Value::Null).await;
-        assert_eq!(v[0]["item"]["label"], "from the Mac", "nothing was overwritten");
+        assert_eq!(
+            v[0]["item"]["label"], "from the Mac",
+            "nothing was overwritten"
+        );
         let _ = std::fs::remove_file(&path);
     }
 
@@ -877,7 +902,14 @@ mod revision_tests {
         let (r, path) = router("missing");
         let (s, _, _) = send(&r, "PATCH", "/api/items/none", None, json!({"width": 1})).await;
         assert_eq!(s, StatusCode::NOT_FOUND);
-        let (s, _, _) = send(&r, "PATCH", "/api/items/none", Some("1"), json!({"width": 1})).await;
+        let (s, _, _) = send(
+            &r,
+            "PATCH",
+            "/api/items/none",
+            Some("1"),
+            json!({"width": 1}),
+        )
+        .await;
         assert_eq!(s, StatusCode::NOT_FOUND);
         // A conditional PUT creates nothing.
         let (s, _, _) = send(&r, "PUT", "/api/items/wardrobe", Some("1"), wardrobe("a")).await;

@@ -45,10 +45,7 @@ fn robust(layout: &str) -> interior::tolerance::Robustness {
 #[test]
 fn an_estimated_size_gets_a_number_instead_of_a_verdict() {
     let r = robust("j-sideboard-knapp");
-    assert!(
-        r.nominal_pass,
-        "the layout passes with the recorded sizes"
-    );
+    assert!(r.nominal_pass, "the layout passes with the recorded sizes");
     match r.holds {
         Holds::UpTo { cm } => assert_eq!(cm, 5, "five cm of air, so five cm of tolerance"),
         other => panic!("expected UpTo {{ cm: 5 }}, bekommen {other:?}"),
@@ -79,11 +76,7 @@ fn reserve_and_bisection_reach_the_same_number() {
 #[test]
 fn a_layout_without_estimated_sizes_says_so_instead_of_inventing_a_number() {
     let r = robust("a-frei");
-    assert!(
-        matches!(r.holds, Holds::NothingGuessed),
-        "{:?}",
-        r.holds
-    );
+    assert!(matches!(r.holds, Holds::NothingGuessed), "{:?}", r.holds);
     assert!(r.tips_at.is_empty());
 }
 
@@ -105,17 +98,11 @@ fn passing_falls_monotonically_with_the_measurement_error() {
     for tol in 0..=HORIZON_CM {
         let pass = interior::tolerance::passes_at_for_test(&m, &l, tol).unwrap();
         if failed {
-            assert!(
-                !pass,
-                "at {tol} cm it passes again after failing"
-            );
+            assert!(!pass, "at {tol} cm it passes again after failing");
         }
         if !pass {
             failed = true;
         }
     }
-    assert!(
-        failed,
-        "this layout must tip within the horizon"
-    );
+    assert!(failed, "this layout must tip within the horizon");
 }

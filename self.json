@@ -280,7 +280,12 @@
     },
     {
       "name": "media",
-      "kind": "capability"
+      "kind": "capability",
+      "service": {
+        "kind": "process",
+        "requires": [],
+        "port": "8102"
+      }
     },
     {
       "name": "operator-profile",
@@ -854,6 +859,16 @@
       ]
     },
     {
+      "from": "cv",
+      "to": "sjel-config",
+      "kinds": [
+        "cargo-dep"
+      ],
+      "evidence": [
+        "capabilities/cv/Cargo.toml"
+      ]
+    },
+    {
       "from": "devices",
       "to": "route-manifest",
       "kinds": [
@@ -1245,7 +1260,27 @@
     },
     {
       "from": "media",
+      "to": "route-manifest",
+      "kinds": [
+        "cargo-dep"
+      ],
+      "evidence": [
+        "capabilities/media/Cargo.toml"
+      ]
+    },
+    {
+      "from": "media",
       "to": "sjel-config",
+      "kinds": [
+        "cargo-dep"
+      ],
+      "evidence": [
+        "capabilities/media/Cargo.toml"
+      ]
+    },
+    {
+      "from": "media",
+      "to": "sjel-server",
       "kinds": [
         "cargo-dep"
       ],
@@ -2476,6 +2511,10 @@
       "verdict": "reject"
     },
     {
+      "name": "serde_yaml_ng",
+      "verdict": "adopt"
+    },
+    {
       "name": "sha2",
       "verdict": "adopt"
     },
@@ -2517,6 +2556,10 @@
     },
     {
       "name": "sveltejs-mcp",
+      "verdict": "adopt"
+    },
+    {
+      "name": "tabler-icons",
       "verdict": "adopt"
     },
     {

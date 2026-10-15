@@ -86,9 +86,7 @@ fn a_new_plan_may_be_empty() {
     )
     .expect("an empty plan is written");
 
-    let l = m
-        .load_layout("nothing-yet")
-        .expect("and read back");
+    let l = m.load_layout("nothing-yet").expect("and read back");
     assert!(l.items.is_empty(), "no piece, because none was placed");
     assert_eq!(l.name, "Noch nichts");
     assert!(
@@ -237,6 +235,7 @@ fn archiving_twice_under_one_name_is_refused() {
 #[test]
 fn a_layout_that_does_not_exist_is_not_archived() {
     let m = flat("archive-empty");
-    let e = layout_io::archive_layout(&m, "gab-es-nie").expect_err("there is nothing to clear away");
+    let e =
+        layout_io::archive_layout(&m, "gab-es-nie").expect_err("there is nothing to clear away");
     assert!(e.to_string().contains("gab-es-nie"), "{e}");
 }

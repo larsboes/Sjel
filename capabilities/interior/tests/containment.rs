@@ -163,15 +163,9 @@ fn a_media_path_does_not_lead_out_of_the_dir() {
         }
     };
 
-    assert!(
-        allowed("produkt/bild.png"),
-        "the image itself is served"
-    );
+    assert!(allowed("produkt/bild.png"), "the image itself is served");
     assert!(!allowed("../geheim.txt"), "one level up: no");
-    assert!(
-        !allowed("produkt/../../geheim.txt"),
-        "through a detour: no"
-    );
+    assert!(!allowed("produkt/../../geheim.txt"), "through a detour: no");
     assert!(!allowed("produkt"), "a directory is no file");
 
     // The case a `..` check would let through: a symlink without a single dot.

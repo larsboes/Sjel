@@ -87,8 +87,7 @@ pub fn check_id(id: &str) -> Result<(), ModelError> {
 
 /// The note as a comment block, line by line: a layout's origin is a paragraph.
 fn as_comment(note: &str) -> String {
-    note
-        .lines()
+    note.lines()
         .map(|z| {
             let z = z.trim_end();
             if z.is_empty() {
@@ -185,7 +184,7 @@ fn date_from_days(days: i64) -> (i64, i64, i64) {
 
 #[cfg(test)]
 mod tests {
-    use super::{as_comment, date_from_days, entries, header, check_id, check_header_suffices};
+    use super::{as_comment, check_header_suffices, check_id, date_from_days, entries, header};
     use crate::model::PlacedItem;
     use std::path::Path;
 

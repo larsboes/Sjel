@@ -378,12 +378,7 @@ fn a_rotation_rotates_the_declared_side() {
 fn an_approach_zone_is_on_the_side_the_flat_names() {
     let north = check_in(FLAT_NORTH, "b-vor-der-kueche");
     let hits: Vec<&str> = north.hard.iter().map(|v| v.rule.as_str()).collect();
-    assert_eq!(
-        hits,
-        ["R7"],
-        "expected exactly R7, got {:?}",
-        north.hard
-    );
+    assert_eq!(hits, ["R7"], "expected exactly R7, got {:?}", north.hard);
     assert_eq!(north.hard[0].required, Some(100));
     assert!(
         north.hard[0].message.contains("kuechenzeile"),

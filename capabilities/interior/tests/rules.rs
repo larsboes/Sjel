@@ -246,7 +246,10 @@ fn r5_tells_side_light_from_frontal() {
         1,
         "rotated by 90 degrees, front and back face the glazing"
     );
-    assert!(r.hard.is_empty(), "and otherwise this layout breaks nothing");
+    assert!(
+        r.hard.is_empty(),
+        "and otherwise this layout breaks nothing"
+    );
 }
 
 /// R6 looks from the entrance into the room and reports what is seen first.

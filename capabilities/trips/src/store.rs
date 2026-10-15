@@ -1069,7 +1069,9 @@ impl TripsStore {
         let prefix = &self.prefix;
         let Some(item) = conn
             .query_row(
-                &format!("SELECT {ITEM_COLUMNS} FROM {prefix}_plan_items WHERE plan_id = ?1 AND id = ?2"),
+                &format!(
+                    "SELECT {ITEM_COLUMNS} FROM {prefix}_plan_items WHERE plan_id = ?1 AND id = ?2"
+                ),
                 params![&plan_id, &item_id],
                 row_to_item,
             )
@@ -2208,11 +2210,21 @@ mod db_tests {
         // An inline edit merges, removes on null, and cannot strip a declared field.
         let patch = |v: Value| v.as_object().unwrap().clone();
         let edited = store
-            .edit_item(&plan.id, &second.id, Some("ICE to Valencia"), &patch(json!({ "time": "07:14", "mode": null })))
+            .edit_item(
+                &plan.id,
+                &second.id,
+                Some("ICE to Valencia"),
+                &patch(json!({ "time": "07:14", "mode": null })),
+            )
             .unwrap_err();
         assert!(edited.to_string().contains("mode"), "got: {edited}");
         let edited = store
-            .edit_item(&plan.id, &second.id, Some("ICE to Valencia"), &patch(json!({ "time": "07:14" })))
+            .edit_item(
+                &plan.id,
+                &second.id,
+                Some("ICE to Valencia"),
+                &patch(json!({ "time": "07:14" })),
+            )
             .unwrap()
             .expect("the item exists");
         assert_eq!(edited.title, "ICE to Valencia");

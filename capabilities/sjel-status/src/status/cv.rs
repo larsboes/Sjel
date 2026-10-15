@@ -84,14 +84,20 @@ pub(crate) async fn cv_write_handler(
     if !ok {
         return Err(bad_request(if stderr.is_empty() { stdout } else { stderr }));
     }
-    Ok(Json(json!({ "action": request.action, "detail": stdout, "warnings": stderr })))
+    Ok(Json(
+        json!({ "action": request.action, "detail": stdout, "warnings": stderr }),
+    ))
 }
 
 /// The launcher argv for a request. Separate from the handler so the mapping is tested
 /// without building PDFs or calling LinkedIn.
 fn plan_cv(r: &CvRequest) -> Result<Vec<String>, String> {
     let s = |v: &[&str]| v.iter().map(|x| x.to_string()).collect::<Vec<_>>();
-    let lang = if r.lang.is_empty() { "en" } else { r.lang.as_str() };
+    let lang = if r.lang.is_empty() {
+        "en"
+    } else {
+        r.lang.as_str()
+    };
     if !matches!(lang, "en" | "de") {
         return Err(format!("lang '{lang}' is not en or de"));
     }
@@ -105,8 +111,17 @@ fn plan_cv(r: &CvRequest) -> Result<Vec<String>, String> {
             plain_name(&r.slug, "slug")?;
             plain_name(&r.profile, "profile")?;
             let mut args = s(&[
-                "app", "new", &r.slug, "--company", &r.company, "--role", &r.role,
-                "--profile", &r.profile, "--lang", lang,
+                "app",
+                "new",
+                &r.slug,
+                "--company",
+                &r.company,
+                "--role",
+                &r.role,
+                "--profile",
+                &r.profile,
+                "--lang",
+                lang,
             ]);
             if !r.url.is_empty() {
                 args.extend(s(&["--url", &r.url]));
@@ -226,7 +241,11 @@ pub(crate) async fn cv_pdf_handler(Query(query): Query<PdfQuery>) -> Response {
         .find(|p| p["name"] == query.name.as_str())
         .and_then(|p| p["path"].as_str().map(PathBuf::from));
     let Some(path) = path else {
-        return (StatusCode::NOT_FOUND, Json(json!({ "error": "no such PDF" }))).into_response();
+        return (
+            StatusCode::NOT_FOUND,
+            Json(json!({ "error": "no such PDF" })),
+        )
+            .into_response();
     };
     match tokio::fs::read(&path).await {
         Ok(bytes) => (
@@ -246,14 +265,20 @@ mod tests {
     use super::*;
 
     fn req(action: &str) -> CvRequest {
-        CvRequest { action: action.into(), ..Default::default() }
+        CvRequest {
+            action: action.into(),
+            ..Default::default()
+        }
     }
 
     #[test]
     fn build_needs_a_plain_profile() {
         let mut r = req("build");
         r.profile = "swe".into();
-        assert_eq!(plan_cv(&r).unwrap(), ["build", "--profile", "swe", "--lang", "en"]);
+        assert_eq!(
+            plan_cv(&r).unwrap(),
+            ["build", "--profile", "swe", "--lang", "en"]
+        );
         r.profile = "--all".into();
         assert!(plan_cv(&r).is_err());
     }
@@ -271,7 +296,10 @@ mod tests {
         r.slug = "acme".into();
         r.status = "applied".into();
         r.note = "--profile x; rm -rf /".into();
-        assert_eq!(plan_cv(&r).unwrap(), ["app", "status", "acme", "applied", "--profile x; rm -rf /"]);
+        assert_eq!(
+            plan_cv(&r).unwrap(),
+            ["app", "status", "acme", "applied", "--profile x; rm -rf /"]
+        );
     }
 
     #[test]
@@ -284,7 +312,10 @@ mod tests {
     #[test]
     fn edit_targets_the_master_or_a_plain_slug() {
         assert_eq!(edit_args("edit", "get", "").unwrap(), ["edit", "get"]);
-        assert_eq!(edit_args("model", "put", "acme").unwrap(), ["model", "put", "acme"]);
+        assert_eq!(
+            edit_args("model", "put", "acme").unwrap(),
+            ["model", "put", "acme"]
+        );
         assert!(edit_args("edit", "put", "../master").is_err());
     }
 

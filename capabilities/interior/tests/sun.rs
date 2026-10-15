@@ -105,7 +105,7 @@ fn at_midnight_it_is_below_the_horizon() {
 // ---------------------------------------------------------------- the light patch
 
 use interior::model::{Model, Rect};
-use interior::sun::{report, touch, light_patch, SunPosition};
+use interior::sun::{light_patch, report, touch, SunPosition};
 use std::sync::Once;
 
 fn model() -> Model {

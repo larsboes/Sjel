@@ -577,7 +577,11 @@ pub fn digest(target: Option<&Target>, text: &str, directive: &Directive, reach:
     if !reach.admits(target) {
         return Outcome::RemoteRefused;
     }
-    let input = if target.backend_name == "foundation-models" { text.to_owned() } else { truncate(text, INPUT_CAP) };
+    let input = if target.backend_name == "foundation-models" {
+        text.to_owned()
+    } else {
+        truncate(text, INPUT_CAP)
+    };
     let prompt = digest_prompt(&input, shape, directive);
     complete(target, &prompt, shape.max_tokens())
 }
@@ -693,7 +697,11 @@ pub fn diagram(target: Option<&Target>, text: &str, reach: Reach) -> Outcome {
     if text.trim().is_empty() {
         return Outcome::SkippedShort;
     }
-    let input = if target.backend_name == "foundation-models" { text.to_owned() } else { truncate(text, INPUT_CAP) };
+    let input = if target.backend_name == "foundation-models" {
+        text.to_owned()
+    } else {
+        truncate(text, INPUT_CAP)
+    };
     let prompt = diagram_prompt(&input);
     match complete(target, &prompt, 700) {
         Outcome::Ok(answer) => match extract_mermaid(&answer) {
@@ -705,17 +713,35 @@ pub fn diagram(target: Option<&Target>, text: &str, reach: Reach) -> Outcome {
 }
 
 fn runtime_admission(target: &Target, prompt: &str, reply_tokens: u32) -> Result<(), String> {
-    let local = reqwest::Url::parse(&target.endpoint).ok()
+    let local = reqwest::Url::parse(&target.endpoint)
+        .ok()
         .and_then(|url| url.host_str().map(str::to_owned))
-        .is_some_and(|host| host == "localhost" || host.trim_matches(['[', ']'])
-            .parse::<std::net::IpAddr>().is_ok_and(|ip| ip.is_loopback()));
-    sjel_runtime::admit_model(&target.backend_name, &target.model, local).map_err(|e| e.to_string())?;
-    if local && target.backend_name == "foundation-models" && target.model == "apple-foundationmodel" {
+        .is_some_and(|host| {
+            host == "localhost"
+                || host
+                    .trim_matches(['[', ']'])
+                    .parse::<std::net::IpAddr>()
+                    .is_ok_and(|ip| ip.is_loopback())
+        });
+    sjel_runtime::admit_model(&target.backend_name, &target.model, local)
+        .map_err(|e| e.to_string())?;
+    if local
+        && target.backend_name == "foundation-models"
+        && target.model == "apple-foundationmodel"
+    {
         let window = target.max_input_tokens.unwrap_or(4096).min(4096) as usize;
-        if prompt.len().saturating_add(reply_tokens as usize).saturating_add(256) > window {
+        if prompt
+            .len()
+            .saturating_add(reply_tokens as usize)
+            .saturating_add(256)
+            > window
+        {
             return Err("deferred by runtime profile: AFM input plus reply exceeds its context; no request was sent".into());
         }
-        let base = target.endpoint.strip_suffix("/chat/completions").unwrap_or(&target.endpoint);
+        let base = target
+            .endpoint
+            .strip_suffix("/chat/completions")
+            .unwrap_or(&target.endpoint);
         if !sjel_inference::afm_available(base) {
             return Err("deferred by runtime profile: AFM model is unavailable".into());
         }

@@ -26,5 +26,8 @@ fn a_layout_check_costs_a_few_milliseconds() {
     }
     let per = t0.elapsed().as_secs_f64() * 1000.0 / n as f64;
     println!("check_layout: {per:.2} ms per call (sample flat, 600 x 450 cm at a 5 cm grid)");
-    assert!(per < 20.0, "{per:.2} ms: the order of the linear max scan the heap replaced");
+    assert!(
+        per < 20.0,
+        "{per:.2} ms: the order of the linear max scan the heap replaced"
+    );
 }

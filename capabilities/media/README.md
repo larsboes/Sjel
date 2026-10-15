@@ -1,6 +1,8 @@
 # media
 
-An exact-byte ingest gate and integrity ledger for a library on mounted volumes, with a read-only preview of reviewed organization mappings and a mirror it both builds and verifies. It answers whether a SHA-256 digest is known, where indexed bytes live, whether indexed mirrors still match, and which collections have reviewed destinations. It does not provide a backup contract, delete library content, browse photographs, or offer an HTTP/UI surface. The organization preview has no apply action.
+An exact-byte ingest gate and integrity ledger for a library on mounted volumes, with a read-only preview of reviewed organization mappings, a mirror it both builds and verifies, and a read-only HTTP surface the dashboard's `/media` page reads. It answers whether a SHA-256 digest is known, where indexed bytes live, whether indexed mirrors still match, which collections have reviewed destinations, and what each ingest run did with every path it considered. It does not provide a backup contract, delete library content, or browse photographs. The organization preview has no apply action.
+
+The verbs that act on the library (`organize`, `supersede`, `relabel`, `reclaim`, `mirror`) are operator-invoked commands with their own approval lists; the HTTP surface exposes none of them. Ledger shape, architecture and the HTTP contract: [`docs/capabilities/media.md`](../../docs/capabilities/media.md).
 
 ## Run it
 
@@ -8,6 +10,7 @@ The user-facing `capabilities/media/media` launcher builds only the `media` Rust
 
 ```sh
 media volume-id --root <mounted-volume>/Media/Library
+media serve
 media index --root <mounted-volume>/Media/Library --uuid <registered-volume-uuid>
 media audit --root <mounted-volume>/Media/Library --uuid <registered-volume-uuid> --sample 100
 media status
@@ -102,6 +105,10 @@ Erasing a drive can change its `/dev/diskN` number within one boot. The volume U
 
 The 2026-09-29 merge measured four nonmatches among 17,583 same-name candidate pairs, and 4,943 recovered rows with **zero matches against the pre-merge library**. Those rows contain 4,918 distinct SHA-256 digests: the other 25 are repeats *inside the recovered set*. Today's library has absorbed the recovered material, so today's live lookup correctly reports it present. Exact hashing is authoritative for duplicate admission. Similarity and a future perceptual hash may offer a human review candidate, never an automatic import or delete. F4 has not begun; neither a perceptual parser nor review tables exist. ExifTool supplies date hints for ingest and bounded date/location-tag evidence for organization preview; metadata cannot make a duplicate verdict. The `[sha2]` and `[exiftool]` provenance verdicts are in `upstreams.toml`.
 
+## The read-only HTTP surface
+
+`media serve` answers `GET /health`, `GET /routes`, `GET /api/status`, `GET /api/ingests` and `GET /api/ingests/{id}` on loopback. Every handler calls a `Ledger` reader, so nothing behind the port moves a file, drops a row or changes a library byte, and the acting verbs are not routes. The dashboard's `/media` page reads it through the shell's derived proxy (`/media/api`, prefix stripped) under the same inbound credential every capability requires. `SJEL_DB_PATH` isolates the database and `SJEL_PORT` the port.
+
 ## Verification and limits
 
 For isolated builds and tests, use `tools/cargo-hermetic test -p sjel-media --locked`. After an isolated debug build, run `python3 capabilities/media/acceptance/preview.py <media-bin>` for the preview's no-write, option-refusal, metadata-privacy and changing-entry checks. Run the existing ingest/index probes separately: `python3 capabilities/media/acceptance/scratch.py <media-bin>` and `python3 capabilities/media/acceptance/labelled.py <media-bin> <private-audit-trail-dir> [<library-root>]`. The synthetic scratch probe compares index counts to a separate `os.walk` implementation and checks idempotence, digest-only admission, a name/size collision, a recorded refusal, interrupted verification, a missing mirror and corruption detection. The historical script uses a **temporary** media schema seeded with historical positive digests, and compares bulk `media classify` output to SQLite queries independently. It checks all 4,943 recovered rows, all four known nonmatches, ten positive controls and both exception ledgers. Supplying a library root also re-hashes any canonical targets still accessible and reports how many of the four were unavailable; unavailable paths are not passing live comparisons.
@@ -110,6 +117,6 @@ For isolated builds and tests, use `tools/cargo-hermetic test -p sjel-media --lo
 
 ## Considered and declined
 
-- A `service.toml` for the multi-verb CLI: `tools/capability.sh` accepts a capability directory without a manifest; `tools/doctor` checks enabled directories, and `tools/check-manifest-integrity.sh` checks only declared `requires`. `kind = "data"` requires its own backup contract, which this capability does not own. `kind = "process"` without a schedule needs a port; this CLI has neither. The vault CLI preceded its server manifest in the same way. F3 may add a server manifest later.
+- A `service.toml` for the multi-verb CLI: declined while the CLI was the whole capability, and settled when media F3 asked for a surface a person can read. `serve` became a verb of the one `media` binary rather than a second server artifact, and the manifest declares the port and the read-only API. The remaining argument held: `kind = "data"` would still be wrong, because the ledger lives in the shared `store`, not in a file this capability owns.
 - A scheduled re-index: no justified cadence, and a manifest job needs a single command. Manual indexing and explicit audits are safer until that requirement is measured.
 - EXIF parsing in Rust and perceptual deduplication now: both duplicate already owned work, and neither decides byte equality. No new parser crate is introduced.

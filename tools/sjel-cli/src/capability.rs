@@ -614,7 +614,11 @@ fn capture_body(words: &[String]) -> serde_json::Value {
     let (url, text): (Vec<&String>, Vec<&String>) = words
         .iter()
         .partition(|w| w.starts_with("https://") || w.starts_with("http://"));
-    let text = text.iter().map(|w| w.as_str()).collect::<Vec<_>>().join(" ");
+    let text = text
+        .iter()
+        .map(|w| w.as_str())
+        .collect::<Vec<_>>()
+        .join(" ");
     serde_json::json!({
         "url": url.first(),
         "text": (!text.is_empty()).then_some(text),

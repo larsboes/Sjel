@@ -60,14 +60,19 @@ reason = "katex 0.16.47 via mermaid 12.x, whose range (^0.16.47) excludes the fi
 # Zed's to make, not a transitive patch here. Checked 2026-10-11 with `cargo tree -i` in
 # apps/gpui-prototype.
 [[IgnoredVulns]]
-id = "RUSTSEC-2026-0173"
-ignoreUntil = 2026-12-01
-reason = "Unmaintained proc-macro-error2 2.0.1, build-time only, via stacksafe-macro <- stacksafe <- gpui (Zed 5f8a7413) <- apps/gpui-prototype. No affected functions, CVSS, or fixed version. Revisit when Zed drops stacksafe or the prototype bumps its Zed pin."
-
-[[IgnoredVulns]]
 id = "RUSTSEC-2026-0206"
 ignoreUntil = 2026-12-01
-reason = "Unmaintained rustybuzz 0.20.1, runtime, via usvg 0.46 <- gpui (Zed 5f8a7413) <- apps/gpui-prototype. It shapes text inside SVGs; apps/gpui-prototype/src loads no SVG and no asset (grep, 2026-10-11), so nothing reaches it. No affected functions, CVSS, or fixed version. The successor is harfrust; revisit when Zed moves usvg to it or the prototype bumps its Zed pin."
+reason = "Unmaintained rustybuzz 0.20.1, runtime, via usvg 0.46 <- gpui-pre 0.3.6 <- gpui-kit 0.6.0 <- apps/gpui-prototype. rustybuzz shapes only SVG <text> elements. The app renders gpui-kit-assets 0.6.6 icons through usvg, and none of its 1,830 SVG files has a <text> element (grep, 2026-10-15), so nothing reaches it. No affected functions, CVSS, or fixed version. The successor is harfrust. Revisit when gpui-pre moves usvg to it, or when the app renders an SVG it did not ship."
+
+[[IgnoredVulns]]
+id = "RUSTSEC-2024-0384"
+ignoreUntil = 2026-12-01
+reason = "Unmaintained instant 0.1.13, via gpui-base and gpui-component 0.6.6 <- gpui-kit 0.6.0 <- apps/gpui-prototype, and notify-types. An informational advisory: no affected functions, CVSS, or fixed version. The successor is web-time. Revisit when gpui-kit drops it or the prototype bumps gpui-kit (ISA.md Decisions 2026-10-15, step 0)."
+
+[[IgnoredVulns]]
+id = "RUSTSEC-2025-0134"
+ignoreUntil = 2026-12-01
+reason = "Unmaintained rustls-pemfile 2.2.0, via gpui-pre-reqwest 0.12.15 <- gpui-pre-reqwest-client 0.3.6 <- gpui-kit 0.6.0 <- apps/gpui-prototype. An informational advisory: no affected functions, CVSS, or fixed version, and its parsing lives on in rustls-pki-types. The prototype talks only to loopback sjel-status over plain http. Revisit at the step 0 bump."
 
 # Runtime-reachable, and accepted for that reason rather than waved through as build-time: this
 # one parses YAML. What it is not is a known vulnerability — see the type in the reason.

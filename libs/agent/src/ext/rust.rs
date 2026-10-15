@@ -164,14 +164,46 @@ fn report(ran: &Ran) -> String {
         out.push('\n');
         out.push_str(line);
     }
-    let stderr = ran.stderr.trim_end();
+    let stderr = ran
+        .stderr
+        .lines()
+        .filter(|line| !is_cargo_status(line))
+        .collect::<Vec<_>>()
+        .join("\n");
     if !stderr.is_empty() {
         // cargo's own failures (a manifest it cannot read, a missing toolchain) arrive here as
         // prose, and they are the whole answer when they do.
         out.push_str("\n--- stderr\n");
-        out.push_str(stderr);
+        out.push_str(&stderr);
     }
     out
+}
+
+/// cargo's progress lines (`Checking`, `Finished`, `Blocking waiting for file lock`). They vary
+/// with cache and lock state, and carry nothing a caller can act on.
+fn is_cargo_status(line: &str) -> bool {
+    const STATUS: [&str; 14] = [
+        "Adding",
+        "Blocking",
+        "Building",
+        "Checking",
+        "Compiling",
+        "Downloaded",
+        "Downloading",
+        "Finished",
+        "Fresh",
+        "Locking",
+        "Running",
+        "Updating",
+        "Waiting",
+        "Removing",
+    ];
+    let line = line.trim();
+    line.is_empty()
+        || STATUS.iter().any(|word| {
+            line.strip_prefix(word)
+                .is_some_and(|rest| rest.starts_with(' '))
+        })
 }
 
 /// One `compiler-message` as a line, plus its child notes indented under it.
@@ -350,7 +382,7 @@ mod tests {
             );
             assert!(
                 out.len() < rendered.len(),
-                "{name}: the tool result is {} bytes and the rendered output {} — measured, not assumed",
+                "{name}: the tool result is {} bytes and the rendered output {} — measured, not assumed\n--- tool\n{out}\n--- rendered\n{rendered}",
                 out.len(),
                 rendered.len()
             );

@@ -21,7 +21,7 @@ import {
 } from "../dashboard/src/lib/inspector/connections.ts";
 import type { CalendarEntry, CapabilityView, FinanceTransaction, TripPlan } from "../dashboard/src/lib/api.ts";
 
-// The shell asks only the capabilities that declare an id's kind (libs/links/ISA.md D1), and a
+// The shell asks only the capabilities that declare an id's kind (docs/capabilities/links.md D1), and a
 // row it already lists as a reference is never repeated as an inference (D2).
 describe("discovery", () => {
   test("the kind is every segment but the last, and an untyped id has none", () => {

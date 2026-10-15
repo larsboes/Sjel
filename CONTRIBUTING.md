@@ -807,11 +807,12 @@ permanent provenance.
 
 ### The backlog is ISAs
 
-Open work — plans, todos, phases, anything unfinished — lives in an `ISA.md` and nowhere else.
-The root `ISA.md` holds what is repo-wide; a capability or Pack with enough of its own carries one
-at its root (`Packs/travel/ISA.md`, `capabilities/places/ISA.md`). `TODO.md`, `PLAN.md`,
-`HANDOFF.md` and `ROADMAP.md` remain a retired surface, including gitignored ones — and so is the
-issue tracker, which as of 2026-08-19 holds no backlog of ours and which no workflow writes to.
+Open work — plans, todos, phases, anything unfinished — lives in the root `ISA.md` and nowhere
+else. It is the only ISA: the per-unit `ISA.md` files were folded into it on 2026-10-15, their
+closed history into `ISA-archive.md`, and their live contracts into `docs/`. `TODO.md`,
+`PLAN.md`, `HANDOFF.md` and `ROADMAP.md` remain a retired surface, including gitignored ones —
+and so is the issue tracker, which as of 2026-08-19 holds no backlog of ours and which no workflow
+writes to.
 
 An open item is a claim, and a claim names the probe that would falsify it. That is the whole
 reason this moved off a tracker: an issue carries a description and a lifecycle, so closing one

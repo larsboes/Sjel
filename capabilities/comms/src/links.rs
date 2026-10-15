@@ -1,4 +1,4 @@
-//! What comms answers on `GET /api/links` (libs/links/ISA.md D10, LNK-17).
+//! What comms answers on `GET /api/links` (docs/capabilities/links.md D10, LNK-17).
 //!
 //! Comms stores no person ids. A person's mail is the triage rows whose sender address is one of
 //! that person's emails, as entities holds them. The match is exact on the address, so mail never

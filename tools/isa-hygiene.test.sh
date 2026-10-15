@@ -15,12 +15,12 @@ export SJEL_PRIVATE_USERS="private-user"
 export SJEL_PRIVATE_NAMES="Extreme INTENSO"
 
 git -C "$SCRATCH" init -q
-mkdir -p "$SCRATCH/capabilities/media"
+mkdir -p "$SCRATCH/capabilities/example"
 
 # Every case starts from a leak-free index, so a finding can only come from the line it planted.
 safe() {
   printf '%s\n' 'safe: no machine identifiers here' > "$SCRATCH/ISA.md"
-  printf '%s\n' 'safe: a relative path capabilities/media/src' > "$SCRATCH/capabilities/media/ISA.md"
+  printf '%s\n' 'safe: a relative path capabilities/media/src' > "$SCRATCH/capabilities/example/ISA.md"
   rm -rf "$SCRATCH/sub" "$SCRATCH/README.md"
   git -C "$SCRATCH" add -A >/dev/null 2>&1
 }
@@ -57,7 +57,7 @@ safe
 expect_silent_about "a clean index reports nothing" "/Volumes/"
 expect_names "a clean index says so" "no machine-private strings found"
 
-plant "capabilities/media/ISA.md" 'measured on /Volumes/Scratch/Media/Library'
+plant "capabilities/example/ISA.md" 'measured on /Volumes/Scratch/Media/Library'
 expect_names "a volume path is named" "/Volumes/Scratch"
 expect_names "the volume path is labelled" "volume path"
 

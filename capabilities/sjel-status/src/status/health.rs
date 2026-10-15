@@ -32,7 +32,7 @@ static LIVENESS_REFRESHING: std::sync::atomic::AtomicBool =
 /// Three handlers ask this on every shell poll. They probed one service after another,
 /// so the slowest probe set the response time: on 2026-10-09 vaultwarden on the LAN took
 /// 0.3–1.0 s, and the capabilities endpoint took 1.0–1.4 s with every local probe under
-/// 35 ms (dashboard/ISA.md DSH-8). Probes now run concurrently, and a result younger
+/// 35 ms (ISA-archive.md DSH-8). Probes now run concurrently, and a result younger
 /// than `LIVENESS_TTL` is served from memory. An older one is still served, and a
 /// refresh starts behind it, so no poll waits on the network once the first has run.
 /// A service the last probe did not cover forces a fresh probe, and so does a start or
@@ -334,7 +334,7 @@ mod tests {
     }
 
     /// A probe is served from memory inside the TTL, so a stopped service still reads up,
-    /// and `forget_liveness` makes the next reader probe again (dashboard/ISA.md DSH-8).
+    /// and `forget_liveness` makes the next reader probe again (ISA-archive.md DSH-8).
     #[tokio::test]
     async fn liveness_serves_the_last_probe_until_it_is_forgotten() {
         let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();

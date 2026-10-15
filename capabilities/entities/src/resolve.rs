@@ -1,4 +1,4 @@
-//! Which person a name or an email written elsewhere means (libs/links/ISA.md D8, LNK-14).
+//! Which person a name or an email written elsewhere means (docs/capabilities/links.md D8, LNK-14).
 //!
 //! Trips and places store people as text. They ask here rather than match names themselves, so
 //! there is one set of name rules: [`duplicates`]'s `norm_name` and its first-name rule, where a

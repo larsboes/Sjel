@@ -30,7 +30,7 @@ sjel-store = { path = "../../libs/sjel-store" }
 # capability's crate, and the shape belongs to neither of them alone.
 candidate-fingerprint = { path = "../../libs/candidate-fingerprint" }
 route-manifest = { path = "../../libs/route-manifest" }
-# The typed-id minter, shared so a place id is `place:<hex>` like every other (libs/links/ISA.md).
+# The typed-id minter, shared so a place id is `place:<hex>` like every other (docs/capabilities/links.md).
 sjel-links = { path = "../../libs/links" }
 serde = { workspace = true, features = ["derive"] }
 serde_json.workspace = true

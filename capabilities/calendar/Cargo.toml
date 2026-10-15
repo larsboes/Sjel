@@ -28,7 +28,7 @@ sjel-store = { path = "../../libs/sjel-store" }
 content-item = { path = "../../libs/content-item" }
 markdown-root = { path = "../../libs/markdown-root" }
 route-manifest = { path = "../../libs/route-manifest" }
-# Typed ids and the `/api/links` body every capability answers alike (libs/links/ISA.md).
+# Typed ids and the `/api/links` body every capability answers alike (docs/capabilities/links.md).
 sjel-links = { path = "../../libs/links" }
 serde = { workspace = true, features = ["derive"] }
 serde_json.workspace = true

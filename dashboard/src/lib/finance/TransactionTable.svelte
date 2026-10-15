@@ -18,7 +18,7 @@
     `${row.kind === "expense" ? "−" : row.kind === "income" ? "+" : ""}${money(row.amount_cents, row.currency)}`;
 
   // Through `transactionItem`, so the inspector gets the linkable `fin:tx:` id and every
-  // capability that references this transaction can answer for it (libs/links/ISA.md D3).
+  // capability that references this transaction can answer for it (docs/capabilities/links.md D3).
   function inspect(row: FinanceTransaction) {
     inspectorStore.open({
       ...transactionItem(row),

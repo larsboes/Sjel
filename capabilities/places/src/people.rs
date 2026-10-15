@@ -1,4 +1,4 @@
-//! Which person each `person_places.person` name means (libs/links/ISA.md D7-D11, LNK-16).
+//! Which person each `person_places.person` name means (docs/capabilities/links.md D7-D11, LNK-16).
 //!
 //! The same contract as trips' `people.rs`: `person` stays text, and `{prefix}_people` holds one
 //! decision per name, keyed by `sjel_links::name_key`: an `ent:` id, or null for "not a person".
@@ -21,7 +21,7 @@ use crate::store::PlacesStore;
 type Fallible<T> = Result<T, Box<dyn std::error::Error>>;
 
 pub const DDL: &str = "
-    -- One decision per person name (libs/links/ISA.md D7, D11). entity_id NULL records
+    -- One decision per person name (docs/capabilities/links.md D7, D11). entity_id NULL records
     -- 'not a person'; a name with no row is undecided.
     CREATE TABLE IF NOT EXISTS {prefix}_people (
         name_key    TEXT PRIMARY KEY,

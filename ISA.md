@@ -8,16 +8,16 @@ principal_stated_goal: "I want no new issues, I wanna get rid of all issues for 
 
 # ISA · Sjel
 
-Repo-wide state of record. Open work that belongs to one capability or Pack lives in
-that owner's own `ISA.md` (`Packs/travel/ISA.md`, `capabilities/places/ISA.md`); this
-file holds what is repo-wide or has no other owner.
+Repo-wide state of record, and since 2026-10-15 the only open-work surface: the per-unit
+`ISA.md` files were folded in here, their closed history into `ISA-archive.md`, and their live
+contracts into `docs/`. Repo-wide work and unit work both live here now.
 
 ## Problem
 
 Sjel's work often crosses capability boundaries: the agent gate, the rename, the disk, the
-privacy rules. Work that belongs to one capability or Pack has that owner's ISA. Work that
-crosses owners, or that no owner holds, needs one record that says what *done* means and how
-to check it.
+privacy rules. Work that belonged to one capability or Pack had that owner's ISA until
+2026-10-15, when eleven per-unit files were folded into this one. Work that crosses owners, or
+that no owner holds, needs one record that says what *done* means and how to check it.
 
 Until 2026-08-20 that record was GitHub Issues. An issue has a description and a lifecycle,
 but no falsifier, so closing one proves nothing. Two records also disagree as soon as someone
@@ -215,6 +215,224 @@ comment that cites one of these ISC numbers finds it there.
 - **F12** · A shared link becomes a row, and a garment is a row like any other · ISC-61…63
 - **F13** · The inventory stops living behind the floor plan · ISC-64…66
 
+## Open work folded in (2026-10-15)
+
+Eleven per-unit `ISA.md` files and the root `PLAN.md` were deleted on 2026-10-15. Their open
+items are here; their closed history is in [`ISA-archive.md`](ISA-archive.md); their live
+contracts are in `docs/`. Each item below is the open remainder, not the shipped whole.
+
+### From `PLAN.md`
+
+- **Capture from the phone.** The phone reaches Sjel only through the LAN listener, which admits
+  only requests signed with a paired device's key. An iOS Shortcut cannot sign, so an iOS share
+  extension in the phone app is the path; a shared-token endpoint was rejected because it opens
+  the signed-only listener.
+- **`#go` has no destination.** It stays in the inbox. It goes to `places`, which needs a write
+  path for a place from a link or a note.
+- **Model suggestions.** Domain rules suggest a tag; the model suggests nothing for what the rules
+  leave.
+- **Prices a page does not declare.** `inventory wunsch` reads a price only from meta tags. Uniqlo
+  declares none and has no JSON-LD (measured 2026-10-13). Open: a per-shop reader, or a price
+  typed in at triage.
+- **Groups of wishes.** A group with one constraint for all its items ("travel-friendly, fewer
+  but better") has no shape in `inventory`.
+- **German identifiers to English.** About 700 identifiers in `interior` and `inventory` are
+  German; many are JSON fields and database columns, so the move needs a store migration, a
+  change to the phone outbox's queued payloads, and an import that still reads the old TOML keys.
+- **Axon names.** "axon" appears in 522 tracked files (`axon.toml`, `axonStatus`, `axon-clip`,
+  `AxonGlance`). The config file names need a fallback read for machines that still have the old
+  name. The doc `axon.db` path in `docs/README.md` was corrected 2026-10-15.
+- **Giant pages.** `routes/travel/+page.svelte` (2,021 lines, from 4,197) and
+  `routes/feed/[id]/+page.svelte` (2,656, from 2,918). Split each the next time it is touched;
+  the `lib/api.ts` split (4,700 → 820 plus `lib/api/*`) and the root-document size are done.
+
+### From the vault PRD `Axon`
+
+The vault `Projects/Sjel/PRD Axon.md` was already `status: archived` and frozen on 2026-09-26,
+but its §13 open rows were never migrated. Verified against the tree on 2026-10-15; the rows
+below are still real, the rest are recorded as superseded at the end.
+
+- **B49 — the mail-classification corpus labels.** The harness shipped 2026-09-07 and exported
+  **121 fixtures, 0 labelled** (`<overlay>/config/comms-mail-stream-shadow.json`). The labels are
+  the operator's hand judgement, written before any model output is read. The stream flip needs
+  model agreement ≥ control + 10 points and a false-eviction rate ≤ 2%; urgency has its own gate.
+  Falsifier: a label file with zero empty labels and a scored confusion.
+- **B53 — the private-capability backup contract.** `tools/backup.sh:63` resolves
+  `service.toml` only under public `capabilities/`, so a private capability's declared
+  `backup_target` is invisible and a private backup would write a valid, empty archive. Use the
+  same public-or-overlay manifest resolution and duplicate-name refusal as capability startup,
+  then test with a synthetic private manifest. *(The row's `AXON_DB_PATH` half is stale:
+  `libs/sjel-config` reads `SJEL_DB_PATH`.)*
+- **B23 — the 4,096-token rung ladder.** `SystemLanguageModel.contextSize = 4096` and
+  `libs/summarize::fits_context` encode it. When macOS 27 / AFM 3 lands (a 32k window on the PCC
+  tier), the "Sectioned" rung may become local. A doctrine revision: the two documents move
+  together.
+- **B47 — the finance investment layer.** `instruments` holds all 13 records and `targets`
+  carries EUR and a null `risk_free_rate_bp`, but `allocations` is empty. Open: decide the target
+  cohort (active allocations sum to 10,000 bp ±50), fill a ticker where one is known (a wrong
+  ticker prices the wrong company silently), and install the `finance-prices` launchd unit.
+- **B28 / B41 — the real flat's own data.** 38 of 42 rows declare nothing; `bett_bestand` is
+  210 × 140 against a 100 cm door and does not say `zerlegbar`; R9 needs `[lage]` and glazing
+  heights; 13 open needs carry no price. A second real flat is what B28 needs.
+- **D19 — rotate the Obsidian Local REST API key.** A credential sits in the overlay's git
+  history (5 gitleaks findings, one commit). The frontmatter writer uses the API (Q107), so it is
+  now load-bearing rather than dormant. Rotate first; the history purge is a separate call.
+- **D15 — the reranking stage.** `bge-reranker-v2-m3-mlx` carries `verdict = "adopt"` and has
+  never served a ranking; Ollama 0.33.3 answers 404 to `/api/rerank`. Waits for a local runtime
+  that can serve it, or accept first-stage-only ranking and drop the `adopt` verdict.
+- **B48 — the trip roll-up numbers.** The budget field, wire and clearing shipped; `by_companion`
+  was cut. Open: a budget on a plan and a trip id on a transaction (both data entry). The finance
+  per-trip route still answers 200 with five zeros for an untagged trip.
+- **B5 — M3–M5.** The always-on agent, one trip end to end, and public. Partly built; undesigned
+  in detail.
+
+*Superseded on migration, 2026-10-15:* **B50** (five list contracts publish no data class) —
+`show_data_class` exists nowhere in the tree any more, so there is no field to add. The
+unnumbered §13 question about `fn erklaert` and the `.base` folder references are vault-side and
+stay in the PRD's history.
+
+### media · F3–F4 and four ingest gaps
+
+- **F3 — HTTP surface and dashboard panel.** `media` declares no `service.toml`; its README
+  says it offers no HTTP/UI surface. Falsifier: the panel exists and reads the index over HTTP.
+- **F4 — perceptual layer, advisory.** No `media_phashes` or `media_reviews` table exists.
+  Falsifier: a near-duplicate is proposed from a phash and reviewed.
+- **Per-file pre-classification failures.** A symlink, unreadable stream or non-UTF-8 path
+  refuses the whole preflight before an ingest run exists. Falsifier: one such input staged
+  among regular files still leaves every path a durable disposition.
+- **Interrupted multi-file ingest and orphans.** A crash between path reservation and link, or
+  an orphan in `.media-incoming`, still needs manual inspection. Falsifier: kill at each
+  filesystem/SQLite boundary and find no unverified final file.
+- **`reclaim`'s survivor must live under `--from`.** A file whose only other copy is on a third
+  volume is reported `unique` and kept even when that third copy is mounted. Falsifier: name
+  the survivor volume and have `reclaim` verify against it.
+- **No structure draft for `To Sort/`.** The two drafts in the overlay target removed Inbox
+  trees, so the 229 files / 53 GB in `Library/To Sort/` have no reviewed destinations and
+  `organize` cannot act. Naming categories is the principal's judgement.
+
+### backup · one claim and three gaps
+
+- **BKP-5 — per-kind verification.** Each target kind counts as verified only when its own check
+  passes. Only the local kind is rehearsed; iCloud and ssh are unproven. Falsifier: a restore
+  from each kind is observed passing.
+- **Concurrency and cancellation.** Two runs against one target, and what a stop does to a
+  half-written archive. `tools/backup.sh` refuses a same-second collision; that is not a job model.
+- **Run-record retention.** How long a failure history is kept, and whether it is pruned.
+- **A `restic`/offsite target kind.** Named as future work, nothing built.
+
+### traveler · four open items
+
+- **F3 — the vault proposes.** `TELOS/Personal/Events Profile.md` is a draft; `scouting` already
+  reads it. The route reads the TELOS notes, emits a per-field diff with the quoted span each
+  change rests on, and writes nothing until accepted. Gated on which TELOS sections are
+  admissible (`CURRENT_STATE` holds a different kind of fact from an interest list).
+- **F4 — the offered-versus-chosen half.** Twenty-eight `option_set` items exist on one plan; one
+  plan is one observation, and a preference inferred from a single choice is a guess.
+- **F6 — companion patterns, pseudonymously.** `places_person_places` holds nineteen rows in
+  state `proposed`, names in a plain column. The profile should learn company (solo, pair,
+  group, family) through the register's person ids, never names.
+- **One profile or one per person.** The store is keyed by id and nothing resolves a current one.
+  The day a second profile is needed is the day the question is real.
+- *(Superseded 2026-10-15, recorded for the record: per-trip weight overrides and the
+  destination-half reader both shipped — `transit/ranking.rs` `override_weights`,
+  `trips/plan_search.rs` `FACTOR_RETROSPECTIVE`.)*
+
+### Packs/travel · eight open items
+
+- **L1 — one outcome record.** `POST /api/plans/:id/outcome` after the next real trip. Not code.
+  Gates L3's transfer-buffer calibration and the journey-reliability independence assumption.
+- **L3 — the retrospective summary's companion half.** Three preconditions, in order: an origin
+  refusal shipped on trips (met 2026-09-05); a key that is the register's person id rather than
+  a name; a class column a mechanism reads. The last two are not met.
+- **`is_regional` disagrees between backends.** Same RE5 Bonn→Köln, 2026-08-20: dbnav `true`,
+  dbweb `false`. The flag decides whether a leg is presented as Deutschlandticket-covered, so
+  a false negative sells a ticket already held. Needs a spread of routes.
+- **Recovering a type for dbweb's regional legs.** Both backends agree on `train_number`; a
+  number→label resolution would make dbweb scorable. Nothing holds the mapping today.
+- **The cancellation flag end to end.** `originCancelled`/`destinationCancelled` are
+  fixture-tested; no cancelled train has appeared live. Opportunistic.
+- **`bodies_without_schemas` as a build gate.** Fourteen routes have undeclared bodies; failing
+  on all fourteen today blocks work rather than directing it.
+- **Obsidian export.** Gated on there being something machine-derived worth exporting (L1).
+- **An open segment has no home in the plan model.** A stage names a destination and date, an
+  item a day, and status is draft/saved/archived — none says "this part is undecided, here are
+  the branches". What would settle it: a second trip planned this way.
+
+### dashboard · six claims and six design questions
+
+- **DSH-2** — ⌃⌥Space opens Ask from any app and the question arrives in the drawer. Code exists
+  (`+layout.svelte` reads `?ask=`, `sjel-status/session.rs` `landing`); only an operator restart
+  is outstanding. Falsifier: the question does not arrive.
+- **DSH-3** — `/finance` reads right with live data (three `DataTable`s, subscription editor,
+  `SidePeek`). A live-data judgement, not a build.
+- **DSH-4** — a page header does not overlap its description at narrow widths. `PageHeader.svelte`
+  stacks `.lead` below 38rem; recompute before ticking.
+- **DSH-5** — no page builds its own table. Markdown and chart tables are exempt. Seven `<table>`
+  sites remain (the three exempt, plus `SyncStatus`, `InteriorPurchaseView`, `InteriorSolverView`,
+  `routes/interior`, `routes/cv`).
+- **DSH-6** — every page that shows fetched data shows its age through one shared component.
+  No such component exists in `lib/ui/`. The rule is `Packs/design/skills/ui-craftsmanship/SKILL.md`
+  ("Stale").
+- **DSH-7** — `Sjel.app` has an app icon, so its approval notifications show one. No `.icns` or
+  `CFBundleIconFile`; `apps/mac/Resources/` holds only the menu-bar PDF.
+- **Home: a ranked list, or a view per context.** Waited for declared joins (shipped 2026-10-06);
+  now the next candidate.
+- **Home's full "now" in the menu bar.** Needs a server endpoint first.
+- **A GPUI command palette.** Measure start time and resident memory against a webview before
+  building past `apps/gpui-prototype` (neither number exists). Open: replace the Swift ⌃⌥Space
+  panel or open beside it; and what it searches beyond Ask.
+- **Database views, from Obsidian Bases and Notion.** One collection, many saved views (table,
+  board, list, calendar), each with its own filter, sort, group and properties. Saved views and
+  per-view formulas do not exist. The planning owner is the first collection that needs it.
+- **A graph view.** `libs/links` joins and vault wikilinks as one graph. Renderer decided when the
+  node count is measured.
+- **Import and export per capability, through one contract.** Each capability names its formats
+  in and out, and the shell gives them one place.
+- **Joins with nothing to return yet.** No ledger transaction carries a trip tag; layouts publish
+  no join; trips keeps its own place namespace.
+
+### places · five items
+
+- **Photos layer.** Blocked on an indexer that respects PRD N4 (index and link, never copy).
+  EXIF geotags would also be the best travel-history source.
+- **MCC capture.** Round 2 captures address columns; Trade Republic's `mcc_code` is still
+  discarded at import.
+- **Self-hosted tiles.** The basemap still egresses to `tiles.openfreemap.org`; the seam is
+  declared swappable to PMTiles.
+- **Register proposals from calendar.** Calendar has no attendee field yet to derive from.
+- **Origin guard hardening.** The default allowlist accepts any `.ts.net` host; pinning it is one
+  overlay env away (`SJEL_PLACES_ALLOWED_ORIGIN_HOSTS`), unset by default.
+
+### operator-profile · two items
+
+- **An export that writes.** Export is dry-run only; a write needs its own reviewed contract.
+- **Harness targets other than Claude Code.** Each needs its user-instruction path verified first.
+
+### cv · one operator-gated claim
+
+- **ISC-67** — `cv linkedin pull` reads the LinkedIn Member Snapshot API on this machine. The
+  code exists (`src/linkedin.rs`); blocked on an operator LinkedIn developer app and token.
+  Falsifier: `cv linkedin pull` answers without the token error.
+
+### libs/agent · two items
+
+- **Wave 2.** Subagents (`ext::subagents`), a full-screen TUI, line editing, and
+  `capabilities/assistant` adopting the loop with read-only Sjel tools and no `bash`.
+- **Measure the specialist claim.** A fixed set of Rust tasks in this workspace runs twice on the
+  same model, with and without the `skills` and `cargo` extensions; the measure is the share that
+  pass `cargo clippy --all-targets` with no new warnings. The task set does not exist yet.
+
+### libs/links · known limits
+
+- `decide` checks that an id is shaped like a person id, not that the person exists.
+- A trip's companion chips open a person by name; the trip plan does not carry the decisions.
+- **Trips' own place namespace.** A destination's `obsidian-place:…` id does not resolve to the
+  places registry, so a place cannot list the trips that went there. See `docs/capabilities/links.md`.
+
+### printing · one question
+
+- **Does KlipperMCP replace the slicer probe?** Open since the capability shipped; never revisited.
+
 ## Operator checks
 
 Four open claims wait on one action each that an agent session cannot take, by design. Each
@@ -252,7 +470,8 @@ deployment with no fix from Lars.
   measurements, in the style of James Simo's city-builder devlog), hosting, or a company.
   Undecided.
 - **One Rust agent for the Sjel app and local coding.** Promoted 2026-10-04: `libs/agent`
-  (crate `sjel-agent`) started with c4a13a85, and its claims live in `libs/agent/ISA.md`. The
+  (crate `sjel-agent`) started with c4a13a85; its claims are under "Open work folded from unit
+  ISAs". The
   product reasoning is in the vault, `Projects/Sjel/Agent/PRD sjel-agent.md`. The bar this entry
   set for replacing Pi stays in force: one household task and one coding task, measured against
   the existing path, before any Pi retirement. The privacy probes in ISC-39 and ISC-45 are still
@@ -386,7 +605,9 @@ claim yet, and the watch rows they name are in `upstreams.toml` with the questio
 
 - [x] A1 — no new tracking surface replaces the tracker. Falsifier: a `TODO.md`,
   `PLAN.md`, `HANDOFF.md` or `ROADMAP.md` appears anywhere in the repo, gitignored ones
-  included.
+  included. Probe 2026-10-15: `git ls-files | grep -iE '(TODO|HANDOFF|ROADMAP|PLAN)\.md$'`
+  returns nothing; the root `PLAN.md` was deleted that day and its open items folded into
+  "Open work folded in".
 - [x] A2 — no issue is closed whose content exists nowhere else. Falsifier: ISC-2 fails
   for any closed issue.
 - [x] A3 — the public repo keeps a path for outside bug reports. Falsifier:
@@ -514,7 +735,7 @@ Entries before 2026-10-08 are in [`ISA-archive.md`](ISA-archive.md#log).
 
 - 2026-10-09 · Two decisions: projects, tasks and habits leave the vault for a Sjel owner,
   reversing Q48, and GPUI gets resident keyboard surfaces while Svelte keeps the rest. The
-  measurement behind the second is DSH-8 in `dashboard/ISA.md`. The vault side is updated in
+  measurement behind the second is DSH-8 in [`ISA-archive.md`](ISA-archive.md). The vault side is updated in
   `Domains/Planning.md`, the vault contract's kind table, and the Q48 callout.
 
 - 2026-10-08 · Review of every ISA against the tree. Three claims changed state. ISC-65 is done:

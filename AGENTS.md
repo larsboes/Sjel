@@ -34,7 +34,7 @@ overlay or Vaultwarden. Never generate, expose or change a secret without explic
 - **UI component modularity**:
   - Route views in `dashboard/src/routes/` are thin orchestrators. Avoid multi-thousand-line page monoliths.
   - Extract self-contained boards, search columns, solver panels, cards, and modal sheets into `dashboard/src/lib/<domain>/<Component>.svelte`.
-- **Short, precise planning & claims**: Issues and open claims in `PLAN.md` or `ISA.md` must be short, falsifiable, and precise specifications, never narrative essays.
+- **Short, precise planning & claims**: Open claims in `ISA.md` must be short, falsifiable, and precise specifications, never narrative essays.
 - **Self-explanatory code over prose comments**:
   - Write expressive, strongly typed code (Newtypes, type-state pattern, explicit enums).
   - If code needs a paragraph to explain *what* it does, refactor the code and variable names instead.

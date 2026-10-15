@@ -1,4 +1,4 @@
-//! What calendar answers on `GET /api/links` (libs/links/ISA.md, LNK-8).
+//! What calendar answers on `GET /api/links` (docs/capabilities/links.md, LNK-8).
 //!
 //! Calendar holds one kind of reference: an entry trips wrote carries its plan as
 //! `payload.plan_id`. The store reads that key only on `source = 'trips'` rows

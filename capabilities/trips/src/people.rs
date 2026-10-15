@@ -1,4 +1,4 @@
-//! Which person each traveller name means (libs/links/ISA.md D7-D11, LNK-15).
+//! Which person each traveller name means (docs/capabilities/links.md D7-D11, LNK-15).
 //!
 //! `travelers` stays text, as the operator wrote it; about a hundred readers take it that way.
 //! Beside it, `{prefix}_people` holds one decision per name, keyed by `sjel_links::name_key`:
@@ -20,7 +20,7 @@ use crate::store::{TripPlan, TripsStore};
 type Fallible<T> = Result<T, Box<dyn std::error::Error>>;
 
 pub const DDL: &str = "
-    -- One decision per traveller name (libs/links/ISA.md D7, D11). entity_id NULL records
+    -- One decision per traveller name (docs/capabilities/links.md D7, D11). entity_id NULL records
     -- 'not a person'; a name with no row is undecided.
     CREATE TABLE IF NOT EXISTS {prefix}_people (
         name_key    TEXT PRIMARY KEY,

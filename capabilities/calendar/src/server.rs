@@ -56,7 +56,7 @@ const ROUTES: &[route_manifest::Route] = &[
     r(
         "GET",
         "/api/links",
-        "Entries that reference a typed id. Required: to=<id>, such as to=trip:plan:… (libs/links/ISA.md).",
+        "Entries that reference a typed id. Required: to=<id>, such as to=trip:plan:… (docs/capabilities/links.md).",
     ),
     r(
         "GET",

@@ -1,4 +1,4 @@
-//! What places answers on `GET /api/links` (libs/links/ISA.md, LNK-9 and LNK-16).
+//! What places answers on `GET /api/links` (docs/capabilities/links.md, LNK-9 and LNK-16).
 //!
 //! Places holds two kinds of reference. `transaction_places.source_id` is finance's fingerprint
 //! of a transaction, and finance's typed id for it is `fin:tx:<source_id>`, so the target's last

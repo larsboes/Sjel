@@ -35,7 +35,7 @@ const ROUTES: &[route_manifest::Route] = &[
     r(
         "GET",
         "/api/links",
-        "Plans whose travellers are a person. Required: to=ent:<id> (libs/links/ISA.md D11).",
+        "Plans whose travellers are a person. Required: to=ent:<id> (docs/capabilities/links.md D11).",
     ),
     r(
         "GET",
@@ -1306,7 +1306,7 @@ fn clipped_span(date_from: &str, date_to: &str) -> Result<DaySpan, &'static str>
 /// because transit reports its gap (`unscored_legs`) and this did not. Now the
 /// days come back `DayLoad::Unknown`, the body carries `calendar` and
 /// `degraded`, and the ranking says what it does not know
-/// (Packs/travel/ISA.md: "a guess that looks like a measurement is worse than
+/// (ISA-archive.md: "a guess that looks like a measurement is worse than
 /// a blank").
 async fn flight_when(Query(params): Query<FlightWhenParams>) -> ApiResponse {
     let span = match clipped_span(&params.date_from, &params.date_to) {

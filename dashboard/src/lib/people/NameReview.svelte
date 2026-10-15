@@ -1,6 +1,6 @@
 <script lang="ts">
   /**
-   * Names other capabilities store as text and nobody has decided yet (libs/links/ISA.md D7-D11).
+   * Names other capabilities store as text and nobody has decided yet (docs/capabilities/links.md D7-D11).
    *
    * Asked of every capability whose `links_to` declares `ent`, so a new capability that stores
    * people by name appears here without a change to this file. Exact matches never reach this

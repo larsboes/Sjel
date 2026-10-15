@@ -1,7 +1,7 @@
 <script lang="ts">
   /**
    * What an item touches in other capabilities, as `connections.ts` answers it: references
-   * first, then inferences, marked as such (libs/links/ISA.md D2). Shared by the inspector and
+   * first, then inferences, marked as such (docs/capabilities/links.md D2). Shared by the inspector and
    * the people page, so a connection reads the same wherever it appears.
    *
    * A group renders only when it has rows or an error. An empty reference group means the

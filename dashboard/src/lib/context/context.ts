@@ -21,7 +21,7 @@ import { link } from '../nav';
  *
  * Every row is a record some capability owns. It opens in the inspector, so its own
  * connections are one more step away. A source that did not answer is named in `missing`,
- * never shown as an empty list (libs/links/ISA.md D2's rule for connections).
+ * never shown as an empty list (docs/capabilities/links.md D2's rule for connections).
  */
 
 export type ContextKind = 'day' | 'trip' | 'person';

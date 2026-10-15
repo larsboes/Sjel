@@ -122,7 +122,7 @@ const ROUTES: &[route_manifest::Route] = &[
         path: "/api/resolve",
         summary: "Which person each of { names, emails } means. A name is exact, first, ambiguous \
                   or none, with candidates; only exact carries an entity_id. An email carries one \
-                  when exactly one person has it (libs/links/ISA.md D8). Writes nothing.",
+                  when exactly one person has it (docs/capabilities/links.md D8). Writes nothing.",
         request_schema: Some(route_manifest::schema_of::<entities::resolve::ResolveRequest>),
     },
     route_manifest::get(

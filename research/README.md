@@ -34,7 +34,7 @@ project named here has a `watch` row in `../upstreams.toml`.
 - Is one native GPUI surface worth a third UI stack? Sjel has a Svelte dashboard and a SwiftUI
   menu-bar app. The talk that raised it measures render speed. Measured 2026-10-09: Sjel's waits
   come from a service, not from rendering. A `/context` day switch settles in 26 ms in Chrome, and
-  one shell endpoint takes over a second (`../dashboard/ISA.md` DSH-8). `../ISA.md` Decisions
+  one shell endpoint takes over a second (`../ISA-archive.md` DSH-8). `../ISA.md` Decisions
   (2026-10-09) gives GPUI a command palette on start time and memory instead. Neither of those
   two numbers is measured yet. Source:
   [Conrad Irwin, EuroRust 2025](https://www.youtube.com/watch?v=sheIOOf-xRo).

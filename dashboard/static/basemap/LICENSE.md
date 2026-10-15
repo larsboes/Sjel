@@ -23,7 +23,7 @@ the TileJSON, and MapLibre's attribution control renders it on every map.
 The vector tiles and the Natural Earth raster still come from `tiles.openfreemap.org` over the
 network. They are the large half — a z6 vector tile measured 269 KB on 2026-09-06 — and they are
 the half a self-hosted PMTiles deployment would replace. That decision is still open; see
-`capabilities/places/ISA.md`, "Not yet specified".
+`ISA.md`, "Not yet specified".
 
 Two ranges of each fontstack are vendored (`0-255`, `256-511`), which covers every Latin-script
 place name. A label outside those ranges falls back to the upstream host through the surface

@@ -1,4 +1,4 @@
-//! What finance answers on `GET /api/links` (libs/links/ISA.md, LNK-7).
+//! What finance answers on `GET /api/links` (docs/capabilities/links.md, LNK-7).
 //!
 //! Finance holds one kind of reference: the `axon-trip-id` tag, projected as
 //! `TransactionRow::trip_id`. A transaction's linkable id is `fin:tx:<source_id>`, because

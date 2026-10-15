@@ -113,7 +113,7 @@ fight the platform's own menu on links.
 
 Ruled 2026-10-06: the joins between capabilities are the reason Sjel is one shell and not
 five apps, so the inspector shows them. `src/lib/inspector/connections.ts` reads them live
-when an item opens, in two kinds that stay apart (`libs/links/ISA.md`, D1 and D2):
+when an item opens, in two kinds that stay apart (`docs/capabilities/links.md`, D1 and D2):
 
 - **References.** The shell takes the kind from the item's typed id and asks
   `GET /<capability>/api/links?to=<id>` of every capability whose `links_to` declares that kind.
@@ -232,7 +232,7 @@ the licence obligations in that directory's `LICENSE.md`. That removes four seri
 transatlantic round trips from the critical path (measured 2026-09-06: 0.23 s style, 0.19 s
 TileJSON, 0.31 s sprite, ~0.2 s per glyph range) and replaces them with ~1 ms loopback reads.
 The **vector tiles and the Natural Earth raster stay remote**; they are the large half, and
-self-hosting them is an open decision in `capabilities/places/ISA.md`.
+self-hosting them is an open decision in `ISA.md`.
 
 Labels are Latin-script only. Liberty renders `name:latin` concatenated with `name:nonlatin`, so
 a European overview asked for Greek, Cyrillic, Arabic, Devanagari and more — measured at **29

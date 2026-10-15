@@ -85,13 +85,13 @@ const ROUTES: &[route_manifest::Route] = &[
         "GET",
         "/api/links",
         "Mail from a person: triage rows whose sender is one of their emails in entities. \
-         Required: to=ent:<id> (libs/links/ISA.md D10).",
+         Required: to=ent:<id> (docs/capabilities/links.md D10).",
     ),
     r(
         "GET",
         "/api/people/open",
         "Names waiting for review: always none here, because mail joins people by exact email \
-         (libs/links/ISA.md D10, D11).",
+         (docs/capabilities/links.md D10, D11).",
     ),
     r(
         "GET",

@@ -24,7 +24,7 @@
 //!
 //! **Names.** Company is counted as a shape — solo, pair, group — never listed.
 //! `travelers` holds real names and is already served by `GET /api/plans`, which
-//! `Packs/travel/ISA.md` records as an open leak; this projection must not be a
+//! the root `ISA.md` records as an open leak; this projection must not be a
 //! second place they leave by.
 
 use serde::{Deserialize, Serialize};

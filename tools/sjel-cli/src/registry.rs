@@ -87,7 +87,7 @@ pub struct Service {
     pub endpoint: String,
     pub proxy_extra: Vec<String>,
     pub requires: Vec<String>,
-    /// Id kinds this capability answers `GET /api/links` for (libs/links/ISA.md D1). Kept for an
+    /// Id kinds this capability answers `GET /api/links` for (docs/capabilities/links.md D1). Kept for an
     /// external capability too: its deployment answers the same route at its endpoint.
     pub links_to: Vec<String>,
 }

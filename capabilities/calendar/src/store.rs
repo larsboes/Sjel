@@ -211,7 +211,7 @@ impl CalendarStore {
     ///
     /// A payload is inert provider evidence (`model.rs`, `Entry::payload`). This reads one key of
     /// it, and only on rows trips itself wrote, because that key is the one reference to a plan an
-    /// entry carries (libs/links/ISA.md, LNK-8). Every other provider's payload stays inert.
+    /// entry carries (docs/capabilities/links.md, LNK-8). Every other provider's payload stays inert.
     pub fn entries_for_plan(&self, plan_id: &str) -> StoreResult<Vec<Entry>> {
         let conn = self.conn()?;
         Ok(conn.query_all(

@@ -98,7 +98,7 @@
   }
 
   // What the selected person touches elsewhere: references from every capability that declares
-  // `ent`, then the text and place matches, labelled inferred (libs/links/ISA.md D2).
+  // `ent`, then the text and place matches, labelled inferred (docs/capabilities/links.md D2).
   let connections = $state<ConnectionGroup[] | null>(null);
   // Bumped when a name is decided below, so the person's links are read again.
   let decided = $state(0);

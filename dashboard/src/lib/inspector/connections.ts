@@ -16,7 +16,7 @@ import type { InspectableEvent, InspectableItem, InspectableTransaction, Inspect
 /**
  * What the inspected item touches in other capabilities, read live when the inspector opens.
  *
- * Two kinds of connection, kept apart on purpose (libs/links/ISA.md D2):
+ * Two kinds of connection, kept apart on purpose (docs/capabilities/links.md D2):
  *
  * - **reference**: a row holds this item's id, or the item holds the row's. Back-references come
  *   from `GET /<capability>/api/links?to=<id>`, asked only of the capabilities whose `links_to`

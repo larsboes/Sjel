@@ -1,6 +1,6 @@
 //! Typed ids, and the answer one capability gives about rows of its own that reference another's.
 //!
-//! The contract is in `libs/links/ISA.md`. In short: an id is `<kind>:<rest>`; a capability that
+//! The contract is in `docs/capabilities/links.md`. In short: an id is `<kind>:<rest>`; a capability that
 //! holds references declares the kinds in `service.toml` as `links_to`, and answers
 //! `GET /api/links?to=<id>` with a [`Links`] body. The shell asks only the capabilities that
 //! declare the id's kind, so it holds no code per pair of capabilities.
@@ -89,7 +89,7 @@ pub fn stable_id(kind: &str, identity: &str) -> String {
     id
 }
 
-// ---- people by name (libs/links/ISA.md D7-D11) -----------------------------------------------
+// ---- people by name (docs/capabilities/links.md D7-D11) -----------------------------------------------
 
 /// The key a person's name is compared by: whitespace collapsed, lower case. Entities resolves
 /// with it and every capability that stores names keys its decisions by it, so "Lucia" and

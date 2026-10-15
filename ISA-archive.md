@@ -1,10 +1,11 @@
 # ISA archive · Sjel
 
-The features of the root [`ISA.md`](ISA.md) whose every claim is ticked, with their test rows
-and the log up to 2026-10-08. Nothing here is open work. A claim that is reopened moves back to
-`ISA.md` with its feature. Text moved here unchanged, except two marked edits: the ISC-65 entry
-of 2026-10-08, and the test commands that named `sjel-interior` for code that moved to
-`sjel-inventory` (F13).
+The closed features of the root [`ISA.md`](ISA.md), with their test rows and the log through
+2026-10-05. Nothing here is open work. A claim that is reopened moves back to `ISA.md` with its
+feature. Text moved here unchanged, except three marked edits: the ISC-65 entry of 2026-10-08,
+the test commands that named `sjel-interior` for code that moved to `sjel-inventory` (F13), and
+the eleven per-unit `ISA.md` files folded in on 2026-10-15 (last section, with pointers to their
+live contracts in `docs/` and their open work in the root `ISA.md`).
 
 ## Features
 
@@ -25,8 +26,7 @@ doctrine and the automation would refill the tracker by Monday.
 - [x] ISC-4 — `upstream-watch` opens no issue: it writes the drift report to the job
   summary and exits non-zero when an entry is past its cooldown. Falsifier: the workflow
   file still calls `gh issue create`, or a green run hides real drift.
-- [x] ISC-5 — `bazel test //...` green on the landing commit, `ARCHITECTURE.md` included. Evidence: 68/68 pass, plus `//:architecture_up_to_date_test` forced uncached, 4050fe4.
-  Falsifier: any failing target.
+- [x] ISC-5 — the full suite green on the landing commit, `ARCHITECTURE.md` included. Evidence: 68/68 pass, plus the architecture-freshness check forced uncached, 4050fe4. Falsifier: any failing target. *(Was `bazel test //...`; PRD Q44 retired Bazel 2026-08-25.)*
 
 ### F1 · Demo seeding for Comms, Scouting and Transit
 
@@ -423,6 +423,12 @@ it should have given up (ISC-65), the dashboard's item surface still lives on `/
 the item images — were left in `interior` because moving a signed, device-authenticated ingress
 without verifying it is how a silent loss happens.
 
+> [!done] Corrected 2026-10-08: **ISC-65 is done.** The item routes left `interior` in
+> `b10e5260`; `capabilities/interior/src/api.rs` now mounts only `POST /api/items/{id}/impact`,
+> which computes and writes nothing. The two statements above recorded the state on 2026-10-05
+> and are kept for that reason. Whether `/api/sync` and `/api/media` have since moved is not
+> re-measured here.
+
 Sequencing, because a half-moved store is the failure this repository has already paid for once
 (B51 was reverted in `815750c` rather than land half a form in a live file): the migration and
 the switch-over are **one** landing, since a copied table and a live table are two truths about
@@ -476,7 +482,8 @@ the same thing. Started and landed 2026-10-05 in the order the file records.
   and 8092 answers nothing. NOT verified: the host rebooted, and the phone's `/api/sync` and the
   item images, which stayed in `interior` on purpose. NOT finished: `interior` still mounts the
   item routes it should have given up (ISC-65), so there are two writers of one table — the same
-  table, so nothing diverges, but it is a deletion left for the next landing.
+  table, so nothing diverges, but it is a deletion left for the next landing. *(Corrected
+  2026-10-08: the deletion landed in `b10e5260`; see ISC-65.)*
 
 - 2026-10-05 · `interior wunsch <url>` and three clothing columns, recorded as F12. A shared link
   becomes a `wanted` row in `interior_item` — the same table a sofa lives in, per Q58 — with the
@@ -950,3 +957,118 @@ the same thing. Started and landed 2026-10-05 in the order the file records.
   Sjel, switched the license and moved the product document into the README.
 - 2026-08-19 · Scaffolded. Carries Axon issues #172, #174, #180 and the tracker
   retirement itself; #185 and #186 went to `Packs/travel/ISA.md`.
+
+## Unit ISAs folded 2026-10-15
+
+Eleven per-unit `ISA.md` files were deleted on 2026-10-15. Their open work is in the root
+[`ISA.md`](ISA.md), section "Open work folded from unit ISAs"; their live contracts are in
+`docs/`; what follows is the closed record. Each file's full text is in git history
+(`git log --all -- <path>`); the delete commit is the last one to name it.
+
+### media (`capabilities/media/ISA.md`, 539 lines)
+
+Index, ingest gate, mirror verification, preview, applied organization, mirror/reclaim/sync.
+F0–F2 and F5–F7 shipped; F3 (HTTP surface/panel) and F4 (perceptual layer) never started and are
+open in the root ISA. Decisions: the index is the authority over the tree; digest and path
+verification share one freshness preflight; reclaim reads its survivor from disk. The 2026-09-29
+probe record and the schema sketch are in git history.
+
+### backup (`capabilities/backup/ISA.md`, 293 lines)
+
+Run records, target registry, timing policy. BKP-1…BKP-4 shipped; BKP-5 (per-kind verification)
+is open; BKP-6 shipped (the dashboard interval control exists); BKP-7 was superseded by media's
+own live probes. Decisions: one run row per capability; the target is a per-run choice driven by
+`capabilities/backup`, not one overlay role.
+
+### traveler (`capabilities/traveler/ISA.md`, 399 lines)
+
+Bio-psycho-social profile with per-field provenance, a surface an agent drives. TRV-1…TRV-20 and
+A1–A4 shipped. Two "not yet specified" items shipped while the file stood (per-trip weight
+overrides; the destination-half reader via `FACTOR_RETROSPECTIVE`); four remain open in the root
+ISA. Decisions and log are in git history.
+
+### Packs/travel (`Packs/travel/ISA.md`, 340 lines)
+
+Reliability, the parquet reader, retrospective and cost roll-up, and a trip that did not happen.
+ISC-1…ISC-14 shipped (ISC-4 deliberately refuted and kept as the record). Eight items remain open
+in the root ISA.
+
+### dashboard (`dashboard/ISA.md`, 108 lines)
+
+DSH-1 and DSH-8 shipped and are recorded here: DSH-1 is the "needs you" dot surviving a restart
+(`capabilities/sjel-status/src/status/health.rs`); DSH-8 is the concurrent liveness probe
+(1.0–1.4 s → concurrent `join_all`, one cache). DSH-2 and DSH-4 have shipped code awaiting an
+operator check; DSH-3, DSH-5, DSH-6 and DSH-7 remain open in the root ISA, as do the six design
+questions that were its "Not yet specified" list. The 2026-10-09 measurement that chose GPUI for
+resident keyboard surfaces is DSH-8.
+
+### places (`capabilities/places/ISA.md`, 267 lines)
+
+PLC-1…PLC-15, A1 and A2 all shipped; the file carried no open claim. Five "Not yet specified"
+items remain open in the root ISA. (Defect: PLC-13 was used twice, for climate params and for the
+presence aggregate; both are archived, so the duplicate id is not carried forward.)
+
+### printing (`capabilities/printing/ISA.md`, 80 lines)
+
+P1–P7 and three anti-claims shipped and were reproduced live on 2026-10-15 (`printctl.py
+selftest`: ALL PASS). The VibeCAD narrative was off-repo history; the KlipperMCP question is open
+in the root ISA.
+
+### operator-profile (`capabilities/operator-profile/ISA.md`, 41 lines)
+
+OPR-1…OPR-4 shipped, each held by a named test. Purpose, boundary, ownership and export contract
+are current and mirrored in `README.md`; two items remain open in the root ISA.
+
+### cv (`capabilities/cv/ISA.md`, 25 lines)
+
+ISC-68 and ISC-69 shipped; ISC-67 is open in the root ISA, blocked on an operator LinkedIn
+developer app rather than on code. `linkedin sheet` shipped without a claim.
+
+### libs/agent (`libs/agent/ISA.md`, 582 lines)
+
+AGT-1…AGT-30 shipped; the file carried no open feature claim. Two items remain open in the root
+ISA (Wave 2; the specialist measurement). The vault's `Projects/Sjel/Agent/PRD sjel-agent.md` was
+already merged here on 2026-10-09. Decisions and log are in git history.
+
+### libs/links (`docs/capabilities/links.md`, 251 lines)
+
+LNK-1…LNK-18 shipped (LNK-10 withdrawn). The typed-id and `/api/links` contract moved to
+[`docs/capabilities/links.md`](docs/capabilities/links.md); the decision index D1–D11 and the
+claim index live there. Known limits and out-of-scope items are in the root ISA.
+
+## Storage history, folded from `PLAN.md` 2026-10-15
+
+`PLAN.md` was retired because the repo's own anti-claim A1 forbids a tracking surface beside the
+ISA. Its open items moved to the root `ISA.md`; the reasoning below is what a scanner cannot
+infer, kept because re-adding a class needs a measurement that the thing is back.
+
+**The crate has one reporting surface and one reclaim surface (2026-10-13).** `report`, `discover`,
+`report --where` and `target` read; `reclaim` is the only thing that removes, with `apply` and
+`prune` kept as spellings of it. Every removal goes through one guard (`guard.rs`):
+canonicalise, scope, git, the policy's protection and ownership, then the live-process probe. The
+policy gained a size axis (`cap_gb`, `older_than_days`), which let `capabilities/cargo-trim` stop
+being a shell script with its own `du`, `pgrep` guard and 50 GB cap — it runs `reclaim
+--scheduled` now. `discover --root <path>` ranked the space the report could only total;
+`--root /` is refused because the Data volume is reached through a firmlink. The walk costs 35 s
+under `$HOME` and 45 s over the volume. Shipped same day: named paths brought named space to
+156.2 GB; the per-class growth curve is in `capabilities/sjel-status`.
+
+**Storage declarations retired 2026-10-13.** Removed from the overlay's `config/storage-policy.toml`
+because their paths were gone. Re-add a class only with a measurement that the thing is back.
+
+- **oMLX KV cache (`~/.omlx/cache`).** `~/.omlx` is absent, no `omlx-server` runs, nothing listens
+  on :8000, and `capabilities/foundation-models/service.toml` records oMLX as retired with apfel
+  serving the light role. **If oMLX returns, do not move its cache to the external SSD** — 230 MB
+  blocks over USB cost more per cache hit than the internal NVMe read. It grew unbounded because
+  `settings.json` has `hot_cache_max_size = "0"` and `ssd_cache_max_size = "auto"`.
+- **`postgres` and `omlx-server` as expected services.** Both retired; the report printed
+  `ABSENT` beside each while a note contradicted the line above it.
+- **Playwright / puppeteer payloads and Chrome's on-device models.** `~/.cache/puppeteer`,
+  `~/Library/Caches/ms-playwright{,-go}`, Chrome's `OptGuideOnDeviceModel` and `screen_ai`. All
+  absent, and **armed rather than dead**: if one comes back, its bytes land in `unattributed` until
+  a class names it.
+- **Per-crate Cargo target dirs.** Absent, and verified 2026-08-08 to stay absent. **If one
+  reappears, that is the signal something builds outside the workspace.**
+- **`~/Library/Caches/bazel` and the absent protected path.** No `bazel-bin`/`bazel-out` exists and
+  cargo is the build system. The protected path `~/Library/Application Support/com.apple.container`
+  guarded Axon's store and was absent.

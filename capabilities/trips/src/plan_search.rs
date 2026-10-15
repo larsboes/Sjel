@@ -10,7 +10,7 @@
 //! ## Two contracts this file keeps deliberately
 //!
 //! **A guess that looks like a measurement is worse than a blank**
-//! (`Packs/travel/ISA.md:57`). A factor that could not be measured is absent
+//! (`ISA-archive.md:57`). A factor that could not be measured is absent
 //! from `factors[]` and the remaining weights are re-normalised to sum to 1;
 //! `degraded[]` names every input that was missing. A neutral 0.5 for absent
 //! climate is a number a reader cannot tell apart from a measured one — the
@@ -391,7 +391,7 @@ pub struct RankedCandidate {
     pub season: Option<SeasonScore>,
     /// `None` when NO factor could be measured. A `0.0` there would read as a
     /// measured worst candidate, which is the same defect as a neutral 0.5 for
-    /// an absent factor (`Packs/travel/ISA.md`: a guess that looks like a
+    /// an absent factor (`ISA-archive.md`: a guess that looks like a
     /// measurement is worse than a blank).
     pub score: Option<f64>,
     pub factors: Vec<ScoreFactor>,

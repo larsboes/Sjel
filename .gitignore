@@ -40,10 +40,9 @@ graphify-out/
 # Project-local agent harness discovery symlinks (e.g. pi / antigravity .agents/skills)
 .agents/
 
-# PLAN.md is deliberately NOT ignored here any more (CONTRIBUTING.md#the-backlog-is-isas).
-# Ignoring it is what let capabilities/PLAN.md grow into documentation ten tracked files
-# cited while staying invisible to every gate. A stray plan file should show up as
-# untracked in `git status` and get dealt with, not disappear.
+# PLAN.md is gone: open work lives in ISA.md (CONTRIBUTING.md#the-backlog-is-isas).
+# It is deliberately NOT ignored, so a stray plan file shows up as untracked in
+# `git status` and gets dealt with rather than disappearing.
 to-integrate/
 # Next.js build output
 **/.next/

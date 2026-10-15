@@ -28,6 +28,7 @@ Capabilities declare their execution type in `service.toml`:
 
 - **[Service Manifest Reference](manifest.md)**: Complete TOML schema specification for `service.toml`.
 - **[Contracts & Health](contracts.md)**: Freshness contracts, heartbeat requirements, and sweep semantics.
+- **[Typed Ids & `/api/links`](links.md)**: The join contract — id grammar, `links_to` discovery, the link response, and people resolution.
 - **[Feed & Communications](feed-and-comms.md)**: Intake pipeline, `content-item-v2`, and privacy redaction ladder.
 - **[Calendar Architecture](calendar.md)**: Materialized forward-only rhythms and two-way Google Calendar synchronization.
 - **[CV](cv.md)**: Typed master file, priority auto-fit to one page, form editor, LinkedIn snapshot diff.

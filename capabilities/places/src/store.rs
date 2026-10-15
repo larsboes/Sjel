@@ -326,7 +326,7 @@ impl PlacesStore {
         Self::type_ids(conn, prefix)
     }
 
-    /// Renames `place_<hex>`, `pp_<hex>` and `visit_<hex>` to `<kind>:<hex>` (libs/links/ISA.md D3,
+    /// Renames `place_<hex>`, `pp_<hex>` and `visit_<hex>` to `<kind>:<hex>` (docs/capabilities/links.md D3,
     /// LNK-12). The hex is unchanged, so a backfill that re-derives an id lands on the renamed row.
     ///
     /// Four tables reference `places.id` and foreign keys are on for every connection
@@ -747,7 +747,7 @@ impl PlacesStore {
 
     /// The places linked to one finance transaction, with the link's precision (`venue` or
     /// `city`). `source_id` is finance's fingerprint, the same value finance's typed id
-    /// `fin:tx:<source_id>` carries (libs/links/ISA.md D3).
+    /// `fin:tx:<source_id>` carries (docs/capabilities/links.md D3).
     pub fn places_for_transaction(&self, source_id: &str) -> Fallible<Vec<(Place, String)>> {
         let prefix = &self.prefix;
         let conn = self.conn()?;
@@ -1074,7 +1074,7 @@ fn row_to_normal(row: &Row) -> rusqlite::Result<MonthlyNormal> {
 /// any machine lands on the row it made before. Same purpose as finance's
 /// path-derived subscription ids.
 ///
-/// Typed `<kind>:<hex>` since 2026-10-06 (libs/links/ISA.md D3); it was `<kind>_<hex>` with the
+/// Typed `<kind>:<hex>` since 2026-10-06 (docs/capabilities/links.md D3); it was `<kind>_<hex>` with the
 /// same hex, and `run_migration` renames the stored ones.
 pub fn stable_id(prefix: &str, identity: &str) -> String {
     sjel_links::stable_id(prefix, identity)

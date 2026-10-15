@@ -28,7 +28,7 @@ export interface CapabilityView {
   panel_path: string;
   autostart: string;
   requires: string[];
-  /** Id kinds this capability answers `GET /api/links` for (libs/links/ISA.md D1). Optional
+  /** Id kinds this capability answers `GET /api/links` for (docs/capabilities/links.md D1). Optional
    *  because a sjel-status built before 2026-10-06 does not send it. */
   links_to?: string[];
   /** null when the capability declares no health surface — unknown, not down. */

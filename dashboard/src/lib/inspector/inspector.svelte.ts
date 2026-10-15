@@ -67,7 +67,7 @@ export interface InspectableLayout {
 }
 
 /** A row another capability answered on `/api/links`, shown the same for every kind
- *  (libs/links/ISA.md D5). */
+ *  (docs/capabilities/links.md D5). */
 export interface InspectableLink {
   type: "link";
   id: string;

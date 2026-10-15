@@ -1,6 +1,6 @@
 ---
 name: ui-craftsmanship
-description: Guides design, layout, styling and visual review of Sjel interfaces (the dashboard, capability UIs, components). Covers four rules — the data picks the form, the explicitness ladder for progressive disclosure, the state inventory of UI the reader does not see at first, and show the join across capabilities — plus a speed budget, anti-vibe-coding tells and mechanical sympathy. Use when designing or reviewing a page, table, panel or component, when moving a page onto the shared UI kit, when deciding where an action goes or whether a feature needs its own page, or when auditing an interface for generic AI or SaaS design tells. Do not use for backend Rust APIs, non-visual scripts or prose writing.
+description: Guides design, layout, styling and visual review of Sjel interfaces across web and native clients. Covers data-shaped layouts, progressive disclosure, complete UI states, cross-capability joins, coherent cross-device experiences, speed, anti-vibe-coding tells and mechanical sympathy. Use when designing or reviewing a page, table, panel or component, when planning a shared Mac and iPhone experience, or when auditing an interface for generic AI or SaaS design tells. Do not use for backend Rust APIs, non-visual scripts, prose writing or version-specific GPUI implementation; use gpui for the latter.
 allowed-tools: Read, Write, Edit, Bash
 ---
 
@@ -84,8 +84,17 @@ done, check each state below. Write "not applicable" for a state only when you k
 
 Sjel's value is the joins between its areas: the trip that explains the spend, the event that
 explains the trip. Every view of one record lists what it touches in other capabilities, and
-opens it in place (the inspector, `libs/links/ISA.md`). In review, a record view that lists
+opens it in place (the inspector, `docs/capabilities/links.md`). In review, a record view that lists
 nothing outside its own capability gets a question.
+
+## Rule 5: one product, native surfaces
+
+A Mac app and a future iPhone app should feel like Sjel, not like scaled copies of each other.
+
+- Keep shared concepts, names, semantic roles and task intent consistent. Adapt navigation, density, input and layout to each platform.
+- Use platform capabilities when they make a Sjel task more direct. Explain access requests when they appear, and keep a useful path when a capability is unavailable.
+- Treat external interfaces as inspiration, not specifications. Reuse useful principles only when they serve Sjel; use Sjel's own design tokens and actual workflows.
+- Keep visual principles here. Route toolkit-specific implementation and verified platform support to the relevant implementation skill.
 
 ## Speed budget
 
@@ -108,11 +117,14 @@ Speed is a feature of the design, not a later optimisation.
 2. **Shape the data** with rule 1. Use a kit primitive. Add a primitive to the kit only when a
    page needs one that does not exist.
 3. **Place every action** with rule 2.
-4. **Walk the state inventory** with rule 3, and **list the joins** with rule 4.
+4. **Walk the state inventory** with rule 3, list the joins with rule 4, and apply rule 5
+   when the workflow spans platforms.
 5. **Check the tells and the budget.** Read
    [`references/anti-slop-tells.md`](references/anti-slop-tells.md) and
    [`references/mechanical-sympathy-in-ui.md`](references/mechanical-sympathy-in-ui.md).
-6. **Run the dashboard tests** listed in [`references/sjel-dashboard.md`](references/sjel-dashboard.md).
+6. **Run surface-specific checks.** For dashboard changes, use the tests listed in
+   [`references/sjel-dashboard.md`](references/sjel-dashboard.md). For toolkit details, route
+   to the relevant implementation skill.
 
 ## Reference routing
 
@@ -122,3 +134,4 @@ Speed is a feature of the design, not a later optimisation.
 | The AI design tells, their code signatures and fixes | [`references/anti-slop-tells.md`](references/anti-slop-tells.md) |
 | Typography, number alignment, spacing, density, semantic colour | [`references/visual-hierarchy-and-typography.md`](references/visual-hierarchy-and-typography.md) |
 | Zero layout shift, compositor-only motion, contrast, reduced motion | [`references/mechanical-sympathy-in-ui.md`](references/mechanical-sympathy-in-ui.md) |
+| Rust desktop implementation and verified platform limits | Use the `gpui` skill; keep version-specific GPUI guidance there. |

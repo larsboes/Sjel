@@ -1,8 +1,8 @@
 # design pack
 
-UI craftsmanship, dense operational interface design, anti-vibe-coding doctrine, typography, and mechanical sympathy for user interfaces across Sjel.
+UI craftsmanship, dense operational interface design, anti-vibe-coding doctrine, typography, and mechanical sympathy across Sjel's web and native interfaces.
 
-- **`ui-craftsmanship`**: Guides creation, review, and refactoring of user interfaces in Sjel (the Dashboard and capability UIs), rejecting generic AI/SaaS design tropes in favor of dense, glanceable, and mechanically sound interfaces.
+- **`ui-craftsmanship`**: Guides interface design across the Dashboard, capability UIs, and native clients. It keeps shared product concepts coherent across devices while adapting interaction patterns to each platform.
 
 ## Activation
 

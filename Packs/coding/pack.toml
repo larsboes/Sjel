@@ -1,4 +1,4 @@
 name        = "coding"
-description = "Engineering craftsmanship across backend and frontend: systems-grade Rust, official Svelte 5 and TypeScript."
+description = "Engineering craftsmanship across backend and frontend: systems-grade Rust, official Svelte 5, TypeScript, and native GPUI desktop development."
 skills      = ["effective-rust", "gpui", "svelte-core-bestpractices", "svelte-code-writer"]
 license     = "MIT"

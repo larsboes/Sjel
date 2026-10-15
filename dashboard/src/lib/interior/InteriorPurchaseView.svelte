@@ -215,7 +215,7 @@
     color: var(--text-secondary);
   }
   .unchecked {
-    color: var(--warning);
+    color: var(--warning-ink);
     display: flex;
     align-items: center;
     gap: 0.4rem;
@@ -264,6 +264,6 @@
     margin-top: 0.25rem;
   }
   .holds.tight {
-    color: var(--warning);
+    color: var(--warning-ink);
   }
 </style>

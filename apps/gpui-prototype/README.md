@@ -84,8 +84,8 @@ view, and GPUI leaves the sidebar unpainted. Clicks and keys still reach GPUI. R
 lookup gates it; without the class, the app draws its normal sidebar. `SJEL_GPUI_GLASS=1
 ./preview home dark` shows it.
 
-Seen on macOS 27: the panel reads as a macOS 26 sidebar in light mode. In dark mode it is close
-to black, darker than the page. In light mode a faint seam shows where the AppKit tint strip
+Seen on macOS 27: the panel reads as a macOS 26 sidebar in both appearances, one step darker
+than the page in dark mode. In light mode a faint seam shows where the AppKit tint strip
 meets GPUI's page tint, because GPUI's translucent colours blend lighter over an AppKit layer
 than over its own. This is an experiment, not a supported GPUI hosting API.
 

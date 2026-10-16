@@ -36,7 +36,7 @@ impl Palette {
                 red: 0xd70015,
             },
             WindowAppearance::Dark | WindowAppearance::VibrantDark => Self {
-                window_tint: 0x10131a9c,
+                window_tint: 0x10131ae0,
                 surface: 0x252a3499,
                 raised: 0xffffff18,
                 border: 0xffffff26,

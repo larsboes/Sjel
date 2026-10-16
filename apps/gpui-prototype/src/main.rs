@@ -12,12 +12,12 @@ mod frames;
 mod home;
 #[cfg(target_os = "macos")]
 mod macos_glass;
-mod route;
 mod selection;
-mod shell;
 mod theme;
 mod ui;
 mod workspace;
+
+use sjel_gpui_core::{route, shell};
 
 use workspace::{GoCapabilities, GoHome, OpenInDashboard, OpenPalette, Refresh, Workspace};
 

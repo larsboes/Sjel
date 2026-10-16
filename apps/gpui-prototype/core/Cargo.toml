@@ -1,0 +1,17 @@
+[package]
+name = "sjel-gpui-core"
+version = "0.1.0"
+edition = "2021"
+publish = false
+license = "AGPL-3.0-only"
+description = "What the Mac and iOS GPUI apps share: destinations and the shell client"
+
+[dependencies]
+futures = "0.3"
+reqwest = { version = "0.13", default-features = false, features = ["json"] }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+tokio = { version = "1", features = ["rt", "time", "net"] }
+
+[lints.rust]
+unsafe_code = "deny"

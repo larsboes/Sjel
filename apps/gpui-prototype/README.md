@@ -8,16 +8,41 @@ The app has two native pages. **Home** shows what needs you now: agent writes th
 approval, kept-running capabilities that do not answer, calendar entries still ahead today and
 tomorrow, and the recent agent writes. **Capabilities** lists every capability with start and
 stop. Both read the shell (`sjel-status`) every 10 seconds with the inbound token, through the
-same endpoints as the menu-bar app (`src/shell.rs`). The token comes from the login Keychain
+same endpoints as the menu-bar app (`core/src/shell.rs`). The token comes from the login Keychain
 item `sjel-inbound-token` that `tools/setup-inbound-auth.sh` writes. The app reads it through
 `/usr/bin/security`, which that script puts on the item's access list. The token stays in the
 app process and never reaches the browser or the log.
 
-The app and the web dashboard share one set of destinations. `src/route.rs` copies the paths and
+The app and the web dashboard share one set of destinations. `core/src/route.rs` copies the paths and
 labels of `dashboard/src/lib/nav.ts`, and a test fails when the two differ. A page with a native
 view opens here. Every other destination opens the dashboard in the browser, logged in through a
 single-use ticket. `sjel://<path>` links follow the same rule: `sjel://capabilities` opens the
 native page, `sjel://calendar` opens the dashboard at `/calendar`.
+
+## Workspace and the iOS app
+
+This directory is one Cargo workspace with one lockfile, so every member builds against the
+same GPUI snapshot (ISA.md Decisions 2026-10-15, step 0).
+
+| Member | What it holds |
+|---|---|
+| `.` | The Mac app |
+| `core/` | What both apps share: the destinations and the shell client. No GPUI types. |
+| `ios/` | The iOS app: GPUI content in `src/lib.rs`, the UIKit host in `host/` |
+
+On iOS, UIKit owns the window, the navigation bar and the safe areas. GPUI draws the content in
+a child view controller. `gpui-pre-mobile` comes from git rev `c24a1308e1`, because its only
+release (0.1.0) pins an older GPUI. That rev also pins `libc =0.2.189`, so the whole workspace
+uses that version. The iOS 27 SDK starts only apps with the UIScene life cycle, so the host
+uses a scene delegate.
+
+Step 0 shows the destinations and one read of the shell's public `/health` over loopback. The
+iOS app has no token yet: the inbound token lives in the Mac's login Keychain. Device pairing
+is the planned way in.
+
+`ios/run-sim` builds the app, runs it on a headless simulator and prints a screenshot path. It
+needs Xcode, XcodeGen and the `aarch64-apple-ios-sim` Rust target. It never opens
+Simulator.app.
 
 | Key | Action |
 |---|---|
@@ -50,9 +75,10 @@ These checks run while you keep working in other apps. None of them activates th
 
 | Command | What it checks |
 |---|---|
-| `cargo test` | Routes, calendar rules, the shell client, and keyboard navigation in a headless GPUI window |
+| `cargo test --workspace` | Routes, calendar rules, the shell client, and keyboard navigation in a headless GPUI window |
 | `./preview [page] [light\|dark]` | Screenshot of the installed app, through Interceptor |
 | `./bench-scroll [page]` | CPU cost of one scroll frame, from the app's own scroll run |
+| `ios/run-sim` | Screenshot of the iOS app on a headless simulator |
 
 `preview` and `bench-scroll` show the window for a few seconds in the bottom-right corner,
 above other apps. GPUI paints nothing while another window covers it, so a hidden window cannot be

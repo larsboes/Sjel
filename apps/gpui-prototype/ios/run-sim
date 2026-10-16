@@ -1,0 +1,37 @@
+#!/usr/bin/env bash
+# apps/gpui-prototype/ios/run-sim — build the iOS app, run it on a headless simulator, and print
+# a screenshot path. Never opens Simulator.app, so it takes no focus.
+#
+# SJEL_IOS_SIM=<udid> picks the simulator; default: the first available iPhone.
+set -euo pipefail
+[ "$(uname -s)" = Darwin ] || { echo "ios/run-sim: macOS only" >&2; exit 1; }
+command -v xcodegen >/dev/null || { echo "ios/run-sim: needs xcodegen (brew install xcodegen)" >&2; exit 1; }
+
+IOS_DIR="$(cd "$(dirname "$0")" && pwd)"
+HOST="$IOS_DIR/host"
+BUNDLE_ID="dev.sjel.ios"
+
+(cd "$IOS_DIR" && cargo build --lib --target aarch64-apple-ios-sim)
+target_dir="$(cd "$IOS_DIR" && cargo metadata --no-deps --format-version 1 | sed -n 's/.*"target_directory":"\([^"]*\)".*/\1/p')"
+rust_lib="$target_dir/aarch64-apple-ios-sim/debug/libsjel_gpui_ios.a"
+
+(cd "$HOST" && xcodegen generate --quiet --spec project.yml)
+xcodebuild -project "$HOST/SjelIOS.xcodeproj" -scheme SjelIOS -sdk iphonesimulator \
+  -configuration Debug -derivedDataPath "$HOST/build" -quiet RUST_LIB="$rust_lib" build
+app="$HOST/build/Build/Products/Debug-iphonesimulator/SjelIOS.app"
+
+udid="${SJEL_IOS_SIM:-$(xcrun simctl list devices available | sed -n 's/^ *iPhone[^(]*(\([0-9A-F-]\{36\}\)).*/\1/p' | head -1)}"
+[ -n "$udid" ] || { echo "ios/run-sim: no available iPhone simulator" >&2; exit 1; }
+booted_here=false
+if ! xcrun simctl list devices | grep -q "$udid) (Booted)"; then
+  xcrun simctl boot "$udid"
+  booted_here=true
+fi
+xcrun simctl bootstatus "$udid" -b >/dev/null
+xcrun simctl install "$udid" "$app"
+xcrun simctl launch --terminate-running-process "$udid" "$BUNDLE_ID" >/dev/null
+sleep 6
+shot="${TMPDIR:-/tmp}/sjel-ios-$(date +%s).png"
+xcrun simctl io "$udid" screenshot "$shot" >/dev/null
+$booted_here && xcrun simctl shutdown "$udid"
+echo "$shot"

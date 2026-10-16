@@ -107,7 +107,7 @@ mod tests {
 
     #[test]
     fn matches_dashboard_nav() {
-        let nav = include_str!("../../../dashboard/src/lib/nav.ts");
+        let nav = include_str!("../../../../dashboard/src/lib/nav.ts");
         let start = nav
             .find("export const PRIMARY_NAV")
             .expect("PRIMARY_NAV in nav.ts");

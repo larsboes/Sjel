@@ -1,0 +1,42 @@
+# XcodeGen spec for the UIKit host. `ios/run-sim` generates the project and passes RUST_LIB,
+# the static library cargo built for the simulator.
+name: SjelIOS
+options:
+  bundleIdPrefix: dev.sjel
+  deploymentTarget:
+    iOS: "17.0"
+targets:
+  SjelIOS:
+    type: application
+    platform: iOS
+    sources:
+      - path: App.swift
+    info:
+      path: Info.plist
+      properties:
+        CFBundleDisplayName: Sjel
+        UILaunchScreen: {}
+        UIApplicationSceneManifest:
+          UIApplicationSupportsMultipleScenes: false
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: dev.sjel.ios
+        SWIFT_VERSION: "5.0"
+        SWIFT_OBJC_BRIDGING_HEADER: Embedding.h
+        CODE_SIGNING_ALLOWED: NO
+        # The Rust library links statically; Xcode's debug dylib loader does not apply.
+        ENABLE_DEBUG_DYLIB: NO
+        ARCHS: arm64
+        OTHER_LDFLAGS:
+          - "-force_load"
+          - "$(RUST_LIB)"
+          - "-lc++"
+          - "-ObjC"
+          - "-framework Metal"
+          - "-framework QuartzCore"
+          - "-framework CoreText"
+          - "-framework Security"
+          - "-framework SystemConfiguration"
+          - "-framework AVFoundation"
+          - "-framework CoreMedia"
+          - "-framework WebKit"

@@ -6,10 +6,14 @@ publish = false
 license = "AGPL-3.0-only"
 description = "Evaluation prototype for a native GPUI desktop surface"
 
-# Keep this evaluation app outside Sjel's production workspace and lockfile.
+# Keep this evaluation app outside Sjel's production workspace and lockfile. One lockfile for
+# the Mac app, the shared core and the iOS app keeps them on one GPUI snapshot (ISA.md
+# Decisions 2026-10-15, step 0).
 [workspace]
+members = ["core", "ios"]
 
 [dependencies]
+sjel-gpui-core = { path = "core" }
 gpui-kit = { version = "=0.7.3", default-features = false, features = ["component", "assets"] }
 chrono = { version = "0.4", default-features = false, features = ["clock"] }
 futures = "0.3"

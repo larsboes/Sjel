@@ -62,6 +62,9 @@ pub fn bind_keys(cx: &mut App) {
     ]);
 }
 
+const SIDEBAR_WIDTH: f32 = 208.;
+/// The gap between the glass sidebar and the window edge.
+const GLASS_INSET: f32 = 8.;
 /// How often the open window reads the shell again.
 const POLL: Duration = Duration::from_secs(10);
 /// Data older than this shows its age.
@@ -456,13 +459,36 @@ impl Workspace {
         }
     }
 
+    /// `SJEL_GPUI_GLASS=1`: Liquid Glass under the sidebar, when this macOS has it. AppKit then
+    /// paints the tint under the sidebar, and this returns true so GPUI tints only the page.
     #[cfg(target_os = "macos")]
-    fn attach_glass(&mut self, window: &mut Window) -> bool {
+    fn attach_glass(&mut self, window: &mut Window, tint: u32) -> bool {
         if !self.native_glass_attempted && std::env::var_os("SJEL_GPUI_GLASS").is_some() {
             self.native_glass_attempted = true;
-            self.native_glass = crate::macos_glass::NativeGlassRegion::attach(window).ok();
+            self.native_glass = crate::macos_glass::NativeGlassRegion::attach(
+                window,
+                SIDEBAR_WIDTH.into(),
+                GLASS_INSET.into(),
+                16.0,
+            )
+            .ok();
+            if self.native_glass.is_some() {
+                // Inside the panel's rounded top-left corner, not on its edge.
+                window.set_traffic_light_position(gpui_kit::point(px(20.), px(20.)));
+            }
         }
-        self.native_glass.is_some()
+        match &mut self.native_glass {
+            Some(glass) => {
+                glass.set_tint(tint);
+                true
+            }
+            None => false,
+        }
+    }
+
+    #[cfg(not(target_os = "macos"))]
+    fn attach_glass(&mut self, _: &mut Window, _: u32) -> bool {
+        false
     }
 }
 
@@ -471,9 +497,13 @@ impl Render for Workspace {
         if let Some(frames) = &self.frames {
             frames.render_started();
         }
-        #[cfg(target_os = "macos")]
-        self.attach_glass(window);
         let palette = Palette::for_appearance(window.appearance());
+        let tint = if opaque_window() {
+            palette.window_tint | 0xff
+        } else {
+            palette.window_tint
+        };
+        let glass = self.attach_glass(window, tint);
         let page = match self.page {
             Page::Home => home::render(self, palette, cx).into_any_element(),
             Page::Capabilities => capabilities::render(self, palette, cx).into_any_element(),
@@ -502,11 +532,7 @@ impl Render for Workspace {
             .on_action(cx.listener(Self::on_run_primary))
             .on_action(cx.listener(Self::on_run_secondary))
             .size_full()
-            .bg(rgba(if opaque_window() {
-                palette.window_tint | 0xff
-            } else {
-                palette.window_tint
-            }))
+            .when(!glass, |root| root.bg(rgba(tint)))
             .text_color(rgb(palette.text))
             .child(
                 div()
@@ -515,11 +541,19 @@ impl Render for Workspace {
                     .key_context("Workspace")
                     .size_full()
                     .flex()
-                    .child(sidebar(self, palette, window, cx))
+                    .child(
+                        div()
+                            .w(px(SIDEBAR_WIDTH))
+                            .flex_none()
+                            .h_full()
+                            .when(glass, |column| column.p(px(GLASS_INSET)))
+                            .child(sidebar(self, palette, glass, window, cx)),
+                    )
                     .child(
                         div()
                             .flex_1()
                             .h_full()
+                            .when(glass, |page| page.bg(rgba(tint)))
                             .flex()
                             .flex_col()
                             .child(header(self, palette))
@@ -544,6 +578,7 @@ impl Render for Workspace {
 fn sidebar(
     view: &Workspace,
     palette: Palette,
+    glass: bool,
     window: &mut Window,
     cx: &mut Context<Workspace>,
 ) -> impl IntoElement {
@@ -587,18 +622,20 @@ fn sidebar(
     });
 
     div()
-        .w(px(208.))
-        .h_full()
+        .size_full()
         .flex()
         .flex_col()
         .gap_1()
-        // Clears the transparent titlebar's traffic lights.
-        .pt(px(52.))
+        // Clears the transparent titlebar's traffic lights; the glass inset already moves it down.
+        .pt(px(if glass { 52. - GLASS_INSET } else { 52. }))
         .px_3()
         .pb_4()
-        .bg(rgba(palette.raised))
-        .border_r_1()
-        .border_color(rgba(palette.border))
+        .when(!glass, |sidebar| {
+            sidebar
+                .bg(rgba(palette.raised))
+                .border_r_1()
+                .border_color(rgba(palette.border))
+        })
         .children(nav)
         .child(div().flex_1())
         .child(

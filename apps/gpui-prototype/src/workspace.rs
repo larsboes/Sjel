@@ -459,11 +459,12 @@ impl Workspace {
         }
     }
 
-    /// `SJEL_GPUI_GLASS=1`: Liquid Glass under the sidebar, when this macOS has it. AppKit then
+    /// Liquid Glass under the sidebar, when this macOS has it and `SJEL_GPUI_NO_GLASS` is unset.
+    /// AppKit then
     /// paints the tint under the sidebar, and this returns true so GPUI tints only the page.
     #[cfg(target_os = "macos")]
     fn attach_glass(&mut self, window: &mut Window, tint: u32) -> bool {
-        if !self.native_glass_attempted && std::env::var_os("SJEL_GPUI_GLASS").is_some() {
+        if !self.native_glass_attempted && std::env::var_os("SJEL_GPUI_NO_GLASS").is_none() {
             self.native_glass_attempted = true;
             self.native_glass = crate::macos_glass::NativeGlassRegion::attach(
                 window,

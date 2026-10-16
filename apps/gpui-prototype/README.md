@@ -65,6 +65,7 @@ measured. Run `./install` first: both scripts use the installed release build.
 | `SJEL_GPUI_OPEN=sjel://…` | Open this destination after start |
 | `SJEL_GPUI_APPEARANCE=light\|dark` | Preview a palette without changing the system setting |
 | `SJEL_GPUI_OPAQUE=1` | Draw an opaque window instead of the blurred one |
+| `SJEL_GPUI_NO_GLASS=1` | Draw the normal sidebar instead of the glass one |
 | `SJEL_GPUI_FRAMES=<file>` | Log the timings of each frame (`src/frames.rs`) |
 | `SJEL_GPUI_BENCH_SCROLL=1` | Scroll the page down and up, then quit |
 
@@ -76,13 +77,13 @@ notification, button, tag, kbd) and adds no second GPUI dependency. Its lockfile
 `gpui-pre` family. GPUI is still pre-1.0, so this is not a production dependency decision.
 
 GPUI's blurred window is not Apple's Liquid Glass. The resolved public API has no general AppKit
-child-view host, so the prototype keeps one narrow, opt-in bridge in `src/macos_glass.rs`. Set
-`SJEL_GPUI_GLASS=1` on macOS 26+ to float the sidebar on a native `NSGlassEffectView`, inset 8
-points with rounded corners, the traffic lights inside it. Glass refracts what is behind it, and
+child-view host, so the prototype keeps one narrow bridge in `src/macos_glass.rs`. On macOS 26+
+the sidebar floats on a native `NSGlassEffectView`, inset 8 points with rounded corners, the
+traffic lights inside it. Glass refracts what is behind it, and
 GPUI draws everything into one view, so the bridge puts the glass and a tint strip behind GPUI's
 view, and GPUI leaves the sidebar unpainted. Clicks and keys still reach GPUI. Runtime class
-lookup gates it; without the class, the app draws its normal sidebar. `SJEL_GPUI_GLASS=1
-./preview home dark` shows it.
+lookup gates it; without the class, the app draws its normal sidebar. `SJEL_GPUI_NO_GLASS=1`
+draws the normal sidebar on any macOS, also through `./preview`.
 
 Seen on macOS 27: the panel reads as a macOS 26 sidebar in both appearances, one step darker
 than the page in dark mode. In light mode a faint seam shows where the AppKit tint strip

@@ -10,7 +10,7 @@ APPEARANCE="${2:-}"
 osascript -e 'tell application id "dev.sjel.desktop" to quit' >/dev/null 2>&1 || true
 for _ in $(seq 50); do pgrep -f "Sjel Desktop.app/Contents/MacOS" >/dev/null || break; sleep 0.1; done
 open -g --env SJEL_GPUI_NO_ACTIVATE=1 --env SJEL_GPUI_FLOAT=1 --env "SJEL_GPUI_OPEN=sjel://$PAGE" \
-  ${APPEARANCE:+--env SJEL_GPUI_APPEARANCE=$APPEARANCE} ${SJEL_GPUI_GLASS:+--env SJEL_GPUI_GLASS=1} "$HOME/Applications/Sjel Desktop.app"
+  ${APPEARANCE:+--env SJEL_GPUI_APPEARANCE=$APPEARANCE} ${SJEL_GPUI_NO_GLASS:+--env SJEL_GPUI_NO_GLASS=1} "$HOME/Applications/Sjel Desktop.app"
 sleep 3
 shot="$(cd "${TMPDIR:-/tmp}" && interceptor macos screenshot --app "Sjel Desktop" --save --format png \
   | sed -n 's/.*"filePath": "\([^"]*\)".*/\1/p')"

@@ -77,9 +77,11 @@ notification, button, tag, kbd) and adds no second GPUI dependency. Its lockfile
 
 GPUI's blurred window is not Apple's Liquid Glass. The resolved public API has no general AppKit
 child-view host, so the prototype keeps one narrow, opt-in bridge in `src/macos_glass.rs`. Set
-`SJEL_GPUI_GLASS=1` on macOS 26+ to attempt a native `NSGlassEffectView` in the header. Runtime
-class lookup gates the native path. The GPUI label remains the fallback. This is an experiment,
-not a supported GPUI hosting API, and still needs visual validation on macOS.
+`SJEL_GPUI_GLASS=1` on macOS 26+ to attach a native `NSGlassEffectView` with an "On this Mac"
+label above the header buttons. Runtime class lookup gates it; without the class, the app draws
+nothing there. `SJEL_GPUI_GLASS=1 ./preview` shows it. On macOS 27 it draws above the GPUI
+content as a plain white box, with the label in its top-right corner: the bridge works, but this
+placement does not read as glass. This is an experiment, not a supported GPUI hosting API.
 
 ## Evaluation scope
 

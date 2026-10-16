@@ -238,8 +238,12 @@ impl Workspace {
         F: FnOnce(Arc<Shell>) -> Fut,
         Fut: Future<Output = ShellResult<()>> + Send + 'static,
     {
-        let Ok(shell) = self.shell.clone() else {
-            return;
+        let shell = match &self.shell {
+            Ok(shell) => shell.clone(),
+            Err(error) => {
+                window.push_notification(Notification::error(error.to_string()), cx);
+                return;
+            }
         };
         if !self.busy.insert(key.clone()) {
             return;
@@ -434,15 +438,11 @@ impl Workspace {
         cx.notify();
     }
 
-    fn selected(&self) -> Option<Item> {
-        self.items().get(self.selection.cursor?).cloned()
-    }
-
     fn on_run_primary(&mut self, _: &RunPrimary, window: &mut Window, cx: &mut Context<Self>) {
         match self.selected() {
             Some(Item::Approval(id)) => self.decide(id, true, window, cx),
             Some(Item::Down(name)) => self.set_running(name, true, window, cx),
-            Some(Item::Entry) => self.open_dashboard("/calendar".into(), window, cx),
+            Some(Item::Entry(_)) => self.open_dashboard("/calendar".into(), window, cx),
             Some(Item::Capability { name, up: false }) => self.set_running(name, true, window, cx),
             Some(Item::Capability { up: true, .. }) | None => {}
         }
@@ -693,7 +693,7 @@ fn header(view: &Workspace, palette: Palette) -> impl IntoElement {
                         .ghost()
                         .small()
                         .icon(IconName::RotateCw)
-                        .loading(view.health.loading || view.agent.loading)
+                        .loading(view.health.loading || view.agent.loading || view.calendar.loading)
                         .tooltip("Refresh (⌘R)")
                         .on_click(|_, window, cx| {
                             window.dispatch_action(Refresh.boxed_clone(), cx)
@@ -783,8 +783,7 @@ mod tests {
     #[gpui::test]
     fn enter_on_a_stopped_capability_starts_it(cx: &mut TestAppContext) {
         let (view, cx) = open(cx);
-        cx.simulate_keystrokes("j j enter");
-        // The shell is unreachable here, so the start fails, but it was attempted for "b".
+        cx.simulate_keystrokes("j j");
         view.read_with(cx, |view, _| {
             assert_eq!(
                 view.selected(),
@@ -794,6 +793,9 @@ mod tests {
                 })
             );
         });
+        // The test endpoint is not on loopback, so the start fails at once and says why.
+        cx.simulate_keystrokes("enter");
+        assert_eq!(cx.update(|window, cx| window.notifications(cx).len()), 1);
     }
 
     #[gpui::test]

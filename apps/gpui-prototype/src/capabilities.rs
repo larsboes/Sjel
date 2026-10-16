@@ -5,6 +5,7 @@ use gpui_kit::component::button::{Button, ButtonVariants};
 use gpui_kit::component::Sizable;
 use gpui_kit::{div, prelude::*, px, rgb, rgba, AnyElement, Context, SharedString};
 
+use crate::selection::Item;
 use crate::shell::{CapabilityHealth, Liveness};
 use crate::theme::Palette;
 use crate::ui::{dot, list, note, placeholder, row, section};
@@ -32,11 +33,18 @@ pub fn render(view: &Workspace, palette: Palette, cx: &mut Context<Workspace>) -
         count(Liveness::Idle),
         count(Liveness::Down)
     );
+    let selected = view.selected();
     let rows: Vec<AnyElement> = health
         .capabilities
         .iter()
-        .enumerate()
-        .map(|(index, (name, state))| capability_row(view, index, name, *state, palette, cx))
+        .map(|(name, state)| {
+            let marked = selected
+                == Some(Item::Capability {
+                    name: name.clone(),
+                    up: state.up,
+                });
+            capability_row(view, marked, name, *state, palette, cx)
+        })
         .collect();
 
     div()
@@ -55,14 +63,13 @@ pub fn render(view: &Workspace, palette: Palette, cx: &mut Context<Workspace>) -
 
 fn capability_row(
     view: &Workspace,
-    index: usize,
+    selected: bool,
     name: &str,
     state: CapabilityHealth,
     palette: Palette,
     cx: &mut Context<Workspace>,
 ) -> AnyElement {
     let busy = view.busy.contains(name);
-    let selected = view.selection.is(index);
     // Running is the normal state: the dot says it, and only the exceptions get words.
     let (tone, label) = match state.liveness() {
         Liveness::Up => (palette.green, ""),
@@ -86,7 +93,7 @@ fn capability_row(
             view.set_running(target.clone(), start, window, cx)
         }));
     view.selection
-        .mark(row(), index, palette)
+        .mark(row(), selected, palette)
         .group("capability")
         .hover(move |style| style.bg(rgba(palette.raised)))
         .child(dot(tone))

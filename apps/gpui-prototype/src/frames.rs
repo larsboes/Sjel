@@ -109,7 +109,7 @@ pub fn drive_scroll_bench(
                 .await;
         }
         probe.arm(false);
-        let _ = cx.update(|cx| cx.quit());
+        cx.update(|cx| cx.quit());
     })
     .detach();
 }

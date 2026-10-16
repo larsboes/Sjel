@@ -91,7 +91,7 @@ fn main() {
         }
         cx.spawn(async move |cx| {
             while let Some(url) = url_rx.next().await {
-                let _ = cx.update(|cx| open_link(&url, cx));
+                cx.update(|cx| open_link(&url, cx));
             }
         })
         .detach();

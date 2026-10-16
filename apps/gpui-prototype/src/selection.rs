@@ -20,8 +20,9 @@ pub enum Item {
     Approval(String),
     /// A kept-running capability that is down. Enter starts it.
     Down(String),
-    /// A calendar entry. Enter opens the calendar in the dashboard.
-    Entry,
+    /// The calendar entry at this place in `Workspace::ahead`. Enter opens the calendar in the
+    /// dashboard.
+    Entry(usize),
     /// Enter starts a stopped capability, ⌘⌫ stops a running one.
     Capability { name: String, up: bool },
 }
@@ -68,13 +69,9 @@ impl Selection {
         self.scroll.set_offset(point(px(0.), px(0.)));
     }
 
-    pub fn is(&self, index: usize) -> bool {
-        self.cursor == Some(index)
-    }
-
     /// Highlights `row` when it is selected, and scrolls it into view after a keyboard move.
-    pub fn mark(&self, row: Div, index: usize, palette: Palette) -> Div {
-        if !self.is(index) {
+    pub fn mark(&self, row: Div, selected: bool, palette: Palette) -> Div {
+        if !selected {
             return row;
         }
         let (reveal, scroll) = (self.reveal.clone(), self.scroll.clone());
@@ -100,8 +97,9 @@ impl Selection {
 }
 
 impl Workspace {
-    /// The rows of the current page, in drawing order. Home and Capabilities render from the same
-    /// data, so their indexes match.
+    /// The rows of the current page, in drawing order. A page highlights a row by comparing its
+    /// `Item` with `selected`, never by position, so Enter acts on the highlighted row even when
+    /// this order and the drawing order differ.
     pub fn items(&self) -> Vec<Item> {
         match self.page {
             Page::Home => {
@@ -114,7 +112,7 @@ impl Workspace {
                 if let Some(health) = &self.health.value {
                     items.extend(health.down().into_iter().map(Item::Down));
                 }
-                items.extend(self.ahead().iter().map(|_| Item::Entry));
+                items.extend((0..self.ahead().len()).map(Item::Entry));
                 items
             }
             Page::Capabilities => self
@@ -128,6 +126,11 @@ impl Workspace {
                 })
                 .collect(),
         }
+    }
+
+    /// The row under the cursor.
+    pub fn selected(&self) -> Option<Item> {
+        self.items().get(self.selection.cursor?).cloned()
     }
 
     /// Calendar entries still ahead, as Home draws them.

@@ -55,10 +55,7 @@ impl NativeGlassRegion {
         );
         glass.setStyle(NSGlassEffectViewStyle::Regular);
 
-        let label = NSTextField::labelWithString(
-            &NSString::from_str("Read-only · on this Mac"),
-            main_thread,
-        );
+        let label = NSTextField::labelWithString(&NSString::from_str("On this Mac"), main_thread);
         label.setFrame(NSRect::new(
             NSPoint::new(0.0, 0.0),
             NSSize::new(width, height),

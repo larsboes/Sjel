@@ -26,16 +26,18 @@ pub fn render(view: &Workspace, palette: Palette, cx: &mut Context<Workspace>) -
 }
 
 fn needs_you(view: &Workspace, palette: Palette, cx: &mut Context<Workspace>) -> impl IntoElement {
-    // Row indexes follow `Workspace::items`: approvals, then down capabilities, then entries.
+    let selected = view.selected();
     let mut rows: Vec<AnyElement> = Vec::new();
     if let Some(agent) = &view.agent.value {
         for approval in &agent.pending {
-            rows.push(approval_row(view, rows.len(), approval, palette, cx));
+            let marked = selected == Some(Item::Approval(approval.id.clone()));
+            rows.push(approval_row(view, marked, approval, palette, cx));
         }
     }
     if let Some(health) = &view.health.value {
         for name in health.down() {
-            rows.push(down_row(view, rows.len(), name, palette, cx));
+            let marked = selected == Some(Item::Down(name.clone()));
+            rows.push(down_row(view, marked, name, palette, cx));
         }
     }
 
@@ -55,7 +57,7 @@ fn needs_you(view: &Workspace, palette: Palette, cx: &mut Context<Workspace>) ->
 
 fn approval_row(
     view: &Workspace,
-    index: usize,
+    selected: bool,
     approval: &Approval,
     palette: Palette,
     cx: &mut Context<Workspace>,
@@ -64,7 +66,7 @@ fn approval_row(
     let mono = cx.theme().mono_font_family.clone();
     let (allow_id, deny_id) = (approval.id.clone(), approval.id.clone());
     view.selection
-        .mark(row(), index, palette)
+        .mark(row(), selected, palette)
         .child(Tag::warning().small().child("agent write"))
         .child(
             div()
@@ -112,7 +114,7 @@ fn approval_row(
 
 fn down_row(
     view: &Workspace,
-    index: usize,
+    selected: bool,
     name: String,
     palette: Palette,
     cx: &mut Context<Workspace>,
@@ -120,7 +122,7 @@ fn down_row(
     let busy = view.busy.contains(&name);
     let start_name = name.clone();
     view.selection
-        .mark(row(), index, palette)
+        .mark(row(), selected, palette)
         .child(dot(palette.red))
         .child(
             div()
@@ -153,11 +155,7 @@ fn down_row(
 fn ahead(view: &Workspace, palette: Palette, cx: &mut Context<Workspace>) -> impl IntoElement {
     let now = chrono::Local::now().naive_local();
     let mono = cx.theme().mono_font_family.clone();
-    let first = view
-        .items()
-        .iter()
-        .take_while(|item| **item != Item::Entry)
-        .count();
+    let selected = view.selected();
     let body = match (&view.calendar.value, &view.calendar.error) {
         (_, Some(error)) => note(
             format!("The calendar did not answer. {error}"),
@@ -175,7 +173,7 @@ fn ahead(view: &Workspace, palette: Palette, cx: &mut Context<Workspace>) -> imp
                         .enumerate()
                         .map(|(offset, entry)| {
                             view.selection
-                                .mark(row(), first + offset, palette)
+                                .mark(row(), selected == Some(Item::Entry(offset)), palette)
                                 .child(
                                     div()
                                         .w(px(112.))

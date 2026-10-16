@@ -11,7 +11,7 @@ use gpui_kit::component::dialog::Dialog;
 use gpui_kit::component::kbd::Kbd;
 use gpui_kit::component::notification::Notification;
 use gpui_kit::component::scroll::ScrollableElement;
-use gpui_kit::component::{IconName, IndexPath, Root, Sizable, Theme, WindowExt};
+use gpui_kit::component::{IconName, IndexPath, Sizable, Theme, WindowExt};
 use gpui_kit::{
     actions, div, prelude::*, px, rgb, rgba, Action, App, Context, FocusHandle, Focusable,
     FontWeight, KeyBinding, SharedString, Subscription, Window,
@@ -570,8 +570,6 @@ impl Render for Workspace {
                             ),
                     ),
             )
-            .children(Root::render_dialog_layer(window, cx))
-            .children(Root::render_notification_layer(window, cx))
             .children(self.frames.as_ref().map(|frames| frames.paint_marker()))
     }
 }
@@ -777,6 +775,7 @@ mod tests {
     use std::rc::Rc;
 
     use gpui::{Entity, TestAppContext, VisualTestContext};
+    use gpui_kit::component::Root;
 
     use super::*;
 

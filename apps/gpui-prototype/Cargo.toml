@@ -10,7 +10,7 @@ description = "Evaluation prototype for a native GPUI desktop surface"
 [workspace]
 
 [dependencies]
-gpui-kit = { version = "=0.6.0", default-features = false, features = ["component", "assets"] }
+gpui-kit = { version = "=0.7.3", default-features = false, features = ["component", "assets"] }
 chrono = { version = "0.4", default-features = false, features = ["clock"] }
 futures = "0.3"
 reqwest = { version = "0.13", default-features = false, features = ["json"] }
@@ -26,7 +26,7 @@ raw-window-handle = "=0.6.2"
 
 [dev-dependencies]
 # Same crate gpui-kit resolves; the name `gpui` is what the #[gpui::test] macro expands to.
-gpui = { package = "gpui-pre", version = "=0.3.6", features = ["test-support"] }
+gpui = { package = "gpui-pre", version = "=0.3.9", features = ["test-support"] }
 
 [lints.rust]
 unsafe_code = "deny"

@@ -72,7 +72,7 @@ measured. Run `./install` first: both scripts use the installed release build.
 The app icon comes from `brand/sjel-icon-maskable.svg`. `Resources/make-icon` builds
 `Resources/AppIcon.icns` from it. Run it again after a change to the brand mark.
 
-The app uses the components of the pinned `gpui-kit = 0.6.0` facade (command palette, dialog,
+The app uses the components of the pinned `gpui-kit = 0.7.3` facade (command palette, dialog,
 notification, button, tag, kbd) and adds no second GPUI dependency. Its lockfile resolves one
 `gpui-pre` family. GPUI is still pre-1.0, so this is not a production dependency decision.
 

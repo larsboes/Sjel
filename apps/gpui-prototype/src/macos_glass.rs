@@ -1,7 +1,7 @@
 #![allow(unsafe_code)]
 //! Liquid Glass under the sidebar. GPUI draws every pixel into one Metal view, so a glass view
 //! on top of it has nothing to refract. This puts two views behind GPUI's view and above GPUI's
-//! own blur (`gpui-pre-macos-0.3.6/src/window.rs`, `set_background_appearance`): the window tint
+//! own blur (`gpui-pre-macos-0.3.9/src/window.rs`, `set_background_appearance`): the window tint
 //! under the sidebar strip, then a floating `NSGlassEffectView` on it. GPUI tints only the page
 //! column, so the gap around the rounded panel gets the same tint as the page. GPUI keeps the
 //! page tint itself: its translucent cards blend lighter over an AppKit tint than over its own. GPUI's view stays on top, so it

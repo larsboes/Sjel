@@ -44,6 +44,11 @@ graphify-out/
 # It is deliberately NOT ignored, so a stray plan file shows up as untracked in
 # `git status` and gets dealt with rather than disappearing.
 to-integrate/
+
+# Session handoffs between agents carry one session's state, unpushed commit lists and
+# machine paths. They are notes for the next session, not doctrine. A durable decision goes
+# into code, the owning skill or ISA.md (AGENTS.md).
+HANDOFF*.md
 # Next.js build output
 **/.next/
 **/*.tsbuildinfo

@@ -13,6 +13,7 @@
   import { tip } from "$lib/tip";
   import Icon from "$lib/Icon.svelte";
   import { axonStatus, type RepoStatus } from "$lib/api";
+  import { dayLabel, daysSince } from "$lib/ui/age";
 
   let { detailed = false }: { detailed?: boolean } = $props();
 
@@ -55,11 +56,8 @@
   }
 
   const relative = (iso: string | null): string => {
-    if (!iso) return "";
-    const days = Math.floor((Date.now() - new Date(iso).getTime()) / 86_400_000);
-    if (days <= 0) return "today";
-    if (days === 1) return "yesterday";
-    return `${days} days ago`;
+    const days = daysSince(iso);
+    return days === null || days < 0 ? "" : dayLabel(days);
   };
 </script>
 

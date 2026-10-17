@@ -38,6 +38,7 @@
     type TriageSweepStatus,
     type VaultLinkCandidate,
   } from "$lib/api";
+  import { dayLabel, daysSince } from "$lib/ui/age";
 
   type StreamFilter = "all" | FeedStream;
   type Order = "recent" | "relevance";
@@ -240,7 +241,7 @@
       rows.push({
         kind: "header",
         id: `day:${day}`,
-        label: dayLabel(day),
+        label: dayHeading(day),
         count: items.length,
         tone: "day",
       });
@@ -638,16 +639,18 @@
     return status === "keeper" ? "kept · u to undo" : "dismissed · u to undo";
   }
 
-  function dayLabel(day: string): string {
+  function dayHeading(day: string): string {
     if (day === "relevance") return "For you";
-    const d = new Date(`${day}T00:00:00`);
-    if (Number.isNaN(d.getTime())) return day;
-    const today = new Date();
-    today.setHours(0, 0, 0, 0);
-    const diff = Math.round((today.getTime() - d.getTime()) / 86_400_000);
-    if (diff === 0) return "Today";
-    if (diff === 1) return "Yesterday";
-    return d.toLocaleDateString("en-GB", { weekday: "short", day: "numeric", month: "long" });
+    const days = daysSince(day);
+    // Today and yesterday are named; an older day is dated its own way, and so is a day
+    // that has not happened yet — a heading is not the place to leave a blank.
+    if (days !== null && days >= 0 && days <= 1) {
+      const word = dayLabel(days);
+      return word.charAt(0).toLocaleUpperCase() + word.slice(1);
+    }
+    const date = new Date(`${day}T00:00:00`);
+    if (Number.isNaN(date.getTime())) return day;
+    return date.toLocaleDateString("en-GB", { weekday: "short", day: "numeric", month: "long" });
   }
 
   function mailCategoryLabel(category: MailCategory): string {

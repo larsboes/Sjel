@@ -1,5 +1,7 @@
 /** Date and count wording the ladder's rows share, so eight rows cannot phrase it eight ways. */
 
+import { dayLabel, daysSince } from "../ui/age";
+
 export function localDateKey(date: Date): string {
   return [
     date.getFullYear(),
@@ -24,13 +26,11 @@ export function dateLabel(value: string): string {
 }
 
 export function relativeDate(value: string, now = new Date()): string {
-  const date = new Date(value);
-  if (Number.isNaN(date.getTime())) return "";
-  const diff = Math.round((now.getTime() - date.getTime()) / 86_400_000);
-  if (diff <= 0) return "today";
-  if (diff === 1) return "yesterday";
-  if (diff < 7) return `${diff} days ago`;
-  return date.toLocaleDateString("en-GB", { day: "numeric", month: "short" });
+  const days = daysSince(value, now.getTime());
+  if (days === null) return "";
+  // A day the ladder has not reached is named; an older one is dated. A day in the future
+  // has no age, so it takes the date too.
+  return days >= 0 && days < 7 ? dayLabel(days) : dateLabel(value);
 }
 
 export function countLabel(count: number, noun: string): string {

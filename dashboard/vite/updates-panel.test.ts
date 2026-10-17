@@ -5,7 +5,6 @@ import {
   auditLabel,
   auditNeedsAttention,
   OWNER_ORDER,
-  sinceLabel,
   statusOf,
   updatesView,
   versionLabel,
@@ -68,24 +67,9 @@ describe("versionLabel", () => {
   });
 });
 
-describe("sinceLabel", () => {
-  const at = "2026-10-01T12:00:00Z";
-  const t = Date.parse(at);
-  test("switches unit as the gap grows", () => {
-    expect(sinceLabel(at, t + 30_000)).toBe("just now");
-    expect(sinceLabel(at, t + 5 * 60_000)).toBe("5m ago");
-    expect(sinceLabel(at, t + 3 * 3_600_000)).toBe("3h ago");
-    expect(sinceLabel(at, t + 2 * 86_400_000)).toBe("2d ago");
-  });
-
-  // A clock skew between the host and the browser must not print "−3m ago".
-  test("a timestamp in the future prints nothing rather than a negative", () => {
-    expect(sinceLabel(at, t - 60_000)).toBe("");
-    expect(sinceLabel(undefined, t)).toBe("");
-    expect(sinceLabel("not a date", t)).toBe("");
-  });
-});
-
+// The age words this panel shows are `lib/ui/age.ts`'s, tested at their boundaries in
+// `tools/dashboard-age.test.ts`. What is left here is what this file owns: the grouping, the
+// stale count and the apply summary.
 describe("updatesView", () => {
   test("groups by owner in the order a reader needs, and counts the stale rows", () => {
     const view = updatesView(

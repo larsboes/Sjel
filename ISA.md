@@ -361,8 +361,12 @@ stay in the PRD's history.
 - **DSH-4** — a page header does not overlap its description at narrow widths. `PageHeader.svelte`
   stacks `.lead` below 38rem; recompute before ticking.
 - **DSH-6** — every page that shows fetched data shows its age through one shared component.
-  No such component exists in `lib/ui/`. The rule is `Packs/design/skills/ui-craftsmanship/SKILL.md`
-  ("Stale").
+  Half done (2026-10-17): the *wording* is one module, `dashboard/src/lib/ui/age.ts`, and the
+  seven surfaces that each phrased an age their own way call it. What is still open is the age
+  of the *view*: "older than its refresh interval" needs each panel to keep its fetch time and
+  declare that interval, and nothing does — sixteen files poll on sixteen hand-written
+  intervals and none records when its data arrived. The rule is
+  `Packs/design/skills/ui-craftsmanship/SKILL.md` ("Stale").
 - **DSH-7** — `Sjel.app` has an app icon, so its approval notifications show one. No `.icns` or
   `CFBundleIconFile`; `apps/mac/Resources/` holds only the menu-bar PDF.
 - **Home: a ranked list, or a view per context.** Waited for declared joins (shipped 2026-10-06);

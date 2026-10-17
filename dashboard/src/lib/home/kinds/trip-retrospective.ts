@@ -23,6 +23,7 @@ import {
 } from "../../travel/api";
 
 import type { DecisionKind, LoadContext, ScoreContext, DataClass } from "../decisions";
+import { dayLabel } from "../../ui/age";
 
 /** Used only when the response omits the window, which the route does not do.
  *  The number that matters is `source.window_days`, read below and carried onto
@@ -73,8 +74,8 @@ const kind: DecisionKind<PendingRetrospectives, PendingRow> = {
 
   whyHere: (row: PendingRow) =>
     row.destinations.length > 0
-      ? `Back from ${row.destinations.join(", ")} ${row.days_since_close} days ago; no retrospective yet`
-      : `Closed ${row.days_since_close} days ago; no retrospective yet`,
+      ? `Back from ${row.destinations.join(", ")} ${dayLabel(row.days_since_close)}; no retrospective yet`
+      : `Closed ${dayLabel(row.days_since_close)}; no retrospective yet`,
 
   /** The trip's end date: the moment that made this a decision. */
   startOrDueAt: (row: PendingRow) => row.date_end,

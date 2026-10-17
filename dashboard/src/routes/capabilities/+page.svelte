@@ -5,6 +5,7 @@
   import Icon from "$lib/Icon.svelte";
   import PageHeader from "$lib/PageHeader.svelte";
   import { axonStatus, hasPanel, type CapabilityView, type BackupStatus } from "$lib/api";
+  import { ageLabel } from "$lib/ui/age";
   import { capabilities } from "$lib/capabilities.svelte";
 
   let busy = $state<string | null>(null);
@@ -52,21 +53,12 @@
     await loadBackups();
   }
 
-  /** Coarse on purpose — "6 days ago" is the decision, the exact minute is not. */
-  function age(seconds: number | null): string {
-    if (seconds === null) return "never";
-    const days = Math.floor(seconds / 86_400);
-    if (days >= 1) return `${days}d ago`;
-    const hours = Math.floor(seconds / 3_600);
-    if (hours >= 1) return `${hours}h ago`;
-    return `${Math.max(1, Math.floor(seconds / 60))}m ago`;
-  }
-
   /** What the badge says, spelled out rather than left as a bare state word. */
   function backupLabel(b: BackupStatus): string {
     if (b.state === "never") return "never backed up";
-    if (b.state === "unknown") return `backed up ${age(b.age_seconds)} · no cadence declared`;
-    return `backed up ${age(b.age_seconds)}`;
+    const elapsed = ageLabel(b.age_seconds, { missing: "never" });
+    if (b.state === "unknown") return `backed up ${elapsed} · no cadence declared`;
+    return `backed up ${elapsed}`;
   }
 
   async function act(name: string, action: "start" | "stop"): Promise<void> {
@@ -139,7 +131,7 @@
             {:else if b?.attempt && b.attempt.exit_code !== 0 && b.attempt.exit_code !== null}
               {@const attemptAgeSeconds = b.attempt.started_epoch ? Math.max(0, Math.floor(Date.now() / 1000) - b.attempt.started_epoch) : Math.max(0, Math.floor((Date.now() - new Date(b.attempt.started_at).getTime()) / 1000))}
               <p class="failed">
-                the last attempt FAILED {age(attemptAgeSeconds)} (exit {b.attempt.exit_code}){b.attempt.detail ? `: ${b.attempt.detail.split("\n")[0]}` : ""} · <a href={link("/backup")}>Backup ledger →</a>
+                the last attempt FAILED {ageLabel(attemptAgeSeconds)} (exit {b.attempt.exit_code}){b.attempt.detail ? `: ${b.attempt.detail.split("\n")[0]}` : ""} · <a href={link("/backup")}>Backup ledger →</a>
               </p>
             {/if}
           </div>

@@ -5,6 +5,7 @@
   import PageHeader from "$lib/PageHeader.svelte";
   import Chip from "$lib/ui/Chip.svelte";
   import Collection from "$lib/ui/Collection.svelte";
+  import { ageLabel } from "$lib/ui/age";
   import type { Field } from "$lib/ui/collection";
   import {
     axonStatus,
@@ -32,17 +33,6 @@
   let selectedTarget = $state<Record<string, string>>({});
   let confirming = $state<string | null>(null);
   let backingUp = $state<Record<string, boolean>>({});
-
-  function timeAgo(seconds: number | null): string {
-    if (seconds === null || seconds === undefined) return "never";
-    if (seconds < 60) return `${Math.max(0, Math.floor(seconds))}s ago`;
-    const mins = Math.floor(seconds / 60);
-    if (mins < 60) return `${mins}m ago`;
-    const hours = Math.floor(seconds / 3600);
-    if (hours < 24) return `${hours}h ago`;
-    const days = Math.floor(seconds / 86400);
-    return `${days}d ago`;
-  }
 
   function attemptAge(attempt: BackupRunAttempt): number {
     if (attempt.started_epoch) {
@@ -416,7 +406,7 @@
 
               <div class="contract-receipt mono">
                 {#if b.last_success}
-                  <span>backed up {timeAgo(b.age_seconds)}</span>
+                  <span>backed up {ageLabel(b.age_seconds, { missing: "never" })}</span>
                   {#if b.bytes}
                     <span class="dim">({formatBytes(b.bytes)})</span>
                   {/if}
@@ -436,7 +426,7 @@
               <div class="attempt-failure">
                 <div class="attempt-failure-title">
                   <Icon name="alert" size={14} />
-                  <strong>The last attempt FAILED {timeAgo(attemptAge(b.attempt!))} (exit {b.attempt!.exit_code})</strong>
+                  <strong>The last attempt FAILED {ageLabel(attemptAge(b.attempt!))} (exit {b.attempt!.exit_code})</strong>
                   <span class="tag mono">target: {b.attempt!.target}</span>
                 </div>
                 {#if b.attempt!.detail}

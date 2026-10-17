@@ -1,4 +1,5 @@
 import type { UpdateApply, UpdateOwner, UpdateRow, UpdateStatus, UpdateSurface, UpdatesReport } from "../api";
+import { sinceLabel } from "../ui/age";
 
 /**
  * How the updates panel reads `sjel update --json`.
@@ -60,19 +61,6 @@ export function versionLabel(row: UpdateRow): string {
   return row.installed;
 }
 
-/** How long ago an apply started, in the units a person reads at a glance. */
-export function sinceLabel(at: string | undefined, now: number): string {
-  if (!at) return "";
-  const ms = now - Date.parse(at);
-  if (!Number.isFinite(ms) || ms < 0) return "";
-  const minutes = Math.floor(ms / 60_000);
-  if (minutes < 1) return "just now";
-  if (minutes < 60) return `${minutes}m ago`;
-  const hours = Math.floor(minutes / 60);
-  if (hours < 24) return `${hours}h ago`;
-  return `${Math.floor(hours / 24)}d ago`;
-}
-
 export function updatesView(report: UpdatesReport, now: number = Date.now()): UpdatesView {
   const surfaces = report.surfaces ?? [];
   const rows = (report.rows ?? []).map((row) => ({ ...row, status: statusOf(row.status) }));
@@ -108,11 +96,11 @@ export function updatesView(report: UpdatesReport, now: number = Date.now()): Up
 export function applySummary(view: UpdatesView, now: number = Date.now()): string {
   const last = view.lastApply;
   if (!last) return "";
-  if (last.state === "running") return `${last.class} — applying, started ${sinceLabel(last.at, now)}`;
+  if (last.state === "running") return `${last.class} — applying, started ${sinceLabel(last.at, { now })}`;
   const failed = last.failed ?? 0;
   const steps = last.steps ?? 0;
   const still = last.stillStale ?? 0;
-  const when = sinceLabel(last.at, now);
+  const when = sinceLabel(last.at, { now });
   return (
     `${last.class} — ${failed > 0 ? `${failed} of ${steps} failed` : `${steps} step${steps === 1 ? "" : "s"} applied`}` +
     `${still > 0 ? `, ${still} still stale` : ""}` +

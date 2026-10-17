@@ -22,6 +22,7 @@ when a page needs it, and move other pages onto the kit one at a time (user deci
 | `ui/Collection.svelte` + `ui/collection.ts` | 1, 2 | A dataset as table, board or month calendar, with search, filter, sort (click a header) and group. Declare `Field`s; a `select` field filters, groups and splits the board; a `date` field turns on the calendar. Groups and board columns follow arrival order, so pass rows sorted the way they should read. With `id`, the state is in the URL under that prefix (`tx.sort=-amount`), so a view is a link. Without `id`, it is a plain `DataTable`. Use this, not a hand-built filter bar. |
 | `ui/Section.svelte` | — | The one section header. Optional collapse, count and actions. |
 | `lib/StateLine.svelte` | 3 | Loading, error and empty in one line. Empty renders nothing unless the caller passes `empty`. |
+| `ui/age.ts` | 3 | One answer to how old something is: `ageLabel` for a duration, `sinceLabel` for an instant, `daysSince` + `dayLabel` for a calendar day. A page still owns the policy — what stands in an old value's place, and where the ladder's end falls to a date. |
 | `lib/tip.ts` (`use:tip`) | 3 | The tooltip. Shows on hover and keyboard focus, and becomes `aria-label` or `aria-description`. Never use `title`. |
 | `lib/list-cursor.svelte.ts` | speed | J/K/Enter over a list, with real DOM focus. |
 | `lib/modal.ts` | 2 | Focus trap for a true modal. Prefer `SidePeek` when the list must stay usable. |
@@ -75,6 +76,7 @@ Run them with `bun test tools/dashboard-*.test.ts` from the repository root.
 | `tools/dashboard-row-disclosure.test.ts` | A row's reason is disclosed, not deleted. Hover, focus and tap all open it. A spent row is dimmed. |
 | `tools/dashboard-tokens.test.ts` | Every custom property a component reads is declared. Every primitive in `app.css` has a consumer. |
 | `tools/dashboard-markup.test.ts` | `<th>` has `scope`. A form button states its `type`. Inputs have a name, not only a placeholder. No page builds its own table. |
+| `tools/dashboard-age.test.ts` | The age ladder's boundaries, and no page phrases its own age. |
 | `tools/dashboard-contrast.test.ts` | Text and tone tokens meet contrast on the surfaces they sit on. |
 | `tools/dashboard-type-scale.test.ts` | Font sizes come from the type scale. |
 
@@ -82,7 +84,9 @@ Run them with `bun test tools/dashboard-*.test.ts` from the repository root.
 
 Measured 2026-10-08. Re-measure before quoting.
 
-- Stale data has no shared primitive. Each page decides how to show the age of its data.
+- How old a **record** is: one module, `ui/age.ts`, since 2026-10-17. How old the **screen**
+  is has no primitive at all: each page polls on an interval of its own and none keeps the time
+  its data arrived, so no surface can say "as of 4m ago".
 - Every data table uses `DataTable` or `Collection` (2026-10-17). The `<table>`s left are
   renderers whose table is not a data table: markdown out of a document, a chart's own figure,
   and `lib/interior/SunGrid.svelte`, where a cell's fill is the measurement rather than a value

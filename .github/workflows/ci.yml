@@ -256,6 +256,44 @@ jobs:
             exit 1
           fi
 
+      # The check compiles nothing, and the gap is measured rather than argued: on 2026-10-17 an
+      # unterminated HTML comment in dashboard/src/routes/interior/+page.svelte was reported as
+      # "0 errors and 0 warnings" by the step above (`svelte-check --tsgo`), while `bun run build`
+      # failed on the same file with "Expected token -->". Nothing else in CI parsed a .svelte
+      # file, so an unbuildable dashboard reached main (the file is unparseable in HEAD).
+      #
+      # The package set is still tools/discover-ui-packages', never a list here. A `build` script
+      # is optional, so a package that declares only a check is named as skipped rather than
+      # failing. Dependencies are already installed by the step above.
+      - name: bun run build (every discovered UI that declares one)
+        run: |
+          set -uo pipefail
+          failed=""
+          for dir in $(tools/discover-ui-packages --dirs); do
+            echo "::group::$dir"
+            script=""
+            if ! script=$(cd "$dir" && bun -e 'import {readFileSync} from "node:fs"; const pkg = JSON.parse(readFileSync("package.json", "utf8")); process.stdout.write(String(pkg.scripts?.build ?? ""))'); then
+              # Fail closed: an unreadable package.json means the build is not known to have run,
+              # and silence here would read as a pass.
+              echo "$dir: could not read package.json, so its build was not run"
+              failed="$failed $dir"
+              echo "::endgroup::"
+              continue
+            fi
+            if [ -z "$script" ]; then
+              echo "$dir: no build script declared — nothing to compile"
+              echo "::endgroup::"
+              continue
+            fi
+            echo "$script"
+            (cd "$dir" && bun run build) || failed="$failed $dir"
+            echo "::endgroup::"
+          done
+          if [ -n "$failed" ]; then
+            echo "ui build FAILED:$failed" >&2
+            exit 1
+          fi
+
   # Repo-level gates, run directly rather than through tools/doctor (Axon#41).
   #
   # Why the scripts and not `doctor`: most of doctor's checks are machine-level — overlay

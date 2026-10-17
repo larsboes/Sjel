@@ -8,6 +8,11 @@
     width?: string;
     /** "end" for numbers, so digits line up by place value. */
     align?: "start" | "end";
+    /**
+     * Cells a reader reads rather than scans. Truncation is right for a label and wrong for a
+     * value somebody has to compare, so this column wraps instead of ending in an ellipsis.
+     */
+    wrap?: boolean;
     /** Gets the column too, so one snippet can render several columns. */
     cell: Snippet<[T, Column<T>]>;
   }
@@ -23,6 +28,9 @@
     columns,
     key,
     group,
+    caption,
+    rowHeader,
+    warn,
     onOpen,
     inactive,
     selected,
@@ -36,6 +44,12 @@
     key: (row: T) => string;
     /** Rows arrive sorted; a header row is drawn wherever this value changes. */
     group?: (row: T) => string;
+    /** Names the table when the heading above it would not. */
+    caption?: string;
+    /** The first column names its row, so it renders as a `<th scope="row">`. */
+    rowHeader?: boolean;
+    /** Rows whose numbers a reader has to look at, in the warning ink. */
+    warn?: (row: T) => boolean;
     onOpen?: (row: T) => void;
     inactive?: (row: T) => boolean;
     selected?: string | null;
@@ -52,8 +66,9 @@
 {#if rows.length === 0}
   <p class="empty">{empty}</p>
 {:else}
-  <div class="wrap">
+  <div class="scroll">
     <table>
+      {#if caption}<caption>{caption}</caption>{/if}
       <colgroup>
         {#each columns as column (column.id)}<col style:width={column.width} />{/each}
         {#if actions}<col style:width="2.5rem" />{/if}
@@ -84,6 +99,7 @@
           {/if}
           <tr
             class:inactive={inactive?.(row)}
+            class:warn={warn?.(row)}
             class:selected={selected === key(row)}
             class:openable={!!onOpen}
             tabindex={onOpen ? 0 : undefined}
@@ -95,8 +111,14 @@
               if (e.key === "Enter" && e.target === e.currentTarget) onOpen?.(row);
             }}
           >
-            {#each columns as column (column.id)}
-              <td class:end={column.align === "end"}>{@render column.cell(row, column)}</td>
+            {#each columns as column, position (column.id)}
+              {#if rowHeader && position === 0}
+                <th scope="row" class:wraps={column.wrap}>{@render column.cell(row, column)}</th>
+              {:else}
+                <td class:end={column.align === "end"} class:wraps={column.wrap}>
+                  {@render column.cell(row, column)}
+                </td>
+              {/if}
             {/each}
             {#if actions}<td class="row-actions">{@render actions(row)}</td>{/if}
           </tr>
@@ -107,7 +129,7 @@
 {/if}
 
 <style>
-  .wrap {
+  .scroll {
     overflow-x: auto;
   }
 
@@ -116,6 +138,13 @@
     border-collapse: collapse;
     table-layout: fixed;
     font-size: var(--text-xs);
+  }
+
+  caption {
+    padding-bottom: 0.35rem;
+    text-align: left;
+    font-size: var(--text-2xs);
+    color: var(--text-tertiary);
   }
 
   th,
@@ -163,6 +192,17 @@
     font-variant-numeric: tabular-nums;
   }
 
+  /* The row's name, said in the row rather than by its place. */
+  tbody th {
+    font-weight: 400;
+    color: var(--text-secondary);
+  }
+
+  .wraps {
+    white-space: normal;
+    vertical-align: top;
+  }
+
   tbody tr:not(.group) {
     border-bottom: 1px solid var(--rule);
   }
@@ -193,8 +233,14 @@
     outline-offset: -2px;
   }
 
+  tr.inactive th,
   tr.inactive td {
     color: var(--text-tertiary);
+  }
+
+  tr.warn th,
+  tr.warn td {
+    color: var(--warning-ink);
   }
 
   .row-actions {

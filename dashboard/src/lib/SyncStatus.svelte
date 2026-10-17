@@ -4,6 +4,7 @@
   // in `./sync-status.ts`; the store and the flush rules are in `src-tauri/src/sync.rs`.
   import { onMount } from "svelte";
   import Overlay from "./Overlay.svelte";
+  import DataTable, { type Column } from "./ui/DataTable.svelte";
   import {
     bridgeErrorText,
     inTauri,
@@ -21,6 +22,7 @@
     showValue,
     statusLine,
     SYNC_CHANGED_EVENT,
+    type FieldDiff,
   } from "./sync-status";
 
   /** How often the line reads the store. Reading is local and cheap; sending is not done here. */
@@ -111,7 +113,27 @@
       document.removeEventListener("visibilitychange", onVisible);
     };
   });
+
+  // Every column wraps. This is the one table in the app where a value is read and compared
+  // against the one beside it, and an ellipsis here would hide the difference it exists for.
+  const diffColumns: Column<FieldDiff>[] = [
+    { id: "field", label: "Field", width: "8rem", wrap: true, cell: fieldNameCell },
+    { id: "mine", label: "Yours", wrap: true, cell: mineCell },
+    { id: "theirs", label: "On the canonical node", wrap: true, cell: theirsCell },
+  ];
 </script>
+
+{#snippet fieldNameCell(diff: FieldDiff)}
+  <span class="mono">{diff.field}</span>
+{/snippet}
+
+{#snippet mineCell(diff: FieldDiff)}
+  {showValue(diff.mine)}
+{/snippet}
+
+{#snippet theirsCell(diff: FieldDiff)}
+  {showValue(diff.theirs)}
+{/snippet}
 
 {#if shown && line}
   <aside class="sync" class:offline={status?.offline} class:review role="status">
@@ -146,16 +168,12 @@
           <p class="hint">
             The canonical node changed this item after you read it. Nothing was overwritten. Pick one.
           </p>
-          <table>
-            <thead><tr><th scope="col">Field</th><th scope="col">Yours</th><th scope="col">On the canonical node</th></tr></thead>
-            <tbody>
-              {#each fieldDiff(entry) as d (d.field)}
-                <tr><td class="mono">{d.field}</td><td>{showValue(d.mine)}</td><td>{showValue(d.theirs)}</td></tr>
-              {:else}
-                <tr><td colspan="3">No field differs: both hold the same values.</td></tr>
-              {/each}
-            </tbody>
-          </table>
+          <DataTable
+            rows={fieldDiff(entry)}
+            columns={diffColumns}
+            key={(diff) => diff.field}
+            empty="No field differs: both hold the same values."
+          />
           <div class="actions">
             <button type="button" disabled={busy} onclick={() => void resolve(entry.id, "keep_mine")}>
               Keep mine
@@ -229,18 +247,6 @@
   .hint {
     opacity: 0.75;
     font-size: var(--text-sm);
-  }
-  table {
-    width: 100%;
-    border-collapse: collapse;
-    margin: 0.4rem 0;
-  }
-  th,
-  td {
-    text-align: left;
-    padding: 0.25rem 0.4rem;
-    vertical-align: top;
-    word-break: break-word;
   }
   .fields {
     margin: 0.3rem 0;

@@ -61,7 +61,7 @@ export const REFUSED: Record<string, string> = {
   "cargo-tests":
     "cargo against the shared target/, and the suite resolves projection roots from the real overlay. Run: tools/cargo-hermetic test --workspace --locked",
   "ui-check":
-    "its first step overwrites $HOME/.axon-overlay/config/machine.toml, this machine's own capability declaration, and its later steps bun install from the network. Run: cd <package> && bun run check",
+    "its first step overwrites $HOME/.axon-overlay/config/machine.toml, this machine's own capability declaration, and its later steps bun install from the network. Run: cd <package> && bun run check, then bun run build — the build is what compiles the templates",
 };
 
 /** What an unclassified job is told, so a new job in ci.yml is a decision and not a default. */

@@ -27,6 +27,7 @@
     type InventoryWishlist,
     type InteriorImpact,
     type InteriorPlacedItem,
+    type InteriorReserve,
     type InteriorAllowed,
     type InteriorRobustness,
     type InteriorSun,
@@ -39,6 +40,8 @@
   import RoomPlanRevisionReview from "$lib/interior/RoomPlanRevisionReview.svelte";
   import InteriorSolverView from "$lib/interior/InteriorSolverView.svelte";
   import InteriorPurchaseView from "$lib/interior/InteriorPurchaseView.svelte";
+  import SunGrid from "$lib/interior/SunGrid.svelte";
+  import DataTable, { type Column } from "$lib/ui/DataTable.svelte";
   import { isRoomPlanPhone } from "$lib/roomplan";
   import { SYNC_CHANGED_EVENT } from "$lib/sync-status";
   import { bridgedSrc } from "$lib/bridged-url";
@@ -57,6 +60,29 @@
   let selected = $state<string | null>(null);
   let detail = $state<InteriorLayoutDetail | null>(null);
   let detailError = $state<string | null>(null);
+
+  /** A walk between two rooms, as the check reports it. */
+  type Corridor = { from: string; to: string; width_cm: number | null };
+  /** A measurement with its place in the list: one rule can be measured more than once. */
+  type ReserveRow = InteriorReserve & { rank: number };
+
+  const walkColumns: Column<Corridor>[] = [
+    { id: "walk", label: "Walk", cell: walkCell },
+    { id: "width", label: "Narrowest", width: "9rem", align: "end", cell: widthCell },
+  ];
+
+  const reserveColumns: Column<ReserveRow>[] = [
+    { id: "rule", label: "Rule", wrap: true, cell: ruleCell },
+    { id: "measured", label: "Measured", width: "8rem", align: "end", cell: measuredCell },
+    { id: "slack", label: "Slack", width: "7rem", align: "end", cell: slackCell },
+  ];
+
+  const reserves: ReserveRow[] = $derived(
+    (detail?.check.reserves ?? []).map((reserve, index) => ({ ...reserve, rank: index })),
+  );
+
+  /** A hard rule that binds, with under 10 units left, is a number somebody has to read. */
+  const tight = (row: ReserveRow): boolean => row.hard && row.binding && row.slack < 10;
 
   let rows = $state<InventoryRow[]>([]);
   /** The flat itself: its name, its outer measurements, its area. Measured, not drawn from. */
@@ -695,6 +721,26 @@
   });
 </script>
 
+{#snippet walkCell(c: Corridor)}
+  {c.from} → {c.to}
+{/snippet}
+
+{#snippet widthCell(c: Corridor)}
+  {c.width_cm === null ? "no way through" : `${c.width_cm} cm`}
+{/snippet}
+
+{#snippet ruleCell(r: ReserveRow)}
+  {r.rule}{#if r.item}<span class="of"> · {r.item}</span>{/if}{#if r.subject}<span class="of"> · {r.subject}</span>{/if}
+{/snippet}
+
+{#snippet measuredCell(r: ReserveRow)}
+  {r.measured}/{r.required} {r.unit}
+{/snippet}
+
+{#snippet slackCell(r: ReserveRow)}
+  <span class:neg={r.slack < 0}>{r.capped ? "≥ " : ""}{r.slack > 0 ? "+" : ""}{r.slack}</span>
+{/snippet}
+
 <svelte:window onkeydown={onKey} />
 
   <PageHeader
@@ -949,17 +995,14 @@
             <div><dt>free</dt><dd>{detail.check.metrics.free_area_m2.toFixed(2)} m²</dd></div>
           </dl>
 
-          <table class="corridors">
-            <caption>Walks, at their narrowest point</caption>
-            <tbody>
-              {#each detail.check.metrics.corridors as c (c.from + c.to)}
-                <tr>
-                  <th scope="row">{c.from} → {c.to}</th>
-                  <td class="mono">{c.width_cm === null ? "no way through" : `${c.width_cm} cm`}</td>
-                </tr>
-              {/each}
-            </tbody>
-          </table>
+          <DataTable
+            rows={detail.check.metrics.corridors}
+            columns={walkColumns}
+            key={(c) => `${c.from} → ${c.to}`}
+            caption="Walks, at their narrowest point"
+            rowHeader
+            empty="No walk between two rooms is declared."
+          />
 
           {#if detail.check.hard.length > 0}
             <ul class="violations hard">
@@ -1022,23 +1065,13 @@
           {#if detail.check.reserves.length > 0}
             <details class="reserves">
               <summary>Every measurement, passed or not ({detail.check.reserves.length})</summary>
-              <table class="corridors">
-                <tbody>
-                  {#each detail.check.reserves as r, i (r.rule + i)}
-                    <tr class:tight={r.hard && r.binding && r.slack < 10}>
-                      <th scope="row">
-                        {r.rule}{#if r.item}<span class="of"> · {r.item}</span>{/if}{#if r.subject}<span class="of"> · {r.subject}</span>{/if}
-                      </th>
-                      <td class="mono">
-                        {r.measured}/{r.required} {r.unit}
-                      </td>
-                      <td class="mono slack" class:neg={r.slack < 0}>
-                        {r.capped ? "≥ " : ""}{r.slack > 0 ? "+" : ""}{r.slack}
-                      </td>
-                    </tr>
-                  {/each}
-                </tbody>
-              </table>
+              <DataTable
+                rows={reserves}
+                columns={reserveColumns}
+                key={(r) => String(r.rank)}
+                rowHeader
+                warn={tight}
+              />
             </details>
           {/if}
 
@@ -1074,24 +1107,7 @@
           {#if sun}
             <details class="reserves">
               <summary>Sun over the year</summary>
-              <table class="sun mono">
-                <tbody>
-                  {#each [...new Set(sun.hours.map((s) => s.day))] as tag (tag)}
-                    <tr>
-                      <th scope="row">{tag}</th>
-                      {#each sun.hours.filter((s) => s.day === tag) as h (h.hour_local)}
-                        <td
-                          class:night={h.altitude_deg <= 0}
-                          class:hit={h.hit.length > 0}
-                          use:tip={`${h.hour_local}:00 · ${h.altitude_deg.toFixed(0)}° up, ${h.azimuth_deg.toFixed(0)}° · ${h.hit.join(", ") || "nothing in the sun"}`}
-                        >
-                          {h.altitude_deg <= 0 ? "·" : h.hit.length || "–"}
-                        </td>
-                      {/each}
-                    </tr>
-                  {/each}
-                </tbody>
-              </table>
+              <SunGrid {sun} />
               <ul class="sunlist">
                 {#each Object.entries(sun.hits_per_piece) as [ref, n] (ref)}
                   <li><span class="mono">{ref}</span> {n} hours in direct sun</li>
@@ -1113,10 +1129,6 @@
   {/if}
 {/if}
 
-{#if !loading && !error && view === "solve"}
-  <!--
-    The most expensive calculation in the capability, finally reachable from the surface that
-    needs it. It runs as a job because it takes minutes: the page asks for a number and comes
 {#if !loading && !error && view === "solve"}
   <InteriorSolverView {selected} {detail} {allOwned} />
 {/if}
@@ -1356,32 +1368,6 @@
     margin: 0;
   }
 
-  .corridors {
-    border-collapse: collapse;
-    margin-top: 0.85rem;
-    width: 100%;
-  }
-  .corridors caption {
-    color: var(--text-tertiary);
-    font-size: var(--text-xs);
-    padding-bottom: 0.35rem;
-    text-align: left;
-  }
-  .corridors th {
-    color: var(--text-secondary);
-    font-weight: 400;
-    text-align: left;
-  }
-  .corridors th,
-  .corridors td {
-    border-top: 1px solid var(--card-border);
-    font-size: var(--text-sm);
-    padding: 0.3rem 0;
-  }
-  .corridors td {
-    text-align: right;
-  }
-
   .violations {
     display: grid;
     gap: 0.3rem;
@@ -1598,15 +1584,8 @@
     cursor: pointer;
     font-size: var(--text-xs);
   }
-  .reserves .slack {
-    text-align: right;
-  }
-  .reserves .slack.neg {
+  .neg {
     color: var(--danger);
-  }
-  .reserves tr.tight th,
-  .reserves tr.tight td {
-    color: var(--warning-ink);
   }
 
   .movein {
@@ -1630,33 +1609,6 @@
     color: var(--text-tertiary);
   }
 
-  /* One row per day, one column per hour: a year on four lines. */
-  .sun {
-    border-collapse: collapse;
-    font-size: var(--text-xs);
-    margin-top: 0.5rem;
-  }
-  .sun th {
-    color: var(--text-tertiary);
-    font-weight: 400;
-    padding-right: 0.75rem;
-    text-align: left;
-  }
-  .sun td {
-    border: 1px solid var(--card-border);
-    color: var(--text-tertiary);
-    min-width: 1.5rem;
-    padding: 0.15rem 0.3rem;
-    text-align: center;
-  }
-  .sun td.night {
-    background: var(--surface);
-    color: var(--text-tertiary);
-  }
-  .sun td.hit {
-    background: color-mix(in srgb, var(--warning) 22%, transparent);
-    color: var(--text-primary);
-  }
   .sunlist {
     color: var(--text-secondary);
     font-size: var(--text-xs);
@@ -1736,20 +1688,7 @@
     section.card + section.card {
       margin-top: var(--space-4);
     }
-    /* A wide table scrolls inside its card instead of pushing the page sideways. */
-    .corridors {
-      display: block;
-      overflow-x: auto;
-    }
-    .corridors td {
-      padding-left: var(--space-3);
-      white-space: nowrap;
-    }
-    .corridors th {
-      min-width: 9rem;
-    }
-
-        /* Every number and sentence stays; only the air between them goes. */
+    /* Every number and sentence stays; only the air between them goes. */
     /* A warning that wraps keeps its icon on the first line. */
     .unchecked,
     .guessed {

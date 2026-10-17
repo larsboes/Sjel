@@ -1,8 +1,10 @@
 <script lang="ts">
   import Icon from "$lib/Icon.svelte";
+  import DataTable, { type Column } from "$lib/ui/DataTable.svelte";
   import {
     interior,
     type InteriorComposed,
+    type InteriorHit,
     type InteriorLayoutDetail,
     type InteriorSearchReport,
     type InventoryRow,
@@ -71,7 +73,45 @@
   function toggle(list: string[], id: string): string[] {
     return list.includes(id) ? list.filter((x) => x !== id) : [...list, id];
   }
+
+  /** A hit with its place in the result: two hits can name the same positions. */
+  type HitRow = InteriorHit & { rank: number };
+
+  const hits: HitRow[] = $derived((searchResult?.hits ?? []).map((hit, index) => ({ ...hit, rank: index })));
+
+  const places = (row: HitRow): string =>
+    Object.entries(row.places)
+      .map(([ref, [x, y]]) => `${ref} ${x},${y}`)
+      .join(" · ");
+
+  const hitColumns: Column<HitRow>[] = [
+    { id: "places", label: "Places", wrap: true, cell: placesCell },
+    { id: "reserve", label: "Tightest reserve", width: "9rem", align: "end", cell: reserveCell },
+    { id: "wall", label: "Wall", width: "8rem", align: "end", cell: wallCell },
+    { id: "walk", label: "Walk", width: "7rem", align: "end", cell: walkCell },
+    { id: "soft", label: "Soft", width: "5rem", align: "end", cell: softCell },
+  ];
 </script>
+
+{#snippet placesCell(row: HitRow)}
+  {row.pareto ? "★ " : ""}{places(row)}
+{/snippet}
+
+{#snippet reserveCell(row: HitRow)}
+  {row.tightest_reserve_cm ?? "—"} cm spare
+{/snippet}
+
+{#snippet wallCell(row: HitRow)}
+  {row.wall_contact_cm} cm wall
+{/snippet}
+
+{#snippet walkCell(row: HitRow)}
+  {row.bottleneck_cm} cm walk
+{/snippet}
+
+{#snippet softCell(row: HitRow)}
+  {row.soft} soft
+{/snippet}
 
 <section class="card solver">
   <h2>Move pieces in {selected ?? "a layout"}</h2>
@@ -135,19 +175,7 @@
       {searchResult.hits.length} of {searchResult.fully_checked.toLocaleString()} checked
       <span class="note">in {(searchResult.elapsed_ms / 1000).toFixed(1)} s</span>
     </h2>
-    <table class="corridors">
-      <tbody>
-        {#each searchResult.hits as h, i (i)}
-          <tr>
-            <th scope="row">{h.pareto ? "★" : ""} {Object.entries(h.places).map(([k, p]) => `${k} ${p[0]},${p[1]}`).join(" · ")}</th>
-            <td class="mono">{h.tightest_reserve_cm ?? "—"} cm spare</td>
-            <td class="mono">{h.wall_contact_cm} cm wall</td>
-            <td class="mono">{h.bottleneck_cm} cm walk</td>
-            <td class="mono">{h.soft} soft</td>
-          </tr>
-        {/each}
-      </tbody>
-    </table>
+    <DataTable rows={hits} columns={hitColumns} key={(row) => String(row.rank)} rowHeader />
   </section>
 {/if}
 
@@ -218,21 +246,6 @@
     list-style: none;
     margin: 0.35rem 0 0;
     padding: 0;
-  }
-  .corridors {
-    border-collapse: collapse;
-    font-size: var(--text-sm);
-    margin-top: 0.75rem;
-    width: 100%;
-  }
-  .corridors th,
-  .corridors td {
-    border-top: 1px solid var(--card-border);
-    padding: 0.45rem 0.6rem;
-    text-align: left;
-  }
-  .corridors td {
-    color: var(--text-secondary);
   }
   .verdict {
     border-radius: var(--radius-sm);

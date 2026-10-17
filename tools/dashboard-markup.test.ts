@@ -1,4 +1,4 @@
-// Three markup habits that are invisible to everyone who can see the page.
+// Markup habits that are invisible to everyone who can see the page.
 //
 // Swept in `dashboard/src/` on 2026-09-08, and each count is the reason this file exists
 // rather than a style note:
@@ -15,6 +15,10 @@
 //                                       the submit buttons, so nothing is broken today —
 //                                       the defect is the next Cancel button somebody adds
 //                                       beside one, which submits the form on click.
+//   <table> outside the kit         5   of 10. Five surfaces drew their own table, so the
+//                                       same table was decided five times. Closed on
+//                                       2026-10-17; see the last describe block for the
+//                                       three renderers whose table is not a data table.
 //
 // The scan reads MARKUP only: `<script>` and `<style>` are cut out first, and so are HTML
 // comments. Two `<input type="number">` in prose comments — RetrospectiveForm and
@@ -155,5 +159,53 @@ describe("every control a reader types into has a name", () => {
       }
     }
     expect(offenders.sort()).toEqual([]);
+  });
+});
+
+// A page renders its data through the one table component.
+//
+// Measured 2026-10-17: seven `<table>` tags in five surfaces outside the kit — the CV
+// applications, three on the interior page, the conflict diff in the sync overlay and two in
+// the interior panels — each with its own padding, border and alignment. That is one table
+// decided six times, and the sixth was already beginning to disagree about where a number
+// sits. `DataTable` is the decision.
+//
+// The three that keep a table are RENDERERS whose table is not a data table: markdown out of
+// a document, a chart's own figure, and the sun grid, where a cell's fill is the measurement
+// rather than a value inside one. The list names renderers and not pages, so exempting one
+// does not exempt the page that renders it — which is the whole reason `SunGrid` is a file.
+const TABLE_RENDERERS = [
+  "lib/ui/DataTable.svelte",
+  "lib/feed/MarkdownDocument.svelte",
+  "lib/feed/ChartFigure.svelte",
+  "lib/interior/SunGrid.svelte",
+];
+
+describe("a page does not build its own table", () => {
+  test("the exempt renderers exist, so this list cannot rot into a no-op", () => {
+    const present = FILES.map(relative);
+    for (const renderer of TABLE_RENDERERS) {
+      expect([renderer, present.includes(renderer)]).toEqual([renderer, true]);
+    }
+  });
+
+  test("only a renderer whose table is not a data table holds one", () => {
+    const offenders: string[] = [];
+    for (const file of FILES) {
+      const name = relative(file);
+      if (TABLE_RENDERERS.includes(name)) continue;
+      const template = markup(readFileSync(file, "utf8"));
+      for (const match of template.matchAll(/<table\b/g)) {
+        offenders.push(`${name}:${lineOf(template, match.index)}`);
+      }
+    }
+    expect(offenders.sort()).toEqual([]);
+  });
+
+  test("the scan still finds tables, so a passing run means something", () => {
+    const found = FILES.filter((file) => TABLE_RENDERERS.includes(relative(file)))
+      .map((file) => markup(readFileSync(file, "utf8")).match(/<table\b/g)?.length ?? 0)
+      .reduce((sum, count) => sum + count, 0);
+    expect(found).toBeGreaterThanOrEqual(4);
   });
 });

@@ -5,9 +5,10 @@
   import { onMount } from "svelte";
   import Icon from "$lib/Icon.svelte";
   import PageHeader from "$lib/PageHeader.svelte";
-  import { axonStatus, type CvView, type CvWrite } from "$lib/api";
+  import { axonStatus, type CvApplication, type CvView, type CvWrite } from "$lib/api";
   import { inTauri } from "$lib/mac-bridge";
   import Chip from "$lib/ui/Chip.svelte";
+  import DataTable, { type Column } from "$lib/ui/DataTable.svelte";
   import CvEditor from "$lib/cv/CvEditor.svelte";
 
   let view = $state<CvView | null>(null);
@@ -57,8 +58,50 @@
   const last = (log: { date: string }[]) => log.at(-1)?.date ?? "";
   const ago = (mtime: number) => new Date(mtime * 1000).toISOString().slice(0, 10);
 
+  const applicationColumns: Column<CvApplication>[] = [
+    { id: "application", label: "Application", wrap: true, cell: applicationCell },
+    { id: "profile", label: "Profile", width: "7rem", cell: profileCell },
+    { id: "status", label: "Status", width: "9rem", cell: statusCell },
+    { id: "last", label: "Last", width: "7rem", cell: lastCell },
+  ];
+
   onMount(() => void load());
 </script>
+
+{#snippet applicationCell(app: CvApplication)}
+  <strong>{app.company}</strong><br /><span class="hint">{app.role}</span>
+{/snippet}
+
+{#snippet profileCell(app: CvApplication)}
+  <span class="hint">{app.profile} · {app.lang}</span>
+{/snippet}
+
+{#snippet statusCell(app: CvApplication)}
+  {#if view}
+    <select
+      class="status"
+      aria-label="Application status"
+      value={app.status}
+      disabled={busy}
+      onchange={(e) => run({ action: "app-status", slug: app.slug, status: e.currentTarget.value }, false)}
+    >
+      {#each view.statuses as s}<option>{s}</option>{/each}
+    </select>
+  {/if}
+{/snippet}
+
+{#snippet lastCell(app: CvApplication)}
+  <span class="hint">{last(app.log)}</span>
+{/snippet}
+
+{#snippet applicationActions(app: CvApplication)}
+  {#if app.url}
+    <a class="posting" href={app.url} target="_blank" rel="noreferrer" aria-label="Open the posting">
+      <Icon name="external" size={12} />
+    </a>
+  {/if}
+  <button class="btn btn-soft" disabled={busy} onclick={() => run({ action: "app-build", slug: app.slug })}>Build</button>
+{/snippet}
 
 <PageHeader badge="CV" title="CV, applications and LinkedIn" />
 
@@ -91,32 +134,13 @@
 
   <section class="card pad">
     <h3>Applications</h3>
-    {#if view.applications.length === 0}<p class="hint">None yet.</p>{/if}
-    <table>
-      <tbody>
-        {#each view.applications as app (app.slug)}
-          <tr>
-            <td><strong>{app.company}</strong><br /><span class="hint">{app.role}</span></td>
-            <td class="hint">{app.profile} · {app.lang}</td>
-            <td>
-              <select
-                aria-label="Application status"
-                value={app.status}
-                disabled={busy}
-                onchange={(e) => run({ action: "app-status", slug: app.slug, status: e.currentTarget.value }, false)}
-              >
-                {#each view.statuses as s}<option>{s}</option>{/each}
-              </select>
-            </td>
-            <td class="hint">{last(app.log)}</td>
-            <td>
-              {#if app.url}<a href={app.url} target="_blank" rel="noreferrer"><Icon name="external" size={12} /></a>{/if}
-              <button class="btn btn-soft" disabled={busy} onclick={() => run({ action: "app-build", slug: app.slug })}>Build</button>
-            </td>
-          </tr>
-        {/each}
-      </tbody>
-    </table>
+    <DataTable
+      rows={view.applications}
+      columns={applicationColumns}
+      key={(app) => app.slug}
+      actions={applicationActions}
+      empty="None yet."
+    />
     <div class="row">
       <input aria-label="Company" placeholder="Company" bind:value={draft.company} />
       <input aria-label="Role" placeholder="Role" bind:value={draft.role} />
@@ -183,8 +207,8 @@
     border: 1px solid var(--card-border);
     border-radius: var(--radius-sm);
   }
-  table { width: 100%; border-collapse: collapse; font-size: 0.8rem; }
-  td { padding: 0.3rem 0.4rem 0.3rem 0; vertical-align: top; }
+  .status { width: 100%; }
+  .posting { margin-right: 0.4rem; }
   ul { list-style: none; padding: 0; margin: 0; font-size: 0.78rem; }
   li { display: flex; align-items: center; gap: 0.4rem; padding: 0.12rem 0; }
   .link { background: none; border: 0; padding: 0; color: var(--text-primary); text-decoration: underline; cursor: pointer; }

@@ -1,12 +1,17 @@
 <script lang="ts">
   import { onMount } from "svelte";
   import Icon from "$lib/Icon.svelte";
+  import DataTable, { type Column } from "$lib/ui/DataTable.svelte";
   import {
     interior,
     type InteriorDeclaration,
     type InteriorDelivery,
+    type InteriorPurchaseLine,
     type InteriorPurchaseOrder,
   } from "$lib/api";
+
+  /** A purchase line with the place the order gave it: the rank is the answer. */
+  type PurchaseRow = InteriorPurchaseLine & { rank: number };
 
   const euro = (cents: number): string =>
     (cents / 100).toLocaleString("de-DE", { style: "currency", currency: "EUR" });
@@ -68,7 +73,46 @@
     void loadOrder();
     void loadDeclarations();
   });
+
+  const lines: PurchaseRow[] = $derived(
+    (order?.lines ?? []).map((line, index) => ({ ...line, rank: index + 1 })),
+  );
+
+  const purchaseColumns: Column<PurchaseRow>[] = [
+    { id: "item", label: "Item", wrap: true, cell: itemCell },
+    { id: "priority", label: "Priority", width: "5rem", cell: priorityCell },
+    { id: "price", label: "Price", width: "6rem", align: "end", cell: priceCell },
+    { id: "cumulative", label: "Cumulative", width: "7rem", align: "end", cell: cumulativeCell },
+    { id: "months", label: "Affordable in", width: "10rem", align: "end", cell: monthsCell },
+  ];
+
+  const months = (row: PurchaseRow): string =>
+    row.affordable_after_months !== null
+      ? `${row.affordable_after_months.toFixed(1)} months`
+      : order?.balance
+        ? "not out of this balance"
+        : "no balance measured";
 </script>
+
+{#snippet itemCell(row: PurchaseRow)}
+  {row.rank}. {row.label}
+{/snippet}
+
+{#snippet priorityCell(row: PurchaseRow)}
+  {row.priority ?? "—"}
+{/snippet}
+
+{#snippet priceCell(row: PurchaseRow)}
+  {euro(row.price_cents ?? 0)}
+{/snippet}
+
+{#snippet cumulativeCell(row: PurchaseRow)}
+  {euro(row.cumulative_cents)}
+{/snippet}
+
+{#snippet monthsCell(row: PurchaseRow)}
+  {months(row)}
+{/snippet}
 
 <section class="card">
   <h2>Does it even fit through the door?</h2>
@@ -91,25 +135,13 @@
       Urgency, then whether a layout already builds on it, then price. No budget: nobody set a
       ceiling and this page does not invent one.
     </p>
-    <table class="corridors">
-      <tbody>
-        {#each order.lines as p, i (p.id)}
-          <tr>
-            <th scope="row">{i + 1}. {p.label}</th>
-            <td class="mono">{p.priority ?? "—"}</td>
-            <td class="mono">{euro(p.price_cents ?? 0)}</td>
-            <td class="mono">{euro(p.cumulative_cents)}</td>
-            <td class="mono">
-              {p.affordable_after_months !== null
-                ? `${p.affordable_after_months.toFixed(1)} months`
-                : order.balance
-                  ? "not out of this balance"
-                  : "no balance measured"}
-            </td>
-          </tr>
-        {/each}
-      </tbody>
-    </table>
+    <DataTable
+      rows={lines}
+      columns={purchaseColumns}
+      key={(row) => row.id}
+      rowHeader
+      empty="Nothing carries a price yet, so there is no order to read."
+    />
     {#if order.unpriced.length > 0}
       <p class="unchecked">
         <Icon name="alert" size={14} />
@@ -198,21 +230,6 @@
     font-size: var(--text-sm);
     font-weight: 500;
     margin: 0.5rem 0 0;
-  }
-  .corridors {
-    border-collapse: collapse;
-    font-size: var(--text-sm);
-    margin-top: 0.75rem;
-    width: 100%;
-  }
-  .corridors th,
-  .corridors td {
-    border-top: 1px solid var(--card-border);
-    padding: 0.45rem 0.6rem;
-    text-align: left;
-  }
-  .corridors td {
-    color: var(--text-secondary);
   }
   .unchecked {
     color: var(--warning-ink);

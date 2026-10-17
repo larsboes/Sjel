@@ -364,8 +364,12 @@ stay in the PRD's history.
   Half done (2026-10-17): the *wording* is one module, `dashboard/src/lib/ui/age.ts`, and the
   seven surfaces that each phrased an age their own way call it. What is still open is the age
   of the *view*: "older than its refresh interval" needs each panel to keep its fetch time and
-  declare that interval, and nothing does — sixteen files poll on sixteen hand-written
-  intervals and none records when its data arrived. The rule is
+  declare that interval, and neither exists. Measured 2026-10-17: seventeen `setInterval` sites
+  in sixteen files — thirteen fetch data, on intervals from 2 s to 30 s, and four tick a clock
+  — and none of the thirteen records when its data last arrived.
+  `lib/capabilities.svelte.ts`'s store is the one place that already takes its interval as an
+  argument and polls only while a component is subscribed; `lib/SyncStatus.svelte` is the one
+  that stops on `visibilitychange`. The rule is
   `Packs/design/skills/ui-craftsmanship/SKILL.md` ("Stale").
 - **DSH-7** — `Sjel.app` has an app icon, so its approval notifications show one. No `.icns` or
   `CFBundleIconFile`; `apps/mac/Resources/` holds only the menu-bar PDF.

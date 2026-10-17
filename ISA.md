@@ -351,7 +351,7 @@ stay in the PRD's history.
   item a day, and status is draft/saved/archived — none says "this part is undecided, here are
   the branches". What would settle it: a second trip planned this way.
 
-### dashboard · six claims and six design questions
+### dashboard · five claims and six design questions
 
 - **DSH-2** — ⌃⌥Space opens Ask from any app and the question arrives in the drawer. Code exists
   (`+layout.svelte` reads `?ask=`, `sjel-status/session.rs` `landing`); only an operator restart
@@ -360,9 +360,6 @@ stay in the PRD's history.
   `SidePeek`). A live-data judgement, not a build.
 - **DSH-4** — a page header does not overlap its description at narrow widths. `PageHeader.svelte`
   stacks `.lead` below 38rem; recompute before ticking.
-- **DSH-5** — no page builds its own table. Markdown and chart tables are exempt. Seven `<table>`
-  sites remain (the three exempt, plus `SyncStatus`, `InteriorPurchaseView`, `InteriorSolverView`,
-  `routes/interior`, `routes/cv`).
 - **DSH-6** — every page that shows fetched data shows its age through one shared component.
   No such component exists in `lib/ui/`. The rule is `Packs/design/skills/ui-craftsmanship/SKILL.md`
   ("Stale").

@@ -72,7 +72,9 @@ its own. Run them alone with:
 cargo test --workspace --locked -- db_tests::
 ~~~
 
-Run `bun run check` in `dashboard/` when dashboard code changes. Manifest or
+Run `bun run check` and `bun run build` in `dashboard/` when dashboard code changes. The
+check does not compile a template; the build does. A package that `tools/discover-ui-packages`
+reports is checked and built the same way in CI, so run both there too. Manifest or
 generated-architecture changes also require:
 
 ~~~sh

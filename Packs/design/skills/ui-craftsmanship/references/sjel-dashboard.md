@@ -14,7 +14,7 @@ when a page needs it, and move other pages onto the kit one at a time (user deci
 
 | Primitive | Rule it carries | Notes |
 |---|---|---|
-| `ui/DataTable.svelte` | 1, 2, 3 | Columns with `align: "end"` get mono tabular figures. `inactive` dims a row. `actions` snippet is rung 3 (hover and focus, always shown with no hover). `onOpen` opens a row with click or Enter. `group` draws day or category headers. |
+| `ui/DataTable.svelte` | 1, 2, 3 | Columns with `align: "end"` get mono tabular figures. `inactive` dims a row. `actions` snippet is rung 3 (hover and focus, always shown with no hover). `onOpen` opens a row with click or Enter. `group` draws day or category headers. `caption` names a table the heading above it would not. `rowHeader` renders the first column as a `<th scope="row">`. `warn` marks the rows whose numbers a reader has to look at. `wrap` on a column wraps its cells rather than ending them in an ellipsis — right for a value compared against the one beside it, wrong for a label. |
 | `ui/Chip.svelte` | 1 | A value from a fixed set. `tone` is one of neutral, accent, success, warning, danger, muted. Map a value to a tone where the data is defined, not at the call site. |
 | `ui/SidePeek.svelte` | 2 | Rung 4. A record's detail and editors beside the list. Not modal, Escape closes it, the next row is one click. |
 | `ui/Property.svelte` | 1, 2 | One field of a record, edited in place. Replaces a separate edit form. |
@@ -74,7 +74,7 @@ Run them with `bun test tools/dashboard-*.test.ts` from the repository root.
 | `tools/dashboard-disclosure.test.ts` | `use:tip`, not `title`. Motion reads the tokens and never uses `transition: all`. Popovers stay native. |
 | `tools/dashboard-row-disclosure.test.ts` | A row's reason is disclosed, not deleted. Hover, focus and tap all open it. A spent row is dimmed. |
 | `tools/dashboard-tokens.test.ts` | Every custom property a component reads is declared. Every primitive in `app.css` has a consumer. |
-| `tools/dashboard-markup.test.ts` | `<th>` has `scope`. A form button states its `type`. Inputs have a name, not only a placeholder. |
+| `tools/dashboard-markup.test.ts` | `<th>` has `scope`. A form button states its `type`. Inputs have a name, not only a placeholder. No page builds its own table. |
 | `tools/dashboard-contrast.test.ts` | Text and tone tokens meet contrast on the surfaces they sit on. |
 | `tools/dashboard-type-scale.test.ts` | Font sizes come from the type scale. |
 
@@ -83,6 +83,8 @@ Run them with `bun test tools/dashboard-*.test.ts` from the repository root.
 Measured 2026-10-08. Re-measure before quoting.
 
 - Stale data has no shared primitive. Each page decides how to show the age of its data.
-- Every data table uses `DataTable` or `Collection` since 2026-10-08. The `<table>`s left are
-  on purpose: markdown and chart tables (`feed/`), the conflict diff in `SyncStatus` (its
-  values must wrap), and interior's key/value readouts and sun heatmap.
+- Every data table uses `DataTable` or `Collection` (2026-10-17). The `<table>`s left are
+  renderers whose table is not a data table: markdown out of a document, a chart's own figure,
+  and `lib/interior/SunGrid.svelte`, where a cell's fill is the measurement rather than a value
+  inside one. The list names renderers and not pages, so a page that uses one is not itself
+  exempt, and `tools/dashboard-markup.test.ts` holds it.

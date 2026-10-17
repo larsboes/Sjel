@@ -7,13 +7,18 @@
 #   * a bookmark dump — reading/inspiration links don't earn a section here.
 #   * a graveyard — a system evaluated and declined gets no section, only the note below.
 #
-# Evaluated and declined as agent harnesses (2026-07-10): Cursor, Kiro (AWS), Google
-# Antigravity, OpenAI Codex, and Docker's cagent. None is tracked here; all five were also
+# Evaluated and declined as agent harnesses (2026-07-10): Cursor, Kiro (AWS), OpenAI Codex,
+# and Docker's cagent. None is tracked here; all four were also
 # purged from disk, including ~161MB of orphaned Library state and two root-owned dangling
 # symlinks (/usr/local/bin/cursor, /usr/local/bin/kiro) left behind by hand-uninstalls. The
 # three kept harnesses are the ones named below: Claude Code, pi-agent, opencode. Bringing any
 # declined tool back is a normal verdict-gate decision (CONTRIBUTING.md#dependency-verdicts-and-provenance), never a bare
 # `brew install` or a manual .app drop.
+#
+# Google Antigravity was on that list and is not any more. Its CLI (`agy`, ~/.local/bin/agy) was
+# running on this Mac on 2026-10-14, and 2026-10-17 Lars admitted it through that gate as a
+# registry harness: `tools/sjel-cli/src/harnesses/antigravity.rs`, registered in
+# ~/.gemini/config/skills.json. Nothing here is tracked as a system; the harness is the record.
 #
 # Fields (single-line TOML only, see tools/lib/toml.sh):
 #   url   = canonical URL (repo, dashboard, or LAN address). PUBLIC repos and

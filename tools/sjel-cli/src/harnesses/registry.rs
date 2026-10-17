@@ -194,6 +194,25 @@ impl Registry {
             validate_adapter_files: None,
         };
 
+        // Antigravity's documented machine-local customization root. Its skills.json lists Pack
+        // directories, so the Pack is registered in place and there is no copy to drift.
+        let antigravity_destination = env_path("SJEL_ANTIGRAVITY_SKILLS_FILE")
+            .unwrap_or_else(|| home.join(".gemini").join("config").join("skills.json"));
+        let mut antigravity_roots = vec![root.join("Packs")];
+        with_overlay(&mut antigravity_roots);
+        let antigravity = DeployConfig {
+            axon_root: root.to_path_buf(),
+            pack_roots: Some(antigravity_roots),
+            destination: antigravity_destination,
+            state_file: resolved(state_dir.join("antigravity.json")),
+            adapter: "antigravity".to_owned(),
+            state_env_var: None,
+            tree_convention: None,
+            flat_file_convention: None,
+            skip_manifest_skills: false,
+            validate_adapter_files: None,
+        };
+
         Self {
             harnesses: vec![
                 Harness {
@@ -236,14 +255,16 @@ impl Registry {
                     cli: "tools/harnesses",
                     config: agent,
                 },
+                Harness {
+                    id: "antigravity",
+                    label: "Antigravity",
+                    marker: home.join(".gemini").join("antigravity-cli"),
+                    model: Model::Registry,
+                    cli: "tools/harnesses",
+                    config: antigravity,
+                },
             ],
-            unsupported: vec![Unsupported {
-                id: "antigravity",
-                label: "Antigravity",
-                why:
-                    "no adapter, and no verified skill/extension format for it in this repository. \
-                      Nothing is installed on this machine to measure against (2026-09-07).",
-            }],
+            unsupported: vec![],
         }
     }
 
@@ -264,11 +285,14 @@ mod tests {
     use super::*;
 
     #[test]
-    fn five_harnesses_and_one_unsupported_row() {
+    fn six_harnesses_and_none_unsupported() {
         let registry = Registry::new(Path::new("/tmp/sjel-registry-test"));
         let ids: Vec<&str> = registry.harnesses.iter().map(|h| h.id).collect();
-        assert_eq!(ids, vec!["claude", "codex", "opencode", "pi", "sjel-agent"]);
-        assert_eq!(registry.unsupported.len(), 1);
+        assert_eq!(
+            ids,
+            vec!["claude", "codex", "opencode", "pi", "sjel-agent", "antigravity"]
+        );
+        assert!(registry.unsupported.is_empty());
         assert!(registry.by_id("nope").is_err());
     }
 

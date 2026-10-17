@@ -172,6 +172,9 @@ pi = [
     "writing/agents/",
 ]
 codex = ["writing/skill-creator", "knowledge/defuddle"]
+# antigravity: defuddle is held here too (2026-10-17), for the same reason as above. Its skills.json
+# is written by `use`, so the hold is what keeps the entry out, and the Pack stays in place.
+antigravity = ["knowledge/defuddle"]
 
 [[profile]]
 name = "productive"
@@ -240,16 +243,17 @@ packs = ["*"]
 except = [
     "home-automation",
     "3d-printing",
-    "cv",
-    "design",
     "travel",
     "ytalbum",
 ]
 # The 2026-10-13 trim, and it is a DEPLOYMENT decision: every Pack named above stays in the
-# repository, un-deployed, and `everything` puts all of them back in one command. `design` is
-# ui-craftsmanship alone; it had the highest measured demand of anything removed here (116
-# uses in a month), so its removal is a deliberate call and not a measurement's conclusion.
-# Sources are recoverable by re-activating a profile; nothing was deleted.
+# repository, un-deployed, and `everything` puts all of them back in one command. Sources are
+# recoverable by re-activating a profile; nothing was deleted.
+#
+# 2026-10-17: `design` (ui-craftsmanship, 116 uses in a month) and `cv` (cv-builder) left the
+# except list. Lars: the always-on set is pi, Codex and Claude Code together, and `design` and
+# `cv` were already deployed to Claude Code, so `full` now says what the machines carry. The
+# Packs above stay dormant.
 skills = { "writing" = ["human-writing", "skill-creator", "unslop"] }
 
 [[profile]]

@@ -57,8 +57,9 @@ machine had three Packs materialized into `~/.agents/skills` for a Codex that is
 while pi — installed, and one of the three harnesses actually in use — carried one Pack of
 fourteen and had no row in `tools/doctor`. Deployment tracked adapters that exist rather than
 harnesses that are installed. `tools/sjel-cli/src/harnesses/registry.rs` is now the one place that knows the
-difference, and it also names what is NOT supported (Antigravity: no adapter, no verified skill
-format, nothing installed to measure against) so a report can say so instead of omitting it.
+difference, and it also names what is NOT supported, so a report can say so instead of omitting
+it. Antigravity was on that list until 2026-10-17, when it became a registry harness
+(`tools/sjel-cli/src/harnesses/antigravity.rs`, which writes `~/.gemini/config/skills.json`).
 
 Two Claude Code hooks call `tools/pack-drift-hook` and report without ever blocking:
 

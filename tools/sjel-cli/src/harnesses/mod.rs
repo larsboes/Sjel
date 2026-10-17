@@ -20,6 +20,7 @@ use std::path::{Path, PathBuf};
 use std::process::{Command, ExitCode};
 
 pub(crate) mod agent;
+pub(crate) mod antigravity;
 mod agentfile;
 pub mod engine;
 mod frontmatter;
@@ -113,14 +114,15 @@ fn sync(registry: &Registry, args: &[String]) -> Result<(), String> {
             // overlay's config/agent.toml by `agent::activate_profile_on_agent`, so `use` is the
             // verb. This line used to print `tools/harnesses deploy <pack>` for sjel-agent, and
             // `tools/harnesses` has no `deploy` verb — the same predicate `use_profile` keys on.
-            let advice = if harness.id == "sjel-agent" {
-                format!("tools/harnesses use <profile> --harness {}", harness.id)
-            } else {
+            // Only pi has a per-Pack `deploy`. Every other registry harness takes a profile.
+            let advice = if harness.id == "pi" {
                 format!(
                     "{} deploy {}",
                     harness.cli,
                     if all { "<pack>" } else { pack.unwrap_or("") }
                 )
+            } else {
+                format!("tools/harnesses use <profile> --harness {}", harness.id)
             };
             println!("  registry harness — run: {advice}");
             continue;
@@ -153,6 +155,10 @@ fn use_profile(registry: &Registry, root: &Path, args: &[String]) -> Result<(), 
         println!("── {}", harness.label);
         if harness.id == "sjel-agent" {
             for line in agent::activate_profile_on_agent(&harness.config, name)? {
+                println!("{line}");
+            }
+        } else if harness.id == "antigravity" {
+            for line in antigravity::activate_profile(&harness.config, name)? {
                 println!("{line}");
             }
         } else if harness.model == Model::Registry {
@@ -467,6 +473,9 @@ pub(crate) fn statuses_for(
 ) -> Result<Vec<StatusRow>, String> {
     if harness.id == "sjel-agent" {
         return agent::registry_statuses(&harness.config, selected);
+    }
+    if harness.id == "antigravity" {
+        return antigravity::registry_statuses(&harness.config, selected);
     }
     match harness.model {
         // pi's rows are two channels: the settings registry, and the agent files it copies to a

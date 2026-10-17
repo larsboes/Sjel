@@ -3,14 +3,18 @@
   // The agent's reach on this machine (ISA F10): one mode per capability, the writes that
   // wait for the owner, and the latest calls. The gate in each capability reads the same
   // policy on its next request, so a change here needs no restart.
-  import { onDestroy, onMount } from "svelte";
+  import { onMount } from "svelte";
   import Icon from "$lib/Icon.svelte";
-  import { axonStatus, type AgentMode, type AgentView } from "$lib/api";
+  import Freshness from "$lib/ui/Freshness.svelte";
+  import { poll } from "$lib/ui/poll.svelte";
+  import { axonStatus, type AgentMode } from "$lib/api";
 
-  let view = $state<AgentView | null>(null);
-  let err = $state<string | null>(null);
+  // Pending writes are what a person waits on, so the list refreshes while the page is open.
+  const polled = poll({ intervalMs: 5_000, fetch: () => axonStatus.agent() });
+  const view = $derived(polled.data);
+  let writeError = $state<string | null>(null);
+  const err = $derived(polled.error ?? writeError);
   let busy = $state<string | null>(null);
-  let timer: ReturnType<typeof setInterval> | undefined;
 
   const LABELS: Record<AgentMode, string> = {
     off: "Off",
@@ -19,22 +23,14 @@
     auto: "Auto",
   };
 
-  async function load() {
-    try {
-      view = await axonStatus.agent();
-      err = null;
-    } catch (e) {
-      err = e instanceof Error ? e.message : String(e);
-    }
-  }
-
   async function setMode(capability: string, mode: AgentMode) {
     busy = capability;
     try {
       await axonStatus.setAgentMode(capability, mode);
-      await load();
+      await polled.refresh();
+      writeError = null;
     } catch (e) {
-      err = e instanceof Error ? e.message : String(e);
+      writeError = e instanceof Error ? e.message : String(e);
     } finally {
       busy = null;
     }
@@ -44,9 +40,10 @@
     busy = id;
     try {
       await axonStatus.decideAgentWrite(id, allow);
-      await load();
+      await polled.refresh();
+      writeError = null;
     } catch (e) {
-      err = e instanceof Error ? e.message : String(e);
+      writeError = e instanceof Error ? e.message : String(e);
     } finally {
       busy = null;
     }
@@ -56,12 +53,7 @@
     return new Date(at * 1000).toLocaleString();
   }
 
-  onMount(() => {
-    load();
-    // Pending writes are what a person waits on, so the list refreshes while the page is open.
-    timer = setInterval(load, 5000);
-  });
-  onDestroy(() => clearInterval(timer));
+  onMount(() => polled.start());
 </script>
 
 <section class="agent">
@@ -71,6 +63,7 @@
     {#if view}
       <span class="state">{view.enrolled ? "enrolled" : "not enrolled"}</span>
     {/if}
+    <Freshness of={polled} />
   </h2>
 
   {#if err}

@@ -351,7 +351,7 @@ stay in the PRD's history.
   item a day, and status is draft/saved/archived — none says "this part is undecided, here are
   the branches". What would settle it: a second trip planned this way.
 
-### dashboard · five claims and six design questions
+### dashboard · four claims and six design questions
 
 - **DSH-2** — ⌃⌥Space opens Ask from any app and the question arrives in the drawer. Code exists
   (`+layout.svelte` reads `?ask=`, `sjel-status/session.rs` `landing`); only an operator restart
@@ -360,17 +360,6 @@ stay in the PRD's history.
   `SidePeek`). A live-data judgement, not a build.
 - **DSH-4** — a page header does not overlap its description at narrow widths. `PageHeader.svelte`
   stacks `.lead` below 38rem; recompute before ticking.
-- **DSH-6** — every page that shows fetched data shows its age through one shared component.
-  Half done (2026-10-17): the *wording* is one module, `dashboard/src/lib/ui/age.ts`, and the
-  seven surfaces that each phrased an age their own way call it. What is still open is the age
-  of the *view*: "older than its refresh interval" needs each panel to keep its fetch time and
-  declare that interval, and neither exists. Measured 2026-10-17: seventeen `setInterval` sites
-  in sixteen files — thirteen fetch data, on intervals from 2 s to 30 s, and four tick a clock
-  — and none of the thirteen records when its data last arrived.
-  `lib/capabilities.svelte.ts`'s store is the one place that already takes its interval as an
-  argument and polls only while a component is subscribed; `lib/SyncStatus.svelte` is the one
-  that stops on `visibilitychange`. The rule is
-  `Packs/design/skills/ui-craftsmanship/SKILL.md` ("Stale").
 - **DSH-7** — `Sjel.app` has an app icon, so its approval notifications show one. No `.icns` or
   `CFBundleIconFile`; `apps/mac/Resources/` holds only the menu-bar PDF.
 - **Home: a ranked list, or a view per context.** Waited for declared joins (shipped 2026-10-06);

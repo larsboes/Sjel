@@ -24,6 +24,7 @@
     type FoundNode,
   } from "../mac-bridge";
   import { setupSheet } from "./setup-state.svelte";
+  import { poll } from "../ui/poll.svelte";
 
   type Step = "intro" | "working" | "pick" | "waiting" | "done";
 
@@ -34,7 +35,13 @@
   let nodes = $state<FoundNode[]>([]);
   let code = $state("");
   let macName = $state("");
-  let poll: ReturnType<typeof setInterval> | null = null;
+
+  // The Mac's answer is data, not a callback: the beat asks how the request this phone sent is
+  // doing, and the effect below is what acts on it. `immediate: false` because nothing is
+  // being watched until a request exists.
+  let joinId: string | null = null;
+  const joinStatus = poll({ intervalMs: 2_000, immediate: false, fetch: () => joins.status(joinId ?? "") });
+  let stopJoinPoll: (() => void) | null = null;
 
   onMount(() => {
     if (!canClaimOnThisDevice()) return;
@@ -56,8 +63,8 @@
   });
 
   function stopPolling() {
-    if (poll) clearInterval(poll);
-    poll = null;
+    stopJoinPoll?.();
+    stopJoinPoll = null;
   }
 
   function fail(message: string) {
@@ -147,27 +154,29 @@
       macName = hostName(node.host);
       code = joinCode(comparisonCode(node.fingerprint), await keyCode(identity.public_key));
       step = "waiting";
-      poll = setInterval(() => void check(join.id), 2000);
+      joinId = join.id;
+      stopJoinPoll = joinStatus.start();
+      void joinStatus.refresh();
     } catch (e) {
       await setLocalEndpoint("", "").catch(() => {});
       fail(bridgeErrorText(e));
     }
   }
 
-  async function check(id: string) {
-    try {
-      const join = await joins.status(id);
-      if (join.status === "approved") {
-        stopPolling();
-        step = "done";
-      } else if (join.status === "denied" || join.status === "expired") {
-        await setLocalEndpoint("", "").catch(() => {});
-        fail(join.status === "denied" ? "The Mac did not allow this iPhone." : "The Mac did not answer in time. Try again.");
-      }
-    } catch {
-      // One missed poll is not a failure; the next one tries again.
+  // One missed poll is not a failure; the next beat tries again. What the phone does with an
+  // answer is the whole of this effect: approved ends the flow, denied or expired undoes the
+  // pin this phone just wrote.
+  $effect(() => {
+    const join = joinStatus.data;
+    if (!join) return;
+    if (join.status === "approved") {
+      stopPolling();
+      step = "done";
+    } else if (join.status === "denied" || join.status === "expired") {
+      void setLocalEndpoint("", "").catch(() => {});
+      fail(join.status === "denied" ? "The Mac did not allow this iPhone." : "The Mac did not answer in time. Try again.");
     }
-  }
+  });
 
   function close() {
     stopPolling();

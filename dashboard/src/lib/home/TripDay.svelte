@@ -9,6 +9,7 @@
   import { tip } from "$lib/tip";
   import type { CalendarEntry, TripPlan, TripStage } from "$lib/api";
   import { localDateKey } from "./format";
+  import { clock } from "$lib/ui/clock.svelte";
 
   /// The trip you are on, read as today and tomorrow. While a trip runs, the
   /// question on opening Home is "what happens next and is it sorted", and the
@@ -16,11 +17,11 @@
   /// This puts both on one timeline per day.
   let { plan, entries }: { plan: TripPlan; entries: CalendarEntry[] } = $props();
 
-  let now = $state(new Date());
-  onMount(() => {
-    const timer = setInterval(() => (now = new Date()), 60_000);
-    return () => clearInterval(timer);
-  });
+  // A minute is the resolution of everything below: which day this is, and whether a leg is
+  // happening now.
+  const ticker = clock(60_000);
+  const now = $derived(ticker.at);
+  onMount(() => ticker.start());
 
   const todayKey = $derived(localDateKey(now));
   const tomorrowKey = $derived(

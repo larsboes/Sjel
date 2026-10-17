@@ -7,22 +7,19 @@
   import { request } from "../api";
   import { comparisonCode } from "../connection/transports";
   import { joinCode, joins, type JoinRequest } from "../devices";
+  import { poll } from "../ui/poll.svelte";
 
-  let waiting = $state<JoinRequest[]>([]);
+  // A phone that tapped "Find my Mac" waits here. Three seconds is the beat a person waiting
+  // by a phone and a Mac notices; the poller stops when the window is hidden, so a forgotten
+  // tab costs nothing.
+  const polled = poll({ intervalMs: 3_000, fetch: () => joins.pending() });
+  let waiting: JoinRequest[] = $derived(polled.data ?? []);
   let certificateCode = $state<string | null>(null);
   let busy = $state(false);
   let note = $state<string | null>(null);
   /** Closed without an answer: not shown again in this tab. The request expires by itself. */
   let dismissed = $state<string[]>([]);
   const current = $derived(waiting.find((join) => !dismissed.includes(join.id)) ?? null);
-
-  async function refresh() {
-    try {
-      waiting = await joins.pending();
-    } catch {
-      waiting = [];
-    }
-  }
 
   onMount(() => {
     void (async () => {
@@ -34,10 +31,8 @@
       } catch {
         certificateCode = null;
       }
-      await refresh();
     })();
-    const timer = setInterval(() => void refresh(), 3000);
-    return () => clearInterval(timer);
+    return polled.start();
   });
 
   async function decide(join: JoinRequest, allow: boolean) {
@@ -50,7 +45,7 @@
       note = e instanceof Error ? e.message : String(e);
     } finally {
       busy = false;
-      await refresh();
+      await polled.refresh();
     }
   }
 </script>

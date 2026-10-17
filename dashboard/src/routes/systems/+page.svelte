@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { onDestroy, onMount } from "svelte";
+  import { onMount } from "svelte";
   import Icon from "$lib/Icon.svelte";
   import { tip } from "$lib/tip";
   import PageHeader from "$lib/PageHeader.svelte";
@@ -8,11 +8,17 @@
   import AgentPanel from "$lib/systems/AgentPanel.svelte";
   import RuntimeProfile from "$lib/systems/RuntimeProfile.svelte";
   import { applySummary, auditNeedsAttention, updatesView, versionLabel } from "$lib/systems/updates";
+  import Freshness from "$lib/ui/Freshness.svelte";
+  import { poll } from "$lib/ui/poll.svelte";
 
-  let macmonState = $state<"checking" | "up" | "down">("checking");
-  let sample = $state<MacmonSample | null>(null);
-  let error = $state<string | null>(null);
-  let pollTimer: ReturnType<typeof setInterval> | undefined;
+  // macmon's live sample: 3 s, the fastest beat on the page, because temperature and power
+  // are what the page is for.
+  const macmonPoll = poll({ intervalMs: 3_000, fetch: () => macmon.json() });
+  let sample: MacmonSample | null = $derived(macmonPoll.data);
+  const error = $derived(macmonPoll.error);
+  const macmonState = $derived<"checking" | "up" | "down">(
+    macmonPoll.data !== null ? "up" : macmonPoll.error !== null ? "down" : "checking",
+  );
   let topProcs = $state<Array<{ pid: number; rss_mb: number; name: string }>>([]);
   let procErr = $state(false);
 
@@ -31,28 +37,33 @@
 
   // Updates, fetched on demand rather than on macmon's 3 s beat for a stronger reason than
   // storage's: `report` asks three registries and one crate registry per crate, so polling it
-  // would be a dozen network calls every three seconds. Null while in flight.
-  let updates = $state<UpdatesReport | null>(null);
-  let updatesErr = $state<string | null>(null);
+  // would be a dozen network calls every three seconds. While an apply runs, the same report
+  // IS the progress, so the poller starts at 4 s and the effect below stops it when the last
+  // receipt is no longer running. Null while in flight.
+  const updatesPoll = poll({ intervalMs: 4_000, immediate: false, fetch: () => axonStatus.updates() });
+  let updates: UpdatesReport | null = $derived(updatesPoll.data);
+  const updatesErr = $derived(updatesPoll.error);
   let applyErr = $state<string | null>(null);
-  let applyTimer: ReturnType<typeof setInterval> | undefined;
+  let stopApplyPoll: (() => void) | undefined;
   const updView = $derived(updates ? updatesView(updates) : null);
   const updSummary = $derived(updView ? applySummary(updView) : "");
 
-  /** Refetch the report, and stop polling once nothing is running. */
-  function loadUpdates() {
-    axonStatus
-      .updates()
-      .then((d) => {
-        updates = d;
-        updatesErr = null;
-        if (d.lastApply?.state !== "running" && applyTimer) {
-          clearInterval(applyTimer);
-          applyTimer = undefined;
-        }
-      })
-      .catch((e) => { updatesErr = e instanceof Error ? e.message : String(e); });
+  /** One read, whether or not an apply is running. */
+  function loadUpdates(): void {
+    void updatesPoll.refresh();
   }
+
+  /** Watch the apply until the receipt it is watching says it settled. */
+  function watchApply(): void {
+    stopApplyPoll ??= updatesPoll.start();
+  }
+
+  $effect(() => {
+    if (updates && updates.lastApply?.state !== "running") {
+      stopApplyPoll?.();
+      stopApplyPoll = undefined;
+    }
+  });
 
   /**
    * Start one class moving. The route answers 202 — started, not finished — because the
@@ -69,8 +80,7 @@
       return;
     }
     loadUpdates();
-    if (applyTimer) clearInterval(applyTimer);
-    applyTimer = setInterval(loadUpdates, 4_000);
+    watchApply();
   }
 
   /** °C → CSS class name */
@@ -120,27 +130,12 @@
 
     loadUpdates();
 
-    const poll = () => {
-      macmon
-        .json()
-        .then((d) => {
-          sample = d;
-          macmonState = "up";
-          error = null;
-        })
-        .catch((e) => {
-          macmonState = "down";
-          error = e instanceof Error ? e.message : String(e);
-        });
+    const stopMacmon = macmonPoll.start();
+    return () => {
+      stopMacmon();
+      stopApplyPoll?.();
+      stopApplyPoll = undefined;
     };
-
-    poll();
-    pollTimer = setInterval(poll, 3_000);
-  });
-
-  onDestroy(() => {
-    if (pollTimer) clearInterval(pollTimer);
-    if (applyTimer) clearInterval(applyTimer);
   });
 </script>
 
@@ -148,7 +143,11 @@
   badge="Local machine"
   title="Systems"
   desc="What this computer is doing now: temperature, power, and utilisation."
-/>
+>
+  {#snippet context()}
+    <Freshness of={[macmonPoll, updatesPoll]} />
+  {/snippet}
+</PageHeader>
 
 <RuntimeProfile />
 

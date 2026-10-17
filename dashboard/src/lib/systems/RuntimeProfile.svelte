@@ -5,44 +5,40 @@
   import StateLine from '$lib/StateLine.svelte';
   import { tip } from '$lib/tip';
   import { ApiError } from '$lib/api';
+  import Freshness from '$lib/ui/Freshness.svelte';
+  import { poll } from '$lib/ui/poll.svelte';
   import { runtime, runtimeView, RUNTIME_MODES, RUNTIME_CATEGORIES, POWER_LABELS, type RuntimeStatus, type RuntimeSelection, type RuntimeCategory, type RuntimeUpdate } from '$lib/runtime';
 
-  let status = $state.raw<RuntimeStatus | null>(null);
-  let error = $state<string | null>(null);
-  let busy = $state(false);
-  let loading = $state(false);
+  const polled = poll({ intervalMs: 30_000, fetch: () => runtime.status() });
+  const status = $derived(polled.data);
   const view = $derived(status ? runtimeView(status) : null);
+  let busy = $state(false);
+  /** A failed write, kept apart from a failed read so the line names which one refused. */
+  let writeError = $state<string | null>(null);
+  const error = $derived(polled.error ?? writeError);
+  const loading = $derived(status === null && error === null);
 
   async function load() {
-    if (loading || busy) return;
-    loading = true;
-    try {
-      status = await runtime.status();
-      error = null;
-    } catch (e) {
-      error = e instanceof Error ? e.message : String(e);
-    } finally {
-      loading = false;
-    }
+    await polled.refresh();
   }
 
   async function save(update: RuntimeUpdate) {
-    if (busy || loading || !status) return;
+    if (busy || !status) return;
     busy = true;
+    // The write's answer is the freshest state this surface has, and the beat is held so a
+    // read dispatched before the write cannot arrive after it and put the old policy back.
+    const release = polled.hold();
     try {
-      status = await runtime.update({ ...update, expected_revision: status.revision });
-      error = null;
+      polled.adopt(await runtime.update({ ...update, expected_revision: status.revision }));
+      writeError = null;
     } catch (e) {
-      error = e instanceof Error ? e.message : String(e);
+      writeError = e instanceof Error ? e.message : String(e);
       if (e instanceof ApiError && e.status === 409) {
-        try {
-          status = await runtime.status();
-          error += ' Current policy reloaded. Review it and retry your change.';
-        } catch (reloadError) {
-          error += ` Could not reload current policy: ${reloadError instanceof Error ? reloadError.message : String(reloadError)}`;
-        }
+        await polled.refresh();
+        writeError += ' Current policy reloaded. Review it and retry your change.';
       }
     } finally {
+      release();
       busy = false;
     }
   }
@@ -55,16 +51,13 @@
     await save({ allow: [...allowed] });
   }
 
-  onMount(() => {
-    void load();
-    const timer = setInterval(load, 30_000);
-    return () => clearInterval(timer);
-  });
+  onMount(() => polled.start());
 </script>
 
 <div class="runtime">
   <Section title="Runtime profile">
     {#snippet actions()}
+      <Freshness of={polled} />
       <button type="button" class="btn" disabled={busy || loading} onclick={load}>Refresh</button>
     {/snippet}
     <StateLine state={error ? 'error' : !status ? 'loading' : 'ready'} message={error ?? 'Reading runtime profile…'} onRetry={load} />

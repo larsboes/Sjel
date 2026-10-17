@@ -20,39 +20,8 @@
 // recency instead of printing nothing.
 
 import { describe, expect, test } from "bun:test";
-import { readdirSync, readFileSync, statSync } from "node:fs";
-import { extname, join } from "node:path";
 import { ageLabel, dayLabel, daysSince, sinceLabel } from "../dashboard/src/lib/ui/age";
-
-const SRC = join(import.meta.dir, "../dashboard/src");
-
-function sources(dir: string): string[] {
-  return readdirSync(dir).flatMap((name) => {
-    const full = join(dir, name);
-    if (statSync(full).isDirectory()) return sources(full);
-    const extension = extname(name);
-    return extension === ".ts" || extension === ".svelte" ? [full] : [];
-  });
-}
-
-const relative = (file: string) => file.slice(SRC.length + 1);
-
-/**
- * Source with its comments blanked out, newlines kept.
- *
- * Blanked rather than deleted so every offset is still the offset in the file and a
- * failure names the line an editor opens at. The comments matter here: two of them quote
- * the very words the scan looks for — the feed's "last run 3 days ago" and the retro row's
- * old phrasing — and a scan that reads them reports the defect it was written to prevent.
- */
-function code(text: string): string {
-  const blank = (region: string) => region.replace(/[^\n]/g, " ");
-  return text
-    .replace(/<!--[\s\S]*?-->/g, blank)
-    .replace(/\/\*[\s\S]*?\*\//g, blank)
-    .replace(/(^|[^:])\/\/[^\n]*/g, (_match, before: string) => before);
-}
-
+import { SRC, code, lineOf, read, relative, sources } from "./lib/dashboard-source";
 /** Every string literal: a backtick literal may span lines, a quoted one does not. */
 const LITERALS = /`([^`]*)`|'([^'\n]*)'|"([^"\n]*)"/g;
 
@@ -68,13 +37,12 @@ const AGE_PHRASE =
   /\b(?:(?:s|m|h|d|secs?|seconds?|mins?|minutes?|hours?|days?|weeks?|months?)\s+ago|yesterday|just now)\b/i;
 
 const MODULE = "lib/ui/age.ts";
-const lineOf = (text: string, index: number) => text.slice(0, index).split("\n").length;
 
 /** Every age phrase in the tree, as `path:line: text`. */
 function ageStrings(): string[] {
   const found = new Map<string, string>();
   for (const file of sources(SRC)) {
-    const text = code(readFileSync(file, "utf8"));
+    const text = code(read(file));
     for (const match of text.matchAll(LITERALS)) {
       const content = match[1] ?? match[2] ?? match[3] ?? "";
       if (!AGE_PHRASE.test(content)) continue;

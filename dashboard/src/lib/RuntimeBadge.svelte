@@ -3,30 +3,17 @@
   import Chip from '$lib/ui/Chip.svelte';
   import { link } from '$lib/nav';
   import { tip } from '$lib/tip';
-  import { runtime, runtimeView, type RuntimeStatus } from '$lib/runtime';
+  import { poll } from '$lib/ui/poll.svelte';
+  import { runtime, runtimeView } from '$lib/runtime';
 
-  let status = $state.raw<RuntimeStatus | null>(null);
-  let error = $state<string | null>(null);
-  let loading = false;
+  // The sidebar badge reads the same profile /systems shows, at a slower beat: what
+  // accelerates the machine changes when someone changes it.
+  const polled = poll({ intervalMs: 30_000, fetch: () => runtime.status() });
+  const status = $derived(polled.data);
+  const error = $derived(polled.error);
   const view = $derived(status ? runtimeView(status) : null);
 
-  async function load() {
-    if (loading) return;
-    loading = true;
-    try {
-      status = await runtime.status();
-      error = null;
-    } catch (e) {
-      error = e instanceof Error ? e.message : String(e);
-    } finally {
-      loading = false;
-    }
-  }
-  onMount(() => {
-    void load();
-    const timer = setInterval(load, 30_000);
-    return () => clearInterval(timer);
-  });
+  onMount(() => polled.start());
 </script>
 
 <a href={link('/systems')} class="runtime-badge" use:tip={error ?? view?.summary ?? 'Reading runtime profile'}>

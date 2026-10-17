@@ -1,4 +1,5 @@
 import { axonStatus, hasPanel, type CapabilityView } from "./api";
+import { poll } from "./ui/poll.svelte";
 
 /**
  * What this machine actually runs, asked of sjel-status rather than compiled in.
@@ -6,46 +7,52 @@ import { axonStatus, hasPanel, type CapabilityView } from "./api";
  * One module-level rune store rather than a per-component fetch: the nav, the home
  * page and the capabilities page all render the same answer, and three independent
  * polls of the same endpoint would make them disagree for up to a poll interval.
+ *
+ * The fetch, the beat and the arrival time are `ui/poll.svelte.ts`'s. What is left here is
+ * the registry itself: the derived key an effect watches, the offline read, and the
+ * panels a shell page can open. A page that shows this list can hand `polled` to
+ * `ui/Freshness.svelte` and say how old the view is.
  */
 class CapabilityStore {
-  items = $state<CapabilityView[]>([]);
+  #polled = poll({ intervalMs: 15_000, fetch: () => axonStatus.capabilities() });
+
+  /** The last list that arrived. A failed poll keeps it: an empty nav is worse than a stale one. */
+  get items(): CapabilityView[] {
+    return this.#polled.data ?? [];
+  }
+
   /** Who answers `/api/links` for which kinds. A derived string, so an effect that reads it
    *  reruns when the declarations change (the first poll arriving, a capability enabled) and
    *  not on every poll that returns the same registry. */
   linksKey = $derived(this.items.map((c) => `${c.name}=${(c.links_to ?? []).join("|")}`).join(","));
-  offline = $state(false);
-  loading = $state(true);
-  #timer: ReturnType<typeof setInterval> | undefined;
-  #subscribers = 0;
 
-  async refresh(): Promise<void> {
-    try {
-      this.items = await axonStatus.capabilities();
-      this.offline = false;
-    } catch {
-      // sjel-status is down. The shell keeps rendering, it just cannot say what is up.
-      // The last known list is deliberately kept: a nav that empties itself on one
-      // failed poll is worse than a stale one.
-      this.offline = true;
-    } finally {
-      this.loading = false;
-    }
+  /** sjel-status is down. The shell keeps rendering, it just cannot say what is up. */
+  get offline(): boolean {
+    return this.#polled.error !== null;
   }
 
-  /** Poll while at least one component is mounted; stop when the last one leaves. */
+  get loading(): boolean {
+    return this.#polled.data === null && this.#polled.error === null;
+  }
+
+  /** The age of this view, for a page that shows the registry. */
+  get polled() {
+    return this.#polled;
+  }
+
+  async refresh(): Promise<void> {
+    await this.#polled.refresh();
+  }
+
+  /**
+   * Poll while at least one component is mounted; stop when the last one leaves.
+   *
+   * The beat follows the fastest reader, so the capabilities page's 5 s wins over the
+   * default 15 s while it is open. It does not slow back down when that reader leaves: one
+   * extra read every 15 s is cheaper than a timer that retunes under the pages still on it.
+   */
   subscribe(intervalMs = 15_000): () => void {
-    this.#subscribers += 1;
-    if (this.#subscribers === 1) {
-      void this.refresh();
-      this.#timer = setInterval(() => void this.refresh(), intervalMs);
-    }
-    return () => {
-      this.#subscribers -= 1;
-      if (this.#subscribers === 0 && this.#timer !== undefined) {
-        clearInterval(this.#timer);
-        this.#timer = undefined;
-      }
-    };
+    return this.#polled.start(intervalMs);
   }
 
   byName(name: string): CapabilityView | undefined {

@@ -7,6 +7,7 @@
   import { contextLink, entryReaderLink, kindConfig } from "$lib/calendar/types";
   import type { CalendarContext, CalendarEntry } from "$lib/api";
   import { inspectorStore } from "$lib/inspector/inspector.svelte";
+  import { clock } from "$lib/ui/clock.svelte";
 
   let {
     contexts,
@@ -16,14 +17,10 @@
     entries: CalendarEntry[];
   } = $props();
 
-  let now = $state(new Date());
-
-  onMount(() => {
-    const timer = setInterval(() => {
-      now = new Date();
-    }, 30_000);
-    return () => clearInterval(timer);
-  });
+  /** "in 20m" is this page's unit, so half a minute is fine and a second never is. */
+  const ticker = clock(30_000);
+  const now = $derived(ticker.at);
+  onMount(() => ticker.start());
 
   /// Four rows before the Calendar page is the better surface. Past that this
   /// stops being a horizon and starts being a second calendar.

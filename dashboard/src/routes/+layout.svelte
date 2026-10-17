@@ -23,6 +23,8 @@
   import { inTauri } from "$lib/mac-bridge";
   import SyncStatus from "$lib/SyncStatus.svelte";
   import RuntimeBadge from "$lib/RuntimeBadge.svelte";
+  import Freshness from "$lib/ui/Freshness.svelte";
+  import { clock } from "$lib/ui/clock.svelte";
   import OmniSearch from "$lib/omni/OmniSearch.svelte";
   import { omniStore } from "$lib/omni/omni.svelte";
   import EntityInspector from "$lib/inspector/EntityInspector.svelte";
@@ -32,9 +34,10 @@
   let dark = $state(true);
   let menuOpen = $state(false);
   let moreOpen = $state(false);
-  let now = $state(new Date());
   let moreEl: HTMLDetailsElement | undefined = $state();
   let drawerEl: HTMLElement | undefined = $state();
+  /** The menu bar's clock. `ui/clock.svelte` owns the beat; this owns what it is for. */
+  const ticker = clock(1_000);
 
   /**
    * Capabilities this shell has already tried to start, for the lifetime of the tab.
@@ -82,7 +85,7 @@
 
   onMount(() => {
     dark = window.matchMedia("(prefers-color-scheme: dark)").matches;
-    const clock = setInterval(() => (now = new Date()), 1000);
+    const stopClock = ticker.start();
     const stop = capabilities.subscribe();
     // A new Sparpreis low becomes a phone notification when the app opens or comes back.
     void checkFareAlerts();
@@ -101,7 +104,7 @@
       void assistantStore.send(ask, clean.pathname);
     }
     return () => {
-      clearInterval(clock);
+      stopClock();
       stop();
       document.removeEventListener("visibilitychange", onVisible);
     };
@@ -235,7 +238,7 @@
         {#if !demo}<RuntimeBadge />{/if}
         <span class="clock mono">
           <Icon name="clock" size={14} />
-          {now.toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit" })}
+          {ticker.at.toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit" })}
         </span>
         <button class="btn" onclick={() => (dark = !dark)} aria-label="Switch theme">
           <Icon name={dark ? "sun" : "moon"} />
@@ -372,6 +375,9 @@
     <div class="inner">
       <span>Sjel</span>
       <span class="mono">{capabilities.items.length} capabilities</span>
+      <!-- The registry is every page's shared read, so its age is the shell's: it is the
+           one place that can say a navigation built on a stale list is stale. -->
+      <Freshness of={capabilities.polled} />
       <MacConnection />
       <!-- An unregistered phone gets 401 for the capability list, so it would never see the
            link it needs to register (2026-09-27). The iOS app always shows it. -->

@@ -7,6 +7,8 @@
   import Collection from "$lib/ui/Collection.svelte";
   import { ageLabel } from "$lib/ui/age";
   import type { Field } from "$lib/ui/collection";
+  import Freshness from "$lib/ui/Freshness.svelte";
+  import { poll } from "$lib/ui/poll.svelte";
   import {
     axonStatus,
     type BackupStatus,
@@ -14,12 +16,31 @@
     type BackupRunAttempt,
   } from "$lib/api";
 
-  let loading = $state(true);
+  /** One read of all three lists: they describe one machine state and are never shown apart. */
+  const view = poll({
+    intervalMs: 5_000,
+    fetch: async () => {
+      const [backupsRes, targetsRes, runsRes] = await Promise.all([
+        axonStatus.backups(),
+        axonStatus.backupTargets(),
+        axonStatus.backupRuns(50),
+      ]);
+      return {
+        backups: backupsRes.backups,
+        targets: targetsRes.targets,
+        runs: runsRes.runs,
+        running: runsRes.running,
+      };
+    },
+  });
+
+  // A failed poll of the owner's own action. The poller's own failure is `view.error`.
   let error = $state<string | null>(null);
-  let backups = $state<BackupStatus[]>([]);
-  let targets = $state<BackupTargetView[]>([]);
-  let runs = $state<BackupRunAttempt[]>([]);
-  let runningCount = $state(0);
+  let backups: BackupStatus[] = $derived(view.data?.backups ?? []);
+  let targets: BackupTargetView[] = $derived(view.data?.targets ?? []);
+  let runs: BackupRunAttempt[] = $derived(view.data?.runs ?? []);
+  let runningCount = $derived(view.data?.running ?? 0);
+  const loading = $derived(view.data === null && view.error === null);
 
   // Per-target UI state
   let verifying = $state<Record<string, boolean>>({});
@@ -67,43 +88,24 @@
     });
   }
 
-  async function reloadData(showLoading = true): Promise<void> {
-    if (showLoading && loading) loading = true;
-    try {
-      const [backupsRes, targetsRes, runsRes] = await Promise.all([
-        axonStatus.backups(),
-        axonStatus.backupTargets(),
-        axonStatus.backupRuns(50),
-      ]);
-      backups = backupsRes.backups;
-      targets = targetsRes.targets;
-      runs = runsRes.runs;
-      runningCount = runsRes.running;
-
-      // Sync interval state for each target
-      for (const t of targets) {
-        if (targetIntervals[t.id] === undefined) {
-          targetIntervals[t.id] = t.interval_hours;
-          const knownPresets = [null, 12, 24, 48, 168];
-          if (t.interval_hours !== null && !knownPresets.includes(t.interval_hours)) {
-            isCustom[t.id] = true;
-            customIntervalInput[t.id] = String(t.interval_hours);
-          }
-        }
+  // The interval controls are the owner's while they are on screen, so they are seeded once
+  // per target from the first read that names it. Seeding them from every poll would throw
+  // away a half-typed interval every five seconds.
+  $effect(() => {
+    for (const t of targets) {
+      if (targetIntervals[t.id] !== undefined) continue;
+      targetIntervals[t.id] = t.interval_hours;
+      const knownPresets = [null, 12, 24, 48, 168];
+      if (t.interval_hours !== null && !knownPresets.includes(t.interval_hours)) {
+        isCustom[t.id] = true;
+        customIntervalInput[t.id] = String(t.interval_hours);
       }
-      error = null;
-    } catch (e) {
-      error = e instanceof Error ? e.message : String(e);
-    } finally {
-      loading = false;
     }
-  }
-
-  onMount(() => {
-    void reloadData(true);
-    const interval = setInterval(() => void reloadData(false), 5_000);
-    return () => clearInterval(interval);
   });
+
+  // Polled rather than pushed: a slow run survives a page refresh because the run state
+  // lives in sjel-status, so a reload re-reads it instead of losing it.
+  onMount(() => view.start());
 
   async function handleVerifyTarget(targetId: string): Promise<void> {
     verifying[targetId] = true;
@@ -111,7 +113,7 @@
     try {
       const res = await axonStatus.verifyBackupTarget(targetId);
       verifyMessage[targetId] = { verdict: res.verdict, detail: res.detail };
-      await reloadData(false);
+      await view.refresh();
     } catch (e) {
       verifyMessage[targetId] = {
         verdict: "failed",
@@ -132,7 +134,7 @@
         targetIntervals[targetId] = hours;
       }
       await axonStatus.setBackupPolicy(targetId, hours);
-      await reloadData(false);
+      await view.refresh();
     } catch (e) {
       error = `save policy: ${e instanceof Error ? e.message : String(e)}`;
     } finally {
@@ -151,7 +153,7 @@
       error = `backup ${name}: ${e instanceof Error ? e.message : String(e)}`;
     } finally {
       backingUp[name] = false;
-      await reloadData(false);
+      await view.refresh();
     }
   }
 
@@ -218,12 +220,16 @@
   badge="Operations"
   title="Backup"
   desc="Every capability's backup contract, declared targets, interval policy, and attempt history."
-/>
+>
+  {#snippet context()}
+    <Freshness of={view} />
+  {/snippet}
+</PageHeader>
 
-{#if error}
+{#if error ?? view.error}
   <div class="error-banner">
     <Icon name="alert" size={16} />
-    <span>{error}</span>
+    <span>{error ?? view.error}</span>
   </div>
 {/if}
 

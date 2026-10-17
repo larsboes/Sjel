@@ -5,6 +5,8 @@
   import { onMount } from "svelte";
   import Overlay from "./Overlay.svelte";
   import DataTable, { type Column } from "./ui/DataTable.svelte";
+  import Freshness from "./ui/Freshness.svelte";
+  import { poll } from "./ui/poll.svelte";
   import {
     bridgeErrorText,
     inTauri,
@@ -29,20 +31,28 @@
   const POLL_MS = 5_000;
 
   const shown = inTauri();
-  let status = $state<SyncStatus | null>(null);
+  const polled = poll({
+    intervalMs: POLL_MS,
+    fetch: async () => {
+      const next = await syncStatus();
+      announce(polled.data, next);
+      return next;
+    },
+  });
   let entries = $state<OutboxEntry[]>([]);
   let open = $state(false);
   let busy = $state(false);
-  let error = $state<string | null>(null);
+  /** A refused write. A failed read is the poller's, and the line goes stale instead. */
+  let actionError = $state<string | null>(null);
 
+  const status = $derived(polled.data);
+  const error = $derived(polled.error ?? actionError);
   const line = $derived(status ? statusLine(status) : null);
   const review = $derived(status ? needsReview(status) : false);
   const waiting = $derived((status?.pending ?? 0) > 0);
 
   /** Fires the change event when the outbox counts move, so the Interior page reloads. */
-  function take(next: SyncStatus) {
-    const before = status;
-    status = next;
+  function announce(before: SyncStatus | null, next: SyncStatus) {
     if (
       before &&
       (before.pending !== next.pending ||
@@ -53,23 +63,20 @@
     }
   }
 
-  async function refresh() {
-    try {
-      take(await syncStatus());
-      if (open) entries = await syncEntries();
-    } catch (e) {
-      error = bridgeErrorText(e);
-    }
+  /** A write's answer is the newest state on this surface, so it is taken as an arrival. */
+  function take(next: SyncStatus) {
+    announce(polled.data, next);
+    polled.adopt(next);
   }
 
   async function flush() {
     busy = true;
-    error = null;
+    actionError = null;
     try {
       take(await syncFlush());
       if (open) entries = await syncEntries();
     } catch (e) {
-      error = bridgeErrorText(e);
+      actionError = bridgeErrorText(e);
     } finally {
       busy = false;
     }
@@ -77,13 +84,13 @@
 
   async function resolve(id: number, action: "keep_mine" | "discard") {
     busy = true;
-    error = null;
+    actionError = null;
     try {
       take(await syncResolve(id, action));
       entries = await syncEntries();
       window.dispatchEvent(new CustomEvent(SYNC_CHANGED_EVENT));
     } catch (e) {
-      error = bridgeErrorText(e);
+      actionError = bridgeErrorText(e);
     } finally {
       busy = false;
     }
@@ -91,25 +98,26 @@
 
   async function showEntries() {
     open = true;
-    error = null;
+    actionError = null;
     try {
       entries = await syncEntries();
     } catch (e) {
-      error = bridgeErrorText(e);
+      actionError = bridgeErrorText(e);
     }
   }
 
   onMount(() => {
     if (!shown) return;
     void flush();
-    const timer = setInterval(() => void refresh(), POLL_MS);
-    // Back in the foreground: send what waits (item 6 of the step-2 design).
+    const stop = polled.start();
+    // Back in the foreground: send what waits (item 6 of the step-2 design). The read is the
+    // poller's, which catches up on return by itself; this one is about sending.
     const onVisible = () => {
       if (document.visibilityState === "visible") void flush();
     };
     document.addEventListener("visibilitychange", onVisible);
     return () => {
-      clearInterval(timer);
+      stop();
       document.removeEventListener("visibilitychange", onVisible);
     };
   });
@@ -138,6 +146,7 @@
 {#if shown && line}
   <aside class="sync" class:offline={status?.offline} class:review role="status">
     <span class="line">{line}</span>
+    <Freshness of={polled} />
     {#if waiting}
       <button type="button" class="link" disabled={busy} onclick={() => void flush()}>
         {busy ? "Sending…" : "Sync now"}

@@ -23,6 +23,9 @@ when a page needs it, and move other pages onto the kit one at a time (user deci
 | `ui/Section.svelte` | — | The one section header. Optional collapse, count and actions. |
 | `lib/StateLine.svelte` | 3 | Loading, error and empty in one line. Empty renders nothing unless the caller passes `empty`. |
 | `ui/age.ts` | 3 | One answer to how old something is: `ageLabel` for a duration, `sinceLabel` for an instant, `daysSince` + `dayLabel` for a calendar day. A page still owns the policy — what stands in an old value's place, and where the ladder's end falls to a date. |
+| `ui/poll.svelte.ts` | stale | `poll({ intervalMs, fetch })` is the only place a page polls. It declares its beat, records when data last arrived, asks only while something is subscribed and the window is in front, and catches up on return. `adopt()` takes the answer to a write as an arrival; `hold()` stops the beat while such a write is in flight. |
+| `ui/Freshness.svelte` + `ui/freshness.ts` | stale | The age of the *view*: nothing while the data is as new as the page's beat, one warning chip — "as of 12m ago" — when it is not, and the beat it missed in the tip. Pass every poller behind the region; the oldest names the line and the fastest names the tip. |
+| `ui/clock.svelte.ts` | speed | `clock(intervalMs)` for the surfaces that tick time rather than fetch: the menu bar's minute, the calendar's now-line, "in 20m". |
 | `lib/tip.ts` (`use:tip`) | 3 | The tooltip. Shows on hover and keyboard focus, and becomes `aria-label` or `aria-description`. Never use `title`. |
 | `lib/list-cursor.svelte.ts` | speed | J/K/Enter over a list, with real DOM focus. |
 | `lib/modal.ts` | 2 | Focus trap for a true modal. Prefer `SidePeek` when the list must stay usable. |
@@ -77,6 +80,7 @@ Run them with `bun test tools/dashboard-*.test.ts` from the repository root.
 | `tools/dashboard-tokens.test.ts` | Every custom property a component reads is declared. Every primitive in `app.css` has a consumer. |
 | `tools/dashboard-markup.test.ts` | `<th>` has `scope`. A form button states its `type`. Inputs have a name, not only a placeholder. No page builds its own table. |
 | `tools/dashboard-age.test.ts` | The age ladder's boundaries, and no page phrases its own age. |
+| `tools/dashboard-poll.test.ts` | What makes a view stale, and no page starts its own `setInterval`: `ui/poll.svelte.ts` and `ui/clock.svelte.ts` are the only two that hold one. |
 | `tools/dashboard-contrast.test.ts` | Text and tone tokens meet contrast on the surfaces they sit on. |
 | `tools/dashboard-type-scale.test.ts` | Font sizes come from the type scale. |
 
@@ -85,8 +89,8 @@ Run them with `bun test tools/dashboard-*.test.ts` from the repository root.
 Measured 2026-10-08. Re-measure before quoting.
 
 - How old a **record** is: one module, `ui/age.ts`, since 2026-10-17. How old the **screen**
-  is has no primitive at all: each page polls on an interval of its own and none keeps the time
-  its data arrived, so no surface can say "as of 4m ago".
+  is: `ui/poll.svelte.ts` + `ui/Freshness.svelte`, since 2026-10-17, after seventeen
+  `setInterval` sites in sixteen files moved onto one poller and one clock.
 - Every data table uses `DataTable` or `Collection` (2026-10-17). The `<table>`s left are
   renderers whose table is not a data table: markdown out of a document, a chart's own figure,
   and `lib/interior/SunGrid.svelte`, where a cell's fill is the measurement rather than a value

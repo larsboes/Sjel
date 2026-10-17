@@ -17,12 +17,17 @@
   import Collection from "$lib/ui/Collection.svelte";
   import type { Column } from "$lib/ui/DataTable.svelte";
   import type { Field } from "$lib/ui/collection";
+  import Freshness from "$lib/ui/Freshness.svelte";
+  import { poll } from "$lib/ui/poll.svelte";
 
   type Row = { pack: string; skill: string };
 
-  let view = $state<PacksView | null>(null);
-  let error = $state<string | null>(null);
-  let loading = $state(true);
+  // Slow beat: deployments are a human action, not a stream. The beat is declared here
+  // because the page says how old the matrix is when that beat does not land.
+  const polled = poll({ intervalMs: 30_000, fetch: () => axonStatus.packs() });
+  let view: PacksView | null = $derived(polled.data);
+  const error = $derived(polled.error);
+  const loading = $derived(polled.data === null && polled.error === null);
 
   /** Which card or cell is mid-write, so the whole page locks rather than racing itself. */
   let busy = $state<string | null>(null);
@@ -83,23 +88,7 @@
     })),
   ]);
 
-  async function load(): Promise<void> {
-    try {
-      view = await axonStatus.packs();
-      error = null;
-    } catch (e) {
-      error = e instanceof Error ? e.message : String(e);
-    } finally {
-      loading = false;
-    }
-  }
-
-  onMount(() => {
-    void load();
-    // Slow beat: deployments are a human action, not a stream.
-    const timer = setInterval(() => void load(), 30_000);
-    return () => clearInterval(timer);
-  });
+  onMount(() => polled.start());
 
   /** Every Pack the matrix knows, in the order the table groups them. */
   const allPacks = $derived([...new Set(rows.map((r) => r.pack))]);
@@ -128,7 +117,7 @@
       writeError = `${action} ${harness}: ${e instanceof Error ? e.message : String(e)}`;
     } finally {
       busy = null;
-      await load();
+      await polled.refresh();
     }
   }
 
@@ -162,7 +151,11 @@
   {:else if needsAttention(status)}<Chip label={status} tone="warning" />{:else if status === "current"}<span class="cell">·</span>{/if}
 {/snippet}
 
-<PageHeader badge="Packs" title="Packs across harnesses" />
+<PageHeader badge="Packs" title="Packs across harnesses">
+  {#snippet context()}
+    <Freshness of={polled} />
+  {/snippet}
+</PageHeader>
 
 {#if loading && !view}
   <p class="loading"><Icon name="loader" /> Reading every harness…</p>

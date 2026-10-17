@@ -6,6 +6,8 @@
   import PageHeader from "$lib/PageHeader.svelte";
   import { axonStatus, hasPanel, type CapabilityView, type BackupStatus } from "$lib/api";
   import { ageLabel } from "$lib/ui/age";
+  import Freshness from "$lib/ui/Freshness.svelte";
+  import { poll } from "$lib/ui/poll.svelte";
   import { capabilities } from "$lib/capabilities.svelte";
 
   let busy = $state<string | null>(null);
@@ -13,30 +15,29 @@
 
   // Keyed by capability. Only the few that declare a backup contract appear, so most
   // cards look up nothing and render no backup row at all.
-  let backups = $state<Record<string, BackupStatus>>({});
+  //
+  // Polled rather than pushed, on the same 5 s beat as the capability list. That poll is
+  // also what makes a slow run survive a page refresh: the run state lives in sjel-status,
+  // so a reload re-reads it instead of losing it. A failed read is not painted twice —
+  // `capabilities.offline` already says sjel-status is unreachable — but the age chip above
+  // does move, which is how a reader tells this list from one read a second ago.
+  const backupPoll = poll({
+    intervalMs: 5_000,
+    fetch: async () => {
+      const r = await axonStatus.backups();
+      return Object.fromEntries(r.backups.map((b) => [b.capability, b]));
+    },
+  });
+  let backups: Record<string, BackupStatus> = $derived(backupPoll.data ?? {});
   // Which capability is mid-confirmation, when its contract says a run holds it down.
   let confirming = $state<string | null>(null);
 
-  // Polled rather than pushed, on the same 5s beat as the capability list. That poll is
-  // also what makes a slow run survive a page refresh: the run state lives in
-  // sjel-status, so a reload re-reads it instead of losing it.
-  async function loadBackups(): Promise<void> {
-    try {
-      const r = await axonStatus.backups();
-      backups = Object.fromEntries(r.backups.map((b) => [b.capability, b]));
-    } catch {
-      // sjel-status being unreachable is already reported by the capabilities poll;
-      // a second copy of the same message helps nobody.
-    }
-  }
-
   onMount(() => {
-    const unsubscribe = capabilities.subscribe(5_000);
-    void loadBackups();
-    const timer = setInterval(() => void loadBackups(), 5_000);
+    const stopRegistry = capabilities.subscribe(5_000);
+    const stopBackups = backupPoll.start();
     return () => {
-      unsubscribe?.();
-      clearInterval(timer);
+      stopRegistry();
+      stopBackups();
     };
   });
 
@@ -50,7 +51,7 @@
     }
     // Refresh either way: a rejected duplicate still means a run is in flight, and the
     // surface should show that rather than only the error.
-    await loadBackups();
+    await backupPoll.refresh();
   }
 
   /** What the badge says, spelled out rather than left as a bare state word. */
@@ -86,7 +87,11 @@
   badge="Machine"
   title="Capabilities"
   desc="What this machine has enabled, what is running, and what starts on demand."
-/>
+>
+  {#snippet context()}
+    <Freshness of={[capabilities.polled, backupPoll]} />
+  {/snippet}
+</PageHeader>
 
 {#if capabilities.offline}
   <p class="offline">

@@ -11,6 +11,7 @@
     type CalendarDay,
     type CalendarEntry,
   } from "./types";
+  import { clock } from "$lib/ui/clock.svelte";
 
   let {
     days,
@@ -35,7 +36,9 @@
   const WEEKDAY = new Intl.DateTimeFormat("en-GB", { weekday: "short" });
 
   let scroller = $state<HTMLDivElement>();
-  let now = $state(new Date());
+  /** The now-line moves a minute at a time; a coarser clock would drop the minute it is on. */
+  const ticker = clock(60_000);
+  const now = $derived(ticker.at);
 
   let dates = $derived(days.map((day) => day.date));
 
@@ -73,10 +76,7 @@
   let nowDate = $derived(dayKey(now));
   let nowOffset = $derived(((now.getHours() * 60 + now.getMinutes()) / MINUTES_PER_DAY) * 100);
 
-  $effect(() => {
-    const timer = setInterval(() => (now = new Date()), 60_000);
-    return () => clearInterval(timer);
-  });
+  $effect(() => ticker.start());
 
   $effect(() => {
     const hour = focusHour;

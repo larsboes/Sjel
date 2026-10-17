@@ -20,6 +20,8 @@
     type TripPlan,
   } from "$lib/api";
   import { capabilities } from "$lib/capabilities.svelte";
+  import Freshness from "$lib/ui/Freshness.svelte";
+  import { poll } from "$lib/ui/poll.svelte";
   import { createListCursor } from "$lib/list-cursor.svelte";
   import { inspectorStore } from "$lib/inspector/inspector.svelte";
   import RailSection from "$lib/rail/RailSection.svelte";
@@ -74,8 +76,11 @@
   /// shows the header and nothing else.
   let sources = $state<Record<string, KindState>>({});
   let dismissed = $state<ReadonlySet<string>>(new Set());
-  let macmonSample = $state<MacmonSample | null>(null);
-  let macmonErr = $state(false);
+  // The sidebar's compact card. No aggressive polling: /systems is the live dashboard, this
+  // is a glance. Its beat is declared so the card can say when it did not land.
+  const macmonPoll = poll({ intervalMs: 30_000, fetch: () => macmon.json() });
+  let macmonSample: MacmonSample | null = $derived(macmonPoll.data);
+  const macmonErr = $derived(macmonPoll.error !== null);
   let busy = $state<string | null>(null);
   let busyProject = $state<string | null>(null);
   let actionError = $state<string | null>(null);
@@ -294,14 +299,7 @@
 
   onMount(() => {
     const stop = capabilities.subscribe();
-
-    // One-shot macmon sample for the sidebar compact card; no aggressive polling since
-    // /systems is the real live dashboard.
-    const pollMac = () => {
-      macmon.json().then((d) => { macmonSample = d; macmonErr = false; }).catch(() => { macmonErr = true; });
-    };
-    pollMac();
-    const macTimer = setInterval(pollMac, 30_000);
+    const stopMacmon = macmonPoll.start();
 
     // Fires once at the next local midnight and then daily, so `todayKey` and every
     // "in N days" on the page move with the calendar rather than with a reload.
@@ -317,7 +315,7 @@
     scheduleMidnight();
 
     return () => {
-      clearInterval(macTimer);
+      stopMacmon();
       clearTimeout(midnightTimer);
       stop();
     };
@@ -807,6 +805,7 @@
                 <span class="mc-mem-num mono">{(macmonSample.memory.ram_usage / 1073741824).toFixed(1)} GB</span>
               </div>
               <a class="mc-detail" href={link("/systems")}>Details</a>
+              <Freshness of={macmonPoll} />
             </div>
           {/if}
 

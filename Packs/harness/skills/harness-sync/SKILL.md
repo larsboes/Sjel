@@ -26,7 +26,7 @@ lose good work or import junk into the source of truth.
 |---|---|
 | The Pack changed; the harness is behind | `sync` |
 | A deployed copy was edited in place and the edit is worth keeping | `accept` |
-| A deployed copy was edited in place and the edit is not worth keeping | Nothing does it yet. `sync`, `deploy` and `remove` all refuse a drifted copy, so the only verb that clears the state is `accept` — which imports the destination's text into the Pack first. Tracked as `HARN-1` in `ISA.md` |
+| A deployed copy was edited in place and the edit is not worth keeping | `discard` — replaces the copy with the Pack's text and keeps the replaced copy beside the ledger. It lists what it replaces, adds and removes, and refuses until given `--force` |
 | A skill exists in a harness, no Pack owns it, and it should be shared | `promote` |
 | A skill exists in a harness and belongs to that harness alone | leave it; it shows as unowned every run, which is the honest state |
 
@@ -61,11 +61,15 @@ Under it, each harness lists what sits at its destination that no Pack owns:
 | `symlink` | Points into a product install | **Never promote.** The target is the install; an upgrade updates it. |
 
 **3 — Resolve drift first.** `tools/harnesses drift [<pack>] [--diff]` names the differing files and
-prints the diff. `sync` refuses to run against a drifted copy — that refusal is the feature, and the
-fix is a decision, never a `--force`. `accept` is the one verb that clears the state, and it imports
-the destination's text into the Pack, so review `git diff` afterwards and revert what should not
-have been imported. Measured 2026-10-17: a copy whose edit is not worth keeping has no direct exit,
-because `sync`, `deploy` and `remove` all pass through the same digest check.
+prints the diff. `sync` refuses to run against a drifted copy — that refusal is the feature. Two verbs
+clear the state, and each is a decision:
+
+- `accept` keeps the edit: it imports the destination's text into the Pack, so review `git diff`
+  afterwards and revert what should not have been imported.
+- `discard` drops the edit: it writes the Pack's text to the destination and keeps the replaced copy
+  under `~/.local/state/axon/pack-deployments/discarded/`. Run it without `--force` first; it lists
+  the files it would replace, add and remove, and refuses until given `--force`. The Pack is never
+  written.
 
 **4 — One direction at a time.** Do not run `accept` and `sync` for the same pack in one pass. Accept
 first, review `git diff`, then deploy outward.

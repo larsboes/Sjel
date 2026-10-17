@@ -628,6 +628,149 @@ pub fn reconcile_unit(config: &DeployConfig, pack: &str, unit: &Unit) -> Result<
     })
 }
 
+/// `accept`'s mirror: replace a drifted destination with the Pack's own text, and re-record it.
+/// The Pack is never written.
+///
+/// `accept` was the only way out of a drifted cell, and it imports the destination into the Pack
+/// first. That is right when the destination holds an edit worth keeping, and wrong when the
+/// destination is simply behind — the case that put an old table rule into Claude Code's copy of
+/// `design/ui-craftsmanship`. The destination is the only copy of its bytes, so it is kept aside
+/// before anything is replaced, and the returned line names where it went.
+pub fn discard_unit(config: &DeployConfig, pack: &str, unit: &Unit) -> Result<String, String> {
+    with_state_lock(config, || {
+        let mut state = read_state(config)?;
+        if !state
+            .packs
+            .get(pack)
+            .is_some_and(|p| p.skills.contains_key(&unit.key))
+        {
+            return Err(format!(
+                "{}: not deployed from {pack}; nothing to discard",
+                unit.key
+            ));
+        }
+        if !unit.destination.exists() {
+            return Err(format!(
+                "{}: {} does not exist",
+                unit.key,
+                unit.destination.display()
+            ));
+        }
+        // Validate the Pack's side before it lands: an adapter that requires a file the source
+        // no longer carries would otherwise write a copy its harness cannot read.
+        let files = engine::desired_files(config, pack, unit)?;
+        validate_unit(config, &files, unit, &format!("{pack}/{}", unit.key))?;
+        let (stage, digest) = materialize_stage(config, pack, unit)?;
+        if digest_destination(config, &unit.destination)? == digest {
+            // Nothing to replace, but a stale ledger still needs the Pack's digest.
+            let _ = fs::remove_dir_all(&stage);
+            record_unit(config, &mut state, pack, unit, &digest);
+            write_state(config, &state)?;
+            return Ok(format!("= {} (already current)", unit.key));
+        }
+        let kept = match keep_aside(config, pack, unit) {
+            Ok(kept) => kept,
+            Err(e) => {
+                let _ = fs::remove_dir_all(&stage);
+                return Err(e);
+            }
+        };
+        replace_atomically(config, &stage, &unit.destination, unit.only_file.is_some());
+        let _ = fs::remove_dir_all(&stage);
+        // `replace_atomically` reports nothing: a failed rename leaves the old copy where it was.
+        // Recording the Pack's digest over that copy would hide the drift for good.
+        if digest_destination(config, &unit.destination)? != digest {
+            return Err(format!(
+                "{}: the replacement did not land; the ledger is unchanged. The copy is kept at {}",
+                unit.key,
+                kept.display()
+            ));
+        }
+        record_unit(config, &mut state, pack, unit, &digest);
+        write_state(config, &state)?;
+        Ok(format!(
+            "✓ {} re-recorded from the Pack; the replaced copy is kept at {}",
+            unit.key,
+            kept.display()
+        ))
+    })
+}
+
+/// What a discard would replace, add and remove at the destination, named per file. The verb
+/// prints it before asking for `--force`, so the operator sees what the copy holds that the Pack
+/// does not, and what the Pack holds that the copy does not.
+#[derive(Debug, Default, PartialEq, Eq)]
+pub struct Replacement {
+    pub replaced: Vec<String>,
+    pub added: Vec<String>,
+    pub removed: Vec<String>,
+}
+
+pub fn replacement_plan(
+    config: &DeployConfig,
+    pack: &str,
+    unit: &Unit,
+) -> Result<Replacement, String> {
+    let wanted = engine::desired_files(config, pack, unit)?;
+    let mut plan = Replacement::default();
+    if !unit.destination.is_dir() {
+        // A single-file unit: the destination is the file itself, so the only question is whether
+        // its bytes differ from the Pack's.
+        for (rel, file) in &wanted {
+            if super::file_digest(&file.absolute_path)? != super::file_digest(&unit.destination)? {
+                plan.replaced.push(rel.clone());
+            }
+        }
+        return Ok(plan);
+    }
+    let mut walked = Vec::new();
+    super::walk(&unit.destination, "", &mut walked)?;
+    let mut actual: BTreeSet<String> = walked.into_iter().collect();
+    for (rel, file) in &wanted {
+        if !actual.remove(rel) {
+            plan.added.push(rel.clone());
+        } else if super::file_digest(&file.absolute_path)?
+            != super::file_digest(&unit.destination.join(rel))?
+        {
+            plan.replaced.push(rel.clone());
+        }
+    }
+    plan.removed = actual.into_iter().collect();
+    Ok(plan)
+}
+
+/// Copies the destination aside before a discard replaces it. It lives beside the ledger: outside
+/// the Pack, and outside every harness's discovery root, so nothing scans it and nothing deploys it.
+fn keep_aside(config: &DeployConfig, pack: &str, unit: &Unit) -> Result<PathBuf, String> {
+    let base = config
+        .state_file
+        .parent()
+        .unwrap_or_else(|| Path::new("."))
+        .join("discarded")
+        .join(&config.adapter)
+        .join(pack);
+    fs::create_dir_all(&base).map_err(|e| format!("{}: {e}", base.display()))?;
+    let stamp = time::now_iso().replace(':', "-");
+    let kept = base.join(format!("{}-{stamp}", basename(&unit.destination)));
+    copy_tree(&unit.destination, &kept)?;
+    Ok(kept)
+}
+
+fn copy_tree(from: &Path, to: &Path) -> Result<(), String> {
+    if from.is_dir() {
+        fs::create_dir_all(to).map_err(|e| format!("{}: {e}", to.display()))?;
+        for entry in fs::read_dir(from).map_err(|e| format!("{}: {e}", from.display()))? {
+            let entry = entry.map_err(|e| format!("{}: {e}", from.display()))?;
+            copy_tree(&entry.path(), &to.join(entry.file_name()))?;
+        }
+        Ok(())
+    } else {
+        fs::copy(from, to)
+            .map(|_| ())
+            .map_err(|e| format!("{}: {e}", to.display()))
+    }
+}
+
 pub fn deploy_pack(
     config: &DeployConfig,
     pack: &str,
@@ -1530,6 +1673,138 @@ mod tests {
             again,
             vec!["= demo (digest policy already current)".to_string()]
         );
+        let _ = fs::remove_dir_all(&root);
+    }
+}
+
+#[cfg(test)]
+mod discard_tests {
+    use super::*;
+    use crate::harnesses::engine::{get_statuses, pack_units, SkillStatus};
+
+    /// A deployed `demo/alpha`, with the Pack and the ledger agreeing before each test edits it.
+    fn deployed(name: &str) -> (PathBuf, DeployConfig) {
+        let root = std::env::temp_dir().join(format!(
+            "sjel-harnesses-discard-{name}-{}",
+            std::process::id()
+        ));
+        let _ = fs::remove_dir_all(&root);
+        let pack = root.join("repo/Packs/demo");
+        fs::create_dir_all(pack.join("skills/alpha/references")).unwrap();
+        fs::write(
+            pack.join("pack.toml"),
+            "name = \"demo\"\ndescription = \"test\"\nskills = [\"alpha\"]\n",
+        )
+        .unwrap();
+        fs::write(
+            pack.join("skills/alpha/SKILL.md"),
+            "---\nname: alpha\ndescription: does a thing\n---\n\npack body\n",
+        )
+        .unwrap();
+        fs::write(pack.join("skills/alpha/references/guide.md"), "guide\n").unwrap();
+        let config = DeployConfig {
+            axon_root: root.join("repo"),
+            pack_roots: None,
+            destination: root.join("dest"),
+            state_file: root.join("state/claude.json"),
+            adapter: "claude".to_owned(),
+            state_env_var: None,
+            tree_convention: None,
+            flat_file_convention: None,
+            skip_manifest_skills: false,
+            validate_adapter_files: None,
+        };
+        deploy_pack(&config, "demo", None).unwrap();
+        (root, config)
+    }
+
+    fn alpha(config: &DeployConfig) -> Unit {
+        pack_units(config, "demo")
+            .unwrap()
+            .into_iter()
+            .find(|u| u.key == "alpha")
+            .unwrap()
+    }
+
+    fn status(config: &DeployConfig) -> SkillStatus {
+        get_statuses(config, Some("demo")).unwrap()[0].status.clone()
+    }
+
+    #[test]
+    fn discard_puts_the_pack_text_back_and_keeps_the_copy_aside() {
+        let (root, config) = deployed("restores");
+        let dest = config.destination.join("alpha");
+        fs::write(
+            dest.join("SKILL.md"),
+            "---\nname: alpha\ndescription: edited here\n---\n\nold table rule\n",
+        )
+        .unwrap();
+        fs::write(dest.join("extra.md"), "only here\n").unwrap();
+        assert_eq!(status(&config), SkillStatus::Drifted);
+
+        let unit = alpha(&config);
+        let plan = replacement_plan(&config, "demo", &unit).unwrap();
+        assert_eq!(plan.replaced, vec!["SKILL.md"]);
+        assert!(plan.added.is_empty());
+        assert_eq!(plan.removed, vec!["extra.md"]);
+
+        let line = discard_unit(&config, "demo", &unit).unwrap();
+        assert!(line.contains("kept at"), "{line}");
+        assert_eq!(
+            fs::read_to_string(dest.join("SKILL.md")).unwrap(),
+            fs::read_to_string(root.join("repo/Packs/demo/skills/alpha/SKILL.md")).unwrap(),
+            "the destination takes the Pack's bytes"
+        );
+        assert!(!dest.join("extra.md").exists());
+        assert_eq!(status(&config), SkillStatus::Current, "{line}");
+
+        let kept = fs::read_dir(config.state_file.parent().unwrap().join("discarded/claude/demo"))
+            .unwrap()
+            .flatten()
+            .next()
+            .unwrap()
+            .path();
+        assert_eq!(
+            fs::read_to_string(kept.join("extra.md")).unwrap(),
+            "only here\n",
+            "the replaced edit survives beside the ledger"
+        );
+        assert!(fs::read_to_string(kept.join("SKILL.md"))
+            .unwrap()
+            .contains("old table rule"));
+        let _ = fs::remove_dir_all(&root);
+    }
+
+    #[test]
+    fn discard_of_a_current_copy_keeps_nothing_aside() {
+        let (root, config) = deployed("current");
+        let line = discard_unit(&config, "demo", &alpha(&config)).unwrap();
+        assert_eq!(line, "= alpha (already current)");
+        assert!(
+            !config.state_file.parent().unwrap().join("discarded").exists(),
+            "nothing differed, so nothing is kept"
+        );
+        let _ = fs::remove_dir_all(&root);
+    }
+
+    #[test]
+    fn discard_refuses_a_unit_the_ledger_does_not_hold() {
+        let (root, config) = deployed("unowned");
+        let mut state = read_state(&config).unwrap();
+        state.packs.get_mut("demo").unwrap().skills.clear();
+        write_state(&config, &state).unwrap();
+        let err = discard_unit(&config, "demo", &alpha(&config)).unwrap_err();
+        assert!(err.contains("nothing to discard"), "{err}");
+        let _ = fs::remove_dir_all(&root);
+    }
+
+    #[test]
+    fn the_plan_names_a_file_the_copy_lost() {
+        let (root, config) = deployed("added");
+        fs::remove_file(config.destination.join("alpha/references/guide.md")).unwrap();
+        let plan = replacement_plan(&config, "demo", &alpha(&config)).unwrap();
+        assert_eq!(plan.added, vec!["references/guide.md"]);
+        assert!(plan.replaced.is_empty() && plan.removed.is_empty(), "{plan:?}");
         let _ = fs::remove_dir_all(&root);
     }
 }

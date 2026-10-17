@@ -6,7 +6,7 @@
 //! question and prints one answer.
 //!
 //! Ported from tools/harnesses.ts: the read verbs (`list`, `status`, `drift`) on 2026-10-02,
-//! the write verbs (`sync`, `use`, `promote`, `accept`) on 2026-10-04 with the pack-deploy
+//! the write verbs (`sync`, `use`, `promote`, `accept`, and `discard`) on 2026-10-04 with the pack-deploy
 //! mutation engine and pi's settings registry. The TypeScript file and its test are deleted,
 //! so this is the only reader and the only writer of every ledger it touches.
 //!
@@ -40,6 +40,8 @@ const HELP: &str = "tools/harnesses — Packs across every agent harness at once
   use <profile> [--harness <id>]        activate a profile on every installed harness (or one)
   promote <skill> --pack <p> [--from h] bring a harness-level skill Sjel does not own into a Pack
   accept <pack> <skill> [--from h]      keep a destination edit to a skill Sjel already owns
+  discard <pack> <skill> [--from h] [--force]
+                                        replace a drifted copy with the Pack's text; the copy is kept aside
 
   --harness <id>     restrict to one harness (implies it, installed or not)
   --all-harnesses    include harnesses that are not installed
@@ -53,7 +55,7 @@ pub fn run(args: &[String]) -> ExitCode {
             println!("{HELP}");
             return ExitCode::SUCCESS;
         }
-        "list" | "status" | "drift" | "sync" | "use" | "promote" | "accept" => {}
+        "list" | "status" | "drift" | "sync" | "use" | "promote" | "accept" | "discard" => {}
         other => {
             eprintln!("{HELP}");
             eprintln!("harnesses: unknown verb '{other}'");
@@ -76,6 +78,7 @@ pub fn run(args: &[String]) -> ExitCode {
         "use" => use_profile(&registry, &root, args),
         "promote" => promote(&registry, &root, args),
         "accept" => accept(&registry, &root, args),
+        "discard" => discard(&registry, &root, args),
         _ => unreachable!(),
     };
     match result {
@@ -340,6 +343,75 @@ fn accept(registry: &Registry, root: &Path, args: &[String]) -> Result<(), Strin
         root.display()
     );
     println!("Then deploy the Pack to the other harnesses that carry it.");
+    Ok(())
+}
+
+/// The inverse of `accept`: drop a destination's edit and put the Pack's text back. Without
+/// `--force` it lists what the copy holds that the Pack does not, and refuses, because the copy is
+/// the only copy of those bytes. With `--force` the replaced copy is kept beside the ledger first.
+fn discard(registry: &Registry, root: &Path, args: &[String]) -> Result<(), String> {
+    let positional = positional(args);
+    let usage = "usage: tools/harnesses discard <pack> <skill> [--from <harness>] [--force]";
+    let pack = positional.get(1).ok_or(usage)?;
+    let skill = positional.get(2).ok_or(usage)?;
+    let from = flag(args, "from").unwrap_or("claude");
+    let harness = registry.by_id(from)?;
+    if harness.model != Model::Materialized {
+        return Err(format!(
+            "{from} reads the Pack source in place; it has no copy to discard"
+        ));
+    }
+    let config = &harness.config;
+    let unit = engine::pack_units(config, pack)?
+        .into_iter()
+        .find(|u| u.key == *skill)
+        .ok_or_else(|| format!("{pack} does not carry {skill}"))?;
+    let deployed = engine::read_state(config)?
+        .packs
+        .get(pack)
+        .is_some_and(|r| r.skills.contains_key(skill));
+    if !deployed {
+        return Err(format!(
+            "{pack}/{skill} is not deployed to {from}; nothing to discard"
+        ));
+    }
+    if !unit.destination.exists() {
+        return Err(format!("{} does not exist", unit.destination.display()));
+    }
+
+    let wanted = engine::digest_files(&engine::desired_files(config, pack, &unit)?);
+    if engine::digest_destination(config, &unit.destination)? == wanted {
+        println!("{}", mutate::discard_unit(config, pack, &unit)?);
+        return Ok(());
+    }
+
+    let plan = mutate::replacement_plan(config, pack, &unit)?;
+    println!("{pack}/{skill} in {from}, against the Pack:");
+    for rel in &plan.replaced {
+        println!("  replace  {rel}");
+    }
+    for rel in &plan.added {
+        println!("  add      {rel}");
+    }
+    for rel in &plan.removed {
+        println!("  remove   {rel}");
+    }
+    if plan.replaced.is_empty() && plan.added.is_empty() && plan.removed.is_empty() {
+        println!("  permissions differ only");
+    }
+    if !has(args, "force") {
+        return Err(format!(
+            "{pack}/{skill} has local changes in {from}, and the copy is the only copy of them. \
+             Read them with `tools/harnesses drift {pack} --diff --harness {from}`, then pass --force"
+        ));
+    }
+
+    println!("{}", mutate::discard_unit(config, pack, &unit)?);
+    println!(
+        "\nThe Pack is untouched. Check: git -C {} status --short -- {}",
+        root.display(),
+        relative(root, &unit.source_root)
+    );
     Ok(())
 }
 
@@ -946,8 +1018,8 @@ fn drift(registry: &Registry, args: &[String]) -> Result<(), String> {
             println!("  source:      {}", relative(&root, &unit.source_root));
             println!("  destination: {}", unit.destination.display());
             println!(
-                "  discard it:  {} sync {}   (overwrites the destination)",
-                harness.cli, row.pack
+                "  discard it:  tools/harnesses discard {} {} --from {}   (keeps the copy aside)",
+                row.pack, row.skill, harness.id
             );
             println!(
                 "  keep it:     tools/harnesses accept {} {} --from {}",

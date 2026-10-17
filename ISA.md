@@ -420,16 +420,6 @@ stay in the PRD's history.
 
 - **Does KlipperMCP replace the slicer probe?** Open since the capability shipped; never revisited.
 
-### harness · one item
-
-- **HARN-1 — a drifted copy cannot be discarded.** `tools/sjel-cli/src/harnesses/mutate.rs`'s
-  `adopt_digest_policy_if_safe` refuses `sync`, `deploy` and `remove` when a materialized
-  destination differs from the digest the ledger recorded, so the only verb that clears a drifted
-  cell is `accept`, which imports the destination's text into the Pack first. Measured 2026-10-17
-  on `design/ui-craftsmanship` in Claude Code, where the destination held the pre-DSH-5 table rule
-  and a path that no longer exists (`libs/links/ISA.md`). Probe: a verb that replaces a drifted
-  destination and re-records its digest without writing into the Pack.
-
 ## Operator checks
 
 Four open claims wait on one action each that an agent session cannot take, by design. Each

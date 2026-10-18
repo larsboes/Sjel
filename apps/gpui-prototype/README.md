@@ -69,6 +69,10 @@ the caret shows its markdown; every other block shows bold, italic, code, strike
 formatted, with the markers hidden (`src/inline.rs`). A click on formatted text puts the caret at
 the same place in the markdown.
 
+`/` in an empty paragraph opens a menu of block kinds; type to filter, ↑ and ↓ to pick, ↩ to
+apply, Esc to close. On hover, a `⋮⋮` handle left of a block opens the same menu to turn the block
+into another kind, and dragging it moves the block. ⌘⇧↑ and ⌘⇧↓ move the block with the caret.
+
 The default endpoint comes from `capabilities/sjel-status/service.toml`. `SJEL_STATUS_URL` can
 point to another loopback port. The app refuses any endpoint that is not `http` on 127.0.0.1 or
 localhost.
@@ -107,6 +111,7 @@ measured. Run `./install` first: both scripts use the installed release build.
 | `SJEL_GPUI_NO_GLASS=1` | Draw the normal sidebar instead of the glass one |
 | `SJEL_GPUI_FRAMES=<file>` | Log the timings of each frame (`src/frames.rs`) |
 | `SJEL_GPUI_BENCH_SCROLL=1` | Scroll the page down and up, then quit |
+| `SJEL_GPUI_NO_SAVE=1` | Edit notes without writing them, to try the editor on real notes |
 | `SJEL_GPUI_BENCH_NOTE=<record path>` | Open that note with saving off, type 240 characters, then quit |
 
 The app icon comes from `brand/sjel-icon-maskable.svg`. `Resources/make-icon` builds

@@ -6,6 +6,7 @@ use gpui_kit::{
     WindowHandle, WindowKind, WindowOptions,
 };
 
+mod block_menu;
 mod blocks;
 mod calendar;
 mod capabilities;

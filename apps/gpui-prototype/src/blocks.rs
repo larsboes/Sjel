@@ -94,6 +94,29 @@ impl Block {
         true
     }
 
+    /// Turn this block into `kind`, keeping its text. Code wraps the text in a fence.
+    pub fn set_kind(&mut self, kind: Kind) {
+        if self.kind == Kind::Code {
+            // Unwrap the fence lines, keep what was between them.
+            let inner: Vec<&str> = self.text.lines().collect();
+            let end = inner.len().saturating_sub(1).max(1);
+            self.text = inner.get(1..end).map(|l| l.join("\n")).unwrap_or_default();
+        }
+        self.prefix = match kind {
+            Kind::Paragraph | Kind::Code => String::new(),
+            Kind::Heading(level) => format!("{} ", "#".repeat(level.into())),
+            Kind::Bullet => "- ".into(),
+            Kind::Numbered => "1. ".into(),
+            Kind::Todo(true) => "- [x] ".into(),
+            Kind::Todo(false) => "- [ ] ".into(),
+            Kind::Quote => "> ".into(),
+        };
+        if kind == Kind::Code {
+            self.text = format!("```\n{}\n```", self.text);
+        }
+        self.kind = kind;
+    }
+
     pub fn toggle_done(&mut self) {
         if let Kind::Todo(done) = self.kind {
             self.kind = Kind::Todo(!done);
@@ -189,6 +212,21 @@ impl Doc {
         }
         lines.extend(std::iter::repeat_n(String::new(), self.trailing));
         format!("{}{}", self.front, lines.join("\n"))
+    }
+
+    /// A paragraph right under a list item, quote or paragraph with no blank line between reads
+    /// back as part of that block. After a block moves or changes kind, give it the blank line.
+    pub fn repair_gaps(&mut self) {
+        for index in 1..self.blocks.len() {
+            let above = self.blocks[index - 1].kind;
+            let block = &mut self.blocks[index];
+            if block.kind == Kind::Paragraph
+                && block.gap == 0
+                && !matches!(above, Kind::Heading(_) | Kind::Code)
+            {
+                block.gap = 1;
+            }
+        }
     }
 
     /// True when saving this document unchanged writes back exactly `content`.
@@ -331,6 +369,39 @@ mod tests {
         assert!(heading.apply_shortcut());
         assert_eq!(heading.kind, Kind::Heading(2));
         assert!(!Block::paragraph("plain #", 0).apply_shortcut());
+    }
+
+    #[test]
+    fn set_kind_rewrites_the_prefix_and_code_round_trips() {
+        let mut block = Block::paragraph("text", 1);
+        block.set_kind(Kind::Heading(2));
+        assert_eq!(
+            (block.prefix.as_str(), block.text.as_str()),
+            ("## ", "text")
+        );
+        block.set_kind(Kind::Code);
+        assert_eq!(
+            (block.prefix.as_str(), block.text.as_str()),
+            ("", "```\ntext\n```")
+        );
+        block.set_kind(Kind::Todo(false));
+        assert_eq!(
+            (block.prefix.as_str(), block.text.as_str()),
+            ("- [ ] ", "text")
+        );
+    }
+
+    #[test]
+    fn repair_gaps_keeps_a_moved_paragraph_its_own_block() {
+        let mut doc = Doc::parse("# H\ntext\n- item\n");
+        // A paragraph straight under a heading is fine; under a list item it is not.
+        doc.blocks.swap(0, 2);
+        doc.repair_gaps();
+        let reread = Doc::parse(&doc.markdown());
+        assert_eq!(reread.blocks.len(), 3, "{:?}", doc.markdown());
+        let mut fine = Doc::parse("# H\ntext\n");
+        fine.repair_gaps();
+        assert_eq!(fine.markdown(), "# H\ntext\n");
     }
 
     /// `SJEL_NOTES_DIR=<dir> cargo test real_notes -- --ignored`: every `.md` under the

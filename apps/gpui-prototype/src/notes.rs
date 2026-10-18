@@ -13,20 +13,25 @@ use gpui_kit::component::input::{
     Backspace, InputEvent, MoveDown, MoveUp, Textarea, TextareaState,
 };
 use gpui_kit::component::notification::Notification;
-use gpui_kit::component::{ActiveTheme, WindowExt};
+use gpui_kit::component::{ActiveTheme, Size, WindowExt};
 use gpui_kit::{
-    actions, div, list as block_list, prelude::*, px, rgb, rgba, AnyElement, App, Context, Entity,
-    Focusable, FontWeight, KeyBinding, ListAlignment, ListState, SharedString, Subscription,
-    Window,
+    actions, div, list as block_list, prelude::*, px, relative, rgb, rgba, AnyElement, App,
+    Context, Entity, Focusable, FontStyle, FontWeight, HighlightStyle, KeyBinding, ListAlignment,
+    ListState, MouseButton, MouseDownEvent, SharedString, StrikethroughStyle, StyledText,
+    Subscription, UnderlineStyle, Window,
 };
 
 use crate::blocks::{Block, Doc, Kind};
+use crate::inline::{Inline, Mark};
 use crate::shell::{self, ProjectRecord, ProjectSummary, Shell, ShellError};
 use crate::theme::Palette;
 use crate::ui::{list, note, placeholder, row, section};
 use crate::workspace::Remote;
 
 actions!(notes, [SaveNote, CloseNote]);
+
+/// The size every block's textarea has, which sets its editor's padding.
+const TEXTAREA: Size = Size::Medium;
 
 /// How long typing pauses before the note saves.
 const SAVE_AFTER: Duration = Duration::from_millis(700);
@@ -109,10 +114,7 @@ impl Notes {
         };
         let notes = cx.entity().downgrade();
         let editor = cx.new(|cx| NoteEditor::new(record, shell, notes, window, cx));
-        let first = editor.read(cx).rows.first().map(|row| row.input.clone());
-        if let Some(first) = first {
-            first.update(cx, |input, cx| input.focus(window, cx));
-        }
+        editor.update(cx, |editor, cx| editor.focus(0, 0, window, cx));
         self.editor = Some(editor);
         cx.notify();
     }
@@ -340,6 +342,8 @@ pub struct NoteEditor {
     revision: u64,
     /// The revision the capability last confirmed.
     saved_revision: u64,
+    /// The block with the caret. It shows its markdown; every other block shows formatted text.
+    active: Option<usize>,
     /// Lays out only the blocks on screen, so a keystroke costs the same in a long note.
     list: ListState,
     shell: Arc<Shell>,
@@ -370,6 +374,7 @@ impl NoteEditor {
             editable_saves: true,
             revision: 0,
             saved_revision: 0,
+            active: None,
             list: ListState::new(0, ListAlignment::Top, px(600.)),
             shell,
             notes,
@@ -429,6 +434,14 @@ impl NoteEditor {
             InputEvent::PressEnter { shift: false, .. } if self.editable => {
                 self.split(index, window, cx)
             }
+            InputEvent::Focus => {
+                self.active = Some(index);
+                cx.notify();
+            }
+            InputEvent::Blur if self.active == Some(index) => {
+                self.active = None;
+                cx.notify();
+            }
             _ => {}
         }
     }
@@ -447,6 +460,10 @@ impl NoteEditor {
     /// Bench only: types one character at the end of the last block, the way a keystroke does.
     pub(crate) fn bench_type(&mut self, window: &mut Window, cx: &mut Context<Self>) {
         let last = self.rows.len() - 1;
+        if self.active != Some(last) {
+            let end = self.doc.blocks[last].text.len();
+            self.focus(last, end, window, cx);
+        }
         let input = self.rows[last].input.clone();
         input.update(cx, |input, cx| input.insert("x", window, cx));
         self.text_changed(last, window, cx);
@@ -567,7 +584,10 @@ impl NoteEditor {
         true
     }
 
-    fn focus(&self, index: usize, offset: usize, window: &mut Window, cx: &mut Context<Self>) {
+    fn focus(&mut self, index: usize, offset: usize, window: &mut Window, cx: &mut Context<Self>) {
+        // Set before the focus event, so the next frame already draws this block's textarea.
+        self.active = Some(index);
+        cx.notify();
         self.list.scroll_to_reveal_item(index);
         self.rows[index].input.update(cx, |input, cx| {
             input.set_selected_range(offset..offset, cx);
@@ -680,14 +700,41 @@ impl NoteEditor {
             }
             _ => div().into_any_element(),
         };
-        let field = Textarea::new(&row.input)
-            .appearance(false)
-            .readonly(!self.editable);
-        let field = match block.kind {
+        // Code always shows its source; prose shows markdown only while the caret is in it.
+        let field = if self.active == Some(index) || block.kind == Kind::Code {
+            let field = Textarea::new(&row.input)
+                .appearance(false)
+                // Cancels the padding its editor gets from its size (`gpui-component`
+                // input.rs `set_editor_paddings`), so a block keeps its box when it gains the
+                // caret.
+                .mx(-TEXTAREA.input_px())
+                .my(-TEXTAREA.input_py())
+                .line_height(relative(1.25))
+                .readonly(!self.editable);
             // The textarea sets its own text size, so a heading styles the textarea itself.
-            Kind::Heading(1) => div().child(field.text_2xl().font_weight(FontWeight::SEMIBOLD)),
-            Kind::Heading(2) => div().child(field.text_xl().font_weight(FontWeight::SEMIBOLD)),
-            Kind::Heading(_) => div().child(field.text_lg().font_weight(FontWeight::SEMIBOLD)),
+            match block.kind {
+                Kind::Heading(1) => field.text_2xl().font_weight(FontWeight::SEMIBOLD),
+                Kind::Heading(2) => field.text_xl().font_weight(FontWeight::SEMIBOLD),
+                Kind::Heading(_) => field.text_lg().font_weight(FontWeight::SEMIBOLD),
+                _ => field,
+            }
+            .into_any_element()
+        } else {
+            formatted(index, &block.text, palette, cx)
+        };
+        let field = match block.kind {
+            Kind::Heading(1) => div()
+                .text_2xl()
+                .font_weight(FontWeight::SEMIBOLD)
+                .child(field),
+            Kind::Heading(2) => div()
+                .text_xl()
+                .font_weight(FontWeight::SEMIBOLD)
+                .child(field),
+            Kind::Heading(_) => div()
+                .text_lg()
+                .font_weight(FontWeight::SEMIBOLD)
+                .child(field),
             Kind::Quote => div()
                 .border_l_2()
                 .border_color(rgba(palette.border))
@@ -713,7 +760,7 @@ impl NoteEditor {
             .items_start()
             .gap_2()
             .pl(px(indent as f32 * 8.))
-            .mt(px(if block.gap > 0 { 10. } else { 2. }))
+            .pt(px(if block.gap > 0 { 10. } else { 2. }))
             .capture_action(cx.listener(move |editor, _: &Backspace, window, cx| {
                 if editor.on_backspace(index, window, cx) {
                     cx.stop_propagation();
@@ -735,13 +782,101 @@ impl NoteEditor {
                     .flex_none()
                     .flex()
                     .justify_end()
-                    .pt(px(2.))
+                    // The text's line height, so the marker sits on the first line.
+                    .line_height(relative(1.25))
                     .text_color(rgb(palette.muted))
                     .child(gutter),
             )
             .child(div().flex_1().min_w_0().child(field))
             .into_any_element()
     }
+}
+
+/// A block as a reader sees it. A click puts the caret at the same place in the markdown.
+fn formatted(
+    index: usize,
+    text: &str,
+    palette: Palette,
+    cx: &mut Context<NoteEditor>,
+) -> AnyElement {
+    let inline = Inline::parse(text);
+    // An empty block keeps one line's height.
+    let shown: SharedString = if inline.text.is_empty() {
+        " ".into()
+    } else {
+        inline.text.clone().into()
+    };
+    let styled = StyledText::new(shown).with_highlights(runs(&inline.marks, palette));
+    let layout = styled.layout().clone();
+    div()
+        .id(("formatted", index))
+        .w_full()
+        // The textarea's line height, so a block keeps its height when it gains the caret.
+        .line_height(relative(1.25))
+        .cursor_text()
+        .on_mouse_down(
+            MouseButton::Left,
+            cx.listener(move |editor, event: &MouseDownEvent, window, cx| {
+                let shown = layout
+                    .index_for_position(event.position)
+                    .unwrap_or_else(|nearest| nearest);
+                editor.focus(index, inline.source_offset(shown), window, cx);
+                cx.stop_propagation();
+            }),
+        )
+        .child(styled)
+        .into_any_element()
+}
+
+/// Marks as non-overlapping highlight runs; where marks nest, their styles combine.
+fn runs(
+    marks: &[(std::ops::Range<usize>, Mark)],
+    palette: Palette,
+) -> Vec<(std::ops::Range<usize>, HighlightStyle)> {
+    let style = |mark: Mark| match mark {
+        Mark::Bold => HighlightStyle {
+            font_weight: Some(FontWeight::BOLD),
+            ..Default::default()
+        },
+        Mark::Italic => HighlightStyle {
+            font_style: Some(FontStyle::Italic),
+            ..Default::default()
+        },
+        Mark::Code => HighlightStyle {
+            background_color: Some(rgba(palette.raised).into()),
+            ..Default::default()
+        },
+        Mark::Strike => HighlightStyle {
+            strikethrough: Some(StrikethroughStyle {
+                thickness: px(1.),
+                color: None,
+            }),
+            ..Default::default()
+        },
+        Mark::Link => HighlightStyle {
+            color: Some(rgb(palette.accent).into()),
+            underline: Some(UnderlineStyle {
+                thickness: px(1.),
+                color: None,
+                wavy: false,
+            }),
+            ..Default::default()
+        },
+    };
+    let mut cuts: Vec<usize> = marks.iter().flat_map(|(r, _)| [r.start, r.end]).collect();
+    cuts.sort_unstable();
+    cuts.dedup();
+    cuts.windows(2)
+        .filter_map(|pair| {
+            let range = pair[0]..pair[1];
+            marks
+                .iter()
+                .filter(|(r, _)| r.start <= range.start && range.end <= r.end)
+                .map(|(_, mark)| style(*mark))
+                .reduce(HighlightStyle::highlight)
+                .map(|style| (range, style))
+        })
+        .collect()
 }
 
 impl Render for NoteEditor {

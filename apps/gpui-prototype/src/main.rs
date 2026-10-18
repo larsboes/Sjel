@@ -11,6 +11,7 @@ mod calendar;
 mod capabilities;
 mod frames;
 mod home;
+mod inline;
 #[cfg(target_os = "macos")]
 mod macos_glass;
 mod notes;

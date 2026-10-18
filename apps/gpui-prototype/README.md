@@ -64,7 +64,10 @@ A selected row shows the actions that a mouse sees on hover, for example Stop.
 In a note, ↩ starts a new block and ⇧↩ a new line in the block. ⌫ at the start of a block turns
 a list item or heading into a paragraph, then joins the paragraph to the block above. ↑ and ↓
 at a block's edge move to the next block. `# `, `- `, `[] `, `1. ` or `> ` at the start of a
-paragraph changes its kind. ⌘S saves at once, ⌘[ goes back to the project.
+paragraph changes its kind. ⌘S saves at once, ⌘[ goes back to the project. Only the block with
+the caret shows its markdown; every other block shows bold, italic, code, strikethrough and links
+formatted, with the markers hidden (`src/inline.rs`). A click on formatted text puts the caret at
+the same place in the markdown.
 
 The default endpoint comes from `capabilities/sjel-status/service.toml`. `SJEL_STATUS_URL` can
 point to another loopback port. The app refuses any endpoint that is not `http` on 127.0.0.1 or

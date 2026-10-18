@@ -57,16 +57,23 @@ fn access_token(
     secret: &str,
     refresh: &str,
 ) -> Result<String, String> {
-    let response = client
-        .post("https://oauth2.googleapis.com/token")
-        .form(&[
-            ("client_id", id),
-            ("client_secret", secret),
-            ("refresh_token", refresh),
-            ("grant_type", "refresh_token"),
-        ])
-        .send()
-        .map_err(|e| format!("token refresh: {e}"))?;
+    let response = sjel_http::send(
+        // A token is minted, not mutated: Google answers a second refresh with another
+        // access token and does not withdraw the first, so a repeat costs one call and
+        // nothing else. This is the call the dark wake killed — measured 2026-10-18, the
+        // 00:01 slot ran at 00:06:18 on a two-second wake and the first request went out
+        // as the network stack tore down.
+        || {
+            client.post("https://oauth2.googleapis.com/token").form(&[
+                ("client_id", id),
+                ("client_secret", secret),
+                ("refresh_token", refresh),
+                ("grant_type", "refresh_token"),
+            ])
+        },
+        sjel_http::Idempotent::Yes,
+    )
+    .map_err(|e| format!("token refresh: {e}"))?;
     let status = response.status();
     let body: Value = response.json().unwrap_or(Value::Null);
     if !status.is_success() {
@@ -106,12 +113,17 @@ pub fn fetch_one(resource_name: &str) -> Result<Value, String> {
         ));
     }
     let (client, token) = authorised()?;
-    let response = client
-        .get(format!("https://people.googleapis.com/v1/{resource_name}"))
-        .bearer_auth(&token)
-        .query(&[("personFields", PERSON_FIELDS)])
-        .send()
-        .map_err(|e| format!("people.get: {e}"))?;
+    let response = sjel_http::send(
+        || {
+            client
+                .get(format!("https://people.googleapis.com/v1/{resource_name}"))
+                .bearer_auth(&token)
+                .query(&[("personFields", PERSON_FIELDS)])
+        },
+        // A read.
+        sjel_http::Idempotent::Yes,
+    )
+    .map_err(|e| format!("people.get: {e}"))?;
     let status = response.status();
     let body: Value = response.json().map_err(|e| format!("people.get: {e}"))?;
     if !status.is_success() {
@@ -133,12 +145,17 @@ pub fn fetch() -> Result<Vec<Value>, String> {
         if let Some(p) = &page {
             query.push(("pageToken", p.clone()));
         }
-        let response = client
-            .get("https://people.googleapis.com/v1/people/me/connections")
-            .bearer_auth(&token)
-            .query(&query)
-            .send()
-            .map_err(|e| format!("people.connections: {e}"))?;
+        let response = sjel_http::send(
+            || {
+                client
+                    .get("https://people.googleapis.com/v1/people/me/connections")
+                    .bearer_auth(&token)
+                    .query(&query)
+            },
+            // A read.
+            sjel_http::Idempotent::Yes,
+        )
+        .map_err(|e| format!("people.connections: {e}"))?;
         let status = response.status();
         let body: Value = response
             .json()

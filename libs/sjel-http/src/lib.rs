@@ -189,9 +189,167 @@ pub fn client(
     Ok(built)
 }
 
+/// Whether a second attempt is harmless if the first one was applied.
+///
+/// Declared rather than inferred, because only the caller knows what its request does.
+/// A repeated `GET` costs a second read; a repeated POST that charges a card costs a
+/// second charge. Where the request is a read, or a write whose repeat is a no-op —
+/// minting an access token, importing a record by name — `Yes` is the honest answer,
+/// and it buys the retry that `No` cannot have.
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+pub enum Idempotent {
+    Yes,
+    No,
+}
+
+/// Three attempts over seven seconds.
+///
+/// The measurement behind the number: the `entities-google-sync` job's 00:01 slot fired
+/// at 00:06:18 on a two-second `DarkWake from Deep Idle`, its first HTTPS request went
+/// out as the network stack tore down, no response arrived, and the whole run was lost.
+/// So the budget has to outlast a dark wake. It also has to stay short: the caller's own
+/// timeout is already 30 s in that case, and a scheduled run that waits a minute to fail
+/// has spent a minute of the slot it was given.
+const ATTEMPTS: usize = 3;
+const WAITS: [Duration; ATTEMPTS - 1] = [Duration::from_secs(2), Duration::from_secs(5)];
+
+/// Send a request, repeating an attempt that never got an answer.
+///
+/// `reqwest` returns `Ok` for a 4xx or a 5xx, so a status is never repeated here. What
+/// is repeated is a *transport* failure, and how much of one depends on what the caller
+/// declares:
+///
+/// * a connection that could not be established is repeated for any request, because
+///   nothing was sent and so there is nothing that could have been applied twice;
+/// * a request that timed out or failed in flight is repeated only under
+///   [`Idempotent::Yes`], because a lost response is indistinguishable from a request
+///   the server applied.
+///
+/// The request is built again for each attempt, which is why this takes a closure and
+/// not a `RequestBuilder`: `send` consumes the builder, so a second attempt needs a new
+/// one, and a caller that can build a second one is exactly a caller that has said its
+/// request can be made twice.
+///
+/// A caller that wants a status raised calls `error_for_status()` on the response. The
+/// error that returns is `is_status()`, and it is never repeated — asking again would ask
+/// a server that already answered.
+pub fn send(
+    request: impl Fn() -> reqwest::blocking::RequestBuilder,
+    idempotent: Idempotent,
+) -> Result<reqwest::blocking::Response, reqwest::Error> {
+    repeat_while(
+        ATTEMPTS,
+        &WAITS,
+        || request().send(),
+        |error| repeats(error, idempotent),
+        std::thread::sleep,
+    )
+}
+
+/// Whether this failure is one to send again.
+fn repeats(error: &reqwest::Error, idempotent: Idempotent) -> bool {
+    if error.is_status() {
+        // A status is an answer, including a 500.
+        return false;
+    }
+    if error.is_connect() {
+        // The connection was never established, so nothing was sent.
+        return true;
+    }
+    if error.is_timeout() || error.is_request() {
+        return idempotent == Idempotent::Yes;
+    }
+    // A redirect the guard refused, an unreadable body, a builder error: anything left is
+    // a decision rather than a lost packet.
+    false
+}
+
+/// The loop, with its attempt count, its waits and its clock as arguments.
+///
+/// Split out so the number of attempts, the gaps between them and the stopping rule are
+/// all provable without a network.
+fn repeat_while<T, E>(
+    attempts: usize,
+    waits: &[Duration],
+    mut once: impl FnMut() -> Result<T, E>,
+    repeats: impl Fn(&E) -> bool,
+    mut sleep: impl FnMut(Duration),
+) -> Result<T, E> {
+    let mut attempt = 1usize;
+    loop {
+        match once() {
+            Err(error) if attempt < attempts && repeats(&error) => {
+                if let Some(wait) = waits.get(attempt - 1) {
+                    sleep(*wait);
+                }
+                attempt += 1;
+            }
+            outcome => return outcome,
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// The loop's own behaviour, with no network: how many attempts, which gaps, and what
+    /// stops it.
+    #[test]
+    fn a_transient_failure_is_attempted_again_and_a_decision_is_not() {
+        fn run(
+            repeats_allowed: bool,
+        ) -> (usize, Vec<Duration>, Result<&'static str, &'static str>) {
+            let mut attempts = 0;
+            let mut slept = Vec::new();
+            let outcome = repeat_while(
+                ATTEMPTS,
+                &WAITS,
+                || {
+                    attempts += 1;
+                    if attempts == 2 {
+                        Ok("a response")
+                    } else {
+                        Err("no response arrived")
+                    }
+                },
+                |_| repeats_allowed,
+                |wait| slept.push(wait),
+            );
+            (attempts, slept, outcome)
+        }
+
+        // The second attempt answers, so the first failure cost one 2 s wait.
+        let (attempts, slept, outcome) = run(true);
+        assert_eq!(attempts, 2);
+        assert_eq!(slept, vec![Duration::from_secs(2)]);
+        assert_eq!(outcome, Ok("a response"));
+
+        // A failure that is not to be repeated is returned on the first attempt.
+        let (attempts, slept, outcome) = run(false);
+        assert_eq!(attempts, 1);
+        assert!(slept.is_empty());
+        assert_eq!(outcome, Err("no response arrived"));
+    }
+
+    #[test]
+    fn the_budget_is_spent_before_the_failure_is_returned() {
+        let mut attempts = 0;
+        let mut slept = Vec::new();
+        let outcome: Result<(), &str> = repeat_while(
+            ATTEMPTS,
+            &WAITS,
+            || {
+                attempts += 1;
+                Err("still nothing")
+            },
+            |_| true,
+            |wait| slept.push(wait),
+        );
+        assert_eq!(attempts, ATTEMPTS, "every attempt is spent");
+        assert_eq!(slept, WAITS, "and every declared gap is waited");
+        assert_eq!(outcome, Err("still nothing"));
+    }
 
     #[test]
     fn the_user_agent_names_sjel_and_the_upstream_repository() {

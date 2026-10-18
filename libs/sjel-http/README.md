@@ -38,6 +38,37 @@ that need an option this crate does not decide: gzip, a cookie store, a redirect
 policy, and `scouting/adapters/meetup.rs`, which overrides the user-agent with a
 browser string because the site refuses anything else.
 
+## Retrying an attempt that never got an answer
+
+`send(request, idempotent)` repeats a transport failure. Its first caller is
+`capabilities/entities`' Google sync, which lost a whole run on 2026-10-18: the
+00:01 slot fired at 00:06:18 on a two-second `DarkWake from Deep Idle`, the first
+HTTPS request went out as the network stack tore down, no response arrived, and a
+single `?` made that fatal.
+
+What is repeated is a failure, never a status: `reqwest` returns `Ok` for a 4xx or
+5xx, and the error `error_for_status()` produces is deliberately not repeated,
+because asking again would ask a server that already answered. A connection that
+could not be established is repeated for any request — nothing was sent. A request
+that timed out or failed in flight is repeated only where the caller declared
+`Idempotent::Yes`, because a lost response cannot be told apart from a request the
+server applied, and a repeated POST that charges a card charges twice.
+
+The request is built again for each attempt, which is why `send` takes a closure
+and not a `RequestBuilder`: `send` consumes the builder, and a caller that can
+build a second one is exactly a caller that has said its request may be made twice.
+
+```rust
+let response = sjel_http::send(
+    || client.get(url).bearer_auth(&token).query(&query),
+    sjel_http::Idempotent::Yes,
+)?;
+```
+
+Three attempts over seven seconds. The budget has to outlast a dark wake and stay
+short: the caller's own timeout is 30 s in that case, and a scheduled run that
+waits a minute to fail has spent a minute of the slot it was given.
+
 The agent is `Sjel-<purpose>/<version> (+https://github.com/larsboes/Sjel)`. The
 version is this crate's, which is the workspace version, so a server sees one
 product rather than nine. The URL is the intended remote, not a live one — Sjel

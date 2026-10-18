@@ -229,3 +229,81 @@ reason = "ruzstd 0.7.3, fixed in 0.9.1, a zstd decoder. Reach: the published loc
 id = "RUSTSEC-2024-0449"
 ignoreUntil = 2027-01-01
 reason = "Unmaintained unsafe-libyaml 0.2.11, no fixed version, runtime. Type INFO, not a vulnerability: the unsoundness, RUSTSEC-2023-0075, was fixed in 0.2.10 and both crates are well past it. Reach: `tauri-cli@2.12.2` (unsafe-libyaml <- serde_yaml 0.9.34+deprecated <- apple-codesign) and `xberg-cli@1.3.9` (<- serde_yaml_ng <- xberg). Accepted for the same reason as in osv-scanner.toml, and immovable here for the same reason: the version is the parent's published pin. Ends when apple-codesign or xberg drops the deprecated serde_yaml."
+
+# ── rustls 0.23.40 and 0.23.45, four advisories all fixed in 0.23.46 ──────────────────
+#
+# All four arrive through the published lock of a crate `cargo install --locked` resolves,
+# measured 2026-10-18 with `sjel update --json` against the crates.io releases:
+#
+#   * cargo-deny 0.20.2 carries 0.23.40, and 0.20.2 IS the latest release — no install moves it.
+#   * xberg-cli 1.3.9 carries 0.23.45. The available 1.3.10 still pins 0.23.45 (read from its
+#     published Cargo.lock), so installing it would not help either.
+#   * tauri-cli 2.12.2 carries 0.23.45. The available 2.12.3 pins the FIXED 0.23.46, so
+#     `cargo install tauri-cli --locked --force` ends that one instance on its own.
+#
+# The exposure is a TLS connection the tool itself makes — a registry, a CDN, a release download
+# — so the remote end must be hostile or a MITM. Nothing in a crate name or an argument reaches
+# these. Ends when a release publishes rustls >= 0.23.46 through its lock, which for cargo-deny
+# and xberg-cli is upstream's to do and for tauri-cli is available today.
+[[IgnoredVulns]]
+id = "RUSTSEC-2026-0346"
+ignoreUntil = 2027-01-01
+reason = "The `Debug` impls on `Tls12ClientSessionValue`/`Tls13ClientSessionValue` printed the TLS 1.2 master secret or TLS 1.3 resumption PSK, fixed in 0.23.46 (CVSS AV:L/AC:H/PR:H/UI:R — local, high privilege, user interaction). The trigger is printing one of those values, and no log line in cargo-deny, xberg-cli or tauri-cli formats a session value, so this is a latent exposure rather than one a connection reaches. Ends with the rustls version, per the note above."
+
+[[IgnoredVulns]]
+id = "RUSTSEC-2026-0347"
+ignoreUntil = 2027-01-01
+reason = "Buffered application data sent to the outer server after an ECH rejection, fixed in 0.23.46 (AV:L/AC:L/PR:H/UI:N, C:L). The trigger is an ECH-negotiated session, and ECH is opt-in in rustls: these three tools build a default client and set no ECH config. Stated as an accepted exposure and not as a measured one — the ECH config of each tool was not read. Ends with the rustls version."
+
+[[IgnoredVulns]]
+id = "RUSTSEC-2026-0348"
+ignoreUntil = 2027-01-01
+reason = "Brotli certificate decompression can allocate up to 1 GiB before authentication, fixed in 0.23.46 (AV:N/AC:H/PR:N/UI:N, A:L). Reach: a TLS connection one of the three tools makes to a registry or CDN, where the server compresses its certificate chain. It needs rustls's brotli certificate support compiled in — whether these published locks enable that feature was not read, so this is an accepted exposure with a reasoned reach. Ends with the rustls version."
+
+[[IgnoredVulns]]
+id = "RUSTSEC-2026-0349"
+ignoreUntil = 2027-01-01
+reason = "An unauthenticated ServerHello can downgrade later connections to classical key exchange, fixed in 0.23.46 (AV:N/AC:H/PR:N/UI:N, C:L). Reach: an active MITM on a connection one of the three tools makes, which is exactly the access a network attacker has to a build tool fetching a registry. Ends with the rustls version."
+
+# ── zip 2.4.2, 8.0.0 and 8.6.0, and the one caller that reaches the vulnerable API ────────
+#
+# All three zip advisories are against `extract()`, which writes entries to disk carrying Unix
+# permissions and symlinks. Measured 2026-10-18 by reading the published sources of every crate
+# installed here that depends on zip:
+#
+#   * tauri-cli 2.12.2, src/mobile/android/mod.rs:561 — `zip::ZipArchive::new(Cursor::new(body))`
+#     then `zip.extract(extract_path)`, where `body` is the HTTP response from CMDLINE_TOOLS_URL
+#     (dl.google.com over TLS, read under a 200 MB limit). 2.12.3 still calls it. This is the one
+#     caller in anything installed here that reaches the affected API, and it runs only from an
+#     Android command, whose environment setup downloads the Android command-line tools.
+#     dashboard/src-tauri/gen/ holds `apple` and `schemas` and no `android`, so nothing in this
+#     repository has ever run it.
+#   * tauri-bundler 2.10.2 (tauri-cli 2.12.2's pin): the only reader is `extract_zip` in
+#     src/utils/http_utils.rs, which is `#[allow(dead_code)]` and hand-rolls the walk —
+#     `by_index`, `enclosed_name()`, then `File::create` + `write_all`. It applies no Unix mode
+#     and creates no symlink, so 0367 and 0369 have nothing to act on there, and calling
+#     `enclosed_name()` first is the defence 0368 describes the absence of. Its other use of zip
+#     is `ZipWriter`, writing the updater archive.
+#   * xberg 1.3.9 and 1.3.10, src/extraction/docx/parser.rs:2227 — `ZipArchive::new` over a
+#     `Cursor` on the caller's bytes, then `by_name` + `read_to_string` under
+#     MAX_UNCOMPRESSED_FILE_SIZE. `extract()`, `ZipStreamReader`, `unix_mode` and `chmod` appear
+#     nowhere in the crate, so transit handing the body of `POST /api/tickets/extract` to the
+#     xberg CLI — an attacker's .docx is a zip — does not reach the affected API.
+#
+# Installing the available tauri-cli 2.12.3 drops the 2.4.2 instance but still ships 8.0.0, and
+# xberg-cli 1.3.10 still ships 8.6.0, so no install clears these IDs. Ends when tauri-cli or
+# xberg-cli publishes against zip >= 9.0.0.
+[[IgnoredVulns]]
+id = "RUSTSEC-2026-0367"
+ignoreUntil = 2027-01-01
+reason = "SUID/SGID bits preserved during ZIP extraction, a privilege-escalation path fixed in 9.0.0 (CVSS 7.3, AV:L/AC:L/PR:L/UI:R, C:H/I:H/A:H). Reach: the `tauri android` command-line-tools extraction above, and the archive would have to carry SUID/SGID entries, so the source (dl.google.com over TLS) must be hostile or MITM'd. tauri-bundler's own reader applies no Unix mode at all. Ends with the zip version."
+
+[[IgnoredVulns]]
+id = "RUSTSEC-2026-0368"
+ignoreUntil = 2027-01-01
+reason = "`ZipArchive::extract` creates symbolic links whose targets are outside the destination directory, fixed in 9.0.0 (osv names no CVSS). Same reach as RUSTSEC-2026-0367, through the same `tauri android` call. The nearest other reader, tauri-bundler's dead `extract_zip`, calls `enclosed_name()` before writing and creates no symlink, so it is not an affected caller. Ends with the zip version."
+
+[[IgnoredVulns]]
+id = "RUSTSEC-2026-0369"
+ignoreUntil = 2027-01-01
+reason = "`ZipStreamReader::extract` and `ZipArchive::extract` apply Unix permissions through symlinks without confining the target, fixed in 9.0.0 (CVSS 9.1, AV:N/AC:L/PR:N/UI:N, I:H/A:H). Same reach as RUSTSEC-2026-0368, and the highest score in this file: the rating assumes an unauthenticated network caller can supply the archive, which here means a hostile or compromised dl.google.com or a MITM on that download — not a caller of Sjel, since the only entry point is the `tauri android` toolchain fetch. Ends with the zip version, or by not using `tauri android` on this machine at all."

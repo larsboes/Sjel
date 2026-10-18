@@ -45,6 +45,32 @@ id = "RUSTSEC-2024-0370"
 ignoreUntil = 2026-12-01
 reason = "Unmaintained proc-macro-error 1.0.4, build-time only, via glib-macros 0.18 <- glib <- gtk 0.18, the same Linux-only Tauri path as GHSA-wrw7-89jp-8q8g. No affected functions and no fixed version."
 
+# The three below reach both lockfiles the way the glib pair above reaches one: through Tauri's
+# Linux-only dependency tree. zbus is the D-Bus client, and it arrives via atspi-common and
+# accesskit_atspi_common (Linux AT-SPI accessibility), zbus_xml and oo7 (the secret-service
+# keyring). Nothing in that chain resolves for a target Sjel ships: for each of zvariant,
+# zvariant_derive and zbus_names, `cargo tree --manifest-path {apps/gpui-prototype,
+# dashboard/src-tauri}/Cargo.toml -i <crate> --target aarch64-apple-darwin` prints "nothing to
+# print", and so does the same probe with `--target aarch64-apple-ios` (all twelve measured
+# 2026-10-18). The lockfiles still list all three, which is what osv-scanner reads. They are
+# informational — no CVSS, no affected function — and no fixed version exists, because RUSTSEC
+# retired each crate as a standalone and folded it into zbus 6.0.0. The end of these is a zbus 6
+# major bump on the Linux side, which is upstream's and not a patch here.
+[[IgnoredVulns]]
+id = "RUSTSEC-2026-0370"
+ignoreUntil = 2027-01-01
+reason = "Unmaintained zvariant 5.15.0, the D-Bus wire format, reached only through zbus on Linux and resolved for neither macOS nor iOS. No known vulnerability, no CVSS, no affected function and no fixed version: the crate is zbus 6.0.0's `wire` module now, so ending this needs a zbus major bump rather than a patch here. Revisit when Tauri's Linux tree moves to zbus 6, or when these two lockfiles stop carrying a Linux build."
+
+[[IgnoredVulns]]
+id = "RUSTSEC-2026-0371"
+ignoreUntil = 2027-01-01
+reason = "Unmaintained zbus_names 4.3.4, the D-Bus name types, reached only through zbus on Linux and resolved for neither macOS nor iOS. Same shape and same end as RUSTSEC-2026-0370: no known vulnerability, no CVSS, no affected function, no fixed version, and the successor is zbus 6.0.0's `names` module."
+
+[[IgnoredVulns]]
+id = "RUSTSEC-2026-0372"
+ignoreUntil = 2027-01-01
+reason = "Unmaintained zvariant_derive 5.15.0, build-time derive macros that zvariant re-exports, reached only through zbus on Linux and resolved for neither macOS nor iOS. No CVSS, no affected function, no fixed version, and zbus 6.0.0 supplies the same macros. Same reach and same end as RUSTSEC-2026-0370."
+
 # KaTeX arrives only through mermaid, whose newest release (12.1.0) still requires `katex
 # ^0.16.47`, so the fixed version (0.18.2) sits outside every range mermaid declares. The
 # advisory is a read-side prototype-pollution gadget: it needs `Object.prototype` already

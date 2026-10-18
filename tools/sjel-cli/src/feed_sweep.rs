@@ -107,6 +107,19 @@ pub fn run(argv: &[String]) -> ExitCode {
     let status = response.status();
     let body = response.text().unwrap_or_default();
     if !status.is_success() {
+        // An all-sources-failed scan is reported and stays non-zero when the fault is this
+        // deployment's. When every failure was transient — a quota, a network that was down —
+        // the next run is the recovery, and exit 1 would tell whoever reads the doctor that
+        // this machine is broken. Measured 2026-10-18 over the job's own log: 11 of 48 recorded
+        // runs exited 1, and every one of them was an upstream refusing us.
+        if status == reqwest::StatusCode::BAD_REQUEST && transient_only(&body) {
+            eprintln!(
+                "feed-sweep: every source failed transiently — nothing collected, and the next \
+                 run retries: {}",
+                truncate(&body, 300)
+            );
+            return ExitCode::SUCCESS;
+        }
         // comms' own error string, which is about a feed source and never about a credential.
         return fail(&format!(
             "/sources/scan answered {}: {}",
@@ -121,7 +134,7 @@ pub fn run(argv: &[String]) -> ExitCode {
             return fail(&format!(
                 "/sources/scan answered 200 with a body that is not JSON: {}",
                 truncate(&body, 200)
-            ))
+            ));
         }
     };
 
@@ -316,6 +329,41 @@ fn truncate(body: &str, n: usize) -> String {
     body.chars().take(n).collect()
 }
 
+/// True when every source that failed did so for a reason that heals on its own.
+///
+/// Reads the class comms put beside each failing source rather than its prose: `quota` is an
+/// upstream refusing this machine and `network` is a connection that did not complete, and both
+/// are answered by asking again later. `auth` and `config` are this deployment's to fix and stay
+/// fatal, and so does a class this function does not recognise — a caller that cannot say what
+/// went wrong is not the one to excuse it.
+///
+/// A body with no failing source in it is not transient either: "nothing failed" arriving with a
+/// failure status is a disagreement this cannot resolve, and the caller keeps failing on it.
+fn transient_only(body: &str) -> bool {
+    let Ok(parsed) = serde_json::from_str::<serde_json::Value>(body) else {
+        return false;
+    };
+    let Some(rows) = parsed.get("sources").and_then(serde_json::Value::as_array) else {
+        return false;
+    };
+    let mut failed = 0usize;
+    for row in rows {
+        if row
+            .get("error")
+            .and_then(serde_json::Value::as_str)
+            .is_none()
+        {
+            continue;
+        }
+        failed += 1;
+        match row.get("error_class").and_then(serde_json::Value::as_str) {
+            Some("quota" | "network") => {}
+            _ => return false,
+        }
+    }
+    failed > 0
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -325,6 +373,44 @@ mod tests {
         assert_eq!(truncate("abcdef", 3), "abc");
         assert_eq!(truncate("abc", 9), "abc");
         assert_eq!(truncate("äöü", 2), "äö");
+    }
+
+    /// The distinction the whole change turns on: an upstream refusing this machine is not this
+    /// machine being broken.
+    #[test]
+    fn only_a_wholly_transient_failure_excuses_the_run() {
+        // Both sources refused, one by quota and one by network: the next run is the recovery.
+        assert!(transient_only(
+            r#"{"error":"every selected Feed source failed (2 of 2)","sources":[
+                 {"source_id":"arxiv-ai-recent","error":"429 Too Many Requests","error_class":"quota"},
+                 {"source_id":"github-trending-daily","error":"connect timed out","error_class":"network"}]}"#
+        ));
+
+        // One of them is this deployment's to fix, so the run stays a failure.
+        assert!(!transient_only(
+            r#"{"sources":[
+                 {"source_id":"a","error":"429","error_class":"quota"},
+                 {"source_id":"b","error":"invalid_grant","error_class":"auth"}]}"#
+        ));
+
+        // An unrecognised class is not excused either, and neither is a class that is simply
+        // missing: only the two that heal on their own are named.
+        assert!(!transient_only(
+            r#"{"sources":[{"source_id":"a","error":"who knows","error_class":"unknown"}]}"#
+        ));
+        assert!(!transient_only(
+            r#"{"sources":[{"source_id":"a","error":"no class here"}]}"#
+        ));
+
+        // No failing source at all, a body that is not JSON, and a comms reply that is not the
+        // scan's own shape: each keeps the caller failing rather than excusing it.
+        assert!(!transient_only(
+            r#"{"sources":[{"source_id":"a","fetched":3}]}"#
+        ));
+        assert!(!transient_only("<html>502</html>"));
+        assert!(!transient_only(
+            r#"{"error":"no matching enabled Feed source"}"#
+        ));
     }
 
     #[test]

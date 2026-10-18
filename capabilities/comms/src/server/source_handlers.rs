@@ -69,8 +69,26 @@ pub(super) struct SourceScanBody {
     source_id: Option<String>,
 }
 
+/// A refusal from the scan, with whatever the caller needs to judge it.
+///
+/// `From<String>` so the ordinary refusals stay one line and the `?` operator keeps working
+/// on a `String`; the all-sources-failed case fills `extra` with the per-source rows.
+pub(super) struct ScanRefusal {
+    message: String,
+    extra: Value,
+}
+
+impl From<String> for ScanRefusal {
+    fn from(message: String) -> Self {
+        Self {
+            message,
+            extra: json!({}),
+        }
+    }
+}
+
 pub(super) async fn source_scan_handler(Json(body): Json<SourceScanBody>) -> HttpResponse {
-    let result = tokio::task::spawn_blocking(move || -> Result<(Value, Vec<String>), String> {
+    let result = tokio::task::spawn_blocking(move || -> Result<(Value, Vec<String>), ScanRefusal> {
         let cfg = Config::load();
         let selected = cfg
             .feed_sources
@@ -83,7 +101,7 @@ pub(super) async fn source_scan_handler(Json(body): Json<SourceScanBody>) -> Htt
             })
             .collect::<Vec<_>>();
         if selected.is_empty() {
-            return Err("no matching enabled Feed source".into());
+            return Err("no matching enabled Feed source".to_string().into());
         }
         let store = Store::open(&cfg.database_path).map_err(|error| error.to_string())?;
         let mut results = Vec::new();
@@ -125,6 +143,10 @@ pub(super) async fn source_scan_handler(Json(body): Json<SourceScanBody>) -> Htt
                         "new_count": 0,
                         "failed": [],
                         "error": error,
+                        // The class beside the reason, so a caller can act on the difference
+                        // without parsing prose. It is the same value `record_sweep_failure`
+                        // stores, computed once here rather than derived twice.
+                        "error_class": class,
                     }));
                     continue;
                 }
@@ -195,9 +217,18 @@ pub(super) async fn source_scan_handler(Json(body): Json<SourceScanBody>) -> Htt
         if source_errors > 0 && source_errors == selected_count {
             // Nothing was collected at all. Reported as the error it is, with the per-source
             // reasons still in the log, rather than as a 200 carrying zeroes.
-            return Err(format!(
-                "every selected Feed source failed ({source_errors} of {selected_count}) — see the comms log for each"
-            ));
+            //
+            // The rows travel with the refusal, because the caller has to tell one outage from
+            // another: every upstream refusing at once — a quota, a network that was down — is
+            // a collector's ordinary weather and recovers on the next run, while an auth or a
+            // config failure is this deployment's to fix. Only the caller can act on that
+            // difference, and it cannot act on it from a bare message.
+            return Err(ScanRefusal {
+                message: format!(
+                    "every selected Feed source failed ({source_errors} of {selected_count}) — see the comms log for each"
+                ),
+                extra: json!({ "sources": results, "source_errors": source_errors }),
+            });
         }
         Ok((
             json!({
@@ -219,7 +250,17 @@ pub(super) async fn source_scan_handler(Json(body): Json<SourceScanBody>) -> Htt
             enrich_many_in_background(ids);
             (StatusCode::OK, Json(value))
         }
-        Ok(Err(error)) => error_response(StatusCode::BAD_REQUEST, error),
+        Ok(Err(refusal)) => {
+            // One body shape whether the scan answered or refused: the message, plus whatever
+            // the refusal carried.
+            let mut body = json!({ "error": refusal.message });
+            if let (Some(fields), Some(extra)) = (body.as_object_mut(), refusal.extra.as_object()) {
+                for (name, value) in extra {
+                    fields.insert(name.clone(), value.clone());
+                }
+            }
+            (StatusCode::BAD_REQUEST, Json(body))
+        }
         Err(_) => (
             StatusCode::INTERNAL_SERVER_ERROR,
             Json(json!({ "error": "task failed" })),

@@ -73,6 +73,13 @@ the same place in the markdown.
 apply, Esc to close. On hover, a `⋮⋮` handle left of a block opens the same menu to turn the block
 into another kind, and dragging it moves the block. ⌘⇧↑ and ⌘⇧↓ move the block with the caret.
 
+A project page shows its tasks as a table above its notes (`src/tasks.rs`): open tasks first, by
+due date, then priority. The checkbox marks a task done through the capability, which also sets
+`status:` and `completed:`. A click on the due date edits it (↩ saves, leaving the field keeps
+the old date), a click on the priority cycles P1, P2, P3, and the last row adds a task. Due and
+priority change only their frontmatter line and save with the content they started from.
+`SJEL_GPUI_NO_SAVE` covers the note editor only; the task table always writes.
+
 The default endpoint comes from `capabilities/sjel-status/service.toml`. `SJEL_STATUS_URL` can
 point to another loopback port. The app refuses any endpoint that is not `http` on 127.0.0.1 or
 localhost.

@@ -10,10 +10,10 @@ use std::time::Duration;
 
 use gpui_kit::component::checkbox::Checkbox;
 use gpui_kit::component::input::{
-    Backspace, Escape, InputEvent, MoveDown, MoveUp, Textarea, TextareaState,
+    Backspace, Escape, Input, InputEvent, InputState, MoveDown, MoveUp, Textarea, TextareaState,
 };
 use gpui_kit::component::notification::Notification;
-use gpui_kit::component::{ActiveTheme, Size, WindowExt};
+use gpui_kit::component::{ActiveTheme, Sizable, Size, WindowExt};
 use gpui_kit::{
     actions, anchored, deferred, div, list as block_list, prelude::*, px, relative, rgb, rgba,
     AnyElement, App, Context, Entity, Focusable, FontStyle, FontWeight, HighlightStyle, KeyBinding,
@@ -24,7 +24,8 @@ use gpui_kit::{
 use crate::block_menu::{self, Choice};
 use crate::blocks::{Block, Doc, Kind};
 use crate::inline::{Inline, Mark};
-use crate::shell::{self, ProjectRecord, ProjectSummary, Shell, ShellError};
+use crate::shell::{self, ProjectRecord, ProjectSummary, Shell, ShellError, ShellResult};
+use crate::tasks;
 use crate::theme::Palette;
 use crate::ui::{list, note, placeholder, row, section};
 use crate::workspace::Remote;
@@ -53,6 +54,10 @@ pub struct Notes {
     /// The open project and its records.
     project: Option<(String, Remote<Vec<ProjectRecord>>)>,
     editor: Option<Entity<NoteEditor>>,
+    /// The "New task" field under the task table.
+    new_task: Option<(Entity<InputState>, Subscription)>,
+    /// The task whose due date is being typed, and its field.
+    due_edit: Option<(ProjectRecord, Entity<InputState>, Subscription)>,
 }
 
 impl Notes {
@@ -62,6 +67,8 @@ impl Notes {
             projects: Remote::default(),
             project: None,
             editor: None,
+            new_task: None,
+            due_edit: None,
         }
     }
 
@@ -159,6 +166,152 @@ impl Notes {
         self.editor.clone()
     }
 
+    /// Reads the open project again, keeping the rows on screen until the answer arrives.
+    fn refresh_records(&mut self, cx: &mut Context<Self>) {
+        let (Ok(shell), Some((name, records))) = (self.shell.clone(), self.project.as_mut()) else {
+            return;
+        };
+        records.loading = true;
+        let (request, name) = (name.clone(), name.clone());
+        let work = shell::run(async move { shell.project(&request).await });
+        cx.spawn(async move |this, cx| {
+            let result = work.await.unwrap_or(Err(ShellError::Unreachable));
+            let _ = this.update(cx, |view, cx| {
+                if let Some((open, records)) = &mut view.project {
+                    if *open == name {
+                        records.settle(result);
+                    }
+                }
+                cx.notify();
+            });
+        })
+        .detach();
+    }
+
+    /// Runs one task write, toasts a failure, then reads the project again.
+    fn task_write<F, Fut>(&mut self, request: F, window: &mut Window, cx: &mut Context<Self>)
+    where
+        F: FnOnce(Arc<Shell>) -> Fut,
+        Fut: std::future::Future<Output = ShellResult<()>> + Send + 'static,
+    {
+        let Ok(shell) = self.shell.clone() else {
+            return;
+        };
+        let work = shell::run(request(shell));
+        cx.spawn_in(window, async move |this, cx| {
+            let result = work.await.unwrap_or(Err(ShellError::Unreachable));
+            let _ = this.update_in(cx, |view, window, cx| {
+                if let Err(error) = result {
+                    window.push_notification(Notification::error(error.to_string()), cx);
+                }
+                view.refresh_records(cx);
+            });
+        })
+        .detach();
+    }
+
+    fn toggle_task(
+        &mut self,
+        path: String,
+        done: bool,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) {
+        self.task_write(
+            move |s| async move { s.set_task_done(&path, done).await },
+            window,
+            cx,
+        );
+    }
+
+    /// Writes one frontmatter field of a task, refused if the note changed since it was read.
+    fn set_task_field(
+        &mut self,
+        record: &ProjectRecord,
+        key: &'static str,
+        value: String,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) {
+        let Some(content) = tasks::set_field(&record.content, key, &value) else {
+            window.push_notification(Notification::error("This task has no frontmatter."), cx);
+            return;
+        };
+        let (path, base) = (record.path.clone(), record.content.clone());
+        self.task_write(
+            move |s| async move { s.save_record(&path, &content, &base).await },
+            window,
+            cx,
+        );
+    }
+
+    fn edit_due(&mut self, record: ProjectRecord, window: &mut Window, cx: &mut Context<Self>) {
+        let due = record.due.clone().unwrap_or_default();
+        let input = cx.new(|cx| {
+            let mut state = InputState::new(window, cx).placeholder("YYYY-MM-DD");
+            state.set_value(due, window, cx);
+            state
+        });
+        input.update(cx, |input, cx| input.focus(window, cx));
+        let subscription = cx.subscribe_in(&input, window, |view, input, event, window, cx| {
+            match event {
+                InputEvent::PressEnter { .. } => {
+                    let due = input.read(cx).value().trim().to_owned();
+                    let Some((record, _, _)) = view.due_edit.take() else {
+                        return;
+                    };
+                    if tasks::valid_due(&due) {
+                        view.set_task_field(&record, "due", due, window, cx);
+                    } else {
+                        window.push_notification(
+                            Notification::error("A due date is YYYY-MM-DD, or empty for none."),
+                            cx,
+                        );
+                    }
+                    cx.notify();
+                }
+                // Leaving the field without Enter keeps the old date.
+                InputEvent::Blur => {
+                    view.due_edit = None;
+                    cx.notify();
+                }
+                _ => {}
+            }
+        });
+        self.due_edit = Some((record, input, subscription));
+        cx.notify();
+    }
+
+    fn new_task_field(
+        &mut self,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) -> Entity<InputState> {
+        if let Some((input, _)) = &self.new_task {
+            return input.clone();
+        }
+        let input = cx.new(|cx| InputState::new(window, cx).placeholder("New task…"));
+        let subscription = cx.subscribe_in(&input, window, |view, input, event, window, cx| {
+            if let InputEvent::PressEnter { .. } = event {
+                let title = input.read(cx).value().trim().to_owned();
+                let Some(project) = view.project.as_ref().map(|(name, _)| name.clone()) else {
+                    return;
+                };
+                if title.is_empty() {
+                    return;
+                }
+                input.update(cx, |input, cx| input.set_value("", window, cx));
+                view.task_write(
+                    move |s| async move { s.add_task(&project, &title).await },
+                    window,
+                    cx,
+                );
+            }
+        });
+        self.new_task = Some((input.clone(), subscription));
+        input
+    }
+
     /// Back to the record list. The project reloads so its list shows what was just saved.
     fn close_note(&mut self, cx: &mut Context<Self>) {
         if let Some(editor) = self.editor.take() {
@@ -168,6 +321,133 @@ impl Notes {
             self.open_project(name, cx);
         }
         cx.notify();
+    }
+}
+
+impl Notes {
+    fn task_table(
+        &self,
+        records: &[ProjectRecord],
+        new_task: &Entity<InputState>,
+        palette: Palette,
+        cx: &mut Context<Self>,
+    ) -> AnyElement {
+        let today = chrono::Local::now().format("%Y-%m-%d").to_string();
+        let header = row()
+            .min_h(px(32.))
+            .py_1()
+            .text_xs()
+            .text_color(rgb(palette.muted))
+            .child(div().w(px(20.)))
+            .child(div().flex_1().child("Task"))
+            .child(div().w(px(110.)).child("Due"))
+            .child(div().w(px(56.)).child("Priority"))
+            .into_any_element();
+        let mut rows = vec![header];
+        for (index, task) in tasks::ordered(records).into_iter().enumerate() {
+            let (toggle, open) = (task.clone(), task.clone());
+            let due = task.due.clone().filter(|d| !d.is_empty());
+            let due_tone = match due.as_deref() {
+                Some(d) if !task.done && *d < *today.as_str() => palette.red,
+                Some(d) if !task.done && d == today => palette.amber,
+                _ => palette.muted,
+            };
+            let editing = self
+                .due_edit
+                .as_ref()
+                .filter(|(record, _, _)| record.path == task.path)
+                .map(|(_, input, _)| input.clone());
+            let due_cell = match editing {
+                Some(input) => div()
+                    .w(px(110.))
+                    .child(Input::new(&input).small())
+                    .into_any_element(),
+                None => {
+                    let edit = task.clone();
+                    div()
+                        .id(("due", index))
+                        .w(px(110.))
+                        .text_sm()
+                        .text_color(rgb(due_tone))
+                        .cursor_pointer()
+                        .on_click(cx.listener(move |view, _, window, cx| {
+                            view.edit_due(edit.clone(), window, cx)
+                        }))
+                        .child(due.unwrap_or_else(|| "—".into()))
+                        .into_any_element()
+                }
+            };
+            let cycle = task.clone();
+            let priority = task.priority.clamp(1, 3);
+            rows.push(
+                row()
+                    .min_h(px(40.))
+                    .py_1()
+                    .when(task.done, |row| row.opacity(0.55))
+                    .child(
+                        div().w(px(20.)).child(
+                            Checkbox::new(("task-done", index))
+                                .checked(task.done)
+                                .on_click(cx.listener(move |view, done: &bool, window, cx| {
+                                    view.toggle_task(toggle.path.clone(), *done, window, cx)
+                                })),
+                        ),
+                    )
+                    .child(
+                        div()
+                            .id(("task", index))
+                            .flex_1()
+                            .min_w_0()
+                            .truncate()
+                            .text_sm()
+                            .cursor_pointer()
+                            .when(task.done, |title| title.line_through())
+                            .hover(move |style| style.text_color(rgb(palette.accent)))
+                            .on_click(cx.listener(move |view, _, window, cx| {
+                                view.open_note(open.clone(), window, cx)
+                            }))
+                            .child(task.title.clone()),
+                    )
+                    .child(due_cell)
+                    .child(
+                        div()
+                            .id(("priority", index))
+                            .w(px(56.))
+                            .text_sm()
+                            .cursor_pointer()
+                            .text_color(rgb(match priority {
+                                1 => palette.red,
+                                2 => palette.text,
+                                _ => palette.muted,
+                            }))
+                            .on_click(cx.listener(move |view, _, window, cx| {
+                                let next = cycle.priority.clamp(1, 3) % 3 + 1;
+                                view.set_task_field(
+                                    &cycle,
+                                    "priority",
+                                    next.to_string(),
+                                    window,
+                                    cx,
+                                )
+                            }))
+                            .child(format!("P{priority}")),
+                    )
+                    .into_any_element(),
+            );
+        }
+        rows.push(
+            row()
+                .min_h(px(40.))
+                .py_1()
+                .child(div().w(px(20.)).text_color(rgb(palette.muted)).child("+"))
+                .child(
+                    div()
+                        .flex_1()
+                        .child(Input::new(new_task).appearance(false).px_0()),
+                )
+                .into_any_element(),
+        );
+        list(rows, palette)
     }
 }
 
@@ -206,13 +486,22 @@ impl Render for Notes {
                 .child(div().flex_1().min_h_0().child(editor.clone()))
                 .into_any_element();
         }
-        if let Some((name, records)) = &self.project {
+        if self.project.is_some() {
+            let new_task = self.new_task_field(window, cx);
+            let Some((name, records)) = &self.project else {
+                return div().into_any_element();
+            };
+            let table = records
+                .value
+                .as_ref()
+                .map(|records| self.task_table(records, &new_task, palette, cx));
             let body = match (&records.value, &records.error) {
                 (_, Some(error)) => note(error.to_string(), palette.red),
                 (None, None) => placeholder(240.),
                 (Some(records), None) => {
                     let rows = records
                         .iter()
+                        .filter(|record| record.kind != "task")
                         .enumerate()
                         .map(|(index, record)| {
                             let open = record.clone();
@@ -258,13 +547,14 @@ impl Render for Notes {
                     }),
                     palette,
                 ))
-                .child(section("Records", body, palette))
                 .child(
                     div()
-                        .text_xs()
-                        .text_color(rgb(palette.muted))
+                        .text_xl()
+                        .font_weight(FontWeight::SEMIBOLD)
                         .child(name.clone()),
                 )
+                .children(table.map(|table| section("Tasks", table, palette)))
+                .child(section("Notes", body, palette))
                 .into_any_element();
         }
         let body = match (&self.projects.value, &self.projects.error) {
@@ -1186,6 +1476,9 @@ mod tests {
             kind: "note".into(),
             title: "Plan".into(),
             content: CONTENT.into(),
+            done: false,
+            due: None,
+            priority: 2,
         }
     }
 
@@ -1327,5 +1620,37 @@ mod tests {
             editor.read_with(cx, |e, _| e.doc.blocks[2].text.clone()),
             "xtwo"
         );
+    }
+
+    #[gpui::test]
+    fn a_project_page_draws_its_tasks_as_a_table(cx: &mut TestAppContext) {
+        cx.update(gpui_kit::init);
+        let slot = std::rc::Rc::new(std::cell::RefCell::new(None));
+        let found = slot.clone();
+        let (_, cx) = cx.add_window_view(move |window, cx| {
+            let view = cx.new(|_| {
+                let mut notes = Notes::new(Err(ShellError::NotLoopback));
+                let task = |title: &str, done: bool| ProjectRecord {
+                    path: format!("P/{title}.md"),
+                    kind: "task".into(),
+                    title: title.into(),
+                    content: "---\ntype: task\n---\n".into(),
+                    done,
+                    due: Some("2026-10-24".into()),
+                    priority: 1,
+                };
+                let records = Remote {
+                    value: Some(vec![task("open", false), task("closed", true), record()]),
+                    ..Remote::default()
+                };
+                notes.project = Some(("P".into(), records));
+                notes
+            });
+            found.replace(Some(view.clone()));
+            gpui_kit::component::Root::new(view, window, cx)
+        });
+        cx.run_until_parked();
+        let notes = slot.take().unwrap();
+        notes.read_with(cx, |notes, _| assert!(notes.new_task.is_some()));
     }
 }

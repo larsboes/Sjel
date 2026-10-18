@@ -134,6 +134,13 @@ pub struct ProjectRecord {
     pub kind: String,
     pub title: String,
     pub content: String,
+    #[serde(default)]
+    pub done: bool,
+    #[serde(default)]
+    pub due: Option<String>,
+    /// 1 to 3; the capability reads a missing or other value as 2.
+    #[serde(default)]
+    pub priority: u8,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -243,6 +250,21 @@ impl Shell {
     pub async fn save_record(&self, path: &str, content: &str, base: &str) -> ShellResult<()> {
         let body = serde_json::json!({ "path": path, "content": content, "base": base });
         self.send(Method::POST, "/projects/api/record", Some(body), 10)
+            .await
+            .map(drop)
+    }
+
+    /// Marks a task done, or open again. The capability also sets `status:` and `completed:`.
+    pub async fn set_task_done(&self, path: &str, done: bool) -> ShellResult<()> {
+        let body = serde_json::json!({ "id": path, "done": done });
+        self.send(Method::POST, "/projects/api/tasks/done", Some(body), 10)
+            .await
+            .map(drop)
+    }
+
+    pub async fn add_task(&self, project: &str, title: &str) -> ShellResult<()> {
+        let body = serde_json::json!({ "project": project, "title": title });
+        self.send(Method::POST, "/projects/api/tasks", Some(body), 10)
             .await
             .map(drop)
     }

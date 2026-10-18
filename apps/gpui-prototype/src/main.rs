@@ -17,6 +17,7 @@ mod inline;
 mod macos_glass;
 mod notes;
 mod selection;
+mod tasks;
 mod theme;
 mod ui;
 mod workspace;

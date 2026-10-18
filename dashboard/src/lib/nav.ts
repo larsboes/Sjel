@@ -88,13 +88,13 @@ export const PRIMARY_NAV: NavItem[] = [
 
 /**
  * Projects and operations are real destinations, but not part of every daily pass.
- * Capability-owned sites are discovered on /projects rather than growing the main bar.
+ * Capability-owned sites are discovered on /apps rather than growing the main bar.
  */
 export const UTILITY_NAV: NavItem[] = [
   // Ein Ziel in der Shell und nicht nur ein Panel (PRD Q59) — jetzt eine Ansicht des Inventars.
   { href: "/interior", label: "Interior", icon: "layout", capability: "interior" },
   { href: "/media", label: "Media", icon: "hard-drive", capability: "media" },
-  { href: "/projects", label: "Projects", icon: "graduation" },
+  { href: "/apps", label: "Apps", icon: "graduation" },
   { href: "/research", label: "Research", icon: "sparkles" },
   { href: "/systems", label: "Systems", icon: "server", capability: "sjel-status" },
   { href: "/capabilities", label: "Capabilities", icon: "boxes", capability: "sjel-status" },

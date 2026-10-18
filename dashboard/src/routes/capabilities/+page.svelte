@@ -166,7 +166,7 @@
             {/if}
           {/if}
           {#if hasPanel(c) && c.up}
-            <a class="btn" href={link("/projects")}>Project <Icon name="arrow-right" size={13} /></a>
+            <a class="btn" href={link("/apps")}>App <Icon name="arrow-right" size={13} /></a>
           {/if}
           {#if c.up !== null}
             {#if busy === c.name}

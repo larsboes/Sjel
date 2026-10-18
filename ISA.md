@@ -200,6 +200,15 @@ Why: report and update software across all host package managers through one coo
 - [x] ISC-59 — audit reaches software installed outside checkout, and every apply records findings. Falsifier: installed package unreached by CycloneDX SBOM or `tools/audit`.
 - [x] ISC-60 — `apply` removes leftovers via `--prune` and re-resolves only named crates via `--re-resolve`. Falsifier: `--prune` removes package pinned by parent, or `--re-resolve` affects unnamed crates.
 
+### F12 · Sjel owns projects and tasks
+
+Built and imported 2026-10-18: `capabilities/projects`, contract in its README. 668 vault notes
+were imported (`Projects.md` skipped: no project folder) and frozen; the vault serves no task.
+
+- [ ] ISC-75 — the frozen vault notes are archived once the operator calls the owner final.
+  Falsifier: a note with `moved_to:` is still under vault `Projects/` after that call. Probe:
+  `rg -l '^moved_to:'` over vault `Projects/`.
+
 ### Closed features, in `ISA-archive.md`
 
 Each feature below has every claim ticked. Its text, its test rows and the log entries from
@@ -562,16 +571,10 @@ claim yet, and the watch rows they name are in `upstreams.toml` with the questio
   every icon, empty and error states). Progressive disclosure is already
   `research/simplicity-and-adoption.md`; the other two have no home. Either they become a checklist
   in `dashboard/README.md` or they stay folklore.
-- **A planning owner.** Decided 2026-10-09 (see Decisions): a new capability, working name
-  `projects`, owns projects and tasks as markdown files outside the vault, indexed in SQLite.
-  The name collides with the dashboard's `/projects` route, which lists capabilities, so one
-  of them is renamed. Open before an ISA exists: where the root lives (overlay path or the
-  store mount), which part of a vault project note moves (status, outcome, tasks) and which
-  stays as knowledge with a link, and how decision-ladder band 620 switches from
-  `capabilities/vault` to the new owner. Habits: which `calendar` rhythm fields carry a habit,
-  and whether the daily metrics in `Journal/01. Daily Notes` (read by vault `Habits.base`)
-  move or stay as journal entries. Vault `Domains/Journal.md` says nothing is written back
-  into a journal entry.
+- **Habits in the planning owner.** Projects and tasks are specified in F12. Habits are not:
+  which `calendar` rhythm fields carry a habit, and whether the daily metrics in
+  `Journal/01. Daily Notes` (read by vault `Habits.base`) move or stay as journal entries.
+  Vault `Domains/Journal.md` says nothing is written back into a journal entry.
 
 ## Test Strategy
 
@@ -634,19 +637,16 @@ claim yet, and the watch rows they name are in `upstreams.toml` with the questio
   base, because neither gpui-kit nor gpui-mobile builds on it. Two risks are reported, not
   measured here: gpui-mobile has one maintainer and no release, and gpui-kit's author reports
   40–60% CPU while a complex GPUI view scrolls (`upstreams.toml`, `gpui-mobile` and `gpui-kit`).
-- **2026-10-09 — the vault keeps knowledge, and Sjel takes projects, tasks and habits**
-  (principal's call, all recommendations accepted). Obsidian keeps Knowledge, Atlas, Journal and
-  Reflections. Projects, tasks and habits get a Sjel owner, because their value is the join with
-  calendar, trips and finance, and a vault note cannot run a join. This **reverses PRD Q48**
-  (2026-08-27, vault `Projects/Sjel/PRD Axon.md`, "Q48"), which returned the Action kind to
-  `Projects/**/Tasks/` and deleted `capabilities/tasks` in `73a47ba1`. Principle 8 holds: the new
-  owner writes markdown with frontmatter into a Sjel-owned root outside the vault, and its SQLite
-  table is an index that can be rebuilt from those files. That is the shape vault
-  `Domains/Planning.md` recommended on 2026-08-07: uniqueness becomes a parse-time check that
-  names both paths, not a database constraint. Habits become `calendar` rhythms plus a daily
-  metric record. The 72 vault notes typed `task` or `project` are imported once, then retired.
-  Until the import runs, Q48 and the read-only `GET /api/tasks` in `capabilities/vault` stay in
-  force. The owner itself is under Not yet specified, "A planning owner".
+- **2026-10-17 / 2026-10-09 — Sjel owns projects, tasks and habits.** Obsidian keeps Knowledge,
+  Atlas, Journal, Reflections. This reverses Q48. Capability `projects` stores projects, tasks
+  and project notes as tables in the shared store. Every write re-renders the record as
+  markdown under `<overlay>/data/projects/`, which keeps Principle 8 the way finance decisions
+  do. Nobody edits the rendered files; Sjel's CLI and API are the only writers. The import
+  takes every markdown note of a vault project folder; binaries stay in the vault, and from
+  `Sjel/` only typed notes move. The vault notes stay frozen as a backup and are archived when
+  the owner is final. The dashboard route `/projects` became `/apps`. The import ran
+  2026-10-18, which ends Q48. The 2026-10-17 part replaces markdown-canonical storage after
+  the operator compared both.
 - **2026-10-09 — GPUI takes the resident keyboard surfaces, and Svelte keeps the rest**
   (principal's call). Measured first, on this Mac: the four calls behind `/context` answer in
   1–5 ms, a day switch settles in 26 ms in Chrome, and

@@ -7,6 +7,7 @@ export * from './api/interior';
 export * from './api/comms';
 export * from './api/calendar';
 export * from './api/vault';
+export * from './api/projects';
 export * from './api/entities';
 export * from './api/finance';
 export * from './api/places';

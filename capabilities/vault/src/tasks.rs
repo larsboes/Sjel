@@ -217,9 +217,10 @@ fn by_due(due: &Option<String>) -> (bool, &str) {
 }
 
 /// The selection rule. See the module doc for what it tracks and where it
-/// deliberately diverges.
+/// deliberately diverges. A note frozen by the `projects` import (`moved_to:`)
+/// is served by that capability instead (ISA.md ISC-73).
 fn is_task(relative: &str, fields: &HashMap<String, String>) -> bool {
-    if !fields.contains_key("done") {
+    if !fields.contains_key("done") || fields.contains_key("moved_to") {
         return false;
     }
     let segments: Vec<&str> = relative.split('/').collect();
@@ -357,6 +358,19 @@ mod tests {
         fn drop(&mut self) {
             let _ = std::fs::remove_dir_all(&self.root);
         }
+    }
+
+    #[test]
+    fn a_note_moved_to_projects_is_not_served_twice() {
+        let fixture = Fixture::new("moved");
+        fixture
+            .note("Garden/Tasks/Open.md", "type: task\ndone: false")
+            .note(
+                "Garden/Tasks/Moved.md",
+                "type: task\ndone: false\nmoved_to: \"sjel projects/Garden/Tasks/Moved.md\"",
+            );
+        let titles: Vec<String> = fixture.read().into_iter().map(|t| t.title).collect();
+        assert_eq!(titles, vec!["Open"]);
     }
 
     /// The three ways a note is claimed, and the three ways it is refused.

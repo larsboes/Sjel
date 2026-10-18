@@ -41,6 +41,7 @@ See the [engineering doctrine](CONTRIBUTING.md#engineering-doctrine) this genera
 | `pihole` | Reusable Pi-hole runtime contract for a private network. | pihole/pihole:latest | — | — |
 | `places` | Canonical place registry, geocode cache, and the map layers above finance, trips, transit and the companion register. | — | `8093` | — |
 | `printing` | Home 3D printing, driven safely from the terminal: slice, upload, arm, print, monitor an Elegoo Neptune 4 (Klipper/Moonraker) without touching the vendor cloud. | — | — | — |
+| `projects` | Projects, tasks and project notes. | — | `8103` | — |
 | `punctuality-ingest` | The scheduled producer for [`capabilities/punctuality`](../punctuality/). | — | — | — |
 | `punctuality` | How reliable a German train actually is, measured rather than predicted. | — | `8085` | — |
 | `scouting` | A generic opportunity-discovery pipeline: scrape a source (events, CFPs/scholarships, ...), normalize into one shared `Opportunity` type, score it against a configurable "interest profile" via embeddings/cosine similarity, rank, persist, and optionally cross-reference against existing notes. | — | `8084` | — |

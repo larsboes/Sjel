@@ -56,7 +56,7 @@ pub const DESTINATIONS: &[Destination] = &[
     d("/people", "People"),
     d("/interior", "Interior"),
     d("/media", "Media"),
-    d("/projects", "Projects"),
+    d("/apps", "Apps"),
     d("/research", "Research"),
     d("/systems", "Systems"),
     d("/capabilities", "Capabilities"),

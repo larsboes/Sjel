@@ -714,7 +714,7 @@
                  section the reader left open is closed behind them. -->
             <a
               class="small-link"
-              href={link("/projects")}
+              href={link("/apps")}
               onclick={(event) => event.stopPropagation()}>All</a
             >
           {/snippet}

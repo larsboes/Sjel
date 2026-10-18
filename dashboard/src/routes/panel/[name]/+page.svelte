@@ -67,7 +67,7 @@
     <a class="btn btn-primary" href={panelUrl(capability)} target="_blank" rel="noreferrer">
       Open site <Icon name="external" size={13} />
     </a>
-    <a class="back" href={link("/projects")}>Back to Projects</a>
+    <a class="back" href={link("/apps")}>Back to Apps</a>
   </div>
 {/if}
 

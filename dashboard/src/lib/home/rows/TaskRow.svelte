@@ -1,12 +1,20 @@
 <script lang="ts">
-  import type { Task } from "../../api";
+  import { projects, type Task } from "../../api";
   import Icon from "../../Icon.svelte";
   import ListRow from "../../ListRow.svelte";
   import RowMeta from "../../RowMeta.svelte";
   import { dateLabel, metaParts } from "../format";
   import type { DecisionRowProps } from "../decisions";
 
-  let { row, id, current, tone, href, whyHere, dataClass }: DecisionRowProps<Task> = $props();
+  let { row, busy, act, id, current, tone, href, whyHere, dataClass }: DecisionRowProps<Task, Task[]> = $props();
+
+  // A projects task has a dashboard page; a vault task still opens Obsidian and has no write.
+  const owned = $derived(row.uri.startsWith("/"));
+  const done = () =>
+    act(() => projects.setDone(row.id, true).then(() => undefined), {
+      dismiss: true,
+      patch: (source) => source.filter((item) => item.id !== row.id),
+    });
 
 
 
@@ -23,16 +31,20 @@
     >{/each}
     {#if overdue}<span class="overdue">overdue</span>{/if}
   </span>
-  <!-- The title links to the note, because the note IS the task. There is no in-page
-       title for the same reason there is no Done button: this row reads a file a human
-       owns, and Obsidian is where that file gets written (PRD Q48). -->
+  <!-- A vault row links to the note, which Obsidian writes (PRD Q48). A projects row links
+       to its project page and can be marked done here. -->
   <a class="row-title" {href}>{row.title}</a>
   {#if row.summary}<p class="row-text">{row.summary}</p>{/if}
 
   {#snippet meta()}<RowMeta {whyHere} {dataClass} candidateStatus="accepted" />{/snippet}
 
   {#snippet actions()}
-    <a class="btn btn-soft" {href}>Open note</a>
+    {#if owned}
+      <button type="button" class="btn btn-soft" disabled={busy} onclick={done}>Done</button>
+      <a class="btn btn-soft" {href}>Open project</a>
+    {:else}
+      <a class="btn btn-soft" {href}>Open note</a>
+    {/if}
   {/snippet}
 </ListRow>
 

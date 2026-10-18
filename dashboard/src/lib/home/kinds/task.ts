@@ -1,4 +1,5 @@
-import { vault, type Task } from "../../api";
+import { projects, vault, type Task } from "../../api";
+import { link } from "../../nav";
 import { RESCALE, type DecisionKind } from "../decisions";
 
 /**
@@ -12,9 +13,10 @@ import { RESCALE, type DecisionKind } from "../decisions";
  * more urgent than one due tomorrow, so it is worth less than a single day of the
  * due-date slope.
  *
- * There is no Done action, and there is no write route to give it one: PRD Q48 moved the
- * Action kind back into the vault, and a task is a note a human owns, edited in Obsidian.
- * `external` is true for the same reason — Enter opens the note, not a dashboard page.
+ * Two sources while the import runs (ISA.md F12): `capabilities/projects` owns imported and new
+ * tasks and has a Done action; the vault serves the rest, read-only, and skips every note the
+ * import froze, so no task arrives twice. A vault row opens Obsidian, a projects row opens the
+ * dashboard's project page. One failed source still shows the other's rows.
  *
  * Old expression: `620 + (due === null ? 0 : days < 0 ? 260 : max(0, 240 - days * 8))
  *                      + (3 - priority) * 3`, maximum 266.
@@ -23,11 +25,17 @@ const task: DecisionKind<Task[], Task> = {
   key: "task",
   band: 620,
   label: "Tasks",
-  capability: "vault",
+  capability: "projects",
   view: "TaskRow",
 
-  load: (ctx) => vault.tasks("open", ctx.signal),
-  // No gate: the vault serves only open tasks.
+  load: async (ctx) => {
+    const sources = await Promise.allSettled([projects.tasks("open", ctx.signal), vault.tasks("open", ctx.signal)]);
+    const rows = sources.flatMap((source) => (source.status === "fulfilled" ? source.value : []));
+    const failed = sources.find((source) => source.status === "rejected");
+    if (rows.length === 0 && failed) throw failed.reason;
+    return rows;
+  },
+  // No gate: both sources serve only open tasks.
   rows: (tasks) => tasks,
   id: (row) => row.id,
   title: (row) => row.title,
@@ -36,8 +44,8 @@ const task: DecisionKind<Task[], Task> = {
     const dated = days === null ? 0 : days < 0 ? 260 : Math.max(0, 240 - days * 8);
     return RESCALE(dated + (3 - row.priority) * 3, 266);
   },
-  href: (row) => row.uri,
-  external: () => true,
+  href: (row) => (row.uri.startsWith("/") ? link(row.uri) : row.uri),
+  external: (row) => !row.uri.startsWith("/"),
 
   whyHere: (row, ctx) => {
     if (!row.due) return "Still open, with no date on it.";

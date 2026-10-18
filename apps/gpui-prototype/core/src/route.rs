@@ -9,20 +9,26 @@
 pub enum Page {
     Home,
     Capabilities,
+    /// Project notes, edited in place. The dashboard has `/projects`, but no nav entry for it.
+    Notes,
 }
 
 impl Page {
-    pub const ALL: [Page; 2] = [Page::Home, Page::Capabilities];
+    pub const ALL: [Page; 3] = [Page::Home, Page::Capabilities, Page::Notes];
 
     pub fn href(self) -> &'static str {
         match self {
             Self::Home => "/",
             Self::Capabilities => "/capabilities",
+            Self::Notes => "/projects",
         }
     }
 
     pub fn label(self) -> &'static str {
-        destination(self.href()).map_or("", |d| d.label)
+        match self {
+            Self::Notes => "Notes",
+            _ => destination(self.href()).map_or("", |d| d.label),
+        }
     }
 }
 
@@ -91,10 +97,12 @@ pub fn parse_deep_link(url: &str) -> Option<Target> {
     if path.contains("..") || path.chars().any(char::is_whitespace) {
         return None;
     }
-    Some(match destination(&path).and_then(Destination::page) {
-        Some(page) => Target::Native(page),
-        None => Target::Dashboard(path),
-    })
+    Some(
+        match Page::ALL.into_iter().find(|page| page.href() == path) {
+            Some(page) => Target::Native(page),
+            None => Target::Dashboard(path),
+        },
+    )
 }
 
 #[cfg(test)]

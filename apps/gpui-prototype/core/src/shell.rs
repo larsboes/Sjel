@@ -118,6 +118,24 @@ pub struct CalendarEntry {
     pub commitment: String,
 }
 
+/// `GET /projects/api/projects` (`ProjectSummary` in `capabilities/projects/src/server.rs`).
+#[derive(Clone, Debug, Deserialize)]
+pub struct ProjectSummary {
+    pub name: String,
+    pub archived: bool,
+    pub notes: usize,
+}
+
+/// One record of `GET /projects/api/project`.
+#[derive(Clone, Debug, Deserialize)]
+pub struct ProjectRecord {
+    pub path: String,
+    /// `project`, `task` or `note`.
+    pub kind: String,
+    pub title: String,
+    pub content: String,
+}
+
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum ShellError {
     /// The endpoint is not on loopback.
@@ -192,6 +210,41 @@ impl Shell {
     pub async fn calendar(&self, from: &str, to: &str) -> ShellResult<Vec<CalendarEntry>> {
         let path = format!("/calendar/api/entries?from={from}&to={to}");
         self.json(Method::GET, &path, None, 5).await
+    }
+
+    pub async fn projects(&self) -> ShellResult<Vec<ProjectSummary>> {
+        #[derive(Deserialize)]
+        struct List {
+            projects: Vec<ProjectSummary>,
+        }
+        let list: List = self
+            .json(Method::GET, "/projects/api/projects", None, 5)
+            .await?;
+        Ok(list.projects)
+    }
+
+    pub async fn project(&self, name: &str) -> ShellResult<Vec<ProjectRecord>> {
+        #[derive(Deserialize)]
+        struct Records {
+            records: Vec<ProjectRecord>,
+        }
+        let mut url = self
+            .base
+            .join("/projects/api/project")
+            .map_err(|_| ShellError::Unreadable)?;
+        url.query_pairs_mut().append_pair("name", name);
+        let path = format!("{}?{}", url.path(), url.query().unwrap_or_default());
+        let records: Records = self.json(Method::GET, &path, None, 10).await?;
+        Ok(records.records)
+    }
+
+    /// Replaces a record's content. `base` is the content the edit started from; the capability
+    /// answers 409 and writes nothing when the record changed since.
+    pub async fn save_record(&self, path: &str, content: &str, base: &str) -> ShellResult<()> {
+        let body = serde_json::json!({ "path": path, "content": content, "base": base });
+        self.send(Method::POST, "/projects/api/record", Some(body), 10)
+            .await
+            .map(drop)
     }
 
     /// Allows or denies one waiting agent write.

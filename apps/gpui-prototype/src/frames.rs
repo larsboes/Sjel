@@ -32,7 +32,8 @@ impl FrameProbe {
             render_start: 0,
             render_end: 0,
             pending_input: 0,
-            armed: std::env::var_os("SJEL_GPUI_BENCH_SCROLL").is_none(),
+            armed: std::env::var_os("SJEL_GPUI_BENCH_SCROLL").is_none()
+                && std::env::var_os("SJEL_GPUI_BENCH_NOTE").is_none(),
             out,
         }))))
     }
@@ -110,6 +111,53 @@ pub fn drive_scroll_bench(
         }
         probe.arm(false);
         cx.update(|cx| cx.quit());
+    })
+    .detach();
+}
+
+/// `SJEL_GPUI_BENCH_NOTE=<record path>`: open that note with saving off, type one character
+/// into its last block every 8 ms, 240 in all, then quit. Measures what a keystroke costs.
+pub fn drive_type_bench(
+    probe: FrameProbe,
+    path: String,
+    notes: gpui_kit::Entity<crate::notes::Notes>,
+    window: &mut gpui_kit::Window,
+    cx: &mut gpui_kit::Context<crate::workspace::Workspace>,
+) {
+    use std::time::Duration;
+    cx.spawn_in(window, async move |_, cx| {
+        let editor = loop {
+            cx.background_executor()
+                .timer(Duration::from_millis(200))
+                .await;
+            let opened = notes.update_in(cx, |notes, window, cx| {
+                notes
+                    .bench_open(&path, window, cx)
+                    .then(|| notes.editor())
+                    .flatten()
+            });
+            match opened {
+                Ok(Some(editor)) => break editor,
+                Ok(None) => continue,
+                Err(_) => return,
+            }
+        };
+        cx.background_executor().timer(Duration::from_secs(1)).await;
+        probe.arm(true);
+        for _ in 0..240 {
+            probe.input();
+            if editor
+                .update_in(cx, |editor, window, cx| editor.bench_type(window, cx))
+                .is_err()
+            {
+                return;
+            }
+            cx.background_executor()
+                .timer(Duration::from_millis(8))
+                .await;
+        }
+        probe.arm(false);
+        let _ = cx.update(|_, cx| cx.quit());
     })
     .detach();
 }

@@ -4,10 +4,14 @@ An isolated evaluation app for a possible native desktop surface. It is intentio
 the production Cargo workspace: it does not change Sjel's shipping UI, capability processes,
 or production dependency lockfiles.
 
-The app has two native pages. **Home** shows what needs you now: agent writes that wait for
+The app has three native pages. **Home** shows what needs you now: agent writes that wait for
 approval, kept-running capabilities that do not answer, calendar entries still ahead today and
 tomorrow, and the recent agent writes. **Capabilities** lists every capability with start and
-stop. Both read the shell (`sjel-status`) every 10 seconds with the inbound token, through the
+stop. **Notes** opens a project's notes from the `projects` capability and edits them as blocks
+(`src/notes.rs`, `src/blocks.rs`). Each block keeps its markdown verbatim, so a save writes back
+exactly what the editor did not change; a note that does not round-trip opens read-only. A save
+follows each pause in typing and sends the content it started from, so the capability refuses an
+edit made over a newer version. Home and Capabilities read the shell (`sjel-status`) every 10 seconds with the inbound token, through the
 same endpoints as the menu-bar app (`core/src/shell.rs`). The token comes from the login Keychain
 item `sjel-inbound-token` that `tools/setup-inbound-auth.sh` writes. The app reads it through
 `/usr/bin/security`, which that script puts on the item's access list. The token stays in the
@@ -47,7 +51,7 @@ Simulator.app.
 | Key | Action |
 |---|---|
 | ⌘K | Search pages and dashboard destinations |
-| ⌘1, ⌘2 | Home, Capabilities |
+| ⌘1, ⌘2, ⌘3 | Home, Capabilities, Notes |
 | ⌘R | Refresh |
 | ⌘D | Open the current page in the dashboard |
 | J / K, ↓ / ↑ | Select the next or previous row |
@@ -56,6 +60,11 @@ Simulator.app.
 | Esc | Clear the selection |
 
 A selected row shows the actions that a mouse sees on hover, for example Stop.
+
+In a note, ↩ starts a new block and ⇧↩ a new line in the block. ⌫ at the start of a block turns
+a list item or heading into a paragraph, then joins the paragraph to the block above. ↑ and ↓
+at a block's edge move to the next block. `# `, `- `, `[] `, `1. ` or `> ` at the start of a
+paragraph changes its kind. ⌘S saves at once, ⌘[ goes back to the project.
 
 The default endpoint comes from `capabilities/sjel-status/service.toml`. `SJEL_STATUS_URL` can
 point to another loopback port. The app refuses any endpoint that is not `http` on 127.0.0.1 or
@@ -78,6 +87,7 @@ These checks run while you keep working in other apps. None of them activates th
 | `cargo test --workspace` | Routes, calendar rules, the shell client, and keyboard navigation in a headless GPUI window |
 | `./preview [page] [light\|dark]` | Screenshot of the installed app, through Interceptor |
 | `./bench-scroll [page]` | CPU cost of one scroll frame, from the app's own scroll run |
+| `SJEL_GPUI_BENCH_NOTE=<record path> ./bench-scroll projects` | CPU cost of one keystroke in that note; saving is off |
 | `ios/run-sim` | Screenshot of the iOS app on a headless simulator |
 
 `preview` and `bench-scroll` show the window for a few seconds in the bottom-right corner,
@@ -94,6 +104,7 @@ measured. Run `./install` first: both scripts use the installed release build.
 | `SJEL_GPUI_NO_GLASS=1` | Draw the normal sidebar instead of the glass one |
 | `SJEL_GPUI_FRAMES=<file>` | Log the timings of each frame (`src/frames.rs`) |
 | `SJEL_GPUI_BENCH_SCROLL=1` | Scroll the page down and up, then quit |
+| `SJEL_GPUI_BENCH_NOTE=<record path>` | Open that note with saving off, type 240 characters, then quit |
 
 The app icon comes from `brand/sjel-icon-maskable.svg`. `Resources/make-icon` builds
 `Resources/AppIcon.icns` from it. Run it again after a change to the brand mark.

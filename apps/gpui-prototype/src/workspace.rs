@@ -13,10 +13,11 @@ use gpui_kit::component::notification::Notification;
 use gpui_kit::component::scroll::ScrollableElement;
 use gpui_kit::component::{IconName, IndexPath, Sizable, Theme, WindowExt};
 use gpui_kit::{
-    actions, div, prelude::*, px, rgb, rgba, Action, App, Context, FocusHandle, Focusable,
+    actions, div, prelude::*, px, rgb, rgba, Action, App, Context, Entity, FocusHandle, Focusable,
     FontWeight, KeyBinding, SharedString, Subscription, Window,
 };
 
+use crate::notes::Notes;
 use crate::route::{self, Destination, Page, Target};
 use crate::selection::{Item, Selection};
 use crate::shell::{self, AgentView, CalendarEntry, NodeHealth, Shell, ShellError, ShellResult};
@@ -30,6 +31,7 @@ actions!(
         OpenPalette,
         GoHome,
         GoCapabilities,
+        GoNotes,
         Refresh,
         /// Open the current page in the web dashboard, logged in.
         OpenInDashboard,
@@ -50,6 +52,7 @@ pub fn bind_keys(cx: &mut App) {
         KeyBinding::new("cmd-k", OpenPalette, None),
         KeyBinding::new("cmd-1", GoHome, None),
         KeyBinding::new("cmd-2", GoCapabilities, None),
+        KeyBinding::new("cmd-3", GoNotes, None),
         KeyBinding::new("cmd-r", Refresh, None),
         KeyBinding::new("cmd-d", OpenInDashboard, None),
         KeyBinding::new("j", SelectNext, Some("Workspace")),
@@ -90,7 +93,7 @@ impl<T> Default for Remote<T> {
 }
 
 impl<T> Remote<T> {
-    fn settle(&mut self, result: ShellResult<T>) {
+    pub(crate) fn settle(&mut self, result: ShellResult<T>) {
         self.loading = false;
         match result {
             Ok(value) => {
@@ -114,6 +117,7 @@ pub struct Workspace {
     pub health: Remote<NodeHealth>,
     pub agent: Remote<AgentView>,
     pub calendar: Remote<Vec<CalendarEntry>>,
+    pub notes: Entity<Notes>,
     /// Approval ids and capability names with a request in flight.
     pub busy: HashSet<String>,
     pub selection: Selection,
@@ -135,12 +139,15 @@ impl Workspace {
         Theme::sync_system_appearance(Some(window), cx);
         let focus = cx.focus_handle();
         window.focus(&focus, cx);
+        let shell = Shell::new(endpoint).map(Arc::new);
+        let notes = cx.new(|_| Notes::new(shell.clone()));
         let mut workspace = Self {
             page: Page::Home,
-            shell: Shell::new(endpoint).map(Arc::new),
+            shell,
             health: Remote::default(),
             agent: Remote::default(),
             calendar: Remote::default(),
+            notes,
             busy: HashSet::new(),
             selection: Selection::default(),
             focus,
@@ -157,6 +164,13 @@ impl Workspace {
             std::env::var_os("SJEL_GPUI_BENCH_SCROLL").is_some(),
         ) {
             crate::frames::drive_scroll_bench(frames, workspace.selection.scroll.clone(), cx);
+        }
+        if let (Some(frames), Ok(path)) = (
+            workspace.frames.clone(),
+            std::env::var("SJEL_GPUI_BENCH_NOTE"),
+        ) {
+            workspace.go(Page::Notes, cx);
+            crate::frames::drive_type_bench(frames, path, workspace.notes.clone(), window, cx);
         }
         cx.spawn(async move |this, cx| loop {
             cx.background_executor().timer(POLL).await;
@@ -179,6 +193,9 @@ impl Workspace {
         if self.page != page {
             self.page = page;
             self.selection.reset();
+            if page == Page::Notes {
+                self.notes.update(cx, |notes, cx| notes.load_projects(cx));
+            }
         }
         cx.notify();
     }
@@ -357,6 +374,7 @@ impl Workspace {
                         Page::Capabilities => item
                             .icon(IconName::Cpu)
                             .action(GoCapabilities.boxed_clone()),
+                        Page::Notes => item.icon(IconName::BookOpen).action(GoNotes.boxed_clone()),
                     }
                 }));
             let actions = CommandGroup::new().label("Actions").items([
@@ -413,8 +431,15 @@ impl Workspace {
         self.go(Page::Capabilities, cx);
     }
 
+    fn on_go_notes(&mut self, _: &GoNotes, _: &mut Window, cx: &mut Context<Self>) {
+        self.go(Page::Notes, cx);
+    }
+
     fn on_refresh(&mut self, _: &Refresh, _: &mut Window, cx: &mut Context<Self>) {
         self.refresh(cx);
+        if self.page == Page::Notes {
+            self.notes.update(cx, |notes, cx| notes.load_projects(cx));
+        }
     }
 
     fn on_open_in_dashboard(
@@ -508,6 +533,7 @@ impl Render for Workspace {
         let page = match self.page {
             Page::Home => home::render(self, palette, cx).into_any_element(),
             Page::Capabilities => capabilities::render(self, palette, cx).into_any_element(),
+            Page::Notes => self.notes.clone().into_any_element(),
         };
 
         if let Some(frames) = &self.frames {
@@ -525,6 +551,7 @@ impl Render for Workspace {
             .on_action(cx.listener(Self::open_palette))
             .on_action(cx.listener(Self::on_go_home))
             .on_action(cx.listener(Self::on_go_capabilities))
+            .on_action(cx.listener(Self::on_go_notes))
             .on_action(cx.listener(Self::on_refresh))
             .on_action(cx.listener(Self::on_open_in_dashboard))
             .on_action(cx.listener(Self::on_select_next))
@@ -539,7 +566,10 @@ impl Render for Workspace {
                 div()
                     .id("frame")
                     .track_focus(&self.focus)
-                    .key_context("Workspace")
+                    // The Notes page types into its blocks, so J, K and Enter must reach them.
+                    .when(self.page != Page::Notes, |frame| {
+                        frame.key_context("Workspace")
+                    })
                     .size_full()
                     .flex()
                     .child(
@@ -558,7 +588,17 @@ impl Render for Workspace {
                             .flex()
                             .flex_col()
                             .child(header(self, palette))
-                            .child(
+                            .child(if self.page == Page::Notes {
+                                // Notes scrolls inside itself: its editor lays out only the
+                                // blocks on screen, which needs a bounded height.
+                                div()
+                                    .id("page")
+                                    .flex_1()
+                                    .min_h_0()
+                                    .px_8()
+                                    .pb_8()
+                                    .child(div().size_full().max_w(px(880.)).child(page))
+                            } else {
                                 div()
                                     .id("page")
                                     .flex_1()
@@ -566,8 +606,8 @@ impl Render for Workspace {
                                     .overflow_y_scroll()
                                     .track_scroll(&scroll)
                                     .vertical_scrollbar(&scroll)
-                                    .child(div().px_8().pb_8().max_w(px(880.)).child(page)),
-                            ),
+                                    .child(div().px_8().pb_8().max_w(px(880.)).child(page))
+                            }),
                     ),
             )
             .children(self.frames.as_ref().map(|frames| frames.paint_marker()))
@@ -598,6 +638,7 @@ fn sidebar(
         let shortcut = match page {
             Page::Home => Kbd::binding_for_action(&GoHome, None, window),
             Page::Capabilities => Kbd::binding_for_action(&GoCapabilities, None, window),
+            Page::Notes => Kbd::binding_for_action(&GoNotes, None, window),
         };
         div()
             .id(page.href())
@@ -681,6 +722,7 @@ fn header(view: &Workspace, palette: Palette) -> impl IntoElement {
     let subtitle: SharedString = match view.page {
         Page::Home => chrono::Local::now().format("%A, %B %-d").to_string().into(),
         Page::Capabilities => view.endpoint(),
+        Page::Notes => "Project notes, edited in place".into(),
     };
     let checked = view
         .health

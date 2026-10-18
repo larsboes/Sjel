@@ -18,7 +18,10 @@ trap 'rm -f "$out"' EXIT
 osascript -e 'tell application id "dev.sjel.desktop" to quit' >/dev/null 2>&1 || true
 # A running copy would take the launch without the bench's environment.
 for _ in $(seq 50); do pgrep -f "Sjel Desktop.app/Contents/MacOS" >/dev/null || break; sleep 0.1; done
-open -g --env "SJEL_GPUI_FRAMES=$out" --env SJEL_GPUI_BENCH_SCROLL=1 --env SJEL_GPUI_NO_ACTIVATE=1 --env SJEL_GPUI_FLOAT=1 \
+# SJEL_GPUI_BENCH_NOTE=<record path> types into that note instead of scrolling (src/frames.rs).
+bench="SJEL_GPUI_BENCH_SCROLL=1"
+[ -n "${SJEL_GPUI_BENCH_NOTE:-}" ] && bench="SJEL_GPUI_BENCH_NOTE=$SJEL_GPUI_BENCH_NOTE"
+open -g --env "SJEL_GPUI_FRAMES=$out" --env "$bench" --env SJEL_GPUI_NO_ACTIVATE=1 --env SJEL_GPUI_FLOAT=1 \
   --env "SJEL_GPUI_OPEN=sjel://$PAGE" ${SJEL_GPUI_OPAQUE:+--env SJEL_GPUI_OPAQUE=1} "$APP"
 sleep 1
 # The app quits itself when the bench ends.

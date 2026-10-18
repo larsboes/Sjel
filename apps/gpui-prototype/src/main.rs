@@ -6,12 +6,14 @@ use gpui_kit::{
     WindowHandle, WindowKind, WindowOptions,
 };
 
+mod blocks;
 mod calendar;
 mod capabilities;
 mod frames;
 mod home;
 #[cfg(target_os = "macos")]
 mod macos_glass;
+mod notes;
 mod selection;
 mod theme;
 mod ui;
@@ -19,7 +21,9 @@ mod workspace;
 
 use sjel_gpui_core::{route, shell};
 
-use workspace::{GoCapabilities, GoHome, OpenInDashboard, OpenPalette, Refresh, Workspace};
+use workspace::{
+    GoCapabilities, GoHome, GoNotes, OpenInDashboard, OpenPalette, Refresh, Workspace,
+};
 
 actions!(sjel, [Quit, CloseWindow]);
 
@@ -50,6 +54,7 @@ fn main() {
             _ => {}
         }
         workspace::bind_keys(cx);
+        notes::bind_keys(cx);
         cx.bind_keys([
             KeyBinding::new("cmd-w", CloseWindow, None),
             KeyBinding::new("cmd-q", Quit, None),
@@ -71,6 +76,7 @@ fn main() {
                 items: vec![
                     MenuItem::action("Home", GoHome),
                     MenuItem::action("Capabilities", GoCapabilities),
+                    MenuItem::action("Notes", GoNotes),
                     MenuItem::separator(),
                     MenuItem::action("Search…", OpenPalette),
                     MenuItem::action("Refresh", Refresh),

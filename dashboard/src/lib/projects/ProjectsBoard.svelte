@@ -6,7 +6,7 @@
   import { tip } from "$lib/tip";
 
   /**
-   * Projects, their tasks and their notes, from `capabilities/projects` (ISA.md F12).
+   * Projects, their tasks and their notes, from `capabilities/projects` (ISA.md F14).
    * The store is canonical; every write here renders the record's markdown before it answers,
    * so the list is reloaded from the server after each write rather than patched in place.
    */

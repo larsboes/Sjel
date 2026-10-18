@@ -200,7 +200,7 @@ Why: report and update software across all host package managers through one coo
 - [x] ISC-59 — audit reaches software installed outside checkout, and every apply records findings. Falsifier: installed package unreached by CycloneDX SBOM or `tools/audit`.
 - [x] ISC-60 — `apply` removes leftovers via `--prune` and re-resolves only named crates via `--re-resolve`. Falsifier: `--prune` removes package pinned by parent, or `--re-resolve` affects unnamed crates.
 
-### F12 · Sjel owns projects and tasks
+### F14 · Sjel owns projects and tasks
 
 Built and imported 2026-10-18: `capabilities/projects`, contract in its README. 668 vault notes
 were imported (`Projects.md` skipped: no project folder) and frozen; the vault serves no task.
@@ -571,7 +571,7 @@ claim yet, and the watch rows they name are in `upstreams.toml` with the questio
   every icon, empty and error states). Progressive disclosure is already
   `research/simplicity-and-adoption.md`; the other two have no home. Either they become a checklist
   in `dashboard/README.md` or they stay folklore.
-- **Habits in the planning owner.** Projects and tasks are specified in F12. Habits are not:
+- **Habits in the planning owner.** Projects and tasks are specified in F14. Habits are not:
   which `calendar` rhythm fields carry a habit, and whether the daily metrics in
   `Journal/01. Daily Notes` (read by vault `Habits.base`) move or stay as journal entries.
   Vault `Domains/Journal.md` says nothing is written back into a journal entry.

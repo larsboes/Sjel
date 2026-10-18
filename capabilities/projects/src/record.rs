@@ -1,7 +1,7 @@
 //! One record is one markdown file: its path under the projects root and its bytes.
 //!
 //! Every other column is derived from those two, so a store rebuilt from the rendered files
-//! equals the live store (ISA.md ISC-69). The selection rules follow
+//! equals the live store. The selection rules follow
 //! `capabilities/vault/src/tasks.rs`, so a task means the same thing on both sides of the import.
 
 use std::collections::HashMap;

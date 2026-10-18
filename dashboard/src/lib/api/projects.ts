@@ -22,7 +22,7 @@ export interface ProjectRecord {
   content: string;
 }
 
-/** The shared store owns projects and tasks (ISA.md F12). Tasks keep the vault's `Task` shape,
+/** The shared store owns projects and tasks (ISA.md F14). Tasks keep the vault's `Task` shape,
  *  so band 620 reads both sources while the import runs. Every write renders its markdown file
  *  before it answers. */
 export const projects = {

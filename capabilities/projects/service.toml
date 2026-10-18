@@ -1,5 +1,5 @@
 # projects: projects, tasks and project notes. The shared store is canonical; every write
-# re-renders the record as markdown under <overlay>/data/projects/ (ISA.md F12, ISC-68).
+# re-renders the record as markdown under <overlay>/data/projects/ (ISA.md F14).
 # 8103: the live registry served 8082-8102 when this was written.
 kind           = "process"
 name           = "projects"

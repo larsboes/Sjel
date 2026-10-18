@@ -218,7 +218,7 @@ fn by_due(due: &Option<String>) -> (bool, &str) {
 
 /// The selection rule. See the module doc for what it tracks and where it
 /// deliberately diverges. A note frozen by the `projects` import (`moved_to:`)
-/// is served by that capability instead (ISA.md ISC-73).
+/// is served by that capability instead.
 fn is_task(relative: &str, fields: &HashMap<String, String>) -> bool {
     if !fields.contains_key("done") || fields.contains_key("moved_to") {
         return false;

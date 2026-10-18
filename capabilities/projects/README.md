@@ -1,7 +1,7 @@
 # projects
 
 Projects, tasks and project notes. Sjel owns them since the import from the Obsidian vault; the
-decision and its claims are in [`ISA.md`](../../ISA.md), F12 and Decisions 2026-10-17 / 2026-10-09.
+decision and its claims are in [`ISA.md`](../../ISA.md), F14 and Decisions 2026-10-17 / 2026-10-09.
 
 One row in the shared store is one markdown file: its path and its bytes. Kind, project, title,
 done, due, priority and archived are derived from those two on every write, so SQL can query them

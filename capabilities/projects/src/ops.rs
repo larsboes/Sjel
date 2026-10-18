@@ -1,4 +1,4 @@
-//! Every operation the CLI and the API share, so both write through one path (ISA.md ISC-71).
+//! Every operation the CLI and the API share, so both write through one path.
 
 use std::{fs, path::Path};
 
@@ -252,7 +252,7 @@ pub struct ImportReport {
     pub skipped: Vec<(String, String)>,
 }
 
-/// Copy the vault's project notes into the store (ISA.md ISC-72).
+/// Copy the vault's project notes into the store.
 ///
 /// Every `.md` under a project folder moves; `Archive/` moves as archived; from the law folder
 /// only notes typed `project` or `task` move. Binaries stay in the vault. A row that changed in
@@ -315,7 +315,7 @@ pub struct FreezeReport {
     pub skipped: Vec<(String, String)>,
 }
 
-/// Mark each imported vault note as moved: a `moved_to` key and a banner (ISA.md ISC-73).
+/// Mark each imported vault note as moved: a `moved_to` key and a banner.
 ///
 /// Only a note whose bytes still equal its imported row is touched, so an edit made in the
 /// vault after the import is reported, never frozen over.

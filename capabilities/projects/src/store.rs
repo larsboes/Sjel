@@ -2,7 +2,7 @@
 //!
 //! The database is canonical. The rendered tree under `<overlay>/data/projects/` is the second
 //! copy Principle 8 asks for, written the way finance writes its decisions: whole file,
-//! temp-plus-rename, mode 0600 (ISA.md ISC-68).
+//! temp-plus-rename, mode 0600.
 
 use std::{
     fs,
@@ -164,7 +164,7 @@ impl Projects {
         Ok(records.len())
     }
 
-    /// Compare the store with the rendered tree, byte for byte (ISA.md ISC-69).
+    /// Compare the store with the rendered tree, byte for byte.
     pub fn verify(&self) -> Fallible<Drift> {
         let records = self.all()?;
         let mut drift = Drift::default();
@@ -234,7 +234,7 @@ pub(crate) mod tests {
         .unwrap()
     }
 
-    /// ISC-68: a write and its file change together.
+    /// A write and its file change together.
     #[test]
     fn every_put_renders_the_same_bytes() {
         let (projects, dir) = scratch("render");
@@ -249,7 +249,7 @@ pub(crate) mod tests {
         fs::remove_dir_all(dir).unwrap();
     }
 
-    /// ISC-69: rows rebuilt from the rendered tree equal the live rows.
+    /// Rows rebuilt from the rendered tree equal the live rows.
     #[test]
     fn a_store_rebuilt_from_the_files_is_identical() {
         let (projects, dir) = scratch("roundtrip");

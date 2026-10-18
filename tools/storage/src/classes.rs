@@ -157,6 +157,23 @@ pub fn run(
         let mut allowed: Vec<String> = Vec::new();
         let mut held = false;
         for path in &step.paths {
+            // A class's path can be absent before the guard ever sees it, and that is nothing
+            // to do rather than a refusal. Both ways it happens are normal: a sibling class in
+            // the same plan removed its parent — `rust-debug-cache` holds `~/.cargo-target/debug`
+            // and `rust-incremental` names `debug/incremental` inside it, the nesting the policy
+            // declares on purpose — and this machine never built for one of the targets a path
+            // globs. `canonicalize` resolves neither, so the guard answers `not found`, and
+            // counting that as a refusal made a run that had freed 73.9 GB exit 1, which the
+            // doctor reads as a producer that failed.
+            //
+            // `symlink_metadata`, not `exists`: a dangling symlink is still an entry on disk,
+            // so it reaches the guard, because refusing what it cannot resolve is the guard's
+            // job. Only a path that is really gone is skipped here.
+            if std::fs::symlink_metadata(path)
+                .is_err_and(|e| e.kind() == std::io::ErrorKind::NotFound)
+            {
+                continue;
+            }
             match guard.check(Path::new(path), Caller::Policy) {
                 Ok(real) => allowed.push(real.to_string_lossy().into_owned()),
                 Err(why) => {
@@ -306,6 +323,7 @@ fn run_argv(argv: &[String], dry_run: bool) -> Result<(), String> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::guard::Authority;
     use crate::policy::is_applicable;
 
     fn class(toml_text: &str) -> StorageClass {
@@ -387,6 +405,51 @@ mod tests {
         let picked = steps(&[a, b], false, Some("b"));
         assert_eq!(picked.len(), 1);
         assert_eq!(picked[0].class.name, "b");
+    }
+
+    #[test]
+    fn a_class_path_that_is_already_gone_is_not_a_refusal() {
+        // The measured failure (2026-10-17, the daily trim): `rust-debug-cache` holds
+        // `~/.cargo-target/debug` and `rust-incremental` names `debug/incremental` inside it.
+        // Removing the parent left the child's paths unresolvable, the guard answered `not
+        // found`, and the single refusal made a run that had freed 73.9 GB exit 1.
+        let root = crate::testutil::tempdir("classes-gone");
+        let gone = root.join("debug").join("incremental");
+        std::fs::create_dir_all(&gone).unwrap();
+        std::fs::write(gone.join("entry"), vec![0u8; 4096]).unwrap();
+        let a = Authority::default();
+        let guard = Guard::new(&a, &root, &root, false);
+        let m = vec![Measured {
+            class: class("name = \"c\"\npaths = [\"/t\"]\napply = true\nolder_than_days = 3\n"),
+            paths: vec![gone.to_string_lossy().into_owned()],
+            // As `measure` found it, before the sibling class removed the parent.
+            bytes: 4096,
+            complete: true,
+            error: String::new(),
+        }];
+        // `rust-debug-cache` removing `debug` in the same plan, which is what happened.
+        std::fs::remove_dir_all(root.join("debug")).unwrap();
+
+        let out = run(&m, &guard, false, None, false);
+        assert_eq!(out.refused, 0, "{:?}", out.lines);
+        assert_eq!(out.skipped, 0, "nothing was held back: {:?}", out.lines);
+
+        // The same class with its path present still acts, so the skip above is not a blanket
+        // silence: an age of zero keeps every entry whose mtime is in the past.
+        let live = root.join("live");
+        std::fs::create_dir_all(live.join("entry")).unwrap();
+        let m = vec![Measured {
+            class: class("name = \"c\"\npaths = [\"/t\"]\napply = true\nolder_than_days = 0\n"),
+            paths: vec![live.to_string_lossy().into_owned()],
+            bytes: 4096,
+            complete: true,
+            error: String::new(),
+        }];
+
+        let out = run(&m, &guard, false, None, false);
+        assert_eq!(out.refused, 0, "{:?}", out.lines);
+        assert_eq!(out.skipped, 0, "{:?}", out.lines);
+        assert!(!live.join("entry").exists(), "{:?}", out.lines);
     }
 
     #[test]

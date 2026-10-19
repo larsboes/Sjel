@@ -4,7 +4,7 @@ version.workspace = true
 edition.workspace = true
 rust-version.workspace = true
 license.workspace = true
-description = "Reads an Obsidian vault as data: link graph resolution, frontmatter conformance, and the Action kind served read-only over HTTP. The tool every vault operation calls before it touches a file."
+description = "Reads an Obsidian vault as data: link graph resolution, frontmatter conformance, and Journal and People reads served over HTTP. The tool every vault operation calls before it touches a file."
 publish = false
 
 # One reader, two front ends. The library holds the note loader and the task

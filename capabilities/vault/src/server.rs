@@ -1,11 +1,7 @@
 //! `vault-server` — the vault's read-only HTTP surface.
 //!
-//! Three questions, all answered live off the files.
-//!
-//! **What actions are open.** PRD Q48 (2026-08-27) retired the `tasks`
-//! capability and gave the Action kind back to `Projects/**/Tasks/`, which left
-//! the dashboard's decision ladder with a band and no source. This is that
-//! source.
+//! Two questions, both answered live off the files. Open tasks were a third until
+//! 2026-10-18, when `capabilities/projects` became their owner (Sjel ISA.md F14).
 //!
 //! **What the Journal knows about each person.** D2's three fields, computed
 //! on every request: see `list_people`. The CLI's `vault fields --apply` writes
@@ -19,11 +15,9 @@
 //! ## Read-only, and not by omission
 //!
 //! There is no POST and no PATCH here, and adding one is not a small change.
-//! The whole point of the ruling is that a task is a note a human owns: it gets
-//! created, edited and marked done in Obsidian. A write endpoint would make
-//! this server a second writer of files a human is editing, which is the
-//! conflict the one-way rule (§5.5, "Axon reads the vault and does not write to
-//! it") exists to prevent. The ladder links to the note instead.
+//! A write endpoint would make this server a second writer of files a human is
+//! editing in Obsidian, which is the conflict the one-way rule (§5.5, "Axon reads
+//! the vault and does not write to it") exists to prevent.
 //!
 //! ## Why the read is not cached
 //!
@@ -35,19 +29,12 @@
 
 use std::sync::Arc;
 
-use axum::{
-    extract::{Query, State},
-    http::StatusCode,
-    response::Json,
-    routing::get,
-    Router,
-};
-use serde::Deserialize;
+use axum::{extract::State, http::StatusCode, response::Json, routing::get, Router};
 use serde_json::{json, Value};
 use tower_http::cors::CorsLayer;
 
 use markdown_root::MarkdownRoot;
-use vault::{journal, people, tasks};
+use vault::{journal, people};
 
 /// What this capability answers, served as data beside `/health`.
 const ROUTES: &[route_manifest::Route] = &[
@@ -55,14 +42,9 @@ const ROUTES: &[route_manifest::Route] = &[
     r(
         "GET",
         "/ready",
-        "Readiness: liveness plus a reachable vault with a Projects folder.",
+        "Readiness: liveness plus a reachable vault.",
     ),
     r("GET", "/routes", "This manifest."),
-    r(
-        "GET",
-        "/api/tasks",
-        "Every action note under Projects/, read live. Optional status filter: open, done.",
-    ),
     r(
         "GET",
         "/api/people",
@@ -160,7 +142,7 @@ async fn health() -> Json<Value> {
 /// not — and `sjel-status` judges availability on this endpoint where a
 /// manifest declares one (#126).
 async fn ready(State(state): State<AppState>) -> ApiResponse {
-    match with_vault(&state, |vault| tasks::projects_root(vault).map(|_| ())).await {
+    match with_vault(&state, |_| Ok(())).await {
         Ok(()) => ok(
             StatusCode::OK,
             json!({ "service": "vault", "status": "ready" }),
@@ -169,45 +151,6 @@ async fn ready(State(state): State<AppState>) -> ApiResponse {
             StatusCode::SERVICE_UNAVAILABLE,
             Json(json!({ "service": "vault", "status": "unavailable", "error": body["error"] })),
         ),
-    }
-}
-
-#[derive(Debug, Deserialize)]
-struct ListQuery {
-    status: Option<String>,
-}
-
-/// `open` and `done`, and no `dropped`.
-///
-/// The retired capability had three states because a machine-filed row needed a
-/// way to be refused without being completed. A note a human wrote has no such
-/// state: they delete it, or they mark it done. The vault's own `done` boolean
-/// is the whole vocabulary, so the filter has to be too.
-const STATUSES: [&str; 2] = ["open", "done"];
-
-async fn list_tasks(State(state): State<AppState>, Query(query): Query<ListQuery>) -> ApiResponse {
-    if let Some(status) = query.status.as_deref() {
-        if !STATUSES.contains(&status) {
-            return (
-                StatusCode::BAD_REQUEST,
-                Json(json!({ "error": format!("invalid status '{status}'") })),
-            );
-        }
-    }
-    let wanted = query.status.clone();
-    match with_vault(&state, move |vault| {
-        let projects = tasks::projects_root(vault)?;
-        let all = tasks::read(&projects, &tasks::vault_name(vault))?;
-        Ok(match wanted.as_deref() {
-            Some("open") => all.into_iter().filter(|t| !t.done).collect(),
-            Some("done") => all.into_iter().filter(|t| t.done).collect(),
-            _ => all,
-        })
-    })
-    .await
-    {
-        Ok(tasks) => ok(StatusCode::OK, json!({ "tasks": tasks })),
-        Err(response) => response,
     }
 }
 
@@ -305,7 +248,6 @@ fn build_router(state: AppState) -> Router {
         .route("/routes", get(routes))
         .route("/health", get(health))
         .route("/ready", get(ready))
-        .route("/api/tasks", get(list_tasks))
         .route("/api/people", get(list_people))
         .route("/api/journal-health", get(journal_health))
         // Permissive CORS, matching every other capability the dashboard reads
@@ -368,63 +310,6 @@ mod readiness_tests {
             live["status"], "ok",
             "liveness must not depend on the vault"
         );
-    }
-
-    /// A vault that IS there answers with the notes on disk, filtered. This is
-    /// the whole contract band 620 reads, exercised end to end through the
-    /// handler rather than through the reader alone.
-    #[tokio::test]
-    async fn the_open_filter_serves_what_the_fixture_vault_holds() {
-        let root = std::env::temp_dir().join(format!("vault-fixture-{}", std::process::id()));
-        let _ = std::fs::remove_dir_all(&root);
-        let folder = root.join("Projects").join("Home-Lab").join("Tasks");
-        std::fs::create_dir_all(&folder).unwrap();
-        std::fs::write(
-            folder.join("Buy a drive.md"),
-            "---\ntype: task\ndone: false\ndue: 2026-09-01\n---\n\nbody\n",
-        )
-        .unwrap();
-        std::fs::write(
-            folder.join("Already bought.md"),
-            "---\ntype: task\ndone: true\n---\n\nbody\n",
-        )
-        .unwrap();
-
-        let state = AppState {
-            vault_root: Arc::new(root.to_string_lossy().into_owned()),
-        };
-
-        let (status, Json(body)) = list_tasks(
-            State(state.clone()),
-            Query(ListQuery {
-                status: Some("open".into()),
-            }),
-        )
-        .await;
-        assert_eq!(status, StatusCode::OK);
-        let open = body["tasks"].as_array().expect("a tasks array");
-        assert_eq!(open.len(), 1, "the done note leaked into the open list");
-        assert_eq!(open[0]["title"], "Buy a drive");
-        assert_eq!(open[0]["due"], "2026-09-01");
-        assert!(
-            open[0]["uri"]
-                .as_str()
-                .is_some_and(|uri| uri.starts_with("obsidian://open?vault=")),
-            "the ladder's only remaining action is the link back to the note"
-        );
-
-        // An unknown status is a caller mistake, not a missing dependency, so
-        // it is the one 400 this server can produce.
-        let (status, _) = list_tasks(
-            State(state),
-            Query(ListQuery {
-                status: Some("dropped".into()),
-            }),
-        )
-        .await;
-        assert_eq!(status, StatusCode::BAD_REQUEST);
-
-        let _ = std::fs::remove_dir_all(&root);
     }
 }
 
@@ -658,18 +543,6 @@ mod origin_tests {
         })
     }
 
-    async fn tasks_status(origin: Option<&str>) -> StatusCode {
-        let mut request = Request::builder().uri("/api/tasks");
-        if let Some(origin) = origin {
-            request = request.header("origin", origin);
-        }
-        router()
-            .oneshot(request.body(Body::empty()).unwrap())
-            .await
-            .expect("the router answers")
-            .status()
-    }
-
     async fn status_for(uri: &str, origin: Option<&str>) -> StatusCode {
         let mut request = Request::builder().uri(uri);
         if let Some(origin) = origin {
@@ -683,11 +556,11 @@ mod origin_tests {
     }
 
     #[tokio::test]
-    async fn a_foreign_origin_cannot_read_the_task_list() {
+    async fn a_foreign_origin_cannot_read_the_people_list() {
         assert_eq!(
-            tasks_status(Some("https://evil.example")).await,
+            status_for("/api/people", Some("https://evil.example")).await,
             StatusCode::FORBIDDEN,
-            "/api/tasks answered a foreign origin — it is registered below the guard layer"
+            "/api/people answered a foreign origin — it is registered below the guard layer"
         );
     }
 
@@ -721,7 +594,7 @@ mod origin_tests {
             Some("https://mac.tailnet.ts.net"),
         ] {
             assert_eq!(
-                tasks_status(origin).await,
+                status_for("/api/people", origin).await,
                 StatusCode::SERVICE_UNAVAILABLE,
                 "the guard refused a caller it must admit: {origin:?}"
             );

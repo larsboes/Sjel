@@ -1,11 +1,9 @@
 # vault — the Obsidian vault read as data, over HTTP. Field reference:
 # schemas/service.toml.example.
 #
-# The capability was a read-only CLI with no manifest until PRD Q48 (2026-08-27)
-# retired `tasks` and gave the Action kind back to `Projects/**/Tasks/`. The
-# dashboard's decision ladder needed an HTTP source for band 620, and the vault
-# is where the data now lives — so the reader that already existed grew a second
-# front end rather than a second capability growing a copy of it.
+# The HTTP front end serves the Journal and People reads. It served band 620's
+# tasks from 2026-08-27 (PRD Q48) until 2026-10-18, when `capabilities/projects`
+# became their owner (ISA.md F14).
 kind        = "process"
 name        = "vault"
 command     = ["target/release/vault-server"]

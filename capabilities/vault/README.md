@@ -132,47 +132,24 @@ for one where none is, which is an instrument that cannot be wrong.
 
 ## The server
 
-`vault-server` on `8094`, loopback. Six routes:
+`vault-server` on `8094`, loopback. Five routes:
 
 | Route | Answers |
 |---|---|
 | `GET /health` | Liveness. A literal — it cannot see the vault. |
-| `GET /ready` | Readiness: the vault root and its `Projects/` folder resolve. |
+| `GET /ready` | Readiness: the vault root resolves. |
 | `GET /routes` | This manifest, as data. |
-| `GET /api/tasks?status=open\|done` | Every action note under `Projects/`, read live. |
 | `GET /api/people` | `last_contact`, `met_at` and `mention_count` per person, computed from `Journal/` backlinks. |
 | `GET /api/journal-health` | The six Journal health keys, counted; which of the six can be produced; `social` computed from `Journal/` person links. |
 
-One task is `{id, title, done, due, priority, summary, projects, uri}`. `id` is
-the vault-relative path; `uri` is the `obsidian://open` address of the note.
+`GET /api/tasks` served band 620 from 2026-08-27 (PRD Q48) to 2026-10-18. It
+retired when `capabilities/projects` became the owner of tasks and the vault's
+`Projects/` moved to `Archive/Projects/` (ISA.md F14).
 
-It exists because PRD **Q48** (2026-08-27) retired the `tasks` capability and
-returned the Action kind to `Projects/**/Tasks/`, where the vault contract
-§5.1b had assigned it all along. The dashboard's decision ladder needed an HTTP
-source for band 620 and the data had moved here, so the reader that already
-existed grew a second front end.
-
-**Q104** (2026-09-09) closed the other half of that shape: `Projects/Tasks/` is
-never created, so the folder rule reads a `Tasks/` folder only when a project
-sits above it. A note filed directly under `Projects/Tasks/` is still served if
-it declares `type: task` — the ruling is about what a folder name means, and it
-does not silently drop an action. For example, `Projects/Garden/Tasks/Order
-seeds.md` is served on its folder alone, and `Projects/Tasks/Order seeds.md` only
-if it says `type: task`.
-
-**The server has no write route, by design.** A task is created, edited and
-marked done in Obsidian, in a note a human owns. A `PATCH` here would make the
-server a second writer of files a human is editing. The ladder links to the
-note; it does not close it. The one writer in this crate is the CLI's
-`vault fields --apply`, for two People keys, described below.
-
-**Which frontmatter keys are served, and why not all of them.** A task note
-carries eleven keys; five are served, because the ladder reads them: `summary`
-renders the row (beside `title`, which is the filename, not a key), `due` and
-`priority` rank it, `projects` labels it, `done` decides whether it is a
-decision at all. The other six — `scheduled`, `context`, `energy`, `focus`,
-`events` and `blocked_by` — have no reader, and a served field with no reader
-is a contract nothing checks.
+**The server has no write route, by design.** A `PATCH` here would make the
+server a second writer of files a human is editing in Obsidian. The one writer in
+this crate is the CLI's `vault fields --apply`, for two People keys, described
+below.
 
 ### `/api/people` — D2, served computed
 
@@ -371,13 +348,6 @@ order:
 4. **The contradictions resolved by hand first.** Those are the days where a
    human wrote `true` and the Journal names nobody, and a producer would silently
    erase them.
-
-**What counts as a task** is `capabilities/vault/src/tasks.rs`'s module doc: the
-vault's own `Resources/Bases/Tasks.base` filter, scoped to `Projects/`, minus
-archived folders, minus notes with no `done` key. Each divergence is measured
-against the live vault and named there. Tracking the operator's own Base rather
-than inventing a second definition is the point — two surfaces disagreeing about
-one folder is exactly what §5.1b's no-doubling law forbids.
 
 ## `fields` — the two People keys Sjel writes
 

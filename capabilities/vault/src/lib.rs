@@ -2,9 +2,8 @@
 //!
 //! A library because this capability now has two binaries over one reader: the
 //! `vault` CLI (`links`, `lint`, `names`, `class`, `people`, `journal`,
-//! `bases`, `fields`) and `vault-server`, the read-only HTTP surface the
-//! dashboard's decision ladder reads the Action kind through (PRD Q48,
-//! 2026-08-27). Both load notes the same way or they would eventually
+//! `bases`, `fields`) and `vault-server`, the read-only HTTP surface for the
+//! Journal and People reads. Both load notes the same way or they would eventually
 //! disagree about what a note is, which is the whole reason `note::load_all` is
 //! one pass in one place.
 //!
@@ -25,4 +24,3 @@ pub mod names;
 pub mod note;
 pub mod obsidian;
 pub mod people;
-pub mod tasks;

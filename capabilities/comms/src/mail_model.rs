@@ -38,7 +38,7 @@ use std::collections::HashMap;
 
 use serde::Deserialize;
 
-use crate::cloud_derivative::{redact_review_field, RedactionFinding};
+use crate::cloud_derivative::{RedactionFinding, redact_review_field};
 use crate::config::{Config, MailModelConfig};
 use crate::content_item::{self, DataClass};
 use crate::store::{ModelCandidate, ModelVerdict, Store};
@@ -505,7 +505,14 @@ pub fn producer(cfg: &Config) -> String {
 ///    paths;
 /// 5. `summarize::ask` with `Reach::LoopbackOnly`;
 /// 6. redact the model's own sentences against [`effective_class`].
-pub fn classify_one(cfg: &Config, candidate: &ModelCandidate) -> ModelVerdict {
+///
+/// `runtime` is the status the caller resolved once for its unit of work; the
+/// admission gates below obey it instead of reading the deployment again.
+pub fn classify_one(
+    cfg: &Config,
+    candidate: &ModelCandidate,
+    runtime: &sjel_runtime::Status,
+) -> ModelVerdict {
     let producer = producer(cfg);
     let from = candidate.from_addr.as_deref().unwrap_or_default();
     let domain = sender_domain(from);
@@ -564,12 +571,14 @@ pub fn classify_one(cfg: &Config, candidate: &ModelCandidate) -> ModelVerdict {
         }
     };
 
-    if let Err(reason) = quiet::runtime_admission(&role, prompt.chars().count(), REPLY_TOKENS) {
+    if let Err(reason) =
+        quiet::runtime_admission(runtime, &role, prompt.chars().count(), REPLY_TOKENS)
+    {
         verdict.state = "policy_deferred".into();
         verdict.last_error = Some(reason.to_string());
         return verdict;
     }
-    let target = digest::to_target(cfg, &role);
+    let target = digest::to_target(cfg, &role, runtime);
     let outcome = summarize::ask(Some(&target), &prompt, REPLY_TOKENS, Reach::LoopbackOnly);
     let answer = match &outcome {
         Outcome::Ok(answer) => answer.clone(),
@@ -677,14 +686,21 @@ fn held_reason(from_class: &str, to_class: &str) -> String {
 /// documented rollout (measure in shadow, read the corpus, set
 /// `mail_model.apply`, run apply) moved nothing at all, because every row it
 /// wanted to move had stopped being due (review, 2026-09-05).
+///
+/// `runtime` is resolved once by the caller — the triage handler, the CLI or a
+/// test — so every admission gate in the pass obeys one profile rather than
+/// re-reading the deployment per row.
 pub fn run_pass(
     cfg: &Config,
     store: &Store,
     mode: Mode,
     limit: usize,
     min_confidence_bp: i64,
+    runtime: &sjel_runtime::Status,
 ) -> std::result::Result<PassReceipt, String> {
-    sjel_runtime::require(sjel_runtime::Category::BulkIndexing).map_err(|e| e.to_string())?;
+    runtime
+        .require(sjel_runtime::Category::BulkIndexing)
+        .map_err(|e| e.to_string())?;
     let producer = producer(cfg);
     let mut receipt = PassReceipt {
         mode: mode.as_str().into(),
@@ -710,8 +726,10 @@ pub fn run_pass(
     receipt.eligible = due.len();
 
     for candidate in due.into_iter().take(limit) {
-        sjel_runtime::require(sjel_runtime::Category::BulkIndexing).map_err(|e| e.to_string())?;
-        let mut verdict = classify_one(cfg, &candidate);
+        runtime
+            .require(sjel_runtime::Category::BulkIndexing)
+            .map_err(|e| e.to_string())?;
+        let mut verdict = classify_one(cfg, &candidate, runtime);
         if verdict.state == "policy_deferred" {
             return Err(verdict
                 .last_error
@@ -741,7 +759,9 @@ pub fn run_pass(
         }
         receipt.redactions += verdict.redactions;
 
-        sjel_runtime::require(sjel_runtime::Category::BulkIndexing).map_err(|e| e.to_string())?;
+        runtime
+            .require(sjel_runtime::Category::BulkIndexing)
+            .map_err(|e| e.to_string())?;
         settle(store, &mut verdict, mode, min_confidence_bp, &mut receipt)?;
         store
             .upsert_model_verdict(&verdict)
@@ -776,7 +796,9 @@ pub fn run_pass(
         }
         written += 1;
         let mut verdict = verdict.clone();
-        sjel_runtime::require(sjel_runtime::Category::BulkIndexing).map_err(|e| e.to_string())?;
+        runtime
+            .require(sjel_runtime::Category::BulkIndexing)
+            .map_err(|e| e.to_string())?;
         settle(store, &mut verdict, mode, min_confidence_bp, &mut receipt)?;
         store
             .upsert_model_verdict(&verdict)
@@ -957,7 +979,8 @@ mod tests {
     #[test]
     fn c3_is_refused_before_a_target_is_built() {
         let cfg = Config::with_inference(inference(Some(APPLE_WINDOW)));
-        let verdict = classify_one(&cfg, &candidate("thread:secret", "c3"));
+        let runtime = sjel_runtime::Status::normal("test");
+        let verdict = classify_one(&cfg, &candidate("thread:secret", "c3"), &runtime);
         assert_eq!(verdict.state, digest::LOCAL_REFUSED);
         assert!(verdict.model_stream.is_none());
         assert!(verdict.rationale.is_none());
@@ -977,7 +1000,8 @@ mod tests {
         let cfg = Config::with_inference(inference(Some(APPLE_WINDOW)));
         let mut over = candidate("thread:huge", "c1");
         over.snippet = Some("x".repeat(40_000));
-        let verdict = classify_one(&cfg, &over);
+        let runtime = sjel_runtime::Status::normal("test");
+        let verdict = classify_one(&cfg, &over, &runtime);
         assert_eq!(verdict.state, digest::SKIPPED_OVER_WINDOW);
         assert!(verdict.model_stream.is_none());
         assert_eq!(verdict.attempts, 0, "over the window is not retryable");
@@ -989,7 +1013,8 @@ mod tests {
     #[test]
     fn a_machine_without_a_light_role_is_unconfigured() {
         let cfg = Config::with_inference(inference(None));
-        let verdict = classify_one(&cfg, &candidate("thread:none", "c1"));
+        let runtime = sjel_runtime::Status::normal("test");
+        let verdict = classify_one(&cfg, &candidate("thread:none", "c1"), &runtime);
         assert_eq!(verdict.state, "unconfigured");
         assert_eq!(verdict.producer, "unconfigured");
     }

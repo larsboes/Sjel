@@ -146,13 +146,16 @@ pub fn run(root: &Path, overlay: &Path, capability: &str, target: &str) -> Outco
     // A receipt that appeared during this run is this run's archive. Recording the newest
     // one unconditionally would attribute a previous run's archive to a run that produced
     // nothing, which is the mis-attribution this check exists to prevent.
-    let archive = newest_archive(overlay, capability).and_then(|(archive, _)| {
-        if before.as_deref() == Some(archive.name.as_str()) {
-            None
-        } else {
-            Some(archive)
-        }
-    });
+    let archive = (exit_code == 0)
+        .then(|| newest_archive(overlay, capability))
+        .flatten()
+        .and_then(|(archive, _)| {
+            if before.as_deref() == Some(archive.name.as_str()) {
+                None
+            } else {
+                Some(archive)
+            }
+        });
 
     if exit_code == 0 {
         clear_attempt(overlay, capability);

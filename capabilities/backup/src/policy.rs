@@ -121,6 +121,12 @@ async fn one_pass(
     let contracts = targets::contracts(root)?;
     let store = Arc::clone(store);
 
+    // Prune stale run records according to retention policy (default 90 days, keeping at least 10 runs per target).
+    let _ = store.prune_runs(
+        crate::store::DEFAULT_RUN_RETENTION_DAYS,
+        crate::store::MIN_RETAINED_RUNS_PER_TARGET,
+    );
+
     // The clock and the database are read in the pass, so the decision itself stays a pure
     // function of numbers that a test can hand made-up values.
     let now = runner::now_epoch();
@@ -161,22 +167,29 @@ async fn one_pass(
             .join("backup")
             .join("logs")
             .join(format!("{}-policy.log", runner::now_epoch()));
-        let run_id = store.start_run(
+        let Some(run_id) = store.try_start_run(
             &decision.capability,
             &decision.target,
             &log_path.to_string_lossy(),
-        )?;
-        let outcome = tokio::task::spawn_blocking(move || {
-            runner::run(&root, &overlay, &decision.capability, &decision.target)
+        )?
+        else {
+            continue;
+        };
+        // Finish in the blocking task so cancelling this async pass does not detach
+        // an archive writer from the durable record it owns.
+        tokio::task::spawn_blocking(move || {
+            let outcome = runner::run(&root, &overlay, &decision.capability, &decision.target);
+            store
+                .finish_run(
+                    run_id,
+                    outcome.exit_code,
+                    outcome.archive.as_ref(),
+                    &outcome.detail,
+                    &outcome.log_path.to_string_lossy(),
+                )
+                .map_err(|error| error.to_string())
         })
-        .await?;
-        store.finish_run(
-            run_id,
-            outcome.exit_code,
-            outcome.archive.as_ref(),
-            &outcome.detail,
-            &outcome.log_path.to_string_lossy(),
-        )?;
+        .await??;
         started += 1;
     }
     Ok(started)

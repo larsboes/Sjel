@@ -190,10 +190,11 @@ pub(super) async fn triage_sweep_handler(Json(body): Json<TriageSweepBody>) -> H
     let limit = body.limit.unwrap_or(100).clamp(1, 100);
     let cursor = body.cursor.filter(|value| !value.trim().is_empty());
     let result = tokio::task::spawn_blocking(move || -> Result<Value, String> {
+        let runtime = sjel_runtime::current().map_err(|e| e.to_string())?;
         let cfg = Config::load();
         let mut outcome = run_inbox_sweep(&cfg, limit, cursor.as_deref())?;
-        outcome.events = mail_events::analyze_batch(&cfg, &outcome.fetched_ids);
-        outcome.receipts = mail_receipts::analyze_batch(&cfg, &outcome.fetched_ids);
+        outcome.events = mail_events::analyze_batch(&runtime, &cfg, &outcome.fetched_ids);
+        outcome.receipts = mail_receipts::analyze_batch(&runtime, &cfg, &outcome.fetched_ids);
         let store = Store::open(&cfg.database_path).map_err(|error| error.to_string())?;
         let total_stored = store
             .list_triage(None)
@@ -249,7 +250,7 @@ pub(super) async fn triage_relevance_handler(
 ) -> HttpResponse {
     let limit = body.limit.unwrap_or(200).clamp(1, 500);
     let result = tokio::task::spawn_blocking(move || -> Result<Value, String> {
-        sjel_runtime::require(sjel_runtime::Category::BulkIndexing).map_err(|e| e.to_string())?;
+        let runtime = sjel_runtime::current().map_err(|e| e.to_string())?;
         let cfg = Config::load();
         let store = Store::open(&cfg.database_path).map_err(|error| error.to_string())?;
         let profiles = relevance::load_profiles(&cfg.relevance)?;
@@ -287,9 +288,10 @@ pub(super) async fn triage_relevance_handler(
                 .map(|role| role.cache_key())
                 .as_deref(),
         );
-        relevance::runtime_admission(embedding_role.as_ref(), reranking_role.as_ref())
+        relevance::runtime_admission(&runtime, embedding_role.as_ref(), reranking_role.as_ref())
             .map_err(|e| e.to_string())?;
-        let semantic_available = relevance::embedding_backend_reachable(embedding_role.as_ref());
+        let semantic_available =
+            relevance::embedding_backend_reachable(&runtime, embedding_role.as_ref());
 
         // The limit bounds the WORK, not the head of a fixed list. `list_triage`
         // orders by `internal_date DESC`, so taking the first `limit` rows and
@@ -351,6 +353,7 @@ pub(super) async fn triage_relevance_handler(
             })
             .collect::<Vec<_>>();
         let outcome = relevance::score_items(
+            &runtime,
             &items,
             &profiles,
             embedding_role.as_ref(),
@@ -367,7 +370,7 @@ pub(super) async fn triage_relevance_handler(
             .next();
         let mut scored = 0usize;
         for item in &outcome.items {
-            relevance::runtime_admission(embedding_role.as_ref(), reranking_role.as_ref())
+            relevance::runtime_admission(&runtime, embedding_role.as_ref(), reranking_role.as_ref())
                 .map_err(|e| e.to_string())?;
             scored += 1;
             store
@@ -381,7 +384,8 @@ pub(super) async fn triage_relevance_handler(
         // gate says no model may read. `replace_triage_relevance` carries no
         // tier gate, so unlike the feed's an empty set really does delete.
         for id in &refused_ids {
-            sjel_runtime::require(sjel_runtime::Category::BulkIndexing)
+            runtime
+                .require(sjel_runtime::Category::BulkIndexing)
                 .map_err(|e| e.to_string())?;
             store
                 .replace_triage_relevance(id, &[])
@@ -401,7 +405,7 @@ pub(super) async fn triage_relevance_handler(
         // then carries weight 0.
         let verdicts = store.model_verdicts().unwrap_or_default();
         for (item, scored_item) in scorable.iter().zip(&outcome.items) {
-            relevance::runtime_admission(embedding_role.as_ref(), reranking_role.as_ref())
+            relevance::runtime_admission(&runtime, embedding_role.as_ref(), reranking_role.as_ref())
                 .map_err(|e| e.to_string())?;
             // The rung's urgency moves the score THROUGH the evaluator rather
             // than competing with it on the wire, so a reader who asks why a
@@ -1254,6 +1258,8 @@ pub(super) async fn triage_classify_refresh_handler(
     let requested_limit = body.limit;
 
     let result = tokio::task::spawn_blocking(move || -> Result<Value, (StatusCode, String)> {
+        let runtime = sjel_runtime::current()
+            .map_err(|error| (StatusCode::BAD_REQUEST, error.to_string()))?;
         let cfg = Config::load();
         let mode = mail_model::apply_allowed(cfg.mail_model.as_ref(), requested)
             .map_err(|error| (StatusCode::CONFLICT, error))?;
@@ -1267,7 +1273,7 @@ pub(super) async fn triage_classify_refresh_handler(
             .mail_model
             .as_ref()
             .map_or(0, |section| i64::from(section.min_confidence_bp));
-        let receipt = mail_model::run_pass(&cfg, &store, mode, limit, min_confidence_bp)
+        let receipt = mail_model::run_pass(&cfg, &store, mode, limit, min_confidence_bp, &runtime)
             .map_err(|error| (StatusCode::INTERNAL_SERVER_ERROR, error))?;
         let (registry_state, registry_names) = people_registry_receipt();
         Ok(json!({
@@ -1772,6 +1778,7 @@ mod tests {
     #[test]
     fn the_shadow_route_writes_verdicts_and_changes_no_category() {
         let store = test_store("classify_shadow");
+        let runtime = sjel_runtime::Status::normal("test");
         store
             .upsert_triage_with_rules(
                 &stored_row("thread:shadow", "Re: the thing", "A short preview."),
@@ -1797,7 +1804,7 @@ mod tests {
             inference: sjel_inference::InferenceConfig::default(),
             ..Config::load()
         };
-        let receipt = mail_model::run_pass(&cfg, &store, Mode::Shadow, 200, 0)
+        let receipt = mail_model::run_pass(&cfg, &store, Mode::Shadow, 200, 0, &runtime)
             .expect("a pass over one candidate");
         assert_eq!(receipt.eligible, 1);
         assert_eq!(receipt.applied, 0);
@@ -1823,6 +1830,7 @@ mod tests {
     #[test]
     fn apply_writes_the_verdict_an_earlier_shadow_pass_stored() {
         let store = test_store("classify_apply_stored");
+        let runtime = sjel_runtime::Status::normal("test");
         store
             .upsert_triage_with_rules(
                 &stored_row("thread:apply", "20% off everything", "Shop the sale."),
@@ -1876,7 +1884,7 @@ mod tests {
 
         // A second shadow pass still writes nothing, and says how much is
         // waiting.
-        let shadow = mail_model::run_pass(&cfg, &store, Mode::Shadow, 200, 9_000)
+        let shadow = mail_model::run_pass(&cfg, &store, Mode::Shadow, 200, 9_000, &runtime)
             .expect("a second shadow pass");
         assert_eq!(shadow.eligible, 0, "the question was already answered");
         assert_eq!(shadow.awaiting_apply, 1);
@@ -1887,7 +1895,7 @@ mod tests {
         );
 
         let applied =
-            mail_model::run_pass(&cfg, &store, Mode::Apply, 200, 9_000).expect("an apply pass");
+            mail_model::run_pass(&cfg, &store, Mode::Apply, 200, 9_000, &runtime).expect("an apply pass");
         assert_eq!(applied.prompted, 0, "apply re-asks nothing");
         assert_eq!(applied.awaiting_apply, 1);
         assert_eq!(applied.disagreed, 1);
@@ -1904,7 +1912,7 @@ mod tests {
         );
 
         // And it does not run twice: the applied row is no longer a candidate.
-        let again = mail_model::run_pass(&cfg, &store, Mode::Apply, 200, 9_000)
+        let again = mail_model::run_pass(&cfg, &store, Mode::Apply, 200, 9_000, &runtime)
             .expect("a third pass changes nothing");
         assert_eq!(again.reviewed, 0);
         assert_eq!(again.applied, 0);
@@ -1914,6 +1922,7 @@ mod tests {
     #[test]
     fn a_stored_verdict_below_the_floor_is_counted_and_not_written() {
         let store = test_store("classify_apply_floor");
+        let runtime = sjel_runtime::Status::normal("test");
         store
             .upsert_triage_with_rules(
                 &stored_row("thread:floor", "20% off everything", "Shop the sale."),
@@ -1965,7 +1974,7 @@ mod tests {
             .unwrap();
 
         let receipt =
-            mail_model::run_pass(&cfg, &store, Mode::Apply, 200, 9_000).expect("an apply pass");
+            mail_model::run_pass(&cfg, &store, Mode::Apply, 200, 9_000, &runtime).expect("an apply pass");
         assert_eq!(receipt.below_confidence, 1);
         assert_eq!(receipt.applied, 0);
         assert_eq!(

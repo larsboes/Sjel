@@ -359,9 +359,10 @@ pub(super) async fn digest_handler(
         Err(error) => return error_response(StatusCode::BAD_REQUEST, error),
     };
     let result = tokio::task::spawn_blocking(move || {
+        let runtime = sjel_runtime::current().map_err(|error| error.to_string())?;
         let cfg = Config::load();
         let store = Store::open(&cfg.database_path).map_err(|error| error.to_string())?;
-        digest::generate(&store, &cfg, &source, &id, &directive)
+        digest::generate(&store, &cfg, &source, &id, &directive, &runtime)
             .map(|row| row.as_ref().map(digest::to_contract))
             .map_err(|error| error.to_string())
     })
@@ -372,9 +373,10 @@ pub(super) async fn digest_handler(
 /// Draw one item as a Mermaid diagram.
 pub(super) async fn diagram_handler(Path((source, id)): Path<(String, String)>) -> HttpResponse {
     let result = tokio::task::spawn_blocking(move || {
+        let runtime = sjel_runtime::current().map_err(|error| error.to_string())?;
         let cfg = Config::load();
         let store = Store::open(&cfg.database_path).map_err(|error| error.to_string())?;
-        digest::generate_diagram(&store, &cfg, &source, &id)
+        digest::generate_diagram(&store, &cfg, &source, &id, &runtime)
             .map(|row| row.as_ref().map(digest::to_contract))
             .map_err(|error| error.to_string())
     })
@@ -389,9 +391,10 @@ pub(super) async fn diagram_handler(Path((source, id)): Path<(String, String)>) 
 /// train the operator to stop reading the state.
 pub(super) async fn chart_handler(Path((source, id)): Path<(String, String)>) -> HttpResponse {
     let result = tokio::task::spawn_blocking(move || {
+        let runtime = sjel_runtime::current().map_err(|error| error.to_string())?;
         let cfg = Config::load();
         let store = Store::open(&cfg.database_path).map_err(|error| error.to_string())?;
-        digest::generate_chart(&store, &cfg, &source, &id)
+        digest::generate_chart(&store, &cfg, &source, &id, &runtime)
             .map(|row| row.as_ref().map(digest::to_contract))
             .map_err(|error| error.to_string())
     })
@@ -434,11 +437,17 @@ pub(super) struct DigestRefreshBody {
 pub(super) async fn digest_refresh_handler(Json(body): Json<DigestRefreshBody>) -> HttpResponse {
     let result =
         tokio::task::spawn_blocking(move || -> Result<(String, digest::DrainReport), String> {
+            let runtime = sjel_runtime::current().map_err(|error| error.to_string())?;
             let cfg = Config::load();
             let store = Store::open(&cfg.database_path).map_err(|error| error.to_string())?;
-            let report =
-                digest::refresh_pending(&store, &cfg, &body.source, body.limit.unwrap_or(25))
-                    .map_err(|error| error.to_string())?;
+            let report = digest::refresh_pending(
+                &store,
+                &cfg,
+                &body.source,
+                body.limit.unwrap_or(25),
+                &runtime,
+            )
+            .map_err(|error| error.to_string())?;
             Ok((body.source, report))
         })
         .await;

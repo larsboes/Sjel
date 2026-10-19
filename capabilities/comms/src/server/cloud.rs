@@ -289,9 +289,10 @@ pub(super) async fn cloud_queue_handler(
 /// implementations of the five-call cap and the `preview_hash` pin.
 pub(super) async fn cloud_run_handler(Path(job_id): Path<String>) -> HttpResponse {
     let result = tokio::task::spawn_blocking(move || -> Result<CloudDerivativeState, String> {
+        let runtime = sjel_runtime::current().map_err(|error| error.to_string())?;
         let cfg = Config::load();
         let store = Store::open(&cfg.database_path).map_err(|error| error.to_string())?;
-        cloud_run::run_job(&store, &cfg, &job_id)
+        cloud_run::run_job(&store, &cfg, &job_id, &runtime)
     })
     .await;
 

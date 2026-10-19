@@ -269,7 +269,7 @@ fn stage(cfg: &Config, item: &TriageItem, receipt: &Receipt) -> Result<bool, Str
 
 /// Analyze a bounded set of stored inbox threads. A manual sweep may retry its
 /// page; scheduled collection passes only newly stored threads.
-pub fn analyze_batch(cfg: &Config, ids: &[String]) -> ScanReport {
+pub fn analyze_batch(runtime: &sjel_runtime::Status, cfg: &Config, ids: &[String]) -> ScanReport {
     let mut report = ScanReport::default();
     if ids.is_empty() {
         return report;
@@ -317,7 +317,7 @@ pub fn analyze_batch(cfg: &Config, ids: &[String]) -> ScanReport {
         return report;
     };
     for item in candidates {
-        if let Err(reason) = role.runtime_admission() {
+        if let Err(reason) = role.runtime_admission_with(runtime) {
             eprintln!("mail receipts: {reason}");
             break;
         }
@@ -330,12 +330,12 @@ pub fn analyze_batch(cfg: &Config, ids: &[String]) -> ScanReport {
         };
         let request = prompt(&body, &accounts);
         if let Err(reason) =
-            crate::quiet::runtime_admission(&role, request.chars().count(), REPLY_TOKENS)
+            crate::quiet::runtime_admission(runtime, &role, request.chars().count(), REPLY_TOKENS)
         {
             eprintln!("mail receipts: {reason}");
             continue;
         }
-        let target = crate::digest::to_target(cfg, &role);
+        let target = crate::digest::to_target(cfg, &role, runtime);
         if !summarize::fits_window(
             request.chars().count(),
             REPLY_TOKENS,

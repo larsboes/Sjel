@@ -41,6 +41,26 @@ Four things the receipts could not carry, and this does:
   its bytes are here, while an `ssh` target answers `unchecked` with the reason rather than a claim.
 - **The interval is data.** `backup_policy.interval_hours` is written from the surface, where `null`
   is `off`.
+- **Run-record retention.** Run history is pruned on policy passes to a default 90-day retention
+  period while keeping at least 10 latest runs per (capability, target) so history is bounded without
+  wiping recent diagnostic history.
+
+## Concurrent runs and interruption
+
+The API and policy timer claim a capability with one SQLite insert that checks for an
+unfinished run. A six-hour-old row stops blocking the ledger; a process lock in
+`tools/backup.sh` still refuses an overlapping live writer, including direct shell runs
+and runs against another target. Different capabilities have separate locks.
+
+The kernel releases the lock when its last owning process exits. Service restarts and
+SSH sessions do not inherit it. HUP, INT and TERM run cleanup after the current foreground
+command returns: resume a held capability, remove staging, and remove this run's local or
+remote partial archive. An SSH cleanup failure is reported. Completed archives are retained.
+
+SIGKILL and power loss cannot run cleanup: the maintenance hold and partial bytes can remain.
+A subsequent run refuses an existing destination name instead of overwriting it. Async task
+cancellation leaves the blocking writer running, and that worker closes its own ledger row.
+This does not provide exclusion between different machines writing to one destination.
 
 ## The timer is stored policy (2026-09-29)
 
@@ -57,7 +77,7 @@ trade an operator can see; the previous arrangement's failure mode was a fixed i
 change without editing a tracked file.
 
 An earlier attempt deleted the manifest without setting the policy first, which deleted the only
-automatic backup on the machine. That was reverted the same session; `ISA.md` records it, because the
+automatic backup on the machine. That was reverted the same session; Git history records it, because the
 ordering is the whole lesson.
 
 ## Why this is a capability and not a LaunchAgent

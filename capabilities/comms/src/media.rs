@@ -309,11 +309,11 @@ pub fn fetch_with_content(
 }
 
 /// `fetch` plus a summary. The CLI path.
-pub fn ingest(url: &str, cfg: &Config) -> Result<FeedItem> {
+pub fn ingest(url: &str, cfg: &Config, runtime: &sjel_runtime::Status) -> Result<FeedItem> {
     let mut item = fetch(url)?;
     let summary_producer = summary_producer_revision(cfg);
     if let Some(text) = &item.transcript {
-        if let SummarizeOutcome::Ok(summary) = summarize(text, cfg, &item.data_class) {
+        if let SummarizeOutcome::Ok(summary) = summarize(runtime, text, cfg, &item.data_class) {
             item.summary = Some(summary);
             item.summary_provenance = summary_producer.map(StageProvenance::model);
         }
@@ -392,12 +392,13 @@ mod tests {
 
     #[test]
     fn media_summarize_refuses_a_c3_item_before_any_request() {
+        let runtime = sjel_runtime::Status::normal("test");
         let cfg = Config::with_inference(unreachable_light_role());
         let text = "paragraph ".repeat(100);
 
         for refused in ["c3", "vault", "personal", "c4", ""] {
             assert_eq!(
-                summarize(&text, &cfg, refused).error_class(),
+                summarize(&runtime, &text, &cfg, refused).error_class(),
                 crate::digest::LOCAL_REFUSED,
                 "{refused} was carried into a prompt"
             );
@@ -406,7 +407,7 @@ mod tests {
         // closed port instead of being refused for its class.
         for allowed in ["c0", "c1", "c2"] {
             assert_ne!(
-                summarize(&text, &cfg, allowed).error_class(),
+                summarize(&runtime, &text, &cfg, allowed).error_class(),
                 crate::digest::LOCAL_REFUSED,
                 "{allowed} lost its local processing"
             );
@@ -815,19 +816,20 @@ mod tests {
         /// this cannot pass on a drain that stopped recording attempts at all.
         #[test]
         fn a_refused_class_moves_no_retry_ledger_through_the_drain() {
+            let runtime = sjel_runtime::Status::normal("test");
             let store = crate::store::db_tests::open_test_store("media_c3_no_retry");
             let mut cfg = Config::with_inference(unreachable_light_role());
             cfg.database_path = crate::store::db_tests::test_database("media_c3_no_retry_gate");
             let text = "paragraph ".repeat(100);
             assert_eq!(
-                summarize(&text, &cfg, "c3").error_class(),
+                summarize(&runtime, &text, &cfg, "c3").error_class(),
                 crate::digest::LOCAL_REFUSED,
                 "the outcome under test is not the refusal"
             );
 
             let refused = stored_feed(&store, "c3");
             assert!(
-                !summarize_item(&store, &cfg, &refused).expect("the drain answers"),
+                !summarize_item(&runtime, &store, &cfg, &refused).expect("the drain answers"),
                 "a refused item reported a summary"
             );
             let row = store
@@ -840,7 +842,7 @@ mod tests {
             assert_eq!(row.summary_next_attempt, None, "a verdict has no backoff");
 
             let attempted = stored_feed(&store, "c2");
-            assert!(!summarize_item(&store, &cfg, &attempted).expect("the drain answers"));
+            assert!(!summarize_item(&runtime, &store, &cfg, &attempted).expect("the drain answers"));
             let control = store
                 .get_feed(&attempted)
                 .expect("the row reads back")

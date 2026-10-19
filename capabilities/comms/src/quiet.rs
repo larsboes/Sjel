@@ -108,14 +108,17 @@ pub fn rung(inference: &InferenceConfig, source_chars: usize, reply_tokens: u32)
 
 /// Runtime admission plus the full-source window check for On-the-go AFM work.
 /// No truncation is allowed to turn an oversized source into an admitted request.
+///
+/// `runtime` is the status the caller resolved for its unit of work, so this gate
+/// obeys the profile that caller decided on rather than reading the overlay again.
 pub fn runtime_admission(
+    runtime: &sjel_runtime::Status,
     role: &ResolvedRole,
     source_chars: usize,
     reply_tokens: u32,
 ) -> Result<(), sjel_runtime::Deferred> {
-    let status = sjel_runtime::current()?;
-    status.admit_model(&role.backend_name, &role.model, role.is_loopback())?;
-    if status.effective == sjel_runtime::Selection::OnTheGo
+    runtime.admit_model(&role.backend_name, &role.model, role.is_loopback())?;
+    if runtime.effective == sjel_runtime::Selection::OnTheGo
         && role.backend_name == "foundation-models"
         && role.model == "apple-foundationmodel"
         && role.max_input_tokens.is_none_or(|window| {

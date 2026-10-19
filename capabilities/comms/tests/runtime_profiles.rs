@@ -17,6 +17,15 @@ fn policy(root: &Path, selection: &str, allow: &[Category]) {
     .unwrap();
 }
 
+/// The profile this child process actually resolves, re-read after every `policy` write.
+///
+/// This test IS about deferral, so it must obey the real overlay rather than state a
+/// profile: that is what makes "on-the-go refuses the work and nothing is written" a
+/// claim about the admission layer and not about a value the test handed in.
+fn live() -> sjel_runtime::Status {
+    sjel_runtime::current().expect("the child harness writes a readable overlay")
+}
+
 fn inference(base: &str, afm: bool, window: Option<u32>) -> sjel_inference::InferenceConfig {
     let backend = if afm { "foundation-models" } else { "local" };
     let model = if afm {
@@ -124,9 +133,10 @@ fn exercise(root: &Path) {
             "feed",
             &item.id,
             &summarize::Directive::default(),
+            &live(),
         ),
-        digest::generate_diagram(&store, &cfg, "feed", &item.id),
-        digest::generate_chart(&store, &cfg, "feed", &item.id),
+        digest::generate_diagram(&store, &cfg, "feed", &item.id, &live()),
+        digest::generate_chart(&store, &cfg, "feed", &item.id, &live()),
     ] {
         assert!(sjel_runtime::is_deferred(&action.unwrap_err().to_string()));
     }
@@ -142,8 +152,8 @@ fn exercise(root: &Path) {
         serde_json::to_value(digest::to_contract(&before)).unwrap(),
         serde_json::to_value(digest::to_contract(&after)).unwrap(),
     );
-    assert!(media::summarize_item(&store, &cfg, &item.id).is_err());
-    assert!(media::summarize_pending(&store, &cfg).is_err());
+    assert!(media::summarize_item(&live(), &store, &cfg, &item.id).is_err());
+    assert!(media::summarize_pending(&live(), &store, &cfg).is_err());
     let summary_after = store.get_feed(&item.id).unwrap().unwrap();
     assert_eq!(summary_before.summary, summary_after.summary);
     assert_eq!(
@@ -159,7 +169,7 @@ fn exercise(root: &Path) {
         summary_after.summary_provenance
     );
     assert_eq!(producers, digest::producer_revisions(&cfg));
-    assert!(mail_model::run_pass(&cfg, &store, mail_model::Mode::Shadow, 10, 0).is_err());
+    assert!(mail_model::run_pass(&cfg, &store, mail_model::Mode::Shadow, 10, 0, &live()).is_err());
 
     let embedding = cfg.embedding_role().unwrap();
     let profile = relevance::InterestProfile {
@@ -183,6 +193,7 @@ fn exercise(root: &Path) {
     for allow in [vec![], vec![Category::BulkIndexing]] {
         policy(root, "on-the-go", &allow);
         let outcome = relevance::score_items(
+            &live(),
             std::slice::from_ref(&item),
             std::slice::from_ref(&profile),
             Some(&embedding),
@@ -211,7 +222,8 @@ fn exercise(root: &Path) {
         &cfg,
         "feed",
         &pending.id,
-        &summarize::Directive::default()
+        &summarize::Directive::default(),
+        &live(),
     )
     .is_err());
     let deferred = store.content_digest("feed", &pending.id).unwrap().unwrap();
@@ -247,7 +259,7 @@ fn exercise(root: &Path) {
         .unwrap();
     let job_id = queued.job_id.unwrap();
     assert!(sjel_runtime::is_deferred(
-        &cloud_run::run_job(&store, &cfg, &job_id).unwrap_err()
+        &cloud_run::run_job(&store, &cfg, &job_id, &live()).unwrap_err()
     ));
     assert_eq!(store.cloud_provider_calls_today("cloud_public").unwrap(), 0);
     assert_eq!(
@@ -271,7 +283,7 @@ fn exercise(root: &Path) {
     policy(root, "on-the-go", &[]);
     let hosted = cfg.inference.role("cloud_public").unwrap();
     assert!(sjel_runtime::is_deferred(
-        &cloud_dispatch::analyze(&hosted, "reviewed document").unwrap_err()
+        &cloud_dispatch::analyze(&live(), &hosted, "reviewed document").unwrap_err()
     ));
     assert!(!store
         .release_cloud_job_attempt(&job_id, attempt + 100)
@@ -306,12 +318,13 @@ fn exercise(root: &Path) {
         &cfg,
         "feed",
         &item.id,
-        &summarize::Directive::new(summarize::Depth::Detailed, [])
+        &summarize::Directive::new(summarize::Depth::Detailed, []),
+        &live(),
     )
     .is_err());
     cfg.inference = inference(&base, true, Some(4096));
     assert!(matches!(
-        media::summarize(&"x".repeat(20000), &cfg, "c0"),
+        media::summarize(&live(), &"x".repeat(20000), &cfg, "c0"),
         media::SummarizeOutcome::OverWindow | media::SummarizeOutcome::PolicyDeferred(_)
     ));
     assert!(
@@ -357,12 +370,12 @@ fn exercise(root: &Path) {
         }
     });
     assert!(matches!(
-        media::summarize(&"x".repeat(600), &cfg, "c0"),
+        media::summarize(&live(), &"x".repeat(600), &cfg, "c0"),
         media::SummarizeOutcome::Ok(_)
     ));
     thread.join().unwrap();
     policy(root, "normal", &[]);
-    assert!(relevance::runtime_admission(Some(&embedding), None).is_ok());
+    assert!(relevance::runtime_admission(&live(), Some(&embedding), None).is_ok());
     cfg.inference = inference(&base, false, Some(24000));
     assert_eq!(digest::producer_revisions(&cfg), producers);
     assert!(store

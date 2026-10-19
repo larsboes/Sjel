@@ -96,12 +96,13 @@ impl ScoringOutcome {
 
 /// Admission does not change which producers define the stored vector space.
 pub fn runtime_admission(
+    runtime: &sjel_runtime::Status,
     embedding_role: Option<&ResolvedRole>,
     reranking_role: Option<&ResolvedRole>,
 ) -> Result<(), sjel_runtime::Deferred> {
-    sjel_runtime::require(sjel_runtime::Category::BulkIndexing)?;
+    runtime.require(sjel_runtime::Category::BulkIndexing)?;
     for role in [embedding_role, reranking_role].into_iter().flatten() {
-        role.runtime_admission()?;
+        role.runtime_admission_with(runtime)?;
     }
     Ok(())
 }
@@ -239,12 +240,13 @@ const EMBED_CHUNK_SIZE: usize = 32;
 /// rationale on a surface. An embedding is a model call and `item_document`
 /// joins title, author and content, which for a mail is the sender address.
 pub fn score_items(
+    runtime: &sjel_runtime::Status,
     items: &[FeedItem],
     profiles: &[InterestProfile],
     embedding_role: Option<&ResolvedRole>,
     reranking_role: Option<&ResolvedRole>,
 ) -> ScoringOutcome {
-    if let Err(reason) = runtime_admission(embedding_role, reranking_role) {
+    if let Err(reason) = runtime_admission(runtime, embedding_role, reranking_role) {
         return ScoringOutcome::deferred(reason.to_string());
     }
     let allowed = items
@@ -313,7 +315,7 @@ pub fn score_items(
             .iter()
             .map(|profile| (profile.text.clone(), TextRole::Query))
             .collect::<Vec<_>>();
-        match embed(role, &inputs) {
+        match embed(runtime, role, &inputs) {
             Ok(vectors) if vectors.len() == profiles.len() => Some(vectors),
             Err(error) if sjel_runtime::is_deferred(&error) => {
                 deferred = Some(error);
@@ -321,7 +323,12 @@ pub fn score_items(
             }
             outcome => {
                 chunks_failed += 1;
-                error_class = Some(report_embed_failure("the profile set", role, outcome.err()));
+                error_class = Some(report_embed_failure(
+                    runtime,
+                    "the profile set",
+                    role,
+                    outcome.err(),
+                ));
                 None
             }
         }
@@ -341,7 +348,7 @@ pub fn score_items(
                     .cloned()
                     .map(|document| (document, TextRole::Document))
                     .collect::<Vec<_>>();
-                match embed(role, &inputs) {
+                match embed(runtime, role, &inputs) {
                     Ok(vectors) if vectors.len() == chunk.len() => Some(vectors),
                     Err(error) if sjel_runtime::is_deferred(&error) => {
                         return ScoringOutcome::deferred(error);
@@ -349,6 +356,7 @@ pub fn score_items(
                     outcome => {
                         chunks_failed += 1;
                         error_class = error_class.or(Some(report_embed_failure(
+                            runtime,
                             "a chunk",
                             role,
                             outcome.err(),
@@ -408,7 +416,13 @@ pub fn score_items(
 
     let reranked = if candidate_profiles.iter().any(|row| !row.is_empty()) {
         reranking_role.and_then(|role| {
-            match rerank_candidate_scores(role, profiles, &item_documents, &candidate_profiles) {
+            match rerank_candidate_scores(
+                runtime,
+                role,
+                profiles,
+                &item_documents,
+                &candidate_profiles,
+            ) {
                 Ok(scores) => Some(scores),
                 Err(error) if sjel_runtime::is_deferred(&error) => {
                     deferred = Some(error);
@@ -427,7 +441,7 @@ pub fn score_items(
     if let Some(reason) = deferred {
         return ScoringOutcome::deferred(reason);
     }
-    if let Err(reason) = runtime_admission(embedding_role, reranking_role) {
+    if let Err(reason) = runtime_admission(runtime, embedding_role, reranking_role) {
         return ScoringOutcome::deferred(reason.to_string());
     }
     for (position, item_index) in allowed.iter().enumerate() {
@@ -516,8 +530,13 @@ pub fn score_items(
 /// `.ok()` discarded it, so a degraded pass looked exactly like a configured
 /// lexical one. `model_reachable` is probed only on a failure, which is what
 /// separates "the server is down" from "the server answered wrongly".
-fn report_embed_failure(what: &str, role: &ResolvedRole, error: Option<String>) -> &'static str {
-    let reachable = role.model_reachable();
+fn report_embed_failure(
+    runtime: &sjel_runtime::Status,
+    what: &str,
+    role: &ResolvedRole,
+    error: Option<String>,
+) -> &'static str {
+    let reachable = role.model_reachable(runtime);
     let class = if reachable {
         "embedding-failed"
     } else {
@@ -529,6 +548,7 @@ fn report_embed_failure(what: &str, role: &ResolvedRole, error: Option<String>) 
 }
 
 fn rerank_candidate_scores(
+    runtime: &sjel_runtime::Status,
     role: &ResolvedRole,
     profiles: &[InterestProfile],
     item_documents: &[String],
@@ -551,9 +571,10 @@ fn rerank_candidate_scores(
                 .iter()
                 .map(|index| item_documents[*index].clone())
                 .collect::<Vec<_>>();
-            sjel_runtime::require(sjel_runtime::Category::BulkIndexing)
+            runtime
+                .require(sjel_runtime::Category::BulkIndexing)
                 .map_err(|e| e.to_string())?;
-            let reranked = role.rerank(&profile.text, &documents)?;
+            let reranked = role.rerank(runtime, &profile.text, &documents)?;
             for (item_index, score) in item_chunk.iter().zip(reranked) {
                 scores[*item_index][profile_index] = Some(f64::from(score));
             }
@@ -571,8 +592,11 @@ fn rerank_candidate_scores(
 
 /// Cheap provider-specific readiness probe. Listing installed models avoids
 /// running an embedding just to paint a status indicator in the dashboard.
-pub fn embedding_backend_reachable(role: Option<&ResolvedRole>) -> bool {
-    role.is_some_and(ResolvedRole::model_reachable)
+pub fn embedding_backend_reachable(
+    runtime: &sjel_runtime::Status,
+    role: Option<&ResolvedRole>,
+) -> bool {
+    role.is_some_and(|role| role.model_reachable(runtime))
 }
 
 fn item_document(item: &FeedItem) -> String {
@@ -598,9 +622,15 @@ fn item_document(item: &FeedItem) -> String {
 /// One embedding call. The error is returned rather than swallowed: `.ok()`
 /// here was the reason a pass could degrade to lexical with nothing on stderr
 /// and nothing in the store to say so.
-fn embed(role: &ResolvedRole, inputs: &[(String, TextRole)]) -> Result<Vec<Vec<f64>>, String> {
-    sjel_runtime::require(sjel_runtime::Category::BulkIndexing).map_err(|e| e.to_string())?;
-    role.embed_mixed(inputs).map(|vectors| {
+fn embed(
+    runtime: &sjel_runtime::Status,
+    role: &ResolvedRole,
+    inputs: &[(String, TextRole)],
+) -> Result<Vec<Vec<f64>>, String> {
+    runtime
+        .require(sjel_runtime::Category::BulkIndexing)
+        .map_err(|e| e.to_string())?;
+    role.embed_mixed(runtime, inputs).map(|vectors| {
         vectors
             .into_iter()
             .map(|vector| vector.into_iter().map(f64::from).collect())
@@ -723,10 +753,13 @@ mod tests {
             text: "software architecture".into(),
             fingerprint: "revision".into(),
         };
-        let scored = score_items(&[item], &[profile], None, None);
-        assert!(scored.items[0].matches[0]
-            .rationale
-            .starts_with("Lexical similarity for Systems"));
+        let runtime = sjel_runtime::Status::normal("test");
+        let scored = score_items(&runtime, &[item], &[profile], None, None);
+        assert!(
+            scored.items[0].matches[0]
+                .rationale
+                .starts_with("Lexical similarity for Systems")
+        );
     }
 
     #[test]
@@ -903,7 +936,8 @@ mod repair_tests {
         let (base_url, _recorded) = stub_embedding::start(2);
         let role = role(&base_url);
         let items = (0..40).map(|index| item(index, "c0")).collect::<Vec<_>>();
-        let outcome = score_items(&items, &[profile()], Some(&role), None);
+        let runtime = sjel_runtime::Status::normal("test");
+        let outcome = score_items(&runtime, &items, &[profile()], Some(&role), None);
 
         assert_eq!(outcome.mode, "semantic");
         assert_eq!(outcome.chunks, 3, "one profile call plus two item chunks");
@@ -929,7 +963,14 @@ mod repair_tests {
         refused.summary = Some("Refused private body".into());
         let allowed = item(2, "c0");
         let allowed_title = allowed.title.clone().expect("a title");
-        let outcome = score_items(&[refused, allowed], &[profile()], Some(&role), None);
+        let runtime = sjel_runtime::Status::normal("test");
+        let outcome = score_items(
+            &runtime,
+            &[refused, allowed],
+            &[profile()],
+            Some(&role),
+            None,
+        );
 
         assert!(outcome.items[0].refused_class);
         assert!(

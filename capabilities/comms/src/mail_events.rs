@@ -5,7 +5,7 @@
 //! never the source body.
 
 use serde::Deserialize;
-use serde_json::{json, Value};
+use serde_json::{Value, json};
 use sha2::{Digest, Sha256};
 
 use crate::{
@@ -257,7 +257,7 @@ fn propose(cfg: &Config, item: &TriageItem, index: usize, event: &Event) -> Resu
 
 /// Analyze a bounded set of inbox threads. The caller controls whether the set
 /// came from an explicit sweep or the optional schedule.
-pub fn analyze_batch(cfg: &Config, ids: &[String]) -> ScanReport {
+pub fn analyze_batch(runtime: &sjel_runtime::Status, cfg: &Config, ids: &[String]) -> ScanReport {
     let mut report = ScanReport::default();
     if ids.is_empty() {
         return report;
@@ -301,7 +301,7 @@ pub fn analyze_batch(cfg: &Config, ids: &[String]) -> ScanReport {
         return report;
     };
     for item in candidates {
-        if let Err(reason) = role.runtime_admission() {
+        if let Err(reason) = role.runtime_admission_with(runtime) {
             eprintln!("mail events: {reason}");
             break;
         }
@@ -312,16 +312,19 @@ pub fn analyze_batch(cfg: &Config, ids: &[String]) -> ScanReport {
                 continue;
             }
         };
-        let target = crate::digest::to_target(cfg, &role);
+        let target = crate::digest::to_target(cfg, &role, runtime);
         // A rail or hotel confirmation runs past a 4,096-token light window, and refusing it
         // dropped every Deutsche Bahn and Booking.com confirmation in the inbox. They put the
         // itinerary at the top, so keep the head. Grounding below still checks each quote
         // against the full body, so the cut can lose an event but cannot invent a date.
         let room = summarize::window_chars(REPLY_TOKENS, role.max_input_tokens.unwrap_or_default())
             .saturating_sub(prompt("").chars().count());
-        if let Err(reason) =
-            crate::quiet::runtime_admission(&role, prompt(&body).chars().count(), REPLY_TOKENS)
-        {
+        if let Err(reason) = crate::quiet::runtime_admission(
+            runtime,
+            &role,
+            prompt(&body).chars().count(),
+            REPLY_TOKENS,
+        ) {
             eprintln!("mail events: {reason}");
             continue;
         }

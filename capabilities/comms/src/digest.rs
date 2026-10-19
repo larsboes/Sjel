@@ -38,13 +38,13 @@
 //! detector the sweep uses on subject and snippet, and the count is recorded, so
 //! a digest cannot republish what the sweep redacted.
 
-use crate::cloud_derivative::{self, redact_review_field, RedactionFinding};
+use crate::Result;
+use crate::cloud_derivative::{self, RedactionFinding, redact_review_field};
 use crate::config::Config;
 use crate::content_item;
 use crate::google;
 use crate::store::{Store, StoredDigest};
 use crate::summarize::{self, Depth, Directive, Outcome, Reach, Target};
-use crate::Result;
 
 /// How many retryable failures a row accumulates before the automatic pass
 /// leaves it alone. An explicit press always runs regardless — the operator can
@@ -121,7 +121,11 @@ pub fn unattended_producer_revisions(cfg: &Config) -> Vec<String> {
 /// The `Target` shape is deliberately plain data: `libs/summarize` never learns
 /// what an `InferenceConfig` is, so a capability with no inference dependency
 /// can still call it.
-pub(crate) fn to_target(cfg: &Config, role: &sjel_inference::ResolvedRole) -> Target {
+pub(crate) fn to_target(
+    cfg: &Config,
+    role: &sjel_inference::ResolvedRole,
+    runtime: &sjel_runtime::Status,
+) -> Target {
     // Two questions, and Q39 is where they stopped having one answer. A trusted
     // peer may see any class (`trusted_for_every_class`) and must not queue
     // behind this machine's GPU gate (`is_loopback`), because it has its own.
@@ -145,6 +149,7 @@ pub(crate) fn to_target(cfg: &Config, role: &sjel_inference::ResolvedRole) -> Ta
         gate: loopback.then(|| {
             crate::local_gate::AdvisoryGate::shared(&cfg.database_path, &role.backend_name)
         }),
+        runtime: Some(runtime.clone()),
     }
 }
 
@@ -338,6 +343,7 @@ pub fn generate(
     source: &str,
     id: &str,
     directive: &Directive,
+    runtime: &sjel_runtime::Status,
 ) -> Result<Option<StoredDigest>> {
     let Some(gathered) = source_text(store, cfg, source, id)? else {
         return Ok(None);
@@ -346,7 +352,7 @@ pub fn generate(
     // otherwise. Unattended passes do not come through here — see
     // [`refresh_pending`] and `crate::quiet`.
     let role = role_for(cfg, directive, gathered.text.chars().count());
-    write_digest(store, cfg, source, id, directive, &gathered, role).map(Some)
+    write_digest(store, cfg, source, id, directive, &gathered, role, runtime).map(Some)
 }
 
 /// Run one resolved role over gathered text and store what came back.
@@ -355,6 +361,7 @@ pub fn generate(
 /// allowed to use instead of re-deriving it. The role arrives resolved rather
 /// than as a name: this function must not be able to pick a different one than
 /// the caller's policy decided.
+#[allow(clippy::too_many_arguments)]
 fn write_digest(
     store: &Store,
     cfg: &Config,
@@ -363,6 +370,7 @@ fn write_digest(
     directive: &Directive,
     gathered: &SourceText,
     role: Option<sjel_inference::ResolvedRole>,
+    runtime: &sjel_runtime::Status,
 ) -> Result<StoredDigest> {
     let previous = store
         .content_digest(source, id)
@@ -385,12 +393,16 @@ fn write_digest(
     // far a payload may travel, and the answer here is "nowhere at all".
     let outcome = gathered.local_prompt_allowed().then(|| {
         if let Some(role) = &role {
-            if let Err(reason) = crate::quiet::runtime_admission(role, chars, shape.max_tokens()) {
+            if let Err(reason) =
+                crate::quiet::runtime_admission(runtime, role, chars, shape.max_tokens())
+            {
                 return Outcome::PolicyDeferred(reason.to_string());
             }
         }
         summarize::digest(
-            role.as_ref().map(|role| to_target(cfg, role)).as_ref(),
+            role.as_ref()
+                .map(|role| to_target(cfg, role, runtime))
+                .as_ref(),
             &gathered.text,
             directive,
             reach_for(gathered, role.as_ref()),
@@ -581,6 +593,7 @@ pub fn generate_diagram(
     cfg: &Config,
     source: &str,
     id: &str,
+    runtime: &sjel_runtime::Status,
 ) -> Result<Option<StoredDigest>> {
     let Some(gathered) = source_text(store, cfg, source, id)? else {
         return Ok(None);
@@ -604,13 +617,15 @@ pub fn generate_diagram(
     // itself.
     if gathered.local_prompt_allowed() {
         if let Some(role) = &role {
-            crate::quiet::runtime_admission(role, input.chars().count(), 700)
+            crate::quiet::runtime_admission(runtime, role, input.chars().count(), 700)
                 .map_err(|e| crate::CommsError::Other(e.to_string()))?;
         }
     }
     let outcome = gathered.local_prompt_allowed().then(|| {
         summarize::diagram(
-            role.as_ref().map(|role| to_target(cfg, role)).as_ref(),
+            role.as_ref()
+                .map(|role| to_target(cfg, role, runtime))
+                .as_ref(),
             &input,
             reach_for(&gathered, role.as_ref()),
         )
@@ -624,7 +639,7 @@ pub fn generate_diagram(
     // by this press needs one to exist. Generating the digest first is also the
     // better diagram: see the note above.
     if existing.is_none() {
-        generate(store, cfg, source, id, &Directive::default())?;
+        generate(store, cfg, source, id, &Directive::default(), runtime)?;
     }
 
     let (diagram, error) = match &outcome {
@@ -661,6 +676,7 @@ pub fn generate_chart(
     cfg: &Config,
     source: &str,
     id: &str,
+    runtime: &sjel_runtime::Status,
 ) -> Result<Option<StoredDigest>> {
     let Some(gathered) = source_text(store, cfg, source, id)? else {
         return Ok(None);
@@ -674,13 +690,15 @@ pub fn generate_chart(
     // refused here most plainly of all (T3).
     if gathered.local_prompt_allowed() {
         if let Some(role) = &role {
-            crate::quiet::runtime_admission(role, gathered.text.chars().count(), 900)
+            crate::quiet::runtime_admission(runtime, role, gathered.text.chars().count(), 900)
                 .map_err(|e| crate::CommsError::Other(e.to_string()))?;
         }
     }
     let outcome = gathered.local_prompt_allowed().then(|| {
         summarize::chart::chart(
-            role.as_ref().map(|role| to_target(cfg, role)).as_ref(),
+            role.as_ref()
+                .map(|role| to_target(cfg, role, runtime))
+                .as_ref(),
             &gathered.text,
             reach_for(&gathered, role.as_ref()),
         )
@@ -693,7 +711,7 @@ pub fn generate_chart(
     // A chart hangs off a digest row, so an item charted before it was digested
     // needs one to exist.
     if existing.is_none() {
-        generate(store, cfg, source, id, &Directive::default())?;
+        generate(store, cfg, source, id, &Directive::default(), runtime)?;
     }
 
     let (chart, error) = match &outcome {
@@ -748,6 +766,7 @@ pub fn refresh_pending(
     cfg: &Config,
     source: &str,
     limit: i64,
+    runtime: &sjel_runtime::Status,
 ) -> Result<DrainReport> {
     let producers = producer_revisions(cfg);
     if producers.is_empty() {
@@ -765,7 +784,7 @@ pub fn refresh_pending(
     let directive = Directive::new(Depth::Standard, []);
     let mut report = DrainReport::default();
     for id in ids {
-        match refresh_one(store, cfg, source, &id, &directive) {
+        match refresh_one(store, cfg, source, &id, &directive, runtime) {
             Ok(Pass::Written(state)) => {
                 report.written += 1;
                 // The streak the alert threshold counts. Recorded here rather
@@ -852,6 +871,7 @@ fn refresh_one(
     source: &str,
     id: &str,
     directive: &Directive,
+    runtime: &sjel_runtime::Status,
 ) -> Result<Pass> {
     let Some(gathered) = source_text(store, cfg, source, id)? else {
         return Ok(Pass::Missing);
@@ -860,14 +880,23 @@ fn refresh_one(
     let shape = directive.shape_for(chars);
     if gathered.local_prompt_allowed() {
         if let Some(role) = cfg.light_summarization_role() {
-            role.runtime_admission()
+            role.runtime_admission_with(runtime)
                 .map_err(|e| crate::CommsError::Other(e.to_string()))?;
         }
     }
     match crate::quiet::rung(&cfg.inference, chars, shape.max_tokens()) {
         crate::quiet::Rung::Unconfigured => Ok(Pass::Unconfigured),
         crate::quiet::Rung::Light(role) => {
-            let row = write_digest(store, cfg, source, id, directive, &gathered, Some(*role))?;
+            let row = write_digest(
+                store,
+                cfg,
+                source,
+                id,
+                directive,
+                &gathered,
+                Some(*role),
+                runtime,
+            )?;
             Ok(Pass::Written(row.state))
         }
         // A class verdict outranks a window verdict, so it is asked first.
@@ -891,10 +920,11 @@ fn refresh_one(
                 directive,
                 &gathered,
                 cfg.light_summarization_role(),
+                runtime,
             )?;
             Ok(Pass::Written(row.state))
         }
-        crate::quiet::Rung::OverWindow => over_window(store, cfg, source, id, shape),
+        crate::quiet::Rung::OverWindow => over_window(store, cfg, source, id, shape, runtime),
     }
 }
 
@@ -920,9 +950,11 @@ fn over_window(
     source: &str,
     id: &str,
     shape: summarize::Shape,
+    runtime: &sjel_runtime::Status,
 ) -> Result<Pass> {
     if source != "feed" {
-        sjel_runtime::require(sjel_runtime::Category::OtherLocalModels)
+        runtime
+            .require(sjel_runtime::Category::OtherLocalModels)
             .map_err(|e| crate::CommsError::Other(e.to_string()))?;
         skip_over_window(store, cfg, source, id, shape)?;
         return Ok(Pass::OverWindow);
@@ -933,8 +965,8 @@ fn over_window(
     else {
         return Ok(Pass::Missing);
     };
-    match crate::cloud_run::enqueue_digest_job(store, cfg, &item) {
-        Ok(queued) => match crate::cloud_run::run_job(store, cfg, &queued.job_id) {
+    match crate::cloud_run::enqueue_digest_job(store, cfg, &item, runtime) {
+        Ok(queued) => match crate::cloud_run::run_job(store, cfg, &queued.job_id, runtime) {
             Ok(_) => {
                 eprintln!(
                     "digest drain: cloud digest for {id} via {}",
@@ -1303,18 +1335,22 @@ mod tests {
     #[test]
     fn only_local_only_content_is_redacted_before_the_digest_is_stored() {
         for class in ["c2", "c3"] {
-            assert!(SourceText {
-                text: String::new(),
-                data_class: class.into(),
-            }
-            .redact_before_persistence());
+            assert!(
+                SourceText {
+                    text: String::new(),
+                    data_class: class.into(),
+                }
+                .redact_before_persistence()
+            );
         }
         for class in ["c0", "c1"] {
-            assert!(!SourceText {
-                text: String::new(),
-                data_class: class.into(),
-            }
-            .redact_before_persistence());
+            assert!(
+                !SourceText {
+                    text: String::new(),
+                    data_class: class.into(),
+                }
+                .redact_before_persistence()
+            );
         }
     }
 
@@ -1430,11 +1466,12 @@ mod tests {
         /// no request made.
         #[test]
         fn a_c3_source_produces_no_local_digest_call() {
+            let runtime = sjel_runtime::Status::normal("test");
             let store = crate::store::db_tests::open_test_store("digest_c3_refusal");
             let cfg = Config::with_inference(unreachable_local_role());
             let id = stored_feed(&store, "c3");
 
-            let row = generate(&store, &cfg, "feed", &id, &Directive::default())
+            let row = generate(&store, &cfg, "feed", &id, &Directive::default(), &runtime)
                 .expect("the digest path answers")
                 .expect("the row exists, so a digest row is written");
             assert_eq!(row.state, LOCAL_REFUSED);
@@ -1448,11 +1485,12 @@ mod tests {
         /// would pass on a gate that refused everything.
         #[test]
         fn a_c2_source_still_reaches_the_local_model() {
+            let runtime = sjel_runtime::Status::normal("test");
             let store = crate::store::db_tests::open_test_store("digest_c2_local");
             let cfg = Config::with_inference(unreachable_local_role());
             let id = stored_feed(&store, "c2");
 
-            let row = generate(&store, &cfg, "feed", &id, &Directive::default())
+            let row = generate(&store, &cfg, "feed", &id, &Directive::default(), &runtime)
                 .expect("the digest path answers")
                 .expect("the row exists, so a digest row is written");
             assert_ne!(
@@ -1515,10 +1553,11 @@ mod tests {
         /// action that cannot work and name the wrong reason while doing it.
         #[test]
         fn an_over_window_c3_mail_thread_records_the_refusal_not_the_window() {
+            let runtime = sjel_runtime::Status::normal("test");
             let store = crate::store::db_tests::open_test_store("digest_c3_mail_drain");
             let (cfg, id) = stored_mail(&store, "thread:t3-drain-c3", "c3");
 
-            refresh_one(&store, &cfg, "mail", &id, &Directive::default())
+            refresh_one(&store, &cfg, "mail", &id, &Directive::default(), &runtime)
                 .expect("the drain answers");
             let row = store
                 .content_digest("mail", &id)
@@ -1538,10 +1577,11 @@ mod tests {
         /// `local_refused` for everything would pass.
         #[test]
         fn an_over_window_c2_mail_thread_still_records_the_window() {
+            let runtime = sjel_runtime::Status::normal("test");
             let store = crate::store::db_tests::open_test_store("digest_c2_mail_drain");
             let (cfg, id) = stored_mail(&store, "thread:t3-drain-c2", "c2");
 
-            refresh_one(&store, &cfg, "mail", &id, &Directive::default())
+            refresh_one(&store, &cfg, "mail", &id, &Directive::default(), &runtime)
                 .expect("the drain answers");
             let row = store
                 .content_digest("mail", &id)
@@ -1606,6 +1646,7 @@ mod tests {
         /// sent to any model.
         #[test]
         fn an_escalation_clears_the_digest_the_diagram_and_the_chart_together() {
+            let runtime = sjel_runtime::Status::normal("test");
             let store = crate::store::db_tests::open_test_store("digest_escalation_clears");
             let cfg = Config::with_inference(unreachable_local_role());
             let id = stored_feed(&store, "c1");
@@ -1615,7 +1656,7 @@ mod tests {
                 .set_feed_data_class(&id, "c3", Some("The item carries a credential."))
                 .expect("an escalation is admitted");
 
-            let row = generate(&store, &cfg, "feed", &id, &Directive::default())
+            let row = generate(&store, &cfg, "feed", &id, &Directive::default(), &runtime)
                 .expect("the digest path answers")
                 .expect("the row exists, so a digest row is written");
             assert_eq!(row.state, LOCAL_REFUSED);
@@ -1634,6 +1675,7 @@ mod tests {
         /// throw away a figure the operator asked for every time the drain ran.
         #[test]
         fn an_ordinary_regeneration_still_keeps_the_diagram_and_the_chart() {
+            let runtime = sjel_runtime::Status::normal("test");
             let store = crate::store::db_tests::open_test_store("digest_regeneration_keeps");
             let mut cfg = Config::with_inference(unreachable_local_role());
             // This one reaches the model, so it sites a local-gate lock file.
@@ -1642,7 +1684,7 @@ mod tests {
             let id = stored_feed(&store, "c2");
             digested_and_diagrammed(&store, &id);
 
-            let row = generate(&store, &cfg, "feed", &id, &Directive::default())
+            let row = generate(&store, &cfg, "feed", &id, &Directive::default(), &runtime)
                 .expect("the digest path answers")
                 .expect("the row exists, so a digest row is written");
             assert_ne!(row.state, LOCAL_REFUSED, "c2 is local-only, not forbidden");

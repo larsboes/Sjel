@@ -90,10 +90,12 @@ pub struct ChatOutcome {
 }
 
 pub fn analyze_with_outcome(
+    runtime: &sjel_runtime::Status,
     role: &ResolvedRole,
     document: &str,
 ) -> Result<(CloudContentAnalysis, ChatOutcome), String> {
     let outcome = chat_outcome(
+        runtime,
         role,
         serde_json::json!({
             "model": role.model,
@@ -111,8 +113,12 @@ pub fn analyze_with_outcome(
     Ok((analysis, outcome))
 }
 
-pub fn analyze(role: &ResolvedRole, document: &str) -> Result<CloudContentAnalysis, String> {
-    analyze_with_outcome(role, document).map(|(a, _)| a)
+pub fn analyze(
+    runtime: &sjel_runtime::Status,
+    role: &ResolvedRole,
+    document: &str,
+) -> Result<CloudContentAnalysis, String> {
+    analyze_with_outcome(runtime, role, document).map(|(a, _)| a)
 }
 
 /// A digest of one reviewed, `public`, passthrough derivative.
@@ -125,6 +131,7 @@ pub fn analyze(role: &ResolvedRole, document: &str) -> Result<CloudContentAnalys
 /// words the analysis task uses that instructions inside the document are not
 /// instructions.
 pub fn digest_with_outcome(
+    runtime: &sjel_runtime::Status,
     role: &ResolvedRole,
     document: &str,
     shape: crate::summarize::Shape,
@@ -132,6 +139,7 @@ pub fn digest_with_outcome(
     let prompt =
         crate::summarize::digest_prompt(document, shape, &crate::summarize::Directive::default());
     let outcome = chat_outcome(
+        runtime,
         role,
         serde_json::json!({
             "model": role.model,
@@ -152,11 +160,12 @@ pub fn digest_with_outcome(
 }
 
 pub fn digest(
+    runtime: &sjel_runtime::Status,
     role: &ResolvedRole,
     document: &str,
     shape: crate::summarize::Shape,
 ) -> Result<String, String> {
-    digest_with_outcome(role, document, shape).map(|(d, _)| d)
+    digest_with_outcome(runtime, role, document, shape).map(|(d, _)| d)
 }
 
 /// One chat-completions round trip against a reviewed cloud role, returning the
@@ -193,8 +202,12 @@ fn apply_role_conventions(role: &ResolvedRole, body: &mut serde_json::Value) {
 }
 
 #[allow(dead_code)]
-pub(crate) fn chat(role: &ResolvedRole, body: serde_json::Value) -> Result<String, String> {
-    chat_outcome(role, body).map(|outcome| outcome.content)
+pub(crate) fn chat(
+    runtime: &sjel_runtime::Status,
+    role: &ResolvedRole,
+    body: serde_json::Value,
+) -> Result<String, String> {
+    chat_outcome(runtime, role, body).map(|outcome| outcome.content)
 }
 
 fn validate_model(role: &ResolvedRole, body: &serde_json::Value) -> Result<(), String> {
@@ -204,8 +217,14 @@ fn validate_model(role: &ResolvedRole, body: &serde_json::Value) -> Result<(), S
     Ok(())
 }
 
-fn chat_outcome(role: &ResolvedRole, mut body: serde_json::Value) -> Result<ChatOutcome, String> {
-    sjel_runtime::require(sjel_runtime::Category::RemoteModels).map_err(|e| e.to_string())?;
+fn chat_outcome(
+    runtime: &sjel_runtime::Status,
+    role: &ResolvedRole,
+    mut body: serde_json::Value,
+) -> Result<ChatOutcome, String> {
+    runtime
+        .require(sjel_runtime::Category::RemoteModels)
+        .map_err(|e| e.to_string())?;
     apply_role_conventions(role, &mut body);
     validate_model(role, &body)?;
     if !role.is_cloud_endpoint() {
@@ -231,8 +250,10 @@ fn chat_outcome(role: &ResolvedRole, mut body: serde_json::Value) -> Result<Chat
     if let Some(key) = role.bearer_key() {
         request = request.bearer_auth(key);
     }
-    sjel_runtime::require(sjel_runtime::Category::RemoteModels).map_err(|e| e.to_string())?;
-    role.admit_chat_request(&body)?;
+    runtime
+        .require(sjel_runtime::Category::RemoteModels)
+        .map_err(|e| e.to_string())?;
+    role.admit_chat_request_with(runtime, &body)?;
     let response = request.send().map_err(|error| {
         if error.is_timeout() {
             "cloud request timed out".to_string()

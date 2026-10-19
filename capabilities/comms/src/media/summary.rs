@@ -137,7 +137,12 @@ pub fn summary_producer_revision(cfg: &Config) -> Option<String> {
 /// (T3), and the loopback POST below is a prompt. `content_item::
 /// local_prompt_allowed` is the gate, the same one `digest.rs` asks and the same
 /// one `processing_policy(..).local_processing` is derived from.
-pub fn summarize(text: &str, cfg: &Config, data_class: &str) -> SummarizeOutcome {
+pub fn summarize(
+    runtime: &sjel_runtime::Status,
+    text: &str,
+    cfg: &Config,
+    data_class: &str,
+) -> SummarizeOutcome {
     if !crate::content_item::local_prompt_allowed(data_class) {
         return SummarizeOutcome::LocalRefused;
     }
@@ -153,7 +158,7 @@ pub fn summarize(text: &str, cfg: &Config, data_class: &str) -> SummarizeOutcome
         crate::quiet::Rung::Unconfigured => return SummarizeOutcome::Unconfigured,
     };
     if let Err(reason) =
-        crate::quiet::runtime_admission(&role, text.chars().count(), SUMMARY_REPLY_TOKENS)
+        crate::quiet::runtime_admission(runtime, &role, text.chars().count(), SUMMARY_REPLY_TOKENS)
     {
         return SummarizeOutcome::PolicyDeferred(reason.to_string());
     }
@@ -208,7 +213,7 @@ pub fn summarize(text: &str, cfg: &Config, data_class: &str) -> SummarizeOutcome
     if let Some(key) = role.bearer_key() {
         req = req.bearer_auth(key);
     }
-    if let Err(reason) = role.admit_chat_request(&body) {
+    if let Err(reason) = role.admit_chat_request_with(runtime, &body) {
         return if sjel_runtime::is_deferred(&reason) {
             SummarizeOutcome::PolicyDeferred(reason)
         } else {
@@ -236,10 +241,10 @@ pub fn summarize(text: &str, cfg: &Config, data_class: &str) -> SummarizeOutcome
     // server the digest path does.
     match crate::summarize::server_error(&body) {
         Some(crate::summarize::ServerError::Capacity(message)) => {
-            return SummarizeOutcome::CapacityAborted(message)
+            return SummarizeOutcome::CapacityAborted(message);
         }
         Some(crate::summarize::ServerError::Other(message)) => {
-            return SummarizeOutcome::ModelError(message)
+            return SummarizeOutcome::ModelError(message);
         }
         None => {}
     }
@@ -262,10 +267,10 @@ pub fn summarize(text: &str, cfg: &Config, data_class: &str) -> SummarizeOutcome
 /// `/models` does not trigger a generation or load a model into memory.
 /// The rung the unattended passes actually use, so a health probe answers about
 /// the model that is going to be asked rather than about one that is not.
-pub fn summarizer_reachable(cfg: &Config) -> bool {
+pub fn summarizer_reachable(runtime: &sjel_runtime::Status, cfg: &Config) -> bool {
     cfg.light_summarization_role()
         .as_ref()
-        .is_some_and(sjel_inference::ResolvedRole::model_reachable)
+        .is_some_and(|role| role.model_reachable(runtime))
 }
 
 /// Summarize one stored item, if it has a transcript and no summary yet.
@@ -274,7 +279,12 @@ pub fn summarizer_reachable(cfg: &Config) -> bool {
 /// `POST /ingest` has already answered — deliberately scoped to the single id
 /// rather than reusing `summarize_pending`, so two concurrent ingests don't
 /// each pick up the other's row.
-pub fn summarize_item(store: &Store, cfg: &Config, id: &str) -> Result<bool> {
+pub fn summarize_item(
+    runtime: &sjel_runtime::Status,
+    store: &Store,
+    cfg: &Config,
+    id: &str,
+) -> Result<bool> {
     let item = match store
         .get_feed(id)
         .map_err(|e| CommsError::Other(e.to_string()))?
@@ -295,7 +305,7 @@ pub fn summarize_item(store: &Store, cfg: &Config, id: &str) -> Result<bool> {
         Some(t) => t,
         None => return Ok(false),
     };
-    match summarize(text, cfg, &item.data_class) {
+    match summarize(runtime, text, cfg, &item.data_class) {
         SummarizeOutcome::Ok(summary) => {
             store
                 .update_feed_summary(id, &summary, &producer_revision)
@@ -339,7 +349,11 @@ pub struct EnrichmentPass {
 
 /// Retry summarization for eligible feed items (bounded by attempt cap and
 /// exponential backoff).
-pub fn summarize_pending(store: &Store, cfg: &Config) -> Result<EnrichmentPass> {
+pub fn summarize_pending(
+    runtime: &sjel_runtime::Status,
+    store: &Store,
+    cfg: &Config,
+) -> Result<EnrichmentPass> {
     let Some(producer_revision) = summary_producer_revision(cfg) else {
         return Ok(EnrichmentPass::default());
     };
@@ -360,7 +374,7 @@ pub fn summarize_pending(store: &Store, cfg: &Config) -> Result<EnrichmentPass> 
                 Ok(false) => continue,
                 Err(e) => return Err(CommsError::Other(e.to_string())),
             }
-            match summarize(text, cfg, &item.data_class) {
+            match summarize(runtime, text, cfg, &item.data_class) {
                 SummarizeOutcome::Ok(summary) => {
                     store
                         .update_feed_summary(&item.id, &summary, &producer_revision)

@@ -92,6 +92,13 @@ fn spawn_enrichment_drain(every_minutes: u64) -> Option<tokio::task::JoinHandle<
             // blocking half would otherwise take the drain down without a word,
             // which is the same silence this issue exists to remove.
             let joined = tokio::task::spawn_blocking(|| {
+                let runtime = match sjel_runtime::current() {
+                    Ok(status) => status,
+                    Err(reason) => {
+                        eprintln!("enrichment drain: {reason}");
+                        return;
+                    }
+                };
                 let cfg = Config::load();
                 let store = match Store::open(&cfg.database_path) {
                     Ok(store) => store,
@@ -111,7 +118,7 @@ fn spawn_enrichment_drain(every_minutes: u64) -> Option<tokio::task::JoinHandle<
                     }
                 };
 
-                match media::summarize_pending(&store, &cfg) {
+                match media::summarize_pending(&runtime, &store, &cfg) {
                     Ok(pass) if pass.summarized > 0 || pass.over_window > 0 => eprintln!(
                         "enrichment drain: summarized {}, {} past the on-device window (left for a press)",
                         pass.summarized, pass.over_window
@@ -174,6 +181,13 @@ fn spawn_digest_drain(every_minutes: u64) -> Option<tokio::task::JoinHandle<()>>
             // panic in the blocking half would otherwise take the drain down
             // silently, rebuilding the exact silence this exists to end.
             let joined = tokio::task::spawn_blocking(|| {
+                let runtime = match sjel_runtime::current() {
+                    Ok(status) => status,
+                    Err(reason) => {
+                        eprintln!("digest drain: {reason}");
+                        return;
+                    }
+                };
                 let cfg = Config::load();
                 let store = match Store::open(&cfg.database_path) {
                     Ok(store) => store,
@@ -182,7 +196,7 @@ fn spawn_digest_drain(every_minutes: u64) -> Option<tokio::task::JoinHandle<()>>
                         return;
                     }
                 };
-                match digest::refresh_pending(&store, &cfg, "feed", 25) {
+                match digest::refresh_pending(&store, &cfg, "feed", 25, &runtime) {
                     Ok(report) if report.unconfigured => eprintln!(
                         "digest drain: no 'summarization_light' inference role on this machine; \
                          unattended digests are off"
@@ -277,6 +291,7 @@ fn spawn_inbox_sweep(
         loop {
             ticker.tick().await;
             let joined = tokio::task::spawn_blocking(move || -> Result<Option<String>, String> {
+                let runtime = sjel_runtime::current().map_err(|e| e.to_string())?;
                 let cfg = Config::load();
                 if !cfg.google_env_path.is_file() {
                     return Ok(None);
@@ -309,8 +324,9 @@ fn spawn_inbox_sweep(
 
                 match run_inbox_sweep(&cfg, max_threads, None) {
                     Ok(mut outcome) => {
-                        outcome.events = mail_events::analyze_batch(&cfg, &outcome.new_ids);
-                        outcome.receipts = mail_receipts::analyze_batch(&cfg, &outcome.new_ids);
+                        outcome.events = mail_events::analyze_batch(&runtime, &cfg, &outcome.new_ids);
+                        outcome.receipts =
+                            mail_receipts::analyze_batch(&runtime, &cfg, &outcome.new_ids);
                         store
                             .record_sweep_success(
                                 INBOX_SWEEP_SOURCE,

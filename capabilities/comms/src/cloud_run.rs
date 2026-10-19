@@ -97,8 +97,10 @@ pub fn enqueue_digest_job(
     store: &Store,
     cfg: &Config,
     item: &FeedItem,
+    runtime: &sjel_runtime::Status,
 ) -> Result<QueuedDigest, DigestNotQueued> {
-    sjel_runtime::require(sjel_runtime::Category::RemoteModels)
+    runtime
+        .require(sjel_runtime::Category::RemoteModels)
         .map_err(|e| DigestNotQueued::PolicyDeferred(e.to_string()))?;
     let registry = crate::people_registry::entity_registry();
     let preview =
@@ -119,7 +121,7 @@ pub fn enqueue_digest_job(
 
     let mut blocked = Vec::new();
     for (name, role) in cleared {
-        role.runtime_admission()
+        role.runtime_admission_with(runtime)
             .map_err(|e| DigestNotQueued::PolicyDeferred(e.to_string()))?;
         if !role.credential_ready() {
             blocked.push(format!("{name}: credential unavailable"));
@@ -266,8 +268,15 @@ fn tier_rank(role: &ResolvedRole) -> u8 {
 ///
 /// Lifted out of the server handler unchanged in behaviour so the drain can call
 /// it. The handler is now the HTTP shell around this.
-pub fn run_job(store: &Store, cfg: &Config, job_id: &str) -> Result<CloudDerivativeState, String> {
-    sjel_runtime::require(sjel_runtime::Category::RemoteModels).map_err(|e| e.to_string())?;
+pub fn run_job(
+    store: &Store,
+    cfg: &Config,
+    job_id: &str,
+    runtime: &sjel_runtime::Status,
+) -> Result<CloudDerivativeState, String> {
+    runtime
+        .require(sjel_runtime::Category::RemoteModels)
+        .map_err(|e| e.to_string())?;
     let job = store
         .cloud_job_for_dispatch(job_id)
         .map_err(|error| error.to_string())?
@@ -291,7 +300,7 @@ pub fn run_job(store: &Store, cfg: &Config, job_id: &str) -> Result<CloudDerivat
         .filter(|role| role.has_cloud_policy())
         .ok_or_else(|| "provider role is no longer a reviewed HTTPS cloud role".to_string())?;
     selected_role
-        .runtime_admission()
+        .runtime_admission_with(runtime)
         .map_err(|e| e.to_string())?;
     if !admits(&selected_role, &job) {
         return Err("provider role no longer allows the staged derivative".into());
@@ -302,7 +311,8 @@ pub fn run_job(store: &Store, cfg: &Config, job_id: &str) -> Result<CloudDerivat
     let mut outcomes = Vec::new();
 
     for (candidate_name, role) in cfg.inference.cloud_failover_roles(&job.provider_role) {
-        role.runtime_admission().map_err(|e| e.to_string())?;
+        role.runtime_admission_with(runtime)
+            .map_err(|e| e.to_string())?;
         if !admits(&role, &job) {
             continue;
         }
@@ -326,8 +336,11 @@ pub fn run_job(store: &Store, cfg: &Config, job_id: &str) -> Result<CloudDerivat
             continue;
         }
 
-        sjel_runtime::require(sjel_runtime::Category::RemoteModels).map_err(|e| e.to_string())?;
-        role.runtime_admission().map_err(|e| e.to_string())?;
+        runtime
+            .require(sjel_runtime::Category::RemoteModels)
+            .map_err(|e| e.to_string())?;
+        role.runtime_admission_with(runtime)
+            .map_err(|e| e.to_string())?;
         let attempt_id = match store
             .claim_cloud_job_attempt(
                 &job.job_id,
@@ -347,7 +360,7 @@ pub fn run_job(store: &Store, cfg: &Config, job_id: &str) -> Result<CloudDerivat
             }
         };
         requested = true;
-        let result = match perform(store, &job, &role) {
+        let result = match perform(store, &job, &role, runtime) {
             Ok(result) => result,
             Err(error) if sjel_runtime::is_deferred(&error) => {
                 if !store
@@ -503,10 +516,12 @@ fn perform(
     store: &Store,
     job: &CloudDispatchJob,
     role: &ResolvedRole,
+    runtime: &sjel_runtime::Status,
 ) -> Result<serde_json::Value, String> {
     let result = match job.task.as_str() {
         cloud_dispatch::TASK_VERSION => {
-            let (analysis, outcome) = cloud_dispatch::analyze_with_outcome(role, &job.document)?;
+            let (analysis, outcome) =
+                cloud_dispatch::analyze_with_outcome(runtime, role, &job.document)?;
             let _ = store.record_egress(&crate::store::NewEgressEntry {
                 job_id: Some(&job.job_id),
                 task: &job.task,
@@ -528,7 +543,8 @@ fn perform(
         cloud_dispatch::DIGEST_TASK_VERSION => {
             let shape =
                 crate::summarize::Directive::default().shape_for(job.document.chars().count());
-            let (text, outcome) = cloud_dispatch::digest_with_outcome(role, &job.document, shape)?;
+            let (text, outcome) =
+                cloud_dispatch::digest_with_outcome(runtime, role, &job.document, shape)?;
             let _ = store.record_egress(&crate::store::NewEgressEntry {
                 job_id: Some(&job.job_id),
                 task: &job.task,
@@ -862,6 +878,7 @@ mod tests {
         /// derivative was staged and no job exists for a non-`c0` item.
         #[test]
         fn a_non_c0_item_gets_no_cloud_digest_job() {
+            let runtime = sjel_runtime::Status::normal("test");
             let store = crate::store::db_tests::open_test_store("cloud_digest_refusal");
             let cfg = Config::with_inference(inference(&[
                 ("cloud_public", "public", 30),
@@ -870,7 +887,7 @@ mod tests {
 
             for class in ["c1", "c2", "c3", "something-new"] {
                 let item = feed_item(class);
-                let refusal = enqueue_digest_job(&store, &cfg, &item)
+                let refusal = enqueue_digest_job(&store, &cfg, &item, &runtime)
                     .expect_err("a non-c0 item must not reach a cloud provider verbatim");
                 let expected = if class == "c1" {
                     // c1 has a derivative; what it lacks here is a cloud tier
@@ -906,11 +923,12 @@ mod tests {
         /// where enqueueing never works at all.
         #[test]
         fn a_c0_item_does_get_a_cloud_digest_job() {
+            let runtime = sjel_runtime::Status::normal("test");
             let store = crate::store::db_tests::open_test_store("cloud_digest_enqueue");
             let cfg = Config::with_inference(inference(&[("cloud_public", "public", 30)]));
             let item = feed_item("c0");
 
-            let queued = enqueue_digest_job(&store, &cfg, &item)
+            let queued = enqueue_digest_job(&store, &cfg, &item, &runtime)
                 .expect("a c0 item finds the public-tier provider");
             assert_eq!(queued.provider_role, "cloud_public");
             let job = store
@@ -979,6 +997,7 @@ mod tests {
         /// re-check.
         #[test]
         fn a_derivative_approved_at_c1_stops_dispatching_when_the_mail_becomes_c2() {
+            let runtime = sjel_runtime::Status::normal("test");
             let store = crate::store::db_tests::open_test_store("cloud_stale_derivative");
             let cfg = Config::with_inference(inference(&[(
                 "cloud_pseudonymized",
@@ -1018,7 +1037,7 @@ mod tests {
             assert_eq!(stale.current_source_class.as_deref(), Some("c2"));
             assert!(!admits(&role, &stale));
             assert_eq!(
-                run_job(&store, &cfg, &job_id),
+                run_job(&store, &cfg, &job_id, &runtime),
                 Err("source row's class changed to c2 after staging".into()),
                 "dispatch reached a provider with a c2 row's derivative"
             );
@@ -1029,6 +1048,7 @@ mod tests {
         /// and no dispatch for a job staged before the row was c2.
         #[test]
         fn a_c2_item_has_no_preview_no_job_and_no_dispatch() {
+            let runtime = sjel_runtime::Status::normal("test");
             let store = crate::store::db_tests::open_test_store("cloud_c2_end_to_end");
             let cfg = Config::with_inference(inference(&[
                 ("cloud_public", "public", 30),
@@ -1069,7 +1089,7 @@ mod tests {
                 "a c2 item produced a pseudonymized preview a human could approve"
             );
             assert_eq!(
-                enqueue_digest_job(&store, &cfg, &c2_item),
+                enqueue_digest_job(&store, &cfg, &c2_item, &runtime),
                 Err(DigestNotQueued::LocalOnlyRefused),
                 "a c2 item was queued for a cloud digest"
             );
@@ -1078,7 +1098,7 @@ mod tests {
                 .expect("the job query answers")
                 .expect("the pre-staged job is still queued");
             assert!(!admits(&role, &staged_before));
-            assert!(run_job(&store, &cfg, &job_id).is_err());
+            assert!(run_job(&store, &cfg, &job_id, &runtime).is_err());
         }
 
         /// Product Rule 4 & ISC-20: A review queue job prepared and queued for a c1

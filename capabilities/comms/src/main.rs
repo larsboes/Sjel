@@ -38,6 +38,16 @@ fn open_store(cfg: &Config) -> Store {
     })
 }
 
+/// The runtime profile this command runs under, resolved once at its edge.
+///
+/// A deployment that cannot be read becomes [`sjel_runtime::Status::unresolved`]
+/// rather than a process exit, so every gate below still has a status to obey and
+/// answers the same way it did when each one resolved the profile itself.
+fn runtime_status() -> sjel_runtime::Status {
+    sjel_runtime::current()
+        .unwrap_or_else(|reason| sjel_runtime::Status::unresolved(reason.to_string()))
+}
+
 fn print_help() {
     println!("comms — read-only Gmail triage + share-link media ingest\n");
     println!("usage: comms <command> [flags]\n");
@@ -209,7 +219,9 @@ fn cmd_sweep(args: &[String], cfg: &Config) {
 
     let should_scan_events = store.is_some();
     drop(store);
-    let events = should_scan_events.then(|| mail_events::analyze_batch(cfg, &fetched_ids));
+    let events = should_scan_events.then(|| {
+        mail_events::analyze_batch(&runtime_status(), cfg, &fetched_ids)
+    });
 
     println!("total: {total} threads across {} streams", grouped.len());
     if redacted > 0 {
@@ -242,7 +254,7 @@ fn cmd_ingest(args: &[String], cfg: &Config) {
         }
     };
 
-    let item = match media::ingest(url, cfg) {
+    let item = match media::ingest(url, cfg, &runtime_status()) {
         Ok(i) => i,
         Err(e) => {
             eprintln!("error: ingest failed: {e}");
@@ -537,7 +549,7 @@ fn cmd_summarize(args: &[String], cfg: &Config) {
         std::process::exit(1);
     }
     let store = open_store(cfg);
-    match media::summarize_pending(&store, cfg) {
+    match media::summarize_pending(&runtime_status(), &store, cfg) {
         Ok(pass) => println!(
             "summarized {} pending feed item(s); {} past the on-device window, left for a press",
             pass.summarized, pass.over_window
@@ -1114,7 +1126,7 @@ fn cmd_mail(args: &[String], cfg: &Config) {
         mail_model::producer(cfg)
     );
     let started = std::time::Instant::now();
-    let receipt = match mail_model::run_pass(cfg, &store, mode, limit, min_confidence_bp) {
+    let receipt = match mail_model::run_pass(cfg, &store, mode, limit, min_confidence_bp, &runtime_status()) {
         Ok(receipt) => receipt,
         Err(error) => {
             eprintln!("error: the pass failed: {error}");

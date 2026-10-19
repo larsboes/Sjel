@@ -413,6 +413,13 @@ pub(super) struct IngestBody {
 }
 
 pub(super) fn enrich_many_in_background(ids: Vec<String>) {
+    let runtime = match sjel_runtime::current() {
+        Ok(status) => status,
+        Err(reason) => {
+            eprintln!("ingest: {reason}");
+            return;
+        }
+    };
     tokio::task::spawn_blocking(move || {
         let cfg = Config::load();
         let store = match Store::open(&cfg.database_path) {
@@ -423,11 +430,11 @@ pub(super) fn enrich_many_in_background(ids: Vec<String>) {
             }
         };
         for id in &ids {
-            if let Err(error) = media::summarize_item(&store, &cfg, id) {
+            if let Err(error) = media::summarize_item(&runtime, &store, &cfg, id) {
                 eprintln!("ingest: summarize failed for {id}: {error}");
             }
         }
-        if let Err(reason) = sjel_runtime::require(sjel_runtime::Category::BulkIndexing) {
+        if let Err(reason) = runtime.require(sjel_runtime::Category::BulkIndexing) {
             eprintln!("ingest: {reason}");
             return;
         }
@@ -467,12 +474,13 @@ pub(super) fn enrich_many_in_background(ids: Vec<String>) {
             &feedback.revision,
         );
         if let Err(reason) =
-            relevance::runtime_admission(embedding_role.as_ref(), reranking_role.as_ref())
+            relevance::runtime_admission(&runtime, embedding_role.as_ref(), reranking_role.as_ref())
         {
             eprintln!("ingest: {reason}");
             return;
         }
-        let semantic_available = relevance::embedding_backend_reachable(embedding_role.as_ref());
+        let semantic_available =
+            relevance::embedding_backend_reachable(&runtime, embedding_role.as_ref());
         items.retain(|item| {
             let item_revision = evaluation::item_revision(item);
             let stored = store.feed_evaluation(&item.id).ok().flatten();
@@ -487,6 +495,7 @@ pub(super) fn enrich_many_in_background(ids: Vec<String>) {
             return;
         }
         let outcome = relevance::score_items(
+            &runtime,
             &items,
             &profiles,
             embedding_role.as_ref(),
@@ -497,9 +506,11 @@ pub(super) fn enrich_many_in_background(ids: Vec<String>) {
             return;
         }
         for (item, result) in items.iter().zip(outcome.items) {
-            if let Err(reason) =
-                relevance::runtime_admission(embedding_role.as_ref(), reranking_role.as_ref())
-            {
+            if let Err(reason) = relevance::runtime_admission(
+                &runtime,
+                embedding_role.as_ref(),
+                reranking_role.as_ref(),
+            ) {
                 eprintln!("ingest: {reason}");
                 return;
             }
@@ -753,8 +764,14 @@ pub(super) async fn relevance_refresh_handler(Json(body): Json<RefreshBody>) -> 
         );
     }
     let requested_offset = body.offset;
+    let runtime = match sjel_runtime::current() {
+        Ok(status) => status,
+        Err(reason) => return error_response(StatusCode::BAD_REQUEST, reason.to_string()),
+    };
     let result = tokio::task::spawn_blocking(move || -> Result<Value, String> {
-        sjel_runtime::require(sjel_runtime::Category::BulkIndexing).map_err(|e| e.to_string())?;
+        runtime
+            .require(sjel_runtime::Category::BulkIndexing)
+            .map_err(|e| e.to_string())?;
         let cfg = Config::load();
         let store = Store::open(&cfg.database_path).map_err(|error| error.to_string())?;
         // Fallible now: a declared lens directory that has moved is reported
@@ -797,9 +814,10 @@ pub(super) async fn relevance_refresh_handler(Json(body): Json<RefreshBody>) -> 
             embedding_producer.as_deref(),
             reranking_producer.as_deref(),
         );
-        relevance::runtime_admission(embedding_role.as_ref(), reranking_role.as_ref())
+        relevance::runtime_admission(&runtime, embedding_role.as_ref(), reranking_role.as_ref())
             .map_err(|e| e.to_string())?;
-        let semantic_available = relevance::embedding_backend_reachable(embedding_role.as_ref());
+        let semantic_available =
+            relevance::embedding_backend_reachable(&runtime, embedding_role.as_ref());
         let receipt = store.relevance_pass().map_err(|error| error.to_string())?;
         let mut cursor =
             PassCursor::parse(receipt.as_ref().and_then(|state| state.cursor.as_deref()));
@@ -873,7 +891,7 @@ pub(super) async fn relevance_refresh_handler(Json(body): Json<RefreshBody>) -> 
             }
         }
 
-        relevance::runtime_admission(embedding_role.as_ref(), reranking_role.as_ref())
+        relevance::runtime_admission(&runtime, embedding_role.as_ref(), reranking_role.as_ref())
             .map_err(|e| e.to_string())?;
         let refused_class = refused.len();
         let mut refused_lower_tier = 0usize;
@@ -923,6 +941,7 @@ pub(super) async fn relevance_refresh_handler(Json(body): Json<RefreshBody>) -> 
         }
 
         let outcome = relevance::score_items(
+            &runtime,
             &to_rescore,
             &profiles,
             embedding_role.as_ref(),
@@ -932,7 +951,7 @@ pub(super) async fn relevance_refresh_handler(Json(body): Json<RefreshBody>) -> 
             return Err(reason.clone());
         }
         for (item, scored) in to_rescore.iter().zip(&outcome.items) {
-            relevance::runtime_admission(embedding_role.as_ref(), reranking_role.as_ref())
+            relevance::runtime_admission(&runtime, embedding_role.as_ref(), reranking_role.as_ref())
                 .map_err(|e| e.to_string())?;
             if !store
                 .replace_feed_relevance(&item.id, &scored.matches)
@@ -963,7 +982,7 @@ pub(super) async fn relevance_refresh_handler(Json(body): Json<RefreshBody>) -> 
         // are already stored, with no model call at all.
         let reused_relevance = to_reevaluate.len();
         for item in &to_reevaluate {
-            relevance::runtime_admission(embedding_role.as_ref(), reranking_role.as_ref())
+            relevance::runtime_admission(&runtime, embedding_role.as_ref(), reranking_role.as_ref())
                 .map_err(|e| e.to_string())?;
             let matches = stored_matches
                 .get(&item.id)
@@ -1007,7 +1026,7 @@ pub(super) async fn relevance_refresh_handler(Json(body): Json<RefreshBody>) -> 
             cursor.advance(&relevance_revision, days, offset, considered, has_more);
         }
         cursor.mode = mode.clone();
-        relevance::runtime_admission(embedding_role.as_ref(), reranking_role.as_ref())
+        relevance::runtime_admission(&runtime, embedding_role.as_ref(), reranking_role.as_ref())
             .map_err(|e| e.to_string())?;
         store
             .record_relevance_pass(
@@ -1071,6 +1090,8 @@ pub(super) async fn relevance_refresh_handler(Json(body): Json<RefreshBody>) -> 
 }
 
 pub(super) async fn evaluation_status_handler() -> HttpResponse {
+    let runtime = sjel_runtime::current()
+        .unwrap_or_else(|reason| sjel_runtime::Status::unresolved(reason.to_string()));
     let result = tokio::task::spawn_blocking(move || -> Result<Value, String> {
         let cfg = Config::load();
         let store = Store::open(&cfg.database_path).map_err(|error| error.to_string())?;
@@ -1111,15 +1132,15 @@ pub(super) async fn evaluation_status_handler() -> HttpResponse {
             .get_source_state(comms::capacity::LOCAL_INFERENCE_SOURCE)
             .map_err(|error| error.to_string())?;
         let unattended_role = cfg.light_summarization_role();
-        let summarizer_reachable = media::summarizer_reachable(&cfg);
+        let summarizer_reachable = media::summarizer_reachable(&runtime, &cfg);
         // Probed rather than assumed: an operator deciding whether to press
         // Regenerate on an over-window item is asking exactly this, and a
         // stopped oMLX is the ordinary state of this machine now.
         let strong_reachable = summarization_role
             .as_ref()
-            .is_some_and(|role| role.model_reachable());
+            .is_some_and(|role| role.model_reachable(&runtime));
         let relevance_reachable =
-            relevance::embedding_backend_reachable(embedding_role.as_ref());
+            relevance::embedding_backend_reachable(&runtime, embedding_role.as_ref());
         // The receipt of the last pass, and the line that would have made the
         // 2026-08-30 degradation visible the day it happened: 525 rows were
         // written lexical in one pass and nothing on the machine said so.
@@ -1138,7 +1159,7 @@ pub(super) async fn evaluation_status_handler() -> HttpResponse {
             .filter(|mode| !mode.is_empty())
             .map(str::to_string);
         let reranking_reachable =
-            relevance::embedding_backend_reachable(reranking_role.as_ref());
+            relevance::embedding_backend_reachable(&runtime, reranking_role.as_ref());
         Ok(json!({
             "evaluator_revision": evaluation::EVALUATOR_REVISION,
             "context_revision": evaluation::context_revision(

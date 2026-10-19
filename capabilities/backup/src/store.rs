@@ -272,16 +272,37 @@ impl BackupStore {
     }
 
     pub fn start_run(&self, capability: &str, target: &str, log_path: &str) -> Fallible<i64> {
+        self.try_start_run(capability, target, log_path)?
+            .ok_or_else(|| format!("a backup of '{capability}' is already running").into())
+    }
+
+    /// Claim the capability in the same SQLite statement that checks for a live run.
+    /// The shell's process lock also covers direct invocations and writers older than
+    /// the ledger's six-hour recovery window.
+    ///
+    /// # Errors
+    /// Returns an error if the database connection or atomic claim statement fails.
+    pub fn try_start_run(
+        &self,
+        capability: &str,
+        target: &str,
+        log_path: &str,
+    ) -> Fallible<Option<i64>> {
         let conn = self.conn()?;
-        conn.execute(
+        let inserted = conn.execute(
             &format!(
-                "INSERT INTO {}_runs (capability, target, started_at, log_path)
-                 VALUES (?1, ?2, {NOW}, ?3)",
-                self.prefix
+                "INSERT INTO {p}_runs (capability, target, started_at, log_path)
+                 SELECT ?1, ?2, {NOW}, ?3
+                  WHERE NOT EXISTS (
+                    SELECT 1 FROM {p}_runs WHERE capability = ?1
+                      AND finished_at IS NULL
+                      AND julianday(started_at) > julianday('now', '-6 hours')
+                  )",
+                p = self.prefix
             ),
             params![capability, target, log_path],
         )?;
-        Ok(conn.last_insert_rowid())
+        Ok((inserted == 1).then(|| conn.last_insert_rowid()))
     }
 
     /// Close a run. `archive` is what the producer recorded, or `None` when the run
@@ -381,7 +402,8 @@ impl BackupStore {
         let conn = self.conn()?;
         let count = conn.query_row(
             &format!(
-                "SELECT count(*) FROM {}_runs WHERE finished_at IS NULL",
+                "SELECT count(*) FROM {}_runs WHERE finished_at IS NULL
+                  AND julianday(started_at) > julianday('now', '-6 hours')",
                 self.prefix
             ),
             [],
@@ -406,7 +428,7 @@ impl BackupStore {
             &format!(
                 "SELECT count(*) FROM {p}_runs
                   WHERE capability = ?1 AND finished_at IS NULL
-                    AND started_at > datetime('now', '-6 hours')",
+                    AND julianday(started_at) > julianday('now', '-6 hours')",
                 p = self.prefix
             ),
             params![capability],
@@ -569,7 +591,40 @@ impl BackupStore {
             .optional()?;
         Ok(row)
     }
+
+    /// Prune run records older than `retention_days`, while keeping at least `keep_min_per_target`
+    /// latest runs for each (capability, target) pair so recent history is never wiped.
+    ///
+    /// Returns the number of pruned rows.
+    pub fn prune_runs(&self, retention_days: i64, keep_min_per_target: usize) -> Fallible<usize> {
+        let conn = self.conn()?;
+        let deleted = conn.execute(
+            &format!(
+                "DELETE FROM {p}_runs
+                  WHERE julianday(started_at) < julianday('now', ?1 || ' days')
+                    AND id NOT IN (
+                        SELECT id FROM (
+                            SELECT id,
+                                   ROW_NUMBER() OVER (
+                                       PARTITION BY capability, target
+                                       ORDER BY id DESC
+                                   ) as rn
+                              FROM {p}_runs
+                        ) WHERE rn <= ?2
+                    )",
+                p = self.prefix
+            ),
+            params![format!("-{retention_days}"), keep_min_per_target as i64],
+        )?;
+        Ok(deleted)
+    }
 }
+
+/// Default retention period for runs in days (90 days).
+pub const DEFAULT_RUN_RETENTION_DAYS: i64 = 90;
+
+/// Minimum number of latest runs to retain per (capability, target) regardless of age.
+pub const MIN_RETAINED_RUNS_PER_TARGET: usize = 10;
 
 #[cfg(test)]
 mod db_tests {
@@ -595,6 +650,46 @@ mod db_tests {
             present: present.to_string(),
             declared_by: caps.iter().map(|c| c.to_string()).collect(),
         }
+    }
+
+    #[test]
+    fn concurrent_claims_have_one_winner_across_connections() {
+        let (store, path) = store("concurrent-claims");
+        let stores: Vec<_> = (0..8).map(|_| BackupStore::open(&path).unwrap()).collect();
+        let barrier = std::sync::Arc::new(std::sync::Barrier::new(stores.len()));
+        let winners = std::thread::scope(|scope| {
+            let threads: Vec<_> = stores
+                .iter()
+                .enumerate()
+                .map(|(i, store)| {
+                    let barrier = &barrier;
+                    scope.spawn(move || {
+                        barrier.wait();
+                        store
+                            .try_start_run("store", &format!("target-{i}"), "")
+                            .unwrap()
+                    })
+                })
+                .collect();
+            threads
+                .into_iter()
+                .filter_map(|thread| thread.join().unwrap())
+                .collect::<Vec<_>>()
+        });
+        assert_eq!(winners.len(), 1);
+        assert_eq!(store.latest_runs().unwrap().len(), 1);
+        // A different capability can run; the same capability can run again after finish.
+        assert!(store
+            .try_start_run("vault", "target-0", "")
+            .unwrap()
+            .is_some());
+        store
+            .finish_run(winners[0], 143, None, "interrupted", "")
+            .unwrap();
+        assert!(store
+            .try_start_run("store", "target-0", "")
+            .unwrap()
+            .is_some());
     }
 
     #[test]
@@ -788,9 +883,49 @@ mod staleness_tests {
                 params![id],
             )
             .unwrap();
+        assert_eq!(store.running_count().unwrap(), 0);
         assert!(
             !store.running_for("store").unwrap(),
             "an abandoned run must not block the next one forever"
         );
+        assert!(store.try_start_run("store", "t", "").unwrap().is_some());
+    }
+
+    #[test]
+    fn pruning_removes_old_runs_while_retaining_recent_minimum() {
+        let dir = std::env::temp_dir().join(format!("backup-prune-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let path = dir.join("prune.db");
+        for tail in ["", "-wal", "-shm"] {
+            let _ = std::fs::remove_file(format!("{}{tail}", path.display()));
+        }
+        let store = BackupStore::open(&path).unwrap();
+
+        // Insert 5 runs for target "local": 4 old (100 days ago), 1 recent
+        let conn = store.conn().unwrap();
+        for _i in 1..=4 {
+            conn.execute(
+                &format!(
+                    "INSERT INTO {}_runs (capability, target, started_at, finished_at, exit_code)
+                     VALUES ('store', 'local', datetime('now', '-100 days'), datetime('now', '-100 days'), 0)",
+                    store.prefix()
+                ),
+                [],
+            ).unwrap();
+        }
+        conn.execute(
+            &format!(
+                "INSERT INTO {}_runs (capability, target, started_at, finished_at, exit_code)
+                 VALUES ('store', 'local', datetime('now'), datetime('now'), 0)",
+                store.prefix()
+            ),
+            [],
+        ).unwrap();
+
+        // Total runs: 5. If we keep minimum 2 per target, pruning at 90 days retention should remove (4 - (2 - 1)) = 3 old runs, leaving 2.
+        let pruned = store.prune_runs(90, 2).unwrap();
+        assert_eq!(pruned, 3);
+        let remaining = store.runs(50).unwrap();
+        assert_eq!(remaining.len(), 2);
     }
 }

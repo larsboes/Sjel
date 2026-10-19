@@ -44,6 +44,10 @@
 # vendored package's own manifest: `bun install --frozen-lockfile --ignore-scripts` then
 # `bun run test` inside Packs/harness/pi-packages/accordion, which is what the bun-tests job
 # does below. See Packs/harness/LICENSE for the vendoring terms.
+#
+# The anatomy figure skill is the second carve-out (2026-10-20). Its 279 scripts/*.test.mjs were
+# written for `node --test` and start headless Chrome, which bun's 5 s per-test default kills;
+# the anatomy-checks job runs them from the skill directory, where their relative paths resolve.
 # ---- the [install] hold is deliberately NOT here ---------------------------------------------
 #
 # Bun reads bunfig.toml from the directory it is invoked in and does NOT walk up to a parent —
@@ -59,6 +63,6 @@
 # rather than listing it, so a third tree cannot join without its own copy.
 
 [test]
-pathIgnorePatterns = ["bazel-*/*", "Packs/*/pi-packages/**"]
+pathIgnorePatterns = ["bazel-*/*", "Packs/*/pi-packages/**", "Packs/presentations/skills/anatomy/**"]
 # Builds sjel-cli once before collection; tools/lib/sjel-cli-preload.ts says why.
 preload = ["./tools/lib/sjel-cli-preload.ts"]

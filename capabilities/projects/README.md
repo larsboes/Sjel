@@ -14,22 +14,43 @@ and the API call the same functions in `src/ops.rs`.
 
 ## Interface
 
-- `GET /api/tasks?status=open|done`: tasks of live projects, in the shape `capabilities/vault`
-  serves, so decision-ladder band 620 reads it unchanged.
+- `GET /api/tasks?status=open|done`: tasks of live projects. Decision-ladder band 620 reads it;
+  the shape is the one the retired vault task reader served. Two keys are added: `project`, the
+  folder, and `fields`, every frontmatter key with lists flattened to `a, b`.
 - `GET /api/projects`, `GET /api/project?name=`: the list and one project's records.
+- `GET /api/records?kind=project|task|note`: every live record of one kind in the task shape,
+  with `kind` and all its properties. The dashboard's tables and note embeds read it.
 - `POST /api/tasks`, `POST /api/tasks/done`, `POST /api/projects`, `POST /api/notes`: create and
   complete.
+- `POST /api/record/property {path, key, value}`: set one frontmatter key; an empty value clears
+  it. Only that key's lines change. Any key is allowed except `type`, `done` and `moved_to`.
+  The server checks `priority` (1 to 3), `due` and `scheduled` (dates), and a task's `status`.
 - `POST /api/record {path, content, base}`: replace a record. A `base` that no longer matches the
   store returns 409 with the current content and writes nothing.
 - CLI `projects`: `list`, `projects`, `add`, `new-project`, `new-note`, `edit` (opens `$EDITOR`),
-  `done`, `reopen`, `import`, `freeze-vault`, `verify`, `render`.
+  `done`, `reopen`, `set`, `normalize`, `import`, `freeze-vault`, `verify`, `render`.
+
+## Task schema
+
+A task's `status` is `open`, `doing`, `waiting` or `done`. `done:` follows `status`; setting
+`status: done` also writes `completed:`. `projects normalize` brings old notes onto this
+schema, and `done:` decides their status. It ran on 2026-10-18 and changed 27 tasks. A project's
+`status` is `active`, `done` or `cancelled`; archiving is the move to `Archive/`.
+
+## Embedded bases
+
+A project note that embeds a vault base (`![[Tasks.base#…]]`) shows a live table in the
+dashboard when the view reads Sjel's records: tasks that link the note, projects in its folder,
+records one folder down. `dashboard/src/lib/projects/database.ts` translates those views from the
+vault's `Resources/Bases/*.base`. Every other base reads vault data and stays a link to the vault.
 
 ## The vault import
 
 `projects import <vault>/Projects` copies every `.md` of each project folder. `Archive/` comes in
-as archived. From `Sjel/` only notes typed `project` or `task` come in; its `Knowledge-Base/` is
-vault law and stays. Binaries stay in the vault. A row changed in Sjel after its import is never
-overwritten.
+as archived. Nothing comes in from `Sjel/Knowledge-Base/`: it is vault law and stays in the vault.
+Every other file of a project folder comes in as an attachment, kept as a file under
+`<overlay>/data/projects/` and served by `GET /api/file`. A row or attachment changed in Sjel
+after its import is never overwritten.
 
 `projects freeze-vault <vault>/Projects` then adds `moved_to:` and a banner to each imported note
 whose bytes still equal its row. The vault reader skips notes with `moved_to:`, so no task is

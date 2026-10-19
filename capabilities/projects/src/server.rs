@@ -2,7 +2,7 @@ use std::sync::Arc;
 
 use axum::{
     extract::{Query, State},
-    http::StatusCode,
+    http::{header, StatusCode},
     middleware,
     response::{IntoResponse, Response},
     routing::{get, post},
@@ -26,6 +26,21 @@ const ROUTES: &[route_manifest::Route] = &[
         "GET",
         "/api/projects",
         "Every project with its open and done task counts and its note count.",
+    ),
+    route_manifest::get(
+        "GET",
+        "/api/records",
+        "Every record of one kind in live projects, in the task shape with all its properties. ?kind=project|task|note.",
+    ),
+    route_manifest::get(
+        "GET",
+        "/api/files",
+        "Every attachment path: the images, PDFs and other files of projects.",
+    ),
+    route_manifest::get(
+        "GET",
+        "/api/file",
+        "One attachment's bytes. ?path= names it. Served sandboxed and never sniffed.",
     ),
     route_manifest::get(
         "GET",
@@ -55,6 +70,12 @@ const ROUTES: &[route_manifest::Route] = &[
         path: "/api/record",
         summary: "Replace a record's whole content. `base` is the content the edit started from; a stale base returns 409 with the current content and writes nothing.",
         request_schema: Some(route_manifest::schema_of::<SaveRecord>),
+    },
+    route_manifest::Route {
+        method: "POST",
+        path: "/api/record/property",
+        summary: "Set one frontmatter property of a live record; an empty value clears it. A task's status sets done with it. Answers with the task shape.",
+        request_schema: Some(route_manifest::schema_of::<SetProperty>),
     },
     route_manifest::Route {
         method: "POST",
@@ -95,6 +116,14 @@ struct SaveRecord {
 }
 
 #[derive(Deserialize, schemars::JsonSchema)]
+struct SetProperty {
+    path: String,
+    key: String,
+    #[serde(default)]
+    value: String,
+}
+
+#[derive(Deserialize, schemars::JsonSchema)]
 struct AddNote {
     project: String,
     title: String,
@@ -105,6 +134,16 @@ struct AddNote {
 #[derive(Deserialize)]
 struct TaskQuery {
     status: Option<String>,
+}
+
+#[derive(Deserialize)]
+struct FileQuery {
+    path: String,
+}
+
+#[derive(Deserialize)]
+struct KindQuery {
+    kind: Kind,
 }
 
 #[derive(Deserialize)]
@@ -216,6 +255,66 @@ async fn list_projects(State(projects): State<Shared>) -> Result<Json<Value>, Ap
     Ok(Json(json!({ "projects": summaries })))
 }
 
+async fn list_records(
+    State(projects): State<Shared>,
+    Query(query): Query<KindQuery>,
+) -> Result<Json<Value>, ApiError> {
+    let records = blocking(projects, false, move |p| ops::records(p, query.kind)).await?;
+    Ok(Json(json!({ "records": records })))
+}
+
+async fn list_files(State(projects): State<Shared>) -> Result<Json<Value>, ApiError> {
+    let files = blocking(projects, false, |p| p.attachments()).await?;
+    Ok(Json(json!({ "files": files })))
+}
+
+/// Images and PDFs open in the page; anything else downloads. Every answer is sandboxed and
+/// unsniffable, so an SVG or HTML file from the vault cannot run script in the dashboard origin.
+async fn get_file(State(projects): State<Shared>, Query(query): Query<FileQuery>) -> Response {
+    let path = query.path.clone();
+    match blocking(projects, true, move |p| p.attachment(&path)).await {
+        Ok(Some(bytes)) => {
+            let extension = query
+                .path
+                .rsplit_once('.')
+                .map_or("", |(_, e)| e)
+                .to_ascii_lowercase();
+            let (kind, inline) = match extension.as_str() {
+                "png" => ("image/png", true),
+                "jpg" | "jpeg" => ("image/jpeg", true),
+                "gif" => ("image/gif", true),
+                "webp" => ("image/webp", true),
+                "svg" => ("image/svg+xml", true),
+                "pdf" => ("application/pdf", true),
+                _ => ("application/octet-stream", false),
+            };
+            let name = query
+                .path
+                .rsplit('/')
+                .next()
+                .unwrap_or_default()
+                .replace('"', "");
+            let disposition = format!(
+                "{}; filename=\"{name}\"",
+                if inline { "inline" } else { "attachment" }
+            );
+            (
+                [
+                    (header::CONTENT_TYPE, kind.to_string()),
+                    (header::CONTENT_DISPOSITION, disposition),
+                    (header::X_CONTENT_TYPE_OPTIONS, "nosniff".to_string()),
+                    (header::CONTENT_SECURITY_POLICY, "sandbox".to_string()),
+                    (header::CACHE_CONTROL, "private, max-age=3600".to_string()),
+                ],
+                bytes,
+            )
+                .into_response()
+        }
+        Ok(None) => ApiError(StatusCode::NOT_FOUND, "no such attachment".into()).into_response(),
+        Err(e) => e.into_response(),
+    }
+}
+
 async fn get_project(
     State(projects): State<Shared>,
     Query(query): Query<ProjectQuery>,
@@ -306,6 +405,17 @@ async fn save_record(State(projects): State<Shared>, Json(body): Json<SaveRecord
     }
 }
 
+async fn set_property(
+    State(projects): State<Shared>,
+    Json(body): Json<SetProperty>,
+) -> Result<Json<Value>, ApiError> {
+    let record = blocking(projects, true, move |p| {
+        ops::set_property(p, &body.path, &body.key, &body.value)
+    })
+    .await?;
+    Ok(Json(json!({ "task": ops::Task::from_record(&record) })))
+}
+
 async fn add_note(
     State(projects): State<Shared>,
     Json(body): Json<AddNote>,
@@ -326,8 +436,12 @@ fn router(projects: Shared) -> Router {
         .route("/api/tasks", get(list_tasks).post(add_task))
         .route("/api/tasks/done", post(set_done))
         .route("/api/projects", get(list_projects).post(add_project))
+        .route("/api/records", get(list_records))
+        .route("/api/files", get(list_files))
+        .route("/api/file", get(get_file))
         .route("/api/project", get(get_project))
         .route("/api/record", post(save_record))
+        .route("/api/record/property", post(set_property))
         .route("/api/notes", post(add_note))
         .layer(middleware::from_fn_with_state(
             "projects",

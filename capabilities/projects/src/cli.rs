@@ -10,6 +10,9 @@ const USAGE: &str = "usage: projects <command>
   new-note <project> <title> [--summary TEXT]
   edit <path>                                  open a record in $EDITOR and save it
   done <task-id>  |  reopen <task-id>
+  set <path> <key> [value]                     set one property; no value clears it
+  remove <path>                                delete a record and its rendered file
+  normalize [--apply]                          put every task on the status schema; dry run first
   import <vault>/Projects [--only PROJECT]     copy vault project notes into the store
   freeze-vault <vault>/Projects [--only PROJECT]  mark imported vault notes as moved
   verify                                       compare the store with the rendered files
@@ -135,15 +138,44 @@ fn run() -> Result<(), Box<dyn std::error::Error>> {
             let r = ops::set_done(&projects, positional(1)?, command == "done")?;
             println!("{} {}", if r.done { "done" } else { "open" }, r.path);
         }
+        "set" => {
+            let value = args.get(3).map(String::as_str).unwrap_or_default();
+            let r = ops::set_property(&projects, positional(1)?, positional(2)?, value)?;
+            println!(
+                "{}: {}",
+                r.path,
+                r.fields().get(positional(2)?).map_or("", String::as_str)
+            );
+        }
+        "remove" => {
+            let path = positional(1)?;
+            let removed = projects.remove(path)?;
+            println!("{} {path}", if removed { "removed" } else { "no record" });
+        }
+        "normalize" => {
+            let apply = args.iter().any(|a| a == "--apply");
+            let report = ops::normalize(&projects, apply)?;
+            for n in &report {
+                println!("{}\n  {}", n.path, n.changes.join("\n  "));
+            }
+            let verb = if apply {
+                "normalized"
+            } else {
+                "would normalize (dry run; add --apply)"
+            };
+            println!("{verb} {} task(s)", report.len());
+        }
         "import" => {
             let report = ops::import(&projects, &PathBuf::from(positional(1)?), flag("--only"))?;
             for (path, reason) in &report.skipped {
                 println!("skipped {path}: {reason}");
             }
             println!(
-                "imported {}, unchanged {}, skipped {}",
+                "imported {}, unchanged {}, attachments {} new and {} unchanged, skipped {}",
                 report.imported.len(),
                 report.unchanged.len(),
+                report.attached.len(),
+                report.attached_unchanged,
                 report.skipped.len()
             );
         }

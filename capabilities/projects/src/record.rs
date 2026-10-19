@@ -1,8 +1,9 @@
 //! One record is one markdown file: its path under the projects root and its bytes.
 //!
 //! Every other column is derived from those two, so a store rebuilt from the rendered files
-//! equals the live store. The selection rules follow
-//! `capabilities/vault/src/tasks.rs`, so a task means the same thing on both sides of the import.
+//! equals the live store. The selection rules are the ones the retired vault task reader applied
+//! (`capabilities/vault/src/tasks.rs` in git history before 2026-10-18), so a task kept its meaning
+//! across the import.
 
 use std::collections::HashMap;
 
@@ -15,7 +16,7 @@ const TASKS: &str = "Tasks";
 const DEFAULT_PRIORITY: u8 = 2;
 const MAX_TITLE_CHARS: usize = 200;
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, serde::Deserialize)]
 #[serde(rename_all = "lowercase")]
 pub enum Kind {
     Project,
@@ -54,19 +55,16 @@ impl Record {
     /// The path escapes the root, is not a markdown file, or sits directly in the root with no
     /// project folder above it; or the frontmatter is not closed.
     pub fn from_content(path: &str, content: String) -> Result<Self, String> {
+        if !path.ends_with(".md") {
+            return Err(format!("{path}: not a markdown path"));
+        }
         let segments = checked_segments(path)?;
-        let archived = segments[0] == ARCHIVE;
         let folders = &segments[..segments.len() - 1];
         let title = segments[segments.len() - 1]
             .strip_suffix(".md")
             .unwrap_or_default()
             .to_string();
-        let project = match (archived, folders.len()) {
-            (false, 0) => return Err(format!("{path}: a record needs a project folder")),
-            (true, 1) => title.clone(),
-            (true, _) => folders[1].to_string(),
-            (false, _) => folders[0].to_string(),
-        };
+        let (project, archived) = project_of(path)?;
         let fields = frontmatter_spanned(&content)
             .map_err(|e| format!("{path}: {e}"))?
             .fields;
@@ -101,9 +99,37 @@ impl Record {
     }
 }
 
+/// The project a path belongs to, and whether it sits under `Archive/`.
+///
+/// # Errors
+/// The path escapes the root or sits directly in the root with no project folder above it.
+pub fn project_of(path: &str) -> Result<(String, bool), String> {
+    let segments = checked_segments(path)?;
+    let archived = segments[0] == ARCHIVE;
+    let stem = |s: &str| s.rsplit_once('.').map_or(s, |(stem, _)| stem).to_string();
+    let project = match (archived, segments.len()) {
+        (_, 1) => return Err(format!("{path}: a record needs a project folder")),
+        (true, 2) => stem(segments[1]),
+        (true, _) => segments[1].to_string(),
+        (false, _) => segments[0].to_string(),
+    };
+    Ok((project, archived))
+}
+
+/// Check the path of an attachment: a file under a project folder that is not a note.
+///
+/// # Errors
+/// The path escapes the root, has no project folder, or is a markdown file.
+pub fn check_attachment(path: &str) -> Result<(), String> {
+    if path.ends_with(".md") {
+        return Err(format!("{path}: a note is a record, not an attachment"));
+    }
+    project_of(path).map(|_| ())
+}
+
 fn checked_segments(path: &str) -> Result<Vec<&str>, String> {
-    if !path.ends_with(".md") || path.contains('\\') {
-        return Err(format!("{path}: not a markdown path"));
+    if path.contains('\\') {
+        return Err(format!("{path}: not a valid path"));
     }
     let segments: Vec<&str> = path.split('/').collect();
     if segments
@@ -202,9 +228,125 @@ pub fn set_done(content: &str, done: bool, today: &str) -> Result<String, String
     Ok(format!("{}{yaml}{}", &content[..start], &content[end..]))
 }
 
+/// Set one top-level frontmatter key, or remove it with `None`.
+///
+/// Only the key's own lines change: its line and, for a block list, the item lines under it. A
+/// key the note does not have is appended to the block. A key that held a list keeps a list: the
+/// value is split on commas, which is how `markdown-root` flattens a list when it reads one.
+///
+/// # Errors
+/// The key is not a plain identifier, the value has a line break, or the note has no frontmatter.
+pub fn set_field(content: &str, key: &str, value: Option<&str>) -> Result<String, String> {
+    let plain = key.chars().next().is_some_and(|c| c.is_ascii_alphabetic())
+        && key
+            .chars()
+            .all(|c| c.is_ascii_alphanumeric() || c == '_' || c == '-');
+    if !plain {
+        return Err(format!(
+            "{key:?}: a property name is letters, digits, _ and -"
+        ));
+    }
+    if value.is_some_and(|v| v.contains(['\n', '\r'])) {
+        return Err("a property value is one line".into());
+    }
+    let parsed = frontmatter_spanned(content)?;
+    let (start, end) = parsed.block.ok_or("the note has no frontmatter")?;
+    let block = &content[start..end];
+    let mut out: Vec<String> = Vec::new();
+    let mut found = false;
+    let mut lines = block.lines().peekable();
+    while let Some(line) = lines.next() {
+        if line.split(':').next() != Some(key) || line.starts_with([' ', '\t']) {
+            out.push(line.to_string());
+            continue;
+        }
+        found = true;
+        let inline = line[key.len() + 1..].trim();
+        let mut was_list = inline.starts_with('[');
+        while lines
+            .peek()
+            .is_some_and(|l| l.starts_with([' ', '\t', '-']) && l.trim_start().starts_with('-'))
+        {
+            lines.next();
+            was_list = true;
+        }
+        if let Some(value) = value {
+            out.extend(field_lines(key, value, was_list));
+        }
+    }
+    if !found {
+        if let Some(value) = value {
+            out.extend(field_lines(key, value, false));
+        }
+    }
+    let mut yaml = out.join("\n");
+    if block.ends_with('\n') && !yaml.is_empty() {
+        yaml.push('\n');
+    }
+    Ok(format!("{}{yaml}{}", &content[..start], &content[end..]))
+}
+
+fn field_lines(key: &str, value: &str, list: bool) -> Vec<String> {
+    let value = value.trim();
+    if !list {
+        return vec![if value.is_empty() {
+            format!("{key}:")
+        } else {
+            format!("{key}: {}", scalar(value))
+        }];
+    }
+    let items: Vec<&str> = value
+        .split(',')
+        .map(str::trim)
+        .filter(|i| !i.is_empty())
+        .collect();
+    if items.is_empty() {
+        return vec![format!("{key}: []")];
+    }
+    std::iter::once(format!("{key}:"))
+        .chain(items.iter().map(|i| format!("  - {}", scalar(i))))
+        .collect()
+}
+
+/// A YAML scalar: plain where YAML reads it back unchanged, double-quoted otherwise.
+fn scalar(value: &str) -> String {
+    let plain = !value.starts_with(|c: char| "[]{}\"'#&*!|>%@`,?:-".contains(c))
+        && !value.contains(": ")
+        && !value.contains(" #")
+        && !value.ends_with(':');
+    if plain {
+        value.to_string()
+    } else {
+        // A double quote turns single, as `new_task` does: `markdown-root` reads no escapes.
+        format!("\"{}\"", value.replace('"', "'"))
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn set_field_changes_one_key_and_keeps_lists_lists() {
+        let due = set_field(TASK, "due", Some("2026-11-01")).unwrap();
+        assert_eq!(due, TASK.replace("due: 2026-10-24", "due: 2026-11-01"));
+        let moved = set_field(TASK, "projects", Some("[[A]], [[B]]")).unwrap();
+        assert!(moved.contains("projects:\n  - \"[[A]]\"\n  - \"[[B]]\"\n---"));
+        let r = Record::from_content("W/Tasks/x.md", moved).unwrap();
+        assert_eq!(r.fields()["projects"], "[[A]], [[B]]");
+        let added = set_field(TASK, "energy", Some("low")).unwrap();
+        assert!(added.contains("  - \"[[Waschmaschine]]\"\nenergy: low\n---"));
+        assert_eq!(set_field(&added, "energy", None).unwrap(), TASK);
+        let quoted = set_field(TASK, "summary", Some("a: \"b\"")).unwrap();
+        assert_eq!(
+            Record::from_content("W/Tasks/x.md", quoted)
+                .unwrap()
+                .fields()["summary"],
+            "a: 'b'"
+        );
+        assert!(set_field(TASK, "bad key", Some("x")).is_err());
+        assert!(set_field(TASK, "due", Some("a\nb")).is_err());
+    }
 
     const TASK: &str = "---\ntype: task\nsummary: \"x\"\ndone: false\nstatus: open\ndue: 2026-10-24\npriority: 1\nprojects:\n  - \"[[Waschmaschine]]\"\n---\n\n## Details\n\n> [!note] kept\n";
 
@@ -258,6 +400,21 @@ mod tests {
             (r.kind, r.priority, r.due.as_deref()),
             (Kind::Task, 1, Some("2026-10-20"))
         );
+    }
+
+    #[test]
+    fn attachments_need_a_project_folder_and_are_not_notes() {
+        assert!(check_attachment("Blog/Assets/a.png").is_ok());
+        assert_eq!(project_of("Archive/Old.pdf").unwrap(), ("Old".into(), true));
+        for bad in [
+            "a.png",
+            "Archive",
+            "Blog/a.md",
+            "../Blog/a.png",
+            "Blog/.hidden/a.png",
+        ] {
+            assert!(check_attachment(bad).is_err(), "{bad}");
+        }
     }
 
     #[test]

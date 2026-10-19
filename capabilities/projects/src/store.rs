@@ -13,7 +13,7 @@ use std::{
 
 use rusqlite::{params, Connection, OptionalExtension, Row};
 
-use crate::record::{Kind, Record};
+use crate::record::{check_attachment, Kind, Record};
 
 pub const PREFIX: &str = "projects";
 type Fallible<T> = Result<T, Box<dyn std::error::Error>>;
@@ -21,6 +21,15 @@ type Fallible<T> = Result<T, Box<dyn std::error::Error>>;
 pub struct Projects {
     pool: sjel_store::Pool,
     root: PathBuf,
+}
+
+/// What `attach` did with one file.
+#[derive(Debug, PartialEq, Eq)]
+pub enum Attached {
+    New,
+    Unchanged,
+    /// A different file of that name exists; nothing was written.
+    Differs,
 }
 
 /// What `verify` found wrong between the store and the rendered tree.
@@ -91,6 +100,22 @@ impl Projects {
         self.render(record)
     }
 
+    /// Delete one record and its rendered file. Returns whether a row was there.
+    ///
+    /// # Errors
+    /// The delete or the file removal failed.
+    pub fn remove(&self, path: &str) -> Fallible<bool> {
+        let mut conn = self.pool.get()?;
+        let tx = sjel_store::write_transaction(&mut conn)?;
+        let removed = tx.execute("DELETE FROM projects_records WHERE path = ?1", [path])? > 0;
+        tx.commit()?;
+        match fs::remove_file(self.root.join(path)) {
+            Err(e) if e.kind() != std::io::ErrorKind::NotFound => return Err(e.into()),
+            _ => {}
+        }
+        Ok(removed)
+    }
+
     pub fn get(&self, path: &str) -> Fallible<Option<Record>> {
         let conn = self.pool.get()?;
         Ok(conn
@@ -137,8 +162,55 @@ impl Projects {
             .collect()
     }
 
+    /// Store an attachment: a binary file of a project, kept as a file in the tree.
+    ///
+    /// Attachments are not rows. 986 MB of PDFs and images came with the vault import
+    /// (measured 2026-10-18); in the shared database they would grow every backup of it. The tree
+    /// is a backup path already. An existing file is never overwritten.
+    ///
+    /// # Errors
+    /// The path is not an attachment path, or the write failed.
+    pub fn attach(&self, path: &str, bytes: &[u8]) -> Fallible<Attached> {
+        check_attachment(path)?;
+        match fs::read(self.root.join(path)) {
+            Ok(current) if current == bytes => return Ok(Attached::Unchanged),
+            Ok(_) => return Ok(Attached::Differs),
+            Err(_) => {}
+        }
+        self.write_file(path, bytes)?;
+        Ok(Attached::New)
+    }
+
+    /// Every attachment path, sorted.
+    pub fn attachments(&self) -> Fallible<Vec<String>> {
+        if !self.root.is_dir() {
+            return Ok(Vec::new());
+        }
+        let tree = markdown_root::MarkdownRoot::declare(&self.root)?;
+        Ok(tree
+            .files_recursive()?
+            .iter()
+            .filter_map(|f| tree.relative_id(f))
+            .filter(|id| check_attachment(id).is_ok())
+            .collect())
+    }
+
+    /// The bytes of one attachment, or nothing when there is none at that path.
+    ///
+    /// # Errors
+    /// The path is not an attachment path.
+    pub fn attachment(&self, path: &str) -> Fallible<Option<Vec<u8>>> {
+        check_attachment(path)?;
+        Ok(fs::read(self.root.join(path)).ok())
+    }
+
     fn render(&self, record: &Record) -> Fallible<()> {
-        let target = self.root.join(&record.path);
+        self.write_file(&record.path, record.content.as_bytes())
+    }
+
+    /// Whole file, temp-plus-rename, mode 0600.
+    fn write_file(&self, path: &str, bytes: &[u8]) -> Fallible<()> {
+        let target = self.root.join(path);
         let dir = target.parent().ok_or("record path has no folder")?;
         fs::create_dir_all(dir)?;
         let name = target.file_name().ok_or("record path has no file name")?;
@@ -149,7 +221,7 @@ impl Projects {
             .truncate(true)
             .mode(0o600)
             .open(&temp)?;
-        file.write_all(record.content.as_bytes())?;
+        file.write_all(bytes)?;
         file.sync_all()?;
         fs::rename(&temp, &target)?;
         Ok(())
@@ -268,6 +340,37 @@ pub(crate) mod tests {
     }
 
     #[test]
+    fn an_attachment_is_written_once_and_never_overwritten() {
+        let (projects, dir) = scratch("attach");
+        assert_eq!(
+            projects.attach("A/Assets/x.png", b"png").unwrap(),
+            Attached::New
+        );
+        assert_eq!(
+            projects.attach("A/Assets/x.png", b"png").unwrap(),
+            Attached::Unchanged
+        );
+        assert_eq!(
+            projects.attach("A/Assets/x.png", b"other").unwrap(),
+            Attached::Differs
+        );
+        assert_eq!(
+            projects.attachment("A/Assets/x.png").unwrap().unwrap(),
+            b"png"
+        );
+        assert!(projects.attach("A/x.md", b"note").is_err());
+        assert!(projects.attachment("../secret.png").is_err());
+        projects.put(&task("A/Tasks/One.md", false)).unwrap();
+        assert_eq!(projects.attachments().unwrap(), vec!["A/Assets/x.png"]);
+        assert_eq!(
+            projects.verify().unwrap(),
+            Drift::default(),
+            "attachments are not orphans"
+        );
+        fs::remove_dir_all(dir).unwrap();
+    }
+
+    #[test]
     fn verify_reports_a_changed_file_and_an_orphan() {
         let (projects, dir) = scratch("drift");
         let record = task("A/Tasks/One.md", false);
@@ -279,6 +382,9 @@ pub(crate) mod tests {
         assert_eq!(drift.orphaned, vec!["A/stray.md"]);
         projects.render_all().unwrap();
         assert!(projects.verify().unwrap().stale.is_empty());
+        assert!(projects.remove("A/Tasks/One.md").unwrap());
+        assert!(!projects.root().join("A/Tasks/One.md").exists());
+        assert!(!projects.remove("A/Tasks/One.md").unwrap());
         fs::remove_dir_all(dir).unwrap();
     }
 }

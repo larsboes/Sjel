@@ -8,27 +8,34 @@ use serde::Serialize;
 
 use crate::{
     record::{self, check_name, Kind, Record, ARCHIVE},
-    store::Projects,
+    store::{Attached, Projects},
 };
 
 type Fallible<T> = Result<T, Box<dyn std::error::Error>>;
 
 /// The frontmatter key a frozen vault note carries. The vault reader skips such notes.
 pub const MOVED_TO: &str = "moved_to";
-/// The vault folder whose law stays in the vault: only its typed notes are imported.
-const LAW_FOLDER: &str = "Sjel";
+/// The vault folder whose law stays in the vault: nothing in it is imported, its typed hub
+/// included. The rest of `Sjel/` is project material and imports like any project (2026-10-18).
+const LAW_FOLDER: &str = "Sjel/Knowledge-Base";
 const CLASS_KEY: &str = "class";
 
-/// One task, in the shape `capabilities/vault` serves, so decision-ladder band 620 reads both.
+/// One task, as decision-ladder band 620 and the dashboard tables read it. The core keys keep the
+/// shape the retired vault task reader served.
 #[derive(Debug, Clone, PartialEq, Serialize)]
 pub struct Task {
     pub id: String,
+    pub kind: Kind,
     pub title: String,
     pub done: bool,
     pub due: Option<String>,
     pub priority: u8,
     pub summary: Option<String>,
     pub projects: Vec<String>,
+    /// The project folder the task lives in.
+    pub project: String,
+    /// Every frontmatter key, lists flattened to `a, b`: the columns of the tasks table.
+    pub fields: std::collections::BTreeMap<String, String>,
     /// The dashboard page that shows the task.
     pub uri: String,
     pub data_class: String,
@@ -45,15 +52,18 @@ impl Task {
         );
         Self {
             id: record.path.clone(),
+            kind: record.kind,
             title: record.title.clone(),
             done: record.done,
             due: record.due.clone(),
             priority: record.priority,
             summary: record::value(&fields, "summary"),
             projects: project_links(&fields).unwrap_or_else(|| vec![record.project.clone()]),
+            project: record.project.clone(),
             uri: format!("/projects?project={}", encode(&record.project)),
             data_class: class.value,
             data_class_rationale: class.rationale,
+            fields: fields.into_iter().collect(),
         }
     }
 }
@@ -97,6 +107,16 @@ pub fn tasks(projects: &Projects, status: Option<&str>) -> Fallible<Vec<Task>> {
             .then_with(|| a.title.cmp(&b.title))
     });
     Ok(tasks)
+}
+
+/// Every record of one kind in live projects, in the task shape, ordered by path.
+pub fn records(projects: &Projects, kind: Kind) -> Fallible<Vec<Task>> {
+    Ok(projects
+        .by_kind(kind)?
+        .iter()
+        .filter(|r| !r.archived)
+        .map(Task::from_record)
+        .collect())
 }
 
 /// Create a task note in a live project.
@@ -163,6 +183,129 @@ pub fn set_done(projects: &Projects, id: &str, done: bool) -> Fallible<Record> {
     let record = Record::from_content(id, content)?;
     projects.put(&record)?;
     Ok(record)
+}
+
+/// The states a task can be in. `done:` follows `status:`, never the other way round.
+pub const TASK_STATUSES: [&str; 4] = ["open", "doing", "waiting", "done"];
+/// The states a project can be in, as the vault's `Projects.base` reads them. An archived project
+/// is a folder move, not a status.
+pub const PROJECT_STATUSES: [&str; 3] = ["active", "done", "cancelled"];
+/// Keys a property edit cannot set: `type` decides the kind, `done` follows `status`, and
+/// `moved_to` marks a frozen vault note.
+const DERIVED_KEYS: [&str; 3] = ["type", "done", MOVED_TO];
+
+/// Set one frontmatter property of a record, or clear it with an empty value.
+///
+/// Any key is accepted, as in Obsidian Bases. Where the schema defines a key, the value is
+/// checked: `priority` is 1 to 3, `due` and `scheduled` are dates, and a task's `status` is one of
+/// `TASK_STATUSES` and sets `done:` and `completed:` with it.
+///
+/// # Errors
+/// No such record, a derived key, a value the schema refuses, or an archived record.
+pub fn set_property(projects: &Projects, path: &str, key: &str, value: &str) -> Fallible<Record> {
+    let current = projects
+        .get(path)?
+        .ok_or_else(|| format!("no record {path:?}"))?;
+    if current.archived {
+        return Err(format!("{path} is archived").into());
+    }
+    if DERIVED_KEYS.contains(&key) {
+        return Err(format!("{key:?} is derived; set status instead").into());
+    }
+    let value = value.trim();
+    match key {
+        "priority" if !["1", "2", "3"].contains(&value) => {
+            return Err("priority is 1, 2 or 3".into())
+        }
+        "due" | "scheduled"
+            if !value.is_empty()
+                && chrono::NaiveDate::parse_from_str(value, "%Y-%m-%d").is_err() =>
+        {
+            return Err(format!("{value:?}: {key} is a date, YYYY-MM-DD").into())
+        }
+        "status" if current.kind == Kind::Task && !TASK_STATUSES.contains(&value) => {
+            return Err(format!("status is one of {}", TASK_STATUSES.join(", ")).into())
+        }
+        "status" if current.kind == Kind::Project && !PROJECT_STATUSES.contains(&value) => {
+            return Err(format!("status is one of {}", PROJECT_STATUSES.join(", ")).into())
+        }
+        _ => {}
+    }
+    let content = if key == "status" && current.kind == Kind::Task {
+        // `set_done` only when done-ness flips, so a move between open states keeps `completed:`.
+        let flipped = if current.done == (value == "done") {
+            current.content.clone()
+        } else {
+            let today = chrono::Local::now().format("%Y-%m-%d").to_string();
+            record::set_done(&current.content, value == "done", &today)?
+        };
+        record::set_field(&flipped, "status", Some(value))?
+    } else {
+        record::set_field(&current.content, key, (!value.is_empty()).then_some(value))?
+    };
+    let record = Record::from_content(path, content)?;
+    projects.put(&record)?;
+    Ok(record)
+}
+
+/// One task whose properties `normalize` changes, with each change as `key: old -> new`.
+#[derive(Debug, Serialize, PartialEq)]
+pub struct Normalized {
+    pub path: String,
+    pub changes: Vec<String>,
+}
+
+/// Bring every task onto the schema `set_property` enforces.
+///
+/// `done:` decides the status, since it is what the store, the vault reader and band 620 read:
+/// a done task gets `status: done`, an open one keeps `doing` or `waiting` and otherwise gets
+/// `open`. `done_date:` becomes `completed:`. A priority outside 1 to 3 moves to the nearest end.
+/// Without `apply` nothing is written.
+pub fn normalize(projects: &Projects, apply: bool) -> Fallible<Vec<Normalized>> {
+    let mut report = Vec::new();
+    for current in projects.by_kind(Kind::Task)? {
+        let fields = current.fields();
+        let mut content = current.content.clone();
+        let mut changes = Vec::new();
+        let old = |key: &str| record::value(&fields, key).unwrap_or_default();
+
+        let status = old("status");
+        let target = match (current.done, status.as_str()) {
+            (true, _) => "done",
+            (false, "doing" | "waiting") => status.as_str(),
+            (false, _) => "open",
+        };
+        if status != target {
+            content = record::set_field(&content, "status", Some(target))?;
+            changes.push(format!("status: {status} -> {target}"));
+        }
+        if fields.contains_key("done_date") {
+            let date = old("done_date");
+            content = record::set_field(&content, "done_date", None)?;
+            if old("completed").is_empty() && !date.is_empty() {
+                content = record::set_field(&content, "completed", Some(&date))?;
+            }
+            changes.push(format!("done_date: {date} -> completed"));
+        }
+        if let Ok(p) = old("priority").parse::<i64>() {
+            let clamped = p.clamp(1, 3);
+            if clamped != p {
+                content = record::set_field(&content, "priority", Some(&clamped.to_string()))?;
+                changes.push(format!("priority: {p} -> {clamped}"));
+            }
+        }
+        if changes.is_empty() {
+            continue;
+        }
+        if apply {
+            projects.put(&Record::from_content(&current.path, content)?)?;
+        }
+        report.push(Normalized {
+            path: current.path,
+            changes,
+        });
+    }
+    Ok(report)
 }
 
 /// The largest record `save` accepts. The biggest imported note was far below it (measured
@@ -248,14 +391,17 @@ pub fn new_note(project: &str, title: &str, summary: &str) -> Result<(String, St
 pub struct ImportReport {
     pub imported: Vec<String>,
     pub unchanged: Vec<String>,
+    /// Attachments copied, and attachments already present with the same bytes.
+    pub attached: Vec<String>,
+    pub attached_unchanged: usize,
     /// Not imported, with the reason.
     pub skipped: Vec<(String, String)>,
 }
 
 /// Copy the vault's project notes into the store.
 ///
-/// Every `.md` under a project folder moves; `Archive/` moves as archived; from the law folder
-/// only notes typed `project` or `task` move. Binaries stay in the vault. A row that changed in
+/// Every `.md` under a project folder moves; `Archive/` moves as archived; nothing from the law
+/// folder moves. Binaries stay in the vault. A row that changed in
 /// Sjel since its import is never overwritten.
 pub fn import(
     projects: &Projects,
@@ -285,7 +431,7 @@ pub fn import(
         if only.is_some_and(|name| name != record.project) {
             continue;
         }
-        if id.starts_with(&format!("{LAW_FOLDER}/")) && record.kind == Kind::Note {
+        if id.starts_with(&format!("{LAW_FOLDER}/")) {
             continue;
         }
         if record.fields().contains_key(MOVED_TO) {
@@ -302,6 +448,28 @@ pub fn import(
                 projects.put(&record)?;
                 report.imported.push(id);
             }
+        }
+    }
+    for file in root.files_recursive()? {
+        let Some(id) = root.relative_id(&file) else {
+            continue;
+        };
+        if id.starts_with(&format!("{LAW_FOLDER}/")) {
+            continue;
+        }
+        let Ok((project, _)) = record::project_of(&id) else {
+            continue;
+        };
+        if id.ends_with(".md") || only.is_some_and(|name| name != project) {
+            continue;
+        }
+        match projects.attach(&id, &fs::read(&file)?)? {
+            Attached::New => report.attached.push(id),
+            Attached::Unchanged => report.attached_unchanged += 1,
+            Attached::Differs => report.skipped.push((
+                id,
+                "a different attachment of that name is in Sjel; not overwritten".into(),
+            )),
         }
     }
     Ok(report)
@@ -407,11 +575,18 @@ mod tests {
                 "---\ntype: task\ndone: true\n---\n",
             ),
             ("Sjel/Sjel.md", "---\ntype: project\n---\n"),
+            ("Sjel/PRD Axon.md", "# PRD\n"),
             (
                 "Sjel/Knowledge-Base/Vault-Contract.md",
                 "---\ntype: note\n---\nlaw\n",
             ),
             ("Projects.md", "---\ntype: note\n---\n"),
+            ("Waschmaschine/Assets/Typenschild.jpg", "jpg"),
+            ("Sjel/Knowledge-Base/diagram.png", "law"),
+            (
+                "Sjel/Knowledge-Base/Knowledge-Base.md",
+                "---\ntype: project\n---\nlaw hub\n",
+            ),
         ] {
             let file = v.join(path);
             fs::create_dir_all(file.parent().unwrap()).unwrap();
@@ -425,10 +600,15 @@ mod tests {
         let (projects, dir) = scratch("import");
         let v = vault(&dir);
         let report = import(&projects, &v, None).unwrap();
-        assert_eq!(report.imported.len(), 5, "{report:?}");
-        assert!(!report.imported.iter().any(|p| p.contains("Vault-Contract")));
+        assert_eq!(report.imported.len(), 6, "{report:?}");
+        assert!(report.imported.iter().any(|p| p == "Sjel/PRD Axon.md"));
+        assert_eq!(
+            report.attached,
+            vec!["Waschmaschine/Assets/Typenschild.jpg"]
+        );
+        assert!(!report.imported.iter().any(|p| p.contains("Knowledge-Base")));
         assert_eq!(report.skipped.len(), 1, "Projects.md has no project folder");
-        assert_eq!(import(&projects, &v, None).unwrap().unchanged.len(), 5);
+        assert_eq!(import(&projects, &v, None).unwrap().unchanged.len(), 6);
         let open = tasks(&projects, Some("open")).unwrap();
         assert_eq!(open.len(), 1, "the archived task is not served");
         assert_eq!(open[0].uri, "/projects?project=Waschmaschine");
@@ -477,6 +657,59 @@ mod tests {
                 .unwrap()
                 .done
         );
+        fs::remove_dir_all(dir).unwrap();
+    }
+
+    #[test]
+    fn set_property_checks_schema_keys_and_status_drives_done() {
+        let (projects, dir) = scratch("property");
+        add_project(&projects, "W", "").unwrap();
+        let path = add_task(&projects, "W", "x", "", None, 2).unwrap().path;
+        assert!(set_property(&projects, &path, "priority", "4").is_err());
+        assert!(set_property(&projects, &path, "due", "24.10.").is_err());
+        assert!(set_property(&projects, &path, "status", "todo").is_err());
+        assert!(set_property(&projects, &path, "done", "true").is_err());
+        let r = set_property(&projects, &path, "context", "Werkstatt").unwrap();
+        assert_eq!(r.fields()["context"], "Werkstatt");
+        let r = set_property(&projects, &path, "status", "done").unwrap();
+        assert!(r.done && r.fields().contains_key("completed"));
+        let r = set_property(&projects, &path, "status", "waiting").unwrap();
+        assert!(!r.done && !r.fields().contains_key("completed"));
+        assert_eq!(r.fields()["status"], "waiting");
+        let r = set_property(&projects, &path, "due", "").unwrap();
+        assert_eq!(r.due, None);
+        assert!(set_property(&projects, "W/W.md", "status", "open").is_err());
+        set_property(&projects, "W/W.md", "status", "done").unwrap();
+        assert_eq!(records(&projects, Kind::Project).unwrap().len(), 1);
+        fs::remove_dir_all(dir).unwrap();
+    }
+
+    #[test]
+    fn normalize_lets_done_decide_status_and_only_writes_when_applied() {
+        let (projects, dir) = scratch("normalize");
+        let messy =
+            "---\ntype: task\ndone: true\nstatus: open\ndone_date: 2026-01-02\npriority: 5\n---\n";
+        projects
+            .put(&Record::from_content("W/Tasks/a.md", messy.into()).unwrap())
+            .unwrap();
+        let clean = "---\ntype: task\ndone: false\nstatus: waiting\npriority: 1\n---\n";
+        projects
+            .put(&Record::from_content("W/Tasks/b.md", clean.into()).unwrap())
+            .unwrap();
+        let report = normalize(&projects, false).unwrap();
+        assert_eq!(report.len(), 1, "{report:?}");
+        assert_eq!(report[0].changes.len(), 3);
+        assert_eq!(
+            projects.get("W/Tasks/a.md").unwrap().unwrap().content,
+            messy
+        );
+        normalize(&projects, true).unwrap();
+        let a = projects.get("W/Tasks/a.md").unwrap().unwrap().content;
+        assert_eq!(
+            a,
+            "---\ntype: task\ndone: true\nstatus: done\npriority: 3\ncompleted: 2026-01-02\n---\n"
+        );
+        assert!(normalize(&projects, false).unwrap().is_empty());
         fs::remove_dir_all(dir).unwrap();
     }
 

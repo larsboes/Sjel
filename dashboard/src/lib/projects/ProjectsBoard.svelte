@@ -2,6 +2,8 @@
   import { ApiError, projects, type ProjectRecord, type ProjectSummary } from "$lib/api";
   import MarkdownDocument from "$lib/feed/MarkdownDocument.svelte";
   import StateLine from "$lib/StateLine.svelte";
+  import DatabaseTable from "./DatabaseTable.svelte";
+  import { fileUrl, resolveFile, segments } from "./database";
   import { link } from "$lib/nav";
   import { tip } from "$lib/tip";
 
@@ -25,6 +27,8 @@
   /** The record open in the editor: its path and the content the edit started from. */
   let editing = $state<{ path: string; base: string } | null>(null);
   let draft = $state("");
+  /** Bumped after each write here, so the tasks table reloads with the list. */
+  let stamp = $state(0);
 
   const live = $derived(list.filter((p) => !p.archived));
   const archived = $derived(list.filter((p) => p.archived));
@@ -40,14 +44,27 @@
   /** Undated after dated: a deadline is what expires. Plain comparison, ISO dates sort as text. */
   const byDue = (a: string | null, b: string | null) => (a === b ? 0 : a === null ? 1 : b === null ? -1 : a < b ? -1 : 1);
   /** Markdown for display: no frontmatter, and the Obsidian syntax MarkdownDocument does not know
-   *  turned into plain markdown. Embeds (`![[…]]`) are dropped: their target stays in the vault. */
-  const body = (content: string) =>
+   *  turned into plain markdown. `segments` split out Bases and attachment embeds before this
+   *  runs; a wikilink to an attachment becomes a link to the file, an embed of a note is dropped. */
+  const body = (content: string, host: string) =>
     content
-      .replace(/^---\n[\s\S]*?\n---\n/, "")
       .replace(/^!\[\[.*\]\]\s*$/gm, "")
-      .replace(/!?\[\[([^\]|]+)(?:\|([^\]]+))?\]\]/g, (_, target: string, label?: string) => label ?? target.split("/").pop() ?? target)
+      // A base embedded inside a callout cannot hold a table; name the view and where it lives.
+      .replace(/!\[\[([^\]#|]+?)\.base(?:#([^\]|]+))?(?:\|([^\]]+))?\]\]/g, (_, file: string, view?: string, alias?: string) =>
+        `*${alias ?? [file.split("/").pop(), view].filter(Boolean).join(" · ")} (a base in the vault)*`)
+      .replace(/!?\[\[([^\]|]+)(?:\|([^\]]+))?\]\]/g, (_, target: string, label?: string) => {
+        const text = label ?? target.split("/").pop() ?? target;
+        const file = target.endsWith(".md") ? null : resolveFile(target, host, files);
+        return file ? `[${text}](${fileUrl(file)})` : text;
+      })
       .replace(/^> \[!(\w+)\][+-]? ?(.*)$/gm, (_, type: string, title: string) => `> **${title || type[0].toUpperCase() + type.slice(1)}**`);
   const message = (e: unknown) => (e instanceof Error ? e.message : String(e));
+
+  /** Every attachment path, read once: wikilinks resolve against it. */
+  let files = $state<string[]>([]);
+  $effect(() => {
+    projects.files().then((f) => (files = f), () => {});
+  });
 
   async function loadList() {
     try {
@@ -80,6 +97,7 @@
     error = null;
     try {
       await run();
+      stamp++;
       await Promise.all([loadList(), loadRecords(selected)]);
     } catch (e) {
       error = message(e);
@@ -169,13 +187,36 @@
 
   <section aria-live="polite">
     {#if !selected}
-      <p class="hint">Pick a project.</p>
+      <h2>Projects</h2>
+      <DatabaseTable kinds={["project"]} columns={["status", "open", "priority", "start", "due"]} storeKey="projects" {stamp} />
+      <h2>All tasks</h2>
+      <DatabaseTable
+        kinds={["task"]}
+        columns={["project", "status", "due", "scheduled", "priority", "context", "energy"]}
+        storeKey="tasks"
+        {stamp}
+        onchange={() => {
+          stamp++;
+          void loadList();
+        }}
+      />
     {:else}
       <StateLine state={recordState} message={recordState === "error" ? (error ?? undefined) : "Reading the project…"} onRetry={() => loadRecords(selected)} />
       {#if recordState === "ready"}
         {#if error}<p class="error" role="alert">{error}</p>{/if}
 
         <h2>Tasks <span class="count">{tasks.filter((t) => !t.done).length} open</span></h2>
+        {#if canAdd}
+          {@const project = selected}
+          <DatabaseTable
+            kinds={["task"]}
+            filter={(r) => r.project === project}
+            columns={["status", "due", "scheduled", "priority", "context", "energy"]}
+            storeKey="project-tasks"
+            {stamp}
+            onchange={() => Promise.all([loadList(), loadRecords(selected)])}
+          />
+        {:else}
         <ul class="tasks">
           {#each tasks as t (t.path)}
             <li class:done={t.done}>
@@ -192,6 +233,7 @@
             </li>
           {/each}
         </ul>
+        {/if}
 
         {#if canAdd}
           <form onsubmit={addTask}>
@@ -237,7 +279,35 @@
       <button type="button" class="btn btn-soft" disabled={busy} onclick={() => (editing = null)}>Cancel</button>
     </div>
   {:else}
-    <MarkdownDocument content={body(record.content)} compact />
+    {#each segments(record.content.replace(/^---\n[\s\S]*?\n---\n/, ""), record.path, files) as part, i (i)}
+      {#if "markdown" in part}
+        <MarkdownDocument content={body(part.markdown, record.path)} compact resolveLink={(href) => href} />
+      {:else if "file" in part}
+        {#if part.image}
+          <img class="attachment" src={fileUrl(part.file)} alt={part.file.split("/").pop()} loading="lazy" />
+        {:else}
+          <p class="vault-base"><a href={fileUrl(part.file)} target="_blank" rel="noreferrer">{part.file.split("/").pop()}</a></p>
+        {/if}
+      {:else if "vault" in part.embed}
+        <p class="vault-base">
+          {part.embed.label} ·
+          <a href={`obsidian://open?vault=Knowledge-Base&file=${encodeURIComponent(part.embed.vault)}`}>open the base in Obsidian</a>
+          <span class="count">vault data, not in Sjel</span>
+        </p>
+      {:else}
+        <div class="embed">
+          <h3>{part.embed.label}</h3>
+          <DatabaseTable
+            kinds={part.embed.kinds}
+            filter={part.embed.filter}
+            columns={part.embed.columns}
+            storeKey={`embed:${record.path}:${i}`}
+            {stamp}
+            onchange={() => Promise.all([loadList(), loadRecords(selected)])}
+          />
+        </div>
+      {/if}
+    {/each}
     <button
       type="button"
       class="btn btn-soft edit"
@@ -328,8 +398,7 @@
   }
 
   .count,
-  .meta,
-  .hint {
+  .meta {
     color: var(--text-secondary);
     font-size: var(--text-sm);
     font-weight: 400;
@@ -363,6 +432,32 @@
 
   form input:first-child {
     flex: 1 1 14rem;
+  }
+
+  .embed {
+    margin: 0.75rem 0 1rem;
+    padding: 0.6rem 0.75rem;
+    border: 1px solid var(--rule);
+    border-radius: var(--radius-sm);
+  }
+
+  .embed h3 {
+    margin: 0 0 0.4rem;
+    font-size: var(--text-sm);
+    color: var(--text-secondary);
+  }
+
+  .attachment {
+    display: block;
+    max-width: 100%;
+    max-height: 32rem;
+    margin: 0.5rem 0;
+    border-radius: var(--radius-sm);
+  }
+
+  .vault-base {
+    margin: 0.5rem 0;
+    font-size: var(--text-sm);
   }
 
   .note {

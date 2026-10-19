@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'bun:test';
-import { embed, linkTargets, resolveFile, segments } from '../src/lib/projects/database';
+import { countCheckboxes, embed, linkTargets, resolveFile, segments, setCheckbox } from '../src/lib/projects/database';
 import type { ProjectTask } from '../src/lib/api';
 
 const row = (id: string, fields: Record<string, string> = {}) => ({ id, fields }) as ProjectTask;
@@ -49,5 +49,20 @@ describe('project attachments', () => {
   test('an attachment line becomes its own segment', () => {
     const parts = segments('intro\n![[a.png]]\n![[gone.png]]', 'Blog/Blog.md', files);
     expect(parts).toEqual([{ markdown: 'intro' }, { file: 'Blog/Assets/a.png', image: true }, { markdown: '![[gone.png]]' }]);
+  });
+});
+
+describe('note checkboxes', () => {
+  const note = '---\ntype: task\nsummary: "- [ ] not a box"\n---\n\n## Details\n\n- [ ] one\n- [x] two\n```\n- [ ] in a fence\n```\n1. [ ] three';
+
+  test('the n-th box after the frontmatter flips, and nothing else changes', () => {
+    expect(setCheckbox(note, 0, true)).toBe(note.replace('- [ ] one', '- [x] one'));
+    expect(setCheckbox(note, 1, false)).toBe(note.replace('- [x] two', '- [ ] two'));
+    expect(setCheckbox(note, 2, true)).toBe(note.replace('1. [ ] three', '1. [x] three'));
+  });
+
+  test('a box inside a code fence is not counted, and a missing box is null', () => {
+    expect(countCheckboxes('- [ ] a\n```\n- [ ] b\n```\n- [x] c')).toBe(2);
+    expect(setCheckbox(note, 3, true)).toBeNull();
   });
 });

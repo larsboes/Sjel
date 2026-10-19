@@ -3,7 +3,7 @@
   import MarkdownDocument from "$lib/feed/MarkdownDocument.svelte";
   import StateLine from "$lib/StateLine.svelte";
   import DatabaseTable from "./DatabaseTable.svelte";
-  import { fileUrl, resolveFile, segments } from "./database";
+  import { countCheckboxes, fileUrl, resolveFile, segments, setCheckbox } from "./database";
   import { link } from "$lib/nav";
   import { tip } from "$lib/tip";
   import { focusRow } from "$lib/list-cursor.svelte";
@@ -96,6 +96,23 @@
       error = message(e);
       recordState = "error";
     }
+  }
+
+  /** Each segment with the number of the first checkbox in it, so a box in the third markdown run
+   *  of a note maps back to its line in the whole record. */
+  const numbered = (parts: ReturnType<typeof segments>) => {
+    let next = 0;
+    return parts.map((part) => {
+      const first = next;
+      if ("markdown" in part) next += countCheckboxes(part.markdown);
+      return { part, first };
+    });
+  };
+
+  /** Ticks one `- [ ]` in a record and saves it, with the shown content as the base. */
+  function toggle(record: ProjectRecord, box: number, checked: boolean) {
+    const next = setCheckbox(record.content, box, checked);
+    if (next !== null) void write(() => projects.save(record.path, next, record.content));
   }
 
   async function write(run: () => Promise<unknown>) {
@@ -293,9 +310,14 @@
       <button type="button" class="btn btn-soft" disabled={busy} onclick={() => (editing = null)}>Cancel</button>
     </div>
   {:else}
-    {#each segments(record.content.replace(/^---\n[\s\S]*?\n---\n/, ""), record.path, files) as part, i (i)}
+    {#each numbered(segments(record.content.replace(/^---\n[\s\S]*?\n---\n/, ""), record.path, files)) as { part, first }, i (i)}
       {#if "markdown" in part}
-        <MarkdownDocument content={body(part.markdown, record.path)} compact resolveLink={(href) => href} />
+        <MarkdownDocument
+          content={body(part.markdown, record.path)}
+          compact
+          resolveLink={(href) => href}
+          onToggle={busy || record.archived ? undefined : (box, checked) => toggle(record, first + box, checked)}
+        />
       {:else if "file" in part}
         {#if part.image}
           <img class="attachment" src={fileUrl(part.file)} alt={part.file.split("/").pop()} loading="lazy" />

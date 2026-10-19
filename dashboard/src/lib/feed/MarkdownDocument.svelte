@@ -5,11 +5,14 @@
     | { kind: "text" | "strong" | "code"; text: string }
     | { kind: "link"; text: string; href: string };
 
+  /** `box` is the checkbox's number in the document (from 0) for a `- [ ]` item, else null. */
+  type ListItem = { parts: InlinePart[]; box: number | null; checked: boolean };
+
   type Block =
     | { kind: "heading"; level: number; id: string; parts: InlinePart[] }
     | { kind: "anchor"; id: string }
     | { kind: "paragraph" | "quote"; parts: InlinePart[] }
-    | { kind: "list"; ordered: boolean; items: InlinePart[][] }
+    | { kind: "list"; ordered: boolean; items: ListItem[] }
     | { kind: "code"; language: string; text: string }
     | { kind: "table"; headers: InlinePart[][]; rows: InlinePart[][][] }
     | { kind: "rule" };
@@ -18,6 +21,7 @@
     content,
     compact = false,
     resolveLink,
+    onToggle,
   } = $props<{
     content: string;
     compact?: boolean;
@@ -27,6 +31,11 @@
      * not. research/ passes one, because its links point at each other and at this repository.
      */
     resolveLink?: (href: string) => string;
+    /**
+     * Makes `- [ ]` items clickable: called with the checkbox's number in this document and its
+     * new state. Without it the boxes show their state and cannot be changed.
+     */
+    onToggle?: (box: number, checked: boolean) => void;
   }>();
   const blocks = $derived(parseMarkdown(content));
 
@@ -93,6 +102,7 @@
     const parsed: Block[] = [];
     const headingIds = new Set<string>();
     let index = 0;
+    let boxes = 0;
 
     while (index < lines.length) {
       const line = lines[index];
@@ -164,12 +174,24 @@
       const listItem = line.match(/^\s*([-*+]|\d+\.)\s+(.+)$/);
       if (listItem) {
         const ordered = /^\d/.test(listItem[1]);
-        const items: InlinePart[][] = [];
+        const items: ListItem[] = [];
         while (index < lines.length) {
           const item = lines[index].match(/^\s*([-*+]|\d+\.)\s+(.+)$/);
           if (!item || /^\d/.test(item[1]) !== ordered) break;
-          items.push(inlineParts(item[2]));
+          let text = item[2];
           index += 1;
+          // An indented line that starts no new item continues this one: a wrapped bullet
+          // rendered as a separate paragraph before.
+          while (index < lines.length && /^\s+\S/.test(lines[index]) && !/^\s*([-*+]|\d+\.)\s+/.test(lines[index])) {
+            text += ` ${lines[index].trim()}`;
+            index += 1;
+          }
+          const box = text.match(/^\[([ xX])\]\s+(.*)$/);
+          items.push(
+            box
+              ? { parts: inlineParts(box[2]), box: boxes++, checked: box[1] !== " " }
+              : { parts: inlineParts(text), box: null, checked: false },
+          );
         }
         parsed.push({ kind: "list", ordered, items });
         continue;
@@ -216,6 +238,18 @@
   {/each}
 {/snippet}
 
+{#snippet listItem(item: ListItem)}
+  {#if item.box !== null}
+    {@const box = item.box}
+    <label>
+      <input type="checkbox" checked={item.checked} disabled={!onToggle} onchange={(e) => onToggle?.(box, e.currentTarget.checked)} />
+      <span class:checked={item.checked}>{@render inline(item.parts)}</span>
+    </label>
+  {:else}
+    {@render inline(item.parts)}
+  {/if}
+{/snippet}
+
 <div class="document" class:compact>
   {#each blocks as block}
     {#if block.kind === "anchor"}
@@ -233,11 +267,11 @@
     {:else if block.kind === "list"}
       {#if block.ordered}
         <ol>
-          {#each block.items as item}<li>{@render inline(item)}</li>{/each}
+          {#each block.items as item}<li class:task={item.box !== null}>{@render listItem(item)}</li>{/each}
         </ol>
       {:else}
         <ul>
-          {#each block.items as item}<li>{@render inline(item)}</li>{/each}
+          {#each block.items as item}<li class:task={item.box !== null}>{@render listItem(item)}</li>{/each}
         </ul>
       {/if}
     {:else if block.kind === "code"}
@@ -266,6 +300,22 @@
 </div>
 
 <style>
+  li.task {
+    list-style: none;
+    margin-left: -1.2rem;
+  }
+
+  li.task label {
+    display: flex;
+    gap: 0.5rem;
+    align-items: baseline;
+  }
+
+  li.task span.checked {
+    color: var(--text-tertiary);
+    text-decoration: line-through;
+  }
+
   .document {
     color: var(--text-secondary);
     font-size: 0.95rem;

@@ -105,3 +105,44 @@ export function segments(body: string, host: string, files: string[] = []): Segm
   if (run.join('').trim()) out.push({ markdown: run.join('\n') });
   return out;
 }
+
+/** A Markdown task-list line: `- [ ] text`, `* [x] text` or `1. [ ] text`. */
+const CHECKBOX = /^(\s*(?:[-*+]|\d+\.)\s+)\[([ xX])\](?=\s)/;
+
+/** How many task-list lines a run of markdown holds, outside code fences, in the order
+ *  MarkdownDocument renders them. A segment's first checkbox is the sum of the runs before it. */
+export function countCheckboxes(markdown: string): number {
+  let fenced = false;
+  let count = 0;
+  for (const line of markdown.split('\n')) {
+    if (/^(```|~~~)/.test(line)) fenced = !fenced;
+    else if (!fenced && CHECKBOX.test(line)) count += 1;
+  }
+  return count;
+}
+
+/** The record's content with its `n`-th checkbox (from 0, after the frontmatter, outside code
+ *  fences) set to `checked`, or null when there is no such checkbox. The caller saves it with
+ *  the old content as `base`, so a toggle on a stale page is refused rather than lost. */
+export function setCheckbox(content: string, n: number, checked: boolean): string | null {
+  const lines = content.split('\n');
+  let start = 0;
+  if (lines[0] === '---') {
+    const end = lines.indexOf('---', 1);
+    if (end > 0) start = end + 1;
+  }
+  let fenced = false;
+  let seen = 0;
+  for (let i = start; i < lines.length; i++) {
+    if (/^(```|~~~)/.test(lines[i])) {
+      fenced = !fenced;
+      continue;
+    }
+    if (fenced || !CHECKBOX.test(lines[i])) continue;
+    if (seen++ === n) {
+      lines[i] = lines[i].replace(CHECKBOX, `$1[${checked ? 'x' : ' '}]`);
+      return lines.join('\n');
+    }
+  }
+  return null;
+}

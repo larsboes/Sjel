@@ -6,13 +6,14 @@
   import { fileUrl, resolveFile, segments } from "./database";
   import { link } from "$lib/nav";
   import { tip } from "$lib/tip";
+  import { focusRow } from "$lib/list-cursor.svelte";
 
   /**
    * Projects, their tasks and their notes, from `capabilities/projects` (ISA.md F14).
    * The store is canonical; every write here renders the record's markdown before it answers,
    * so the list is reloaded from the server after each write rather than patched in place.
    */
-  let { selected }: { selected: string | null } = $props();
+  let { selected, open = null }: { selected: string | null; open?: string | null } = $props();
 
   let list = $state<ProjectSummary[]>([]);
   let records = $state<ProjectRecord[]>([]);
@@ -39,6 +40,11 @@
       .toSorted((a, b) => Number(a.done) - Number(b.done) || byDue(a.due, b.due) || a.priority - b.priority),
   );
   const notes = $derived(records.filter((r) => r.kind === "note"));
+  /** The task named by `?open=`: its body is shown under the table, the way a note opens. */
+  const openTask = $derived(tasks.find((t) => t.path === open) ?? null);
+  $effect(() => {
+    if (open && recordState === "ready") focusRow(document.getElementById(`record-${open}`));
+  });
   const canAdd = $derived(selected !== null && !records.some((r) => r.archived));
 
   /** Undated after dated: a deadline is what expires. Plain comparison, ISO dates sort as text. */
@@ -235,6 +241,14 @@
         </ul>
         {/if}
 
+        {#if openTask}
+          <article class="opened" id={`record-${openTask.path}`} tabindex="-1">
+            <h3>{openTask.title}</h3>
+            {@render editable(openTask)}
+            <a class="close" href={link(`/projects?project=${encodeURIComponent(selected ?? "")}`)}>Close</a>
+          </article>
+        {/if}
+
         {#if canAdd}
           <form onsubmit={addTask}>
             <input aria-label="New task" placeholder="New task" bind:value={title} maxlength="200" required />
@@ -255,7 +269,7 @@
 
         <h2>Notes <span class="count">{notes.length}</span></h2>
         {#each notes as n (n.path)}
-          <details class="note" open={editing?.path === n.path}>
+          <details class="note" id={`record-${n.path}`} open={editing?.path === n.path || open === n.path}>
             <summary>{n.title}</summary>
             {@render editable(n)}
           </details>
@@ -462,6 +476,12 @@
 
   .note {
     border-bottom: 1px solid var(--rule);
+  }
+
+  .opened {
+    border-top: 1px solid var(--rule);
+    border-bottom: 1px solid var(--rule);
+    margin: 0.8rem 0;
   }
 
   .error {

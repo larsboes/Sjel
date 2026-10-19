@@ -234,7 +234,8 @@
                   {/if}
                 </td>
               {/if}
-              <td class="title"><a href={link(`/projects?project=${encodeURIComponent(r.project)}`)}>{r.title}</a></td>
+              <!-- A task or note opens its own body; a link to its project alone went nowhere from inside that project. -->
+              <td class="title"><a href={link(`/projects?project=${encodeURIComponent(r.project)}${r.kind === "project" ? "" : `&open=${encodeURIComponent(r.id)}`}`)}>{r.title}</a></td>
               {#each shown as k (k)}
                 {@const label = `${k}: ${r.title}`}
                 <td>

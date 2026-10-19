@@ -23,7 +23,7 @@ use serde_json::{json, Value};
 
 use places::config::Config;
 use places::geocode::{GeocodeQuery, Geocoder, StructuredQuery};
-use places::store::{stable_id, PlacesStore, Review, ReviewOutcome, PRESENCE_RADIUS_KM};
+use places::store::{stable_id, Place, PlacesStore, Review, ReviewOutcome, PRESENCE_RADIUS_KM};
 use places::{layers, today};
 
 const ROUTES: &[route_manifest::Route] = &[
@@ -59,6 +59,13 @@ const ROUTES: &[route_manifest::Route] = &[
         "List/search the place registry. Optional ?q= substring and ?kind= venue|city|station|address|region. \
          A shared registry: it holds no opinion about whether anyone liked a place.",
     ),
+    route_manifest::Route {
+        method: "POST",
+        path: "/api/places",
+        summary: "Register a place from a name, query, link, or note. Resolves coordinates via \
+                  the cached geocoder when not given.",
+        request_schema: Some(route_manifest::schema_of::<CreatePlaceRequest>),
+    },
     r(
         "GET",
         "/api/visits",
@@ -223,20 +230,70 @@ async fn people_decide(
     State(state): State<AppState>,
     Json(decision): Json<sjel_links::Decision>,
 ) -> ApiResponse {
+    people_decide_at(state, decision, places::people::entities_base_url()).await
+}
+
+async fn people_decide_at(
+    state: AppState,
+    decision: sjel_links::Decision,
+    entities_url: String,
+) -> ApiResponse {
     if let Err(reason) = decision.check() {
         return respond(StatusCode::BAD_REQUEST, json!({ "error": reason }));
     }
     let database_path = state.database_path.clone();
     match tokio::task::spawn_blocking(move || {
+        let verified = decision.check_with_person(|id| {
+            let client = sjel_http::client(
+                sjel_http::Purpose::new("places-entities"),
+                std::time::Duration::from_secs(3),
+            )
+            .map_err(|_| "entities verification client could not start".to_string())?;
+            let mut url = reqwest::Url::parse(&entities_url)
+                .map_err(|_| "entities verification URL is invalid".to_string())?;
+            url.path_segments_mut()
+                .map_err(|_| "entities verification URL cannot hold a path".to_string())?
+                .pop_if_empty()
+                .extend(["api", "entities", id]);
+            let reply =
+                sjel_server::InboundAuth::with_loopback_auth(client.get(url.clone()), url.as_str())
+                    .send()
+                    .map_err(|_| "entities is not reachable; decision was not saved".to_string())?;
+            if reply.status() == reqwest::StatusCode::NOT_FOUND {
+                return Ok(None);
+            }
+            if !reply.status().is_success() {
+                return Err(format!(
+                    "entities verification answered {}; decision was not saved",
+                    reply.status()
+                ));
+            }
+            reply
+                .json::<sjel_links::EntityIdentity>()
+                .map(Some)
+                .map_err(|_| {
+                    "entities answered an unexpected shape; decision was not saved".to_string()
+                })
+        });
+        if let Err(error) = verified {
+            return Ok::<_, String>(Err(error));
+        }
         PlacesStore::open(&database_path)
             .and_then(|store| {
                 places::people::decide(&store, &decision.name, decision.entity_id.as_deref())
             })
+            .map(|()| Ok(()))
             .map_err(|error| error.to_string())
     })
     .await
     {
-        Ok(Ok(())) => respond(StatusCode::OK, json!({ "ok": true })),
+        Ok(Ok(Ok(()))) => respond(StatusCode::OK, json!({ "ok": true })),
+        Ok(Ok(Err(sjel_links::DecisionError::Invalid(error)))) => {
+            respond(StatusCode::BAD_REQUEST, json!({ "error": error }))
+        }
+        Ok(Ok(Err(sjel_links::DecisionError::Unavailable(error)))) => {
+            respond(StatusCode::SERVICE_UNAVAILABLE, json!({ "error": error }))
+        }
         Ok(Err(error)) => failed(error),
         Err(_) => failed("task panicked".into()),
     }
@@ -365,6 +422,153 @@ async fn list_places(
             respond(StatusCode::OK, json!({ "places": rendered }))
         }
         Ok(Err(error)) => failed(error),
+        Err(_) => failed("task panicked".into()),
+    }
+}
+
+#[derive(Debug, Deserialize, serde::Serialize, schemars::JsonSchema)]
+pub struct CreatePlaceRequest {
+    #[serde(default)]
+    pub name: Option<String>,
+    #[serde(default)]
+    pub query: Option<String>,
+    #[serde(default)]
+    pub link: Option<String>,
+    #[serde(default)]
+    pub note: Option<String>,
+    #[serde(default)]
+    pub address: Option<String>,
+    #[serde(default)]
+    pub city: Option<String>,
+    #[serde(default)]
+    pub country_code: Option<String>,
+    #[serde(default)]
+    pub kind: Option<String>,
+    #[serde(default)]
+    pub latitude: Option<f64>,
+    #[serde(default)]
+    pub longitude: Option<f64>,
+}
+
+async fn create_place(
+    State(state): State<AppState>,
+    Json(request): Json<CreatePlaceRequest>,
+) -> ApiResponse {
+    let name = request
+        .name
+        .as_deref()
+        .map(str::trim)
+        .filter(|s| !s.is_empty())
+        .or_else(|| request.query.as_deref().map(str::trim).filter(|s| !s.is_empty()))
+        .or_else(|| request.note.as_deref().map(str::trim).filter(|s| !s.is_empty()))
+        .or_else(|| request.link.as_deref().map(str::trim).filter(|s| !s.is_empty()));
+    let Some(name) = name else {
+        return respond(
+            StatusCode::BAD_REQUEST,
+            json!({ "error": "place must have a name, query, note or link" }),
+        );
+    };
+    let name = name.to_string();
+    let database_path = state.database_path.clone();
+    let now = today();
+
+    match tokio::task::spawn_blocking(move || -> Result<Value, String> {
+        let store = PlacesStore::open(&database_path).map_err(|e| e.to_string())?;
+
+        // 1. If explicit coordinates are provided, insert/upsert directly.
+        if let (Some(lat), Some(lon)) = (request.latitude, request.longitude) {
+            let kind = request.kind.as_deref().unwrap_or("venue").to_string();
+            let ext_ref = request
+                .link
+                .as_deref()
+                .map(|l| l.to_string())
+                .unwrap_or_else(|| format!("capture:{}", name));
+            let id = stable_id("place", &ext_ref);
+            let place = Place {
+                id: id.clone(),
+                name: name.clone(),
+                kind,
+                address: request.address.clone().or_else(|| request.note.clone()),
+                city: request.city.clone(),
+                country_code: request.country_code.clone(),
+                latitude: Some(lat),
+                longitude: Some(lon),
+                source: "capture".to_string(),
+                external_ref: Some(ext_ref),
+            };
+            store.upsert_place(&place, &now).map_err(|e| e.to_string())?;
+            return Ok(json!({
+                "ok": true,
+                "id": place.id,
+                "place": place_summary(&place, None),
+            }));
+        }
+
+        // 2. Try geocoding if query / address / name looks like a placename (not a bare url).
+        let geocode_text = request
+            .query
+            .as_deref()
+            .or(request.address.as_deref())
+            .or_else(|| {
+                if !name.starts_with("http://") && !name.starts_with("https://") {
+                    Some(name.as_str())
+                } else {
+                    None
+                }
+            });
+
+        if let Some(text) = geocode_text {
+            let geocoder = Geocoder::new(&store);
+            if let Ok(outcome) = geocoder.geocode(
+                &GeocodeQuery::Free(text.to_string()),
+                request.kind.as_deref(),
+                &now,
+            ) {
+                if let Some(mut place) = outcome.place {
+                    if let Some(link) = &request.link {
+                        if place.external_ref.is_none() {
+                            place.external_ref = Some(link.clone());
+                        }
+                    }
+                    return Ok(json!({
+                        "ok": true,
+                        "id": place.id,
+                        "place": place_summary(&place, None),
+                    }));
+                }
+            }
+        }
+
+        // 3. Fallback: store unlocated place record so the captured item is preserved in places.
+        let ext_ref = request
+            .link
+            .as_deref()
+            .map(|l| l.to_string())
+            .unwrap_or_else(|| format!("capture:{}", name));
+        let id = stable_id("place", &ext_ref);
+        let place = Place {
+            id: id.clone(),
+            name: name.clone(),
+            kind: request.kind.as_deref().unwrap_or("venue").to_string(),
+            address: request.address.or(request.note),
+            city: request.city,
+            country_code: request.country_code,
+            latitude: None,
+            longitude: None,
+            source: "capture".to_string(),
+            external_ref: Some(ext_ref),
+        };
+        store.upsert_place(&place, &now).map_err(|e| e.to_string())?;
+        Ok(json!({
+            "ok": true,
+            "id": place.id,
+            "place": place_summary(&place, None),
+        }))
+    })
+    .await
+    {
+        Ok(Ok(val)) => respond(StatusCode::OK, val),
+        Ok(Err(err)) => failed(err),
         Err(_) => failed("task panicked".into()),
     }
 }
@@ -1044,7 +1248,7 @@ fn build_router(state: AppState) -> Router {
         .route("/api/people/decide", post(people_decide))
         .route("/health", get(health))
         .route("/ready", get(ready))
-        .route("/api/places", get(list_places))
+        .route("/api/places", get(list_places).post(create_place))
         .route("/api/visits", get(list_visits))
         .route("/api/geocode", post(geocode))
         .route("/api/layers/spend", get(spend_layer))
@@ -1337,4 +1541,66 @@ mod tests {
             "a server-to-server caller must not be refused"
         );
     }
+
+    #[tokio::test]
+    async fn create_place_registers_explicit_coordinates_and_unlocated_links() {
+        let path = scratch_database("create-place");
+        let state = AppState {
+            database_path: Arc::new(path.clone()),
+        };
+
+        // 1. Explicit coordinates
+        let req1 = CreatePlaceRequest {
+            name: Some("Berghain".into()),
+            query: None,
+            link: Some("https://berghain.berlin".into()),
+            note: Some("Famous club".into()),
+            address: Some("Am Wriezener Bahnhof".into()),
+            city: Some("Berlin".into()),
+            country_code: Some("DE".into()),
+            kind: Some("venue".into()),
+            latitude: Some(52.511),
+            longitude: Some(13.443),
+        };
+        let (status1, Json(body1)) = create_place(State(state.clone()), Json(req1)).await;
+        assert_eq!(status1, StatusCode::OK, "{body1}");
+        assert_eq!(body1["ok"], true);
+        let id1 = body1["id"].as_str().unwrap();
+        assert!(id1.starts_with("place:"));
+
+        // 2. Unlocated capture from link or note
+        let req2 = CreatePlaceRequest {
+            name: None,
+            query: None,
+            link: Some("https://example.com/nice-bar".into()),
+            note: Some("Cozy neighborhood bar".into()),
+            address: None,
+            city: None,
+            country_code: None,
+            kind: None,
+            latitude: None,
+            longitude: None,
+        };
+        let (status2, Json(body2)) = create_place(State(state.clone()), Json(req2)).await;
+        assert_eq!(status2, StatusCode::OK, "{body2}");
+        assert_eq!(body2["ok"], true);
+        let id2 = body2["id"].as_str().unwrap();
+        assert!(id2.starts_with("place:"));
+
+        // Verify stored in places_places
+        let store = PlacesStore::open(&path).unwrap();
+        let p1 = store.place(id1).unwrap().expect("p1 found");
+        assert_eq!(p1.name, "Berghain");
+        assert_eq!(p1.latitude, Some(52.511));
+        assert_eq!(p1.longitude, Some(13.443));
+
+        let p2 = store.place(id2).unwrap().expect("p2 found");
+        assert_eq!(p2.name, "Cozy neighborhood bar");
+        assert_eq!(p2.external_ref, Some("https://example.com/nice-bar".into()));
+        assert_eq!(p2.latitude, None);
+    }
 }
+
+#[cfg(test)]
+#[path = "server_people_tests.rs"]
+mod people_decision_tests;

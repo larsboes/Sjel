@@ -37,8 +37,7 @@ pub enum DayLoad {
     /// The calendar was not read, so nothing is known about this day.
     ///
     /// Last on purpose. `rank` orders by this enum before price, so an unknown
-    /// day never outranks a day that was measured free — a guess that looks
-    /// like a measurement is worse than a blank (ISA-archive.md). In
+    /// day never outranks a day that was measured free. In
     /// practice it is all-or-nothing: either the calendar answered for the
     /// whole span or it answered for none of it.
     Unknown,

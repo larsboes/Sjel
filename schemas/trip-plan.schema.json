@@ -62,6 +62,21 @@
         "archived"
       ]
     },
+    "traveler_links": {
+      "type": "array",
+      "readOnly": true,
+      "description": "Local HTTP projection of saved traveler decisions, in travelers order. Never persisted or sent to search providers.",
+      "items": {
+        "type": "object",
+        "required": ["name", "status", "entity_id"],
+        "properties": {
+          "name": { "type": "string" },
+          "status": { "enum": ["resolved", "not_person", "unresolved"] },
+          "entity_id": { "type": ["string", "null"], "pattern": "^ent:[^:]+$" }
+        },
+        "additionalProperties": false
+      }
+    },
     "travelers": {
       "type": "array",
       "items": {

@@ -33,6 +33,55 @@ pub const DDL: &str = "
 /// a test holds the two equal.
 pub const LINKS_TO: &[&str] = &["ent"];
 
+/// Read-only join for the local plan surface; never persisted or sent to search providers.
+#[derive(serde::Serialize)]
+pub struct TravelerLink<'a> {
+    pub name: &'a str,
+    pub status: &'static str,
+    pub entity_id: Option<&'a str>,
+}
+
+/// Projects only the supplied traveler names from saved decisions, preserving their order and
+/// spelling. Invalid saved IDs are unresolved and never become inspector targets.
+pub fn traveler_links<'a>(
+    names: &'a [String],
+    decided: &'a HashMap<String, Option<String>>,
+) -> Vec<TravelerLink<'a>> {
+    names
+        .iter()
+        .map(|name| {
+            let (status, entity_id) = match decided.get(&sjel_links::name_key(name)) {
+                Some(Some(id))
+                    if sjel_links::TypedId::parse(id).is_ok_and(|id| id.kind == "ent") =>
+                {
+                    ("resolved", Some(id.as_str()))
+                }
+                Some(None) => ("not_person", None),
+                _ => ("unresolved", None),
+            };
+            TravelerLink {
+                name,
+                status,
+                entity_id,
+            }
+        })
+        .collect()
+}
+
+/// Adds local decision metadata to an HTTP plan response without changing persisted plan data.
+///
+/// # Errors
+/// Returns a serialization error if the supplied plan cannot be encoded as JSON.
+pub fn with_traveler_links(
+    plan: &impl serde::Serialize,
+    names: &[String],
+    decided: &HashMap<String, Option<String>>,
+) -> serde_json::Result<serde_json::Value> {
+    let mut body = serde_json::to_value(plan)?;
+    body["traveler_links"] = serde_json::to_value(traveler_links(names, decided))?;
+    Ok(body)
+}
+
 // ---- store ----------------------------------------------------------------------------------
 
 /// Every decision, by name key.
@@ -192,6 +241,35 @@ mod tests {
         .expect("a plan");
         plan.travelers = travelers.iter().map(|t| t.to_string()).collect();
         plan
+    }
+
+    #[test]
+    fn traveler_projection_preserves_names_and_only_exposes_decided_entity_ids() {
+        let plan = plan(
+            "trip:plan:synthetic",
+            &[" Alice ", "Team", "Unknown", "Broken", "Empty"],
+        );
+        let decided = HashMap::from([
+            ("alice".into(), Some("ent:synthetic".into())),
+            ("team".into(), None),
+            ("broken".into(), Some("trip:plan:wrong".into())),
+            ("empty".into(), Some("ent:".into())),
+            ("unrelated".into(), Some("ent:private".into())),
+        ]);
+        let body = with_traveler_links(&plan, &plan.travelers, &decided).unwrap();
+        assert_eq!(body["travelers"], serde_json::json!(plan.travelers));
+        assert_eq!(
+            body["traveler_links"],
+            serde_json::json!([
+                {"name":" Alice ","status":"resolved","entity_id":"ent:synthetic"},
+                {"name":"Team","status":"not_person","entity_id":null},
+                {"name":"Unknown","status":"unresolved","entity_id":null},
+                {"name":"Broken","status":"unresolved","entity_id":null},
+                {"name":"Empty","status":"unresolved","entity_id":null}
+            ])
+        );
+        assert!(!body.to_string().contains("ent:private"));
+        assert_eq!(body["id"], plan.id);
     }
 
     #[test]

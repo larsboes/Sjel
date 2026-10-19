@@ -449,9 +449,17 @@ async fn ready(State(state): State<AppState>) -> ApiResponse {
 async fn list_plans(State(state): State<AppState>) -> ApiResponse {
     let database_path = state.database_path.clone();
     match blocking(move || {
-        TripsStore::open(&database_path)
-            .and_then(|store| store.list_plans())
-            .map_err(|error| error.to_string())
+        let store = TripsStore::open(&database_path).map_err(|error| error.to_string())?;
+        let decisions = trips::people::decisions(&store).map_err(|error| error.to_string())?;
+        store
+            .list_plans()
+            .map_err(|error| error.to_string())?
+            .iter()
+            .map(|plan| {
+                trips::people::with_traveler_links(plan, &plan.travelers, &decisions)
+                    .map_err(|error| error.to_string())
+            })
+            .collect::<Result<Vec<_>, _>>()
     })
     .await
     {
@@ -463,8 +471,12 @@ async fn list_plans(State(state): State<AppState>) -> ApiResponse {
 async fn create_plan(State(state): State<AppState>, Json(input): Json<CreatePlan>) -> ApiResponse {
     let database_path = state.database_path.clone();
     match blocking(move || {
-        TripsStore::open(&database_path)
-            .and_then(|store| store.create_plan(&input))
+        let store = TripsStore::open(&database_path).map_err(|error| error.to_string())?;
+        let plan = store
+            .create_plan(&input)
+            .map_err(|error| error.to_string())?;
+        let decisions = trips::people::decisions(&store).map_err(|error| error.to_string())?;
+        trips::people::with_traveler_links(&plan, &plan.travelers, &decisions)
             .map_err(|error| error.to_string())
     })
     .await
@@ -484,9 +496,16 @@ async fn update_plan(
 ) -> ApiResponse {
     let database_path = state.database_path.clone();
     match blocking(move || {
-        TripsStore::open(&database_path)
-            .and_then(|store| store.update_plan(&id, &input))
-            .map_err(|error| error.to_string())
+        let store = TripsStore::open(&database_path).map_err(|error| error.to_string())?;
+        let decisions = trips::people::decisions(&store).map_err(|error| error.to_string())?;
+        store
+            .update_plan(&id, &input)
+            .map_err(|error| error.to_string())?
+            .map(|plan| {
+                trips::people::with_traveler_links(&plan, &plan.travelers, &decisions)
+                    .map_err(|error| error.to_string())
+            })
+            .transpose()
     })
     .await
     {
@@ -529,7 +548,7 @@ async fn links(State(state): State<AppState>, Query(query): Query<LinksQuery>) -
             return response(
                 StatusCode::BAD_REQUEST,
                 json!({ "error": format!("trips holds no references to `{}`", target.kind) }),
-            )
+            );
         }
         Err(reason) => return response(StatusCode::BAD_REQUEST, json!({ "error": reason })),
     }
@@ -574,20 +593,70 @@ async fn people_decide(
     State(state): State<AppState>,
     Json(decision): Json<sjel_links::Decision>,
 ) -> ApiResponse {
+    people_decide_at(state, decision, trips::people::entities_base_url()).await
+}
+
+async fn people_decide_at(
+    state: AppState,
+    decision: sjel_links::Decision,
+    entities_url: String,
+) -> ApiResponse {
     if let Err(reason) = decision.check() {
         return response(StatusCode::BAD_REQUEST, json!({ "error": reason }));
     }
     let database_path = state.database_path.clone();
     match blocking(move || {
+        let verified = decision.check_with_person(|id| {
+            let client = sjel_http::client(
+                sjel_http::Purpose::new("trips-entities"),
+                std::time::Duration::from_secs(3),
+            )
+            .map_err(|_| "entities verification client could not start".to_string())?;
+            let mut url = reqwest::Url::parse(&entities_url)
+                .map_err(|_| "entities verification URL is invalid".to_string())?;
+            url.path_segments_mut()
+                .map_err(|_| "entities verification URL cannot hold a path".to_string())?
+                .pop_if_empty()
+                .extend(["api", "entities", id]);
+            let reply =
+                sjel_server::InboundAuth::with_loopback_auth(client.get(url.clone()), url.as_str())
+                    .send()
+                    .map_err(|_| "entities is not reachable; decision was not saved".to_string())?;
+            if reply.status() == reqwest::StatusCode::NOT_FOUND {
+                return Ok(None);
+            }
+            if !reply.status().is_success() {
+                return Err(format!(
+                    "entities verification answered {}; decision was not saved",
+                    reply.status()
+                ));
+            }
+            reply
+                .json::<sjel_links::EntityIdentity>()
+                .map(Some)
+                .map_err(|_| {
+                    "entities answered an unexpected shape; decision was not saved".to_string()
+                })
+        });
+        if let Err(error) = verified {
+            return Ok::<_, String>(Err(error));
+        }
         TripsStore::open(&database_path)
             .and_then(|store| {
                 trips::people::decide(&store, &decision.name, decision.entity_id.as_deref())
             })
+            .map(|()| Ok(()))
             .map_err(|error| error.to_string())
     })
     .await
     {
-        Ok(()) => response(StatusCode::OK, json!({ "ok": true })),
+        Ok(Ok(())) => response(StatusCode::OK, json!({ "ok": true })),
+        Ok(Err(sjel_links::DecisionError::Invalid(error))) => {
+            response(StatusCode::BAD_REQUEST, json!({ "error": error }))
+        }
+        Ok(Err(sjel_links::DecisionError::Unavailable(error))) => {
+            response(StatusCode::SERVICE_UNAVAILABLE, json!({ "error": error }))
+        }
         Err(error) => response(StatusCode::INTERNAL_SERVER_ERROR, json!({ "error": error })),
     }
 }
@@ -834,9 +903,16 @@ async fn list_places(State(state): State<AppState>) -> ApiResponse {
 async fn get_plan(State(state): State<AppState>, Path(id): Path<String>) -> ApiResponse {
     let database_path = state.database_path.clone();
     match blocking(move || {
-        TripsStore::open(&database_path)
-            .and_then(|store| store.get_plan(&id))
-            .map_err(|error| error.to_string())
+        let store = TripsStore::open(&database_path).map_err(|error| error.to_string())?;
+        let decisions = trips::people::decisions(&store).map_err(|error| error.to_string())?;
+        store
+            .get_plan(&id)
+            .map_err(|error| error.to_string())?
+            .map(|details| {
+                trips::people::with_traveler_links(&details, &details.plan.travelers, &decisions)
+                    .map_err(|error| error.to_string())
+            })
+            .transpose()
     })
     .await
     {
@@ -1297,17 +1373,8 @@ fn clipped_span(date_from: &str, date_to: &str) -> Result<DaySpan, &'static str>
 /// The fuzzy-timeframe answer: every day of the span priced via the grid,
 /// joined with committed calendar time, ranked free-cheapest-first.
 ///
-/// A calendar that cannot be reached no longer degrades to all-free. It used
-/// to: `.ok()/.and_then/.unwrap_or_default()` fed an EMPTY entry list into
-/// `day_loads`, which starts every day at `DayLoad::Free`, so a fully committed
-/// week ranked cheapest-first and nothing in the body said the calendar had
-/// never answered. The old doc comment called that deliberate and cited
-/// punctuality enrichment as the precedent; the precedent does not hold,
-/// because transit reports its gap (`unscored_legs`) and this did not. Now the
-/// days come back `DayLoad::Unknown`, the body carries `calendar` and
-/// `degraded`, and the ranking says what it does not know
-/// (ISA-archive.md: "a guess that looks like a measurement is worse than
-/// a blank").
+/// An unreachable calendar produces `DayLoad::Unknown`, with `calendar` and
+/// `degraded` describing the missing evidence. It must never imply an all-free span.
 async fn flight_when(Query(params): Query<FlightWhenParams>) -> ApiResponse {
     let span = match clipped_span(&params.date_from, &params.date_to) {
         Ok(span) => span,
@@ -2211,3 +2278,7 @@ mod route_manifest_tests {
         assert!(missing.is_empty(), "served but undocumented: {missing:?}");
     }
 }
+
+#[cfg(test)]
+#[path = "server_people_tests.rs"]
+mod people_decision_tests;

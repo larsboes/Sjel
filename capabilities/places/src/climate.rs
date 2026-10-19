@@ -169,9 +169,7 @@ fn mean(sum: f64, count: i64) -> Option<f64> {
 /// years that carried a precipitation reading, so a month present in six of ten
 /// years reports a six-year average rather than a suppressed one.
 ///
-/// A month with no rows at all is ABSENT from the result. It is not a row of
-/// zeroes: a guess that looks like a measurement is worse than a blank
-/// (ISA-archive.md).
+/// A month with no rows is absent rather than reported as a measured zero.
 pub fn aggregate_daily(days: &[DailyRow]) -> Vec<MonthlyNormal> {
     let mut months: Vec<MonthAccumulator> = (0..12).map(|_| MonthAccumulator::default()).collect();
     for day in days {

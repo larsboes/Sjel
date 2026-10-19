@@ -23,6 +23,7 @@ flowchart TD
         Files[("media_files")]
         Locations[("media_locations")]
         Runs[("media_ingests + media_ingest_items")]
+        Copies[("media_ingest_copies")]
     end
 
     subgraph Read["Read surfaces"]
@@ -36,6 +37,7 @@ flowchart TD
     Library --> Index
     Mirror --> Verbs
     Ingest --> Runs
+    Ingest --> Copies
     Ingest --> Files
     Ingest --> Locations
     Index --> Locations
@@ -51,7 +53,7 @@ flowchart TD
 
 ## 1. The ledger
 
-Five tables in the shared SQLite store (opened through `sjel_store`, created on first use by
+Six tables in the shared SQLite store (opened through `sjel_store`, created on first use by
 `Ledger::open`). A file and its location commit in one transaction, so a crashed indexer cannot
 leave an orphaned digest.
 
@@ -62,6 +64,7 @@ leave an orphaned digest.
 | `media_locations` | One indexed path on one volume | `(uuid, relpath)` |
 | `media_ingests` | One ingest run and its disposition counts | `id` |
 | `media_ingest_items` | One path's disposition inside a run, with the reason | `(ingest_id, relpath)` |
+| `media_ingest_copies` | Incoming directory ownership, target volume UUID and canonical library root | `(ingest_id, relpath)`; unique incoming name |
 
 Two invariants make the ledger answer *"where do these bytes live"* rather than *"what did the last
 run look like"*. A digest's `size` is written once and any later row that disagrees is refused
@@ -86,6 +89,30 @@ A refusal is per path, never per run. One unusable path in a batch names itself 
 returns the rest their disposition (`files_with_refusals`, `staged_hashes`); the strict `files`
 walk remains for the verbs that cannot proceed without a complete tree. Ingest reports each refusal
 as a durable `refused` item and the run still completes.
+
+### Interrupted ingest recovery
+
+An applying ingest holds an OS file lock in the library parent's `.media-incoming` directory.
+Another applying ingest using that incoming area is refused, including one with a different source
+or volume UUID. Process exit releases the lock. A dry run inspects without taking a write lock or
+cleaning temporary files.
+
+On retry, the copy journal limits cleanup to the same canonical staging and library paths and
+volume UUID. Recovery rechecks the original's digest before removing a journal-owned incoming
+directory containing only its regular `copy` file, or nothing. It then recopies or verifies the
+reserved final path. Acceptance requires a regular file with matching size and SHA-256 and stable
+metadata during verification; destination symlinks are refused. Earlier verified items survive a
+later interruption.
+
+The CLI report's `incoming_unresolved` array names entries whose ownership or contents cannot be
+verified. These entries remain in place, block staging prune, and cause a nonzero CLI exit.
+This includes older unjournaled copies, unfamiliar directory contents, changed originals, and an
+empty directory left by a crash before its journal entry. Historical reservations without target
+ownership also require inspection. Before pruning, ingest re-enumerates and rehashes the complete
+staging file set; changed or added files refuse prune. The producer must stop writing during
+ingest because this check is not a filesystem snapshot. The journal supports checked retries across SQLite and
+filesystem boundaries; it cannot make those boundaries one atomic transaction or protect against
+external filesystem edits and storage failure.
 
 ## 3. The HTTP surface
 

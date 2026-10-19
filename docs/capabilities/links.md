@@ -86,6 +86,21 @@ name as text.
   `GET /api/people/open` and `POST /api/people/decide`. If entities does not answer, names stay
   undecided and nothing fails.
 
+Manual decisions verify the selected ID through entities' `GET /api/entities/{id}` before
+writing. A missing entity or a non-person returns `400`; an unavailable verifier, malformed
+response, or mismatched response ID returns `503`. Either refusal preserves the saved decision.
+An `entity_id: null` decision records "not a person" without contacting entities.
+
+Plan list, detail, create, and update responses project each original traveler name into
+`traveler_links`, in the same order. Each entry has `name`, `status` (`resolved`, `not_person`, or `unresolved`), and an
+`entity_id` only for a resolved decision. Invalid saved typed IDs remain unresolved. This metadata
+is read-only: it is not stored in the plan or forwarded to journey search providers.
+
+Traveler chips open the person inspector by that saved entity ID. Unresolved and not-person
+names stay unlinked. Nearby-person and host actions keep the IDs supplied by the located-person
+response; a display-name match never creates an inspector target. Name-only meetup participants
+also stay unlinked.
+
 ## Decisions
 
 | Id | Decision |
@@ -102,7 +117,7 @@ name as text.
 | D10 | Mail joins by exact email and stores nothing. |
 | D11 | The owner writes, and no new vocabulary; one decision covers every row of that name. |
 
-The decisions were answered 2026-10-06; the narrative record is in `ISA-archive.md`.
+The table records the contract decisions; Git history retains their discussion.
 
 ## Claims
 
@@ -122,10 +137,6 @@ All shipped; the paths are the evidence.
 
 ## Known limits
 
-- `decide` checks that an id is shaped like a person id, not that the person exists; the review
-  UI only offers real ids.
-- A trip's companion chips still open a person by name, because the trip plan does not carry the
-  decisions; following the trip's travellers to a person needs trips to expose them.
 - `trips_plans.travelers` is served by `GET /api/plans`; the companion summary is not published
   per traveller until the register's person id and a class column exist (see root `ISA.md`).
 

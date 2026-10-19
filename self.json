@@ -97,6 +97,10 @@
       "kind": "pack"
     },
     {
+      "name": "device-auth",
+      "kind": "lib"
+    },
+    {
       "name": "devices",
       "kind": "capability",
       "service": {
@@ -341,6 +345,15 @@
     {
       "name": "printing",
       "kind": "capability"
+    },
+    {
+      "name": "projects",
+      "kind": "capability",
+      "service": {
+        "kind": "process",
+        "requires": [],
+        "port": "8103"
+      }
     },
     {
       "name": "pseudonymize",
@@ -866,6 +879,26 @@
       ],
       "evidence": [
         "capabilities/cv/Cargo.toml"
+      ]
+    },
+    {
+      "from": "dashboard",
+      "to": "device-auth",
+      "kinds": [
+        "cargo-dep"
+      ],
+      "evidence": [
+        "dashboard/src-tauri/Cargo.toml"
+      ]
+    },
+    {
+      "from": "devices",
+      "to": "device-auth",
+      "kinds": [
+        "cargo-dep"
+      ],
+      "evidence": [
+        "capabilities/devices/Cargo.toml"
       ]
     },
     {
@@ -1416,6 +1449,66 @@
       ],
       "evidence": [
         "capabilities/places/Cargo.toml"
+      ]
+    },
+    {
+      "from": "projects",
+      "to": "content-item",
+      "kinds": [
+        "cargo-dep"
+      ],
+      "evidence": [
+        "capabilities/projects/Cargo.toml"
+      ]
+    },
+    {
+      "from": "projects",
+      "to": "markdown-root",
+      "kinds": [
+        "cargo-dep"
+      ],
+      "evidence": [
+        "capabilities/projects/Cargo.toml"
+      ]
+    },
+    {
+      "from": "projects",
+      "to": "route-manifest",
+      "kinds": [
+        "cargo-dep"
+      ],
+      "evidence": [
+        "capabilities/projects/Cargo.toml"
+      ]
+    },
+    {
+      "from": "projects",
+      "to": "sjel-config",
+      "kinds": [
+        "cargo-dep"
+      ],
+      "evidence": [
+        "capabilities/projects/Cargo.toml"
+      ]
+    },
+    {
+      "from": "projects",
+      "to": "sjel-server",
+      "kinds": [
+        "cargo-dep"
+      ],
+      "evidence": [
+        "capabilities/projects/Cargo.toml"
+      ]
+    },
+    {
+      "from": "projects",
+      "to": "sjel-store",
+      "kinds": [
+        "cargo-dep"
+      ],
+      "evidence": [
+        "capabilities/projects/Cargo.toml"
       ]
     },
     {
@@ -2259,6 +2352,10 @@
       "verdict": "adopt"
     },
     {
+      "name": "github-actions-artifacts",
+      "verdict": "adopt"
+    },
+    {
       "name": "gitleaks",
       "verdict": "adopt"
     },
@@ -2499,6 +2596,10 @@
       "verdict": "adopt"
     },
     {
+      "name": "rust-analyzer",
+      "verdict": "inspiration"
+    },
+    {
       "name": "rustls",
       "verdict": "adopt"
     },
@@ -2576,6 +2677,10 @@
     },
     {
       "name": "telekom-mcp-security",
+      "verdict": "inspiration"
+    },
+    {
+      "name": "tigerbeetle",
       "verdict": "inspiration"
     },
     {

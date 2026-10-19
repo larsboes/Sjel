@@ -1,33 +1,49 @@
-# Doctor Diagnostics Suite
+# Doctor diagnostics suite
 
-`tools/doctor` is the primary health assertion tool for a Sjel host. It is non-destructive and evaluates whether current machine state conforms to declared architectural invariants.
+`tools/doctor` checks whether an already configured host matches its declarations. It reports
+failures; it does not establish that every application workflow works.
 
-## Check Categories
+```bash
+tools/doctor            # full report without GitHub calls
+tools/doctor --online   # also probe declared systems and fetch origin/main
+tools/doctor --version  # version identity only
+```
 
-### 1. Host Toolchain & Runtime
-- Verifies that all CLI utilities required by the host profile are installed (e.g. `bun`, `cargo`, `sqlite3`, `launchctl`).
-- Enforces Bun/npm install policies (`minimumReleaseAge = 86400`).
+The full report exits `0` when all checks pass and `1` when one or more checks fail.
+`--version` exits `0` and is not a health assertion. The current report sections are defined in
+[`doctor/checks.rs`](../../tools/sjel-cli/src/doctor/checks.rs).
 
-### 2. Scheduled Producers
-- Queries `launchctl list` (or `systemctl`) to verify periodic background workers.
-- Asserts that every scheduled job's last run exited with status code `0`.
-- Verifies that output logs (`/tmp/axon-*-schedule.log`) are actively written within their declared intervals.
+## Check categories
 
-### 3. Store Integrity
-- Executes `PRAGMA integrity_check;` on the shared SQLite database.
-- Checks WAL file size and permissions.
+### 1. Host toolchain & runtime
 
-### 4. Freshness & Backups
-- Evaluates declared contracts across `comms`, `finance`, and `places`.
-- Confirms that backup archives exist at destinations with valid checksums and timestamps.
+Doctor delegates dependency checks to `tools/toolchain-check` and reports machine identity,
+state mounts, enabled capabilities, manifest validity, port uniqueness, and shared server policy.
+It also reports local inference roles and agent harness deployment.
 
-## Remediation Workflow
+### 2. Scheduled producers
 
-When a check fails:
-1. Note the specific sub-check and error output.
-2. Inspect the log referenced by the unit (e.g. `/tmp/axon-<unit>-schedule.err`).
-3. For launchd units reporting non-zero exits, kickstart the unit:
-   ```bash
-   launchctl kickstart -k gui/$(id -u)/com.sjel.<unit>
-   ```
-4. Re-run `tools/doctor` to confirm resolution.
+Persistence checks compare installed units with their generated declarations. Producer checks
+look for evidence that scheduled work ran. Read the named producer and its log or receipt when
+an installed unit has stopped producing data; unit presence alone does not prove a successful run.
+
+### 3. Store integrity
+
+The shared-store check opens SQLite read-only and runs `PRAGMA integrity_check`. This checks the
+database structure; domain correctness and application behavior need their own checks.
+
+### 4. Freshness & backups
+
+Freshness checks use declared arrival contracts. Backup checks inspect receipts and the archives
+they name. Follow the owning capability's backup contract for restore verification; a fresh
+receipt alone does not prove recovery.
+
+## Remediation workflow
+
+1. Record the failed section and its exact output.
+2. Read the named tool or capability's diagnostics and inspect its referenced log or receipt.
+3. Correct that cause, then rerun the relevant command and `tools/doctor`.
+
+For lifecycle or installed-unit failures, use the [service runner](persistence.md#lifecycle-commands).
+A manual stop creates a maintenance hold; use `resume` when you intend to lift it. Restarting a
+job without inspecting the failure can hide the evidence needed to fix it.

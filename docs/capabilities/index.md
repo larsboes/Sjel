@@ -1,36 +1,32 @@
-# Capabilities Overview
+# Capabilities overview
 
-Capabilities are autonomous software units packaged as independent modules in `capabilities/<name>`.
+A capability owns a domain contract and declares its runtime in `service.toml`. Public units live
+under `capabilities/`; private units can live in the active overlay. The
+[generated architecture](../../ARCHITECTURE.md#capabilities) lists public declarations. Use the
+host registry for the enabled set and live status.
 
-```mermaid
-flowchart TD
-    Manifest["service.toml (Contract)"] --> Runner["tools/service-runner.sh"]
-    Runner --> Native["Native Binary (:port)"]
-    Runner --> Container["Container Runtime (:port)"]
-    Runner --> Cron["Scheduled Job (launchd / systemd)"]
-    Native --> Doctor["tools/doctor Verification"]
-    Container --> Doctor
-    Cron --> Doctor
-```
+## Capability types
 
-## Capability Types
+| Manifest `kind` | Runtime |
+| --- | --- |
+| `process` | A host process. `autostart` declares a persistent service; `schedule` declares a periodic job; neither means on demand. |
+| `container` | A container managed by the selected Docker or Podman runtime. This is the default kind when omitted. |
+| `data` | State with a backup contract and no process to start. |
 
-Capabilities declare their execution type in `service.toml`:
+Start with the [manifest guide](manifest.md) when adding a unit, then read
+[contracts and health](contracts.md). The manifest's `requires` array declares runtime
+prerequisites; it does not permit one capability to mutate another's tables.
 
-| Type | Manifest `kind` | Description | Typical Use Cases |
-| :--- | :--- | :--- | :--- |
-| **Process** | `process` | Native daemon listening on an assigned loopback port | Web APIs, REST endpoints, proxy adapters |
-| **Container** | `container` | OCI container managed by Docker or Podman | Third-party services, sandboxed environments |
-| **Scheduled** | `process` (with `schedule`) | Periodic batch task executed on a timer | Feed sweeps, price crawlers, backup routines |
-| **Data** | `data` | Passive storage unit declaring backup contracts | Knowledge base mounts, media archives |
+## Reference guides
 
-## Reference Guides
+| Task | Manual |
+| --- | --- |
+| Connect domain identifiers and resolve people | [Typed IDs and `/api/links`](links.md) |
+| Understand intake and privacy redaction | [Feed and communications](feed-and-comms.md) |
+| Change availability, rhythms, or calendar sync | [Calendar](calendar.md) |
+| Build a CV or compare a LinkedIn snapshot | [CV](cv.md) |
+| Inspect media ingest, integrity, and organization previews | [Media](media.md) |
+| Follow journey planning and trip intent | [Travel and routing](travel.md) |
 
-- **[Service Manifest Reference](manifest.md)**: Complete TOML schema specification for `service.toml`.
-- **[Contracts & Health](contracts.md)**: Freshness contracts, heartbeat requirements, and sweep semantics.
-- **[Typed Ids & `/api/links`](links.md)**: The join contract — id grammar, `links_to` discovery, the link response, and people resolution.
-- **[Feed & Communications](feed-and-comms.md)**: Intake pipeline, `content-item-v2`, and privacy redaction ladder.
-- **[Calendar Architecture](calendar.md)**: Materialized forward-only rhythms and two-way Google Calendar synchronization.
-- **[CV](cv.md)**: Typed master file, priority auto-fit to one page, form editor, LinkedIn snapshot diff.
-- **[Media Ledger](media.md)**: Exact-byte ingest gate, volume integrity ledger, per-path ingest disposition, and the read-only HTTP surface the `/media` page reads.
-- **[Travel & Routing](travel.md)**: Multi-modal journey planning, intent drafting, and reservation parsing.
+The owning README explains purpose and design choices. These manuals describe interface and data
+contracts; [ISA.md](../../ISA.md) holds open claims and decisions.

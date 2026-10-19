@@ -4,6 +4,9 @@ Load the `sjel` skill (`Packs/harness/skills/sjel/SKILL.md`) for any Sjel operat
 change. It routes to the rules for placement, documentation, verification, data boundaries, and
 commits. For operations, run `sjel help` or `sjel search <task>` before you browse files.
 
+Shared documentation and planning rules live in [CONTRIBUTING.md](CONTRIBUTING.md#documentation).
+Keep this file as the bootstrap; link to the owning rule instead of duplicating it here.
+
 Before editing:
 
 1. Run `git status --short --branch` and `tools/doctor`.

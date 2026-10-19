@@ -39,8 +39,8 @@ Sjel stores the facts of one person's or one household's life as typed data: peo
 trips, money, home and calendar. The data stays on hardware the household controls. Screens show
 that data, and an assistant works on it.
 
-Sjel has a small core and optional extensions. All extensions live in this repository. Each
-installation switches on the extensions it needs.
+Sjel has a core and optional capabilities. Public capabilities live in this repository; private
+ones may live in a deployment overlay. Each installation enables the capabilities it needs.
 
 ## Why I built it
 
@@ -67,9 +67,10 @@ Expect AI-polished text throughout, because I trust my drafts more after an AI p
 
 Sjel is designed with two deliberate surfaces:
 
-1. **On the glass**: Apple-like simplicity for daily life. Guided device pairing via QR code,
+1. **On the glass, the intended experience**: Apple-like simplicity for daily life. Guided device pairing via QR code,
    one-tap local intelligence tuning that auto-detects hardware and quantizations, and zero
-   terminal friction for household members. It just works.
+   terminal friction for household members. Node setup still requires an operator; the
+   [installation workflow](docs/operations/index.md#install-a-shell-only-node) describes the current steps.
 2. **Under the hood**: A completely open, scriptable node. Every capability serves a live route
    manifest (`GET /routes`), speaks typed JSON over loopback HTTP, and stores state in queryable
    SQLite files. Developers and operators can drive every workflow from the terminal (`sjel`,
@@ -115,13 +116,14 @@ smart. Using and maintaining it may not require that smartness.
 | Feature | State |
 |---|---|
 | Typed people, places, trips, money, home and calendar, with a source on every value | Built |
-| iPhone app with an offline copy, paired by device key | Built |
-| Same Wi-Fi, Tailscale and own-server connections | Built |
-| Pseudonymizer in front of cloud model calls, and in front of every agent read | Built: `comms` cloud calls, and the agent gate (ISA F9) |
+| iPhone app with an offline copy, paired by device key | Client, outbox and pairing paths implemented; clean-device onboarding and offline timing remain unmeasured. See [dashboard contracts](dashboard/README.md). |
+| Same Wi-Fi, Tailscale and own-server connections | Connection paths implemented; listener, credentials and deployment setup are required. |
+| Pseudonymizer in front of cloud model calls and admitted agent reads | Implemented for `comms` cloud calls and capabilities that admit the agent gate; [access policy](docs/architecture/security.md#agent-access-policy) controls admission. |
 | Data about other people sent to a cloud model pseudonymized, or synced end-to-end encrypted | Target |
-| Model selection: dual-mechanism — device model or local decision engine, with zero-fail heuristic fallback | Built |
-| Assistant that proposes actions and asks before anything that leaves Sjel or cannot be undone | Partly built. Agent writes run under a per-capability mode with approvals (ISA F10). The drawer sends unrouted questions down the model ladder. |
-| Mac app | Built: menu bar companion (`apps/mac`) |
+| Model selection: device model or local decision engine, with heuristic fallback | Selection and fallback paths implemented; available models depend on the device and configured services. |
+| Assistant that proposes actions and asks before anything that leaves Sjel or cannot be undone | Partly built. Agent writes follow the configured per-capability mode; confirmation is not a universal default. The drawer sends unrouted questions down the model ladder. |
+| Mac app | Menu bar companion in `apps/mac`; native desktop and iOS work in [the GPUI workspace](apps/gpui-prototype/README.md). The web dashboard remains available. |
+| Small install with optional downloadable capabilities | Release preparation exists for Mac DMGs, node archives, Calendar packages and native iOS archives. First-run setup, app package installation and clean-user acceptance remain open in the ISA. See [release preparation](docs/operations/index.md#release-preparation-and-later-testing). |
 | iCloud connection, encrypted by Sjel | Relay built and tested (`apps/mac`, ISC-19). Nothing syncs through it yet. |
 
 ## Try it
@@ -129,18 +131,19 @@ smart. Using and maintaining it may not require that smartness.
 The [live demo](https://larsboes.github.io/Sjel/) runs the web interface on synthetic data. No
 install needed.
 
-To run your own node:
+To prepare a source-based node installation on macOS or Linux:
 
 ~~~sh
 git clone https://github.com/larsboes/Sjel.git
 cd Sjel
 tools/install.sh
-tools/doctor
 ~~~
 
-You get the web interface at `http://localhost:8082` and the `sjel` command. The installer asks
-where to keep your private settings, which live outside this repository. macOS and Linux.
-[Start here](CONTRIBUTING.md#start-here) covers the details.
+Setup creates or connects private configuration outside this repository and offers capability
+selection. It does not complete browser login or guarantee a built, running dashboard. Follow
+the [shell-only installation workflow](docs/operations/index.md#install-a-shell-only-node) for
+prerequisites, the web build, authentication, startup and reboot checks. Optional capabilities
+are enabled separately; enabling one does not start it or remove unused code from the checkout.
 
 ## Measured
 
@@ -151,12 +154,15 @@ Each number names the command that reproduces it.
 | Pseudonymizer recall, reversible path | 48/48 (100.0%), gate ≥ 91.7%, measured 2026-09-27 | `cargo run -p sjel-comms --bin comms-redaction-eval -- --pseudonymized <corpus>` |
 | Redaction recall, destructive path | 48/48 (100.0%), gate ≥ 91.7%, measured 2026-09-27 | the same command without `--pseudonymized` |
 | Feed ranking (bge-m3) | 0.941 pairwise, 0.994 mean nDCG, 6/6 useful top-1 | `bun capabilities/comms/eval/run-relevance.ts`, result in `capabilities/comms/eval/results/2026-08-30-bge-m3-ollama.md` |
-| Tests | 829 TypeScript tests and 107 Rust test binaries, CI green | `sjel test` and `cargo test --workspace` |
 
 The redaction corpus (24 fixtures) lives in the private settings, so its two rows cannot be re-run
 from a public clone. The relevance corpus is public
 (`capabilities/comms/eval/relevance-corpus.json`) and needs a local bge-m3. Offline use and pairing
 time are not measured yet.
+
+Run `sjel test` and `cargo test --workspace --locked` for current test results; this page does
+not establish that the current checkout passes. See [installation footprint](docs/operations/index.md#installation-footprint)
+for the measured shell artifacts and what that inventory excludes.
 
 ## Structure
 

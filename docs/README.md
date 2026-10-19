@@ -1,27 +1,26 @@
-# Sjel Technical Documentation
+# Sjel technical documentation
 
-Sjel is a private operating environment structured as a lean core with autonomous capabilities, packs, and strict boundary isolation.
+Choose a guide by the task you want to complete. Repository doctrine lives in
+[CONTRIBUTING.md](../CONTRIBUTING.md#engineering-doctrine); the current declared structure
+is generated in [ARCHITECTURE.md](../ARCHITECTURE.md).
 
-## Reading Paths
+## Reading paths
 
-| Audience | Start Here | Key Topics |
-| :--- | :--- | :--- |
-| **Architects & Core Devs** | [Architecture Overview](architecture/index.md) | Spine vs. Capabilities, SQLite single-writer, Tailnet gate |
-| **Capability Authors** | [Capability Manifests](capabilities/manifest.md) | `service.toml` schema, port allocation, IPC conventions |
-| **Operators & SRE** | [Operations Guide](operations/index.md) | `doctor` diagnostics, launchd/systemd persistence, backups |
+| Task | Start here | Then read |
+| --- | --- | --- |
+| Prepare a release or a later friend trial | [Release preparation](operations/index.md#release-preparation-and-later-testing) | [Open acceptance work](../ISA.md#distribution) |
+| Install and verify a minimal shell | [Shell-only node](operations/index.md#install-a-shell-only-node) | [Footprint](operations/index.md#installation-footprint), [service persistence](operations/persistence.md) |
+| Understand where a component belongs | [Architecture overview](architecture/index.md) | [Storage](architecture/storage.md), [data classes and security](architecture/security.md) |
+| Add or change a capability | [Capability manifests](capabilities/manifest.md) | [Health and freshness contracts](capabilities/contracts.md), the capability's manual |
+| Diagnose or manage a host | [Operations guide](operations/index.md) | [Doctor](operations/doctor.md), [patch policy](operations/index.md#patch-first), [service persistence](operations/persistence.md) |
+| Rehearse recovery before a migration | [Storage and recovery](architecture/storage.md#backups-before-migrations) | The owning capability's backup contract |
 
-```mermaid
-flowchart TD
-    subgraph Host["Host Machine"]
-        Tailnet["Tailnet Ingress (:47117)"] --> Spine["Sjel Spine (Dashboard + Proxy)"]
-        Spine --> Caps["Autonomous Capabilities (Rust / Python / TS)"]
-        Caps --> Store[("Single-Writer SQLite (axon.db)")]
-        Packs["Agent Packs & Skills"] --> Spine
-    end
-```
+## Documentation sections
 
-## Documentation Sections
+- [Architecture](architecture/index.md): component ownership, storage, and access boundaries.
+- [Capabilities](capabilities/index.md): manifest reference and domain manuals.
+- [Operations](operations/index.md): diagnosis and service lifecycle procedures.
 
-- **[Architecture](architecture/index.md)**: High-altitude design, component boundaries, storage patterns, and security guarantees.
-- **[Capabilities](capabilities/index.md)**: Service manifest schemas (`service.toml`), lifecycle management, and data freshness contracts.
-- **[Operations](operations/index.md)**: Host diagnosis (`tools/doctor`), persistence orchestration, and verification procedures.
+Read the owning capability or Pack README for its purpose and design choices. Open claims and
+decisions live in [ISA.md](../ISA.md). Use Sjel tools for current ports, enabled services, and
+health; a documentation page cannot establish that a service is running.

@@ -1,34 +1,38 @@
-# Architecture Overview
+# Architecture overview
 
-Sjel organizes system responsibilities into three concrete nouns with strict directional coupling.
+Sjel separates the runtime, domain services, and agent workflows. The
+[generated architecture](../../ARCHITECTURE.md) lists their declared wiring; the
+[engineering doctrine](../../CONTRIBUTING.md#architecture-and-ownership) defines placement.
 
-```mermaid
-flowchart LR
-    Packs["Packs (Skills / Agents)"] --> Spine["Spine (Dashboard + CLI)"]
-    Spine --> Caps["Capabilities (Domain Services)"]
-    Caps --> Store[("SQLite Store")]
-```
-
-## Architectural Nouns
+## Architectural nouns
 
 ### 1. The Spine
-The central orchestrator and developer surface.
-- **Components**: Sjel Dashboard (SvelteKit UI on port 47117), reverse proxy, `sjel-cli`, and host diagnostics (`doctor`).
-- **Invariants**: Serves as the UI shell and ingress router. Holds no domain state directly; proxies to capabilities and queries status.
+
+The spine contains root manifests, `schemas/`, operator tools in `tools/`, shared libraries in
+`libs/`, and the `dashboard/` shell. The dashboard presents capability surfaces and owns no domain
+state. Its [manifest](../../dashboard/service.toml) declares its service configuration.
 
 ### 2. Capabilities
-Autonomous domain services providing discrete functions (e.g. `comms`, `finance`, `transit`, `entities`).
-- **Contract**: Declared via `service.toml`.
-- **Runtime**: Native Rust binaries, background processes, or containers.
-- **Isolation**: Communicate over localhost HTTP or Unix domain sockets. Never directly modify another capability's storage.
+
+Capabilities own domain behavior under `capabilities/<name>/`. A capability may begin as a README;
+its `service.toml` declares runtime and backup contracts when needed. Some run a process or
+container, while a data capability owns state without running a service. Private capabilities
+may also live in the active overlay.
+See the [manifest guide](../capabilities/manifest.md).
 
 ### 3. Packs
-Modular AI assistant skills, personas, and harnesses.
-- **Harnesses**: Claude Code, Codex, Pi, OpenCode.
-- **Content**: Portable Markdown skills, system prompts, deliberation flows, and agent role definitions.
 
-## Boundary Invariants
+Packs contain portable agent skills and workflows under `Packs/<name>/`. Their `pack.toml`
+manifests declare the capabilities and external systems they use. See the
+[Pack schema](../../schemas/pack.toml.example) and [Pack directory](../../Packs/).
 
-1. **Downward Dependency**: Packs depend on the Spine; the Spine depends on Capabilities; Capabilities depend on shared libraries (`libs/*`). Dependencies never flow backward.
-2. **Single Store Responsibility**: Shared persistent state resides in SQLite with WAL mode. Writers hold immediate transactions; readers read concurrently.
-3. **Public Core / Private Overlay**: The Sjel repository contains strictly public engine code and documentation. All user data, private keys, and machine configurations live in the private overlay or Vaultwarden.
+## Boundary invariants
+
+- Shared contracts belong in `schemas/`; reusable implementation belongs in `libs/`.
+- Capabilities use another capability's declared interface rather than mutating its tables.
+  A shared database supports cross-domain reads without transferring table ownership.
+- Public code and schemas stay in this repository. Deployment configuration and private data
+  stay in the active overlay; secrets follow the [security boundary](security.md).
+
+Read [storage](storage.md) before changing a store and [security](security.md) before changing a
+listener or authentication policy.

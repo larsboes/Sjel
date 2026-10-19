@@ -9,7 +9,7 @@ operator-specific policy.
 Name the consumer and the outcome. An interesting technology without a concrete Sjel consumer
 remains an idea, not an implementation commitment.
 
-No backlog entry is required to start. Add a claim to the owning `ISA.md` only when something
+No backlog entry is required to start. Add a claim to the owning ISA only when something
 must outlive the change itself: a defect being left unfixed, or a decision that needs a record.
 Write it as a claim with the probe that would falsify it, not as a description. The issue tracker
 takes reports from outside the project; it is not where this project's work is planned.
@@ -127,8 +127,8 @@ Releases before 2026-09-26 were published under the MIT license and stay availab
 
 # Engineering doctrine
 
-The rules below govern every change to this repository. Each section is the owner of its rule; code
-comments and capability READMEs link here.
+The rules below govern every change to this repository. Detailed procedures live in the linked
+technical documents; each rule has one owner. Code comments and READMEs link to that owner.
 
 ## Product rules
 
@@ -158,18 +158,11 @@ Every change keeps to these. Rules 1, 4 and 5 describe the target behaviour; the
 Sjel supports macOS and Linux. The guided installer detects the platform, creates or connects a
 private deployment overlay, writes the local machine manifest, and leaves existing state alone.
 
-~~~sh
-git clone https://github.com/larsboes/Sjel.git
-cd Sjel
-tools/install.sh --help
-tools/install.sh
-tools/doctor
-~~~
-
-Read the prompt before choosing an overlay location or cloning a private remote. Missing host
-tools are reported with platform-specific installation hints from `toolchain.toml`; the installer
-does not hide or auto-install them. Contributors who only need the source and test suite can skip
-the operating setup and start at [Before writing code](#before-writing-code).
+Follow [the shell-only installation workflow](docs/operations/index.md#install-a-shell-only-node)
+for prerequisites, source setup, capability selection, authentication, build, startup and reboot
+verification. The installer reports missing tools rather than installing them silently.
+Contributors who only need source and tests can skip operating setup and start at
+[Before writing code](#before-writing-code).
 
 ## Operating values
 
@@ -411,104 +404,8 @@ substitute for that hold — see [Patch first](#patch-first) for the trade.
 
 ### Patch first
 
-This section was **Pins and cooldown** until 2026-09-02, and an `upstreams.toml` entry dated
-before then was decided under the hold it described. Those entries still point here; their text is
-left as written, because rewriting a decision's reasoning to match a later rule falsifies it.
-
-Take the patch. There is no adoption cooldown on host packages, Cargo, containers, rustup or
-repository-wide version policy, and nothing is held at a version anywhere. Q74 removed the
-cooldown on 2026-09-02; Q77, the same day, removed what was left — `upstreams.toml`'s 86 `pin`
-lines, the Rust toolchain literal, the three container image versions, and
-`capabilities/agentbox`'s pinned release and checksums. Q109 (2026-09-22) is the narrow
-exception: Bun/npm resolution waits 24 hours in the two UI trees and on this laptop, while
-Dependabot applies the same one-day window to those two manifests. The laptop-wide copy is
-`~/.bunfig.toml`; `tools/install.sh` offers it opt-in and `tools/doctor` reports drift. It is an
-age hold, not a version pin, and every dependency still tracks its upstream's latest after that
-window.
-
-The hold asked a release to age seven to fourteen days before adoption, on the argument that the
-ecosystem finds a compromised publish in days and reading the dependency tree yourself cannot.
-That argument is still true, and it was traded away deliberately. The same window that catches a
-poisoned release also holds every ordinary security fix, and this deployment has one operator: a
-hold that needs a human to end it is a hold that ends late. What was measured on the day of the
-ruling is why the trade is defensible rather than merely chosen — Homebrew formulae sat outdated
-with no updater configured at all, `openssl@3`, `gnupg`, `libgcrypt`, `nss` and `ffmpeg` among
-them, while the bot that was to enforce the hold had never been installed. The hold was guarding a
-door that was already open.
-
-**What replaces it is speed and reporting, not silence.** Four things move on their own, and each
-one leaves something a check can read:
-
-- `capabilities/host-patch` runs `tools/host-patch.sh` every 24 hours — `brew update`, `brew
-  upgrade --formula`, `brew upgrade --cask --greedy`, `brew cleanup`, one `uv tool upgrade` per
-  installed tool, `rustup update`, then `tools/audit`.
-- `capabilities/container-refresh` runs `tools/container-refresh.sh` every 24 hours on a host
-  that runs containers: it pulls every image a `service.toml` declares and recreates the ones
-  whose digest moved.
-- `.github/dependabot.yml` opens the repository half daily. Cargo and github-actions carry
-  `cooldown: default-days: 0`; the two Bun manifests carry `default-days: 1`, the 24-hour npm
-  window restored by Q109. `.github/workflows/dependabot-automerge.yml` still arms
-  `gh pr merge --auto --squash` on each pull request — so the ordinary bump merges itself once
-  the required checks pass, and no bump waits for somebody to look.
-- `rust-toolchain.toml` names the `stable` channel rather than a release, which is the toolchain
-  `rustup update` above already installs.
-
-Both scheduled jobs write a receipt the next `tools/doctor` reads out, because a scheduled job's
-real failure is that it quietly stops running. `.github/workflows/security.yml`, CodeQL and
-GitHub's advisory alerts are what now stand between a bad publish and this machine.
-
-**The named cost.** A compromised publish reaches the npm path after one day instead of after a
-seven-day hold; host packages and the other ecosystems still take the patch immediately. The two
-Bun UI trees now add Socket's scanner, but it is a network-backed detector rather than a guarantee:
-free mode needs no token, a Socket outage is an operational dependency, and the scanner does not
-cover non-Bun paths. What stands against the remaining gap is smallness and reading — every entry
-in `upstreams.toml` carries a human verdict, every resolving UI tree carries the hold and scanner,
-and `bun install` never runs a lifecycle hook (`tools/check-bun-install-policy.sh`), which is the
-path ChainDrop took.
-
-**The second cost, from dropping the versions.** A merely BAD release now lands too. A broken
-`graphify` breaks `tools/graphify.sh` the day it ships, a bad Home Assistant `:stable` is what
-the house runs by the next morning, and CI can go red for a Bun release nobody here chose. That
-is the trade, not an oversight: a version literal bought a delay and, on this deployment, delay
-was measured to be the more expensive failure. It also never bought reproducibility — a container
-tag is rebuilt under the same name, and `upstreams.toml`'s `pin` recorded an audit date while
-`host-patch` moved the installed version past it every night.
-
-**Where the version actually lives now.** Not in a manifest. The digest of a running container
-(`docker inspect <name> --format '{{.Image}}'`, ISA.md C4), the label on a built agentbox image,
-`Cargo.lock` and `bun.lock` for what is compiled, and `<overlay>/data/*/last.json` for what the
-last scheduled run did. Every one of those describes a machine rather than an intention.
-`toolchain.toml`'s `min_version` rows are the exception that proves the rule: they are FLOORS —
-the oldest release Sjel's use of a tool is known to work on — and never a version to install.
-
-**One binary, one owner.** On macOS `brew` owns `bun`, `uv`, `gitleaks` and `osv-scanner`, so
-`host-patch.sh` never calls `bun upgrade` or `uv self update`. A second updater for one file is
-how a `~/.local/bin` copy comes to shadow the `brew` one and answer differently — the PRD records
-that happening to `yt-dlp`, which returned HTTP 403 on every media URL while `--dump-json` kept
-working.
-
-**Container images track a channel.** A `service.toml` `tag` names the publisher's rolling tag —
-`:stable` for Home Assistant, `:latest` for Pi-hole, `:alpine` for Vaultwarden — and
-`capabilities/container-refresh` pulls every declared image every 24 hours, recreating the
-container when the digest moves. `tools/check-service-tomls.sh` refused `latest` until 2026-09-02;
-it was defending a reproducibility a tag never gave, since publishers rebuild under the same
-literal. The digest is what identifies a running image (ISA.md C4).
-
-**The Bun the workflows install is `latest`.** `oven-sh/setup-bun` is asked for `bun-version:
-latest` in both workflows, so CI runs the runtime a contributor's package manager just gave them.
-It was three pinned literals and `tools/check-bun-pin.sh` keeping them equal until 2026-09-02; with
-no literal left anywhere — not in a workflow, and since Q77 not in `upstreams.toml` either —
-there is nothing to diverge, and the class that gate caught is impossible rather than watched. The
-cost is stated rather than hidden: a bad Bun release can turn CI red for a reason
-unrelated to the code, which is the same trade `security.yml` makes for its scanners.
-
-**`capabilities/agentbox` builds from the latest release.** `agentbox build` and `agentbox
-host-install` resolve GitHub's `/releases/latest` and verify the tarball against THAT release's
-own published `SHA256SUMS` — so the sha256 refusal survives, and the version and checksum
-literals it used to compare against are gone. The self-update shim went with them: it refused
-`pi update` to protect a pin, and with no pin it would refuse the outcome this section asks for.
-The cooldown half, and the separate `gate` verb that was left holding only it, are gone. The
-printed advisory reminder stays, because nothing automated reads advisories for a release tarball.
+Take upstream patches under the [patch policy](docs/operations/index.md#patch-first), including
+the Bun/npm age window, update ownership, receipts, and accepted risks.
 
 ### Secrets
 
@@ -521,91 +418,14 @@ none exists today.
 
 ### Data classes
 
-The data classes are `c0` Public, `c1` Mine, `c2` Others, `c3` Secret, ranked in that order. `c0`
-and `c1` may reach a cloud model (`c1` only as a redacted derivative); `c2` and `c3` redact before
-persistence and never reach a cloud model.
-
-The policy is one function: `content_item::cloud_admission` in `libs/content-item`, a leaf crate
-every capability already depends on. It admits two representations — `c0` unchanged to any declared
-tier, and `c1` as a reviewed `c1` derivative to the `pseudonymized_personal` tier — and refuses
-everything else, including every class outside the vocabulary. The `processing_policy` a reader is
-shown is *derived* from it, so the label and the gate cannot disagree; they used to be two
-expressions and did.
-
-Enforced today, mechanically, on four independent gates: `cloud_derivative::prepare` builds no
-approvable preview for anything that is not `c0` or `c1`, `cloud_derivative::tier_allows` (a thin
-wrapper over `cloud_admission` that adds the transformation-version pin) refuses the dispatch,
-dispatch re-reads the source row's **current** class so a derivative approved at `c1` stops
-dispatching once the row becomes `c2`, and the `comms_content_cloud_derivatives` CHECK constraint
-refuses the row.
-
-`c3` is refused every local prompt too, and that is now a gate rather than a declaration:
-`content_item::local_prompt_allowed` answers `false` for `c3` and for any unrecognized value, both
-prompt-builders that read stored text ask it before they build a prompt —
-`capabilities/comms/src/digest.rs` (digest, diagram and chart) and `capabilities/comms/src/media.rs`
-(`summarize`) — and `processing_policy(..).local_processing` is derived from the same function. A
-refused item gets a `local_refused` row that says so, not a missing one. Embed and rerank
-(`libs/inference`) stay class-blind and loopback-or-nothing.
-
-A refusal is missing evidence, never a free pass. A ranker that redistributes a refused factor's
-weight over the surviving factors promotes exactly what the gate refused, so the refused share is
-withheld instead and the weights sum below 1.0 on purpose (PRD Q89, 2026-09-05; measured on the
-mail band in `capabilities/comms/README.md`).
-
-Data may select an allow-listed behavior but may not become executable code.
+Follow the [data-class and model-admission policy](docs/architecture/security.md#data-classes).
+The shared admission functions own the gate; labels and callers must agree with it.
 
 ### Backups before migrations
 
-No data migration starts without a tested 3-2-1 backup. A command being reversible in source
-control does not make its state mutation reversible.
-
-`tools/backup.sh <capability>` writes a self-describing archive, ships it under a partial name,
-verifies the remote byte count before renaming it, applies the capability's retention policy, and
-records the archive size and SHA-256 in the private receipt. The receipt also records whether
-retention ran. A shipment receipt proves delivery, not recovery.
-
-For a recovery rehearsal, run `tools/backup.sh --no-prune <capability>`. This mode ships and
-verifies a new archive but does not list or delete older archives. A capability that declares
-`backup_sqlite` stays held while all declared host paths and the cold database copy are staged and
-the staged copy passes `integrity_check`; it resumes before compression or network access. Failure
-or interruption after the hold triggers a resume attempt and exits without shipping the staged
-snapshot. A capability that declares `backup_sqlite_online` instead is never held: its database is
-copied open, through `sqlite3 .backup`, and the archive records how many tables and rows the copy
-held so a restore can check that they came back. That form is correct only where every reader is a
-host process on this machine, which is the condition SQLite's WAL states and a container behind a
-virtiofs mount does not meet.
-
-Retrieve that new archive into a private scratch location, compare its SHA-256 with the receipt,
-then run `tools/restore.sh <capability> <archive> --receipt <receipt.json>`. The explicit receipt
-makes the command reject the wrong capability, archive name, byte count or SHA-256 before
-extraction. Restore defaults to a new `/tmp` directory and refuses the Sjel checkout or active
-overlay as a destination. It separates the recovery stages explicitly:
-
-1. **Retrieve:** copy the named archive from the backup target without applying it.
-2. **Extract:** validate archive structure and capability identity, then extract into isolation.
-3. **Restore:** expand container-path archives with their recorded modes.
-4. **Verify:** require declared roots, run SQLite integrity checking on every declared database,
-   and compare an online copy's table and row counts against the numbers the archive recorded.
-5. **Clean up:** inspect and then remove the retained scratch tree manually. The tool never
-   removes the extracted evidence.
-
-The rehearsal ends in that isolated scratch tree. It never applies recovered files to the live
-overlay or starts a restored service against live paths. Any live replacement is a separate,
-explicitly approved migration after the recovery evidence has been reviewed.
-
-For a container-path backup, the nested tar remains the ownership and mode authority. Inspect it
-with `tar -tvzf <restore-dir>/container-*.tar.gz`; the convenience extraction preserves modes, but
-an unprivileged host user cannot re-apply a container's numeric ownership. Apply that archive only
-inside the intended disposable or stopped container after the verification pass.
-
-Archives created before the embedded `axon-backup.toml` format require `--allow-legacy`. That mode
-uses the standard archive name and current manifest as weaker identity evidence, so it is for a
-known private receipt, not an arbitrary file. Actual restore timestamps, digests, application-level
-queries and verdicts stay in the private overlay; only a redacted pass/fail result belongs in a
-public issue.
-
-Security continues after install: egress, access and agent touches remain observable, while the
-logs themselves stay in the private overlay.
+No data migration starts without a tested 3-2-1 backup. Follow the
+[recovery rehearsal](docs/architecture/storage.md#backups-before-migrations) before changing live
+state. Delivery receipts alone do not prove recovery.
 
 ## Tooling conventions
 
@@ -684,32 +504,33 @@ with instructions rather than silently repaired.
 
 ### Getting onto the line
 
-The decided shape is one command that fetches a bootstrap script, which clones and then hands off
-to the unchanged `tools/install.sh`. A usage install takes `--depth 1 --branch <tag>`; a
-development install takes a full clone. The operator never types `git clone`. That bootstrap is not
-written yet — `## Start here` shows the clone that works today — so what follows is the decision,
-recorded because the two alternatives were rejected on evidence and should not be reopened without
-new evidence.
+`bootstrap.sh` clones a release and hands off to `tools/install.sh`. The `usage` profile uses
+`--depth 1 --branch <tag>`; `development` keeps full history. Fetch the bootstrap by a chosen
+release tag rather than executing a moving branch. `tools/bootstrap.test.sh` exercises both
+clone shapes, installer handoff, refusals and truncated downloads against a local test remote.
 
-A shallow usage install is not a dead end: `git fetch --unshallow` promotes it to a development one
-without reinstalling. The tree exists either way, because it has to — every tool resolves
-`SJEL_ROOT` from its own location, and no shape of Sjel runs without a directory tree.
+A usage checkout can become a development checkout without reinstalling. Restore the branch
+fetch specification before deepening the tag-only clone:
 
-**A release tarball instead of a clone was rejected.** Measured at decision time, a `--depth 1`
-clone transferred 3.12 MiB and landed 11.4 MB in 586 files — most of that weight a lockfile the
-build has since dropped, so the tree is smaller now, not larger. A tarball saves nothing measurable
-and costs the update path: `tools/update.sh` is fetch plus fast-forward, so a tarball install would
-need a second update mechanism for the same job.
+~~~sh
+git config remote.origin.fetch '+refs/heads/*:refs/remotes/origin/*'
+git fetch --unshallow origin
+~~~
 
-**An install without git at all was rejected.** `git` is already a declared host requirement in
-`toolchain.toml`, so skipping it removes no dependency and only removes capability. The run path
-would survive — `capability.sh`, `service-runner.sh`, `watchdog.sh` and `packs.sh` make zero git
-calls — but `tools/doctor` makes thirteen that carry weight, and `tools/update.sh` and `tools/self`
-lose the update path and version truth entirely. Sjel's version identity *is* the release tag, so a
-git-free install would need a stamped version file, a second source for one fact, plus a second
-update mechanism: extracting over an existing tree leaves behind files upstream deleted. New
-evidence would be git ceasing to be a host requirement, or the run path growing a consumer that
-cannot assume it.
+Both profiles retain the source tree: tools resolve `SJEL_ROOT` from it. The bootstrap chooses
+the clone shape; it does not provide prebuilt services or complete authentication and startup.
+
+**A release tarball instead of a clone was rejected.** `tools/update.sh` updates by fetch and
+fast-forward. A tarball would require a second update mechanism, including removal of files
+deleted upstream. Historical clone measurements do not establish the current installation size;
+use the [footprint method](docs/operations/index.md#installation-footprint).
+
+Source checkouts retain Git for release identity, updates and repository metadata. The consumer
+distribution target is now prebuilt apps and a minimal node, with optional capability packages;
+it must not require Git or build tooling on the user's machine. `distribution.json` and the
+release catalogue carry the packaged runtime's identity. The remaining acceptance probes live
+in the ISA; [release preparation](docs/operations/index.md#release-preparation-and-later-testing)
+does not establish that the source-free installation is ready.
 
 The agent-readable install page is the primary route and the one-liner is the terminal alternative.
 Sjel's install contains real decisions — overlay location, container runtime, capability selection,
@@ -774,8 +595,29 @@ Capability and Pack READMEs explain what the thing solves, its verdict, tradeoff
 honest experience. A README may precede implementation when defining the capability is itself the
 current work.
 
-Public contributions follow [CONTRIBUTING.md](CONTRIBUTING.md). Report vulnerabilities through
-the private route in [SECURITY.md](SECURITY.md), never through a public issue.
+The [technical docs](docs/README.md) route readers by task: understand the architecture, build a
+capability, or operate an installation. Keep commands and interface contracts in their references;
+explain entry points and invariants beside the owning code. This organization draws on
+[TigerBeetle's documentation](https://docs.tigerbeetle.com/) and
+[rust-analyzer's architecture guide](https://rust-analyzer.github.io/book/contributing/architecture.html),
+recorded as documentation influences in `upstreams.toml`.
+
+Report vulnerabilities through the private route in [SECURITY.md](SECURITY.md), never through
+a public issue.
+
+### Document size and modularity
+
+Aim for fewer than 500 lines per hand-maintained document. At 500–800 lines, review whether it
+still serves one reader task. Keep new documents below 800 lines. Existing longer documents
+may stay while they are cleaned up; avoid further growth by removing duplication or extracting
+a cohesive section when that section changes. Apply this through review before introducing a
+CI limit. Generated files and vendored upstream documentation are outside this limit.
+
+Split by subject and ownership, with a short entry point linking to the details. Move a rule
+to one canonical location and update its references; do not copy it into several documents.
+Use existing READMEs and `docs/` sections before adding another guide. Keep `AGENTS.md` a short
+bootstrap that routes to the shared rules and relevant skills. A separate repository-rules
+file earns its place only when it replaces an existing body of rules and simplifies navigation.
 
 ### Generated architecture
 
@@ -789,17 +631,17 @@ and must state when a layer cannot be checked on a fresh clone.
 
 ### Decisions live with their owner
 
-Implemented decisions live in code. Reasoning needed to change that code lives beside it. A
-rejected alternative belongs under `## Considered and declined` in the affected README. A
-capability-wide choice uses `## Why this shape: <topic>`; `tools/doctor` validates that structure
-and any declared absent paths. Repository-wide doctrine lives in this README. There is no detached
-decision-log directory.
+Implemented decisions live in code; reasoning needed to change them lives beside it. Rejected
+alternatives use `## Considered and declined` in the affected README; capability-wide choices
+use `## Why this shape: <topic>`. Doctor validates that structure and any declared absent paths.
+Repository-wide doctrine lives here. Do not create a detached decision-log directory.
 
 ### Scratch is not documentation
 
-`to-integrate/` is ignored pre-git scratch and may never be cited by permanent files. Unjudged external leads belong in the owning ISA's `## Not yet specified`; adopted dependencies and influences pass through `upstreams.toml` and the consuming owner.
-
-
+`to-integrate/` is ignored pre-git scratch and may never be cited by permanent files. Unjudged
+external leads and speculative ideas belong in the owning README or relevant `docs/` section.
+Promote one into the ISA when it becomes actionable work. Adopted dependencies and influences
+pass through `upstreams.toml` and the consuming owner.
 ### Quarries and one-way migration
 
 Legacy tooling and LifeOS-mono archives are quarries, not dependencies. Migrate
@@ -809,27 +651,25 @@ permanent provenance.
 
 ### The backlog is ISAs
 
-Open work — plans, todos, phases, anything unfinished — lives in the root `ISA.md` and nowhere
-else. It is the only ISA: the per-unit `ISA.md` files were folded into it on 2026-10-15, their
-closed history into `ISA-archive.md`, and their live contracts into `docs/`. `TODO.md`,
-`PLAN.md`, `HANDOFF.md` and `ROADMAP.md` remain a retired surface, including gitignored ones —
-and so is the issue tracker, which as of 2026-08-19 holds no backlog of ours and which no workflow
-writes to.
+Open work lives in the existing ISA organization. Preserve its current divisions and clean
+them incrementally; do not add a parallel backlog or consolidate them as incidental cleanup.
+Keep actionable, unfinished work there. Explanations, design reasoning and speculative ideas
+belong in the owning README or `docs/`, linked from an open item when needed.
 
-An open item is a claim, and a claim names the probe that would falsify it. That is the whole
-reason this moved off a tracker: an issue carries a description and a lifecycle, so closing one
-proves nothing was verified, while a claim cannot be checked off without evidence. Git log is the
-history — the ISA carries no changelog section of its own.
+A later migration may replace the ISAs with one `PLAN.md` containing only work still to do.
+That migration is deferred. It must preserve unresolved work, remove the planning entries it
+replaces, and leave completed history in Git. Do not create `PLAN.md` alongside the active
+ISAs now, or introduce another TODO, HANDOFF or ROADMAP surface.
 
-Reasoning that outlives the work is not backlog: it moves into the owning README as it lands. A
-scratch file must never become the thing a permanent file points at for its "why" — that is how
-`capabilities/PLAN.md` ended up cited by ten tracked files while being gitignored, in flat
-contradiction of the rule directly above this one.
+Each open claim names a probe that could falsify it; completion requires evidence. After the
+probe passes or the principal withdraws the item with a reason, move enduring contracts to
+their owners and remove the item. Git keeps history. Do not create a completed-work archive
+or add a changelog section to an ISA.
 
 The tracker stays reachable for reports from outside the project. Those are inbound mail, not the
-backlog; anything adopted from one becomes a claim in the owning ISA. A capability's testable
-ideal state belongs in its `ISA.md`, verified by its own doctor or self-test. Do not invent a new
-standing specification type.
+backlog; anything adopted from one becomes a claim in the owning ISA, with its capability or
+Pack named. Shipped interface contracts belong in the owner's technical manual and are verified
+by its doctor or self-test. Do not add another planning surface or a standing specification type.
 
 ## Placement guide
 
@@ -846,8 +686,8 @@ standing specification type.
 | Machine fact or private state | Active overlay | Resolve it dynamically; never copy it into public prose |
 | Shared operator logic | `tools/lib/` | Source it from every caller |
 | Technical manual & specs | `docs/` | Bounded interface specifications and architecture diagrams |
-| Interesting unjudged lead | The owning ISA's `## Not yet specified` | Promote to a claim through the provenance gate when adopted |
-| Unfinished work, plan or todo | A claim in the owning `ISA.md` | Reasoning that outlives the work moves into the owning README |
+| Interesting unjudged lead | Owning README or relevant `docs/` section | Promote to an ISA claim when actionable; apply the provenance gate before adoption |
+| Unfinished work, plan or todo | A claim in the owning ISA | Reasoning that outlives the work moves into the owning README |
 
 ## Control surface
 

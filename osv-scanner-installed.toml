@@ -307,3 +307,25 @@ reason = "`ZipArchive::extract` creates symbolic links whose targets are outside
 id = "RUSTSEC-2026-0369"
 ignoreUntil = 2027-01-01
 reason = "`ZipStreamReader::extract` and `ZipArchive::extract` apply Unix permissions through symlinks without confining the target, fixed in 9.0.0 (CVSS 9.1, AV:N/AC:L/PR:N/UI:N, I:H/A:H). Same reach as RUSTSEC-2026-0368, and the highest score in this file: the rating assumes an unauthenticated network caller can supply the archive, which here means a hostile or compromised dl.google.com or a MITM on that download — not a caller of Sjel, since the only entry point is the `tauri android` toolchain fetch. Ends with the zip version, or by not using `tauri android` on this machine at all."
+
+# ── Inside tauri-cli's own dependency tree ───────────────────────────────────────
+#
+# `tauri-cli 2.12.3` (latest stable) resolves `tauri-bundler 2.10.3` which carries
+# `ml-dsa 0.0.4` in its published Cargo.lock. Sjel uses Apple Developer ID code signing
+# for macOS desktop distribution, not ML-DSA post-quantum signature schemes. Ends when
+# tauri-cli publishes a release bumping ml-dsa.
+[[IgnoredVulns]]
+id = "RUSTSEC-2025-0144"
+ignoreUntil = 2027-01-01
+reason = "ml-dsa 0.0.4 signature verification / timing vulnerability, fixed in 0.0.5. Reach: tauri-cli 2.12.3 > tauri-bundler 2.10.3 > ml-dsa in tauri-cli's published Cargo.lock. Sjel uses Apple code signing, not ML-DSA. Ends when tauri-cli publishes a newer tauri-bundler."
+
+[[IgnoredVulns]]
+id = "GHSA-5x2r-hc65-25f9"
+ignoreUntil = 2027-01-01
+reason = "ml-dsa 0.0.4 polynomial verification issue. Same reach and same end as RUSTSEC-2025-0144: tauri-cli's embedded Cargo.lock."
+
+[[IgnoredVulns]]
+id = "GHSA-h37v-hp6w-2pp8"
+ignoreUntil = 2027-01-01
+reason = "ml-dsa 0.0.4 encoding issue. Same reach and same end as RUSTSEC-2025-0144: tauri-cli's embedded Cargo.lock."
+

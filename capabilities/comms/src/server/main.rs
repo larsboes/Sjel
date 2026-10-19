@@ -921,9 +921,9 @@ mod tests {
     #[test]
     fn a_search_matches_sender_subject_or_snippet_ignoring_case() {
         let mut item = triage_fixture("t1");
-        item.from_addr = Some("service@Miele.de".into());
+        item.from_addr = Some("service@Example.com".into());
         item.snippet = None;
-        assert!(matches_query(&item, "miele"));
+        assert!(matches_query(&item, "example"));
         assert!(matches_query(&item, "useful subject"));
         assert!(!matches_query(&item, "ebay"));
     }

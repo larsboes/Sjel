@@ -997,7 +997,7 @@ Routes:
   collector; `{"source_id":null}` scans all. Returns per-source fetched/new/known counts and
   enriches only revision-stale items behind the response.
 - `GET /triage?status=proposed` → triage items
-- `GET /triage?q=miele` → only mail whose sender, subject or snippet contains the text,
+- `GET /triage?q=invoice` → only mail whose sender, subject or snippet contains the text,
   ignoring case. It combines with `status` and `max_data_class`.
 - `POST /triage/sweep` `{"limit":100,"cursor":null}` → fetches one inbox page without Gmail
   lifecycle mutations, stores proposals, and locally analyzes event/ticket candidates for grounded

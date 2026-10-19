@@ -204,10 +204,9 @@ below are still real, the rest are recorded as superseded at the end.
 - **Figure embeds in project notes.** A note line names a registered figure and the page renders
   it live, the way a `.base` embed renders a `DatabaseTable` (`lib/projects/database.ts`). An
   HTML attachment cannot do this: `GET /api/file` serves it sandboxed, as a download
-  (`capabilities/projects/src/server.rs:271`). First case: the W 961 mains filter in project
-  "Washing Machine", now a standalone page built with the anatomy skill. Open: where figure code
-  lives and how it is reviewed. Falsifier: the mains filter figure moves on a project page with
-  no attachment opened.
+  (`capabilities/projects/src/server.rs:271`). First case: an isometric figure in a personal
+  project, now a standalone page built with the anatomy skill. Open: where figure code lives and
+  how it is reviewed. Falsifier: that figure moves on a project page with no attachment opened.
 
 ### places · five items
 
@@ -266,16 +265,24 @@ below are still real, the rest are recorded as superseded at the end.
 
 - **Does KlipperMCP replace the slicer probe?** Open since the capability shipped; never revisited.
 
+### comms · one open item
+
+- **A `comms-server` outside the runner held the port.** On 2026-10-19 `service-runner.sh
+  restart comms` refused because a `comms-server` started six days earlier still answered on
+  8083 with no pid file, so the live service ran six-day-old code. Stopping that process and
+  `start comms` fixed it; how it escaped the pid file is unknown. Falsifier: a `comms-server`
+  answers on the port while the runner's pid file names no running process.
+
 ### projects · two gaps
 
-- **No way to add an attachment.** The routes cover records only, and the `projects` CLI is not
-  on `PATH`. Adding 48 photos to `Waschmaschine/Assets/` on 2026-10-19 meant a `cp -n` into
-  the overlay tree, which does what `Projects::attach` does without its path check.
-  Falsifier: an agent adds a file through the API or an installed CLI, and a second add of
-  different bytes is refused.
-- **Attachment paths come back as identity tokens.** On 2026-10-19 `GET /api/files` answered
-  809 paths, and 525 of them were one whole `<PHONE_…>` or `<TOKEN_…>` token. A file name such
-  as `IMG_0700.jpeg` is not an identity, but the agent cannot read it. Falsifier: a path with
+- **No way to add an attachment.** The routes cover records only, and the `projects` CLI (on
+  `PATH` since 2026-10-19 through `capabilities/projects/projects`) has `import` but no `attach`.
+  Adding photos to a project on 2026-10-19 meant a `cp -n` into the overlay tree, which does
+  what `Projects::attach` does without its path check. Falsifier: an agent adds a file through
+  the API or the CLI, and a second add of different bytes is refused.
+- **Attachment paths come back as identity tokens.** On 2026-10-19 about two thirds of the paths
+  `GET /api/files` answered were one whole `<PHONE_…>` or `<TOKEN_…>` token. A camera file name
+  such as `IMG_1234.jpeg` is not an identity, but the agent cannot read it. Falsifier: a path with
   no identity in it reaches the agent unchanged.
 
 

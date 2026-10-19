@@ -1,0 +1,12 @@
+#!/bin/bash
+# The operator CLI (src/cli.rs). Builds its binary on first use; the server is projects-server.
+set -euo pipefail
+_dir="$(cd "$(dirname "${BASH_SOURCE[0]:-$0}")" && pwd)"
+# shellcheck source=../../tools/lib/paths.sh
+source "$_dir/../../tools/lib/paths.sh"
+BIN="${CARGO_TARGET_DIR:-$SJEL_ROOT/target}/release/projects"
+if [ ! -x "$BIN" ]; then
+  echo "projects: building (first run)…" >&2
+  (cd "$SJEL_ROOT" && cargo build --locked --release --bin projects) >&2
+fi
+exec "$BIN" "$@"

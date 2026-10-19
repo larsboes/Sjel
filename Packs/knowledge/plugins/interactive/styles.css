@@ -1,0 +1,32 @@
+/* html-embed & interactive — native and iframe embeds */
+.html-embed,
+.interactive-native {
+  margin: 0.5em 0 1em;
+  position: relative;
+  width: 100%;
+}
+
+.html-embed-frame {
+  display: block;
+  width: 100%;
+  border: 1px solid var(--background-modifier-border);
+  border-radius: var(--radius-m);
+  background: transparent;
+  transition: height 120ms ease-out;
+}
+
+.html-embed-caption {
+  font-size: var(--font-ui-smaller);
+  color: var(--text-faint);
+  margin-top: 4px;
+  text-align: right;
+}
+
+.html-embed-error {
+  font-family: var(--font-monospace);
+  font-size: var(--font-smaller);
+  color: var(--text-error);
+  border: 1px dashed var(--text-error);
+  border-radius: var(--radius-s);
+  padding: 8px 10px;
+}

@@ -1,0 +1,16 @@
+{
+  "icons": {
+    "Areas": "lucide-atom",
+    "Resources": "lucide-package",
+    "Resources/Bases": "lucide-table",
+    "Resources/Templates": "lucide-notebook",
+    "Atlas/Identity": "lucide-brain-circuit",
+    "Projects": "lucide-hammer",
+    "Knowledge": "lucide-book",
+    "Resources/Inbox": "lucide-inbox",
+    "Journal": "lucide-calendar",
+    "Atlas": "lucide-map",
+    "Projects/Archive": "lucide-trash"
+  },
+  "migratedFromIconize": true
+}

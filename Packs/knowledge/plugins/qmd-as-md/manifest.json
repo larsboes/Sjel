@@ -1,0 +1,9 @@
+{
+  "id": "qmd-as-md",
+  "name": "Quarto Markdown (qmd)",
+  "version": "0.4.3-local",
+  "minAppVersion": "1.8.0",
+  "description": "View, edit, preview and render Quarto (.qmd) files. Local vendored in Sjel.",
+  "author": "Local vendored (based on Daniel Borek)",
+  "isDesktopOnly": true
+}

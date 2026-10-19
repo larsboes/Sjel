@@ -1,0 +1,9 @@
+{
+  "id": "mehrmaid",
+  "name": "Mehrmaid (local vendored)",
+  "version": "0.1.0-sjel",
+  "minAppVersion": "0.15.0",
+  "description": "Render Markdown inside Mermaid diagrams with dynamic Obsidian theme integration. Developed in Sjel.",
+  "author": "Local vendored (based on huterguier)",
+  "isDesktopOnly": false
+}

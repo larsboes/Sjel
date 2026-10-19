@@ -1,0 +1,9 @@
+{
+  "id": "vault-folder-icons",
+  "name": "Vault Folder Icons",
+  "version": "1.0.0",
+  "minAppVersion": "1.5.0",
+  "description": "Assigns an icon to a folder in the file explorer. Own code, no upstream, no dependencies.",
+  "author": "Lars Boes",
+  "isDesktopOnly": false
+}

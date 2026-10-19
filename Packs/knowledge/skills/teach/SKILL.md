@@ -23,6 +23,7 @@ The arc is **Probe → Plan → Teach → Close**. Do not skip or merge phases.
 - **Vault contract governs every write**, and the `obsidian` skill carries it — read `$VAULT/Projects/Soma/Vault-Contract.md` if you haven't this session rather than restating it here. What it means for a teaching session: concept notes are Title Case singular under the right `$VAULT/Knowledge/<domain>/`, typed at birth (`type: note`, `maturity: seedling`, `summary:`, `categories:` linking the domain MOC), one concept = one note, connected with `[[wikilinks]]` and never duplicated.
 - **Link before you write.** Before explaining any concept, `grep`/`find` `$VAULT` for an existing note. Exists and the probe showed the student knows it → just `[[link]]` it. Exists but thin → extend it in place. Missing → create it.
 - **Obsidian renders LaTeX (`$...$`, `$$...$$`) and mermaid natively.** Use both freely in notes. In the terminal, keep math readable as plain text.
+- **Interactive simulations render via the `interactive` plugin.** Use ````interactive```` (or ````html-embed````) for dynamic state machines, queues, pipelines, or Anatomy physical explainer models. Assets live in `$VAULT/Knowledge/<domain>/Assets/<kebab-name>.html`.
 
 ## Phase 1 — Probe
 
@@ -47,7 +48,17 @@ Walk the path **one reasoning step at a time**. Never rush ahead; each step must
 
 1. **Explain** the step in the terminal — one idea, built from what's already established. Slow beats complete.
 2. **Write the durable core into the vault**: create/extend the concept's note (contract above) with the clean explanation, `[[links]]` to prerequisites and the primary topic note, and `categories:` for its domain. The note gets the polished knowledge; the terminal gets the pedagogy. Never paste the conversational explanation verbatim into the note.
-3. **Visualize when a picture carries the idea** (geometric/structural concepts): write an SVG into `$VAULT/Knowledge/<domain>/Assets/`, then verify before embedding — render `qlmanage -t -s 1000 -o /tmp <file>.svg` (or `magick <file>.svg <file>.png`) and *view the PNG* with `read`; fix the SVG if it's wrong or ugly, then embed in the note via `![[name.svg]]`. Never embed an unviewed SVG.
+3. **Visualize when a picture or simulation carries the idea**:
+   - **Static diagrams/geometry**: write an SVG into `$VAULT/Knowledge/<domain>/Assets/`, then verify before embedding — render `qlmanage -t -s 1000 -o /tmp <file>.svg` (or `magick <file>.svg <file>.png`) and *view the PNG* with `read`; fix the SVG if it's wrong or ugly, then embed in the note via `![[name.svg]]`. Never embed an unviewed SVG.
+   - **Interactive simulation or physical machine (Anatomy or state/queue model)**: when the concept has state transitions, queues, concurrency, flow, or mechanical parts, write an interactive HTML explainer.
+     - Follow the vault theme contract: read `:root` variables (`--text-normal`, `--text-muted`, `--background-secondary`, `--interactive-accent`, `--font-monospace`), or use Anatomy's `.iso` / `--anatomy-*` palette with light/dark reactivity.
+     - Write the standalone HTML file to `$VAULT/Knowledge/<domain>/Assets/<kebab-name>.html`.
+     - Embed in the concept note with:
+       ```interactive
+       file: Knowledge/<domain>/Assets/<kebab-name>.html
+       height: 380
+       ```
+     - Provide responsive controls (sliders/buttons), live readouts, and clear state transitions.
 4. **Check understanding with `quiz`** — 1-2 questions applying (not recalling) the step. Wrong or IDK → re-explain from a different angle before moving on; adjust the remaining path if the miss reveals a deeper gap. Contested → reconcile it with `mode: "review"` first: a learner who disputes a verdict is engaging more deeply with the material than one who accepts it, and moving on while it stands teaches them that arguing is pointless.
 5. Questions from the student always take priority over the path.
 

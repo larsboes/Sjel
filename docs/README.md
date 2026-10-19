@@ -13,6 +13,7 @@ is generated in [ARCHITECTURE.md](../ARCHITECTURE.md).
 | Understand where a component belongs | [Architecture overview](architecture/index.md) | [Storage](architecture/storage.md), [data classes and security](architecture/security.md) |
 | Add or change a capability | [Capability manifests](capabilities/manifest.md) | [Health and freshness contracts](capabilities/contracts.md), the capability's manual |
 | Diagnose or manage a host | [Operations guide](operations/index.md) | [Doctor](operations/doctor.md), [patch policy](operations/index.md#patch-first), [service persistence](operations/persistence.md) |
+| Projects & Generative UI | [Projects UI](architecture/projects-ui.md) | [Engineering doctrine](../CONTRIBUTING.md#product-rules) |
 | Rehearse recovery before a migration | [Storage and recovery](architecture/storage.md#backups-before-migrations) | The owning capability's backup contract |
 
 ## Documentation sections

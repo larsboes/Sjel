@@ -83,6 +83,12 @@ const ROUTES: &[route_manifest::Route] = &[
         summary: "Create a note in a live project.",
         request_schema: Some(route_manifest::schema_of::<AddNote>),
     },
+    route_manifest::Route {
+        method: "POST",
+        path: "/api/record/remove",
+        summary: "Remove a record from the projects store and disk.",
+        request_schema: Some(route_manifest::schema_of::<RemoveRecord>),
+    },
 ];
 
 #[derive(Deserialize, schemars::JsonSchema)]
@@ -129,6 +135,11 @@ struct AddNote {
     title: String,
     #[serde(default)]
     summary: String,
+}
+
+#[derive(Deserialize, schemars::JsonSchema)]
+struct RemoveRecord {
+    path: String,
 }
 
 #[derive(Deserialize)]
@@ -428,6 +439,14 @@ async fn add_note(
     Ok((StatusCode::CREATED, Json(json!({ "path": record.path }))))
 }
 
+async fn remove_record(
+    State(projects): State<Shared>,
+    Json(body): Json<RemoveRecord>,
+) -> Result<Json<Value>, ApiError> {
+    let removed = blocking(projects, true, move |p| p.remove(&body.path)).await?;
+    Ok(Json(json!({ "removed": removed })))
+}
+
 fn router(projects: Shared) -> Router {
     Router::new()
         .route("/health", get(health))
@@ -442,6 +461,7 @@ fn router(projects: Shared) -> Router {
         .route("/api/project", get(get_project))
         .route("/api/record", post(save_record))
         .route("/api/record/property", post(set_property))
+        .route("/api/record/remove", post(remove_record))
         .route("/api/notes", post(add_note))
         .layer(middleware::from_fn_with_state(
             "projects",

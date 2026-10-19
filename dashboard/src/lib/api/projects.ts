@@ -105,4 +105,6 @@ export const projects = {
     request<{ path: string }>('/projects/api/notes', jsonInit('POST', { project, title, summary })),
   addProject: (name: string, summary = '') =>
     request<{ project: string }>('/projects/api/projects', jsonInit('POST', { name, summary })),
+  remove: (path: string) =>
+    request<{ removed: boolean }>('/projects/api/record/remove', jsonInit('POST', { path })),
 };

@@ -1024,3 +1024,18 @@ verdict = "adopt"
 license = "MIT"
 summary = "Retain manually prepared release files as GitHub Actions artifacts"
 why = "The manual distribution workflow uses the official action to retain archives, catalogues and readiness notes without publishing a release or installing software. Draft release publication remains a separate explicit maintainer command. Artifact archives preserve executable modes; the action's outer download container is not the release package format."
+
+[open-intelligent-ui]
+url = "https://github.com/thesysdev/open-intelligent-ui"
+verdict = "inspiration"
+license = "MIT"
+summary = "Open-source reproduction of ChatGPT Intelligent UI using OpenUI Lang declarative primitives"
+why = "Reviewed 2026-10-20. Upstream open standard for Generative UI (Thesys / OpenUI). Defines streaming OpenUI Lang 1.0 with primitives across layout (Col, Row, Box, Card, Grid, Carousel), inputs with $variables, data (Table, Chart, Map), and pure typed @functions. Directly aligns with Sjel Product Rule 6 ('Screens and assistant tools come from the typed data'). Informs Sjel's generative UI specification and dashboard component catalog. Nothing vendored."
+
+[cc-intelligent-ui]
+url = "https://github.com/razorback16/cc-intelligent-ui"
+verdict = "inspiration"
+license = "MIT"
+summary = "Typeset rendering of markdown, charts, and diagrams in terminals for Claude Code using Typst"
+why = "Reviewed 2026-10-20. Renders Claude Code responses as typeset visual output via Typst, CeTZ, and fletcher inside terminal emulators supporting graphics protocols (Ghostty, kitty, iTerm2). Informs inline terminal diagram generation and low-cognitive-load agent session output. Nothing vendored."
+

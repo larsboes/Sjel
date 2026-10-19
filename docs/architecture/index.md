@@ -34,5 +34,6 @@ manifests declare the capabilities and external systems they use. See the
 - Public code and schemas stay in this repository. Deployment configuration and private data
   stay in the active overlay; secrets follow the [security boundary](security.md).
 
-Read [storage](storage.md) before changing a store and [security](security.md) before changing a
-listener or authentication policy.
+Read [storage](storage.md) before changing a store, [security](security.md) before changing a
+listener or authentication policy, and [projects UI](projects-ui.md) for projects, figure embeds,
+and generative UI.

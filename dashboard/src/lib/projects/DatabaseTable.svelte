@@ -17,6 +17,7 @@
     storeKey,
     stamp = 0,
     onchange,
+    onselect,
   }: {
     kinds: ProjectTask["kind"][];
     /** Which rows belong to this view; all of `kinds` when absent. */
@@ -28,6 +29,7 @@
     /** Bump to reload, after a write made elsewhere on the page. */
     stamp?: number;
     onchange?: () => void;
+    onselect?: (r: ProjectTask) => void;
   } = $props();
 
   type Sort = { key: string; dir: 1 | -1 };
@@ -37,7 +39,7 @@
   const READ_ONLY = new Set(["project", "open", "type", "moved_to"]);
   const DATES = new Set(["due", "scheduled", "start", "completed"]);
   const statuses = (r: ProjectTask): readonly string[] =>
-    r.kind === "task" ? TASK_STATUSES : r.kind === "project" ? PROJECT_STATUSES : [];
+    r.kind === "task" ? TASK_STATUSES : r.kind === "project" ? PROJECT_STATUSES : ["active", "done", "cancelled"];
 
   let rows = $state<ProjectTask[]>([]);
   /** Open tasks per project note, for the `open` column of a projects view. */
@@ -76,7 +78,11 @@
   const shown = $derived(columns.filter((c) => keys.includes(c)));
 
   const cell = (r: ProjectTask, key: string) =>
-    key === "project" ? r.project : key === "open" ? String(openCount.get(r.title) ?? 0) : (r.fields[key] ?? "");
+    key === "project"
+      ? r.project
+      : key === "open"
+        ? String(openCount.get(r.title) ?? 0)
+        : (r.fields[key] ?? (key === "summary" ? r.summary ?? "" : ""));
   /** Done last, dated before undated, then priority. ISO dates compare as plain text;
    *  `localeCompare` would sort a sentinel like "~" before digits. */
   const byDue = (a?: string, b?: string) => (a === b ? 0 : !a ? 1 : !b ? -1 : a < b ? -1 : 1);
@@ -235,7 +241,19 @@
                 </td>
               {/if}
               <!-- A task or note opens its own body; a link to its project alone went nowhere from inside that project. -->
-              <td class="title"><a href={link(`/projects?project=${encodeURIComponent(r.project)}${r.kind === "project" ? "" : `&open=${encodeURIComponent(r.id)}`}`)}>{r.title}</a></td>
+              <td class="title">
+                <a
+                  href={link(`/projects?project=${encodeURIComponent(r.project)}${r.kind === "project" ? "" : `&open=${encodeURIComponent(r.id)}`}`)}
+                  onclick={(e) => {
+                    if (onselect) {
+                      e.preventDefault();
+                      onselect(r);
+                    }
+                  }}
+                >
+                  {r.title}
+                </a>
+              </td>
               {#each shown as k (k)}
                 {@const label = `${k}: ${r.title}`}
                 <td>
@@ -245,6 +263,15 @@
                     <select aria-label={label} value={r.fields.status ?? ""} onchange={(e) => set(r, k, e.currentTarget.value)}>
                       {#if !statuses(r).includes(r.fields.status ?? "")}<option value={r.fields.status ?? ""}>{r.fields.status || "—"}</option>{/if}
                       {#each statuses(r) as s (s)}<option value={s}>{s}</option>{/each}
+                    </select>
+                  {:else if k === "maturity"}
+                    <select aria-label={label} value={r.fields.maturity ?? ""} onchange={(e) => set(r, k, e.currentTarget.value)}>
+                      {#if !["seedling", "growing", "mature", "evergreen"].includes(r.fields.maturity ?? "")}
+                        <option value={r.fields.maturity ?? ""}>{r.fields.maturity || "—"}</option>
+                      {/if}
+                      {#each ["seedling", "growing", "mature", "evergreen"] as m (m)}
+                        <option value={m}>{m}</option>
+                      {/each}
                     </select>
                   {:else if k === "priority"}
                     <select aria-label={label} value={r.fields.priority ?? ""} onchange={(e) => set(r, k, e.currentTarget.value)}>
@@ -256,7 +283,7 @@
                   {:else}
                     <input
                       aria-label={label}
-                      value={r.fields[k] ?? ""}
+                      value={cell(r, k)}
                       onchange={(e) => set(r, k, e.currentTarget.value.trim())}
                       onkeydown={(e) => e.key === "Enter" && e.currentTarget.blur()}
                     />

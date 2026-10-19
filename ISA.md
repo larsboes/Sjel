@@ -201,12 +201,11 @@ below are still real, the rest are recorded as superseded at the end.
   in and out, and the shell gives them one place.
 - **Joins with nothing to return yet.** No ledger transaction carries a trip tag; layouts publish
   no join; trips keeps its own place namespace.
-- **Figure embeds in project notes.** A note line names a registered figure and the page renders
-  it live, the way a `.base` embed renders a `DatabaseTable` (`lib/projects/database.ts`). An
-  HTML attachment cannot do this: `GET /api/file` serves it sandboxed, as a download
-  (`capabilities/projects/src/server.rs:271`). First case: an isometric figure in a personal
-  project, now a standalone page built with the anatomy skill. Open: where figure code lives and
-  how it is reviewed. Falsifier: that figure moves on a project page with no attachment opened.
+- **Figure embeds in project notes.** Built 2026-10-20: [`dashboard/src/lib/figures/`](dashboard/src/lib/figures/)
+  holds reviewed Svelte 5 components (`index.ts`), `lib/projects/database.ts` parses `![[figure:<id>]]`,
+  and `ProjectsBoard.svelte` renders them live. First case: `miele-w961-filter` embedded in
+  `Washing Machine Connect and Test.md`. Verified by `bun test dashboard/vite/projects-database.test.ts`
+  and `bun run check`. Stepping stone for generative UI from typed data ([Product Rule 6](CONTRIBUTING.md#product-rules)).
 
 ### places · five items
 

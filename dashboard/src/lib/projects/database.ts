@@ -78,13 +78,63 @@ export function resolveFile(target: string, host: string, files: string[]): stri
   return matches.find((f) => f.startsWith(`${project}/`)) ?? matches[0] ?? null;
 }
 
-export type Segment = { markdown: string } | { embed: Embed } | { file: string; image: boolean };
+import type { GenUISpec } from '../genui/types';
 
-/** Split a note body into markdown runs, base embeds and attachment embeds, in order. */
+export type Segment =
+  | { markdown: string }
+  | { embed: Embed }
+  | { file: string; image: boolean }
+  | { figure: string; label?: string }
+  | { genui: GenUISpec };
+
+const FIGURE = /^!\[\[figure:([a-zA-Z0-9_-]+)(?:\|([^\]]+))?\]\]\s*$/;
+
+/** Split a note body into markdown runs, base embeds, figures, gen-ui widgets and attachment embeds, in order. */
 export function segments(body: string, host: string, files: string[] = []): Segment[] {
   const out: Segment[] = [];
   let run: string[] = [];
+  let inGenUI = false;
+  let genUILines: string[] = [];
+
   for (const line of body.split('\n')) {
+    if (inGenUI) {
+      if (line.trim().startsWith('```')) {
+        inGenUI = false;
+        const text = genUILines.join('\n').trim();
+        try {
+          const spec = JSON.parse(text) as GenUISpec;
+          out.push({ genui: spec });
+        } catch (e) {
+          out.push({
+            genui: {
+              type: 'raw',
+              raw: text,
+              error: e instanceof Error ? e.message : String(e),
+            },
+          });
+        }
+        genUILines = [];
+      } else {
+        genUILines.push(line);
+      }
+      continue;
+    }
+
+    if (line.trim().startsWith('```gen-ui')) {
+      if (run.join('').trim()) out.push({ markdown: run.join('\n') });
+      run = [];
+      inGenUI = true;
+      genUILines = [];
+      continue;
+    }
+
+    const fig = FIGURE.exec(line.trim());
+    if (fig) {
+      if (run.join('').trim()) out.push({ markdown: run.join('\n') });
+      run = [];
+      out.push({ figure: fig[1], label: fig[2]?.trim() });
+      continue;
+    }
     const attached = /^!\[\[([^\]]+)\]\]\s*$/.exec(line.trim());
     const file = attached && !/\.(md|base)(#|\||$)/.test(attached[1]) ? resolveFile(attached[1], host, files) : null;
     if (file) {
@@ -146,3 +196,81 @@ export function setCheckbox(content: string, n: number, checked: boolean): strin
   }
   return null;
 }
+
+/** The project a record belongs to. */
+export const recordProject = (path: string): string => {
+  if (path.startsWith('Archive/')) {
+    return path.split('/').slice(0, 2).join('/');
+  }
+  return path.split('/')[0] ?? '';
+};
+
+/** The bare title of a record path. `Washing Machine/Washing Machine Electrics.md` → `Washing Machine Electrics`. */
+export const recordTitle = (path: string): string =>
+  path.split('/').pop()!.replace(/\.md$/, '');
+
+/** Resolve a wikilink target against available project records. */
+export function resolveRecord<T extends { path: string; title?: string }>(
+  target: string,
+  host: string,
+  records: T[],
+): T | null {
+  const clean = target.split('|')[0].split('#')[0].trim().replace(/\.md$/, '');
+  const targetName = clean.split('/').pop()!;
+  const hostProj = recordProject(host);
+
+  const byPath = records.find((r) => r.path === clean || r.path === `${clean}.md` || r.path.endsWith(`/${clean}.md`));
+  if (byPath) return byPath;
+
+  const matches = records.filter(
+    (r) => recordTitle(r.path) === targetName || (r.title && r.title === targetName),
+  );
+  if (matches.length === 0) return null;
+  return matches.find((r) => recordProject(r.path) === hostProj) ?? matches[0];
+}
+
+/** Find all records in `records` that contain a wikilink reference to `target`. */
+export function findBacklinks<T extends { path: string; title?: string; content: string }>(
+  target: { path: string; title?: string },
+  records: T[],
+): T[] {
+  const title = target.title ?? recordTitle(target.path);
+  const targetBase = recordTitle(target.path);
+  return records.filter((r) => {
+    if (r.path === target.path) return false;
+    const body = r.content;
+    return (
+      body.includes(`[[${title}`) ||
+      body.includes(`[[${targetBase}`) ||
+      body.includes(`[[${target.path}`) ||
+      body.includes(`[[Projects/${target.path}`)
+    );
+  });
+}
+
+/** Extract frontmatter key-value pairs from raw markdown. */
+export function extractFrontmatter(content: string): Record<string, string> {
+  const match = content.match(/^---\n([\s\S]*?)\n---/);
+  if (!match) return {};
+  const fields: Record<string, string> = {};
+  for (const line of match[1].split('\n')) {
+    const colon = line.indexOf(':');
+    if (colon > 0) {
+      const k = line.slice(0, colon).trim();
+      const v = line.slice(colon + 1).trim().replace(/^['"]|['"]$/g, '');
+      if (k && v) fields[k] = v;
+    }
+  }
+  return fields;
+}
+
+/** Extract a text excerpt for hover preview cards. */
+export function extractExcerpt(content: string, maxLines = 3, separator = ' '): string {
+  const stripped = content.replace(/^---\n[\s\S]*?\n---\n/, '').trim();
+  const lines = stripped
+    .split('\n')
+    .map((l) => l.trim())
+    .filter((l) => l.length > 0 && !l.startsWith('#') && !l.startsWith('!'));
+  return lines.slice(0, maxLines).join(separator);
+}
+

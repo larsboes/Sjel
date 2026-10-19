@@ -9,7 +9,7 @@ mod server;
 fn usage() {
     eprintln!("media — exact-byte index, ingest gate and mirror verification\n\
         usage:\n  media volume-id --root PATH\n  media index --root PATH --uuid UUID [--db PATH]\n  media audit --root PATH --uuid UUID --sample N [--db PATH]\n  media ingest --staging PATH --library PATH --uuid UUID [--apply] [--prune] [--db PATH]\n  media classify (--digest SHA256 | --digests-file PATH) [--db PATH]\n  media verify-mirror --left-root PATH --left-uuid UUID --right-root PATH --right-uuid UUID [--paths] [--db PATH]\n  media status [--db PATH]\n  media serve\n  media duplicates --uuid UUID [--legacy PREFIX] [--resolve-inside PREFIX --root PATH --metadata] [--list PATH] [--db PATH]\n  media supersede --root PATH --uuid UUID --list PATH --quarantine PATH --journal PATH [--apply]\n  media reconcile --root PATH --uuid UUID [--apply] [--db PATH]\n  media relabel --from DIR --to DIR --uuid UUID --journal PATH [--library PATH] [--apply] [--settled-for SECONDS] [--plan FILE]\n  media preview --structure FILE [--metadata]\n  media organize --structure FILE [--apply --journal PATH] [--settled-for SECONDS] [--only COLLECTION]\n  media mirror --from PATH --from-uuid UUID --to PATH --to-uuid UUID [--path REL] [--exclude REL] [--consume PREFIX] [--journal PATH] [--settled-for SECONDS] [--apply | --check]
-  media sync --from PATH --from-uuid UUID --to PATH --to-uuid UUID [--path REL] [--exclude REL] [--consume PREFIX] [--journal PATH] [--settled-for SECONDS]\n  media reclaim --from PATH --from-uuid UUID --to PATH --to-uuid UUID [--path REL] [--exclude REL] [--list PATH] [--quarantine PATH] [--journal PATH] [--apply]\n\n\
+  media sync --from PATH --from-uuid UUID --to PATH --to-uuid UUID [--path REL] [--exclude REL] [--consume PREFIX] [--journal PATH] [--settled-for SECONDS]\n  media reclaim --from PATH --from-uuid UUID --to PATH --to-uuid UUID [--survivor PATH] [--survivor-uuid UUID] [--path REL] [--exclude REL] [--list PATH] [--quarantine PATH] [--journal PATH] [--apply]\n\n\
         ingest is a dry run unless --apply is set. --prune additionally removes staging/originals\n\
         only after every new import verifies; neither verb deletes library content.");
 }
@@ -425,6 +425,11 @@ fn run(args: &[String]) -> Result<i32> {
                         .unwrap_or_else(|| to.join("reclaim-journal.tsv")),
                 )
             };
+            let survivor_root = option(opts, "--survivor")?.map(PathBuf::from);
+            let survivor_uuid = option(opts, "--survivor-uuid")?;
+            if let (Some(s_root), Some(s_uuid)) = (&survivor_root, &survivor_uuid) {
+                mounted(s_root, s_uuid)?;
+            }
             let report = media::reclaim::reclaim(
                 &ledger,
                 &media::reclaim::ReclaimOptions {
@@ -438,6 +443,8 @@ fn run(args: &[String]) -> Result<i32> {
                     quarantine: &quarantine,
                     journal: &journal,
                     apply,
+                    survivor_root: survivor_root.as_deref(),
+                    survivor_uuid: survivor_uuid.as_deref(),
                 },
             )?;
             // A declared removal is not an absence: the index row goes with the file, and the
@@ -459,7 +466,11 @@ fn run(args: &[String]) -> Result<i32> {
                 .as_deref()
                 .ok_or("ingest needs a mounted volume")?;
             let staging = rooted(opts, "--staging")?;
-            let pending = ledger.pending_paths(&staging.canonicalize()?.to_string_lossy())?;
+            let pending = ledger.pending_paths(
+                &staging.canonicalize()?.to_string_lossy(),
+                uuid,
+                &library.canonicalize()?.to_string_lossy(),
+            )?;
             let inventory = audit(&ledger, &library, uuid, 0)?;
             let unexpected = inventory
                 .disagreements
@@ -492,7 +503,8 @@ fn run(args: &[String]) -> Result<i32> {
                     fail_before_verify: false,
                 },
             )?;
-            let fail = report.failed > 0 || report.refused > 0;
+            let fail =
+                report.failed > 0 || report.refused > 0 || !report.incoming_unresolved.is_empty();
             println!("{}", serde_json::to_string(&report)?);
             Ok(i32::from(fail))
         }

@@ -85,6 +85,8 @@ pub struct ReclaimOptions<'a> {
     pub quarantine: &'a Path,
     pub journal: &'a Path,
     pub apply: bool,
+    pub survivor_root: Option<&'a Path>,
+    pub survivor_uuid: Option<&'a str>,
 }
 
 #[derive(Debug, Serialize)]
@@ -145,13 +147,11 @@ struct SourceState {
     by_digest: SourceLocations,
 }
 
-/// What the source still holds, by path and by digest — from the ledger, read only where it cannot
-/// answer. Nothing here hashes the source: `index` is the verb that records digests, and a reclaim
-/// that re-hashed a 511 GiB library to plan a cleanup would be slower than the cleanup is worth.
-fn source_state(ledger: &Ledger, opts: &ReclaimOptions<'_>) -> Result<SourceState> {
-    let paths: BTreeSet<String> = files(opts.from)?.into_iter().map(|(rel, _)| rel).collect();
+/// Find surviving paths on a volume that actually exist on disk right now.
+fn survivor_locations(ledger: &Ledger, root: &Path, uuid: &str) -> Result<SourceLocations> {
+    let paths: BTreeSet<String> = files(root)?.into_iter().map(|(rel, _)| rel).collect();
     let mut by_digest: SourceLocations = BTreeMap::new();
-    for row in ledger.locations(opts.from_uuid)? {
+    for row in ledger.locations(uuid)? {
         if !paths.contains(&row.relpath) {
             continue;
         }
@@ -160,6 +160,15 @@ fn source_state(ledger: &Ledger, opts: &ReclaimOptions<'_>) -> Result<SourceStat
             .or_default()
             .push((row.relpath, row.size, row.mtime_ns));
     }
+    Ok(by_digest)
+}
+
+/// What the source still holds, by path and by digest — from the ledger, read only where it cannot
+/// answer. Nothing here hashes the source: `index` is the verb that records digests, and a reclaim
+/// that re-hashed a 511 GiB library to plan a cleanup would be slower than the cleanup is worth.
+fn source_state(ledger: &Ledger, opts: &ReclaimOptions<'_>) -> Result<SourceState> {
+    let paths: BTreeSet<String> = files(opts.from)?.into_iter().map(|(rel, _)| rel).collect();
+    let by_digest = survivor_locations(ledger, opts.from, opts.from_uuid)?;
     Ok(SourceState { paths, by_digest })
 }
 
@@ -178,6 +187,11 @@ struct Plan {
 
 fn plan(ledger: &Ledger, opts: &ReclaimOptions<'_>) -> Result<Plan> {
     let source = source_state(ledger, opts)?;
+    let survivor_extra = if let (Some(s_root), Some(s_uuid)) = (opts.survivor_root, opts.survivor_uuid) {
+        Some((s_root, s_uuid, survivor_locations(ledger, s_root, s_uuid)?))
+    } else {
+        None
+    };
     let mut recorded: BTreeMap<String, (String, i64, i64)> = BTreeMap::new();
     for row in ledger.locations(opts.to_uuid)? {
         recorded.insert(row.relpath, (row.digest, row.size, row.mtime_ns));
@@ -225,11 +239,19 @@ fn plan(ledger: &Ledger, opts: &ReclaimOptions<'_>) -> Result<Plan> {
             },
         };
         // The survivor has to be on disk, not merely recorded. A row is a statement about a past
-        // read; a removal may not rest on one.
+        // read; a removal may not rest on one. It must exist under --from or under the named survivor volume.
         let survivor = source.by_digest.get(&digest).and_then(|rows| {
             rows.iter()
                 .find(|(rel, size, mtime_ns)| current(opts.from, rel, *size, *mtime_ns))
                 .map(|(rel, _, _)| rel.clone())
+        }).or_else(|| {
+            survivor_extra.as_ref().and_then(|(s_root, s_uuid, by_digest)| {
+                by_digest.get(&digest).and_then(|rows| {
+                    rows.iter()
+                        .find(|(rel, size, mtime_ns)| current(s_root, rel, *size, *mtime_ns))
+                        .map(|(rel, _, _)| format!("{s_uuid}:{rel}"))
+                })
+            })
         });
         match survivor {
             Some(survivor) => plan.candidates.push(Candidate {
@@ -365,6 +387,11 @@ pub fn reclaim(ledger: &Ledger, opts: &ReclaimOptions<'_>) -> Result<ReclaimRepo
                 .as_secs()
                 .to_string();
             let source = source_state(ledger, opts)?;
+            let survivor_extra = if let (Some(s_root), Some(s_uuid)) = (opts.survivor_root, opts.survivor_uuid) {
+                Some((s_root, s_uuid, survivor_locations(ledger, s_root, s_uuid)?))
+            } else {
+                None
+            };
             report.candidates = rows.len();
             for (digest, size, relpath, survivor) in rows {
                 let rel = safe_relpath(&relpath)?;
@@ -395,10 +422,14 @@ pub fn reclaim(ledger: &Ledger, opts: &ReclaimOptions<'_>) -> Result<ReclaimRepo
                 }
                 // The survivor is re-checked here rather than trusted from the planning pass. The
                 // list may be days old, and the source may have changed since it was written.
-                let survives = source.by_digest.get(&digest).is_some_and(|rows| {
+                let survives = (source.by_digest.get(&digest).is_some_and(|rows| {
                     rows.iter()
                         .any(|(rel, size, mtime_ns)| current(&from, rel, *size, *mtime_ns))
-                }) && !survivor.is_empty();
+                }) || survivor_extra.as_ref().is_some_and(|(s_root, _s_uuid, by_digest)| {
+                    by_digest.get(&digest).is_some_and(|rows| {
+                        rows.iter().any(|(rel, size, mtime_ns)| current(s_root, rel, *size, *mtime_ns))
+                    })
+                })) && !survivor.is_empty();
                 if !survives {
                     report.refused += 1;
                     report.issues.push(format!(
@@ -515,6 +546,15 @@ mod tests {
         /// The fixture's own paths, leaked so the borrowed options can outlive the locals. A test
         /// that outlives its own process is not a leak worth avoiding.
         fn opts(&self, list: Option<&Path>, apply: bool) -> ReclaimOptions<'static> {
+            self.opts_with_survivor(list, apply, None, None)
+        }
+        fn opts_with_survivor(
+            &self,
+            list: Option<&Path>,
+            apply: bool,
+            survivor_root: Option<&'static Path>,
+            survivor_uuid: Option<&'static str>,
+        ) -> ReclaimOptions<'static> {
             let leaked = |p: PathBuf| -> &'static Path { Box::leak(p.into_boxed_path()) };
             ReclaimOptions {
                 from: leaked(self.0.join("src")),
@@ -527,6 +567,8 @@ mod tests {
                 quarantine: leaked(self.0.join("quarantine")),
                 journal: leaked(self.0.join("journal.tsv")),
                 apply,
+                survivor_root,
+                survivor_uuid,
             }
         }
     }
@@ -562,6 +604,31 @@ mod tests {
         assert_eq!(report.candidates, 0);
         assert_eq!(report.unique, 1);
         assert_eq!(report.kept_unique, vec!["only/x.jpg".to_string()]);
+    }
+
+    #[test]
+    fn a_stale_path_whose_bytes_survive_on_third_volume_is_reclaimable_when_named() {
+        let f = Fixture::new();
+        // Destination has old/x.jpg
+        f.write("dst", "old/x.jpg", "third-volume-payload");
+        // Source does NOT have it, but a third directory does
+        f.write("third", "backup/x.jpg", "third-volume-payload");
+        let ledger = f.ledger();
+        ledger.register("THIRD", "third").unwrap();
+        f.record(&ledger, "DST", "dst", "old/x.jpg");
+        f.record(&ledger, "THIRD", "third", "backup/x.jpg");
+
+        // Without naming survivor, it's reported unique and kept
+        let report_unnamed = reclaim(&ledger, &f.opts(None, false)).unwrap();
+        assert_eq!(report_unnamed.candidates, 0);
+        assert_eq!(report_unnamed.unique, 1);
+
+        // When survivor volume is named and verified, it is reclaimable
+        let leaked = Box::leak(f.0.join("third").into_boxed_path());
+        let opts = f.opts_with_survivor(None, false, Some(leaked), Some("THIRD"));
+        let report_named = reclaim(&ledger, &opts).unwrap();
+        assert_eq!(report_named.candidates, 1);
+        assert_eq!(report_named.unique, 0);
     }
 
     #[test]

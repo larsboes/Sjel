@@ -136,7 +136,13 @@ impl Ledger {
                     verified INTEGER NOT NULL DEFAULT 0 CHECK(verified IN (0,1)),
                     PRIMARY KEY (ingest_id, relpath)
                 );
-                CREATE INDEX IF NOT EXISTS media_ingest_history ON media_ingests(staging, id);",
+                CREATE INDEX IF NOT EXISTS media_ingest_history ON media_ingests(staging, id);
+                CREATE TABLE IF NOT EXISTS media_ingest_copies (
+                    ingest_id INTEGER NOT NULL REFERENCES media_ingests(id),
+                    relpath TEXT NOT NULL, uuid TEXT NOT NULL, library TEXT NOT NULL,
+                    incoming_name TEXT NOT NULL UNIQUE,
+                    PRIMARY KEY (ingest_id, relpath)
+                );",
                 now = sjel_store::NOW
             ))?;
             Ok(())
@@ -328,28 +334,81 @@ impl Ledger {
         Ok(conn.last_insert_rowid())
     }
 
+    /// Records the incoming directory owned by one staged path and target.
+    ///
+    /// # Errors
+    /// Returns an error if the connection fails or the ownership row violates a constraint.
+    pub fn own_incoming(
+        &self,
+        id: i64,
+        relpath: &str,
+        uuid: &str,
+        library: &str,
+        name: &str,
+    ) -> Result<()> {
+        self.pool.get()?.execute(
+            "INSERT INTO media_ingest_copies(ingest_id,relpath,uuid,library,incoming_name) VALUES(?1,?2,?3,?4,?5)",
+            params![id, relpath, uuid, library, name],
+        )?;
+        Ok(())
+    }
+
+    /// Lists owned incoming names, source paths, and digests for this staging/target pair.
+    ///
+    /// # Errors
+    /// Returns an error if the database cannot be read or its rows cannot be decoded.
+    pub fn incoming_copies(
+        &self,
+        staging: &str,
+        uuid: &str,
+        library: &str,
+    ) -> Result<Vec<(String, String, String)>> {
+        let conn = self.pool.get()?;
+        let mut stmt = conn.prepare(
+            "SELECT c.incoming_name,c.relpath,i.digest FROM media_ingest_copies c
+             JOIN media_ingests r ON r.id=c.ingest_id
+             JOIN media_ingest_items i ON i.ingest_id=c.ingest_id AND i.relpath=c.relpath
+             WHERE r.staging=?1 AND c.uuid=?2 AND c.library=?3",
+        )?;
+        let rows = stmt
+            .query_map(params![staging, uuid, library], |r| {
+                Ok((r.get(0)?, r.get(1)?, r.get(2)?))
+            })?
+            .collect::<rusqlite::Result<Vec<_>>>()?;
+        Ok(rows)
+    }
+
     pub fn prior_verified(
         &self,
         staging: &str,
+        uuid: &str,
+        library: &str,
         relpath: &str,
         digest: &str,
     ) -> Result<Option<String>> {
         let conn = self.pool.get()?;
         Ok(conn.query_row("SELECT i.imported_relpath FROM media_ingest_items i
             JOIN media_ingests r ON r.id=i.ingest_id WHERE r.staging=?1 AND i.relpath=?2 AND i.digest=?3
-            AND i.verified=1 AND i.disposition='imported' ORDER BY r.id DESC LIMIT 1",
-            params![staging, relpath, digest], |r| r.get(0)).optional()?)
+            AND i.verified=1 AND i.disposition IN ('imported','resumed')
+            AND EXISTS (SELECT 1 FROM media_ingest_copies c WHERE c.ingest_id=i.ingest_id AND c.relpath=i.relpath AND c.uuid=?4 AND c.library=?5) ORDER BY r.id DESC LIMIT 1",
+            params![staging, relpath, digest, uuid, library], |r| r.get(0)).optional()?)
     }
 
-    pub fn pending_paths(&self, staging: &str) -> Result<std::collections::BTreeSet<String>> {
+    pub fn pending_paths(
+        &self,
+        staging: &str,
+        uuid: &str,
+        library: &str,
+    ) -> Result<std::collections::BTreeSet<String>> {
         let conn = self.pool.get()?;
         let mut stmt = conn.prepare(
             "SELECT DISTINCT i.imported_relpath FROM media_ingest_items i
             JOIN media_ingests r ON r.id=i.ingest_id WHERE r.staging=?1 AND i.verified=0
-            AND i.imported_relpath IS NOT NULL",
+            AND i.imported_relpath IS NOT NULL
+            AND EXISTS (SELECT 1 FROM media_ingest_copies c WHERE c.ingest_id=i.ingest_id AND c.relpath=i.relpath AND c.uuid=?2 AND c.library=?3)",
         )?;
         let paths = stmt
-            .query_map([staging], |r| r.get::<_, String>(0))?
+            .query_map(params![staging, uuid, library], |r| r.get::<_, String>(0))?
             .collect::<rusqlite::Result<std::collections::BTreeSet<_>>>()?;
         Ok(paths)
     }
@@ -357,14 +416,17 @@ impl Ledger {
     pub fn prior_unverified(
         &self,
         staging: &str,
+        uuid: &str,
+        library: &str,
         relpath: &str,
         digest: &str,
     ) -> Result<Option<String>> {
         let conn = self.pool.get()?;
         Ok(conn.query_row("SELECT i.imported_relpath FROM media_ingest_items i
             JOIN media_ingests r ON r.id=i.ingest_id WHERE r.staging=?1 AND i.relpath=?2 AND i.digest=?3
-            AND i.verified=0 AND i.imported_relpath IS NOT NULL ORDER BY r.id DESC LIMIT 1",
-            params![staging, relpath, digest], |r| r.get(0)).optional()?)
+            AND i.verified=0 AND i.imported_relpath IS NOT NULL
+            AND EXISTS (SELECT 1 FROM media_ingest_copies c WHERE c.ingest_id=i.ingest_id AND c.relpath=i.relpath AND c.uuid=?4 AND c.library=?5) ORDER BY r.id DESC LIMIT 1",
+            params![staging, relpath, digest, uuid, library], |r| r.get(0)).optional()?)
     }
 
     pub fn item(

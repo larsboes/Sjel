@@ -10,3 +10,12 @@ health_path    = "/health"
 ready_path     = "/ready"
 proxy_api_only = "true"
 backup_paths   = ["data/projects"]
+
+# The records are rows in the shared store, which capabilities/store backs up daily. This
+# contract exists for the attachments: they are files, not rows, and nothing else copies
+# them. 1.0 GB on 2026-10-19 and rarely changed, so 7 tarballs and a weekly cadence, not
+# the default 14. Before this line, backup.sh refused the capability ("no backup_target").
+backup_target      = "backup-target"
+backup_retain      = "7"
+backup_advise_days = "7"
+backup_stale_days  = "14"

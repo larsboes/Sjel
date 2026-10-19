@@ -31,6 +31,7 @@ members = [
     "libs/sjel-store",
     "libs/candidate-fingerprint",
     "libs/civil-date",
+    "libs/device-auth",
     "libs/content-item",
     "libs/extraction",
     "libs/inference",

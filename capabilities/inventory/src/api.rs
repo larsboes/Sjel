@@ -8,15 +8,30 @@ use axum::extract::{Extension, Path, Request, State};
 use axum::http::StatusCode;
 use axum::middleware;
 use axum::response::{Html, IntoResponse, Response};
-use axum::routing::{get, post, put};
+use axum::routing::{delete, get, post, put};
 use axum::{Json, Router};
 #[path = "sync.rs"]
 mod sync;
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
 use std::path::PathBuf;
 use std::sync::Arc;
 
 use crate::store::{Item, Store, WriteOutcome, LEGACY_FIELDS};
+
+#[derive(Debug, Deserialize, Serialize, schemars::JsonSchema)]
+pub struct SaveWishGroupRequest {
+    pub id: String,
+    pub title: String,
+    #[serde(default)]
+    pub constraint_text: String,
+    #[serde(default)]
+    pub item_ids: Option<Vec<String>>,
+}
+
+#[derive(Debug, Deserialize, Serialize, schemars::JsonSchema)]
+pub struct SetWishGroupItemsRequest {
+    pub item_ids: Vec<String>,
+}
 
 pub struct AppState {
     pub device_store: devices::store::DevicesStore,
@@ -50,6 +65,29 @@ const ROUTES: &[route_manifest::Route] = &[
         "/api/wishlist",
         "The open wishlist and what it costs in monthly balances.",
     ),
+    r(
+        "GET",
+        "/api/wish-groups",
+        "Groups of wishes sharing a constraint, with member items and cost totals.",
+    ),
+    route_manifest::Route {
+        method: "POST",
+        path: "/api/wish-groups",
+        summary: "Create or update a wish group with its title and constraint.",
+        request_schema: Some(route_manifest::schema_of::<SaveWishGroupRequest>),
+    },
+    route_manifest::Route {
+        method: "DELETE",
+        path: "/api/wish-groups/{id}",
+        summary: "Delete a wish group.",
+        request_schema: None,
+    },
+    route_manifest::Route {
+        method: "PUT",
+        path: "/api/wish-groups/{id}/items",
+        summary: "Set the items assigned to a wish group.",
+        request_schema: Some(route_manifest::schema_of::<SetWishGroupItemsRequest>),
+    },
     r(
         "POST",
         "/api/items",
@@ -174,6 +212,54 @@ async fn api_wishlist(State(s): State<Arc<AppState>>) -> Result<impl IntoRespons
         "monthly_balance": balance,
         "months_to_pay": months,
     })))
+}
+
+/// Groups of wishes sharing a constraint, with member items and cost totals.
+async fn api_get_wish_groups(
+    State(s): State<Arc<AppState>>,
+) -> Result<impl IntoResponse, HttpError> {
+    let st = store(&s)?;
+    let groups = st.wish_groups().map_err(boom)?;
+    Ok(Json(serde_json::json!({ "wish_groups": groups })))
+}
+
+/// Create or update a wish group with its title and constraint.
+async fn api_post_wish_group(
+    State(s): State<Arc<AppState>>,
+    Json(body): Json<SaveWishGroupRequest>,
+) -> Result<impl IntoResponse, HttpError> {
+    let st = store(&s)?;
+    let group = st
+        .create_or_update_wish_group(&body.id, &body.title, &body.constraint_text)
+        .map_err(boom)?;
+    if let Some(items) = body.item_ids {
+        st.set_wish_group_items(&body.id, &items).map_err(boom)?;
+    }
+    Ok(Json(group))
+}
+
+/// Delete a wish group.
+async fn api_delete_wish_group(
+    State(s): State<Arc<AppState>>,
+    Path(id): Path<String>,
+) -> Result<impl IntoResponse, HttpError> {
+    let st = store(&s)?;
+    let deleted = st.delete_wish_group(&id).map_err(boom)?;
+    if !deleted {
+        return Err((StatusCode::NOT_FOUND, "wish group not found".to_string()));
+    }
+    Ok(StatusCode::NO_CONTENT)
+}
+
+/// Set the items assigned to a wish group.
+async fn api_put_wish_group_items(
+    State(s): State<Arc<AppState>>,
+    Path(id): Path<String>,
+    Json(body): Json<SetWishGroupItemsRequest>,
+) -> Result<impl IntoResponse, HttpError> {
+    let st = store(&s)?;
+    st.set_wish_group_items(&id, &body.item_ids).map_err(boom)?;
+    Ok(StatusCode::OK)
 }
 
 async fn api_vault_writeback(
@@ -639,6 +725,12 @@ pub fn build_router(state: Arc<AppState>) -> Router {
         .route("/routes", get(routes))
         .route("/api/inventory", get(api_inventory))
         .route("/api/wishlist", get(api_wishlist))
+        .route(
+            "/api/wish-groups",
+            get(api_get_wish_groups).post(api_post_wish_group),
+        )
+        .route("/api/wish-groups/{id}", delete(api_delete_wish_group))
+        .route("/api/wish-groups/{id}/items", put(api_put_wish_group_items))
         .route("/api/items", post(api_post_item))
         .route("/api/items/{id}", put(api_put_item).patch(api_patch_item))
         .route(
@@ -929,6 +1021,62 @@ mod revision_tests {
         body["expected_revision"] = json!(2);
         let (s, _, _) = send(&r, "PUT", "/api/items/wardrobe", Some("1"), body).await;
         assert_eq!(s, StatusCode::BAD_REQUEST);
+        let _ = std::fs::remove_file(&path);
+    }
+
+    #[tokio::test]
+    async fn wish_groups_roundtrip_with_items_and_costs() {
+        let (r, path) = router("wish-groups");
+        // Create an item with price
+        send(
+            &r,
+            "POST",
+            "/api/items",
+            None,
+            json!({
+                "id": "merino-tee",
+                "kind": "piece",
+                "label": "Merino Wool T-Shirt",
+                "price_cents": 7500,
+                "state": "wanted"
+            }),
+        )
+        .await;
+
+        // Create wish group
+        let (s, _, v) = send(
+            &r,
+            "POST",
+            "/api/wish-groups",
+            None,
+            json!({
+                "id": "travel-capsule",
+                "title": "Travel Capsule",
+                "constraint_text": "travel-friendly, fewer but better",
+                "item_ids": ["merino-tee"]
+            }),
+        )
+        .await;
+        assert_eq!(s, StatusCode::OK, "{v}");
+
+        // List wish groups
+        let (s, _, v) = send(&r, "GET", "/api/wish-groups", None, Value::Null).await;
+        assert_eq!(s, StatusCode::OK);
+        assert_eq!(v["wish_groups"].as_array().unwrap().len(), 1);
+        let group = &v["wish_groups"][0];
+        assert_eq!(group["id"], "travel-capsule");
+        assert_eq!(group["title"], "Travel Capsule");
+        assert_eq!(group["constraint_text"], "travel-friendly, fewer but better");
+        assert_eq!(group["items_count"], 1);
+        assert_eq!(group["total_low_cents"], 7500);
+
+        // Delete wish group
+        let (s, _, _) = send(&r, "DELETE", "/api/wish-groups/travel-capsule", None, Value::Null).await;
+        assert_eq!(s, StatusCode::NO_CONTENT);
+
+        let (_, _, v) = send(&r, "GET", "/api/wish-groups", None, Value::Null).await;
+        assert_eq!(v["wish_groups"].as_array().unwrap().len(), 0);
+
         let _ = std::fs::remove_file(&path);
     }
 }

@@ -507,6 +507,33 @@ pub enum WriteOutcome {
     Stale(Box<Item>, Option<State>),
 }
 
+/// A group of wishes sharing a common constraint or goal (e.g. "travel-friendly, fewer but better").
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct WishGroup {
+    pub id: String,
+    pub title: String,
+    #[serde(default)]
+    pub constraint_text: String,
+    #[serde(default)]
+    pub created_at: String,
+    #[serde(default)]
+    pub updated_at: String,
+}
+
+/// A wish group viewed with its member items and aggregate costs.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct WishGroupView {
+    pub id: String,
+    pub title: String,
+    pub constraint_text: String,
+    pub created_at: String,
+    pub updated_at: String,
+    pub items: Vec<Item>,
+    pub items_count: usize,
+    pub total_low_cents: i64,
+    pub total_high_cents: i64,
+}
+
 pub struct Store {
     pool: sjel_store::Pool,
     prefix: String,
@@ -629,6 +656,20 @@ impl Store {
                 revision INTEGER NOT NULL,
                 processed_at TEXT NOT NULL
             );
+            CREATE TABLE IF NOT EXISTS {prefix}_wish_group (
+                id              TEXT PRIMARY KEY,
+                title           TEXT NOT NULL,
+                constraint_text TEXT NOT NULL DEFAULT '',
+                created_at      TEXT NOT NULL,
+                updated_at      TEXT NOT NULL
+            );
+            CREATE TABLE IF NOT EXISTS {prefix}_wish_group_item (
+                group_id TEXT NOT NULL REFERENCES {prefix}_wish_group(id) ON DELETE CASCADE,
+                item_id  TEXT NOT NULL REFERENCES {prefix}_item(id) ON DELETE CASCADE,
+                PRIMARY KEY (group_id, item_id)
+            );
+            CREATE INDEX IF NOT EXISTS {prefix}_idx_wish_group_item
+                ON {prefix}_wish_group_item(item_id);
             ",
             prefix = prefix
         ))?;
@@ -1181,6 +1222,126 @@ impl Store {
             Ok((row.get::<_, String>(0)?, row.get::<_, i64>(1)?))
         })?;
         Ok(rows.collect::<Result<Vec<_>, _>>()?)
+    }
+
+    /// Create or update a wish group with its title and constraint.
+    pub fn create_or_update_wish_group(
+        &self,
+        id: &str,
+        title: &str,
+        constraint_text: &str,
+    ) -> Result<WishGroup, Error> {
+        let p = &self.prefix;
+        let now = sjel_store::now_offset("'+0 seconds'");
+        let conn = self.conn()?;
+        conn.execute(
+            &format!(
+                "INSERT INTO {p}_wish_group (id, title, constraint_text, created_at, updated_at)
+                 VALUES (?1, ?2, ?3, {now}, {now})
+                 ON CONFLICT(id) DO UPDATE SET
+                    title = excluded.title,
+                    constraint_text = excluded.constraint_text,
+                    updated_at = {now}"
+            ),
+            params![id, title, constraint_text],
+        )?;
+        Ok(WishGroup {
+            id: id.to_string(),
+            title: title.to_string(),
+            constraint_text: constraint_text.to_string(),
+            created_at: String::new(),
+            updated_at: String::new(),
+        })
+    }
+
+    /// Delete a wish group and its item memberships.
+    pub fn delete_wish_group(&self, id: &str) -> Result<bool, Error> {
+        let conn = self.conn()?;
+        let count = conn.execute(
+            &format!("DELETE FROM {}_wish_group WHERE id = ?1", self.prefix),
+            params![id],
+        )?;
+        Ok(count > 0)
+    }
+
+    /// Set the items assigned to a wish group.
+    pub fn set_wish_group_items(&self, group_id: &str, item_ids: &[String]) -> Result<(), Error> {
+        let mut conn = self.conn()?;
+        let tx = conn.transaction()?;
+        tx.execute(
+            &format!("DELETE FROM {}_wish_group_item WHERE group_id = ?1", self.prefix),
+            params![group_id],
+        )?;
+        for item_id in item_ids {
+            tx.execute(
+                &format!(
+                    "INSERT OR IGNORE INTO {}_wish_group_item (group_id, item_id) VALUES (?1, ?2)",
+                    self.prefix
+                ),
+                params![group_id, item_id],
+            )?;
+        }
+        tx.commit()?;
+        Ok(())
+    }
+
+    /// Return all wish groups with their members and cost totals.
+    pub fn wish_groups(&self) -> Result<Vec<WishGroupView>, Error> {
+        let conn = self.conn()?;
+        let mut stmt = conn.prepare(&format!(
+            "SELECT id, title, constraint_text, created_at, updated_at FROM {}_wish_group ORDER BY title",
+            self.prefix
+        ))?;
+        let groups: Vec<WishGroup> = stmt
+            .query_map([], |row| {
+                Ok(WishGroup {
+                    id: row.get(0)?,
+                    title: row.get(1)?,
+                    constraint_text: row.get(2)?,
+                    created_at: row.get(3)?,
+                    updated_at: row.get(4)?,
+                })
+            })?
+            .collect::<Result<Vec<_>, _>>()?;
+
+        let mut out = Vec::new();
+        for g in groups {
+            let mut item_stmt = conn.prepare(&format!(
+                "SELECT item_id FROM {}_wish_group_item WHERE group_id = ?1 ORDER BY item_id",
+                self.prefix
+            ))?;
+            let ids: Vec<String> = item_stmt
+                .query_map(params![g.id], |row| row.get(0))?
+                .collect::<Result<Vec<_>, _>>()?;
+
+            let mut items = Vec::new();
+            for id in &ids {
+                if let Some((it, _)) = self.item(id)? {
+                    items.push(it);
+                }
+            }
+            let total_low: i64 = items
+                .iter()
+                .map(|i| i.price_cents.or(i.cost_min_cents).unwrap_or(0))
+                .sum();
+            let total_high: i64 = items
+                .iter()
+                .map(|i| i.price_cents.or(i.cost_max_cents).unwrap_or(0))
+                .sum();
+            let count = items.len();
+            out.push(WishGroupView {
+                id: g.id,
+                title: g.title,
+                constraint_text: g.constraint_text,
+                created_at: g.created_at,
+                updated_at: g.updated_at,
+                items,
+                items_count: count,
+                total_low_cents: total_low,
+                total_high_cents: total_high,
+            });
+        }
+        Ok(out)
     }
 }
 

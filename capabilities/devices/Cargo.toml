@@ -22,6 +22,7 @@ sjel-config = { path = "../../libs/sjel-config" }
 sjel-server = { path = "../../libs/sjel-server" }
 sjel-store = { path = "../../libs/sjel-store" }
 route-manifest = { path = "../../libs/route-manifest" }
+device-auth = { path = "../../libs/device-auth" }
 axum.workspace = true
 getrandom.workspace = true
 rusqlite.workspace = true

@@ -11,10 +11,13 @@ targets:
     platform: iOS
     sources:
       - path: App.swift
+      - path: DeviceIdentity.swift
     info:
       path: Info.plist
       properties:
         CFBundleDisplayName: Sjel
+        # Bonjour names (`<mac>.local`) on the local network: the LAN listener's address.
+        NSLocalNetworkUsageDescription: Sjel talks to your Mac on this network.
         UILaunchScreen: {}
         UIApplicationSceneManifest:
           UIApplicationSupportsMultipleScenes: false
@@ -23,7 +26,10 @@ targets:
         PRODUCT_BUNDLE_IDENTIFIER: dev.sjel.ios
         SWIFT_VERSION: "5.0"
         SWIFT_OBJC_BRIDGING_HEADER: Embedding.h
-        CODE_SIGNING_ALLOWED: NO
+        # Ad-hoc ("Sign to Run Locally"), Xcode's simulator default. An unsigned app has no
+        # application identifier, and the Keychain refuses it the device key.
+        CODE_SIGN_IDENTITY: "-"
+        CODE_SIGN_STYLE: Manual
         # The Rust library links statically; Xcode's debug dylib loader does not apply.
         ENABLE_DEBUG_DYLIB: NO
         ARCHS: arm64

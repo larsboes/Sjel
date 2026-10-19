@@ -1,0 +1,26 @@
+[package]
+name = "device-auth"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+description = "The axon-device-auth/v1 protocol, written once: the bytes a paired device signs, its headers, and the pinned TLS client for the node's LAN listener. The devices capability verifies with it; the Tauri and GPUI phone apps sign with it."
+publish = false
+
+[lib]
+name = "device_auth"
+path = "src/lib.rs"
+
+[features]
+# The phone side of the LAN listener: a TLS client that accepts one certificate by its SHA-256.
+# The server never needs it, so it does not pull in rustls.
+pinned-tls = ["dep:rustls"]
+
+[dependencies]
+getrandom.workspace = true
+sha2.workspace = true
+# Same requirement as dashboard/src-tauri, which had this code first (mac_bridge.rs).
+rustls = { version = "0.23", optional = true }
+
+[lints]
+workspace = true

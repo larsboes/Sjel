@@ -5,9 +5,8 @@
 //! timestamp window.
 
 use axum::http::HeaderMap;
-use sha2::{Digest, Sha256};
 
-pub const PROTOCOL_VERSION: &str = "axon-device-auth/v1";
+pub use device_auth::PROTOCOL_VERSION;
 // `x-sjel-*` since 2026-10-01 (ISA ISC-28). The gate renames a legacy `x-axon-*` header to these
 // names before anything reads it (`sjel_server::normalize_legacy_headers`), so a paired phone
 // that still sends the old names keeps working. The protocol string above is unchanged: it is
@@ -64,50 +63,26 @@ impl SignedRequest {
     }
 }
 
-/// The exact bytes signed by a device. `path_and_query` is the path seen by the capability, not
-/// the shell mount used to reach it (for example `/api/devices/me`, not `/devices/api/devices/me`).
+/// The exact bytes signed by a device (`libs/device-auth`, shared with the phone apps that sign
+/// them). `path_and_query` is the path seen by the capability, not the shell mount used to reach
+/// it (for example `/api/devices/me`, not `/devices/api/devices/me`).
 pub fn signing_message(
     request: &SignedRequest,
     method: &str,
     path_and_query: &str,
     body: &[u8],
 ) -> Vec<u8> {
-    let body_digest = Sha256::digest(body);
-    let body_digest = hex(&body_digest);
-    format!(
-        "{PROTOCOL_VERSION}\n{}\n{}\n{}\n{}\n{}\n{}\n",
-        request.device_id,
+    device_auth::signing_message(
+        &request.device_id,
         request.timestamp,
-        request.nonce,
-        method.to_ascii_uppercase(),
+        &request.nonce,
+        method,
         path_and_query,
-        body_digest,
+        body,
     )
-    .into_bytes()
 }
 
-pub fn decode_hex(value: &str) -> Result<Vec<u8>, String> {
-    if !value.len().is_multiple_of(2) || !value.bytes().all(|byte| byte.is_ascii_hexdigit()) {
-        return Err("value must be an even-length hexadecimal string".into());
-    }
-    let bytes = value.as_bytes();
-    (0..bytes.len())
-        .step_by(2)
-        .map(|index| {
-            let high = (bytes[index] as char)
-                .to_digit(16)
-                .ok_or_else(|| "invalid hexadecimal value".to_string())?;
-            let low = (bytes[index + 1] as char)
-                .to_digit(16)
-                .ok_or_else(|| "invalid hexadecimal value".to_string())?;
-            Ok(((high << 4) | low) as u8)
-        })
-        .collect()
-}
-
-pub fn hex(bytes: &[u8]) -> String {
-    bytes.iter().map(|byte| format!("{byte:02x}")).collect()
-}
+pub use device_auth::{decode_hex, hex};
 
 #[cfg(test)]
 mod tests {

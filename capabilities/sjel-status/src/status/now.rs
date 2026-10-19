@@ -80,9 +80,7 @@ fn query_calendar(
     let entries: Vec<NowCalendarEntry> = rows.filter_map(Result::ok).collect();
 
     let now_str: String = conn
-        .query_row("SELECT datetime('now', 'localtime')", [], |row| {
-            row.get(0)
-        })
+        .query_row("SELECT datetime('now', 'localtime')", [], |row| row.get(0))
         .unwrap_or_default();
 
     let current = entries
@@ -90,10 +88,7 @@ fn query_calendar(
         .find(|e| e.starts_at <= now_str && e.ends_at > now_str)
         .cloned();
 
-    let next = entries
-        .iter()
-        .find(|e| e.starts_at > now_str)
-        .cloned();
+    let next = entries.iter().find(|e| e.starts_at > now_str).cloned();
 
     Some((current, next, entries))
 }
@@ -146,10 +141,7 @@ fn query_trips(db_path: &Path) -> Option<(Option<NowTripInfo>, Option<NowTripInf
         .find(|t| t.date_start <= today_str && t.date_end >= today_str)
         .cloned();
 
-    let next = trips
-        .iter()
-        .find(|t| t.date_start > today_str)
-        .cloned();
+    let next = trips.iter().find(|t| t.date_start > today_str).cloned();
 
     Some((active, next))
 }
@@ -194,10 +186,7 @@ pub(crate) async fn now_handler() -> Result<Json<Value>, (StatusCode, Json<Value
     // 5. Warnings
     let mut warnings = Vec::new();
     if !healthy && !unhealthy_services.is_empty() {
-        warnings.push(format!(
-            "Services down: {}",
-            unhealthy_services.join(", ")
-        ));
+        warnings.push(format!("Services down: {}", unhealthy_services.join(", ")));
     }
     if pending_approvals_count > 0 {
         warnings.push(format!(
@@ -226,7 +215,11 @@ mod tests {
     #[tokio::test]
     async fn now_handler_answers_valid_shape_without_crashing() {
         let res = now_handler().await;
-        assert!(res.is_ok(), "now_handler should never fail: {:?}", res.err());
+        assert!(
+            res.is_ok(),
+            "now_handler should never fail: {:?}",
+            res.err()
+        );
         let Json(val) = res.unwrap();
         assert!(val.get("timestamp_epoch").is_some());
         assert!(val.get("healthy").is_some());

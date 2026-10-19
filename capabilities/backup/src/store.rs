@@ -920,7 +920,8 @@ mod staleness_tests {
                 store.prefix()
             ),
             [],
-        ).unwrap();
+        )
+        .unwrap();
 
         // Total runs: 5. If we keep minimum 2 per target, pruning at 90 days retention should remove (4 - (2 - 1)) = 3 old runs, leaving 2.
         let pruned = store.prune_runs(90, 2).unwrap();

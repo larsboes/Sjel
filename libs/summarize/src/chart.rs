@@ -32,7 +32,7 @@
 
 // This is an ordinary submodule of sjel-summarize; keep sibling imports grouped
 // through the parent module.
-use super::{INPUT_CAP, Outcome, Reach, Target, complete, truncate};
+use super::{complete, truncate, Outcome, Reach, Target, INPUT_CAP};
 
 /// Bump with any change to [`chart_prompt`] or the extraction contract.
 pub const CHART_PROMPT_REVISION: &str = "content-chart-v1-single-measure";
@@ -442,16 +442,12 @@ mod tests {
     /// train the operator to ignore the state entirely.
     #[test]
     fn no_data_is_a_verdict_not_a_failure() {
-        assert!(
-            parse_chart(r#"{"has_data": false}"#, SOURCE)
-                .unwrap()
-                .is_none()
-        );
-        assert!(
-            parse_chart("```json\n{\"has_data\": false}\n```", SOURCE)
-                .unwrap()
-                .is_none()
-        );
+        assert!(parse_chart(r#"{"has_data": false}"#, SOURCE)
+            .unwrap()
+            .is_none());
+        assert!(parse_chart("```json\n{\"has_data\": false}\n```", SOURCE)
+            .unwrap()
+            .is_none());
     }
 
     #[test]

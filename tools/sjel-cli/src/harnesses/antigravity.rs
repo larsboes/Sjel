@@ -50,15 +50,16 @@ pub fn read_entries(document: &Value) -> Vec<Entry> {
                 .iter()
                 .filter_map(|item| {
                     let path = item.get("path")?.as_str()?.to_owned();
-                    let include_only = item.get("include_only").and_then(Value::as_array).map(
-                        |names| {
-                            names
-                                .iter()
-                                .filter_map(Value::as_str)
-                                .map(str::to_owned)
-                                .collect()
-                        },
-                    );
+                    let include_only =
+                        item.get("include_only")
+                            .and_then(Value::as_array)
+                            .map(|names| {
+                                names
+                                    .iter()
+                                    .filter_map(Value::as_str)
+                                    .map(str::to_owned)
+                                    .collect()
+                            });
                     Some(Entry { path, include_only })
                 })
                 .collect()
@@ -157,7 +158,10 @@ pub fn activate_profile(config: &DeployConfig, profile_name: &str) -> Result<Vec
         fs::create_dir_all(parent).map_err(|e| format!("{}: {e}", parent.display()))?;
     }
     let document = read_document(dest)?;
-    let roots = config.pack_roots.clone().unwrap_or_else(|| vec![config.axon_root.join("Packs")]);
+    let roots = config
+        .pack_roots
+        .clone()
+        .unwrap_or_else(|| vec![config.axon_root.join("Packs")]);
     let updated = update_document(document, &roots, &wanted);
     let text = serde_json::to_string_pretty(&updated).map_err(|e| format!("{e}"))?;
     // Write beside the file and rename, so a crash mid-write never leaves a truncated document.
@@ -342,7 +346,10 @@ mod tests {
         write(&config.destination, "{ not json");
         let err = activate_profile(&config, "full").unwrap_err();
         assert!(err.contains("skills.json"), "{err}");
-        assert_eq!(fs::read_to_string(&config.destination).unwrap(), "{ not json");
+        assert_eq!(
+            fs::read_to_string(&config.destination).unwrap(),
+            "{ not json"
+        );
         let _ = fs::remove_dir_all(&root);
     }
 }

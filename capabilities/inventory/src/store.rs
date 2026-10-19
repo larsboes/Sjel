@@ -1269,7 +1269,10 @@ impl Store {
         let mut conn = self.conn()?;
         let tx = conn.transaction()?;
         tx.execute(
-            &format!("DELETE FROM {}_wish_group_item WHERE group_id = ?1", self.prefix),
+            &format!(
+                "DELETE FROM {}_wish_group_item WHERE group_id = ?1",
+                self.prefix
+            ),
             params![group_id],
         )?;
         for item_id in item_ids {

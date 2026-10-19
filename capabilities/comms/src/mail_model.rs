@@ -38,7 +38,7 @@ use std::collections::HashMap;
 
 use serde::Deserialize;
 
-use crate::cloud_derivative::{RedactionFinding, redact_review_field};
+use crate::cloud_derivative::{redact_review_field, RedactionFinding};
 use crate::config::{Config, MailModelConfig};
 use crate::content_item::{self, DataClass};
 use crate::store::{ModelCandidate, ModelVerdict, Store};

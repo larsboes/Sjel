@@ -290,7 +290,14 @@ mod tests {
         let ids: Vec<&str> = registry.harnesses.iter().map(|h| h.id).collect();
         assert_eq!(
             ids,
-            vec!["claude", "codex", "opencode", "pi", "sjel-agent", "antigravity"]
+            vec![
+                "claude",
+                "codex",
+                "opencode",
+                "pi",
+                "sjel-agent",
+                "antigravity"
+            ]
         );
         assert!(registry.unsupported.is_empty());
         assert!(registry.by_id("nope").is_err());

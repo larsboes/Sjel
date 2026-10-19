@@ -103,10 +103,17 @@ pub fn uniqlo_price(page: &str) -> Option<i64> {
         }
     }
     // 1. Check for FastRetailing JSON pattern: "prices":{"promo":{"value":X}} or "base":{"value":X}
-    for key in [r#""promo":{"value":"#, r#""sales":{"value":"#, r#""base":{"value":"#] {
+    for key in [
+        r#""promo":{"value":"#,
+        r#""sales":{"value":"#,
+        r#""base":{"value":"#,
+    ] {
         if let Some(idx) = page.find(key) {
             let rest = &page[idx + key.len()..];
-            let num_str: String = rest.chars().take_while(|c| c.is_ascii_digit() || *c == '.').collect();
+            let num_str: String = rest
+                .chars()
+                .take_while(|c| c.is_ascii_digit() || *c == '.')
+                .collect();
             if let Some(cents) = cents_from(&num_str) {
                 return Some(cents);
             }
@@ -514,17 +521,26 @@ mod tests {
     fn uniqlo_shop_reader_parses_fastretailing_json_and_html_spans() {
         let json_page = r#"<html><head><title>UNIQLO</title><meta property="og:title" content="AIRism Shirt"></head>
             <body><script>window.__PRELOADED_STATE__ = {"product":{"prices":{"base":{"value":49.90},"currency":{"code":"EUR"}}}};</script></body></html>"#;
-        let page = parse_with_url(json_page, Some("https://www.uniqlo.com/de/de/products/E123456"));
+        let page = parse_with_url(
+            json_page,
+            Some("https://www.uniqlo.com/de/de/products/E123456"),
+        );
         assert_eq!(page.title, Some("AIRism Shirt".to_string()));
         assert_eq!(page.price_cents, Some(4990));
         assert_eq!(page.price_from, Some("shop:uniqlo".to_string()));
 
         let promo_page = r#"{"prices":{"promo":{"value":29.90},"base":{"value":39.90}}}"#;
-        let p2 = parse_with_url(promo_page, Some("https://www.uniqlo.com/de/de/products/E999"));
+        let p2 = parse_with_url(
+            promo_page,
+            Some("https://www.uniqlo.com/de/de/products/E999"),
+        );
         assert_eq!(p2.price_cents, Some(2990));
 
         let span_page = r#"<span class="fr-price-currency">€</span><span class="product-price-amount">19,90</span>"#;
-        let p3 = parse_with_url(span_page, Some("https://www.uniqlo.com/de/de/products/E777"));
+        let p3 = parse_with_url(
+            span_page,
+            Some("https://www.uniqlo.com/de/de/products/E777"),
+        );
         assert_eq!(p3.price_cents, Some(1990));
     }
 }

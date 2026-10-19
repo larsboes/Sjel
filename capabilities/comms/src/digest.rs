@@ -38,13 +38,13 @@
 //! detector the sweep uses on subject and snippet, and the count is recorded, so
 //! a digest cannot republish what the sweep redacted.
 
-use crate::Result;
-use crate::cloud_derivative::{self, RedactionFinding, redact_review_field};
+use crate::cloud_derivative::{self, redact_review_field, RedactionFinding};
 use crate::config::Config;
 use crate::content_item;
 use crate::google;
 use crate::store::{Store, StoredDigest};
 use crate::summarize::{self, Depth, Directive, Outcome, Reach, Target};
+use crate::Result;
 
 /// How many retryable failures a row accumulates before the automatic pass
 /// leaves it alone. An explicit press always runs regardless — the operator can
@@ -1335,22 +1335,18 @@ mod tests {
     #[test]
     fn only_local_only_content_is_redacted_before_the_digest_is_stored() {
         for class in ["c2", "c3"] {
-            assert!(
-                SourceText {
-                    text: String::new(),
-                    data_class: class.into(),
-                }
-                .redact_before_persistence()
-            );
+            assert!(SourceText {
+                text: String::new(),
+                data_class: class.into(),
+            }
+            .redact_before_persistence());
         }
         for class in ["c0", "c1"] {
-            assert!(
-                !SourceText {
-                    text: String::new(),
-                    data_class: class.into(),
-                }
-                .redact_before_persistence()
-            );
+            assert!(!SourceText {
+                text: String::new(),
+                data_class: class.into(),
+            }
+            .redact_before_persistence());
         }
     }
 

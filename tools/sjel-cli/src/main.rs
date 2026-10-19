@@ -17,8 +17,8 @@ use std::process::{Command, ExitCode, ExitStatus};
 
 mod audit;
 mod capability;
-mod doctor;
 mod distribution;
+mod doctor;
 mod feed_sweep;
 mod harnesses;
 mod help;

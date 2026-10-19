@@ -387,8 +387,12 @@ pub(super) async fn triage_relevance_handler(
             .next();
         let mut scored = 0usize;
         for item in &outcome.items {
-            relevance::runtime_admission(&runtime, embedding_role.as_ref(), reranking_role.as_ref())
-                .map_err(|e| e.to_string())?;
+            relevance::runtime_admission(
+                &runtime,
+                embedding_role.as_ref(),
+                reranking_role.as_ref(),
+            )
+            .map_err(|e| e.to_string())?;
             scored += 1;
             store
                 .replace_triage_relevance(&item.feed_id, &item.matches)
@@ -422,8 +426,12 @@ pub(super) async fn triage_relevance_handler(
         // then carries weight 0.
         let verdicts = store.model_verdicts().unwrap_or_default();
         for (item, scored_item) in scorable.iter().zip(&outcome.items) {
-            relevance::runtime_admission(&runtime, embedding_role.as_ref(), reranking_role.as_ref())
-                .map_err(|e| e.to_string())?;
+            relevance::runtime_admission(
+                &runtime,
+                embedding_role.as_ref(),
+                reranking_role.as_ref(),
+            )
+            .map_err(|e| e.to_string())?;
             // The rung's urgency moves the score THROUGH the evaluator rather
             // than competing with it on the wire, so a reader who asks why a
             // mail is at the top gets four bars, one of which is the model's.
@@ -1911,8 +1919,8 @@ mod tests {
             "aktiv"
         );
 
-        let applied =
-            mail_model::run_pass(&cfg, &store, Mode::Apply, 200, 9_000, &runtime).expect("an apply pass");
+        let applied = mail_model::run_pass(&cfg, &store, Mode::Apply, 200, 9_000, &runtime)
+            .expect("an apply pass");
         assert_eq!(applied.prompted, 0, "apply re-asks nothing");
         assert_eq!(applied.awaiting_apply, 1);
         assert_eq!(applied.disagreed, 1);
@@ -1990,8 +1998,8 @@ mod tests {
             })
             .unwrap();
 
-        let receipt =
-            mail_model::run_pass(&cfg, &store, Mode::Apply, 200, 9_000, &runtime).expect("an apply pass");
+        let receipt = mail_model::run_pass(&cfg, &store, Mode::Apply, 200, 9_000, &runtime)
+            .expect("an apply pass");
         assert_eq!(receipt.below_confidence, 1);
         assert_eq!(receipt.applied, 0);
         assert_eq!(

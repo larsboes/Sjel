@@ -459,9 +459,27 @@ async fn create_place(
         .as_deref()
         .map(str::trim)
         .filter(|s| !s.is_empty())
-        .or_else(|| request.query.as_deref().map(str::trim).filter(|s| !s.is_empty()))
-        .or_else(|| request.note.as_deref().map(str::trim).filter(|s| !s.is_empty()))
-        .or_else(|| request.link.as_deref().map(str::trim).filter(|s| !s.is_empty()));
+        .or_else(|| {
+            request
+                .query
+                .as_deref()
+                .map(str::trim)
+                .filter(|s| !s.is_empty())
+        })
+        .or_else(|| {
+            request
+                .note
+                .as_deref()
+                .map(str::trim)
+                .filter(|s| !s.is_empty())
+        })
+        .or_else(|| {
+            request
+                .link
+                .as_deref()
+                .map(str::trim)
+                .filter(|s| !s.is_empty())
+        });
     let Some(name) = name else {
         return respond(
             StatusCode::BAD_REQUEST,
@@ -496,7 +514,9 @@ async fn create_place(
                 source: "capture".to_string(),
                 external_ref: Some(ext_ref),
             };
-            store.upsert_place(&place, &now).map_err(|e| e.to_string())?;
+            store
+                .upsert_place(&place, &now)
+                .map_err(|e| e.to_string())?;
             return Ok(json!({
                 "ok": true,
                 "id": place.id,
@@ -558,7 +578,9 @@ async fn create_place(
             source: "capture".to_string(),
             external_ref: Some(ext_ref),
         };
-        store.upsert_place(&place, &now).map_err(|e| e.to_string())?;
+        store
+            .upsert_place(&place, &now)
+            .map_err(|e| e.to_string())?;
         Ok(json!({
             "ok": true,
             "id": place.id,

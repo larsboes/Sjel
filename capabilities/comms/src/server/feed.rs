@@ -951,8 +951,12 @@ pub(super) async fn relevance_refresh_handler(Json(body): Json<RefreshBody>) -> 
             return Err(reason.clone());
         }
         for (item, scored) in to_rescore.iter().zip(&outcome.items) {
-            relevance::runtime_admission(&runtime, embedding_role.as_ref(), reranking_role.as_ref())
-                .map_err(|e| e.to_string())?;
+            relevance::runtime_admission(
+                &runtime,
+                embedding_role.as_ref(),
+                reranking_role.as_ref(),
+            )
+            .map_err(|e| e.to_string())?;
             if !store
                 .replace_feed_relevance(&item.id, &scored.matches)
                 .map_err(|error| error.to_string())?
@@ -982,8 +986,12 @@ pub(super) async fn relevance_refresh_handler(Json(body): Json<RefreshBody>) -> 
         // are already stored, with no model call at all.
         let reused_relevance = to_reevaluate.len();
         for item in &to_reevaluate {
-            relevance::runtime_admission(&runtime, embedding_role.as_ref(), reranking_role.as_ref())
-                .map_err(|e| e.to_string())?;
+            relevance::runtime_admission(
+                &runtime,
+                embedding_role.as_ref(),
+                reranking_role.as_ref(),
+            )
+            .map_err(|e| e.to_string())?;
             let matches = stored_matches
                 .get(&item.id)
                 .map(Vec::as_slice)

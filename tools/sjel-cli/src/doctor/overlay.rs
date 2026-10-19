@@ -64,7 +64,12 @@ pub fn resolve_overlay_root(root: &Path) -> Option<OverlayResolution> {
             }
         }
     }
-    for name in ["sjel.local.toml", "axon.local.toml", "sjel.toml", "axon.toml"] {
+    for name in [
+        "sjel.local.toml",
+        "axon.local.toml",
+        "sjel.toml",
+        "axon.toml",
+    ] {
         if let Some(v) = overlay_key(&root.join(name)) {
             return Some(OverlayResolution {
                 root: expand_home(&v),

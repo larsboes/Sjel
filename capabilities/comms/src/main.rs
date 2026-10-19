@@ -219,9 +219,8 @@ fn cmd_sweep(args: &[String], cfg: &Config) {
 
     let should_scan_events = store.is_some();
     drop(store);
-    let events = should_scan_events.then(|| {
-        mail_events::analyze_batch(&runtime_status(), cfg, &fetched_ids)
-    });
+    let events = should_scan_events
+        .then(|| mail_events::analyze_batch(&runtime_status(), cfg, &fetched_ids));
 
     println!("total: {total} threads across {} streams", grouped.len());
     if redacted > 0 {
@@ -1126,7 +1125,14 @@ fn cmd_mail(args: &[String], cfg: &Config) {
         mail_model::producer(cfg)
     );
     let started = std::time::Instant::now();
-    let receipt = match mail_model::run_pass(cfg, &store, mode, limit, min_confidence_bp, &runtime_status()) {
+    let receipt = match mail_model::run_pass(
+        cfg,
+        &store,
+        mode,
+        limit,
+        min_confidence_bp,
+        &runtime_status(),
+    ) {
         Ok(receipt) => receipt,
         Err(error) => {
             eprintln!("error: the pass failed: {error}");

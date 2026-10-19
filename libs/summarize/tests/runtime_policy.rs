@@ -1,7 +1,7 @@
-use sjel_summarize::{Admission, LocalGate, Outcome, Reach, Target, ask};
+use sjel_summarize::{ask, Admission, LocalGate, Outcome, Reach, Target};
 use std::path::Path;
-use std::sync::Arc;
 use std::sync::atomic::{AtomicUsize, Ordering};
+use std::sync::Arc;
 use std::time::{SystemTime, UNIX_EPOCH};
 
 fn policy(root: &Path, selection: &str) {

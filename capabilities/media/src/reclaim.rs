@@ -187,11 +187,12 @@ struct Plan {
 
 fn plan(ledger: &Ledger, opts: &ReclaimOptions<'_>) -> Result<Plan> {
     let source = source_state(ledger, opts)?;
-    let survivor_extra = if let (Some(s_root), Some(s_uuid)) = (opts.survivor_root, opts.survivor_uuid) {
-        Some((s_root, s_uuid, survivor_locations(ledger, s_root, s_uuid)?))
-    } else {
-        None
-    };
+    let survivor_extra =
+        if let (Some(s_root), Some(s_uuid)) = (opts.survivor_root, opts.survivor_uuid) {
+            Some((s_root, s_uuid, survivor_locations(ledger, s_root, s_uuid)?))
+        } else {
+            None
+        };
     let mut recorded: BTreeMap<String, (String, i64, i64)> = BTreeMap::new();
     for row in ledger.locations(opts.to_uuid)? {
         recorded.insert(row.relpath, (row.digest, row.size, row.mtime_ns));
@@ -240,19 +241,27 @@ fn plan(ledger: &Ledger, opts: &ReclaimOptions<'_>) -> Result<Plan> {
         };
         // The survivor has to be on disk, not merely recorded. A row is a statement about a past
         // read; a removal may not rest on one. It must exist under --from or under the named survivor volume.
-        let survivor = source.by_digest.get(&digest).and_then(|rows| {
-            rows.iter()
-                .find(|(rel, size, mtime_ns)| current(opts.from, rel, *size, *mtime_ns))
-                .map(|(rel, _, _)| rel.clone())
-        }).or_else(|| {
-            survivor_extra.as_ref().and_then(|(s_root, s_uuid, by_digest)| {
-                by_digest.get(&digest).and_then(|rows| {
-                    rows.iter()
-                        .find(|(rel, size, mtime_ns)| current(s_root, rel, *size, *mtime_ns))
-                        .map(|(rel, _, _)| format!("{s_uuid}:{rel}"))
-                })
+        let survivor = source
+            .by_digest
+            .get(&digest)
+            .and_then(|rows| {
+                rows.iter()
+                    .find(|(rel, size, mtime_ns)| current(opts.from, rel, *size, *mtime_ns))
+                    .map(|(rel, _, _)| rel.clone())
             })
-        });
+            .or_else(|| {
+                survivor_extra
+                    .as_ref()
+                    .and_then(|(s_root, s_uuid, by_digest)| {
+                        by_digest.get(&digest).and_then(|rows| {
+                            rows.iter()
+                                .find(|(rel, size, mtime_ns)| {
+                                    current(s_root, rel, *size, *mtime_ns)
+                                })
+                                .map(|(rel, _, _)| format!("{s_uuid}:{rel}"))
+                        })
+                    })
+            });
         match survivor {
             Some(survivor) => plan.candidates.push(Candidate {
                 relpath,
@@ -387,11 +396,12 @@ pub fn reclaim(ledger: &Ledger, opts: &ReclaimOptions<'_>) -> Result<ReclaimRepo
                 .as_secs()
                 .to_string();
             let source = source_state(ledger, opts)?;
-            let survivor_extra = if let (Some(s_root), Some(s_uuid)) = (opts.survivor_root, opts.survivor_uuid) {
-                Some((s_root, s_uuid, survivor_locations(ledger, s_root, s_uuid)?))
-            } else {
-                None
-            };
+            let survivor_extra =
+                if let (Some(s_root), Some(s_uuid)) = (opts.survivor_root, opts.survivor_uuid) {
+                    Some((s_root, s_uuid, survivor_locations(ledger, s_root, s_uuid)?))
+                } else {
+                    None
+                };
             report.candidates = rows.len();
             for (digest, size, relpath, survivor) in rows {
                 let rel = safe_relpath(&relpath)?;
@@ -425,11 +435,14 @@ pub fn reclaim(ledger: &Ledger, opts: &ReclaimOptions<'_>) -> Result<ReclaimRepo
                 let survives = (source.by_digest.get(&digest).is_some_and(|rows| {
                     rows.iter()
                         .any(|(rel, size, mtime_ns)| current(&from, rel, *size, *mtime_ns))
-                }) || survivor_extra.as_ref().is_some_and(|(s_root, _s_uuid, by_digest)| {
-                    by_digest.get(&digest).is_some_and(|rows| {
-                        rows.iter().any(|(rel, size, mtime_ns)| current(s_root, rel, *size, *mtime_ns))
-                    })
-                })) && !survivor.is_empty();
+                }) || survivor_extra.as_ref().is_some_and(
+                    |(s_root, _s_uuid, by_digest)| {
+                        by_digest.get(&digest).is_some_and(|rows| {
+                            rows.iter()
+                                .any(|(rel, size, mtime_ns)| current(s_root, rel, *size, *mtime_ns))
+                        })
+                    },
+                )) && !survivor.is_empty();
                 if !survives {
                     report.refused += 1;
                     report.issues.push(format!(

@@ -1328,8 +1328,8 @@ mod tests {
     /// deadlocks the second caller.
     #[test]
     fn a_permit_is_released_when_the_request_finishes() {
-        use std::sync::Arc;
         use std::sync::atomic::{AtomicUsize, Ordering};
+        use std::sync::Arc;
 
         #[derive(Default)]
         struct Counting {

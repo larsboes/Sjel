@@ -755,11 +755,9 @@ mod tests {
         };
         let runtime = sjel_runtime::Status::normal("test");
         let scored = score_items(&runtime, &[item], &[profile], None, None);
-        assert!(
-            scored.items[0].matches[0]
-                .rationale
-                .starts_with("Lexical similarity for Systems")
-        );
+        assert!(scored.items[0].matches[0]
+            .rationale
+            .starts_with("Lexical similarity for Systems"));
     }
 
     #[test]

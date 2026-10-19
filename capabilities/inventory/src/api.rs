@@ -1066,12 +1066,22 @@ mod revision_tests {
         let group = &v["wish_groups"][0];
         assert_eq!(group["id"], "travel-capsule");
         assert_eq!(group["title"], "Travel Capsule");
-        assert_eq!(group["constraint_text"], "travel-friendly, fewer but better");
+        assert_eq!(
+            group["constraint_text"],
+            "travel-friendly, fewer but better"
+        );
         assert_eq!(group["items_count"], 1);
         assert_eq!(group["total_low_cents"], 7500);
 
         // Delete wish group
-        let (s, _, _) = send(&r, "DELETE", "/api/wish-groups/travel-capsule", None, Value::Null).await;
+        let (s, _, _) = send(
+            &r,
+            "DELETE",
+            "/api/wish-groups/travel-capsule",
+            None,
+            Value::Null,
+        )
+        .await;
         assert_eq!(s, StatusCode::NO_CONTENT);
 
         let (_, _, v) = send(&r, "GET", "/api/wish-groups", None, Value::Null).await;

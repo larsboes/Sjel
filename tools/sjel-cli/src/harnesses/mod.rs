@@ -20,8 +20,8 @@ use std::path::{Path, PathBuf};
 use std::process::{Command, ExitCode};
 
 pub(crate) mod agent;
-pub(crate) mod antigravity;
 mod agentfile;
+pub(crate) mod antigravity;
 pub mod engine;
 mod frontmatter;
 pub(crate) mod mutate;

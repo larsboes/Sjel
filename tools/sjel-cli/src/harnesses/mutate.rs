@@ -1727,7 +1727,9 @@ mod discard_tests {
     }
 
     fn status(config: &DeployConfig) -> SkillStatus {
-        get_statuses(config, Some("demo")).unwrap()[0].status.clone()
+        get_statuses(config, Some("demo")).unwrap()[0]
+            .status
+            .clone()
     }
 
     #[test]
@@ -1758,12 +1760,18 @@ mod discard_tests {
         assert!(!dest.join("extra.md").exists());
         assert_eq!(status(&config), SkillStatus::Current, "{line}");
 
-        let kept = fs::read_dir(config.state_file.parent().unwrap().join("discarded/claude/demo"))
-            .unwrap()
-            .flatten()
-            .next()
-            .unwrap()
-            .path();
+        let kept = fs::read_dir(
+            config
+                .state_file
+                .parent()
+                .unwrap()
+                .join("discarded/claude/demo"),
+        )
+        .unwrap()
+        .flatten()
+        .next()
+        .unwrap()
+        .path();
         assert_eq!(
             fs::read_to_string(kept.join("extra.md")).unwrap(),
             "only here\n",
@@ -1781,7 +1789,12 @@ mod discard_tests {
         let line = discard_unit(&config, "demo", &alpha(&config)).unwrap();
         assert_eq!(line, "= alpha (already current)");
         assert!(
-            !config.state_file.parent().unwrap().join("discarded").exists(),
+            !config
+                .state_file
+                .parent()
+                .unwrap()
+                .join("discarded")
+                .exists(),
             "nothing differed, so nothing is kept"
         );
         let _ = fs::remove_dir_all(&root);
@@ -1804,7 +1817,10 @@ mod discard_tests {
         fs::remove_file(config.destination.join("alpha/references/guide.md")).unwrap();
         let plan = replacement_plan(&config, "demo", &alpha(&config)).unwrap();
         assert_eq!(plan.added, vec!["references/guide.md"]);
-        assert!(plan.replaced.is_empty() && plan.removed.is_empty(), "{plan:?}");
+        assert!(
+            plan.replaced.is_empty() && plan.removed.is_empty(),
+            "{plan:?}"
+        );
         let _ = fs::remove_dir_all(&root);
     }
 }

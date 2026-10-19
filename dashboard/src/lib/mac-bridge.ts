@@ -24,6 +24,8 @@ export interface MacResponse {
   stale?: boolean;
   /** For a stale answer: when the copy was fetched, unix milliseconds. */
   fetched_at?: number | null;
+  /** Time the native side spent on the request, in milliseconds (`mac_request`). */
+  native_ms?: number;
 }
 
 /** Mirrors `STALE_BYTES_STATUS` in `src-tauri/src/sync.rs`: a byte answer from the device's copy. */

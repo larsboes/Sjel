@@ -241,4 +241,16 @@ export const places = {
     geocode_query: string | null;
     precision: 'venue' | 'city';
   }) => request<AssignPlaceResult>('/places/api/unplaced/assign', jsonInit('POST', body)),
+  create: (body: {
+    name?: string;
+    query?: string;
+    link?: string;
+    note?: string;
+    address?: string;
+    city?: string;
+    country_code?: string;
+    kind?: string;
+    latitude?: number;
+    longitude?: number;
+  }) => request<{ ok: boolean; id: string; place: unknown }>('/places/api/places', jsonInit('POST', body)),
 };

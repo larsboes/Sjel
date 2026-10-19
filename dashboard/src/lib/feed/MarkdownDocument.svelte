@@ -1,10 +1,13 @@
 <script lang="ts">
+  import MermaidDiagram from "$lib/feed/MermaidDiagram.svelte";
+
   type InlinePart =
     | { kind: "text" | "strong" | "code"; text: string }
     | { kind: "link"; text: string; href: string };
 
   type Block =
-    | { kind: "heading"; level: number; parts: InlinePart[] }
+    | { kind: "heading"; level: number; id: string; parts: InlinePart[] }
+    | { kind: "anchor"; id: string }
     | { kind: "paragraph" | "quote"; parts: InlinePart[] }
     | { kind: "list"; ordered: boolean; items: InlinePart[][] }
     | { kind: "code"; language: string; text: string }
@@ -31,12 +34,12 @@
     const resolved = resolveLink
       ? value.replace(/\[([^\]]+)]\(([^)\s]+)\)/g, (_, text: string, href: string) => `[${text}](${resolveLink(href)})`)
       : value;
-    const unlinked = resolveLink ? /\[([^\]]+)]\((?!https?:\/\/|\/)[^)]+\)/g : /\[([^\]]+)]\((?!https?:\/\/)[^)]+\)/g;
+    const unlinked = resolveLink ? /\[([^\]]+)]\((?!https?:\/\/|\/|#)[^)]+\)/g : /\[([^\]]+)]\((?!https?:\/\/)[^)]+\)/g;
     const readable = resolved.replace(unlinked, "$1");
     const parts: InlinePart[] = [];
     // A root-relative href is kept only when resolveLink produced it; without a resolver,
     // `unlinked` has already turned it into text.
-    const pattern = /(\[([^\]]+)]\((https?:\/\/[^)\s]+|\/[^)\s]*)\)|`([^`]+)`|\*\*([^*]+)\*\*)/g;
+    const pattern = /(\[([^\]]+)]\((https?:\/\/[^)\s]+|[\/#][^)\s]*)\)|`([^`]+)`|\*\*([^*]+)\*\*)/g;
     let cursor = 0;
     for (const match of readable.matchAll(pattern)) {
       const start = match.index ?? 0;
@@ -88,11 +91,19 @@
   function parseMarkdown(source: string): Block[] {
     const lines = source.split("\n");
     const parsed: Block[] = [];
+    const headingIds = new Set<string>();
     let index = 0;
 
     while (index < lines.length) {
       const line = lines[index];
       if (!line.trim() || /^\s*\[[^\]]+]:\s+\S+/.test(line)) {
+        index += 1;
+        continue;
+      }
+
+      const anchor = line.match(/^<a id="([\w-]+)"><\/a>$/);
+      if (anchor) {
+        parsed.push({ kind: "anchor", id: anchor[1] });
         index += 1;
         continue;
       }
@@ -112,10 +123,17 @@
 
       const heading = line.match(/^(#{1,6})\s+(.+)$/);
       if (heading) {
+        const parts = inlineParts(heading[2].replace(/\s+#+$/, ""));
+        const base = parts.map((part) => part.text).join("").toLowerCase()
+          .replace(/[^\p{L}\p{N}\p{M}_\s-]/gu, "").replace(/\s/g, "-");
+        let id = base;
+        for (let suffix = 1; headingIds.has(id); suffix += 1) id = `${base}-${suffix}`;
+        headingIds.add(id);
         parsed.push({
           kind: "heading",
           level: heading[1].length,
-          parts: inlineParts(heading[2].replace(/\s+#+$/, "")),
+          id,
+          parts,
         });
         index += 1;
         continue;
@@ -183,7 +201,7 @@
 {#snippet inline(parts: InlinePart[])}
   {#each parts as part}
     {#if part.kind === "link"}
-      {#if part.href.startsWith("/")}
+      {#if part.href.startsWith("/") || part.href.startsWith("#")}
         <a href={part.href}>{part.text}</a>
       {:else}
         <a href={part.href} target="_blank" rel="noreferrer">{part.text}</a>
@@ -200,11 +218,13 @@
 
 <div class="document" class:compact>
   {#each blocks as block}
-    {#if block.kind === "heading"}
+    {#if block.kind === "anchor"}
+      <span id={block.id}></span>
+    {:else if block.kind === "heading"}
       {#if block.level <= 2}
-        <h2>{@render inline(block.parts)}</h2>
+        <h2 id={block.id}>{@render inline(block.parts)}</h2>
       {:else}
-        <h3>{@render inline(block.parts)}</h3>
+        <h3 id={block.id}>{@render inline(block.parts)}</h3>
       {/if}
     {:else if block.kind === "paragraph"}
       <p>{@render inline(block.parts)}</p>
@@ -221,7 +241,11 @@
         </ul>
       {/if}
     {:else if block.kind === "code"}
-      <pre><code class:language={block.language}>{block.text}</code></pre>
+      {#if block.language === "mermaid"}
+        <MermaidDiagram source={block.text} />
+      {:else}
+        <pre><code class:language={block.language}>{block.text}</code></pre>
+      {/if}
     {:else if block.kind === "table"}
       <div class="table-wrap">
         <table>

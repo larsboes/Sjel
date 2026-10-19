@@ -35,10 +35,12 @@ tauri-plugin-local-network = { path = "../../plugins/local-network" }
 # https call to `<name>.ts.net` needs.
 reqwest = "0.13"
 getrandom = "0.3"
-sha2 = "0.10"
 # The phone's pinned-certificate client for the node's local-network listener (src/mac_bridge.rs,
 # PinnedCertificate; PRD Q119). Already in the tree through reqwest; declared to name its types.
 rustls = "0.23"
+# The axon-device-auth/v1 protocol and the pinned TLS client, shared with the devices capability
+# and apps/gpui-prototype (libs/device-auth).
+device-auth = { path = "../../libs/device-auth", features = ["pinned-tls"] }
 # The phone's local store (src/sync.rs): snapshot and outbox, PRD §10 A5 and the
 # "Library research" table's A4 row. Same requirement as the root workspace's
 # `[workspace.dependencies]` rusqlite; bundled, so iOS links its own SQLite.

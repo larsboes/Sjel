@@ -1,3 +1,12 @@
+<script module lang="ts">
+  import type { KindState } from "$lib/home/registry";
+
+  /// The last pass's kinds, kept across navigation. Leaving Home unmounts the page, so
+  /// without this every return painted an empty ladder and waited on seven reads again.
+  /// The next pass overwrites each kind as it settles.
+  let keptSources: Record<string, KindState> = {};
+</script>
+
 <script lang="ts">
   import { link } from "$lib/nav";
   import { goto } from "$app/navigation";
@@ -37,7 +46,6 @@
     decisionsFrom,
     rowComponent,
     runKinds,
-    type KindState,
   } from "$lib/home/registry";
   import {
     bandLabel,
@@ -74,7 +82,10 @@
   /// read settles" fix: one `await Promise.allSettled` over seven reads held `loading`
   /// true until the slowest capability answered, and the baseline capture at four seconds
   /// shows the header and nothing else.
-  let sources = $state<Record<string, KindState>>({});
+  let sources = $state<Record<string, KindState>>(keptSources);
+  $effect(() => {
+    keptSources = sources;
+  });
   let dismissed = $state<ReadonlySet<string>>(new Set());
   // The sidebar's compact card. No aggressive polling: /systems is the live dashboard, this
   // is a glance. Its beat is declared so the card can say when it did not land.
@@ -327,7 +338,6 @@
   $effect(() => {
     void reloadToken;
     const controller = new AbortController();
-    sources = {};
 
     void (async () => {
       // Local and fast, and awaited once before the fan-out because the capability list is

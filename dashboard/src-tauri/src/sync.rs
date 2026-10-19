@@ -42,7 +42,7 @@ pub const DB_FILE: &str = "axon-local.db";
 /// not full offline parity: edits still require the canonical node.
 pub const C1_PREFIXES: &[&str] = &["/interior/api/", "/inventory/api/"];
 pub const OFFLINE_PROJECTION_PATHS: &[&str] = &[
-    "/vault/api/tasks",
+    "/projects/api/tasks",
     "/vault/api/people",
     "/calendar/api/entries",
 ];
@@ -2548,7 +2548,7 @@ mod tests {
     #[test]
     fn bounded_offline_projections_are_explicit() {
         for path in [
-            "/vault/api/tasks",
+            "/projects/api/tasks",
             "/vault/api/people",
             "/calendar/api/entries",
             "/knowledge-graph/api/graph/unit/comms",

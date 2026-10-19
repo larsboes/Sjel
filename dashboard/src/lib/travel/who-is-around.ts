@@ -10,6 +10,7 @@ import type { LocatedPerson, PlanItem, TripStage } from '../api';
 export const AROUND_RADIUS_KM = 50;
 
 export interface AroundPerson {
+  entityId: string;
   person: string;
   placeName: string;
   distanceKm: number;
@@ -61,6 +62,7 @@ export function stageCoordinate(stage: TripStage): [number, number] | null {
 }
 
 export interface Host {
+  entityId: string;
   person: string;
   placeName: string;
   distanceKm: number;
@@ -94,6 +96,7 @@ export function aroundFromLocated(
     const distanceKm = haversineKm(destination, [person.latitude, person.longitude]);
     if (distanceKm > AROUND_RADIUS_KM) continue;
     around.push({
+      entityId: person.entity_id,
       person: person.name,
       placeName: person.place,
       distanceKm,
@@ -103,9 +106,9 @@ export function aroundFromLocated(
   }
   around.sort((a, b) => a.distanceKm - b.distanceKm);
   return {
-    around: around.map(({ person, placeName, distanceKm }) => ({ person, placeName, distanceKm })),
+    around: around.map(({ entityId, person, placeName, distanceKm }) => ({ entityId, person, placeName, distanceKm })),
     hosts: around
       .filter((p) => p.host)
-      .map(({ person, placeName, distanceKm, note }) => ({ person, placeName, distanceKm, note })),
+      .map(({ entityId, person, placeName, distanceKm, note }) => ({ entityId, person, placeName, distanceKm, note })),
   };
 }

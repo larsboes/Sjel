@@ -28,6 +28,7 @@
   import MapSurface from "$lib/map/MapSurface.svelte";
   import TripResultColumns from "$lib/travel/TripResultColumns.svelte";
   import Chip from "$lib/ui/Chip.svelte";
+  import TravelerChips from "$lib/travel/TravelerChips.svelte";
 
   interface Props {
     plan: TripPlan;
@@ -201,9 +202,7 @@
         {#each plan.transport_modes as mode (mode)}
           <Chip label={modeLabel(mode)} tone={MODE_TONE[mode] ?? "neutral"} />
         {/each}
-        {#if plan.travelers.length > 0}
-          <Chip label={plan.travelers.join(", ")} tone="neutral" />
-        {/if}
+        <TravelerChips {plan} />
       </div>
     </div>
     <div class="trip-head-actions">

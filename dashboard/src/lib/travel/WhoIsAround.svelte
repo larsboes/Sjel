@@ -48,28 +48,14 @@
     }),
   );
 
-  const personFor = (name: string): Entity | undefined =>
-    people.find((p) => p.name.toLowerCase() === name.toLowerCase());
-
-  function inspectPersonByName(name: string) {
-    const p = personFor(name);
-    if (p) {
-      const home = p.facts?.find((f) => f.predicate === "home_base")?.place;
-      const away = p.facts?.find((f) => f.predicate === "away")?.place;
-      const loc = away ? `${away} (away)` : home;
-      inspectorStore.inspectPerson({
-        id: p.id,
-        name: p.name,
-        location: loc,
-        relationship: (p.values?.relationship?.value as string) ?? undefined,
-        notes: p.note_ref ?? undefined,
-      });
-    } else {
-      inspectorStore.inspectPerson({
-        id: name,
-        name,
-      });
-    }
+  function inspectPerson(entityId: string, name: string) {
+    if (!/^ent:[^:]+$/.test(entityId)) return;
+    const person = people.find((p) => p.id === entityId && p.kind === "person");
+    inspectorStore.inspectPerson({
+      id: entityId,
+      name,
+      notes: person?.note_ref ?? undefined,
+    });
   }
 
   // "Where is someone": an away period (with dates) or a home base (without), written to
@@ -130,14 +116,7 @@
           <strong>
             {#each meetup.people as p, i (p)}
               {#if i > 0}, {/if}
-              <button
-                type="button"
-                class="person-chip-btn"
-                onclick={() => inspectPersonByName(p)}
-                use:tip={`Inspect ${p}`}
-              >
-                {p}
-              </button>
+              {p}
             {/each}
           </strong>
           <span>{meetup.title}</span>
@@ -165,12 +144,12 @@
         <p class="meta">Nobody you know is nearby that day.</p>
       {:else}
         <p class="when">
-          {#each leg.around as p, i (p.person)}
+          {#each leg.around as p, i (p.entityId)}
             {#if i > 0}, {/if}
             <button
               type="button"
               class="person-chip-btn"
-              onclick={() => inspectPersonByName(p.person)}
+              onclick={() => inspectPerson(p.entityId, p.person)}
               use:tip={`Inspect ${p.person}`}
             >
               {p.person}
@@ -193,12 +172,12 @@
       {#if leg.hosts.length > 0}
         <p class="stay-line">
           <Icon name="home" size={12} /> Could stay with:
-          {#each leg.hosts as h, i (h.person)}
+          {#each leg.hosts as h, i (h.entityId)}
             {#if i > 0}, {/if}
             <button
               type="button"
               class="person-chip-btn"
-              onclick={() => inspectPersonByName(h.person)}
+              onclick={() => inspectPerson(h.entityId, h.person)}
               use:tip={`Inspect host ${h.person}`}
             >
               {h.person}

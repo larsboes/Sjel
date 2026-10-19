@@ -10,7 +10,8 @@
   import Property from "$lib/ui/Property.svelte";
   import Chip from "$lib/ui/Chip.svelte";
   import type { Field } from "$lib/ui/collection";
-  import { TAGS, captures, label, route, routeFor, type Capture, type Route } from "$lib/capture";
+  import { TAGS, captures, extractPrice, label, route, routeFor, type Capture, type Route } from "$lib/capture";
+  import { centsFrom, euro } from "$lib/inventory/money";
 
   let rows = $state<Capture[]>([]);
   let error = $state<string | null>(null);
@@ -80,7 +81,7 @@
     for (const r of routable) await act(() => route(r, routeFor(r)!));
   }
 
-  const ROUTE_LABEL: Record<Route, string> = { wishlist: "To wishlist", feed: "To feed" };
+  const ROUTE_LABEL: Record<Route, string> = { wishlist: "To wishlist", feed: "To feed", places: "To places" };
 
   onMount(load);
 </script>
@@ -133,6 +134,20 @@
 {#if open}
   <SidePeek title={label(open)} eyebrow={open.tag ? `#${open.tag}` : "Untagged"} onClose={() => (peek = null)}>
     <Property label="Text" kind="textarea" value={open.text} onCommit={(v) => act(() => captures.patch(open.id, { text: v ?? "" }))} />
+    {#if routeFor(open) === "wishlist"}
+      {@const p = extractPrice(open.text).price_cents}
+      <Property
+        label="Price"
+        value={typeof p === "number" ? euro(p) : ""}
+        placeholder="39,90"
+        onCommit={(v) => {
+          const cents = centsFrom(v);
+          const clean = extractPrice(open?.text).label;
+          const next = typeof cents === "number" ? (clean ? `${clean} ${(cents / 100).toFixed(2)} €` : `${(cents / 100).toFixed(2)} €`) : clean;
+          return act(() => captures.patch(open!.id, { text: next }));
+        }}
+      />
+    {/if}
     <Property label="Tag" kind="select" value={open.tag ?? ""} options={tagOptions} onCommit={(v) => act(() => captures.patch(open.id, { tag: (v ?? "") as Capture["tag"] }))} />
     <Property label="Status" kind="select" value={open.status} options={statusOptions} onCommit={(v) => v && act(() => captures.patch(open.id, { status: v as Capture["status"] }))} />
     {#if open.url}<Property label="Link" value={open.url} readonly />{/if}

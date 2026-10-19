@@ -13,7 +13,8 @@
   import CompanionRail from "$lib/travel/CompanionRail.svelte";
   import { stageCoordinate } from "$lib/travel/who-is-around";
   import TravelerProfileModal from "$lib/travel/TravelerProfileModal.svelte";
-  import PlaceField from "$lib/travel/PlaceField.svelte";
+  import TravelCandidatesRail from "$lib/travel/TravelCandidatesRail.svelte";
+  import ObsidianTripsRail from "$lib/travel/ObsidianTripsRail.svelte";
   import {
     TRIP_LAYERS,
     tripFitKey,
@@ -145,7 +146,7 @@
   let obsidianNotice = $state<string | null>(null);
   let importOrigin = $state<PlaceRef | null>(null);
   let importOriginNeeded = $state(false);
-  let importOriginField: HTMLDivElement | undefined = $state();
+  let obsidianTripsRail = $state<{ focusOriginField: () => void } | null>(null);
   let mapOpen = $state(false);
   let travelCandidates = $state<TravelCandidateAssessment[]>([]);
   let travelCandidatesLoading = $state(true);
@@ -533,16 +534,6 @@
     travelCandidatesLoading = false;
   }
 
-  function travelCandidateLabel(candidate: TravelCandidateAssessment): string {
-    switch (candidate.state) {
-      case "matching_trip": return "Matches a trip";
-      case "free_window": return "Free window";
-      case "needs_travel_day": return "Travel day needed";
-      case "conflicts": return "Calendar says no";
-      case "date_unresolved": return "Date unresolved";
-      case "calendar_unavailable": return "Calendar unavailable";
-    }
-  }
 
   async function addTravelCandidate(candidate: TravelCandidateAssessment): Promise<void> {
     const match = candidate.plan_match;
@@ -1186,7 +1177,7 @@
     error = null;
     importOriginNeeded = true;
     obsidianNotice = "A shared origin is required before importing.";
-    queueMicrotask(() => importOriginField?.querySelector("input")?.focus());
+    obsidianTripsRail?.focusOriginField();
   }
 
   function toggleTransportMode(mode: TransportMode): void {
@@ -1396,156 +1387,31 @@
 
     <Rail label="Travel review and planning">
       <RailGroup title="Review" count={travelReviewCount}>
-        <RailSection label="Candidates" count={travelCandidates.length}>
-          <p class="rail-hint">
-            Far events matched to dated trip destinations or checked against your Calendar.
-          </p>
+        <TravelCandidatesRail
+          candidates={travelCandidates}
+          loading={travelCandidatesLoading}
+          notice={travelCandidateNotice}
+          savingId={travelCandidateSaving}
+          savedIds={savedTravelCandidates}
+          onAddCandidate={(candidate) => void addTravelCandidate(candidate)}
+          onOpenPlan={(plan) => void openPlan(plan)}
+          onSeedPlan={(candidate) => seedPlanFromCandidate(candidate)}
+          onRefresh={() => void loadTravelCandidates()}
+        />
 
-          {#if travelCandidateNotice}
-            <p class="rail-notice" aria-live="polite">{travelCandidateNotice}</p>
-          {/if}
-
-          {#if travelCandidatesLoading}
-            <p class="rail-empty">Checking Scouting, Trips, and Calendar…</p>
-          {:else if travelCandidates.length === 0}
-            <p class="rail-empty">No undismissed travel-candidate events are waiting.</p>
-          {:else}
-            <ol class="candidate-list">
-              {#each travelCandidates as candidate (candidate.opportunity.id)}
-                <li class:blocked={candidate.state === "conflicts"}>
-                  <p class="candidate-when">
-                    <strong>{shortDate(candidate.opportunity.starts_at.slice(0, 10))}</strong>
-                    <span>{candidate.opportunity.city || candidate.opportunity.location || "Place open"}</span>
-                  </p>
-                  <span class="candidate-state {candidate.state}">{travelCandidateLabel(candidate)}</span>
-                  <a class="candidate-title" href={candidate.opportunity.url} target="_blank" rel="noreferrer">
-                    {candidate.opportunity.title}
-                  </a>
-                  <small use:tip={candidate.reason}>{candidate.reason}</small>
-                  <div class="candidate-actions">
-                    {#if candidate.plan_match}
-                      <button
-                        type="button"
-                        disabled={travelCandidateSaving !== null || savedTravelCandidates.has(candidate.opportunity.id)}
-                        onclick={() => void addTravelCandidate(candidate)}
-                      >
-                        <Icon
-                          name={savedTravelCandidates.has(candidate.opportunity.id) ? "check" : "plus"}
-                          size={13}
-                        />
-                        {savedTravelCandidates.has(candidate.opportunity.id)
-                          ? "Added"
-                          : travelCandidateSaving === candidate.opportunity.id
-                            ? "Adding…"
-                            : "Add to trip"}
-                      </button>
-                      <button type="button" onclick={() => void openPlan(candidate.plan_match!.plan)}>
-                        Open trip
-                      </button>
-                    {:else if ["free_window", "needs_travel_day"].includes(candidate.state)}
-                      <button type="button" onclick={() => seedPlanFromCandidate(candidate)}>
-                        <Icon name="map-pin" size={13} /> Plan around event
-                      </button>
-                    {/if}
-                  </div>
-                </li>
-              {/each}
-            </ol>
-          {/if}
-
-          <button
-            class="btn btn-outline rail-action"
-            type="button"
-            disabled={travelCandidatesLoading}
-            onclick={() => void loadTravelCandidates()}
-          >
-            <Icon name={travelCandidatesLoading ? "loader" : "refresh"} size={13} />
-            {travelCandidatesLoading ? "Checking…" : "Refresh"}
-          </button>
-        </RailSection>
-
-        <RailSection label="Obsidian" count={obsidianPendingCount}>
-          <p class="rail-hint">
-            Scans only notes marked as trips. Everything remains unchanged until import.
-          </p>
-
-          {#if obsidianNotice}
-            <p class="rail-notice" aria-live="polite">{obsidianNotice}</p>
-          {/if}
-
-          {#if obsidianCandidates.length > 0}
-            <div
-              class="import-origin"
-              class:missing={importOriginNeeded && !importOrigin}
-              bind:this={importOriginField}
-            >
-              <PlaceField
-                label="Origin for imports"
-                placeholder="Applies to the trips imported now"
-                bind:place={importOrigin}
-              />
-              <p>
-                {#if importOriginNeeded && !importOrigin}
-                  Enter an origin or select one from the suggestions.
-                {:else}
-                  Missing origins are not guessed. You can change them later for each trip.
-                {/if}
-              </p>
-            </div>
-            <ol class="import-list">
-              {#each obsidianCandidates as candidate (candidate.reference)}
-                <li>
-                  <div>
-                    <strong>{candidate.title}</strong>
-                    <span>
-                      {shortDate(candidate.date_start)} – {shortDate(candidate.date_end)}
-                      · {candidate.destination?.name ?? "Destination open"}
-                    </span>
-                    {#if candidate.issues.length > 0}
-                      <small>{candidate.issues.join(" · ")}</small>
-                    {:else if candidate.travelers.length > 0}
-                      <small>{candidate.travelers.join(", ")}</small>
-                    {/if}
-                  </div>
-                  {#if candidate.imported_plan_id}
-                    <span class="imported"><Icon name="check" size={13} /> Imported</span>
-                  {:else}
-                    <button
-                      type="button"
-                      disabled={candidate.issues.length > 0 || obsidianImportingAll || obsidianImporting !== null}
-                      onclick={() => void importObsidian(candidate)}
-                    >
-                      {obsidianImporting === candidate.reference ? "Importing…" : "Import"}
-                    </button>
-                  {/if}
-                </li>
-              {/each}
-            </ol>
-          {/if}
-
-          <div class="rail-actions">
-            <button
-              class="btn btn-outline"
-              type="button"
-              disabled={obsidianScanning || obsidianImportingAll}
-              onclick={() => void scanObsidian()}
-            >
-              <Icon name={obsidianScanning ? "loader" : "database"} size={13} />
-              {obsidianScanning ? "Scanning…" : "Scan"}
-            </button>
-            {#if obsidianCandidates.length > 0}
-              <button
-                class="btn btn-primary"
-                type="button"
-                disabled={obsidianReadyCount === 0 || obsidianImportingAll || obsidianImporting !== null}
-                onclick={() => void importAllObsidian()}
-              >
-                <Icon name={obsidianImportingAll ? "loader" : "check"} size={13} />
-                {obsidianImportingAll ? "Importing…" : `Import all (${obsidianReadyCount})`}
-              </button>
-            {/if}
-          </div>
-        </RailSection>
+        <ObsidianTripsRail
+          bind:this={obsidianTripsRail}
+          candidates={obsidianCandidates}
+          scanning={obsidianScanning}
+          importing={obsidianImporting}
+          importingAll={obsidianImportingAll}
+          notice={obsidianNotice}
+          bind:importOrigin
+          bind:importOriginNeeded
+          onScan={() => void scanObsidian()}
+          onImport={(candidate) => void importObsidian(candidate)}
+          onImportAll={() => void importAllObsidian()}
+        />
 
         <RailSection label="Companions" count={companionProposals.length}>
           <CompanionRail
@@ -1660,9 +1526,6 @@
     background: var(--success-soft);
   }
 
-  .editing-hidden {
-    display: none;
-  }
 
   .travel-nav {
     display: flex;
@@ -1711,306 +1574,6 @@
 
   /* Candidate rows in the rail: when and where, what it is, why it surfaced, then
    * what you can do about it — the reading order the calendar's inboxes use. */
-  .candidate-list {
-    margin: 0;
-    padding: 0;
-    list-style: none;
-  }
-
-  .candidate-list li {
-    padding: 0.55rem 0;
-    border-top: 1px solid var(--card-border);
-  }
-
-  .candidate-list li.blocked .candidate-title {
-    color: var(--text-secondary);
-  }
-
-  .candidate-when {
-    display: flex;
-    align-items: baseline;
-    gap: 0.35rem;
-    margin: 0;
-    min-width: 0;
-  }
-
-  .candidate-when strong {
-    font-size: var(--text-xs);
-  }
-
-  .candidate-when span {
-    overflow: hidden;
-    color: var(--text-tertiary);
-    font-size: 0.625rem;
-    text-overflow: ellipsis;
-    white-space: nowrap;
-  }
-
-  .candidate-title {
-    display: block;
-    margin-top: 0.15rem;
-    color: var(--text-primary);
-    font-size: var(--text-sm);
-    font-weight: 600;
-    line-height: 1.3;
-  }
-
-  .candidate-title:hover {
-    color: var(--primary);
-  }
-
-  .candidate-list small {
-    display: block;
-    margin-top: 0.2rem;
-    color: var(--text-tertiary);
-    font-size: var(--text-2xs);
-    line-height: 1.4;
-  }
-
-  .candidate-state {
-    display: inline-block;
-    margin-top: 0.25rem;
-    padding: 0.12rem 0.3rem;
-    border-radius: 999px;
-    background: var(--surface);
-    color: var(--text-secondary);
-    font-family: var(--font-mono);
-    font-size: 0.5625rem;
-  }
-
-  .candidate-state.matching_trip,
-  .candidate-state.free_window {
-    background: var(--success-soft);
-    color: var(--success);
-  }
-
-  .candidate-state.needs_travel_day {
-    background: var(--warning-soft);
-    color: var(--warning-ink);
-  }
-
-  .candidate-state.conflicts {
-    background: var(--danger-soft);
-    color: var(--danger);
-  }
-
-  .candidate-actions {
-    display: flex;
-    flex-wrap: wrap;
-    gap: 0.3rem;
-    margin-top: 0.45rem;
-  }
-
-  .candidate-actions button {
-    display: inline-flex;
-    flex: 1;
-    align-items: center;
-    justify-content: center;
-    gap: 0.25rem;
-    padding: 0.3rem 0.5rem;
-    border: 0;
-    border-radius: var(--radius-sm);
-    background: var(--primary-soft);
-    color: var(--primary);
-    font: inherit;
-    font-size: var(--text-2xs);
-    cursor: pointer;
-  }
-
-  .candidate-actions button:disabled {
-    color: var(--text-tertiary);
-    cursor: default;
-  }
-
-  /* Shared by both rail sections: the line that explains the list, the line that
-   * reports what just happened, the line that says nothing is waiting. */
-  .rail-hint {
-    margin: 0 0 0.4rem;
-    color: var(--text-secondary);
-    font-size: var(--text-xs);
-    line-height: 1.45;
-  }
-
-  .rail-notice {
-    margin: 0 0 0.4rem;
-    padding: 0.4rem 0.5rem;
-    border-radius: var(--radius-sm);
-    background: var(--primary-soft);
-    color: var(--text-secondary);
-    font-size: 0.72rem;
-    line-height: 1.4;
-  }
-
-  .rail-empty {
-    margin: 0;
-    color: var(--text-tertiary);
-    font-size: 0.78rem;
-  }
-
-  .rail-action,
-  .rail-actions {
-    margin-top: 0.5rem;
-  }
-
-  .rail-action {
-    width: 100%;
-  }
-
-  .rail-actions {
-    display: flex;
-    gap: 0.3rem;
-  }
-
-  .rail-action,
-  .rail-actions .btn {
-    flex: 1;
-    padding: 0.3rem 0.5rem;
-    font-size: 0.72rem;
-  }
-
-  .rail-actions .btn:disabled,
-  .rail-action:disabled {
-    opacity: 0.48;
-    cursor: not-allowed;
-  }
-
-  .map-top-bar {
-    position: absolute;
-    top: 1.25rem;
-    right: 1.25rem;
-    z-index: 2;
-  }
-
-  .map-link-btn {
-    display: inline-flex;
-    align-items: center;
-    gap: 0.35rem;
-    padding: 0.3rem 0.6rem;
-    border: 1px solid var(--card-border);
-    border-radius: var(--radius-sm);
-    background: var(--surface);
-    color: var(--text-primary);
-    font-size: var(--text-2xs);
-    font-weight: 600;
-    text-decoration: none;
-    box-shadow: 0 1px 4px rgb(0 0 0 / 12%);
-    transition: background-color var(--motion-fast) ease, border-color var(--motion-fast) ease;
-  }
-
-  .map-link-btn:hover {
-    background: var(--card-bg);
-    border-color: var(--primary);
-    color: var(--primary);
-  }
-
-  .past-map-wrap {
-    position: relative;
-    grid-column: 1 / -1;
-  }
-
-
-
-  .import-origin p {
-    margin: 0.15rem 0 0;
-    color: var(--text-tertiary);
-    font-size: var(--text-2xs);
-  }
-
-  .import-origin {
-    display: grid;
-    gap: 0.4rem;
-    margin-bottom: 0.4rem;
-    padding: 0.5rem 0.6rem;
-    border-radius: var(--radius-sm);
-    background: var(--surface);
-  }
-
-  .import-origin.missing {
-    background: var(--warning-soft);
-  }
-
-  .import-origin.missing p {
-    color: var(--warning-ink);
-    font-weight: 600;
-  }
-
-  .import-origin.missing :global(input) {
-    border-color: var(--warning);
-    box-shadow: 0 0 0 2px var(--warning-soft);
-  }
-
-  .import-list {
-    margin: 0;
-    padding: 0;
-    list-style: none;
-  }
-
-  .import-list li {
-    display: grid;
-    grid-template-columns: minmax(0, 1fr) auto;
-    gap: 0.5rem;
-    align-items: center;
-    padding: 0.55rem 0;
-    border-top: 1px solid var(--card-border);
-  }
-
-  .import-list strong,
-  .import-list span,
-  .import-list small {
-    display: block;
-  }
-
-  .import-list strong {
-    font-size: var(--text-xs);
-  }
-
-  .import-list span,
-  .import-list small {
-    margin-top: 0.15rem;
-    color: var(--text-tertiary);
-    font-size: 0.625rem;
-  }
-
-  .import-list small {
-    color: var(--warning-ink);
-  }
-
-  .import-list button,
-  .imported {
-    padding: 0.35rem 0.5rem;
-    border: 0;
-    border-radius: var(--radius-sm);
-    background: var(--primary-soft);
-    color: var(--primary);
-    font: inherit;
-    font-size: var(--text-2xs);
-  }
-
-  .import-list button {
-    cursor: pointer;
-  }
-
-  .import-list button:disabled {
-    color: var(--text-tertiary);
-    cursor: default;
-  }
-
-  .import-list .imported {
-    display: inline-flex;
-    align-items: center;
-    gap: 0.25rem;
-    margin: 0;
-    color: var(--success);
-  }
-
-  .empty-history {
-    margin: 0;
-    padding: 1rem;
-    border: 1px dashed var(--card-border);
-    border-radius: var(--radius-md);
-    color: var(--text-tertiary);
-    font-size: var(--text-xs);
-  }
 
 
   @media (width >= 64rem) {

@@ -185,8 +185,8 @@ can see.
 
 **Data class is shown only where a capability publishes one.** Mail and finance publish one,
 `GET /comms/feed` began publishing one on 2026-09-06 (`capabilities/comms/README.md`), and on
-2026-09-08 the calendar entry lists, `GET /vault/api/tasks` and `GET /scouting/opportunities`
-joined them (B50). **The trip plan is the one list left**, and it stays silent on purpose: what
+2026-09-08 the calendar entry lists, the task list (since 2026-10-18 `GET /projects/api/tasks`)
+and `GET /scouting/opportunities` joined them (B50). **The trip plan is the one list left**, and it stays silent on purpose: what
 a plan naming its travellers is worth is an open operator question, not the shell's to answer,
 and this shell will not invent a class it does not own. `tools/dashboard-home-data-class.test.ts`
 holds the trip and trip-retrospective kinds on the silent list so that filling one in is a test

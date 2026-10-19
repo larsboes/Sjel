@@ -1,28 +1,10 @@
 <script lang="ts">
-  /**
-   * One Mermaid diagram, rendered from source the server already validated.
-   *
-   * Mermaid is loaded by dynamic import inside this component and nowhere else,
-   * so its bundle is code-split onto the reader route rather than shipped to
-   * every page — the same shape the Trips workspace uses for maplibre-gl
-   * (dashboard/README.md). `startOnLoad` stays off: the reader decides when a
-   * diagram appears, and a library that scans the document on load would also
-   * try to render the code fences inside an article body.
-   *
-   * Colours come from `mermaid-theme.ts` and nowhere else. Mermaid resolves its
-   * theme at `initialize`, not at render, so a theme change means re-initialising
-   * and drawing again; the observer below is what notices. It watches the root
-   * element's class rather than taking a prop, because the layout owns the
-   * toggle and does not know this component exists.
-   *
-   * The server's `extract_mermaid` gate means an unrenderable string never
-   * reaches here. A parse error is therefore a real one and is shown rather than
-   * swallowed, with the source kept visible so the failure is inspectable.
-   */
+  /** Render a diagram lazily, with the source visible if parsing fails. */
   import { onMount } from "svelte";
   import { mermaidConfig } from "$lib/feed/mermaid-theme";
 
   let { source }: { source: string } = $props();
+  const instanceId = $props.id();
 
   let svg = $state<string | null>(null);
   let error = $state<string | null>(null);
@@ -32,13 +14,13 @@
   async function draw(diagram: string, darkMode: boolean) {
     const run = ++sequence;
     error = null;
+    svg = null;
     try {
       const mermaid = (await import("mermaid")).default;
       mermaid.initialize(mermaidConfig(darkMode));
-      // A fresh id per render: Mermaid keys its internal definitions by id and
-      // reuses a stale one otherwise, which shows the previous diagram after a
-      // regenerate or a theme flip.
-      const { svg: rendered } = await mermaid.render(`axon-mermaid-${run}`, diagram);
+      // Multiple diagrams on one page must not share Mermaid's SVG definition IDs.
+      const id = `sjel-mermaid-${instanceId.replace(/[^a-zA-Z0-9_-]/g, "")}-${run}`;
+      const { svg: rendered } = await mermaid.render(id, diagram);
       if (run !== sequence) return; // a later run already superseded this one
       svg = rendered;
     } catch (cause) {
@@ -60,13 +42,13 @@
 
   $effect(() => {
     if (source) void draw(source, dark);
+    return () => { sequence += 1; };
   });
 </script>
 
 <figure class="diagram" class:dark>
   {#if svg}
-    <!-- Mermaid returns an SVG string; there is no element API to bind to. The
-         input is the server-validated diagram source, not operator HTML. -->
+    <!-- Mermaid renders SVG under the strict security policy in mermaid-theme.ts. -->
     <!-- eslint-disable-next-line svelte/no-at-html-tags -->
     {@html svg}
   {:else if error}

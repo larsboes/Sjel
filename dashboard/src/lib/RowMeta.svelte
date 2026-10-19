@@ -11,7 +11,7 @@
    * beside `whyHere` whenever a model produced the rank.
    *
    * Every optional field renders nothing when null. The data class is shown where a
-   * capability publishes one — mail, feed, finance, calendar, vault tasks and scouting
+   * capability publishes one — mail, feed, finance, calendar, tasks and scouting
    * since B50 — and is silent where none does, rather than guessed: the dashboard owns no
    * data (dashboard/README.md:7-9) and a class it invented would be a false provenance
    * claim.

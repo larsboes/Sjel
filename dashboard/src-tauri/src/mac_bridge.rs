@@ -51,7 +51,6 @@ use std::time::Duration;
 
 use reqwest::Url;
 use serde::{Deserialize, Serialize};
-use sha2::{Digest, Sha256};
 use tauri::{AppHandle, Manager, Runtime, State};
 
 use crate::sync::{self, LocalStore, Outgoing, Reply, SendError, SyncStatus, Transport};
@@ -105,6 +104,7 @@ pub const ALLOWED_PATHS: &[&str] = &[
     "/knowledge-graph/",
     "/macmon/",
     "/places/",
+    "/projects/api/",
     "/scouting/",
     "/transit/",
     "/api/",
@@ -277,19 +277,7 @@ pub fn validate_base(base: &str, allow_loopback: bool) -> Result<Url, String> {
 /// Wi-Fi, and a public node has a real certificate and belongs in the base URL.
 pub fn validate_local(base: &str, pin_sha256: &str) -> Result<LocalEndpoint, String> {
     let url = validate_base(base, false)?;
-    let host = url.host_str().unwrap_or_default().to_ascii_lowercase();
-    let local_name = host
-        .strip_suffix(".local")
-        .is_some_and(|name| !name.is_empty() && !name.contains('.'));
-    let private = match host.trim_start_matches('[').trim_end_matches(']').parse() {
-        Ok(std::net::IpAddr::V4(ip)) => ip.is_private(),
-        Ok(std::net::IpAddr::V6(ip)) => {
-            let first = ip.segments()[0];
-            (first & 0xfe00) == 0xfc00 || (first & 0xffc0) == 0xfe80
-        }
-        Err(_) => false,
-    };
-    if !local_name && !private {
+    if !device_auth::is_local_host(url.host_str().unwrap_or_default()) {
         return Err("a local address must be <name>.local or a private IP address".into());
     }
     let pin = pin_sha256.trim().to_ascii_lowercase();
@@ -518,38 +506,9 @@ fn classify(error: reqwest::Error, what: &str) -> SendError {
     }
 }
 
-/// The requests a device sends before it is registered. Mirrors `unsigned_pairing_route` in
-/// `libs/sjel-server/src/auth.rs`, which admits exactly these on the LAN listener.
-fn unsigned_pairing_request(method: &str, path: &str) -> bool {
-    let path = path.split('?').next().unwrap_or(path);
-    match method {
-        "POST" => path == "/devices/api/pairing/claims" || path == "/devices/api/pairing/requests",
-        "GET" => path
-            .strip_prefix("/devices/api/pairing/requests/")
-            .is_some_and(|id| !id.is_empty() && !id.contains('/')),
-        _ => false,
-    }
-}
-
-fn signed_path(path: &str) -> &str {
-    if path == "/api" || path.starts_with("/api/") {
-        return path;
-    }
-    // The shell mounts capabilities at /<name>/..., then strips that first segment before
-    // forwarding. Sign the upstream target, not the shell mount.
-    path[1..].find('/').map_or("/", |index| &path[index + 1..])
-}
-
-fn body_digest(body: &[u8]) -> String {
-    Sha256::digest(body)
-        .iter()
-        .map(|byte| format!("{byte:02x}"))
-        .collect()
-}
-
-fn hex(bytes: &[u8]) -> String {
-    bytes.iter().map(|byte| format!("{byte:02x}")).collect()
-}
+// The protocol itself lives in `libs/device-auth`, shared with the devices capability that
+// verifies it and the GPUI app that also signs it.
+use device_auth::unsigned_pairing_request;
 
 fn signed_request(
     signer: &dyn RequestSigner,
@@ -557,32 +516,19 @@ fn signed_request(
     path: &str,
     body: &[u8],
 ) -> Result<[(String, String); 4], String> {
-    let timestamp = now_ms() / 1000;
-    let mut nonce_bytes = [0u8; 16];
-    getrandom::fill(&mut nonce_bytes).map_err(|error| format!("secure random source: {error}"))?;
-    let nonce = hex(&nonce_bytes);
-    let message = format!(
-        "axon-device-auth/v1\n{}\n{}\n{}\n{}\n{}\n{}\n",
+    let headers = device_auth::signed_headers(
         signer.device_id(),
-        timestamp,
-        nonce,
-        method.to_ascii_uppercase(),
-        signed_path(path),
-        body_digest(body),
-    );
-    let signature = hex(&signer.sign(message.as_bytes())?);
-    Ok([
-        // Still the legacy names, on purpose (ISA ISC-28): a server accepts both since
-        // 2026-10-01, and a phone build sending `x-sjel-*` would fail against a server that has
-        // not restarted since. Switch once every server runs the renaming gate.
-        ("x-axon-device-id".into(), signer.device_id().into()),
-        ("x-axon-timestamp".into(), timestamp.to_string()),
-        ("x-axon-nonce".into(), nonce),
-        ("x-axon-signature".into(), signature),
-    ])
+        now_ms() / 1000,
+        method,
+        path,
+        body,
+        |message| signer.sign(message),
+    )?;
+    Ok(headers.map(|(name, value)| (name.to_owned(), value)))
 }
 
 /// One address of the node and the client that reaches it.
+#[derive(Clone)]
 struct Endpoint {
     base: Url,
     client: reqwest::Client,
@@ -591,6 +537,7 @@ struct Endpoint {
     local: bool,
 }
 
+#[derive(Clone)]
 pub struct ReqwestTransport {
     endpoints: Vec<Endpoint>,
     signer: Option<Arc<dyn RequestSigner>>,
@@ -604,8 +551,8 @@ const LOCAL_CONNECT_TIMEOUT: Duration = Duration::from_millis(1500);
 /// After the local endpoint failed, go straight to the main address for this long.
 const LOCAL_RETRY_AFTER_MS: i64 = 60_000;
 
-/// When the local endpoint last failed, unix milliseconds. Process-wide, because a transport is
-/// built per request.
+/// When the local endpoint last failed, unix milliseconds. Process-wide, so a transport built
+/// after a settings change still skips a local endpoint that just failed.
 static LOCAL_FAILED_AT: std::sync::atomic::AtomicI64 = std::sync::atomic::AtomicI64::new(0);
 
 impl ReqwestTransport {
@@ -739,99 +686,46 @@ impl Transport for ReqwestTransport {
     }
 }
 
-fn decode_pin(pin: &str) -> Result<[u8; 32], String> {
-    let bytes = pin.as_bytes();
-    if bytes.len() != 64 {
-        return Err("certificate pin must be 64 hexadecimal characters".into());
-    }
-    let mut out = [0u8; 32];
-    for (i, pair) in bytes.chunks_exact(2).enumerate() {
-        let text = std::str::from_utf8(pair).map_err(|_| "certificate pin is not hexadecimal")?;
-        out[i] = u8::from_str_radix(text, 16).map_err(|_| "certificate pin is not hexadecimal")?;
-    }
-    Ok(out)
-}
+use device_auth::{decode_pin, pinned_tls};
 
-/// A TLS client that accepts exactly one certificate, identified by its SHA-256.
-///
-/// The node's local listener has a self-signed certificate (`libs/sjel-server/src/lan.rs`), so no
-/// chain or host name can be checked; the pin replaces both. The handshake signature is still
-/// verified with the provider's own functions, which proves the peer holds the pinned key.
-#[derive(Debug)]
-struct PinnedCertificate {
-    pin: [u8; 32],
-    provider: Arc<rustls::crypto::CryptoProvider>,
-}
+/// The transport built for the last settings and device id seen. A `reqwest::Client` owns the
+/// connection pool, so building one per request opened a new TCP and TLS connection for every
+/// call. Cloning a transport clones the client handles and shares their pools.
+type TransportKey = (Settings, Option<String>);
+static TRANSPORT: std::sync::Mutex<Option<(TransportKey, ReqwestTransport)>> =
+    std::sync::Mutex::new(None);
 
-impl rustls::client::danger::ServerCertVerifier for PinnedCertificate {
-    fn verify_server_cert(
-        &self,
-        end_entity: &rustls::pki_types::CertificateDer<'_>,
-        _intermediates: &[rustls::pki_types::CertificateDer<'_>],
-        _server_name: &rustls::pki_types::ServerName<'_>,
-        _ocsp_response: &[u8],
-        _now: rustls::pki_types::UnixTime,
-    ) -> Result<rustls::client::danger::ServerCertVerified, rustls::Error> {
-        if Sha256::digest(end_entity.as_ref()).as_slice() == self.pin {
-            Ok(rustls::client::danger::ServerCertVerified::assertion())
-        } else {
-            Err(rustls::Error::General(
-                "the certificate is not the one this device paired with".into(),
-            ))
-        }
-    }
-
-    fn verify_tls12_signature(
-        &self,
-        message: &[u8],
-        cert: &rustls::pki_types::CertificateDer<'_>,
-        dss: &rustls::DigitallySignedStruct,
-    ) -> Result<rustls::client::danger::HandshakeSignatureValid, rustls::Error> {
-        rustls::crypto::verify_tls12_signature(
-            message,
-            cert,
-            dss,
-            &self.provider.signature_verification_algorithms,
-        )
-    }
-
-    fn verify_tls13_signature(
-        &self,
-        message: &[u8],
-        cert: &rustls::pki_types::CertificateDer<'_>,
-        dss: &rustls::DigitallySignedStruct,
-    ) -> Result<rustls::client::danger::HandshakeSignatureValid, rustls::Error> {
-        rustls::crypto::verify_tls13_signature(
-            message,
-            cert,
-            dss,
-            &self.provider.signature_verification_algorithms,
-        )
-    }
-
-    fn supported_verify_schemes(&self) -> Vec<rustls::SignatureScheme> {
-        self.provider
-            .signature_verification_algorithms
-            .supported_schemes()
-    }
-}
-
-fn pinned_tls(pin: [u8; 32]) -> Result<rustls::ClientConfig, String> {
-    // Named, not the process default: `builder()` panics when a tree enables two providers.
-    let provider = Arc::new(rustls::crypto::aws_lc_rs::default_provider());
-    let mut config = rustls::ClientConfig::builder_with_provider(provider.clone())
-        .with_safe_default_protocol_versions()
-        .map_err(|e| format!("tls versions: {e}"))?
-        .dangerous()
-        .with_custom_certificate_verifier(Arc::new(PinnedCertificate { pin, provider }))
-        .with_no_client_auth();
-    config.alpn_protocols = vec![b"h2".to_vec(), b"http/1.1".to_vec()];
-    Ok(config)
-}
-
-/// The transport to the configured canonical node, or the "not configured" error.
+/// The transport to the configured canonical node, or the "not configured" error. The settings
+/// and the device id are still read per request, so a settings change or an identity reset
+/// applies to the next call.
 pub fn transport<R: Runtime>(app: &AppHandle<R>) -> Result<ReqwestTransport, String> {
     let settings = read_settings(app)?;
+    #[cfg(mobile)]
+    let device_id = Some(
+        app.state::<tauri_plugin_device_identity::DeviceIdentity<R>>()
+            .get()
+            .map_err(|error| error.to_string())?
+            .id,
+    );
+    #[cfg(not(mobile))]
+    let device_id: Option<String> = None;
+    let key = (settings, device_id);
+    let mut cached = TRANSPORT.lock().unwrap_or_else(|e| e.into_inner());
+    if let Some((seen, t)) = cached.as_ref() {
+        if *seen == key {
+            return Ok(t.clone());
+        }
+    }
+    let t = build_transport(app, &key.0, key.1.clone())?;
+    *cached = Some((key, t.clone()));
+    Ok(t)
+}
+
+fn build_transport<R: Runtime>(
+    app: &AppHandle<R>,
+    settings: &Settings,
+    device_id: Option<String>,
+) -> Result<ReqwestTransport, String> {
     let base = settings
         .canonical_base_url
         .as_deref()
@@ -845,21 +739,18 @@ pub fn transport<R: Runtime>(app: &AppHandle<R>) -> Result<ReqwestTransport, Str
         ));
     }
     #[cfg(mobile)]
-    {
-        let identity = app
-            .state::<tauri_plugin_device_identity::DeviceIdentity<R>>()
-            .get()
-            .map_err(|error| error.to_string())?;
+    if let Some(device_id) = device_id {
         return ReqwestTransport::with_signer(
             base,
             local,
             Some(Arc::new(NativeRequestSigner {
                 app: app.clone(),
-                device_id: identity.id,
+                device_id,
             })),
         );
     }
     #[cfg(not(mobile))]
+    let _ = (app, device_id);
     ReqwestTransport::with_signer(base, local, None)
 }
 
@@ -916,17 +807,31 @@ pub fn now_ms() -> i64 {
         .map_or(0, |d| d.as_millis() as i64)
 }
 
+/// A [`MacResponse`] with the time the native side spent on it, so the page can split a slow
+/// read into IPC (its own total minus this) and node time (this).
+#[derive(Debug, Serialize)]
+pub struct TimedResponse {
+    #[serde(flatten)]
+    response: MacResponse,
+    native_ms: u64,
+}
+
 #[tauri::command]
 pub async fn mac_request<R: Runtime>(
     app: AppHandle<R>,
     local: State<'_, Local>,
     request: MacRequest,
-) -> Result<MacResponse, String> {
+) -> Result<TimedResponse, String> {
+    let started = std::time::Instant::now();
     let t = transport(&app)?;
-    match &local.store {
+    let response = match &local.store {
         Some(store) => sync::request_text(store, &t, request.into(), now_ms()).await,
         None => sync::plain_text(&t, request.into()).await,
-    }
+    }?;
+    Ok(TimedResponse {
+        response,
+        native_ms: started.elapsed().as_millis() as u64,
+    })
 }
 
 /// Refuses an answer whose declared length is above `cap`.
@@ -1131,51 +1036,8 @@ mod tests {
 
     use super::*;
 
-    #[test]
-    fn pairing_requests_go_unsigned_and_nothing_else_does() {
-        assert!(unsigned_pairing_request(
-            "POST",
-            "/devices/api/pairing/claims"
-        ));
-        assert!(unsigned_pairing_request(
-            "POST",
-            "/devices/api/pairing/requests"
-        ));
-        assert!(unsigned_pairing_request(
-            "GET",
-            "/devices/api/pairing/requests/join_1"
-        ));
-        assert!(!unsigned_pairing_request(
-            "GET",
-            "/devices/api/pairing/requests"
-        ));
-        assert!(!unsigned_pairing_request(
-            "POST",
-            "/devices/api/pairing/requests/join_1/approve"
-        ));
-        assert!(!unsigned_pairing_request("GET", "/devices/api/devices/me"));
-        assert!(!unsigned_pairing_request(
-            "GET",
-            "/sjel-status/api/sjel-status/health"
-        ));
-    }
-
     fn base(url: &str) -> Url {
         validate_base(url, true).expect("valid base")
-    }
-
-    #[test]
-    fn signed_path_matches_the_upstream_capability_path() {
-        assert_eq!(signed_path("/devices/api/devices/me"), "/api/devices/me");
-        assert_eq!(
-            signed_path("/interior/api/items/item-1?room=kitchen"),
-            "/api/items/item-1?room=kitchen"
-        );
-        assert_eq!(
-            signed_path("/api/suggest?q=Berlin"),
-            "/api/suggest?q=Berlin"
-        );
-        assert_eq!(signed_path("/devices"), "/");
     }
 
     #[test]
@@ -1226,30 +1088,6 @@ mod tests {
         }
         assert!(validate_local("https://lars-mac.local", "abc").is_err());
         assert!(validate_local("https://lars-mac.local", &"zz".repeat(32)).is_err());
-    }
-
-    /// The pin is the whole check: the certificate with that SHA-256 passes, any other fails,
-    /// whatever name it claims.
-    #[test]
-    fn the_pinned_verifier_accepts_one_certificate_only() {
-        use rustls::client::danger::ServerCertVerifier;
-        let cert = rustls::pki_types::CertificateDer::from(b"the paired certificate".to_vec());
-        let other = rustls::pki_types::CertificateDer::from(b"another certificate".to_vec());
-        let pin: [u8; 32] = Sha256::digest(cert.as_ref()).into();
-        let verifier = PinnedCertificate {
-            pin,
-            provider: Arc::new(rustls::crypto::aws_lc_rs::default_provider()),
-        };
-        let name = rustls::pki_types::ServerName::try_from("anything.local").unwrap();
-        let now = rustls::pki_types::UnixTime::now();
-        assert!(verifier
-            .verify_server_cert(&cert, &[], &name, &[], now)
-            .is_ok());
-        assert!(verifier
-            .verify_server_cert(&other, &[], &name, &[], now)
-            .is_err());
-        assert_eq!(decode_pin(&hex(&pin)).unwrap(), pin);
-        assert!(pinned_tls(pin).is_ok());
     }
 
     #[test]
@@ -1332,7 +1170,8 @@ mod tests {
             "/assistant/api/generate",
             "/traveler/api/profile",
             "/trips/api/plans",
-            "/vault/api/tasks",
+            "/vault/api/people",
+            "/projects/api/tasks",
         ] {
             assert!(validate_path(good).is_ok(), "{good} must be admitted");
         }

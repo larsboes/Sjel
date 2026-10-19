@@ -42,47 +42,22 @@ export function toDocEntry(doc: { slug: string; category: string; file: string; 
  */
 export function resolveDocLink(
   href: string,
-  currentSlug: string,
+  currentFile: string,
   link: (path: string) => string,
 ): string {
-  if (/^[a-z]+:/i.test(href) || href.startsWith("#")) return href;
+  if (/^[a-z]+:/i.test(href) || href.startsWith("#") || href.startsWith("//")) return href;
 
-  const [rawPath, anchor] = href.split("#");
-  const hash = anchor ? `#${anchor}` : "";
-
-  if (!rawPath) return hash;
-
-  // If pointing to a markdown file
-  if (rawPath.endsWith(".md")) {
-    const clean = rawPath.replace(/\.md$/, "");
-    let target = clean;
-
-    if (clean.startsWith("/")) {
-      target = clean.slice(1);
-    } else if (clean.startsWith("../")) {
-      const parts = currentSlug.split("/").slice(0, -1);
-      const segs = clean.split("/");
-      for (const seg of segs) {
-        if (seg === "..") parts.pop();
-        else if (seg !== ".") parts.push(seg);
-      }
-      target = parts.join("/");
-    } else if (clean.startsWith("./")) {
-      const currentDir = currentSlug.includes("/") ? currentSlug.slice(0, currentSlug.lastIndexOf("/")) : "";
-      target = currentDir ? `${currentDir}/${clean.slice(2)}` : clean.slice(2);
-    } else {
-      const currentDir = currentSlug.includes("/") ? currentSlug.slice(0, currentSlug.lastIndexOf("/")) : "";
-      target = currentDir ? `${currentDir}/${clean}` : clean;
-    }
-
+  // The source file retains the directory that section-index route slugs omit.
+  const resolved = new URL(href, `https://sjel.invalid/${currentFile}`);
+  const path = resolved.pathname.slice(1);
+  const suffix = resolved.search + resolved.hash;
+  if (path.startsWith("docs/") && path.endsWith(".md")) {
+    let target = path.slice("docs/".length, -".md".length);
     if (target.endsWith("/index")) target = target.slice(0, -"/index".length);
-    if (target === "index" || target === "README") return link(`/docs${hash}`);
-    return link(`/docs/${target}${hash}`);
+    if (target === "index" || target === "README") return link(`/docs/README${suffix}`);
+    return link(`/docs/${target}${suffix}`);
   }
-
-  // Any other repository path goes to GitHub
-  const repoPath = rawPath.startsWith("/") ? rawPath.slice(1) : rawPath;
-  return `${REPO}/${repoPath}${hash}`;
+  return `${REPO}/${path}${suffix}`;
 }
 
 export const CATEGORY_META: Record<string, { label: string; description: string; order: number }> = {

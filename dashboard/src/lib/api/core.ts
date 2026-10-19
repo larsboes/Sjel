@@ -75,11 +75,23 @@ export interface Answer {
 }
 
 /**
+ * One console line per request: the total as the page saw it and, in the app, the native share.
+ * `ipc` is the total minus the native time: bridge, serialization and the event loop. Debug
+ * level, so it shows only with the console's verbose filter on.
+ */
+function logTiming(path: string, init: RequestInit | undefined, started: number, nativeMs?: number, stale?: boolean) {
+  const total = Math.round(performance.now() - started);
+  const split = nativeMs === undefined ? '' : ` native=${nativeMs}ms ipc=${Math.max(0, total - nativeMs)}ms`;
+  console.debug(`[timing] ${init?.method ?? 'GET'} ${path} total=${total}ms${split}${stale ? ' stale' : ''}`);
+}
+
+/**
  * In the Tauri app a relative path has no server behind it, so a node path goes
  * through the native bridge (`./mac-bridge.ts`). An absolute URL, such as the
  * Wikipedia lookups below, is not a Mac path and stays a plain fetch.
  */
 export async function send(path: string, init?: RequestInit): Promise<Answer> {
+  const started = performance.now();
   if (inTauri() && path.startsWith('/')) {
     let answer: MacResponse;
     try {
@@ -91,9 +103,11 @@ export async function send(path: string, init?: RequestInit): Promise<Answer> {
       }
       throw new ApiError(0, message);
     }
+    logTiming(path, init, started, answer.native_ms, answer.stale);
     return { ok: answer.status >= 200 && answer.status < 300, status: answer.status, text: answer.body };
   }
   const res = await fetch(path, init);
+  logTiming(path, init, started);
   if (!res.ok) return { ok: false, status: res.status, text: await res.text().catch(() => '') };
   return { ok: true, status: res.status, text: await res.text() };
 }

@@ -62,6 +62,12 @@ export interface TripPlan {
   interests: string;
   status: 'draft' | 'saved' | 'archived';
   travelers: string[];
+  /** Local GET projection of Trips' per-name decisions; absent on older servers and mutations. */
+  traveler_links?: Array<{
+    name: string;
+    status: 'resolved' | 'not_person' | 'unresolved';
+    entity_id: string | null;
+  }>;
   transport_modes: TransportMode[];
   budget_cents: number | null;
   currency: string | null;

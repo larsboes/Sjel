@@ -547,7 +547,7 @@
           {/if}
         </h3>
         <ul class="upd-list">
-          {#each group.rows as row (`${row.surface}-${row.name}`)}
+          {#each group.rows as row, i (`${row.surface}-${row.name}-${i}`)}
             <li class="upd-row">
               <span class="upd-mark {row.status}">
                 {#if row.status === "stale"}

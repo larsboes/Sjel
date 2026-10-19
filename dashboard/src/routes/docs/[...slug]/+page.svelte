@@ -58,7 +58,7 @@
     <article class="card prose">
       <MarkdownDocument
         content={doc.body}
-        resolveLink={(href) => resolveDocLink(href, doc.slug, link)}
+        resolveLink={(href) => resolveDocLink(href, doc.file, link)}
       />
     </article>
 

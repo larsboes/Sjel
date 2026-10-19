@@ -1,4 +1,4 @@
-import { projects, vault, type Task } from "../../api";
+import { projects, type Task } from "../../api";
 import { link } from "../../nav";
 import { RESCALE, type DecisionKind } from "../decisions";
 
@@ -13,10 +13,7 @@ import { RESCALE, type DecisionKind } from "../decisions";
  * more urgent than one due tomorrow, so it is worth less than a single day of the
  * due-date slope.
  *
- * Two sources while the import runs (ISA.md F12): `capabilities/projects` owns imported and new
- * tasks and has a Done action; the vault serves the rest, read-only, and skips every note the
- * import froze, so no task arrives twice. A vault row opens Obsidian, a projects row opens the
- * dashboard's project page. One failed source still shows the other's rows.
+ * `capabilities/projects` is the one source (ISA.md F14). A row opens the dashboard's project page.
  *
  * Old expression: `620 + (due === null ? 0 : days < 0 ? 260 : max(0, 240 - days * 8))
  *                      + (3 - priority) * 3`, maximum 266.
@@ -28,14 +25,8 @@ const task: DecisionKind<Task[], Task> = {
   capability: "projects",
   view: "TaskRow",
 
-  load: async (ctx) => {
-    const sources = await Promise.allSettled([projects.tasks("open", ctx.signal), vault.tasks("open", ctx.signal)]);
-    const rows = sources.flatMap((source) => (source.status === "fulfilled" ? source.value : []));
-    const failed = sources.find((source) => source.status === "rejected");
-    if (rows.length === 0 && failed) throw failed.reason;
-    return rows;
-  },
-  // No gate: both sources serve only open tasks.
+  load: (ctx) => projects.tasks("open", ctx.signal),
+  // No gate: the source serves only open tasks.
   rows: (tasks) => tasks,
   id: (row) => row.id,
   title: (row) => row.title,
@@ -44,8 +35,7 @@ const task: DecisionKind<Task[], Task> = {
     const dated = days === null ? 0 : days < 0 ? 260 : Math.max(0, 240 - days * 8);
     return RESCALE(dated + (3 - row.priority) * 3, 266);
   },
-  href: (row) => (row.uri.startsWith("/") ? link(row.uri) : row.uri),
-  external: (row) => !row.uri.startsWith("/"),
+  href: (row) => link(row.uri),
 
   whyHere: (row, ctx) => {
     if (!row.due) return "Still open, with no date on it.";
@@ -56,7 +46,7 @@ const task: DecisionKind<Task[], Task> = {
   },
   startOrDueAt: (row) => row.due,
   candidateStatus: () => "accepted",
-  // CONTRACT: the vault classifies every task it serves -- folder default, frontmatter
+  // CONTRACT: the projects server classifies every task it serves -- folder default, frontmatter
   // override (PRD Q9a), decided by `libs/content-item` and never here.
   dataClass: (row) => row.data_class ?? null,
   processingRoute: () => null,

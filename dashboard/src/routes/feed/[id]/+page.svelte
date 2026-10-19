@@ -13,8 +13,8 @@
     type FeedEntryLoadPhase,
   } from "$lib/feed/entry-loader";
   import MarkdownDocument from "$lib/feed/MarkdownDocument.svelte";
-  import MermaidDiagram from "$lib/feed/MermaidDiagram.svelte";
-  import ChartFigure from "$lib/feed/ChartFigure.svelte";
+  import FeedDigestSection from "$lib/feed/FeedDigestSection.svelte";
+  import FeedCloudProcessing from "$lib/feed/FeedCloudProcessing.svelte";
   import {
     KINDS,
     whenError,
@@ -81,11 +81,6 @@
   let providerListLoaded = $state(false);
   let queueingCloudDerivative = $state(false);
   let runningCloudJob = $state(false);
-  /// Which digest press is in flight, or null. One variable rather than three
-  /// booleans: the three presses share a model and must not run at once.
-  let digestBusy = $state<"standard" | "detailed" | "diagram" | "chart" | null>(null);
-  let digestError = $state<string | null>(null);
-  let focusInput = $state("");
   let calendarProposalBusy = $state<string | null>(null);
   let calendarProposalSaved = $state<Set<string>>(new Set());
   let calendarProposalError = $state<string | null>(null);
@@ -147,112 +142,6 @@
     entry?.digest?.state === "generated" ? entry.digest.text : null,
   );
 
-  const SHAPE_LABEL: Record<string, string> = {
-    brief: "Brief",
-    standard: "Standard",
-    sectioned: "Sectioned",
-    none: "None",
-  };
-
-  /// The rung, and whether it was asked for. Both, because "Sectioned" alone
-  /// does not say whether the length earned it or the operator did.
-  const digestRungLabel = $derived(
-    entry?.digest
-      ? `${SHAPE_LABEL[entry.digest.shape] ?? entry.digest.shape}${
-          entry.digest.depth === "detailed" ? " · you asked for more" : ""
-        }`
-      : "",
-  );
-
-  /// Why there is no text. A skip is a claim about the source, so it reads
-  /// differently from a model that could not be reached.
-  function digestExplanation(digest: ContentDigest): string {
-    switch (digest.state) {
-      case "generated":
-        return "";
-      case "skipped_short":
-        return "Too short to be worth a digest — the source is already the summary. Press More detail to force one.";
-      case "remote_refused":
-        return "This item is not Public and the configured model is not local, so nothing was sent.";
-      // Not "could not be reached": no model was asked. Reclassifying the item
-      // is the only thing that changes this answer.
-      case "local_refused":
-        return "Secret content enters no prompt, so nothing was sent to any model.";
-      case "unconfigured":
-        return "No summarization model is configured on this machine.";
-      case "timeout":
-        return "The local model did not answer in time.";
-      case "capacity_aborted":
-        // About the machine, not the model. The server accepted this request
-        // and ran out of memory part-way through; the same item digests fine
-        // once something stops holding the GPU, and the drain will try again.
-        return "The local server ran out of memory part-way through this one. It will retry on its own.";
-      case "empty_response":
-        return "The local model answered with nothing.";
-      default:
-        return digest.last_error ?? "The local model could not be reached.";
-    }
-  }
-
-  /// The diagram's own failure, which is a different axis from the digest's:
-  /// a model that produced prose instead of Mermaid did answer.
-  function diagramExplanation(digest: ContentDigest): string {
-    if (digest.diagram_error) return digest.diagram_error;
-    return digestExplanation({
-      ...digest,
-      state: (digest.diagram_state ?? "model_error") as ContentDigest["state"],
-    });
-  }
-
-  function focusTerms(): string[] {
-    return focusInput
-      .split(",")
-      .map((term) => term.trim())
-      .filter(Boolean);
-  }
-
-  async function runDigest(depth: "standard" | "detailed") {
-    if (!entry || digestBusy) return;
-    digestBusy = depth;
-    digestError = null;
-    try {
-      const digest = await comms.digest(entry.source, entry.id, { depth, focus: focusTerms() });
-      entry.digest = digest;
-      // What the model was asked for is now stored; showing it back from the
-      // row rather than the input keeps the two from drifting after a reload.
-      focusInput = digest.focus.join(", ");
-    } catch (cause) {
-      digestError = cause instanceof Error ? cause.message : String(cause);
-    } finally {
-      digestBusy = null;
-    }
-  }
-
-  async function runDiagram() {
-    if (!entry || digestBusy) return;
-    digestBusy = "diagram";
-    digestError = null;
-    try {
-      entry.digest = await comms.diagram(entry.source, entry.id);
-    } catch (cause) {
-      digestError = cause instanceof Error ? cause.message : String(cause);
-    } finally {
-      digestBusy = null;
-    }
-  }
-
-  async function runChart() {
-    if (!entry || digestBusy) return;
-    digestBusy = "chart";
-    digestError = null;
-    try {
-      entry.digest = await comms.chart(entry.source, entry.id);
-    } catch (cause) {
-      digestError = cause instanceof Error ? cause.message : String(cause);
-    } finally {
-      digestBusy = null;
-    }
-  }
 
   const title = $derived(entry?.title ?? entry?.url ?? "Feed entry");
   const bodyLabel = $derived(entry?.content_label ?? "Source content");
@@ -757,52 +646,6 @@
   /// One sentence per reason the server can refuse a role. The roster used to
   /// collapse all four into "setup required", which read as "you forgot a key"
   /// even when the real cause was an exhausted daily budget.
-  const PROVIDER_UNAVAILABLE_LABEL: Record<CloudProviderUnavailableReason, string> = {
-    missing_credential: "No API key materialized on this machine",
-    billing_expired_or_unknown: "Billing window expired or unknown",
-    budget_unavailable: "Today's call ledger could not be read",
-    daily_request_limit_reached: "Daily request limit reached",
-  };
-
-  /// `available` is a state, not a reason, so it gets its own branch rather
-  /// than a fifth entry in the map.
-  function providerStateLabel(provider: CloudProvider): string {
-    if (provider.available) return "Available";
-    return provider.unavailable_reason === null
-      ? "Unavailable, with no reason reported"
-      : PROVIDER_UNAVAILABLE_LABEL[provider.unavailable_reason];
-  }
-
-  /// Remaining budget, keeping "the ledger did not answer" distinct from a
-  /// genuine zero — the server reports the first as a null, not as 0 used.
-  function providerBudgetLabel(provider: CloudProvider): string {
-    const limit = `${provider.max_requests_per_day}/day`;
-    if (provider.requests_remaining_today === null || provider.requests_used_today === null) {
-      return `Unknown · ${limit} configured`;
-    }
-    return `${provider.requests_remaining_today} left · ${provider.requests_used_today} used · ${limit}`;
-  }
-
-  function providerTierLabel(tier: CloudProvider["data_tier"]): string {
-    return tier === "pseudonymized_personal"
-      ? "Reviewed Personal derivatives"
-      : "Public derivatives only";
-  }
-
-  function providerBillingLabel(provider: CloudProvider): string {
-    const mode = provider.billing_mode === "free_only" ? "Free tier only" : "Prepaid credit";
-    return provider.credit_expires_on
-      ? `${mode} · credit expires ${provider.credit_expires_on}`
-      : `${mode} · no credit expiry`;
-  }
-
-  function cloudDispatchLabel(status: ContentItemDetail["cloud_processing"]["dispatch_status"]): string {
-    if (status === "queued") return "Ready to run";
-    if (status === "running") return "Running";
-    if (status === "succeeded") return "Completed";
-    if (status === "failed") return "Needs attention";
-    return entry?.cloud_processing.status === "staged" ? "Staged locally" : "Not prepared";
-  }
 
   async function runCloudJob(): Promise<void> {
     const jobId = entry?.cloud_processing.job_id;
@@ -1140,106 +983,7 @@
       {#if error}<p class="inline-error" aria-live="polite">{error}</p>{/if}
         </header>
 
-        <section class="note digest" aria-labelledby="digest-title">
-          <div class="digest-head">
-            <p class="section-label" id="digest-title">Digest</p>
-            {#if digestText}
-              <span class="digest-rung">{digestRungLabel}</span>
-            {/if}
-          </div>
-
-          {#if digestText}
-            <MarkdownDocument content={digestText} compact />
-          {:else if entry.digest}
-            <p class="digest-note">{digestExplanation(entry.digest)}</p>
-          {:else}
-            <p class="digest-note">Not generated yet.</p>
-          {/if}
-
-          {#if entry.digest?.focus?.length}
-            <p class="digest-focus">
-              Asked to focus on: {entry.digest.focus.join(", ")}
-            </p>
-          {/if}
-          {#if entry.digest && entry.digest.redactions > 0}
-            <p class="digest-redactions">
-              {entry.digest.redactions}
-              {entry.digest.redactions === 1 ? "entity was" : "entities were"} redacted before this
-              was stored — this item's class requires redaction, and a digest must not republish
-              what the sweep removed.
-            </p>
-          {/if}
-
-          <div class="digest-controls">
-            <label class="digest-field">
-              <span>Focus on</span>
-              <input
-                type="text"
-                placeholder="optional — comma-separated, e.g. cost, evaluation"
-                bind:value={focusInput}
-                disabled={digestBusy !== null}
-              />
-            </label>
-            <div class="digest-buttons">
-              <button
-                class="btn"
-                disabled={digestBusy !== null}
-                onclick={() => runDigest("standard")}
-                use:tip={"Regenerate at the rung this source's length earns"}
-              >
-                {digestBusy === "standard" ? "Digesting…" : "Regenerate"}
-              </button>
-              <button
-                class="btn btn-primary"
-                disabled={digestBusy !== null}
-                onclick={() => runDigest("detailed")}
-                use:tip={"One rung further up the same ladder"}
-              >
-                {digestBusy === "detailed" ? "Digesting…" : "More detail"}
-              </button>
-              <button
-                class="btn"
-                disabled={digestBusy !== null}
-                onclick={runDiagram}
-                use:tip={"Draw this item as a Mermaid diagram"}
-              >
-                {digestBusy === "diagram" ? "Drawing…" : "Diagram"}
-              </button>
-              <button
-                class="btn"
-                disabled={digestBusy !== null}
-                onclick={runChart}
-                use:tip={"Pull the item's numbers out and plot them"}
-              >
-                {digestBusy === "chart" ? "Reading…" : "Chart"}
-              </button>
-            </div>
-          </div>
-
-          {#if entry.digest?.chart}
-            <ChartFigure data={entry.digest.chart} />
-          {:else if entry.digest?.chart_state && entry.digest.chart_state !== "generated"}
-            <p class="digest-note">
-              {entry.digest.chart_state === "skipped_short"
-                ? "No chart: this source has no set of comparable numbers in it. Most prose does not."
-                : `No chart: ${entry.digest.chart_error ?? "the local model could not be reached."}`}
-            </p>
-          {/if}
-
-          {#if entry.digest?.diagram}
-            <MermaidDiagram source={entry.digest.diagram} />
-          {:else if entry.digest?.diagram_state && entry.digest.diagram_state !== "generated"}
-            <p class="digest-note">No diagram: {diagramExplanation(entry.digest)}</p>
-          {/if}
-
-          {#if digestError}<p class="inline-error" aria-live="polite">{digestError}</p>{/if}
-          {#if entry.digest}
-            <p class="digest-provenance">
-              {entry.digest.source_chars.toLocaleString()} characters of source · produced by
-              <code>{entry.digest.producer}</code>
-            </p>
-          {/if}
-        </section>
+        <FeedDigestSection bind:entry />
 
         <!-- `summary` is what the *source* said it is, and stays beside the
              digest rather than being replaced by it: for a calendar entry it is
@@ -1399,216 +1143,27 @@
              `not_prepared` truthfully. Offering "Preview cloud-ready copy"
              anyway would advertise a button that cannot do anything. -->
         {#if entry.source !== "calendar"}
-        <section class="cloud-processing" aria-labelledby="cloud-processing-title">
-          <div class="aside-title">
-            <p class="section-label" id="cloud-processing-title">Cloud processing</p>
-            <span class:staged={entry.cloud_processing.status === "staged"}>
-              {entry.cloud_processing.status === "stale"
-                ? "Review again"
-                : cloudDispatchLabel(entry.cloud_processing.dispatch_status)}
-            </span>
-          </div>
-          <p class="cloud-explanation">
-            {entry.data_class.value === "c0"
-              ? "Build a bounded copy and inspect it before a cloud task can use it."
-              : "Redact obvious identifiers locally, then inspect the exact derivative before approval."}
-          </p>
-          <button
-            class="btn cloud-preview-button"
-            disabled={preparingCloudPreview || approvingCloudPreview}
-            onclick={prepareCloudPreview}
-          >
-            {preparingCloudPreview
-              ? "Preparing locally…"
-              : entry.cloud_processing.status === "staged"
-                ? "Review a fresh copy"
-                : "Preview cloud-ready copy"}
-          </button>
-          {#if entry.cloud_processing.status === "staged"}
-            {#if entry.cloud_processing.dispatch_status !== "not_queued"}
-              <dl class="cloud-job">
-                <div><dt>Provider role</dt><dd class="mono">{entry.cloud_processing.provider_role}</dd></div>
-                <div><dt>Task</dt><dd>{entry.cloud_processing.task ?? "Content analysis"}</dd></div>
-                <div><dt>State</dt><dd>{cloudDispatchLabel(entry.cloud_processing.dispatch_status)}</dd></div>
-                <div><dt>Provider calls</dt><dd>{entry.cloud_processing.provider_calls}</dd></div>
-              </dl>
-              {#if entry.cloud_processing.dispatch_status === "queued"}
-                <button
-                  class="btn btn-primary cloud-run-button"
-                  disabled={runningCloudJob}
-                  onclick={runCloudJob}
-                >
-                  {runningCloudJob ? "Sending approved copy…" : "Run approved cloud analysis"}
-                </button>
-                <p class="cloud-boundary">This sends only the reviewed derivative to the selected provider.</p>
-              {:else if entry.cloud_processing.dispatch_status === "failed"}
-                {#if entry.cloud_processing.last_error}
-                  <p class="cloud-job-error">{entry.cloud_processing.last_error}</p>
-                {/if}
-                <button
-                  class="btn cloud-run-button"
-                  disabled={runningCloudJob || entry.cloud_processing.provider_calls >= 5}
-                  onclick={runCloudJob}
-                >
-                  {runningCloudJob ? "Retrying…" : "Retry approved cloud analysis"}
-                </button>
-                {#if entry.cloud_processing.provider_calls >= 5}
-                  <p class="cloud-boundary">The five-call retry limit has been reached. Review and stage a fresh derivative.</p>
-                {/if}
-              {:else if entry.cloud_processing.dispatch_status === "running"}
-                <p class="cloud-boundary">A provider call is in progress. Reload the entry to refresh its state.</p>
-              {/if}
-
-              {#if entry.cloud_processing.dispatch_status === "succeeded" && entry.cloud_processing.result}
-                {@const result = entry.cloud_processing.result}
-                <div class="cloud-result" aria-label="Cloud content analysis">
-                  <div class="cloud-result-head">
-                    <strong>{result.importance} importance</strong>
-                    {#if entry.cloud_processing.completed_at}
-                      <span>{lifecycleDate(entry.cloud_processing.completed_at)}</span>
-                    {/if}
-                  </div>
-                  <p>{result.summary}</p>
-                  <p class="cloud-rationale">{result.importance_rationale}</p>
-                  {#if result.important_dates.length > 0}
-                    <div class="cloud-result-group">
-                      <span class="section-label">Important dates</span>
-                      {#each result.important_dates as date, index (`${date.label}:${date.date}:${date.source_text}`)}
-                        {@const candidate = calendarCandidates.find((item) => item.key === `important_dates:${index}`)}
-                        <div class="cloud-result-item">
-                          <strong>{date.label}</strong>
-                          <span>{date.date ?? "Date not resolved"}</span>
-                          <small>{date.source_text}</small>
-                          {#if candidate}
-                            <button
-                              class="calendar-proposal-button"
-                              disabled={calendarProposalBusy !== null || calendarProposalSaved.has(candidate.key)}
-                              onclick={() => proposeToCalendar(candidate)}
-                            >
-                              {calendarProposalSaved.has(candidate.key)
-                                ? "In Calendar review"
-                                : calendarProposalBusy === candidate.key
-                                  ? "Adding…"
-                                  : "Add to Calendar review"}
-                            </button>
-                          {/if}
-                        </div>
-                      {/each}
-                    </div>
-                  {/if}
-                  {#if result.action_items.length > 0}
-                    <div class="cloud-result-group">
-                      <span class="section-label">Actions</span>
-                      {#each result.action_items as action, index (`${action.text}:${action.due_date}`)}
-                        {@const candidate = calendarCandidates.find((item) => item.key === `action_items:${index}`)}
-                        <div class="cloud-result-item">
-                          <strong>{action.text}</strong>
-                          {#if action.due_date}<span>Due {action.due_date}</span>{/if}
-                          {#if candidate}
-                            <button
-                              class="calendar-proposal-button"
-                              disabled={calendarProposalBusy !== null || calendarProposalSaved.has(candidate.key)}
-                              onclick={() => proposeToCalendar(candidate)}
-                            >
-                              {calendarProposalSaved.has(candidate.key)
-                                ? "In Calendar review"
-                                : calendarProposalBusy === candidate.key
-                                  ? "Adding…"
-                                  : "Add deadline to Calendar review"}
-                            </button>
-                          {/if}
-                        </div>
-                      {/each}
-                    </div>
-                  {/if}
-                  {#if result.topics.length > 0}
-                    <div class="cloud-topics" aria-label="Topics">
-                      {#each result.topics as topic (topic)}<span>{topic}</span>{/each}
-                    </div>
-                  {/if}
-                  {#if calendarProposalSaved.size > 0}
-                    <a class="calendar-review-link" href={link("/calendar")}>Open Calendar review →</a>
-                  {/if}
-                  {#if calendarProposalError}
-                    <p class="cloud-job-error" role="alert">{calendarProposalError}</p>
-                  {/if}
-                </div>
-              {/if}
-            {/if}
-          {/if}
-          {#if entry.cloud_processing.dispatch_status === "not_queued"}
-            <!-- The roster sits outside the `staged` branch on purpose. Which
-                 providers exist, what data class each accepts and how much of
-                 today's budget is left are facts about this machine, not about
-                 this item's derivative. Gating them behind a Preview press made
-                 a working cloud path look like an unbuilt one. -->
-            {#if cloudProviders.length > 0}
-              <div class="provider-roster" role="radiogroup" aria-labelledby="cloud-provider-roster-title">
-                <p class="section-label" id="cloud-provider-roster-title">Cloud providers</p>
-                {#each cloudProviders as provider (provider.role)}
-                  <label
-                    class="provider-option"
-                    class:provider-selected={provider.role === selectedProviderRole}
-                    class:provider-unavailable={!provider.available}
-                  >
-                    <span class="provider-head">
-                      <input
-                        type="radio"
-                        name="cloud-provider"
-                        value={provider.role}
-                        bind:group={selectedProviderRole}
-                        disabled={!provider.available || queueingCloudDerivative}
-                      />
-                      <strong>{provider.name}</strong>
-                      <span class="mono">{provider.model}</span>
-                    </span>
-                    <dl class="provider-facts">
-                      <div><dt>Role</dt><dd class="mono">{provider.role}</dd></div>
-                      <div><dt>Endpoint</dt><dd>{provider.provider_label} · {provider.location}</dd></div>
-                      <div><dt>Accepts</dt><dd>{providerTierLabel(provider.data_tier)}</dd></div>
-                      <div><dt>Billing</dt><dd>{providerBillingLabel(provider)}</dd></div>
-                      <div><dt>Failover</dt><dd>Priority {provider.failover_priority}</dd></div>
-                      <div><dt>Budget today</dt><dd>{providerBudgetLabel(provider)}</dd></div>
-                      <div><dt>Input ceiling</dt><dd>{provider.max_input_tokens.toLocaleString("en-GB")} tokens</dd></div>
-                      <div>
-                        <dt>State</dt>
-                        <dd>
-                          {providerStateLabel(provider)}
-                          {#if provider.unavailable_reason}
-                            <span class="mono">{provider.unavailable_reason}</span>
-                          {/if}
-                        </dd>
-                      </div>
-                    </dl>
-                  </label>
-                {/each}
-              </div>
-              <button
-                class="btn cloud-queue-button"
-                disabled={queueingCloudDerivative
-                  || !selectedProviderRole
-                  || entry.cloud_processing.status !== "staged"}
-                onclick={queueCloudDerivative}
-              >
-                {queueingCloudDerivative ? "Queueing…" : "Queue for cloud processing"}
-              </button>
-              {#if entry.cloud_processing.status !== "staged"}
-                <p class="provider-missing">Queueing needs a reviewed copy of this item first — preview one above.</p>
-              {/if}
-              {#if !cloudProviders.some((provider) => provider.available)}
-                <p class="provider-missing">The reviewed providers are configured, but their keys have not been materialized on this machine.</p>
-              {/if}
-            {:else if providerListLoaded}
-              <p class="provider-missing">No reviewed HTTPS cloud role is configured.</p>
-            {/if}
-            <p class="cloud-boundary">Approval stages only the reviewed copy. Queueing records provider intent without sending it.</p>
-          {:else if entry.cloud_processing.dispatch_status === "queued"}
-            <p class="cloud-boundary">Queued locally. Nothing has been sent until you run the approved analysis.</p>
-          {/if}
-          {#if cloudPreviewError && !cloudPreview}
-            <p class="inline-error" aria-live="polite">{cloudPreviewError}</p>
-          {/if}
-        </section>
+          <FeedCloudProcessing
+            bind:entry
+            {cloudProviders}
+            bind:selectedProviderRole
+            {providerListLoaded}
+            {preparingCloudPreview}
+            {approvingCloudPreview}
+            {runningCloudJob}
+            {queueingCloudDerivative}
+            {cloudPreview}
+            {cloudPreviewError}
+            {calendarCandidates}
+            {calendarProposalBusy}
+            {calendarProposalSaved}
+            {calendarProposalError}
+            onPrepareCloudPreview={prepareCloudPreview}
+            onRunCloudJob={runCloudJob}
+            onQueueCloudDerivative={queueCloudDerivative}
+            onProposeToCalendar={proposeToCalendar}
+            {lifecycleDate}
+          />
         {/if}
 
         {#if entry.mail}
@@ -2075,94 +1630,11 @@
     border-left: 2px solid var(--primary);
   }
 
-  .digest-note,
-  .digest-focus,
-  .digest-redactions,
-  .digest-provenance,
   .classification-rationale {
-    margin: 0;
+    margin: 0.65rem 0 0;
     color: var(--text-secondary);
     font-size: 0.8rem;
     line-height: 1.55;
-  }
-
-  .digest {
-    display: flex;
-    flex-direction: column;
-    gap: 0.75rem;
-  }
-
-  .digest-head {
-    display: flex;
-    align-items: baseline;
-    justify-content: space-between;
-    gap: 1rem;
-  }
-
-  /* Which rung produced this, at a glance. Muted: it explains the digest, it
-     is not a second thing to read. */
-  .digest-rung {
-    color: var(--text-tertiary);
-    font-size: var(--text-xs);
-    letter-spacing: 0.02em;
-  }
-
-  .digest-redactions {
-    color: var(--warning-ink);
-  }
-
-  .digest-provenance {
-    color: var(--text-tertiary);
-    font-size: 0.7rem;
-  }
-
-  .digest-provenance code {
-    font-family: var(--font-mono);
-    font-size: 0.7rem;
-    overflow-wrap: anywhere;
-  }
-
-  .digest-controls {
-    display: flex;
-    flex-wrap: wrap;
-    align-items: flex-end;
-    gap: 0.75rem;
-    padding-top: 0.25rem;
-    border-top: 1px solid var(--card-border);
-  }
-
-  .digest-field {
-    display: flex;
-    flex: 1 1 16rem;
-    flex-direction: column;
-    gap: 0.3rem;
-  }
-
-  .digest-field span {
-    color: var(--text-tertiary);
-    font-size: 0.7rem;
-    text-transform: uppercase;
-    letter-spacing: 0.06em;
-  }
-
-  .digest-field input {
-    padding: 0.45rem 0.6rem;
-    border: 1px solid var(--input-border);
-    border-radius: var(--radius-sm);
-    background: var(--input-bg);
-    color: var(--text-primary);
-    font-family: inherit;
-    font-size: 0.85rem;
-  }
-
-  .digest-buttons {
-    display: flex;
-    flex-wrap: wrap;
-    gap: 0.5rem;
-  }
-
-  .classification-rationale {
-    margin-top: 0.65rem;
   }
 
   .policy-rationale {
@@ -2172,205 +1644,6 @@
     line-height: 1.5;
   }
 
-  .cloud-explanation,
-  .cloud-boundary {
-    margin: 0;
-    color: var(--text-secondary);
-    font-size: var(--text-xs);
-    line-height: 1.5;
-  }
-
-  .cloud-preview-button {
-    width: 100%;
-    justify-content: center;
-    margin-top: 0.8rem;
-  }
-
-  .provider-roster {
-    display: grid;
-    gap: 0.5rem;
-    margin-top: 0.85rem;
-  }
-
-  .provider-roster .section-label {
-    margin: 0;
-  }
-
-  .provider-option {
-    display: grid;
-    gap: 0.3rem;
-    padding: 0.55rem 0.6rem;
-    border: 1px solid var(--card-border);
-    border-radius: var(--radius-md);
-    background: var(--card-bg);
-    cursor: pointer;
-  }
-
-  .provider-selected {
-    border-color: var(--primary);
-  }
-
-  .provider-unavailable {
-    cursor: not-allowed;
-    opacity: 0.72;
-  }
-
-  .provider-head {
-    display: flex;
-    flex-wrap: wrap;
-    align-items: baseline;
-    gap: 0.4rem;
-    color: var(--text-primary);
-    font-size: var(--text-sm);
-  }
-
-  .provider-head .mono {
-    color: var(--text-tertiary);
-    font-size: 0.625rem;
-    overflow-wrap: anywhere;
-  }
-
-  .provider-facts div {
-    gap: 0.6rem;
-    padding: 0.12rem 0;
-    font-size: 0.625rem;
-  }
-
-  .provider-facts dd {
-    overflow-wrap: anywhere;
-  }
-
-  .provider-facts .mono {
-    color: var(--text-tertiary);
-  }
-
-  .provider-missing {
-    margin: 0.4rem 0 0;
-    color: var(--text-tertiary);
-    font-size: 0.625rem;
-    line-height: 1.45;
-    overflow-wrap: anywhere;
-  }
-
-  .cloud-queue-button,
-  .cloud-run-button {
-    width: 100%;
-    justify-content: center;
-    margin-top: 0.65rem;
-  }
-
-  .cloud-job {
-    margin-top: 0.8rem;
-    padding-top: 0.55rem;
-    border-top: 1px solid var(--card-border);
-  }
-
-  .cloud-boundary {
-    margin-top: 0.55rem;
-    color: var(--text-tertiary);
-    font-size: var(--text-2xs);
-  }
-
-  .cloud-job-error {
-    margin: 0.65rem 0 0;
-    color: var(--warning-ink);
-    font-size: var(--text-2xs);
-    line-height: 1.45;
-  }
-
-  .cloud-result {
-    display: grid;
-    gap: 0.7rem;
-    margin-top: 0.8rem;
-    padding-top: 0.8rem;
-    border-top: 1px solid var(--card-border);
-  }
-
-  .cloud-result p {
-    margin: 0;
-    color: var(--text-secondary);
-    font-size: var(--text-xs);
-    line-height: 1.5;
-  }
-
-  .cloud-result .cloud-rationale {
-    color: var(--text-tertiary);
-    font-size: var(--text-2xs);
-  }
-
-  .cloud-result-head,
-  .cloud-result-item {
-    display: grid;
-    gap: 0.15rem;
-  }
-
-  .calendar-proposal-button {
-    justify-self: start;
-    margin-top: 0.2rem;
-    padding: 0;
-    border: 0;
-    background: transparent;
-    color: var(--primary);
-    cursor: pointer;
-    font: inherit;
-    font-size: 0.625rem;
-  }
-
-  .calendar-proposal-button:disabled {
-    cursor: default;
-    opacity: 0.65;
-  }
-
-  .calendar-review-link {
-    color: var(--primary);
-    font-size: var(--text-2xs);
-  }
-
-  .cloud-result-head {
-    grid-template-columns: 1fr auto;
-    align-items: baseline;
-    font-size: var(--text-xs);
-  }
-
-  .cloud-result-head strong {
-    text-transform: capitalize;
-  }
-
-  .cloud-result-head span,
-  .cloud-result-item span,
-  .cloud-result-item small {
-    color: var(--text-tertiary);
-    font-size: 0.625rem;
-  }
-
-  .cloud-result-group {
-    display: grid;
-    gap: 0.45rem;
-  }
-
-  .cloud-result-item {
-    padding-left: 0.6rem;
-    border-left: 1px solid var(--card-border);
-    font-size: var(--text-2xs);
-  }
-
-  .cloud-topics {
-    display: flex;
-    flex-wrap: wrap;
-    gap: 0.3rem;
-  }
-
-  .cloud-topics span {
-    padding: 0.2rem 0.4rem;
-    border: 1px solid var(--card-border);
-    border-radius: 999px;
-    color: var(--text-secondary);
-    font-size: 0.625rem;
-  }
-
-  .staged {
-    color: var(--success) !important;
-  }
 
   .source-document {
     min-width: 0;

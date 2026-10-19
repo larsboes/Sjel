@@ -197,9 +197,10 @@ jobs:
           cd "$RUNNER_TEMP/anatomy-deps"
           bun add esbuild@0.28.2 react@19.3.1 react-dom@19.3.1 typescript@5.9.3
           echo "NODE_PATH=$RUNNER_TEMP/anatomy-deps/node_modules" >> "$GITHUB_ENV"
+      # A glob, not the directory: Node 20 takes only files, later versions take either.
       - name: node --test in the skill directory
         working-directory: Packs/presentations/skills/anatomy
-        run: node --test scripts
+        run: node --test scripts/*.test.mjs
 
   # Svelte type checks, local-only until 2026-07 and dashboard-only until now: a type
   # regression could land on main unseen (Axon#41), and a capability that grows its own UI

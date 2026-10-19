@@ -2,7 +2,13 @@ import { existsSync, readFileSync } from "node:fs";
 import { hostname } from "node:os";
 import { dirname, resolve } from "node:path";
 
-export type OverlaySource = "SJEL_OVERLAY_ROOT" | "SJEL_PERSONAL_ROOT" | "axon.local.toml" | "axon.toml";
+export type OverlaySource =
+  | "SJEL_OVERLAY_ROOT"
+  | "SJEL_PERSONAL_ROOT"
+  | "sjel.local.toml"
+  | "axon.local.toml"
+  | "sjel.toml"
+  | "axon.toml";
 export type OverlayResolution = { root: string; source: OverlaySource };
 
 export function axonRoot(): string {
@@ -34,7 +40,7 @@ export function resolveOverlayRoot(root: string = axonRoot()): OverlayResolution
     const value = process.env[name]?.trim();
     if (value) return { root: expandHome(value), source: name };
   }
-  for (const name of ["axon.local.toml", "axon.toml"] as const) {
+  for (const name of ["sjel.local.toml", "axon.local.toml", "sjel.toml", "axon.toml"] as const) {
     const value = readOverlayKey(resolve(root, name));
     if (value) return { root: expandHome(value), source: name };
   }
@@ -45,7 +51,7 @@ export function overlayRoot(root: string = axonRoot()): string | null {
   return resolveOverlayRoot(root)?.root ?? null;
 }
 
-export type MachineSource = "axon.local.toml" | "hostname" | "config/machine.toml";
+export type MachineSource = "sjel.local.toml" | "axon.local.toml" | "hostname" | "config/machine.toml";
 export type MachineResolution = { path: string; source: MachineSource; name: string | null };
 
 function readMachineKey(file: string): string | null {
@@ -76,11 +82,11 @@ export function resolveMachineToml(
   overlay: string,
   opts: { hostname?: string | null } = {},
 ): MachineResolution | null {
-  const explicit = readMachineKey(resolve(axonRoot(), "axon.local.toml"));
-  if (explicit) {
-    // A named machine that does not exist is an error, never a fallback: falling back
-    // would operate on a different machine while looking like it worked.
-    return { path: resolve(overlay, "config", "machines", `${explicit}.toml`), source: "axon.local.toml", name: explicit };
+  for (const name of ["sjel.local.toml", "axon.local.toml"] as const) {
+    const explicit = readMachineKey(resolve(axonRoot(), name));
+    if (explicit) {
+      return { path: resolve(overlay, "config", "machines", `${explicit}.toml`), source: name, name: explicit };
+    }
   }
   // Short name either way. `hostname -s` is what paths.sh reads, and a caller passing
   // an FQDN should get the same answer as the host reporting one.

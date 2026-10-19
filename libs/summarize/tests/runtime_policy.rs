@@ -1,7 +1,7 @@
-use sjel_summarize::{ask, Admission, LocalGate, Outcome, Reach, Target};
+use sjel_summarize::{Admission, LocalGate, Outcome, Reach, Target, ask};
 use std::path::Path;
-use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::Arc;
+use std::sync::atomic::{AtomicUsize, Ordering};
 use std::time::{SystemTime, UNIX_EPOCH};
 
 fn policy(root: &Path, selection: &str) {
@@ -45,6 +45,7 @@ fn runtime_child() {
             root: root.to_owned(),
             calls: Arc::clone(&calls),
         })),
+        runtime: None,
     };
     // Policy is checked before queuing and again after a potentially long wait for admission.
     let blocked = ask(Some(&target), "summarize this", 100, Reach::LoopbackOnly);

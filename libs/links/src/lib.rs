@@ -218,7 +218,51 @@ pub struct Decision {
     pub entity_id: Option<String>,
 }
 
+/// The fields needed from entities' `GET /api/entities/{id}` response.
+#[derive(Debug, Clone, Deserialize)]
+pub struct EntityIdentity {
+    pub id: String,
+    pub kind: String,
+}
+
+/// A refused person decision: invalid input or unavailable registry verification.
+#[derive(Debug, PartialEq, Eq)]
+pub enum DecisionError {
+    Invalid(String),
+    Unavailable(String),
+}
+
 impl Decision {
+    /// Verify a manual link against the owning service before storing it. A null
+    /// decision needs no lookup, so "not a person" still works while entities is down.
+    ///
+    /// # Errors
+    /// Returns `Invalid` for a malformed decision, a missing entity, or an entity
+    /// of another kind. Returns `Unavailable` when lookup fails or answers for another id.
+    pub fn check_with_person(
+        &self,
+        lookup: impl FnOnce(&str) -> Result<Option<EntityIdentity>, String>,
+    ) -> Result<(), DecisionError> {
+        self.check().map_err(DecisionError::Invalid)?;
+        let Some(id) = self.entity_id.as_deref() else {
+            return Ok(());
+        };
+        let person = lookup(id)
+            .map_err(DecisionError::Unavailable)?
+            .ok_or_else(|| DecisionError::Invalid("the selected person no longer exists".into()))?;
+        if person.id != id {
+            return Err(DecisionError::Unavailable(
+                "entities returned a different id for the selected person".into(),
+            ));
+        }
+        if person.kind != "person" {
+            return Err(DecisionError::Invalid(
+                "the selected entity is not a person".into(),
+            ));
+        }
+        Ok(())
+    }
+
     /// A decision names an `ent:` id or none; anything else is refused before it is stored.
     pub fn check(&self) -> Result<(), String> {
         if name_key(&self.name).is_empty() {
@@ -295,6 +339,58 @@ mod tests {
         }
         .check()
         .is_err());
+    }
+
+    #[test]
+    fn a_manual_link_requires_an_existing_person() {
+        let decision = Decision {
+            name: "Lucia".into(),
+            entity_id: Some("ent:18d8".into()),
+        };
+        let identity = |kind: &str| EntityIdentity {
+            id: "ent:18d8".into(),
+            kind: kind.into(),
+        };
+        assert!(decision
+            .check_with_person(|_| Ok(Some(identity("person"))))
+            .is_ok());
+        assert!(matches!(
+            decision.check_with_person(|_| Ok(None)),
+            Err(DecisionError::Invalid(_))
+        ));
+        for kind in ["organisation", "place", "self"] {
+            assert!(matches!(
+                decision.check_with_person(|_| Ok(Some(identity(kind)))),
+                Err(DecisionError::Invalid(_))
+            ));
+        }
+        assert!(matches!(
+            decision.check_with_person(|_| Err("entities is down".into())),
+            Err(DecisionError::Unavailable(_))
+        ));
+        assert!(matches!(
+            decision.check_with_person(|_| Ok(Some(EntityIdentity {
+                id: "ent:other".into(),
+                kind: "person".into()
+            }))),
+            Err(DecisionError::Unavailable(_))
+        ));
+    }
+
+    #[test]
+    fn null_and_malformed_decisions_do_not_look_up_people() {
+        let mut decision = Decision {
+            name: "Lucia".into(),
+            entity_id: None,
+        };
+        assert!(decision
+            .check_with_person(|_| panic!("null needs no lookup"))
+            .is_ok());
+        decision.entity_id = Some("trip:plan:1".into());
+        assert!(matches!(
+            decision.check_with_person(|_| panic!("invalid id needs no lookup")),
+            Err(DecisionError::Invalid(_))
+        ));
     }
 
     #[test]

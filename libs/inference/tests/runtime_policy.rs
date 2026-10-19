@@ -32,16 +32,20 @@ fn runtime_child() {
         }
     }).to_string().parse().unwrap();
     let cached = config.role("embedding").unwrap();
+    // This test is deliberately about the real resolution: the parent points the child at the
+    // overlay the child wrote, so it passes what that deployment resolves to rather than a
+    // stated profile. The no-argument wrappers below resolve again on their own.
+    let status = sjel_runtime::current().expect("the child's own overlay resolves");
     let input = ["text".to_owned()];
     assert!(cached
         .embed(&input, TextRole::Document)
         .unwrap_err()
         .starts_with("deferred by runtime profile:"));
     assert!(cached
-        .rerank("query", &input)
+        .rerank(&status, "query", &input)
         .unwrap_err()
         .starts_with("deferred by runtime profile:"));
-    assert!(!cached.model_reachable());
+    assert!(!cached.model_reachable(&status));
     assert!(config
         .role("summarization_light")
         .unwrap()

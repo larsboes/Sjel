@@ -105,6 +105,28 @@ pub struct Status {
 }
 
 impl Status {
+    /// Normal, with nothing configured: the profile a fresh install runs under, and the one a
+    /// test states when what it is testing is not the profile.
+    ///
+    /// `resolve` is what makes this honest rather than a special case — no hardware, no sample
+    /// and no settings resolve to Normal, so this is the same path a fresh installation takes.
+    pub fn normal(device: impl Into<String>) -> Self {
+        resolve(device.into(), None, None, 0)
+    }
+
+    /// A profile that admits nothing, carrying the reason it could not be resolved.
+    ///
+    /// A probe or a worker that cannot read the deployment has no profile to obey, and guessing
+    /// at one is the one thing it must not do. This is the answer that refuses, so a caller has a
+    /// value to pass down rather than an error path around every gate below it.
+    pub fn unresolved(reason: impl Into<String>) -> Self {
+        let mut status = Self::normal("unresolved");
+        status.selection = Selection::OnTheGo;
+        status.effective = Selection::OnTheGo;
+        status.detail = Some(reason.into());
+        status
+    }
+
     pub fn require(&self, category: Category) -> Result<(), Deferred> {
         if self.effective == Selection::Normal || self.allow.contains(&category) {
             Ok(())

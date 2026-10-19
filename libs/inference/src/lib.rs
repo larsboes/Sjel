@@ -669,7 +669,20 @@ pub fn afm_available(base_url: &str) -> bool {
 
 impl ResolvedRole {
     /// Rechecked at dispatch, not role resolution: a mode change must also stop cached roles.
+    ///
+    /// This resolves the profile itself. A worker that already holds the status for its unit of
+    /// work passes it to [`Self::runtime_admission_with`] instead, so the admission it obeys is
+    /// the one its own caller decided on rather than a second read of the overlay — and a test
+    /// of that worker can state the profile it is testing instead of reading this machine's.
     pub fn runtime_admission(&self) -> Result<(), sjel_runtime::Deferred> {
+        sjel_runtime::current().and_then(|status| self.runtime_admission_with(&status))
+    }
+
+    /// The same gate against a status the caller already resolved.
+    pub fn runtime_admission_with(
+        &self,
+        status: &sjel_runtime::Status,
+    ) -> Result<(), sjel_runtime::Deferred> {
         let local = reqwest::Url::parse(&self.backend.base_url)
             .ok()
             .and_then(|url| url.host_str().map(str::to_owned))
@@ -680,7 +693,7 @@ impl ResolvedRole {
                         .parse::<std::net::IpAddr>()
                         .is_ok_and(|ip| ip.is_loopback())
             });
-        sjel_runtime::admit_model(&self.backend_name, &self.model, local)
+        status.admit_model(&self.backend_name, &self.model, local)
     }
 
     pub fn is_afm(&self) -> bool {
@@ -691,7 +704,18 @@ impl ResolvedRole {
 
     /// Overrides cannot replace the admitted model or exceed AFM's shared context.
     pub fn admit_chat_request(&self, body: &serde_json::Value) -> Result<(), String> {
-        self.runtime_admission().map_err(|e| e.to_string())?;
+        let status = sjel_runtime::current().map_err(|e| e.to_string())?;
+        self.admit_chat_request_with(&status, body)
+    }
+
+    /// The same check against a status the caller already resolved.
+    pub fn admit_chat_request_with(
+        &self,
+        runtime: &sjel_runtime::Status,
+        body: &serde_json::Value,
+    ) -> Result<(), String> {
+        self.runtime_admission_with(runtime)
+            .map_err(|e| e.to_string())?;
         if body.get("model").and_then(|m| m.as_str()) != Some(self.model.as_str()) {
             return Err("request model does not match the admitted inference role".into());
         }
@@ -869,8 +893,8 @@ impl ResolvedRole {
 
     /// Cheap readiness probe that confirms the role's selected model is listed
     /// without loading it or running inference.
-    pub fn model_reachable(&self) -> bool {
-        if self.runtime_admission().is_err() {
+    pub fn model_reachable(&self, runtime: &sjel_runtime::Status) -> bool {
+        if self.runtime_admission_with(runtime).is_err() {
             return false;
         }
         if self.backend.base_url.trim().is_empty() || self.model.trim().is_empty() {
@@ -966,7 +990,12 @@ impl ResolvedRole {
     /// Scores documents jointly with one query through the Cohere/Jina-style
     /// `/v1/rerank` contract. Results are restored to input order even though
     /// the server returns them sorted by relevance.
-    pub fn rerank(&self, query: &str, documents: &[String]) -> Result<Vec<f32>, String> {
+    pub fn rerank(
+        &self,
+        runtime: &sjel_runtime::Status,
+        query: &str,
+        documents: &[String],
+    ) -> Result<Vec<f32>, String> {
         self.refuse_ungoverned_cloud_call("a query and documents to rerank")?;
         if documents.is_empty() {
             return Ok(Vec::new());
@@ -983,7 +1012,8 @@ impl ResolvedRole {
         if let Some(key) = self.bearer_key() {
             request = request.bearer_auth(key);
         }
-        self.runtime_admission().map_err(|e| e.to_string())?;
+        self.runtime_admission_with(runtime)
+            .map_err(|e| e.to_string())?;
         let response = request
             .send()
             .map_err(|error| format!("POST {endpoint}: {error}"))?;
@@ -1028,18 +1058,23 @@ impl ResolvedRole {
     }
 
     pub fn embed(&self, texts: &[String], text_role: TextRole) -> Result<Vec<Vec<f32>>, String> {
+        let runtime = sjel_runtime::current().map_err(|e| e.to_string())?;
         let inputs = texts
             .iter()
             .cloned()
             .map(|text| (text, text_role))
             .collect::<Vec<_>>();
-        self.embed_mixed(&inputs)
+        self.embed_mixed(&runtime, &inputs)
     }
 
     /// Embeds query and document inputs in one batch while applying each
     /// input's declared role prefix. Retrieval consumers use this to keep both
     /// sides in one request and one vector space.
-    pub fn embed_mixed(&self, inputs: &[(String, TextRole)]) -> Result<Vec<Vec<f32>>, String> {
+    pub fn embed_mixed(
+        &self,
+        runtime: &sjel_runtime::Status,
+        inputs: &[(String, TextRole)],
+    ) -> Result<Vec<Vec<f32>>, String> {
         if inputs.is_empty() {
             return Ok(Vec::new());
         }
@@ -1058,7 +1093,8 @@ impl ResolvedRole {
             request = request.bearer_auth(key);
         }
 
-        self.runtime_admission().map_err(|e| e.to_string())?;
+        self.runtime_admission_with(runtime)
+            .map_err(|e| e.to_string())?;
         let response = request
             .send()
             .map_err(|error| format!("POST {endpoint}: {error}"))?;

@@ -424,6 +424,8 @@ pub struct Target {
     /// would buy nothing and cost latency — and a trusted peer is a hosted
     /// provider in exactly that respect, whatever it is allowed to see.
     pub gate: Option<std::sync::Arc<dyn LocalGate>>,
+    /// Runtime profile to obey. `None` resolves [`sjel_runtime::current`] per request.
+    pub runtime: Option<sjel_runtime::Status>,
 }
 
 // Hand-written because `Arc<dyn LocalGate>` is not Debug, and requiring that of
@@ -437,6 +439,7 @@ impl std::fmt::Debug for Target {
             .field("loopback", &self.loopback)
             .field("operator_owned", &self.operator_owned)
             .field("gate", &self.gate.as_ref().map(|_| "<gate>"))
+            .field("runtime", &self.runtime.as_ref().map(|_| "<runtime>"))
             .finish()
     }
 }
@@ -665,7 +668,7 @@ pub fn extract_mermaid(answer: &str) -> Result<String, String> {
         // model that ignored the format, and guessing which fence it meant is
         // how prose ends up in the column.
         None if answer.contains("```") => {
-            return Err("answer used a fence that was not ```mermaid".into())
+            return Err("answer used a fence that was not ```mermaid".into());
         }
         None => answer,
     };
@@ -723,8 +726,14 @@ fn runtime_admission(target: &Target, prompt: &str, reply_tokens: u32) -> Result
                     .parse::<std::net::IpAddr>()
                     .is_ok_and(|ip| ip.is_loopback())
         });
-    sjel_runtime::admit_model(&target.backend_name, &target.model, local)
-        .map_err(|e| e.to_string())?;
+    if let Some(runtime) = &target.runtime {
+        runtime
+            .admit_model(&target.backend_name, &target.model, local)
+            .map_err(|e| e.to_string())?;
+    } else {
+        sjel_runtime::admit_model(&target.backend_name, &target.model, local)
+            .map_err(|e| e.to_string())?;
+    }
     if local
         && target.backend_name == "foundation-models"
         && target.model == "apple-foundationmodel"
@@ -1060,6 +1069,7 @@ mod tests {
             loopback: false,
             operator_owned: false,
             gate: None,
+            runtime: None,
         };
         let text = "x".repeat(1_000);
         assert_eq!(
@@ -1105,6 +1115,7 @@ mod tests {
             loopback: true,
             operator_owned: true,
             gate: None,
+            runtime: None,
         };
         for empty in ["", "   ", "\n\t "] {
             assert_eq!(
@@ -1130,6 +1141,7 @@ mod tests {
             loopback: true,
             operator_owned: true,
             gate: None,
+            runtime: None,
         };
         assert!(Reach::LoopbackOnly.admits(&local));
         assert!(Reach::CloudCleared.admits(&local));
@@ -1253,6 +1265,7 @@ mod tests {
             loopback: true,
             operator_owned: true,
             gate: Some(std::sync::Arc::new(AlwaysBusy)),
+            runtime: Some(sjel_runtime::Status::normal("test")),
         };
         assert_eq!(
             digest(
@@ -1285,6 +1298,7 @@ mod tests {
             loopback: false,
             operator_owned: false,
             gate: Some(std::sync::Arc::new(NeverCalled)),
+            runtime: Some(sjel_runtime::Status::normal("test")),
         };
         // Refused for its data class before any gate question arises, which is
         // itself the ordering that matters: policy first, capacity second.
@@ -1314,8 +1328,8 @@ mod tests {
     /// deadlocks the second caller.
     #[test]
     fn a_permit_is_released_when_the_request_finishes() {
-        use std::sync::atomic::{AtomicUsize, Ordering};
         use std::sync::Arc;
+        use std::sync::atomic::{AtomicUsize, Ordering};
 
         #[derive(Default)]
         struct Counting {
@@ -1342,6 +1356,7 @@ mod tests {
             loopback: true,
             operator_owned: true,
             gate: Some(std::sync::Arc::new(Arc::clone(&counting))),
+            runtime: Some(sjel_runtime::Status::normal("test")),
         };
         // Fails at the socket, which is the point: the release must happen on
         // the error path too, not only on a clean answer.

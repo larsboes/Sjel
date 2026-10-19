@@ -184,3 +184,22 @@ role, beside the model, and travel with it.
 will serve e5 vectors to a nomic run after a backend switch: every score wrong, nothing
 logged. `ResolvedRole::cache_key()` returns `backend:model` so a cache can name its
 producer and refuse a mismatch. `capabilities/scouting/src/embed.rs` is the worked example.
+
+## Admission is a value the caller passes
+
+`ResolvedRole::runtime_admission()` and `admit_chat_request()` resolve the runtime profile
+themselves, and that is right for a one-off call. It is the wrong shape inside a worker: a pass
+that reads the overlay per candidate obeys several readings of it, and every test of that pass
+depends on this machine's power source — measured 2026-10-18, when `cargo test -p sjel-comms`
+lost 14 tests to a laptop on battery and not one of them was about the profile.
+
+So each gate has two spellings. The `*_with` variants take a `&sjel_runtime::Status` the caller
+already resolved, and `model_reachable`, `rerank` and `embed_mixed` take it outright, because
+this crate's only caller outside it is `capabilities/comms`. A unit of work resolves once at its
+edge — a handler or a drain calls `sjel_runtime::current()` and passes the value down — and a
+test states `sjel_runtime::Status::normal("test")` instead of reading the operator's overlay.
+`Status::unresolved(reason)` is the answer for a deployment that cannot be read, so a caller has
+a value to pass rather than an error path around every gate below it.
+
+`embed()` keeps its own resolution because `capabilities/scouting` calls it, and that is the rule
+rather than an exception: a caller with no status to hand keeps the signature it had.

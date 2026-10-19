@@ -4,6 +4,11 @@ Per-device runtime admission, separate from capability installation, agent permi
 privacy policy. Workers read the overlay files before each unit of work; only `sjel-status`
 writes preferences and samples the power source. No extra service runs.
 
+A worker resolves the profile once at the edge of its unit of work and passes the `Status` down:
+`Status::normal` states one in a test, and `Status::unresolved` refuses when the deployment cannot
+be read. Why a per-candidate read is the wrong shape is in
+[`libs/inference`](../inference/README.md#admission-is-a-value-the-caller-passes).
+
 ## Controls
 
 The dashboard's Systems page offers Auto, Normal and On the go, plus persistent exceptions.

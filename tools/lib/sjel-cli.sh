@@ -22,6 +22,10 @@ sjel_cli_exec() {
   local sub
   sub="$(basename "$0")"
   local bin="${SJEL_CLI_BIN:-}"
+  if [ -z "$bin" ] && [ -f "$SJEL_ROOT/distribution.json" ]; then
+    bin="$SJEL_ROOT/target/release/sjel-cli"
+    [ -x "$bin" ] || { echo "$sub: packaged CLI is missing; repair the installation" >&2; exit 2; }
+  fi
   if [ -z "$bin" ]; then
     local crate
     crate="$(cd "$(dirname "${BASH_SOURCE[0]:-$0}")/../sjel-cli" 2>/dev/null && pwd)" || crate=""

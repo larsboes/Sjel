@@ -18,6 +18,7 @@ use std::process::{Command, ExitCode, ExitStatus};
 mod audit;
 mod capability;
 mod doctor;
+mod distribution;
 mod feed_sweep;
 mod harnesses;
 mod help;
@@ -141,6 +142,7 @@ fn sjel(root: &Path, command: &str, rest: &[String]) -> ExitCode {
         "capability" => capability::command(root, rest),
         "capture" => capability::command(root, &[&["capture".to_string()], rest].concat()),
         "runtime" => runtime::run(root, rest),
+        "distribution" => distribution::run(root, rest),
         "agent" => match rest.first().map(String::as_str) {
             Some("enroll") => {
                 exec(Command::new(tool("tools/capability-auth/capability-auth")).arg("enroll"))
@@ -175,6 +177,7 @@ fn help(root: &Path, topic: &str) -> ExitCode {
         "gates" | "test" => help::GATES,
         "cargo" => help::CARGO,
         "doctor" => "Usage: sjel doctor",
+        "distribution" => distribution::USAGE,
         "search" => "Usage: sjel search <words...>",
         "capture" => {
             "Usage: sjel capture [url] [text] [#buy|#look|#go|#learn]  (no words: list unsorted)"

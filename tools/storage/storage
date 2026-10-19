@@ -15,6 +15,11 @@ _here="$(cd "$(dirname "${BASH_SOURCE[0]:-$0}")" && pwd)"
 . "$_here/../lib/paths.sh"   # SJEL_ROOT, SJEL_OVERLAY_ROOT, SJEL_PERSONAL_ROOT
 
 BIN="${CARGO_TARGET_DIR:-$SJEL_ROOT/target}/release/sjel-storage"
+if [ -f "$SJEL_ROOT/distribution.json" ]; then
+  BIN="$SJEL_ROOT/target/release/sjel-storage"
+  [ -x "$BIN" ] || { echo "storage: packaged binary is missing; repair the installation" >&2; exit 2; }
+  exec "$BIN" "$@"
+fi
 
 # Rebuild when the binary is missing, or when any crate source is newer than it. `find
 # -newer` with -quit stops at the first hit, so this costs one stat walk over a small tree.

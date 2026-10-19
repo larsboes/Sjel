@@ -20,6 +20,8 @@ Check a change before pushing it:
   cargo <args...>                Run cargo against a scratch target dir and a scratch overlay
 
 Operate capabilities:
+  distribution verify <archive> --sha256 <digest>  Verify a release capability package without installing
+  distribution install-package <archive> --sha256 <digest>  Install into a packaged runtime; do not start
   runtime status                 Runtime mode, power and On-the-go exceptions
   runtime mode <mode>            Owner-only: auto, normal or on-the-go
   runtime allow <category> on|off Owner-only: persistent On-the-go exception

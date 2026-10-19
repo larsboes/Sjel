@@ -18,6 +18,8 @@ mkdir -p "$FIXTURE/tools/lib" "$FIXTURE/capabilities/vaultwarden" \
 cp "$ROOT/tools/backup.sh" "$FIXTURE/tools/backup.sh"
 cp "$ROOT/tools/icloud-store-backup.py" "$ROOT/tools/icloud-item.swift" "$FIXTURE/tools/"
 cp "$ROOT/tools/lib/toml.sh" "$FIXTURE/tools/lib/toml.sh"
+cp "$ROOT/tools/lib/paths.sh" "$FIXTURE/tools/lib/paths.sh"
+export SJEL_OVERLAY_ROOT="$OVERLAY"
 # The real resolver, not a stub. backup.sh refuses a capability another deployment provides
 # (retired-tracker#169), and every case below depends on that refusal NOT firing — a stub that
 # always answered "local" would keep them green through a change that broke the check.
@@ -27,14 +29,6 @@ cp "$ROOT/tools/lib/external-ref.sh" "$FIXTURE/tools/lib/external-ref.sh"
 # test.
 source "$ROOT/tools/lib/test-support.sh"
 
-cat > "$FIXTURE/tools/lib/paths.sh" <<PATHS
-#!/bin/bash
-SJEL_ROOT="$FIXTURE"
-SJEL_PERSONAL_ROOT="$OVERLAY"
-SJEL_MACHINE_TOML="$OVERLAY/config/machine.toml"
-export SJEL_ROOT SJEL_PERSONAL_ROOT SJEL_MACHINE_TOML
-source "$FIXTURE/tools/lib/toml.sh"
-PATHS
 cat > "$FIXTURE/tools/lib/platform.sh" <<'PLATFORM'
 #!/bin/bash
 SJEL_CONTAINER_RUNTIME="docker"
@@ -49,6 +43,10 @@ cat > "$FIXTURE/tools/service-runner.sh" <<'RUNNER'
 #!/bin/bash
 set -u
 action="$1"
+if [ -e /dev/fd/9 ]; then
+  echo "service-runner inherited backup lock" >&2
+  exit 1
+fi
 printf 'service:%s\n' "$action" >> "$MOCK_LOG"
 case "$action" in
   stop)
@@ -92,6 +90,10 @@ printf 'certificate\n' > "$OVERLAY/data/vaultwarden/tls/cert.pem"
 cat > "$MOCK_BIN/rsync" <<'RSYNC'
 #!/bin/bash
 printf 'rsync:%s\n' "$2" >> "$MOCK_LOG"
+if [ -n "${MOCK_BLOCK_RSYNC:-}" ] && [ ! -e "$MOCK_BLOCK_RSYNC.entered" ]; then
+  touch "$MOCK_BLOCK_RSYNC" "$MOCK_BLOCK_RSYNC.entered"
+  while [ -e "$MOCK_BLOCK_RSYNC" ]; do sleep 0.02; done
+fi
 [ "${MOCK_SIGNAL_PARENT:-0}" = "0" ] || {
   kill -"$MOCK_SIGNAL_PARENT" "$PPID"
   sleep 1
@@ -147,6 +149,9 @@ if [ "${MOCK_FAIL_COLD_COPY:-0}" -eq 1 ] && [ "$1" = "$MOCK_SQLITE_SOURCE" ]; th
   printf 'copy:cold\n' >> "$MOCK_LOG"
   exit 1
 fi
+if [ "${MOCK_FAIL_DEST_COPY:-0}" -eq 1 ]; then
+  case "${2:-}" in *.part) printf truncated > "$2"; exit 1 ;; esac
+fi
 /bin/cp "$@"
 COPY
 cat > "$MOCK_BIN/ssh" <<'SSH'
@@ -157,6 +162,12 @@ case " $* " in
   *" -O exit "*) printf 'ssh:close\n' >> "$MOCK_LOG"; exit 0 ;;
 esac
 printf 'ssh:%s\n' "$last" >> "$MOCK_LOG"
+if [ "${MOCK_SIGNAL_REMOTE_COPY:-0}" != "0" ]; then
+  case "$last" in "cat > "*) /bin/sh -c "$last"; kill -"$MOCK_SIGNAL_REMOTE_COPY" "$PPID"; exit 143 ;; esac
+fi
+if [ "${MOCK_FAIL_REMOTE_COPY:-0}" -eq 1 ]; then
+  case "$last" in "cat > "*) /bin/sh -c "$last"; exit 1 ;; esac
+fi
 /bin/sh -c "$last"
 SSH
 cat > "$MOCK_BIN/date" <<'DATE'
@@ -231,7 +242,8 @@ reset_run() {
   : > "$MOCK_LOG"
   rm -f "$MOCK_RESUME_COUNT"
   unset MOCK_FAIL_RSYNC MOCK_FAIL_SQLITE MOCK_FAIL_STOP MOCK_FAIL_COLD_COPY \
-    MOCK_FAIL_BACKUP MOCK_RESUME_FAILS MOCK_SIGNAL_PARENT
+    MOCK_FAIL_BACKUP MOCK_RESUME_FAILS MOCK_SIGNAL_PARENT MOCK_BLOCK_RSYNC \
+    MOCK_FAIL_REMOTE_COPY MOCK_FAIL_DEST_COPY MOCK_SIGNAL_REMOTE_COPY
 }
 reset_remote() {
   rm -rf "$SCRATCH/remote/vaultwarden"
@@ -251,6 +263,44 @@ file_sha256() {
   fi
 }
 source_before="$(file_sha256 "$OVERLAY/data/vaultwarden/data/db.sqlite3")"
+
+# An overlay-only capability must use its own contract, carry the declared data,
+# and record the target that received it. Keep resolution real so a public-only
+# lookup or a silent duplicate fallback breaks this test.
+mkdir -p "$OVERLAY/capabilities/private-ledger" "$OVERLAY/data/private-ledger" \
+  "$SCRATCH/private-destination"
+cat > "$OVERLAY/capabilities/private-ledger/service.toml" <<'MANIFEST'
+name = "private-ledger"
+backup_paths = ["data/private-ledger"]
+backup_target = "private-target"
+MANIFEST
+cat >> "$OVERLAY/config/systems.local.toml" <<SYSTEMS
+[private-target]
+kind = "local"
+path = "$SCRATCH/private-destination"
+SYSTEMS
+printf 'private ledger payload\n' > "$OVERLAY/data/private-ledger/entries.txt"
+reset_run
+export MOCK_TIMESTAMP=20251230T010101Z
+expect_pass "overlay-only capability backup" "$BACKUP" --no-prune private-ledger
+private_archive="$SCRATCH/private-destination/private-ledger/private-ledger-$MOCK_TIMESTAMP.tar.gz"
+private_payload="$(tar -xOzf "$private_archive" ./data/private-ledger/entries.txt 2>/dev/null)"
+[ "$private_payload" = "private ledger payload" ] \
+  || fail "private archive omitted or changed the declared overlay data"
+private_meta="$(tar -xOzf "$private_archive" ./axon-backup.toml 2>/dev/null)"
+printf '%s' "$private_meta" | grep -q 'capability = "private-ledger"' \
+  || fail "private archive did not record its capability"
+grep -q '"target": "private-target"' "$OVERLAY/backup/receipts/private-ledger.json" \
+  || fail "private backup receipt did not record the manifest target"
+
+mkdir -p "$FIXTURE/capabilities/private-ledger"
+cp "$OVERLAY/capabilities/private-ledger/service.toml" "$FIXTURE/capabilities/private-ledger/service.toml"
+reset_run
+expect_fail_with "duplicate capability backup" "declared in both roots" "$BACKUP" --no-prune private-ledger
+[ "$status" -eq 2 ] || fail "duplicate capability did not preserve the resolver's exit status 2"
+[ ! -s "$MOCK_LOG" ] || fail "duplicate capability touched backup sources or services"
+rm -f "$FIXTURE/capabilities/private-ledger/service.toml"
+expect_fail_with "unknown capability backup" "no service.toml for capability 'missing-capability'" "$BACKUP" missing-capability
 
 # Pull mode produces a raw archive on stdout, keeps diagnostics on stderr, and does
 # not resolve or contact a push target. Removing systems.local.toml proves destination
@@ -353,6 +403,43 @@ count="$(find "$SCRATCH/remote/vaultwarden" -maxdepth 1 -name 'vaultwarden-*.tar
 grep -q '"retention_applied": true' "$OVERLAY/backup/receipts/vaultwarden.json" \
   || fail "normal receipt did not record retention_applied=true"
 grep -q 'tail -n +' "$MOCK_LOG" || fail "normal mode did not issue the remote prune command"
+
+# A live shell writer excludes another invocation before it can acquire the same hold.
+reset_remote
+reset_run
+export MOCK_TIMESTAMP=20260102T020202Z MOCK_BLOCK_RSYNC="$SCRATCH/rsync-blocked"
+"$BACKUP" --no-prune vaultwarden > "$SCRATCH/first.log" 2>&1 &
+first_pid=$!
+for attempt in {1..500}; do
+  [ ! -f "$MOCK_BLOCK_RSYNC" ] || break
+  sleep 0.02
+done
+[ -f "$MOCK_BLOCK_RSYNC" ] || fail "first backup never reached the held snapshot"
+expect_fail_with "concurrent shell writer" "already running" "$BACKUP" --no-prune vaultwarden
+[ "$(grep -c '^service:stop$' "$MOCK_LOG")" = 1 ] || fail "concurrent run touched the service hold"
+rm -f "$MOCK_BLOCK_RSYNC"
+wait "$first_pid" || fail "first overlapping backup failed"
+unset MOCK_BLOCK_RSYNC
+
+# A transport failure removes its own partial and preserves previously completed archives.
+reset_remote
+reset_run
+export MOCK_TIMESTAMP=20260102T030303Z MOCK_FAIL_REMOTE_COPY=1
+expect_fail "remote transfer failure" "$BACKUP" --no-prune vaultwarden
+[ -z "$(find "$SCRATCH/remote/vaultwarden" -mindepth 1 -print -quit)" ] \
+  || fail "failed remote transfer left an archive or partial"
+reset_run
+export MOCK_TIMESTAMP=20260102T035353Z MOCK_SIGNAL_REMOTE_COPY=TERM
+expect_fail "remote transfer interruption" "$BACKUP" --no-prune vaultwarden
+[ -z "$(find "$SCRATCH/remote/vaultwarden" -mindepth 1 -print -quit)" ] \
+  || fail "interrupted remote transfer left an archive or partial"
+reset_run
+export MOCK_TIMESTAMP=20260102T040404Z
+expect_pass "run after failure releases the lock" "$BACKUP" --no-prune vaultwarden
+archive_before="$(file_sha256 "$SCRATCH/remote/vaultwarden/vaultwarden-$MOCK_TIMESTAMP.tar.gz")"
+expect_fail_with "same-second remote collision" "refusing overwrite" "$BACKUP" --no-prune vaultwarden
+[ "$(file_sha256 "$SCRATCH/remote/vaultwarden/vaultwarden-$MOCK_TIMESTAMP.tar.gz")" = "$archive_before" ] \
+  || fail "remote collision replaced the completed archive"
 
 # A path-copy failure happens under the hold and the EXIT trap resumes before returning.
 reset_remote
@@ -757,6 +844,15 @@ HOME="$CLOUD_HOME" expect_pass "an explicit target wins over the manifest" "$BAC
 [ ! -f "$LOCAL_DEST/ledger/ledger-20260108T000000Z.tar.gz" ] \
   || fail "--target fell back to the manifest target"
 
+reset_run
+export MOCK_TIMESTAMP=20260108T010101Z MOCK_FAIL_DEST_COPY=1
+HOME="$CLOUD_HOME" expect_fail "local transfer failure" "$BACKUP" --target override-target ledger
+[ ! -e "$SCRATCH/override-dest/ledger/.ledger-$MOCK_TIMESTAMP.tar.gz.part" ] \
+  || fail "failed local transfer left a partial"
+[ ! -e "$SCRATCH/override-dest/ledger/ledger-$MOCK_TIMESTAMP.tar.gz" ] \
+  || fail "failed local transfer published a completed archive"
+reset_run
+
 # An immutable receipt per archive. The surface reads these to record what landed, and
 # retention reads them so an archive is always checked against the digest recorded when it
 # was produced rather than one recomputed from bytes that may have changed since.
@@ -787,4 +883,4 @@ if [ "$fails" -gt 0 ]; then
   echo "backup tests: $fails failure(s)"
   exit 1
 fi
-echo "backup tests: stream, coherent hold, live copy, file paths, no-prune, retention, resume failures, and local-destination eviction passed"
+echo "backup tests: private manifests, duplicate refusal, stream, coherent hold, live copy, file paths, no-prune, retention, resume failures, and local-destination eviction passed"

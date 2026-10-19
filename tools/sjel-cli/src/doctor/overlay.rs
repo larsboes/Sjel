@@ -64,7 +64,7 @@ pub fn resolve_overlay_root(root: &Path) -> Option<OverlayResolution> {
             }
         }
     }
-    for name in ["axon.local.toml", "axon.toml"] {
+    for name in ["sjel.local.toml", "axon.local.toml", "sjel.toml", "axon.toml"] {
         if let Some(v) = overlay_key(&root.join(name)) {
             return Some(OverlayResolution {
                 root: expand_home(&v),
@@ -95,21 +95,23 @@ fn short_hostname() -> String {
         .unwrap_or_default()
 }
 
-/// `machine = "<name>"` in axon.local.toml, else `config/machines/<short-hostname>.toml` when it
+/// `machine = "<name>"` in sjel.local.toml / axon.local.toml, else `config/machines/<short-hostname>.toml` when it
 /// exists, else the single-file `config/machine.toml`.
 pub fn resolve_machine_toml(root: &Path, overlay: &str) -> MachineResolution {
     let machines = Path::new(overlay).join("config/machines");
-    let explicit = read_key(&root.join("axon.local.toml"), |d| {
-        d.get("machine")
-            .and_then(toml::Value::as_str)
-            .map(str::to_owned)
-    });
-    if let Some(name) = explicit {
-        return MachineResolution {
-            path: machines.join(format!("{name}.toml")),
-            source: "axon.local.toml",
-            name: Some(name),
-        };
+    for name in ["sjel.local.toml", "axon.local.toml"] {
+        let explicit = read_key(&root.join(name), |d| {
+            d.get("machine")
+                .and_then(toml::Value::as_str)
+                .map(str::to_owned)
+        });
+        if let Some(name_str) = explicit {
+            return MachineResolution {
+                path: machines.join(format!("{name_str}.toml")),
+                source: name,
+                name: Some(name_str),
+            };
+        }
     }
     let host = short_hostname();
     if !host.is_empty() {

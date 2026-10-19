@@ -1,0 +1,94 @@
+#!/usr/bin/env bash
+# Build the native GPUI iOS archive in a separate generated host project. Never install or upload.
+set -euo pipefail
+
+usage() {
+  echo "tools/distribution/ios-archive --version X.Y.Z --build NUMBER --out NEW_DIR [--team TEAM_ID] [--export]"
+  echo "Without --team this prepares an unsigned archive. --export requires a signing team."
+}
+version=""; build=""; out=""; team=""; export_ipa=false
+while [ "$#" -gt 0 ]; do
+  case "$1" in
+    --help|-h) usage; exit 0 ;;
+    --export) export_ipa=true; shift ;;
+    --version|--build|--out|--team)
+      [ "$#" -ge 2 ] || { usage >&2; exit 2; }
+      case "$1" in
+        --version) version="$2" ;; --build) build="$2" ;; --out) out="$2" ;; --team) team="$2" ;;
+      esac
+      shift 2 ;;
+    *) usage >&2; exit 2 ;;
+  esac
+done
+[[ "$version" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]] || { echo "a numeric --version is required" >&2; exit 2; }
+[[ "$build" =~ ^[1-9][0-9]*$ ]] || { echo "a positive --build is required" >&2; exit 2; }
+[ -n "$out" ] && [ ! -e "$out" ] || { echo "--out must name a new directory" >&2; exit 2; }
+if [ -n "$team" ]; then
+  [[ "$team" =~ ^[A-Z0-9]{10}$ ]] || { echo "invalid Apple team identifier" >&2; exit 2; }
+fi
+[ "$export_ipa" = false ] || [ -n "$team" ] || { echo "--export requires --team" >&2; exit 2; }
+[ "$(uname -s)" = Darwin ] || { echo "iOS archive preparation requires macOS" >&2; exit 1; }
+for tool in cargo xcrun xcodebuild xcodegen; do
+  command -v "$tool" >/dev/null || { echo "missing build tool: $tool" >&2; exit 1; }
+done
+
+root="$(cd "$(dirname "$0")/../.." && pwd)"
+mkdir -p "$out"
+out="$(cd "$out" && pwd)"
+stage="$(mktemp -d "${TMPDIR:-/tmp}/sjel-ios-archive.XXXXXX")"
+trap 'rm -rf "$stage"' EXIT
+host="$stage/host"
+mkdir -p "$host"
+# Copy source inputs only; never reuse a Simulator build or generated project.
+for source in "$root/apps/gpui-prototype/ios/host/"*.swift "$root/apps/gpui-prototype/ios/host/"*.h \
+  "$root/apps/gpui-prototype/ios/host/project.yml"; do
+  [ -f "$source" ] && cp "$source" "$host/$(basename "$source")"
+done
+[ -f "$host/project.yml" ] || { echo "native host project spec is missing" >&2; exit 1; }
+target="$out/cargo-target"
+cargo build --locked --release --manifest-path "$root/apps/gpui-prototype/Cargo.toml" \
+  --package sjel-gpui-ios --target aarch64-apple-ios --target-dir "$target" --lib
+rust_lib="$target/aarch64-apple-ios/release/libsjel_gpui_ios.a"
+[ -f "$rust_lib" ] || { echo "native Rust library was not produced" >&2; exit 1; }
+(cd "$host" && xcodegen generate --spec project.yml)
+/usr/libexec/PlistBuddy -c "Set :CFBundleShortVersionString $version" "$host/Info.plist"
+/usr/libexec/PlistBuddy -c "Set :CFBundleVersion $build" "$host/Info.plist"
+
+signing=(CODE_SIGNING_ALLOWED=NO)
+if [ -n "$team" ]; then
+  signing=(CODE_SIGNING_ALLOWED=YES CODE_SIGN_STYLE=Automatic "DEVELOPMENT_TEAM=$team" \
+    "CODE_SIGN_IDENTITY=Apple Development" PROVISIONING_PROFILE_SPECIFIER=)
+fi
+xcodebuild -project "$host/SjelIOS.xcodeproj" -scheme SjelIOS -configuration Release \
+  -sdk iphoneos -destination 'generic/platform=iOS' -archivePath "$out/Sjel.xcarchive" \
+  -derivedDataPath "$out/derived-data" "RUST_LIB=$rust_lib" \
+  "MARKETING_VERSION=$version" "CURRENT_PROJECT_VERSION=$build" \
+  GENERATE_INFOPLIST_FILE=NO INFOPLIST_KEY_CFBundleShortVersionString="$version" \
+  INFOPLIST_KEY_CFBundleVersion="$build" "${signing[@]}" archive
+
+if [ -n "$team" ]; then
+  cat > "$out/ExportOptions.plist" <<EOF
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0"><dict>
+<key>method</key><string>app-store-connect</string>
+<key>destination</key><string>export</string>
+<key>teamID</key><string>$team</string>
+<key>signingStyle</key><string>automatic</string>
+<key>manageAppVersionAndBuildNumber</key><false/>
+<key>uploadSymbols</key><true/>
+</dict></plist>
+EOF
+fi
+if [ "$export_ipa" = true ]; then
+  xcodebuild -exportArchive -archivePath "$out/Sjel.xcarchive" \
+    -exportOptionsPlist "$out/ExportOptions.plist" -exportPath "$out/export"
+fi
+cat > "$out/READINESS.txt" <<EOF
+Native GPUI iOS archive: $version ($build)
+Nothing installed or uploaded. An unsigned archive cannot be distributed.
+For TestFlight, the owner must configure signing, App Store Connect, privacy/export-compliance
+answers and review access, then distribute the signed archive through Xcode Organizer.
+This command does not grant Developer Mode, pair a phone or install an app.
+EOF
+echo "Prepared $out/Sjel.xcarchive. Nothing installed or uploaded."

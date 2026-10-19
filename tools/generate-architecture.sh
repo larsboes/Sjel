@@ -20,6 +20,26 @@ UP="$SJEL_ROOT/upstreams.toml"
 SYS="$SJEL_ROOT/systems.toml"
 AX="$SJEL_ROOT/axon.toml"
 
+# Copied README descriptions keep links relative to their source directory.
+rebase_readme_links() {
+  awk -v base="$1" '
+    {
+      rest = $0
+      while (match(rest, /\]\([^)]*\)/)) {
+        before = substr(rest, 1, RSTART - 1)
+        target = substr(rest, RSTART + 2, RLENGTH - 3)
+        after = substr(rest, RSTART + RLENGTH)
+        if (target ~ /^[#?]/) target = base "README.md" target
+        else if (target !~ /^([[:alpha:]][[:alnum:]+.-]*:|\/)/ && target != "")
+          target = base target
+        printf "%s](%s)", before, target
+        rest = after
+      }
+      print rest
+    }
+  '
+}
+
 {
   echo "# Sjel Architecture"
   echo
@@ -64,6 +84,7 @@ AX="$SJEL_ROOT/axon.toml"
       pa="$(toml_get panel_path "$dir/service.toml")"
       if [ -n "$pp" ] || [ -n "$pa" ]; then panel="\`${pp:-$p}${pa}\`"; fi
     fi
+    desc="$(printf '%s\n' "$desc" | rebase_readme_links "${dir#"$SJEL_ROOT"/}")"
     echo "| \`$name\` | $desc | $svc | $port | $panel |"
   done
   echo
@@ -92,6 +113,7 @@ AX="$SJEL_ROOT/axon.toml"
     port="—"
     p="$(toml_get port "$st")"
     if [ -n "$p" ]; then port="\`$p\`"; fi
+    desc="$(printf '%s\n' "$desc" | rebase_readme_links "${dir#"$SJEL_ROOT"/}")"
     echo "| \`$name\` | $desc | $port |"
   done
   echo
@@ -112,6 +134,7 @@ AX="$SJEL_ROOT/axon.toml"
       trimmed="${desc%%. *}"
       if [ "$trimmed" != "$desc" ]; then desc="$trimmed."; else desc="${desc% }"; fi
     fi
+    desc="$(printf '%s\n' "$desc" | rebase_readme_links "${dir#"$SJEL_ROOT"/}")"
     echo "| \`$name\` | $desc |"
   done
   echo

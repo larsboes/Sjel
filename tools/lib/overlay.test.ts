@@ -39,6 +39,16 @@ describe("overlay resolution", () => {
     writeFileSync(join(root, "axon.toml"), '[platform]\noverlay = "/default"\n');
     expect(resolveOverlayRoot(root)).toEqual({ root: "/local", source: "axon.local.toml" });
   });
+  test("prefers sjel.local.toml over axon.local.toml", () => {
+    writeFileSync(join(root, "sjel.local.toml"), 'overlay = "/sjel-local"\n');
+    writeFileSync(join(root, "axon.local.toml"), 'overlay = "/axon-local"\n');
+    expect(resolveOverlayRoot(root)).toEqual({ root: "/sjel-local", source: "sjel.local.toml" });
+  });
+  test("prefers sjel.toml over axon.toml fallback", () => {
+    writeFileSync(join(root, "sjel.toml"), 'overlay = "/sjel-default"\n');
+    writeFileSync(join(root, "axon.toml"), '[platform]\noverlay = "/default"\n');
+    expect(resolveOverlayRoot(root)).toEqual({ root: "/sjel-default", source: "sjel.toml" });
+  });
   test("reads the tracked platform fallback", () => {
     writeFileSync(join(root, "axon.toml"), '[platform]\noverlay = "/default"\n');
     expect(resolveOverlayRoot(root)).toEqual({ root: "/default", source: "axon.toml" });

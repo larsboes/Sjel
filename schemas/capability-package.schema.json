@@ -1,0 +1,28 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Sjel binary capability package",
+  "description": "package.json at an archive root; only the named payload files are reconstructed. The archive digest must come from a trusted release catalogue.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema", "name", "version", "platform", "requires", "files"],
+  "properties": {
+    "schema": { "const": 1 },
+    "name": { "type": "string", "pattern": "^[a-z0-9][a-z0-9-]{0,79}$" },
+    "version": { "type": "string", "pattern": "^v[0-9]+\\.[0-9]+\\.[0-9]+$" },
+    "platform": { "type": "string", "enum": ["aarch64-apple-darwin", "x86_64-apple-darwin", "aarch64-unknown-linux-gnu", "x86_64-unknown-linux-gnu"] },
+    "requires": { "type": "array", "items": { "type": "string", "pattern": "^[a-z0-9][a-z0-9-]{0,79}$" }, "uniqueItems": true },
+    "files": {
+      "type": "array", "minItems": 1, "maxItems": 4096,
+      "items": {
+        "type": "object", "additionalProperties": false,
+        "required": ["path", "bytes", "sha256", "executable"],
+        "properties": {
+          "path": { "type": "string", "minLength": 1, "description": "A unique relative regular-file path without empty, dot, parent or backslash components." },
+          "bytes": { "type": "integer", "minimum": 0, "maximum": 1073741824 },
+          "sha256": { "type": "string", "pattern": "^[0-9a-f]{64}$" },
+          "executable": { "type": "boolean" }
+        }
+      }
+    }
+  }
+}

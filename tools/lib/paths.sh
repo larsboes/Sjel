@@ -32,14 +32,20 @@ if [ -n "${SJEL_OVERLAY_ROOT:-}" ]; then
   _overlay_raw="$SJEL_OVERLAY_ROOT"
   _overlay_overridden="yes"
 fi
+if [ -z "$_overlay_raw" ] && [ -f "$SJEL_ROOT/sjel.local.toml" ]; then
+  _overlay_raw="$(toml_get overlay "$SJEL_ROOT/sjel.local.toml")"
+fi
 if [ -z "$_overlay_raw" ] && [ -f "$SJEL_ROOT/axon.local.toml" ]; then
   _overlay_raw="$(toml_get overlay "$SJEL_ROOT/axon.local.toml")"
+fi
+if [ -z "$_overlay_raw" ] && [ -f "$SJEL_ROOT/sjel.toml" ]; then
+  _overlay_raw="$(toml_get overlay "$SJEL_ROOT/sjel.toml")"
 fi
 if [ -z "$_overlay_raw" ]; then
   _overlay_raw="$(toml_get overlay "$SJEL_ROOT/axon.toml")"
 fi
 if [ -z "$_overlay_raw" ]; then
-  echo "paths.sh: no 'overlay' in $SJEL_ROOT/axon.local.toml or $SJEL_ROOT/axon.toml — run tools/install.sh" >&2
+  echo "paths.sh: no 'overlay' in sjel.local.toml/axon.local.toml or sjel.toml/axon.toml — run tools/install.sh" >&2
   return 1 2>/dev/null || exit 1
 fi
 # SJEL_OVERLAY_ROOT is the canonical active deployment overlay. Keep the historical
@@ -52,7 +58,7 @@ export SJEL_OVERLAY_ROOT SJEL_PERSONAL_ROOT
 # own several machines, so the file is selected rather than assumed. Three ways in,
 # most specific first:
 #
-#   1. `machine = "<name>"` in axon.local.toml — that file is gitignored and per-machine
+#   1. `machine = "<name>"` in sjel.local.toml / axon.local.toml — that file is gitignored and per-machine
 #      already, which makes it the honest place to say which machine this is. It also
 #      lets a host carry a role name ("service-node") instead of whatever DNS calls it.
 #   2. <overlay>/config/machines/<short-hostname>.toml — zero config for the common case.
@@ -63,16 +69,23 @@ export SJEL_OVERLAY_ROOT SJEL_PERSONAL_ROOT
 # no generator that writes a tracked artifact reads them.
 SJEL_MACHINES_DIR="$SJEL_OVERLAY_ROOT/config/machines"
 _machine_name=""
+_machine_source=""
 # Skipped when the overlay was overridden above: `machine` names a machine INSIDE the
-# overlay axon.local.toml points at, so carrying it across to a borrowed overlay asks for a
+# overlay the local toml points at, so carrying it across to a borrowed overlay asks for a
 # machines/<name>.toml that has no reason to exist there and fails the lookup outright.
-if [ -z "$_overlay_overridden" ] && [ -f "$SJEL_ROOT/axon.local.toml" ]; then
-  _machine_name="$(toml_get machine "$SJEL_ROOT/axon.local.toml")"
+if [ -z "$_overlay_overridden" ]; then
+  if [ -f "$SJEL_ROOT/sjel.local.toml" ]; then
+    _machine_name="$(toml_get machine "$SJEL_ROOT/sjel.local.toml")"
+    _machine_source="sjel.local.toml"
+  elif [ -f "$SJEL_ROOT/axon.local.toml" ]; then
+    _machine_name="$(toml_get machine "$SJEL_ROOT/axon.local.toml")"
+    _machine_source="axon.local.toml"
+  fi
 fi
 if [ -n "$_machine_name" ]; then
   SJEL_MACHINE_TOML="$SJEL_MACHINES_DIR/$_machine_name.toml"
   if [ ! -f "$SJEL_MACHINE_TOML" ]; then
-    echo "paths.sh: axon.local.toml names machine '$_machine_name', but $SJEL_MACHINE_TOML does not exist" >&2
+    echo "paths.sh: $_machine_source names machine '$_machine_name', but $SJEL_MACHINE_TOML does not exist" >&2
     return 1 2>/dev/null || exit 1
   fi
 else
@@ -84,7 +97,7 @@ else
   fi
 fi
 export SJEL_MACHINE_TOML SJEL_MACHINES_DIR
-unset _machine_name _host
+unset _machine_name _machine_source _host
 
 # Capability manifests resolve from two roots. Public Axon holds reusable capabilities;
 # the active overlay holds deployment-specific ones, which is what keeps private services

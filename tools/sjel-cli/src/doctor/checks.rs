@@ -311,15 +311,15 @@ fn registry_field(s: &Json, k: &str) -> String {
 
 fn overlay(ctx: &mut Ctx) {
     let Some(o) = resolve_overlay_root(&ctx.root) else {
-        ctx.bad("no 'overlay' in axon.local.toml or axon.toml — run tools/install.sh");
+        ctx.bad("no 'overlay' in sjel.local.toml/axon.local.toml or sjel.toml/axon.toml — run tools/install.sh");
         return;
     };
     ctx.overlay_path = o.root;
     if exists(&ctx.overlay_path) {
         let msg = format!("overlay at {} (from {})", ctx.overlay_path, o.source);
         ctx.ok(msg);
-        if o.source == "axon.toml" {
-            ctx.warn("no axon.local.toml — this machine is running on the shipped default; run tools/install.sh to pin it");
+        if o.source == "axon.toml" || o.source == "sjel.toml" {
+            ctx.warn("no local configuration (sjel.local.toml / axon.local.toml) — this machine is running on the shipped default; run tools/install.sh to pin it");
         }
     } else {
         let msg = format!(
@@ -337,9 +337,10 @@ fn machine_identity(ctx: &mut Ctx) {
     }
     let m = resolve_machine_toml(&ctx.root, &ctx.overlay_path);
     if !m.path.exists() {
-        let named = if m.source == "axon.local.toml" {
+        let named = if m.source == "axon.local.toml" || m.source == "sjel.local.toml" {
             format!(
-                " — axon.local.toml names machine '{}', which has no manifest",
+                " — {} names machine '{}', which has no manifest",
+                m.source,
                 m.name.clone().unwrap_or_default()
             )
         } else {

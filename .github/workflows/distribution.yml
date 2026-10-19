@@ -1,0 +1,80 @@
+name: Prepare distribution artifacts
+
+on:
+  workflow_dispatch:
+    inputs:
+      kind:
+        description: Artifact to prepare; nothing is installed or published
+        type: choice
+        options: [macos, node, capability, ios]
+        default: macos
+      version:
+        description: Release version (vMAJOR.MINOR.PATCH)
+        required: true
+        type: string
+      runner:
+        description: macOS is required for Mac and iOS artifacts
+        type: choice
+        options: [macos-latest, ubuntu-latest]
+        default: macos-latest
+      capability:
+        description: Optional compiled capability
+        type: string
+        default: calendar
+      build_number:
+        description: Positive iOS build number
+        type: string
+        default: "1"
+
+permissions:
+  contents: read
+
+jobs:
+  prepare:
+    runs-on: ${{ inputs.runner }}
+    timeout-minutes: 90
+    env:
+      ARTIFACT_KIND: ${{ inputs.kind }}
+      RELEASE_VERSION: ${{ inputs.version }}
+      CAPABILITY: ${{ inputs.capability }}
+      BUILD_NUMBER: ${{ inputs.build_number }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2
+        with:
+          bun-version: latest
+      - name: Validate inputs before building
+        shell: bash
+        run: |
+          [[ "$RELEASE_VERSION" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]]
+          if [[ "$ARTIFACT_KIND" == macos || "$ARTIFACT_KIND" == ios ]]; then
+            test "$RUNNER_OS" = macOS
+          fi
+      - name: Build node, capability or unsigned Mac DMG
+        if: inputs.kind != 'ios'
+        shell: bash
+        run: |
+          bun tools/distribution/prepare.ts "$ARTIFACT_KIND" \
+            --version "$RELEASE_VERSION" --capability "$CAPABILITY" \
+            --target-dir "$RUNNER_TEMP/sjel-build" --out "$RUNNER_TEMP/sjel-dist" --build
+      - name: Prepare native iOS unsigned archive
+        if: inputs.kind == 'ios'
+        shell: bash
+        run: |
+          brew install xcodegen
+          rustup target add aarch64-apple-ios
+          tools/distribution/ios-archive --version "${RELEASE_VERSION#v}" \
+            --build "$BUILD_NUMBER" --out "$RUNNER_TEMP/sjel-dist"
+          tar -C "$RUNNER_TEMP/sjel-dist" -czf "$RUNNER_TEMP/sjel-dist/Sjel-ios.xcarchive.tar.gz" Sjel.xcarchive
+      - name: Retain preparation artifacts
+        uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6.0.0
+        with:
+          name: sjel-${{ inputs.kind }}-${{ runner.os }}-${{ runner.arch }}
+          path: |
+            ${{ runner.temp }}/sjel-dist/*.dmg
+            ${{ runner.temp }}/sjel-dist/*.tar.gz
+            ${{ runner.temp }}/sjel-dist/*.json
+            ${{ runner.temp }}/sjel-dist/*.txt
+            ${{ runner.temp }}/sjel-dist/SHA256SUMS
+          if-no-files-found: error
+          retention-days: 14

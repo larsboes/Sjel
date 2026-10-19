@@ -1,0 +1,167 @@
+#!/bin/bash
+# tools/vault-plugins — Build and deploy Sjel-vendored plugins to the Obsidian vault.
+#
+# Commands:
+#   tools/vault-plugins build     Build all TypeScript plugins to dist/
+#   tools/vault-plugins deploy    Build and deploy plugins to $VAULT/.obsidian/plugins/
+#   tools/vault-plugins status    Show status and drift between Sjel and vault plugins
+#   tools/vault-plugins check     Validate plugin buildability
+#
+set -euo pipefail
+
+SJEL_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]:-$0}")/.." && pwd)"
+PLUGINS_SRC="$SJEL_ROOT/Packs/knowledge/plugins"
+
+get_vault_root() {
+  if [ -n "${VAULT_ROOT:-}" ]; then
+    echo "$VAULT_ROOT"
+    return
+  fi
+  python3 "$SJEL_ROOT/Packs/knowledge/skills/obsidian/scripts/vault" root 2>/dev/null || {
+    echo "$HOME/Library/Mobile Documents/iCloud~md~obsidian/Documents/Knowledge-Base"
+  }
+}
+
+build_plugin() {
+  local id="$1"
+  local dir="$PLUGINS_SRC/$id"
+  if [ -f "$dir/src/main.ts" ]; then
+    mkdir -p "$dir/dist"
+    bun build "$dir/src/main.ts" --outfile "$dir/dist/main.js" --external obsidian --format cjs --target node >/dev/null
+    printf "\nmodule.exports = module.exports.default || module.exports;\n" >> "$dir/dist/main.js"
+    echo "  ✓ $id built with bun (cjs)"
+  elif [ -f "$dir/main.js" ]; then
+    mkdir -p "$dir/dist"
+    cp "$dir/main.js" "$dir/dist/main.js"
+    echo "  ✓ $id prepared (static js)"
+  fi
+}
+
+cmd_build() {
+  echo "Building vault plugins in $PLUGINS_SRC..."
+  for p in "$PLUGINS_SRC"/*; do
+    if [ -d "$p" ]; then
+      local id
+      id="$(basename "$p")"
+      build_plugin "$id"
+    fi
+  done
+  echo "Build complete."
+}
+
+cmd_deploy() {
+  local vault
+  vault="$(get_vault_root)"
+  local target_dir="$vault/.obsidian/plugins"
+
+  if [ ! -d "$target_dir" ]; then
+    echo "Error: Vault plugins directory not found: $target_dir" >&2
+    exit 1
+  fi
+
+  cmd_build
+
+  echo "Deploying plugins to $target_dir..."
+  for p in "$PLUGINS_SRC"/*; do
+    if [ -d "$p" ]; then
+      local id
+      id="$(basename "$p")"
+      local dest="$target_dir/$id"
+      mkdir -p "$dest"
+
+      # Deploy main.js
+      if [ -f "$p/dist/main.js" ]; then
+        cp "$p/dist/main.js" "$dest/main.js"
+      elif [ -f "$p/main.js" ]; then
+        cp "$p/main.js" "$dest/main.js"
+      fi
+
+      # Deploy manifest.json
+      if [ -f "$p/manifest.json" ]; then
+        cp "$p/manifest.json" "$dest/manifest.json"
+      fi
+
+      # Deploy styles.css if present
+      if [ -f "$p/styles.css" ]; then
+        cp "$p/styles.css" "$dest/styles.css"
+      fi
+
+      echo "  → deployed $id"
+    fi
+  done
+  echo "Deployment to vault complete."
+}
+
+cmd_status() {
+  local vault
+  vault="$(get_vault_root)"
+  local target_dir="$vault/.obsidian/plugins"
+
+  echo "Vault root: $vault"
+  echo "Sjel plugins source: $PLUGINS_SRC"
+  echo ""
+  printf "%-25s %-12s %-10s %s\n" "Plugin" "Source" "Vault" "Status"
+  echo "------------------------------------------------------------------"
+
+  for p in "$PLUGINS_SRC"/*; do
+    if [ -d "$p" ]; then
+      local id
+      id="$(basename "$p")"
+      local src_type="js"
+      if [ -f "$p/src/main.ts" ]; then src_type="ts (modular)"; fi
+
+      local dest="$target_dir/$id"
+      if [ ! -d "$dest" ]; then
+        printf "%-25s %-12s %-10s %s\n" "$id" "$src_type" "missing" "needs deploy"
+      else
+        local cmp_src="$p/dist/main.js"
+        if [ ! -f "$cmp_src" ]; then cmp_src="$p/main.js"; fi
+
+        if cmp -s "$cmp_src" "$dest/main.js" 2>/dev/null; then
+          printf "%-25s %-12s %-10s %s\n" "$id" "$src_type" "installed" "synced"
+        else
+          printf "%-25s %-12s %-10s %s\n" "$id" "$src_type" "installed" "drift / modified"
+        fi
+      fi
+    fi
+  done
+}
+
+cmd_check() {
+  cmd_build
+  echo "Checking syntax of built bundles..."
+  for p in "$PLUGINS_SRC"/*; do
+    if [ -d "$p" ]; then
+      local id
+      id="$(basename "$p")"
+      local file="$p/dist/main.js"
+      if [ -f "$file" ]; then
+        node -c "$file"
+        echo "  ✓ $id syntax valid"
+      fi
+    fi
+  done
+  echo "All plugins pass check."
+}
+
+case "${1:-status}" in
+  build)
+    cmd_build
+    ;;
+  deploy)
+    cmd_deploy
+    ;;
+  status)
+    cmd_status
+    ;;
+  check)
+    cmd_check
+    ;;
+  -h|--help|help)
+    echo "Usage: tools/vault-plugins [status|build|deploy|check]"
+    ;;
+  *)
+    echo "Unknown command: $1. Usage: tools/vault-plugins [status|build|deploy|check]" >&2
+    exit 1
+    ;;
+esac

@@ -20,7 +20,9 @@ set -euo pipefail
 # and nothing else, including output from sourced helpers. Preserve the caller's stdout
 # on fd 3 before loading any helper, and route every normal message to stderr.
 case "$#:${1:-}" in
-  2:--stream) exec 3>&1 1>&2 ;;
+  2:--stream)
+    if [ "${SJEL_BACKUP_LOCK_PID:-}" != "$$" ]; then exec 3>&1 1>&2; fi
+    ;;
 esac
 
 TOOLS_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -29,9 +31,10 @@ source "$TOOLS_DIR/lib/platform.sh"              # SJEL_CONTAINER_RUNTIME (conta
 source "$TOOLS_DIR/lib/external-ref.sh"          # capability_provider — whose data is this?
 # Best-effort: make the vault SSH agent available even if not launched from an
 # interactive shell (shared with init.zsh). No-op if the app isn't running.
-source "$TOOLS_DIR/lib/bw-agent.sh" 2>/dev/null || true
+source "$TOOLS_DIR/lib/bw-agent.sh" 9>&- 2>/dev/null || true
 
 usage() { echo "usage: backup.sh [--no-prune] [--target <id>] <capability> | --stream <capability>" >&2; exit 1; }
+BACKUP_ARGS=("$@")
 NO_PRUNE=0
 STREAM=0
 TARGET_FLAG=""
@@ -60,8 +63,37 @@ if [ "$STREAM" -eq 1 ] && { [ "$NO_PRUNE" -eq 1 ] || [ -n "$TARGET_FLAG" ]; }; t
   usage
 fi
 
-MANIFEST="$SJEL_ROOT/capabilities/$CAP/service.toml"
-[ -f "$MANIFEST" ] || { echo "backup.sh: no $MANIFEST" >&2; exit 1; }
+# A kernel lock is released when the process and its children exit, including SIGKILL.
+# Keep the inode: removing a lock file would let another process lock a different inode.
+# Re-exec retains the PID and descriptor; the PID marker prevents recursion only in this
+# process, so a separately launched backup still has to acquire its own lock.
+if [ "${SJEL_BACKUP_LOCK_PID:-}" != "$$" ]; then
+  case "$CAP" in *[!a-zA-Z0-9_-]*|"") usage ;; esac
+  mkdir -p "$SJEL_PERSONAL_ROOT/backup/locks"
+  exec python3 -c '
+import fcntl, os, sys
+lock = open(sys.argv[1], "a")
+try:
+    fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
+except BlockingIOError:
+    print("backup.sh: a backup of %r is already running" % sys.argv[2], file=sys.stderr)
+    sys.exit(75)
+os.dup2(lock.fileno(), 9)
+if lock.fileno() != 9:
+    lock.close()
+os.set_inheritable(9, True)
+os.environ["SJEL_BACKUP_LOCK_PID"] = str(os.getpid())
+os.execv("/bin/bash", ["bash", sys.argv[3], *sys.argv[4:]])
+' "$SJEL_PERSONAL_ROOT/backup/locks/$CAP.flock" "$CAP" "$TOOLS_DIR/backup.sh" "${BACKUP_ARGS[@]}"
+fi
+
+if MANIFEST="$(axon_manifest_for "$CAP")"; then :; else
+  status=$?
+  if [ "$status" -eq 1 ]; then
+    echo "backup.sh: no service.toml for capability '$CAP' in the public or overlay root" >&2
+  fi
+  exit "$status"
+fi
 
 # Backup authority does not travel with a reference (retired-tracker#169). A capability this
 # machine consumes has its manifest here, backup contract and all, and every path in that
@@ -337,10 +369,12 @@ TARBALL="$RUN_DIR/$CAP-$TS.tar.gz"
 REMOTE_DIR=""
 if [ "$STREAM" -eq 0 ]; then REMOTE_DIR="$REMOTE_ROOT/$CAP"; fi
 CAPABILITY_HELD=0
+DEST_PART=""
+REMOTE_PART=""
 
 resume_capability() {
   [ "$CAPABILITY_HELD" -eq 1 ] || return 0
-  if "$TOOLS_DIR/service-runner.sh" resume "$CAP" >/dev/null; then
+  if "$TOOLS_DIR/service-runner.sh" resume "$CAP" 9>&- >/dev/null; then
     CAPABILITY_HELD=0
     return 0
   fi
@@ -348,7 +382,15 @@ resume_capability() {
   return 1
 }
 
-cleanup() { rm -rf "$RUN_DIR" "$STAGE" "$TARBALL"; }
+cleanup() {
+  rm -rf "$RUN_DIR"
+  if [ -n "$DEST_PART" ]; then rm -f "$DEST_PART"; fi
+  if [ -n "$REMOTE_PART" ]; then
+    if ! ssh 9>&- "${SSHM[@]}" "$SSH_USER@$HOST" "rm -f '$REMOTE_PART'"; then
+      echo "backup.sh: could not remove remote partial: $REMOTE_PART" >&2
+    fi
+  fi
+}
 on_exit() {
   status=$?
   trap - EXIT HUP INT TERM
@@ -410,7 +452,7 @@ if [ -n "$SQLITE_REL" ]; then
   # Set before stop: resume is idempotent, so even a stop command that creates the hold
   # and then exits non-zero cannot strand the capability silently.
   CAPABILITY_HELD=1
-  "$TOOLS_DIR/service-runner.sh" stop "$CAP"
+  "$TOOLS_DIR/service-runner.sh" stop "$CAP" 9>&-
 fi
 if [ "${#PATHS[@]}" -gt 0 ]; then
   stage_host_paths
@@ -714,10 +756,11 @@ if [ "$TARGET_KIND" = "local" ]; then
   echo "→ ship → $LOCAL_DIR/"
   mkdir -p "$LOCAL_DIR"
   DEST_NAME="$(basename "$TARBALL")"
-  DEST_PART="$LOCAL_DIR/.$DEST_NAME.part"
+  CANDIDATE_PART="$LOCAL_DIR/.$DEST_NAME.part"
   [ ! -e "$LOCAL_DIR/$DEST_NAME" ] && [ ! -L "$LOCAL_DIR/$DEST_NAME" ] \
-    && [ ! -e "$DEST_PART" ] && [ ! -L "$DEST_PART" ] || {
+    && [ ! -e "$CANDIDATE_PART" ] && [ ! -L "$CANDIDATE_PART" ] || {
     echo "backup.sh: archive or partial path already exists at the destination; refusing overwrite" >&2; exit 1; }
+  DEST_PART="$CANDIDATE_PART"
   cp "$TARBALL" "$DEST_PART"
   LOCAL_BYTES="$(wc -c < "$TARBALL" | tr -d ' ')"
   DEST_BYTES="$(wc -c < "$DEST_PART" | tr -d ' ')"
@@ -727,6 +770,7 @@ if [ "$TARGET_KIND" = "local" ]; then
     exit 1
   fi
   mv "$DEST_PART" "$LOCAL_DIR/$DEST_NAME"
+  DEST_PART=""
   echo "  wrote $LOCAL_BYTES bytes, size verified at the destination"
 
   RETENTION_APPLIED=true
@@ -823,10 +867,10 @@ else
 # ControlMaster — so the Bitwarden agent asks for approval ONCE, not per-command.
 CTRL="/tmp/axon-backup-$CAP-$$.sock"
 SSHM=(-o ControlMaster=auto -o "ControlPath=$CTRL" -o ControlPersist=30)
-close_master() { ssh -O exit -o "ControlPath=$CTRL" "$SSH_USER@$HOST" 2>/dev/null || true; }
+close_master() { ssh 9>&- -O exit -o "ControlPath=$CTRL" "$SSH_USER@$HOST" 2>/dev/null || true; }
 
 echo "→ ship → $SSH_USER@$HOST:$REMOTE_DIR/  (approve the Bitwarden agent prompt — ONCE)"
-ssh "${SSHM[@]}" "$SSH_USER@$HOST" "mkdir -p '$REMOTE_DIR'"
+ssh 9>&- "${SSHM[@]}" "$SSH_USER@$HOST" "mkdir -p '$REMOTE_DIR'"
 
 # Shipped by streaming into `cat`, not with rsync or scp, and that is deliberate.
 # A backup target is the one machine you want to grant as little as possible, and a
@@ -841,17 +885,22 @@ ssh "${SSHM[@]}" "$SSH_USER@$HOST" "mkdir -p '$REMOTE_DIR'"
 # transfer that lands under the final name is worse than a failed one: it looks like a
 # backup, and you find out otherwise on the day you need it.
 REMOTE_NAME="$(basename "$TARBALL")"
-REMOTE_PART="$REMOTE_DIR/.$REMOTE_NAME.part"
-ssh "${SSHM[@]}" "$SSH_USER@$HOST" "cat > '$REMOTE_PART'" < "$TARBALL"
+# Never truncate an existing completed archive or partial, including dangling links.
+CANDIDATE_PART="$REMOTE_DIR/.$REMOTE_NAME.part"
+ssh 9>&- "${SSHM[@]}" "$SSH_USER@$HOST" "test ! -e '$REMOTE_DIR/$REMOTE_NAME' && test ! -L '$REMOTE_DIR/$REMOTE_NAME' && test ! -e '$CANDIDATE_PART' && test ! -L '$CANDIDATE_PART'" || {
+  echo "backup.sh: archive or partial path already exists at the destination; refusing overwrite" >&2; exit 1; }
+REMOTE_PART="$CANDIDATE_PART"
+ssh 9>&- "${SSHM[@]}" "$SSH_USER@$HOST" "cat > '$REMOTE_PART'" < "$TARBALL"
 
 LOCAL_BYTES="$(wc -c < "$TARBALL" | tr -d ' ')"
-REMOTE_BYTES="$(ssh "${SSHM[@]}" "$SSH_USER@$HOST" "wc -c < '$REMOTE_PART'" | tr -d ' ')"
+REMOTE_BYTES="$(ssh 9>&- "${SSHM[@]}" "$SSH_USER@$HOST" "wc -c < '$REMOTE_PART'" | tr -d ' ')"
 if [ "$LOCAL_BYTES" != "$REMOTE_BYTES" ]; then
-  ssh "${SSHM[@]}" "$SSH_USER@$HOST" "rm -f '$REMOTE_PART'"
+  ssh 9>&- "${SSHM[@]}" "$SSH_USER@$HOST" "rm -f '$REMOTE_PART'"
   echo "backup.sh: short write — sent $LOCAL_BYTES bytes, target holds $REMOTE_BYTES. Nothing was kept." >&2
   exit 1
 fi
-ssh "${SSHM[@]}" "$SSH_USER@$HOST" "mv '$REMOTE_PART' '$REMOTE_DIR/$REMOTE_NAME'"
+ssh 9>&- "${SSHM[@]}" "$SSH_USER@$HOST" "mv '$REMOTE_PART' '$REMOTE_DIR/$REMOTE_NAME'"
+REMOTE_PART=""
 echo "  shipped $LOCAL_BYTES bytes, size verified on the target"
 
 RETENTION_APPLIED=true
@@ -860,7 +909,7 @@ if [ "$NO_PRUNE" -eq 1 ]; then
   echo "→ retain every prior archive (--no-prune)"
 else
   echo "→ prune remote to last $RETAIN"
-  ssh "${SSHM[@]}" "$SSH_USER@$HOST" "ls -1t '$REMOTE_DIR'/$CAP-*.tar.gz 2>/dev/null | tail -n +$((RETAIN + 1)) | xargs -r rm -f"
+  ssh 9>&- "${SSHM[@]}" "$SSH_USER@$HOST" "ls -1t '$REMOTE_DIR'/$CAP-*.tar.gz 2>/dev/null | tail -n +$((RETAIN + 1)) | xargs -r rm -f"
 fi
 SHIP_DESCRIPTION="$SSH_USER@$HOST:$REMOTE_DIR"
 fi  # end destination-kind branch

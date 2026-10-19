@@ -36,8 +36,7 @@ public struct NodeHealth: Sendable, Equatable, Decodable {
     }
 
     /// Names of the kept-running capabilities that did not answer, sorted so the list does not
-    /// reorder between polls. An on-demand capability that is stopped is not down
-    /// (ISA-archive.md DSH-1): on 2026-10-08 four of those kept the "needs you" dot on.
+    /// reorder between polls. A stopped on-demand capability does not count as down.
     public var down: [String] {
         capabilities.filter { $0.value.autostart && !$0.value.up }.map(\.key).sorted()
     }

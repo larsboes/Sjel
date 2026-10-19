@@ -187,7 +187,7 @@ const ROUTES: &[route_manifest::Route] = &[
         "/sources/scan",
         "Collect from the declared sources.",
     ),
-    r("GET", "/triage", "Mail proposals. Optional status and max_data_class filters."),
+    r("GET", "/triage", "Mail proposals. Optional status and max_data_class filters. Optional q: keep mail whose sender, subject or snippet contains the text, ignoring case."),
     r(
         "POST",
         "/triage/{id}/status",
@@ -916,6 +916,16 @@ mod tests {
         assert!(value["mail"]["gmail_location"].is_null());
         assert!(value["mail"]["gmail_sync_status"].is_null());
         assert!(value["evaluation"].is_null());
+    }
+
+    #[test]
+    fn a_search_matches_sender_subject_or_snippet_ignoring_case() {
+        let mut item = triage_fixture("t1");
+        item.from_addr = Some("service@Miele.de".into());
+        item.snippet = None;
+        assert!(matches_query(&item, "miele"));
+        assert!(matches_query(&item, "useful subject"));
+        assert!(!matches_query(&item, "ebay"));
     }
 
     /// A stored mail, built here because the lib's test fixtures are not

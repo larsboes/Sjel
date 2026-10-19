@@ -8,6 +8,18 @@ pub(super) struct TriageParams {
     /// dashboard, so this is a policy an agent client applies, not a gate (ISA F8,
     /// ISC-39 — the gate needs the agent identity of ISC-38).
     max_data_class: Option<String>,
+    /// Keep only mail whose sender, subject or snippet contains this text,
+    /// ignoring case. An agent finds one mail without reading the whole table
+    /// (ISA, comms · one gap).
+    q: Option<String>,
+}
+
+/// Whether `needle`, already lowercased, occurs in the sender, subject or snippet.
+pub(super) fn matches_query(item: &TriageItem, needle: &str) -> bool {
+    [&item.from_addr, &item.subject, &item.snippet]
+        .into_iter()
+        .flatten()
+        .any(|field| field.to_lowercase().contains(needle))
 }
 
 pub(super) async fn triage_handler(Query(params): Query<TriageParams>) -> Json<Value> {
@@ -32,6 +44,11 @@ pub(super) async fn triage_handler(Query(params): Query<TriageParams>) -> Json<V
             items.retain(|item| {
                 content_item::class_rank(&item.data_class).is_some_and(|rank| rank <= ceiling)
             });
+        }
+        // Before the per-row queries below, so a search pays only for its hits.
+        if let Some(needle) = params.q.as_deref().map(str::trim).filter(|q| !q.is_empty()) {
+            let needle = needle.to_lowercase();
+            items.retain(|item| matches_query(item, &needle));
         }
         // One grouped read for the whole list, not one per row. The list already
         // knows the keys; asking per item would be a query per rendered line.

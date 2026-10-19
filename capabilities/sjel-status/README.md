@@ -60,6 +60,7 @@ in this process would rebuild the plumbing the item deleted. Dependabot
 - `POST /api/sjel-status/capabilities/:name/stop` — take one down and hold it
 - `GET /api/sjel-status/runtime` — this device's selected/effective runtime profile, power source and saved exceptions
 - `POST /api/sjel-status/runtime` — save `selection` (Auto, Normal, On the go) or the `allow` category set; optional `expected_revision` rejects stale updates with 409
+- `GET /api/sjel-status/now` — aggregated "now" snapshot for menu bar and ambient surfaces: system health, pending agent approvals, current/next/upcoming calendar entries, active/next trips, and warnings
 
 Runtime controls are owner-only, like the other shell controls. The owned power monitor samples
 at startup and every 30 seconds; workers reread the policy without restarting capabilities.

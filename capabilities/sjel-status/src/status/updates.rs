@@ -42,7 +42,83 @@
 //! token at all (ISA ISC-47), so an apply is reachable only by the owner's browser session or the
 //! deployment credential, never by an agent.
 
+use std::sync::LazyLock;
+use std::time::{Duration, Instant};
+use tokio::sync::Mutex;
+
 use super::*;
+
+struct CachedReport {
+    generated_at: Instant,
+    report: Value,
+}
+
+static CACHE: LazyLock<Mutex<Option<CachedReport>>> = LazyLock::new(|| Mutex::new(None));
+static FETCH_LOCK: LazyLock<Mutex<()>> = LazyLock::new(|| Mutex::new(()));
+
+/// Normal TTL for cached reports: 15 minutes. Software package status does not change rapidly,
+/// and stale-while-revalidate serves cached reports instantaneously (<1ms).
+const CACHE_TTL: Duration = Duration::from_secs(900);
+/// Shorter TTL when an apply is in flight so progress settles within 5 seconds.
+const RUNNING_APPLY_TTL: Duration = Duration::from_secs(5);
+
+fn ttl_for(report: &Value) -> Duration {
+    if report
+        .get("lastApply")
+        .and_then(|v| v.get("state"))
+        .and_then(|v| v.as_str())
+        == Some("running")
+    {
+        RUNNING_APPLY_TTL
+    } else {
+        CACHE_TTL
+    }
+}
+
+async fn run_updates_report(offline: bool) -> Result<Value, String> {
+    let root = axon_root()?;
+    let mut cmd = tokio::process::Command::new(root.join("tools/updates"));
+    cmd.arg("report").arg("--json").current_dir(&root);
+    if offline {
+        cmd.arg("--offline");
+    }
+    let out = cmd
+        .output()
+        .await
+        .map_err(|e| format!("could not run tools/updates: {e}"))?;
+    interpret_tool_report("tools/updates", &out.stdout, &out.stderr, out.status.code())
+}
+
+/// Pre-warm the cache in the background on startup so the first visit is instantaneous.
+pub(crate) fn warm_cache() {
+    tokio::spawn(async {
+        let Ok(_guard) = FETCH_LOCK.try_lock() else {
+            return;
+        };
+        if let Ok(report) = run_updates_report(false).await {
+            let mut cache = CACHE.lock().await;
+            *cache = Some(CachedReport {
+                generated_at: Instant::now(),
+                report,
+            });
+        }
+    });
+}
+
+fn spawn_background_refresh() {
+    tokio::spawn(async {
+        let Ok(_guard) = FETCH_LOCK.try_lock() else {
+            return;
+        };
+        if let Ok(report) = run_updates_report(false).await {
+            let mut cache = CACHE.lock().await;
+            *cache = Some(CachedReport {
+                generated_at: Instant::now(),
+                report,
+            });
+        }
+    });
+}
 
 /// The classes a caller may ask `apply` to move.
 ///
@@ -67,23 +143,48 @@ pub(crate) struct ApplyRequest {
     pub(crate) class: String,
 }
 
-/// `GET /api/sjel-status/updates` — the tool's own report, unchanged.
+/// `GET /api/sjel-status/updates` — the tool's own report, cached with stale-while-revalidate.
 ///
 /// `report` exits 1 whenever anything is stale, which is its normal answer on a healthy machine
 /// and the whole point of the panel. The exit code is therefore only consulted when there is
 /// nothing to parse, via the shared [`interpret_tool_report`].
 pub(crate) async fn updates_handler() -> Result<Json<Value>, (StatusCode, Json<Value>)> {
-    let root = axon_root().map_err(bad_gateway)?;
-    let out = tokio::process::Command::new(root.join("tools/updates"))
-        .arg("report")
-        .arg("--json")
-        .current_dir(&root)
-        .output()
-        .await
-        .map_err(|e| bad_gateway(format!("could not run tools/updates: {e}")))?;
-    interpret_tool_report("tools/updates", &out.stdout, &out.stderr, out.status.code())
-        .map(Json)
-        .map_err(bad_gateway)
+    // 1. If cache has an entry, check if stale and return immediately (stale-while-revalidate)
+    {
+        let cache = CACHE.lock().await;
+        if let Some(entry) = &*cache {
+            if entry.generated_at.elapsed() >= ttl_for(&entry.report) {
+                spawn_background_refresh();
+            }
+            return Ok(Json(entry.report.clone()));
+        }
+    }
+
+    // 2. Cold start (cache is empty): trigger full background online fetch...
+    spawn_background_refresh();
+
+    // ...and seed cache quickly with offline report (<1s) so the client never times out or blocks
+    match run_updates_report(true).await {
+        Ok(report) => {
+            let mut cache = CACHE.lock().await;
+            if cache.is_none() {
+                *cache = Some(CachedReport {
+                    generated_at: Instant::now(),
+                    report: report.clone(),
+                });
+            }
+            Ok(Json(report))
+        }
+        Err(e) => {
+            let _guard = FETCH_LOCK.lock().await;
+            let cache = CACHE.lock().await;
+            if let Some(entry) = &*cache {
+                Ok(Json(entry.report.clone()))
+            } else {
+                Err(bad_gateway(e))
+            }
+        }
+    }
 }
 
 /// `POST /api/sjel-status/updates/apply` — start one class moving, and answer at once.
@@ -119,6 +220,23 @@ pub(crate) async fn updates_apply_handler(
         .stderr(std::process::Stdio::null())
         .spawn()
         .map_err(|e| bad_gateway(format!("could not start tools/updates apply: {e}")))?;
+
+    // Update cached report's lastApply and mark stale so next poll sees running state immediately
+    {
+        let mut cache = CACHE.lock().await;
+        if let Some(entry) = &mut *cache {
+            if let Some(last_apply) = entry.report.get_mut("lastApply") {
+                if let Some(obj) = last_apply.as_object_mut() {
+                    obj.insert("state".to_string(), Value::String("running".to_string()));
+                    obj.insert("class".to_string(), Value::String(class.to_string()));
+                }
+            }
+            // Expire generated_at so the next poll triggers background refresh
+            entry.generated_at = Instant::now() - Duration::from_secs(3600);
+        }
+    }
+
+    spawn_background_refresh();
 
     Ok((
         StatusCode::ACCEPTED,

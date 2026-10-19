@@ -284,16 +284,12 @@ pub(crate) async fn backup_handler(
         Some(target) => target,
         None => contract_target(&root, &name)?,
     };
-    // Refuse rather than queue, and ask the durable record as well as this process's map: a
-    // run an earlier process left unfinished and one this process is holding mean the same
-    // thing to the staging directory they would share.
-    if store.running_for(&name).map_err(gateway)? {
+    let Some(run_id) = store.try_start_run(&name, &target, "").map_err(gateway)? else {
         return Err((
             StatusCode::CONFLICT,
             Json(json!({ "error": format!("a backup of '{name}' is already running") })),
         ));
-    }
-    let run_id = store.start_run(&name, &target, "").map_err(gateway)?;
+    };
     let started = now_epoch();
     {
         // Refuse rather than queue. A second concurrent run on one capability is not a
@@ -301,15 +297,6 @@ pub(crate) async fn backup_handler(
         // and the first to finish resumes the capability out from under the second,
         // which is how a "coherent cold snapshot" stops being either.
         let mut runs = backup_runs();
-        if let Some(existing) = runs.get(&name).filter(|r| r.state == "running") {
-            return Err((
-                StatusCode::CONFLICT,
-                Json(json!({
-                    "error": format!("a backup of '{name}' is already running"),
-                    "run": existing,
-                })),
-            ));
-        }
         runs.insert(
             name.clone(),
             BackupRun {
@@ -330,31 +317,29 @@ pub(crate) async fn backup_handler(
         // the row carries the archive's own digest. Driving the mechanism here directly is
         // what left a failed run with no durable trace.
         let outcome = tokio::task::spawn_blocking(move || {
-            ::backup::runner::run(&root, &overlay, &task_name, &task_target)
+            let outcome = ::backup::runner::run(&root, &overlay, &task_name, &task_target);
+            if let Err(error) = store.finish_run(
+                run_id,
+                outcome.exit_code,
+                outcome.archive.as_ref(),
+                &outcome.detail,
+                &outcome.log_path.to_string_lossy(),
+            ) {
+                eprintln!("[sjel-status] could not close backup run {run_id}: {error}");
+            }
+            outcome
         })
         .await;
-        let (state, detail, log_path, archive, code) = match outcome {
+        let (state, detail) = match outcome {
             Ok(outcome) => {
                 let code = outcome.exit_code;
                 (
                     if code == 0 { "succeeded" } else { "failed" },
-                    outcome.detail.clone(),
-                    outcome.log_path.to_string_lossy().into_owned(),
-                    outcome.archive,
-                    code,
+                    outcome.detail,
                 )
             }
-            Err(error) => (
-                "failed",
-                format!("the run task did not finish: {error}"),
-                String::new(),
-                None,
-                1,
-            ),
+            Err(error) => ("failed", format!("the run task did not finish: {error}")),
         };
-        if let Err(error) = store.finish_run(run_id, code, archive.as_ref(), &detail, &log_path) {
-            eprintln!("[sjel-status] could not close backup run {run_id}: {error}");
-        }
         let mut runs = backup_runs();
         runs.insert(
             ledger_name,

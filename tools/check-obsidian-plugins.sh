@@ -21,7 +21,8 @@
 #      (capabilities/vault/src/people.rs); trips owns its projections and overwrites them
 #      whole. A plugin that also wrote would be a second writer of the same keys with no
 #      shared refusal path. A plugin that must write is a design change, not an edit —
-#      reopen this rule then.
+#      reopen this rule then. `create` is not in the list: it refuses a path that already
+#      exists, so it cannot be a second writer of anything.
 #
 # R3 — A PLUGIN DECLARING `isDesktopOnly: false` MAY REQUIRE ONLY `obsidian`. Node packages
 #      do not exist on mobile; Obsidian's own loader answers a node require there with a
@@ -69,7 +70,7 @@ BROWSER="$BROWSER"'|(window|globalThis|self)\.(fetch[[:space:]]*\(|XMLHttpReques
 # single quotes writes just as hard, and the gate that only reads one of the two spellings
 # is the gate that passes the write it exists to refuse.
 WRITE="method:[[:space:]]*[\"'](POST|PUT|PATCH|DELETE)"
-WRITE="$WRITE"'|(vault|adapter|fileManager)\.(create|modify|append|process|delete|trash|rename|copy|write|remove|mkdir)[A-Za-z]*\('
+WRITE="$WRITE"'|(vault|adapter|fileManager)\.(modify|append|process|delete|trash|rename|copy|write|remove|mkdir)[A-Za-z]*\('
 WRITE="$WRITE"'|processFrontMatter'
 
 fail=0

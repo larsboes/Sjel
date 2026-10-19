@@ -1267,7 +1267,7 @@ impl Store {
     /// Set the items assigned to a wish group.
     pub fn set_wish_group_items(&self, group_id: &str, item_ids: &[String]) -> Result<(), Error> {
         let mut conn = self.conn()?;
-        let tx = conn.transaction()?;
+        let tx = sjel_store::write_transaction(&mut conn)?;
         tx.execute(
             &format!(
                 "DELETE FROM {}_wish_group_item WHERE group_id = ?1",

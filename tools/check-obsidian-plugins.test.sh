@@ -160,6 +160,35 @@ module.exports = class extends Plugin {
 JS
 expect_fail_with "writing frontmatter is refused" "$root" "read-only"
 
+# Creating a note that does not exist yet is not a second writer: Obsidian refuses a path
+# that is already there, so no key can be overwritten. Overwriting one still fails.
+root=$(tree creates-a-note)
+manifest "$root"
+cat > "$root/plugin/main.js" <<'JS'
+"use strict";
+const { Plugin } = require("obsidian");
+module.exports = class extends Plugin {
+  async onload() {
+    await this.app.vault.create("Inbox/new.md", "");
+  }
+};
+JS
+expect_pass "creating a new note is not a write" "$root"
+
+root=$(tree overwrites-a-note)
+manifest "$root"
+cat > "$root/plugin/main.js" <<'JS'
+"use strict";
+const { Plugin } = require("obsidian");
+module.exports = class extends Plugin {
+  async onload() {
+    const file = this.app.vault.getAbstractFileByPath("People/ada.md");
+    await this.app.vault.modify(file, "");
+  }
+};
+JS
+expect_fail_with "overwriting an existing note is refused" "$root" "read-only"
+
 # Rendering is not writing. `createEl`, `createDiv` and `append` are what every plugin does
 # to build its pane, and a gate that reports them is a gate somebody deletes.
 root=$(tree dom-calls-allowed)

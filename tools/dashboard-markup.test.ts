@@ -179,6 +179,7 @@ const TABLE_RENDERERS = [
   "lib/feed/MarkdownDocument.svelte",
   "lib/feed/ChartFigure.svelte",
   "lib/interior/SunGrid.svelte",
+  "lib/projects/DatabaseTable.svelte",
 ];
 
 describe("a page does not build its own table", () => {

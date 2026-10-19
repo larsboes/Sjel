@@ -1,3 +1,20 @@
+<script module lang="ts">
+  /** What one window's load produced, in the shape the page assigns. */
+  interface KeptWindow {
+    entries: import("$lib/api").CalendarEntry[];
+    contexts: import("$lib/api").CalendarContext[];
+    rhythms: import("$lib/api").CalendarRhythm[];
+    freeDays: ReadonlySet<string>;
+    googleExports: ReadonlyMap<string, import("$lib/api").CalendarGoogleExportOptIn>;
+    tripPlans: import("$lib/api").TripPlan[];
+  }
+
+  /** Every window loaded this session, keyed `from|to`, kept across navigation. A return to a
+   * month paints this copy at once and the load replaces it when the answer lands. */
+  // ponytail: unbounded and memory-only; the device replica replaces it (dashboard/README.md).
+  const keptWindows = new Map<string, KeptWindow>();
+</script>
+
 <script lang="ts">
   import { eventItem } from "$lib/inspector/connections";
   import { page } from "$app/state";
@@ -61,6 +78,10 @@
   // domain, and a second implementation in the UI would drift from it.
   let freeDays = $state<ReadonlySet<string>>(new Set());
   let loading = $state(true);
+  /** True once any window has landed. After that a reload keeps the grid on screen, dimmed,
+   * instead of swapping it for a "Loading" line: a blank frame on every month switch read as
+   * a slow app even when the answer took milliseconds. */
+  let loaded = $state(false);
   let error = $state("");
 
   // One anchor date for all three views, so switching keeps your place; only
@@ -148,10 +169,22 @@
     void load(windowFrom, windowTo);
   }
 
+  function show(kept: KeptWindow) {
+    entries = kept.entries;
+    contexts = kept.contexts;
+    rhythms = kept.rhythms;
+    freeDays = kept.freeDays;
+    googleExports = kept.googleExports;
+    tripPlans = kept.tripPlans;
+    loaded = true;
+  }
+
   async function load(from: string, to: string) {
     const token = ++loadToken;
     loading = true;
     error = "";
+    const kept = keptWindows.get(`${from}|${to}`);
+    if (kept) show(kept);
     try {
       // calendar's manifest declares it on-demand, so opening this page is what
       // has to start it — the same thing /travel and /feed do for their backends.
@@ -173,12 +206,16 @@
         trips.list().catch(() => []),
       ]);
       if (token !== loadToken) return;
-      entries = nextEntries;
-      contexts = nextContexts;
-      rhythms = nextRhythms;
-      freeDays = nextWindows ? freeDaysOf(nextWindows.windows) : new Set();
-      googleExports = new Map(nextGoogleExports.map((optIn) => [optIn.entry_id, optIn]));
-      tripPlans = nextTrips;
+      const next: KeptWindow = {
+        entries: nextEntries,
+        contexts: nextContexts,
+        rhythms: nextRhythms,
+        freeDays: nextWindows ? freeDaysOf(nextWindows.windows) : new Set(),
+        googleExports: new Map(nextGoogleExports.map((optIn) => [optIn.entry_id, optIn])),
+        tripPlans: nextTrips,
+      };
+      keptWindows.set(`${from}|${to}`, next);
+      show(next);
     } catch (cause) {
       if (token === loadToken) error = String(cause);
     } finally {
@@ -381,7 +418,7 @@
 />
 
 <div class="workspace">
-  <div class="main">
+  <div class="main" class:reloading={loading && loaded} aria-busy={loading}>
     <div class="toolbar">
       <div class="nav">
         <button class="btn btn-outline" aria-label="Previous" onclick={() => shift(-1)}>‹</button>
@@ -397,7 +434,7 @@
       </div>
     </div>
 
-    {#if loading}
+    {#if loading && !loaded}
       <p class="loading">Loading calendar…</p>
     {:else if error}
       <p class="error">{error}</p>
@@ -513,6 +550,9 @@
     box-shadow: var(--card-shadow);
   }
 
+  /* Dims only after 150 ms, so a fast reload never flickers. The toolbar stays live. */
+  .main > :not(.toolbar) { transition: opacity var(--motion-fast); }
+  .reloading > :not(.toolbar) { opacity: 0.6; transition-delay: 150ms; }
   .loading, .error { text-align: center; padding: 48px; color: var(--text-secondary); }
   .error { color: var(--danger); }
 

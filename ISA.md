@@ -201,6 +201,13 @@ below are still real, the rest are recorded as superseded at the end.
   in and out, and the shell gives them one place.
 - **Joins with nothing to return yet.** No ledger transaction carries a trip tag; layouts publish
   no join; trips keeps its own place namespace.
+- **Figure embeds in project notes.** A note line names a registered figure and the page renders
+  it live, the way a `.base` embed renders a `DatabaseTable` (`lib/projects/database.ts`). An
+  HTML attachment cannot do this: `GET /api/file` serves it sandboxed, as a download
+  (`capabilities/projects/src/server.rs:271`). First case: the W 961 mains filter in project
+  "Washing Machine", now a standalone page built with the anatomy skill. Open: where figure code
+  lives and how it is reviewed. Falsifier: the mains filter figure moves on a project page with
+  no attachment opened.
 
 ### places · five items
 
@@ -301,6 +308,8 @@ below are still real, the rest are recorded as superseded at the end.
 - **A fast structured-decision model as a rung**, the kind Jev is (typesafe.ai, 2026). Candidate,
   not measured.
 - **Generative interface from the typed core** ([product rule 6](CONTRIBUTING.md#product-rules)). No design yet.
+  Next step, set by the principal 2026-10-19: a draft, after figure embeds (dashboard unit),
+  which are the first registered component a note can name.
 - **The on-device model path is untested on an eligible device.** The iPhone 14 Pro reports
   `deviceNotEligible`; a 15 Pro or later, or a Simulator, is needed.
 - **Semantic graph coverage is unmeasured.** `tools/graphify.sh` defaults to authenticated

@@ -99,9 +99,6 @@ twenty-four:
 - `GET /api/places`
 - `GET /api/flights/search`, `GET /api/flights/grid`, `GET /api/flights/when`,
   `GET /api/flights/pivot`
-- `GET /api/import/obsidian/scan`
-- `POST /api/import/obsidian`
-- `POST /api/import/obsidian/all`
 - `POST /api/plan-search` · `GET /api/plan-search/:id` · `POST /api/plan-search/:id/adopt`
 
 `GET /routes` is the current list; the names above are the ones worth knowing by heart.
@@ -251,12 +248,10 @@ are declared there rather than written past it. `revision` is declared optional:
 required would have retroactively invalidated the twelve `option_set` rows already in the live
 database and every row the 12-hourly fare watcher writes.
 
-Obsidian scanning is enabled by `$SJEL_PERSONAL_ROOT/config/trips.json`, shaped like
-[`schemas/trips.json.example`](../../schemas/trips.json.example). The scanner stays inside
-that configured root and considers only Markdown notes with `category: trip`. Scanning is
-read-only. Import is explicit, idempotent by vault-relative path and requires a chosen
-origin instead of guessing one. This contract does not scan Comms keeper notes or Scouting
-opportunities; those vault surfaces remain owned by their respective capabilities.
+Plans were once imported from the vault's `Atlas/Events` notes marked `category: trip`. The
+import went on 2026-10-20 with that folder: each plan keeps its `source` reference, and the
+note's text is the plan's `Obsidian-Reisenotiz` note item (`payload.text`), edited on the trip
+page like any other item.
 
 ## A sentence to a draft
 
@@ -410,20 +405,16 @@ TripIt; connection search shows Besser Bahn and BetterBahn. MapLibre, OpenFreeMa
 Wikimedia are providers used by Sjel, so their attribution stays next to the data they
 render rather than being mislabeled as alternatives.
 
-## Obsidian sync boundary
-
-Obsidian integration belongs at this capability's contract, not in the Svelte dashboard
-and not as direct database access from a vault script. The import slice scans and
-previews existing trip notes, then materializes a selected note as a plan with its source
-reference preserved.
+## The plan safety copy
 
 ### The export slice, shipped
 
 This paragraph specified it a month before anything implemented it, and PRD Q47
 (2026-08-27) then made it a requirement rather than a roadmap item: `trips_plan_items`
 holds 21 rows that exist nowhere else, and a capability holding only-copy rows projects
-them to files. Every plan is now one Markdown file under `Resources/Sjel/Trips/`, in the
-vault named by `<overlay>/config/trips.json`.
+them to files. Every plan is now one Markdown file under `<overlay>/data/trips/plans/`
+(`SJEL_TRIPS_EXPORT_ROOT` redirects it). Until 2026-10-20 the folder was the vault's
+`Resources/Sjel/Trips/`; the vault became knowledge only that day.
 
 The four points above survive with one correction. Point 3 said "a marked Sjel-owned
 section", which is right for a note a human already writes and wrong here: no human note
@@ -451,8 +442,8 @@ Two triggers, and both are needed:
 - The server re-exports after **any** successful non-GET request, as a layer rather than
   a line in nine handlers — a tenth mutation route added later would otherwise stop
   projecting silently. A failure is logged and the request still succeeds: refusing a plan
-  write because the vault is unreachable trades a durable row for a missing file.
-- `trips export-vault` (`--dry-run` to look first) is the copy a human can take when the
+  write because the copy cannot be written trades a durable row for a missing file.
+- `trips export` (`--dry-run` to look first) is the copy a human can take when the
   server is down, which is exactly when it matters.
 
 Both run the same function, so both also sweep: a projection whose plan was renamed,
@@ -461,11 +452,8 @@ would restore from. Archived plans **are** exported — `list_plans` hides them 
 dashboard, and letting that filter reach the safety copy would make archiving a silent
 data loss.
 
-Two-way synchronization comes only after that export shape has been used. It should accept
-only explicit fields such as notes, places and links, validate them into `PlanItem` data,
-and record a conflict instead of silently choosing between two changed revisions. Sjel's
-database remains authoritative for trip identity, stages and item IDs; the vault remains
-the authoritative writing surface for human notes.
+The copy is one-way and for reconstruction only. A trip's notes are written on the trip page,
+into the plan, not into these files.
 
 ## Build
 

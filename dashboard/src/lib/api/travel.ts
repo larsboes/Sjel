@@ -127,31 +127,6 @@ export interface PlanDetails extends TripPlan {
   retrospective: Retrospective | null;
 }
 
-export interface ObsidianTripCandidate {
-  reference: string;
-  title: string;
-  summary: string;
-  date_start: string | null;
-  date_end: string | null;
-  destination: PlaceRef | null;
-  status: string;
-  travelers: string[];
-  transport_modes: TransportMode[];
-  cover: string | null;
-  issues: string[];
-  imported_plan_id: string | null;
-}
-
-export interface ObsidianImportAllResult {
-  imported: TripPlan[];
-  existing: TripPlan[];
-  skipped: Array<{
-    reference: string;
-    title: string;
-    issues: string[];
-  }>;
-}
-
 export type Provenance = 'default' | 'stated' | 'derived' | 'vault';
 
 export interface HardConstraints {
@@ -435,18 +410,6 @@ export const trips = {
     request<void>(
       `/trips/api/plans/${encodeURIComponent(planId)}/items/${encodeURIComponent(itemId)}`,
       { method: 'DELETE' },
-    ),
-  scanObsidian: () =>
-    request<ObsidianTripCandidate[]>('/trips/api/import/obsidian/scan'),
-  importObsidian: (reference: string, origin: PlaceRef) =>
-    request<TripPlan>(
-      '/trips/api/import/obsidian',
-      jsonInit('POST', { reference, origin }),
-    ),
-  importAllObsidian: (origin: PlaceRef) =>
-    request<ObsidianImportAllResult>(
-      '/trips/api/import/obsidian/all',
-      jsonInit('POST', { origin }),
     ),
   bases: (req: BaseRequest) =>
     request<BaseResult>('/trips/api/bases', jsonInit('POST', req)),

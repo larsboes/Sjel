@@ -14,7 +14,6 @@
   import { stageCoordinate } from "$lib/travel/who-is-around";
   import TravelerProfileModal from "$lib/travel/TravelerProfileModal.svelte";
   import TravelCandidatesRail from "$lib/travel/TravelCandidatesRail.svelte";
-  import ObsidianTripsRail from "$lib/travel/ObsidianTripsRail.svelte";
   import {
     TRIP_LAYERS,
     tripFitKey,
@@ -64,7 +63,6 @@
     type CalendarCandidateVerdict,
     type BaseCandidate,
     type Journey,
-    type ObsidianTripCandidate,
     type PlanItem,
     type PlaceRef,
     type ScoredResult,
@@ -139,14 +137,6 @@
   let journeyPhrase = $state("");
   let expandedJourneyId = $state<string | null>(null);
   let itineraryView = $state<"timeline" | "list">("timeline");
-  let obsidianCandidates = $state<ObsidianTripCandidate[]>([]);
-  let obsidianScanning = $state(false);
-  let obsidianImporting = $state<string | null>(null);
-  let obsidianImportingAll = $state(false);
-  let obsidianNotice = $state<string | null>(null);
-  let importOrigin = $state<PlaceRef | null>(null);
-  let importOriginNeeded = $state(false);
-  let obsidianTripsRail = $state<{ focusOriginField: () => void } | null>(null);
   let mapOpen = $state(false);
   let travelCandidates = $state<TravelCandidateAssessment[]>([]);
   let travelCandidatesLoading = $state(true);
@@ -287,15 +277,6 @@
   const filteredPlans = $derived(
     planFilter === "upcoming" ? upcomingPlans : planFilter === "past" ? pastPlans : [...upcomingPlans, ...pastPlans],
   );
-  const obsidianReadyCount = $derived(
-    obsidianCandidates.filter(
-      (candidate) => candidate.issues.length === 0 && !candidate.imported_plan_id,
-    ).length,
-  );
-  // What the rail badges count: anything scanned but not yet a trip here.
-  const obsidianPendingCount = $derived(
-    obsidianCandidates.filter((candidate) => !candidate.imported_plan_id).length,
-  );
   // The companion register's waiting decisions, read-only here. `places` is a
   // capability the published demo does not have, so its own 503 sentence is
   // carried into the section rather than a 404 body (demo/demo.toml
@@ -419,7 +400,7 @@
   }
 
   const travelReviewCount = $derived(
-    travelCandidates.length + obsidianPendingCount + companionProposals.length,
+    travelCandidates.length + companionProposals.length,
   );
   const overviewMapPoints = $derived.by<MapPoint[]>(() =>
     filteredPlans.flatMap((plan) =>
@@ -1091,95 +1072,6 @@
     }
   }
 
-  async function scanObsidian(): Promise<void> {
-    obsidianScanning = true;
-    error = null;
-    obsidianNotice = null;
-    try {
-      // Opening Travel normally starts Trips, but a click must also recover after the
-      // service was stopped while this page stayed open.
-      await sjelStatus.start("trips").catch(() => undefined);
-      obsidianCandidates = await trips.scanObsidian();
-      const ready = obsidianCandidates.filter(
-        (candidate) => candidate.issues.length === 0 && !candidate.imported_plan_id,
-      ).length;
-      const incomplete = obsidianCandidates.filter((candidate) => candidate.issues.length > 0).length;
-      obsidianNotice = obsidianCandidates.length === 0
-        ? "No Obsidian notes marked as trips were found."
-        : `${obsidianCandidates.length} trips found · ${ready} importable${
-            incomplete > 0 ? ` · ${incomplete} incomplete` : ""
-          }`;
-    } catch (caught) {
-      error = caught instanceof Error ? caught.message : String(caught);
-    } finally {
-      obsidianScanning = false;
-    }
-  }
-
-  async function importObsidian(candidate: ObsidianTripCandidate): Promise<void> {
-    if (!importOrigin) {
-      requireImportOrigin();
-      return;
-    }
-    obsidianImporting = candidate.reference;
-    error = null;
-    obsidianNotice = null;
-    try {
-      const plan = await trips.importObsidian(candidate.reference, importOrigin);
-      plans = [plan, ...plans.filter((current) => current.id !== plan.id)];
-      obsidianCandidates = obsidianCandidates.map((current) =>
-        current.reference === candidate.reference
-          ? { ...current, imported_plan_id: plan.id }
-          : current,
-      );
-      obsidianNotice = `“${candidate.title}” was imported.`;
-    } catch (caught) {
-      error = caught instanceof Error ? caught.message : String(caught);
-    } finally {
-      obsidianImporting = null;
-    }
-  }
-
-  async function importAllObsidian(): Promise<void> {
-    if (!importOrigin) {
-      requireImportOrigin();
-      return;
-    }
-    obsidianImportingAll = true;
-    error = null;
-    obsidianNotice = null;
-    try {
-      const result = await trips.importAllObsidian(importOrigin);
-      const returnedPlans = [...result.imported, ...result.existing];
-      const returnedIds = new Set(returnedPlans.map((plan) => plan.id));
-      plans = [...returnedPlans, ...plans.filter((plan) => !returnedIds.has(plan.id))];
-      const planIdByReference = new Map(
-        returnedPlans
-          .filter((plan) => plan.source?.kind === "obsidian")
-          .map((plan) => [plan.source!.reference, plan.id]),
-      );
-      obsidianCandidates = obsidianCandidates.map((candidate) => ({
-        ...candidate,
-        imported_plan_id:
-          planIdByReference.get(candidate.reference) ?? candidate.imported_plan_id,
-      }));
-      obsidianNotice = `${result.imported.length} trips imported${
-        result.existing.length > 0 ? ` · ${result.existing.length} already present` : ""
-      }${result.skipped.length > 0 ? ` · ${result.skipped.length} skipped` : ""}.`;
-    } catch (caught) {
-      error = caught instanceof Error ? caught.message : String(caught);
-    } finally {
-      obsidianImportingAll = false;
-    }
-  }
-
-  function requireImportOrigin(): void {
-    error = null;
-    importOriginNeeded = true;
-    obsidianNotice = "A shared origin is required before importing.";
-    obsidianTripsRail?.focusOriginField();
-  }
-
   function toggleTransportMode(mode: TransportMode): void {
     transportModes = transportModes.includes(mode)
       ? transportModes.filter((current) => current !== mode)
@@ -1399,19 +1291,6 @@
           onRefresh={() => void loadTravelCandidates()}
         />
 
-        <ObsidianTripsRail
-          bind:this={obsidianTripsRail}
-          candidates={obsidianCandidates}
-          scanning={obsidianScanning}
-          importing={obsidianImporting}
-          importingAll={obsidianImportingAll}
-          notice={obsidianNotice}
-          bind:importOrigin
-          bind:importOriginNeeded
-          onScan={() => void scanObsidian()}
-          onImport={(candidate) => void importObsidian(candidate)}
-          onImportAll={() => void importAllObsidian()}
-        />
 
         <RailSection label="Companions" count={companionProposals.length}>
           <CompanionRail

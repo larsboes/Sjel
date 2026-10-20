@@ -6,7 +6,7 @@
 //! than the call it wraps. When the model is unreachable it says how to start it and
 //! prints the heuristic draft that `POST /api/intent/draft` would also return.
 //!
-//! `export-vault` writes the safety copy PRD Q47 requires. It has no HTTP route
+//! `export` writes the safety copy PRD Q47 requires. It has no HTTP route
 //! either, and for a different reason: the server already re-exports after every write
 //! (`src/server.rs`, `project_after_write`), so a route would be a third caller of one
 //! function with no reader. What a human needs is a command they can run when the
@@ -18,8 +18,8 @@ const USAGE: &str = "\
 Usage:
   trips draft-intent \"somewhere warm in October, under 300 euro, by train\"
   trips draft-intent -            read the sentence from stdin
-  trips export-vault              write every plan to the vault projection
-  trips export-vault --dry-run    print what would be written, touch nothing
+  trips export                    write every plan's safety copy into the overlay
+  trips export --dry-run          print what would be written, touch nothing
   trips gear import               propose interior items from the overlay's gear notes
   trips gear import --json        the same proposals as JSON
   trips gear import --apply       write each proposal to interior (409 = already there)
@@ -28,10 +28,10 @@ draft-intent prints a CreatePlan-shaped draft plus what it could not resolve.
 Persists nothing and resolves no station: every destination comes back as a
 place slug with null coordinates, exactly as typed text does.
 
-export-vault writes one Markdown file per plan under Resources/Sjel/Trips/ in
-the vault named by <overlay>/config/trips.json, each carrying every plan item's
-payload verbatim. The server does the same after every write; this is the copy
-you can take by hand.
+export writes one Markdown file per plan under data/trips/plans/ in the overlay
+(or SJEL_TRIPS_EXPORT_ROOT), each carrying every plan item's payload verbatim.
+The server does the same after every write; this is the copy you can take by
+hand.
 
 gear import READS the overlay's item notes and PROPOSES one interior item per
 note; --apply writes them through interior's own POST /api/items. Proposal ids
@@ -69,13 +69,13 @@ fn main() {
                 std::process::exit(1);
             }
         }
-        (Some("export-vault"), rest) => {
+        (Some("export"), rest) => {
             let dry_run = matches!(rest.map(String::as_str), Some("--dry-run"));
             if rest.is_some() && !dry_run {
                 eprintln!("{USAGE}");
                 std::process::exit(2);
             }
-            if let Err(error) = export_vault(dry_run) {
+            if let Err(error) = export(dry_run) {
                 eprintln!("trips: {error}");
                 std::process::exit(1);
             }
@@ -87,18 +87,18 @@ fn main() {
     }
 }
 
-/// Write every plan into the vault, or say what a write would do.
+/// Write every plan's safety copy, or say what a write would do.
 ///
-/// An unconfigured vault is an error rather than a quiet zero: the whole point of the
+/// No export root is an error rather than a quiet zero: the whole point of the
 /// command is that a copy exists, and "nothing to do" is indistinguishable from
 /// "nothing was saved" once the terminal scrolls.
-fn export_vault(dry_run: bool) -> Result<(), String> {
+fn export(dry_run: bool) -> Result<(), String> {
     let config = trips::config::Config::load();
-    let vault = config
-        .obsidian
-        .ok_or("no vault configured: set obsidian.root in <overlay>/config/trips.json")?;
-    let root =
-        markdown_root::MarkdownRoot::declare(vault.root.clone()).map_err(|e| e.to_string())?;
+    let export_root = config
+        .export_root
+        .ok_or("no export root: set SJEL_PERSONAL_ROOT or SJEL_TRIPS_EXPORT_ROOT")?;
+    std::fs::create_dir_all(&export_root).map_err(|e| e.to_string())?;
+    let root = markdown_root::MarkdownRoot::declare(export_root).map_err(|e| e.to_string())?;
 
     let store = trips::store::TripsStore::open(&config.database_path).map_err(|e| e.to_string())?;
     let plans = store.list_every_plan().map_err(|e| e.to_string())?;

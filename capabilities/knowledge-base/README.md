@@ -93,26 +93,11 @@ eleven names would differ byte-wise and Obsidian's wikilinks to them would not r
 2026-09-23 comparison normalises both sides to NFC and found no such difference, which is the
 confirmation that the earlier eleven were cosmetic.
 
-## `plugin/` — the Obsidian plugin for the directory this capability owns
+## The Sjel Lens plugin, removed 2026-10-20
 
-`plugin/sjel-lens/` is an Obsidian plugin: a right-sidebar pane showing what Sjel knows about the
-open note, read-only, with its own README. It is not built and not installed by anything here —
-the three files are what Obsidian wants, and the operator copies them into
-`<vault>/.obsidian/plugins/sjel-lens/` (`plugin/sjel-lens/README.md`, "Install it").
-
-**Why here and not under `vault/`.** The placement question is which capability's removal makes
-the plugin meaningless. Remove the `vault` capability and the People pane degrades to one line
-saying so — which is a first-class behaviour, not a failure — while the trip badge still works.
-Remove *this* capability and there is no vault, no Obsidian, and nowhere for a plugin to be
-installed. The plugin's lifecycle is bound to the directory, so it belongs to the capability that
-owns the directory. `capabilities/soundscape/ui/` is the other shape and a different one: that is
-a bundle its own server serves, and this is an artifact copied into a file tree.
-
-It reads three capabilities over HTTP — `sjel-status` for discovery, `vault` and `trips` for the
-two adapters — which is the ordinary cross-capability contract (CONTRIBUTING.md#schemas-and-dependency-direction),
-not a claim on any of them.
-
-`tools/check-obsidian-plugins.sh` gates it, and gates any other Obsidian plugin added anywhere in
-the repository: no browser-context HTTP (sjel-status sends no CORS header, so the renderer
-withholds its reply; `requestUrl` sends no `Origin` and needs none), no writes, no node require
-under `isDesktopOnly: false`, and no address that is not discovered.
+`plugin/sjel-lens/` was an Obsidian pane that compared two kinds of note with what Sjel computed:
+`Atlas/People` notes against `vault`'s `/api/people`, and the `trips` plan copies in
+`Resources/Sjel/Trips/` against `/api/plans`. On 2026-10-20 the vault became knowledge only
+(capabilities/projects/README.md, "Why this shape"): the people moved into `entities`, and the plan
+copies into the overlay. With both adapters gone the pane had nothing to show, so it was removed.
+`tools/check-obsidian-plugins.sh` still gates every other Obsidian plugin in the repository.

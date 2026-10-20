@@ -8,12 +8,6 @@ use serde::Deserialize;
 use sjel_config::{database_path, expand_tilde, resolve_port};
 use std::path::PathBuf;
 
-#[derive(Debug, Clone, Deserialize)]
-pub struct ObsidianConfig {
-    pub root: PathBuf,
-    pub trips_dir: PathBuf,
-}
-
 /// A city where sleeping costs nothing and staying is wanted -- a friend, family.
 /// The pivot-routing search (PRD F4) enumerates itineraries THROUGH these, which
 /// is the one thing no commercial engine can offer: it does not know where you
@@ -65,7 +59,9 @@ fn default_items_dir() -> String {
 pub struct Config {
     pub database_path: PathBuf,
     pub port: u16,
-    pub obsidian: Option<ObsidianConfig>,
+    /// Root of the plan safety copy (`projection::DIR` below it): `SJEL_TRIPS_EXPORT_ROOT`,
+    /// else the overlay root. `None` when neither is set, and nothing is exported.
+    pub export_root: Option<PathBuf>,
     pub travel: TravelPrefs,
     /// `None` when no overlay is configured, which is what `gear import` reports
     /// rather than scanning a guessed path.
@@ -74,22 +70,10 @@ pub struct Config {
 
 #[derive(Debug, Deserialize)]
 struct TripsFileConfig {
-    obsidian: Option<TripsFileObsidian>,
     #[serde(default)]
     travel: Option<TravelPrefs>,
     #[serde(default)]
     gear: Option<GearConfig>,
-}
-
-#[derive(Debug, Deserialize)]
-struct TripsFileObsidian {
-    root: String,
-    #[serde(default = "default_trips_dir")]
-    trips_dir: String,
-}
-
-fn default_trips_dir() -> String {
-    "Atlas/Events".into()
 }
 
 fn file_config() -> Option<TripsFileConfig> {
@@ -97,14 +81,6 @@ fn file_config() -> Option<TripsFileConfig> {
     let path = expand_tilde(&overlay).join("config").join("trips.json");
     let body = std::fs::read_to_string(path).ok()?;
     serde_json::from_str(&body).ok()
-}
-
-fn obsidian_from_personal_config() -> Option<ObsidianConfig> {
-    let obsidian = file_config()?.obsidian?;
-    Some(ObsidianConfig {
-        root: expand_tilde(&obsidian.root),
-        trips_dir: PathBuf::from(obsidian.trips_dir),
-    })
 }
 
 /// The gear notes directory, from `SJEL_TRIPS_GEAR_DIR` or the overlay's
@@ -129,21 +105,15 @@ fn gear_items_dir() -> Option<PathBuf> {
 impl Config {
     pub fn load() -> Self {
         let port = resolve_port(None, None, 8086);
-        let obsidian = match sjel_config::env_var("SJEL_TRIPS_OBSIDIAN_ROOT") {
-            Ok(root) => Some(ObsidianConfig {
-                root: expand_tilde(&root),
-                trips_dir: PathBuf::from(
-                    sjel_config::env_var("SJEL_TRIPS_OBSIDIAN_DIR")
-                        .unwrap_or_else(|_| default_trips_dir()),
-                ),
-            }),
-            Err(_) => obsidian_from_personal_config(),
-        };
+        let export_root = sjel_config::env_var("SJEL_TRIPS_EXPORT_ROOT")
+            .ok()
+            .map(|root| expand_tilde(&root))
+            .or_else(sjel_config::overlay_root);
         let travel = file_config().and_then(|c| c.travel).unwrap_or_default();
         Self {
             database_path: database_path(),
             port,
-            obsidian,
+            export_root,
             travel,
             gear_items_dir: gear_items_dir(),
         }
@@ -153,11 +123,6 @@ impl Config {
 #[cfg(test)]
 mod tests {
     use super::*;
-
-    #[test]
-    fn obsidian_default_is_atlas_events() {
-        assert_eq!(default_trips_dir(), "Atlas/Events");
-    }
 
     /// A shape, not a value: the default is a directory layout this repository
     /// may name, and the notes inside it are never read from here.

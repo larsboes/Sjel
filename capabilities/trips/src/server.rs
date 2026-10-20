@@ -13,12 +13,9 @@ use serde_json::{json, Value};
 use sjel_server::blocking;
 use tower_http::cors::CorsLayer;
 
-use trips::config::{Config, ObsidianConfig};
+use trips::config::Config;
 use trips::kiwi::KiwiClient;
-use trips::obsidian::{read_trip_note, scan_trip_notes, ObsidianTripCandidate};
-use trips::store::{
-    CreatePlan, CreatePlanItem, PlaceRef, PlanSource, TripPlan, TripsStore, UpdatePlan,
-};
+use trips::store::{CreatePlan, CreatePlanItem, TripPlan, TripsStore, UpdatePlan};
 
 /// What this capability answers, served as data beside `/health`.
 /// Required query parameters are named in the summary: a path alone cannot tell
@@ -125,21 +122,6 @@ const ROUTES: &[route_manifest::Route] = &[
         "DELETE",
         "/api/plans/{plan_id}/items/{item_id}",
         "Remove an item from a plan.",
-    ),
-    r(
-        "GET",
-        "/api/import/obsidian/scan",
-        "Vault trip notes that could be imported. Read-only.",
-    ),
-    r(
-        "POST",
-        "/api/import/obsidian",
-        "Import one vault trip note.",
-    ),
-    r(
-        "POST",
-        "/api/import/obsidian/all",
-        "Import every scanned vault trip note.",
     ),
     r(
         "GET",
@@ -309,7 +291,8 @@ async fn routes() -> Json<Value> {
 #[derive(Clone)]
 struct AppState {
     database_path: Arc<PathBuf>,
-    obsidian: Option<ObsidianConfig>,
+    /// Where the plan safety copy is written: the overlay root, or `SJEL_TRIPS_EXPORT_ROOT`.
+    export_root: Option<std::path::PathBuf>,
     travel: Arc<trips::config::TravelPrefs>,
     /// Held across one export so two concurrent writes cannot interleave inside one
     /// projected file. `std::fs::write` is not atomic, and a half-written safety copy
@@ -317,7 +300,7 @@ struct AppState {
     export_lock: Arc<tokio::sync::Mutex<()>>,
 }
 
-/// Re-export every plan to the vault after any successful write.
+/// Re-export every plan to the overlay safety copy after any successful write.
 ///
 /// A layer rather than a line at the end of nine handlers. Nine call sites would put
 /// the rule "a plan write is projected" in nine places, and the tenth mutation route
@@ -334,8 +317,8 @@ struct AppState {
 /// first would project the state the write is about to replace.
 ///
 /// A failure is logged and the request still succeeds. Refusing a plan write because
-/// the vault is unreachable would trade a durable row for a missing file, which is the
-/// wrong way round; `trips export-vault` is the repair, and it is a command a human
+/// the copy cannot be written would trade a durable row for a missing file, which is the
+/// wrong way round; `trips export` is the repair, and it is a command a human
 /// can run when this process is not even up.
 async fn project_after_write(
     State(state): State<AppState>,
@@ -347,7 +330,7 @@ async fn project_after_write(
     if !completes_a_write(&method, &response) {
         return response;
     }
-    let Some(vault) = state.obsidian.clone() else {
+    let Some(export_root) = state.export_root.clone() else {
         return response;
     };
     let database_path = state.database_path.clone();
@@ -355,8 +338,8 @@ async fn project_after_write(
     tokio::spawn(async move {
         let _held = lock.lock().await;
         let outcome = tokio::task::spawn_blocking(move || -> Result<_, String> {
-            let root = markdown_root::MarkdownRoot::declare(vault.root.clone())
-                .map_err(|e| e.to_string())?;
+            let root =
+                markdown_root::MarkdownRoot::declare(export_root).map_err(|e| e.to_string())?;
             let store = TripsStore::open(&database_path).map_err(|e| e.to_string())?;
             let plans = store.list_every_plan().map_err(|e| e.to_string())?;
             trips::projection::export_all(&root, &plans).map_err(|e| e.to_string())
@@ -365,13 +348,13 @@ async fn project_after_write(
         match outcome {
             Ok(Ok(report)) => {
                 for path in &report.refused {
-                    eprintln!("trips: vault projection refused, a human owns {path}");
+                    eprintln!("trips: plan copy refused, a file this capability did not write is at {path}");
                 }
             }
             Ok(Err(error)) => eprintln!(
-                "trips: vault projection failed ({error}); the rows are safe, the copy is stale — run `trips export-vault`"
+                "trips: plan copy failed ({error}); the rows are safe, the copy is stale — run `trips export`"
             ),
-            Err(error) => eprintln!("trips: vault projection task failed ({error})"),
+            Err(error) => eprintln!("trips: plan copy task failed ({error})"),
         }
     });
     response
@@ -1015,216 +998,6 @@ async fn delete_item(
             json!({ "error": error.to_string() }),
         ),
     }
-}
-
-async fn scan_obsidian(State(state): State<AppState>) -> ApiResponse {
-    let Some(obsidian) = state.obsidian.clone() else {
-        return response(
-            StatusCode::SERVICE_UNAVAILABLE,
-            json!({ "error": "Obsidian import is not configured for this machine" }),
-        );
-    };
-    let database_path = state.database_path.clone();
-    match tokio::task::spawn_blocking(move || {
-        let store = TripsStore::open(&database_path).map_err(|error| error.to_string())?;
-        let mut candidates = scan_trip_notes(&obsidian.root, &obsidian.trips_dir)
-            .map_err(|error| error.to_string())?;
-        for candidate in &mut candidates {
-            candidate.imported_plan_id = store
-                .find_plan_by_source("obsidian", &candidate.reference)
-                .map_err(|error| error.to_string())?
-                .map(|plan| plan.id);
-        }
-        Ok::<_, String>(candidates)
-    })
-    .await
-    {
-        Ok(Ok(candidates)) => response(StatusCode::OK, candidates),
-        Ok(Err(error)) => response(StatusCode::BAD_REQUEST, json!({ "error": error })),
-        Err(error) => response(
-            StatusCode::INTERNAL_SERVER_ERROR,
-            json!({ "error": error.to_string() }),
-        ),
-    }
-}
-
-#[derive(serde::Deserialize)]
-struct ImportObsidianTrip {
-    reference: String,
-    origin: PlaceRef,
-}
-
-enum ImportOutcome {
-    Imported(TripPlan),
-    Existing(TripPlan),
-}
-
-impl ImportOutcome {
-    fn plan(self) -> TripPlan {
-        match self {
-            Self::Imported(plan) | Self::Existing(plan) => plan,
-        }
-    }
-}
-
-#[derive(Serialize)]
-struct SkippedObsidianTrip {
-    reference: String,
-    title: String,
-    issues: Vec<String>,
-}
-
-#[derive(Serialize)]
-struct ImportAllObsidianResult {
-    imported: Vec<TripPlan>,
-    existing: Vec<TripPlan>,
-    skipped: Vec<SkippedObsidianTrip>,
-}
-
-fn import_obsidian_candidate(
-    store: &TripsStore,
-    candidate: ObsidianTripCandidate,
-    origin: PlaceRef,
-) -> Result<ImportOutcome, String> {
-    if let Some(existing) = store
-        .find_plan_by_source("obsidian", &candidate.reference)
-        .map_err(|error| error.to_string())?
-    {
-        return Ok(ImportOutcome::Existing(existing));
-    }
-    if !candidate.issues.is_empty() {
-        return Err(candidate.issues.join(" · "));
-    }
-    let destination = candidate
-        .destination
-        .ok_or_else(|| "Destination is missing".to_owned())?;
-    let date_start = candidate
-        .date_start
-        .ok_or_else(|| "Start date is missing".to_owned())?;
-    let date_end = candidate
-        .date_end
-        .ok_or_else(|| "End date is missing".to_owned())?;
-    let cover_image_url = candidate
-        .cover
-        .as_ref()
-        .filter(|value| value.starts_with("https://"))
-        .cloned();
-    let plan = store
-        .create_plan(&CreatePlan {
-            title: candidate.title.clone(),
-            origin,
-            destinations: vec![destination],
-            date_start,
-            date_end,
-            interests: candidate.summary.clone(),
-            travelers: candidate.travelers,
-            transport_modes: candidate.transport_modes,
-            stages: Vec::new(),
-            cover_image_url,
-            source: Some(PlanSource {
-                kind: "obsidian".into(),
-                reference: candidate.reference.clone(),
-            }),
-        })
-        .map_err(|error| error.to_string())?;
-    store
-        .add_item(
-            &plan.id,
-            &CreatePlanItem {
-                item_type: "note".into(),
-                day: None,
-                external_id: candidate.reference.clone(),
-                title: "Obsidian-Reisenotiz".into(),
-                payload: json!({
-                    "vault_path": candidate.reference,
-                    "summary": candidate.summary,
-                    "status": candidate.status,
-                    "cover": candidate.cover,
-                }),
-            },
-        )
-        .map_err(|error| error.to_string())?;
-    let imported = store
-        .get_plan(&plan.id)
-        .map_err(|error| error.to_string())?
-        .map(|details| details.plan)
-        .ok_or_else(|| "imported trip could not be reloaded".to_owned())?;
-    Ok(ImportOutcome::Imported(imported))
-}
-
-async fn import_obsidian(
-    State(state): State<AppState>,
-    Json(input): Json<ImportObsidianTrip>,
-) -> ApiResponse {
-    let Some(obsidian) = state.obsidian.clone() else {
-        return response(
-            StatusCode::SERVICE_UNAVAILABLE,
-            json!({ "error": "Obsidian import is not configured for this machine" }),
-        );
-    };
-    let database_path = state.database_path.clone();
-    match blocking(move || {
-        let store = TripsStore::open(&database_path).map_err(|error| error.to_string())?;
-        let candidate =
-            read_trip_note(&obsidian.root, &input.reference).map_err(|error| error.to_string())?;
-        import_obsidian_candidate(&store, candidate, input.origin).map(ImportOutcome::plan)
-    })
-    .await
-    {
-        Ok(plan) => response(StatusCode::CREATED, plan),
-        Err(error) => response(StatusCode::BAD_REQUEST, json!({ "error": error })),
-    }
-}
-
-async fn import_all_obsidian(
-    State(state): State<AppState>,
-    Json(input): Json<ImportAllObsidianTrips>,
-) -> ApiResponse {
-    let Some(obsidian) = state.obsidian.clone() else {
-        return response(
-            StatusCode::SERVICE_UNAVAILABLE,
-            json!({ "error": "Obsidian import is not configured for this machine" }),
-        );
-    };
-    let database_path = state.database_path.clone();
-    match tokio::task::spawn_blocking(move || {
-        let store = TripsStore::open(&database_path).map_err(|error| error.to_string())?;
-        let candidates = scan_trip_notes(&obsidian.root, &obsidian.trips_dir)
-            .map_err(|error| error.to_string())?;
-        let mut result = ImportAllObsidianResult {
-            imported: Vec::new(),
-            existing: Vec::new(),
-            skipped: Vec::new(),
-        };
-        for candidate in candidates {
-            let reference = candidate.reference.clone();
-            let title = candidate.title.clone();
-            match import_obsidian_candidate(&store, candidate, input.origin.clone()) {
-                Ok(ImportOutcome::Imported(plan)) => result.imported.push(plan),
-                Ok(ImportOutcome::Existing(plan)) => result.existing.push(plan),
-                Err(error) => result.skipped.push(SkippedObsidianTrip {
-                    reference,
-                    title,
-                    issues: vec![error],
-                }),
-            }
-        }
-        Ok::<_, String>(result)
-    })
-    .await
-    {
-        Ok(Ok(result)) => response(StatusCode::OK, result),
-        Ok(Err(error)) => response(StatusCode::BAD_REQUEST, json!({ "error": error })),
-        Err(error) => response(
-            StatusCode::INTERNAL_SERVER_ERROR,
-            json!({ "error": error.to_string() }),
-        ),
-    }
-}
-
-#[derive(serde::Deserialize)]
-struct ImportAllObsidianTrips {
-    origin: PlaceRef,
 }
 
 #[derive(serde::Deserialize)]
@@ -2027,9 +1800,6 @@ fn build_router(state: AppState) -> Router {
         .route("/api/plans/{id}/cost", get(plan_cost))
         .route("/api/retrospectives/pending", get(pending_retrospectives))
         .route("/api/retrospectives/summary", get(retrospective_summary))
-        .route("/api/import/obsidian/scan", get(scan_obsidian))
-        .route("/api/import/obsidian/all", post(import_all_obsidian))
-        .route("/api/import/obsidian", post(import_obsidian))
         .route("/api/plan-search", post(plan_search_start))
         .route("/api/bases", post(base_search))
         .route("/api/plan-search/{id}", get(plan_search_status))
@@ -2063,7 +1833,7 @@ async fn main() {
     let config = Config::load();
     let state = AppState {
         database_path: Arc::new(config.database_path),
-        obsidian: config.obsidian,
+        export_root: config.export_root,
         travel: Arc::new(config.travel),
         export_lock: Arc::new(tokio::sync::Mutex::new(())),
     };
@@ -2090,7 +1860,7 @@ mod readiness_tests {
         std::fs::write(&blocker, b"not a directory").unwrap();
         let state = AppState {
             database_path: Arc::new(blocker.join("axon.db")),
-            obsidian: None,
+            export_root: None,
             travel: Arc::new(Default::default()),
             export_lock: Arc::new(tokio::sync::Mutex::new(())),
         };
@@ -2122,7 +1892,7 @@ mod origin_tests {
     async fn a_foreign_origin_cannot_read_a_plan_search_result() {
         let state = AppState {
             database_path: Arc::new(std::env::temp_dir().join("trips-origin-test.db")),
-            obsidian: None,
+            export_root: None,
             travel: Arc::new(Default::default()),
             export_lock: Arc::new(tokio::sync::Mutex::new(())),
         };

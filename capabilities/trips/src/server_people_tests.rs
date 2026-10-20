@@ -20,7 +20,7 @@ async fn plan_reads_project_only_their_saved_traveler_decisions() {
     trips::people::decide(&store, "Unrelated", Some("ent:unrelated")).unwrap();
     let state = AppState {
         database_path: Arc::new(path.clone()),
-        obsidian: None,
+        export_root: None,
         travel: Arc::new(Default::default()),
         export_lock: Arc::new(tokio::sync::Mutex::new(())),
     };
@@ -64,7 +64,7 @@ async fn people_decisions_verify_the_target_before_replacing_a_saved_link() {
     }
     let state = AppState {
         database_path: Arc::new(path.clone()),
-        obsidian: None,
+        export_root: None,
         travel: Arc::new(Default::default()),
         export_lock: Arc::new(tokio::sync::Mutex::new(())),
     };

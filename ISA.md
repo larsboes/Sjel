@@ -85,13 +85,13 @@ Migrated 2026-10-15 from §13 of the frozen PRD (now the `projects` record `Sjel
   was cut. Open: a budget on a plan and a trip id on a transaction (both data entry). The finance
   per-trip route still answers 200 with five zeros for an untagged trip.
 
-### media · F4 and one open item
+### media · one open item
 
-- **F4 — perceptual layer, advisory.** No `media_phashes` or `media_reviews` table exists.
-  Falsifier: a near-duplicate is proposed from a phash and reviewed.
 - **No structure draft for `To Sort/`.** The two drafts in the overlay target removed Inbox
   trees, so the 229 files / 53 GB in `Library/To Sort/` have no reviewed destinations and
-  `organize` cannot act. Naming categories is the principal's judgement.
+  `organize` cannot act. Naming categories is the principal's judgement. (`F4` perceptual
+  advisory layer shipped in `capabilities/media/src/perceptual.rs` with `media_phashes` and
+  `media_reviews`.)
 
 ### backup · one claim
 
@@ -99,17 +99,12 @@ Migrated 2026-10-15 from §13 of the frozen PRD (now the `projects` record `Sjel
   passes. Only the local kind is rehearsed; iCloud and ssh are unproven. Falsifier: a restore
   from each kind is observed passing.
 
-### traveler · three open items
+### traveler · one open item
 
-- **F3 — the vault proposes.** `TELOS/Personal/Events Profile.md` is a draft; `scouting` already
-  reads it. The route reads the TELOS notes, emits a per-field diff with the quoted span each
-  change rests on, and writes nothing until accepted. Gated on which TELOS sections are
-  admissible (`CURRENT_STATE` holds a different kind of fact from an interest list).
 - **F4 — the offered-versus-chosen half.** Twenty-eight `option_set` items exist on one plan; one
-  plan is one observation, and a preference inferred from a single choice is a guess.
-- **F6 — companion patterns, pseudonymously.** `places_person_places` holds nineteen rows in
-  state `proposed`, names in a plain column. The profile should learn company (solo, pair,
-  group, family) through the register's person ids, never names.
+  plan is one observation, and a preference inferred from a single choice is a guess. (`F3` vault
+  proposals shipped on `GET /api/profile/proposals` with section gating; `F6` pseudonymous
+  companion patterns shipped in `GET /api/profile/derived` keyed by `ent:` register IDs.)
 
 ### Packs/travel · three open items
 
@@ -139,11 +134,6 @@ Migrated 2026-10-15 from §13 of the frozen PRD (now the `projects` record `Sjel
 
 - **DIST-1 to DIST-4 — a fresh-user Mac and iPhone install.** Tracked in
   [#235](https://github.com/larsboes/Sjel/issues/235) since 2026-10-20, for another contributor.
-
-### operator-profile · two items
-
-- **An export that writes.** Export is dry-run only; a write needs its own reviewed contract.
-- **Harness targets other than Claude Code.** Each needs its user-instruction path verified first.
 
 ### libs/agent · two items
 

@@ -46,9 +46,9 @@ see [planning rules](CONTRIBUTING.md#the-backlog-is-isas). Keep external bug rep
   Open operator actions:
   1. In a new agent session, verify `Read` of `secrets/**` is refused by the user-level configuration floor.
   2. Serve answers 502: the sandboxed Tailscale app cannot connect to the shell's socket
-     (`connect: operation not permitted`, 2026-10-20). Replace it with the open-source
-     `tailscaled`, rerun `tools/setup-tailnet-shell.sh`, and verify `/health` 200 through
-     Tailscale Serve.
+     (`connect: operation not permitted`, 2026-10-20). `tools/setup-tailnet-shell.sh` now runs a
+     second, user-level `tailscaled` node named `sjel` on macOS. Run it and verify `/health` 200
+     through that node's Serve.
 
 ## Unit work
 

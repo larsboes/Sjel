@@ -87,7 +87,7 @@ os.execv("/bin/bash", ["bash", sys.argv[3], *sys.argv[4:]])
 ' "$SJEL_PERSONAL_ROOT/backup/locks/$CAP.flock" "$CAP" "$TOOLS_DIR/backup.sh" "${BACKUP_ARGS[@]}"
 fi
 
-if MANIFEST="$(axon_manifest_for "$CAP")"; then :; else
+if MANIFEST="$(sjel_manifest_for "$CAP")"; then :; else
   status=$?
   if [ "$status" -eq 1 ]; then
     echo "backup.sh: no service.toml for capability '$CAP' in the public or overlay root" >&2

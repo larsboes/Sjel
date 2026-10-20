@@ -114,9 +114,9 @@ done
 
 # --- the sandbox -----------------------------------------------------------
 
-# Cleared first, then set: tools/lib/test-support.sh#isolate_axon_env documents this exact
+# Cleared first, then set: tools/lib/test-support.sh#isolate_sjel_env documents this exact
 # order for a caller that wants its sandbox named explicitly.
-isolate_axon_env
+isolate_sjel_env
 
 SANDBOX="$(mktemp -d "${TMPDIR:-/tmp}/axon-cargo-hermetic.XXXXXX")"
 trap 'rm -rf "$SANDBOX"' EXIT

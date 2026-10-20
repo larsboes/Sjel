@@ -31,18 +31,18 @@ function expandTilde(path: string, home: string | undefined): string {
   return path.startsWith("~/") && home ? join(home, path.slice(2)) : path;
 }
 
-function fromAxonRoot(path: string, axonRoot: string): string {
-  return isAbsolute(path) ? path : resolve(axonRoot, path);
+function fromSjelRoot(path: string, sjelRoot: string): string {
+  return isAbsolute(path) ? path : resolve(sjelRoot, path);
 }
 
-function configPath(axonRoot: string, env: RuntimeEnv): string {
+function configPath(sjelRoot: string, env: RuntimeEnv): string {
   if (env.SJEL_COMMS_CONFIG) {
-    return fromAxonRoot(expandTilde(env.SJEL_COMMS_CONFIG, env.HOME), axonRoot);
+    return fromSjelRoot(expandTilde(env.SJEL_COMMS_CONFIG, env.HOME), sjelRoot);
   }
   if (env.SJEL_PERSONAL_ROOT) {
     return join(expandTilde(env.SJEL_PERSONAL_ROOT, env.HOME), "config", "comms.json");
   }
-  return join(axonRoot, "capabilities", "comms", "comms.config.json");
+  return join(sjelRoot, "capabilities", "comms", "comms.config.json");
 }
 
 function tokenFromBody(body: string): string | null {
@@ -62,12 +62,12 @@ function tokenFromBody(body: string): string | null {
  * returned value stays in the Vite process; it is never imported by browser code.
  */
 export function loadCommsProxyCredential(
-  axonRoot: string,
+  sjelRoot: string,
   env: RuntimeEnv = process.env,
 ): CommsProxyCredential {
   let config: { api_secret_file?: unknown };
   try {
-    config = JSON.parse(readFileSync(configPath(axonRoot, env), "utf8"));
+    config = JSON.parse(readFileSync(configPath(sjelRoot, env), "utf8"));
   } catch {
     return { authorization: null, reason: "config-missing" };
   }
@@ -76,9 +76,9 @@ export function loadCommsProxyCredential(
     return { authorization: null, reason: "secret-unconfigured" };
   }
 
-  const secretPath = fromAxonRoot(
+  const secretPath = fromSjelRoot(
     expandTilde(config.api_secret_file.trim(), env.HOME),
-    axonRoot,
+    sjelRoot,
   );
   try {
     const token = tokenFromBody(readFileSync(secretPath, "utf8"));

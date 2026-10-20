@@ -23,13 +23,13 @@ import { isAbsolute, join, normalize, resolve, sep } from "node:path";
 
 const HEARTBEAT_INTERVAL_MS = 30_000;
 
-const axonRoot = process.env.SJEL_ROOT ?? process.cwd();
+const sjelRoot = process.env.SJEL_ROOT ?? process.cwd();
 const arg = process.argv[2];
 if (!arg) {
   console.error("panel-server.ts: needs the directory to serve — usage: bun tools/panel-server.ts <dist-dir>");
   process.exit(1);
 }
-const root = resolve(isAbsolute(arg) ? arg : join(axonRoot, arg));
+const root = resolve(isAbsolute(arg) ? arg : join(sjelRoot, arg));
 if (!existsSync(join(root, "index.html"))) {
   console.error(`panel-server.ts: ${root} has no index.html — has the panel been built?`);
   process.exit(1);

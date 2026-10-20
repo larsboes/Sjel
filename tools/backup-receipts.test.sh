@@ -19,7 +19,7 @@ set -uo pipefail
 
 _root="$(cd "$(dirname "${BASH_SOURCE[0]:-$0}")/.." && pwd)"
 source "$_root/tools/lib/test-support.sh"
-isolate_axon_env
+isolate_sjel_env
 
 WORK="$(mktemp -d)"
 trap 'rm -rf "$WORK"' EXIT

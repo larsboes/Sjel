@@ -1,5 +1,5 @@
 #!/bin/bash
-# Tests for axon_state_mount_for in tools/lib/paths.sh, over planted overlays. What it replaced
+# Tests for sjel_state_mount_for in tools/lib/paths.sh, over planted overlays. What it replaced
 # is scripts each carrying their own hardcoded path to a tool's state directory.
 #
 # Every case here is one that passes on the machine that wrote the fallback and fails on the
@@ -31,9 +31,9 @@ done
 
 # Every case below plants a machine.toml and asks which [[state_mount]] resolves. An operator's
 # exported SJEL_MACHINE_TOML points that lookup at the real one instead of the planted one
-# (tools/lib/test-support.sh#isolate_axon_env).
+# (tools/lib/test-support.sh#isolate_sjel_env).
 source "$LIB_DIR/test-support.sh"
-isolate_axon_env
+isolate_sjel_env
 
 fails=0
 
@@ -80,7 +80,7 @@ tool = "knowledge-base"
 path = "~/some/where"
 data_class = "personal"
 ')"
-want "a configured mount resolves, ~ expanded" "$(call_out "$r" axon_state_mount_for knowledge-base)" "$HOME/some/where"
+want "a configured mount resolves, ~ expanded" "$(call_out "$r" sjel_state_mount_for knowledge-base)" "$HOME/some/where"
 
 # 2. An absolute path is passed through untouched.
 r="$(plant '
@@ -88,7 +88,7 @@ r="$(plant '
 tool = "knowledge-base"
 path = "/opt/elsewhere"
 ')"
-want "an absolute mount is returned as-is" "$(call_out "$r" axon_state_mount_for knowledge-base)" "/opt/elsewhere"
+want "an absolute mount is returned as-is" "$(call_out "$r" sjel_state_mount_for knowledge-base)" "/opt/elsewhere"
 
 # 3. Undeclared: must fail rather than answer. This is the case the hardcoded fallbacks used
 #    to absorb, which is how the manifest and the scripts could disagree indefinitely.
@@ -97,14 +97,14 @@ r="$(plant '
 tool = "knowledge-base"
 path = "/opt/x"
 ')"
-want "an undeclared tool exits 1" "$(call_rc "$r" axon_state_mount_for mach-mono)" "1"
-case "$(call_err "$r" axon_state_mount_for mach-mono)" in
+want "an undeclared tool exits 1" "$(call_rc "$r" sjel_state_mount_for mach-mono)" "1"
+case "$(call_err "$r" sjel_state_mount_for mach-mono)" in
   *mach-mono*) echo "  ok   the error names the tool it could not resolve" ;;
   *) echo "  FAIL the error does not name the tool"; fails=$((fails + 1)) ;;
 esac
 
 # 4. Ambiguous: two declarations for one tool are refused, not resolved by order — the same
-#    call axon_manifest_for makes for a duplicate capability name.
+#    call sjel_manifest_for makes for a duplicate capability name.
 r="$(plant '
 [[state_mount]]
 tool = "knowledge-base"
@@ -114,7 +114,7 @@ path = "~/first"
 tool = "knowledge-base"
 path = "~/second"
 ')"
-want "two declarations for one tool exit 2" "$(call_rc "$r" axon_state_mount_for knowledge-base)" "2"
+want "two declarations for one tool exit 2" "$(call_rc "$r" sjel_state_mount_for knowledge-base)" "2"
 
 # 5. Non-default location: resolution follows the SELECTED machine manifest. A second machine
 #    declaring a different root is the entire reason this is not a constant.
@@ -123,11 +123,11 @@ r="$(plant '
 tool = "knowledge-base"
 path = "/opt/service-node"
 ' service-node)"
-want "the selected machine's mount wins" "$(call_out "$r" axon_state_mount_for knowledge-base)" "/opt/service-node"
+want "the selected machine's mount wins" "$(call_out "$r" sjel_state_mount_for knowledge-base)" "/opt/service-node"
 
 # 6. A manifest with no mounts at all fails cleanly rather than returning empty-and-happy.
 r="$(plant '')"
-want "no state mounts at all exits 1" "$(call_rc "$r" axon_state_mount_for knowledge-base)" "1"
+want "no state mounts at all exits 1" "$(call_rc "$r" sjel_state_mount_for knowledge-base)" "1"
 
 if [ "$fails" -gt 0 ]; then
   echo "state-mount-resolution: $fails check(s) failed" >&2

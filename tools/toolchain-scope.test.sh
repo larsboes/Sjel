@@ -30,9 +30,9 @@ done
 # four capability-field checks read the OPERATOR's machine.toml and the OPERATOR's capabilities
 # directory instead of the fixtures written twenty lines below, so `withdb` is never enabled
 # anywhere and `fixturedb` correctly reads n/a. Cleared, all 30 checks pass; the exclusion in
-# .github/workflows/ci.yml is gone with it (tools/lib/test-support.sh#isolate_axon_env).
+# .github/workflows/ci.yml is gone with it (tools/lib/test-support.sh#isolate_sjel_env).
 source "$SRC_TOOLS/lib/test-support.sh"
-isolate_axon_env
+isolate_sjel_env
 
 SCRATCH="$(mktemp -d "/tmp/toolchain-scope.XXXXXX")"
 trap 'rm -rf "$SCRATCH"' EXIT

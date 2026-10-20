@@ -30,7 +30,7 @@ set -u
 
 _here="$(cd "$(dirname "$0")" && pwd)"
 # shellcheck source=tools/lib/paths.sh
-. "$_here/lib/paths.sh"      # SJEL_ROOT, SJEL_PERSONAL_ROOT, SJEL_MACHINE_TOML, axon_manifest_for
+. "$_here/lib/paths.sh"      # SJEL_ROOT, SJEL_PERSONAL_ROOT, SJEL_MACHINE_TOML, sjel_manifest_for
 # shellcheck source=tools/lib/platform.sh
 # `|| exit 2`, because platform.sh signals a missing overlay or machine.toml with `return 1` when
 # sourced. Without that check the script would run on with SJEL_CONTAINER_RUNTIME unset and, under
@@ -83,7 +83,7 @@ echo "Sjel container-refresh · $(date -u +%Y-%m-%dT%H:%M:%SZ 2>/dev/null || dat
 # and each service.toml owns whether it declares an image at all.
 CONTAINER_CAPS=""
 for _cap in $(toml_array capabilities "$SJEL_MACHINE_TOML" 2>/dev/null); do
-  _mf="$(axon_manifest_for "$_cap" 2>/dev/null)" || continue
+  _mf="$(sjel_manifest_for "$_cap" 2>/dev/null)" || continue
   [ -n "$_mf" ] || continue
   [ -n "$(toml_get image "$_mf")" ] || continue
   CONTAINER_CAPS="$CONTAINER_CAPS $_cap"
@@ -129,7 +129,7 @@ container_running() {  # container_running <container-name>
 }
 
 for cap in $CONTAINER_CAPS; do
-  mf="$(axon_manifest_for "$cap" 2>/dev/null)" || continue
+  mf="$(sjel_manifest_for "$cap" 2>/dev/null)" || continue
   image="$(toml_get image "$mf")"
   tag="$(toml_get tag "$mf")"
   name="$(toml_get name "$mf")"

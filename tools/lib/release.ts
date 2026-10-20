@@ -14,13 +14,13 @@ import { readFileSync } from "node:fs";
 import { join } from "node:path";
 
 /**
- * The `[release] tag_glob` value from `<axonRoot>/sjel.toml`.
+ * The `[release] tag_glob` value from `<sjelRoot>/sjel.toml`.
  *
  * Throws when the key is missing rather than falling back to a literal: a default here would put
  * the pattern in two places again, which is the defect this module removes.
  */
-export function releaseTagGlob(axonRoot: string): string {
-  const manifest = join(axonRoot, "sjel.toml");
+export function releaseTagGlob(sjelRoot: string): string {
+  const manifest = join(sjelRoot, "sjel.toml");
   const parsed = Bun.TOML.parse(readFileSync(manifest, "utf8")) as {
     release?: { tag_glob?: unknown };
   };

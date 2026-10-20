@@ -67,7 +67,7 @@ ask_profile() {
   esac
 }
 
-clone_axon() { # clone_axon <profile> <ref> <dir>
+clone_sjel() { # clone_sjel <profile> <ref> <dir>
   local profile="$1" ref="$2" dir="$3"
   [ -e "$dir" ] && die "$dir already exists — remove it or set SJEL_DIR to somewhere else."
   if [ "$profile" = "development" ]; then
@@ -93,7 +93,7 @@ main() {
     *) die "unknown profile '$profile' — use usage or development." ;;
   esac
 
-  clone_axon "$profile" "$ref" "$dir"
+  clone_sjel "$profile" "$ref" "$dir"
 
   say ""
   say "Cloned $(git -C "$dir" describe --tags 2>/dev/null || printf '%s' "$ref") into $dir"

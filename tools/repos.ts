@@ -119,8 +119,8 @@ function read(path: string, role: RepoStatus["role"], releaseGlob: string): Repo
   };
 }
 
-const axonRoot = process.env.SJEL_ROOT;
-if (!axonRoot) {
+const sjelRoot = process.env.SJEL_ROOT;
+if (!sjelRoot) {
   console.error("repos.ts: SJEL_ROOT is not set — run through tools/repos, or export it");
   process.exit(1);
 }
@@ -130,9 +130,9 @@ const overlayRoot = process.env.SJEL_PERSONAL_ROOT;
 
 // One home for "which tags are release tags" — sjel.toml [release] tag_glob, shared with
 // tools/lib/version.sh and tools/doctor (tools/sjel-cli/src/doctor/checks.rs, CONTRIBUTING.md#the-release-line).
-const releaseGlob = releaseTagGlob(axonRoot);
+const releaseGlob = releaseTagGlob(sjelRoot);
 
-const repos = [read(axonRoot, "spine", releaseGlob)];
+const repos = [read(sjelRoot, "spine", releaseGlob)];
 if (overlayRoot && (await Bun.file(`${overlayRoot}/.git/HEAD`).exists())) {
   repos.push(read(overlayRoot, "overlay", releaseGlob));
 }

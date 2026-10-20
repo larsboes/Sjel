@@ -55,9 +55,9 @@ done
 # Every case below writes a machine.toml into its own scratch overlay and asserts on what the
 # runner reads back. An operator's exported SJEL_OVERLAY_ROOT / SJEL_MACHINE_TOML wins over the
 # scratch sjel.toml, so without this the runner reads the REAL machine and the fixture is inert
-# (tools/lib/test-support.sh#isolate_axon_env).
+# (tools/lib/test-support.sh#isolate_sjel_env).
 source "$SRC_TOOLS/lib/test-support.sh"
-isolate_axon_env
+isolate_sjel_env
 # tools/capability.sh is a launcher for the sjel-cli crate since 2026-10-02, and the scratch
 # root this suite copies it into has no crate to build.
 sjel_cli_prebuilt

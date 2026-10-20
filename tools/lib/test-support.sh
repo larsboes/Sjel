@@ -13,7 +13,7 @@
 #
 # The second: a test that builds a scratch Sjel root must not inherit the SJEL_* environment.
 # Same shape, opposite direction — green in CI, red only on the machine of whoever exported the
-# variables. See isolate_axon_env below.
+# variables. See isolate_sjel_env below.
 #
 # bash 3.2-safe (CONTRIBUTING.md#portable-shell).
 
@@ -44,7 +44,7 @@ skippable() {
   return 0
 }
 
-# isolate_axon_env — drop the SJEL_* environment before a test builds its scratch root.
+# isolate_sjel_env — drop the SJEL_* environment before a test builds its scratch root.
 #
 # tools/lib/paths.sh answers "which overlay am I" from an exported SJEL_OVERLAY_ROOT first, and
 # only then from sjel.local.toml / sjel.toml. That precedence is deliberate: it is the
@@ -69,7 +69,7 @@ skippable() {
 #
 # The settings are cleared so a value the operator's shell exports cannot stand in for the
 # sandbox's own.
-isolate_axon_env() {
+isolate_sjel_env() {
   local v
   for v in ROOT OVERLAY_ROOT PERSONAL_ROOT MACHINE_TOML MACHINES_DIR CAPS_DIR OVERLAY_CAPS_DIR; do
     unset "SJEL_$v"

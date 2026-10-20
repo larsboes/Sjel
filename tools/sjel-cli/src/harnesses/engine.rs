@@ -333,7 +333,7 @@ pub fn read_pack_skills(config: &DeployConfig, pack: &str) -> Result<Vec<String>
 }
 
 /// A Pack whose manifest names a `deployer` is owned by that tool alone. The read is from
-/// `axonRoot/Packs`, not the Pack roots — the same place pack-deploy.ts looks.
+/// `sjelRoot/Packs`, not the Pack roots — the same place pack-deploy.ts looks.
 pub fn pack_deployer(config: &DeployConfig, pack: &str) -> Option<String> {
     let manifest = config.axon_root.join("Packs").join(pack).join("pack.toml");
     let parsed: toml::Table = fs::read_to_string(manifest).ok()?.parse().ok()?;

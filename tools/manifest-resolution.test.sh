@@ -1,5 +1,5 @@
 #!/bin/bash
-# Test for axon_manifest_for in tools/lib/paths.sh — the one place that turns a
+# Test for sjel_manifest_for in tools/lib/paths.sh — the one place that turns a
 # capability name into a manifest path. Builds a throwaway Sjel root and a throwaway
 # overlay beside it, then asserts each resolution case.
 #
@@ -24,9 +24,9 @@ fi
 
 # An operator's exported SJEL_OVERLAY_ROOT outranks the scratch root's own sjel.toml inside
 # paths.sh, which would make this test resolve the real overlay it is supposed to be replacing
-# (tools/lib/test-support.sh#isolate_axon_env).
+# (tools/lib/test-support.sh#isolate_sjel_env).
 source "$LIB_DIR/test-support.sh"
-isolate_axon_env
+isolate_sjel_env
 
 mkdir -p "$ROOT/tools/lib"
 cp "$LIB_DIR/paths.sh" "$LIB_DIR/toml.sh" "$ROOT/tools/lib/"
@@ -51,7 +51,7 @@ source "$ROOT/tools/lib/paths.sh"
 fails=0
 check() {  # check <description> <expected-rc> <expected-stdout> <name>
   local desc="$1" want_rc="$2" want_out="$3" name="$4" out rc=0
-  out="$(axon_manifest_for "$name" 2>/dev/null)" || rc=$?
+  out="$(sjel_manifest_for "$name" 2>/dev/null)" || rc=$?
   if [ "$rc" != "$want_rc" ]; then
     echo "FAIL: $desc — exit $rc, wanted $want_rc"; fails=$((fails + 1)); return
   fi
@@ -67,7 +67,7 @@ check "unknown name is exit 1, no output" 1 "" nothing-here
 check "duplicate is exit 2, no output" 2 "" both
 
 # A refusal that does not say where the two manifests are leaves the reader to guess.
-err="$(axon_manifest_for both 2>&1 >/dev/null || true)"
+err="$(sjel_manifest_for both 2>&1 >/dev/null || true)"
 for path in "$ROOT/capabilities/both/service.toml" "$OVERLAY/capabilities/both/service.toml"; do
   if ! printf '%s' "$err" | grep -qF -- "$path"; then
     echo "FAIL: duplicate error omits $path"; fails=$((fails + 1))
@@ -93,7 +93,7 @@ lean() { env -u SJEL_OVERLAY_ROOT -u SJEL_PERSONAL_ROOT bash -c "$1" 2>/dev/null
 if [ "$(lean "source '$LEGACY/tools/lib/paths.sh' && printf '%s' \"\$SJEL_OVERLAY_ROOT\"")" != "$OVERLAY" ]; then
   echo "FAIL: a root that only carries axon.toml no longer resolves its overlay"; fails=$((fails + 1))
 fi
-if [ "$(lean "source '$LEGACY/tools/lib/paths.sh' && axon_manifest_for legacy")" != "$LEGACY/capabilities/legacy/service.toml" ]; then
+if [ "$(lean "source '$LEGACY/tools/lib/paths.sh' && sjel_manifest_for legacy")" != "$LEGACY/capabilities/legacy/service.toml" ]; then
   echo "FAIL: a root that only carries axon.toml no longer resolves a capability"; fails=$((fails + 1))
 fi
 

@@ -16,7 +16,7 @@ pub struct Paths {
     pub overlay_caps_dir: Option<PathBuf>,
 }
 
-/// Where a capability's service.toml is, by the rule of `axon_manifest_for` in
+/// Where a capability's service.toml is, by the rule of `sjel_manifest_for` in
 /// tools/lib/paths.sh.
 pub enum Manifest {
     Found(PathBuf),
@@ -193,7 +193,7 @@ fn first_quoted(line: &str) -> Option<&str> {
     Some(&rest[..end])
 }
 
-/// The message `axon_manifest_for` prints for a name declared in both roots.
+/// The message `sjel_manifest_for` prints for a name declared in both roots.
 pub fn duplicate_message(name: &str, core: &Path, overlay: &Path) -> String {
     format!(
         "paths.sh: capability '{name}' is declared in both roots:\n  {}\n  {}\nRename one — they are two different services sharing a name.",

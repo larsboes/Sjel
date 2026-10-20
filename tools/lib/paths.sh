@@ -117,7 +117,7 @@ export SJEL_CAPS_DIR SJEL_OVERLAY_CAPS_DIR
 # exit 2 when both roots declare it. A duplicate is refused rather than resolved by
 # path order: silently starting whichever root sorted first is a worse failure than
 # stopping, because the two manifests are different services wearing one name.
-axon_manifest_for() {
+sjel_manifest_for() {
   local name="$1" root_mf="" overlay_mf=""
   if [ -f "$SJEL_CAPS_DIR/$name/service.toml" ]; then
     root_mf="$SJEL_CAPS_DIR/$name/service.toml"
@@ -146,14 +146,14 @@ axon_manifest_for() {
 # <tool> -> the path this machine declares for that state mount, on stdout, with a
 # leading ~ expanded. Exit 1 when the machine declares no mount for the tool, exit 2
 # when it declares more than one. Ambiguity is refused rather than resolved by order,
-# for the same reason axon_manifest_for refuses a duplicate name.
+# for the same reason sjel_manifest_for refuses a duplicate name.
 #
 # machine.toml's [[state_mount]] is array-of-tables, past toml.sh's single-line
 # contract (see its header), so this reads it through Bun.TOML like every other
 # array-of-tables caller. That keeps the manifest the one source of truth instead of
 # letting each script carry its own fallback path — the failure mode being that the
 # two agree on one installation and silently disagree on the next.
-axon_state_mount_for() {
+sjel_state_mount_for() {
   local tool="$1" out=""
   [ -f "$SJEL_MACHINE_TOML" ] || {
     echo "paths.sh: no machine manifest at $SJEL_MACHINE_TOML" >&2

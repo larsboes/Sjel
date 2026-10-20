@@ -40,7 +40,7 @@ _manifest_name() {  # the tracked manifest's name in <dir>, empty if this is not
   done
 }
 
-_resolve_axon_root() {
+_resolve_sjel_root() {
   if [ -n "${SJEL_ROOT:-}" ] && [ -n "$(_manifest_name "$SJEL_ROOT")" ]; then
     echo "$SJEL_ROOT"
     return
@@ -85,7 +85,7 @@ require() {
 require curl
 require jq
 
-SJEL_ROOT="$(_resolve_axon_root)"
+SJEL_ROOT="$(_resolve_sjel_root)"
 [ -n "$SJEL_ROOT" ] || die "Sjel checkout not found; export SJEL_ROOT=/path/to/Sjel"
 export SJEL_ROOT
 

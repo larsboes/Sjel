@@ -27,9 +27,9 @@ fi
 
 # This test's whole subject is which machine.toml paths.sh picks. An operator's exported
 # SJEL_MACHINE_TOML/SJEL_OVERLAY_ROOT answers that question before the scratch root gets to,
-# so the assertions measured the real machine (tools/lib/test-support.sh#isolate_axon_env).
+# so the assertions measured the real machine (tools/lib/test-support.sh#isolate_sjel_env).
 source "$LIB_DIR/test-support.sh"
-isolate_axon_env
+isolate_sjel_env
 
 mkdir -p "$ROOT/tools/lib" "$OVERLAY/config/machines"
 cp "$LIB_DIR/paths.sh" "$LIB_DIR/toml.sh" "$ROOT/tools/lib/"

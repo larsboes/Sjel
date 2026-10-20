@@ -11,7 +11,7 @@ export type OverlaySource =
   | "axon.toml";
 export type OverlayResolution = { root: string; source: OverlaySource };
 
-export function axonRoot(): string {
+export function sjelRoot(): string {
   return resolve(dirname(new URL(import.meta.url).pathname), "..", "..");
 }
 
@@ -35,7 +35,7 @@ function readOverlayKey(file: string): string | null {
   return null;
 }
 
-export function resolveOverlayRoot(root: string = axonRoot()): OverlayResolution | null {
+export function resolveOverlayRoot(root: string = sjelRoot()): OverlayResolution | null {
   for (const name of ["SJEL_OVERLAY_ROOT", "SJEL_PERSONAL_ROOT"] as const) {
     const value = process.env[name]?.trim();
     if (value) return { root: expandHome(value), source: name };
@@ -47,7 +47,7 @@ export function resolveOverlayRoot(root: string = axonRoot()): OverlayResolution
   return null;
 }
 
-export function overlayRoot(root: string = axonRoot()): string | null {
+export function overlayRoot(root: string = sjelRoot()): string | null {
   return resolveOverlayRoot(root)?.root ?? null;
 }
 
@@ -83,7 +83,7 @@ export function resolveMachineToml(
   opts: { hostname?: string | null } = {},
 ): MachineResolution | null {
   for (const name of ["sjel.local.toml", "axon.local.toml"] as const) {
-    const explicit = readMachineKey(resolve(axonRoot(), name));
+    const explicit = readMachineKey(resolve(sjelRoot(), name));
     if (explicit) {
       return { path: resolve(overlay, "config", "machines", `${explicit}.toml`), source: name, name: explicit };
     }

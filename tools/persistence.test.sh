@@ -34,9 +34,9 @@ done
 # operator's exported SJEL_OVERLAY_ROOT outranks this sandbox's own sjel.toml inside paths.sh, so
 # every `os = "linux"` case here read the author's real macOS machine.toml and every env-block
 # assertion read the author's real declarations. 14 checks failed locally and none in CI, which is
-# exactly the shape a test cannot warn you about (tools/lib/test-support.sh#isolate_axon_env).
+# exactly the shape a test cannot warn you about (tools/lib/test-support.sh#isolate_sjel_env).
 source "$SRC_TOOLS/lib/test-support.sh"
-isolate_axon_env
+isolate_sjel_env
 # tools/capability.sh is a launcher for the sjel-cli crate since 2026-10-02, and the scratch
 # root this suite copies it into has no crate to build.
 sjel_cli_prebuilt

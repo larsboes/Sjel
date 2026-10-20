@@ -29,9 +29,9 @@ OVERLAY="$SCRATCH/overlay"
 
 # An operator's exported SJEL_OVERLAY_ROOT / SJEL_MACHINE_TOML wins over the scratch sjel.toml,
 # so without this the launcher reads the REAL machine and the fixture is inert
-# (tools/lib/test-support.sh#isolate_axon_env).
+# (tools/lib/test-support.sh#isolate_sjel_env).
 source "$SRC_ROOT/tools/lib/test-support.sh"
-isolate_axon_env
+isolate_sjel_env
 
 mkdir -p "$ROOT/tools/lib" "$ROOT/capabilities/agentbox" "$OVERLAY/config"
 cp "$SRC_ROOT"/tools/lib/*.sh "$ROOT/tools/lib/"

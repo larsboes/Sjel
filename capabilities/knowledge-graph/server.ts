@@ -30,7 +30,7 @@
 import { existsSync, readFileSync, statSync } from "node:fs";
 import { join } from "node:path";
 
-const axonRoot = (): string => process.env.SJEL_ROOT ?? process.cwd();
+const sjelRoot = (): string => process.env.SJEL_ROOT ?? process.cwd();
 
 // ── Graph data ──────────────────────────────────────────────────────────────
 
@@ -39,7 +39,7 @@ const axonRoot = (): string => process.env.SJEL_ROOT ?? process.cwd();
 let graphCache: { path: string; data: any; mtime: number } | null = null;
 
 export function loadGraph(): any {
-  const graphJsonPath = join(axonRoot(), "graphify-out/graph.json");
+  const graphJsonPath = join(sjelRoot(), "graphify-out/graph.json");
   if (!existsSync(graphJsonPath)) return null;
   const mtime = statSync(graphJsonPath).mtimeMs;
   if (graphCache && graphCache.path === graphJsonPath && graphCache.mtime === mtime) return graphCache.data;

@@ -37,7 +37,7 @@ SJEL_OVERLAY_ROOT="$OVERLAY"
 SJEL_MACHINE_TOML="$MACHINE"
 export SJEL_ROOT SJEL_PERSONAL_ROOT SJEL_OVERLAY_ROOT SJEL_MACHINE_TOML
 source "$FIXTURE/tools/lib/toml.sh"
-axon_manifest_for() {
+sjel_manifest_for() {
   [ -f "$FIXTURE/capabilities/\$1/service.toml" ] || return 1
   echo "$FIXTURE/capabilities/\$1/service.toml"
 }

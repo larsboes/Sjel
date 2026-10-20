@@ -195,6 +195,59 @@ impl PseudonymizerSession {
         token
     }
 
+    /// Tokenizes a file or Vault relative path (`path`, `files`, `uri`).
+    ///
+    /// Slash-separated paths like `Waschmaschine/Assets/IMG_1234.jpeg` are single whitespace
+    /// words whose combined letters and digits trip the generic token and phone detectors in
+    /// [`Self::tokenize_text`]. Path tokenization applies dictionary matches (`registry`) and
+    /// per-segment email shapes while leaving path structure, filenames, dates, and asset
+    /// numbers intact unless they contain a known identity.
+    pub fn tokenize_path(&mut self, path: &str, registry: &EntityRegistry) -> String {
+        if path.trim().is_empty() {
+            return path.to_string();
+        }
+
+        let mut spans: Vec<MatchSpan> = Vec::new();
+        let mut offset = 0;
+        for segment in path.split('/') {
+            let clean = trim_trailing_punctuation(segment);
+            if pattern::looks_like_email(clean) {
+                spans.push(MatchSpan {
+                    start: offset,
+                    end: offset + clean.len(),
+                    entity_type: EntityType::Email,
+                    original_matched: clean.to_string(),
+                });
+            }
+            offset += segment.len() + 1;
+        }
+
+        for m in registry.find_matches(path) {
+            if !spans
+                .iter()
+                .any(|s| overlaps(s.start, s.end, m.start, m.end))
+            {
+                spans.push(m);
+            }
+        }
+
+        spans.sort_by(|a, b| a.start.cmp(&b.start).then(b.end.cmp(&a.end)));
+        let mut result = String::with_capacity(path.len());
+        let mut cursor = 0;
+        for span in spans {
+            if span.start < cursor {
+                continue;
+            }
+            self.push_escaped(&mut result, &path[cursor..span.start]);
+            let token = self.token_for(&span.original_matched, span.entity_type);
+            self.record_finding(span.entity_type);
+            result.push_str(&token);
+            cursor = span.end;
+        }
+        self.push_escaped(&mut result, &path[cursor..]);
+        result
+    }
+
     /// Tokenizes `text` with the ladder of PRD §6.2: rung 1 shapes, then rung 0 names from
     /// `registry`, then rung 2 cues on what is left.
     pub fn tokenize_text(&mut self, text: &str, registry: &EntityRegistry) -> String {

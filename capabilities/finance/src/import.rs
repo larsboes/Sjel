@@ -77,6 +77,8 @@ pub struct CsvLocationColumns {
     pub city_column: Option<String>,
     #[serde(default)]
     pub country_column: Option<String>,
+    #[serde(default)]
+    pub mcc_column: Option<String>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -228,6 +230,8 @@ pub struct TransactionCandidate {
     pub location_city: Option<String>,
     #[serde(default)]
     pub location_country: Option<String>,
+    #[serde(default)]
+    pub location_mcc: Option<String>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
@@ -291,6 +295,7 @@ pub fn prepare_csv(bytes: &[u8], mapping: &CsvMapping) -> ImportResult<PreparedC
     )?;
     let city = optional_column(&headers, location.and_then(|l| l.city_column.as_deref()))?;
     let country = optional_column(&headers, location.and_then(|l| l.country_column.as_deref()))?;
+    let mcc = optional_column(&headers, location.and_then(|l| l.mcc_column.as_deref()))?;
     let row_filter = mapping
         .row_filter
         .as_ref()
@@ -438,6 +443,7 @@ pub fn prepare_csv(bytes: &[u8], mapping: &CsvMapping) -> ImportResult<PreparedC
             location_postal_code: location_value(postal_code),
             location_city: location_value(city),
             location_country: location_value(country),
+            location_mcc: location_value(mcc),
         });
     }
     let outflow_count = candidates
@@ -540,6 +546,7 @@ pub fn mail_candidate(
         location_postal_code: None,
         location_city: None,
         location_country: None,
+        location_mcc: None,
     })
 }
 
@@ -1283,10 +1290,11 @@ mod tests {
             postal_code_column: Some("PLZ".into()),
             city_column: None,
             country_column: Some("Land".into()),
+            mcc_column: Some("mcc_code".into()),
         });
         // The quoted street field carries two lines, as the Amex export does:
         // line 1 street, line 2 city. It must survive byte-for-byte.
-        let csv = b"Buchung;Betrag;Text;Referenz;Waehrung;Adresse;PLZ;Land\n02.08.2026;-12,34;Synthetic market;row-1;EUR;\"Beispielstr. 1\nMusterstadt\";12345;Deutschland\n03.08.2026;-5,00;Synthetic service;row-2;EUR;; ;\n";
+        let csv = b"Buchung;Betrag;Text;Referenz;Waehrung;Adresse;PLZ;Land;mcc_code\n02.08.2026;-12,34;Synthetic market;row-1;EUR;\"Beispielstr. 1\nMusterstadt\";12345;Deutschland;5812\n03.08.2026;-5,00;Synthetic service;row-2;EUR;; ;;\n";
 
         let rows = parse_csv(csv, &with_location).unwrap();
 
@@ -1297,9 +1305,11 @@ mod tests {
         assert_eq!(rows[0].location_postal_code.as_deref(), Some("12345"));
         assert_eq!(rows[0].location_city, None);
         assert_eq!(rows[0].location_country.as_deref(), Some("Deutschland"));
+        assert_eq!(rows[0].location_mcc.as_deref(), Some("5812"));
         // Blank and whitespace-only cells are absent, not empty strings.
         assert_eq!(rows[1].location_street, None);
         assert_eq!(rows[1].location_postal_code, None);
+        assert_eq!(rows[1].location_mcc, None);
 
         // Location never enters the fingerprint: venue links in the places
         // capability key on identities minted before these fields existed.

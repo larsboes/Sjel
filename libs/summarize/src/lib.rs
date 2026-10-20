@@ -23,6 +23,14 @@
 //! rung it was produced at — and an operator pressing refine twice does not get
 //! two different unrelated documents.
 //!
+//! ## Rung ladder and the 4,096-token AFM ceiling (B23)
+//!
+//! Apple Foundation Models (`libs/inference/src/afm_probe.rs`) carries a
+//! 4,096-token combined window. `Shape::Brief` and `Shape::Standard` fit inside
+//! that window; `Shape::Sectioned` stays on the larger model (`INPUT_CAP =
+//! 15_000`). When macOS 27 / AFM 3 widens the local context window, the
+//! `Sectioned` rung may move to the local tier.
+//!
 //! ## Dependency rule
 //!
 //! This is a normal workspace crate with an intentionally narrow dependency

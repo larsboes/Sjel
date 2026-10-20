@@ -3,6 +3,7 @@
   import MarkdownDocument from "$lib/feed/MarkdownDocument.svelte";
   import StateLine from "$lib/StateLine.svelte";
   import DatabaseTable from "./DatabaseTable.svelte";
+  import ProjectsGraph from "./ProjectsGraph.svelte";
   import {
     countCheckboxes,
     extractExcerpt,
@@ -47,8 +48,8 @@
   let priority = $state(2);
   let noteTitle = $state("");
 
-  // Notes view mode (cards vs database table)
-  let notesView = $state<"cards" | "table">("cards");
+  // Notes view mode (cards vs database table vs graph)
+  let notesView = $state<"cards" | "table" | "graph">("cards");
   // In-editor live preview toggle
   let editorPreview = $state(false);
 
@@ -507,11 +508,11 @@
   <section aria-live="polite">
     {#if !selected}
       <h2>Projects</h2>
-      <DatabaseTable kinds={["project"]} columns={["status", "open", "priority", "start", "due"]} storeKey="projects" {stamp} />
+      <DatabaseTable kinds={["project"]} columns={["status", "open", "priority", "start", "due", "class"]} storeKey="projects" {stamp} />
       <h2>All tasks</h2>
       <DatabaseTable
         kinds={["task"]}
-        columns={["project", "status", "due", "scheduled", "priority", "context", "energy"]}
+        columns={["project", "status", "due", "scheduled", "priority", "context", "energy", "class"]}
         storeKey="tasks"
         {stamp}
         onchange={() => {
@@ -522,7 +523,7 @@
       <h2>All notes</h2>
       <DatabaseTable
         kinds={["note"]}
-        columns={["project", "summary", "maturity", "type", "categories"]}
+        columns={["project", "summary", "maturity", "type", "categories", "class"]}
         storeKey="all-notes"
         {stamp}
         onchange={() => {
@@ -701,10 +702,21 @@
             >
               🗂️ Database Table
             </button>
+            <button
+              type="button"
+              class="view-switch-btn"
+              class:active={notesView === "graph"}
+              onclick={() => (notesView = "graph")}
+              use:tip={"Interactive knowledge & link graph"}
+            >
+              🕸️ Graph
+            </button>
           </div>
         </div>
 
-        {#if notesView === "table"}
+        {#if notesView === "graph"}
+          <ProjectsGraph {records} />
+        {:else if notesView === "table"}
           {@const project = selected}
           <div class="notes-table-wrap">
             <DatabaseTable

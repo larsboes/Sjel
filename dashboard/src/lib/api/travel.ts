@@ -68,6 +68,7 @@ export interface TripPlan {
     status: 'resolved' | 'not_person' | 'unresolved';
     entity_id: string | null;
   }>;
+  data_class?: 'c0' | 'c1' | 'c2' | 'c3';
   transport_modes: TransportMode[];
   budget_cents: number | null;
   currency: string | null;

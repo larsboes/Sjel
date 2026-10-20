@@ -82,14 +82,7 @@ const kind: DecisionKind<PendingRetrospectives, PendingRow> = {
 
   candidateStatus: () => "open",
 
-  /**
-   * Null, and never computed here. `trips_plans` carries no class column, and
-   * inventing one in the dashboard would be a false provenance claim from a
-   * layer that owns no data. The `change_note` a retrospective collects is C1 by
-   * default and C2 when it names a person, which is a claim for trips to make
-   * with a mechanism behind it, not for this row to assert.
-   */
-  dataClass: () => null,
+  dataClass: (row: PendingRow) => (row.data_class as DataClass | undefined) ?? null,
 
   processingRoute: () => null,
 };

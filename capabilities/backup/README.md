@@ -131,3 +131,6 @@ checked, and why, rather than passing over it. The prevention half has a limit t
 Finder's "Keep Downloaded" as an extended attribute a tool can read and no CLI can set, so `pin the
 destination` stays an operator action for other iCloud-backed capabilities. For the store-only
 cloud gate, the operator may remove that pin in Finder; the code does not evict files itself.
+
+**Future target kind.** A `restic` / encrypted offsite target kind is not yet implemented; targets
+today are `local` and `ssh`.

@@ -93,6 +93,8 @@ const IDENTITY_KEYS: &[&str] = &[
     "attendees",
 ];
 
+const PATH_KEYS: &[&str] = &["path", "files", "uri"];
+
 fn is_structural(key: &str) -> bool {
     STRUCTURAL_KEYS.contains(&key) || STRUCTURAL_SUFFIXES.iter().any(|s| key.ends_with(s))
 }
@@ -154,6 +156,7 @@ fn walk(
         Value::String(s) => match key {
             Some(k) if is_structural(k) => {}
             Some(k) if IDENTITY_KEYS.contains(&k) => *s = identity(s, class, session, registry),
+            Some(k) if PATH_KEYS.contains(&k) => *s = session.tokenize_path(s, registry),
             _ => *s = session.tokenize_text(s, registry),
         },
         Value::Array(items) => {
@@ -301,5 +304,30 @@ mod tests {
         for item in value["to"].as_array().unwrap() {
             assert!(item.as_str().unwrap().starts_with("<SENDER_"), "{item}");
         }
+    }
+
+    #[test]
+    fn attachment_paths_without_identities_survive_and_named_paths_redact_the_name() {
+        let mut value = json!({
+            "files": [
+                "Waschmaschine/Assets/IMG_1234.jpeg",
+                "Steuer-2025/Belege/2025-11-04-rechnung-1234567.pdf",
+                "Reisen/Katrin/IMG_1234.jpeg"
+            ],
+            "path": "Waschmaschine/Assets/IMG_1234.jpeg"
+        });
+        let mut s = session();
+        agent_view(&mut value, &mut s, &registry());
+        let files = value["files"].as_array().unwrap();
+        assert_eq!(files[0], "Waschmaschine/Assets/IMG_1234.jpeg");
+        assert_eq!(
+            files[1],
+            "Steuer-2025/Belege/2025-11-04-rechnung-1234567.pdf"
+        );
+        let named = files[2].as_str().unwrap();
+        assert!(!named.contains("Katrin"), "{named}");
+        assert!(named.ends_with("/IMG_1234.jpeg"), "{named}");
+        assert_eq!(s.rehydrate_text(named), "Reisen/Katrin/IMG_1234.jpeg");
+        assert_eq!(value["path"], "Waschmaschine/Assets/IMG_1234.jpeg");
     }
 }

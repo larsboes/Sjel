@@ -42,6 +42,15 @@ pub struct Task {
     pub data_class_rationale: String,
 }
 
+/// Classify a project record with the same rule as the vault note it came from.
+pub fn classify_record(record: &Record) -> DataClass {
+    let fields = record.fields();
+    DataClass::classify_vault_note(
+        &format!("Projects/{}", record.path),
+        fields.get(CLASS_KEY).map(String::as_str),
+    )
+}
+
 impl Task {
     pub fn from_record(record: &Record) -> Self {
         let fields = record.fields();
@@ -384,6 +393,68 @@ pub fn new_note(project: &str, title: &str, summary: &str) -> Result<(String, St
         format!("{project}/{title}.md"),
         format!("---\ntype: note\nsummary: \"{summary}\"\nprojects:\n  - \"[[{project}]]\"\n---\n\n# {title}\n"),
     ))
+}
+
+/// The largest attachment `attach` accepts over CLI or HTTP (32 MiB).
+pub const MAX_ATTACHMENT_BYTES: usize = 32 * 1024 * 1024;
+
+/// Store an attachment in a live project and refuse to overwrite different bytes.
+///
+/// # Errors
+/// The path is not a valid attachment path, the project is not live, or the file exceeds
+/// [`MAX_ATTACHMENT_BYTES`].
+pub fn attach(projects: &Projects, path: &str, bytes: &[u8]) -> Fallible<Attached> {
+    if bytes.len() > MAX_ATTACHMENT_BYTES {
+        return Err(format!("an attachment is at most {MAX_ATTACHMENT_BYTES} bytes").into());
+    }
+    record::check_attachment(path)?;
+    let (project, archived) = record::project_of(path)?;
+    if archived || !projects.by_project(&project)?.iter().any(|r| !r.archived) {
+        return Err(format!("no live project named {project:?}").into());
+    }
+    projects.attach(path, bytes)
+}
+
+/// Decode standard or URL-safe base64 (with optional `data:...;base64,` prefix) into raw bytes.
+pub fn decode_base64(input: &str) -> Result<Vec<u8>, String> {
+    let payload = input
+        .trim()
+        .split_once(";base64,")
+        .map_or(input.trim(), |(_, rest)| rest);
+    let mut out = Vec::with_capacity(payload.len() * 3 / 4);
+    let mut buf = 0u32;
+    let mut bits = 0u8;
+    let mut padded = false;
+    for b in payload.bytes() {
+        if b.is_ascii_whitespace() {
+            continue;
+        }
+        if b == b'=' {
+            padded = true;
+            continue;
+        }
+        if padded {
+            return Err("invalid base64: characters after padding".into());
+        }
+        let val = match b {
+            b'A'..=b'Z' => b - b'A',
+            b'a'..=b'z' => b - b'a' + 26,
+            b'0'..=b'9' => b - b'0' + 52,
+            b'+' | b'-' => 62,
+            b'/' | b'_' => 63,
+            _ => return Err(format!("invalid base64 byte 0x{b:02x}")),
+        };
+        buf = (buf << 6) | u32::from(val);
+        bits += 6;
+        if bits >= 8 {
+            bits -= 8;
+            out.push(((buf >> bits) & 0xff) as u8);
+        }
+    }
+    if bits >= 6 || (bits > 0 && (buf & ((1 << bits) - 1)) != 0) {
+        return Err("invalid base64 trailing bits".into());
+    }
+    Ok(out)
 }
 
 /// What one import run did, note by note.
@@ -768,6 +839,32 @@ mod tests {
             None
         )
         .is_err());
+        fs::remove_dir_all(dir).unwrap();
+    }
+
+    #[test]
+    fn attach_requires_a_live_project_and_refuses_different_bytes() {
+        let (projects, dir) = scratch("ops-attach");
+        assert!(attach(&projects, "W/Assets/manual.pdf", b"pdf-1").is_err());
+        add_project(&projects, "W", "").unwrap();
+        assert_eq!(
+            attach(&projects, "W/Assets/manual.pdf", b"pdf-1").unwrap(),
+            Attached::New
+        );
+        assert_eq!(
+            attach(&projects, "W/Assets/manual.pdf", b"pdf-1").unwrap(),
+            Attached::Unchanged
+        );
+        assert_eq!(
+            attach(&projects, "W/Assets/manual.pdf", b"pdf-2").unwrap(),
+            Attached::Differs
+        );
+        assert_eq!(
+            projects.attachment("W/Assets/manual.pdf").unwrap().as_deref(),
+            Some(&b"pdf-1"[..])
+        );
+        let decoded = decode_base64("data:application/pdf;base64,cGRmLTE=").unwrap();
+        assert_eq!(decoded, b"pdf-1");
         fs::remove_dir_all(dir).unwrap();
     }
 }

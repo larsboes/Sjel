@@ -268,6 +268,12 @@ pub struct PendingRetrospective {
     pub date_start: String,
     pub date_end: String,
     pub days_since_close: i64,
+    #[serde(default = "default_plan_data_class")]
+    pub data_class: String,
+}
+
+fn default_plan_data_class() -> String {
+    "c1".to_string()
 }
 
 /// How long after a trip closes the ladder keeps asking.
@@ -836,10 +842,11 @@ impl TripsStore {
             return Err(format!("today must be ISO, got {today:?}").into());
         };
         let earliest = crate::windows::iso_of_day_number(today_day - RETROSPECTIVE_WINDOW_DAYS);
+        let decided = crate::people::decisions(self).unwrap_or_default();
         let conn = self.conn()?;
-        let rows: Vec<(String, String, String, String, String)> = conn.query_all(
+        let rows: Vec<(String, String, String, String, String, String)> = conn.query_all(
             &format!(
-                "SELECT p.id, p.title, p.destinations, p.date_start, p.date_end
+                "SELECT p.id, p.title, p.destinations, p.date_start, p.date_end, p.travelers
                  FROM {prefix}_plans p
                  LEFT JOIN {prefix}_retrospectives r ON r.plan_id = p.id
                  WHERE p.date_end < ?1 AND p.date_end >= ?2
@@ -855,25 +862,32 @@ impl TripsStore {
                     row.get(2)?,
                     row.get(3)?,
                     row.get(4)?,
+                    row.get(5)?,
                 ))
             },
         )?;
         Ok(rows
             .into_iter()
             .map(
-                |(plan_id, title, destinations, date_start, date_end)| PendingRetrospective {
-                    destinations: serde_json::from_str::<Vec<PlaceRef>>(&destinations)
-                        .unwrap_or_default()
-                        .into_iter()
-                        .map(|place| place.name)
-                        .collect(),
-                    days_since_close: crate::windows::day_number(&date_end)
-                        .map(|closed| today_day - closed)
-                        .unwrap_or_default(),
-                    plan_id,
-                    title,
-                    date_start,
-                    date_end,
+                |(plan_id, title, destinations, date_start, date_end, travelers)| {
+                    let travelers =
+                        serde_json::from_str::<Vec<String>>(&travelers).unwrap_or_default();
+                    PendingRetrospective {
+                        destinations: serde_json::from_str::<Vec<PlaceRef>>(&destinations)
+                            .unwrap_or_default()
+                            .into_iter()
+                            .map(|place| place.name)
+                            .collect(),
+                        days_since_close: crate::windows::day_number(&date_end)
+                            .map(|closed| today_day - closed)
+                            .unwrap_or_default(),
+                        data_class: crate::people::plan_data_class(&travelers, &decided)
+                            .to_string(),
+                        plan_id,
+                        title,
+                        date_start,
+                        date_end,
+                    }
                 },
             )
             .collect())

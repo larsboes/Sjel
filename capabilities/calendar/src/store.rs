@@ -21,8 +21,24 @@ use crate::model::{
 use crate::rhythm;
 
 static NEXT_ID: AtomicU64 = AtomicU64::new(0);
+static LAST_STAMP: AtomicU64 = AtomicU64::new(0);
 
 type StoreResult<T> = Result<T, Box<dyn std::error::Error>>;
+
+/// Deletion tombstone for incremental calendar sync (`DSH-9`).
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize, PartialEq, Eq)]
+pub struct EntryTombstone {
+    pub id: String,
+    pub deleted_at: String,
+}
+
+/// Incremental change feed since a cursor (`DSH-9`).
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize, PartialEq)]
+pub struct EntryChanges {
+    pub cursor: String,
+    pub upserted: Vec<Entry>,
+    pub deleted: Vec<EntryTombstone>,
+}
 
 fn generated_id(prefix: &str) -> String {
     let nanos = SystemTime::now()
@@ -40,11 +56,18 @@ fn commitment_rank_sql(column: &str) -> String {
 }
 
 fn now_text() -> String {
-    SystemTime::now()
+    let secs = SystemTime::now()
         .duration_since(UNIX_EPOCH)
         .unwrap_or_default()
-        .as_secs()
-        .to_string()
+        .as_secs();
+    let mut prev = LAST_STAMP.load(Ordering::Relaxed);
+    loop {
+        let next = secs.max(prev + 1);
+        match LAST_STAMP.compare_exchange_weak(prev, next, Ordering::Relaxed, Ordering::Relaxed) {
+            Ok(_) => return next.to_string(),
+            Err(actual) => prev = actual,
+        }
+    }
 }
 
 /// The prefix is interpolated into DDL and every statement, so it is checked
@@ -199,6 +222,12 @@ impl CalendarStore {
                 pushed_at TEXT,
                 created_at TEXT NOT NULL
             );
+            CREATE TABLE IF NOT EXISTS {prefix}_entry_tombstones (
+                entry_id TEXT PRIMARY KEY,
+                deleted_at TEXT NOT NULL
+            );
+            CREATE INDEX IF NOT EXISTS idx_{prefix}_entry_tombstones_deleted
+                ON {prefix}_entry_tombstones(deleted_at);
             ",
             prefix = prefix
         ))?;
@@ -519,15 +548,80 @@ impl CalendarStore {
     }
 
     pub fn delete_entry(&self, id: &str) -> StoreResult<bool> {
-        let conn = self.conn()?;
-        let count = conn.execute(
+        let mut conn = self.conn()?;
+        let tx = sjel_store::write_transaction(&mut conn)?;
+        let count = tx.execute(
             &format!(
                 "DELETE FROM {prefix}_entries WHERE id = ?1",
                 prefix = self.prefix
             ),
             params![&id],
         )?;
+        if count > 0 {
+            tx.execute(
+                &format!(
+                    "INSERT INTO {prefix}_entry_tombstones (entry_id, deleted_at) \
+                     VALUES (?1, ?2) \
+                     ON CONFLICT (entry_id) DO UPDATE SET deleted_at = excluded.deleted_at",
+                    prefix = self.prefix
+                ),
+                params![&id, &now_text()],
+            )?;
+        }
+        tx.commit()?;
         Ok(count > 0)
+    }
+
+    /// Entries created/updated and entry ids deleted strictly after `since` (`DSH-9`).
+    pub fn changes_since(&self, since: Option<&str>) -> StoreResult<EntryChanges> {
+        let since_num: i64 = match since.map(str::trim).filter(|s| !s.is_empty()) {
+            Some(raw) => raw
+                .parse::<i64>()
+                .map_err(|_| "since must be an integer cursor")?,
+            None => 0,
+        };
+        let conn = self.conn()?;
+        let upserted: Vec<Entry> = conn.query_all(
+            &format!(
+                "SELECT * FROM {prefix}_entries \
+                 WHERE CAST(updated_at AS INTEGER) > ?1 \
+                 ORDER BY CAST(updated_at AS INTEGER), id",
+                prefix = self.prefix
+            ),
+            params![since_num],
+            entry_from_row,
+        )?;
+        let deleted: Vec<EntryTombstone> = conn.query_all(
+            &format!(
+                "SELECT entry_id, deleted_at FROM {prefix}_entry_tombstones \
+                 WHERE CAST(deleted_at AS INTEGER) > ?1 \
+                 ORDER BY CAST(deleted_at AS INTEGER), entry_id",
+                prefix = self.prefix
+            ),
+            params![since_num],
+            |row| {
+                Ok(EntryTombstone {
+                    id: row.get(0)?,
+                    deleted_at: row.get(1)?,
+                })
+            },
+        )?;
+        let max_upserted = upserted
+            .iter()
+            .filter_map(|e| e.updated_at.parse::<i64>().ok())
+            .max()
+            .unwrap_or(since_num);
+        let max_deleted = deleted
+            .iter()
+            .filter_map(|t| t.deleted_at.parse::<i64>().ok())
+            .max()
+            .unwrap_or(since_num);
+        let cursor = max_upserted.max(max_deleted).max(since_num).to_string();
+        Ok(EntryChanges {
+            cursor,
+            upserted,
+            deleted,
+        })
     }
 
     // ---- bounded planning context ----------------------------------------
@@ -1018,6 +1112,17 @@ impl CalendarStore {
 
 fn delete_future_instances(tx: &Transaction, prefix: &str, rhythm_id: &str) -> StoreResult<usize> {
     let today = date::format_date(date::today_days());
+    let stamp = now_text();
+    tx.execute(
+        &format!(
+            "INSERT INTO {prefix}_entry_tombstones (entry_id, deleted_at) \
+             SELECT id, ?3 FROM {prefix}_entries \
+             WHERE rhythm_id = ?1 AND substr(starts_at, 1, 10) >= ?2 \
+             ON CONFLICT (entry_id) DO UPDATE SET deleted_at = excluded.deleted_at",
+            prefix = prefix
+        ),
+        params![&rhythm_id, &today, &stamp],
+    )?;
     Ok(tx.execute(
         &format!(
             "DELETE FROM {prefix}_entries \
@@ -1591,5 +1696,31 @@ mod db_tests {
             .is_empty());
         assert!(store.delete_context(&created.id).unwrap());
         assert!(store.get_context(&created.id).unwrap().is_none());
+    }
+
+    #[test]
+    fn changes_since_returns_upserts_and_deletion_tombstones_after_cursor() {
+        let store = open_test_store("changes");
+        let e1 = store
+            .create_entry(&an_entry("First", "2026-09-01", "event"))
+            .unwrap();
+        let initial = store.changes_since(None).unwrap();
+        assert_eq!(initial.upserted.len(), 1);
+        assert!(initial.deleted.is_empty());
+
+        let e2 = store
+            .create_entry(&an_entry("Second", "2026-09-02", "event"))
+            .unwrap();
+        assert!(store.delete_entry(&e1.id).unwrap());
+
+        let delta = store.changes_since(Some(&initial.cursor)).unwrap();
+        assert_eq!(delta.upserted.len(), 1);
+        assert_eq!(delta.upserted[0].id, e2.id);
+        assert_eq!(delta.deleted.len(), 1);
+        assert_eq!(delta.deleted[0].id, e1.id);
+
+        let caught_up = store.changes_since(Some(&delta.cursor)).unwrap();
+        assert!(caught_up.upserted.is_empty());
+        assert!(caught_up.deleted.is_empty());
     }
 }

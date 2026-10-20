@@ -227,6 +227,7 @@ pub(super) struct FeedFullItem {
     pub(super) day: String,
     pub(super) created_at: String,
     pub(super) status: String,
+    pub(super) data_class: String,
     pub(super) content_status: String,
     /// Which client handed this content over; null when the server fetched it.
     pub(super) captured_via: Option<String>,
@@ -256,6 +257,7 @@ impl FeedFullItem {
             day: item.day,
             created_at: item.created_at,
             status: item.status,
+            data_class: item.data_class,
             content_status: item.content_status,
             captured_via: item.captured_via,
             relevance: relevance.into_iter().map(RelevanceOut::from).collect(),

@@ -63,6 +63,11 @@ const ROUTES: &[route_manifest::Route] = &[
         "/api/entries",
         "Entries overlapping a day window. Requires from, to; optional kind (CSV).",
     ),
+    r(
+        "GET",
+        "/api/entries/changes",
+        "Incremental entry changes and deletion tombstones after an optional ?since=<cursor>.",
+    ),
     r("POST", "/api/entries", "Create an entry."),
     r("GET", "/api/entries/{id}", "One entry."),
     r(
@@ -296,6 +301,11 @@ struct ProposalsQuery {
     to: String,
 }
 
+#[derive(serde::Deserialize)]
+struct ChangesQuery {
+    since: Option<String>,
+}
+
 /// One entry as a LIST states it: the row, and what it is worth protecting.
 ///
 /// `content.rs` has declared a class for this whole source since it was written
@@ -322,6 +332,13 @@ struct EntryListItem {
 }
 
 impl EntryListItem {
+    fn one(entry: Entry) -> Self {
+        Self {
+            entry,
+            data_class: content::classification().value,
+        }
+    }
+
     /// Classified once per request, not once per row: the declaration takes no
     /// argument, so a per-row call would allocate the same string N times.
     fn all(entries: Vec<Entry>) -> Vec<Self> {
@@ -358,6 +375,35 @@ async fn list_entries(
     .await
     {
         Ok(Ok(entries)) => response(StatusCode::OK, EntryListItem::all(entries)),
+        Ok(Err(error)) => response(StatusCode::BAD_REQUEST, json!({ "error": error })),
+        Err(error) => response(
+            StatusCode::INTERNAL_SERVER_ERROR,
+            json!({ "error": error.to_string() }),
+        ),
+    }
+}
+
+async fn entry_changes(
+    State(state): State<AppState>,
+    Query(query): Query<ChangesQuery>,
+) -> ApiResponse {
+    let database_path = state.database_path.clone();
+    let since = query.since;
+    match tokio::task::spawn_blocking(move || {
+        CalendarStore::open(&database_path)
+            .and_then(|store| store.changes_since(since.as_deref()))
+            .map_err(|error| error.to_string())
+    })
+    .await
+    {
+        Ok(Ok(changes)) => response(
+            StatusCode::OK,
+            json!({
+                "cursor": changes.cursor,
+                "upserted": EntryListItem::all(changes.upserted),
+                "deleted": changes.deleted,
+            }),
+        ),
         Ok(Err(error)) => response(StatusCode::BAD_REQUEST, json!({ "error": error })),
         Err(error) => response(
             StatusCode::INTERNAL_SERVER_ERROR,
@@ -417,7 +463,7 @@ async fn create_entry(State(state): State<AppState>, Json(input): Json<NewEntry>
     })
     .await
     {
-        Ok(Ok(entry)) => response(StatusCode::CREATED, entry),
+        Ok(Ok(entry)) => response(StatusCode::CREATED, EntryListItem::one(entry)),
         Ok(Err(error)) => response(StatusCode::BAD_REQUEST, json!({ "error": error })),
         Err(error) => response(
             StatusCode::INTERNAL_SERVER_ERROR,
@@ -438,7 +484,7 @@ async fn upsert_external_entry(
     })
     .await
     {
-        Ok(Ok(entry)) => response(StatusCode::OK, entry),
+        Ok(Ok(entry)) => response(StatusCode::OK, EntryListItem::one(entry)),
         Ok(Err(error)) => response(StatusCode::BAD_REQUEST, json!({ "error": error })),
         Err(error) => response(
             StatusCode::INTERNAL_SERVER_ERROR,
@@ -494,7 +540,7 @@ async fn get_entry(State(state): State<AppState>, Path(id): Path<String>) -> Api
     })
     .await
     {
-        Ok(Ok(Some(entry))) => response(StatusCode::OK, entry),
+        Ok(Ok(Some(entry))) => response(StatusCode::OK, EntryListItem::one(entry)),
         Ok(Ok(None)) => response(StatusCode::NOT_FOUND, json!({ "error": "entry not found" })),
         Ok(Err(error)) => response(StatusCode::INTERNAL_SERVER_ERROR, json!({ "error": error })),
         Err(error) => response(
@@ -517,7 +563,7 @@ async fn update_entry(
     })
     .await
     {
-        Ok(Ok(Some(entry))) => response(StatusCode::OK, entry),
+        Ok(Ok(Some(entry))) => response(StatusCode::OK, EntryListItem::one(entry)),
         Ok(Ok(None)) => response(StatusCode::NOT_FOUND, json!({ "error": "entry not found" })),
         Ok(Err(error)) => response(StatusCode::BAD_REQUEST, json!({ "error": error })),
         Err(error) => response(
@@ -1646,6 +1692,7 @@ fn build_router(state: AppState) -> Router {
         .route("/routes", get(routes))
         .route("/api/links", get(links))
         .route("/api/entries", get(list_entries).post(create_entry))
+        .route("/api/entries/changes", get(entry_changes))
         .route("/api/google/drafts", get(list_google_drafts))
         .route("/api/proposals", get(list_external_proposals))
         .route("/api/entries/external", put(upsert_external_entry))

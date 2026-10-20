@@ -64,8 +64,7 @@ const trip: DecisionKind<TripPlan[], TripPlan> = {
   whyHere: (plan) => tripGap(plan),
   startOrDueAt: (plan) => plan.date_start,
   candidateStatus: (plan) => (plan.status === "draft" ? "proposed" : "accepted"),
-  // trips_plans has no data-class column, so there is nothing honest to report.
-  dataClass: () => null,
+  dataClass: (plan) => plan.data_class ?? null,
   processingRoute: () => null,
 };
 

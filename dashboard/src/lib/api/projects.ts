@@ -58,6 +58,8 @@ export interface ProjectRecord {
   priority: number;
   archived: boolean;
   content: string;
+  data_class?: DataClass;
+  data_class_rationale?: string;
 }
 
 /** The shared store owns projects and tasks (`capabilities/projects`). Tasks keep the vault's
@@ -107,4 +109,9 @@ export const projects = {
     request<{ project: string }>('/projects/api/projects', jsonInit('POST', { name, summary })),
   remove: (path: string) =>
     request<{ removed: boolean }>('/projects/api/record/remove', jsonInit('POST', { path })),
+  attach: (path: string, base64: string) =>
+    request<{ path: string; status: 'created' | 'unchanged' }>(
+      '/projects/api/file',
+      jsonInit('POST', { path, base64 }),
+    ),
 };

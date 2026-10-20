@@ -1,4 +1,5 @@
 import type { ProjectTask } from '$lib/api';
+import { link } from '../nav';
 
 /** The folder of a record path: `A/Tasks/x.md` → `A/Tasks`. */
 export const folder = (path: string) => path.split('/').slice(0, -1).join('/');
@@ -273,4 +274,109 @@ export function extractExcerpt(content: string, maxLines = 3, separator = ' '): 
     .filter((l) => l.length > 0 && !l.startsWith('#') && !l.startsWith('!'));
   return lines.slice(0, maxLines).join(separator);
 }
+
+export interface ProjectGraphNode {
+  id: string;
+  label: string;
+  kind: 'project' | 'task' | 'note' | 'entity';
+  project: string;
+  href: string;
+  done?: boolean;
+  degree: number;
+}
+
+export interface ProjectGraphEdge {
+  from: string;
+  to: string;
+  via: 'wikilink' | 'hierarchy' | 'typed-id';
+}
+
+const TYPED_ID_RE =
+  /\b((?:ent|trip:plan|cal:entry|fin:tx|place|inv:item|int:element|media:item):[a-zA-Z0-9_-]+)\b/g;
+
+export function typedIdHref(id: string): string {
+  if (id.startsWith('ent:')) return link(`/people?id=${encodeURIComponent(id)}`);
+  if (id.startsWith('trip:plan:')) return link(`/travel?plan=${encodeURIComponent(id)}`);
+  if (id.startsWith('cal:entry:')) return link(`/calendar?entry=${encodeURIComponent(id)}`);
+  if (id.startsWith('fin:tx:')) return link(`/finance?tx=${encodeURIComponent(id)}`);
+  if (id.startsWith('place:')) return link(`/travel?place=${encodeURIComponent(id)}`);
+  if (id.startsWith('inv:item:')) return link(`/inventory?item=${encodeURIComponent(id)}`);
+  if (id.startsWith('int:element:')) return link(`/interior?element=${encodeURIComponent(id)}`);
+  if (id.startsWith('media:item:')) return link(`/media?id=${encodeURIComponent(id)}`);
+  return link('/context');
+}
+
+/** Build an interactive graph of project records, wikilinks, and typed Sjel IDs (`libs/links`). */
+export function buildProjectGraph<
+  T extends { path: string; title: string; kind: 'project' | 'task' | 'note'; content: string; done?: boolean },
+>(records: T[]): { nodes: ProjectGraphNode[]; edges: ProjectGraphEdge[] } {
+  const nodeMap = new Map<string, ProjectGraphNode>();
+  const edgeSet = new Set<string>();
+  const edges: ProjectGraphEdge[] = [];
+
+  for (const r of records) {
+    const proj = recordProject(r.path);
+    const href =
+      r.kind === 'project'
+        ? link(`/projects?project=${encodeURIComponent(proj)}`)
+        : link(`/projects?project=${encodeURIComponent(proj)}&open=${encodeURIComponent(r.path)}`);
+    nodeMap.set(r.path, {
+      id: r.path,
+      label: r.title || recordTitle(r.path),
+      kind: r.kind,
+      project: proj,
+      href,
+      done: r.done,
+      degree: 0,
+    });
+  }
+
+  const addEdge = (from: string, to: string, via: ProjectGraphEdge['via']) => {
+    if (from === to) return;
+    const key = `${from}->${to}:${via}`;
+    if (edgeSet.has(key)) return;
+    edgeSet.add(key);
+    edges.push({ from, to, via });
+    const a = nodeMap.get(from);
+    const b = nodeMap.get(to);
+    if (a) a.degree += 1;
+    if (b) b.degree += 1;
+  };
+
+  for (const r of records) {
+    const proj = recordProject(r.path);
+    const hub = records.find((cand) => cand.kind === 'project' && recordProject(cand.path) === proj);
+    if (hub && hub.path !== r.path) {
+      addEdge(hub.path, r.path, 'hierarchy');
+    }
+
+    for (const match of r.content.matchAll(/\[\[([^\]|#]+)(?:#[^\]|]+)?(?:\|[^\]]+)?\]\]/g)) {
+      const target = resolveRecord(match[1], r.path, records);
+      if (target) {
+        addEdge(r.path, target.path, 'wikilink');
+      }
+    }
+
+    for (const match of r.content.matchAll(TYPED_ID_RE)) {
+      const typedId = match[1];
+      if (!nodeMap.has(typedId)) {
+        nodeMap.set(typedId, {
+          id: typedId,
+          label: typedId,
+          kind: 'entity',
+          project: proj,
+          href: typedIdHref(typedId),
+          degree: 0,
+        });
+      }
+      addEdge(r.path, typedId, 'typed-id');
+    }
+  }
+
+  return {
+    nodes: [...nodeMap.values()],
+    edges,
+  };
+}
+
 

@@ -22,16 +22,21 @@ export interface CalendarEntry {
   payload: unknown;
   created_at: string;
   updated_at: string;
-  /** What this entry is worth protecting, as the three entry LISTS state it since
-   *  2026-09-08: `/api/entries`, `/api/proposals` and `/api/google/drafts`.
-   *
-   *  Calendar declares one class for the whole source rather than one per row —
-   *  `capabilities/calendar/src/content.rs`, `classification()`: "where the operator is
-   *  and when is personal, whatever the event itself is". So this is c1 on every row a
-   *  list serves, and the `?` is the contract gap, not caution: `GET /api/entries/:id`,
-   *  the create and the patch answer with the bare row and state no class. A reader
-   *  treats `undefined` as "not stated", which is not the same claim as any of the four. */
+  /** What this entry is worth protecting, stated on every entry list and single-entry
+   *  read/write (`capabilities/calendar/src/content.rs`, `classification()`: "where the
+   *  operator is and when is personal, whatever the event itself is" → `c1`). */
   data_class?: DataClass;
+}
+
+export interface CalendarEntryTombstone {
+  id: string;
+  deleted_at: string;
+}
+
+export interface CalendarEntryChanges {
+  cursor: string;
+  upserted: CalendarEntry[];
+  deleted: CalendarEntryTombstone[];
 }
 
 export interface CalendarNewEntry {
@@ -327,6 +332,12 @@ export const calendar = {
       const params = new URLSearchParams({ from, to });
       if (kind) params.set('kind', kind);
       return request<CalendarEntry[]>(`/calendar/api/entries?${params}`);
+    },
+    changes: (since?: string) => {
+      const params = new URLSearchParams();
+      if (since) params.set('since', since);
+      const q = params.toString();
+      return request<CalendarEntryChanges>(`/calendar/api/entries/changes${q ? `?${q}` : ''}`);
     },
     get: (id: string) =>
       request<CalendarEntry>(`/calendar/api/entries/${encodeURIComponent(id)}`),

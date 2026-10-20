@@ -169,7 +169,8 @@ impl FinanceStore {
                 location_street TEXT,
                 location_postal_code TEXT,
                 location_city TEXT,
-                location_country TEXT
+                location_country TEXT,
+                location_mcc TEXT
             );
             CREATE INDEX IF NOT EXISTS idx_{prefix}_transaction_candidates_state
                 ON {prefix}_transaction_candidates(state, booked_at DESC);
@@ -356,6 +357,7 @@ impl FinanceStore {
             "
         ))?;
         rebuild_decision_events_check(conn, prefix)?;
+        add_candidate_location_mcc(conn, prefix)?;
         Ok(())
     }
 
@@ -515,8 +517,8 @@ impl FinanceStore {
                          source_account, source_reference, proposed_account,
                          confidence_basis_points, state, created_at,
                          location_street, location_postal_code, location_city,
-                         location_country)
-                     VALUES (?1,?2,?3,?4,?5,?6,?7,?8,?9,?10,?11,?12,?13,?14,?15,?16)
+                         location_country, location_mcc)
+                     VALUES (?1,?2,?3,?4,?5,?6,?7,?8,?9,?10,?11,?12,?13,?14,?15,?16,?17)
                      ON CONFLICT (fingerprint) DO NOTHING"
                 ),
                 params![
@@ -536,6 +538,7 @@ impl FinanceStore {
                     &candidate.location_postal_code,
                     &candidate.location_city,
                     &candidate.location_country,
+                    &candidate.location_mcc,
                 ],
             )?;
             if inserted == 1 {
@@ -552,7 +555,8 @@ impl FinanceStore {
                              location_street = COALESCE(?4, location_street),
                              location_postal_code = COALESCE(?5, location_postal_code),
                              location_city = COALESCE(?6, location_city),
-                             location_country = COALESCE(?7, location_country)
+                             location_country = COALESCE(?7, location_country),
+                             location_mcc = COALESCE(?8, location_mcc)
                          WHERE fingerprint = ?1 AND state = 'pending'"
                     ),
                     params![
@@ -563,6 +567,7 @@ impl FinanceStore {
                         &candidate.location_postal_code,
                         &candidate.location_city,
                         &candidate.location_country,
+                        &candidate.location_mcc,
                     ],
                 )?;
                 existing += 1;
@@ -580,7 +585,8 @@ impl FinanceStore {
                     "SELECT id, fingerprint, booked_at, description, amount_cents,
                             currency, source_account, source_reference, proposed_account,
                             confidence_basis_points, state, location_street,
-                            location_postal_code, location_city, location_country
+                            location_postal_code, location_city, location_country,
+                            location_mcc
                      FROM {prefix}_transaction_candidates
                      ORDER BY booked_at DESC, id"
                 ),
@@ -607,7 +613,8 @@ impl FinanceStore {
                     "SELECT id, fingerprint, booked_at, description, amount_cents,
                             currency, source_account, source_reference, proposed_account,
                             confidence_basis_points, state, location_street,
-                            location_postal_code, location_city, location_country
+                            location_postal_code, location_city, location_country,
+                            location_mcc
                      FROM {prefix}_transaction_candidates
                      WHERE id = ?1"
                 ),
@@ -1697,6 +1704,21 @@ fn rebuild_decision_events_check(conn: &Connection, prefix: &str) -> Fallible<()
     Ok(())
 }
 
+fn add_candidate_location_mcc(conn: &Connection, prefix: &str) -> Fallible<()> {
+    let table = format!("{prefix}_transaction_candidates");
+    let present: i64 = conn.query_row(
+        "SELECT COUNT(*) FROM pragma_table_info(?1) WHERE name = 'location_mcc'",
+        params![&table],
+        |row| row.get(0),
+    )?;
+    if present == 0 {
+        conn.execute_batch(&format!(
+            "ALTER TABLE {table} ADD COLUMN location_mcc TEXT;"
+        ))?;
+    }
+    Ok(())
+}
+
 fn insert_price(
     conn: &Connection,
     prefix: &str,
@@ -1845,6 +1867,7 @@ fn row_to_candidate(row: &Row) -> rusqlite::Result<Option<TransactionCandidate>>
         location_postal_code: row.get("location_postal_code")?,
         location_city: row.get("location_city")?,
         location_country: row.get("location_country")?,
+        location_mcc: row.get("location_mcc")?,
     }))
 }
 
@@ -1917,5 +1940,51 @@ mod tests {
         let c = fnv1a64(b"Atlas/Finance/Subscriptions/Other.md");
         assert_eq!(a, b);
         assert_ne!(a, c);
+    }
+
+    #[test]
+    fn stage_candidates_persists_and_coalesces_location_mcc() {
+        let path = std::env::temp_dir().join(format!(
+            "axon-finance-store-mcc-{}.db",
+            std::process::id()
+        ));
+        let _ = std::fs::remove_file(&path);
+        let store = FinanceStore::open(&path).unwrap();
+        let mut candidate = TransactionCandidate {
+            id: "candidate_mcc_1".into(),
+            fingerprint: "fp_mcc_1".into(),
+            booked_at: "2026-08-02".into(),
+            description: "Trade Republic Card Spend".into(),
+            amount_cents: -1250,
+            currency: "EUR".into(),
+            source_account: "assets:bank:tr".into(),
+            source_reference: Some("tr-1".into()),
+            proposed_account: "expenses:food".into(),
+            confidence_basis_points: 9000,
+            state: CandidateState::Pending,
+            location_street: None,
+            location_postal_code: None,
+            location_city: Some("Berlin".into()),
+            location_country: Some("DE".into()),
+            location_mcc: None,
+        };
+        assert_eq!(store.stage_candidates(&[candidate.clone()], "2026-08-02").unwrap(), (1, 0));
+        assert_eq!(store.candidate("candidate_mcc_1").unwrap().unwrap().location_mcc, None);
+
+        candidate.location_mcc = Some("5812".into());
+        assert_eq!(store.stage_candidates(&[candidate.clone()], "2026-08-02").unwrap(), (0, 1));
+        assert_eq!(
+            store.candidate("candidate_mcc_1").unwrap().unwrap().location_mcc.as_deref(),
+            Some("5812")
+        );
+
+        candidate.location_mcc = None;
+        assert_eq!(store.stage_candidates(&[candidate], "2026-08-02").unwrap(), (0, 1));
+        assert_eq!(
+            store.candidate("candidate_mcc_1").unwrap().unwrap().location_mcc.as_deref(),
+            Some("5812"),
+            "re-importing without an MCC column must not erase a previously captured MCC"
+        );
+        let _ = std::fs::remove_file(&path);
     }
 }

@@ -89,6 +89,12 @@ const ROUTES: &[route_manifest::Route] = &[
         summary: "Remove a record from the projects store and disk.",
         request_schema: Some(route_manifest::schema_of::<RemoveRecord>),
     },
+    route_manifest::Route {
+        method: "POST",
+        path: "/api/file",
+        summary: "Store a project attachment (base64 body) under a live project folder; refuses to overwrite different bytes (409).",
+        request_schema: Some(route_manifest::schema_of::<AttachFile>),
+    },
 ];
 
 #[derive(Deserialize, schemars::JsonSchema)]
@@ -140,6 +146,12 @@ struct AddNote {
 #[derive(Deserialize, schemars::JsonSchema)]
 struct RemoveRecord {
     path: String,
+}
+
+#[derive(Deserialize, schemars::JsonSchema)]
+struct AttachFile {
+    path: String,
+    base64: String,
 }
 
 #[derive(Deserialize)]
@@ -338,10 +350,12 @@ async fn get_project(
     let records: Vec<Value> = records
         .iter()
         .map(|r| {
+            let class = ops::classify_record(r);
             json!({
                 "path": r.path, "kind": r.kind, "title": r.title, "done": r.done,
                 "due": r.due, "priority": r.priority, "archived": r.archived,
                 "content": r.content,
+                "data_class": class.value, "data_class_rationale": class.rationale,
             })
         })
         .collect();
@@ -447,6 +461,33 @@ async fn remove_record(
     Ok(Json(json!({ "removed": removed })))
 }
 
+async fn attach_file(
+    State(projects): State<Shared>,
+    Json(body): Json<AttachFile>,
+) -> Result<(StatusCode, Json<Value>), ApiError> {
+    let bytes =
+        ops::decode_base64(&body.base64).map_err(|e| ApiError(StatusCode::BAD_REQUEST, e))?;
+    let path = body.path.clone();
+    let outcome = blocking(projects, true, move |p| ops::attach(p, &path, &bytes)).await?;
+    match outcome {
+        projects::store::Attached::New => Ok((
+            StatusCode::CREATED,
+            Json(json!({ "path": body.path, "status": "created" })),
+        )),
+        projects::store::Attached::Unchanged => Ok((
+            StatusCode::OK,
+            Json(json!({ "path": body.path, "status": "unchanged" })),
+        )),
+        projects::store::Attached::Differs => Err(ApiError(
+            StatusCode::CONFLICT,
+            format!(
+                "a different attachment already exists at {:?}; not overwritten",
+                body.path
+            ),
+        )),
+    }
+}
+
 fn router(projects: Shared) -> Router {
     Router::new()
         .route("/health", get(health))
@@ -457,7 +498,7 @@ fn router(projects: Shared) -> Router {
         .route("/api/projects", get(list_projects).post(add_project))
         .route("/api/records", get(list_records))
         .route("/api/files", get(list_files))
-        .route("/api/file", get(get_file))
+        .route("/api/file", get(get_file).post(attach_file))
         .route("/api/project", get(get_project))
         .route("/api/record", post(save_record))
         .route("/api/record/property", post(set_property))

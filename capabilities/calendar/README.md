@@ -374,6 +374,7 @@ capability.
 |---|---|---|
 | GET | `/health` | |
 | GET | `/api/entries?from=&to=&kind=` | Window query, optional CSV kind filter |
+| GET | `/api/entries/changes?since=` | Incremental change feed (`upserted`, `deleted` tombstones, next `cursor`) |
 | GET | `/api/proposals?from=&to=` | External, non-Google `possible` entries waiting for a Calendar decision; manual soft blocks are excluded, and so is anything already adopted under another key (see Duplicate suppression) |
 | GET | `/api/content/calendar/:id` | The entry as [`content-item-v2`](../../schemas/content-item.schema.json), for the shared reader. Same path shape comms serves — see Content contract |
 | POST | `/api/entries` | Create entry |

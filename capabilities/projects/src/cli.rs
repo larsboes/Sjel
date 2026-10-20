@@ -11,6 +11,7 @@ const USAGE: &str = "usage: projects <command>
   edit <path>                                  open a record in $EDITOR and save it
   done <task-id>  |  reopen <task-id>
   set <path> <key> [value]                     set one property; no value clears it
+  attach <path> <file>                         store a binary attachment in a live project
   remove <path>                                delete a record and its rendered file
   normalize [--apply]                          put every task on the status schema; dry run first
   import <vault>/Projects [--only PROJECT]     copy vault project notes into the store
@@ -146,6 +147,21 @@ fn run() -> Result<(), Box<dyn std::error::Error>> {
                 r.path,
                 r.fields().get(positional(2)?).map_or("", String::as_str)
             );
+        }
+        "attach" => {
+            let path = positional(1)?;
+            let file = positional(2)?;
+            let bytes = std::fs::read(file)?;
+            match ops::attach(&projects, path, &bytes)? {
+                projects::store::Attached::New => println!("attached {path}"),
+                projects::store::Attached::Unchanged => println!("unchanged {path}"),
+                projects::store::Attached::Differs => {
+                    return Err(format!(
+                        "a different attachment already exists at {path:?}; not overwritten"
+                    )
+                    .into());
+                }
+            }
         }
         "remove" => {
             let path = positional(1)?;

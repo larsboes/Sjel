@@ -76,6 +76,8 @@ describe("a kind reports the class its capability published, and never one of it
       ["calendar", { data_class: "c1" }, "c1"],
       ["task", { data_class: "c2" }, "c2"],
       ["opportunity", { data_class: "c0" }, "c0"],
+      ["trip", { data_class: "c2" }, "c2"],
+      ["trip-retrospective", { data_class: "c1" }, "c1"],
     ];
     for (const [key, row, expected] of cases) {
       const kind = byKey.get(key);
@@ -86,13 +88,7 @@ describe("a kind reports the class its capability published, and never one of it
   test("a kind that reports no class is one whose contract states none", () => {
     // The list, so a kind going silent shows up as a failing test rather than as a chip
     // that stopped appearing. `host` and `system` read sjel-status, which serves machine
-    // state and no content. The two trips kinds are an OPEN operator ruling: 12 of 13 live
-    // plans name third parties, four with full names, so a plan is arguably c2 — and B50
-    // says in as many words that inventing that answer is the failure mode, so they stay
-    // null until the operator rules.
-    //
-    // Every other kind's capability publishes a class as of 2026-09-08, so this list is
-    // now complete rather than provisional: a kind joining it is a regression.
+    // state and no content. Every content capability publishes a class as of 2026-10-20.
     const silent = kinds
       .filter(({ kind }) => kind.dataClass({ data_class: "c2" } as never) === null)
       .map(({ kind }) => kind.key)
@@ -100,8 +96,6 @@ describe("a kind reports the class its capability published, and never one of it
     expect(silent).toEqual([
       "host",
       "system",
-      "trip",
-      "trip-retrospective",
     ]);
   });
 });

@@ -68,6 +68,31 @@ pub fn traveler_links<'a>(
         .collect()
 }
 
+/// Data classification of a trip plan or retrospective from its traveller list.
+///
+/// Solo plans and plans whose only traveller entries are marked `not_person` (`entity_id: None`)
+/// or self-markers (`me`, `solo`, `self`, `ich`, `allein`) are `c1` (personal); any plan naming
+/// another resolved or undecided person is `c2` (sensitive).
+pub fn plan_data_class(names: &[String], decided: &HashMap<String, Option<String>>) -> &'static str {
+    let names_another_person = names.iter().any(|name| {
+        let key = sjel_links::name_key(name);
+        if key.is_empty()
+            || matches!(
+                key.as_str(),
+                "me" | "solo" | "self" | "ich" | "allein" | "myself"
+            )
+        {
+            return false;
+        }
+        !matches!(decided.get(&key), Some(None))
+    });
+    if names_another_person {
+        "c2"
+    } else {
+        "c1"
+    }
+}
+
 /// Adds local decision metadata to an HTTP plan response without changing persisted plan data.
 ///
 /// # Errors
@@ -79,6 +104,7 @@ pub fn with_traveler_links(
 ) -> serde_json::Result<serde_json::Value> {
     let mut body = serde_json::to_value(plan)?;
     body["traveler_links"] = serde_json::to_value(traveler_links(names, decided))?;
+    body["data_class"] = serde_json::Value::String(plan_data_class(names, decided).into());
     Ok(body)
 }
 
@@ -270,6 +296,12 @@ mod tests {
         );
         assert!(!body.to_string().contains("ent:private"));
         assert_eq!(body["id"], plan.id);
+        assert_eq!(body["data_class"], "c2");
+
+        assert_eq!(
+            plan_data_class(&["Me".into(), "Team".into()], &decided),
+            "c1"
+        );
     }
 
     #[test]

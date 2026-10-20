@@ -164,7 +164,9 @@ because `trips` needs the same refusal for its plan-search body and a second cop
 of a security predicate is drift. **Every new route must be registered above the
 `.layer()` call in `build_router`**: axum wraps only the routes added before it,
 and `a_foreign_origin_cannot_read_people_presence` drives the wired router to
-catch a route that lands below it.
+catch a route that lands below it. `SJEL_PLACES_ALLOWED_ORIGIN_HOSTS` pins an
+explicit host allowlist in environments where the default `*.ts.net` tailnet
+rule is broader than desired.
 
 - `GET /health`, `GET /ready`, `GET /routes`
 - `GET /api/places` — list/search the registry

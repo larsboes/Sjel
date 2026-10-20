@@ -218,6 +218,7 @@ export interface PendingRetrospective {
   date_start: string;
   date_end: string;
   days_since_close: number;
+  data_class?: "c0" | "c1" | "c2" | "c3";
 }
 
 export interface PendingRetrospectives {

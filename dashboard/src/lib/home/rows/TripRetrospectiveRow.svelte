@@ -14,6 +14,7 @@
     href,
     whyHere,
     candidateStatus,
+    dataClass,
   }: DecisionRowProps<PendingRetrospective> = $props();
   const where = $derived(row.destinations.join(" → "));
 
@@ -28,7 +29,7 @@
   <span class="row-kind">{#each kind as part}<span>{part}</span>{/each}</span>
   <a class="row-title" {href}>{row.title}</a>
 
-  {#snippet meta()}<RowMeta {whyHere} {candidateStatus} />{/snippet}
+  {#snippet meta()}<RowMeta {whyHere} {candidateStatus} {dataClass} />{/snippet}
 
   {#snippet actions()}
     <a class="btn btn-soft" {href}>

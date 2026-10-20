@@ -43,8 +43,12 @@ written back into a journal entry.
   The server checks `priority` (1 to 3), `due` and `scheduled` (dates), and a task's `status`.
 - `POST /api/record {path, content, base}`: replace a record. A `base` that no longer matches the
   store returns 409 with the current content and writes nothing.
+- `GET /api/files`, `GET /api/file?path=`, `POST /api/file {path, base64}`: list, serve (sandboxed
+  with `Content-Security-Policy: sandbox` and `nosniff`), and store project attachments under live
+  projects; refuses a second add of different bytes with `409 Conflict`.
 - CLI `projects`: `list`, `projects`, `add`, `new-project`, `new-note`, `edit` (opens `$EDITOR`),
-  `done`, `reopen`, `set`, `normalize`, `import`, `freeze-vault`, `verify`, `render`.
+  `done`, `reopen`, `set`, `attach`, `remove`, `normalize`, `import`, `freeze-vault`, `verify`,
+  `render`.
 
 ## Task schema
 

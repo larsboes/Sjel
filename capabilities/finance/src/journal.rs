@@ -869,6 +869,7 @@ mod tests {
             location_postal_code: None,
             location_city: None,
             location_country: None,
+            location_mcc: None,
         }
     }
 

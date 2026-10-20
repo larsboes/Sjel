@@ -95,9 +95,8 @@ width, because it refreshes every few seconds. Rows arrive through `@starting-st
 rows in without moving the rows below them.
 
 `tools/dashboard-disclosure.test.ts` holds the line. No file may carry a `title` hint, a
-literal duration or `transition: all`; on 2026-10-05 there were 96, 80 and 20. The one
-exception is `routes/interior/+page.svelte`, still owed its eight hints, and the test keeps
-that list from growing.
+literal duration or `transition: all`; on 2026-10-05 there were 96, 80 and 20, and all three
+are now at zero across the shell.
 
 A row that leaves Home's queue does so inside a view transition: ListRow carries its id as its
 `view-transition-name`, so the browser fades it out and slides the rest into place from
@@ -183,22 +182,19 @@ feed link to script in the origin that renders the mail snippets. The keyboard h
 only while the ladder is on screen, so Enter on another view cannot navigate to a row nobody
 can see.
 
-**Data class is shown only where a capability publishes one.** Mail and finance publish one,
-`GET /comms/feed` began publishing one on 2026-09-06 (`capabilities/comms/README.md`), and on
-2026-09-08 the calendar entry lists, the task list (since 2026-10-18 `GET /projects/api/tasks`)
-and `GET /scouting/opportunities` joined them (B50). **The trip plan is the one list left**, and it stays silent on purpose: what
-a plan naming its travellers is worth is an open operator question, not the shell's to answer,
-and this shell will not invent a class it does not own. `tools/dashboard-home-data-class.test.ts`
-holds the trip and trip-retrospective kinds on the silent list so that filling one in is a test
-failure rather than a guess.
+**Data class is shown wherever a capability publishes one.** Mail, finance, `GET /comms/feed` and
+`GET /comms/feed/:id`, calendar entry lists and single-entry responses (`GET /api/entries/:id`,
+`POST /api/entries`, `PUT /api/entries/external`, `PATCH /api/entries/:id`), `GET /projects/api/tasks`,
+`GET /projects/api/records`, `GET /projects/api/project`, `GET /scouting/opportunities`, and
+`capabilities/trips` (`GET /api/plans`, `GET /api/plans/:id`, and `GET /api/retrospectives/pending`:
+`c1` for solo/non-person plans, `c2` when a plan names other resolved or undecided travellers) all
+state their class. Only `host` and `system` rows on Home stay silent because machine state has no
+personal data class (`tools/dashboard-home-data-class.test.ts`).
 
-`FeedEntry.data_class` in `src/lib/api.ts` is typed **optional**, and the `?` records a contract
-gap rather than caution: comms' detail contract carries no class, so `toListEntry` in
-`routes/feed/+page.svelte` builds a list row out of an ingest response that has none. A reader
-must treat `undefined` as *not stated* and fail closed. The field stops being optional the day
-the detail contract states one too. `CalendarEntry.data_class` carries the same `?` for the same
-kind of reason: the three entry lists state a class, while `GET /api/entries/:id`, the create and
-the patch answer with the bare row.
+In `/projects`, `DatabaseTable.svelte` exposes `class` (`Public · c0`, `Mine · c1`, `Others · c2`,
+`Secret · c3`) for filtering, sorting, and inline editing across `table`, `board`, `list`, and
+`calendar` views with saved named views persisted per store key, and `ProjectsGraph.svelte` renders
+record wikilinks and typed Sjel IDs (`libs/links`) as an interactive graph.
 
 ### One map surface, and a basemap that is half local
 

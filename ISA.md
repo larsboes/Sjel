@@ -101,9 +101,7 @@ Migrated 2026-10-15 from §13 of the frozen PRD (now the `projects` record `Sjel
   follow-ups. `Knowledge/` cites the Media sources with 140 wikilinks that Obsidian no longer
   resolves; the store paths are unchanged (`Atlas/Media/X.md`). `comms` still writes saved
   items as source notes into the vault's `Resources/Sources/` (`comms/src/projection.rs`), the
-  kind of note Media's sources were. And the vault bases and MOCs that showed the moved folders
-  go. Then the vault bases and MOCs that
-  showed those folders go, and the vault rules shrink into the `obsidian` skill. Falsifier: the
+  kind of note Media's sources were. Then the vault bases and MOCs that showed those folders go, and the vault rules shrink into the `obsidian` skill. Falsifier: the
   vault holds a non-knowledge note outside `Archive/`.
 
 ### host-patch · one open item

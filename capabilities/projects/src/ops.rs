@@ -485,17 +485,36 @@ pub struct ImportReport {
 /// Every `.md` under a project folder moves; `Archive/` moves as archived; nothing from the law
 /// folder moves. Binaries stay in the vault. A row that changed in
 /// Sjel since its import is never overwritten.
+///
+/// With `folder`, the root is the vault itself and only that domain folder moves, under the
+/// same path (`Atlas/Finance/...`), so a link that names the vault path still names the record.
 pub fn import(
     projects: &Projects,
     vault_projects: &Path,
     only: Option<&str>,
+    folder: Option<&str>,
 ) -> Fallible<ImportReport> {
+    let prefix = match folder {
+        Some(folder) => {
+            let folder = folder.trim_matches('/');
+            let top = folder.split('/').next().unwrap_or_default();
+            if !record::is_domain(top) {
+                return Err(format!("{folder:?} is not under a domain folder").into());
+            }
+            Some(format!("{folder}/"))
+        }
+        None => None,
+    };
+    let outside = |id: &str| prefix.as_ref().is_some_and(|p| !id.starts_with(p.as_str()));
     let root = MarkdownRoot::declare(vault_projects)?;
     let mut report = ImportReport::default();
     for file in root.markdown_files_recursive()? {
         let Some(id) = root.relative_id(&file) else {
             continue;
         };
+        if outside(&id) {
+            continue;
+        }
         let content = match fs::read_to_string(&file) {
             Ok(content) => content,
             Err(e) => {
@@ -536,7 +555,7 @@ pub fn import(
         let Some(id) = root.relative_id(&file) else {
             continue;
         };
-        if id.starts_with(&format!("{LAW_FOLDER}/")) {
+        if outside(&id) || id.starts_with(&format!("{LAW_FOLDER}/")) {
             continue;
         }
         let Ok((project, _)) = record::project_of(&id) else {
@@ -677,6 +696,37 @@ mod tests {
         v
     }
 
+    /// A domain folder imports under its vault path and takes nothing outside it.
+    #[test]
+    fn a_domain_folder_imports_under_its_vault_path() {
+        let (projects, dir) = scratch("domain-import");
+        let v = dir.join("vault");
+        for (path, content) in [
+            (
+                "Atlas/Finance/Subscriptions/Claude Pro.md",
+                "---\ncost: 20\n---\nwhy\n",
+            ),
+            ("Atlas/Finance/Finance.md", "---\ntype: note\n---\n"),
+            ("Atlas/People/Ron.md", "---\ntype: note\n---\n"),
+            ("Knowledge/Rust.md", "---\ntype: note\n---\n"),
+            ("Atlas/Finance/receipt.pdf", "pdf"),
+        ] {
+            let file = v.join(path);
+            fs::create_dir_all(file.parent().unwrap()).unwrap();
+            fs::write(file, content).unwrap();
+        }
+        let report = import(&projects, &v, None, Some("Atlas/Finance")).unwrap();
+        assert_eq!(report.imported.len(), 2, "{report:?}");
+        assert_eq!(report.attached, vec!["Atlas/Finance/receipt.pdf"]);
+        let note = projects
+            .get("Atlas/Finance/Subscriptions/Claude Pro.md")
+            .unwrap()
+            .unwrap();
+        assert!(note.domain);
+        assert!(import(&projects, &v, None, Some("Knowledge")).is_err());
+        fs::remove_dir_all(dir).unwrap();
+    }
+
     /// A domain folder holds notes only: never a project, a task or a project-list row.
     #[test]
     fn a_domain_is_not_a_project() {
@@ -714,7 +764,7 @@ mod tests {
     fn import_takes_project_notes_and_leaves_the_law() {
         let (projects, dir) = scratch("import");
         let v = vault(&dir);
-        let report = import(&projects, &v, None).unwrap();
+        let report = import(&projects, &v, None, None).unwrap();
         assert_eq!(report.imported.len(), 6, "{report:?}");
         assert!(report.imported.iter().any(|p| p == "Sjel/PRD Axon.md"));
         assert_eq!(
@@ -723,7 +773,10 @@ mod tests {
         );
         assert!(!report.imported.iter().any(|p| p.contains("Knowledge-Base")));
         assert_eq!(report.skipped.len(), 1, "Projects.md has no project folder");
-        assert_eq!(import(&projects, &v, None).unwrap().unchanged.len(), 6);
+        assert_eq!(
+            import(&projects, &v, None, None).unwrap().unchanged.len(),
+            6
+        );
         let open = tasks(&projects, Some("open")).unwrap();
         assert_eq!(open.len(), 1, "the archived task is not served");
         assert_eq!(open[0].uri, "/projects?project=Waschmaschine");
@@ -734,7 +787,7 @@ mod tests {
     fn freeze_marks_unchanged_notes_and_import_then_skips_them() {
         let (projects, dir) = scratch("freeze");
         let v = vault(&dir);
-        import(&projects, &v, Some("Waschmaschine")).unwrap();
+        import(&projects, &v, Some("Waschmaschine"), None).unwrap();
         fs::write(
             v.join("Waschmaschine/Waschmaschine Links.md"),
             "edited in vault",
@@ -747,7 +800,7 @@ mod tests {
         assert!(note.starts_with("---\ntype: task\ndone: false\npriority: 1\nmoved_to: \"sjel projects/Waschmaschine/Tasks/Schlauch.md\"\n---\n> [!warning] Moved to Sjel"));
         assert!(note.ends_with("\nx\n"));
         assert_eq!(freeze_vault(&projects, &v, None).unwrap().already.len(), 2);
-        let again = import(&projects, &v, Some("Waschmaschine")).unwrap();
+        let again = import(&projects, &v, Some("Waschmaschine"), None).unwrap();
         assert!(again.imported.is_empty());
         fs::remove_dir_all(dir).unwrap();
     }
@@ -756,9 +809,9 @@ mod tests {
     fn import_never_overwrites_a_change_made_in_sjel() {
         let (projects, dir) = scratch("conflict");
         let v = vault(&dir);
-        import(&projects, &v, Some("Waschmaschine")).unwrap();
+        import(&projects, &v, Some("Waschmaschine"), None).unwrap();
         set_done(&projects, "Waschmaschine/Tasks/Schlauch.md", true).unwrap();
-        let report = import(&projects, &v, Some("Waschmaschine")).unwrap();
+        let report = import(&projects, &v, Some("Waschmaschine"), None).unwrap();
         let conflicts: Vec<_> = report
             .skipped
             .iter()

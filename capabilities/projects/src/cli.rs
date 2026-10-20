@@ -15,6 +15,7 @@ const USAGE: &str = "usage: projects <command>
   remove <path>                                delete a record and its rendered file
   normalize [--apply]                          put every task on the status schema; dry run first
   import <vault>/Projects [--only PROJECT]     copy vault project notes into the store
+  import <vault> --folder Atlas/<Domain>       copy one domain folder, keeping its path
   freeze-vault <vault>/Projects [--only PROJECT]  mark imported vault notes as moved
   verify                                       compare the store with the rendered files
   render                                       re-render every record";
@@ -182,7 +183,12 @@ fn run() -> Result<(), Box<dyn std::error::Error>> {
             println!("{verb} {} task(s)", report.len());
         }
         "import" => {
-            let report = ops::import(&projects, &PathBuf::from(positional(1)?), flag("--only"))?;
+            let report = ops::import(
+                &projects,
+                &PathBuf::from(positional(1)?),
+                flag("--only"),
+                flag("--folder"),
+            )?;
             for (path, reason) in &report.skipped {
                 println!("skipped {path}: {reason}");
             }

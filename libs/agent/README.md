@@ -211,5 +211,9 @@ letting a profile switch fill `[skills] paths` for you (AGT-21, in `tools/sjel-c
 property test over the stream fold (AGT-22, whose tooling is an open decision). Line editing, a
 full-screen TUI and subagents are named in [`ISA.md`](ISA.md) as wave 2, not decided.
 
+Pi stays until this agent beats it on one household task and one coding task, each measured
+against the existing path. The product reasoning is the `projects` record
+`Sjel/Agent/PRD sjel-agent.md`.
+
 A Ctrl-C while the model reads a long prompt and streams nothing takes effect at the first
 chunk. Press it twice to exit instead.

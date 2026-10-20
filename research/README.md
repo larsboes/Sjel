@@ -34,9 +34,10 @@ project named here has a `watch` row in `../upstreams.toml`.
 - Is one native GPUI surface worth a third UI stack? Sjel has a Svelte dashboard and a SwiftUI
   menu-bar app. The talk that raised it measures render speed. Measured 2026-10-09: Sjel's waits
   come from a service, not from rendering. A `/context` day switch settles in 26 ms in Chrome, and
-  one shell endpoint takes over a second. `../ISA.md` Decisions
-  (2026-10-09) gives GPUI a command palette on start time and memory instead. Neither of those
-  two numbers is measured yet. Source:
+  one shell endpoint takes over a second. The 2026-10-09 decision gave GPUI a command palette,
+  judged on start time and memory. The wider decision of 2026-10-15 is in
+  [`../apps/gpui-prototype/README.md`](../apps/gpui-prototype/README.md). Neither number is
+  measured yet. Source:
   [Conrad Irwin, EuroRust 2025](https://www.youtube.com/watch?v=sheIOOf-xRo).
 - Does a booking document need a reader of its own? `kitinerary` is read AND run: it installs on
   the Linux runtime, takes stdin and emits schema.org JSON-LD, and it extracted a JSON-LD
@@ -62,6 +63,20 @@ project named here has a `watch` row in `../upstreams.toml`.
 - What can a host's history see that `host-watch` cannot? It watches cumulative CPU and disk and
   stays silent otherwise by design. No list exists of the failures that leaves uncovered, and
   installing an agent to find out is the wrong order. Watch row: `beszel`.
+- Could the feed install on its own? A colleague fetches podcasts every day and summarizes them
+  with a local Whisper model. On 2026-08-12 they said many people would want Sjel's feed if it
+  were easy to set up. The README quick start installs the whole system, and nothing installs
+  the feed alone. What a feed-only install needs is not measured.
+- Where does the redactor's 100% recall stop? `deterministic-entity-redaction-v3` found 48 of 48
+  labels on the frozen 24-fixture corpus, and the `presidio` comparison set that bar. No document
+  names a corpus size, language or document class where its rules should fail. Until one does,
+  the 100% describes the corpus, not the redactor.
+- Is a health domain worth a capability? The PRD named energy, sleep, training and records, and
+  nothing in Sjel reads any of them. No source is collected yet.
+- How could Sjel be funded, and do parts stay closed? AGPL-3.0 keeps open source and open core
+  both possible. The options named so far are support and sponsorship with a build-in-public
+  video series (decisions, papers, measurements, in the style of James Simo's city-builder
+  devlog), hosting, or a company. Undecided.
 
 ## To verify
 

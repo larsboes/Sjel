@@ -1,7 +1,8 @@
 import UIKit
 
 // UIKit owns the window, the navigation bar and the safe areas. GPUI draws the content
-// (ISA.md Decisions 2026-10-15). Host pattern from longbridge/gpui-mobile example/ios/App.swift.
+// (`../../README.md`, "GPUI for every client"). Host pattern from longbridge/gpui-mobile
+// example/ios/App.swift.
 // The iOS 27 SDK refuses to launch an app without the UIScene life cycle, so a scene
 // delegate owns the window (the upstream example's app-delegate window fails here).
 @main

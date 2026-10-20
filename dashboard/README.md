@@ -347,6 +347,16 @@ explicitly admitted offline views, and its `outbox` is a queue of idempotent, re
 item edits. The database file is never synchronized as a file. Offline answers are marked stale;
 conflicts are visible and require a person to resolve them.
 
+**A client reads from its own replica (decided 2026-10-19).** A page never waits for the node
+before it paints. For the paths in `OFFLINE_PROJECTION_PATHS` and `C1_PREFIXES`
+(`src-tauri/src/sync.rs`), the replica is the read source, online or not. Every other path stays
+network-first. The replica stores rows, not answers: today's `snapshot` keys each answer by its
+exact query, so a new calendar range misses it. Sync talks to the node and the page does not, so
+a node on another machine changes how fresh the data is, not how fast the page paints. Writes
+keep the outbox. The replica and sync belong in a crate that both the Tauri bridge and
+`apps/gpui-prototype/core` use, so the work survives a move to GPUI. Calendar goes first (DSH-9 in
+`ISA.md`).
+
 The deployment choices are deliberately staged:
 
 1. **Direct canonical node — selected now.** The phone connects to the configured Sjel node over

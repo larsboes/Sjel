@@ -11,6 +11,7 @@ wrappers. A ~small stdlib-only Python CLI (`printctl`) over OrcaSlicer's headles
 Moonraker's API covers the whole loop. Considered and declined: mcp-3D-printer-server
 (multi-vendor + Bambu MQTT baggage), KlipperMCP (config-write features worth cherry-picking
 later), klipper-config-mcp (subset of the former).
+Whether KlipperMCP could replace `printctl`'s slicer probe was never checked.
 
 ## What I run
 

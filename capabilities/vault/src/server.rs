@@ -1,7 +1,7 @@
 //! `vault-server` — the vault's read-only HTTP surface.
 //!
 //! Two questions, both answered live off the files. Open tasks were a third until
-//! 2026-10-18, when `capabilities/projects` became their owner (Sjel ISA.md F14).
+//! 2026-10-18, when `capabilities/projects` became their owner (capabilities/projects/README.md).
 //!
 //! **What the Journal knows about each person.** D2's three fields, computed
 //! on every request: see `list_people`. The CLI's `vault fields --apply` writes

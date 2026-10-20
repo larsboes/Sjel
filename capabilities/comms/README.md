@@ -759,6 +759,10 @@ HTTP and its input is a URL a stranger chose:
   is still http. `http_client`'s redirect policy re-runs both checks on each of
   at most three hops, so a `302` is not the way around them. Q74.
 
+Nothing imports a saved collection: each Instagram URL is extracted one at a time. A bulk import
+must not break Instagram's terms of use, so the account is not banned (principal, 2026-08-12).
+Existing open-source importers are not surveyed yet.
+
 **The operator-visible cost: a LAN or loopback URL can no longer be ingested.**
 A link to a NAS, a router page or a home dashboard pasted into `/ingest` or
 found in a `vault_link_sources` file now fails with

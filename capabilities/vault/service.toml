@@ -3,7 +3,7 @@
 #
 # The HTTP front end serves the Journal and People reads. It served band 620's
 # tasks from 2026-08-27 (PRD Q48) until 2026-10-18, when `capabilities/projects`
-# became their owner (ISA.md F14).
+# became their owner (capabilities/projects/README.md).
 kind        = "process"
 name        = "vault"
 command     = ["target/release/vault-server"]

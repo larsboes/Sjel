@@ -21,3 +21,8 @@ needs a supported iPhone, iPad or Mac ([Apple Support 121115](https://support.ap
 
 - How Apple's model performs on Sjel's own tasks, such as labelling a mail or a transaction. Not
   measured.
+- Whether Sjel's on-device path runs at all on an eligible phone. The iPhone 14 Pro reports
+  `deviceNotEligible`. A 15 Pro or later, or a Simulator, is needed. Not tested.
+- Whether Private Cloud Compute is worth a rung for pseudonymized prompts only
+  ([product rule 4](../CONTRIBUTING.md#product-rules)). The dashboard reports its availability
+  (`dashboard/src/lib/intelligence/backends.ts`) and never calls it. Not measured.

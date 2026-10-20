@@ -122,3 +122,11 @@ verdicts would change.
 A layout file keeps its header comment through every rewrite: the header holds the reasoning for
 a decision. A new layout never overwrites an existing one. Archiving moves the file to
 `layouts/archiv/` and never deletes it.
+
+## Known gaps
+
+- The real flat declares little. 38 of 42 rows declare nothing. `bett_bestand` is 210 × 140
+  against a 100 cm door and does not say `zerlegbar`. R9 needs `[lage]` and glazing heights, and
+  13 open needs carry no price.
+- The rules are tested against one real flat. A second real flat is what would show which of
+  them generalize.

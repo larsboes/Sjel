@@ -1,8 +1,8 @@
 import type { DataClass } from './comms';
 import { jsonInit, request } from './core';
 
-/** One task as band 620 and the tables read it. Sjel owns tasks (ISA.md F14); the vault's task
- *  reader retired on 2026-10-18 once the vault's `Projects/` moved to its `Archive/`. */
+/** One task as band 620 and the tables read it. Sjel owns tasks (`capabilities/projects`); the
+ *  vault's task reader retired on 2026-10-18 once the vault's `Projects/` moved to its `Archive/`. */
 export interface Task {
   /** The record path under the projects root. */
   id: string;
@@ -60,8 +60,8 @@ export interface ProjectRecord {
   content: string;
 }
 
-/** The shared store owns projects and tasks (ISA.md F14). Tasks keep the vault's `Task` shape,
- *  so band 620 reads both sources while the import runs. Every write renders its markdown file
+/** The shared store owns projects and tasks (`capabilities/projects`). Tasks keep the vault's
+ *  `Task` shape, so band 620 reads both sources while the import runs. Every write renders its markdown file
  *  before it answers. */
 export const projects = {
   tasks: (status?: TaskStatus, signal?: AbortSignal) =>

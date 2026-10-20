@@ -15,4 +15,8 @@ Export is dry-run only. It does not write files. Other harness targets remain un
 
 The managed section is a projection, not a source of truth. Changes made inside it are not imported back into the profile. The generated text states that saved preferences are subordinate to the current request and higher-priority instructions.
 
+The test that the profile is wired in comes from the PRD's Q14: an answer names a fact about the
+operator that the prompt did not contain. Format rules (no preamble, earned length) are a floor,
+not this test.
+
 No actual profile data or generated instruction text belongs in this repository. Recommendations, automatic learning, dashboard editing, skills, and memory are outside this first slice.

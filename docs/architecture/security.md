@@ -96,3 +96,7 @@ withheld instead and the weights sum below 1.0 on purpose (PRD Q89, 2026-09-05; 
 mail band in `capabilities/comms/README.md`).
 
 Data may select an allow-listed behavior but may not become executable code.
+
+## Not covered
+
+Device loss is not in the threat model. What a stolen phone exposes is not stated.

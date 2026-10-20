@@ -68,3 +68,9 @@ existing rows without `--force`.
 `vault-writeback` gives every slot a note under `Atlas/Interior/` in the vault named by
 `obsidian.root` in `<overlay>/config/inventory.json`. The first run seeds the note; after that it
 rewrites only the marked region, which holds numbers and never a sentence a person wrote.
+
+## Not built
+
+Intake from a link works (`inventory add <url>`). Intake from the object does not. Scanning an
+object needs the extraction ladder to end at something better than text, and the only barcode
+path is `tauri-plugin-barcode-scanner`, which reads the Mac's pairing QR code.

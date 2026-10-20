@@ -48,6 +48,20 @@ Rebuild the graph with:
 tools/graphify.sh
 ```
 
+## Not measured, not built
+
+- **Semantic coverage.** `tools/graphify.sh` defaults to authenticated oMLX and falls back to a
+  code-only build. Before you claim semantic coverage, run `tools/graphify.sh --check`, then a
+  rebuild, and read the non-AST elements and hyperedges it reports. What the code-only fallback
+  loses is not measured. `tools/self generate` needs no graph.
+- **Link prediction over the vault.** The vault has a graph, and nothing reads it. A completed
+  run exists over 679 notes and 9,001 candidate pairs, with structure, text and metadata
+  features. It is a link-prediction notebook in a private lab checkout, read rather than copied;
+  the overlay records where. The snapshot uses the vault's old `Areas/` paths, so it predates the
+  `Knowledge/` rename, and the note count has roughly tripled since. Precision matters more than
+  recall: the useful output is a short ranked list per note, not a score for every pair. No
+  consumer exists yet.
+
 ## Run
 
 ```bash

@@ -197,6 +197,25 @@ contract, install, or review decision.
    locale-specific capabilities may remain multilingual; accepting multilingual input must not
    silently change Sjel's output language.
 
+### Principles cited by number
+
+Code and READMEs cite "Principle N" by the number the frozen PRD gave it. Those principles bind
+like the values above:
+
+- **Principle 1, cheapest mechanism first.** Logic, then algorithms, then ML, then AI. A rule
+  beats a model. Each capability names the lowest rung that does its job and justifies a higher
+  one.
+- **Principle 2, privacy by data class.** What the data is decides its route, not whoever wrote
+  the call site. See [Data classes](#data-classes).
+- **Principle 3, one fact, one owner.** Each field is maintained by hand or derived, and has a
+  declared owner. A fact stated in two places without one is drift.
+- **Principle 5, evidence before automation.** Operating value 4.
+- **Principle 8, human-readable at rest.** Markdown, JSON, YAML and plaintext journals are the
+  ground truth. A database is a rebuildable index, never the only copy.
+- **Principle 9, cut what stopped earning its place.** A folder, field, capability or rule that
+  stopped earning its place is removed, not documented around. When it conflicts with another
+  principle, this one wins.
+
 ## Feed, Scouting, and Obsidian boundaries
 
 “One feed” means one general observation stream, not one opportunity engine. A feed item is
@@ -253,6 +272,21 @@ Installer authority is strictly additive:
   removing or clobbering existing operator keys. Refuses unparseable files rather than overwriting.
 - Drift is detected and reported via `sjel claude check`.
 - Packs are offered rather than force-linked during installation.
+
+### What survives a harness swap
+
+A harness is an adapter (operating value 6), so a swap must keep everything below:
+
+| Must survive | Where it lives |
+|---|---|
+| The operator's preferences and principles | `capabilities/operator-profile` |
+| Long-term memory | The vault |
+| Skills and know-how | `Packs/` |
+| Tool contracts | `schemas/` and capability manifests |
+| Conversation history | Agent state outside the harness |
+| Scheduled jobs | Sjel, never the harness |
+
+A swap may lose the chat UI, the exact prompt format and provider-specific caching.
 
 ### Integrate-first topology
 

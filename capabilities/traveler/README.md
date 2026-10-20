@@ -164,3 +164,6 @@ Stated here rather than left to be discovered:
   orders `/api/search` by it, dropping any factor it could not compute. The
   *destination* half still has no reader: `plan_search` is `plan-search-v1` with
   its constants, which is what `plan-search-v2` would change.
+- **No current profile.** The store is keyed by id, and nothing resolves which profile is the
+  current one. The question of one profile or one per person becomes real the day a second
+  profile is needed.

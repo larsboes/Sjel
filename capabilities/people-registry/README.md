@@ -18,3 +18,8 @@ explicit `SJEL_PERSONAL_ROOT` with a comment explaining that launchd gives a job
 shell's exports. True — and unnecessary once the job runs through `tools/service-runner.sh`, which
 sources `tools/lib/paths.sh`, which exports it. One fewer machine-local value copied by hand into
 a generated file.
+
+## Not built
+
+Google Contacts beyond inbound, an import from TELOS, trips listed from a person, and meetup
+capture. All four were named in the PRD, and none is planned.

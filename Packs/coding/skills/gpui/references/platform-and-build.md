@@ -25,7 +25,7 @@ These are revision-specific facts. Confirm them at the selected source revision 
 
 ## Native chrome and iOS
 
-The operating system draws the chrome, and GPUI draws the content (`ISA.md`, Decisions 2026-10-15):
+The operating system draws the chrome, and GPUI draws the content (`apps/gpui-prototype/README.md`, "Why this shape: GPUI for every client"):
 
 - macOS: AppKit owns the sidebar, toolbar, menus and glass. GPUI renders the views inside the window. `apps/gpui-prototype/src/macos_glass.rs` is the narrow AppKit bridge. The resolved GPUI has no general child-view host, so keep the bridge opt-in with a GPUI fallback.
 - iOS: UIKit owns the window, navigation, safe areas and keyboard layout. GPUI renders one embedded view. The platform crate is Longbridge's fork, `gpui-pre-mobile` (https://github.com/longbridge/gpui-mobile). gpui-kit's `website/docs/mobile.md` documents the Swift host and calls mobile experimental.

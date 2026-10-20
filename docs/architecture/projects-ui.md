@@ -1,6 +1,6 @@
 # Projects and Tasks UI/UX Architecture
 
-Projects, tasks, and project notes are owned by Sjel (`capabilities/projects`, [`ISA.md`](../../ISA.md) F14).
+Projects, tasks, and project notes are owned by Sjel ([`capabilities/projects`](../../capabilities/projects/README.md)).
 This document records the UI/UX architecture for viewing and interacting with them, the live embed
 mechanisms, the generative/intelligent UI evolution, and the upstream references.
 

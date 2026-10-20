@@ -17,7 +17,7 @@
 // What deliberately stays remote: the vector tiles and the Natural Earth raster. Those are
 // the part that is large (a z6 tile measured 269 KB) and the part a self-hosted PMTiles
 // deployment would replace -- the seam `upstreams.toml` [openfreemap] already declares and
-// `ISA.md` names under "Not yet specified". This change does not take
+// `ISA.md` names under places, "Self-hosted tiles". This change does not take
 // that decision; it removes the latency that does not depend on it.
 //
 // The pin, and its cost. The TileJSON's `tiles` URL carries a dated planet snapshot

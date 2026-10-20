@@ -13,7 +13,7 @@ import { RESCALE, type DecisionKind } from "../decisions";
  * more urgent than one due tomorrow, so it is worth less than a single day of the
  * due-date slope.
  *
- * `capabilities/projects` is the one source (ISA.md F14). A row opens the dashboard's project page.
+ * `capabilities/projects` is the one source (its README). A row opens the dashboard's project page.
  *
  * Old expression: `620 + (due === null ? 0 : days < 0 ? 260 : max(0, 240 - days * 8))
  *                      + (3 - priority) * 3`, maximum 266.

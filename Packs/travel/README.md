@@ -46,3 +46,16 @@ a route.
 
 The capability READMEs stay the contracts. This Pack points at them rather than restating them,
 so a change to a capability is a change in one place.
+
+## Known limits
+
+- **No trip outcome is recorded.** `POST /api/plans/:id/outcome` waits for the next real trip.
+  Until then the transfer buffer stays uncalibrated, the journey-reliability independence
+  assumption stays untested, and nothing is worth an Obsidian export.
+- **The retrospective's companion half** needs a key that is the people register's person id
+  rather than a name, and a class column a mechanism reads. Neither exists. The origin refusal
+  on trips, its first precondition, shipped on 2026-09-05.
+- **No cancelled train has appeared live.** `originCancelled` and `destinationCancelled` are
+  tested only against fixtures.
+- **Planning gaps the PRD named.** Nothing composes a route, nothing answers "where should I base
+  myself", and accommodation has no source.

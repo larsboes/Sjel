@@ -16,6 +16,19 @@ discover the exact target rather than relying on a static validation list.
 Record skipped checks and pre-existing failures separately. A failing unrelated doctor item does
 not invalidate a focused change, but it must not be described as passing.
 
+## Claiming that the gates pass
+
+Say "the gates pass" only after all of these pass: `cargo test --workspace --locked`,
+`bun test`, every `tools/check-*.sh` gate, and `tools/check-architecture-fresh.sh`. `bun test`
+reaches `tools/*.test.ts`, which includes the four dashboard build gates.
+
+`tools/self check` compares tracked inputs and must pass without Graphify. Counts derived from
+the graph are fused on read and can be stale. Verify a gate claim about `origin/main` in a
+worktree.
+
+For an overlay sweep, use `rg --no-ignore --hidden --follow`. Plain `rg` skips ignored
+configuration.
+
 ## When the claim is that a UI renders
 
 The dashboard suite is pure functions over view models. Nothing mounts a component, so no test

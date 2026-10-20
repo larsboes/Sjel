@@ -144,7 +144,7 @@ for one where none is, which is an instrument that cannot be wrong.
 
 `GET /api/tasks` served band 620 from 2026-08-27 (PRD Q48) to 2026-10-18. It
 retired when `capabilities/projects` became the owner of tasks and the vault's
-`Projects/` moved to `Archive/Projects/` (ISA.md F14).
+`Projects/` moved into Sjel (capabilities/projects/README.md).
 
 **The server has no write route, by design.** A `PATCH` here would make the
 server a second writer of files a human is editing in Obsidian. The one writer in

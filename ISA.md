@@ -13,29 +13,15 @@ until their probes pass or the principal withdraws them with a reason. Explanati
 belong in the owning README or `docs/`. Remove completed and withdrawn items after their
 enduring contracts reach their owners; Git keeps the history.
 
+Decisions live with their owner ([rule](CONTRIBUTING.md#decisions-live-with-their-owner)), never
+here. Verification rules live in the `sjel` skill's `on-verification.md`.
+
 Outside bug reports may use GitHub Issues; our backlog stays here. Nothing automatically
 creates a work item. Move enduring content to its owner before closing a claim. Do not create
 another planning file during cleanup. A possible later migration to one `PLAN.md` is deferred;
 see [planning rules](CONTRIBUTING.md#the-backlog-is-isas). Keep external bug reporting available.
 
-## Constraints
-
-- C1: claim the gates pass only after `cargo test --workspace --locked`, `bun test`, the
-  `tools/check-*.sh` gates and `tools/check-architecture-fresh.sh` pass. Bun reaches
-  `tools/*.test.ts`, including the four dashboard build gates.
-- C2: `tools/self check` compares tracked inputs and must pass without Graphify. Graph-derived
-  counts are fused on read and may be stale. Verify origin/main gate claims in a worktree.
-- C3: overlay sweeps use `rg --no-ignore --hidden --follow`; plain `rg` omits ignored config.
-- C4: container status reports a declared channel, not the running version. Digests identify
-  the running image and the backup writer. `container-refresh` owns pull/recreate; argument
-  drift omits images. See [container image identity](docs/operations/persistence.md#container-image-identity).
-
 ## Features
-
-### F5 · The session's work, proven on real devices
-
-- [ ] ISC-21 — the family deployment runs for a week without Lars touching it.
-  Falsifier: any fix to it made by Lars in that week.
 
 ### F6 · What the old PRD still owes
 
@@ -53,6 +39,11 @@ see [planning rules](CONTRIBUTING.md#the-backlog-is-isas). Keep external bug rep
   Probes:
   - Field minimization: verified by `cloud_derivative_carries_only_fields_task_needs_answering_staab_et_al`.
   - Prompt rate: divide approvals in `secrets/agent/approvals/` by lines in `secrets/agent/calls/<YYYY-MM>.jsonl` over one calendar month. Threshold: set by principal after first month.
+- [ ] ISC-76 — each of the PRD's five non-goals has a current ruling in root `README.md`
+  `## Scope`. N1 "not a product to sell" and N3 "tailnet only, no inbound webhooks" conflict with
+  the distribution work and the LAN listener. N4 "not a replacement for Obsidian" was re-opened
+  for projects on 2026-10-09. N2 "not a full local LLM host" and N5 "not multi-user" are
+  unconfirmed. Falsifier: `## Scope` has no ruling on one of the five.
 
 ### F9 · One pseudonymizer, applied by the gate to every agent read
 
@@ -61,16 +52,6 @@ see [planning rules](CONTRIBUTING.md#the-backlog-is-isas). Keep external bug rep
   1. In a new agent session, verify `Read` of `secrets/**` is refused by the user-level configuration floor.
   2. Find a socket path the Tailscale system extension may connect to, complete
      `tools/setup-tailnet-shell.sh`, and verify `/health` 200 through Tailscale Serve.
-
-### F14 · Sjel owns projects and tasks
-
-Built and imported 2026-10-18: `capabilities/projects`, contract in its README. The store holds
-674 notes and 761 attachments; `projects verify` checks them against the rendered tree. The
-vault's `Projects/` now holds only its law, `Projects/Sjel/Knowledge-Base/`. Everything else moved
-to vault `Archive/Projects/` as a frozen backup, and the vault's task reader retired.
-
-- [ ] ISC-75 — the vault backup is deleted once the operator calls the owner final.
-  Falsifier: vault `Archive/Projects/` still exists after that call. Probe: `ls` it.
 
 ## Unit work
 
@@ -85,20 +66,16 @@ owner heading; `F4` under media is not the root feature F4.
   the signed-only listener.
 - **Model suggestions.** Domain rules suggest a tag; the model suggests nothing for what the rules
   leave.
-- **German identifiers to English.** About 700 identifiers in `interior` and `inventory` are
-  German; many are JSON fields and database columns, so the move needs a store migration, a
-  change to the phone outbox's queued payloads, and an import that still reads the old TOML keys.
-- **Axon names.** Review remaining tracked references with `git grep -n -i axon`.
-  Config file fallback reads shipped (`sjel.local.toml` / `axon.local.toml` and `sjel.toml` / `axon.toml`).
-  Persisted paths and compatibility names need their own migration; replacing prose alone
-  does not close the rename.
-
+- **Axon names.** Decided 2026-09-30: rename `axon` in names, headers, prose and the FDA
+  launcher. `X-Axon-*` headers stay accepted until the phone app ships, and FDA is restored after
+  the rename. The `AXON_*` fallback is retired. Config file fallback reads shipped
+  (`sjel.local.toml` / `axon.local.toml` and `sjel.toml` / `axon.toml`). Persisted paths and
+  compatibility names need their own migration; replacing prose alone does not close the rename.
+  Probe: `git grep -n -i axon`.
 
 ### From the vault PRD `Axon`
 
-The vault `Projects/Sjel/PRD Axon.md` was already `status: archived` and frozen on 2026-09-26,
-but its §13 open rows were never migrated. Verified against the tree on 2026-10-15; the rows
-below are still real, the rest are recorded as superseded at the end.
+Migrated 2026-10-15 from §13 of the frozen PRD (now the `projects` record `Sjel/PRD Axon.md`).
 
 - **B49 — the mail-classification corpus labels.** The harness shipped 2026-09-07 and exported
   **121 fixtures, 0 labelled** (`<overlay>/config/comms-mail-stream-shadow.json`). The labels are
@@ -113,18 +90,12 @@ below are still real, the rest are recorded as superseded at the end.
   carries EUR and a null `risk_free_rate_bp`, but `allocations` is empty. Open: decide the target
   cohort (active allocations sum to 10,000 bp ±50), fill a ticker where one is known (a wrong
   ticker prices the wrong company silently), and install the `finance-prices` launchd unit.
-- **B28 / B41 — the real flat's own data.** 38 of 42 rows declare nothing; `bett_bestand` is
-  210 × 140 against a 100 cm door and does not say `zerlegbar`; R9 needs `[lage]` and glazing
-  heights; 13 open needs carry no price. A second real flat is what B28 needs.
 - **D15 — the reranking stage.** `bge-reranker-v2-m3-mlx` carries `verdict = "adopt"` and has
   never served a ranking; Ollama 0.33.3 answers 404 to `/api/rerank`. Waits for a local runtime
   that can serve it, or accept first-stage-only ranking and drop the `adopt` verdict.
 - **B48 — the trip roll-up numbers.** The budget field, wire and clearing shipped; `by_companion`
   was cut. Open: a budget on a plan and a trip id on a transaction (both data entry). The finance
   per-trip route still answers 200 with five zeros for an untagged trip.
-- **B5 — M3–M5.** The always-on agent, one trip end to end, and public. Partly built; undesigned
-  in detail.
-
 
 ### media · F4 and one open item
 
@@ -141,7 +112,7 @@ below are still real, the rest are recorded as superseded at the end.
   from each kind is observed passing.
 - **A `restic`/offsite target kind.** Named as future work, nothing built.
 
-### traveler · four open items
+### traveler · three open items
 
 - **F3 — the vault proposes.** `TELOS/Personal/Events Profile.md` is a draft; `scouting` already
   reads it. The route reads the TELOS notes, emits a per-field diff with the quoted span each
@@ -152,24 +123,14 @@ below are still real, the rest are recorded as superseded at the end.
 - **F6 — companion patterns, pseudonymously.** `places_person_places` holds nineteen rows in
   state `proposed`, names in a plain column. The profile should learn company (solo, pair,
   group, family) through the register's person ids, never names.
-- **One profile or one per person.** The store is keyed by id and nothing resolves a current one.
-  The day a second profile is needed is the day the question is real.
 
-### Packs/travel · seven open items
+### Packs/travel · three open items
 
-- **L1 — one outcome record.** `POST /api/plans/:id/outcome` after the next real trip. Not code.
-  Gates L3's transfer-buffer calibration and the journey-reliability independence assumption.
-- **L3 — the retrospective summary's companion half.** Three preconditions, in order: an origin
-  refusal shipped on trips (met 2026-09-05); a key that is the register's person id rather than
-  a name; a class column a mechanism reads. The last two are not met.
 - **`is_regional` disagrees between backends.** Same RE5 Bonn→Köln, 2026-08-20: dbnav `true`,
   dbweb `false`. The flag decides whether a leg is presented as Deutschlandticket-covered, so
   a false negative sells a ticket already held. Needs a spread of routes.
 - **Recovering a type for dbweb's regional legs.** Both backends agree on `train_number`; a
   number→label resolution would make dbweb scorable. Nothing holds the mapping today.
-- **The cancellation flag end to end.** `originCancelled`/`destinationCancelled` are
-  fixture-tested; no cancelled train has appeared live. Opportunistic.
-- **Obsidian export.** Gated on there being something machine-derived worth exporting (L1).
 - **An open segment has no home in the plan model.** A stage names a destination and date, an
   item a day, and status is draft/saved/archived — none says "this part is undecided, here are
   the branches". What would settle it: a second trip planned this way.
@@ -181,8 +142,8 @@ below are still real, the rest are recorded as superseded at the end.
   is outstanding. Falsifier: the question does not arrive.
 - **DSH-3** — `/finance` reads right with live data (three `DataTable`s, subscription editor,
   `SidePeek`). A live-data judgement, not a build.
-- **DSH-9** — Calendar reads from a row replica on the device (decision 2026-10-19). The node
-  needs a change feed per table, `?since=<cursor>`. Entries carry `updated_at`
+- **DSH-9** — Calendar reads from a row replica on the device (`dashboard/README.md`, the
+  replica). The node needs a change feed per table, `?since=<cursor>`. Entries carry `updated_at`
   (`capabilities/calendar/src/model.rs:131`), but `delete_entry` removes the row
   (`store.rs:521`), so the feed also needs tombstones. Until then the page keeps each loaded
   window in memory and dims it while it reloads. Falsifier: with the node stopped, a month
@@ -201,11 +162,6 @@ below are still real, the rest are recorded as superseded at the end.
   in and out, and the shell gives them one place.
 - **Joins with nothing to return yet.** No ledger transaction carries a trip tag; layouts publish
   no join; trips keeps its own place namespace.
-- **Figure embeds in project notes.** Built 2026-10-20: [`dashboard/src/lib/figures/`](dashboard/src/lib/figures/)
-  holds reviewed Svelte 5 components (`index.ts`), `lib/projects/database.ts` parses `![[figure:<id>]]`,
-  and `ProjectsBoard.svelte` renders them live. First case: `miele-w961-filter` embedded in
-  `Washing Machine Connect and Test.md`. Verified by `bun test dashboard/vite/projects-database.test.ts`
-  and `bun run check`. Stepping stone for generative UI from typed data ([Product Rule 6](CONTRIBUTING.md#product-rules)).
 
 ### places · five items
 
@@ -260,10 +216,6 @@ below are still real, the rest are recorded as superseded at the end.
 - **Trips' own place namespace.** A destination's `obsidian-place:…` id does not resolve to the
   places registry, so a place cannot list the trips that went there. See `docs/capabilities/links.md`.
 
-### printing · one question
-
-- **Does KlipperMCP replace the slicer probe?** Open since the capability shipped; never revisited.
-
 ### comms · one open item
 
 - **A `comms-server` outside the runner held the port.** On 2026-10-19 `service-runner.sh
@@ -284,180 +236,13 @@ below are still real, the rest are recorded as superseded at the end.
   such as `IMG_1234.jpeg` is not an identity, but the agent cannot read it. Falsifier: a path with
   no identity in it reaches the agent unchanged.
 
+### harness · two items
 
-## Not yet specified
-
-- **knowledge-graph link prediction over the vault.** `knowledge-graph` serves the code
-  graph; the vault has one and nothing reads it. A completed run exists over 679 notes
-  and 9,001 candidate pairs with structure, text and metadata features engineered
-  (the quarry is a completed link-prediction notebook in a private lab checkout, read rather
-  than copied; the overlay records where).
-  Two things to know before consuming it: the snapshot uses the vault's old `Areas/`
-  paths, so it predates the `Knowledge/` rename and the note count has roughly tripled;
-  and precision matters more than recall, so the useful output is a short ranked list
-  per note, not a score for every pair. No consumer yet — that is what keeps it here
-  rather than in Features.
-- **Open source or open core.** AGPL-3.0 keeps both possible. Undecided whether parts stay
-  closed later.
-- **Funding.** Support and sponsorship with a build-in-public video series (decisions, papers,
-  measurements, in the style of James Simo's city-builder devlog), hosting, or a company.
-  Undecided.
-- **One Rust agent for the Sjel app and local coding.** Promoted 2026-10-04: `libs/agent`
-  (crate `sjel-agent`) started with c4a13a85; its claims are under "Open work folded from unit
-  ISAs". The
-  product reasoning is in the vault, `Projects/Sjel/Agent/PRD sjel-agent.md`. The bar this entry
-  set for replacing Pi stays in force: one household task and one coding task, measured against
-  the existing path, before any Pi retirement. The privacy probes in ISC-39 and ISC-45 are still
-  open.
-- **Private Cloud Compute as a ladder rung**, for pseudonymized prompts only ([product rule 4](CONTRIBUTING.md#product-rules)). The plugin
-  reports its availability today and never calls it.
-- **A fast structured-decision model as a rung**, the kind Jev is (typesafe.ai, 2026). Candidate,
-  not measured.
-- **Generative interface from the typed core** ([product rule 6](CONTRIBUTING.md#product-rules)). No design yet.
-  Next step, set by the principal 2026-10-19: a draft, after figure embeds (dashboard unit),
-  which are the first registered component a note can name.
-- **The on-device model path is untested on an eligible device.** The iPhone 14 Pro reports
-  `deviceNotEligible`; a 15 Pro or later, or a Simulator, is needed.
-- **Semantic graph coverage is unmeasured.** `tools/graphify.sh` defaults to authenticated
-  oMLX, with a code-only fallback; the retired DeepSeek model is no longer the configured
-  blocker. Probe: run `tools/graphify.sh --check`, then a rebuild, and inspect its reported
-  non-AST elements/hyperedges before claiming semantic coverage. `tools/self generate` needs
-  no graph. What the code-only fallback loses remains unmeasured.
-- **From the old PRD, not yet planned.** Device loss as a threat (what a stolen phone exposes).
-  A health domain (energy, sleep, training, records). Item intake: **the link half is built**
-  (F12, 2026-10-05) — what remains is *scan an object*, which needs the Q63 ladder to end at
-  something better than text, and a barcode path, which is `[tauri-plugin-barcode-scanner]`
-  today and reads the Mac's pairing QR code. Travel: route composition, "where should I base
-  myself", an accommodation source. People: Google Contacts beyond inbound, a TELOS import,
-  trips from a person, meetup capture. An autonomy gate for a structured-decision model (apply
-  at ≥ 0.95 confidence, otherwise a card). shellcheck as shell analysis. The PRD's non-goals, which conflict with Sjel ("not a
-  product", "tailnet only") and need a new ruling rather than a copy.
-
-**Filed 2026-10-08 from the vault's former `Projects/Axon/`.** The folder merged into
-`Projects/Sjel/` that day. These four items were open there and are owned nowhere in this repo.
-The vault copies now point here.
-
-- **Bulk import of saved Instagram posts.** `comms` extracts one Instagram URL at a time
-  (`capabilities/comms/README.md`, the per-source extractor table). Nothing imports a saved
-  collection. The constraint the principal set (2026-08-12): the import must not break
-  Instagram's terms of use, so that the account is not banned. Existing open-source importers are
-  not surveyed yet.
-- **The feed, installable by someone else.** A colleague fetches favourite podcasts daily and
-  summarizes them with a local Whisper model, and said many people would want Sjel's feed if it
-  were easy to set up (principal, 2026-08-12). The README quick start installs the whole system,
-  and nothing installs the feed alone. Not measured: what a feed-only install would need.
 - **`OPERATIONAL_RULES.md`, sorted.** From the 2026-08-22 skills audit (claim C7): sort the old
-  LifeOS operational rules down to what is worth keeping, put them in the private overlay, and make
-  them deployable to the user-level `CLAUDE.md`. The source is only in the overlay's LifeOS backup
-  today. Falsifier carried over: a port that carries LifeOS-specific rules across, or edits made
-  only in the live `~/.claude` tree.
-- **A prior-art skill that searches.** Same audit, claim C8: rethink the prior-art and build-ladder
-  skills from the start rather than wrap them. Falsifier carried over: a skill that restates the
+  LifeOS operational rules down to what is worth keeping, put them in the private overlay, and
+  make them deployable to the user-level `CLAUDE.md`. The source is only in the overlay's LifeOS
+  backup. Falsifier: a port that carries LifeOS-specific rules across, or edits made only in the
+  live `~/.claude` tree.
+- **A prior-art skill that searches.** Same audit, claim C8: rethink the prior-art and
+  build-ladder skills from the start rather than wrap them. Falsifier: a skill that restates the
   ladder without a way to actually search.
-
-**Filed 2026-10-01 from the Sjel project roast.** Seven items the roast raised that nothing in this
-repo owned. Each states what exists in that slot today, read from the tree on that date; none is a
-claim yet, and the watch rows they name are in `upstreams.toml` with the questions attached.
-
-- **No booking document reaches a trip.** A `.pkpass`, a forwarded reservation mail and a UIC
-  barcode are all text in Sjel today: the Q63 ladder (Apple Vision through `tools/visocr`, xberg,
-  Docling) ends at text, and the only barcode path in the tree is `[tauri-plugin-barcode-scanner]`,
-  which scans the Mac's pairing QR code. Turning a reservation into a trip is manual.
-  `[kitinerary]` is read AND run: on the Linux runtime it installs from Debian as
-  `libkitinerary-bin`, reads stdin and writes schema.org JSON-LD, and extracted a JSON-LD
-  `TrainReservation` from HTML intact. A plain iCal `VEVENT` came back empty, so an `.ics` is not
-  a way in. It is still not adopted into a capability. macOS was measured as the expensive half:
-  Homebrew has Qt6 but none of `kpkpass`, `kmime`, `kcalendarcore` or `kcontacts`, and KDE's
-  prebuilt macOS arm64 tarball of the extractor downloads at 1.4 MB and **does not run** -- its
-  dylibs are absolute paths from KDE's CI machine and that path is its only `LC_RPATH` -- so the
-  workable route is a KDE Craft root built from KDE's prebuilt packages. The owner recorded the
-  macOS port as a target and this feature as **optional and not core** on 2026-10-02, so nothing
-  on the Mac is built; on the Linux runtime, where it is measured working, the install costs
-  679 MB. Still unmeasured: a real `.pkpass`, PDF or UIC barcode from this household. `[db-rest]`
-  and `[motis]` stay unread.
-- **Bank imports are CSV only.** `capabilities/finance/src/import.rs` reviews CSV into the
-  plaintext journal and calls CSV an edge format; that is the whole intake. `camt`, `ofx` and
-  `mt940` appear nowhere in the tree, so a bank that exports XML has no path in. Unmeasured, and
-  prior to any reader: which formats this household's own bank produces. Watched for their
-  importer catalogues: `[beancount]`, `[firefly-iii]`.
-- **Contacts and calendar speak Sjel's API, not a standard.** There is no vCard (RFC 6350),
-  iCalendar (RFC 5545) or CalDAV/CardDAV code, and `capabilities/calendar` reaches Google through
-  Google's own API. `[radicale]` is watched. The question that comes first is not which server but
-  whether anything outside the phone app and the dashboard would ever read these records;
-  `[vaultwarden]` was adopted because its clients already existed.
-- **Semantic retrieval is a linear cosine, and the number that would change it is missing.**
-  `capabilities/comms/src/relevance.rs` scores candidates in process and `libs/sjel-store` loads no
-  vector extension. What is absent is the candidate-set size at retrieval time, which decides
-  whether `[sqlite-vec]` is worth anything here. Measure, then delete or promote the row.
-- **Dependency vulnerability scanning is five adopted tools, not a missing one.** `[osv-scanner]`,
-  `[grype]`, `[trivy]`, `[gitleaks]` and `[semgrep]` are adopted and `osv-scanner.toml` is
-  configured; a scanner written here would be a sixth. What is genuinely absent is the hook --
-  nothing runs a scan on a schedule and surfaces a finding through the assistant, which is
-  `host-watch`-shaped if it is built at all.
-- **The pseudonymizer's 100% has a corpus boundary nothing states.** Recall reached 100.0% (48/48
-  labels) on the frozen 24-fixture corpus in `deterministic-entity-redaction-v3`, and the
-  `[presidio]` comparison is what set it. No document says what would falsify that next: a corpus
-  size, a language or a document class where the current rules should be expected to fail. Until
-  one does, 100% reads as a property of the redactor rather than of the corpus it was measured on.
-- **Habits in the planning owner.** Projects and tasks are specified in F14. Habits are not:
-  which `calendar` rhythm fields carry a habit, and whether the daily metrics in
-  `Journal/01. Daily Notes` (read by vault `Habits.base`) move or stay as journal entries.
-  Vault `Domains/Journal.md` says nothing is written back into a journal entry.
-
-
-## Decisions
-
-These bind open work. Git retains earlier reasoning, measurements, overrides and superseded
-alternatives.
-
-- 2026-10-15 / 2026-10-11: GPUI is the goal for all clients. Step 0 uses the Longbridge
-  `gpui-pre-mobile` fork and one GPUI snapshot (`gpui-pre =0.3.9`, gpui-kit 0.7.3). OS chrome
-  belongs to AppKit/UIKit; content belongs to GPUI. See `upstreams.toml`, gpui-kit's
-  `website/docs/mobile.md` and `apps/gpui-prototype/src/macos_glass.rs`.
-  0. One Cargo workspace builds GPUI, gpui-kit and gpui-mobile; show one loopback-HTTP-fed list
-     on Mac and iOS Simulator. Failure reopens the iPhone decision.
-  1. Build the command palette; measure start time and resident memory against Tauri.
-  2. Port the dashboard's routes into an isolated app: `context`, `calendar`, `inbox` first,
-     native `capabilities` as reference. GPUI draws charts; map last, `gpui-webview` fallback.
-     2026-10-18 editor spike (`1e0300ac`..`f7d4270b`): block editing, inline formatting, `/`
-     menu, drag reorder and a task table all work without a fork. 1.6 ms CPU per keystroke on a
-     1,740-line note. GPUI gaps had outside workarounds: no inline styling outside code-editor
-     mode, fixed textarea padding, key-context precedence.
-  3. Test and review; decide switch, both or stop. Svelte/Tauri stay live through that review.
-  This replaces the narrower 2026-10-09 keyboard-only split. It is a stack decision; DSH-8
-  did not identify rendering as the wait. Do not retire Pi before one household task and one
-  coding task beat the existing path.
-- 2026-10-19: A client reads from its own replica and never waits on the node to paint. The
-  replica is the read source for the paths in `OFFLINE_PROJECTION_PATHS` and `C1_PREFIXES`
-  (`dashboard/src-tauri/src/sync.rs:43`), online or not. Every other path stays network-first.
-  The replica stores rows, not answers: today's snapshot keys each answer by its exact
-  query, so a new calendar range misses it. Sync, not the page, talks to the node, so a node
-  on another machine changes freshness and not paint time. Writes keep the outbox. The replica
-  and sync belong in a crate that the Tauri bridge and `apps/gpui-prototype/core` both use, so
-  the work survives the GPUI move. Calendar goes first (DSH-9).
-- 2026-10-17 / 2026-10-09: Sjel owns projects, tasks and habits. Obsidian keeps Knowledge,
-  Atlas, Journal, Reflections. This reverses Q48. Capability `projects` stores projects, tasks
-  and project notes as tables in the shared store. Every write re-renders the record as
-  markdown under `<overlay>/data/projects/`, which keeps Principle 8 the way finance decisions
-  do. Nobody edits the rendered files; Sjel's CLI and API are the only writers. The import
-  takes every markdown note and every attachment of a vault project folder, and nothing from the
-  law folder `Sjel/Knowledge-Base/`. Attachments stay files in the rendered tree, not rows
-  (2026-10-18: 986 MB would grow every backup of the shared database). The frozen vault notes
-  moved to vault `Archive/Projects/` as the backup until the owner is final. The page that
-  listed apps under `/projects` moved to `/apps`; `/projects` is this capability. The import ran
-  2026-10-18, which ends Q48. The 2026-10-17 part replaces markdown-canonical storage after
-  the operator compared both.
-- 2026-10-05: garments share `interior_item`, with `category`, `groesse`, `farbe`, `saison`.
-  Both URL intake and create/edit forms are required. A garment is `kind = piece`; `gear`
-  means portable packing equipment. Keep the `interior` name. Read category suggestions from
-  rows; report spelling collisions without merging. Fetch URLs only in the CLI. Refuse guessed
-  and non-EUR prices; missing prices stay explicit because totals feed finance (B29).
-- 2026-10-01: `sjel update` reports all software with its owner; apply delegates owned classes
-  and moves only the rest. Systems gets apply, under operator/session/origin guards and
-  `APPLY_CLASSES`; sjel-status admits no agent token (ISC-47). Cargo/npm stay unscheduled.
-- 2026-09-30: agent access starts discovered, authenticated and read-only, with explicit
-  per-capability write grants and the user's secret store. The gate pseudonymizes reads;
-  reversible session tokens permit pseudonymized c2, never c3 (amends Q27).
-- 2026-09-30: rename `axon`, headers, prose and the FDA launcher. Accept `X-Axon-*` until
-  the phone ships; restore FDA after renaming (ISC-29). The `AXON_*` fallback is retired.
-- 2026-09-30: the dashboard exposes the disk's own measurements from `tools/storage`, under R6.

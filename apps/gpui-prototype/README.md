@@ -23,10 +23,38 @@ view opens here. Every other destination opens the dashboard in the browser, log
 single-use ticket. `sjel://<path>` links follow the same rule: `sjel://capabilities` opens the
 native page, `sjel://calendar` opens the dashboard at `/calendar`.
 
+## Why this shape: GPUI for every client
+
+GPUI is the goal for every Sjel client, on the Mac and on iOS (decided 2026-10-11, revised
+2026-10-15). AppKit or UIKit draws the operating-system chrome, and GPUI draws the content. The
+workspace pins one GPUI snapshot, `gpui-pre =0.3.9` with gpui-kit 0.7.3, and uses the Longbridge
+`gpui-pre-mobile` fork on iOS. Sources: `upstreams.toml`, the mobile page of gpui-kit's website docs,
+and `src/macos_glass.rs`.
+
+The move has four steps:
+
+0. One Cargo workspace builds GPUI, gpui-kit and gpui-mobile, and shows one list fed over
+   loopback HTTP on the Mac and in the iOS Simulator. If this fails, the iPhone decision opens
+   again.
+1. A command palette, measured for start time and resident memory against Tauri.
+2. The dashboard's routes, ported into this app: `context`, `calendar` and `inbox` first, with
+   the native `capabilities` page as the reference. GPUI draws the charts. The map comes last,
+   with `gpui-webview` as the fallback.
+3. Test and review, then decide: switch, keep both, or stop. Svelte and Tauri stay live until
+   that review.
+
+The editor spike of 2026-10-18 built block editing, inline formatting,
+a `/` menu, drag reorder and a task table without a fork, at 1.6 ms CPU per keystroke on a
+1,740-line note. Three GPUI gaps needed outside workarounds: no inline styling outside
+code-editor mode, fixed textarea padding, and key-context precedence.
+
+This is a stack decision, not a speed fix: DSH-8 found that Sjel's waits come from services, not
+from rendering. It replaces the 2026-10-09 split that gave GPUI only the keyboard surfaces.
+
 ## Workspace and the iOS app
 
 This directory is one Cargo workspace with one lockfile, so every member builds against the
-same GPUI snapshot (ISA.md Decisions 2026-10-15, step 0).
+same GPUI snapshot (step 0 above).
 
 | Member | What it holds |
 |---|---|

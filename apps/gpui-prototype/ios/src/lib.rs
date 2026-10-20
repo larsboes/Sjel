@@ -1,5 +1,5 @@
 //! The iOS app's GPUI content. UIKit owns the window, the navigation bar and the safe areas
-//! (`host/App.swift`); GPUI draws inside them (ISA.md Decisions 2026-10-15).
+//! (`host/App.swift`); GPUI draws inside them (`../README.md`, "GPUI for every client").
 //!
 //! The app is a paired device (`capabilities/devices/README.md`): it claims the one-time code
 //! from the Mac's pairing QR code, then signs every request with its Keychain key

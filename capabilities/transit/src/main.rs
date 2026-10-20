@@ -26,7 +26,7 @@ fn require(
 }
 
 fn print_usage() {
-    eprintln!("Axon Transit -- HAFAS journey search, split-ticket solver, ticket extraction\n");
+    eprintln!("Sjel Transit -- HAFAS journey search, split-ticket solver, ticket extraction\n");
     eprintln!("Usage:");
     eprintln!("  transit suggest --query <station name>");
     eprintln!("  transit search  --from <EVA> --to <EVA> --time <ISO datetime>");

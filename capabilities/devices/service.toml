@@ -1,4 +1,4 @@
-# Device enrollment and revocation for one Axon deployment.
+# Device enrollment and revocation for one Sjel deployment.
 # The service is reached through sjel-status' same-origin proxy; it owns durable device
 # security state, not host health or capability lifecycle.
 kind            = "process"

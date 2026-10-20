@@ -4,7 +4,7 @@ version.workspace = true
 edition.workspace = true
 rust-version.workspace = true
 license.workspace = true
-description = "Axon's system of record for people, organisations, places and the operator: typed fields per kind, declared extension fields, dated location facts, and where every value came from (PRD Q117)."
+description = "Sjel's system of record for people, organisations, places and the operator: typed fields per kind, declared extension fields, dated location facts, and where every value came from (PRD Q117)."
 publish = false
 
 [lib]

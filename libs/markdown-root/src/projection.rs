@@ -104,7 +104,7 @@ fn declared_owner(document: &str) -> Option<&str> {
 pub fn header(spec: &RegionSpec) -> String {
     format!(
         "{HEADER} owner={} v={} -->\n\
-         <!-- Axon generates this file and overwrites it whole. An edit here is lost on the next export. \
+         <!-- Sjel generates this file and overwrites it whole. An edit here is lost on the next export. \
          To write about this subject, make your own note; this projection then refuses the path (PRD Q31). -->\n",
         spec.owner, spec.version
     )

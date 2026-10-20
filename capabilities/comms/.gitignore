@@ -5,4 +5,4 @@ comms.config.json
 comms.env
 /target
 
-# Cargo.lock IS committed (binary crate; Axon doctrine pins everything).
+# Cargo.lock IS committed (binary crate; Sjel doctrine pins everything).

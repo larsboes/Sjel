@@ -1,6 +1,6 @@
 use super::*;
 
-/// What Axon has deployed into each agent harness on this machine.
+/// What Sjel has deployed into each agent harness on this machine.
 ///
 /// ## Why this capability serves another capability's state
 ///

@@ -7,7 +7,7 @@
 //!
 //! ## Notice, then hand off
 //!
-//! Two host conditions are invisible until they hurt, and both bit on 2026-08-15 (Axon#177): a
+//! Two host conditions are invisible until they hurt, and both bit on 2026-08-15 (Sjel#177): a
 //! System Settings Storage pane got stuck at 08:35 and burned 3h29m of CPU before anyone
 //! noticed; and the disk half was ALREADY solved — `tools/storage` answered it in seconds — but
 //! nothing ran it, so it may as well not have existed. A tool nobody runs and a tool nobody

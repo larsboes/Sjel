@@ -11,7 +11,7 @@ use std::process::Command;
 
 use crate::store::{Fallible, TargetDecl};
 
-/// The Axon checkout `tools/` lives in.
+/// The Sjel checkout `tools/` lives in.
 ///
 /// `SJEL_ROOT` first, because `tools/lib/paths.sh` exports it and every entry point that
 /// matters sets it. The error names the fix rather than guessing a path: a capability

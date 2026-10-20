@@ -574,7 +574,7 @@ pub(super) fn execute_gmail_action_job(
         Ok(None) => {
             return store
                 .observe_gmail_missing(&job.triage_id)
-                .map_err(|_| "Axon could not record that the Gmail thread is missing".to_string())
+                .map_err(|_| "Sjel could not record that the Gmail thread is missing".to_string())
                 .and_then(|updated| {
                     if updated {
                         Ok(GmailActionOutcome::Missing)
@@ -600,7 +600,7 @@ pub(super) fn execute_gmail_action_job(
         }
         match store
             .complete_gmail_action(job.job_id)
-            .map_err(|_| "Axon could not commit the confirmed Gmail result".to_string())?
+            .map_err(|_| "Sjel could not commit the confirmed Gmail result".to_string())?
         {
             true => Ok(GmailActionOutcome::Confirmed { changed }),
             false => Err("mail proposal disappeared before local completion".into()),
@@ -852,7 +852,7 @@ pub(super) async fn triage_bulk_handler(Json(body): Json<TriageBulkBody>) -> Htt
                     .and_then(|outcome| match outcome {
                         GmailActionOutcome::Confirmed { .. } => Ok(Some(())),
                         GmailActionOutcome::Missing => {
-                            Err("Gmail thread no longer exists; Axon retained its local record".into())
+                            Err("Gmail thread no longer exists; Sjel retained its local record".into())
                         }
                     }),
                 _ => unreachable!(),
@@ -1676,7 +1676,7 @@ pub(super) async fn triage_gmail_handler(
         Ok(Ok(GmailActionOutcome::Missing)) => (
             StatusCode::GONE,
             Json(json!({
-                "error": "Gmail thread no longer exists; Axon retained its local record"
+                "error": "Gmail thread no longer exists; Sjel retained its local record"
             })),
         ),
         Ok(Err((status, error))) => (status, Json(json!({ "error": error }))),
@@ -1741,7 +1741,7 @@ pub(super) async fn triage_gmail_job_handler(
             GmailActionOutcome::Missing => Ok((
                 StatusCode::GONE,
                 json!({
-                    "error": "Gmail thread no longer exists; Axon retained its local record"
+                    "error": "Gmail thread no longer exists; Sjel retained its local record"
                 }),
             )),
         }

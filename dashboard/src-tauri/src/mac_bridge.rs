@@ -1,4 +1,4 @@
-//! The native bridge from the app to the Mac's Axon services.
+//! The native bridge from the app to the Mac's Sjel services.
 //!
 //! ## Why the request leaves from Rust and not from the WebView
 //!
@@ -142,7 +142,7 @@ const CONNECT_TIMEOUT: Duration = Duration::from_secs(8);
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub struct Settings {
     pub protocol_version: String,
-    /// Stable identity of this canonical Axon node. It survives URL changes and migration.
+    /// Stable identity of this canonical Sjel node. It survives URL changes and migration.
     #[serde(default = "default_node_id")]
     pub node_id: String,
     /// For example `https://<name>.ts.net` or a hosted node. `None` until the operator sets it.

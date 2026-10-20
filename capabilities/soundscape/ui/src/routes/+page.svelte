@@ -72,7 +72,7 @@
 <svelte:window onkeydown={onKeyDown} />
 
 <svelte:head>
-  <title>Soundscape — Axon</title>
+  <title>Soundscape — Sjel</title>
   <meta name="description" content="Generative audio, composed in the browser, conducted by the capability" />
 </svelte:head>
 

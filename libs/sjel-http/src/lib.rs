@@ -10,7 +10,7 @@
 //!    `capabilities/calendar/src/google_sync/auth.rs`. A `reqwest` client with no
 //!    timeout waits forever, which is how a scheduled job becomes a stuck process.
 //! 2. **The user-agent disagreed with itself.** `axon-places/0.1`, `AxonComms/0.1`,
-//!    `Axon-Comms/0.1`, `AxonCalendar/0.1.0`, `Axon-Scouting/0.1-rss`,
+//!    `Sjel-Comms/0.1`, `AxonCalendar/0.1.0`, `Sjel-Scouting/0.1-rss`,
 //!    `axon-finance/1.0`, and nothing at all in a dozen others. Two of them pointed
 //!    at the GitHub Pages site rather than the repository.
 //! 3. **Every call rebuilt the client.** A `reqwest::blocking::Client` owns a TLS
@@ -36,7 +36,7 @@
 //! (`host-net`, `interior`, `soundscape`, `vault`, `tools/storage`) depend on
 //! sjel-config and make no outbound request, and `reqwest` brings a TLS stack with
 //! it. A lib in this repository is spine-owned shared code with no domain of its own
-//! (ARCHITECTURE.md, "Libs"), and "how Axon talks to the network" is exactly that.
+//! (ARCHITECTURE.md, "Libs"), and "how Sjel talks to the network" is exactly that.
 
 pub mod guard;
 
@@ -49,7 +49,7 @@ use std::time::Duration;
 /// The `+` prefix is the convention RFC 9110 §10.1.5 shows for a URI in a
 /// `User-Agent` comment, and it is what the sites that already carried a URL used.
 ///
-/// The URL is the intended one, not a live one: Axon has no public GitHub remote
+/// The URL is the intended one, not a live one: Sjel has no public GitHub remote
 /// yet (PROJECTS.md). Three scouting adapters each carried that caveat beside their
 /// own copy of the string; it is one caveat in one place now.
 pub const UPSTREAM: &str = "https://github.com/larsboes/Sjel";
@@ -85,7 +85,7 @@ impl std::fmt::Display for Purpose {
     }
 }
 
-/// `Axon-<purpose>/<version> (+<upstream>)` — the one user-agent shape.
+/// `Sjel-<purpose>/<version> (+<upstream>)` — the one user-agent shape.
 ///
 /// The version is this crate's, which is the workspace version, so every capability
 /// reports the same number and a server sees one product rather than nine.
@@ -99,7 +99,7 @@ pub fn user_agent(purpose: Purpose) -> String {
 
 /// Folds a purpose to the characters a `User-Agent` product token allows.
 ///
-/// Not a rejection: a purpose is a compile-time constant written by an Axon author,
+/// Not a rejection: a purpose is a compile-time constant written by an Sjel author,
 /// so the realistic failure is a typo, not an attack. Folding keeps the request
 /// working and keeps the header un-splittable either way.
 fn header_token(raw: &str) -> String {
@@ -164,7 +164,7 @@ fn pool() -> &'static Pool {
 /// thread and a root-certificate load each time.
 ///
 /// **Not for use from an async runtime worker.** A blocking client driven from inside
-/// a Tokio worker panics at run time. Every caller in Axon is either a CLI or inside
+/// a Tokio worker panics at run time. Every caller in Sjel is either a CLI or inside
 /// `tokio::task::spawn_blocking`, whose threads are not runtime workers.
 /// `capabilities/finance/src/price.rs` states the same rule at its own call site.
 ///

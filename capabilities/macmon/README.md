@@ -18,7 +18,7 @@ page.
 
 It used to be a LaunchAgent nobody generated. The unit was written by hand, exempted from
 `tools/doctor`'s orphan check through the `sidecars` seam in `dashboard/service.toml`
-(Axon#65), and therefore versioned nowhere — its port and sampling interval lived in one
+(Sjel#65), and therefore versioned nowhere — its port and sampling interval lived in one
 untracked file under `~/Library/LaunchAgents`. Rebuild the machine and it comes back
 wrong, or not at all, with doctor still green: the exemption that stopped the false
 positive also removed the only check that would have noticed.

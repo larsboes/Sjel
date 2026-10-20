@@ -449,7 +449,7 @@ pub(crate) use sjel_http::guard::normalize_origin;
 ///
 /// **Empty by default, and that is the shipped value.** No real machine needs
 /// an entry: the guard exists because an ingested link could otherwise drive a
-/// loopback-bound Axon API. The demo is the one caller that legitimately points
+/// loopback-bound Sjel API. The demo is the one caller that legitimately points
 /// Comms at loopback — `tools/demo-up` writes `demo/demo.toml`'s `[demo] origin`
 /// into `demo/overlay/config/comms.json` before starting the stack, and that
 /// origin is a synthetic HTTP server on a port no capability occupies.

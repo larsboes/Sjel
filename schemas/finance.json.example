@@ -215,6 +215,6 @@
     ]
   },
   "_commitment_note": "Commitments are forward-looking dated obligations, not historical transactions. All real labels, dates and amounts belong only in the private overlay.",
-  "_planning_note": "Planning rules, comparison dates, card usage, personal benefit values, point balances and valuation assumptions are private. Public Axon contains only the provider-neutral arithmetic and this synthetic shape.",
-  "_mapping_note": "Only synthetic profiles belong in Axon. Real source keys, profile labels, column mappings, instrument aliases and symbolic source accounts stay in the private overlay."
+  "_planning_note": "Planning rules, comparison dates, card usage, personal benefit values, point balances and valuation assumptions are private. Public Sjel contains only the provider-neutral arithmetic and this synthetic shape.",
+  "_mapping_note": "Only synthetic profiles belong in Sjel. Real source keys, profile labels, column mappings, instrument aliases and symbolic source accounts stay in the private overlay."
 }

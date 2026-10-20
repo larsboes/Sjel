@@ -1,4 +1,4 @@
-# Axon overlay ignore policy — IMMUTABLE HARD BLOCKS.
+# Sjel overlay ignore policy — IMMUTABLE HARD BLOCKS.
 #
 # These patterns must be the LAST thing in every generated overlay .gitignore, because git
 # resolves a path against the last matching pattern. An allowlist entry above can un-ignore

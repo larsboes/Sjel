@@ -14,7 +14,7 @@
 #     $ bash -c 'set -o pipefail; seq 1 300000 | grep -q "^299999$"; echo "${PIPESTATUS[*]} -> $?"'
 #     0 0 -> 0              # same question, match near the end, correct answer
 #
-# It was found for real (#42): `launchctl list | grep -q "com\.axon\.$CAP\$"` reported a loaded
+# It was found for real (#42): `launchctl list | grep -q "com\.sjel\.$CAP\$"` reported a loaded
 # launchd agent as not loaded, because that output is hundreds of lines long.
 #
 # The fix is not to drop pipefail — pipefail is why a failing producer is not silently read as

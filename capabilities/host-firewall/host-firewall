@@ -1,8 +1,8 @@
 #!/bin/bash
 # capabilities/host-firewall — a default-deny host firewall for a Linux node, rendered from
-# the active overlay's declaration (Axon#193).
+# the active overlay's declaration (Sjel#193).
 #
-# Axon did not ship a host-firewall capability, so a consumer had to assemble both the rules
+# Sjel did not ship a host-firewall capability, so a consumer had to assemble both the rules
 # and the deployment logic in its private overlay — even though almost none of that behaviour
 # is specific to a machine. What IS machine-specific is exactly four things: which interface
 # faces the network, which interfaces are trusted, which sources may connect, and which ports
@@ -30,7 +30,7 @@
 # So the failure mode of a wrong rule is "the connection comes back in a minute", not "drive
 # to the machine". That property is why apply exists here rather than as an `nft -f` in a
 # runbook. Applying to a real host and proving its effective policy are still the overlay's
-# work, per Axon#193 — this file owns the shape and the safety, not the rollout.
+# work, per Sjel#193 — this file owns the shape and the safety, not the rollout.
 
 set -u
 
@@ -48,7 +48,7 @@ usage() { sed -n '2,20p' "$0"; }
 require_config() {
   [ -f "$CONFIG" ] || die "no config at $CONFIG
   Copy capabilities/host-firewall/host-firewall.toml.example there and fill it in for this
-  machine. Axon ships no interface, network or port — a default would be a guess about your
+  machine. Sjel ships no interface, network or port — a default would be a guess about your
   topology, and the wrong guess here is a lockout."
   WAN="$(toml_get wan_interface "$CONFIG")"
   [ -n "$WAN" ] || die "$CONFIG declares no wan_interface"
@@ -190,7 +190,7 @@ cmd_check() {
 cmd_apply() {
   local confirm_seconds="${1:-60}"
   command -v nft >/dev/null 2>&1 || die "nft not installed — this capability applies to a Linux host with nftables"
-  [ "$(id -u)" -eq 0 ] || die "apply needs root. Axon does not escalate on your behalf; re-run:
+  [ "$(id -u)" -eq 0 ] || die "apply needs root. Sjel does not escalate on your behalf; re-run:
   sudo $0 apply"
   cmd_check >/dev/null || die "inputs are invalid — refusing to apply. Run 'host-firewall check'."
 

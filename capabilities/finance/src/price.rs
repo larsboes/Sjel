@@ -22,8 +22,8 @@
 //! over `latest_unit_price`, so a quote written there would make the file refuse
 //! itself on the next read.
 //!
-//! These tables are NOT `finance_price_points`, which is Axon's own subscription
-//! pricing history (PRD §9.2 dogfooding). Market data and what Axon pays for a
+//! These tables are NOT `finance_price_points`, which is Sjel's own subscription
+//! pricing history (PRD §9.2 dogfooding). Market data and what Sjel pays for a
 //! streaming service are two different series that happen to share a word.
 
 use std::collections::BTreeMap;

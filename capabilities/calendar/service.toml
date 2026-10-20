@@ -1,4 +1,4 @@
-# calendar — Axon's calendar layer: availability windows, scoped rhythms, events.
+# calendar — Sjel's calendar layer: availability windows, scoped rhythms, events.
 kind        = "process"
 name        = "calendar"
 command     = ["target/release/calendar-server"]

@@ -1,7 +1,7 @@
-# axon-__OVERLAY_NAME__ — the reviewed allowlist. THIS is the file you edit.
+# sjel-__OVERLAY_NAME__ — the reviewed allowlist. THIS is the file you edit.
 #
 # Everything is denied by default. Each line here un-ignores something you have looked at and
-# decided is safe to track. Axon's immutable hard blocks are appended below whatever you write,
+# decided is safe to track. Sjel's immutable hard blocks are appended below whatever you write,
 # so a secret-shaped file stays out even if a line here would have let it in.
 #
 # After editing:  tools/ignore-policy render <this overlay>
@@ -10,7 +10,7 @@
 # Never un-ignore a file that contains a real secret value.
 
 # config/ — structure ONLY (never machine.toml, *.env, secrets.zsh, machine.zsh)
-# No machine.toml.example here on purpose: the schema has exactly one home, Axon's
+# No machine.toml.example here on purpose: the schema has exactly one home, Sjel's
 # schemas/machine.toml.example. tools/install.sh writes a real machine.toml from detected
 # values, so an overlay never needs an example of a file it already carries for real.
 !/config/

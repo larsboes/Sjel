@@ -1,8 +1,8 @@
 //! The accounting-engine boundary.
 //!
-//! Axon owns these DTOs and reads the journal itself. The boundary stayed after
+//! Sjel owns these DTOs and reads the journal itself. The boundary stayed after
 //! the engine changed: callers still ask for `check` and `transactions` and
-//! still receive Axon's own types, so replacing the engine under them changed
+//! still receive Sjel's own types, so replacing the engine under them changed
 //! no importer, no analytic and no route.
 //!
 //! Until 2026-08-28 the only implementation shelled out to hledger and parsed
@@ -78,7 +78,7 @@ pub trait AccountingEngine: Send + Sync {
     fn transactions(&self) -> AccountingResult<Vec<JournalTransaction>>;
 }
 
-/// Reads a plaintext journal with Axon's own parser.
+/// Reads a plaintext journal with Sjel's own parser.
 #[derive(Debug, Clone)]
 pub struct JournalEngine {
     journal: PathBuf,

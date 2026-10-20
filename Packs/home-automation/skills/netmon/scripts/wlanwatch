@@ -37,7 +37,7 @@ from pathlib import Path
 OUT = sys.argv[1] if len(sys.argv) > 1 else os.path.expanduser("~/wlanwatch.tsv")
 def _default_gateway():
     """The gateway to probe: $GATEWAY, else whatever the system actually routes through.
-    Never a hardcoded address — this pack keeps house facts out of Axon."""
+    Never a hardcoded address — this pack keeps house facts out of Sjel."""
     if os.environ.get("GATEWAY"):
         return os.environ["GATEWAY"]
     try:

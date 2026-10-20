@@ -1,6 +1,6 @@
 #!/bin/bash
 # tools/protection-zones — verdict coverage, fail-closed behaviour, and the derived Claude
-# deny rules (Axon#147).
+# deny rules (Sjel#147).
 #
 # Every path in here is synthetic and lives in a temp dir. The real policy names material
 # that must not reach a cloud-backed model; a fixture that copied it would be the disclosure

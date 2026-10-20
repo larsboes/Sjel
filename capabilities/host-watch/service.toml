@@ -1,6 +1,6 @@
 # See schemas/service.toml.example for the field reference.
 #
-# The host watch (Axon#177): one pass over the machine's own vital signs, then exit. It
+# The host watch (Sjel#177): one pass over the machine's own vital signs, then exit. It
 # writes a row per finding into its own table in the shared store and nothing at all when
 # the machine is healthy.
 #

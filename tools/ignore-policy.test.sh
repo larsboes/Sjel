@@ -1,6 +1,6 @@
 #!/bin/bash
 # tools/ignore-policy — the renderer, the three failure modes, and what git actually does
-# with the result (Axon#194).
+# with the result (Sjel#194).
 #
 # The behaviour cases run `git check-ignore` against a real temp repository rather than
 # asserting on the text of the generated file. That distinction is the point of the issue: a
@@ -47,14 +47,14 @@ DIR="$(overlay alpha '!/config/' '/config/*' '!/config/.gitkeep')"
 check "renders without an existing .gitignore" "yes" "$([ -f "$DIR/.gitignore" ] && echo yes || echo no)"
 check "the overlay name reaches the header" "1" "$(grep -c 'axon-alpha' "$DIR/.gitignore")"
 
-# Two different allowlists must produce two different files from the same Axon inputs — that
+# Two different allowlists must produce two different files from the same Sjel inputs — that
 # is what makes the allowlist a separate input rather than decoration.
 DIR2="$(overlay beta '!/network/' '/network/*')"
 check "a different allowlist renders a different policy" "no" \
   "$(cmp -s "$DIR/.gitignore" "$DIR2/.gitignore" && echo yes || echo no)"
 # Anchored on the marker line, not on the phrase: the preamble explains the floor in prose and
 # a loose match lands there instead, comparing two headers that legitimately differ by name.
-floor_of() { sed -n '/^# ---- Axon immutable hard blocks/,$p' "$1"; }
+floor_of() { sed -n '/^# ---- Sjel immutable hard blocks/,$p' "$1"; }
 check "both still carry the same immutable floor" "yes" \
   "$( [ "$(floor_of "$DIR/.gitignore")" = "$(floor_of "$DIR2/.gitignore")" ] && echo yes || echo no)"
 

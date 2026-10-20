@@ -1,7 +1,7 @@
 //! Producing a digest for one stored item, whatever source it came from.
 //!
 //! `libs/summarize` owns the ladder, the prompt and the Mermaid gate. This
-//! module owns the three things that are specific to Axon: **where the source
+//! module owns the three things that are specific to Sjel: **where the source
 //! text comes from**, **whether a remote target is allowed to see it**, and
 //! **what has to be removed before the result is written down**.
 //!

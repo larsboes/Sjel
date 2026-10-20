@@ -17,7 +17,7 @@ tools/axon-context with [capability]
 tools/axon-context on [unit-or-path]
 ```
 
-The path is repository-relative: run it from the Sjel checkout. The installed `axon` CLI
+The path is repository-relative: run it from the Sjel checkout. The installed `sjel` CLI
 exposes the same surface as `sjel context with|on`. Read `references/shared-failure-policy.md`
 when any expected tool, overlay, service, graph, or remote is unavailable.
 

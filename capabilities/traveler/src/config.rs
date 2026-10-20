@@ -1,4 +1,4 @@
-//! Config resolution. Axon doctrine: this crate is public, so no personal value
+//! Config resolution. Sjel doctrine: this crate is public, so no personal value
 //! lives here — everything personal comes from the private overlay at runtime,
 //! and in this capability that means the profile rows and nothing else.
 //!

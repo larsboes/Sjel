@@ -2441,9 +2441,9 @@ export default function accordionLive(pi: ExtensionAPI, dependencies: RuntimeDep
 		// already-attached client whose GUI toggle shows "on" gets an explicit `folding:false` to
 		// resync it — connected clients are NOT dropped across a session_start, so without this a
 		// client's toggle could silently drift from the true (now-reset) internal state.
-		// ── LOCAL DELTA against upstream (Axon, 2026-09-16; re-applied 2026-10-01 onto d34b5d0) ──
+		// ── LOCAL DELTA against upstream (Sjel, 2026-09-16; re-applied 2026-10-01 onto d34b5d0) ──
 		// Upstream hardcodes `setFolding(false)` here, i.e. folding is opt-in per session and must be
-		// re-armed in the GUI every time. Axon wants it on by default, so the arm is read from
+		// re-armed in the GUI every time. Sjel wants it on by default, so the arm is read from
 		// `ACCORDION_FOLDING_DEFAULT` (default on) and the conductor from
 		// `ACCORDION_CONDUCTOR_DEFAULT` (default triptych). Both are env vars rather than a code edit
 		// so going back to opt-in is `ACCORDION_FOLDING_DEFAULT=off`, which is the whole reason this
@@ -2714,7 +2714,7 @@ export default function accordionLive(pi: ExtensionAPI, dependencies: RuntimeDep
 	// history (the same `ingestMessages` → `rebuildTruth` structural-divergence path the hooks use —
 	// including conductor resync via `liveHost.dispatchResync()`) and then notifies.
 	pi.on("session_before_compact", (_event, ctx: ExtensionContext) => {
-		// ── LOCAL DELTA against upstream (Axon, 2026-09-16; re-applied 2026-10-01 onto d34b5d0) ──
+		// ── LOCAL DELTA against upstream (Sjel, 2026-09-16; re-applied 2026-10-01 onto d34b5d0) ──
 		// Upstream cancels native compaction whenever folding is armed, unconditionally, with no
 		// overflow escape valve. Its comment says that is deliberate: once folding is armed, Accordion's
 		// budget is meant to be the only thing standing between the session and overflow. That holds

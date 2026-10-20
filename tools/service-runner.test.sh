@@ -12,7 +12,7 @@
 # reparented and keeps the port, so the recorded pid is gone, running_pid() returns nothing,
 # kill_tree never runs, and stop removed the pid file and exited 0 over a live service.
 #
-# Built on the same throwaway-root idea as manifest-resolution.test.sh: a scratch Axon root with
+# Built on the same throwaway-root idea as manifest-resolution.test.sh: a scratch Sjel root with
 # its own overlay and capability manifest, so nothing here touches the real machine's state.
 # The orphan is a real listener on a real port, because the point of the check is that the port
 # is observably held — asserting it against a mock would test the mock.

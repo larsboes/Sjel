@@ -134,7 +134,7 @@ capabilities = ["home-assistant", "vaultwarden"]
 #   # such a host — machine-local by nature, so it cannot live in the tracked service.toml.
 
 # --- state mounts (optional, repeatable) ---------------------------------
-# Where a tool on this machine actually persists data. Axon records the tool's own default
+# Where a tool on this machine actually persists data. Sjel records the tool's own default
 # location, it never relocates it (CONTRIBUTING.md#state-mounts-record-reality).
 # `tool` must match a systems.toml id, or doctor reports an undeclared system.
 #   data_class = "public" | "personal" | "vault"

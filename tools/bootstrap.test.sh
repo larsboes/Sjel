@@ -45,7 +45,7 @@ chmod +x "$REMOTE/tools/install.sh"
 echo "axon" > "$REMOTE/README.md"
 git -C "$REMOTE" init --quiet -b main
 git -C "$REMOTE" config user.email axon-test@example.invalid
-git -C "$REMOTE" config user.name "Axon Test"
+git -C "$REMOTE" config user.name "Sjel Test"
 git -C "$REMOTE" add -A
 git -C "$REMOTE" commit --quiet -m "v9.9.9"
 git -C "$REMOTE" tag v9.9.9

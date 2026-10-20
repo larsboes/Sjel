@@ -22,7 +22,7 @@
 //
 // WHY IT SKIPS, and this is the honest cost: the extensions import pi's packages
 // (@earendil-works/pi-tui, typebox) and pi's types, none of which the bun-tests job can
-// install — that job is deliberately dependency-free (Axon#116), and its comment says
+// install — that job is deliberately dependency-free (Sjel#116), and its comment says
 // every test there imports bun:test, node builtins and local sources only. pi is also
 // where these files can run at all, so the gate opens exactly where the code is live: on a
 // machine with pi installed, visible as a skip anywhere else. A green run on a machine

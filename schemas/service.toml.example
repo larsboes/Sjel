@@ -265,7 +265,7 @@ freshness_stale_hours  = "24"             # past this age nothing is arriving, a
 #                                           # continuously, which leaves an interval nothing to
 #                                           # start. autostart = a service, schedule = a job.
 #                                           #
-#                                           # Declared in Axon because "every 6h" is a property of
+#                                           # Declared in Sjel because "every 6h" is a property of
 #                                           # the capability. WHETHER it runs stays a per-machine
 #                                           # fact in the overlay's enabled set, so a laptop can
 #                                           # carry the declaration switched off while a homeserver

@@ -1,4 +1,4 @@
-//! The profile table, in the shared Axon database under its own prefix.
+//! The profile table, in the shared Sjel database under its own prefix.
 //!
 //! One row per profile id. The whole profile is stored as columns of JSON rather
 //! than as a column per field, deliberately: the profile is read and written

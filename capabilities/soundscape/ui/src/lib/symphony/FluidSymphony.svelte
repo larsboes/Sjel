@@ -414,8 +414,8 @@
         ↓ Bar
       </button>
     {:else}
-      <a href="/" class="back-btn" class:hidden-ui={uiHidden} title="Back to the Axon dashboard">
-        ← Axon Dashboard
+      <a href="/" class="back-btn" class:hidden-ui={uiHidden} title="Back to the Sjel dashboard">
+        ← Sjel Dashboard
       </a>
     {/if}
 

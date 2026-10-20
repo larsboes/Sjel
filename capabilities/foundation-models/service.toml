@@ -1,6 +1,6 @@
 # foundation-models — host process, not a container. Shape: schemas/service.toml.example.
 #
-# Apple's on-device model behind the OpenAI chat-completions shape, so Axon
+# Apple's on-device model behind the OpenAI chat-completions shape, so Sjel
 # reaches it as a backend in inference.json rather than through a binding.
 #
 # MAC ONLY, and there is no manifest field that says so. Capabilities are enabled per machine, so
@@ -21,7 +21,7 @@
 kind        = "process"
 name        = "foundation-models"
 
-# apfel, not a server Axon writes. `upstreams.toml [apfel]` carries the verdict;
+# apfel, not a server Sjel writes. `upstreams.toml [apfel]` carries the verdict;
 # toolchain.toml declares the binary under `needed_by = ["capability:foundation-models"]`, so an
 # enabled capability with the binary missing is reported rather than discovered in a watchdog log.
 #

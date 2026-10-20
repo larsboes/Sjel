@@ -176,7 +176,7 @@ async function main() {
       say("           SKIPPED: pass --vault <root> to compare real projections");
       failures += 1;
     } else {
-      const folder = path.join(root, "Resources", "Axon", "Trips");
+      const folder = path.join(root, "Resources", "Sjel", "Trips");
       const notes = fs.readdirSync(folder).filter((name) => name.endsWith(".md")).sort();
       const counts = {};
       for (const name of notes) {

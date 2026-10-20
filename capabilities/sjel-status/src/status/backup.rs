@@ -162,7 +162,7 @@ pub(crate) fn backup_runs() -> std::sync::MutexGuard<'static, HashMap<String, Ba
 ///
 /// `unknown` when the manifest declares no `backup_stale_days`: this surface will not
 /// invent a cadence for data whose owner did not state one, because a red badge derived
-/// from a number Axon made up is worse than no badge. `never` outranks everything —
+/// from a number Sjel made up is worse than no badge. `never` outranks everything —
 /// a capability with a backup contract and no receipt has the problem, whatever its
 /// thresholds say.
 ///

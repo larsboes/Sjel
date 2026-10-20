@@ -1,6 +1,6 @@
 # host-net-policy.toml — which wildcard listeners are expected on THIS machine.
 #
-# The overlay half of `capabilities/host-net`. Core Axon owns the parsing, the scope
+# The overlay half of `capabilities/host-net`. Core Sjel owns the parsing, the scope
 # classification and the exit codes, and knows no process name; every name below is
 # machine-specific and therefore lives in the active overlay
 # (CONTRIBUTING.md#public-core-and-private-overlays).

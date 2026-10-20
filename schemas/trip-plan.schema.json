@@ -1,7 +1,7 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://axon.local/schemas/trip-plan.schema.json",
-  "title": "Axon Trip Plan",
+  "title": "Sjel Trip Plan",
   "type": "object",
   "required": [
     "id",
@@ -478,7 +478,7 @@
       }
     },
     "bookingPayload": {
-      "description": "What makes a stage's `booked` status mean something. Before this, `booked` was a string the API accepted with nothing behind it: no order reference, no fare name, no refundability, no cancellation deadline. Axon never buys anything, so a booking record is always evidence of a purchase made elsewhere, entered by hand or parsed from a confirmation.",
+      "description": "What makes a stage's `booked` status mean something. Before this, `booked` was a string the API accepted with nothing behind it: no order reference, no fare name, no refundability, no cancellation deadline. Sjel never buys anything, so a booking record is always evidence of a purchase made elsewhere, entered by hand or parsed from a confirmation.",
       "type": "object",
       "required": [
         "provider",

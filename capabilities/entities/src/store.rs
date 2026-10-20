@@ -1,4 +1,4 @@
-//! The entity tables, in the shared Axon database under the `entities` prefix.
+//! The entity tables, in the shared Sjel database under the `entities` prefix.
 //!
 //! Five tables. `fields` is the registry of what each kind has, built-ins seeded on open.
 //! `entities` is one row per person, organisation, place or self. `values` holds the

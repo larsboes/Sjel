@@ -85,7 +85,7 @@ function main(): void {
 
   writeJson(join(OUT_ROOT, ".claude-plugin", "marketplace.json"), {
     name: "axon-packs",
-    description: "Togglable agent-skill bundles mirrored from Axon's harness-neutral Packs (Packs/<name>/pack.toml).",
+    description: "Togglable agent-skill bundles mirrored from Sjel's harness-neutral Packs (Packs/<name>/pack.toml).",
     owner: MARKETPLACE_OWNER,
     metadata: { pluginRoot: "./Packs" },
     plugins: packs.map((name) => ({ name, source: name })),

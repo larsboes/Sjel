@@ -25,7 +25,7 @@
 // Importing this file starts nothing: binding the port and every exit live in
 // main(), behind `import.meta.main`. That is what lets server.test.ts call
 // handleAPI against a planted graph without a port or a running service — a
-// module that exits the process on import cannot be tested at all (Axon#116).
+// module that exits the process on import cannot be tested at all (Sjel#116).
 
 import { existsSync, readFileSync, statSync } from "node:fs";
 import { join } from "node:path";

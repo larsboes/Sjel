@@ -1,7 +1,7 @@
 //! The shared `Opportunity` schema: one type, six kinds (event, scholarship,
 //! career, housing, project, literature), one pipeline. Ported from
 //! LifeOS-mono's `schemas/opportunity` crate and folded in as a module here
-//! (Axon doctrine rule 5: no second crate for ~90 lines used by one
+//! (Sjel doctrine rule 5: no second crate for ~90 lines used by one
 //! consumer -- DRY/minimal over ceremony).
 
 use serde::{Deserialize, Serialize};

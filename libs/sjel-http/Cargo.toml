@@ -4,7 +4,7 @@ version.workspace = true
 edition.workspace = true
 rust-version.workspace = true
 license.workspace = true
-description = "One home for outbound HTTP: the blocking client factory, the user-agent every Axon request carries, and the timeout no caller can forget."
+description = "One home for outbound HTTP: the blocking client factory, the user-agent every Sjel request carries, and the timeout no caller can forget."
 publish = false
 
 [lib]
@@ -13,7 +13,7 @@ path = "src/lib.rs"
 
 [dependencies]
 # The only dependency, and it is the point of the crate. `blocking` because every
-# outbound fetcher in Axon runs inside `spawn_blocking` or a CLI; the async
+# outbound fetcher in Sjel runs inside `spawn_blocking` or a CLI; the async
 # `reqwest::Client` sites in the workspace are all tests plus sjel-status' proxy,
 # and none of them build a client with options worth centralising.
 reqwest = { workspace = true, features = ["blocking"] }

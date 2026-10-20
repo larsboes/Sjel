@@ -4,7 +4,7 @@ version.workspace = true
 edition.workspace = true
 rust-version.workspace = true
 license.workspace = true
-description = "Aggregates live health from Axon's own HTTP-surfaced capabilities (transit-server, scout-server) for dashboard. Not LifeOS Pulse -- see capabilities/sjel-status/README.md."
+description = "Aggregates live health from Sjel's own HTTP-surfaced capabilities (transit-server, scout-server) for dashboard. Not LifeOS Pulse -- see capabilities/sjel-status/README.md."
 publish = false
 
 [[bin]]

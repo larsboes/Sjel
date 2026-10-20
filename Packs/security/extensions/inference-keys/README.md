@@ -63,7 +63,7 @@ second group has a model list at all.
 
 ## Setup
 
-Vault items are Secure Notes in the `Axon` folder, following the convention
+Vault items are Secure Notes in the `Sjel` folder, following the convention
 `tools/materialize-inference-key` already uses:
 
 | provider | vault item |
@@ -112,7 +112,7 @@ source for everything that has not moved.
 
 1. Create a key at <https://ollama.com/settings/keys>.
 2. In Bitwarden, add a Secure Note named `inference-ollama-cloud-api-key` in the
-   `Axon` folder, and paste the key as the only content of the note body.
+   `Sjel` folder, and paste the key as the only content of the note body.
 3. In pi, run `/bw-refresh`. The provider appears with its live model list.
 
 Its `/v1/models` endpoint is public, so the model list is fetched without a key
@@ -124,7 +124,7 @@ rather than requests per minute.
 | command | effect |
 |---|---|
 | `/bw-status` | Vault state, whether the session works, and per provider: `ready`, `found` (item exists, not registered), or `missing`. Also shows the last failure reason. |
-| `/bw-unlock` | Unlocks via the Axon keychain-backed helper, drops cached keys, and re-reads the inventory. |
+| `/bw-unlock` | Unlocks via the Sjel keychain-backed helper, drops cached keys, and re-reads the inventory. |
 | `/bw-refresh` | Drops cached keys, re-reads the inventory, registers anything new, and re-runs model discovery. |
 
 A failed key lookup is reported by pi as `Failed to resolve API key for provider
@@ -139,7 +139,7 @@ is where the actual reason appears.
 | `PI_BW_BIN` | `bw` | Bitwarden CLI binary. |
 | `PI_BW_TIMEOUT_MS` | `8000` | Total budget for a key lookup, including fallback `bw` calls. The extension kills the helper at 9s, so stay under it. |
 | `PI_BW_ADMIN_TIMEOUT_MS` | `30000` | Per-`bw` timeout for the Rust CLI's inventory and status commands. |
-| `PI_BW_FOLDER` | `Axon` | Folder preferred when a name is ambiguous. |
+| `PI_BW_FOLDER` | `Sjel` | Folder preferred when a name is ambiguous. |
 | `PI_BW_CACHE_DIR` | `~/.cache/pi-inference-keys` | Manifest and key cache. Never holds anything else. |
 | `PI_BW_KEY` | unset | Optional override path to the Rust CLI launcher. |
 | `PI_KEYCHAIN` | `1` | Set to `0` to skip the keychain read and use the vault only. Exists to compare the two paths. |
@@ -160,7 +160,7 @@ minute.
 
 The cached file is mode 0600 in `~/.cache/pi-inference-keys`, which is the same
 trust boundary as the Bitwarden session key `bwu` already caches at
-`~/.cache/axon/bw-session`. Run `/bw-refresh` to clear it, or set `PI_BW_TTL=0`
+`~/.cache/sjel/bw-session`. Run `/bw-refresh` to clear it, or set `PI_BW_TTL=0`
 if you would rather not have it at all. If you run `bw serve`, the per-call cost
 drops to milliseconds and `PI_BW_TTL=0` becomes cheap.
 
@@ -181,9 +181,9 @@ the vault's `huggingface.co` site login is *not* used as a Hugging Face token.
 **Duplicated vault items.** This vault holds two copies of several legacy items
 (two `Openrouter API Key`, two `Kimi K2 API Token`, both in a folder named
 `Personal` which itself appears twice). The Rust gateway resolves these
-deterministically: the item in the `Axon` folder wins, otherwise the most
+deterministically: the item in the `Sjel` folder wins, otherwise the most
 recently revised copy. `/bw-status` flags them as ambiguous. Creating
-`inference-<slug>-api-key` items in `Axon` removes the guesswork, and is what
+`inference-<slug>-api-key` items in `Sjel` removes the guesswork, and is what
 `tools/materialize-inference-key` expects anyway.
 
 **A locked vault is not a silent failure.** `bw` exits 0 with empty output when it

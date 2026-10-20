@@ -22,7 +22,7 @@ use crate::harnesses::pi_settings;
 use crate::harnesses::registry::{Harness, Registry};
 
 const CLAUDE_HELP: &str = "\
-tools/packs-claude — materialize Axon Packs into Claude Code.
+tools/packs-claude — materialize Sjel Packs into Claude Code.
 
   tools/packs-claude status [<pack>|--all]  show source/install/drift state
   tools/packs-claude deploy <pack>...       install one or more Packs
@@ -38,7 +38,7 @@ Environment:
 ";
 
 const CODEX_HELP: &str = "\
-tools/packs-codex — materialize Axon Packs.
+tools/packs-codex — materialize Sjel Packs.
 
   tools/packs-codex status [<pack>|--all]  show source/install/drift state
   tools/packs-codex deploy <pack>...       install one or more Packs

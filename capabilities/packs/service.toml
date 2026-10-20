@@ -1,6 +1,6 @@
 # packs — the deployment ledgers: which agent harness holds which Pack, and at what digest.
 #
-# kind = "data" because nothing here starts. The domain is real and bounded — what Axon
+# kind = "data" because nothing here starts. The domain is real and bounded — what Sjel
 # has put into each agent harness on this machine — but its whole implementation is
 # operator machinery that already exists under tools/, exactly as capabilities/backup
 # wraps tools/backup-all.sh without carrying a line of its own. What was missing was an
@@ -19,8 +19,8 @@
 # directory rather than a file list precisely so the count does not matter to a restore.
 #
 # Each ledger records, per deployed unit, the source
-# path inside Axon and the digest that was installed. Nothing backed them up. Losing one
-# does not lose a skill — the copies stay on disk — it loses the PROOF that Axon put them
+# path inside Sjel and the digest that was installed. Nothing backed them up. Losing one
+# does not lose a skill — the copies stay on disk — it loses the PROOF that Sjel put them
 # there, so every deployed skill reads as an unowned collision and each Pack has to be
 # re-adopted by hand, one at a time, and only while every copy is still byte-identical to
 # its source. A drifted copy cannot be adopted at all.

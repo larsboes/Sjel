@@ -1,4 +1,4 @@
-//! Shared config resolution for Axon's Rust capabilities. Public crate, Axon
+//! Shared config resolution for Sjel's Rust capabilities. Public crate, Sjel
 //! doctrine: no personal value lives here — everything personal comes from the
 //! private overlay at runtime via `SJEL_PERSONAL_ROOT`.
 //!
@@ -60,7 +60,7 @@ pub fn overlay_data_dir(capability: &str) -> Option<PathBuf> {
 /// The last resort is deliberately a scratch path rather than a plausible one.
 /// The Postgres fallback named the real database and the demo overlay resolved
 /// to it: the only thing standing between a demo seeding run and the live store
-/// was that the real password was not the word `axon`. A fallback that looks
+/// was that the real password was not the word `sjel`. A fallback that looks
 /// like production is worse than one that obviously is not.
 /// Nothing is created here; `sjel_store::pool_for` makes the directory when a
 /// caller actually opens the file.

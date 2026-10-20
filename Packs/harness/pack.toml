@@ -5,7 +5,7 @@
 # every session (trim), whether every harness still matches the Packs that feed it (harness-sync),
 # and how to operate or change Sjel itself (sjel, formerly axon).
 #
-# `axon` was merged in here on 2026-09-17. It was a one-skill Pack whose jobs were already
+# `sjel` was merged in here on 2026-09-17. It was a one-skill Pack whose jobs were already
 # deployed alongside these three in every profile that held either, and both are the same
 # subject: the agent system looking at itself. Authoring the content of a skill stays
 # Packs/writing (skill-creator) — see README.md#the-boundary.
@@ -15,6 +15,6 @@
 name        = "harness"
 description = "Keep the agent system and its repository in shape: operate and change Sjel, propose the skills the recorded work actually needs, shrink what loads into every session, and keep every harness in step with the Packs that feed it."
 skills      = ["sjel", "suggest-skills", "trim", "harness-sync"]
-# `axon` became `sjel` on 2026-09-26 with the product rename; the ledger removes the old copy.
+# `sjel` became `sjel` on 2026-09-26 with the product rename; the ledger removes the old copy.
 retired_skills = ["axon"]
 license     = "MIT"

@@ -8,9 +8,9 @@ pub struct ImportOutcome {
     pub google_event_id: String,
     pub title: String,
     pub action: Action,
-    /// The Axon entry, once there is one.
+    /// The Sjel entry, once there is one.
     pub entry_id: Option<String>,
-    /// Set when Axon's version won: what Google now says, so the divergence is
+    /// Set when Sjel's version won: what Google now says, so the divergence is
     /// visible instead of silently dropped.
     pub google_says: Option<Value>,
 }
@@ -40,7 +40,7 @@ pub struct ImportReport {
 
 /// The status of one Google event in the review-before-import surface.  This
 /// is intentionally more cautious than the unattended import: a person must
-/// see why an event is not selectable before Axon writes even a draft.
+/// see why an event is not selectable before Sjel writes even a draft.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
 #[serde(rename_all = "kebab-case")]
 pub enum ReviewStatus {
@@ -167,8 +167,8 @@ pub(super) fn candidate_for(
             candidate.status = ReviewStatus::AlreadyInAxon;
             candidate.reason = Some(
                 match google::decide(event, existing) {
-                    Action::RefreshDraft => "Already imported as an Axon draft",
-                    Action::KeepAxonVersion => "Already adopted in Axon; Axon keeps its version",
+                    Action::RefreshDraft => "Already imported as an Sjel draft",
+                    Action::KeepAxonVersion => "Already adopted in Sjel; Sjel keeps its version",
                     _ => unreachable!("handled above"),
                 }
                 .into(),

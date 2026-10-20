@@ -2,7 +2,7 @@
 # check-bun-install-policy.sh — the frontend install boundary must never execute lifecycle hooks,
 # and every tree that resolves dependencies must carry the npm-only adoption hold.
 #
-# ChainDrop used an npm preinstall hook, before the dependency tree had finished installing. Axon's
+# ChainDrop used an npm preinstall hook, before the dependency tree had finished installing. Sjel's
 # frontend packages are fully resolved by committed Bun lockfiles, and nothing that installs them
 # needs lifecycle hooks. Keep that invariant in every place that performs or teaches a frontend
 # dependency install.

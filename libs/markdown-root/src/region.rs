@@ -1,7 +1,7 @@
 //! A marked region a machine may regenerate, inside a file a human owns.
 //!
 //! `capabilities/trips/README.md` specified this in prose a month before anything
-//! implemented it: regenerate only a marked Axon-owned section, preserve
+//! implemented it: regenerate only a marked Sjel-owned section, preserve
 //! everything outside it, and record a conflict rather than choosing between two
 //! changed revisions. Every capability that wants to write back to a knowledge
 //! store needs the same primitive, so it lives here rather than inside `trips`.
@@ -9,9 +9,9 @@
 //! ## The shape on disk
 //!
 //! ```text
-//! <!-- axon:begin owner=finance v=1 sha=1a2b3c4d5e6f7890 -->
+//! <!-- sjel:begin owner=finance v=1 sha=1a2b3c4d5e6f7890 -->
 //! anything the machine generated
-//! <!-- axon:end owner=finance -->
+//! <!-- sjel:end owner=finance -->
 //! ```
 //!
 //! HTML comments because Obsidian renders them as nothing, so the note stays
@@ -80,7 +80,7 @@ pub enum RegionError {
     /// Two complete regions for one owner. Which one is authoritative is not a
     /// question this crate gets to answer.
     Duplicate { owner: String, line: usize },
-    /// An `axon:begin` line missing `owner=`. Without it the region belongs to
+    /// An `sjel:begin` line missing `owner=`. Without it the region belongs to
     /// nobody and no caller can claim it.
     MalformedOpener { line: usize },
 }

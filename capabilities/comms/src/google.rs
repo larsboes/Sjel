@@ -27,7 +27,7 @@ const TOKEN_URL: &str = "https://oauth2.googleapis.com/token";
 const THREADS_URL: &str = "https://gmail.googleapis.com/gmail/v1/users/me/threads";
 const LABELS_URL: &str = "https://gmail.googleapis.com/gmail/v1/users/me/labels";
 
-/// The only label Axon creates, and the doctrine's stated ceiling: one state
+/// The only label Sjel creates, and the doctrine's stated ceiling: one state
 /// label, no topic labels. `Finance`, `University`, `Newsletters` and friends
 /// are deliberately absent — a topic label is a second classification competing
 /// with the stream a thread already has, and the two drift.
@@ -546,7 +546,7 @@ fn valid_thread_id(id: &str) -> bool {
 
 /// Apply one deliberately small Gmail mutation. Archive removes only the
 /// INBOX label. Trash uses Gmail's recoverable Trash operation; restore either
-/// adds INBOX back or uses untrash. Axon never calls permanent delete.
+/// adds INBOX back or uses untrash. Sjel never calls permanent delete.
 pub fn apply_thread_action(token: &str, id: &str, action: ThreadAction) -> Result<()> {
     if !valid_thread_id(id) {
         return Err(CommsError::Other("invalid Gmail thread id".into()));

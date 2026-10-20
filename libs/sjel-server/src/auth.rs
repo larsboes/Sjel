@@ -762,7 +762,7 @@ async fn admit_device(
 }
 
 /// `Authorization: Bearer <token>` first, then `X-Sjel-Token: <token>` (or the legacy
-/// `X-Axon-Token`, which the gate renames to it first).
+/// `X-Sjel-Token`, which the gate renames to it first).
 ///
 /// Two header forms because two kinds of client call these ports: HTTP tooling
 /// and proxies that already speak `Authorization`, and the browser extension /

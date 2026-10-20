@@ -7,7 +7,7 @@
 //! > Add or revise a judgement from its meaning and rationale before looking at
 //! > a model's score. Never tune a label merely to turn a failing model green.
 //!
-//! `multilingual-e5-base-mlx` and `bge-reranker-v2-m3-mlx` entered Axon by
+//! `multilingual-e5-base-mlx` and `bge-reranker-v2-m3-mlx` entered Sjel by
 //! clearing a corpus like this one; `multilingual-e5-small-mlx` and both Apple
 //! native embedding variants did not, and their failing runs are still on disk
 //! as evidence. No engine enters the extraction ladder any other way

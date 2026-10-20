@@ -1,4 +1,4 @@
-# tools/lib/test-support.sh — shared helpers for Axon's shell tests.
+# tools/lib/test-support.sh — shared helpers for Sjel's shell tests.
 #
 # Two rules so far, and both earned a place here for the same reason: each is an assumption a
 # test makes that nobody can see failing.
@@ -11,7 +11,7 @@
 # platform-dependent assertion is not unusual, so the guard belongs to the convention rather
 # than to that one test.
 #
-# The second: a test that builds a scratch Axon root must not inherit the SJEL_* environment.
+# The second: a test that builds a scratch Sjel root must not inherit the SJEL_* environment.
 # Same shape, opposite direction — green in CI, red only on the machine of whoever exported the
 # variables. See isolate_axon_env below.
 #

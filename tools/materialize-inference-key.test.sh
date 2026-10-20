@@ -14,7 +14,7 @@ cat > "$FAKE_BIN/bw" <<'EOF'
 case "$1 $2" in
   "status ") printf '{"status":"%s","serverUrl":"%s"}\n' "${BW_FAKE_STATUS:-unlocked}" "${BW_FAKE_SERVER:-https://vault.test}" ;;
   "sync --session") ;;
-  "list folders") printf '[{"id":"folder-1","name":"Axon"}]\n' ;;
+  "list folders") printf '[{"id":"folder-1","name":"Sjel"}]\n' ;;
   "list items") printf '[{"id":"item-1","name":"inference-gemini-api-key"}]\n' ;;
   "get item") printf '{"id":"item-1","type":2}\n' ;;
   "get notes") printf 'synthetic-test-key\n' ;;

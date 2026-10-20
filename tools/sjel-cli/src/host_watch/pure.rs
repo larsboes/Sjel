@@ -3,7 +3,7 @@
 //!
 //! No I/O, no clock and no policy file — `mod.rs` owns all three. The cases `tools/host-watch.test.ts`
 //! held live here as Rust unit tests, and every fixture row below is a real measurement from
-//! the 2026-08-15 incident (Axon#177) rather than an invented number, because the whole
+//! the 2026-08-15 incident (Sjel#177) rather than an invented number, because the whole
 //! question this tool answers is "which of these two processes is the runaway" and the honest
 //! answer is only interesting when both rows look alarming.
 //!
@@ -333,7 +333,7 @@ fn fmt_bytes(b: f64) -> String {
 
 /// The volume state is the finding; a large class is not.
 ///
-/// Decided in Axon#177 against the tempting alternative. A large class dir — the cargo target
+/// Decided in Sjel#177 against the tempting alternative. A large class dir — the cargo target
 /// dir runs tens of GB — is not a finding on a machine with plenty free, and alerting on it
 /// would mean this watcher's FIRST run produced a task nobody needed, which is precisely how a
 /// watcher gets muted. The class breakdown stays what it already was: what `sysmon storage`
@@ -438,7 +438,7 @@ pub fn net_finding(report: Option<&NetReport>) -> Option<Finding> {
 ///
 /// The generation used to be packed into the id as `{key}~{n}` because `tasks` gave this watcher
 /// one string field to key on, and parsing that string back out is where the two bugs of
-/// Axon#177 lived — a `#` separator truncated the PATCH path, and without any separator
+/// Sjel#177 lived — a `#` separator truncated the PATCH path, and without any separator
 /// `cpu:Storage` claimed `cpu:StorageManagementService`'s history. Owning the table makes both
 /// unrepresentable: `key` and `generation` are columns, and the comparison below is exact by
 /// construction rather than by choosing a lucky character.
@@ -657,7 +657,7 @@ mod tests {
 
     #[test]
     fn an_over_flag_class_on_a_healthy_volume_stays_silent() {
-        // The fixture carries flagged: true, which is the decision Axon#177 made.
+        // The fixture carries flagged: true, which is the decision Sjel#177 made.
         assert_eq!(storage_finding(&storage("ok", 140_000_000_000.0)), None);
     }
 
@@ -746,7 +746,7 @@ mod tests {
         );
     }
 
-    /// The Axon#177 bug a packed `{key}~{n}` id made possible: `cpu:Storage` is a prefix of
+    /// The Sjel#177 bug a packed `{key}~{n}` id made possible: `cpu:Storage` is a prefix of
     /// `cpu:StorageManagementService`, so a startsWith comparison gave one condition the other's
     /// history. `key` is a column now, so this is exact — the test stays because the guarantee
     /// is what matters, not how it is obtained.

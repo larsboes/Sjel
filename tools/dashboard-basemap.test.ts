@@ -114,7 +114,7 @@ describe("basemapUrl", () => {
 
   test("sends an unvendored range upstream through an absolute URL", () => {
     expect(
-      basemapUrl("https://lars.example.ts.net/Axon/basemap/fonts/Noto%20Sans%20Bold/1024-1279.pbf", vendored),
+      basemapUrl("https://lars.example.ts.net/Sjel/basemap/fonts/Noto%20Sans%20Bold/1024-1279.pbf", vendored),
     ).toBe("https://tiles.openfreemap.org/fonts/Noto%20Sans%20Bold/1024-1279.pbf");
   });
 

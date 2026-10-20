@@ -287,7 +287,7 @@ pub(crate) static REGISTRY_CACHE: OnceLock<Mutex<Option<RegistrySnapshot>>> = On
 /// The shell call underneath costs ~440ms on this machine — `tools/lib/toml.sh` forks a
 /// grep and a sed per key per manifest, ~12 manifests × 9 keys — and every handler here
 /// starts with it, including the `/capabilities` the dashboard's layout polls every 15s
-/// on every page. That put ~440ms of dead time in front of every Axon page for an answer
+/// on every page. That put ~440ms of dead time in front of every Sjel page for an answer
 /// that changes only when somebody edits a file.
 ///
 /// Two concurrent misses may both run the script. That is left alone deliberately: the

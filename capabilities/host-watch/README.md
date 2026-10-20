@@ -5,7 +5,7 @@ line. Most runs print one line and write nothing, and that silence is the produc
 
 ## Why it exists
 
-Two host conditions were invisible until they hurt, and both did on 2026-08-15 (Axon#177).
+Two host conditions were invisible until they hurt, and both did on 2026-08-15 (Sjel#177).
 
 A System Settings Storage pane got stuck at 08:35 and ran until it was killed at 17:52.
 `ApplicationsStorageExtension` burned **3h29m of CPU** in that window; the only symptom
@@ -118,7 +118,7 @@ an hourly run starts no interpreter; `tools/host-watch` is the path a person and
 
 ## Why it is a manifest and not a LaunchAgent
 
-Same reason as macmon, learned the same way (Axon#65): a hand-written unit versions its
+Same reason as macmon, learned the same way (Sjel#65): a hand-written unit versions its
 interval nowhere and needs a doctor exemption that removes the only check that would
 notice it is gone. `schedule = "1h"` renders launchd or systemd through
 `tools/service-runner.sh install-persistence` like everything else.

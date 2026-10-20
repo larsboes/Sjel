@@ -3,7 +3,7 @@
 // framework it stands on is systems.toml [apple-vision]).
 //
 // Adopted verbatim from the implementation that produced the 2026-08-31
-// measurement, so the engine recorded there and the engine Axon runs are the
+// measurement, so the engine recorded there and the engine Sjel runs are the
 // same binary. Only this header is new.
 //
 // PROTOCOL. Reads one file path per line on stdin. Emits, per input, one line:

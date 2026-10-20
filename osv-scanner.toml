@@ -1,6 +1,6 @@
 # Temporary informational-advisory exceptions. Both carry an expiry; known vulnerabilities
 # remain blocking regardless. osv-scanner enforces these dates itself, and names an entry it
-# no longer honours under `unused ignores` — which is why Axon stopped carrying a clock of its
+# no longer honours under `unused ignores` — which is why Sjel stopped carrying a clock of its
 # own on 2026-09-02 (Q74).
 #
 # THIS FILE IS THE REPOSITORY SCAN'S, and CI reads it. That is why the rule above holds here

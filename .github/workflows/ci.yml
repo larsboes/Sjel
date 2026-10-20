@@ -33,7 +33,7 @@ jobs:
     name: cargo fmt + clippy
     runs-on: ubuntu-latest
     steps:
-      - name: Check out Axon
+      - name: Check out Sjel
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - name: cargo fmt --all --check
         run: cargo fmt --all --check
@@ -45,7 +45,7 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      - name: Check out Axon
+      - name: Check out Sjel
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
       # Fetched artifacts: the crates.io registry and any git dependencies. Keyed
@@ -92,17 +92,17 @@ jobs:
         run: cargo test --workspace --locked
 
   # One rootward `bun test`, not a list of directories. The list said ./tools/ and
-  # Packs/axon/evals/, which is how dashboard/vite/comms-proxy-auth.test.ts and
+  # Packs/sjel/evals/, which is how dashboard/vite/comms-proxy-auth.test.ts and
   # libs/overlay/overlay.test.ts came to run nowhere: both were written, committed, and
   # never once executed by CI. bun discovers *.test.ts itself and skips node_modules, so a
-  # test file added anywhere is gated by existing (Axon#116). No install step: every one of
+  # test file added anywhere is gated by existing (Sjel#116). No install step: every one of
   # these imports bun:test, node builtins and local sources only, which is what keeps a
   # dependency-free runner honest.
   bun-tests:
     name: bun test
     runs-on: ubuntu-latest
     steps:
-      - name: Check out Axon
+      - name: Check out Sjel
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - name: Set up Bun
         uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2
@@ -147,7 +147,7 @@ jobs:
           node smoke.mjs
 
       # Every tools/*.test.sh, discovered rather than listed — a hand-list is how a committed
-      # test comes to run nowhere (the Axon#116 shape, again). They all drive real scripts
+      # test comes to run nowhere (the Sjel#116 shape, again). They all drive real scripts
       # against throwaway roots under /tmp, and this job has bun on PATH for the ones
       # (service-runner, doctor-driving) that need it. Ran as Bazel sh_test targets until
       # PRD Q44 (2026-08-25) retired Bazel; this loop is their one home since.
@@ -203,8 +203,8 @@ jobs:
         run: node --test scripts/*.test.mjs
 
   # Svelte type checks, local-only until 2026-07 and dashboard-only until now: a type
-  # regression could land on main unseen (Axon#41), and a capability that grows its own UI
-  # was unchecked from the day it landed (Axon#139 — the knowledge-graph UI carried six
+  # regression could land on main unseen (Sjel#41), and a capability that grows its own UI
+  # was unchecked from the day it landed (Sjel#139 — the knowledge-graph UI carried six
   # errors while this workflow reported green).
   #
   # The set is discovered, never listed: `tools/discover-ui-packages` reads committed
@@ -215,7 +215,7 @@ jobs:
     name: bun run check (every discovered UI)
     runs-on: ubuntu-latest
     steps:
-      - name: Check out Axon
+      - name: Check out Sjel
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - name: Set up Bun
         uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2
@@ -228,7 +228,7 @@ jobs:
       # reports that failure, so the first run of this job came back with 31 errors in 31
       # files — one per file, none of them type errors.
       #
-      # A runner IS a machine, and Axon's contract is that a machine has an overlay, so the
+      # A runner IS a machine, and Sjel's contract is that a machine has an overlay, so the
       # honest fix is to give it the minimal one rather than to make the config tolerate its
       # absence. No sjel.local.toml is written: with none present, paths.sh falls back to
       # sjel.toml's shipped default (~/.axon-overlay), which is what this creates.
@@ -324,7 +324,7 @@ jobs:
             exit 1
           fi
 
-  # Repo-level gates, run directly rather than through tools/doctor (Axon#41).
+  # Repo-level gates, run directly rather than through tools/doctor (Sjel#41).
   #
   # Why the scripts and not `doctor`: most of doctor's checks are machine-level — overlay
   # reachability, machine.toml, declared state mounts, upstream network — and a fresh clone
@@ -334,7 +334,7 @@ jobs:
   #
   # tools/self check runs here now. It used to read `tools/capability.sh registry`, which merges
   # this machine's machine.toml overrides and hard-fails without one -- so its answer was
-  # machine-specific by construction and it stayed a doctor-only check (Axon#7). It reads the
+  # machine-specific by construction and it stayed a doctor-only check (Sjel#7). It reads the
   # service.toml manifests directly since, which makes the committed artifact reproducible from a
   # fresh clone and this the right place for it. Bun is set up for that one step; the other two
   # gates are pure shell.
@@ -342,7 +342,7 @@ jobs:
     name: repo gates (labels, tracked inputs)
     runs-on: ubuntu-latest
     steps:
-      - name: Check out Axon
+      - name: Check out Sjel
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - name: Generator inputs are tracked
         run: tools/check-generator-inputs-tracked.sh

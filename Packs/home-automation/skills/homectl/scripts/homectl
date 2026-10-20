@@ -3,7 +3,7 @@
 # requires-python = ">=3.11"          # tomllib is stdlib from 3.11
 # dependencies = ["pyyaml"]
 # ///
-"""homectl — MATERIALIZER for the Axon `home-assistant` capability.
+"""homectl — MATERIALIZER for the Sjel `home-assistant` capability.
 
 The selected overlay ships the automation TEMPLATES (`capabilities/home-assistant/
 automations/*.yaml.tmpl`) carrying only `%%TOKENS%%` — never a real entity ID — and the
@@ -11,9 +11,9 @@ component lockfile beside them. The real values live in ONE gitignored overlay f
 (`config/home-assistant.vars`). homectl fills the templates from that map at build time
 and vendors the pinned components.
 
-Templates and lockfile sit in the overlay rather than in Axon because which automations
+Templates and lockfile sit in the overlay rather than in Sjel because which automations
 exist and which third-party components run describes one building, and the set of them is
-an inventory even where every value is a token. Axon keeps the mechanism: service.toml,
+an inventory even where every value is a token. Sjel keeps the mechanism: service.toml,
 TEMPLATING.md, the automation doctrine, the .example scaffolding.
 
 Three subcommands:
@@ -32,7 +32,7 @@ Derived projections (from the single OVERRIDE_MAP = [{entity, timer}] list):
   %%JSON:OVERRIDE_MAP%%       -> the JSON object {"<entity>": "<timer>", ...}
 
 Doctrine: zero hardcoded paths (every path is an arg, defaulted from env or the script's
-own location), and nothing instance-shaped is ever written into public Axon.
+own location), and nothing instance-shaped is ever written into public Sjel.
 """
 
 from __future__ import annotations
@@ -87,14 +87,14 @@ def _home_overlay_root() -> Path:
 
 SJEL_HOME_ROOT = _home_overlay_root()
 
-# The templates and the component lockfile live in the OVERLAY, not in public Axon. Both
+# The templates and the component lockfile live in the OVERLAY, not in public Sjel. Both
 # describe what a particular house has — which automations exist, which third-party
 # components run — and the set of them is an inventory even though every value is a
-# %%TOKEN%% and every pin is a public repo. Axon keeps the mechanism:
+# %%TOKEN%% and every pin is a public repo. Sjel keeps the mechanism:
 # service.toml, TEMPLATING.md, the doctrine, and the .example scaffolding.
 DEF_CAPS = SJEL_HOME_ROOT / "capabilities/home-assistant"
 DEF_VARS = SJEL_HOME_ROOT / "config/home-assistant.vars"
-DEF_OUT = SJEL_HOME_ROOT / "build/home-assistant"          # instance-specific output — never public Axon
+DEF_OUT = SJEL_HOME_ROOT / "build/home-assistant"          # instance-specific output — never public Sjel
 DEF_COMPONENTS = DEF_CAPS / "components.toml"
 # Home Assistant's own config root inside the overlay — the directory bind-mounted to /config.
 # Both vendor destinations hang off it. They used to hang off config/ directly, one level too
@@ -580,7 +580,7 @@ def main() -> int:
     m.add_argument("--caps", default=str(DEF_CAPS), help=f"capability dir (default: {DEF_CAPS})")
     m.add_argument("--vars", default=str(DEF_VARS), help=f"overlay vars file (default: {DEF_VARS})")
     m.add_argument("--out", default=str(DEF_OUT),
-                   help=f"output dir — instance/build, NEVER public Axon (default: {DEF_OUT})")
+                   help=f"output dir — instance/build, NEVER public Sjel (default: {DEF_OUT})")
     m.set_defaults(func=cmd_materialize)
 
     c = sub.add_parser("components", help="clone + vendor pinned components, YAML packages and dashboard resources (build-time)")

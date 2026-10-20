@@ -29,7 +29,7 @@ graphify-out/
 # Per-machine harness settings, for the same reason graphify-out/ above is ignored:
 # they name absolute tool paths on one workstation. The graphify hook-guard that was
 # tracked here until 2026-08-02 pointed at a global `graphify` install that
-# upstreams.toml's [graphify] entry deliberately excludes from Axon, so shipping it
+# upstreams.toml's [graphify] entry deliberately excludes from Sjel, so shipping it
 # would have bound a public clone to exactly the uncontrolled version that entry
 # argues against. The graphify *instruction* is project doctrine and stays in
 # CLAUDE.md and AGENTS.md; the binary path enforcing it is machine state.

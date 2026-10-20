@@ -232,7 +232,7 @@ const ROUTES: &[route_manifest::Route] = &[
     r(
         "POST",
         "/triage/reconcile",
-        "Reconcile Axon's mail state against Gmail.",
+        "Reconcile Sjel's mail state against Gmail.",
     ),
     r(
         "POST",
@@ -1041,7 +1041,7 @@ mod tests {
     #[tokio::test]
     async fn a_wrong_token_is_rejected_too() {
         let base = serve(Some("s3cret")).await;
-        for header in [("Authorization", "Bearer wrong"), ("X-Axon-Token", "wrong")] {
+        for header in [("Authorization", "Bearer wrong"), ("X-Sjel-Token", "wrong")] {
             let response = reqwest::Client::new()
                 .post(format!("{base}/ingest"))
                 .header(header.0, header.1)
@@ -1109,7 +1109,7 @@ mod tests {
 
             let allowed = client
                 .get(format!("{base}{path}"))
-                .header("X-Axon-Token", "s3cret")
+                .header("X-Sjel-Token", "s3cret")
                 .send()
                 .await
                 .unwrap();

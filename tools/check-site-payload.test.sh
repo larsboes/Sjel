@@ -86,7 +86,7 @@ expect_pass "a reserved documentation address and a loopback URL"
 
 # The runner's own home is a portable public example, not somebody's machine — the same
 # exemption tools/check-publication-hygiene.sh makes for it.
-plant build.log 'built in /home/runner/work/Axon/Axon'
+plant build.log 'built in /home/runner/work/Sjel/Sjel'
 expect_pass "a CI runner home path"
 
 # Regression: the derived half used to fire on github.com, because an overlay's systems file

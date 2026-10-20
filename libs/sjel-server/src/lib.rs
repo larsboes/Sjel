@@ -935,7 +935,7 @@ mod http_tests {
         );
         for (name, value) in [
             ("Authorization", "Bearer s3cret"),
-            ("X-Axon-Token", "s3cret"),
+            ("X-Sjel-Token", "s3cret"),
         ] {
             let response = client
                 .get(format!("{base}/api/thing"))

@@ -23,7 +23,7 @@ mod checks;
 pub(crate) mod overlay;
 pub mod pure;
 
-const HELP: &str = "tools/doctor — health checks for an already-set-up Axon machine.
+const HELP: &str = "tools/doctor — health checks for an already-set-up Sjel machine.
 
   tools/doctor            full report, offline (no GitHub calls)
   tools/doctor --online   also probe declared systems and fetch origin/main
@@ -116,7 +116,7 @@ pub fn run(args: &[String]) -> ExitCode {
         failed: 0,
         out: String::new(),
     };
-    println!("Axon doctor · {}", root.display());
+    println!("Sjel doctor · {}", root.display());
     checks::run_all(&mut ctx);
     println!();
     if ctx.failed == 0 {

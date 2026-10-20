@@ -78,7 +78,7 @@ pub fn rewrite_reimbursement(
     let replacement = render_reimbursement(candidate, expense_source_id)?;
     rewrite_owned_entry(journal, candidate, &replacement, |block| {
         let current = tag(block, "axon-reimbursement-for")
-            .ok_or_else(|| ImportError("journal entry is not an Axon reimbursement".into()))?;
+            .ok_or_else(|| ImportError("journal entry is not an Sjel reimbursement".into()))?;
         render_reimbursement(candidate, current)
     })
 }
@@ -239,7 +239,7 @@ where
     let block = owned_block(journal, candidate)?;
     if render_current(block)? != block {
         return Err(ImportError(
-            "Axon-owned journal entry drifted from its recorded allocation".into(),
+            "Sjel-owned journal entry drifted from its recorded allocation".into(),
         ));
     }
     Ok((journal.replacen(block, replacement, 1), true))
@@ -257,7 +257,7 @@ fn owned_block<'a>(journal: &'a str, candidate: &TransactionCandidate) -> Import
     );
     let start = journal[..marker_at]
         .rfind(&header)
-        .ok_or_else(|| ImportError("Axon-owned journal entry header is absent".into()))?;
+        .ok_or_else(|| ImportError("Sjel-owned journal entry header is absent".into()))?;
     let marker_end = marker_at + marker.len();
     let end = journal[marker_end..]
         .find("\n\n")
@@ -268,7 +268,7 @@ fn owned_block<'a>(journal: &'a str, candidate: &TransactionCandidate) -> Import
 fn parse_expense(block: &str) -> ImportResult<ExpenseAllocation> {
     let purpose = tag(block, "axon-purpose")
         .and_then(SpendingPurpose::parse)
-        .ok_or_else(|| ImportError("journal entry has no valid Axon purpose".into()))?;
+        .ok_or_else(|| ImportError("journal entry has no valid Sjel purpose".into()))?;
     let personal_cents = tag(block, "axon-own-cents")
         .and_then(|value| value.parse().ok())
         .ok_or_else(|| ImportError("journal entry has no valid personal share".into()))?;

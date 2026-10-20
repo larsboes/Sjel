@@ -5,7 +5,7 @@
 # `+refs/tags/<tag>:refs/tags/<tag>` and therefore NO origin/main ref — a property of real
 # cloning, not of any directory you can construct by hand.
 #
-# The remote here is a scratch repository built from the tracked update path, not the Axon
+# The remote here is a scratch repository built from the tracked update path, not the Sjel
 # checkout: a test that pulled from the developer's own working tree would pass or fail
 # depending on what they had uncommitted.
 set -uo pipefail
@@ -32,7 +32,7 @@ echo "demo" > "$REMOTE/capabilities/demo/README.md"
 
 git -C "$REMOTE" init --quiet -b main
 git -C "$REMOTE" config user.email axon-test@example.invalid
-git -C "$REMOTE" config user.name "Axon Test"
+git -C "$REMOTE" config user.name "Sjel Test"
 git -C "$REMOTE" add -A
 git -C "$REMOTE" commit --quiet -m "v0.0.1"
 git -C "$REMOTE" tag v0.0.1

@@ -1,8 +1,8 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://axon.local/schemas/axon-sync.schema.json",
-  "title": "Axon node-neutral synchronization protocol",
-  "description": "Portable mutations, acknowledgements, revisions and conflicts for an offline-capable Axon device and canonical node. The protocol does not assume that the canonical node is a Mac.",
+  "title": "Sjel node-neutral synchronization protocol",
+  "description": "Portable mutations, acknowledgements, revisions and conflicts for an offline-capable Sjel device and canonical node. The protocol does not assume that the canonical node is a Mac.",
   "$defs": {
     "node_id": {
       "type": "string",

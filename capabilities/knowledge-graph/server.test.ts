@@ -8,7 +8,7 @@
 // documented route promises, not the contents of any particular graph.
 //
 // One assertion per documented route plus the two failure paths a caller actually hits: no
-// graph on disk, and an unknown node. That is the whole surface README.md and Axon#116
+// graph on disk, and an unknown node. That is the whole surface README.md and Sjel#116
 // claim, which is what makes this a closure condition rather than coverage for its own
 // sake.
 // Run: bun test capabilities/knowledge-graph/server.test.ts

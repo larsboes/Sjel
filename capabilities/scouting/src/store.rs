@@ -583,7 +583,7 @@ pub struct SourceState {
 pub struct ProposedSource {
     pub id: String,
     /// Which adapter would read it, if it were ever declared. Not validated
-    /// against `create_adapter`'s arms on the way in: a hub on a platform Axon
+    /// against `create_adapter`'s arms on the way in: a hub on a platform Sjel
     /// has no adapter for yet is exactly the kind of thing worth remembering,
     /// and refusing it would throw away the note to write the adapter.
     pub adapter: String,

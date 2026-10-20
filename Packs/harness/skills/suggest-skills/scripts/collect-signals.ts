@@ -12,7 +12,7 @@
 //   bun collect-signals.ts [--days N] [--history PATH] [--skills DIR]... [--packs DIR]... [--json]
 //
 // Defaults: 30 days, $HOME/.claude/history.jsonl, $HOME/.claude/skills, and the
-// Axon Packs root when $SJEL_ROOT is set.
+// Sjel Packs root when $SJEL_ROOT is set.
 
 import { existsSync, readFileSync, readdirSync, statSync } from "node:fs";
 import { basename, join } from "node:path";

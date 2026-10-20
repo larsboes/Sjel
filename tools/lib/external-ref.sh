@@ -2,7 +2,7 @@
 # tools/lib/external-ref.sh — the one resolver for a capability this machine CONSUMES but
 # does not RUN (retired-tracker#169).
 #
-# Axon's default is loopback: a capability is a process on this host, and every consumer
+# Sjel's default is loopback: a capability is a process on this host, and every consumer
 # computes http://127.0.0.1:<port>. That default is right often enough that it was never
 # written down as an assumption — until a vault moved to another host owned by another
 # overlay, and the tools that needed its address each grew their own lookup.
@@ -14,7 +14,7 @@
 #
 # Two files rather than one because they answer two different questions. machine.toml is
 # already where "what does THIS machine run" lives, so "and this one it doesn't, someone
-# else does" belongs beside it. systems.local.toml is already the private half of Axon's
+# else does" belongs beside it. systems.local.toml is already the private half of Sjel's
 # systems map, and the address has a home there — putting a URL in machine.toml too would
 # be two homes for one fact. The indirection also buys provenance: `provided_by` names WHO
 # provides it, and the id is free to differ from the capability name.

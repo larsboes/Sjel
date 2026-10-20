@@ -7,7 +7,7 @@
 // THE STEP LIST IS NOT WRITTEN DOWN HERE. It is read out of .github/workflows/ci.yml,
 // because a second copy of a gate list is a copy that goes stale — the same argument
 // ci.yml already makes for discovering `tools/*.test.sh` with a glob rather than listing
-// them (Axon#116). Add a gate to the repo-gates job and it runs here on the next
+// them (Sjel#116). Add a gate to the repo-gates job and it runs here on the next
 // invocation, with nobody editing this file.
 //
 // What is safe to replay locally is a judgement, not a derivation, and it lives in

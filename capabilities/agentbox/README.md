@@ -233,7 +233,7 @@ that intercepted `pi update|upgrade|self-update` and refused them. It existed to
 version literal: a self-updating binary replaced the file on disk and left `profile.toml`'s
 `version` and `archive_sha256_*` describing software the machine had stopped running — which
 happened here, `pi update` about 15h after a release, with the pin written afterwards to
-describe an adoption that had already occurred (Axon#126). Those literals are deleted, and this
+describe an adoption that had already occurred (Sjel#126). Those literals are deleted, and this
 launcher now resolves the latest release on every build and install. The shim would be refusing
 the outcome the ruling asks for, so it is removed rather than left as a rule with nothing behind
 it. `<host-root>/bin/<agent>` is a plain symlink through `current` now.

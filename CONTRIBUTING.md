@@ -494,16 +494,16 @@ part of an argument, but it must not claim a changing count that no gate verifie
 
 ### Public CLI
 
-`axon` is the public command interface for humans and agents. Run `sjel help` to discover
+`sjel` is the public command interface for humans and agents. Run `sjel help` to discover
 operations and `sjel search <task>` to narrow the current capability and Pack surface without an
 installed agent skill. Repository policy lives in `AGENTS.md`; command help and capability or Pack
 contracts own operational detail.
 
-There is deliberately no separate CLI reference. `docs/axon-cli.md` was one, and every row of it
+There is deliberately no separate CLI reference. `docs/sjel-cli.md` was one, and every row of it
 restated something `sjel help` already prints — a command table, the harness names, the discovery
 instruction `AGENTS.md` carries verbatim. A second copy of a generated surface is the kind of doc
 that rots first and is believed longest. `tools/install.sh` owns the installation contract: it
-links `~/.local/bin/axon` to the tracked launcher, never overwrites a non-Sjel command at that
+links `~/.local/bin/sjel` to the tracked launcher, never overwrites a non-Sjel command at that
 path, and reports the exact shell-path action when `~/.local/bin` is absent from `PATH`.
 
 ## Releases

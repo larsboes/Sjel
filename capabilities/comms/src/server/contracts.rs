@@ -296,9 +296,9 @@ pub(super) struct TriageOut {
     pub(super) gmail_sync_action: Option<String>,
     pub(super) gmail_sync_error: Option<String>,
     /// The doctrine's one state label. Rendered as a badge rather than folded into
-    /// `status`: status is what Axon decided about a proposal, waiting is what the
+    /// `status`: status is what Sjel decided about a proposal, waiting is what the
     /// operator decided about the conversation, and collapsing them would make
-    /// "I replied and I'm blocked" indistinguishable from "Axon dismissed it".
+    /// "I replied and I'm blocked" indistinguishable from "Sjel dismissed it".
     pub(super) waiting: bool,
     pub(super) waiting_since: Option<String>,
     /// The mail evaluator's `overall_score` in basis points, 0..=10000 — the

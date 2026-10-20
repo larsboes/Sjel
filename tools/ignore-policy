@@ -1,5 +1,5 @@
 #!/bin/bash
-# tools/ignore-policy — render and verify a private overlay's default-deny .gitignore (Axon#194).
+# tools/ignore-policy — render and verify a private overlay's default-deny .gitignore (Sjel#194).
 #
 # Every private overlay runs the same doctrine: ignore everything, allow only reviewed paths,
 # and keep hard blocks for secret-shaped files no allowlist may reach. Hand-maintaining that
@@ -7,7 +7,7 @@
 # their own copy, and nothing compares them.
 #
 # The split:
-#   Axon owns    templates/overlay-ignore/preamble     the deny-all and the ordering contract
+#   Sjel owns    templates/overlay-ignore/preamble     the deny-all and the ordering contract
 #                templates/overlay-ignore/hard-blocks  the immutable floor, always last
 #   the overlay owns  .ignore-allowlist                what it has reviewed and wants tracked
 #
@@ -17,7 +17,7 @@
 #
 # Exit 0 = clean, 1 = violation, 2 = usage error. bash 3.2-safe (CONTRIBUTING.md#portable-shell).
 #
-# What this deliberately does NOT do: migrate an existing overlay. Axon#194 puts that in each
+# What this deliberately does NOT do: migrate an existing overlay. Sjel#194 puts that in each
 # overlay's own repository, with its allowlist reviewed by whoever owns that deployment.
 
 set -u
@@ -30,9 +30,9 @@ TPL="${SJEL_IGNORE_TEMPLATES:-$_here/templates/overlay-ignore}"
 PREAMBLE="$TPL/preamble"
 HARD_BLOCKS="$TPL/hard-blocks"
 
-# The marker that separates the overlay's section from Axon's floor. Emitted by render and
+# The marker that separates the overlay's section from Sjel's floor. Emitted by render and
 # located by check — one string, so the two can never disagree about where the floor starts.
-FLOOR_MARKER="# ---- Axon immutable hard blocks — nothing may follow this line ----"
+FLOOR_MARKER="# ---- Sjel immutable hard blocks — nothing may follow this line ----"
 
 die() { echo "ignore-policy: $*" >&2; exit 2; }
 fail() { echo "  ✗ $*" >&2; VIOLATIONS=$((VIOLATIONS + 1)); }
@@ -48,13 +48,13 @@ render_policy() {
   local overlay="$1" allowlist name
   allowlist="$overlay/.ignore-allowlist"
   [ -f "$allowlist" ] || die "no allowlist at $allowlist
-  An overlay declares what it has reviewed; Axon supplies the deny-all and the floor.
+  An overlay declares what it has reviewed; Sjel supplies the deny-all and the floor.
   Create it — even an empty one is a valid claim (allow nothing beyond the always-safe files)."
   name="$(overlay_name "$overlay")"
 
   sed "s/__OVERLAY_NAME__/$name/g" "$PREAMBLE"
   echo
-  echo "# 3) reviewed allowlist — owned by this overlay, not by Axon"
+  echo "# 3) reviewed allowlist — owned by this overlay, not by Sjel"
   # Comments and blank lines survive: the reasoning for an un-ignore is the most valuable
   # thing in the file, and a generator that strips it teaches people to keep it nowhere.
   cat "$allowlist"

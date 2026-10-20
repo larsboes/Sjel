@@ -5,7 +5,7 @@ edition = "2021"
 rust-version = "1.77.2"
 license = "AGPL-3.0-only"
 links = "tauri-plugin-foundation-models"
-description = "Optional on-device Apple Foundation Models backend for the Axon iOS app."
+description = "Optional on-device Apple Foundation Models backend for the Sjel iOS app."
 publish = false
 
 [lib]

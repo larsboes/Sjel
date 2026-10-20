@@ -1,5 +1,5 @@
 #!/bin/bash
-# tools/install.sh — first-time Axon setup. Detects OS, resolves where the
+# tools/install.sh — first-time Sjel setup. Detects OS, resolves where the
 # private overlay (axon-overlay) lives, scaffolds or clones it, writes this
 # machine's machine.toml, then hands off to the harness-specific Pack
 # deployers for optional activation.
@@ -24,7 +24,7 @@ esac
 
 source "$TOOLS_DIR/lib/toml.sh"
 
-# Write only the one safety setting Axon owns in the laptop-wide Bun config. Do not put the
+# Write only the one safety setting Sjel owns in the laptop-wide Bun config. Do not put the
 # scanner here: Bun requires a configured scanner to be a dependency of every project, so a
 # global scanner block would break unrelated checkouts. This function preserves every other
 # line and key in an existing file; it only creates or replaces [install].minimumReleaseAge.
@@ -89,7 +89,7 @@ install_git_hooks() {
   done
 }
 
-# `sjel` is the public human/agent interface, and `axon` is its earlier name (a symlink in the
+# `sjel` is the public human/agent interface, and `sjel` is its earlier name (a symlink in the
 # checkout), so installation puts both launchers in the conventional user bin directory. Never
 # replace an unrelated command: an existing non-symlink requires an explicit operator decision
 # instead of silently changing their PATH behavior.
@@ -119,7 +119,7 @@ esac
 SJEL_LOCAL_TOML="$SJEL_ROOT/sjel.local.toml"
 SKELETON="$TOOLS_DIR/templates/overlay-skeleton"
 
-echo "Axon installer"
+echo "Sjel installer"
 echo "==============="
 
 # Which profile this checkout IS, read off the checkout rather than passed in — bootstrap.sh
@@ -129,7 +129,7 @@ echo "==============="
 # have, #58), so say it once, here, instead of letting it be discovered as a malfunction.
 if [ "$(git -C "$SJEL_ROOT" rev-parse --is-shallow-repository 2>/dev/null)" = "true" ]; then
   echo "Profile: usage — shallow clone pinned to $(git -C "$SJEL_ROOT" describe --tags 2>/dev/null || echo 'a tag')."
-  echo "  To change Axon rather than run it, promote this checkout:"
+  echo "  To change Sjel rather than run it, promote this checkout:"
   echo "    git -C \"$SJEL_ROOT\" config remote.origin.fetch '+refs/heads/*:refs/remotes/origin/*'"
   echo "    git -C \"$SJEL_ROOT\" fetch --unshallow origin"
 elif git -C "$SJEL_ROOT" rev-parse --git-dir >/dev/null 2>&1; then
@@ -217,8 +217,8 @@ else
       for f in "$OVERLAY_PATH/README.md" "$OVERLAY_PATH/.ignore-allowlist"; do
         [ -f "$f" ] && sed -i.bak "s/__OVERLAY_NAME__/$OVERLAY_NAME/g" "$f" && rm -f "$f.bak"
       done
-      # .gitignore is generated, not copied (Axon#194). The skeleton ships only the allowlist —
-      # what this overlay has reviewed — and Axon renders the deny-all above it and the
+      # .gitignore is generated, not copied (Sjel#194). The skeleton ships only the allowlist —
+      # what this overlay has reviewed — and Sjel renders the deny-all above it and the
       # immutable hard blocks below it. Two overlays hand-maintaining the same floor is exactly
       # how that floor drifts, and `tools/ignore-policy check` is what notices.
       "$TOOLS_DIR/ignore-policy" render "$OVERLAY_PATH" \
@@ -253,7 +253,7 @@ else
   fi
   cat > "$MACHINE_TOML" <<EOF
 # This machine's identity — every fact that is true of THIS deployment instance and
-# not of Axon itself. One overlay is one instance, which is why this file can afford
+# not of Sjel itself. One overlay is one instance, which is why this file can afford
 # to describe exactly one machine. See
 # schemas/machine.toml.example.
 
@@ -285,7 +285,7 @@ EOF
   echo "Wrote $MACHINE_TOML"
 fi
 
-# 4.5) Host toolchain report — is every tool Axon's own scripts assume actually installed?
+# 4.5) Host toolchain report — is every tool Sjel's own scripts assume actually installed?
 # Report-only: a fresh box legitimately installs tools as it goes, so a missing required
 # tool prints its install hint but never aborts the setup (the `|| true` is load-bearing
 # under `set -e`). Runs here because the container runtime is now known (freshly chosen
@@ -384,8 +384,8 @@ else
   echo "  Non-interactive — skipped. Later: tools/agent-integrations.sh install --all-configured"
 fi
 
-# 7) Laptop-wide Bun/npm resolution policy — opt-in because this affects projects outside Axon.
-# The two Axon UI trees carry the same 24-hour hold in tracked bunfig.toml files. This optional
+# 7) Laptop-wide Bun/npm resolution policy — opt-in because this affects projects outside Sjel.
+# The two Sjel UI trees carry the same 24-hour hold in tracked bunfig.toml files. This optional
 # copy covers other projects on THIS machine and is deliberately hold-only: the Socket scanner
 # cannot be global because Bun requires it to be installed in each project's dependencies.
 # Never ask on a non-TTY; CI and piped installs must not hang on a machine-policy prompt.

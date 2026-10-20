@@ -1,4 +1,4 @@
-//! Axon doctrine: this crate is public. No personal value (interest-profile
+//! Sjel doctrine: this crate is public. No personal value (interest-profile
 //! content, events-directory path, DB location) lives here -- those come
 //! from the private overlay at runtime. Mirrors
 //! `capabilities/printing/printctl.py`'s `_cfg_path()`/`load_cfg()` exactly.

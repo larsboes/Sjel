@@ -1,6 +1,6 @@
 #!/usr/bin/env bun
 /**
- * Axon · comms capability — one-time Google OAuth bootstrap.
+ * Sjel · comms capability — one-time Google OAuth bootstrap.
  *
  * Reads the Desktop OAuth client JSON from the macOS login keychain or
  * Bitwarden/Vaultwarden (never hardcoded), runs a loopback consent flow for the Gmail + Calendar
@@ -19,7 +19,7 @@ import { readFileSync, writeFileSync, mkdirSync, chmodSync } from "node:fs";
 import { join } from "node:path";
 import { overlayRoot } from "../../../libs/overlay/overlay.ts";
 
-const BW_ITEM = "Axon Google OAuth 2.0 Client IDs";
+const BW_ITEM = "Sjel Google OAuth 2.0 Client IDs";
 
 /** `--env <file>` and repeatable `--scope <name>`. Defaults are the comms grant, unchanged.
  *  capabilities/entities mints its own token with `--env entities.env --scope
@@ -53,7 +53,7 @@ type OAuthClient = { client_id: string; client_secret: string; token_uri: string
  * The OAuth client JSON from the macOS login keychain, as a generic password whose service
  * is BW_ITEM. Apple Passwords (the iCloud Keychain) is not readable by `security`, so the
  * item is copied into the login keychain once, by hand:
- *   security add-generic-password -a axon -s "Axon Google OAuth 2.0 Client IDs" -U -w
+ *   security add-generic-password -a sjel -s "Sjel Google OAuth 2.0 Client IDs" -U -w
  * (`-w` last with no value makes `security` prompt, so the JSON never enters shell history.)
  * Returns null when there is no such item, so Bitwarden stays the fallback.
  */
@@ -180,7 +180,7 @@ const code = await new Promise<string>((resolve) => {
       if (c) {
         resolve(c);
         setTimeout(() => server.stop(), 150);
-        return new Response("✅ Axon: consent received — you can close this tab.", {
+        return new Response("✅ Sjel: consent received — you can close this tab.", {
           headers: { "content-type": "text/plain; charset=utf-8" },
         });
       }

@@ -7,7 +7,7 @@
 //!
 //! ## Why this exists
 //!
-//! Axon's HTTP surface grew five conventions across seven capabilities: `/api/…`
+//! Sjel's HTTP surface grew five conventions across seven capabilities: `/api/…`
 //! behind a proxy, bare paths, self-prefixed `/api/<name>/…`, and transit
 //! serving both `/health` and `/api/health`. Renaming all of that is churn with
 //! a large blast radius; **not being able to find out what exists** was the

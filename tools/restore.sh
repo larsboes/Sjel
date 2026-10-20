@@ -1,5 +1,5 @@
 #!/bin/bash
-# Restore and verify one tools/backup.sh archive without writing into live Axon state.
+# Restore and verify one tools/backup.sh archive without writing into live Sjel state.
 # The extracted tree remains for inspection; a database in it is opened read-only and
 # checked against the contents the archive recorded. Bash 3.2-safe.
 set -euo pipefail
@@ -146,7 +146,7 @@ fi
 
 SJEL_REAL="$(cd "$SJEL_ROOT" && pwd -P)"
 OVERLAY_REAL="$(cd "$SJEL_PERSONAL_ROOT" 2>/dev/null && pwd -P || true)"
-path_within "$DEST" "$SJEL_REAL" && fail "destination may not be inside the Axon checkout"
+path_within "$DEST" "$SJEL_REAL" && fail "destination may not be inside the Sjel checkout"
 [ -n "$OVERLAY_REAL" ] && path_within "$DEST" "$OVERLAY_REAL" \
   && fail "destination may not be inside the active private overlay"
 # Refused BEFORE the destination exists, for the reason the container preflight this replaces
@@ -163,7 +163,7 @@ path_within "$DEST" "$SJEL_REAL" && fail "destination may not be inside the Axon
 # for the archive it is written for. tools/pipe.test.sh is the gate on that, and it caught this
 # line when the container preflight it replaced was removed.
 if tar -tzf "$ARCHIVE" 2>/dev/null | stream_matches -E '(^|/)pg_dumpall\.sql$'; then
-  fail "this archive carries a PostgreSQL dump, and the capability that produced it was retired on 2026-08-27 (PRD Q45). Verify it with the Axon revision that still declares the image"
+  fail "this archive carries a PostgreSQL dump, and the capability that produced it was retired on 2026-08-27 (PRD Q45). Verify it with the Sjel revision that still declares the image"
 fi
 
 case "$DEST_NEEDS_CREATE" in
@@ -213,13 +213,13 @@ if [ -n "$META_MEMBER" ]; then
   # refused for that reason would be refused precisely when it is needed. The version question
   # is answered by reading the two digests, which is a human's call and not a gate.
   [ "$IMAGE:$TAG" = "$CURRENT_IMAGE:$CURRENT_TAG" ] \
-    || fail "archive was taken from '$IMAGE:$TAG'; this manifest declares '$CURRENT_IMAGE:$CURRENT_TAG' — use the matching Axon revision"
+    || fail "archive was taken from '$IMAGE:$TAG'; this manifest declares '$CURRENT_IMAGE:$CURRENT_TAG' — use the matching Sjel revision"
   [ "$SQLITE_REL:$SQLITE_ONLINE_REL" = "$CURRENT_SQLITE:$CURRENT_SQLITE_ONLINE" ] \
-    || fail "archive database contract differs from the current tracked manifest; use the matching Axon revision"
+    || fail "archive database contract differs from the current tracked manifest; use the matching Sjel revision"
   [ "$(toml_array backup_paths "$WORK/axon-backup.toml")" = "$(toml_array backup_paths "$MANIFEST")" ] \
-    || fail "archive path contract differs from the current tracked manifest; use the matching Axon revision"
+    || fail "archive path contract differs from the current tracked manifest; use the matching Sjel revision"
   [ "$(toml_array backup_container_paths "$WORK/axon-backup.toml")" = "$(toml_array backup_container_paths "$MANIFEST")" ] \
-    || fail "archive container-path contract differs from the current tracked manifest; use the matching Axon revision"
+    || fail "archive container-path contract differs from the current tracked manifest; use the matching Sjel revision"
 else
   [ "$ALLOW_LEGACY" -eq 1 ] || fail "archive has no axon-backup.toml; pass --allow-legacy only for a known pre-format archive"
   case "$(basename "$ARCHIVE")" in

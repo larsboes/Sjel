@@ -8,8 +8,8 @@ persistent unit. Containers use the runtime's restart policy rather than a secon
 
 The [persistence renderer](../../tools/sjel-cli/src/persist.rs) writes macOS user agents under
 `~/Library/LaunchAgents/com.sjel.<name>.plist`. Linux uses user units under
-`${XDG_CONFIG_HOME:-~/.config}/systemd/user/`, with `axon-<name>.service` and, for scheduled jobs,
-`axon-<name>.timer`. These filenames are generated contracts, including the retained `axon` prefix.
+`${XDG_CONFIG_HOME:-~/.config}/systemd/user/`, with `sjel-<name>.service` and, for scheduled jobs,
+`sjel-<name>.timer`. These filenames are generated contracts, including the retained `sjel` prefix.
 
 ## Plist structure & invariants
 

@@ -16,7 +16,7 @@ describe("parseJobs", () => {
       workflow(`  repo-gates:
     runs-on: ubuntu-latest
     steps:
-      - name: Check out Axon
+      - name: Check out Sjel
         uses: actions/checkout@v5
       - name: Publication hygiene
         run: tools/check-publication-hygiene.sh

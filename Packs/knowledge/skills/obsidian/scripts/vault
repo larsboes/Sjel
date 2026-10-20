@@ -46,7 +46,7 @@ def overlay_root() -> Path:
         # pulled and re-run tools/install.sh yet still has only those.
         for candidate in (
             Path.home() / "Developer/Sjel/sjel.local.toml",
-            Path.home() / "Developer/Axon/sjel.local.toml",
+            Path.home() / "Developer/Sjel/sjel.local.toml",
             Path.home() / "Developer/Axon/axon.local.toml",
         ):
             if candidate.exists():
@@ -79,12 +79,12 @@ def cmd_root(_args) -> None:
 def cmd_contract(_args) -> None:
     # Ruled 2026-09-07 (contract §2 conv. 6): the law lives in the umbrella project's
     # Knowledge-Base/ and graduates to Knowledge/Meta/Vault/ if the umbrella ever archives.
-    # The umbrella folder moved from Projects/Axon/ to Projects/Sjel/ on 2026-10-08. Check
+    # The umbrella folder moved from Projects/Sjel/ to Projects/Sjel/ on 2026-10-08. Check
     # the current home first, then the former and next homes, so a vault that predates or
     # outlives either move still answers.
     candidates = [
         vault_root() / "Projects/Sjel/Knowledge-Base/Vault-Contract.md",
-        vault_root() / "Projects/Axon/Knowledge-Base/Vault-Contract.md",
+        vault_root() / "Projects/Sjel/Knowledge-Base/Vault-Contract.md",
         vault_root() / "Knowledge/Meta/Vault/Vault-Contract.md",
         vault_root() / "Projects/Soma/Vault-Contract.md",
     ]

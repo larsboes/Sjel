@@ -13,7 +13,7 @@ health_path = "/json"
 routes_absent = "upstream binary (vladkens/macmon); serves /json only"
 
 # Why ${SJEL_PORT} rather than the literal: macmon takes its port on argv and cannot read
-# the SJEL_PORT env var an Axon-owned process would. Writing 9911 twice — once here, once
+# the SJEL_PORT env var an Sjel-owned process would. Writing 9911 twice — once here, once
 # in `port` above — would let the machine.toml override move one and not the other, and
 # the dashboard proxies whatever `port` says. One fact, one home.
 #

@@ -57,9 +57,9 @@ a marked Sjel-owned section, preserve everything outside it, and record a confli
 rather than choosing between two changed revisions.
 
 ```text
-<!-- axon:begin owner=finance v=1 sha=1a2b3c4d5e6f7890 -->
+<!-- sjel:begin owner=finance v=1 sha=1a2b3c4d5e6f7890 -->
 anything the machine generated
-<!-- axon:end owner=finance -->
+<!-- sjel:end owner=finance -->
 ```
 
 HTML comments, so Obsidian renders them as nothing. The owner sits on both markers,
@@ -87,7 +87,7 @@ shared rather than per-capability, which is why it is here and not in `trips`.
 The file carries a header instead of markers:
 
 ```text
-<!-- axon:projection owner=trips v=1 -->
+<!-- sjel:projection owner=trips v=1 -->
 <!-- Sjel generates this file and overwrites it whole. … -->
 ```
 

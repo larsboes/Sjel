@@ -104,16 +104,16 @@ const HEARTBEAT = `<script>
  */
 const shellPort = process.env.SJEL_SHELL_PORT ?? "";
 const BACKLINK = /^\d+$/.test(shellPort)
-  ? `<a id="axon-back" href="#" title="Back to Axon">← Axon</a>
+  ? `<a id="axon-back" href="#" title="Back to Sjel">← Sjel</a>
 <style>
-#axon-back {
+#sjel-back {
   position: fixed; left: 1rem; bottom: 1rem; z-index: 2147483647;
   padding: .4rem .7rem; border-radius: 999px;
   font: 500 12px/1 ui-sans-serif, system-ui, sans-serif; text-decoration: none;
   color: #e6f6ff; background: rgba(15, 23, 42, .82); border: 1px solid rgba(56, 189, 248, .45);
   backdrop-filter: blur(6px); opacity: .55; transition: opacity .15s ease;
 }
-#axon-back:hover, #axon-back:focus-visible { opacity: 1; }
+#sjel-back:hover, #sjel-back:focus-visible { opacity: 1; }
 @media print { #axon-back { display: none; } }
 </style>
 <script>

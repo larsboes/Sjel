@@ -1,5 +1,5 @@
 #!/bin/bash
-# capabilities/host-firewall — what the renderer produces from declared inputs (Axon#193).
+# capabilities/host-firewall — what the renderer produces from declared inputs (Sjel#193).
 #
 # The render layer is the whole of what this repository can honestly test: applying rules to a
 # real host is the overlay's work by the issue's own boundary, and this machine is a Mac with

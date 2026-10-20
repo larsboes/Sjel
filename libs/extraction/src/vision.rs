@@ -62,7 +62,7 @@ const UNIT_SEPARATOR: char = '\u{1f}';
 /// deliberately not this rung's input, even a scanned one:
 /// `NSImage(contentsOfFile:)` renders page one of a PDF and nothing else
 /// (`tools/visocr/visocr.swift`), so accepting the class would mean returning
-/// one page's text under a `producer` claiming the document was read. Axon has
+/// one page's text under a `producer` claiming the document was read. Sjel has
 /// no rasterizer, and a silent truncation is the exact failure this crate exists
 /// to prevent, so the honest boundary is that rung 2 reads pixels. Rasterizing a
 /// PDF into pages is a named follow-up, not something to fake here.

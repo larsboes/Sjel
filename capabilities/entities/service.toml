@@ -1,6 +1,6 @@
 # See schemas/service.toml.example for the field reference.
 #
-# The entity core, PRD Q117 (2026-09-25): Axon is the system of record for people,
+# The entity core, PRD Q117 (2026-09-25): Sjel is the system of record for people,
 # organisations, places and the operator's own context. Obsidian, Google Contacts and TELOS
 # are adapters. Serves C2 (facts about named people), so no CORS; the dashboard reaches it
 # through its same-origin proxy.

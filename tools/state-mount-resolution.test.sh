@@ -37,7 +37,7 @@ isolate_axon_env
 
 fails=0
 
-# plant <mounts-toml> [machine-name] -> echoes the planted Axon root.
+# plant <mounts-toml> [machine-name] -> echoes the planted Sjel root.
 #
 # Each call gets its own mktemp dir rather than a counter: plant runs inside a command
 # substitution, so any variable it increments is lost with that subshell. An earlier version

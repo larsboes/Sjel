@@ -87,12 +87,12 @@ fn entries() -> Vec<Entry> {
         One("Doctrine freshness (README why-blocks)", doctrine_freshness),
         One("Self-model freshness (self.json)", self_model),
         One(
-            "Architecture-generator input visibility (Axon#30)",
+            "Architecture-generator input visibility (Sjel#30)",
             generator_inputs,
         ),
         One("Service manifests (both roots)", service_manifests),
         One("Publication hygiene (tracked tree)", publication_hygiene),
-        One("UI type-check coverage (Axon#139)", ui_coverage),
+        One("UI type-check coverage (Sjel#139)", ui_coverage),
         One("Host patch (capabilities/host-patch)", host_patch),
         One(
             "Container refresh (capabilities/container-refresh)",
@@ -386,7 +386,7 @@ fn machine_identity(ctx: &mut Ctx) {
     }
     for s in strays {
         ctx.bad(format!(
-            "{} duplicates schemas/machine.toml.example — delete it and drop its .gitignore allowlist line; the schema lives in Axon only",
+            "{} duplicates schemas/machine.toml.example — delete it and drop its .gitignore allowlist line; the schema lives in Sjel only",
             s.display()
         ));
     }
@@ -553,7 +553,7 @@ fn inference_roles(ctx: &mut Ctx) {
                 ""
             };
             ctx.warn(format!(
-                "{}: {} on {} — {}{cost}. Axon does not supervise a systems.toml tool (see [{}]); start it, or point the role elsewhere.",
+                "{}: {} on {} — {}{cost}. Sjel does not supervise a systems.toml tool (see [{}]); start it, or point the role elsewhere.",
                 f("role"),
                 f("model"),
                 f("backend"),
@@ -799,7 +799,7 @@ fn enabled_set(ctx: &mut Ctx) {
     }
     if all_present {
         ctx.ok(format!(
-            "{} enabled, every one a real capabilities/<name>/ dir in Axon or the overlay",
+            "{} enabled, every one a real capabilities/<name>/ dir in Sjel or the overlay",
             enabled.len()
         ));
     }
@@ -2622,7 +2622,7 @@ fn session_orientation(ctx: &mut Ctx) {
 
 /// `tools/doctor --version`: installed against origin/main, read-only.
 pub fn print_version(root: &Path, online: bool) {
-    println!("Axon doctor --version · {}", root.display());
+    println!("Sjel doctor --version · {}", root.display());
     if online {
         capture(
             Command::new("git")

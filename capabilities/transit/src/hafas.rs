@@ -7,9 +7,9 @@
 //!
 //! **Not ported from the original: ONNX delay-risk prediction.** The source
 //! service loaded a `tract-onnx` model (`infra/data/model.onnx`) to fill
-//! `Journey.delay_risk_score`. Axon has no such model artifact -- the
+//! `Journey.delay_risk_score`. Sjel has no such model artifact -- the
 //! source monorepo's delay-training pipeline was rated quarry-for-patterns-only
-//! in the original migration evaluation and has now been removed from Axon.
+//! in the original migration evaluation and has now been removed from Sjel.
 //! Carrying `tract-onnx` (a heavy dependency) plus hand-rolled date
 //! math for a field that would only ever return a constant 0.15 fallback is
 //! the exact "machinery with nothing behind it" anti-pattern this repo
@@ -129,7 +129,7 @@ pub fn is_regional_leg(category: &str, train_name: &str) -> bool {
 }
 
 // Spoofed real-browser UA sent to bahn.de -- kept deliberately, not
-// genericized to a self-identifying "Axon-Transit/0.1" string. This mirrors
+// genericized to a self-identifying "Sjel-Transit/0.1" string. This mirrors
 // `capabilities/scouting/src/adapters/meetup.rs`'s precedent, not the
 // self-identifying-UA one (source.rs/cfp_conferences/luma): this endpoint is
 // undocumented and ungated only because it looks like normal browser

@@ -5,7 +5,7 @@ edition = "2021"
 rust-version = "1.77.2"
 license = "AGPL-3.0-only"
 links = "tauri-plugin-local-network"
-description = "Bonjour discovery of an Axon node on the local network, for the Axon iOS app."
+description = "Bonjour discovery of an Sjel node on the local network, for the Sjel iOS app."
 publish = false
 
 [lib]

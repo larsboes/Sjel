@@ -1,6 +1,6 @@
 #!/bin/bash
 # Test for axon_manifest_for in tools/lib/paths.sh — the one place that turns a
-# capability name into a manifest path. Builds a throwaway Axon root and a throwaway
+# capability name into a manifest path. Builds a throwaway Sjel root and a throwaway
 # overlay beside it, then asserts each resolution case.
 #
 # The cases exist because getting any of them wrong is silent: a missed overlay root

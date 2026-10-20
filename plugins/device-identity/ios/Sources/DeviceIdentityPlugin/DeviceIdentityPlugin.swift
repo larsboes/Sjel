@@ -37,13 +37,13 @@ private enum DeviceIdentityError: LocalizedError {
   var errorDescription: String? {
     switch self {
     case .keychainRead(let status):
-      return "Could not read the Axon signing key from Keychain (status \(status))."
+      return "Could not read the Sjel signing key from Keychain (status \(status))."
     case .keychainWrite(let status):
-      return "Could not store the Axon signing key in Keychain (status \(status))."
+      return "Could not store the Sjel signing key in Keychain (status \(status))."
     case .keychainDelete(let status):
-      return "Could not remove the Axon signing key from Keychain (status \(status))."
+      return "Could not remove the Sjel signing key from Keychain (status \(status))."
     case .invalidStoredKey:
-      return "The Axon signing key in Keychain is invalid."
+      return "The Sjel signing key in Keychain is invalid."
     }
   }
 }

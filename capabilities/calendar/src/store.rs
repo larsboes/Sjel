@@ -329,7 +329,7 @@ impl CalendarStore {
         )?)
     }
 
-    /// External contributions that still need an Axon decision, except Google
+    /// External contributions that still need an Sjel decision, except Google
     /// imports. Google has its own inbox because its refresh/ownership rules
     /// are special; all other providers share the ordinary Calendar proposal
     /// flow. A user-created `possible` block is intentionally not a proposal.
@@ -371,7 +371,7 @@ impl CalendarStore {
 
     /// The entry a provider contributed under this key, if any. Phase E's
     /// conflict policy has to read before it writes — `upsert_external_entry`
-    /// overwrites unconditionally, and "Axon wins" means deciding *not* to
+    /// overwrites unconditionally, and "Sjel wins" means deciding *not* to
     /// call it. Reads the same `(source, external_id)` pair that index is
     /// unique on, so there is at most one.
     pub fn get_entry_by_external(
@@ -443,7 +443,7 @@ impl CalendarStore {
 
     /// Idempotent contribution boundary for Feed/Scouting/Google and future
     /// providers. A stable `(source, external_id)` updates the contributed
-    /// entry in place while preserving its Axon id and original `created_at`.
+    /// entry in place while preserving its Sjel id and original `created_at`.
     /// Manual CRUD stays on `create_entry` and never acquires upsert semantics.
     pub fn upsert_external_entry(&self, input: &NewEntry) -> StoreResult<Entry> {
         input.validate()?;
@@ -1551,7 +1551,7 @@ mod db_tests {
 
         input.title = "Meetup (renamed upstream)".into();
         let second = store.upsert_external_entry(&input).unwrap();
-        assert_eq!(second.id, first.id, "the Axon id survives a re-import");
+        assert_eq!(second.id, first.id, "the Sjel id survives a re-import");
         assert_eq!(second.title, "Meetup (renamed upstream)");
         assert_eq!(
             second.commitment,

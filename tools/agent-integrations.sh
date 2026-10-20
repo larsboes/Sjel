@@ -4,7 +4,7 @@
 #
 # Some upstreams ship an editor/agent integration alongside the tool: a skill, a hook, a
 # plugin. graphify is the first, and `graphify install --platform <p>` covers nineteen
-# harnesses. This script drives those installers instead of Axon keeping a copy of what
+# harnesses. This script drives those installers instead of Sjel keeping a copy of what
 # they emit.
 #
 # It resolved a version from upstreams.toml `pin` until 2026-09-02 (Q77). That field is
@@ -73,8 +73,8 @@ source "$_ai_lib/paths.sh"
 # not by this script.
 INTEGRATIONS="graphify interceptor"
 
-# Harnesses Axon knows how to detect, and where each keeps its global config.
-# graphify's --platform vocabulary is much longer; these are the ones Axon has an
+# Harnesses Sjel knows how to detect, and where each keeps its global config.
+# graphify's --platform vocabulary is much longer; these are the ones Sjel has an
 # opinion about. Adding one is a row here plus, if it needs a delta, a case in
 # post_install().
 harness_command() {
@@ -121,7 +121,7 @@ ASSISTANT_INTEGRATION_STATE_FILE=".graphify-upstream-installed"
 
 # ── graphify ────────────────────────────────────────────────────────────────
 # `uv tool run --from graphifyy` and NOT the bare `graphify` on PATH — the interactive skill
-# upgrades that one for its own purposes and Axon's runs would ride along; `--from` keeps
+# upgrades that one for its own purposes and Sjel's runs would ride along; `--from` keeps
 # them in their own ephemeral environment. Same reasoning, and the same invocation shape, as
 # tools/graphify.sh. See upstreams.toml [graphify].
 

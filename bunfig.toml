@@ -1,7 +1,7 @@
 # bunfig.toml — Bun's config. One section so far, and one reason for it.
 #
-# Bazel dropped convenience symlinks at the workspace root (bazel-Axon, bazel-bin, bazel-out,
-# bazel-testlogs), and bazel-Axon pointed at the execroot, which symlinked every source file
+# Bazel dropped convenience symlinks at the workspace root (bazel-Sjel, bazel-bin, bazel-out,
+# bazel-testlogs), and bazel-Sjel pointed at the execroot, which symlinked every source file
 # straight back here. `bun test` follows them, so from a checkout that has ever run Bazel it
 # discovered all 27 test files twice and reported 54. PRD Q44 retired Bazel on 2026-08-25;
 # this stays because the symlinks it left on existing checkouts do not go away with it.
@@ -24,18 +24,18 @@
 # unanchored, that pattern swallowed real directories elsewhere in the tree.
 #
 # This deliberately does NOT list which directories hold tests. The one rootward `bun test`
-# is the point (Axon#116): a test file added anywhere is gated by existing, and the moment
+# is the point (Sjel#116): a test file added anywhere is gated by existing, and the moment
 # this file starts naming directories, a new test's coverage depends on someone remembering
 # to come here.
 #
 # The second entry is the one exception, and it is a SCOPE statement rather than a list of
-# Axon directories to skip. A vendored pi package is another project's tree, and it ships
+# Sjel directories to skip. A vendored pi package is another project's tree, and it ships
 # another project's test runner: the 22 accordion test files import from vitest, and Bun's
 # `vi` shim does not implement `advanceTimersByTimeAsync`, so `bun test` reported 7 failures
 # in code this repository did not write and cannot fix — upstream's files are byte-identical
 # on purpose. A gate red for a reason nobody can act on is a gate people stop reading.
 #
-# It does not weaken the rule it sits beside. That rule is that an Axon test is gated by
+# It does not weaken the rule it sits beside. That rule is that an Sjel test is gated by
 # existing, with no registry to update. `Packs/*/pi-packages/**` is structural, so a newly
 # vendored package is covered by it without anyone remembering to come here — and it
 # carves out only vendored trees, never one of ours.

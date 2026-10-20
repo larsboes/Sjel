@@ -1,5 +1,5 @@
 #!/bin/bash
-# tools/release — cut a versioned release of Axon. The maintainer companion to tools/update.sh:
+# tools/release — cut a versioned release of Sjel. The maintainer companion to tools/update.sh:
 # update.sh is how a checkout CONSUMES releases; this is how one is CUT. It computes the next
 # semver tag, gates on a clean & green tree, generates notes from the manifest-aware delta
 # (tools/lib/delta.sh — the SAME categorized view update.sh shows, so notes never drift from what

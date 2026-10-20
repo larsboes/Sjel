@@ -85,11 +85,11 @@ VAULT_STATUS="$(printf '%s' "$STATUS_JSON" | jq -r '.status // "unauthenticated"
 if [ "$CURRENT_SERVER" != "$DOMAIN" ]; then
   if [ "$VAULT_STATUS" != "unauthenticated" ]; then
     echo "materialize-inference-key: Bitwarden CLI is logged into a different server" >&2
-    echo "run 'bw logout' yourself, then rerun this command; it will configure the active Axon Vaultwarden server" >&2
+    echo "run 'bw logout' yourself, then rerun this command; it will configure the active Sjel Vaultwarden server" >&2
     exit 1
   fi
   bw config server "$DOMAIN" >/dev/null
-  echo "materialize-inference-key: active Axon Vaultwarden server configured; run 'bw login' yourself, then rerun" >&2
+  echo "materialize-inference-key: active Sjel Vaultwarden server configured; run 'bw login' yourself, then rerun" >&2
   exit 1
 fi
 
@@ -133,15 +133,15 @@ trap cleanup EXIT
 
 bw sync --session "$BW_SESSION" >/dev/null
 FOLDER_ID="$(bw list folders --session "$BW_SESSION" --nointeraction \
-  | jq -r '.[] | select(.name=="Axon") | .id' | head -1)"
+  | jq -r '.[] | select(.name=="Sjel") | .id' | head -1)"
 [ -n "$FOLDER_ID" ] || {
-  echo "materialize-inference-key: Vaultwarden folder 'Axon' is missing" >&2
+  echo "materialize-inference-key: Vaultwarden folder 'Sjel' is missing" >&2
   exit 1
 }
 ITEM_ID="$(bw list items --folderid "$FOLDER_ID" --session "$BW_SESSION" --nointeraction \
   | jq -r --arg name "$ITEM" '.[] | select(.name==$name) | .id' | head -1)"
 [ -n "$ITEM_ID" ] || {
-  echo "materialize-inference-key: Secure Note '$ITEM' is missing from folder 'Axon'" >&2
+  echo "materialize-inference-key: Secure Note '$ITEM' is missing from folder 'Sjel'" >&2
   exit 1
 }
 ITEM_TYPE="$(bw get item "$ITEM_ID" --session "$BW_SESSION" --nointeraction | jq -r '.type')"
@@ -167,5 +167,5 @@ grep -q '[^[:space:]]' "$TMP" || {
 chmod 600 "$TMP"
 mv "$TMP" "$TARGET"
 
-echo "done — $PROVIDER credential materialized for local Axon runtime use"
+echo "done — $PROVIDER credential materialized for local Sjel runtime use"
 echo "restart Comms before testing provider availability"

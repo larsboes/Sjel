@@ -61,7 +61,7 @@ printf '%s\n' '# an uninstalled crate: reaching this would report a version nobo
   > "$CARGO_HOME_FIXTURE/registry/src/index.crates.io-test/absent-9.9.9/Cargo.lock"
 
 git init -q "$PRIMARY"
-git -C "$PRIMARY" -c user.name=Axon -c user.email=axon@example.invalid \
+git -C "$PRIMARY" -c user.name=Sjel -c user.email=axon@example.invalid \
   commit -q --allow-empty -m initial
 git -C "$PRIMARY" worktree add -q -b audit-linked "$LINKED"
 
@@ -180,7 +180,7 @@ grep -F 'private overlay — not reachable' "$SCRATCH/missing.out" >/dev/null ||
 }
 
 run_gitleaks_audit "" >"$SCRATCH/unconfigured.out" 2>&1 || {
-  echo "FAIL: an unconfigured optional overlay failed the Axon audit" >&2
+  echo "FAIL: an unconfigured optional overlay failed the Sjel audit" >&2
   exit 1
 }
 grep -F 'private overlay — not configured' "$SCRATCH/unconfigured.out" >/dev/null || {
@@ -192,7 +192,7 @@ if run_gitleaks_audit "" 1 >"$SCRATCH/leak.out" 2>&1; then
   echo "FAIL: mocked leak produced a clean audit" >&2
   exit 1
 fi
-grep -F 'Axon — leak(s) found' "$SCRATCH/leak.out" >/dev/null || {
+grep -F 'Sjel — leak(s) found' "$SCRATCH/leak.out" >/dev/null || {
   echo "FAIL: leak status was not explicit" >&2
   exit 1
 }
@@ -201,7 +201,7 @@ if run_gitleaks_audit "" 2 >"$SCRATCH/error.out" 2>&1; then
   echo "FAIL: mocked scanner error produced a clean audit" >&2
   exit 1
 fi
-grep -F 'Axon — gitleaks errored (exit 2' "$SCRATCH/error.out" >/dev/null || {
+grep -F 'Sjel — gitleaks errored (exit 2' "$SCRATCH/error.out" >/dev/null || {
   echo "FAIL: scanner-error status was not explicit" >&2
   exit 1
 }

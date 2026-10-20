@@ -1384,7 +1384,7 @@ async fn google_import_preview(
 }
 
 /// Commits only explicit, still-current selections from a prior preview. The
-/// Google event revisions are checked before any Axon entry is written.
+/// Google event revisions are checked before any Sjel entry is written.
 async fn google_import_selected(
     State(state): State<AppState>,
     Json(input): Json<GoogleSelectedImportRequest>,

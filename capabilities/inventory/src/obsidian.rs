@@ -1,4 +1,4 @@
-//! A slot's way into the vault, and the one block Axon owns there.
+//! A slot's way into the vault, and the one block Sjel owns there.
 //!
 //! A slot is an open decision with target sizes, and decisions live in the vault. On the first
 //! run a note is seeded; its prose sits outside the markers and belongs to the person from then
@@ -111,10 +111,10 @@ fn price(item: &Item) -> String {
     }
 }
 
-/// The block Axon owns: numbers only, never a sentence a person wrote.
+/// The block Sjel owns: numbers only, never a sentence a person wrote.
 pub fn render_block(item: &Item, state: Option<State>) -> String {
     let mut out = String::new();
-    out.push_str("> [!info] Derived by Axon. Do not edit inside this block\n");
+    out.push_str("> [!info] Derived by Sjel. Do not edit inside this block\n");
 
     let text = |v: &Option<String>| {
         v.as_deref()
@@ -192,7 +192,7 @@ fn seed(item: &Item) -> String {
 
     out.push_str(
         "> [!tip] The text from here on is yours\n\
-         > This note was created once from the inventory table. Everything outside the Axon\n\
+         > This note was created once from the inventory table. Everything outside the Sjel\n\
          > block below is yours to change; it is never overwritten.\n\n",
     );
     // The region is appended by `region::apply`, which also writes the hash conflict detection

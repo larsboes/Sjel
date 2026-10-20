@@ -231,9 +231,9 @@ pub struct TriageItem {
     /// Last Gmail lifecycle action recorded after the Gmail request succeeded.
     pub gmail_action: Option<String>,
     pub gmail_action_at: Option<String>,
-    /// Only trashed items have a purge deadline. Archived items remain in Axon.
+    /// Only trashed items have a purge deadline. Archived items remain in Sjel.
     pub purge_after: Option<String>,
-    /// Last observed Gmail label location, kept separate from an Axon-requested
+    /// Last observed Gmail label location, kept separate from an Sjel-requested
     /// action so direct Gmail changes are not misattributed.
     pub gmail_location: Option<String>,
     pub gmail_observed_at: Option<String>,
@@ -775,7 +775,7 @@ pub(crate) fn human_reclassification(
         written,
     )?;
     let rationale = if written.is_empty() {
-        "Data class set manually in Axon.".to_string()
+        "Data class set manually in Sjel.".to_string()
     } else {
         written.to_string()
     };
@@ -1346,7 +1346,7 @@ pub(crate) mod db_tests {
 
         let row = store.list_triage(None).unwrap().remove(0);
         assert_eq!(row.stream, "belege");
-        assert_eq!(row.rationale, "Category set manually in Axon.");
+        assert_eq!(row.rationale, "Category set manually in Sjel.");
         assert_eq!(row.classification_method, "human");
         assert_eq!(row.classification_version, "manual-v1");
         assert_eq!(
@@ -1386,7 +1386,7 @@ pub(crate) mod db_tests {
         assert_eq!(row.data_class, "c3");
         assert_eq!(row.data_classification_method, "human");
         assert_eq!(row.data_classification_version, "manual-v1");
-        assert_eq!(row.data_class_rationale, "Data class set manually in Axon.");
+        assert_eq!(row.data_class_rationale, "Data class set manually in Sjel.");
         assert!(store
             .set_triage_data_class("thread:private", "secret", Some("why"))
             .is_err());
@@ -1697,7 +1697,7 @@ pub(crate) mod db_tests {
 
         let row = store.get_triage("thread:human").unwrap().unwrap();
         assert_eq!(row.stream, "steuern");
-        assert_eq!(row.rationale, "Category set manually in Axon.");
+        assert_eq!(row.rationale, "Category set manually in Sjel.");
         assert_eq!(row.classification_method, "human");
         assert_eq!(row.classification_version, "manual-v1");
     }

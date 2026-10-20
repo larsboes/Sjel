@@ -1,11 +1,11 @@
 # capabilities/host-firewall — the overlay's inputs. Copy to
 # <overlay>/config/host-firewall.toml and fill in for THIS machine.
 #
-# Nothing in this file ships with Axon. Every address, interface and port below is an example
+# Nothing in this file ships with Sjel. Every address, interface and port below is an example
 # from RFC 5737 / RFC 3849 documentation ranges — they are unroutable by design, so a copied
 # file cannot accidentally describe a real network, and a fixture built from it cannot leak one.
 #
-# Axon owns the rule shape, the default-deny posture and the lifecycle. This file owns which
+# Sjel owns the rule shape, the default-deny posture and the lifecycle. This file owns which
 # machine, which interfaces, which networks and which ports.
 
 # The interface the host's real traffic arrives on. `nft` needs a name, not a guess.
@@ -30,5 +30,5 @@ public_ports = []
 
 # ICMP is not optional. Dropping ICMPv6 breaks IPv6 outright (neighbour discovery, PMTU) and
 # dropping ICMPv4 fragmentation-needed breaks path MTU discovery in ways that look like random
-# hangs. Axon always permits the required subset; this switch only controls echo-request.
+# hangs. Sjel always permits the required subset; this switch only controls echo-request.
 allow_ping = true

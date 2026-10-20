@@ -4,7 +4,7 @@ version.workspace = true
 edition.workspace = true
 rust-version.workspace = true
 license.workspace = true
-description = "Axon device registry: one-time pairing challenges, device public keys and revocation."
+description = "Sjel device registry: one-time pairing challenges, device public keys and revocation."
 publish = false
 
 [[bin]]

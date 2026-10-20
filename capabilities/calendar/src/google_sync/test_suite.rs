@@ -251,7 +251,7 @@ mod tests {
         let axon = store.get("3q7l9v1c8m2p4t6y0x5z");
         assert_eq!(
             axon.starts_at, "2026-08-14T10:00:00",
-            "Axon wins the collision"
+            "Sjel wins the collision"
         );
         assert_eq!(axon.title, "Sprint-Review (verschoben)");
         assert_eq!(axon.kind, "work_onsite");

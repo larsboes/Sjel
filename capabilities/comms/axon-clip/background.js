@@ -1,4 +1,4 @@
-// Background service worker for Axon Clip.
+// Background service worker for Sjel Clip.
 //
 // Everything that clips outside the popup lives here: the context menus and the
 // keyboard shortcut. Those paths have no popup to write into, so each one ends
@@ -12,19 +12,19 @@ const CLIENT_ID = 'axon-clip';
 chrome.runtime.onInstalled.addListener(() => {
   chrome.contextMenus.create({
     id: 'axon-clip-page',
-    title: 'Clip Page to Axon',
+    title: 'Clip Page to Sjel',
     contexts: ['page']
   });
 
   chrome.contextMenus.create({
     id: 'axon-clip-selection',
-    title: 'Clip Selection to Axon',
+    title: 'Clip Selection to Sjel',
     contexts: ['selection']
   });
 
   chrome.contextMenus.create({
     id: 'axon-clip-link',
-    title: 'Clip Link to Axon',
+    title: 'Clip Link to Sjel',
     contexts: ['link']
   });
 });
@@ -42,7 +42,7 @@ async function sendIngestRequest(payload) {
 
   if (apiSecret) {
     headers['Authorization'] = `Bearer ${apiSecret}`;
-    headers['X-Axon-Token'] = apiSecret;
+    headers['X-Sjel-Token'] = apiSecret;
   }
 
   const response = await fetch(endpoint, {
@@ -76,7 +76,7 @@ async function report(item, error) {
     await chrome.notifications.create({
       type: 'basic',
       iconUrl: 'icons/icon-48.png',
-      title: 'Axon Clip failed',
+      title: 'Sjel Clip failed',
       message: error
     });
     return;
@@ -86,7 +86,7 @@ async function report(item, error) {
   await chrome.notifications.create({
     type: 'basic',
     iconUrl: 'icons/icon-48.png',
-    title: 'Clipped to Axon Feed',
+    title: 'Clipped to Sjel Feed',
     message: `${item.title || item.url}\nid ${item.id}`
   });
 }
@@ -122,7 +122,7 @@ chrome.commands.onCommand.addListener(async (command) => {
   try {
     await report(await clipActivePage(tab));
   } catch (err) {
-    console.error('Axon Clip shortcut ingest failed:', err);
+    console.error('Sjel Clip shortcut ingest failed:', err);
     await report(null, err.message);
   }
 });
@@ -145,7 +145,7 @@ chrome.contextMenus.onClicked.addListener(async (info, tab) => {
       await report(await clipActivePage(tab));
     }
   } catch (err) {
-    console.error('Axon Clip context menu ingest failed:', err);
+    console.error('Sjel Clip context menu ingest failed:', err);
     await report(null, err.message);
   }
 });

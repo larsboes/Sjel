@@ -109,7 +109,7 @@ impl MeetupAdapter {
 
         // `builder`, not `client`: USER_AGENT here is a browser string, and the
         // override is deliberate -- Meetup answers a non-browser agent with a
-        // block page. Every other adapter now sends the Axon agent.
+        // block page. Every other adapter now sends the Sjel agent.
         let client = sjel_http::builder(
             sjel_http::Purpose::new("scouting-meetup"),
             crate::http::TIMEOUT,

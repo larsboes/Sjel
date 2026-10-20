@@ -151,7 +151,7 @@ pub fn run(argv: &[String]) -> ExitCode {
     let mut r = Report::default();
     let root_text = root.display().to_string();
 
-    println!("Axon audit · {}", utc_seconds());
+    println!("Sjel audit · {}", utc_seconds());
     gitleaks_section(&root_text, &overlay, &mut r);
     repo_osv_section(&root, &mut r);
     globals_osv_section(&root, &mut r);
@@ -186,7 +186,7 @@ fn gitleaks_section(root: &str, overlay: &str, r: &mut Report) {
         r.setup = true;
         return;
     }
-    scan_git_history("Axon", root, r);
+    scan_git_history("Sjel", root, r);
     scan_git_history("private overlay", overlay, r);
 }
 

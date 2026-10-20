@@ -283,7 +283,7 @@ mod tests {
     #[test]
     fn declared_kinds_match_what_ingest_stores() {
         for (adapter, url) in [
-            ("github-trending", "https://github.com/larsboes/Axon"),
+            ("github-trending", "https://github.com/larsboes/Sjel"),
             ("arxiv", "https://arxiv.org/abs/2501.00001"),
         ] {
             let declared = item_kind(adapter).expect("adapter names a kind");

@@ -4,7 +4,7 @@ version.workspace = true
 edition.workspace = true
 rust-version.workspace = true
 license.workspace = true
-description = "Shared overlay/config resolution for Axon's Rust capabilities: tilde expansion, overlay paths, the shared-Postgres DSN, the runner's port contract, DSN redaction."
+description = "Shared overlay/config resolution for Sjel's Rust capabilities: tilde expansion, overlay paths, the shared-Postgres DSN, the runner's port contract, DSN redaction."
 publish = false
 
 [lib]

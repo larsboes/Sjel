@@ -1,6 +1,6 @@
 //! The traveller profile: who is travelling, as data a solver reads.
 //!
-//! Axon's travel stack could search and could rank, and the ranking weights were
+//! Sjel's travel stack could search and could rank, and the ranking weights were
 //! the same four constants for every person and every trip. The interests a plan
 //! carried were echoed back to the page and read by nothing. This module is the
 //! missing half: a stated profile with hard limits a search must obey, weights

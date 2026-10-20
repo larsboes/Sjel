@@ -17,7 +17,7 @@ from __future__ import annotations
 import argparse, json, os, sys, glob, subprocess, time, zipfile, urllib.request, urllib.parse, urllib.error
 
 # ------------------------------------------------------------------ config
-# Axon doctrine: this file is public. No personal value (printer IP, preset
+# Sjel doctrine: this file is public. No personal value (printer IP, preset
 # names) lives here — those come from the private overlay at runtime. The
 # config is resolved in order:
 #   1. $SJEL_PRINTING_CONFIG (explicit override)
@@ -58,7 +58,7 @@ DEFAULT_CFG = {
     "preset_process": None,   # e.g. "VanMoof-PETG-strength"
     "preset_filament": None,  # e.g. "Elegoo PETG @EN4 Series"
     # where an armed job token lives — resolved to the overlay in load_cfg so
-    # transient runtime state never lands in the public Axon repo.
+    # transient runtime state never lands in the public Sjel repo.
     "arm_file": "",
 }
 

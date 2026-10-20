@@ -17,7 +17,7 @@
 # warning, see below. A rule nothing checks is a rule that has already been broken;
 # nobody notices, because the only symptom is a skill that never fires.
 #
-# Scope: Axon-authored skills only, `Packs/<pack>/skills/<name>/SKILL.md`.
+# Scope: Sjel-authored skills only, `Packs/<pack>/skills/<name>/SKILL.md`.
 # Deliberately NOT checked, each for a reason rather than by oversight:
 #   Packs/*/pi-packages/**  vendored third-party pi packages. Their files are
 #                           byte-identical to upstream on purpose (Packs/harness/

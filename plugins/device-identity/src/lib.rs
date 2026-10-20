@@ -1,4 +1,4 @@
-//! Tauri bridge for the native device identity used by Axon's pairing protocol.
+//! Tauri bridge for the native device identity used by Sjel's pairing protocol.
 //!
 //! On iOS, the native implementation creates or loads one Curve25519 signing key from the
 //! platform Keychain. Only its public key crosses this boundary. Desktop builds intentionally

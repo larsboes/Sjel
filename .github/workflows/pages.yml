@@ -50,7 +50,7 @@ jobs:
     # No service container. The demo's store is a file tools/demo-up creates under demo/state,
     # since PRD Q45 (2026-08-27) replaced the Postgres instance with one SQLite file — so the
     # job that builds the demonstration needs neither a database service nor the variable that
-    # used to address one. The reason this was a service container rather than Axon's own
+    # used to address one. The reason this was a service container rather than Sjel's own
     # postgres capability still holds for anything like it: the demo overlay enables no
     # container runtime, and a demonstration should not need one to build.
     env:
@@ -59,7 +59,7 @@ jobs:
       SJEL_PAGES_BASE: /Sjel
 
     steps:
-      - name: Check out Axon
+      - name: Check out Sjel
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
       - name: Set up Bun

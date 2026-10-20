@@ -96,7 +96,7 @@ fn session_start(registry: &Registry, root: &Path) -> Result<Vec<String>, String
         return Ok(Vec::new());
     }
     let mut out =
-        vec!["Axon Pack drift, deployed copies that no longer match their source:".to_string()];
+        vec!["Sjel Pack drift, deployed copies that no longer match their source:".to_string()];
     out.extend(lines);
     out.push("  Keep the edit: tools/harnesses accept <pack> <skill> --from <harness>".to_string());
     out.push("  Discard it:    tools/harnesses sync <pack>".to_string());

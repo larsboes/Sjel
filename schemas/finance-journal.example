@@ -2,7 +2,7 @@
 ; capabilities/finance expects. Every name here is generic on purpose: the real
 ; journal lives in the private overlay and this file is published.
 ;
-; Validated by Axon's own parser, in capabilities/finance's test suite: the engine
+; Validated by Sjel's own parser, in capabilities/finance's test suite: the engine
 ; checks and reads this exact file on every run (capabilities/finance/src/journal.rs).
 ;
 ; The format is hledger's and stays that way (Principle 8), so the same file also

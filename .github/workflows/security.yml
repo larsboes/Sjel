@@ -40,7 +40,7 @@ jobs:
     name: osv-scanner (every lockfile)
     runs-on: ubuntu-latest
     steps:
-      - name: Check out Axon
+      - name: Check out Sjel
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - name: Install osv-scanner
         env:
@@ -63,21 +63,21 @@ jobs:
 
   # REPORT-ONLY about IMAGES, and that is the whole point of the job (Q77, 2026-09-02).
   # Every declared image tracks a rolling tag now, so a CVE published against an upstream base
-  # layer turns this red through no change of Axon's. Dependabot's pull requests auto-merge on
+  # layer turns this red through no change of Sjel's. Dependabot's pull requests auto-merge on
   # the required checks (.github/workflows/dependabot-automerge.yml), and a dependency bump held
   # back by somebody else's image is the exact failure the ruling was made to remove. The counts
   # land in the run summary instead, where they are read on every run rather than only when
   # something goes red.
   #
   # `continue-on-error` sits on the SCAN STEP and not on the job, because exactly one failure
-  # here is still Axon's own and still has to be fatal: a discovery loop that matched no image
+  # here is still Sjel's own and still has to be fatal: a discovery loop that matched no image
   # scanned nothing while reporting success. That check is the last step, it has no
   # continue-on-error, and it is why this job can still go red.
   images:
     name: grype (every declared image)
     runs-on: ubuntu-latest
     steps:
-      - name: Check out Axon
+      - name: Check out Sjel
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - name: Install grype
         env:

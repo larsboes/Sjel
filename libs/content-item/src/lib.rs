@@ -1783,7 +1783,7 @@ mod tests {
     fn everything_else_is_mine_and_nothing_is_public() {
         for id in [
             "Journal/2026-09-07.md",
-            "Projects/Axon/PRD Axon.md",
+            "Projects/Sjel/PRD Axon.md",
             "Atlas/Personal/Ziele.md",
             "Home.md",
         ] {

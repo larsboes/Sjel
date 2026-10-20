@@ -1,4 +1,4 @@
-// Content script for Axon Clip
+// Content script for Sjel Clip
 chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   if (message.action === 'extract') {
     const selection = window.getSelection().toString().trim();

@@ -626,7 +626,7 @@ impl DevicesStore {
         self.authenticate_at(request, method, path_and_query, body, now())
     }
 
-    /// [`Self::authenticate`] for a verifier other than this capability, such as the Axon
+    /// [`Self::authenticate`] for a verifier other than this capability, such as the Sjel
     /// shell's inbound gate. The nonce is consumed in `scope`, so the shell admitting a request
     /// does not make the same request a replay when it reaches `/api/devices/me` behind it.
     /// Replay inside one scope is refused exactly as in the default scope.

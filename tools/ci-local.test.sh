@@ -64,7 +64,7 @@ jobs:
     name: repo gates
     runs-on: ubuntu-latest
     steps:
-      - name: Check out Axon
+      - name: Check out Sjel
         uses: actions/checkout@v5
       - name: first gate
         run: $2
@@ -167,7 +167,7 @@ on: [push]
 jobs:
   repo-gates:
     steps:
-      - name: Check out Axon
+      - name: Check out Sjel
         uses: actions/checkout@v5
 EOF
 if expect_status "a job with nothing to run is refused, not passed" 2 "$root" run repo-gates; then

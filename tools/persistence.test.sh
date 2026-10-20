@@ -8,7 +8,7 @@
 # missing entirely.
 #
 # Built on the same throwaway-root idea as service-runner.test.sh and manifest-resolution.test.sh:
-# a scratch Axon root with its own overlay, machine.toml and capability manifests, plus a scratch
+# a scratch Sjel root with its own overlay, machine.toml and capability manifests, plus a scratch
 # HOME so unit files land inside the sandbox.
 #
 # launchctl, systemctl and loginctl are STUBBED on PATH. The first version of this file did not
@@ -338,7 +338,7 @@ printf '# hand-edited\n' >> "$UNIT"
 expect_state "linux, unit edited" always stale
 
 # --- linux: a schedule is two files ----------------------------------------
-# systemd splits WHEN from WHAT, so a scheduled job is axon-<cap>.timer plus the oneshot it
+# systemd splits WHEN from WHAT, so a scheduled job is sjel-<cap>.timer plus the oneshot it
 # activates. This is the one place the two backends differ in SHAPE rather than syntax, and the
 # case that matters is a timer matching while its companion has drifted — a check that only looked
 # at the primary unit would report that as installed.

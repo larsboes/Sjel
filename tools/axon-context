@@ -1,5 +1,5 @@
 #!/bin/bash
-# axon-context — emit bounded, current context for one Axon target.
+# sjel-context — emit bounded, current context for one Sjel target.
 set -euo pipefail
 
 TOOLS_DIR="$(cd "$(dirname "${BASH_SOURCE[0]:-$0}")" && pwd)"

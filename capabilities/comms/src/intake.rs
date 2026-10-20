@@ -273,7 +273,7 @@ mod tests {
         from_thread_against(meta(subject, snippet), &[], knows_nobody)
     }
 
-    /// The case that produced Axon#129: a live sweep stored a one-time code
+    /// The case that produced Sjel#129: a live sweep stored a one-time code
     /// because it arrived in the subject line, where nothing was looking.
     #[test]
     fn a_one_time_code_never_reaches_the_stored_row() {

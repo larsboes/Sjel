@@ -1,7 +1,7 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://axon.local/schemas/device-pairing.schema.json",
-  "title": "Axon device pairing",
+  "title": "Sjel device pairing",
   "description": "The one-time invitation and claim shapes used to register a device public key. Private keys never enter this contract.",
   "$defs": {
     "challenge": {

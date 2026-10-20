@@ -47,7 +47,7 @@ pub const VERSION: u32 = 3;
 /// Q31's home for a projection, plus one folder for this capability. Vault-relative
 /// and not configurable: a second declaration of where machine output goes is how two
 /// hosts end up writing to two different folders and neither notices.
-// `Resources/Axon/Trips` until 2026-10-08, when the vault folder took the product name.
+// `Resources/Sjel/Trips` until 2026-10-08, when the vault folder took the product name.
 pub const DIR: &str = "Resources/Sjel/Trips";
 
 /// One plan's file name and body, ready to write.

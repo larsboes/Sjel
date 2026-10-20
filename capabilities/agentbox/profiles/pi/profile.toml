@@ -43,7 +43,7 @@ config_dir     = "/home/agent/config"
 config_dir_env = "PI_CODING_AGENT_DIR"
 
 # Rendered from <name>.tmpl in this directory into the mounted config dir on every
-# run, so Axon stays the source of truth for the contract and the overlay only holds
+# run, so Sjel stays the source of truth for the contract and the overlay only holds
 # instance values plus the agent's own runtime artifacts (sessions, caches, trust
 # decisions). An `extensions/` directory here, if present, is copied alongside them.
 render = ["AGENTS.md", "models.json"]

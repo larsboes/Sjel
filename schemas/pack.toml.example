@@ -1,9 +1,9 @@
 # Shape of a Packs/<name>/pack.toml. A Pack is a togglable bundle of agent
-# open agent skills (SKILL.md units) that Axon deploys into an active harness.
+# open agent skills (SKILL.md units) that Sjel deploys into an active harness.
 # This file IS the schema (single-line TOML only, see tools/lib/toml.sh):
 # copy it into a pack dir, fill it in, drop the skills under skills/.
 #
-# Doctrine: skills are PUBLIC and stay in Axon. No personal value (host, path,
+# Doctrine: skills are PUBLIC and stay in Sjel. No personal value (host, path,
 # key) is ever inlined in a skill — it is redacted to a placeholder, and the
 # skill reads the real value at runtime from the overlay
 # ($SJEL_PERSONAL_ROOT/config/<pack>.*). Harness adapters activate the same

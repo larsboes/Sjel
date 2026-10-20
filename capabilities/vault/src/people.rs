@@ -45,7 +45,7 @@ pub struct PersonFacts {
     /// The keys whose stored value disagrees with the computed one.
     pub disagrees: Vec<String>,
     /// The note's `home` key: the city the person lives in, as typed. PRD Q116 (2026-09-25):
-    /// who someone is stays in the note, and Axon reads it.
+    /// who someone is stays in the note, and Sjel reads it.
     pub home: Option<String>,
     /// `host: yes` in the note: Lars could ask to stay with this person at their place.
     pub host: bool,

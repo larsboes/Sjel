@@ -11,10 +11,10 @@ contains() { case "$1" in *"$2"*) ;; *) fail "expected '$2' in: $1" ;; esac; }
 [ -x "$SJEL" ] || fail "sjel is not executable"
 [ ! -e "$ROOT/scripts/axapi" ] || fail "legacy scripts/axapi remains"
 
-# `Packs/axon/pack.toml` was asserted absent here from #102 (the CLI port retired the
-# Pack) until 2026-08-25. #137 gave the Axon Pack a dedicated deployer and put the
+# `Packs/sjel/pack.toml` was asserted absent here from #102 (the CLI port retired the
+# Pack) until 2026-08-25. #137 gave the Sjel Pack a dedicated deployer and put the
 # manifest back, and this line should have gone with it. It did not, and the assertion
-# stayed green for two months because the sh_test declared only `axon` and
+# stayed green for two months because the sh_test declared only `sjel` and
 # `tools/axon-context` as data: the sandbox never materialized the file the test was
 # looking for, so `[ ! -e ... ]` was true about the sandbox and false about the repo.
 # PRD Q44 (2026-08-25) retired Bazel, this test started reading the real checkout, and

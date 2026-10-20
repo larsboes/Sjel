@@ -267,11 +267,11 @@ Do **not** use `createEventDispatcher` in Svelte 5. Use typed callback propertie
 * **Targeted Invalidation**: Avoid blanket `invalidateAll()` when only a specific API endpoint or dependency changed. Use `invalidate(url)` or custom dependency keys:
   ```ts
   // In load function:
-  depends('axon:capabilities');
+  depends('sjel:capabilities');
 
   // In mutation handler:
   import { invalidate } from '$app/navigation';
-  await invalidate('axon:capabilities');
+  await invalidate('sjel:capabilities');
   ```
 * **Shallow Routing (`pushState`)**: For modals, drawers, or slide-overs that should update browser history without re-running page loaders:
   ```ts

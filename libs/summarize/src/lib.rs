@@ -356,7 +356,7 @@ impl std::fmt::Debug for Admission {
 /// lives here rather than in each caller.
 ///
 /// Why this exists: on 2026-08-05 four concurrent prefills pushed oMLX past its
-/// hard watermark and it aborted all four. Nothing in Axon knew the others were
+/// hard watermark and it aborted all four. Nothing in Sjel knew the others were
 /// running. An in-process semaphore would not have helped — the competing
 /// consumers are separate processes.
 pub trait LocalGate: Send + Sync {

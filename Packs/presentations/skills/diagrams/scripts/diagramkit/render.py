@@ -2,7 +2,7 @@
 
 Two things here are deliberate.
 
-**The renderer is pinned.** Axon's dependency doctrine is a pinned version, never
+**The renderer is pinned.** Sjel's dependency doctrine is a pinned version, never
 a floating release; `DIAGRAMS_MERMAID_CLI` exists so a bump is a decision someone
 made rather than a side effect of a render. mermaid-cli downloads a Chromium on
 first use — see `diagrams doctor`.

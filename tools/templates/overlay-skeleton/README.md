@@ -1,4 +1,4 @@
-# axon-__OVERLAY_NAME__
+# sjel-__OVERLAY_NAME__
 
 The private overlay of [Sjel](../Sjel/) for this ownership boundary
 (`__OVERLAY_NAME__` — one of personal / work / family). Everything private for this

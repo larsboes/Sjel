@@ -53,7 +53,7 @@ impl Row {
     ///
     /// Readiness first: until 2026-08-07 sjel-status polled `health_path` everywhere, and five
     /// database-backed capabilities answered it from a handler that could not see their
-    /// database (Axon#126). An external capability has no port here, because a port is a fact
+    /// database (Sjel#126). An external capability has no port here, because a port is a fact
     /// about the host that binds it, so it is polled at its resolved endpoint and never on
     /// loopback.
     pub fn probe_url(&self) -> Option<String> {

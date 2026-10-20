@@ -7,7 +7,7 @@
 // capability's demo data goes stale the same way its API does — loudly, with a 404.
 //
 // THE GUARD, and why it is not optional. These are real writes to whatever database the
-// running capabilities are pointed at. Run this against a machine's own Axon and it would
+// running capabilities are pointed at. Run this against a machine's own Sjel and it would
 // post invented transactions into a real ledger. So it refuses to start unless the resolved
 // overlay is this repository's demo overlay, and refuses each capability that already holds
 // data. Both checks are cheap; the failure they prevent is not recoverable by re-running.

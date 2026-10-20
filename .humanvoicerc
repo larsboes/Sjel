@@ -1,5 +1,5 @@
 {
-  "_why": "Repo-wide calibration for human-writing's scanner. The em dash is a ratified voice choice in Axon's prose, not an unspecified default, so it does not score here. Every other category stays at full weight. Measured 2026-07-28: em_dash was 535 of ~1000 hits across 107 tracked .md files, which put 93% of the corpus in strong-tell and made the ProseGate hook unusable.",
+  "_why": "Repo-wide calibration for human-writing's scanner. The em dash is a ratified voice choice in Sjel's prose, not an unspecified default, so it does not score here. Every other category stays at full weight. Measured 2026-07-28: em_dash was 535 of ~1000 hits across 107 tracked .md files, which put 93% of the corpus in strong-tell and made the ProseGate hook unusable.",
   "category_weights": {
     "em_dash": 0
   },

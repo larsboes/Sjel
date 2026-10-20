@@ -232,7 +232,7 @@ impl FinanceStore {
             -- (mantissa, scale) rather than REAL because a float is where an exact
             -- decimal stops being exact.
             --
-            -- NOT {prefix}_price_points: that series is Axon's own subscription
+            -- NOT {prefix}_price_points: that series is Sjel's own subscription
             -- pricing history (§9.2 dogfooding) and must not be conflated with
             -- market data.
             --

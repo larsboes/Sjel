@@ -191,7 +191,7 @@ impl<'a> Ctx<'a> {
         if self.paths.cap_dir(name).is_none() {
             return fail(
                 1,
-                format!("capability.sh: required capability '{name}' has no capabilities/{name}/ directory in Axon or the overlay"),
+                format!("capability.sh: required capability '{name}' has no capabilities/{name}/ directory in Sjel or the overlay"),
             );
         }
         visiting.push(name.to_owned());

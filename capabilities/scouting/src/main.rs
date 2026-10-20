@@ -226,7 +226,7 @@ fn run_adapter(
         match &store {
             Some(st) => {
                 println!(
-                    "Axon Scouting — stored backlog{}\n",
+                    "Sjel Scouting — stored backlog{}\n",
                     if options.include_dismissed {
                         " (including dismissed)"
                     } else {
@@ -313,7 +313,7 @@ fn run_merged_sources(
     limit: usize,
 ) {
     println!(
-        "Axon Scouting — opportunity discovery (merged, {} sources)\n",
+        "Sjel Scouting — opportunity discovery (merged, {} sources)\n",
         enabled_sources.len()
     );
 
@@ -417,7 +417,7 @@ fn print_run_header(
 }
 
 fn print_help() {
-    println!("Axon Scouting — opportunity discovery\n");
+    println!("Sjel Scouting — opportunity discovery\n");
     println!("usage: scout [flags]\n");
     println!(
         "  --adapter <name>         run one source (registry id from --list-sources, or built-in:"
@@ -695,7 +695,7 @@ fn main() {
                 std::process::exit(1);
             }
         };
-        println!("Axon Scouting — promote saved luma events into calendar\n");
+        println!("Sjel Scouting — promote saved luma events into calendar\n");
         match scouting::calendar_promote::promote_saved_luma(
             &store,
             &calendar_url,
@@ -720,7 +720,7 @@ fn main() {
 
     // --list-sources: print configured sources and exit
     if list_sources {
-        println!("Axon Scouting — configured opportunity sources\n");
+        println!("Sjel Scouting — configured opportunity sources\n");
         print_sources(&cfg.sources);
         return;
     }
@@ -777,7 +777,7 @@ fn main() {
             return;
         }
 
-        println!("Axon Scouting — opportunity discovery\n");
+        println!("Sjel Scouting — opportunity discovery\n");
         print_run_header(&adapter, &cfg, &opp_emb_path, &database_path);
 
         match run_adapter(
@@ -846,7 +846,7 @@ fn main() {
             return;
         }
 
-        println!("Axon Scouting — opportunity discovery\n");
+        println!("Sjel Scouting — opportunity discovery\n");
         print_run_header(&*adapter, &cfg, &opp_emb_path, &database_path);
 
         match run_adapter(
@@ -915,7 +915,7 @@ fn main() {
         }
 
         if !ran_any {
-            println!("Axon Scouting — opportunity discovery (multi-source)\n");
+            println!("Sjel Scouting — opportunity discovery (multi-source)\n");
         }
         ran_any = true;
 
@@ -964,7 +964,7 @@ fn main() {
             return;
         }
 
-        println!("Axon Scouting — opportunity discovery\n");
+        println!("Sjel Scouting — opportunity discovery\n");
         print_run_header(&*adapter, &cfg, &opp_emb_path, &database_path);
 
         match run_adapter(
@@ -1023,7 +1023,7 @@ fn run_from_file(
         Store::open(database_path).ok()
     };
 
-    println!("Axon Scouting — past-event retro calibration (deprecated --from-file)\n");
+    println!("Sjel Scouting — past-event retro calibration (deprecated --from-file)\n");
     println!("  source     : {path} ({} opportunities)", opps.len());
     println!(
         "  interests  : {} profiles from {}",

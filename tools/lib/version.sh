@@ -1,4 +1,4 @@
-# tools/lib/version.sh — ordering version strings, and naming Axon's own release line.
+# tools/lib/version.sh — ordering version strings, and naming Sjel's own release line.
 #
 # This file was 355 lines on 2026-08-28 and is now 57. It was extracted from
 # tools/upstream-checker, and PRD Q41 retired that script: with it went the tag-decoration

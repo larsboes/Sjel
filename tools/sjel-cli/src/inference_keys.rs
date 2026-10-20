@@ -24,7 +24,7 @@ const DEFAULT_ADMIN_TIMEOUT_MS: u64 = 30_000;
 // Keep 15 seconds of headroom under the extension's 60-second manifest deadline.
 const DEFAULT_MANIFEST_BUDGET_MS: u64 = 45_000;
 const DEFAULT_KEYCHAIN_TIMEOUT_MS: u64 = 5_000;
-const DEFAULT_FOLDER: &str = "Axon";
+const DEFAULT_FOLDER: &str = "Sjel";
 
 #[derive(Debug)]
 struct Failure {
@@ -1175,7 +1175,7 @@ fn enrollment(account: &str) -> Result<(), Failure> {
                 "",
                 "-U",
                 "-l",
-                "Axon - Bitwarden master password",
+                "Sjel - Bitwarden master password",
                 "-w",
             ])
             .stdin(Stdio::inherit())
@@ -1190,7 +1190,7 @@ fn enrollment(account: &str) -> Result<(), Failure> {
         let status = Command::new("secret-tool")
             .args([
                 "store",
-                "--label=Axon - Bitwarden master password",
+                "--label=Sjel - Bitwarden master password",
                 "service",
                 "axon-bw-master",
                 "account",

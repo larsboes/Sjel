@@ -37,7 +37,7 @@ document.addEventListener('DOMContentLoaded', async () => {
 
   async function performIngest(payload) {
     setButtonsDisabled(true);
-    setStatus('Clipping to Axon Feed...', 'info');
+    setStatus('Clipping to Sjel Feed...', 'info');
 
     chrome.runtime.sendMessage({ action: 'ingest', payload }, (response) => {
       setButtonsDisabled(false);

@@ -11,7 +11,7 @@
 //! * **Nothing from Google becomes an authoritative block.** An imported event
 //!   lands at `Commitment::Possible`, which the correlation layer caps at
 //!   `Free`, until the operator adopts it. See [`IMPORT_COMMITMENT`].
-//! * **Axon wins a disagreement.** [`decide`] never overwrites an entry the
+//! * **Sjel wins a disagreement.** [`decide`] never overwrites an entry the
 //!   operator has already adopted; the divergence is reported, not applied.
 //! * **No date is guessed.** An event whose schedule this module cannot read
 //!   exactly is skipped with a reason, never imported with an invented time —
@@ -42,7 +42,7 @@ pub const IMPORT_COMMITMENT: Commitment = Commitment::Possible;
 /// either way, so adopting one can always prefill from it.
 pub fn kind_for(event: &GoogleEvent) -> &'static str {
     match event.event_type.as_deref() {
-        // The one Google type that maps cleanly onto an Axon kind. Still
+        // The one Google type that maps cleanly onto an Sjel kind. Still
         // weightless on import — the commitment is what gates blocking, so
         // saying `away` here no longer costs anything.
         Some("outOfOffice") => "away",
@@ -291,12 +291,12 @@ pub enum Action {
     Create,
     /// A draft the operator has not adopted; Google's newer version replaces it.
     RefreshDraft,
-    /// The operator confirmed or re-kinded this entry. Axon is the source of
+    /// The operator confirmed or re-kinded this entry. Sjel is the source of
     /// truth, so the import leaves it alone and reports the divergence.
     KeepAxonVersion,
     /// Google withdrew an event the operator never adopted. The draft goes.
     DropDraft,
-    /// Google withdrew an event the operator *did* adopt. Axon wins: the entry
+    /// Google withdrew an event the operator *did* adopt. Sjel wins: the entry
     /// stays, and the operator is told the upstream is gone.
     KeepCancelledAxonVersion,
     /// Google withdrew an event that was never imported. Nothing to do.
@@ -306,7 +306,7 @@ pub enum Action {
 /// The conflict policy, as a function.
 ///
 /// One rule carries it: **an entry still at `Commitment::Possible` is
-/// Google's to update; anything he has raised is the operator's and Axon
+/// Google's to update; anything he has raised is the operator's and Sjel
 /// wins.** Raising the commitment is the act of adoption, so "has the operator
 /// touched this" needs no extra column and no timestamp comparison — the thing
 /// the operator changes *is* the signal.
@@ -358,7 +358,7 @@ pub fn export_refusal(entry: &Entry) -> Option<String> {
     None
 }
 
-/// The `calendar#event` body for an Axon entry.
+/// The `calendar#event` body for an Sjel entry.
 ///
 /// Timed entries get an explicit offset *and* the zone name: the offset is
 /// what pins the instant, the zone is what lets Google render it correctly for
@@ -730,7 +730,7 @@ mod tests {
 
         assert_eq!(decide(&event, Some(&confirmed)), Action::KeepAxonVersion);
 
-        // ...and a moved Google event still does not move the Axon one.
+        // ...and a moved Google event still does not move the Sjel one.
         let mut moved = event;
         moved.start.date_time = Some("2026-08-14T15:00:00+02:00".into());
         moved.end.date_time = Some("2026-08-14T16:00:00+02:00".into());

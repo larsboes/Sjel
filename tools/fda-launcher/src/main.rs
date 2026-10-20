@@ -3,7 +3,7 @@
 //!
 //! macOS decides whether a process may read another app's iCloud container, such as
 //! Obsidian's vault, by asking which process is *responsible* for it. A launchd job's
-//! responsible process is the executable launchd started. For a scheduled Axon job that
+//! responsible process is the executable launchd started. For a scheduled Sjel job that
 //! was `/bin/bash`, which has no Full Disk Access, so `rsync` got "Operation not
 //! permitted" on the vault and `ls` could not list the iCloud Drive backup folder
 //! (measured 2026-09-25, `tools/backup.sh` traced under `launchctl submit`).

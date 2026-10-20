@@ -1,8 +1,8 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://axon.local/schemas/device-mesh.schema.json",
-  "title": "Axon canonical-node connection",
-  "description": "The app-private connection contract for a device joining one Axon deployment. The node may be a Mac, a home server or a hosted node; a paired device key, not the network, admits the device (PRD Q119).",
+  "title": "Sjel canonical-node connection",
+  "description": "The app-private connection contract for a device joining one Sjel deployment. The node may be a Mac, a home server or a hosted node; a paired device key, not the network, admits the device (PRD Q119).",
   "type": "object",
   "required": [
     "protocol_version",

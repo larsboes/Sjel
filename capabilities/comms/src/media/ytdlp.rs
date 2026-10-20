@@ -57,7 +57,7 @@ pub(super) fn ytdlp_sub_args(url: &str, dir: &Path, impersonate: bool) -> Vec<St
         "--skip-download".into(),
         // Without --ignore-errors, yt-dlp stops after the first missing
         // language. Prefer English, then retain German as a multilingual-input
-        // fallback; generated Axon text still defaults to English.
+        // fallback; generated Sjel text still defaults to English.
         "--ignore-errors".into(),
         "--write-auto-subs".into(),
         "--write-subs".into(),

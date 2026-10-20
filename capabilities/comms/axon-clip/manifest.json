@@ -1,8 +1,8 @@
 {
   "manifest_version": 3,
-  "name": "Axon Clip",
+  "name": "Sjel Clip",
   "version": "0.2.0",
-  "description": "Clip web pages, articles, and selections directly into your local Axon Feed.",
+  "description": "Clip web pages, articles, and selections directly into your local Sjel Feed.",
   "icons": {
     "16": "icons/icon-16.png",
     "48": "icons/icon-48.png",
@@ -30,11 +30,11 @@
   "commands": {
     "_execute_action": {
       "suggested_key": { "default": "Ctrl+Shift+K", "mac": "Command+Shift+K" },
-      "description": "Open Axon Clip"
+      "description": "Open Sjel Clip"
     },
     "clip-page": {
       "suggested_key": { "default": "Ctrl+Shift+Y", "mac": "Command+Shift+Y" },
-      "description": "Clip the current page to the Axon Feed"
+      "description": "Clip the current page to the Sjel Feed"
     }
   },
   "options_page": "options.html",

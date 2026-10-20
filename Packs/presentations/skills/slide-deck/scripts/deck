@@ -4,7 +4,7 @@
 # Thin launcher. The mechanism lives in the deckkit package beside this file
 # (single source of truth); this file only resolves paths and dependencies.
 #
-# Why bash and not a `pyproject.toml` project: Axon has no Python project
+# Why bash and not a `pyproject.toml` project: Sjel has no Python project
 # anywhere (CONTRIBUTING.md#cargo-and-bun-are-the-build-path), and the sibling skills
 # that need Python deps all use exactly this shape. `uv run --with` also keeps
 # dependencies pinned per invocation without a lockfile to maintain.
@@ -25,7 +25,7 @@ if ! command -v uv >/dev/null 2>&1; then
   exit 2
 fi
 
-# Pinned, never a floating release: Axon's dependency doctrine.
+# Pinned, never a floating release: Sjel's dependency doctrine.
 _core=(--with "python-pptx==1.0.2" --with "pillow==12.3.0")
 
 case "${1:-}" in

@@ -1,5 +1,5 @@
 #!/bin/bash
-# tools/protection-zones — which coding assistants can actually protect what (Axon#147).
+# tools/protection-zones — which coding assistants can actually protect what (Sjel#147).
 #
 # The work deployment has a real protected-path class: material there must not be read by a
 # cloud-backed coding assistant. Claude Code's deny policy protects one such location today,

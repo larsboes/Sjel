@@ -1,4 +1,4 @@
-# Axon Pack profiles — named use-cases that deploy a set of Packs together,
+# Sjel Pack profiles — named use-cases that deploy a set of Packs together,
 # optionally narrowed to a per-Pack skill subset so a profile does not drag a
 # whole Pack into every session when the measurements say most of it is unused.
 #
@@ -59,7 +59,7 @@
 # the retired `# pi: REFUSED` line in Packs/home-automation/pack.toml for why it is
 # not written in a Pack any more.
 #
-# PI IS PROFILE-DRIVEN (2026-09-11, Lars: "I want to be able to change through axon
+# PI IS PROFILE-DRIVEN (2026-09-11, Lars: "I want to be able to change through sjel
 # profiles what's deployed"; pi is used from the home folder, so the GLOBAL registry
 # is the load set — no project scoping). The registry currently holds `full` minus
 # home-automation; switching it is one command: tools/harnesses use <name> --harness pi.

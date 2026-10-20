@@ -460,7 +460,7 @@ def _render_state(s: dict, when: str) -> str:
 last_updated: {when}
 last_updated_by: fritz snapshot
 convention: pai-freshness-v1
-generator: Axon/Packs/home-automation/skills/fritz/scripts/fritz
+generator: Sjel/Packs/home-automation/skills/fritz/scripts/fritz
 ---
 
 # Network state — generated
@@ -576,7 +576,7 @@ def cmd_inventory(args) -> int:
     L = [f"""---
 last_updated_by: fritz inventory
 convention: pai-freshness-v1
-generator: Axon/Packs/home-automation/skills/fritz/scripts/fritz
+generator: Sjel/Packs/home-automation/skills/fritz/scripts/fritz
 ---
 
 # Network devices — generated

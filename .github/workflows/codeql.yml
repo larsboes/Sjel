@@ -86,7 +86,7 @@ jobs:
         language: [rust, javascript-typescript, python, actions]
 
     steps:
-      - name: Check out Axon
+      - name: Check out Sjel
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
       # Pinned by commit sha like every other action here, and the comment names the release the

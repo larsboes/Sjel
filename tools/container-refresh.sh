@@ -76,7 +76,7 @@ write_receipt() {  # write_receipt <exit-code>
   exit "$1"
 }
 
-echo "Axon container-refresh · $(date -u +%Y-%m-%dT%H:%M:%SZ 2>/dev/null || date -u)"
+echo "Sjel container-refresh · $(date -u +%Y-%m-%dT%H:%M:%SZ 2>/dev/null || date -u)"
 
 # Which capabilities this machine runs, and which of those are containers. Both reads go through
 # tools/lib/toml.sh: machine.toml owns the enabled set (tools/capability.sh is its only writer),

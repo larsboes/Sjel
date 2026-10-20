@@ -4,7 +4,7 @@ import Tauri
 import UIKit
 import WebKit
 
-// The on-device rung of Axon's model ladder (dashboard/src/lib/intelligence/). The app's floor is
+// The on-device rung of Sjel's model ladder (dashboard/src/lib/intelligence/). The app's floor is
 // iOS 16, so every FoundationModels use sits behind `#available`. On an ineligible device the
 // plugin still loads and says why it cannot run; it never pretends to answer.
 //

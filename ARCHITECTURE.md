@@ -138,7 +138,7 @@ schemas/machine.toml.example.
 
 | System | Kind | Local | Why |
 |---|---|---|---|
-| `axon` | project | yes | The public core: reusable contracts, capabilities and deployment tooling; private state is injected from the selected overlay. |
+| `sjel` | project | yes | The public core: reusable contracts, capabilities and deployment tooling; private state is injected from the selected overlay. |
 | `home-automation` | project | yes | Private home-automation deployment consumed through Sjel's public capability and Pack contracts; coordinates live in the selected overlay. |
 | `backup-target` | service | yes | Remote backup role, separate from each source host so one node failure cannot remove both live state and recovery data; coordinates live in the selected overlay. |
 | `pi-agent` | project | yes | Minimal open-source coding agent, extendable from core. One of three swappable harness targets to port Packs/skills to — distinct from opencode below. Points at upstream, matching upstreams.toml's [pi-coding-agent] pin: the fork this entry once named was never created. |
@@ -146,7 +146,7 @@ schemas/machine.toml.example.
 | `knowledge-base` | project | yes | Private knowledge store with its own sync lifecycle, connected through explicit capability contracts rather than treated as an Sjel-wide database. |
 | `obsidian-local-rest-api` | service | yes | Obsidian plugin (MIT) serving the open vault over loopback HTTP. The only route by which capabilities/vault writes into the vault: `vault fields --apply` reads a People note with GET and stores it with a raw-bytes PUT, never the frontmatter PATCH, which re-serialises the whole block. URL and key file come from the overlay's config/knowledge.toml. |
 | `mach-mono` | project | yes | Swift monorepo of macOS/iOS quality-of-life utilities; plugin-first, extendable from core. |
-| `lifeos` | platform | yes | Personalization + tooling layer under the agent runtime, and the ancestor of Sjel's public-core-plus-private-overlay shape. Axon held a reviewed delta against it until 2026-08-25 and holds none now — see upstreams.toml's [lifeos] entry, which owns the last consumed pin and the reason it stopped. Ideas flow from here into Sjel. |
+| `lifeos` | platform | yes | Personalization + tooling layer under the agent runtime, and the ancestor of Sjel's public-core-plus-private-overlay shape. Sjel held a reviewed delta against it until 2026-08-25 and holds none now — see upstreams.toml's [lifeos] entry, which owns the last consumed pin and the reason it stopped. Ideas flow from here into Sjel. |
 | `moonraker` | service | yes | Klipper's local REST API on the LAN — the actual integration surface printctl drives. Host in overlay config/printing.json. |
 | `fluidd` | service | yes | Web UI on top of Moonraker. Same API; not a separate integration. |
 | `orcaslicer` | tool | yes | Headless slicer printctl shells out to (STL/3MF -> gcode). User presets required (CLI rejects system presets). |

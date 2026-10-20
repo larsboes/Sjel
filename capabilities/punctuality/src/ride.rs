@@ -156,7 +156,7 @@ fn timestamp(batch: &arrow::record_batch::RecordBatch, name: &str, row: usize) -
 }
 
 /// Days since the Unix epoch to a civil date. Same proleptic-Gregorian
-/// arithmetic `dataset`/`date` modules use elsewhere in Axon, inlined here
+/// arithmetic `dataset`/`date` modules use elsewhere in Sjel, inlined here
 /// rather than taking a chrono dependency for one call.
 fn civil_from_days(z: i64) -> (i64, u32, u32) {
     let z = z + 719_468;

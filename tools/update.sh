@@ -3,7 +3,7 @@
 # this checkout to origin/main and re-run tools/doctor as a post-update
 # sanity check. Never force-pushes/rebases/resets: a diverged checkout
 # (local commits ahead AND behind) is left alone with instructions, not
-# silently discarded. Every Axon deployment, current or future, runs this
+# silently discarded. Every Sjel deployment, current or future, runs this
 # the same way — there is no fleet/central-registry concept; each checkout
 # maintains itself, per
 # `CONTRIBUTING.md#documentation-stays-owned-and-current`'s bring-your-
@@ -122,7 +122,7 @@ EOF
   fi
 }
 
-echo "Axon update · $SJEL_ROOT"
+echo "Sjel update · $SJEL_ROOT"
 echo
 
 cd "$SJEL_ROOT"

@@ -1,4 +1,4 @@
-//! Axon's own journal parser.
+//! Sjel's own journal parser.
 //!
 //! The journal FORMAT stays hledger-compatible (Principle 8: the file is
 //! human-readable and opens in hledger any day). Only the runtime dependency is
@@ -77,7 +77,7 @@ pub fn parse(text: &str) -> Result<Vec<JournalTransaction>> {
 
 /// Validate a journal without keeping the parse.
 ///
-/// This is what the old `hledger check` guarded, stated in Axon's own terms:
+/// This is what the old `hledger check` guarded, stated in Sjel's own terms:
 /// every line is a shape this parser recognizes, every date is a real calendar
 /// date, every amount parses, every transaction balances (with at most one
 /// amount inferred), and every `source-id` tag carries a value. A journal that
@@ -186,7 +186,7 @@ impl Parser {
                 Ok(())
             }
             "commodity" => {
-                // The directive declares a display style. Axon reads only the
+                // The directive declares a display style. Sjel reads only the
                 // decimal mark out of it, and only when no decimal-mark
                 // directive has already said so.
                 if self.decimal_mark.is_none() {
@@ -201,12 +201,12 @@ impl Parser {
             "account" | "payee" | "tag" => Ok(()),
             // A market price. Nothing consumes prices now that the valuation
             // report is gone, but the shape is in the published fixture, so it
-            // parses rather than refusing a file Axon itself publishes.
+            // parses rather than refusing a file Sjel itself publishes.
             "P" => Ok(()),
             other => refuse(
                 number,
                 format!(
-                    "unrecognized directive {other:?}; Axon's parser handles \
+                    "unrecognized directive {other:?}; Sjel's parser handles \
                      decimal-mark, commodity, account, payee, tag and P"
                 ),
             ),
@@ -220,7 +220,7 @@ impl Parser {
         if date_text.contains('=') {
             return refuse(
                 number,
-                "a secondary date is not a shape Axon writes or has measured; \
+                "a secondary date is not a shape Sjel writes or has measured; \
                  remove it or extend the parser deliberately",
             );
         }
@@ -229,7 +229,7 @@ impl Parser {
             message: format!("{date_text:?} is not a YYYY-MM-DD calendar date"),
         })?;
         let mut rest = rest.trim_start();
-        // Status mark. Axon's writer always emits `*`; the published fixture
+        // Status mark. Sjel's writer always emits `*`; the published fixture
         // leaves it off, and both are valid hledger.
         if let Some(tail) = rest.strip_prefix('*').or_else(|| rest.strip_prefix('!')) {
             if tail.is_empty() || tail.starts_with(char::is_whitespace) {
@@ -268,7 +268,7 @@ impl Parser {
         if let Some(comment) = trimmed.strip_prefix(';') {
             let tags = parse_comment_tags(Some(comment));
             // hledger attaches a comment to the posting above it, and to the
-            // transaction when no posting has been read yet. Axon's writer puts
+            // transaction when no posting has been read yet. Sjel's writer puts
             // `; source-id:` under the last posting, which is exactly why the
             // id is read back off a posting rather than the transaction.
             match transaction.postings.last_mut() {
@@ -325,7 +325,7 @@ impl Parser {
         if source_id.as_deref() == Some("") {
             return refuse(
                 raw.line,
-                "source-id tag has no value; a transaction Axon wrote is identified by it",
+                "source-id tag has no value; a transaction Sjel wrote is identified by it",
             );
         }
         self.finished.push(JournalTransaction {
@@ -358,7 +358,7 @@ fn balance(raw: &RawTransaction) -> Result<Vec<Posting>> {
                 return refuse(
                     posting.line,
                     "a second posting leaves its amount out; hledger infers at \
-                     most one per transaction and so does Axon",
+                     most one per transaction and so does Sjel",
                 );
             }
             elided = Some(index);
@@ -510,7 +510,7 @@ fn split_keyword(line: &str) -> (&str, &str) {
     line.split_once(char::is_whitespace).unwrap_or((line, ""))
 }
 
-/// Split a line at its comment marker. Descriptions Axon writes never contain a
+/// Split a line at its comment marker. Descriptions Sjel writes never contain a
 /// `;` — `import::sanitize_description` replaces it — so the first one wins.
 fn split_comment(line: &str) -> (&str, Option<&str>) {
     match line.split_once(';') {
@@ -595,7 +595,7 @@ fn parse_simple_amount(line: usize, text: &str, decimal_mark: char) -> Result<Pa
     if commodity.is_empty() {
         return refuse(
             line,
-            format!("{text:?} has no commodity; Axon's journal names one on every amount"),
+            format!("{text:?} has no commodity; Sjel's journal names one on every amount"),
         );
     }
     let (mantissa, scale) = parse_number(line, number_text.trim(), decimal_mark)?;
@@ -696,7 +696,7 @@ mod tests {
     use crate::import::{render_journal_entry, CandidateState, TransactionCandidate};
 
     /// The two header lines the live journal opens with, which every journal
-    /// Axon writes into starts from (`import.rs`'s own test writes the same).
+    /// Sjel writes into starts from (`import.rs`'s own test writes the same).
     const HEADER: &str = "decimal-mark .\ncommodity 1,000.00 EUR\n";
 
     fn parse_ok(text: &str) -> Vec<JournalTransaction> {
@@ -751,7 +751,7 @@ mod tests {
         assert_eq!(cents(&expense.postings[0]), -4_599);
         assert_eq!(cents(&expense.postings[1]), 4_599);
         assert_eq!(expense.postings[1].account, "expenses:uncategorized");
-        // Axon's writer puts the id under the last posting, so it is read back
+        // Sjel's writer puts the id under the last posting, so it is read back
         // off a posting rather than the transaction. `tags` stays empty, which
         // is what the shell-out adapter returned for these too.
         assert!(expense.tags.is_empty());
@@ -765,7 +765,7 @@ mod tests {
         std::fs::read_to_string(path).expect("the published fixture is part of the repository")
     }
 
-    /// `schemas/finance-journal.example` is the format Axon publishes. It is
+    /// `schemas/finance-journal.example` is the format Sjel publishes. It is
     /// deliberately richer than the live journal, and every shape in it has to
     /// parse or the repository documents a format its own reader refuses.
     #[test]

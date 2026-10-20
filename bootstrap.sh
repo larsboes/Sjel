@@ -1,5 +1,5 @@
 #!/bin/bash
-# bootstrap.sh — the one-line installer's entry point, and the only Axon script that runs
+# bootstrap.sh — the one-line installer's entry point, and the only Sjel script that runs
 # before there is a checkout. Decided in #2; everything it does is deliberately small.
 #
 #   curl -fsSL https://raw.githubusercontent.com/larsboes/Sjel/<tag>/bootstrap.sh | bash
@@ -13,7 +13,7 @@
 # reviewable and tested. This file is the part that cannot be, so it stays trivial.
 #
 #   SJEL_REF=v1.2.3      clone that tag instead of the newest release
-#   SJEL_DIR=~/src/Axon  clone here instead of ./Axon
+#   SJEL_DIR=~/src/Sjel  clone here instead of ./Sjel
 #   SJEL_PROFILE=usage   answer the profile question up front (usage | development)
 #
 # bash 3.2-safe.
@@ -33,7 +33,7 @@ die()  { printf 'bootstrap: %s\n' "$*" >&2; exit 1; }
 
 require_git() {
   command -v git >/dev/null 2>&1 || die "git is required and was not found.
-  Axon resolves its own version from the checkout (git describe) and updates by fast-forward,
+  Sjel resolves its own version from the checkout (git describe) and updates by fast-forward,
   so git is a hard requirement rather than a convenience — see #2."
 }
 
@@ -55,8 +55,8 @@ ask_profile() {
   # Without a terminal there is nothing to ask, and usage is the safe default to assume.
   if [ ! -r /dev/tty ]; then printf 'usage'; return 0; fi
   say "" >&2
-  say "  usage        pinned to the release, shallow clone — run Axon" >&2
-  say "  development  full history — change Axon" >&2
+  say "  usage        pinned to the release, shallow clone — run Sjel" >&2
+  say "  development  full history — change Sjel" >&2
   say "" >&2
   printf '  Which? [usage/development]: ' >&2
   local answer=""
@@ -86,7 +86,7 @@ main() {
   local ref profile dir
   ref="$(resolve_ref)"
   [ -n "$ref" ] || die "could not resolve the newest release of $SJEL_REPO — set SJEL_REF to a tag."
-  dir="${SJEL_DIR:-$PWD/Axon}"
+  dir="${SJEL_DIR:-$PWD/Sjel}"
   profile="$(ask_profile)"
   case "$profile" in
     usage|development) ;;

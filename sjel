@@ -1,5 +1,5 @@
 #!/bin/bash
-# sjel — the public command interface for a Sjel installation. `axon` is a symlink to it.
+# sjel — the public command interface for a Sjel installation. `sjel` is a symlink to it.
 #
 # Launcher only. The commands moved into the sjel-cli crate on 2026-10-02: dispatch and help in
 # tools/sjel-cli/src/main.rs, `capability` in capability.rs, `search` in search.rs. This file

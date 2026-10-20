@@ -16,7 +16,7 @@
 //!
 //! There is no POST and no PATCH here, and adding one is not a small change.
 //! A write endpoint would make this server a second writer of files a human is
-//! editing in Obsidian, which is the conflict the one-way rule (§5.5, "Axon reads
+//! editing in Obsidian, which is the conflict the one-way rule (§5.5, "Sjel reads
 //! the vault and does not write to it") exists to prevent.
 //!
 //! ## Why the read is not cached

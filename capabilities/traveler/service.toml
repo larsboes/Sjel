@@ -13,7 +13,7 @@ ready_path  = "/ready"   # availability is judged on this, not on liveness (#126
 # capability needs no permissive CORS (server.rs states the reason).
 proxy_api_only = "true"
 
-# No `requires`: the profile lives in the shared Axon database file this process
+# No `requires`: the profile lives in the shared Sjel database file this process
 # opens itself, so there is no service to wait for (PRD Q45). It is deliberately
 # NOT `requires = ["trips"]` — the profile is read by a search that must keep
 # working when nothing has been stated, so a dependency here would turn "no

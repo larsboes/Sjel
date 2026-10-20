@@ -7,7 +7,7 @@
 # derived from Atlas/People and goes stale the moment a person note is added.
 #
 # This exists as a script rather than a shell fragment inside a LaunchAgent for
-# the reason every other Axon agent does the same: a plist that carries quoting,
+# the reason every other Sjel agent does the same: a plist that carries quoting,
 # redirection and an && is a plist nobody can test. Run it by hand and it
 # behaves identically to the scheduled run.
 #

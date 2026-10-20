@@ -86,7 +86,7 @@ require curl
 require jq
 
 SJEL_ROOT="$(_resolve_axon_root)"
-[ -n "$SJEL_ROOT" ] || die "Axon checkout not found; export SJEL_ROOT=/path/to/Axon"
+[ -n "$SJEL_ROOT" ] || die "Sjel checkout not found; export SJEL_ROOT=/path/to/Sjel"
 export SJEL_ROOT
 
 OVERLAY_ROOT="$(_resolve_overlay_root)"

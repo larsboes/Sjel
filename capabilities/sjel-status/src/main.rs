@@ -65,7 +65,7 @@ const ROUTES: &[route_manifest::Route] = &[
     r(
         "GET",
         "/api/sjel-status/self",
-        "This machine's resolved Axon model.",
+        "This machine's resolved Sjel model.",
     ),
     r(
         "GET",
@@ -772,8 +772,8 @@ mod backup_tests {
 
     #[test]
     fn undeclared_thresholds_never_invent_a_cadence() {
-        // Axon ships no personal schedule. A capability whose owner never said what timely
-        // means gets `unknown` — not a red badge derived from a number Axon made up.
+        // Sjel ships no personal schedule. A capability whose owner never said what timely
+        // means gets `unknown` — not a red badge derived from a number Sjel made up.
         let silent = BackupContract {
             holds_service: false,
             advise_days: None,

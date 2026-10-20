@@ -1,10 +1,10 @@
-# Every host binary Axon assumes is already installed on the machine. No entry, no check.
+# Every host binary Sjel assumes is already installed on the machine. No entry, no check.
 #
-# WHY THIS IS NOT upstreams.toml. upstreams.toml is "external CODE Axon builds or consumes,"
+# WHY THIS IS NOT upstreams.toml. upstreams.toml is "external CODE Sjel builds or consumes,"
 # with an audit verdict + license (CONTRIBUTING.md#dependency-verdicts-and-provenance). This file is a different concern: "what
-# host tool must be on PATH for Axon's own scripts to run, and how do you install it." Most
+# host tool must be on PATH for Sjel's own scripts to run, and how do you install it." Most
 # entries here (git, jq, uv, gh, restic, docker, cargo) are host infrastructure with no
-# upstreams.toml entry at all — Axon doesn't build them, it just calls them. The few that are
+# upstreams.toml entry at all — Sjel doesn't build them, it just calls them. The few that are
 # ALSO adopted code (bun, bitwarden-cli, apfel, macmon, the scanners) carry `upstream = <id>`
 # pointing at their upstreams.toml section; the license/why live THERE, never restated here
 # (CONTRIBUTING.md#schemas-and-dependency-direction "import, never redefine"; CONTRIBUTING.md#one-manifest-per-concern no duplication).
@@ -18,12 +18,12 @@
 #       optional — feature/gate-scoped; absence is a warning, not a failure.
 #       runtime  — a container runtime; the checker resolves this machine's chosen
 #                  container_runtime and checks ONLY that one (the others are alternatives).
-#   why          = one line: what Axon uses it for.
+#   why          = one line: what Sjel uses it for.
 #   install_macos / install_linux = the copy-paste install hint for that OS.
 #   bin          = the executable name IF it differs from the section name (e.g. bitwarden-cli → bw).
 #   os           = "macos" | "linux" — scope the entry to one OS; the checker skips it elsewhere.
 #   upstream     = the upstreams.toml section id, when this tool is also audited code.
-#   min_version / version_cmd = optional FLOOR -- the oldest release Axon's use of the tool is
+#   min_version / version_cmd = optional FLOOR -- the oldest release Sjel's use of the tool is
 #                  known to work on, never a version to install. Nothing holds a host at it:
 #                  capabilities/host-patch upgrades every package manager nightly (Q77), so a
 #                  healthy machine sits above every floor here. Checked only when BOTH are
@@ -61,7 +61,7 @@ install_linux = "apt-get install -y git"
 
 [bash]
 required = "yes"
-why = "every tools/*.sh runs here; Axon targets bash 3.2 (CONTRIBUTING.md#portable-shell) so the stock macOS shell is enough"
+why = "every tools/*.sh runs here; Sjel targets bash 3.2 (CONTRIBUTING.md#portable-shell) so the stock macOS shell is enough"
 install_macos = "preinstalled (3.2)"
 install_linux = "preinstalled"
 
@@ -196,7 +196,7 @@ required = "optional"
 needed_by = ["capability:comms", "capability:scouting"]
 version_cmd = "ollama --version"
 min_version = "0.33.0"
-why = "serves the `embedding` and `summarization` inference roles: capabilities/comms/src/relevance.rs for Feed-TELOS ranking, capabilities/scouting/src/embed.rs for profile vectors, and the strong local digest rung an operator reaches by pressing Regenerate. Absent, both degrade rather than fail -- relevance drops to the deterministic `lexical` control -- which is why this is optional and also exactly why it must be declared: the same silence the macmon and yt-dlp entries above record. It is a systems.toml service ([ollama]), not adopted code, so no `upstream` id: Axon calls it and builds nothing from it."
+why = "serves the `embedding` and `summarization` inference roles: capabilities/comms/src/relevance.rs for Feed-TELOS ranking, capabilities/scouting/src/embed.rs for profile vectors, and the strong local digest rung an operator reaches by pressing Regenerate. Absent, both degrade rather than fail -- relevance drops to the deterministic `lexical` control -- which is why this is optional and also exactly why it must be declared: the same silence the macmon and yt-dlp entries above record. It is a systems.toml service ([ollama]), not adopted code, so no `upstream` id: Sjel calls it and builds nothing from it."
 install_macos = "brew install --cask ollama"
 install_linux = "curl -fsSL https://ollama.com/install.sh | sh"
 
@@ -204,7 +204,7 @@ install_linux = "curl -fsSL https://ollama.com/install.sh | sh"
 required = "optional"
 version_cmd = "tailscale version"
 min_version = "1.98.9"
-why = "capabilities/host-net execs `tailscale status --json`, `tailscale debug prefs` and `tailscale lock status` for its `tailnet` verb; a host without it degrades to a named error rather than an empty posture. Undeclared until 2026-09-02, which is the same silence the macmon and yt-dlp entries above record. It is a host daemon Axon calls and builds nothing from, so no `upstream` id, the reasoning [ollama] states. The floor is the release this entry was reviewed against, not the build host's incidental 1.102.3: the three subcommands are all long-standing, so the functional floor is far lower and unmeasured, and writing the build host's own version here would report every slightly older but working install as `outdated`. Below the reviewed release is the one statement this can make with a source."
+why = "capabilities/host-net execs `tailscale status --json`, `tailscale debug prefs` and `tailscale lock status` for its `tailnet` verb; a host without it degrades to a named error rather than an empty posture. Undeclared until 2026-09-02, which is the same silence the macmon and yt-dlp entries above record. It is a host daemon Sjel calls and builds nothing from, so no `upstream` id, the reasoning [ollama] states. The floor is the release this entry was reviewed against, not the build host's incidental 1.102.3: the three subcommands are all long-standing, so the functional floor is far lower and unmeasured, and writing the build host's own version here would report every slightly older but working install as `outdated`. Below the reviewed release is the one statement this can make with a source."
 # NO needed_by, and that is the decision rather than an omission. `capability:host-net` cannot
 # fire: toolchain-check resolves a capability scope against machine.toml's `capabilities` array
 # (tools/toolchain-check:133-137), and by convention every capability without a service.toml —
@@ -226,7 +226,7 @@ bin = "soffice"
 # warning with an install hint, never a failure. The one consumer is the slide-deck Pack
 # (Packs/presentations), whose `scripts/deck render` shells out to `soffice --headless
 # --convert-to pdf` and has no fallback: an unrendered deck is an unverified deck.
-why = "headless LibreOffice is the only renderer the slide-deck skill can use, and rendering is its verification step; `scripts/deck render` fails without it (Packs/presentations). Axon calls it and builds nothing from it, so no `upstream` id, the [ollama] rule. macOS note: the cask installs a .app and links a `soffice` shim into the Homebrew bin dir, which is what `shutil.which(\"soffice\")` finds; without that shim the binary sits at /Applications/LibreOffice.app/Contents/MacOS/soffice and render reports it as missing."
+why = "headless LibreOffice is the only renderer the slide-deck skill can use, and rendering is its verification step; `scripts/deck render` fails without it (Packs/presentations). Sjel calls it and builds nothing from it, so no `upstream` id, the [ollama] rule. macOS note: the cask installs a .app and links a `soffice` shim into the Homebrew bin dir, which is what `shutil.which(\"soffice\")` finds; without that shim the binary sits at /Applications/LibreOffice.app/Contents/MacOS/soffice and render reports it as missing."
 install_macos = "brew install --cask libreoffice"
 install_linux = "apt-get install -y libreoffice"
 
@@ -267,7 +267,7 @@ install_linux = "apt-get install -y libreoffice"
 [bat]
 required = "optional"
 os = "macos"
-why = "colourised file reading. `cat` is `bat --style=plain --paging=never` in the personal shell config, MANPAGER pipes man pages through it, and ~/.config/bat/config holds the theme and style. Axon calls it and builds nothing from it, so no `upstream` id, the [ollama] rule. Entirely cosmetic: without it `cat` is BSD cat and nothing else changes"
+why = "colourised file reading. `cat` is `bat --style=plain --paging=never` in the personal shell config, MANPAGER pipes man pages through it, and ~/.config/bat/config holds the theme and style. Sjel calls it and builds nothing from it, so no `upstream` id, the [ollama] rule. Entirely cosmetic: without it `cat` is BSD cat and nothing else changes"
 install_macos = "brew install bat"
 
 [eza]
@@ -280,8 +280,8 @@ install_macos = "brew install eza"
 required = "optional"
 os = "macos"
 bin = "delta"
-# NOT tools/lib/delta.sh, which owns the word inside Axon and means the version-to-version
-# diff between two of Axon's own releases. This row is the diff COLOURISER for the git CLI.
+# NOT tools/lib/delta.sh, which owns the word inside Sjel and means the version-to-version
+# diff between two of Sjel's own releases. This row is the diff COLOURISER for the git CLI.
 # Two different deltas, one word, and the collision is worth naming here rather than left for
 # the next reader to trip over.
 why = "git's pager for diff, log and blame, set once in ~/.gitconfig as `core.pager = delta` plus interactive.diffFilter, delta.navigate and delta.line-numbers. It is a git setting rather than a Sjel one, which is why nothing in the repository has to invoke it. Absence does not break the setting: git reports the pager failure and prints the diff unrendered"
@@ -296,7 +296,7 @@ install_macos = "brew install zoxide"
 [fzf]
 required = "optional"
 os = "macos"
-why = "`eval \"$(fzf --zsh)\"` in the personal shell config, which is what turns Ctrl-R into history search, Ctrl-T into file picking and **<Tab> into completion; it is also the selector zoxide's `zi` reaches for. Declared on the same reasoning as the four above: nothing in Axon calls it yet, and this row is where that changes the day a tool does"
+why = "`eval \"$(fzf --zsh)\"` in the personal shell config, which is what turns Ctrl-R into history search, Ctrl-T into file picking and **<Tab> into completion; it is also the selector zoxide's `zi` reaches for. Declared on the same reasoning as the four above: nothing in Sjel calls it yet, and this row is where that changes the day a tool does"
 install_macos = "brew install fzf"
 
 # Core since 2026-10-02, no longer `workflow:build` only. Sjel's own tooling moves into the
@@ -375,19 +375,19 @@ install_macos = "brew install procs"
 
 # [apple-container] stood here until 2026-09-02, when Q75 retired it. This machine
 # declares container_runtime = "docker" and capabilities/agentbox invokes docker, so no machine
-# needs Apple's `container` executable to run Axon. Deleted rather than kept: toolchain.toml
+# needs Apple's `container` executable to run Sjel. Deleted rather than kept: toolchain.toml
 # declares what a machine must have, and a host tool nothing calls is a check that can only be
 # noise. upstreams.toml [apple-container] holds the dated verdict.
 #
 # WHICH DAEMON supplies the docker CLI is a machine fact, not a second entry here. OrbStack does
 # on this Mac; Docker Desktop, colima or a Linux daemon do elsewhere. [docker] below is the whole
-# assumption Axon makes, and it is the [ollama] rule above applied again: Axon calls it and
+# assumption Sjel makes, and it is the [ollama] rule above applied again: Sjel calls it and
 # builds nothing from it, so there is no upstreams.toml row either.
 
 [docker]
 required = "runtime"
 why = "container runtime (machine.toml container_runtime = docker). Since 2026-09-02 it is the only one this machine declares, and capabilities/agentbox depends on the CLI by name. `bin` is deliberately absent: the section name is the command, whichever daemon answers it. NB on macOS the OrbStack CLI lives at ~/.orbstack/bin/docker, which a login shell has on PATH and a bare launchd or cron environment does not -- tools/service-runner.sh injects its dirname into generated units for exactly that reason, and a hand-written invocation has to do the same"
-install_macos = "brew install --cask orbstack   # or --cask docker, or colima — Axon assumes the docker CLI, never one provider of it"
+install_macos = "brew install --cask orbstack   # or --cask docker, or colima — Sjel assumes the docker CLI, never one provider of it"
 install_linux = "apt-get install -y docker.io   # or Docker Engine per docs.docker.com"
 
 [podman]

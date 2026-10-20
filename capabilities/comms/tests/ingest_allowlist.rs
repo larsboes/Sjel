@@ -89,7 +89,7 @@ fn a_listed_loopback_origin_is_fetched_and_its_neighbours_are_not() {
     );
 
     // The neighbouring port on the same host is a different origin, and every
-    // Axon service is a neighbour of the demo origin. Refused before a socket
+    // Sjel service is a neighbour of the demo origin. Refused before a socket
     // is opened, so this asserts a policy and connects to nothing.
     let err = comms::media::fetch(&format!("http://127.0.0.1:{}/api/plans", port + 1))
         .expect_err("a port the config did not name stays refused");

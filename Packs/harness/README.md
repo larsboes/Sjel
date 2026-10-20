@@ -6,8 +6,8 @@ Every other Pack does work. This one maintains the thing that does the work — 
 that holds it: what skills should exist, what should stop being loaded into every session, and how
 to operate Sjel itself.
 
-- **`axon`** operates and changes the Sjel repository: capability discovery, service and feed
-  operations, architecture placement, focused change. It carries the `axon` CLI
+- **`sjel`** operates and changes the Sjel repository: capability discovery, service and feed
+  operations, architecture placement, focused change. It carries the `sjel` CLI
   (`help`, `search`, `doctor`, `context`, `storage`, `gates`, `test`, `cargo`, `capability`,
   `pack`) and the rules for working in this repo — where a change belongs, what to read before
   making it, and which verification is proportionate to it. Merged into this Pack 2026-09-17;
@@ -30,13 +30,13 @@ The three maintenance skills put a deterministic script in front of the model.
 `collect-signals.ts` gathers and counts; `measure-context.ts` measures and resolves. Neither
 judges, and neither writes. Two runs over the same files return the same corpus, so a proposal can
 be argued with instead of trusted, and the model spends its judgment on the part that needs
-judgment. `axon` is the exception and is not that shape: it is a runbook over an existing CLI.
+judgment. `sjel` is the exception and is not that shape: it is a runbook over an existing CLI.
 
-**Why `axon` is here.** It was a one-skill Pack. Every profile that held it also held this one, and
+**Why `sjel` is here.** It was a one-skill Pack. Every profile that held it also held this one, and
 both answer the same question from the same direction — the agent system looking at itself. A Pack
 is a deployment unit, not a category, so co-deployment is the test; the skills keep their names, so
-nothing changed about what loads. Note the consequence for profiles: `productive` held `axon` but
-not this Pack, so it now selects `skills = { "harness" = ["axon"] }` rather than dragging in three
+nothing changed about what loads. Note the consequence for profiles: `productive` held `sjel` but
+not this Pack, so it now selects `skills = { "harness" = ["sjel"] }` rather than dragging in three
 maintenance skills it never loaded.
 
 ## The tool and the hooks
@@ -67,9 +67,9 @@ Two Claude Code hooks call `tools/pack-drift-hook` and report without ever block
 // ~/.claude/settings.json
 "hooks": {
   "SessionStart": [{ "matcher": "startup",
-    "hooks": [{ "type": "command", "command": "<axon>/tools/pack-drift-hook", "timeout": 15 }] }],
+    "hooks": [{ "type": "command", "command": "<sjel>/tools/pack-drift-hook", "timeout": 15 }] }],
   "FileChanged":  [{ "matcher": "SKILL.md",
-    "hooks": [{ "type": "command", "command": "<axon>/tools/pack-drift-hook", "timeout": 15 }] }]
+    "hooks": [{ "type": "command", "command": "<sjel>/tools/pack-drift-hook", "timeout": 15 }] }]
 }
 ```
 
@@ -90,7 +90,7 @@ Three things sit near each other and do different jobs:
 | *How* is a skill written and audited? | `skill-creator`, in `Packs/writing` |
 | What loads every session, and can it be smaller? | `trim`, here |
 | Where is it deployed, and what drifted? | `harness-sync`, here |
-| How do I operate or change Sjel itself? | `axon`, here |
+| How do I operate or change Sjel itself? | `sjel`, here |
 
 `suggest-skills` hands its shortlist to the authoring skill and stops. The authoring skill never
 decides what to build. Keeping the two apart is the point: the same agent doing both will propose

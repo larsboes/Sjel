@@ -18,7 +18,7 @@
 //! only; this one has to accept an arbitrary offset (Google does not normalize
 //! to UTC) and run the conversion *backwards* for export, which is the half
 //! that has to reason about nonexistent and ambiguous wall times at all. The
-//! two crates have no dependency edge, and a `libs/axon-time` with one real
+//! two crates have no dependency edge, and a `libs/sjel-time` with one real
 //! consumer plus a near-duplicate still sitting in scouting would be worse
 //! than an honest documented copy. Folding both into one lib is a follow-up
 //! that has to touch scouting.

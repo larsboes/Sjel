@@ -111,7 +111,7 @@ why   = "Swift monorepo of macOS/iOS quality-of-life utilities; plugin-first, ex
 url   = "https://github.com/danielmiessler/LifeOS"
 kind  = "platform"
 local = "yes"
-why   = "Personalization + tooling layer under the agent runtime, and the ancestor of Sjel's public-core-plus-private-overlay shape. Axon held a reviewed delta against it until 2026-08-25 and holds none now — see upstreams.toml's [lifeos] entry, which owns the last consumed pin and the reason it stopped. Ideas flow from here into Sjel."
+why   = "Personalization + tooling layer under the agent runtime, and the ancestor of Sjel's public-core-plus-private-overlay shape. Sjel held a reviewed delta against it until 2026-08-25 and holds none now — see upstreams.toml's [lifeos] entry, which owns the last consumed pin and the reason it stopped. Ideas flow from here into Sjel."
 
 # ---- 3d-printing stack (referenced by Packs/3d-printing) -------------------
 

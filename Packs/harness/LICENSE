@@ -65,7 +65,7 @@ a-Fig/Accordion, revision d34b5d09ebe9e06e8279516d169e773bed4b05da, branch devma
   under the runner it was written for. Every *.test.ts under this directory is
   upstream's, byte-identical and vendored as-is; upstream's runner is vitest, and
   Bun's `vi` shim does not implement advanceTimersByTimeAsync, so `bun test` reported
-  seven failures in code Axon did not write. bunfig.toml scopes `bun test` away from
+  seven failures in code Sjel did not write. bunfig.toml scopes `bun test` away from
   Packs/*/pi-packages/**, and the CI bun-tests job runs `bun run test` inside this
   directory instead (24 files, 552 tests, green from 2026-10-01). The tests are kept
   rather than dropped because they carry upstream's coverage of the two conductors and

@@ -24,7 +24,7 @@
 #
 # NOT run here either: any image or container scan. grype lives in
 # .github/workflows/security.yml, which installs it itself and runs whether or not this machine
-# is awake. Nothing on this host needs grype for Axon to be patched.
+# is awake. Nothing on this host needs grype for Sjel to be patched.
 #
 # Exit 0 = patched and the audit was clean · 1 = the audit found something · 2 = a step failed.
 # bash 3.2-safe.
@@ -67,7 +67,7 @@ step() {  # step <binary> <label> <argv...>
   return 0
 }
 
-echo "Axon host-patch · $(date -u +%Y-%m-%dT%H:%M:%SZ 2>/dev/null || date -u)"
+echo "Sjel host-patch · $(date -u +%Y-%m-%dT%H:%M:%SZ 2>/dev/null || date -u)"
 
 step brew   "brew update"           brew update
 step brew   "brew upgrade formula"  brew upgrade --formula

@@ -1,6 +1,6 @@
 # The demo manifest (#168). One file decides what the published demonstration contains.
 #
-# Axon's public page used to be tables generated from self.json: true, checkable, and
+# Sjel's public page used to be tables generated from self.json: true, checkable, and
 # no help at all to somebody asking what the thing looks like. This manifest drives the
 # other half — a real dashboard bundle running on data that was never real.
 #

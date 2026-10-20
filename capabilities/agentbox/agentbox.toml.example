@@ -1,5 +1,5 @@
 # Shape of <overlay>/config/agentbox.toml — this machine's instance of the box.
-# Single-line TOML only (tools/lib/toml.sh). Copy, fill in, keep out of Axon.
+# Single-line TOML only (tools/lib/toml.sh). Copy, fill in, keep out of Sjel.
 #
 # What belongs here: which agent, which model, where the model answers, how much of
 # the machine the box may use. What does NOT: the agent's version and checksum (that

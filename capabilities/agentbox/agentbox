@@ -266,7 +266,7 @@ cmd_build() {
 
 # --- config rendering ------------------------------------------------------
 
-# Rendered fresh on every run: Axon owns the contract, the overlay owns the instance
+# Rendered fresh on every run: Sjel owns the contract, the overlay owns the instance
 # values and whatever the agent itself writes next to them (sessions, caches, trust).
 render_config_dir() {
   mkdir -p "$AGENT_DIR"
@@ -400,7 +400,7 @@ cmd_run() {
 # It no longer writes a self-update shim. That shim intercepted `pi update|upgrade|self-update`
 # and refused them, because a self-updating binary replaced the thing on disk and left the
 # profile's version literal and checksum describing software the machine had stopped running
-# (Axon#126 — upstreams.toml's pi-coding-agent entry records exactly that happening, `pi update`
+# (Sjel#126 — upstreams.toml's pi-coding-agent entry records exactly that happening, `pi update`
 # about 15h after a release). Q77 (2026-09-02) deleted the literal and the pin it protected.
 # With this launcher resolving the LATEST release on every build and install, a self-update
 # moves the binary to the same place the next `host-install` would, so the shim would be
@@ -468,7 +468,7 @@ cmd_host_install() {
   # and neither Dependabot alerts nor osv-scanner will ever see it. The cooldown half of this
   # check went on 2026-09-02 (Q74) — it asked how OLD the bytes were; the sha256 in
   # fetch_archive asks WHAT they are, and that one still refuses.
-  repo="$(upstream_repo)" || die "profile $PROFILE declares no 'upstream' — cannot name the advisory list (Axon#126)"
+  repo="$(upstream_repo)" || die "profile $PROFILE declares no 'upstream' — cannot name the advisory list (Sjel#126)"
   echo "agentbox: advisories are NOT checked here — open the list before you accept:"
   echo "    https://github.com/$repo/security/advisories"
   echo "  (capabilities/agentbox/README.md#what-host-install-refuses explains why this is manual)"
@@ -527,7 +527,7 @@ cmd_host_install() {
   echo
   echo "Add it to PATH ahead of any other $AGENT:"
   echo "  export PATH=\"$host_root/bin:\$PATH\""
-  echo "Axon does not edit your shell config; that is a machine fact and belongs to you."
+  echo "Sjel does not edit your shell config; that is a machine fact and belongs to you."
 }
 
 # --- doctor ----------------------------------------------------------------

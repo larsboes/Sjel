@@ -73,7 +73,7 @@ ENV_FILE="$SJEL_PERSONAL_ROOT/$ENV_FILE_REL"
 POINTER="$SJEL_PERSONAL_ROOT/secrets/$SERVICE.md"
 
 echo "capability:  $CAP"
-echo "vault item:  \"$SERVICE\" (folder: Axon, on $DOMAIN)"
+echo "vault item:  \"$SERVICE\" (folder: Sjel, on $DOMAIN)"
 echo "env file:    $ENV_FILE ($VAR)"
 echo "pointer doc: $POINTER"
 echo
@@ -114,10 +114,10 @@ trap cleanup EXIT
 bw sync --session "$BW_SESSION" >/dev/null
 
 FOLDER_ID="$(bw list folders --session "$BW_SESSION" --nointeraction \
-  | jq -r '.[] | select(.name=="Axon") | .id' | head -1)"
+  | jq -r '.[] | select(.name=="Sjel") | .id' | head -1)"
 if [ -z "$FOLDER_ID" ]; then
   FOLDER_ID="$(bw get template folder --session "$BW_SESSION" --nointeraction \
-    | jq '.name="Axon"' | bw encode \
+    | jq '.name="Sjel"' | bw encode \
     | bw create folder --session "$BW_SESSION" --nointeraction | jq -r .id)"
 fi
 
@@ -153,7 +153,7 @@ esac
 
 echo
 echo "About to:"
-[ "${CHOICE:0:1}" != "K" ] && [ "${CHOICE:0:1}" != "k" ] && echo "  - write the value to the vault item \"$SERVICE\" (folder Axon)"
+[ "${CHOICE:0:1}" != "K" ] && [ "${CHOICE:0:1}" != "k" ] && echo "  - write the value to the vault item \"$SERVICE\" (folder Sjel)"
 echo "  - write $VAR into $ENV_FILE"
 echo "  - write/update $POINTER (pointer only, never the value)"
 read -r -p "Continue? [y/N]: " CONFIRM
@@ -197,7 +197,7 @@ Reference only — the plaintext value never touches a file, per \`axon-overlay/
 (\`$ENV_FILE_REL\` is the one required exception: the container needs a real env value, and
 \`*.env\` is hard-blocked in \`.gitignore\` so it never reaches git).
 
-- **Plaintext:** Vaultwarden, item \`$SERVICE\`, folder \`Axon\`, on \`$DOMAIN\`.
+- **Plaintext:** Vaultwarden, item \`$SERVICE\`, folder \`Sjel\`, on \`$DOMAIN\`.
   Retrieve: \`bw unlock\` (or reuse \`\$BW_SESSION\`), then
   \`bw get notes "$SERVICE" --session "\$BW_SESSION"\`
 - **Deployed as:** \`$ENV_FILE_REL\` → \`$VAR\`

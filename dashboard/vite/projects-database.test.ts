@@ -17,7 +17,7 @@ const row = (id: string, fields: Record<string, string> = {}) => ({ id, fields }
 
 describe('project note embeds', () => {
   test('a link target is the last path segment, not the label', () => {
-    expect(linkTargets('[[Projects/Sjel/Sjel|Axon]], [[Waschmaschine]]')).toEqual(['Sjel', 'Waschmaschine']);
+    expect(linkTargets('[[Projects/Sjel/Sjel|Sjel]], [[Waschmaschine]]')).toEqual(['Sjel', 'Waschmaschine']);
   });
 
   test('tasks by project match the tasks that link the host note', () => {

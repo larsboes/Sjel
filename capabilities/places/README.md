@@ -19,7 +19,7 @@ A 2026-08-25 survey found four place shapes in the system, none shared:
 
 The map needs one registry and one geocoder, and four consumers exist on day one:
 the spend layer (finance), the travel layer (trips, transit), the people layer
-(the companion register from `PRD Sjel.md` §8.2), and the dashboard `/map` route.
+(the companion register from `PRD Axon.md` §8.2), and the dashboard `/map` route.
 That names the concrete consumer the no-speculative-surfaces ruling requires
 (`dashboard/README.md`, "capabilities expose HTTP").
 

@@ -1,7 +1,7 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://axon.local/schemas/cloud-content-analysis.schema.json",
-  "title": "Axon Cloud Content Analysis",
+  "title": "Sjel Cloud Content Analysis",
   "description": "A bounded structured result produced from one explicitly approved cloud derivative.",
   "type": "object",
   "required": ["schema_version", "summary", "importance", "importance_rationale", "important_dates", "action_items", "topics"],

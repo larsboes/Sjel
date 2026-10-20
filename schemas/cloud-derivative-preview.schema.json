@@ -1,7 +1,7 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://axon.local/schemas/cloud-derivative-preview.schema.json",
-  "title": "Axon Cloud Derivative Preview",
+  "title": "Sjel Cloud Derivative Preview",
   "description": "A locally generated, bounded document that must be reviewed before it can be staged and queued for cloud processing.",
   "type": "object",
   "required": [

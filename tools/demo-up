@@ -104,7 +104,7 @@ write_comms_config() {
   SJEL_DEMO_COMMS_TOKEN="$(cat "$secret_file")"
   export SJEL_DEMO_COMMS_TOKEN
   # Comms refuses to fetch a URL that resolves inside this machine — an ingested
-  # link would otherwise drive any loopback-bound Axon API (Q74, see
+  # link would otherwise drive any loopback-bound Sjel API (Q74, see
   # capabilities/comms/src/media.rs check_destination). Every URL this demo seeds
   # is exactly that, on purpose: the origin is loopback so the published corpus
   # depends on no host anybody else owns. So the demo names its one origin here,

@@ -407,7 +407,7 @@ pub fn seed_from_note(note: &ScannedNote, today: &str) -> Subscription {
 /// non-EUR price renders its refusal, which is the state of a store with no FX rows.
 pub fn render_block(sub: &Subscription, today: &str, rates: &[FxObservation]) -> String {
     let mut out = String::new();
-    out.push_str("> [!info] Derived by Axon — do not edit inside this block\n");
+    out.push_str("> [!info] Derived by Sjel — do not edit inside this block\n");
 
     match sub.price_at(today) {
         Some(p) => {
@@ -559,7 +559,7 @@ fn cycle_word(cycle: BillingCycle) -> &'static str {
 ///
 /// Vault-relative, not configurable — a second declaration of where machine output goes
 /// is how two hosts write to two folders and neither notices.
-// `Resources/Axon/Subscriptions` until 2026-10-08, when the vault folder took the product name.
+// `Resources/Sjel/Subscriptions` until 2026-10-08, when the vault folder took the product name.
 pub const PROJECTION_DIR: &str = "Resources/Sjel/Subscriptions";
 
 /// One subscription as a whole file, for the case where no note exists to hold a region.

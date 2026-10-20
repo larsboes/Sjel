@@ -22,7 +22,7 @@ path = "src/main.rs"
 # this reopens the prior "no server, zero consumers" call (dashboard is
 # now the named consumer) instead of just re-adding it unrecorded. No
 # tract-onnx -- see hafas.rs's doc comment for why the ONNX delay-prediction
-# machinery was deliberately not ported (no model artifact exists in Axon
+# machinery was deliberately not ported (no model artifact exists in Sjel
 # yet; it would be dead-weight code).
 [[bin]]
 name = "transit-server"

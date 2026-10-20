@@ -246,7 +246,7 @@ pub fn collapse_ws(s: &str) -> String {
     s.split_whitespace().collect::<Vec<_>>().join(" ")
 }
 
-/// The entities Axon's sources actually emit.
+/// The entities Sjel's sources actually emit.
 ///
 /// `&amp;` is decoded **last**, and that ordering is the whole correctness
 /// argument: decoding it first turns `&amp;lt;` into `&lt;`, which the next

@@ -138,7 +138,7 @@ while IFS= read -r line; do [ -n "$line" ] && EXCLUDES+=("$line"); done < <(toml
 EXCLUDE_ARGS=()
 for x in ${EXCLUDES[@]+"${EXCLUDES[@]}"}; do EXCLUDE_ARGS+=(--exclude "$x"); done
 
-# Where the declared backup_paths hang from. The overlay for every capability whose data Axon
+# Where the declared backup_paths hang from. The overlay for every capability whose data Sjel
 # itself writes; a machine-local root for one whose data lives where the operator put it. The
 # vault is that case — an iCloud container path is a fact about this machine, so it cannot sit
 # in a tracked manifest, exactly as [[state_mount]] cannot.
@@ -579,7 +579,7 @@ fi
 
 # The archive describes the historical backup contract it was made from. Restore checks
 # it against the tracked service.toml before using it, so a changed contract requires
-# checking out the matching Axon revision instead of guessing. All values originate in
+# checking out the matching Sjel revision instead of guessing. All values originate in
 # tracked manifests and contain no host, user, target, receipt, or private path.
 write_toml_array() { # <key> [values...]
   key="$1"; shift
@@ -919,7 +919,7 @@ fi  # end destination-kind branch
 # -- which is the whole point of having one: cleanup() deletes the staging dir and the
 # tarball, so without this nothing local can answer "when was the last successful
 # backup" and reading the answer off the target costs an ssh round trip plus an
-# unlocked vault agent. Instance state, so it lives in the overlay, not in Axon.
+# unlocked vault agent. Instance state, so it lives in the overlay, not in Sjel.
 # Deliberately NOT backup/local/.last-backup-timestamp: that path belongs to a retired
 # ad-hoc script and reusing it would inherit its meaning.
 # Hand-built JSON rather than jq: bash 3.2 everywhere, no new dependency for eight fields

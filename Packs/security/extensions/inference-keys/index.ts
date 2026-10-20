@@ -160,7 +160,7 @@ const CATALOG: CatalogEntry[] = [
 		builtin: true,
 		vaultItem: "Openrouter API Key",
 		keyUrl: "https://openrouter.ai/workspaces/default/keys",
-		note: "two vault items share this name; the one in the Axon folder wins",
+		note: "two vault items share this name; the one in the Sjel folder wins",
 	},
 	{
 		id: "huggingface",
@@ -848,7 +848,7 @@ export default function (pi: ExtensionAPI) {
 	});
 
 	pi.registerCommand("bw-unlock", {
-		description: "Unlock the Bitwarden vault via the Axon helper, then re-read the key inventory",
+		description: "Unlock the Bitwarden vault via the Sjel helper, then re-read the key inventory",
 		handler: async (_args, ctx) => {
 			ctx.ui.notify("Unlocking the vault — authorize the keychain prompt", "info");
 			try {

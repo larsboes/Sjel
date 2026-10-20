@@ -32,7 +32,7 @@ use serde::{Deserialize, Serialize};
 use crate::source::{SearchQuery, SourceAdapter, SourceError};
 
 const API_BASE: &str = "https://api2.luma.com";
-// Update once Axon goes public (no public GitHub remote yet, see PROJECTS.md).
+// Update once Sjel goes public (no public GitHub remote yet, see PROJECTS.md).
 
 /// Last-resort bootstrap map, used only when the live `bootstrap-page` lookup
 /// fails (offline, rate limited). **Known stale**: probed 2026-07-30, only the

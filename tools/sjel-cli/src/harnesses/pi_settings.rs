@@ -921,7 +921,7 @@ pub fn remove_packs(config: &DeployConfig, packs: &[String]) -> Result<Vec<Strin
         // deployed. Either ledger owning it is enough to remove it. Measured 2026-10-13: a
         // `remove writing` whose agent step failed left exactly this state.
         if !state.packs.contains_key(pack) && !agents_ledger_owns(&agents, pack) {
-            return Err(format!("{pack}: not owned by Axon Pi deployment"));
+            return Err(format!("{pack}: not owned by Sjel Pi deployment"));
         }
         remove_paths.extend(state.packs.get(pack).cloned().unwrap_or_default());
         remove_extensions.extend(state.extensions.get(pack).cloned().unwrap_or_default());

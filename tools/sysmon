@@ -45,7 +45,7 @@ need_bin() {  # need_bin <bin-on-PATH> <crate-name>
 }
 
 report() {
-  echo "Axon sysmon report · $(date '+%Y-%m-%d %H:%M:%S %Z')"
+  echo "Sjel sysmon report · $(date '+%Y-%m-%d %H:%M:%S %Z')"
   echo
 
   echo "Load & uptime"

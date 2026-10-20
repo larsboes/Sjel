@@ -106,7 +106,7 @@ case $- in *i*)
   alias l='ls -CF'
   alias ..='cd ..'
   alias gs='git status'
-  alias dev='cd "${SJEL_ROOT%/*}"'   # parent of Axon, derived — no hardcoded path
+  alias dev='cd "${SJEL_ROOT%/*}"'   # parent of Sjel, derived — no hardcoded path
 
   # History.
   HISTSIZE=10000

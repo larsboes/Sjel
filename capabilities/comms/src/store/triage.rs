@@ -329,7 +329,7 @@ impl Store {
             &format!(
                 "UPDATE {}_triage_items SET
                     stream = ?1,
-                    rationale = 'Category set manually in Axon.',
+                    rationale = 'Category set manually in Sjel.',
                     classification_method = 'human',
                     classification_version = 'manual-v1'
                  WHERE id = ?2",
@@ -1615,7 +1615,7 @@ impl Store {
         Ok(affected > 0)
     }
 
-    /// Record an authoritative Gmail 404/410 without discarding Axon's local
+    /// Record an authoritative Gmail 404/410 without discarding Sjel's local
     /// metadata. Any queued or attention action is closed because Gmail can no
     /// longer apply it. A Trash retention deadline, if present, remains active.
     pub fn observe_gmail_missing(&self, id: &str) -> Result<bool, Box<dyn std::error::Error>> {
@@ -1647,7 +1647,7 @@ impl Store {
     }
 
     /// Remove expired Trash content and any staged cloud copy. Gmail owns its
-    /// own Trash retention; this cleanup is strictly Axon's local copy.
+    /// own Trash retention; this cleanup is strictly Sjel's local copy.
     pub fn purge_expired_trashed(&self) -> Result<u64, Box<dyn std::error::Error>> {
         let mut conn = self.conn()?;
         let transaction = sjel_store::write_transaction(&mut conn)?;

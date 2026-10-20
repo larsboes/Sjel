@@ -114,9 +114,9 @@ describe("internal links are base-aware", () => {
 
   test("link() prefixes every path once the demo's base is configured", async () => {
     const { link, setBase } = await import("../dashboard/src/lib/nav.ts");
-    setBase("/Axon");
-    expect(link("/calendar")).toBe("/Axon/calendar");
-    expect(link("/feed/abc?source=calendar")).toBe("/Axon/feed/abc?source=calendar");
+    setBase("/Sjel");
+    expect(link("/calendar")).toBe("/Sjel/calendar");
+    expect(link("/feed/abc?source=calendar")).toBe("/Sjel/feed/abc?source=calendar");
     setBase(""); // leave the module as found, for whatever imports it next
   });
 

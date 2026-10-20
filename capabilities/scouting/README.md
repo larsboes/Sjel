@@ -601,7 +601,7 @@ stops, so none of the three falls through now.
   The backend went back to Postgres (see Verdict), but the connection string is never
   hardcoded with a real credential: it's built from `axon-overlay/config/postgres.env`
   (itself Vaultwarden-provisioned, see `tools/setup-secret.sh`) or a generic
-  `axon`/`axon`/`127.0.0.1` placeholder for zero-config local dev — never a personal value.
+  `sjel`/`sjel`/`127.0.0.1` placeholder for zero-config local dev — never a personal value.
 - `main.rs`/`server_main.rs`'s `VAULT_PATH`, `LIFEOS_ROOT`, `SCOUTING_PORT`, `DATABASE_URL`
   env-var reads and the `CARGO_MANIFEST_DIR`-relative vault-guessing (`.ancestors().nth(2)`) —
   all replaced by `config.rs` (that guessing logic was monorepo-structure-specific and has no

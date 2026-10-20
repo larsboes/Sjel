@@ -1,7 +1,7 @@
 #!/usr/bin/env bun
 // tools/skill-eval — run a skill's evals, and check the suites are sound.
 //
-// The problem this exists for: Axon had 36 skills and 2 eval suites, and nothing read
+// The problem this exists for: Sjel had 36 skills and 2 eval suites, and nothing read
 // either of them. Every gate in tools/ measures STRUCTURE — is the metadata discoverable, is
 // the skill self-contained, do two skills' contracts agree — and none of them can answer the
 // only question that matters about a skill: does it change what the model does? A skill is an

@@ -1,7 +1,7 @@
 #!/usr/bin/env bun
 // repos.ts — version identity for the two repos this installation is made of.
 //
-// Axon is public-safe and its overlay is private, so "which Axon am I running" is
+// Sjel is public-safe and its overlay is private, so "which Sjel am I running" is
 // really two answers that have to be read separately and shown together. Both repos
 // carry zero tags today; `git describe` degrades to a short sha, and that is a fact
 // worth rendering rather than an error worth hiding.

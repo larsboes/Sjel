@@ -90,7 +90,7 @@ struct PutProfileRequest {
 }
 
 /// A refusal that carries the capability's own reason, in the same shape every
-/// other Axon capability uses.
+/// other Sjel capability uses.
 struct ApiError {
     status: StatusCode,
     body: Value,

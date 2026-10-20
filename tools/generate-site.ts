@@ -2,7 +2,7 @@
 // tools/generate-site.ts — render self.json as a self-contained page (#14).
 //
 // The repository has no landing surface: the only entry points are a 32 KB README and a generated
-// ARCHITECTURE.md. This renders what Axon already knows about itself into one HTML file someone
+// ARCHITECTURE.md. This renders what Sjel already knows about itself into one HTML file someone
 // can read without cloning.
 //
 // Generated, never hand-maintained, for the same reason ARCHITECTURE.md is: a fact that is not in
@@ -58,7 +58,7 @@ const KIND_LABEL: Record<string, string> = {
   pack: "Packs",
 };
 const KIND_BLURB: Record<string, string> = {
-  capability: "A service Axon runs, declared by one service.toml the shared runner interprets.",
+  capability: "A service Sjel runs, declared by one service.toml the shared runner interprets.",
   spine: "The parts every capability resolves against rather than reimplements.",
   lib: "Shared code with no service of its own.",
   pack: "Harness-neutral skills, deployed to an agent harness rather than run.",
@@ -129,7 +129,7 @@ ${list.map((u) => `      <li><span>${esc(u.name)}</span></li>`).join("\n")}
   return `
 <section id="upstreams">
   <h2>Upstreams <span class="count">${upstreams.length}</span></h2>
-  <p class="blurb">Every external project Axon touches, with the verdict it was given. No entry, no entry. Each one tracks its upstream\u2019s latest release; the register records no version.</p>
+  <p class="blurb">Every external project Sjel touches, with the verdict it was given. No entry, no entry. Each one tracks its upstream\u2019s latest release; the register records no version.</p>
 ${body}
 </section>`;
 }

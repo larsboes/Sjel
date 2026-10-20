@@ -1,7 +1,7 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://axon.local/schemas/content-item.schema.json",
-  "title": "Axon Content Item",
+  "title": "Sjel Content Item",
   "description": "Canonical reader contract. Source adapters extend content without creating a second reader model.",
   "type": "object",
   "required": [
@@ -40,7 +40,7 @@
     "url": {
       "type": "string",
       "format": "uri-reference",
-      "description": "Where this item lives. An absolute URI for anything with an external home (a feed article, a Gmail deep link); a root-relative dashboard path for an item whose only home is Axon itself, which is why this is uri-reference and not uri."
+      "description": "Where this item lives. An absolute URI for anything with an external home (a feed article, a Gmail deep link); a root-relative dashboard path for an item whose only home is Sjel itself, which is why this is uri-reference and not uri."
     },
     "author": { "type": ["string", "null"] },
     "summary": { "type": ["string", "null"] },

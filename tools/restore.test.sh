@@ -143,7 +143,7 @@ expect_fail_with "failed SQLite integrity" "failed integrity_check" \
   "$RESTORE" vaultwarden "$SCRATCH/broken.tar.gz" --destination "$SCRATCH/broken-out"
 
 live_candidate="$ROOT/restore-test-must-not-exist"
-expect_fail_with "live checkout destination" "may not be inside the Axon checkout" \
+expect_fail_with "live checkout destination" "may not be inside the Sjel checkout" \
   "$RESTORE" vaultwarden "$SCRATCH/vaultwarden.tar.gz" --destination "$live_candidate"
 [ ! -e "$live_candidate" ] || { echo "FAIL: refused live destination was created"; fails=$((fails + 1)); }
 

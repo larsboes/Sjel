@@ -4,7 +4,7 @@
 # Thin launcher. The mechanism lives in the diagramkit package beside this file
 # (single source of truth); this file only resolves paths and the interpreter.
 #
-# Why uv and not plain python3: the same reason scripts/deck gives. Axon has no
+# Why uv and not plain python3: the same reason scripts/deck gives. Sjel has no
 # Python project anywhere, and `uv run --python 3` pins an interpreter without a
 # lockfile to maintain. There are no third-party Python dependencies here — the
 # renderer is Node, invoked through bunx — so this launcher passes no --with.

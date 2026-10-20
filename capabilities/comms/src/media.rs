@@ -137,7 +137,7 @@ fn check_scheme(url: &str) -> Result<()> {
 /// `sjel_http::guard::check_destination`. What is comms' own is why the door is
 /// here at all: `POST /ingest` (`server/feed.rs`) takes the URL from the request
 /// body, and `server/source_handlers.rs` fetches URLs an external feed produced,
-/// so an ingested link would otherwise drive a loopback-bound Axon API from the
+/// so an ingested link would otherwise drive a loopback-bound Sjel API from the
 /// outside. CodeQL rust/request-forgery reported it against `extract_article`.
 /// The allowlist is [`crate::config::ingest_allowed_origins`], empty on every
 /// machine but the demo's.
@@ -431,8 +431,8 @@ mod tests {
 
     #[test]
     fn detect_share_link_kinds() {
-        assert_eq!(detect("https://github.com/larsboes/Axon").0, "github");
-        assert_eq!(detect("https://github.com/larsboes/Axon").1, "news");
+        assert_eq!(detect("https://github.com/larsboes/Sjel").0, "github");
+        assert_eq!(detect("https://github.com/larsboes/Sjel").1, "news");
         assert_eq!(detect("https://arxiv.org/abs/2501.12345").0, "arxiv");
         assert_eq!(
             detect("https://www.reddit.com/r/rust/comments/abc123/some_title/").0,
@@ -440,7 +440,7 @@ mod tests {
         );
         // Deeper GitHub paths (issues, PRs, files) are github target extractions.
         assert_eq!(
-            detect("https://github.com/larsboes/Axon/issues/7").0,
+            detect("https://github.com/larsboes/Sjel/issues/7").0,
             "github"
         );
         assert_eq!(detect("https://github.com/larsboes").0, "article");
@@ -451,20 +451,20 @@ mod tests {
     #[test]
     fn github_repo_parses_root_paths_only() {
         assert_eq!(
-            github_repo("https://github.com/larsboes/Axon"),
-            Some(("larsboes".into(), "Axon".into()))
+            github_repo("https://github.com/larsboes/Sjel"),
+            Some(("larsboes".into(), "Sjel".into()))
         );
         // Trailing slash, query and .git suffix are all the same repo.
         assert_eq!(
-            github_repo("https://github.com/larsboes/Axon.git?tab=readme"),
-            Some(("larsboes".into(), "Axon".into()))
+            github_repo("https://github.com/larsboes/Sjel.git?tab=readme"),
+            Some(("larsboes".into(), "Sjel".into()))
         );
         assert_eq!(
-            github_repo("https://github.com/larsboes/Axon/"),
-            Some(("larsboes".into(), "Axon".into()))
+            github_repo("https://github.com/larsboes/Sjel/"),
+            Some(("larsboes".into(), "Sjel".into()))
         );
         assert_eq!(
-            github_repo("https://github.com/larsboes/Axon/blob/main/README.md"),
+            github_repo("https://github.com/larsboes/Sjel/blob/main/README.md"),
             None
         );
         assert_eq!(github_repo("https://gitlab.com/a/b"), None);
@@ -682,31 +682,31 @@ mod tests {
 
     #[test]
     fn parse_github_deep_paths() {
-        let repo_url = "https://github.com/larsboes/Axon";
+        let repo_url = "https://github.com/larsboes/Sjel";
         assert_eq!(
             parse_github_url(repo_url),
             Some(GitHubTarget::Repo {
                 owner: "larsboes".into(),
-                repo: "Axon".into()
+                repo: "Sjel".into()
             })
         );
 
-        let issue_url = "https://github.com/larsboes/Axon/issues/80";
+        let issue_url = "https://github.com/larsboes/Sjel/issues/80";
         assert_eq!(
             parse_github_url(issue_url),
             Some(GitHubTarget::Issue {
                 owner: "larsboes".into(),
-                repo: "Axon".into(),
+                repo: "Sjel".into(),
                 number: 80
             })
         );
 
-        let blob_url = "https://github.com/larsboes/Axon/blob/main/capabilities/comms/src/media.rs";
+        let blob_url = "https://github.com/larsboes/Sjel/blob/main/capabilities/comms/src/media.rs";
         assert_eq!(
             parse_github_url(blob_url),
             Some(GitHubTarget::Blob {
                 owner: "larsboes".into(),
-                repo: "Axon".into(),
+                repo: "Sjel".into(),
                 branch: "main".into(),
                 path: "capabilities/comms/src/media.rs".into()
             })

@@ -13,7 +13,7 @@
 //! - [`check_scheme`] refuses anything that is not plain http(s). `file://` would
 //!   make an extractor read the local disk.
 //! - [`check_destination`] refuses a URL that resolves inside this machine or this
-//!   network. `http://127.0.0.1:8086/api/plans` is still http, and every Axon service
+//!   network. `http://127.0.0.1:8086/api/plans` is still http, and every Sjel service
 //!   binds loopback (`libs/sjel-server`), so without it an ingested link drives an
 //!   internal API from the outside. CodeQL `rust/request-forgery` reported exactly
 //!   that against comms' `extract_article`.
@@ -411,7 +411,7 @@ mod tests {
     fn check_destination_lets_a_listed_loopback_origin_through() {
         let listed = || vec!["http://127.0.0.1:8099".to_string()];
         assert!(check_destination("http://127.0.0.1:8099/articles/x", listed).is_ok());
-        // The neighbouring port on the same host is a different Axon service.
+        // The neighbouring port on the same host is a different Sjel service.
         assert!(check_destination("http://127.0.0.1:8086/api/plans", listed).is_err());
     }
 
@@ -486,7 +486,7 @@ mod tests {
             &url("http://127.0.0.1:8099/articles/a-slug"),
             &allowed
         ));
-        // A different port on the same host is a different Axon service. This is the
+        // A different port on the same host is a different Sjel service. This is the
         // whole reason the entry is an origin and not a host.
         assert!(!origin_is_allowed(
             &url("http://127.0.0.1:8086/api/plans"),
@@ -558,7 +558,7 @@ mod tests {
     #[test]
     fn a_redirect_off_the_public_internet_into_this_network_is_refused() {
         for inside in [
-            // Loopback, where every Axon capability binds.
+            // Loopback, where every Sjel capability binds.
             "http://127.0.0.1:8082/api/sjel-status/capabilities",
             "http://[::1]:8090/api/dashboard",
             // The cloud metadata service, which is why `is_public` refuses link-local.

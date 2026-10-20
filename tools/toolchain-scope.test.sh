@@ -7,7 +7,7 @@
 # defect is just as bad — a restore that discovers a missing dependency after it has already
 # held a service down.
 #
-# Built on the same throwaway-root idea as persistence.test.sh: a scratch Axon root with its own
+# Built on the same throwaway-root idea as persistence.test.sh: a scratch Sjel root with its own
 # overlay, machine.toml, toolchain.toml and capability manifests, plus a stub PATH so presence and
 # absence are decided here rather than by whatever the host happens to have installed. Nothing in
 # this file consults the real machine.

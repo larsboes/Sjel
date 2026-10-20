@@ -1,4 +1,4 @@
-//! Axon doctrine: this crate is public. No personal value (a home/default
+//! Sjel doctrine: this crate is public. No personal value (a home/default
 //! station pair) lives here -- that comes from the private overlay at
 //! runtime, if set at all. Mirrors `capabilities/scouting/src/config.rs`'s
 //! `Config::load()` resolution exactly:

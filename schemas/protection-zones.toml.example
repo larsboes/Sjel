@@ -1,4 +1,4 @@
-# schemas/protection-zones.toml.example — what a coding assistant may read (Axon#147).
+# schemas/protection-zones.toml.example — what a coding assistant may read (Sjel#147).
 #
 # Copy to <overlay>/config/protection-zones.toml and fill in real paths there. THIS file is
 # the contract and ships no path: the machine has material that must never reach a

@@ -24,7 +24,7 @@
 //! available without opening Obsidian: how many of the Base's own declared columns the notes in
 //! that folder actually carry. Measured on this vault 2026-09-08, four references have exactly
 //! one candidate and only three of the four survive that: `Atlas/Focus` fills 3 of Focus.base's
-//! 3 columns, `Atlas/Reflections` 4 of 5, `Projects/Axon/Knowledge-Base/Domains` 4 of 4 — and
+//! 3 columns, `Atlas/Reflections` 4 of 5, `Projects/Sjel/Knowledge-Base/Domains` 4 of 4 — and
 //! `Projects/Archive/Ledger/Notability/Investments`, the lone candidate for
 //! `Atlas/Finance/Investments`, fills **0 of 8**. It is an archived Notability import that
 //! shares a word with a folder that no longer exists.
@@ -727,7 +727,7 @@ mod tests {
     #[test]
     fn a_folder_whose_namesakes_all_sit_under_its_parent_reads_as_spread() {
         let notes = vec![
-            note("Projects/Axon/Tasks/Ship it.md", &[]),
+            note("Projects/Sjel/Tasks/Ship it.md", &[]),
             note("Projects/Home-Lab/Tasks/Buy a drive.md", &[]),
         ];
         let text = "filters:\n  and:\n    - file.inFolder(\"Projects/Tasks\")\n";
@@ -740,7 +740,7 @@ mod tests {
             .collect();
         assert_eq!(
             folders,
-            vec!["Projects/Axon/Tasks", "Projects/Home-Lab/Tasks"]
+            vec!["Projects/Home-Lab/Tasks", "Projects/Sjel/Tasks"]
         );
         assert_eq!(
             folder.missing,
@@ -763,14 +763,14 @@ mod tests {
     /// would notice.
     #[test]
     fn a_single_namesake_under_the_parent_is_a_move_rather_than_a_shape() {
-        let notes = vec![note("Projects/Axon/Tasks/Ship it.md", &[("done", "false")])];
+        let notes = vec![note("Projects/Sjel/Tasks/Ship it.md", &[("done", "false")])];
         let text = "filters:\n  and:\n    - file.inFolder(\"Projects/Tasks\")\n\
                     properties:\n  done:\n    displayName: Done\n";
         let rep = report_off_disk(&notes, &[("Tasks.base".into(), text.into())]);
         assert_eq!(
             rep.items[0].folders[0].missing,
             Some(Missing::Moved {
-                to: "Projects/Axon/Tasks".into(),
+                to: "Projects/Sjel/Tasks".into(),
                 columns_carried: 1,
                 columns_total: 1,
             })
@@ -783,7 +783,7 @@ mod tests {
     #[test]
     fn namesakes_under_different_parents_are_ambiguous_rather_than_spread() {
         let notes = vec![
-            note("Projects/Axon/Tasks/Ship it.md", &[]),
+            note("Projects/Sjel/Tasks/Ship it.md", &[]),
             note("Atlas/Tasks/Buy a drive.md", &[]),
         ];
         let text = "filters:\n  and:\n    - file.inFolder(\"Projects/Tasks\")\n";
@@ -913,7 +913,7 @@ mod tests {
     /// of every Base that carries it.
     #[test]
     fn a_negated_reference_is_not_counted_as_unresolved() {
-        let notes = vec![note("Projects/Axon/Axon.md", &[])];
+        let notes = vec![note("Projects/Sjel/Sjel.md", &[])];
         let text = "filters:\n  and:\n    - file.inFolder(\"Projects\")\n    \
                     - '!file.inFolder(\"Resources/Templates\")'\n";
         let rep = report_off_disk(&notes, &[("Projects.base".into(), text.into())]);
@@ -926,7 +926,7 @@ mod tests {
     /// taken against the whole vault would be a number nobody asked for.
     #[test]
     fn a_base_with_no_folder_reports_no_scope_rather_than_the_whole_vault() {
-        let notes = vec![note("Projects/Axon/Tasks/Ship it.md", &[("done", "false")])];
+        let notes = vec![note("Projects/Sjel/Tasks/Ship it.md", &[("done", "false")])];
         let text = "filters:\n  and:\n    - type == \"task\"\nproperties:\n  done:\n    displayName: Done\n";
         let rep = report_off_disk(&notes, &[("Tasks.base".into(), text.into())]);
         assert_eq!((rep.items[0].scope, rep.empty_fields), (None, 0));

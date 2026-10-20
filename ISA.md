@@ -92,6 +92,14 @@ Migrated 2026-10-15 from §13 of the frozen PRD (now the `projects` record `Sjel
   advisory layer shipped in `capabilities/media/src/perceptual.rs` with `media_phashes` and
   `media_reviews`.)
 
+### host-patch · one open item
+
+- **The daily run exits 1 on three webpki advisories.** RUSTSEC-2026-0381, -0382 and -0383
+  (`webpki-roots`, `rustls-webpki`, `webpki-root-certs`) are in the Cargo.lock published inside
+  `tauri-cli 2.12.3` and `xberg-cli 1.3.10`, so no install on this Mac moves them. Open: accept
+  each in `osv-scanner-installed.toml` with its reach and an end date, or upgrade when a
+  maintainer republishes. Falsifier: `launchctl list com.sjel.host-patch` shows exit 0.
+
 ### backup · one claim
 
 - **BKP-5 — per-kind verification.** Each target kind counts as verified only when its own check

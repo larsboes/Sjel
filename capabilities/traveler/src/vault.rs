@@ -245,6 +245,42 @@ fn scan_markdown_note(
                             anchors,
                             scalars,
                         );
+                        if key == "current_focus" {
+                            for item in val.split(',').map(str::trim).filter(|s| !s.is_empty()) {
+                                interests.push((
+                                    strip_quotes(item),
+                                    file_name.to_string(),
+                                    section.clone(),
+                                    line.trim().to_string(),
+                                ));
+                            }
+                        }
+                    } else if key == "category_affinity" && !val.is_empty() {
+                        let section = "frontmatter:category_affinity".to_string();
+                        for item in val
+                            .trim_matches(['[', ']'])
+                            .split(',')
+                            .map(str::trim)
+                            .filter(|s| !s.is_empty())
+                        {
+                            let cleaned = strip_quotes(item);
+                            if !cleaned.is_empty() {
+                                interests.push((
+                                    cleaned.clone(),
+                                    file_name.to_string(),
+                                    section.clone(),
+                                    line.trim().to_string(),
+                                ));
+                                for anchor in anchors_in_text(&cleaned) {
+                                    anchors.push((
+                                        anchor,
+                                        file_name.to_string(),
+                                        section.clone(),
+                                        line.trim().to_string(),
+                                    ));
+                                }
+                            }
+                        }
                     }
                     index += 1;
                     continue;

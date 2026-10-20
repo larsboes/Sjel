@@ -573,7 +573,12 @@ mod backup_tests {
             proxy_api_only: String::new(),
             proxy_extra: Vec::new(),
             requires: Vec::new(),
+            // Id kinds this capability answers `GET /api/links` for, and what it takes in and
+            // hands out. Empty is what a synthetic capability declares; a test that is about
+            // backups must not have to state a link contract to compile.
             links_to: Vec::new(),
+            imports: Vec::new(),
+            exports: Vec::new(),
         }
     }
 

@@ -28,6 +28,7 @@ use traveler::config::Config;
 use traveler::derive::{self, DerivedTravel, TRIPS_PREFIX};
 use traveler::model::{ProfileInput, TravelProfile, DEFAULT_PROFILE_ID};
 use traveler::store::{PutOutcome, TravelerStore};
+use traveler::vault::{self, VaultProposals};
 
 const ROUTES: &[route_manifest::Route] = &[
     route_manifest::get("GET", "/health", "Liveness."),
@@ -60,13 +61,22 @@ const ROUTES: &[route_manifest::Route] = &[
         "GET",
         "/api/profile/derived",
         "What the stored trips actually show: trip length, booking lead time, destinations, \
-         repeat destinations, company shape, months and modes, with the plan ids every number \
-         was computed from. Computed on read over trips' own tables and stored nowhere. Counts \
-         plans, not confirmed trips: only a retrospective recording not_taken excludes one, and \
+         repeat destinations, company shape, pseudonymous companion patterns (keyed by ent: \
+         register ids), months and modes, with the plan ids every number was computed from. \
+         Computed on read over trips' own tables and stored nowhere. Counts plans, not \
+         confirmed trips: only a retrospective recording not_taken excludes one, and \
          lead_time_days covers only plans whose row predates the trip, because the vault import \
-         stamps created_at with the import date. Company is counted as a shape, never listed, \
-         because travelers holds real names. `notes` carries every limit in the response. \
-         Answers with absences rather than 500 when trips has never run here.",
+         stamps created_at with the import date. Company is counted as a shape, never listed \
+         by raw name. `notes` carries every limit in the response. Answers with absences rather \
+         than 500 when trips has never run here.",
+    ),
+    route_manifest::get(
+        "GET",
+        "/api/profile/proposals",
+        "Read-only per-field proposals extracted from TELOS markdown notes in the overlay \
+         vault, naming the source file, admissible section, and quoted span. Explicitly skips \
+         CURRENT_STATE and draft/history sections and writes nothing until accepted via \
+         PUT /api/profile.",
     ),
 ];
 
@@ -190,6 +200,22 @@ async fn get_derived(
     Ok(Json(derived))
 }
 
+/// `GET /api/profile/proposals`.
+async fn get_proposals(
+    State(store): State<Arc<TravelerStore>>,
+) -> Result<Json<VaultProposals>, ApiError> {
+    let current = read_profile(store)
+        .await?
+        .unwrap_or_else(TravelProfile::unstated);
+    let telos_dir = Config::load().telos_dir;
+    let proposals = tokio::task::spawn_blocking(move || {
+        vault::propose_from_dir(telos_dir.as_deref(), &current)
+    })
+    .await
+    .map_err(|error| ApiError::internal(format!("vault proposal task failed: {error}")))?;
+    Ok(Json(proposals))
+}
+
 async fn read_profile(store: Arc<TravelerStore>) -> Result<Option<TravelProfile>, ApiError> {
     tokio::task::spawn_blocking(move || {
         store
@@ -229,6 +255,7 @@ fn router(store: Arc<TravelerStore>) -> Router {
         .route("/routes", get(routes))
         .route("/api/profile", get(get_profile).put(put_profile))
         .route("/api/profile/derived", get(get_derived))
+        .route("/api/profile/proposals", get(get_proposals))
         // Below every route, because axum's `layer` wraps only what is
         // registered before it (libs/sjel-server/src/origin.rs).
         .layer(middleware::from_fn_with_state(
@@ -480,6 +507,19 @@ mod http_tests {
                 200
             );
         }
+        let _ = std::fs::remove_dir_all(dir);
+    }
+
+    #[tokio::test]
+    async fn proposals_route_answers_read_only_without_mutating_profile() {
+        let (base, dir) = scratch_server("proposals").await;
+        let response = reqwest::get(format!("{base}/api/profile/proposals"))
+            .await
+            .unwrap();
+        assert_eq!(response.status(), 200);
+        let body: Value = response.json().await.unwrap();
+        assert!(body["proposals"].is_array());
+        assert!(body["skipped_sections"].is_array());
         let _ = std::fs::remove_dir_all(dir);
     }
 }

@@ -10,10 +10,11 @@
 
 use std::path::PathBuf;
 
-use sjel_config::{database_path, resolve_port};
+use sjel_config::{database_path, env_var, expand_tilde, overlay_root, resolve_port};
 
 pub struct Config {
     pub database_path: PathBuf,
+    pub telos_dir: Option<PathBuf>,
     pub port: u16,
 }
 
@@ -25,8 +26,14 @@ impl Config {
         // ports this repo cannot see (the scouting/vaultwarden 8080 collision
         // class, libs/sjel-config), so the runner's variable is the authority.
         let port = resolve_port(None, None, 8096);
+        let telos_dir = env_var("SJEL_TELOS_DIR")
+            .ok()
+            .filter(|v| !v.trim().is_empty())
+            .map(|v| expand_tilde(&v))
+            .or_else(|| overlay_root().map(|root| root.join("vault/TELOS/Personal")));
         Self {
             database_path: database_path(),
+            telos_dir,
             port,
         }
     }

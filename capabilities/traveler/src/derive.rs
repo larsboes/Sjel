@@ -105,9 +105,28 @@ pub struct Company {
     /// No travellers recorded. Not the same as travelling alone — the field is
     /// empty for a plan nobody filled in.
     pub unrecorded: usize,
+    /// Travelling alone: the plan explicitly records a self-marker (`"me"`,
+    /// `"solo"`, `"self"`, `"ich"`, `"allein"`) or only entries resolved as
+    /// `not_person` in `{trips}_people`.
+    #[serde(default)]
+    pub solo: usize,
     /// Exactly one traveller besides the operator's own entry, or one name.
     pub pair: usize,
     pub group: usize,
+}
+
+/// Pseudonymous companion pattern keyed only by register entity id (`ent:…`).
+///
+/// Never carries a real name: `{trips}_people` resolves raw `travelers` strings
+/// to `ent:…` ids, and any unresolved string is counted only in `Company` shape
+/// (`pair` / `group`) and never emitted here.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct CompanionPattern {
+    pub person_id: String,
+    pub trips: usize,
+    pub pair_trips: usize,
+    pub group_trips: usize,
+    pub destinations: Vec<DestinationCount>,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -139,6 +158,10 @@ pub struct DerivedTravel {
     /// reports as `merge_candidates`.
     pub repeat_destinations: Vec<DestinationCount>,
     pub company: Company,
+    /// Pseudonymous companion patterns keyed by register entity id (`ent:…`)
+    /// from `{trips}_people`. Empty until names are resolved; never carries raw names.
+    #[serde(default)]
+    pub companion_patterns: Vec<CompanionPattern>,
     /// Plans per calendar month, `01`..`12`, most-used first.
     pub months: Vec<Bucket>,
     pub modes: Vec<Bucket>,
@@ -189,6 +212,20 @@ pub fn derive(store: &TravelerStore, trips_prefix: &str) -> Fallible<DerivedTrav
         Vec::new()
     };
 
+    let people_map: std::collections::BTreeMap<String, Option<String>> =
+        if table_exists(&conn, &format!("{trips_prefix}_people"))? {
+            use sjel_store::QueryAll;
+            conn.query_all(
+                &format!("SELECT name_key, entity_id FROM {trips_prefix}_people"),
+                [],
+                |row| Ok((row.get::<_, String>(0)?, row.get::<_, Option<String>>(1)?)),
+            )?
+            .into_iter()
+            .collect()
+        } else {
+            std::collections::BTreeMap::new()
+        };
+
     let rows: Vec<PlanRow> = {
         use sjel_store::QueryAll;
         conn.query_all(
@@ -221,6 +258,7 @@ pub fn derive(store: &TravelerStore, trips_prefix: &str) -> Fallible<DerivedTrav
     let mut months: Vec<Bucket> = Vec::new();
     let mut modes: Vec<Bucket> = Vec::new();
     let mut company = Company::default();
+    let mut companion_patterns: Vec<CompanionPattern> = Vec::new();
     let mut basis: Vec<String> = Vec::new();
 
     for row in &rows {
@@ -251,17 +289,57 @@ pub fn derive(store: &TravelerStore, trips_prefix: &str) -> Fallible<DerivedTrav
             bump(&mut months, &month);
         }
 
-        for name in destination_names(&row.destinations) {
-            match destinations.iter_mut().find(|entry| entry.name == name) {
+        let plan_dests = destination_names(&row.destinations);
+        for name in &plan_dests {
+            match destinations.iter_mut().find(|entry| &entry.name == name) {
                 Some(entry) => entry.trips += 1,
-                None => destinations.push(DestinationCount { name, trips: 1 }),
+                None => destinations.push(DestinationCount {
+                    name: name.clone(),
+                    trips: 1,
+                }),
             }
         }
 
-        match traveller_count(&row.travelers) {
-            0 => company.unrecorded += 1,
-            1 => company.pair += 1,
-            _ => company.group += 1,
+        let (shape, resolved_ids) = classify_companions(&row.travelers, &people_map);
+        match shape {
+            CompanyShape::Unrecorded => company.unrecorded += 1,
+            CompanyShape::Solo => company.solo += 1,
+            CompanyShape::Pair => company.pair += 1,
+            CompanyShape::Group => company.group += 1,
+        }
+        let is_pair = matches!(shape, CompanyShape::Pair);
+        for person_id in resolved_ids {
+            let pattern = match companion_patterns
+                .iter_mut()
+                .find(|entry| entry.person_id == person_id)
+            {
+                Some(entry) => entry,
+                None => {
+                    companion_patterns.push(CompanionPattern {
+                        person_id,
+                        trips: 0,
+                        pair_trips: 0,
+                        group_trips: 0,
+                        destinations: Vec::new(),
+                    });
+                    companion_patterns.last_mut().unwrap()
+                }
+            };
+            pattern.trips += 1;
+            if is_pair {
+                pattern.pair_trips += 1;
+            } else {
+                pattern.group_trips += 1;
+            }
+            for dest in &plan_dests {
+                match pattern.destinations.iter_mut().find(|d| &d.name == dest) {
+                    Some(entry) => entry.trips += 1,
+                    None => pattern.destinations.push(DestinationCount {
+                        name: dest.clone(),
+                        trips: 1,
+                    }),
+                }
+            }
         }
 
         for mode in string_array(&row.transport_modes) {
@@ -275,6 +353,13 @@ pub fn derive(store: &TravelerStore, trips_prefix: &str) -> Fallible<DerivedTrav
         .filter(|entry| entry.trips > 1)
         .cloned()
         .collect();
+    for pattern in &mut companion_patterns {
+        pattern
+            .destinations
+            .sort_by(|a, b| b.trips.cmp(&a.trips).then_with(|| a.name.cmp(&b.name)));
+    }
+    companion_patterns
+        .sort_by(|a, b| b.trips.cmp(&a.trips).then_with(|| a.person_id.cmp(&b.person_id)));
     sort_buckets(&mut months);
     sort_buckets(&mut modes);
 
@@ -288,6 +373,7 @@ pub fn derive(store: &TravelerStore, trips_prefix: &str) -> Fallible<DerivedTrav
         destinations,
         repeat_destinations,
         company,
+        companion_patterns,
         months,
         modes,
         basis,
@@ -327,11 +413,80 @@ fn empty_baseline(excluded_not_taken: Vec<String>) -> DerivedTravel {
         destinations: Vec::new(),
         repeat_destinations: Vec::new(),
         company: Company::default(),
+        companion_patterns: Vec::new(),
         months: Vec::new(),
         modes: Vec::new(),
         basis: Vec::new(),
         notes: notes(),
     }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum CompanyShape {
+    Unrecorded,
+    Solo,
+    Pair,
+    Group,
+}
+
+/// Canonical lookup key matching `capabilities/trips/src/people.rs`:
+/// trimmed, lowercase, internal whitespace collapsed to one space.
+fn name_key(raw: &str) -> String {
+    raw.split_whitespace()
+        .collect::<Vec<_>>()
+        .join(" ")
+        .to_lowercase()
+}
+
+fn is_self_marker(key: &str) -> bool {
+    matches!(key, "me" | "solo" | "self" | "myself" | "ich" | "allein")
+}
+
+/// Classify a plan's `travelers` array into its company shape and any resolved
+/// pseudonymous register ids (`ent:…`).
+///
+/// Raw names never leave this function: only `ent:` ids from `{trips}_people`
+/// are returned in the companion list.
+fn classify_companions(
+    raw: &str,
+    people_map: &std::collections::BTreeMap<String, Option<String>>,
+) -> (CompanyShape, Vec<String>) {
+    let entries = string_array(raw);
+    if entries.is_empty() {
+        return (CompanyShape::Unrecorded, Vec::new());
+    }
+    let mut companion_slots = 0_usize;
+    let mut resolved_ids: Vec<String> = Vec::new();
+    for entry in entries {
+        let key = name_key(&entry);
+        if key.is_empty() || is_self_marker(&key) {
+            continue;
+        }
+        match people_map.get(&key) {
+            Some(None) => {
+                // Explicitly decided `not_person` (e.g. a pet, a group label, or
+                // the operator's own name marked not-a-companion).
+                continue;
+            }
+            Some(Some(entity_id)) if entity_id.starts_with("ent:") => {
+                companion_slots += 1;
+                if !resolved_ids.contains(entity_id) {
+                    resolved_ids.push(entity_id.clone());
+                }
+            }
+            _ => {
+                // Unresolved string: counts toward the company shape (pair/group)
+                // but never enters `companion_patterns`.
+                companion_slots += 1;
+            }
+        }
+    }
+    let shape = match companion_slots {
+        0 => CompanyShape::Solo,
+        1 => CompanyShape::Pair,
+        _ => CompanyShape::Group,
+    };
+    (shape, resolved_ids)
 }
 
 /// A stored timestamp as a day number.
@@ -398,6 +553,7 @@ fn destination_names(raw: &str) -> Vec<String> {
     names
 }
 
+#[cfg(test)]
 fn traveller_count(raw: &str) -> usize {
     string_array(raw).len()
 }
@@ -655,6 +811,7 @@ mod tests {
             derived.company,
             Company {
                 unrecorded: 1,
+                solo: 0,
                 pair: 1,
                 group: 0
             }
@@ -825,6 +982,116 @@ mod tests {
     fn a_prefix_that_could_carry_sql_is_refused_before_any_read() {
         let (store, dir) = scratch_with_trips("prefix");
         assert!(derive(&store, "trips; DROP TABLE trips_plans").is_err());
+        let _ = std::fs::remove_dir_all(dir);
+    }
+
+    #[test]
+    fn companion_patterns_are_keyed_by_register_id_and_never_by_name() {
+        let (store, dir) = scratch_with_trips("companions");
+        store
+            .conn()
+            .unwrap()
+            .execute_batch(
+                "CREATE TABLE trips_people (
+                    name_key TEXT PRIMARY KEY,
+                    entity_id TEXT,
+                    decided_at TEXT NOT NULL
+                );
+                INSERT INTO trips_people (name_key, entity_id, decided_at) VALUES
+                    ('alex example', 'ent:person-a', '0'),
+                    ('blair example', 'ent:person-b', '0'),
+                    ('team retreat', NULL, '0');",
+            )
+            .unwrap();
+
+        let berlin = r#"[{"id":"place:berlin","name":"Berlin"}]"#;
+        let vienna = r#"[{"id":"place:vienna","name":"Vienna"}]"#;
+
+        // Pair trip with resolved person-a
+        insert_plan(
+            &store,
+            PlanFixture {
+                id: "c1",
+                start: "2026-04-01",
+                end: "2026-04-03",
+                created: "2026-03-01",
+                travellers: r#"["Alex Example"]"#,
+                modes: r#"["train"]"#,
+                destinations: berlin,
+            },
+        );
+        // Group trip with person-a, person-b, and an unresolved string
+        insert_plan(
+            &store,
+            PlanFixture {
+                id: "c2",
+                start: "2026-05-01",
+                end: "2026-05-04",
+                created: "2026-03-01",
+                travellers: r#"["Alex Example", "Blair Example", "Unresolved Name"]"#,
+                modes: r#"["train"]"#,
+                destinations: vienna,
+            },
+        );
+        // Solo trip (explicit "solo" + a `not_person` label)
+        insert_plan(
+            &store,
+            PlanFixture {
+                id: "c3",
+                start: "2026-06-01",
+                end: "2026-06-02",
+                created: "2026-03-01",
+                travellers: r#"["solo", "Team Retreat"]"#,
+                modes: r#"["train"]"#,
+                destinations: berlin,
+            },
+        );
+
+        let derived = derive(&store, TRIPS_PREFIX).unwrap();
+        assert_eq!(
+            derived.company,
+            Company {
+                unrecorded: 0,
+                solo: 1,
+                pair: 1,
+                group: 1,
+            }
+        );
+        assert_eq!(
+            derived.companion_patterns,
+            vec![
+                CompanionPattern {
+                    person_id: "ent:person-a".into(),
+                    trips: 2,
+                    pair_trips: 1,
+                    group_trips: 1,
+                    destinations: vec![
+                        DestinationCount {
+                            name: "Berlin".into(),
+                            trips: 1,
+                        },
+                        DestinationCount {
+                            name: "Vienna".into(),
+                            trips: 1,
+                        },
+                    ],
+                },
+                CompanionPattern {
+                    person_id: "ent:person-b".into(),
+                    trips: 1,
+                    pair_trips: 0,
+                    group_trips: 1,
+                    destinations: vec![DestinationCount {
+                        name: "Vienna".into(),
+                        trips: 1,
+                    }],
+                },
+            ]
+        );
+        let json_text = serde_json::to_string(&derived).unwrap();
+        assert!(!json_text.contains("Alex"));
+        assert!(!json_text.contains("Blair"));
+        assert!(!json_text.contains("Unresolved"));
         let _ = std::fs::remove_dir_all(dir);
     }
 }

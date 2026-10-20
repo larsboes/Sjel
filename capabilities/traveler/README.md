@@ -67,7 +67,8 @@ yet behave identically and mean completely different things.
 | --- | --- |
 | `GET /api/profile` | The profile plus `stored`. **Never 404s**: an unstated profile comes back with `stored: false` and `revision: 0` |
 | `PUT /api/profile` | Replace it. `{ profile, expected_revision? }`. 400 names the rule broken; 409 `stale_profile` carries `current_revision` |
-| `GET /api/profile/derived` | What the stored trips actually show — trip length, lead time, destinations, company shape, months, modes, and the plan ids every number came from. Computed on read, stored nowhere |
+| `GET /api/profile/derived` | What the stored trips actually show — trip length, lead time, destinations, company shape (`unrecorded`, `solo`, `pair`, `group`), pseudonymous `companion_patterns` (keyed only by `ent:` register IDs), months, modes, and the plan ids every number came from. Computed on read, stored nowhere |
+| `GET /api/profile/proposals` | Read-only per-field proposals extracted from TELOS markdown notes (`<overlay>/vault/TELOS/Personal` or `SJEL_TELOS_DIR`), naming the source file, admissible section, and quoted span while skipping `CURRENT_STATE` and draft/history blocks |
 
 `GET /routes` serves the manifest, including the write body's schema derived from
 the struct serde already deserializes.
@@ -147,18 +148,14 @@ reading `default`, so nothing was stated and nothing ranked.
 
 Stated here rather than left to be discovered:
 
-- **The vault proposal is not built.** D1 in the design conversation chose
-  "profile is the interface, the vault proposes, the operator confirms". This
-  release ships the interface. `TELOS/Personal/Events Profile.md` is marked
-  *"Draft profile, awaiting Lars's corrections"* and nothing reads it into this
-  store yet.
 - **The derived baseline is built, and nothing reads it.** It publishes what the
-  history shows; no ranking consumes it. The offered-versus-chosen half is not in
+  history shows (including pseudonymous `companion_patterns` resolved through
+  `trips_people`); no ranking consumes it yet. The offered-versus-chosen half is not in
   it either — the offered options sit on one plan, and comparing them to what was
   picked needs the same treatment.
-- **Companion patterns are not built**, and `places_person_places` holds rows all
-  in state `proposed`, with the person's name in a plain column rather than only
-  in the id. `GET /api/plans` still serves `travelers`.
+- **Vault proposals are read-only until confirmed.** `GET /api/profile/proposals`
+  diffs admissible TELOS sections against the current profile and quotes exact
+  spans, writing nothing until accepted via `PUT /api/profile`.
 - **One consumer reads the profile, and it is the journey half.**
   `capabilities/transit/src/ranking.rs` reads the `journey` block over HTTP and
   orders `/api/search` by it, dropping any factor it could not compute. The

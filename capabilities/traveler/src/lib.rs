@@ -8,10 +8,12 @@ pub mod config;
 pub mod derive;
 pub mod model;
 pub mod store;
+pub mod vault;
 
-pub use derive::{derive, DerivedTravel};
+pub use derive::{derive, CompanionPattern, DerivedTravel};
 pub use model::{
     Anchor, HardConstraints, JourneyWeights, Pace, ProfileError, ProfileInput, Provenance,
     SoftWeights, TravelProfile, BASIS_KEYS, DEFAULT_PROFILE_ID,
 };
 pub use store::{PutOutcome, TravelerStore};
+pub use vault::{propose_from_dir, FieldProposal, SkippedSection, VaultProposals};

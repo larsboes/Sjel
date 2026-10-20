@@ -225,6 +225,7 @@ fn run(args: Args) -> Result<ExitCode, String> {
 
     let stdin = std::io::stdin();
     let mut line = String::new();
+    let mut history: Vec<String> = Vec::new();
     loop {
         eprint!("\n> ");
         line.clear();
@@ -236,10 +237,34 @@ fn run(args: Args) -> Result<ExitCode, String> {
             Err(e) if e.kind() == std::io::ErrorKind::Interrupted => continue,
             Err(e) => return Err(e.to_string()),
         }
-        match line.trim() {
+        let trimmed = line.trim();
+        match trimmed {
             "" => continue,
-            "/exit" => return Ok(ExitCode::SUCCESS),
+            "/exit" | "/quit" => return Ok(ExitCode::SUCCESS),
+            "/clear" => {
+                // Clear screen and move cursor to top-left (ANSI)
+                eprint!("\x1b[2J\x1b[H");
+                continue;
+            }
+            "/history" => {
+                if history.is_empty() {
+                    eprintln!("{DIM}[no prompt history in this session]{RESET}");
+                } else {
+                    for (i, h) in history.iter().enumerate() {
+                        eprintln!("{DIM}{:3}: {RESET}{h}", i + 1);
+                    }
+                }
+                continue;
+            }
+            "/help" => {
+                eprintln!("Commands:");
+                eprintln!("  /history  - Show prompt history in this session");
+                eprintln!("  /clear    - Clear the terminal screen");
+                eprintln!("  /exit     - Exit the session (or Ctrl-D)");
+                continue;
+            }
             prompt => {
+                history.push(prompt.to_string());
                 stop.store(false, Ordering::Relaxed);
                 let before = messages.len();
                 match turn(&agent, &mut messages, prompt.to_owned()) {
@@ -269,6 +294,7 @@ const BUILT_IN: &[&str] = &[
     ext::mcp::NAME,
     ext::compaction::NAME,
     ext::web::NAME,
+    ext::subagents::NAME,
 ];
 
 /// The extension a name resolves to, or `None` when this build does not carry it. `stop` is
@@ -306,6 +332,7 @@ fn built_in(
             Some(Box::new(ext::compaction::Compaction::new(limit)))
         }
         ext::web::NAME => Some(Box::new(ext::web::Web::new(stop, config.web.timeout))),
+        ext::subagents::NAME => Some(Box::new(ext::subagents::Subagents::new(stop, None))),
         _ => None,
     }
 }

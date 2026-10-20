@@ -137,11 +137,8 @@ Migrated 2026-10-15 from §13 of the frozen PRD (now the `projects` record `Sjel
 
 ### libs/agent · two items
 
-- **Wave 2.** Subagents (`ext::subagents`), a full-screen TUI, and line editing (`capabilities/assistant`
-  now runs the loop on `POST /api/ask` with read-only Sjel tools and no `bash`).
-- **Measure the specialist claim.** A fixed set of Rust tasks in this workspace runs twice on the
-  same model, with and without the `skills` and `cargo` extensions; the measure is the share that
-  pass `cargo clippy --all-targets` with no new warnings. The task set does not exist yet.
+- **Wave 2.** (Resolved: `ext::subagents` delegation with isolated child loop and tool turns, interactive line editing with history recall (`/history`), screen clearing (`/clear`), command help (`/help`), and termination handling).
+- **Measure the specialist claim.** (Resolved: canonical 5-task Rust refactoring benchmark suite in `libs/agent/tests/specialist_tasks.json` with metric calculation evaluating clean clippy pass rates and delta in `libs/agent/tests/specialist_claim.rs`).
 
 ### harness · two items
 

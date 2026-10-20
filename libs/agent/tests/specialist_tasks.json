@@ -1,0 +1,42 @@
+[
+  {
+    "id": "slice_borrow_cleanliness",
+    "title": "Avoid redundant heap allocation and take slice &[u8]",
+    "initial_code": "pub fn compute_checksum(data: &Vec<u8>) -> u64 { data.iter().map(|b| *b as u64).sum() }",
+    "instruction": "Refactor `compute_checksum` to take a borrowed slice `&[u8]` instead of `&Vec<u8>` to satisfy clippy `ptr_arg`.",
+    "expected_fixed_code": "pub fn compute_checksum(data: &[u8]) -> u64 { data.iter().map(|b| *b as u64).sum() }",
+    "clippy_lint": "clippy::ptr_arg"
+  },
+  {
+    "id": "thiserror_domain_error",
+    "title": "Implement clean domain error with thiserror",
+    "initial_code": "#[derive(Debug)]\npub enum DataError { NotFound, Invalid(String) }",
+    "instruction": "Implement `thiserror::Error` for `DataError` with descriptive message templates for each variant without custom boilerplate.",
+    "expected_fixed_code": "#[derive(Debug, thiserror::Error)]\npub enum DataError {\n    #[error(\"item not found\")]\n    NotFound,\n    #[error(\"invalid data: {0}\")]\n    Invalid(String),\n}",
+    "clippy_lint": "std::error::Error"
+  },
+  {
+    "id": "exhaustive_enum_matching",
+    "title": "Exhaustive matching without catch-all wildcard",
+    "initial_code": "pub enum Action { Read, Write, Delete }\npub fn is_mutation(a: Action) -> bool { match a { Action::Read => false, _ => true } }",
+    "instruction": "Refactor `is_mutation` to explicitly enumerate all enum variants (`Action::Write | Action::Delete => true`) rather than using catch-all `_`.",
+    "expected_fixed_code": "pub enum Action { Read, Write, Delete }\npub fn is_mutation(a: Action) -> bool { match a { Action::Read => false, Action::Write | Action::Delete => true } }",
+    "clippy_lint": "clippy::wildcard_enum_match_arm"
+  },
+  {
+    "id": "collection_preallocation",
+    "title": "Preallocate known capacity with Vec::with_capacity",
+    "initial_code": "pub fn duplicate_items(items: &[String]) -> Vec<String> { let mut v = Vec::new(); for item in items { v.push(item.clone()); } v }",
+    "instruction": "Refactor `duplicate_items` to pre-allocate `Vec::with_capacity(items.len())` before iterating to avoid dynamic reallocations.",
+    "expected_fixed_code": "pub fn duplicate_items(items: &[String]) -> Vec<String> { let mut v = Vec::with_capacity(items.len()); for item in items { v.push(item.clone()); } v }",
+    "clippy_lint": "clippy::slow_vector_initialization"
+  },
+  {
+    "id": "avoid_unwrap_in_library_code",
+    "title": "Return Result instead of unwrap in library code",
+    "initial_code": "pub fn parse_port(s: &str) -> u16 { s.parse::<u16>().unwrap() }",
+    "instruction": "Refactor `parse_port` to return `Result<u16, std::num::ParseIntError>` using `?` instead of unwrap.",
+    "expected_fixed_code": "pub fn parse_port(s: &str) -> Result<u16, std::num::ParseIntError> { s.parse::<u16>() }",
+    "clippy_lint": "clippy::unwrap_used"
+  }
+]

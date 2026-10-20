@@ -8,7 +8,7 @@ is generated in [ARCHITECTURE.md](../ARCHITECTURE.md).
 
 | Task | Start here | Then read |
 | --- | --- | --- |
-| Prepare a release or a later friend trial | [Release preparation](operations/index.md#release-preparation-and-later-testing) | [Open acceptance work](../ISA.md#distribution) |
+| Prepare a release or a later friend trial | [Release preparation](operations/index.md#release-preparation-and-later-testing) | [Open acceptance work (#235)](https://github.com/larsboes/Sjel/issues/235) |
 | Install and verify a minimal shell | [Shell-only node](operations/index.md#install-a-shell-only-node) | [Footprint](operations/index.md#installation-footprint), [service persistence](operations/persistence.md) |
 | Understand where a component belongs | [Architecture overview](architecture/index.md) | [Storage](architecture/storage.md), [data classes and security](architecture/security.md) |
 | Add or change a capability | [Capability manifests](capabilities/manifest.md) | [Health and freshness contracts](capabilities/contracts.md), the capability's manual |

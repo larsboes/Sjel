@@ -15,7 +15,7 @@ health. The [generated architecture](../../ARCHITECTURE.md) describes public dec
 The target delivery is a notarized Mac DMG, a native iOS app distributed through TestFlight,
 and a prebuilt headless node with optional capability packages. Source installation remains
 the developer path. These release tools prepare files; they do not establish that a new user
-can complete setup. Track the remaining acceptance work in [the ISA](../../ISA.md#distribution).
+can complete setup. Track the remaining acceptance work in [#235](https://github.com/larsboes/Sjel/issues/235).
 
 ### Prepare files without installing
 
@@ -48,8 +48,14 @@ are copied; overlay files and developer configuration are not packaging inputs.
 
 Each output includes archive checksums, `release.json` and `READINESS.txt`. The catalogue states
 `friend_ready: false`. The DMG contains that note too. Its native app still needs first-run
-create/connect-node integration and writable runtime placement before it can serve as a
-fresh-user installer. Packaging an app is not evidence that these flows exist.
+create/connect-node integration before it can serve as a fresh-user installer. Packaging an app
+is not evidence that these flows exist.
+
+The app's runtime is read-only inside the bundle. `sjel distribution place` copies it to
+`~/Library/Application Support/Sjel/runtime/<version>` and creates an empty overlay at
+`~/Library/Application Support/Sjel/overlay`. It never overwrites an existing file, and it starts
+no service and creates no credential. The launcher uses the placed copy of the same release when
+one exists. Copies of other releases stay in place; nothing removes them yet.
 
 ### Signing, publication and iOS distribution
 

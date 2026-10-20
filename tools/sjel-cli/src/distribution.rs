@@ -6,12 +6,12 @@ use std::collections::BTreeSet;
 use std::fs::{self, File};
 use std::io::{Read, Write};
 use std::os::unix::fs::PermissionsExt;
-use std::path::{Component, Path};
+use std::path::{Component, Path, PathBuf};
 use std::process::{Command, ExitCode, Stdio};
 
 const MAX_MANIFEST: u64 = 1_048_576;
 const MAX_PACKAGE: u64 = 1_073_741_824;
-pub const USAGE: &str = "Usage: sjel distribution <verify|install-package> <archive> --sha256 <trusted-release-digest>\nVerify never installs. Install requires a writable packaged runtime of the same release; it never enables or starts a service.";
+pub const USAGE: &str = "Usage: sjel distribution <verify|install-package> <archive> --sha256 <trusted-release-digest>\n       sjel distribution place\nVerify never installs. Install requires a writable packaged runtime of the same release; it never enables or starts a service.\nPlace copies the app's packaged runtime to a writable per-user location and creates an empty overlay; it never starts a service or creates a credential.";
 
 #[derive(Debug, Deserialize)]
 #[serde(deny_unknown_fields)]
@@ -38,6 +38,8 @@ struct Runtime {
     schema: u32,
     version: String,
     platform: String,
+    #[serde(default)]
+    core: Vec<String>,
 }
 
 fn identifier(value: &str) -> bool {
@@ -338,6 +340,109 @@ fn install(root: &Path, archive: &Path, package: &Package) -> Result<(), String>
     result
 }
 
+/// The per-user home of placed runtimes and the overlay, relative to `$HOME`.
+/// `desktop_launcher.rs` reads the same location; change both together.
+pub const SUPPORT: &str = "Library/Application Support/Sjel";
+
+/// A packaged runtime: release identity present, no source checkout markers.
+fn packaged(root: &Path) -> Result<Runtime, String> {
+    if root.join("Cargo.toml").exists() || root.join(".git").exists() {
+        return Err("expected a packaged runtime, never a source checkout".into());
+    }
+    let runtime: Runtime = serde_json::from_slice(
+        &fs::read(root.join("distribution.json"))
+            .map_err(|e| format!("no packaged runtime identity: {e}"))?,
+    )
+    .map_err(|e| format!("invalid runtime identity: {e}"))?;
+    if runtime.schema != 1 || !runtime.version.starts_with('v') || !relative_file(&runtime.version)
+    {
+        return Err("unsupported runtime identity".into());
+    }
+    Ok(runtime)
+}
+
+/// Copy a tree, keeping permission bits. Symlinks are refused, as `prepare.ts` refuses them.
+fn copy_tree(from: &Path, to: &Path) -> Result<u64, String> {
+    fs::create_dir(to).map_err(|e| format!("cannot create {}: {e}", to.display()))?;
+    let mut bytes = 0;
+    for entry in fs::read_dir(from).map_err(|e| e.to_string())? {
+        let entry = entry.map_err(|e| e.to_string())?;
+        let kind = entry.file_type().map_err(|e| e.to_string())?;
+        let target = to.join(entry.file_name());
+        if kind.is_symlink() {
+            return Err(format!(
+                "runtime contains a symlink: {}",
+                entry.path().display()
+            ));
+        }
+        bytes += if kind.is_dir() {
+            copy_tree(&entry.path(), &target)?
+        } else {
+            fs::copy(entry.path(), &target).map_err(|e| e.to_string())?
+        };
+    }
+    Ok(bytes)
+}
+
+/// Copy the app's read-only runtime to `<support>/runtime/<version>` and create an empty
+/// overlay beside it. Existing files are never overwritten, so a second run changes nothing.
+/// Returns the placed runtime and the bytes copied (0 when already placed).
+fn place(source: &Path, support: &Path) -> Result<(PathBuf, u64), String> {
+    let runtime = packaged(source)?;
+    let overlay = support.join("overlay");
+    let text = overlay.to_str().ok_or("home path is not UTF-8")?;
+    if text.contains(['"', '\\', '\n']) {
+        return Err("home path cannot be written to sjel.local.toml".into());
+    }
+    let versions = support.join("runtime");
+    fs::create_dir_all(&versions).map_err(|e| e.to_string())?;
+    let destination = versions.join(&runtime.version);
+    let mut bytes = 0;
+    if !destination.join("distribution.json").is_file() {
+        let stage = versions.join(format!(
+            ".{}-{}.partial",
+            runtime.version,
+            std::process::id()
+        ));
+        let result = copy_tree(source, &stage).and_then(|copied| {
+            bytes = copied;
+            fs::rename(&stage, &destination)
+                .map_err(|e| format!("cannot activate {}: {e}", destination.display()))
+        });
+        if result.is_err() {
+            let _ = fs::remove_dir_all(&stage);
+        }
+        result?;
+    }
+    for dir in ["config", "data"] {
+        fs::create_dir_all(overlay.join(dir)).map_err(|e| e.to_string())?;
+    }
+    // Core services are processes; container_runtime is required by platform.sh but unused.
+    let capabilities = runtime
+        .core
+        .iter()
+        .map(|name| format!("\"{name}\""))
+        .collect::<Vec<_>>()
+        .join(", ");
+    create_once(
+        &overlay.join("config/machine.toml"),
+        &format!("# Written by 'sjel distribution place'. See schemas/machine.toml.example.\nos = \"macos\"\ncontainer_runtime = \"docker\"\ncapabilities = [{capabilities}]\n"),
+    )?;
+    create_once(
+        &destination.join("sjel.local.toml"),
+        &format!("# Written by 'sjel distribution place'. tools/lib/paths.sh reads it.\noverlay = \"{text}\"\n"),
+    )?;
+    Ok((destination, bytes))
+}
+
+fn create_once(path: &Path, body: &str) -> Result<(), String> {
+    match File::options().write(true).create_new(true).open(path) {
+        Ok(mut file) => file.write_all(body.as_bytes()).map_err(|e| e.to_string()),
+        Err(e) if e.kind() == std::io::ErrorKind::AlreadyExists => Ok(()),
+        Err(e) => Err(format!("cannot write {}: {e}", path.display())),
+    }
+}
+
 /// Validate, inspect or install a package without enabling or starting it.
 ///
 /// # Errors
@@ -346,6 +451,25 @@ pub fn run(root: &Path, args: &[String]) -> ExitCode {
     if matches!(args, [arg] if arg == "--help" || arg == "-h") {
         println!("{USAGE}");
         return ExitCode::SUCCESS;
+    }
+    if matches!(args, [arg] if arg == "place") {
+        let home = std::env::var_os("HOME").filter(|home| !home.is_empty());
+        let result = home
+            .ok_or_else(|| "HOME is unset".to_owned())
+            .and_then(|home| place(root, &Path::new(&home).join(SUPPORT)));
+        return match result {
+            Ok((runtime, bytes)) => {
+                println!(
+                    "runtime at {} ({bytes} bytes copied); no service started",
+                    runtime.display()
+                );
+                ExitCode::SUCCESS
+            }
+            Err(error) => {
+                eprintln!("distribution: {error}");
+                ExitCode::from(1)
+            }
+        };
     }
     let result = (|| {
         let [action, archive, flag, digest] = args else {
@@ -468,6 +592,56 @@ mod tests {
         assert!(inspect(&archive, &"0".repeat(64)).is_err());
         assert!(archive_file(&archive, "payload/bin/calendar-server", 1).is_err());
         assert!(archive_file(&archive, "payload/missing", 1).is_err());
+        fs::remove_dir_all(scratch).expect("test cleanup");
+    }
+
+    #[test]
+    fn place_copies_once_and_never_overwrites() {
+        let nonce = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .expect("test clock")
+            .as_nanos();
+        let scratch =
+            std::env::temp_dir().join(format!("sjel-place-{}-{nonce}", std::process::id()));
+        let bundle = scratch.join("Sjel.app/Contents/Resources/runtime");
+        fs::create_dir_all(bundle.join("target/release")).expect("test bundle");
+        fs::write(
+            bundle.join("distribution.json"),
+            r#"{"schema":1,"version":"v1.2.3","platform":"p","core":["sjel-status","store"]}"#,
+        )
+        .expect("test identity");
+        let tool = bundle.join("target/release/sjel-cli");
+        fs::write(&tool, b"bin").expect("test binary");
+        fs::set_permissions(&tool, fs::Permissions::from_mode(0o755)).expect("test mode");
+        let support = scratch.join("Application Support/Sjel");
+
+        let (runtime, bytes) = place(&bundle, &support).expect("first placement");
+        assert_eq!(runtime, support.join("runtime/v1.2.3"));
+        assert!(bytes > 0);
+        let mode = fs::metadata(runtime.join("target/release/sjel-cli"))
+            .expect("copied")
+            .permissions()
+            .mode();
+        assert_eq!(mode & 0o111, 0o111);
+        let machine =
+            fs::read_to_string(support.join("overlay/config/machine.toml")).expect("machine");
+        assert!(machine.contains(r#"capabilities = ["sjel-status", "store"]"#));
+        let local = fs::read_to_string(runtime.join("sjel.local.toml")).expect("local");
+        assert!(local.contains(&format!(
+            "overlay = \"{}\"",
+            support.join("overlay").display()
+        )));
+
+        fs::write(support.join("overlay/config/machine.toml"), "edited").expect("user edit");
+        let (_, again) = place(&bundle, &support).expect("second placement");
+        assert_eq!(again, 0);
+        assert_eq!(
+            fs::read_to_string(support.join("overlay/config/machine.toml")).expect("kept"),
+            "edited"
+        );
+
+        fs::write(bundle.join("Cargo.toml"), "").expect("checkout marker");
+        assert!(place(&bundle, &support).is_err());
         fs::remove_dir_all(scratch).expect("test cleanup");
     }
 

@@ -7,7 +7,6 @@ import CryptoKit
 @Suite("CloudKit Relay & Product Rule 4 Verification")
 struct CloudKitRelayTests {
 
-    /// ISC-19 Falsifier Test:
     /// "a test reads a record back as Apple stores it and finds ciphertext (product rule 4).
     /// Falsifier: a field name or value of a C2 record readable in the stored record."
     @Test("C2 record in CloudKit storage is strictly ciphertext with zero readable C2 fields or values")

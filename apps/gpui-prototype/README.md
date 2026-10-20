@@ -48,7 +48,7 @@ a `/` menu, drag reorder and a task table without a fork, at 1.6 ms CPU per keys
 1,740-line note. Three GPUI gaps needed outside workarounds: no inline styling outside
 code-editor mode, fixed textarea padding, and key-context precedence.
 
-This is a stack decision, not a speed fix: DSH-8 found that Sjel's waits come from services, not
+This is a stack decision, not a speed fix: on 2026-10-09, Sjel's waits came from services, not
 from rendering. It replaces the 2026-10-09 split that gave GPUI only the keyboard surfaces.
 
 ## Workspace and the iOS app

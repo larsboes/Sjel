@@ -212,7 +212,7 @@ url = "https://github.com/bitwarden/clients"
 verdict = "adopt"
 license = "GPL-3.0-only"
 summary = "Official Bitwarden CLI that Sjel's secret setup script uses to store and read vault items"
-why = "official CLI for the vaultwarden-protocol-compatible vault; setup-secret.sh scripts item create/read against self-hosted vaultwarden (bw config server) for the capabilities that keep a vault item. Since 2026-10-01 the canonical store is the OS keychain, set up per user, with Vaultwarden optional (ISA ISC-37): the agent and inbound tokens are written to the login Keychain, not here"
+why = "official CLI for the vaultwarden-protocol-compatible vault; setup-secret.sh scripts item create/read against self-hosted vaultwarden (bw config server) for the capabilities that keep a vault item. Since 2026-10-01 the canonical store is the OS keychain, set up per user, with Vaultwarden optional: the agent and inbound tokens are written to the login Keychain, not here"
 
 [scout]
 url = "https://github.com/troyriverabusiness/scout"
@@ -387,14 +387,14 @@ url = "https://nominatim.org/release-docs/latest/api/Search/"
 verdict = "adopt"
 license = "API output is ODbL (OpenStreetMap data); places stores responses in its own local cache and the map keeps OSM attribution visible"
 summary = "OpenStreetMap geocoder the places registry calls at 1 request/s, caching every answer permanently"
-why = "forward and reverse geocoder for the places registry (capabilities/places decision D3: external API with a permanent local cache, chosen over bundled datasets). The usage constraints are part of the adoption, enforced in geocode.rs rather than remembered: at most 1 request/s with the identifying User-Agent axon-places/0.1 per the Nominatim usage policy; every response cached permanently in places.geocode_cache so a query egresses at most once; and a query carries place text or a bare coordinate pair only -- never a person name, an amount, or a date (PRD 6.1, places ISA PLC-3/A1)"
+why = "forward and reverse geocoder for the places registry (capabilities/places decision D3: external API with a permanent local cache, chosen over bundled datasets). The usage constraints are part of the adoption, enforced in geocode.rs rather than remembered: at most 1 request/s with the identifying User-Agent axon-places/0.1 per the Nominatim usage policy; every response cached permanently in places.geocode_cache so a query egresses at most once; and a query carries place text or a bare coordinate pair only -- never a person name, an amount, or a date (PRD 6.1)"
 
 [open-meteo-api]
 url = "https://open-meteo.com"
 verdict = "adopt"
 license = "CC BY 4.0 for the API data; the attribution renders under the climate strip wherever the normals are shown"
 summary = "Free weather archive API the places registry uses for climate normals, one cached call per place"
-why = "climate normals for the places registry (capabilities/places decision D5). The ARCHIVE endpoint (https://archive-api.open-meteo.com/v1/archive) answers with daily observations over a closed historical window, which is what a normal is folded from -- not a forecast, which PRD 8.2 rules out. Free, no key. The usage constraints are part of the adoption and are enforced in capabilities/places/src/climate.rs rather than remembered: one request per place, cached permanently in places_climate_normals so a place egresses at most once (ISA PLC-14); the request carries a coordinate pair rounded to two decimals and a fixed ten-year window and nothing else -- never a plan date, a person or an amount (PLC-13); a kind = 'address' place is refused before a request is built (PLC-15); a provider error writes no row; and the error Display is stripped of its URL, because that URL is a coordinate"
+why = "climate normals for the places registry (capabilities/places decision D5). The ARCHIVE endpoint (https://archive-api.open-meteo.com/v1/archive) answers with daily observations over a closed historical window, which is what a normal is folded from -- not a forecast, which PRD 8.2 rules out. Free, no key. The usage constraints are part of the adoption and are enforced in capabilities/places/src/climate.rs rather than remembered: one request per place, cached permanently in places_climate_normals so a place egresses at most once; the request carries a coordinate pair rounded to two decimals and a fixed ten-year window and nothing else -- never a plan date, a person or an amount; a kind = 'address' place is refused before a request is built; a provider error writes no row; and the error Display is stripped of its URL, because that URL is a coordinate"
 
 [platforms]
 url = "https://github.com/bazelbuild/platforms"

@@ -2946,7 +2946,7 @@ mod tests {
     /// that each path it listed was in ROUTES -- it could not see a route the
     /// router serves that nobody declared, which is the failure it existed to
     /// catch. `undeclared_routes` reads this file's own source, so adding a
-    /// `.route()` without a manifest entry fails here (ISA PLC-1). If it fails,
+    /// `.route()` without a manifest entry fails here. If it fails,
     /// declare the route; do not weaken the assertion.
     #[test]
     fn every_route_the_router_serves_is_declared() {

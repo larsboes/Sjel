@@ -35,7 +35,7 @@ impl Skills {
     /// A path that will not read, or whose frontmatter fails the validation the Pack engine
     /// applies, comes back as a problem rather than an error. One broken skill among twenty is
     /// not a reason to refuse the run, and a skill that vanishes without a word is worse than a
-    /// run that does not start — so the caller reports every problem (AGT-13).
+    /// run that does not start — so the caller reports every problem.
     pub fn load(paths: &[String]) -> (Self, Vec<String>) {
         let mut skills = Vec::new();
         let mut problems = Vec::new();
@@ -212,7 +212,7 @@ mod tests {
         }
         assert!(prompt.contains("does the first thing"), "{prompt}");
         assert!(prompt.contains("does the second"), "{prompt}");
-        // AGT-12: name and description, and not one byte of the document.
+        // Name and description, and not one byte of the document.
         assert!(
             !prompt.contains(BODY_MARKER),
             "a skill body reached the prompt: {prompt}"

@@ -588,7 +588,7 @@ mod tests {
         })
     }
 
-    /// Every case the ported file's header lists, with the verdict it gives there (AGT-10).
+    /// Every case the ported file's header lists, with the verdict it gives there.
     ///
     /// The header is the spec: "what is blocked" and "what is allowed" are its two lists, and a
     /// case that behaves differently here would be a port that quietly widened or narrowed the

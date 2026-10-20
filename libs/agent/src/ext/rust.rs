@@ -4,8 +4,8 @@
 //! text, the help text, and the "for further information about this error" trailer. The same
 //! information is in `cargo`'s `--message-format=json`, so this reads that and prints
 //! `path:line:col level[code] message`, with a child note indented under it when the compiler
-//! has one (AGT-19). Measured smaller than the rendered output on a fixture, which is the only
-//! place that number means anything (AGT-20).
+//! has one. Measured smaller than the rendered output on a fixture, which is the only
+//! place that number means anything.
 //!
 //! `cargo deny` is not here: it speaks its own format rather than the compiler's JSON, and D8
 //! makes it F6's business "once a `deny.toml` exists". There is none in this repository, so

@@ -1,8 +1,8 @@
 //! Context compaction (F5): summarizes older complete turns when estimated tokens
-//! exceed the role's `max_input_tokens` (AGT-17, AGT-18).
+//! exceed the role's `max_input_tokens`.
 //!
-//! A turn is never split between its tool calls and their results (AGT-17).
-//! The session file records the summary, so `--continue` sends the summary (AGT-18).
+//! A turn is never split between its tool calls and their results.
+//! The session file records the summary, so `--continue` sends the summary.
 
 use sjel_agent::{Extension, Message};
 
@@ -263,7 +263,7 @@ mod tests {
         let compactor = Compaction::with_limit(initial_tokens - 50);
         compactor.before_request(&mut messages);
 
-        // AGT-17: The oldest turn is compacted into one summary message.
+        // The oldest turn is compacted into one summary message.
         // There must be no orphaned Tool messages without an assistant call!
         assert!(
             messages.len() < 9,
@@ -285,7 +285,7 @@ mod tests {
             assert!(content.contains("Fix test 1"), "{content}");
         }
 
-        // AGT-17 invariant: Verify no tool result exists whose tool call was compacted away
+        // Verify no tool result exists whose tool call was compacted away
         let mut in_flight_calls = Vec::new();
         for m in &messages {
             match m {
@@ -358,7 +358,7 @@ mod tests {
         let compactor = Compaction::with_limit(initial_tokens - 50);
         compactor.before_request(&mut messages);
 
-        // Overwrite session after compaction (AGT-18)
+        // Overwrite session after compaction
         crate::session::overwrite(&path, &messages).unwrap();
 
         // Resume session

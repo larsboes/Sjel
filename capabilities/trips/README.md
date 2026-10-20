@@ -212,8 +212,8 @@ commit message: a route keyed by a traveler name, carrying a score and a basis o
 plan ids that resolve to destinations and date ranges, is person + place + date
 range readable by any page in the operator's browser. `places` — which owns the
 companion register — layers `refuse_foreign_origins` on its whole router exactly
-because that register is C2, and the shipped invariant for this same data (places
-ISA PLC-12) is falsified by "a person name in its output".
+because that register is C2, and the shipped invariant for this same data is
+falsified by "a person name in its output".
 
 Three preconditions, recorded so this is a plan and not a rediscovery. **The first
 is met as of 2026-09-05** and the other two are not:

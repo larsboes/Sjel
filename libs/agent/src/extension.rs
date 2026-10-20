@@ -59,7 +59,7 @@ pub trait Extension: Send + Sync {
 /// The extensions a run names, in the order they run: the config list first, then the `--ext`
 /// flags in the order they were given.
 ///
-/// Three flag forms and no fourth (AGT-8). `none` clears the set, `+name` adds one, `-name`
+/// Three flag forms and no fourth. `none` clears the set, `+name` adds one, `-name`
 /// removes one. A bare name is an error rather than a guess about which of the two it meant.
 /// Names are not checked against what the binary carries here — that is the front end's table
 /// to check, because that is where the crates are linked.

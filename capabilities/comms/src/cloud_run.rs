@@ -500,7 +500,7 @@ fn admits(role: &ResolvedRole, job: &CloudDispatchJob) -> bool {
         return false;
     }
 
-    // ISC-24: Gated by reviewed provider list (providers.toml)
+    // Gated by reviewed provider list (providers.toml)
     let provider_name = role.provider_name.as_deref().unwrap_or("");
     let providers = sjel_inference::ReviewedProvidersList::load();
     let today = current_utc_date();
@@ -511,7 +511,7 @@ fn admits(role: &ResolvedRole, job: &CloudDispatchJob) -> bool {
 
 /// Make the one provider request this job asks for, and persist whatever the
 /// task's own home needs persisted, returning the JSON stored on the attempt.
-/// Writes to the durable egress log with token count and cost (ISC-23).
+/// Writes to the durable egress log with token count and cost.
 fn perform(
     store: &Store,
     job: &CloudDispatchJob,
@@ -1101,7 +1101,7 @@ mod tests {
             assert!(run_job(&store, &cfg, &job_id, &runtime).is_err());
         }
 
-        /// Product Rule 4 & ISC-20: A review queue job prepared and queued for a c1
+        /// Product Rule 4: a review queue job prepared and queued for a c1
         /// item produces a pseudonymized job using `PSEUDONYMIZE_VERSION` where all
         /// personal/relational entities are replaced with typed tokens and no raw C2
         /// entities leak into the stored job payload.
@@ -1157,7 +1157,7 @@ mod tests {
             );
         }
 
-        /// ISC-24 Falsifier: Cloud call to an unreviewed provider is refused.
+        /// Cloud call to an unreviewed provider is refused.
         #[test]
         fn cloud_call_to_unreviewed_provider_is_refused() {
             let inf: sjel_inference::InferenceConfig = serde_json::from_value(serde_json::json!({
@@ -1213,7 +1213,7 @@ mod tests {
             ));
         }
 
-        /// ISC-24: 12-month review expiry gates cloud calls.
+        /// 12-month review expiry gates cloud calls.
         #[test]
         fn cloud_call_to_expired_provider_is_refused() {
             let mut list = sjel_inference::ReviewedProvidersList::new();
@@ -1234,7 +1234,7 @@ mod tests {
             ));
         }
 
-        /// ISC-24: Data class exceeding provider ceiling is refused.
+        /// Data class exceeding provider ceiling is refused.
         #[test]
         fn cloud_call_exceeding_data_class_is_refused() {
             let mut list = sjel_inference::ReviewedProvidersList::new();
@@ -1307,7 +1307,7 @@ mod tests {
                 })
                 .expect("record failed egress succeeds");
 
-            // Verify listing entries (ISC-23)
+            // Verify listing entries
             let entries = store.list_egress_entries(10).expect("list egress succeeds");
             assert_eq!(entries.len(), 2);
             assert_eq!(entries[0].job_id.as_deref(), Some("job-124"));

@@ -31,7 +31,7 @@ cp "${CARGO_TARGET_DIR:-$SJEL_ROOT/target}/release/sjel-fda-launcher" "$dest.new
 codesign --force --sign "$identity" --identifier dev.sjel.fda-launcher --options runtime "$dest.new"
 mv "$dest.new" "$dest"
 codesign --verify --strict "$dest"
-# The binary was axon-fda-launcher until 2026-10-01 (ISA ISC-29). A grant is keyed on the
+# The binary was axon-fda-launcher until 2026-10-01. A grant is keyed on the
 # signature's identifier, which changed with the name, so the old copy holds a grant nothing
 # uses. Removed here so the list in System Settings has one entry to re-grant.
 rm -f "$dest_dir/axon-fda-launcher"

@@ -142,7 +142,7 @@ struct DiscoverResponse {
 }
 
 /// `GET /discover` crawls third-party sources and stores what it scores, so an agent's mode
-/// treats it as a write (ISA ISC-38's audit, F10). Moving it to `POST` would change the demo
+/// treats it as a write. Moving it to `POST` would change the demo
 /// recordings that replay it.
 const AGENT_ROUTES: sjel_server::agent_policy::AgentRoutes =
     sjel_server::agent_policy::AgentRoutes {

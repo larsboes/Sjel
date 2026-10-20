@@ -51,7 +51,7 @@ impl PseudonymizerSession {
     /// A session whose tokens are a function of `key`, the entity type and the value.
     ///
     /// Two keyed sessions with one key issue the same token for the same value, in any
-    /// process and in any order (ISA F9, ISC-41). Use [`crate::keyed::session_key`] to derive
+    /// process and in any order (ISA F9). Use [`crate::keyed::session_key`] to derive
     /// the key; never pass a key an agent can read.
     pub fn keyed(key: [u8; 32]) -> Self {
         Self {

@@ -7,7 +7,7 @@
 use axum::http::HeaderMap;
 
 pub use device_auth::PROTOCOL_VERSION;
-// `x-sjel-*` since 2026-10-01 (ISA ISC-28). The gate renames a legacy `x-axon-*` header to these
+// `x-sjel-*` since 2026-10-01. The gate renames a legacy `x-axon-*` header to these
 // names before anything reads it (`sjel_server::normalize_legacy_headers`), so a paired phone
 // that still sends the old names keeps working. The protocol string above is unchanged: it is
 // part of what the device signs.

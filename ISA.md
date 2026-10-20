@@ -39,11 +39,6 @@ see [planning rules](CONTRIBUTING.md#the-backlog-is-isas). Keep external bug rep
   Probes:
   - Field minimization: verified by `cloud_derivative_carries_only_fields_task_needs_answering_staab_et_al`.
   - Prompt rate: divide approvals in `secrets/agent/approvals/` by lines in `secrets/agent/calls/<YYYY-MM>.jsonl` over one calendar month. Threshold: set by principal after first month.
-- [ ] ISC-76 — each of the PRD's five non-goals has a current ruling in root `README.md`
-  `## Scope`. N1 "not a product to sell" and N3 "tailnet only, no inbound webhooks" conflict with
-  the distribution work and the LAN listener. N4 "not a replacement for Obsidian" was re-opened
-  for projects on 2026-10-09. N2 "not a full local LLM host" and N5 "not multi-user" are
-  unconfirmed. Falsifier: `## Scope` has no ruling on one of the five.
 
 ### F9 · One pseudonymizer, applied by the gate to every agent read
 

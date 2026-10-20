@@ -279,7 +279,7 @@ freshness_stale_hours  = "24"             # past this age nothing is arriving, a
 #                                           # /<name> proxied with the prefix stripped — that one is
 #                                           # convention, not configuration, and needs no field.
 # routes_absent = "upstream binary"         # optional, a reason. A process with a port serves
-#                                           # GET /routes (libs/route-manifest, ISA ISC-34), or says
+#                                           # GET /routes (libs/route-manifest), or says
 #                                           # here why it cannot: an upstream binary, a UI with no
 #                                           # API of its own. tools/check-service-tomls.sh refuses a
 #                                           # port with neither.

@@ -114,7 +114,7 @@ fn sjel(root: &Path, command: &str, rest: &[String]) -> ExitCode {
         "search" => search::run(root, rest),
         // In-process since 2026-10-02: tools/doctor is a launcher for this same entry point.
         "doctor" => doctor::run(rest),
-        // stdio MCP server (ISA ISC-40), and its registration with each harness. Both halves are
+        // stdio MCP server, and its registration with each harness. Both halves are
         // the sjel-mcp crate: tools/sjel-mcp.ts was the server until 2026-10-04.
         "mcp" => exec(Command::new(tool("tools/sjel-mcp/sjel-mcp")).args(rest)),
         // This device's user-level Claude Code settings (ISA ISC-45).

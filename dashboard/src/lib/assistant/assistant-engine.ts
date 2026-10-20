@@ -139,7 +139,7 @@ export class AssistantEngine {
    * 2. Mac Foundation Models (if Mac reachable via local network)
    * 3. Deterministic rules with quick capability suggestions
    *
-   * Shows which rung answered (ISC-18).
+   * Shows which rung answered.
    */
   private async general(prompt: string): Promise<Reply> {
     try {

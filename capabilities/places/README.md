@@ -229,14 +229,14 @@ catch a route that lands below it.
   in the stored row.
   What this obliges, enforced in `src/climate.rs` rather than remembered:
   the outbound request carries a coordinate pair **rounded to two decimals** and
-  that fixed window and nothing else (ISA PLC-13). Two decimals is roughly
+  that fixed window and nothing else. Two decimals is roughly
   1.1 km, coarser than a street address, and it is stated as a **bound, not a
   measurement** — the provider's grid resolution was not verified here. The
   fetch verb refuses a `kind = 'address'` row outright and names its city
-  instead (PLC-15), because the cache is permanent and an over-precise egress
+  instead, because the cache is permanent and an over-precise egress
   cannot be taken back. A provider error writes no row. Every error `Display` is
   stripped of its URL, because that URL is a coordinate. A place's normals leave
-  the host at most once (PLC-14). The CC BY 4.0 attribution is an adopted
+  the host at most once. The CC BY 4.0 attribution is an adopted
   obligation and renders wherever the normals are shown.
   Not claimed: crowd season. The archive carries no crowd measure and the
   candidates are provider-priced, so that half of the §8.2 sentence stays open.
@@ -327,4 +327,4 @@ and it takes flags the `backfill <name>` dispatch has no room for.
   evidence. Nothing tracks the phone.
 - **No photo storage.** PRD non-goal N4 is permanent: Sjel indexes and links,
   never copies from Photos.app. A photo layer waits for an indexer and is
-  recorded in `ISA.md` here.
+  an open item in the places unit of the root `ISA.md`.

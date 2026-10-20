@@ -3,7 +3,7 @@
 //! A counted token (`<TRAVELER_01>`) depends on what one session has already seen, so two
 //! capabilities serving one agent would give one person two names. A keyed token is a
 //! function of the key, the entity type and the exact value, so they agree without sharing
-//! state (ISA F9, ISC-41).
+//! state (ISA F9).
 //!
 //! HMAC, not a bare hash: without the key, a party that sees `<TRAVELER_k3x9qa>` cannot
 //! hash a guessed name and compare. HMAC-SHA256 per RFC 2104, over the workspace's `sha2`.

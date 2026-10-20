@@ -23,7 +23,7 @@ use sjel_http::Purpose;
 /// The name `agent.toml` and `--ext` use.
 pub const NAME: &str = "web";
 
-/// Default timeout in seconds for web requests (AGT-30).
+/// Default timeout in seconds for web requests.
 pub const DEFAULT_TIMEOUT_SECS: u64 = 30;
 pub const MAX_TIMEOUT_SECS: u64 = 120;
 

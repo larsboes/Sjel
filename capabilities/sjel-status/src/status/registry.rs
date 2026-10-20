@@ -182,7 +182,7 @@ pub(crate) struct CapabilityStatus {
     pub(crate) up: bool,
     pub(crate) url: String,
     /// `Service::kept_running`: down is a fault. Anything else starts on demand, and
-    /// stopped is its normal state (DSH-1). Named for the manifest field the menu bar reads.
+    /// stopped is its normal state. Named for the manifest field the menu bar reads.
     pub(crate) autostart: bool,
 }
 

@@ -17,7 +17,7 @@
 // TWO HALVES, and the first one is the one that runs everywhere:
 //
 //   declared    Every path matches a route the owning capability's own `const ROUTES` table
-//               declares — the manifest `GET /routes` serves, which ISA PLC-1 already keeps
+//               declares — the manifest `GET /routes` serves, which is already kept
 //               equal to the router (each capability's `every_route_the_router_serves_is_
 //               declared` test). Pure file reading: no capability runs, no port is bound, no
 //               network. This is the half that would have caught /upstreams the day it left.

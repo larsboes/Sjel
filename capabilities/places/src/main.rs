@@ -25,7 +25,7 @@ fn usage() -> ! {
 /// city's climate, so fetching all 183 registry rows would egress 134 venue
 /// coordinates for an identical answer, at one provider request each; the read
 /// side resolves a venue from its city row anyway. `kind = 'address'` is refused
-/// by `fetch_normals` itself (ISA PLC-15), whichever path names it.
+/// by `fetch_normals` itself, whichever path names it.
 fn climate(args: &[String]) -> Result<(), Box<dyn std::error::Error>> {
     if args.first().map(String::as_str) != Some("fetch") {
         usage();
@@ -66,7 +66,7 @@ fn climate(args: &[String]) -> Result<(), Box<dyn std::error::Error>> {
             Err(error) => {
                 failed += 1;
                 // The message is already stripped of the request URL, which is
-                // the coordinate pair (climate.rs, ISA PLC-13).
+                // the coordinate pair (climate.rs).
                 eprintln!("{}: {error}", place.id);
             }
         }

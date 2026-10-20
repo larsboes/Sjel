@@ -72,7 +72,7 @@ pub const DEFAULT_MODE: Mode = Mode::Auto;
 pub struct AgentRoutes {
     /// A write that leaves Sjel or cannot be undone. It asks in every mode (Product Rule 5).
     pub confirm: &'static [(&'static str, &'static str)],
-    /// A `GET` that changes state, so the mode treats it as a write (ISA ISC-38's audit).
+    /// A `GET` that changes state, so the mode treats it as a write.
     pub get_writes: &'static [(&'static str, &'static str)],
 }
 

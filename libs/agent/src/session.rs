@@ -37,7 +37,7 @@ pub fn append(path: &Path, messages: &[Message]) -> std::io::Result<()> {
 }
 
 /// Atomically replaces the contents of `path` with `messages` (excluding system prompt).
-/// Used after conversation compaction rewrites the session history (AGT-18).
+/// Used after conversation compaction rewrites the session history.
 pub fn overwrite(path: &Path, messages: &[Message]) -> std::io::Result<()> {
     if let Some(dir) = path.parent() {
         std::fs::create_dir_all(dir)?;

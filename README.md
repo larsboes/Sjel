@@ -124,7 +124,7 @@ smart. Using and maintaining it may not require that smartness.
 | Assistant that proposes actions and asks before anything that leaves Sjel or cannot be undone | Partly built. Agent writes follow the configured per-capability mode; confirmation is not a universal default. The drawer sends unrouted questions down the model ladder. |
 | Mac app | Menu bar companion in `apps/mac`; native desktop and iOS work in [the GPUI workspace](apps/gpui-prototype/README.md). The web dashboard remains available. |
 | Small install with optional downloadable capabilities | Release preparation exists for Mac DMGs, node archives, Calendar packages and native iOS archives. First-run setup, app package installation and clean-user acceptance remain open in the ISA. See [release preparation](docs/operations/index.md#release-preparation-and-later-testing). |
-| iCloud connection, encrypted by Sjel | Relay built and tested (`apps/mac`, ISC-19). Nothing syncs through it yet. |
+| iCloud connection, encrypted by Sjel | Relay built and tested (`apps/mac`). Nothing syncs through it yet. |
 
 ## Try it
 
@@ -182,10 +182,20 @@ shows the ones on this machine.
 
 ## Scope
 
-- Sjel does not ask for passwords or MFA codes of other services.
-- Only first-party extensions run. There is no extension store.
-- Prose stays in Obsidian. Sjel stores the structured facts and links to the notes.
-- Supported platforms: macOS, Linux and iOS.
+- **One household, one node.** Each household runs its own Sjel node. Its members use paired
+  devices, and one operator runs the node.
+- **Devices reach the node directly**, over the same Wi-Fi, Tailscale or the household's own
+  HTTPS server. Sjel polls outside services; none of them calls in.
+- **The models the devices already have.** A task runs on the device's model, then the Mac's,
+  then fixed rules ([product rule 1](CONTRIBUTING.md#product-rules)). A cloud model receives only
+  what rule 4 admits.
+- **Structured facts and the work on them.** Sjel stores people, places, trips, money, home,
+  calendar, projects and tasks. Prose stays in Obsidian and photos stay in the photo library;
+  Sjel links to them.
+- **Other services through their own authorization**, an API token or an OAuth grant, kept in the
+  user's secret store.
+- **First-party capabilities**, from this repository or the deployment's own overlay.
+- **Platforms:** macOS, Linux and iOS.
 
 ## Research
 

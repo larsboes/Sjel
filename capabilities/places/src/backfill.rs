@@ -847,9 +847,9 @@ pub fn stations(store: &PlacesStore, today: &str) -> Fallible<()> {
                 // there) when listed, then ask transit's own suggest surface for
                 // coordinates — by that name, or by the bare EVA itself. The EVA
                 // query is what resolves the HAFAS meta-stations (city-level
-                // aggregate codes) that punctuality's station list lacks (ISA
-                // PLC-6; the specific codes are live data and stay in the
-                // overlay evidence note).
+                // aggregate codes) that punctuality's station list lacks (the
+                // specific codes are live data and stay in the overlay evidence
+                // note).
                 let known_name: Option<String> = {
                     let conn = store.conn()?;
                     // `lpad($1, 8, '0')` has no SQLite counterpart. The padded
@@ -996,7 +996,7 @@ pub fn first_located_destination(destinations: &str) -> Option<(String, String, 
 /// Derive register proposals from `trips.plans` travelers (PRD 8.2). One
 /// proposal per traveler × plan, id stable on that pair, state hardcoded to
 /// `proposed` by `propose_person_place` — derivation never writes a confirmed
-/// row (ISA PLC-7). Archived plans are skipped, the same reading of `status`
+/// row. Archived plans are skipped, the same reading of `status`
 /// as `travel_layer`. The prefix is a parameter so a test can point the
 /// same SQL at a scratch copy of the table; production passes `trips`.
 pub fn travelers_from(
@@ -1294,7 +1294,7 @@ pub fn vault(store: &PlacesStore, today: &str) -> Fallible<()> {
     }
 
     // Person notes with populated coordinates become register PROPOSALS,
-    // never confirmed rows (README D4, ISA PLC-7).
+    // never confirmed rows (README D4).
     let people = people_dir()?;
     let geocoder = Geocoder::new(store);
     let mut person_notes = 0_usize;
@@ -1548,8 +1548,8 @@ fn takeout_labelled(
         }
         if let Some(person) = takeout_person_label(name) {
             // 9000 bp: the user typed this label into Maps themselves — it is
-            // curation, not derivation — but confirmation stays with the human
-            // (PLC-7), so the row still enters as `proposed`.
+            // curation, not derivation — but confirmation stays with the human,
+            // so the row still enters as `proposed`.
             let id = stable_id("pp", &format!("takeout-labelled:{person}:{name}"));
             if store
                 .propose_person_place(&id, &person, &place.id, None, None, 9000, "takeout", today)?
@@ -2634,7 +2634,7 @@ mod db_tests {
             assert_eq!(row.date_end.as_deref(), Some("2026-09-05"));
             assert_eq!(row.confidence_bp, 5000);
         }
-        // PLC-7: derivation must never produce a confirmed row.
+        // Derivation must never produce a confirmed row.
         assert!(store
             .person_places_in_state("confirmed")
             .unwrap()
@@ -2708,7 +2708,7 @@ mod db_tests {
         assert_eq!(report.proposals_written, 1);
         assert_eq!(report.commute_files_held, 1);
 
-        // PLC-7: the person label produced a `proposed` row for the person
+        // The person label produced a `proposed` row for the person
         // verbatim; nothing entered `confirmed`.
         let proposed = store.person_places_in_state("proposed").unwrap();
         assert_eq!(proposed.len(), 1);

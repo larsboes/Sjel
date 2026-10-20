@@ -9,17 +9,17 @@
 //! A request with the agent token:
 //!
 //! 1. is refused when the capability's mode is `off`, and a write is refused when it is
-//!    `read-only` (ISC-46). A write is any method but `GET` and `HEAD`, or a `GET` the
+//!    `read-only`. A write is any method but `GET` and `HEAD`, or a `GET` the
 //!    capability declared in [`AgentRoutes::get_writes`];
 //! 2. has pseudonym tokens in its query string, and in a write's body, mapped back, so an
-//!    agent can act on a value it only knows as `<SENDER_k3x9qa>` (ISC-49). A token this
+//!    agent can act on a value it only knows as `<SENDER_k3x9qa>`. A token this
 //!    session never issued is refused rather than passed on;
-//! 3. in `ask` mode, or on a `confirm` route in any mode, waits for the owner's Allow
-//!    (ISC-47, ISC-48): the first attempt answers 202 with an approval id, and the agent
+//! 3. in `ask` mode, or on a `confirm` route in any mode, waits for the owner's Allow:
+//!    the first attempt answers 202 with an approval id, and the agent
 //!    repeats the same write with `X-Sjel-Approval: <id>`;
 //! 4. gets a JSON response rewritten by `sjel_pseudonymize::view::agent_view`, with c3
 //!    objects removed. A read whose response is not JSON is refused;
-//! 5. leaves one line in the call log, with no body and no query (ISC-50).
+//! 5. leaves one line in the call log, with no body and no query.
 //!
 //! Only a capability that calls [`crate::InboundAuth::admit_agents`] accepts the agent token.
 //! Everywhere else it is an unknown token and answers 401.

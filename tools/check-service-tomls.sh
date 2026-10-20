@@ -83,7 +83,7 @@ for svc in "$SJEL_ROOT"/capabilities/*/service.toml "$SJEL_ROOT"/*/service.toml 
       elif [ -z "$(toml_get port "$svc")" ]; then
         echo "FAIL [$cap]: kind=process needs a port — the registry, the proxy and the health poll all read it — $svc" >&2
         fail=1
-      # A port is a surface, and an agent learns a surface from `GET /routes` (ISA ISC-34). The
+      # A port is a surface, and an agent learns a surface from `GET /routes`. The
       # route is found in the source, not by asking the server: most capabilities are off on a
       # given machine, and a live /routes answers 401 without the token, which is also what a
       # missing route answers. A process that cannot serve one names the reason instead.

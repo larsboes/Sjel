@@ -56,7 +56,7 @@
 //!
 //! ## Token sourcing: shared, not per-capability
 //!
-//! One deployment token, plus one agent token (ISA ISC-38). The agent token is a second
+//! One deployment token, plus one agent token. The agent token is a second
 //! identity, not a second boundary: it is admitted only where a capability calls
 //! [`InboundAuth::admit_agents`], for GET and HEAD only, and every answer is pseudonymized.
 //!
@@ -107,7 +107,7 @@ const EXEMPT_PATHS: &[&str] = &["/health", "/ready", "/__axon/freshness"];
 /// `capabilities/devices/src/auth.rs`). The other three headers are read by the verifier.
 pub const DEVICE_SIGNATURE_HEADER: &str = "x-sjel-signature";
 
-/// The request headers renamed from Axon to Sjel (ISA ISC-28): legacy name, current name.
+/// The request headers renamed from Axon to Sjel: legacy name, current name.
 pub const LEGACY_HEADERS: [(&str, &str); 5] = [
     ("x-axon-device-id", "x-sjel-device-id"),
     ("x-axon-timestamp", "x-sjel-timestamp"),
@@ -386,7 +386,7 @@ impl InboundAuth {
     /// enrolled.
     ///
     /// A mode that forbids writes forbids every method but GET and HEAD, so a GET that changes
-    /// state must be named in `routes.get_writes`. ISA ISC-38 lists the ones its audit found.
+    /// state must be named in `routes.get_writes`.
     pub fn admit_agents(
         mut self,
         capability: &str,
@@ -1078,7 +1078,7 @@ mod tests {
         }
     }
 
-    /// ISA ISC-28: a legacy `x-axon-*` header reaches the reader under its `x-sjel-*` name, and
+    /// A legacy `x-axon-*` header reaches the reader under its `x-sjel-*` name, and
     /// when both arrive the current one wins.
     #[test]
     fn a_legacy_header_is_renamed_and_the_current_one_wins() {

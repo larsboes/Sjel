@@ -586,7 +586,7 @@ mod tests {
 
     #[test]
     fn capability_index_finds_comms_for_mail() {
-        // ISA ISC-33, against the real checkout.
+        // Against the real checkout.
         let caps = [cap("comms"), cap("calendar")];
         let r = search_capabilities(&real_root(), None, &caps, "mail");
         assert!(r.iter().any(|l| l.starts_with("  comms ")), "{r:?}");

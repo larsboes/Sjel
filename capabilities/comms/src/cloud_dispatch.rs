@@ -231,7 +231,7 @@ fn chat_outcome(
         return Err("the selected role is not an approved HTTPS cloud endpoint".into());
     }
 
-    // Gated by reviewed providers list (providers.toml, ISC-24)
+    // Gated by reviewed providers list (providers.toml)
     let provider_name = role.provider_name.as_deref().unwrap_or("");
     let providers = sjel_inference::ReviewedProvidersList::load();
     let today = crate::cloud_run::current_utc_date();
@@ -307,7 +307,7 @@ fn chat_outcome(
         .map(str::to_string)
         .ok_or_else(|| "cloud provider returned no answer".to_string())?;
 
-    // Parse token usage & cost (ISC-23)
+    // Parse token usage & cost
     let (prompt_tokens, completion_tokens, total_tokens) = body_json
         .get("usage")
         .map(|usage| {

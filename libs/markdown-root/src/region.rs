@@ -379,7 +379,7 @@ mod tests {
         RegionSpec::new("finance", 1)
     }
 
-    // ISC-1 — every byte outside the markers is preserved.
+    // Every byte outside the markers is preserved.
     #[test]
     fn creating_a_region_preserves_the_original_document_byte_for_byte() {
         let doc = "# Claude Max\n\nWhy I pay for this.\n";
@@ -398,7 +398,7 @@ mod tests {
         assert!(found.is_intact());
     }
 
-    // ISC-2 — a human edit outside the region survives regeneration, proven by
+    // A human edit outside the region survives regeneration, proven by
     // mutating the prose and the region in the same file.
     #[test]
     fn a_human_edit_outside_the_region_survives_regeneration() {
@@ -422,7 +422,7 @@ mod tests {
         assert!(second.ends_with("A footer a human wrote.\n"));
     }
 
-    // ISC-3 — an edit inside the region is a conflict, and nothing is written.
+    // An edit inside the region is a conflict, and nothing is written.
     #[test]
     fn a_human_edit_inside_the_region_conflicts_and_writes_nothing() {
         let (doc, _) = apply("# Note\n", &spec(), "burn: 12").unwrap();
@@ -458,7 +458,7 @@ mod tests {
         assert_eq!(out, doc, "a no-op must not churn the vault's git history");
     }
 
-    // ISC-4 — each malformed marker case returns its own named error.
+    // Each malformed marker case returns its own named error.
     #[test]
     fn an_unterminated_region_is_an_error() {
         let doc = "# Note\n<!-- axon:begin owner=finance v=1 sha=0 -->\nbody\n";

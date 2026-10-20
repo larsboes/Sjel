@@ -232,7 +232,7 @@ paths = [
 reason = """
 places is absent because its two interesting surfaces cannot be seeded honestly. The map layers \
 are joins over finance transactions, transit legs and the companion register, which is C2 and \
-never leaves the host (places ISA PLC-8) -- seeding it would mean inventing people, and a made-up \
+never leaves the host -- seeding it would mean inventing people, and a made-up \
 person in a made-up city is exactly the shape of the data the rule exists to protect. And the \
 seasonality strip on the travel page reads climate normals folded from ten years of real daily \
 observations per place, fetched once from Open-Meteo and cached permanently; a hand-written \

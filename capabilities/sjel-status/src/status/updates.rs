@@ -39,7 +39,7 @@
 //! every route above its fallback — `sjel_server::origin::refuse_foreign_origins` and the
 //! session verifier on the loopback listener — and this route is mounted above that line for
 //! exactly that reason. sjel-status is also the one capability that does not admit the agent
-//! token at all (ISA ISC-47), so an apply is reachable only by the owner's browser session or the
+//! token at all, so an apply is reachable only by the owner's browser session or the
 //! deployment credential, never by an agent.
 
 use std::sync::LazyLock;

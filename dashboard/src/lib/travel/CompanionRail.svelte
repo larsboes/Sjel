@@ -20,7 +20,7 @@
      * The capability's own sentence when places is absent. In the published demo
      * the shim answers 503 with a reason, and it is rendered verbatim rather than
      * translated: a synthetic companion register is the one fixture this demo
-     * must not have (places ISA PLC-8).
+     * must not have.
      */
     notice = null,
   }: {

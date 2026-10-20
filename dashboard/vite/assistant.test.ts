@@ -461,7 +461,7 @@ describe('generative UI widgets', () => {
   });
 });
 
-describe('assistant model ladder (ISC-18)', () => {
+describe('assistant model ladder', () => {
   const general = extractRouteContext('/');
 
   it('falls back to rules rung when backends are unreachable', async () => {

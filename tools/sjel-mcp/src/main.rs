@@ -1,5 +1,5 @@
 // tools/sjel-mcp/src/main.rs — register Sjel's MCP server with the agent harnesses on this
-// machine, and verify each registration against the server itself (ISA ISC-40).
+// machine, and verify each registration against the server itself.
 //
 // Why this exists: the server shipped 2026-10-01 and was registered in no harness at all. The
 // ISA named the command that would have done it, nobody ran it, and nothing in this repository

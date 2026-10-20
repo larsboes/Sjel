@@ -15,7 +15,7 @@ pub use pinned::{decode_pin, pinned_tls, PinnedCertificate};
 
 pub const PROTOCOL_VERSION: &str = "axon-device-auth/v1";
 
-/// The header names a device sends. Still the legacy `x-axon-*` names, on purpose (ISA ISC-28):
+/// The header names a device sends. Still the legacy `x-axon-*` names, on purpose:
 /// a server accepts both since 2026-10-01, and a phone build sending `x-sjel-*` would fail
 /// against a server that has not restarted since. Switch once every server runs the renaming
 /// gate (`sjel_server::normalize_legacy_headers`).

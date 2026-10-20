@@ -1,6 +1,6 @@
 //! MCP client (F4, D10): speaks JSON-RPC 2.0 over stdio and HTTP.
 //!
-//! Exposes tools discovered from external MCP servers as `<server>__<tool>` (AGT-14).
+//! Exposes tools discovered from external MCP servers as `<server>__<tool>`.
 //! Blocking, in-process, without async runtimes or third-party SDK dependencies (C3, D10).
 
 use std::collections::HashMap;
@@ -17,7 +17,7 @@ use sjel_agent::{Extension, Tool};
 /// The name `agent.toml` and `--ext` use.
 pub const NAME: &str = "mcp";
 
-/// Default timeout in seconds for an MCP call (AGT-15).
+/// Default timeout in seconds for an MCP call.
 pub const DEFAULT_TIMEOUT_SECS: u64 = 120;
 
 /// Configuration for an MCP server in `agent.toml`.
@@ -636,7 +636,7 @@ for line in sys.stdin:
         assert_eq!(res.unwrap_err(), "stopped by user");
         assert!(
             elapsed < Duration::from_secs(1),
-            "stop must respond in < 1 s (AGT-16), took {elapsed:?}"
+            "stop must respond in < 1 s, took {elapsed:?}"
         );
 
         // Now clear stop flag and call echo_tool: the server must still be alive!

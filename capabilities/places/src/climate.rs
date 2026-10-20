@@ -5,14 +5,14 @@
 //! Modelled on `geocode.rs`, and the four constraints it enforces rather than
 //! remembers are enforced here too:
 //!
-//! - **A stored place never egresses again** (ISA PLC-14): the stored rows are
+//! - **A stored place never egresses again**: the stored rows are
 //!   read before a network client exists for the request.
 //! - **A courtesy throttle** spaces provider requests process-globally, whatever
 //!   thread asks, because the endpoint is free and keyless.
-//! - **The request carries a rounded coordinate pair and a fixed period only**
-//!   (ISA PLC-13): six query parameters, no plan date, no person, no amount.
+//! - **The request carries a rounded coordinate pair and a fixed period only**:
+//!   six query parameters, no plan date, no person, no amount.
 //! - **A provider error writes no row** and its `Display` is stripped of the
-//!   request URL, because that URL *is* a coordinate (ISA PLC-13).
+//!   request URL, because that URL *is* a coordinate.
 //!
 //! What is data and what is code: the twelve rows are measurements and are
 //! stored; `best_months` is a rule and is computed on read, so changing the rule
@@ -386,9 +386,9 @@ pub struct FetchOutcome {
 ///
 /// `url` is a parameter, never an env read, so parallel tests inject a stub
 /// without racing on process env. `force` is the refresh path a permanent cache
-/// needs; without it a place egresses at most once (ISA PLC-14).
+/// needs; without it a place egresses at most once.
 ///
-/// A `kind = 'address'` place is refused before a request is built (ISA PLC-15):
+/// A `kind = 'address'` place is refused before a request is built:
 /// a home address has no business in a climate request at any precision, and its
 /// city row answers the same question.
 pub fn fetch_normals(
@@ -411,7 +411,7 @@ pub fn fetch_normals(
     };
 
     // Stored first: a place with rows answers without a network client ever
-    // being built (PLC-14).
+    // being built.
     if !force {
         let stored = store.climate_get(&place.id)?;
         if !stored.is_empty() {
@@ -425,7 +425,7 @@ pub fn fetch_normals(
     let (period_start, period_end, years) = normals_period(today);
     throttle();
     let client = sjel_http::client(sjel_http::Purpose::new("places-climate"), REQUEST_TIMEOUT)?;
-    // Exactly six parameters, and PLC-13's falsifier is a seventh: the plan's
+    // Exactly six parameters, and a seventh would break the contract: the plan's
     // dates, a traveler, an amount and a place name all have nowhere to go here.
     let response = client
         .get(url)
@@ -444,8 +444,8 @@ pub fn fetch_normals(
         ])
         // `without_url`: reqwest's error Display appends the request URL, and
         // that URL is a coordinate pair. Fetch errors reach stderr verbatim
-        // (main.rs), and a coordinate in a log line is what PLC-13 exists to
-        // prevent.
+        // (main.rs), and a coordinate in a log line is the leak this
+        // contract prevents.
         .send()
         .map_err(reqwest::Error::without_url)?;
     let status = response.status();
@@ -776,7 +776,7 @@ mod db_tests {
                 "daily",
                 "timezone"
             ],
-            "PLC-13: a seventh parameter is the falsifier — {query}"
+            "a seventh parameter is the falsifier — {query}"
         );
         // Two decimals exactly, on both coordinates.
         assert!(query.contains("latitude=48.21"), "{query}");
@@ -816,10 +816,7 @@ mod db_tests {
             false,
         )
         .expect("stored rows answer without a client");
-        assert!(
-            second.cached,
-            "PLC-14: a stored place egresses at most once"
-        );
+        assert!(second.cached, "a stored place egresses at most once");
         assert_eq!(hits.load(Ordering::SeqCst), 1);
     }
 
@@ -858,7 +855,7 @@ mod db_tests {
         store.upsert_place(&place, "2026-09-05").unwrap();
 
         let error = fetch_normals(&store, &place, &url, "2026-09-05", false)
-            .expect_err("PLC-15: an address coordinate never reaches the provider")
+            .expect_err("an address coordinate never reaches the provider")
             .to_string();
         assert!(error.contains("city"), "the refusal names the fix: {error}");
         assert_eq!(hits.load(Ordering::SeqCst), 0, "no request was built");

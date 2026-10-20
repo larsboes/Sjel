@@ -13,8 +13,8 @@
 //! on its whole router exactly because that register is C2. A route keyed by a
 //! traveler name, carrying a score and a basis of plan ids that resolve to
 //! destinations and date ranges, is person + place + date range readable
-//! cross-origin, and the shipped invariant for this same data (places ISA
-//! PLC-12) is falsified by "a person name in its output". `by_destination` adds
+//! cross-origin, and the shipped invariant for this same data is
+//! falsified by "a person name in its output". `by_destination` adds
 //! no exposure, because `GET /api/plans` already serves `destinations` over the
 //! same permissive layer. The three preconditions for bringing the companion
 //! half back are written down in `capabilities/trips/README.md`.
@@ -351,7 +351,7 @@ mod tests {
 
     /// The assertion the privacy ruling earns. Two plans whose `travelers` are
     /// set, and no name appears anywhere in the serialized body — the same
-    /// falsifier shape as places ISA PLC-12.
+    /// falsifier shape as the places register.
     #[test]
     fn the_summary_response_carries_no_traveler_name() {
         let plans = vec![

@@ -1,4 +1,4 @@
-//! The CLI's startup rules, checked by running the binary (AGT-8, AGT-11).
+//! The CLI's startup rules, checked by running the binary.
 //!
 //! The extension set is the first thing a run resolves, before the inference role or the working
 //! directory, so a name this build does not carry stops the run with nothing else to wait for,

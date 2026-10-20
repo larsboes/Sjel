@@ -1,6 +1,6 @@
 //! places: canonical place registry, cached geocoder, and the map layers.
 //!
-//! Contract: `README.md` here (decisions D1-D4), `ISA.md` here (PLC-1..8).
+//! Contract: `README.md` here (decisions D1-D4).
 //! Writes stay inside the `places` schema; reads of `finance.*`, `trips.*`,
 //! `transit.*` and `punctuality.*` are read-only SELECTs, the correlation-join
 //! usage `capabilities/store/README.md` chose one database for.

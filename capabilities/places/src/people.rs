@@ -6,7 +6,7 @@
 //! matches itself and leaves the rest to the operator.
 //!
 //! A dismissed person-place row is not a link and its name is not open: the operator already
-//! said that place does not belong to that person (ISA PLC-7). Proposed and confirmed rows are
+//! said that place does not belong to that person. Proposed and confirmed rows are
 //! listed, and the link says which.
 
 use std::collections::{BTreeMap, HashMap, HashSet};

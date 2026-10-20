@@ -190,7 +190,7 @@ impl Aggregate {
 
 /// `GET /api/layers/spend`.
 ///
-/// Reconciliation (ISA PLC-5): `summary.total_cents` is the sum of
+/// Reconciliation: `summary.total_cents` is the sum of
 /// `finance.transaction_projection.amount_cents` over exactly the linked EUR
 /// expense rows, computed from the same join the features come from — the two
 /// cannot disagree because they are one query. `summary.transactions` counts
@@ -421,7 +421,7 @@ pub fn travel_layer_in(
     }
 
     // Stations and legs. Station coordinates come from the registry
-    // (`backfill stations` fills it, ISA PLC-6); a leg whose HAFAS ref embeds
+    // (`backfill stations` fills it); a leg whose HAFAS ref embeds
     // its own coordinates can be drawn even before the registry has the row.
     let station_places: HashMap<String, (String, f64, f64)> = store
         .places_with_coordinates()?
@@ -836,7 +836,7 @@ mod db_tests {
         let (store, path) = open_test_store("layers");
         create_neighbour_tables(&path);
 
-        // No links yet: the spend layer must reconcile to zero (PLC-5's shape:
+        // No links yet: the spend layer must reconcile to zero (the reconciliation rule:
         // total is the sum over linked rows, and none are linked here).
         let spend = spend_layer(&store).expect("spend layer SQL is valid");
         assert_eq!(spend["summary"]["total_cents"], 0);

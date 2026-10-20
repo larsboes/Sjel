@@ -1,7 +1,7 @@
 //! Is this browser origin allowed to talk to this capability at all?
 //!
 //! Moved here verbatim from `capabilities/places/src/server.rs`, where it was
-//! written for the companion register (places README D4, ISA PLC-7). It moved
+//! written for the companion register (places README D4). It moved
 //! because a second capability needs it: `trips` serves plan-search results
 //! that carry the operator's feasible calendar windows and a companion hint,
 //! under `CorsLayer::permissive()`. A second copy of a security predicate is

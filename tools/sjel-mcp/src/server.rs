@@ -1,4 +1,4 @@
-//! Sjel's capabilities as MCP tools over stdio (ISA ISC-40, F10) — `tools/sjel-mcp.ts` ported on
+//! Sjel's capabilities as MCP tools over stdio — `tools/sjel-mcp.ts` ported on
 //! 2026-10-04.
 //!
 //! One stdio MCP server over every capability whose gate admits the agent. The tools are built

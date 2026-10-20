@@ -148,8 +148,8 @@ impl Agent {
     /// (see [`tools::coding`]).
     ///
     /// The extensions' tools join the core tools here, and two tools may not share a name: one
-    /// of them would never run, and which one depends on the order they were collected in
-    /// (AGT-9). The error names both owners.
+    /// of them would never run, and which one depends on the order they were collected in.
+    /// The error names both owners.
     pub fn new(
         role: ResolvedRole,
         mut tools: Vec<Box<dyn Tool>>,
@@ -635,7 +635,7 @@ mod tests {
         }
     }
 
-    /// One extension touching every hook, denying `counted` and counting what fired (AGT-6).
+    /// One extension touching every hook, denying `counted` and counting what fired.
     #[derive(Default)]
     struct Denier {
         runs: Arc<AtomicUsize>,
@@ -667,7 +667,7 @@ mod tests {
 
     #[test]
     fn a_tool_result_hook_rewrites_the_model_copy_and_not_the_trace() {
-        /// Replaces one word in every `echo` result (AGT-27).
+        /// Replaces one word in every `echo` result.
         struct Redactor;
         impl Extension for Redactor {
             fn name(&self) -> &'static str {
@@ -798,7 +798,7 @@ mod tests {
                     "parameters": { "type": "object", "properties": { "text": { "type": "string" } } },
                 }}],
             }),
-            "with no extensions named, the request body is F0's, key for key (AGT-7)"
+            "with no extensions named, the request body is F0's, key for key"
         );
     }
 

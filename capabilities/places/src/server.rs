@@ -1057,7 +1057,7 @@ async fn list_proposals(State(state): State<AppState>) -> ApiResponse {
 }
 
 /// The explicit human review path — with `dismiss` below, the ONLY code that
-/// can move a register row to `confirmed` (README D4, ISA PLC-7).
+/// can move a register row to `confirmed` (README D4).
 #[derive(Deserialize)]
 struct StatedPlace {
     person: String,
@@ -1079,7 +1079,7 @@ fn is_day(value: &str) -> bool {
 ///
 /// Added 2026-09-25 (PRD Q116): the register had no way in except backfills, and "where
 /// is someone right now" is the fact a trip needs most. The operator is the source, so the
-/// row carries full confidence, but it is still written `proposed`: PLC-7 keeps the confirm
+/// row carries full confidence, but it is still written `proposed`: README D4 keeps the confirm
 /// route the one writer of `confirmed`, and the dashboard calls it in the same action.
 /// Only the city text reaches the geocoder, never the person's name (README D3).
 async fn state_person_place(
@@ -1323,7 +1323,7 @@ mod tests {
     /// The manifest is data a caller reads to learn the surface; a served route
     /// missing from it is invisible. `undeclared_routes` reads this file's own
     /// source, so adding a `.route()` without a manifest entry fails here
-    /// (ISA PLC-1, `libs/route-manifest/README.md`).
+    /// (`libs/route-manifest/README.md`).
     #[test]
     fn the_manifest_covers_every_served_route() {
         assert!(

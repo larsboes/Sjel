@@ -295,7 +295,7 @@ mod tests {
     }
 
     proptest! {
-        /// AGT-22, first half: one valid stream, folded in pieces of any size, gives the same
+        /// One valid stream, folded in pieces of any size, gives the same
         /// message and the same streamed text as folding it whole.
         #[test]
         fn the_fold_is_the_same_however_the_stream_is_cut(
@@ -312,7 +312,7 @@ mod tests {
             prop_assert_eq!(whole_thinking, cut_thinking);
         }
 
-        /// AGT-22, second half: arbitrary bytes — not a stream, not UTF-8, not JSON — come back
+        /// Arbitrary bytes — not a stream, not UTF-8, not JSON — come back
         /// as a message or an error. The claim is that they return at all.
         #[test]
         fn arbitrary_bytes_return_rather_than_panic(

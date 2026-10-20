@@ -3,12 +3,11 @@
 //!
 //! Three constraints are load-bearing and enforced here rather than remembered:
 //!
-//! - **A cache hit never egresses** (ISA PLC-2): the cache lookup happens
+//! - **A cache hit never egresses**: the cache lookup happens
 //!   before a client even exists for the request.
 //! - **At most 1 request/s** (Nominatim usage policy): a process-global
 //!   throttle spaces provider requests, whatever thread asks.
-//! - **A query carries place text or a bare coordinate pair only** (PRD 6.1,
-//!   ISA PLC-3/A1): the query type below has fields for street, postal code,
+//! - **A query carries place text or a bare coordinate pair only** (PRD 6.1): the query type below has fields for street, postal code,
 //!   city, country, free place text and a reverse-lookup coordinate pair —
 //!   there is nowhere to put a person, an amount or a date.
 
@@ -176,7 +175,7 @@ impl<'a> Geocoder<'a> {
         let hash = query.hash();
 
         // Cache first: a hit of any status answers without a network client
-        // ever being built (PLC-2).
+        // ever being built.
         if let Some(entry) = self.store.cache_get(&hash)? {
             if entry.status != "hit" {
                 return Ok(GeocodeOutcome {
@@ -618,7 +617,7 @@ pub(crate) mod db_tests {
         assert_eq!(
             hits.load(Ordering::SeqCst),
             1,
-            "a cache hit must not produce a provider request (PLC-2)"
+            "a cache hit must not produce a provider request"
         );
         assert_eq!(first.place.as_ref().unwrap().id, second.place.unwrap().id);
     }

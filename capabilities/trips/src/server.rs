@@ -395,7 +395,7 @@ struct NotAWrite;
 /// would otherwise cost a listing and thirteen file comparisons per search.
 ///
 /// `is_safe`, not `!= GET`: a HEAD is a read too, and counting it as a write
-/// made every HEAD rewrite the vault projection (ISA ISC-38's audit, 2026-10-01).
+/// made every HEAD rewrite the vault projection (the 2026-10-01 audit).
 fn completes_a_write(method: &axum::http::Method, response: &axum::response::Response) -> bool {
     !method.is_safe()
         && response.status().is_success()

@@ -158,7 +158,7 @@ into trips), and a browser always sends one on a cross-origin request.
 |---|---|
 | Allowed by default | `localhost`, `127.0.0.1`, `[::1]`, any `*.ts.net` host |
 | Env var | `SJEL_<CAPABILITY>_ALLOWED_ORIGIN_HOSTS` — comma-separated exact hosts, which **replaces** the `.ts.net` suffix and closes the Tailscale Funnel gap |
-| Applied by | `places` (the companion register, README D4 / ISA PLC-7) and, since 2026-09-05, `trips` (the plan-search body carries the operator's feasible windows and a companion hint; its router had ended in `CorsLayer::permissive()`, which made every route above it readable cross-origin) |
+| Applied by | `places` (the companion register, README D4) and, since 2026-09-05, `trips` (the plan-search body carries the operator's feasible windows and a companion hint; its router had ended in `CorsLayer::permissive()`, which made every route above it readable cross-origin) |
 
 ```rust
 .layer(axum::middleware::from_fn_with_state(

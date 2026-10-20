@@ -1,4 +1,4 @@
-//! Reviewed cloud providers gating outbound model calls (PRD §6, ISC-24).
+//! Reviewed cloud providers gating outbound model calls (PRD §6).
 //!
 //! A cloud model call is refused unless its provider is listed in `providers.toml`,
 //! its review date is within the 12-month expiry window, and the payload does not
@@ -230,7 +230,7 @@ why = "Zero-retention agreement"
         // c2 never admitted
         assert!(list.check_admission("openai", "c2", "2026-09-29").is_err());
 
-        // Unreviewed provider refused (ISC-24 falsifier)
+        // Unreviewed provider refused (falsifier)
         let err = list
             .check_admission("unreviewed-provider", "c0", "2026-09-29")
             .unwrap_err();

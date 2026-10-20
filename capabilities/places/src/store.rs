@@ -119,8 +119,7 @@ pub struct PersonPlaceRow {
 
 /// The only two states the review route may write. `Proposed` is deliberately
 /// absent: proposals are created by `propose_person_place`, which hardcodes it,
-/// and nothing else in this crate can spell `confirmed` into the table
-/// (ISA PLC-7).
+/// and nothing else in this crate can spell `confirmed` into the table.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Review {
     Confirmed,
@@ -248,7 +247,7 @@ impl PlacesStore {
 
             -- The companion register, PRD 8.2 / README D4. C2: never seeded
             -- into axon_demo, and no write path here sets 'confirmed' except
-            -- review_person_place (ISA PLC-7).
+            -- review_person_place.
             CREATE TABLE IF NOT EXISTS {prefix}_person_places (
                 id TEXT PRIMARY KEY,
                 person TEXT NOT NULL,
@@ -779,7 +778,7 @@ impl PlacesStore {
 
     /// Write a register proposal. The state is the literal `'proposed'` and
     /// nothing the caller passes can change that — derivation never writes a
-    /// confirmed row (README D4, ISA PLC-7).
+    /// confirmed row (README D4).
     #[allow(clippy::too_many_arguments)]
     pub fn propose_person_place(
         &self,
@@ -844,7 +843,7 @@ impl PlacesStore {
     }
 
     /// The one write path that can produce `state = 'confirmed'`, reached only
-    /// from the explicit confirm/dismiss routes (ISA PLC-7).
+    /// from the explicit confirm/dismiss routes.
     ///
     /// The guard is **asymmetric**, and that is the whole decision:
     ///
@@ -925,7 +924,7 @@ impl PlacesStore {
     /// with its own single home.
     ///
     /// Confirmed rows only. A proposal is an inference nobody has agreed with,
-    /// so it is not evidence that anyone is anywhere (ISA PLC-7).
+    /// so it is not evidence that anyone is anywhere.
     ///
     /// Overlap rule: a row with no `date_start` and no `date_end` means "lives
     /// there" and matches any window; one open end is open in that direction.

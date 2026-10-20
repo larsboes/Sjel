@@ -3,8 +3,8 @@
 # the official `bw` CLI, upstreams.toml [bitwarden-cli]).
 #
 # Vaultwarden is no longer the canonical store. The principal ruled on 2026-10-01
-# that secrets live in the OS keychain, set up per user, with Vaultwarden optional
-# (ISA ISC-37). The agent token (`sjel agent enroll`) and the inbound token
+# that secrets live in the OS keychain, set up per user, with Vaultwarden optional.
+# The agent token (`sjel agent enroll`) and the inbound token
 # (tools/setup-inbound-auth.sh) follow that rule. This tool still serves the
 # container capabilities that keep a vault item, until each one moves. The capability's
 # env file still gets the one required plaintext copy (containers read

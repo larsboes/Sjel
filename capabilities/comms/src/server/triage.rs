@@ -5,8 +5,7 @@ pub(super) struct TriageParams {
     status: Option<String>,
     /// Drop every row whose class ranks above this one (`c1` keeps Public and Mine).
     /// The caller chooses it: the one shared token cannot tell an agent from the
-    /// dashboard, so this is a policy an agent client applies, not a gate (ISA F8,
-    /// ISC-39 — the gate needs the agent identity of ISC-38).
+    /// dashboard, so this is a policy an agent client applies, not a gate.
     max_data_class: Option<String>,
     /// Keep only mail whose sender, subject or snippet contains this text,
     /// ignoring case. An agent finds one mail without reading the whole table

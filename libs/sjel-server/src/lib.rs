@@ -403,7 +403,7 @@ mod http_tests {
         assert_eq!(not_shell.status().as_u16(), 401);
     }
 
-    // --- the agent identity (ISA F9, ISC-43) ---------------------------------------------
+    // --- the agent identity (ISA F9) ---------------------------------------------
 
     fn agent_access() -> agent::AgentAccess {
         use sha2::Digest;
@@ -829,7 +829,7 @@ mod http_tests {
         );
     }
 
-    /// ISA ISC-28: a paired phone that still sends the `x-axon-*` names is admitted.
+    /// A paired phone that still sends the `x-axon-*` names is admitted.
     #[tokio::test]
     async fn a_phone_sending_the_legacy_header_names_is_still_admitted() {
         let registry = std::sync::Arc::new(FakeRegistry {

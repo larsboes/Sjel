@@ -558,7 +558,7 @@ fn mail_secret_reason(lowercased_text: &str) -> Option<&'static str> {
 /// A code word next to the code itself: "Your UNiDAYS code is 482913",
 /// "482913 is your passcode", "Dein Anmeldecode: 4829".
 ///
-/// Added 2026-10-01 (ISA ISC-39). A one-time passcode from a student-discount
+/// Added 2026-10-01. A one-time passcode from a student-discount
 /// service was stored as c1 with the code in its subject, because no phrase in
 /// the list above matched it. The phrase list cannot grow to every sender's
 /// wording, but the shape is constant: a code word, and a standalone number of
@@ -631,7 +631,7 @@ fn mail_others_reason(stream: &str, lowercased_text: &str) -> Option<&'static st
     if contains_any(lowercased_text, &HEALTH) {
         return Some("Health-related metadata is Others.");
     }
-    // Added 2026-10-01 (ISA ISC-39): a named person's live-location mail was
+    // Added 2026-10-01: a named person's live-location mail was
     // stored as c1. Where somebody is, right now, is a fact about them.
     const LOCATION: [&str; 12] = [
         "sharing their location",
@@ -1603,7 +1603,7 @@ mod tests {
         }
     }
 
-    /// ISC-39: a code word beside the code is Secret, whatever phrase the sender
+    /// A code word beside the code is Secret, whatever phrase the sender
     /// chose. These are the shapes the phrase list missed.
     #[test]
     fn a_code_beside_a_code_word_is_secret() {
@@ -1636,7 +1636,7 @@ mod tests {
         }
     }
 
-    /// ISC-39: where another person is, right now, is a fact about them.
+    /// Where another person is, right now, is a fact about them.
     #[test]
     fn location_sharing_mail_is_others() {
         for subject in [

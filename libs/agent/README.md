@@ -153,8 +153,8 @@ max_tokens = 16384 # optional override; defaults to role's limit
 ```
 
 It replaces the oldest complete turns with a single summary message before each completion. A turn
-is never split between tool calls and their results (AGT-17), and the session file is updated so
-`--continue` resumes from the compacted summary (AGT-18).
+is never split between tool calls and their results, and the session file is updated so
+`--continue` resumes from the compacted summary.
 
 ## Web Access
 
@@ -205,11 +205,8 @@ Add a `coding` role to the overlay's `config/inference.json` first:
 
 ## Not here yet
 
-The extension contract is in place (F1), the guard uses all of it including the fifth hook (F2,
-D9), and skills (F3) and Rust diagnostics (F6) run on it. Next: MCP and compaction. Not done:
-letting a profile switch fill `[skills] paths` for you (AGT-21, in `tools/sjel-cli`), and the
-property test over the stream fold (AGT-22, whose tooling is an open decision). Line editing, a
-full-screen TUI and subagents are named in [`ISA.md`](ISA.md) as wave 2, not decided.
+The extension contract, the guard, skills, Rust diagnostics, MCP and compaction all run. Line
+editing, a full-screen TUI and subagents are wave 2 in [`ISA.md`](../../ISA.md), not decided.
 
 Pi stays until this agent beats it on one household task and one coding task, each measured
 against the existing path. The product reasoning is the `projects` record

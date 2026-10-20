@@ -114,8 +114,8 @@ fn run(args: Args) -> Result<ExitCode, String> {
     .map_err(|e| format!("could not handle Ctrl-C: {e}"))?;
 
     // Extensions resolve before the inference role, so a name this build does not carry fails at
-    // startup with nothing else to wait for (AGT-8), and a skill that will not read is named
-    // there too (AGT-13).
+    // startup with nothing else to wait for, and a skill that will not read is named
+    // there too.
     let config = agent_toml()?;
     let configured = config
         .agent
@@ -201,7 +201,7 @@ fn run(args: Args) -> Result<ExitCode, String> {
                     );
                 }
             } else {
-                // Compaction replaced earlier messages with a summary (AGT-18)
+                // Compaction replaced earlier messages with a summary
                 if let Err(e) = session::overwrite(path, messages) {
                     eprintln!(
                         "sjel-agent: could not rewrite the session to {}: {e}",
@@ -288,7 +288,7 @@ fn built_in(
             let (skills, problems) = ext::skills::Skills::load(&config.skills.paths);
             // A skill whose frontmatter does not parse is named and skipped, and the run goes
             // on: one broken skill among twenty must not stop the session, and must not vanish
-            // without a word either (AGT-13).
+            // without a word either.
             for problem in problems {
                 eprintln!("{DIM}sjel-agent: skipped a skill — {problem}{RESET}");
             }
@@ -310,7 +310,7 @@ fn built_in(
     }
 }
 
-/// The startup line (AGT-11): what runs, and — because the guard is the one extension that is on
+/// The startup line: what runs, and — because the guard is the one extension that is on
 /// by default (D3) — that it does not, when something removed it. A run that can read secrets
 /// says so before it starts.
 fn extension_line(names: &[String]) -> String {
@@ -388,7 +388,7 @@ struct AgentSection {
 }
 
 /// `[skills] paths = [...]`: the skill directories this run offers, written by whatever deployed
-/// them (AGT-21 has the harness do it) and read here.
+/// them (the harness does it) and read here.
 #[derive(serde::Deserialize, Default)]
 struct SkillsSection {
     #[serde(default)]

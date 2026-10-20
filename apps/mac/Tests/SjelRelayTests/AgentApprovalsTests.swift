@@ -82,7 +82,7 @@ import Testing
         #expect(health.down == ["dashboard", "transit"])
     }
 
-    /// DSH-1: an on-demand capability that is stopped is not down.
+    /// An on-demand capability that is stopped is not down.
     @Test func onlyAKeptRunningCapabilityIsDown() throws {
         let data = Data(#"{"ok":false,"version":"0.1.0","uptime_seconds":1,"capabilities":{"comms":{"up":false,"url":"u","autostart":true},"soundscape":{"up":false,"url":"u","autostart":false},"finance":{"up":true,"url":"u","autostart":false}}}"#.utf8)
         let health = try JSONDecoder().decode(NodeHealth.self, from: data)

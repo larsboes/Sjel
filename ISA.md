@@ -99,9 +99,7 @@ Migrated 2026-10-15 from §13 of the frozen PRD (now the `projects` record `Sjel
   Done: Finance, Items, Interior, People, Reflections and `Journal/` (originals in the vault's
   `Archive/`). Open, each with its reader repointed first: Documents (`documents`), Events
   (`calendar`), Media (`comms`), Focus and Personal. `entities-sync` now reads the Journal from
-  `projects`. In `vault`, `/api/people`, `/api/journal-health` and `vault fields` read folders that
-  are gone and answer 503: `people.rs`, `journal.rs`, `fields.rs` and `names.rs` are to remove,
-  and the `sjel-lens` plugin's people section with them. Then the vault bases and MOCs that
+  `projects`, and the redaction name registry comes from `entities` (`entities-server names`). Then the vault bases and MOCs that
   showed those folders go, and the vault rules shrink into the `obsidian` skill. Falsifier: the
   vault holds a non-knowledge note outside `Archive/`.
 

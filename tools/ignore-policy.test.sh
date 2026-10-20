@@ -23,7 +23,7 @@ check() { # check <label> <expected> <actual>
 # overlay <name> <allowlist lines...> — a temp git repo with an allowlist, rendered.
 overlay() {
   local name="$1"; shift
-  local dir="$SCRATCH/axon-$name"
+  local dir="$SCRATCH/sjel-$name"
   mkdir -p "$dir"
   git -C "$dir" init -q 2>/dev/null
   printf '%s\n' "$@" > "$dir/.ignore-allowlist"
@@ -45,7 +45,7 @@ echo "render"
 
 DIR="$(overlay alpha '!/config/' '/config/*' '!/config/.gitkeep')"
 check "renders without an existing .gitignore" "yes" "$([ -f "$DIR/.gitignore" ] && echo yes || echo no)"
-check "the overlay name reaches the header" "1" "$(grep -c 'axon-alpha' "$DIR/.gitignore")"
+check "the overlay name reaches the header" "1" "$(grep -c 'sjel-alpha' "$DIR/.gitignore")"
 
 # Two different allowlists must produce two different files from the same Sjel inputs — that
 # is what makes the allowlist a separate input rather than decoration.

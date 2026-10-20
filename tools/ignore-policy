@@ -39,7 +39,10 @@ fail() { echo "  ✗ $*" >&2; VIOLATIONS=$((VIOLATIONS + 1)); }
 
 usage() { sed -n '2,26p' "$0"; }
 
-overlay_name() { basename "$1" | sed 's/^axon-//'; }
+# The overlay directory is `sjel-<name>` since the 2026-10-20 rename, and `axon-<name>` on a
+# machine that has not renamed its directory yet. Both prefixes come off: the header names the
+# overlay, not the prefix, and stripping one would leave the other in the header.
+overlay_name() { basename "$1" | sed -E 's/^(sjel|axon)-//'; }
 
 # render_policy <overlay-dir> — the complete file, to stdout. Pure: reads three inputs, writes
 # nothing. `check` and `render` both go through it, so a drift check can never be comparing

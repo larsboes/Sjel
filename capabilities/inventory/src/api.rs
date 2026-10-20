@@ -111,11 +111,6 @@ const ROUTES: &[route_manifest::Route] = &[
     r("POST", "/api/items/{id}/state", "Append a state change."),
     r(
         "POST",
-        "/api/vault/writeback",
-        "Write slots into their marked region in the vault.",
-    ),
-    r(
-        "POST",
         "/api/sync",
         "Signed axon-sync/v1 mutations from a paired device.",
     ),
@@ -260,27 +255,6 @@ async fn api_put_wish_group_items(
     let st = store(&s)?;
     st.set_wish_group_items(&id, &body.item_ids).map_err(boom)?;
     Ok(StatusCode::OK)
-}
-
-async fn api_vault_writeback(
-    State(s): State<Arc<AppState>>,
-) -> Result<impl IntoResponse, HttpError> {
-    let rows = store(&s)?.catalogue().map_err(boom)?;
-    let Some(outcome) = crate::obsidian::writeback(&rows) else {
-        return Err((
-            StatusCode::NOT_IMPLEMENTED,
-            "no vault root declared: set obsidian.root in <overlay>/config/inventory.json"
-                .to_string(),
-        ));
-    };
-    let report = outcome.map_err(boom)?;
-    Ok(Json(serde_json::json!({
-        "ok": report.conflicts.is_empty(),
-        "seeded": report.seeded,
-        "written": report.written,
-        "unchanged": report.unchanged,
-        "conflicts": report.conflicts,
-    })))
 }
 
 #[derive(Deserialize)]
@@ -737,11 +711,9 @@ pub fn build_router(state: Arc<AppState>) -> Router {
             "/api/items/{id}/state",
             get(api_state_history).post(api_post_state),
         )
-        .route("/api/vault/writeback", post(api_vault_writeback))
         .merge(signed_sync)
-        // Last, because axum wraps only routes registered before `.layer()`. Needed because
-        // `POST /api/vault/writeback` has no body, so a foreign page can send it without a
-        // CORS preflight.
+        // Last, because axum wraps only routes registered before `.layer()`. Needed because a
+        // POST a browser sends as a simple request reaches the handler with no CORS preflight.
         .layer(axum::middleware::from_fn_with_state(
             CAPABILITY,
             sjel_server::origin::refuse_foreign_origins,

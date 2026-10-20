@@ -4659,7 +4659,6 @@ name = "sjel-inventory"
 version = "0.1.0"
 dependencies = [
  "axum",
- "markdown-root",
  "route-manifest",
  "rusqlite",
  "schemars",

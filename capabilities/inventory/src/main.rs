@@ -32,7 +32,6 @@ fn usage() -> ! {
                                  [--size M] [--color white] [--seasons winter,spring]
                                  [--id some-id])
   {import}                       inventory/*.toml into the tables (repeatable)
-  {writeback}                    write slots into their marked vault region
   {serve}                        HTTP API for the dashboard
 "#,
         t = bold("inventory"),
@@ -40,7 +39,6 @@ fn usage() -> ! {
         categories = bold("categories"),
         add = bold("add"),
         import = bold("import"),
-        writeback = bold("vault-writeback"),
         serve = bold("serve"),
     );
     std::process::exit(2)
@@ -94,7 +92,6 @@ async fn main() {
         "import" => import(&argv),
         "inventory" => show(),
         "categories" => categories_show(),
-        "vault-writeback" => vault_writeback(),
         "add" => add(&argv).await,
         _ => usage(),
     };
@@ -387,41 +384,3 @@ fn euro(cents: i64) -> String {
     format!("{},{:02} €", cents / 100, (cents % 100).abs())
 }
 
-fn vault_writeback() -> i32 {
-    let store = or_exit!(open());
-    let rows = or_exit!(store.catalogue());
-    let Some(outcome) = sjel_inventory::obsidian::writeback(&rows) else {
-        eprintln!(
-            "{}",
-            red("no vault root declared: set obsidian.root in <overlay>/config/inventory.json")
-        );
-        return 2;
-    };
-    let report = match outcome {
-        Ok(r) => r,
-        Err(e) => {
-            eprintln!("{}", red(&e.to_string()));
-            return 1;
-        }
-    };
-    for path in &report.seeded {
-        println!("  {} {path}", green("created:"));
-    }
-    for path in &report.written {
-        println!("  {} {path}", green("region rewritten:"));
-    }
-    if !report.unchanged.is_empty() {
-        println!(
-            "  {}",
-            dim(&format!("{} unchanged", report.unchanged.len()))
-        );
-    }
-    if !report.conflicts.is_empty() {
-        eprintln!("  {} {}", red("conflicts:"), report.conflicts.len());
-        for k in &report.conflicts {
-            eprintln!("    · {k}");
-        }
-        return 1;
-    }
-    0
-}

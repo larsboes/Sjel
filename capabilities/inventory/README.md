@@ -11,7 +11,6 @@ inventory add <url> [--label X]     a shared link becomes a wanted row
                                     [--price 79,90] [--category kleidung] [--kind piece]
                                     [--size M] [--color white] [--seasons winter,spring] [--id x]
 inventory import [--force]          inventory/*.toml into the tables
-inventory vault-writeback           write slots into their marked region in the vault
 inventory serve                     HTTP API on port 8101
 ```
 
@@ -52,7 +51,6 @@ German columns next to the renamed ones.
 | `PUT /api/items/{id}` | replace an entry |
 | `PATCH /api/items/{id}` | change the named fields; `null` clears one, an unknown field is refused |
 | `GET`, `POST /api/items/{id}/state` | the state history, or append a change |
-| `POST /api/vault/writeback` | the same as the CLI command |
 | `POST /api/sync` | signed mutations from a paired phone |
 
 Every write raises the row's `revision` and returns it as `ETag`. A client that sends the revision
@@ -61,15 +59,16 @@ nothing is overwritten.
 
 ## Imports and the vault
 
-Decided 2026-10-20: `Atlas/Interior` leaves the vault for the `projects` store, and this capability reads it there first ([ruling](../projects/README.md#why-this-shape-sjel-owns-projects-tasks-and-habits)). Until then, this section describes the current code.
-
 `inventory/*.toml` in the overlay (`data/inventory/inventory`, else `data/interior/inventory`) was
 the source of the first import. Since then the tables are the truth: `import` refuses to run over
 existing rows without `--force`.
 
-`vault-writeback` gives every slot a note under `Atlas/Interior/` in the vault named by
-`obsidian.root` in `<overlay>/config/inventory.json`. The first run seeds the note; after that it
-rewrites only the marked region, which holds numbers and never a sentence a person wrote.
+A slot's prose is in its row: `target`, `reason`, `notes` and `open_question`. Until 2026-10-20
+`vault-writeback` also gave every slot a note under the vault's `Atlas/Interior/`, seeded once
+from those columns and then maintained only in a marked region. On 2026-10-20 all 18 notes still
+matched their rows, so the notes went to the vault's `Archive/` and the writeback was removed
+([ruling](../projects/README.md#why-this-shape-sjel-owns-projects-tasks-and-habits)). Nothing in
+this capability writes the vault.
 
 ## Not built
 

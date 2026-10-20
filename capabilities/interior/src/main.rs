@@ -55,7 +55,7 @@ fn usage() -> ! {
   {serve}                        HTTP API for the dashboard
 
 What is owned and wanted lives in `capabilities/inventory`: `inventory inventory`,
-`inventory add`, `inventory import` and `inventory vault-writeback`.
+`inventory add` and `inventory import`.
 "#,
         t = bold("interior"),
         model = bold("model"),

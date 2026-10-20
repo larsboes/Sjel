@@ -9,5 +9,4 @@ pub mod api;
 pub mod budget;
 pub mod import;
 pub mod intake;
-pub mod obsidian;
 pub mod store;

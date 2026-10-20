@@ -96,9 +96,12 @@ Migrated 2026-10-15 from §13 of the frozen PRD (now the `projects` record `Sjel
 
 - **The rest of Atlas, Journal and Reflections leave the vault.** Ruled 2026-10-20
   ([projects README](capabilities/projects/README.md#why-this-shape-sjel-owns-projects-tasks-and-habits)).
-  Done: Finance, Items and Interior (originals in the vault's `Archive/Atlas/`). Open, each with
-  its reader repointed first: Documents (`documents`), Events (`calendar`), People (`entities`),
-  Media (`comms`), Focus, Personal, Reflections and `Journal/`. Then the vault bases and MOCs that
+  Done: Finance, Items, Interior and People (originals in the vault's `Archive/Atlas/`). Open,
+  each with its reader repointed first: Documents (`documents`), Events (`calendar`), Media
+  (`comms`), Focus, Personal, Reflections and `Journal/`. Until `Journal/` moves, `vault`'s
+  `/api/people` and `/api/journal-health` answer 503 for the missing People folder, by design,
+  and `entities-sync` is held (`tools/service-runner.sh stop entities-sync`): the Journal-derived
+  `last_contact`, `met_at` and `mention_count` keep their last values. Then the vault bases and MOCs that
   showed those folders go, and the vault rules shrink into the `obsidian` skill. Falsifier: the
   vault holds a non-knowledge note outside `Archive/`.
 

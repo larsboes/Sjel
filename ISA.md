@@ -96,10 +96,13 @@ Migrated 2026-10-15 from §13 of the frozen PRD (now the `projects` record `Sjel
 
 - **The rest of Atlas, Journal and Reflections leave the vault.** Ruled 2026-10-20
   ([projects README](capabilities/projects/README.md#why-this-shape-sjel-owns-projects-tasks-and-habits)).
-  Done: Finance, Items, Interior, People, Events, Reflections and `Journal/` (originals in the
-  vault's `Archive/`). Open, each with its reader repointed first: Documents (`documents`), Media
-  (`comms`), Focus and Personal. No capability writes the vault any more except `comms`, whose
-  library projection goes with Media. Then the vault bases and MOCs that
+  Done: Finance, Items, Interior, People, Events, Media, Reflections and `Journal/` (originals
+  in the vault's `Archive/`). Open: Documents (`documents`), Focus and Personal. Then three
+  follow-ups. `Knowledge/` cites the Media sources with 140 wikilinks that Obsidian no longer
+  resolves; the store paths are unchanged (`Atlas/Media/X.md`). `comms` still writes saved
+  items as source notes into the vault's `Resources/Sources/` (`comms/src/projection.rs`), the
+  kind of note Media's sources were. And the vault bases and MOCs that showed the moved folders
+  go. Then the vault bases and MOCs that
   showed those folders go, and the vault rules shrink into the `obsidian` skill. Falsifier: the
   vault holds a non-knowledge note outside `Archive/`.
 

@@ -64,10 +64,12 @@ impl TransitStore {
         let pool = sjel_store::open_pool(database_path, prefix, |conn| {
             Self::init_schema(conn, prefix)
         })?;
-        Ok(Self {
+        let store = Self {
             pool,
             prefix: prefix.to_string(),
-        })
+        };
+        let _ = store.load_train_labels();
+        Ok(store)
     }
 
     /// A connection from the shared pool, for the duration of one statement.
@@ -164,9 +166,38 @@ impl TransitStore {
 
             CREATE INDEX IF NOT EXISTS {prefix}_idx_trips_status ON {prefix}_trips(status);
             CREATE INDEX IF NOT EXISTS {prefix}_idx_trips_session ON {prefix}_trips(session_id);
+
+            CREATE TABLE IF NOT EXISTS {prefix}_train_labels (
+                train_number TEXT PRIMARY KEY,
+                train_name TEXT NOT NULL,
+                train_type TEXT NOT NULL,
+                updated_at TEXT NOT NULL
+            );
             "
         ))?;
         Ok(())
+    }
+
+    /// Loads persisted train number -> (name, type) mappings into the in-memory registry.
+    pub fn load_train_labels(&self) -> Result<usize, Box<dyn std::error::Error>> {
+        let conn = self.conn()?;
+        let mut stmt = conn.prepare(&format!(
+            "SELECT train_number, train_name, train_type FROM {}_train_labels",
+            self.prefix
+        ))?;
+        let rows = stmt.query_map([], |row| {
+            Ok((
+                row.get::<_, String>(0)?,
+                row.get::<_, String>(1)?,
+                row.get::<_, String>(2)?,
+            ))
+        })?;
+        let mut count = 0;
+        for r in rows.flatten() {
+            crate::hafas::register_train_label(&r.0, &r.1, &r.2);
+            count += 1;
+        }
+        Ok(count)
     }
 
     pub const VALID_TRIGGER_REASONS: [&'static str; 3] = ["manual", "auto", "session"];
@@ -571,6 +602,24 @@ fn insert_legs(
                 &leg.destination.longitude,
             ],
         )?;
+
+        // Learn and persist train number -> (name, type) mappings from observed trips:
+        if !leg.train_number.is_empty() && !leg.train_name.is_empty() && leg.train_name != leg.train_number {
+            if let Some(t) = crate::punctuality::train_type_of_label(&leg.train_name) {
+                let _ = tx.execute(
+                    &format!(
+                        "INSERT INTO {prefix}_train_labels (train_number, train_name, train_type, updated_at)
+                         VALUES (?1, ?2, ?3, ?4)
+                         ON CONFLICT(train_number) DO UPDATE SET
+                             train_name = excluded.train_name,
+                             train_type = excluded.train_type,
+                             updated_at = excluded.updated_at"
+                    ),
+                    params![&leg.train_number, &leg.train_name, t, &chrono_now()],
+                );
+                crate::hafas::register_train_label(&leg.train_number, &leg.train_name, t);
+            }
+        }
     }
     Ok(())
 }

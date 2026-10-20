@@ -167,13 +167,17 @@ pub fn hour_and_weekend(iso: &str) -> Option<(u8, bool)> {
 /// regional case: it names those trains `"28510"` and carries no label at all. That is
 /// honest absence, and it is reported as `Journey::unscored_legs` rather than passed
 /// off as a missing cell.
-pub fn train_type_of(leg: &Leg) -> Option<&str> {
-    let label = leg
-        .train_name
+/// Extracts the train type prefix from a rider-facing label (e.g. "RE5" -> "RE", "ICE 857" -> "ICE").
+pub fn train_type_of_label(label_str: &str) -> Option<&str> {
+    let label = label_str
         .trim()
         .trim_end_matches(|c: char| c.is_ascii_digit())
         .trim_end();
     (!label.is_empty()).then_some(label)
+}
+
+pub fn train_type_of(leg: &Leg) -> Option<&str> {
+    train_type_of_label(&leg.train_name)
 }
 
 /// Six minutes is DB's own punctuality threshold, and the one `share_late_6`
@@ -287,6 +291,25 @@ pub fn enrich(journeys: &mut [Journey]) {
     if journeys.is_empty() {
         return;
     }
+
+    // Number -> label recovery for dbweb bare-number regional legs before scoring:
+    for j in journeys.iter_mut() {
+        for leg in j.legs.iter_mut() {
+            if train_type_of(leg).is_none() {
+                if let Some((recovered_name, recovered_type)) = crate::hafas::resolve_train_label(&leg.train_number) {
+                    leg.train_name = recovered_name;
+                    if leg.train_category.is_empty()
+                        || leg.train_category == "DRB"
+                        || leg.train_category == "DRE"
+                        || leg.train_category == "NRE"
+                    {
+                        leg.train_category = recovered_type;
+                    }
+                }
+            }
+        }
+    }
+
     let mut wants: Vec<Want> = Vec::new();
     let mut stops: Vec<StopQuery> = Vec::new();
     // A property of the response, not of the punctuality service: it is filled and
@@ -690,6 +713,7 @@ mod tests {
     fn named(train_name: &str, train_category: &str) -> Leg {
         let mut leg = leg_at("2026-08-24T09:04:00", Some("2026-08-24T07:04:00Z"));
         leg.train_name = train_name.into();
+        leg.train_number = train_name.into();
         leg.train_category = train_category.into();
         leg
     }
@@ -740,7 +764,7 @@ mod tests {
             id: "j".into(),
             start_station: station("Bonn Hbf", "8000044"),
             end_station: station("Köln Hbf", "8000207"),
-            legs: vec![named("28510", "DRB"), named("ICE 857", "ICE")],
+            legs: vec![named("99999", "DRB"), named("ICE 857", "ICE")],
             total_duration_minutes: 60,
             total_price: None,
             delay_risk_score: None,
@@ -755,7 +779,7 @@ mod tests {
         assert_eq!(journeys[0].unscored_legs.len(), 1);
         let unscored = &journeys[0].unscored_legs[0];
         assert_eq!(unscored.leg_index, 0);
-        assert_eq!(unscored.train_name, "28510");
+        assert_eq!(unscored.train_name, "99999");
         assert_eq!(unscored.train_category, "DRB");
         // The labelled leg is not in the list; absence of a cell is a different state
         // from absence of a question, and only the second one lands here.
@@ -763,5 +787,33 @@ mod tests {
             .unscored_legs
             .iter()
             .all(|u| u.train_name != "ICE 857"));
+    }
+
+    #[test]
+    fn recovered_bare_number_becomes_scorable() {
+        let mut leg = named("28510", "DRB");
+        leg.train_number = "28510".into();
+
+        let mut journeys = vec![Journey {
+            id: "j".into(),
+            start_station: station("Bonn Hbf", "8000044"),
+            end_station: station("Köln Hbf", "8000207"),
+            legs: vec![leg],
+            total_duration_minutes: 24,
+            total_price: None,
+            delay_risk_score: None,
+            arrival_punctuality: None,
+            reliability: None,
+            unscored_legs: Vec::new(),
+            ranking: None,
+        }];
+
+        enrich(&mut journeys);
+
+        // Train name recovered from number 28510 -> RE5
+        assert_eq!(journeys[0].legs[0].train_name, "RE5");
+        assert_eq!(journeys[0].legs[0].train_category, "RE");
+        // Because the leg has a resolved type, it is not reported as unscorable
+        assert!(journeys[0].unscored_legs.is_empty());
     }
 }

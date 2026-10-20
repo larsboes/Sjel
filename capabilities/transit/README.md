@@ -172,11 +172,15 @@ All eleven prefixes seen live — `ICE`, `RE`, `IC`, `S`, `RB`, `EC`, `RJ`, `FEX
 is that read, and a category equivalence table was deliberately **not** built: `dbweb`
 already threw the distinction away, so no correct one exists.
 
-`dbweb` regional legs therefore stay unscored, and now say so. It names those trains by
-their bare number (`"28510"`), so there is no label to read — the journey comes back with
-`reliability: null` beside `unscored_legs: [{leg_index, train_name, train_category}]`.
-That separates three states a bare null used to flatten: punctuality is down, punctuality
-has no cell, and nobody asked.
+Instead, a **number → label resolution** bridges both backends on `train_number`:
+both backends agree on the train number, so known lines (e.g. `28510` → `RE5` / `RE`,
+`33602` → `RB26` / `RB`, `16511` → `RE1` / `RE`) and any observed trips recorded in
+the store populate `train_labels`. When a dbweb regional leg names a bare number,
+it recovers its rider-facing label and train type, making dbweb regional legs scorable
+under their true population (`RE`, `RB`, etc.). Legs whose number is genuinely unmapped
+stay unscored and say so: `unscored_legs: [{leg_index, train_name, train_category}]`.
+`is_regional` is likewise unified: dbweb checks both the `9G` Deutschlandticket attribute
+and regional product categories/names, agreeing with dbnav across routes.
 
 ## Ordering by the traveller's own trade-off
 

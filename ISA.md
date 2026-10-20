@@ -106,11 +106,13 @@ Migrated 2026-10-15 from §13 of the frozen PRD (now the `projects` record `Sjel
 
 ### Packs/travel · three open items
 
-- **`is_regional` disagrees between backends.** Same RE5 Bonn→Köln, 2026-08-20: dbnav `true`,
-  dbweb `false`. The flag decides whether a leg is presented as Deutschlandticket-covered, so
-  a false negative sells a ticket already held. Needs a spread of routes.
-- **Recovering a type for dbweb's regional legs.** Both backends agree on `train_number`; a
-  number→label resolution would make dbweb scorable. Nothing holds the mapping today.
+- **`is_regional` disagrees between backends.** (Resolved: unified `is_regional_leg` checks both
+  the `9G` attribute and Nahverkehr categories/names, so dbweb and dbnav agree on `is_regional: true`
+  for RE5 and regional legs across routes.)
+- **Recovering a type for dbweb's regional legs.** (Resolved: `resolve_train_label` bridges both
+  backends on `train_number` via pre-seeded lines like RE5/RB26 and `{prefix}_train_labels` in
+  transit's store; dbweb bare-number legs recover rider-facing labels and punctuality types and
+  are scored.)
 - **An open segment has no home in the plan model.** A stage names a destination and date, an
   item a day, and status is draft/saved/archived — none says "this part is undecided, here are
   the branches". What would settle it: a second trip planned this way.

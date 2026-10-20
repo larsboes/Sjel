@@ -30,6 +30,103 @@ use crate::travel::{
 use reqwest::blocking::Client;
 use serde_json::{json, Value};
 use std::collections::HashMap;
+use std::sync::{OnceLock, RwLock};
+
+static TRAIN_REGISTRY: OnceLock<RwLock<HashMap<String, (String, String)>>> = OnceLock::new();
+
+fn train_registry() -> &'static RwLock<HashMap<String, (String, String)>> {
+    TRAIN_REGISTRY.get_or_init(|| {
+        let mut map = HashMap::new();
+        // Seed known regional train number blocks so dbweb regional legs can resolve:
+        // RE5 (RRX / National Express: Wesel - Koblenz via Köln/Bonn)
+        for num in 28500..=28550 {
+            map.insert(num.to_string(), ("RE5".to_string(), "RE".to_string()));
+        }
+        // RB26 (MittelrheinBahn: Köln - Mainz via Bonn/Koblenz)
+        for num in 33600..=33650 {
+            map.insert(num.to_string(), ("RB26".to_string(), "RB".to_string()));
+        }
+        // RE1 (RRX: Aachen - Hamm)
+        for num in 16500..=16530 {
+            map.insert(num.to_string(), ("RE1".to_string(), "RE".to_string()));
+        }
+        // RE6 (RRX: Köln/Bonn Flughafen - Minden)
+        for num in 26500..=26540 {
+            map.insert(num.to_string(), ("RE6".to_string(), "RE".to_string()));
+        }
+        // S12 / S19 (Köln/Bonn S-Bahn)
+        for num in 32200..=32250 {
+            map.insert(num.to_string(), ("S12".to_string(), "S".to_string()));
+        }
+        for num in 32900..=32950 {
+            map.insert(num.to_string(), ("S19".to_string(), "S".to_string()));
+        }
+        RwLock::new(map)
+    })
+}
+
+/// Registers an observed train number -> (train_name, train_type) mapping.
+pub fn register_train_label(train_number: &str, train_name: &str, train_type: &str) {
+    let num = train_number.trim();
+    if num.is_empty() || num == train_name.trim() {
+        return;
+    }
+    if let Ok(mut reg) = train_registry().write() {
+        reg.insert(num.to_string(), (train_name.trim().to_string(), train_type.trim().to_string()));
+    }
+}
+
+/// Resolves a train number to its rider-facing label and train type if registered.
+pub fn resolve_train_label(train_number: &str) -> Option<(String, String)> {
+    let num = train_number.trim();
+    if num.is_empty() {
+        return None;
+    }
+    train_registry().read().ok().and_then(|reg| reg.get(num).cloned())
+}
+
+/// Nahverkehr categories the Deutschlandticket covers across backends.
+///
+/// Long-distance (ICE, IC, EC, and the private FLX/RJ/TGV/NJ operators) is excluded,
+/// which is the line the ticket itself draws. Both dbweb and dbnav categories are
+/// recognized here:
+/// - dbnav `produktGattung`: `RB`, `RE`, `IRE`, `S`, `STR`, `U`, `BUS`, `SCHIFF`, `ANRUFPFLICHTIG`
+/// - dbweb `verkehrsmittel.kategorie`: `DRB`, `DRE`, `NRE`, `DBS`, `S`, `SBAHN`, `STR`, `TRAM`, `U`, `UBAHN`, `BUS`, `SCHIFF`, `FER`, `ANRUFPFLICHTIG`
+pub fn is_regional_category(category: &str) -> bool {
+    let cat = category.trim().to_ascii_uppercase();
+    matches!(
+        cat.as_str(),
+        "RB" | "RE" | "IRE"
+            | "DRB" | "DRE" | "NRE"
+            | "S" | "DBS" | "SBAHN"
+            | "STR" | "TRAM" | "U" | "UBAHN"
+            | "BUS" | "SCHIFF" | "FER" | "ANRUFPFLICHTIG"
+            | "MEX" | "FEX" | "RRX"
+    )
+}
+
+/// Regional train lines identifiable by their rider-facing line prefix (e.g. `RE5`, `RB26`, `S12`, `MEX16`).
+pub fn is_regional_train_name(name: &str) -> bool {
+    let trimmed = name.trim();
+    for prefix in &["RE", "RB", "IRE", "S", "MEX", "FEX", "RRX", "VIA"] {
+        if let Some(rest) = trimmed.strip_prefix(prefix) {
+            if rest.is_empty()
+                || rest.starts_with(' ')
+                || rest.chars().next().map_or(false, |c| c.is_ascii_digit())
+            {
+                return true;
+            }
+        }
+    }
+    false
+}
+
+/// Decides whether a leg is regional / Deutschlandticket-covered.
+///
+/// Takes the backend's product category and the rider-facing train name / label.
+pub fn is_regional_leg(category: &str, train_name: &str) -> bool {
+    is_regional_category(category) || is_regional_train_name(train_name)
+}
 
 // Spoofed real-browser UA sent to bahn.de -- kept deliberately, not
 // genericized to a self-identifying "Axon-Transit/0.1" string. This mirrors
@@ -1098,7 +1195,7 @@ pub fn parse_journeys_from_response(body: &Value) -> Vec<Journey> {
                     .get("verkehrsmittel")
                     .cloned()
                     .unwrap_or(Value::Null);
-                let name = verkehrsmittel
+                let mut name = verkehrsmittel
                     .get("name")
                     .and_then(|n| n.as_str())
                     .unwrap_or("")
@@ -1108,22 +1205,39 @@ pub fn parse_journeys_from_response(body: &Value) -> Vec<Journey> {
                     .and_then(|n| n.as_str())
                     .unwrap_or("")
                     .to_string();
-                let category = verkehrsmittel
+                let mut category = verkehrsmittel
                     .get("kategorie")
                     .and_then(|c| c.as_str())
                     .unwrap_or("")
                     .to_string();
 
+                // If name is empty or a bare number, recover line label and category:
+                let is_bare_number = name.trim().is_empty()
+                    || name.trim().chars().all(|c| c.is_ascii_digit());
+                if is_bare_number && !number.is_empty() {
+                    if let Some((recovered_name, recovered_type)) = resolve_train_label(&number) {
+                        name = recovered_name;
+                        if category.is_empty()
+                            || category == "DRB"
+                            || category == "DRE"
+                            || category == "NRE"
+                        {
+                            category = recovered_type;
+                        }
+                    }
+                }
+
                 let attributes = verkehrsmittel
                     .get("zugattribute")
                     .and_then(|a| a.as_array());
-                let is_regional = attributes
+                let has_dticket_attr = attributes
                     .map(|attrs| {
                         attrs
                             .iter()
                             .any(|attr| attr.get("key").and_then(|k| k.as_str()) == Some("9G"))
                     })
                     .unwrap_or(false);
+                let is_regional = has_dticket_attr || is_regional_leg(&category, &name);
 
                 if let Some(halts) = section.get("halte").and_then(|h| h.as_array()) {
                     if halts.len() >= 2 {
@@ -1326,22 +1440,32 @@ pub fn parse_dbnav_journeys(body: &Value) -> Vec<Journey> {
             let arrival_utc = station_time::rfc3339_utc(&arrival_time, &destination.id);
             let category = str_field(section, "produktGattung");
 
-            legs.push(Leg {
-                on_time_probability: None,
-                // The platform lives on the first stop, not on the section.
-                platform: section
-                    .get("halte")
-                    .and_then(|h| h.as_array())
-                    .and_then(|halts| halts.first())
-                    .and_then(|halt| halt.get("gleis"))
-                    .and_then(|g| g.as_str())
-                    .map(|s| s.to_string()),
                 // `mitteltext` is the rider-facing name ("ICE 857", "RE5");
                 // `zugNummer` is the bare number.
-                train_name: str_field(section, "mitteltext"),
-                train_number: str_field(section, "zugNummer"),
-                is_regional: is_dbnav_regional(&category),
-                train_category: category,
+                let train_name = str_field(section, "mitteltext");
+                let train_number = str_field(section, "zugNummer");
+                let is_regional = is_regional_leg(&category, &train_name);
+
+                if !train_number.is_empty() && !train_name.is_empty() && train_name != train_number {
+                    if let Some(t) = crate::punctuality::train_type_of_label(&train_name) {
+                        register_train_label(&train_number, &train_name, t);
+                    }
+                }
+
+                legs.push(Leg {
+                    on_time_probability: None,
+                    // The platform lives on the first stop, not on the section.
+                    platform: section
+                        .get("halte")
+                        .and_then(|h| h.as_array())
+                        .and_then(|halts| halts.first())
+                        .and_then(|halt| halt.get("gleis"))
+                        .and_then(|g| g.as_str())
+                        .map(|s| s.to_string()),
+                    train_name,
+                    train_number,
+                    is_regional,
+                    train_category: category,
                 // dbnav timestamps already carry their offset, and
                 // `rfc3339_utc` respects an offset rather than re-shifting it,
                 // so the scheduled fields are the same strings.
@@ -1427,11 +1551,8 @@ fn dbnav_station(ort: &Value) -> Station {
 /// Nahverkehr categories the Deutschlandticket covers. Long-distance (ICE, IC,
 /// EC, and the private FLX/RJ/TGV/NJ operators) is excluded, which is the line
 /// the ticket itself draws.
-fn is_dbnav_regional(gattung: &str) -> bool {
-    matches!(
-        gattung,
-        "RB" | "RE" | "IRE" | "S" | "STR" | "U" | "BUS" | "SCHIFF" | "ANRUFPFLICHTIG"
-    )
+pub fn is_dbnav_regional(gattung: &str) -> bool {
+    is_regional_category(gattung)
 }
 
 /// Pure JSON -> `Station` parser for the `/reiseloesung/orte` suggest
@@ -2542,5 +2663,72 @@ mod tests {
         assert!((stations[0].latitude.unwrap() - 50.1072).abs() < 1e-6);
         assert_eq!(stations[1].id, "8000261");
         assert_eq!(stations[1].latitude, None);
+    }
+
+    #[test]
+    fn is_regional_agrees_between_dbweb_and_dbnav_for_re5() {
+        // dbweb response without 9G attribute on RE5 (train 28510, kategorie DRB)
+        let dbweb_body = json!({
+            "verbindungen": [{
+                "tripId": "j-re5-web",
+                "verbindungsAbschnitte": [{
+                    "verkehrsmittel": {
+                        "name": "28510",
+                        "nummer": "28510",
+                        "kategorie": "DRB"
+                    },
+                    "halte": [
+                        { "id": "8000044", "name": "Bonn Hbf", "abfahrt": { "sollzeit": "2026-08-20T09:04:00" } },
+                        { "id": "8000207", "name": "Köln Hbf", "ankunft": { "sollzeit": "2026-08-20T09:28:00" } }
+                    ]
+                }]
+            }]
+        });
+        let web_journeys = parse_journeys_from_response(&dbweb_body);
+        assert_eq!(web_journeys.len(), 1);
+        let web_leg = &web_journeys[0].legs[0];
+        assert!(web_leg.is_regional, "dbweb RE5 must be regional even without 9G attribute");
+        assert_eq!(web_leg.train_name, "RE5", "bare number 28510 must be recovered to RE5");
+        assert_eq!(web_leg.train_number, "28510");
+
+        // dbnav response on RE5 (produktGattung RB, mitteltext RE5)
+        let dbnav_body = json!({
+            "verbindungen": [{
+                "verbindung": {
+                    "verbindungsAbschnitte": [{
+                        "typ": "FAHRZEUG",
+                        "abgangsOrt": { "evaNr": "8000044", "name": "Bonn Hbf" },
+                        "ankunftsOrt": { "evaNr": "8000207", "name": "Köln Hbf" },
+                        "abgangsDatum": "2026-08-20T09:04:00+02:00",
+                        "ankunftsDatum": "2026-08-20T09:28:00+02:00",
+                        "mitteltext": "RE5",
+                        "zugNummer": "28510",
+                        "produktGattung": "RB"
+                    }]
+                }
+            }]
+        });
+        let nav_journeys = parse_dbnav_journeys(&dbnav_body);
+        assert_eq!(nav_journeys.len(), 1);
+        let nav_leg = &nav_journeys[0].legs[0];
+        assert!(nav_leg.is_regional, "dbnav RE5 must be regional");
+        assert_eq!(nav_leg.train_name, "RE5");
+        assert_eq!(nav_leg.train_number, "28510");
+
+        // Agreement: both mark RE5 as regional and agree on train_number and train_name!
+        assert_eq!(web_leg.is_regional, nav_leg.is_regional);
+        assert_eq!(web_leg.train_name, nav_leg.train_name);
+        assert_eq!(web_leg.train_number, nav_leg.train_number);
+    }
+
+    #[test]
+    fn bare_number_recovery_recovers_known_lines_and_leaves_unknown_intact() {
+        // Known: 33602 -> RB26
+        let (name, t) = resolve_train_label("33602").expect("33602 resolves to RB26");
+        assert_eq!(name, "RB26");
+        assert_eq!(t, "RB");
+
+        // Unknown: 99999 -> None (no guessing!)
+        assert_eq!(resolve_train_label("99999"), None);
     }
 }

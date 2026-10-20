@@ -394,7 +394,7 @@ mod tests {
         let _env = env_lock();
         let _binary = EnvGuard::set(BINARY_ENV, "/bin/cat");
         let paths: Vec<PathBuf> = (0..20_000)
-            .map(|n| PathBuf::from(format!("/tmp/axon-visocr-pipe-probe-{n:012}.png")))
+            .map(|n| PathBuf::from(format!("/tmp/sjel-visocr-pipe-probe-{n:012}.png")))
             .collect();
         // `cat` echoes the paths, so no record separator is ever emitted and
         // every page is missing. Reaching that answer at all is the assertion.

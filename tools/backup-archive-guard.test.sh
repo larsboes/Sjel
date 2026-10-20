@@ -24,7 +24,7 @@
 set -uo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]:-$0}")/.." && pwd)"
-SCRATCH="$(mktemp -d /tmp/axon-backup-guard-test.XXXXXX)"
+SCRATCH="$(mktemp -d /tmp/sjel-backup-guard-test.XXXXXX)"
 trap 'rm -rf "$SCRATCH"' EXIT
 
 fail() { echo "FAIL: $*" >&2; exit 1; }

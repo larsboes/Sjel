@@ -865,7 +865,7 @@ else
 
 # One shared ssh connection for every remote op (mkdir + ship + verify + prune) via
 # ControlMaster — so the Bitwarden agent asks for approval ONCE, not per-command.
-CTRL="/tmp/axon-backup-$CAP-$$.sock"
+CTRL="/tmp/sjel-backup-$CAP-$$.sock"
 SSHM=(-o ControlMaster=auto -o "ControlPath=$CTRL" -o ControlPersist=30)
 close_master() { ssh 9>&- -O exit -o "ControlPath=$CTRL" "$SSH_USER@$HOST" 2>/dev/null || true; }
 

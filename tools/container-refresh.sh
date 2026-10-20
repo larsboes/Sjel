@@ -153,7 +153,9 @@ for cap in $CONTAINER_CAPS; do
   echo "  · moved: ${before:-(none)} -> ${after:-(none)}"
   # The hold is the operator's, and recreate would clear it. Checked before `ps` because a held
   # capability is usually a stopped one and "held" is the more useful word in the receipt.
-  if [ -f "/tmp/axon-$cap.maintenance" ]; then
+  # The pre-rename name is still read: a hold taken by the runner before the 2026-10-20 rename
+  # stays live until it is released, and missing it would recreate a held capability.
+  if [ -f "/tmp/sjel-$cap.maintenance" ] || [ -f "/tmp/axon-$cap.maintenance" ]; then
     echo "  · '$cap' is held for maintenance — pulled, not recreated"
     SKIPPED="$SKIPPED $cap:held"
     continue

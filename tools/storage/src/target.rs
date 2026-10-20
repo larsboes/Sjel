@@ -412,14 +412,14 @@ mod tests {
 
     #[test]
     fn target_dir_follows_cargo_rather_than_the_repo_layout() {
-        let repo = Path::new("/tmp/axon-fixture");
+        let repo = Path::new("/tmp/sjel-fixture");
         // Read through the process environment, so this asserts the fallback only; the
         // CARGO_TARGET_DIR arm is exercised by every run of the test suite itself, which
         // cargo sets.
         if std::env::var_os("CARGO_TARGET_DIR").is_none() {
             assert_eq!(
                 target_dir(repo),
-                (PathBuf::from("/tmp/axon-fixture/target"), "repo")
+                (PathBuf::from("/tmp/sjel-fixture/target"), "repo")
             );
         }
     }

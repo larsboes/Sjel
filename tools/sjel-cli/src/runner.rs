@@ -322,10 +322,10 @@ impl<'a> Svc<'a> {
         }
 
         Ok(Self {
-            lock: PathBuf::from(format!("/tmp/axon-{cap}.maintenance")),
-            pid_file: PathBuf::from(format!("/tmp/axon-{cap}.pid")),
-            log: PathBuf::from(format!("/tmp/axon-{cap}.log")),
-            err: PathBuf::from(format!("/tmp/axon-{cap}.err")),
+            lock: PathBuf::from(format!("/tmp/sjel-{cap}.maintenance")),
+            pid_file: PathBuf::from(format!("/tmp/sjel-{cap}.pid")),
+            log: PathBuf::from(format!("/tmp/sjel-{cap}.log")),
+            err: PathBuf::from(format!("/tmp/sjel-{cap}.err")),
             name: g("name"),
             autostart: g("autostart"),
             schedule: g("schedule"),
@@ -582,10 +582,20 @@ impl<'a> Svc<'a> {
 
     fn running_pid(&self) -> Option<String> {
         let pid = std::fs::read_to_string(&self.pid_file)
-            .ok()?
+            .ok()
+            .or_else(|| std::fs::read_to_string(self.legacy_pid_file()).ok())?
             .trim()
             .to_owned();
         (!pid.is_empty() && pid.bytes().all(|b| b.is_ascii_digit()) && alive(&pid)).then_some(pid)
+    }
+
+    /// Where an instance started before the 2026-10-20 rename recorded its pid. Read, never
+    /// written: the pid file is the only thing that tells this runner a capability is already
+    /// up, so an instance started under the old name must stay visible until it is restarted.
+    /// Without this the first watchdog tick after a rebuild starts a second copy on a port the
+    /// live one already holds, and both report themselves as running.
+    fn legacy_pid_file(&self) -> PathBuf {
+        PathBuf::from(format!("/tmp/axon-{}.pid", self.cap))
     }
 
     /// Build when the artifact is missing, or always when `force` (restart).

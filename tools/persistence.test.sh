@@ -328,8 +328,8 @@ HOME="$FAKE_HOME" XDG_CONFIG_HOME="$FAKE_HOME/.config" \
 sed -e "s|__WATCHDOG_PATH__|$ROOT/tools/watchdog.sh|" \
     -e "s|__PATH__|/bin:/usr/local/bin:/usr/bin:/bin|" \
     -e "s|__CAPABILITY__|always|" \
-    -e "s|__LOG_OUT__|/tmp/axon-always-watchdog.log|" \
-    -e "s|__LOG_ERR__|/tmp/axon-always-watchdog.err|" \
+    -e "s|__LOG_OUT__|/tmp/sjel-always-watchdog.log|" \
+    -e "s|__LOG_ERR__|/tmp/sjel-always-watchdog.err|" \
     "$ROOT/tools/templates/systemd-watchdog.service.tmpl" \
   | grep -v '__EXTRA_ENV__' > "$UNIT"   # the renderer drops that line when nothing is declared (#44)
 expect_installed_file "linux, unit matching the declaration" always
@@ -362,8 +362,8 @@ render_linux_sched() {  # render both files the way install would, without calli
   sed -e "s|__RUNNER_PATH__|$ROOT/tools/service-runner.sh|" \
       -e "s|__PATH__|/bin:/usr/local/bin:/usr/bin:/bin|" \
       -e "s|__CAPABILITY__|sched|" \
-      -e "s|__LOG_OUT__|/tmp/axon-sched-schedule.log|" \
-      -e "s|__LOG_ERR__|/tmp/axon-sched-schedule.err|" \
+      -e "s|__LOG_OUT__|/tmp/sjel-sched-schedule.log|" \
+      -e "s|__LOG_ERR__|/tmp/sjel-sched-schedule.err|" \
       "$ROOT/tools/templates/systemd-schedule.service.tmpl" \
     | grep -v '__EXTRA_ENV__' > "$ONESHOT"   # the renderer drops that line when nothing is declared (#44)
 }

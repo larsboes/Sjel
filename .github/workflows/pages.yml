@@ -142,7 +142,7 @@ jobs:
       - name: Capability logs
         if: failure()
         run: |
-          for log in /tmp/axon-*.log /tmp/axon-*.err; do
+          for log in /tmp/sjel-*.log /tmp/sjel-*.err; do
             [ -s "$log" ] || continue
             echo "───────── $log"
             tail -80 "$log"

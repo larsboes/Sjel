@@ -4,7 +4,7 @@ set -uo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]:-$0}")/.." && pwd)"
 RESTORE="$ROOT/tools/restore.sh"
-SCRATCH="$(mktemp -d /tmp/axon-restore-test.XXXXXX)"
+SCRATCH="$(mktemp -d /tmp/sjel-restore-test.XXXXXX)"
 trap 'rm -rf "$SCRATCH"' EXIT
 MOCK_BIN="$SCRATCH/bin"
 mkdir -p "$MOCK_BIN"

@@ -74,9 +74,9 @@ describe("activeOverlay", () => {
       const pathsSh = join(hostile, "paths.sh");
       // A stand-in for tools/lib/paths.sh: `source`d for one variable, which is all
       // activeOverlay reads out of it.
-      writeFileSync(pathsSh, 'SJEL_OVERLAY_ROOT="/tmp/axon-demo-seed-overlay"\n');
+      writeFileSync(pathsSh, 'SJEL_OVERLAY_ROOT="/tmp/sjel-demo-seed-overlay"\n');
 
-      expect(activeOverlay(pathsSh)).toBe("/tmp/axon-demo-seed-overlay");
+      expect(activeOverlay(pathsSh)).toBe("/tmp/sjel-demo-seed-overlay");
       expect(existsSync(marker)).toBe(false);
     } finally {
       rmSync(root, { recursive: true, force: true });

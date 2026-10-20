@@ -270,13 +270,13 @@ fn render_unit(s: &mut Svc) -> R<String> {
     let label = format!("{PREFIX}.{cap}");
     let (log_out, log_err) = if m == Mode::Scheduled {
         (
-            format!("/tmp/axon-{cap}-schedule.log"),
-            format!("/tmp/axon-{cap}-schedule.err"),
+            format!("/tmp/sjel-{cap}-schedule.log"),
+            format!("/tmp/sjel-{cap}-schedule.err"),
         )
     } else {
         (
-            format!("/tmp/axon-{cap}-watchdog.log"),
-            format!("/tmp/axon-{cap}-watchdog.err"),
+            format!("/tmp/sjel-{cap}-watchdog.log"),
+            format!("/tmp/sjel-{cap}-watchdog.err"),
         )
     };
     let secs = || {
@@ -387,8 +387,8 @@ fn render_companion(s: &mut Svc) -> R<String> {
                 format!("{runtime_dir}:/usr/local/bin:/usr/bin:/bin"),
             ),
             ("__CAPABILITY__", cap.clone()),
-            ("__LOG_OUT__", format!("/tmp/axon-{cap}-schedule.log")),
-            ("__LOG_ERR__", format!("/tmp/axon-{cap}-schedule.err")),
+            ("__LOG_OUT__", format!("/tmp/sjel-{cap}-schedule.log")),
+            ("__LOG_ERR__", format!("/tmp/sjel-{cap}-schedule.err")),
         ],
         false,
         &env,

@@ -4,7 +4,7 @@ set -uo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]:-$0}")/.." && pwd)"
 
-SCRATCH="$(mktemp -d /tmp/axon-backup-test.XXXXXX)"
+SCRATCH="$(mktemp -d /tmp/sjel-backup-test.XXXXXX)"
 trap 'rm -rf "$SCRATCH"' EXIT
 FIXTURE="$SCRATCH/fixture"
 OVERLAY="$SCRATCH/overlay"

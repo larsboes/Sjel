@@ -48,7 +48,7 @@ MANIFEST="$SJEL_ROOT/capabilities/$CAP/service.toml"
 [ -f "$ARCHIVE" ] || { echo "restore.sh: archive not found: $ARCHIVE" >&2; exit 1; }
 ARCHIVE="$(cd "$(dirname "$ARCHIVE")" && pwd -P)/$(basename "$ARCHIVE")"
 
-WORK="$(mktemp -d "/tmp/axon-restore-check.XXXXXX")"
+WORK="$(mktemp -d "/tmp/sjel-restore-check.XXXXXX")"
 DEST=""
 DEST_AUTO=0
 RESTORE_COMPLETE=0
@@ -140,7 +140,7 @@ if [ -n "$DEST_ARG" ]; then
     DEST_NEEDS_CREATE=1
   fi
 else
-  DEST="/tmp/axon-restore-$CAP.XXXXXX"
+  DEST="/tmp/sjel-restore-$CAP.XXXXXX"
   DEST_NEEDS_CREATE=2
 fi
 

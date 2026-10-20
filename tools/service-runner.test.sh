@@ -35,12 +35,12 @@ LISTENER_PID=""
 cleanup() {
   if [ -n "$LISTENER_PID" ]; then kill -TERM "$LISTENER_PID" 2>/dev/null; wait "$LISTENER_PID" 2>/dev/null; fi
   rm -rf "$SCRATCH"
-  rm -f /tmp/axon-porthog.pid /tmp/axon-porthog.maintenance
-  rm -f /tmp/axon-inferhog.pid /tmp/axon-inferhog.maintenance
-  rm -f /tmp/axon-inferhog.log /tmp/axon-inferhog.err
-  rm -f /tmp/axon-envhog.pid /tmp/axon-envhog.maintenance
-  rm -f /tmp/axon-envhog.log /tmp/axon-envhog.err
-  rm -f /tmp/axon-dockhog.maintenance
+  rm -f /tmp/sjel-porthog.pid /tmp/sjel-porthog.maintenance
+  rm -f /tmp/sjel-inferhog.pid /tmp/sjel-inferhog.maintenance
+  rm -f /tmp/sjel-inferhog.log /tmp/sjel-inferhog.err
+  rm -f /tmp/sjel-envhog.pid /tmp/sjel-envhog.maintenance
+  rm -f /tmp/sjel-envhog.log /tmp/sjel-envhog.err
+  rm -f /tmp/sjel-dockhog.maintenance
 }
 trap cleanup EXIT
 
@@ -105,7 +105,7 @@ done
 
 # A pid file pointing at a pid that is already gone — the exact shape running_pid() returns
 # nothing for. 2^22 is above every default pid_max, so it cannot collide with a live process.
-echo 4194304 > /tmp/axon-porthog.pid
+echo 4194304 > /tmp/sjel-porthog.pid
 
 out="$("$ROOT/tools/service-runner.sh" stop porthog 2>&1)"; rc=$?
 
@@ -126,7 +126,7 @@ for _ in 1 2 3 4 5 6 7 8 9 10 11 12 13 14 15 16 17 18 19 20; do
   (: < "/dev/tcp/127.0.0.1/$PORT") 2>/dev/null || break
   sleep 0.25
 done
-echo 4194304 > /tmp/axon-porthog.pid
+echo 4194304 > /tmp/sjel-porthog.pid
 out2="$("$ROOT/tools/service-runner.sh" stop porthog 2>&1)"; rc2=$?
 [ "$rc2" -eq 0 ] || fail "stop failed on a free port; rc=$rc2, said: $out2"
 
@@ -136,10 +136,10 @@ out2="$("$ROOT/tools/service-runner.sh" stop porthog 2>&1)"; rc2=$?
 # same holding stop, so every service answered the following `up` with "is held for maintenance,
 # not starting" and the advertised pair no-opped on its second half.
 SR="$ROOT/tools/service-runner.sh"
-rm -f /tmp/axon-porthog.pid /tmp/axon-porthog.maintenance
+rm -f /tmp/sjel-porthog.pid /tmp/sjel-porthog.maintenance
 
 "$SR" stop porthog >/dev/null 2>&1
-[ -f /tmp/axon-porthog.maintenance ] \
+[ -f /tmp/sjel-porthog.maintenance ] \
   || fail "stop did not take the maintenance hold — the backup path depends on it"
 out_held="$("$SR" start porthog 2>&1)"
 case "$out_held" in
@@ -149,12 +149,12 @@ esac
 
 # The hold survives a --no-hold stop: only `resume` lifts a window someone deliberately opened.
 "$SR" stop porthog --no-hold >/dev/null 2>&1
-[ -f /tmp/axon-porthog.maintenance ] \
+[ -f /tmp/sjel-porthog.maintenance ] \
   || fail "--no-hold cleared a hold it did not take"
 
-rm -f /tmp/axon-porthog.maintenance
+rm -f /tmp/sjel-porthog.maintenance
 "$SR" stop porthog --no-hold >/dev/null 2>&1
-[ ! -f /tmp/axon-porthog.maintenance ] \
+[ ! -f /tmp/sjel-porthog.maintenance ] \
   || fail "stop --no-hold took a hold anyway — this is what down fans out"
 out_free="$("$SR" start porthog 2>&1)"
 case "$out_free" in
@@ -163,9 +163,9 @@ esac
 
 # The real fan-out, not just the per-capability mechanism: `down` must leave nothing held, and
 # the `up` that follows must not answer "held for maintenance".
-rm -f /tmp/axon-porthog.pid /tmp/axon-porthog.maintenance
+rm -f /tmp/sjel-porthog.pid /tmp/sjel-porthog.maintenance
 "$SR" down >/dev/null 2>&1
-[ ! -f /tmp/axon-porthog.maintenance ] \
+[ ! -f /tmp/sjel-porthog.maintenance ] \
   || fail "down took a maintenance hold — the following up is a no-op"
 out_up="$("$SR" up 2>&1)"
 case "$out_up" in
@@ -218,7 +218,7 @@ SH
 chmod +x "$INF_ROOT/capabilities/inferhog/dump-backend"
 
 inference_backend_seen() {  # start inferhog and echo what it was handed
-  rm -f "$ENV_DUMP" /tmp/axon-inferhog.pid
+  rm -f "$ENV_DUMP" /tmp/sjel-inferhog.pid
   "$INF_SR" start inferhog >/dev/null 2>&1
   local waited=0
   while [ "$waited" -lt 40 ] && [ ! -s "$ENV_DUMP" ]; do sleep 0.25; waited=$((waited + 1)); done
@@ -266,7 +266,7 @@ SH
 chmod +x "$INF_ROOT/capabilities/envhog/dump-env"
 
 marker_seen() {  # start envhog and echo what it was handed
-  rm -f "$MARKER_DUMP" /tmp/axon-envhog.pid
+  rm -f "$MARKER_DUMP" /tmp/sjel-envhog.pid
   "$INF_SR" start envhog >/dev/null 2>&1
   local waited=0
   while [ "$waited" -lt 40 ] && [ ! -s "$MARKER_DUMP" ]; do sleep 0.25; waited=$((waited + 1)); done
@@ -315,7 +315,7 @@ CARGO_TARGET_DIR="$SCRATCH/elsewhere" "$INF_SR" restart buildhog >/dev/null 2>&1
 seen="$(cat "$TARGET_DUMP" 2>/dev/null)"
 [ "$seen" = "$INF_ROOT/target" ] \
   || fail "a restart built outside the root's target/ (CARGO_TARGET_DIR seen: '$seen')"
-rm -f /tmp/axon-buildhog.pid /tmp/axon-buildhog.maintenance /tmp/axon-buildhog.log /tmp/axon-buildhog.err
+rm -f /tmp/sjel-buildhog.pid /tmp/sjel-buildhog.maintenance /tmp/sjel-buildhog.log /tmp/sjel-buildhog.err
 
 # The runtime gate that stood here until 2026-09-02 (Q75) guarded #125: a dead
 # apple-container apiserver aborted start_service before ensure_runtime could revive it, so a

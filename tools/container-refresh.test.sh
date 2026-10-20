@@ -9,10 +9,10 @@ set -u
 
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 SCRATCH="$(mktemp -d)"
-# The maintenance lock path is service-runner's, and it is absolute (/tmp/axon-<cap>.maintenance).
+# The maintenance lock path is service-runner's, and it is absolute (/tmp/sjel-<cap>.maintenance).
 # The fixture capability names are deliberately ones no deployment uses, so this test can create
 # and delete that file without touching a real hold.
-trap 'rm -rf "$SCRATCH"; rm -f /tmp/axon-refresh-alpha.maintenance /tmp/axon-refresh-beta.maintenance' EXIT
+trap 'rm -rf "$SCRATCH"; rm -f /tmp/sjel-refresh-alpha.maintenance /tmp/sjel-refresh-beta.maintenance' EXIT
 
 FIXTURE="$SCRATCH/root"
 OVERLAY="$SCRATCH/overlay"
@@ -203,9 +203,9 @@ esac
 #    so the hold has to be checked here rather than relied on downstream.
 set_digest example.org/alpha:stable "sha256:aaa" "sha256:bbb"
 printf 'alpha-container\n' > "$STATE/running"
-: > /tmp/axon-refresh-alpha.maintenance
+: > /tmp/sjel-refresh-alpha.maintenance
 SJEL_TEST_FAIL_PULL="" run_refresh "$MOCK_BIN:/usr/bin:/bin"
-rm -f /tmp/axon-refresh-alpha.maintenance
+rm -f /tmp/sjel-refresh-alpha.maintenance
 [ "$rc" -eq 0 ] || fail "a held capability must not fail the run, got $rc"
 grep -F 'service-runner' "$CALLS" >/dev/null 2>&1 && fail "a held capability must not be recreated"
 case "$(receipt_field skipped)" in

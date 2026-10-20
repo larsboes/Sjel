@@ -1802,16 +1802,16 @@ mod tests {
             (Some(787), Some(0))
         );
         assert!(!jobs.contains_key("Label") && !jobs.contains_key("com.axon.host-patch"));
-        let plist = "<plist version=\"1.0\">\n<dict>\n  <key>StartInterval</key>\n  <integer>21600</integer>\n  <key>StandardOutPath</key>\n  <string>/tmp/axon-feed-sweep-schedule.log</string>\n  <key>StandardErrorPath</key>\n  <string>/tmp/axon-feed-sweep-schedule.err</string>\n</dict>\n</plist>";
+        let plist = "<plist version=\"1.0\">\n<dict>\n  <key>StartInterval</key>\n  <integer>21600</integer>\n  <key>StandardOutPath</key>\n  <string>/tmp/sjel-feed-sweep-schedule.log</string>\n  <key>StandardErrorPath</key>\n  <string>/tmp/sjel-feed-sweep-schedule.err</string>\n</dict>\n</plist>";
         let p = parse_launchd_schedule(plist);
         assert_eq!(p.interval, Some(21600.0));
         assert_eq!(
             p.stdout.as_deref(),
-            Some("/tmp/axon-feed-sweep-schedule.log")
+            Some("/tmp/sjel-feed-sweep-schedule.log")
         );
         assert_eq!(
             p.stderr.as_deref(),
-            Some("/tmp/axon-feed-sweep-schedule.err")
+            Some("/tmp/sjel-feed-sweep-schedule.err")
         );
         assert_eq!(
             parse_launchd_schedule("<dict><key>KeepAlive</key><true/></dict>").interval,

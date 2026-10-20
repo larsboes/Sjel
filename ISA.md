@@ -92,6 +92,16 @@ Migrated 2026-10-15 from §13 of the frozen PRD (now the `projects` record `Sjel
   advisory layer shipped in `capabilities/media/src/perceptual.rs` with `media_phashes` and
   `media_reviews`.)
 
+### projects · one open item
+
+- **The rest of Atlas, Journal and Reflections leave the vault.** Ruled 2026-10-20
+  ([projects README](capabilities/projects/README.md#why-this-shape-sjel-owns-projects-tasks-and-habits)).
+  Done: Finance, Items and Interior (originals in the vault's `Archive/Atlas/`). Open, each with
+  its reader repointed first: Documents (`documents`), Events (`calendar`), People (`entities`),
+  Media (`comms`), Focus, Personal, Reflections and `Journal/`. Then the vault bases and MOCs that
+  showed those folders go, and the vault rules shrink into the `obsidian` skill. Falsifier: the
+  vault holds a non-knowledge note outside `Archive/`.
+
 ### host-patch · one open item
 
 - **The daily run exits 1 on three webpki advisories.** RUSTSEC-2026-0381, -0382 and -0383

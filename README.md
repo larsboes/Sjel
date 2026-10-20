@@ -122,7 +122,7 @@ smart. Using and maintaining it may not require that smartness.
 | Data about other people sent to a cloud model pseudonymized, or synced end-to-end encrypted | Target |
 | Model selection: device model or local decision engine, with heuristic fallback | Selection and fallback paths implemented; available models depend on the device and configured services. |
 | Assistant that proposes actions and asks before anything that leaves Sjel or cannot be undone | Partly built. Agent writes follow the configured per-capability mode; confirmation is not a universal default. The drawer sends unrouted questions down the model ladder. |
-| Mac app | Menu bar companion in `apps/mac`; native desktop and iOS work in [the GPUI workspace](apps/gpui-prototype/README.md). The web dashboard remains available. |
+| Mac app | Menu bar companion in `apps/mac`; native desktop and iOS work in [the GPUI workspace](apps/gpui/README.md). The web dashboard remains available. |
 | Small install with optional downloadable capabilities | Release preparation exists for Mac DMGs, node archives, Calendar packages and native iOS archives. First-run setup, app package installation and clean-user acceptance remain open in the ISA. See [release preparation](docs/operations/index.md#release-preparation-and-later-testing). |
 | iCloud connection, encrypted by Sjel | Relay built and tested (`apps/mac`). Nothing syncs through it yet. |
 

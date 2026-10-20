@@ -530,10 +530,24 @@ cmd_list() {
   echo "Installed at upstream's latest, never a recorded version (Q77)."
   echo "Update: tools/agent-integrations.sh update [<upstream>...] — each upstream's own updater."
   echo "Configured on this machine: $(configured_harnesses | tr '\n' ' ')"
+  echo
+  echo "Optional upstream packages (explicit opt-in; excluded from --all-configured):"
+  echo "  accordion    Pi context-window management — https://github.com/a-Fig/Accordion"
+  echo "               tools/agent-integrations.sh install accordion pi"
+  echo "               delegates to: pi install npm:@a-fig/accordion; updates: pi update"
 }
 
 cmd_install() {
   local upstream="graphify" targets=""
+  if [ "${1:-}" = "accordion" ]; then
+    if [ "$#" -ne 2 ] || [ "$2" != "pi" ]; then
+      echo "usage: agent-integrations.sh install accordion pi" >&2
+      return 1
+    fi
+    command -v pi >/dev/null 2>&1 || { echo "pi is required to install Accordion" >&2; return 1; }
+    pi install npm:@a-fig/accordion
+    return
+  fi
   if [ "${1:-}" = "--all-configured" ] || [ "${1:-}" = "--all-detected" ] || [ "${1:-}" = "--all" ]; then
     targets="$(configured_harnesses)"
     [ -n "$targets" ] || { echo "No known harness config dirs found — nothing to do."; return 0; }

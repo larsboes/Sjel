@@ -1345,6 +1345,7 @@ export default function (pi: ExtensionAPI) {
 				summaryContext.modelRegistry,
 				parsed.value.slice(0, slashIndex),
 				parsed.value.slice(slashIndex + 1),
+				summaryContext.scopedModels,
 			);
 			if (!model) return null;
 			const value = `${model.provider}/${model.id}`;
@@ -1364,7 +1365,7 @@ export default function (pi: ExtensionAPI) {
 		}
 		if (!defaultSummaryModel) {
 			for (const preferred of preferredDefaults) {
-				const model = findModelWithProviderRouting(summaryContext.modelRegistry, preferred.provider, preferred.id);
+				const model = findModelWithProviderRouting(summaryContext.modelRegistry, preferred.provider, preferred.id, summaryContext.scopedModels);
 				const value = model ? `${model.provider}/${model.id}` : null;
 				if (value && availableValues.has(value)) {
 					defaultSummaryModel = value;

@@ -1,0 +1,72 @@
+#!/usr/bin/env bash
+# apps/gpui/install — build, sign and install the GPUI app as ~/Applications/Sjel Desktop.app.
+#
+# The menu-bar app (apps/mac) opens it by bundle identifier, so it needs a stable bundle. Same
+# signing rule as apps/mac/install: SJEL_CODESIGN_IDENTITY, or the first valid identity.
+set -euo pipefail
+[ "$(uname -s)" = Darwin ] || { echo "apps/gpui/install: macOS only; nothing to do here"; exit 0; }
+
+APP_DIR="$(cd "$(dirname "$0")" && pwd)"
+DEST="${SJEL_DESKTOP_APP_DEST:-$HOME/Applications/Sjel Desktop.app}"
+BUNDLE_ID="dev.sjel.desktop"
+
+identity="${SJEL_CODESIGN_IDENTITY:-}"
+if [ -z "$identity" ]; then
+  identity="$(security find-identity -v -p codesigning | awk 'NR==1 && $2 ~ /^[0-9A-F]{40}$/ {print $2}')"
+fi
+[ -n "$identity" ] || { echo "apps/gpui/install: no code-signing identity in the keychain" >&2; exit 1; }
+
+(cd "$APP_DIR" && cargo build --release)
+target_dir="$(cd "$APP_DIR" && cargo metadata --no-deps --format-version 1 | sed -n 's/.*"target_directory":"\([^"]*\)".*/\1/p')"
+binary="$target_dir/release/sjel-gpui"
+
+staging="$(mktemp -d)"
+trap 'rm -rf "$staging"' EXIT
+bundle="$staging/Sjel Desktop.app"
+mkdir -p "$bundle/Contents/MacOS" "$bundle/Contents/Resources"
+cp "$binary" "$bundle/Contents/MacOS/Sjel Desktop"
+# Built from brand/sjel-icon-maskable.svg by Resources/make-icon.
+cp "$APP_DIR/Resources/AppIcon.icns" "$bundle/Contents/Resources/"
+version="$(git -C "$APP_DIR" describe --tags --always 2>/dev/null || echo 0.0.0)"
+# A Finder or NSWorkspace launch gets only /usr/bin:/bin:/usr/sbin:/sbin; the app runs `sjel`.
+cat > "$bundle/Contents/Info.plist" <<PLIST
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+  <key>CFBundleIdentifier</key><string>$BUNDLE_ID</string>
+  <key>CFBundleName</key><string>Sjel Desktop</string>
+  <key>CFBundleDisplayName</key><string>Sjel Desktop</string>
+  <key>CFBundleExecutable</key><string>Sjel Desktop</string>
+  <key>CFBundlePackageType</key><string>APPL</string>
+  <key>CFBundleIconFile</key><string>AppIcon</string>
+  <key>CFBundleShortVersionString</key><string>$version</string>
+  <key>CFBundleVersion</key><string>$version</string>
+  <key>LSMinimumSystemVersion</key><string>14.0</string>
+  <key>NSHighResolutionCapable</key><true/>
+  <!-- sjel://<dashboard path>: route.rs opens it natively or in the dashboard. -->
+  <key>CFBundleURLTypes</key>
+  <array>
+    <dict>
+      <key>CFBundleURLName</key><string>$BUNDLE_ID</string>
+      <key>CFBundleURLSchemes</key><array><string>sjel</string></array>
+    </dict>
+  </array>
+  <key>LSEnvironment</key>
+  <dict>
+    <key>PATH</key><string>$HOME/.local/bin:$HOME/.cargo/bin:/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin</string>
+  </dict>
+</dict>
+</plist>
+PLIST
+codesign --force --sign "$identity" --identifier "$BUNDLE_ID" --options runtime "$bundle"
+codesign --verify --strict "$bundle"
+
+osascript -e "tell application id \"$BUNDLE_ID\" to quit" >/dev/null 2>&1 || true
+mkdir -p "$(dirname "$DEST")"
+rm -rf "$DEST"
+mv "$bundle" "$DEST"
+# Re-register so LaunchServices picks up the new LSEnvironment.
+/System/Library/Frameworks/CoreServices.framework/Frameworks/LaunchServices.framework/Support/lsregister -f "$DEST"
+echo "apps/gpui/install: installed $DEST"
+echo "Open it from the Sjel menu bar: Open App."

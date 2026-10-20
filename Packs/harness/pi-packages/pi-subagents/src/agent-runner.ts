@@ -570,7 +570,7 @@ function getLastAssistantText(session: AgentSession, startIndex = 0): string {
  *     land as a "completed" run with an empty result (the #144 symptom).
  * Everything else completes: a clean "stop"/"toolUse" final, and — crucially — a
  * "length" stop that DID produce text (a legitimate truncated-but-useful answer).
- * "aborted" is handled by the manager's abort flag / "stopped" guard, not here.
+ * A provider abort is a failure; the manager preserves a caller-initiated stopped status.
  * Bounded by `startIndex` (like the text fallback) so a resume that produced no
  * assistant message of its own never inherits a PRIOR turn's stop reason.
  */
@@ -578,6 +578,9 @@ function finalTurnError(session: AgentSession, startIndex = 0): string | undefin
   for (let i = session.messages.length - 1; i >= startIndex; i--) {
     const msg = session.messages[i];
     if (msg.role !== "assistant") continue;
+    if (msg.stopReason === "aborted") {
+      return "provider aborted before completion";
+    }
     if (msg.stopReason === "error") {
       return (msg as { errorMessage?: string }).errorMessage?.trim() || "provider error with no output";
     }
@@ -597,6 +600,7 @@ function forwardAbortSignal(session: AgentSession, signal?: AbortSignal): () => 
   if (!signal) return () => {};
   const onAbort = () => session.abort();
   signal.addEventListener("abort", onAbort, { once: true });
+  if (signal.aborted) onAbort();
   return () => signal.removeEventListener("abort", onAbort);
 }
 
@@ -613,6 +617,7 @@ export async function runAgent(
   prompt: string,
   options: RunOptions,
 ): Promise<RunResult> {
+  options.signal?.throwIfAborted();
   const config = getConfig(type);
   const agentConfig = getAgentConfig(type);
 
@@ -1110,6 +1115,7 @@ export async function runAgent(
   const startLen = session.messages.length;
   let structuredRetried = false;
   try {
+    options.signal?.throwIfAborted();
     await session.prompt(effectivePrompt);
 
     // One more prompt when a schema was asked for and nothing usable came back
@@ -1161,6 +1167,7 @@ export async function resumeAgent(
     signal?: AbortSignal;
   } = {},
 ): Promise<{ text: string; failure?: string }> {
+  options.signal?.throwIfAborted();
   // Boundary for the history fallback: the session already holds prior turns,
   // so only assistant text produced by THIS resume prompt counts as its output
   // — a failed resume must not surface the previous turn's answer (#144).
@@ -1189,6 +1196,7 @@ export async function resumeAgent(
     : () => {};
 
   try {
+    options.signal?.throwIfAborted();
     await session.prompt(prompt);
   } finally {
     collector.unsubscribe();

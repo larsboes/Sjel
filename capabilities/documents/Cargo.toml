@@ -1,0 +1,37 @@
+[package]
+name = "sjel-documents"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+description = "Local document library with content-addressed originals and reviewed filing metadata."
+publish = false
+
+[lib]
+name = "documents"
+path = "src/lib.rs"
+
+[[bin]]
+name = "documents"
+path = "src/cli.rs"
+
+[dependencies]
+axum.workspace = true
+route-manifest = { path = "../../libs/route-manifest" }
+schemars = "1.2.2"
+chrono.workspace = true
+rusqlite.workspace = true
+serde = { workspace = true, features = ["derive"] }
+serde_json.workspace = true
+sha2.workspace = true
+sjel-config = { path = "../../libs/sjel-config" }
+sjel-extraction = { path = "../../libs/extraction" }
+sjel-store = { path = "../../libs/sjel-store" }
+sjel-server = { path = "../../libs/sjel-server" }
+tokio = { workspace = true, features = ["rt-multi-thread", "macros"] }
+
+[dev-dependencies]
+tower = { workspace = true, features = ["util"] }
+
+[lints]
+workspace = true

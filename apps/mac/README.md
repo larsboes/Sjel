@@ -15,7 +15,7 @@ Per Sjel / Sjel doctrine and **Product Rule 4**:
 - `SjelRelay`: Swift library managing `C2Record` modeling, `EncryptionEnvelope` AEAD packaging, `RelayKeyManager` Keychain storage, and `CloudKitRelay` translation to/from `CKRecord`.
 - `SjelMacApp`: Native SwiftUI `MenuBarExtra` companion app: the shell's health, **Open
   Dashboard**, **Open App** (the GPUI desktop app, `dev.sjel.desktop`, installed by
-  `apps/gpui-prototype/install`), and **Open at login**.
+  `apps/gpui/install`), and **Open at login**.
 - `SjelRelayTests`: Test suite verifying the falsifier:
   - `c2RecordInCloudKitStorageHasZeroReadableFieldsOrValues`: Asserts that stored `CKRecord.allKeys()` and all record values contain no C2 field names or values, and verifies full roundtrip decryption.
   - `tamperedCiphertextRefusesDecryption`: Asserts AEAD authentication rejects modified payloads.

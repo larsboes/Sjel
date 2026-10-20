@@ -28,22 +28,8 @@
 # this file starts naming directories, a new test's coverage depends on someone remembering
 # to come here.
 #
-# The second entry is the one exception, and it is a SCOPE statement rather than a list of
-# Sjel directories to skip. A vendored pi package is another project's tree, and it ships
-# another project's test runner: the 22 accordion test files import from vitest, and Bun's
-# `vi` shim does not implement `advanceTimersByTimeAsync`, so `bun test` reported 7 failures
-# in code this repository did not write and cannot fix — upstream's files are byte-identical
-# on purpose. A gate red for a reason nobody can act on is a gate people stop reading.
-#
-# It does not weaken the rule it sits beside. That rule is that an Sjel test is gated by
-# existing, with no registry to update. `Packs/*/pi-packages/**` is structural, so a newly
-# vendored package is covered by it without anyone remembering to come here — and it
-# carves out only vendored trees, never one of ours.
-#
-# Those 459 tests are not dropped. They run under the runner they were written for, from the
-# vendored package's own manifest: `bun install --frozen-lockfile --ignore-scripts` then
-# `bun run test` inside Packs/harness/pi-packages/accordion, which is what the bun-tests job
-# does below. See Packs/harness/LICENSE for the vendoring terms.
+# Third-party pi package tests use their own runners. Keep them outside Bun's discovery.
+# Optional upstream packages are installed by Pi and are not tested in this checkout.
 #
 # The anatomy figure skill is the second carve-out (2026-10-20). Its 279 scripts/*.test.mjs were
 # written for `node --test` and start headless Chrome, which bun's 5 s per-test default kills;

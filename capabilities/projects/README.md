@@ -52,6 +52,10 @@ written back into a journal entry.
   the shape is the one the retired vault task reader served. Two keys are added: `project`, the
   folder, and `fields`, every frontmatter key with lists flattened to `a, b`.
 - `GET /api/projects`, `GET /api/project?name=`: the list and one project's records.
+  `content=false` leaves every record's content out, for a reader that draws a list of titles
+  and reads the one record it opens; a project of 185 notes is 55 KB that way and 2.0 MB with
+  the content in.
+- `GET /api/record?path=`: one record with its content.
 - `GET /api/records?kind=project|task|note`: every live record of one kind in the task shape,
   with `kind` and all its properties. The dashboard's tables and note embeds read it.
 - `POST /api/tasks`, `POST /api/tasks/done`, `POST /api/projects`, `POST /api/notes`: create and

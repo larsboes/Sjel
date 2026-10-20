@@ -17,7 +17,7 @@ import { existsSync, readFileSync } from "node:fs";
 import { join, resolve } from "node:path";
 import { describe, expect, test } from "bun:test";
 
-import { basemapUrl } from "../dashboard/src/lib/map/surface";
+import { basemapUrl, setTilesEndpoint } from "../dashboard/src/lib/map/surface";
 import { vendoredTarget } from "./fetch-basemap.ts";
 
 const BASEMAP = resolve(import.meta.dir, "..", "dashboard", "static", "basemap");
@@ -122,6 +122,13 @@ describe("basemapUrl", () => {
     for (const url of ["/basemap/style.json", "http://127.0.0.1:8082/basemap/sprite/ofm@2x.png"]) {
       expect(basemapUrl(url, vendored)).toBe(url);
     }
+  });
+
+  test("allows swapping the tile seam via setTilesEndpoint", () => {
+    setTilesEndpoint("http://127.0.0.1:8080/tiles/{z}/{x}/{y}.pbf");
+    expect((globalThis as any).__SJEL_TILES_URL__).toBe("http://127.0.0.1:8080/tiles/{z}/{x}/{y}.pbf");
+    setTilesEndpoint(undefined);
+    expect((globalThis as any).__SJEL_TILES_URL__).toBeUndefined();
   });
 });
 

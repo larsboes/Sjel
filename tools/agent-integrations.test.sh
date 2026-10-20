@@ -108,4 +108,23 @@ if $SCRIPT install unknown-harness >/dev/null 2>&1; then
   exit 1
 fi
 
+cat > "$tmp/bin/pi" <<'STUB'
+#!/bin/bash
+printf '%s\n' "$*" >> "$SJEL_TEST_UV_LOG"
+exit "${SJEL_TEST_PI_EXIT:-0}"
+STUB
+chmod +x "$tmp/bin/pi"
+
+printf '%s\n' "$list_output" | grep -Fq 'install accordion pi'
+$SCRIPT install accordion pi
+grep -Fxq 'install npm:@a-fig/accordion' "$SJEL_TEST_UV_LOG"
+if $SCRIPT install accordion claude >/dev/null 2>&1; then
+  echo "Accordion accepted an unsupported harness" >&2
+  exit 1
+fi
+if SJEL_TEST_PI_EXIT=23 $SCRIPT install accordion pi; then
+  echo "failed Pi install unexpectedly succeeded" >&2
+  exit 1
+fi
+
 echo "agent-integrations tests passed"

@@ -10,7 +10,9 @@
 
 use std::path::PathBuf;
 
-use sjel_config::{database_path, env_var, expand_tilde, overlay_config, overlay_root, resolve_port};
+use sjel_config::{
+    database_path, env_var, expand_tilde, overlay_config, overlay_root, resolve_port,
+};
 
 pub struct Config {
     pub database_path: PathBuf,

@@ -1,0 +1,53 @@
+default_permissions = "sjel-auto"
+approval_policy = { granular = { sandbox_approval = false, rules = true, mcp_elicitations = true, request_permissions = false, skill_approval = true } }
+approvals_reviewer = "user"
+
+[shell_environment_policy]
+ignore_default_excludes = false
+
+[shell_environment_policy.filters]
+"*PASSWORD*" = "exclude"
+"*PASSWD*" = "exclude"
+"*CREDENTIAL*" = "exclude"
+"BW_SESSION" = "exclude"
+
+[permissions.sjel-auto]
+description = "Broad filesystem and network access, with secret files denied and deletion commands reviewed by rules."
+
+[permissions.sjel-auto.network]
+enabled = true
+
+[permissions.sjel-auto.filesystem]
+"/" = "write"
+"@HOME@/.ssh" = "deny"
+"@HOME@/.gnupg" = "deny"
+"@HOME@/.aws" = "deny"
+"@HOME@/.kube" = "deny"
+"@HOME@/.netrc" = "deny"
+"@HOME@/.git-credentials" = "deny"
+"@HOME@/.config/git/credentials" = "deny"
+"@HOME@/.config/gcloud" = "deny"
+"@HOME@/.codex/auth.json" = "deny"
+"@HOME@/.pi/agent/auth.json" = "deny"
+"@HOME@/**/.env" = "deny"
+"@HOME@/**/.env.*" = "deny"
+"@HOME@/**/*.env" = "deny"
+"@HOME@/**/.secrets" = "deny"
+"@HOME@/**/.secrets.*" = "deny"
+"@HOME@/**/secrets/**" = "deny"
+"@HOME@/**/*.pem" = "deny"
+"@HOME@/**/*.key" = "deny"
+"@HOME@/**/*.p12" = "deny"
+"@HOME@/**/*.pfx" = "deny"
+
+[permissions.sjel-auto.filesystem.":workspace_roots"]
+"**/.env" = "deny"
+"**/.env.*" = "deny"
+"**/*.env" = "deny"
+"**/.secrets" = "deny"
+"**/.secrets.*" = "deny"
+"**/secrets/**" = "deny"
+"**/*.pem" = "deny"
+"**/*.key" = "deny"
+"**/*.p12" = "deny"
+"**/*.pfx" = "deny"

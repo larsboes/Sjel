@@ -73,13 +73,13 @@ function resolveModel(ctx: ExtensionContext, override?: string, configured?: Ans
 	const selector = override ? parseModelSelector(override) : configured;
 	const model = selector
 		? (() => {
-			return findModelWithProviderRouting(ctx.modelRegistry, selector.provider, selector.id);
+			return findModelWithProviderRouting(ctx.modelRegistry, selector.provider, selector.id, ctx.scopedModels);
 		})()
 		: ctx.model;
 	if (!model) {
-		if (override) throw new Error(`Answer model not found: ${override}`);
+		if (override) throw new Error(`Answer model not found or not enabled: ${override}`);
 		if (configured) {
-			throw new Error(`Answer model not found: ${configured.provider}/${configured.id} (from fetch.answerProvider/fetch.answerModel in ${getWebSearchConfigPath()})`);
+			throw new Error(`Answer model not found or not enabled: ${configured.provider}/${configured.id} (from fetch.answerProvider/fetch.answerModel in ${getWebSearchConfigPath()})`);
 		}
 		throw new Error("No current model available for page answering");
 	}

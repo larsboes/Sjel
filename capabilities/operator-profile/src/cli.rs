@@ -144,7 +144,9 @@ fn run() -> Result<(), Box<dyn std::error::Error>> {
                 (false, SectionChange::Unchanged) => "managed section is current",
                 (true, SectionChange::Create) => "created managed section",
                 (true, SectionChange::Replace) => "replaced managed section",
-                (true, SectionChange::Unchanged) => "managed section already current (no write needed)",
+                (true, SectionChange::Unchanged) => {
+                    "managed section already current (no write needed)"
+                }
             };
             let audit = render::audit(&profile, harness);
             println!(

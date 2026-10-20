@@ -286,7 +286,12 @@ fn decode_pgm_9x8(bytes: &[u8]) -> Option<[u8; 72]> {
             pos += 1;
         }
         if start < pos {
-            tokens.push(std::str::from_utf8(&bytes[start..pos]).ok()?.parse::<usize>().ok()?);
+            tokens.push(
+                std::str::from_utf8(&bytes[start..pos])
+                    .ok()?
+                    .parse::<usize>()
+                    .ok()?,
+            );
         }
     }
     if tokens.len() != 3 || pos >= bytes.len() || !bytes[pos].is_ascii_whitespace() {
@@ -351,10 +356,8 @@ mod tests {
 
     #[test]
     fn a_near_duplicate_is_proposed_from_a_phash_and_reviewed() {
-        let dir = std::env::temp_dir().join(format!(
-            "sjel-media-perceptual-{}",
-            std::process::id()
-        ));
+        let dir =
+            std::env::temp_dir().join(format!("sjel-media-perceptual-{}", std::process::id()));
         let _ = std::fs::remove_dir_all(&dir);
         std::fs::create_dir_all(&dir).unwrap();
 
@@ -400,7 +403,10 @@ mod tests {
         let digest_a = write_pgm("original.pgm", &grid_a);
         let digest_b = write_pgm("reencoded.pgm", &grid_b);
         let digest_c = write_pgm("distinct.pgm", &grid_c);
-        assert_ne!(digest_a, digest_b, "near-duplicates have distinct byte digests");
+        assert_ne!(
+            digest_a, digest_b,
+            "near-duplicates have distinct byte digests"
+        );
 
         let index_report = index_phashes(&ledger, &dir, "VOL-1").unwrap();
         assert_eq!(index_report.computed, 3);

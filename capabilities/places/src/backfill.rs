@@ -1166,7 +1166,10 @@ pub fn calendar_from_geocoder(
         if attendees.is_empty() {
             continue;
         }
-        let Some(loc_str) = location.map(|s| s.trim().to_string()).filter(|s| !s.is_empty()) else {
+        let Some(loc_str) = location
+            .map(|s| s.trim().to_string())
+            .filter(|s| !s.is_empty())
+        else {
             report.without_location += 1;
             continue;
         };

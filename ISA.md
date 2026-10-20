@@ -118,6 +118,13 @@ Migrated 2026-10-15 from §13 of the frozen PRD (now the `projects` record `Sjel
   passes. Only the local kind is rehearsed; iCloud and ssh are unproven. Falsifier: a restore
   from each kind is observed passing.
 
+### documents · four open claims
+
+- **DOC-1 — external backup and restore.** `documents` stores originals locally and declares a backup path; metadata remains in the shared store's archive. Open until both archives are verified and a restore rehearsal proves a document's bytes and metadata return together from the selected external SSD. Falsifier: a document is readable after restoring only one half, or the selected target is not the same SSD used for media/photos.
+- **DOC-2 — evaluated inbox enrichment and source receipts.** Folder intake, polling, and the operator UI/API exist; source identities, mail attachment intake, source-linked insights, and class-gated model enrichment do not. Follow the pipeline in `capabilities/documents/README.md`. Close with a frozen German/English corpus, declared acceptance criteria, recorded results, and an idempotent mail replay. Falsifiers: an insight has no supporting source span, a retry creates a duplicate source receipt, a `c2` document reaches cloud inference, or `c3` content enters any prompt.
+- **DOC-3 — mixed-scan segmentation.** Evaluate proposed document boundaries separately from PDF page extraction. Preserve the parent original, child page ranges, and complete page coverage. Close with annotated German/English multi-document scans, declared boundary acceptance criteria, and a verified reconstruction. Falsifiers: a page is lost or duplicated, a boundary lacks inspectable evidence, or a child cannot be traced to its original pages.
+- **DOC-4 — live operator reader.** The document API, dashboard collection, filing controls, and PDF/text reader compile and pass focused checks; browser rendering is unverified. Close with an authenticated browser exercising upload/replay, search/filter, filing, archive/restore, and original PDF viewing at desktop and phone widths. Verify original hashes after mutations. Falsifiers: the page shows counts that disagree with the library, an original cannot be viewed or downloaded, a narrow viewport clips controls, or an unauthenticated/agent request returns document contents.
+
 ### traveler · one open item
 
 - **F4 — the offered-versus-chosen half.** Twenty-eight `option_set` items exist on one plan; one
@@ -125,46 +132,13 @@ Migrated 2026-10-15 from §13 of the frozen PRD (now the `projects` record `Sjel
   proposals shipped on `GET /api/profile/proposals` with section gating; `F6` pseudonymous
   companion patterns shipped in `GET /api/profile/derived` keyed by `ent:` register IDs.)
 
-### Packs/travel · three open items
+### Packs/travel · one open item
 
-- **`is_regional` disagrees between backends.** (Resolved: unified `is_regional_leg` checks both
-  the `9G` attribute and Nahverkehr categories/names, so dbweb and dbnav agree on `is_regional: true`
-  for RE5 and regional legs across routes.)
-- **Recovering a type for dbweb's regional legs.** (Resolved: `resolve_train_label` bridges both
-  backends on `train_number` via pre-seeded lines like RE5/RB26 and `{prefix}_train_labels` in
-  transit's store; dbweb bare-number legs recover rider-facing labels and punctuality types and
-  are scored.)
 - **An open segment has no home in the plan model.** A stage names a destination and date, an
   item a day, and status is draft/saved/archived — none says "this part is undecided, here are
   the branches". What would settle it: a second trip planned this way.
-
-### dashboard · one claim
-
-- **DSH-3** — `/finance` reads right with live data (three `DataTable`s, subscription editor,
-  `SidePeek`). A live-data judgement, not a build.
-
-### places · three items
-
-- **Photos layer.** (Resolved: `media_geotags` EXIF indexer respects PRD N4; `places` serves `GET /api/layers/photos` with bounding box filtering and cached coordinates.)
-- **Self-hosted tiles.** The basemap still egresses to `tiles.openfreemap.org`; the seam is
-  declared swappable to PMTiles.
-- **Register proposals from calendar.** (Resolved: `attendees` array on calendar events with `places backfill calendar` extracting participants to registered contacts.)
 
 ### distribution
 
 - **DIST-1 to DIST-4 — a fresh-user Mac and iPhone install.** Tracked in
   [#235](https://github.com/larsboes/Sjel/issues/235) since 2026-10-20, for another contributor.
-
-### libs/agent · two items
-
-- **Wave 2.** (Resolved: `ext::subagents` delegation with isolated child loop and tool turns, interactive line editing with history recall (`/history`), screen clearing (`/clear`), command help (`/help`), and termination handling).
-- **Measure the specialist claim.** (Resolved: canonical 5-task Rust refactoring benchmark suite in `libs/agent/tests/specialist_tasks.json` with metric calculation evaluating clean clippy pass rates and delta in `libs/agent/tests/specialist_claim.rs`).
-
-### harness · two items
-
-- **`OPERATIONAL_RULES.md`, sorted.** (Resolved: old LifeOS rules sorted to durable principles in
-  `<overlay>/config/OPERATIONAL_RULES.md` and `<overlay>/config/operator-profile.json`; stored in
-  `operator-profile` and projected cleanly into `~/.claude/CLAUDE.md` via `operator-profile export --apply`.)
-- **A prior-art skill that searches.** (Resolved: `Packs/coding/skills/prior-art` implements the 7-rung
-  build ladder with executable search script `scripts/search-prior-art` across symbols, modules, crates,
-  and upstreams; synced and verified.)

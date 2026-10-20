@@ -2,7 +2,7 @@ import { Plugin, MarkdownRenderChild, MarkdownPostProcessorContext, TFile, norma
 import { parseBlock, escapeHtml } from './parser';
 import { collectThemeVars } from './theme';
 import { buildSrcdoc } from './iframe-renderer';
-import { renderNativeElement, updateNativeTheme, NativeRenderEntry } from './native-renderer';
+import { disposeNativeElement, renderNativeElement, updateNativeTheme, NativeRenderEntry } from './native-renderer';
 import { MESSAGE_TYPE, MAX_HEIGHT } from './types';
 
 interface FrameEntry {
@@ -62,6 +62,7 @@ export default class HtmlEmbedPlugin extends Plugin {
   }
 
   onunload() {
+    for (const entry of this.nativeEntries) entry.destroy?.();
     this.frames.clear();
     this.nativeEntries.clear();
   }
@@ -97,14 +98,21 @@ export default class HtmlEmbedPlugin extends Plugin {
     let file: TFile | null = null;
     let rawContent = content;
     const plugin = this;
+    let destroyed = false;
+    let renderVersion = 0;
 
     const entry: NativeRenderEntry = {
       render: async function () {
+        if (destroyed) return;
+        const version = ++renderVersion;
+        let nextContent = rawContent;
         try {
-          if (file) rawContent = await plugin.app.vault.cachedRead(file);
+          if (file) nextContent = await plugin.app.vault.cachedRead(file);
         } catch (e) {
-          rawContent = `<pre>interactive: could not read ${escapeHtml(String(opts.file))}</pre>`;
+          nextContent = `<pre>interactive: could not read ${escapeHtml(String(opts.file))}</pre>`;
         }
+        if (destroyed || version !== renderVersion) return;
+        rawContent = nextContent;
         renderNativeElement(
           wrap,
           rawContent,
@@ -114,7 +122,13 @@ export default class HtmlEmbedPlugin extends Plugin {
         );
       },
       updateTheme: function () {
-        updateNativeTheme(wrap);
+        if (!destroyed) updateNativeTheme(wrap);
+      },
+      destroy: function () {
+        if (destroyed) return;
+        destroyed = true;
+        renderVersion++;
+        disposeNativeElement(wrap);
       }
     };
 
@@ -134,6 +148,7 @@ export default class HtmlEmbedPlugin extends Plugin {
 
     this.nativeEntries.add(entry);
     child.register(() => {
+      entry.destroy?.();
       plugin.nativeEntries.delete(entry);
     });
 

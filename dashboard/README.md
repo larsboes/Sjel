@@ -228,7 +228,7 @@ the licence obligations in that directory's `LICENSE.md`. That removes four seri
 transatlantic round trips from the critical path (measured 2026-09-06: 0.23 s style, 0.19 s
 TileJSON, 0.31 s sprite, ~0.2 s per glyph range) and replaces them with ~1 ms loopback reads.
 The **vector tiles and the Natural Earth raster stay remote**; they are the large half, and
-self-hosting them is an open decision in `ISA.md`.
+`surface.ts` (`setTilesEndpoint`) provides a swappable seam for a self-hosted PMTiles or local tile deployment.
 
 Labels are Latin-script only. Liberty renders `name:latin` concatenated with `name:nonlatin`, so
 a European overview asked for Greek, Cyrillic, Arabic, Devanagari and more — measured at **29

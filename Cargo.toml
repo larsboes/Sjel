@@ -4,6 +4,7 @@ members = [
     "capabilities/sjel-status",
     "capabilities/calendar",
     "capabilities/comms",
+    "capabilities/documents",
     "capabilities/cv",
     "capabilities/devices",
     "capabilities/entities",

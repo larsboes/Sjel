@@ -4541,6 +4541,26 @@ dependencies = [
 ]
 
 [[package]]
+name = "sjel-documents"
+version = "0.1.0"
+dependencies = [
+ "axum",
+ "chrono",
+ "route-manifest",
+ "rusqlite",
+ "schemars",
+ "serde",
+ "serde_json",
+ "sha2 0.11.0",
+ "sjel-config",
+ "sjel-extraction",
+ "sjel-server",
+ "sjel-store",
+ "tokio",
+ "tower",
+]
+
+[[package]]
 name = "sjel-entities"
 version = "0.1.0"
 dependencies = [
@@ -4883,6 +4903,7 @@ name = "sjel-status"
 version = "0.1.0"
 dependencies = [
  "axum",
+ "futures-util",
  "getrandom 0.4.3",
  "reqwest",
  "ring",

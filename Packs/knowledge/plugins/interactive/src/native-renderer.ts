@@ -29,6 +29,11 @@ export function updateNativeTheme(wrap: HTMLElement): void {
   );
 }
 
+/** Let an embedded controller release resources before its DOM is replaced or removed. */
+export function disposeNativeElement(wrap: HTMLElement): void {
+  wrap.dispatchEvent(new CustomEvent('interactive-dispose'));
+}
+
 export function renderNativeElement(
   wrap: HTMLElement,
   content: string,
@@ -36,6 +41,7 @@ export function renderNativeElement(
   fileName?: string,
   onOpenFile?: () => void
 ): void {
+  disposeNativeElement(wrap);
   wrap.empty();
   updateNativeTheme(wrap);
 

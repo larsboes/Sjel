@@ -207,8 +207,8 @@ Add a `coding` role to the overlay's `config/inference.json` first:
 
 ## Not here yet
 
-The extension contract, the guard, skills, Rust diagnostics, MCP and compaction all run. Line
-editing, a full-screen TUI and subagents are wave 2 in [`ISA.md`](../../ISA.md), not decided.
+The extension contract, the guard, skills, Rust diagnostics, MCP, compaction, line
+editing with command history, and subagents (`ext::subagents`) all run. A full-screen TUI is not decided.
 
 Pi stays until this agent beats it on one household task and one coding task, each measured
 against the existing path. The product reasoning is the `projects` record

@@ -9,11 +9,6 @@
 //! documented. The values were compared against the TypeScript factories on this Mac before
 //! the launcher switched, per the porting recipe in tools/sjel-cli/README.md.
 //!
-//! One inherited oddity is kept on purpose: the opencode config in TypeScript is a spread of
-//! the codex one with five fields overridden, so it inherits codex's `stateEnvVar` and its
-//! `validateAdapterFiles`. Both are reproduced rather than tidied, because a port that
-//! silently changes which env var an error names is a port that changed behaviour.
-
 use std::path::{Path, PathBuf};
 
 use super::engine::{self, DeployConfig, TreeConvention};
@@ -152,12 +147,11 @@ impl Registry {
                     .unwrap_or_else(|| state_dir.join("opencode-packs.json")),
             ),
             adapter: "opencode".to_owned(),
-            // Inherited from the codex spread in tools/packs-opencode.ts — see the module note.
-            state_env_var: Some("SJEL_CODEX_STATE_FILE".to_owned()),
+            state_env_var: Some("SJEL_OPENCODE_PACKS_STATE_FILE".to_owned()),
             tree_convention: None,
             flat_file_convention: None,
             skip_manifest_skills: false,
-            validate_adapter_files: Some(engine::validate_codex_files),
+            validate_adapter_files: None,
         };
         let pi = DeployConfig {
             axon_root: root.to_path_buf(),
@@ -304,13 +298,13 @@ mod tests {
     }
 
     #[test]
-    fn the_opencode_config_keeps_the_codex_spread_it_inherits() {
+    fn opencode_config_is_independent() {
         let registry = Registry::new(Path::new("/tmp/sjel-registry-test"));
         let opencode = registry.by_id("opencode").unwrap();
         assert_eq!(
             opencode.config.state_env_var.as_deref(),
-            Some("SJEL_CODEX_STATE_FILE")
+            Some("SJEL_OPENCODE_PACKS_STATE_FILE")
         );
-        assert!(opencode.config.validate_adapter_files.is_some());
+        assert!(opencode.config.validate_adapter_files.is_none());
     }
 }

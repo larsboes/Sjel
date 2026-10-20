@@ -383,4 +383,3 @@ async fn add(argv: &[String]) -> i32 {
 fn euro(cents: i64) -> String {
     format!("{},{:02} €", cents / 100, (cents % 100).abs())
 }
-

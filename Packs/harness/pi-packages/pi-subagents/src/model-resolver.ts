@@ -43,17 +43,15 @@ export function resolveModel(
 ): any | string {
   // Available models (those with auth configured)
   const all = (registry.getAvailable?.() ?? registry.getAll()) as ModelEntry[];
-  const availableSet = new Set(all.map(m => `${m.provider}/${m.id}`.toLowerCase()));
-
-  // 1. Exact match: "provider/modelId" — only if available (has auth)
+  input = input.trim();
   const slashIdx = input.indexOf("/");
-  if (slashIdx !== -1) {
-    const provider = input.slice(0, slashIdx);
-    const modelId = input.slice(slashIdx + 1);
-    if (availableSet.has(input.toLowerCase())) {
-      const found = registry.find(provider, modelId);
-      if (found) return found;
-    }
+  if (!input || slashIdx === 0 || slashIdx === input.length - 1) {
+    return `Invalid model selector: "${input}". Use a model name or provider/modelId.`;
+  }
+  const exact = all.find(model => `${model.provider}/${model.id}`.toLowerCase() === input.toLowerCase());
+  if (exact) {
+    const found = registry.find(exact.provider, exact.id);
+    if (found) return found;
   }
 
   // 2. Fuzzy match against available models. Normalize separators so cosmetic

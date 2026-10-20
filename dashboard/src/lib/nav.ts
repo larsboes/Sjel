@@ -74,6 +74,7 @@ export const PRIMARY_NAV: NavItem[] = [
   { href: "/calendar", label: "Calendar", icon: "calendar", capability: "calendar" },
   // Sjel owns projects and tasks since the vault import (capabilities/projects/README.md).
   { href: "/projects", label: "Projects", icon: "check", capability: "projects" },
+  { href: "/documents", label: "Documents", icon: "file-text", capability: "documents" },
   { href: "/inbox", label: "Inbox", icon: "plus", capability: "comms" },
   { href: "/feed", label: "Feed", icon: "feed", capability: "comms" },
   { href: "/travel", label: "Travel", icon: "map-pin", capability: "transit", starts: ["transit", "trips"], warmsMap: true },

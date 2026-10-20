@@ -14,7 +14,7 @@ interaction patterns. The iPhone path is experimental: read "Native chrome and i
 
 ## Workflow
 
-1. **Locate the app and pin.** Read its `Cargo.toml` and lockfile. For Sjel, the evaluation app is `apps/gpui-prototype`; it has its own Cargo workspace and lockfile. Run `python3 scripts/show_revision.py <Cargo.toml>` to print the selected Zed source revision and matching GitHub links. The helper requires Python 3.11+; do not assume `main` matches the app's API.
+1. **Locate the app and pin.** Read its `Cargo.toml` and lockfile. For Sjel, the desktop app is `apps/gpui`; it has its own Cargo workspace and lockfile. Run `python3 scripts/show_revision.py <Cargo.toml>` to print the selected Zed source revision and matching GitHub links. The helper requires Python 3.11+; do not assume `main` matches the app's API.
 2. **Load only the relevant reference.** Read `references/views-and-events.md` for UI structure and input; `references/async-and-data.md` for state updates and I/O; or `references/platform-and-build.md` for OS features and verification.
 3. **Follow the local revision.** Prefer examples and API definitions under that revision's `crates/gpui` and `crates/gpui_platform`. Use the upstream `main` links as navigation only. Do not update GPUI pins as part of an unrelated UI change.
 4. **Keep the app boundary clear.** In Sjel, use existing capability APIs or reviewed local interfaces. Do not give the desktop UI direct access to capability databases or copy private overlay values into source.

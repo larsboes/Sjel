@@ -40,13 +40,13 @@ trap 'rm -rf "$stage"' EXIT
 host="$stage/host"
 mkdir -p "$host"
 # Copy source inputs only; never reuse a Simulator build or generated project.
-for source in "$root/apps/gpui-prototype/ios/host/"*.swift "$root/apps/gpui-prototype/ios/host/"*.h \
-  "$root/apps/gpui-prototype/ios/host/project.yml"; do
+for source in "$root/apps/gpui/ios/host/"*.swift "$root/apps/gpui/ios/host/"*.h \
+  "$root/apps/gpui/ios/host/project.yml"; do
   [ -f "$source" ] && cp "$source" "$host/$(basename "$source")"
 done
 [ -f "$host/project.yml" ] || { echo "native host project spec is missing" >&2; exit 1; }
 target="$out/cargo-target"
-cargo build --locked --release --manifest-path "$root/apps/gpui-prototype/Cargo.toml" \
+cargo build --locked --release --manifest-path "$root/apps/gpui/Cargo.toml" \
   --package sjel-gpui-ios --target aarch64-apple-ios --target-dir "$target" --lib
 rust_lib="$target/aarch64-apple-ios/release/libsjel_gpui_ios.a"
 [ -f "$rust_lib" ] || { echo "native Rust library was not produced" >&2; exit 1; }

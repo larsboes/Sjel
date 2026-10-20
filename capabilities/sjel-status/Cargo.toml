@@ -34,12 +34,15 @@ route-manifest = { path = "../../libs/route-manifest" }
 getrandom.workspace = true
 sha2.workspace = true
 axum.workspace = true
+# `stream::unfold` turns the event watcher's channel into the body `Sse` takes, since neither
+# `Sse` nor tokio's channels re-export a Stream (src/status/events.rs).
+futures-util = { version = "0.3", default-features = false, features = ["std"] }
 # Not `full`: these are the drivers this crate reaches for, verified with a lone
 # `cargo check -p <crate> --all-targets`, which is the only build where a missing
 # tokio feature is visible (a workspace build unifies them away).
 # `process` for the systemd/launchd probes in registry.rs and backup.rs, `time` for the
 # poll interval. Rest: `#[tokio::main]` plus `spawn`/`spawn_blocking`.
-tokio = { workspace = true, features = ["macros", "rt-multi-thread", "process", "time"] }
+tokio = { workspace = true, features = ["macros", "rt-multi-thread", "process", "sync", "time"] }
 serde = { workspace = true, features = ["derive"] }
 serde_json.workspace = true
 reqwest = { workspace = true, features = ["json", "stream", "query", "form"] }

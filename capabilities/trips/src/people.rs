@@ -73,7 +73,10 @@ pub fn traveler_links<'a>(
 /// Solo plans and plans whose only traveller entries are marked `not_person` (`entity_id: None`)
 /// or self-markers (`me`, `solo`, `self`, `ich`, `allein`) are `c1` (personal); any plan naming
 /// another resolved or undecided person is `c2` (sensitive).
-pub fn plan_data_class(names: &[String], decided: &HashMap<String, Option<String>>) -> &'static str {
+pub fn plan_data_class(
+    names: &[String],
+    decided: &HashMap<String, Option<String>>,
+) -> &'static str {
     let names_another_person = names.iter().any(|name| {
         let key = sjel_links::name_key(name);
         if key.is_empty()

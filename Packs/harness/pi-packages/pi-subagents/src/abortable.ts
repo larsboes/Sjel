@@ -12,7 +12,11 @@
 /** Await a promise until it settles or the caller cancels, without aborting the underlying work. */
 export function abortable<T>(promise: Promise<T>, signal?: AbortSignal): Promise<T> {
   if (!signal) return promise;
-  if (signal.aborted) return Promise.reject(signal.reason);
+  if (signal.aborted) {
+    // Observe work that was already started even when its caller has stopped waiting.
+    void promise.catch(() => {});
+    return Promise.reject(signal.reason);
+  }
 
   return new Promise<T>((resolve, reject) => {
     let settled = false;

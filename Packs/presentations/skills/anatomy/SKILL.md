@@ -70,11 +70,10 @@ Work in this order. Write the concept and the parts list before any geometry. Mo
 
 ## Setup
 
-The code is in `kit/`: `iso-kit.ts` and `iso-kit.mjs` are the core (camera, solids, parts library,
-SVG strings, card and page, CSS), `lathe.mjs` turns round parts on any axis, `tube.mjs` splits pipes
-and cables into depth-sortable chunks, `audit.mjs` proves the geometry, `gl.mjs` is the WebGL layer
-and `turn*.mjs` the 3D mode. `scripts/` holds the headless checks: `capture.mjs`, `drive.mjs`,
-`lines.mjs`, `inline-kit.mjs` and `turn-check.mjs`. Signatures and the tool table: `references/kit.md`.
+For Sjel or Obsidian output, read [local integration](references/sjel-integration.md) first.
+
+`kit/` owns geometry, shading and animation. `scripts/` owns capture and headless checks.
+Read `references/kit.md` for the modules, signatures and tool table.
 
 Pick the path that fits the project:
 

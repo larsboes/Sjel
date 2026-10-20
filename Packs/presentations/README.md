@@ -191,3 +191,11 @@ academic layer is grounded in the source thesis's first assessment and its valid
 taxonomy (Wohlin et al.), with the constructs sourced from the `academic-writing` Pack.
 The `deckkit` code is written against `python-pptx` and `pymupdf`, both pinned in
 `scripts/deck`.
+
+## Anatomy ownership
+
+Anatomy is intentionally maintained in Sjel, including its drawing kit, examples and checks.
+Local integration is described in
+[`references/sjel-integration.md`](skills/anatomy/references/sjel-integration.md): interactive embeds
+inside Obsidian and Sjel notes, optional static exports, and destination rules owned by the vault or project.
+Review upstream changes selectively and preserve local integration when upgrading.

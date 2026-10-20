@@ -53,12 +53,19 @@ Environment:
   SJEL_CODEX_STATE_FILE ownership ledger override (mainly for tests)
 ";
 
-const OPENCODE_USAGE: &str = "\
-usage: tools/packs-opencode status [<pack>|--all]
-       tools/packs-opencode deploy <pack>...
-       tools/packs-opencode sync <pack>|--all
-       tools/packs-opencode remove <pack>...
-       tools/packs-opencode list";
+const OPENCODE_HELP: &str = "\
+tools/packs-opencode — materialize Sjel Packs into OpenCode.
+
+  tools/packs-opencode status [<pack>|--all]  show source/install/drift state
+  tools/packs-opencode deploy <pack>...       install one or more Packs
+  tools/packs-opencode sync <pack>|--all      update already-deployed Packs
+  tools/packs-opencode remove <pack>...       remove one or more owned Packs
+  tools/packs-opencode list                   list available Packs
+  tools/harnesses use <profile> --harness opencode  activate a profile
+
+Environment:
+  OPENCODE_SKILLS_DIR              destination (default: $HOME/.config/opencode/skills)
+  SJEL_OPENCODE_PACKS_STATE_FILE   ownership ledger override";
 
 const PI_USAGE: &str = "usage: tools/packs-pi list | status [pack ...] | deploy <pack ...> | \
                         sync <pack ...> | remove <pack ...> | use <profile>";
@@ -403,29 +410,32 @@ fn opencode(registry: &Registry, args: &[String]) -> Result<(), String> {
     let verb = help_or_default(args).unwrap_or("status");
     let rest = args.get(1..).unwrap_or(&[]);
     let config = config(registry, "opencode")?;
-    // No `-h`: opencode's adapter never had one, and its usage is the error.
+    if matches!(verb, "-h" | "--help" | "help") {
+        println!("{OPENCODE_HELP}");
+        return Ok(());
+    }
     match verb {
         "list" => list(&config, true),
         "status" => status(&config, rest.first().map(String::as_str)),
         "deploy" => {
             if rest.is_empty() {
-                return Err(OPENCODE_USAGE.to_string());
+                return Err(OPENCODE_HELP.to_string());
             }
             deploy(&config, rest, false)
         }
         "sync" => {
             if rest.is_empty() {
-                return Err(OPENCODE_USAGE.to_string());
+                return Err(OPENCODE_HELP.to_string());
             }
             sync(&config, rest.first().map(String::as_str), false)
         }
         "remove" => {
             if rest.is_empty() {
-                return Err(OPENCODE_USAGE.to_string());
+                return Err(OPENCODE_HELP.to_string());
             }
             remove(&config, rest, false)
         }
-        _ => Err(OPENCODE_USAGE.to_string()),
+        _ => Err(OPENCODE_HELP.to_string()),
     }
 }
 
@@ -532,5 +542,15 @@ mod tests {
         assert_eq!(leading_int("2abc"), Some(2));
         assert_eq!(leading_int("home"), None);
         assert_eq!(leading_int("-1"), None);
+    }
+
+    #[test]
+    fn opencode_help_lists_global_controls() {
+        assert!(OPENCODE_HELP.contains("tools/packs-opencode deploy <pack>..."));
+        assert!(OPENCODE_HELP.contains("tools/packs-opencode sync <pack>|--all"));
+        assert!(OPENCODE_HELP.contains("tools/harnesses use <profile> --harness opencode"));
+        assert!(OPENCODE_HELP.contains("OPENCODE_SKILLS_DIR"));
+        assert!(OPENCODE_HELP.contains("SJEL_OPENCODE_PACKS_STATE_FILE"));
+        assert!(!OPENCODE_HELP.contains("SJEL_CODEX_STATE_FILE"));
     }
 }

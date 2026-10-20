@@ -376,7 +376,7 @@
 
   .inspector-kind {
     text-transform: uppercase;
-    font-size: 0.65rem;
+    font-size: var(--text-2xs);
     font-weight: 700;
     padding: 0.1rem 0.35rem;
     border-radius: 3px;

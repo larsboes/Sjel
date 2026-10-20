@@ -1762,7 +1762,8 @@ mod tests {
             "QuickTime:CreateDate": "2026:09:01"
         }))
         .unwrap();
-        let parsed_combined = parse_exif_geotag_row(&combined).expect("parses combined GPSPosition");
+        let parsed_combined =
+            parse_exif_geotag_row(&combined).expect("parses combined GPSPosition");
         assert_eq!(parsed_combined.0, 52.5200);
         assert_eq!(parsed_combined.1, 13.4050);
         assert_eq!(parsed_combined.2.as_deref(), Some("2026-09-01"));

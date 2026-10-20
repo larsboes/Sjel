@@ -33,12 +33,7 @@ pub const ADMISSIBLE_SECTIONS: &[&str] = &[
 ];
 
 /// Section headings that are explicitly excluded from proposing profile fields.
-pub const EXCLUDED_HEADINGS: &[&str] = &[
-    "CURRENT_STATE",
-    "Current State",
-    "Draft",
-    "History",
-];
+pub const EXCLUDED_HEADINGS: &[&str] = &["CURRENT_STATE", "Current State", "Draft", "History"];
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct FieldProposal {
@@ -126,7 +121,10 @@ pub fn propose_from_dir(telos_dir: Option<&Path>, current: &TravelProfile) -> Va
         let mut merged = current.interests.clone();
         let mut first_hit: Option<(String, String, String)> = None;
         for (item, file, section, span) in interests {
-            if !merged.iter().any(|existing| existing.eq_ignore_ascii_case(&item)) {
+            if !merged
+                .iter()
+                .any(|existing| existing.eq_ignore_ascii_case(&item))
+            {
                 if first_hit.is_none() {
                     first_hit = Some((file, section, span));
                 }
@@ -172,7 +170,10 @@ pub fn propose_from_dir(telos_dir: Option<&Path>, current: &TravelProfile) -> Va
         if is_stated(current, &candidate.field) {
             continue;
         }
-        if proposals.iter().any(|existing| existing.field == candidate.field) {
+        if proposals
+            .iter()
+            .any(|existing| existing.field == candidate.field)
+        {
             continue;
         }
         let current_val = current_field_value(current, &candidate.field);
@@ -363,12 +364,11 @@ fn scan_markdown_note(
         }
 
         if let Some(section) = &active_section {
-            let body = trimmed
-                .strip_prefix('>')
-                .map(str::trim)
-                .unwrap_or(trimmed);
+            let body = trimmed.strip_prefix('>').map(str::trim).unwrap_or(trimmed);
             if !body.is_empty() {
-                extract_line_signals(file_name, section, trimmed, body, interests, anchors, scalars);
+                extract_line_signals(
+                    file_name, section, trimmed, body, interests, anchors, scalars,
+                );
             }
         }
 
@@ -420,7 +420,14 @@ fn extract_line_signals(
     if let Some(item) = text.strip_prefix("- ").or_else(|| text.strip_prefix("* ")) {
         let item = item.trim();
         if let Some((key, value)) = item.split_once(':') {
-            parse_key_value_directive(file_name, section, quoted_span, key.trim(), value.trim(), scalars);
+            parse_key_value_directive(
+                file_name,
+                section,
+                quoted_span,
+                key.trim(),
+                value.trim(),
+                scalars,
+            );
         } else if section == "heading:Interests" && !item.is_empty() {
             interests.push((
                 strip_quotes(item),
@@ -430,7 +437,14 @@ fn extract_line_signals(
             ));
         }
     } else if let Some((key, value)) = text.split_once(':') {
-        parse_key_value_directive(file_name, section, quoted_span, key.trim(), value.trim(), scalars);
+        parse_key_value_directive(
+            file_name,
+            section,
+            quoted_span,
+            key.trim(),
+            value.trim(),
+            scalars,
+        );
     }
 }
 
@@ -580,10 +594,7 @@ mod tests {
 
     #[test]
     fn admissible_sections_propose_with_exact_quotes_and_current_state_is_skipped() {
-        let dir = std::env::temp_dir().join(format!(
-            "axon-traveler-vault-{}",
-            std::process::id()
-        ));
+        let dir = std::env::temp_dir().join(format!("axon-traveler-vault-{}", std::process::id()));
         let _ = std::fs::remove_dir_all(&dir);
         std::fs::create_dir_all(&dir).unwrap();
 
@@ -634,7 +645,11 @@ mod tests {
             .iter()
             .find(|p| p.field == "hard.earliest_departure")
             .expect("earliest_departure proposal");
-        assert_eq!(dep.proposed, json!("08:30"), "CURRENT_STATE 05:00 must be ignored");
+        assert_eq!(
+            dep.proposed,
+            json!("08:30"),
+            "CURRENT_STATE 05:00 must be ignored"
+        );
         assert_eq!(dep.section, "callout:Charter");
         assert_eq!(dep.quoted_span, "> earliest_departure: 08:30");
 

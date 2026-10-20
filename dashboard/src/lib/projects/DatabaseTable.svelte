@@ -766,8 +766,8 @@
   }
 
   .pill-btn.active {
-    color: var(--text);
-    border-color: var(--accent, var(--text));
+    color: var(--text-primary);
+    border-color: var(--accent, var(--text-primary));
     font-weight: 600;
   }
 
@@ -781,7 +781,7 @@
   }
 
   .saved-view-chip.active {
-    border-color: var(--accent, var(--text));
+    border-color: var(--accent, var(--text-primary));
   }
 
   .saved-view-select,
@@ -878,16 +878,16 @@
     flex-wrap: wrap;
     gap: 0.4rem;
     color: var(--text-secondary);
-    font-size: 0.75rem;
+    font-size: var(--text-xs);
   }
 
   .board-status-select {
-    font-size: 0.75rem;
+    font-size: var(--text-xs);
     padding: 0.1rem 0.25rem;
   }
 
   .class-chip {
-    font-size: 0.7rem;
+    font-size: var(--text-2xs);
     padding: 0.05rem 0.35rem;
     border: 1px solid var(--rule);
     border-radius: var(--radius-sm);
@@ -931,7 +931,7 @@
     align-items: center;
     gap: 0.5rem;
     color: var(--text-secondary);
-    font-size: 0.75rem;
+    font-size: var(--text-xs);
   }
 
   .calendar-buckets {

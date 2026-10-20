@@ -68,3 +68,20 @@ The syntax references started from [kepano/obsidian-skills](https://github.com/k
 dropped so they cannot win a trigger, and rewritten against this vault as they get touched. They
 are inspiration and starting material, not a pinned vendor copy: there is no re-sync path and no
 obligation to track upstream. `references/wiki.md` is not upstream at all.
+
+## Interactive figures in notes
+
+The locally maintained `plugins/interactive/` plugin renders `interactive` fenced blocks as
+native HTML/CSS/JavaScript inside Obsidian notes. `file:`, `height:` and `title:` select an
+asset and presentation. `html-embed` uses the separate iframe renderer.
+
+Native controllers scope DOM lookups to their embed root and register a one-shot
+`interactive-dispose` listener there to release animation frames, timers and global listeners.
+The renderer sends that event before replacing content, when a note block is removed and when
+the plugin unloads. Asset reads that finish after teardown or a newer render are ignored.
+The Anatomy skill's local integration reference owns figure authoring guidance.
+
+Build with `bun build Packs/knowledge/plugins/interactive/src/main.ts --target browser
+--format cjs --external obsidian --outfile <staging>/main.js`. The installed plugin lives in the
+active vault's `.obsidian/plugins/interactive/`; resolve the vault through the Obsidian skill,
+retain the previous bundle before replacing it, and reload the plugin to activate the build.

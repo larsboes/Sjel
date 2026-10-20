@@ -13,7 +13,7 @@ export interface ModelRegistryLike<T extends ModelLike = ModelLike> {
 }
 
 /**
- * Resolve a model through its native provider or a provider that routes that model ID.
+ * Resolve an enabled native model or an enabled provider route for that model ID.
  *
  * The direct registry fallback preserves explicit/native model resolution when a
  * provider's availability snapshot does not include the configured model. Callers
@@ -23,8 +23,9 @@ export function findModelWithProviderRouting<T extends ModelLike>(
 	registry: ModelRegistryLike<T>,
 	provider: string,
 	id: string,
+	scopedModels: ReadonlyArray<{ model: ModelLike }> = [],
 ): T | undefined {
-	const available = registry.getAvailable();
+	const available = registry.getAvailable().filter(model => isModelInScope(model, scopedModels));
 	const direct = available.find(model => model.provider === provider && model.id === id);
 	if (direct) return direct;
 
@@ -33,7 +34,9 @@ export function findModelWithProviderRouting<T extends ModelLike>(
 	// determines which route is selected. An explicit provider/model selector can
 	// select a specific route when that distinction matters.
 	const routed = available.find(model => model.id === routedId);
-	return routed ?? registry.find(provider, id);
+	if (routed) return routed;
+	const configured = registry.find(provider, id);
+	return configured && isModelInScope(configured, scopedModels) ? configured : undefined;
 }
 
 /**

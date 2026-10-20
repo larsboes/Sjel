@@ -139,14 +139,14 @@ cd "$SJEL_ROOT/Packs/harness/pi-packages/pi-subagents" && bun install
 
 ## Attribution
 
-**Upstreams here are provenance, not constraints.** The three vendored trees — accordion,
-pi-subagents, pi-web-access — were taken as starting points, not as forks to keep faithful or to
-feed back. Edit any of them in place. Nothing is held back for an upstream PR, no divergence needs
-an apology, and the sections below record the revision each tree was last read at so that a future
-re-read is a decision somebody makes with the origin in hand rather than an obligation. The
-`LOCAL DELTA` comments inside those trees are worth keeping for a different reason: they are the
-fastest way for a reader to see which lines are ours. A manifest or comment that still claims a
-vendored file is byte-identical to upstream is stale, and should be corrected on sight.
+Sjel distinguishes optional products from intentionally maintained adaptations. Accordion is
+an optional upstream product. Pi-subagents and pi-web-access are maintained here so Sjel can
+improve their behavior. Human-writing, unslop and Anatomy are also maintained in their Packs.
+These are explicit ownership decisions, not a license to copy every discovered project.
+
+Keep upstream attribution and a reviewed source revision. Evaluate incoming changes against
+local behavior and tests; do not replace these trees with stock installations automatically.
+Machine configuration and private values remain outside the public source.
 
 Ported from Daniel Miessler's LifeOS, MIT: <https://github.com/danielmiessler/LifeOS>
 (`SuggestSkills` and `Trim`, read 2026-09-07). The register verdict for that upstream is
@@ -229,134 +229,70 @@ For CLM, `/clm-probe` checks that `/health` reports a working encoder, the `clm-
 
 The CLM v0.1 release is Apache-2.0 (checkpoint and code, <https://huggingface.co/Contrastive-LM/CLM-v0.1-8B>); it needs the matching Qwen3-8B last-token pooling encoder plus its trained heads. An Ollama `/api/embed` cosine of Qwen3-8B vectors is **not CLM**. The reference `contrastive-lm` package currently installs vLLM, and its documented serving recipe targets an NVIDIA GPU. vllm-metal documents experimental LAST pooling on macOS, but that is not yet an end-to-end validation of this checkpoint. On this Mac the service and Qwen3-8B are not installed; with 35 GiB free, no model download or background service was started. Keep this extension off until an exact encoder/head match and labeled accuracy are measured. Hosted Jev through Pi's built-in `typesafe/jev-latest` is the next, separate step after local validation; it needs credentials and Sjel's egress approval before personal data is sent.
 
-### Accordion (vendored, detached)
+### Accordion (optional upstream install)
 
-[a-Fig/Accordion](https://github.com/a-Fig/Accordion), MIT, revision `d34b5d0`, version 0.1.2
-(2026-09-29). Full grant text in this Pack's [`LICENSE`](LICENSE).
-
-A pi extension for context-window management: the Map, folding, and the conductors that decide
-what folds between turns. Vendored rather than installed because the two strongest conductors —
-thermocline and triptych — ship with the repository and are deliberately absent from the npm
-package, so an npm install could never have the part the README calls the proof.
-
-Re-ported 2026-10-01 from `8427145` (26 commits). The reason was a correctness fix, not freshness:
-upstream now marks a `thinking` block that a provider sealed with a signature (`Block.signed` in
-`core/types.ts`, `thinkingIsSigned` in `core/wire.ts`), because rewriting a signed block's text
-keeps the stale signature and the API may reject the replay — and rewriting block text is what a
-fold does. Two conductors arrived with it, `keel-lite` and `keel-note`, along with the
-`ACCORDION_COMPLETION_LOG` side-log that records a conductor's out-of-band spend, which protocol v22
-`CompletionResult` cannot carry.
-
-The committed browser client was **not** rebuilt and does not need to be: `PROTOCOL_VERSION` is
-still 22 and the new field is explicitly additive, so a client that does not know `signed` treats
-the block as unsigned. See the rebuild recipe below for the day that stops being true.
-
-| | |
-|---|---|
-| Vendored | `pi-packages/accordion/` — `extension/`, `core/`, `conductors/`, and the one module `app/src/lib/live/registry.ts` the extension imports |
-| Not copied | `app/` (the SvelteKit + Tauri desktop app) except that one module, `brand/` (24M), `docs/` (6.8M), `.github/` |
-| Not committed | `node_modules/`, and `accordion.js`. Upstream does not commit `accordion.js` either — it is built at `prepack` for the npm tarball, which excludes `core/` and `app/` |
-| Committed on purpose | `extension/dist/client/` — 2.3M, 54 files. This is the SvelteKit browser build the Map is served from, and it is the one generated artifact that IS committed, because it cannot be rebuilt from this tree: `build-client.mjs` copies `app/build`, and `app/` is not vendored. Upstream ships exactly this directory in its npm package (`files`) while never committing it to git |
-| Local deltas | FIVE, all reversible without touching upstream's structure. (1) A root `package.json` beside the vendored trees carrying `pi.extensions: ["./extension/accordion.ts"]`, so pi loads the TypeScript source directly and the extension needs no build — upstream points its manifest at the built `accordion.js`, which is only necessary when `core/` and the shared app module are absent from the tarball. (2) In `session_start`, folding is armed from `ACCORDION_FOLDING_DEFAULT` (default **on**) and a catalog-validated conductor is attached from `ACCORDION_CONDUCTOR_DEFAULT` (default **triptych**), where upstream hardcodes `setFolding(false)`. (3) `session_before_compact` cancels pi's native compaction only while a conductor is attached, where upstream cancels it whenever folding is armed. (4) `conductors/ws/thermocline/probe/requirements.txt` moves the CUDA build from 12.1 to 12.6, keeps the torch version unqualified so pip's `cu126` index picks the wheel while `osv-scanner` can still resolve the release from PyPI, and pins `anyio`/`idna`/`sympy` ahead of the probe's own resolution. (5) A wrapper `package.json` carries `scripts.test` and a pinned `devDependencies.vitest`, so the upstream suite runs under the runner it was written for; the three pi peers read `>=0.87.0` rather than a caret so the floor is what 0.87.0 established while Pi 1.0.0 still satisfies it — see below |
-| Owner | Sjel, **detached**: no `.git`, no remote, no re-sync path. Upstream is read at the revision above and re-read only when a port is worth its cost — the two behavioural deltas have to be re-applied by hand each time, and the vendored suite is what proves the re-application landed. Divergence is expected, not drift |
-
-Rebuilding the browser client, if it ever needs to change — it needs a checkout of upstream,
-because `app/` is not vendored:
+Accordion is not bundled or enabled by this Pack. The detached source, browser bundle,
+conductors, and Sjel's default-on folding patches were removed. Session data remains owned by
+Accordion; removal from this repository does not delete it.
 
 ```bash
-git clone --depth 1 https://github.com/a-Fig/Accordion /tmp/acc
-cd /tmp/acc/app && npm install && npm run build   # vite build, no Rust
-cd ../extension && node build-client.mjs          # → extension/dist/client
-cp -R /tmp/acc/extension/dist/client "$SJEL_ROOT/Packs/harness/pi-packages/accordion/extension/dist/client"
+tools/agent-integrations.sh list
+tools/agent-integrations.sh install accordion pi   # explicit opt-in; delegates to pi install
 ```
 
-The extension loads without this and folds context normally; only the Map view is missing, and
-it answers `No browser build found` on the HTTP port until the directory exists. That failure is
-worth knowing about, because it looks like a broken installation and is actually a missing build.
+The install source is `npm:@a-fig/accordion`. Pi owns the installed package and its updates
+(`pi update`); Sjel carries no replacement source or default-conductor configuration.
+`install --all-configured` does not include optional packages.
 
-### Setup, and what is on by default
+### Locally maintained adaptations
 
-```bash
-cd "$SJEL_ROOT/Packs/harness/pi-packages/accordion"                        && bun install --frozen-lockfile --ignore-scripts   # the test runner
-cd "$SJEL_ROOT/Packs/harness/pi-packages/accordion/extension"               && bun install
-cd "$SJEL_ROOT/Packs/harness/pi-packages/accordion/conductors/ws/triptych" && bun install
-```
+Audit method: compare tracked files with their recorded upstream Git trees, then compare with
+upstream HEAD separately. Differences from a newer release are upstream changes, not evidence
+of Sjel customization. The following findings were checked on 2026-10-20. No migration of these
+five projects was performed. The user confirmed local ownership of all five after this audit;
+retain the measured differences below and improve the source here.
 
-The first install exists only to run the vendored suite; the other two are runtime.
-
-### Running the vendored tests
-
-One command, from the package root:
-
-```bash
-cd "$SJEL_ROOT/Packs/harness/pi-packages/accordion" && bun run test
-```
-
-24 files, 552 tests, all green since 2026-10-01. It covers **upstream's** code, including the two
-conductors and the signed-thinking flag this port brought in.
-
-The two deltas have their own step, and they need it. Measured 2026-10-01, by reverting each one in
-turn: with the compaction gate reverted the vitest suite still passes 552/552 while
-`extension/smoke.mjs` fails 4; with the folding default reverted, vitest still passes and smoke
-fails 1. The suite never loads either patch — no vitest file mentions `ACCORDION_FOLDING_DEFAULT`,
-`ACCORDION_CONDUCTOR_DEFAULT` or `session_before_compact` — so a green vitest run says nothing about
-them.
-
-`smoke.mjs` is the one harness that drives the real entry point: mock `pi`, a real WebSocket
-client, real `session_start` and compact hooks. It is upstream's file, and upstream expects folding
-OFF throughout, so it sets `ACCORDION_FOLDING_DEFAULT=off` for its own sections and covers the two
-deltas in a section of its own under their own settings — including the case where folding is armed
-with no conductor attached, which must leave pi's native compaction alone. CI runs it immediately
-after vitest, as `accordion smoke (the two vendoring deltas)`.
-
-Re-applying both deltas by hand is the whole cost of staying current. These are what now says a
-re-application landed intact.
-
-It runs under **vitest**, not `bun test`, and that is a deliberate split rather than an
-oversight. The upstream tests import `vi` from vitest, and Bun's compatibility shim does not
-implement `advanceTimersByTimeAsync` — so `bun test` reported seven failures inside vendored
-code that this repository did not write and must not edit, since every upstream file here is
-byte-identical on purpose. `bunfig.toml` therefore scopes `bun test` away from
-`Packs/*/pi-packages/**`, and the `bun-tests` CI job runs this suite separately with the flags
-the install policy requires. The exclusion is structural, so the next vendored package is
-covered by it without anyone remembering to edit anything.
-
-The second install is not decoration. Triptych's `web-tree-sitter` and `tree-sitter-wasms` are
-declared as `requiredModules` in `core/conductor/registry.ts`, and a spawn conductor whose modules
-do not resolve shows in the picker as unavailable with a remediation line. Without it, the
-strongest conductor in the repository — the one whose README carries the benchmark — is simply
-absent, which reads as a feature that does not exist rather than a dependency that was never
-installed. Thermocline needs nothing: its runner is dependency-free by design and its optional
-attention probe degrades to an age-based fallback.
-
-**Folding is armed by default, and triptych is attached to do the folding.** Both are env-driven,
-which is what makes this reversible without editing the vendored code:
-
-| Variable | Default | Effect |
+| Project and purpose | Actual customization | Ownership decision |
 |---|---|---|
-| `ACCORDION_FOLDING_DEFAULT` | `on` | Anything but `0`/`false`/`off`/`no` arms folding at `session_start`. Set it to `off` to go back to opt-in per session |
-| `ACCORDION_CONDUCTOR_DEFAULT` | `triptych` | The conductor attached when folding is armed. Validated against the catalog, so a typo warns and attaches nothing rather than breaking session start; `none` is a real choice |
+| pi-subagents: Pi delegation, agent types and workflow UI | Against `e955e29`, 56 of 64 files match; 6 differ and 2 are local packaging files. Only `src/model-resolver.ts` changes runtime behavior; `src/output-file.ts` changes a comment. The remaining differences are checks, dependencies, formatting and a replacement regression-test file. | Keep and improve locally. Preserve provider-scoped resolution; investigate cancellation, results and tool-permission handling. Keep per-machine model choices outside the source. |
+| pi-web-access: Pi web search, fetch, PDFs and video | Against `72c6e67` (0.35.0), 83 of 86 files match. Only `.gitignore` and `package.json` differ; `bun.lock` is local. No TypeScript source differs. Upstream HEAD is 0.43.0. | Keep and improve locally. Review provider routing, extraction quality, source attribution and overlap with Interceptor/Defuddle. Keep credentials and machine defaults outside the source. |
+| Anatomy: interactive physical SVG explainers | Against `e948829`, 141 of 144 files match. Changes are `SKILL.md`, eval assertions, and an extracted `references/examples.md`. Drawing code, examples and verification scripts match. Newer HEAD `1482e84` adds printing; those differences are upstream evolution. | Keep and adapt locally for Sjel and Obsidian output. Preserve the geometry kit, examples and checks; add local integration through a focused reference. |
+| human-voice within human-writing: prose linter and writing guidance | Of 17 copied script/data files present locally, 12 match `9bcba2f` and 5 differ. Changes add 14 patterns, flag a single em dash, remove inline suppressions, correct a reference path and annotate an import for Semgrep. The composed skill also draws from oberskills and design-tells. Current upstream reorganizes the linter extensively. | Keep the composed skill, linter and references in Sjel. Upgrade them locally and review upstream changes selectively; preserve existing behavior unless explicitly revised. |
+| vibecoded-design-tells within unslop: code/UI scanners and review guidance | All 4 mapped reference files match `f7c4aef`. Both scanners differ only in displayed reference paths. The skill combines the code and UI workflows and adds Sjel ownership boundaries. | Keep the combined skill, scanners and references in Sjel. Improve them locally; use upstream as a reviewed source of changes. |
 
-The arm and the attach go together, and that pairing is the point. A conductor proposes folds between
-turns only while folding is armed (`serializeWire` is guarded on `foldingEnabled`), so a conductor
-with folding off does nothing; and folding armed with **no** conductor is the combination to avoid,
-because it is the one where pi's own protection has been switched off with nothing replacing it.
+The pi-subagents routing fix still matters: with an unavailable
+`anthropic/claude-haiku-4-5` pin and two available gateway entries, Sjel's resolver selects
+`opencode/claude-haiku-4-5`; upstream HEAD `ca93a52` selects
+`openrouter/anthropic/claude-haiku-4.5`. This was reproduced by importing each resolver against
+the same synthetic registry. Do not drop the patch just because an upstream version is newer.
 
-That is what the third local delta fixes. Upstream cancels `session_before_compact` — pi's native
-compaction — whenever folding is armed, unconditionally, with no overflow escape valve. Its comment
-says that is deliberate: once folding is armed, Accordion's budget is meant to be the only thing
-between the session and overflow. That holds while a conductor is actually folding, and it is false
-in the window where folding is armed and nothing has folded yet — no conductor attached yet, or one
-that crashed or was detached. Folding on by default makes that window the common case, so the cancel
-is now gated on `liveHost.activeMeta()`: armed but idle leaves pi's compaction intact.
+Configuration cannot reproduce every human-writing delta. Current human-voice supports
+`.humanvoicerc` thresholds and weights, but its em-dash check also hardcodes a minimum count of
+three, and inline suppressions run unconditionally. A threshold override alone preserves
+neither Sjel's single-dash rule nor its ban on inline suppressions. Preserve those policies during local upgrades unless the user explicitly revises them.
 
-Set `ACCORDION_FOLDING_DEFAULT=off` and the whole thing returns to upstream's opt-in behaviour,
-including the unconditional suppression rule, with no code change.
+### Local Pi behavior
 
-Configuration is by environment variable rather than a config file, so it is per invocation:
-`ACCORDION_HOME` (state directory, default `~/.accordion`), `ACCORDION_DOOR_PORT` (the stable
-door), `ACCORDION_APP_PATH` / `ACCORDION_APP_FLAG` to point at a built desktop app, and the
-`ACCORDION_PLAN_TIMEOUT_MS` and `ACCORDION_CONTROLLER_*_MS` timers.
+The local source now preserves these contracts:
+
+- Web summary, query-rewrite and page-answer model selection checks the enabled scope before
+  choosing between native and routed models. A disabled first router cannot hide an enabled one.
+- HTML extraction resolves relative links against the fetched document or its declared base,
+  preserves useful short fallback text, and retains an extracted article when an optional
+  fallback fails. Incomplete content stays labeled as incomplete. Search snippets retain
+  clickable source links. Failed fetches also point to the existing Interceptor browser workflow
+  for JavaScript or signed-in pages; this does not create a second browser integration.
+- Subagents resolve canonical exact pins before fuzzy matching and reject empty or malformed
+  pins. Cancellation before startup or resume cannot start a prompt. Cancelling a result wait
+  leaves the child available; later rejection is still observed. A provider abort is reported
+  as a failed result with partial output, while a user-stopped record keeps its stopped status.
+- Existing extension-tool narrowing, denied tools and prior tool-call guards remain enforced
+  when extensions register tools after startup.
+
+`bun test tools/pi-local-adaptations.test.ts` exercises these contracts without live providers,
+credentials or model spend. CI installs both packages' locked dependencies before collecting
+these tests. Upstream remains a source of reviewed fixes and ideas; preserve local regression
+cases when adopting changes.
 
 ### pi-web-access (vendored, detached)
 

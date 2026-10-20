@@ -296,7 +296,9 @@ pub fn enrich(journeys: &mut [Journey]) {
     for j in journeys.iter_mut() {
         for leg in j.legs.iter_mut() {
             if train_type_of(leg).is_none() {
-                if let Some((recovered_name, recovered_type)) = crate::hafas::resolve_train_label(&leg.train_number) {
+                if let Some((recovered_name, recovered_type)) =
+                    crate::hafas::resolve_train_label(&leg.train_number)
+                {
                     leg.train_name = recovered_name;
                     if leg.train_category.is_empty()
                         || leg.train_category == "DRB"

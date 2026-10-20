@@ -185,6 +185,11 @@ const ROUTES: &[route_manifest::Route] = &[
         "The agent's reach: enrolment, each capability's mode, writes waiting for the owner, and the latest calls.",
     ),
     r(
+        "GET",
+        "/api/sjel-status/events",
+        "The health and agent answers as server-sent events: one `snapshot` frame per change, carrying both. Read instead of polling the two above.",
+    ),
+    r(
         "POST",
         "/api/sjel-status/agent/mode",
         "Set one capability's agent mode. Body: { capability, mode } where mode is off, read-only, ask or auto.",
@@ -505,6 +510,7 @@ fn build_router(shell: proxy::Proxy) -> Router {
             get(runtime_handler).post(runtime_update_handler),
         )
         .route("/api/sjel-status/agent", get(agent_handler))
+        .route("/api/sjel-status/events", get(events_handler))
         .route("/api/sjel-status/agent/mode", post(agent_mode_handler))
         .route(
             "/api/sjel-status/agent/approvals/{id}",

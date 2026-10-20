@@ -8,7 +8,7 @@ async function resolveFirstAvailableModel(
 	candidates: Array<{ provider: string; id: string }>,
 ): Promise<{ model: Model<Api>; apiKey: string; headers?: ProviderHeaders }> {
 	for (const { provider, id } of candidates) {
-		const model = findModelWithProviderRouting(ctx.modelRegistry, provider, id);
+		const model = findModelWithProviderRouting(ctx.modelRegistry, provider, id, ctx.scopedModels);
 		if (!model || !isModelInScope(model, ctx.scopedModels)) continue;
 		const auth = await ctx.modelRegistry.getApiKeyAndHeaders(model);
 		if (auth.ok && auth.apiKey) return { model, apiKey: auth.apiKey, headers: auth.headers };

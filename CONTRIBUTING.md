@@ -320,9 +320,17 @@ The dashboard is strictly presentation: it mounts capability surfaces but owns z
 
 ### Upstream-first
 
-Choose in this order: adopt, contribute upstream, overlay a pinned source, use a fork only as a
-temporary contribution vehicle, then build. A maintained fork is another copy of the same logic
-and drifts for the same reason duplicated configuration does.
+Choose in this order: adopt, contribute upstream, configure or adapt existing source, then
+build. Decide explicitly whether Sjel consumes an upstream product or maintains an adaptation.
+Use the upstream installer for a product Sjel only consumes. A locally maintained adaptation
+belongs in Sjel when its behavior and integration are part of Sjel's work; preserve provenance,
+licenses, the reviewed upstream revision and the reasons for local changes in its owning README.
+Review upstream changes selectively and preserve local behavior during upgrades.
+
+Discovery does not authorize adoption. Offer unselected extensions and skills as optional
+upstream installs; do not copy or enable them merely because they were found. Conversely, an
+explicit decision to maintain source locally is authorization to improve it here, not a demand
+to replace it with a stock installation. The harness Pack records the current ownership choices.
 
 ### Cargo and bun are the build path
 

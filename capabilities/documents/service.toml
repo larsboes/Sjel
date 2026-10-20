@@ -1,0 +1,15 @@
+# documents: canonical local originals plus explicit reviewed filing metadata.
+kind          = "process"
+name          = "documents"
+command       = ["target/release/documents", "serve"]
+build         = ["cargo", "build", "--locked", "--release", "--bin", "documents"]
+port          = "8104"
+health_path   = "/health"
+proxy_api_only = "true"
+imports       = ["pdf", "office-documents"]
+exports       = ["json", "original-bytes"]
+backup_paths  = ["data/documents"]
+backup_target = "documents-ssd"
+backup_retain = "14"
+backup_advise_days = "1"
+backup_stale_days  = "2"

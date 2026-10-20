@@ -1,0 +1,18 @@
+#!/usr/bin/env bash
+# apps/gpui/preview [page] [light|dark] — screenshot the installed app without focus.
+#
+# Starts ~/Applications/Sjel Desktop.app in a corner window above other apps (SJEL_GPUI_FLOAT),
+# opens sjel://<page>, captures the window through Interceptor, quits, and prints the PNG path.
+set -euo pipefail
+command -v interceptor >/dev/null || { echo "preview: needs the interceptor CLI" >&2; exit 1; }
+PAGE="${1:-home}"
+APPEARANCE="${2:-}"
+osascript -e 'tell application id "dev.sjel.desktop" to quit' >/dev/null 2>&1 || true
+for _ in $(seq 50); do pgrep -f "Sjel Desktop.app/Contents/MacOS" >/dev/null || break; sleep 0.1; done
+open -g --env SJEL_GPUI_NO_ACTIVATE=1 --env SJEL_GPUI_FLOAT=1 --env "SJEL_GPUI_OPEN=sjel://$PAGE" \
+  ${APPEARANCE:+--env SJEL_GPUI_APPEARANCE=$APPEARANCE} ${SJEL_GPUI_NO_GLASS:+--env SJEL_GPUI_NO_GLASS=1} "$HOME/Applications/Sjel Desktop.app"
+sleep 3
+shot="$(cd "${TMPDIR:-/tmp}" && interceptor macos screenshot --app "Sjel Desktop" --save --format png \
+  | sed -n 's/.*"filePath": "\([^"]*\)".*/\1/p')"
+osascript -e 'tell application id "dev.sjel.desktop" to quit' >/dev/null 2>&1 || true
+echo "$shot"

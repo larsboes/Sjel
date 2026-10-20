@@ -72,7 +72,10 @@ pub fn register_train_label(train_number: &str, train_name: &str, train_type: &s
         return;
     }
     if let Ok(mut reg) = train_registry().write() {
-        reg.insert(num.to_string(), (train_name.trim().to_string(), train_type.trim().to_string()));
+        reg.insert(
+            num.to_string(),
+            (train_name.trim().to_string(), train_type.trim().to_string()),
+        );
     }
 }
 
@@ -82,7 +85,10 @@ pub fn resolve_train_label(train_number: &str) -> Option<(String, String)> {
     if num.is_empty() {
         return None;
     }
-    train_registry().read().ok().and_then(|reg| reg.get(num).cloned())
+    train_registry()
+        .read()
+        .ok()
+        .and_then(|reg| reg.get(num).cloned())
 }
 
 /// Nahverkehr categories the Deutschlandticket covers across backends.
@@ -96,12 +102,25 @@ pub fn is_regional_category(category: &str) -> bool {
     let cat = category.trim().to_ascii_uppercase();
     matches!(
         cat.as_str(),
-        "RB" | "RE" | "IRE"
-            | "DRB" | "DRE" | "NRE"
-            | "S" | "DBS" | "SBAHN"
-            | "STR" | "TRAM" | "U" | "UBAHN"
-            | "BUS" | "SCHIFF" | "FER" | "ANRUFPFLICHTIG"
-            | "MEX" | "FEX" | "RRX"
+        "RB" | "RE"
+            | "IRE"
+            | "DRB"
+            | "DRE"
+            | "NRE"
+            | "S"
+            | "DBS"
+            | "SBAHN"
+            | "STR"
+            | "TRAM"
+            | "U"
+            | "UBAHN"
+            | "BUS"
+            | "SCHIFF"
+            | "FER"
+            | "ANRUFPFLICHTIG"
+            | "MEX"
+            | "FEX"
+            | "RRX"
     )
 }
 
@@ -1212,8 +1231,8 @@ pub fn parse_journeys_from_response(body: &Value) -> Vec<Journey> {
                     .to_string();
 
                 // If name is empty or a bare number, recover line label and category:
-                let is_bare_number = name.trim().is_empty()
-                    || name.trim().chars().all(|c| c.is_ascii_digit());
+                let is_bare_number =
+                    name.trim().is_empty() || name.trim().chars().all(|c| c.is_ascii_digit());
                 if is_bare_number && !number.is_empty() {
                     if let Some((recovered_name, recovered_type)) = resolve_train_label(&number) {
                         name = recovered_name;
@@ -1440,32 +1459,32 @@ pub fn parse_dbnav_journeys(body: &Value) -> Vec<Journey> {
             let arrival_utc = station_time::rfc3339_utc(&arrival_time, &destination.id);
             let category = str_field(section, "produktGattung");
 
-                // `mitteltext` is the rider-facing name ("ICE 857", "RE5");
-                // `zugNummer` is the bare number.
-                let train_name = str_field(section, "mitteltext");
-                let train_number = str_field(section, "zugNummer");
-                let is_regional = is_regional_leg(&category, &train_name);
+            // `mitteltext` is the rider-facing name ("ICE 857", "RE5");
+            // `zugNummer` is the bare number.
+            let train_name = str_field(section, "mitteltext");
+            let train_number = str_field(section, "zugNummer");
+            let is_regional = is_regional_leg(&category, &train_name);
 
-                if !train_number.is_empty() && !train_name.is_empty() && train_name != train_number {
-                    if let Some(t) = crate::punctuality::train_type_of_label(&train_name) {
-                        register_train_label(&train_number, &train_name, t);
-                    }
+            if !train_number.is_empty() && !train_name.is_empty() && train_name != train_number {
+                if let Some(t) = crate::punctuality::train_type_of_label(&train_name) {
+                    register_train_label(&train_number, &train_name, t);
                 }
+            }
 
-                legs.push(Leg {
-                    on_time_probability: None,
-                    // The platform lives on the first stop, not on the section.
-                    platform: section
-                        .get("halte")
-                        .and_then(|h| h.as_array())
-                        .and_then(|halts| halts.first())
-                        .and_then(|halt| halt.get("gleis"))
-                        .and_then(|g| g.as_str())
-                        .map(|s| s.to_string()),
-                    train_name,
-                    train_number,
-                    is_regional,
-                    train_category: category,
+            legs.push(Leg {
+                on_time_probability: None,
+                // The platform lives on the first stop, not on the section.
+                platform: section
+                    .get("halte")
+                    .and_then(|h| h.as_array())
+                    .and_then(|halts| halts.first())
+                    .and_then(|halt| halt.get("gleis"))
+                    .and_then(|g| g.as_str())
+                    .map(|s| s.to_string()),
+                train_name,
+                train_number,
+                is_regional,
+                train_category: category,
                 // dbnav timestamps already carry their offset, and
                 // `rfc3339_utc` respects an offset rather than re-shifting it,
                 // so the scheduled fields are the same strings.
@@ -2687,8 +2706,14 @@ mod tests {
         let web_journeys = parse_journeys_from_response(&dbweb_body);
         assert_eq!(web_journeys.len(), 1);
         let web_leg = &web_journeys[0].legs[0];
-        assert!(web_leg.is_regional, "dbweb RE5 must be regional even without 9G attribute");
-        assert_eq!(web_leg.train_name, "RE5", "bare number 28510 must be recovered to RE5");
+        assert!(
+            web_leg.is_regional,
+            "dbweb RE5 must be regional even without 9G attribute"
+        );
+        assert_eq!(
+            web_leg.train_name, "RE5",
+            "bare number 28510 must be recovered to RE5"
+        );
         assert_eq!(web_leg.train_number, "28510");
 
         // dbnav response on RE5 (produktGattung RB, mitteltext RE5)

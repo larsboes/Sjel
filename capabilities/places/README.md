@@ -178,6 +178,7 @@ rule is broader than desired.
   legs as LineStrings between station coordinates, and city-presence evidence
   derived from spend
 - `GET /api/layers/people` — confirmed, currently-valid register rows
+- `GET /api/layers/photos` — GeoJSON FeatureCollection of geotagged media items (PRD N4: index and link, never copy)
 - `GET /api/unplaced` — expense transactions with no place link, grouped by
   exact description, ranked by total spend, capped at 200 groups
 - `POST /api/unplaced/assign` — link every unlinked transaction whose
@@ -255,6 +256,8 @@ and reports counts.
   descriptions, geocode city names, write city links.
 - `backfill stations` — resolve coordinates for the EVA codes present in
   `transit.trips`/`transit.trip_legs` through transit's HAFAS suggest surface.
+- `backfill calendar` — parse calendar events with attendees, extract participants to registered
+  contacts, and write `proposed` register rows (`places.person_places`, D4).
 - `backfill takeout` — import the Google Takeout exports staged in the
   overlay (`data/places/import/raw/takeout-<yyyymmdd>/`, the finance raw-export
   convention): labelled places become `address` rows, own reviews become
@@ -328,5 +331,6 @@ and it takes flags the `backfill <name>` dispatch has no room for.
 - **No GPS trace.** Travel history is reconstructed from plans, legs and spend
   evidence. Nothing tracks the phone.
 - **No photo storage.** PRD non-goal N4 is permanent: Sjel indexes and links,
-  never copies from Photos.app. A photo layer waits for an indexer and is
-  an open item in the places unit of the root `ISA.md`.
+  never copies from Photos.app. The photo layer (`GET /api/layers/photos`) is
+  served from `media_geotags` (EXIF extraction in `capabilities/media`) with bounding
+  box filtering and cached coordinates, referencing original media paths without duplicating bytes.

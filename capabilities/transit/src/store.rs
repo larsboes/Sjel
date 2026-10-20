@@ -604,7 +604,10 @@ fn insert_legs(
         )?;
 
         // Learn and persist train number -> (name, type) mappings from observed trips:
-        if !leg.train_number.is_empty() && !leg.train_name.is_empty() && leg.train_name != leg.train_number {
+        if !leg.train_number.is_empty()
+            && !leg.train_name.is_empty()
+            && leg.train_name != leg.train_number
+        {
             if let Some(t) = crate::punctuality::train_type_of_label(&leg.train_name) {
                 let _ = tx.execute(
                     &format!(

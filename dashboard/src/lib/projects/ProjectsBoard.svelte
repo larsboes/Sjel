@@ -2,6 +2,7 @@
   import { ApiError, projects, type ProjectRecord, type ProjectSummary } from "$lib/api";
   import MarkdownDocument from "$lib/feed/MarkdownDocument.svelte";
   import StateLine from "$lib/StateLine.svelte";
+  import Icon from "$lib/Icon.svelte";
   import DatabaseTable from "./DatabaseTable.svelte";
   import ProjectsGraph from "./ProjectsGraph.svelte";
   import {
@@ -379,6 +380,7 @@
   });
 </script>
 
+<!-- svelte-ignore a11y_no_static_element_interactions -->
 <div class="board" onpointerover={handlePointerOver} onpointerout={handlePointerOut}>
   <!-- Hover Preview Popover -->
   {#if hoverPreview && hoverPreview.visible}
@@ -482,7 +484,7 @@
           <a href={link(`/projects?project=${encodeURIComponent(p.name)}`)} aria-current={p.name === selected ? "page" : undefined}>
             <span class="name" use:tip={p.name}>{p.name}</span>
             <div class="counts">
-              {#if p.notes > 0}<span class="notes-count" use:tip={`${p.notes} note(s)`}>{p.notes} 📄</span>{/if}
+              {#if p.notes > 0}<span class="notes-count" use:tip={`${p.notes} note(s)`}><Icon name="file-text" size={12} /> {p.notes}</span>{/if}
               {#if p.open > 0}<span class="count" use:tip={`${p.open} open task(s)`}>{p.open}</span>{/if}
             </div>
           </a>
@@ -691,7 +693,7 @@
               onclick={() => (notesView = "cards")}
               use:tip={"Cards view"}
             >
-              📑 Cards
+              <Icon name="layout" size={13} /> Cards
             </button>
             <button
               type="button"
@@ -700,7 +702,7 @@
               onclick={() => (notesView = "table")}
               use:tip={"Database table view"}
             >
-              🗂️ Database Table
+              <Icon name="database" size={13} /> Database Table
             </button>
             <button
               type="button"
@@ -709,7 +711,7 @@
               onclick={() => (notesView = "graph")}
               use:tip={"Interactive knowledge & link graph"}
             >
-              🕸️ Graph
+              <Icon name="git-branch" size={13} /> Graph
             </button>
           </div>
         </div>
@@ -775,10 +777,10 @@
               <details class="note" id={`record-${n.path}`} open={editing?.path === n.path || open === n.path}>
                 <summary>
                   <div class="note-summary-main">
-                    <span class="note-icon" aria-hidden="true">📄</span>
+                    <span class="note-icon" aria-hidden="true"><Icon name="file-text" size={14} /></span>
                     <span class="note-title">{n.title}</span>
                     {#if noteBacklinks.length > 0}
-                      <span class="backlink-pill" use:tip={`${noteBacklinks.length} backlink(s)`}>{noteBacklinks.length} 🔗</span>
+                      <span class="backlink-pill" use:tip={`${noteBacklinks.length} backlink(s)`}><Icon name="link" size={11} /> {noteBacklinks.length}</span>
                     {/if}
                   </div>
                   <div class="note-actions">
@@ -793,7 +795,7 @@
                         editorPreview = false;
                       }}
                     >
-                      ✏️ Edit
+                      <Icon name="pencil" size={13} /> Edit
                     </button>
                     <button
                       type="button"
@@ -804,7 +806,7 @@
                         deleteRecord(n.path, n.title);
                       }}
                     >
-                      🗑️ Delete
+                      <Icon name="trash" size={13} /> Delete
                     </button>
                   </div>
                 </summary>
@@ -855,7 +857,7 @@
             class:active={!editorPreview}
             onclick={() => (editorPreview = false)}
           >
-            ✏️ Markdown
+            <Icon name="pencil" size={13} /> Markdown
           </button>
           <button
             type="button"
@@ -863,17 +865,17 @@
             class:active={editorPreview}
             onclick={() => (editorPreview = true)}
           >
-            👁️ Preview
+            <Icon name="eye" size={13} /> Preview
           </button>
         </div>
         <div class="edit-actions-top">
           <details class="genui-dropdown">
-            <summary class="btn btn-sm btn-soft">✨ + GenUI ▾</summary>
+            <summary class="btn btn-sm btn-soft"><Icon name="sparkles" size={13} /> + GenUI ▾</summary>
             <div class="genui-menu">
-              <button type="button" class="genui-menu-item" onclick={() => insertGenUI("metrics")}>📊 Metric Grid</button>
-              <button type="button" class="genui-menu-item" onclick={() => insertGenUI("matrix")}>⚖️ Decision Matrix</button>
-              <button type="button" class="genui-menu-item" onclick={() => insertGenUI("simulator")}>🎛️ Simulator</button>
-              <button type="button" class="genui-menu-item" onclick={() => insertGenUI("timeline")}>⏱️ Timeline</button>
+              <button type="button" class="genui-menu-item" onclick={() => insertGenUI("metrics")}><Icon name="activity" size={13} /> Metric Grid</button>
+              <button type="button" class="genui-menu-item" onclick={() => insertGenUI("matrix")}><Icon name="layout" size={13} /> Decision Matrix</button>
+              <button type="button" class="genui-menu-item" onclick={() => insertGenUI("simulator")}><Icon name="cpu" size={13} /> Simulator</button>
+              <button type="button" class="genui-menu-item" onclick={() => insertGenUI("timeline")}><Icon name="clock" size={13} /> Timeline</button>
             </div>
           </details>
           <button
@@ -882,7 +884,7 @@
             disabled={busy || draft === editing.base}
             onclick={saveEdit}
           >
-            💾 Save (⌘S)
+            <Icon name="check" size={13} /> Save (⌘S)
           </button>
           <button
             type="button"
@@ -890,7 +892,7 @@
             disabled={busy}
             onclick={() => (editing = null)}
           >
-            ✕ Cancel
+            <Icon name="close" size={13} /> Cancel
           </button>
         </div>
       </div>
@@ -912,7 +914,7 @@
               editorPreview = false;
             }}
           >
-            ✏️ Edit
+            <Icon name="pencil" size={13} /> Edit
           </button>
           {#if record.kind !== "project"}
             <button
@@ -921,7 +923,7 @@
               use:tip={"Delete note"}
               onclick={() => deleteRecord(record.path, record.title)}
             >
-              🗑️ Delete
+              <Icon name="trash" size={13} /> Delete
             </button>
           {/if}
         </div>
@@ -1145,7 +1147,10 @@
   }
 
   .notes-count {
-    font-size: 0.7rem;
+    display: inline-flex;
+    align-items: center;
+    gap: 0.2rem;
+    font-size: var(--text-2xs);
     color: var(--text-secondary);
   }
 
@@ -1340,7 +1345,10 @@
   }
 
   .backlink-pill {
-    font-size: 0.7rem;
+    display: inline-flex;
+    align-items: center;
+    gap: 0.2rem;
+    font-size: var(--text-2xs);
     padding: 0.1rem 0.35rem;
     background: var(--rule);
     border-radius: 4px;
@@ -1354,6 +1362,9 @@
   }
 
   .btn-icon {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.3rem;
     background: transparent;
     border: 1px solid var(--rule);
     border-radius: var(--radius-sm);
@@ -1605,7 +1616,7 @@
     margin-top: 0.4rem;
     padding-top: 0.4rem;
     border-top: 1px solid var(--rule, #e2e8f0);
-    font-size: 0.7rem;
+    font-size: var(--text-2xs);
   }
 
   .hover-preview-bl {
@@ -1644,6 +1655,9 @@
   }
 
   .view-switch-btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.35rem;
     background: transparent;
     border: none;
     font-size: var(--text-xs);
@@ -1695,6 +1709,9 @@
   }
 
   .tab-btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.35rem;
     background: transparent;
     border: 1px solid var(--rule);
     border-radius: var(--radius-sm);
@@ -1723,6 +1740,9 @@
   }
 
   .btn-primary {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.35rem;
     background: var(--primary);
     color: #ffffff;
     border: 1px solid var(--primary);
@@ -1740,7 +1760,7 @@
 
   .kind-tag {
     text-transform: uppercase;
-    font-size: 0.65rem;
+    font-size: var(--text-2xs);
     font-weight: 700;
     background: var(--surface);
     border: 1px solid var(--rule);
@@ -1771,6 +1791,9 @@
   }
 
   .genui-dropdown summary {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.35rem;
     list-style: none;
     cursor: pointer;
   }
@@ -1797,6 +1820,9 @@
   .genui-menu-item {
     all: unset;
     cursor: pointer;
+    display: flex;
+    align-items: center;
+    gap: 0.4rem;
     padding: 0.35rem 0.6rem;
     font-size: var(--text-xs, 0.75rem);
     border-radius: 4px;

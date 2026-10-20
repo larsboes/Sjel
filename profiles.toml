@@ -175,6 +175,14 @@ codex = ["writing/skill-creator", "knowledge/defuddle"]
 # antigravity: defuddle is held here too (2026-10-17), for the same reason as above. Its skills.json
 # is written by `use`, so the hold is what keeps the entry out, and the Pack stays in place.
 antigravity = ["knowledge/defuddle"]
+# opencode: defuddle is held here too, for the same reason as every other harness. opencode
+# materializes the Packs into ~/.config/opencode/skills and carries the same Pack set Claude Code
+# carries (2026-10-20), so the hold is what keeps defuddle out of that copy. Its key is the UNIT
+# key, not a path: opencode is a materialized channel like claude and codex, not a registry like pi.
+# opencode needs no other entry — it has no agents channel (`tree_convention: None`) and ships no
+# system skill of its own, so nothing collides with the Pack set the way Codex's own
+# `skill-creator` did.
+opencode = ["knowledge/defuddle"]
 
 [[profile]]
 name = "productive"

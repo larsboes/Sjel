@@ -44,8 +44,13 @@ const ROUTES: &[route_manifest::Route] = &[
     ),
     route_manifest::get(
         "GET",
+        "/api/record",
+        "One record, content included. ?path= names it.",
+    ),
+    route_manifest::get(
+        "GET",
         "/api/project",
-        "One project's records, content included. ?name= selects it.",
+        "One project's records. ?name= selects it; ?content=false leaves every content out, for a list that only draws titles.",
     ),
     route_manifest::Route {
         method: "POST",
@@ -172,6 +177,13 @@ struct KindQuery {
 #[derive(Deserialize)]
 struct ProjectQuery {
     name: String,
+    /// Absent means included, so a reader written before this flag keeps its answer.
+    content: Option<bool>,
+}
+
+#[derive(Deserialize)]
+struct RecordQuery {
+    path: String,
 }
 
 #[derive(Serialize, Default)]
@@ -338,28 +350,47 @@ async fn get_file(State(projects): State<Shared>, Query(query): Query<FileQuery>
     }
 }
 
+/// One record in the shape `GET /api/project` and `GET /api/record` share.
+fn record_json(record: &projects::Record, with_content: bool) -> Value {
+    let class = ops::classify_record(record);
+    let mut value = json!({
+        "path": record.path, "kind": record.kind, "title": record.title,
+        "done": record.done, "due": record.due, "priority": record.priority,
+        "archived": record.archived,
+        "data_class": class.value, "data_class_rationale": class.rationale,
+    });
+    if with_content {
+        value["content"] = json!(record.content);
+    }
+    value
+}
+
 async fn get_project(
     State(projects): State<Shared>,
     Query(query): Query<ProjectQuery>,
 ) -> Result<Json<Value>, ApiError> {
     let name = query.name;
+    let with_content = query.content.unwrap_or(true);
     let records = blocking(projects, false, move |p| p.by_project(&name)).await?;
     if records.is_empty() {
         return Err(ApiError(StatusCode::NOT_FOUND, "no such project".into()));
     }
     let records: Vec<Value> = records
         .iter()
-        .map(|r| {
-            let class = ops::classify_record(r);
-            json!({
-                "path": r.path, "kind": r.kind, "title": r.title, "done": r.done,
-                "due": r.due, "priority": r.priority, "archived": r.archived,
-                "content": r.content,
-                "data_class": class.value, "data_class_rationale": class.rationale,
-            })
-        })
+        .map(|record| record_json(record, with_content))
         .collect();
     Ok(Json(json!({ "records": records })))
+}
+
+async fn get_record(
+    State(projects): State<Shared>,
+    Query(query): Query<RecordQuery>,
+) -> Result<Json<Value>, ApiError> {
+    let path = query.path;
+    let record = blocking(projects, false, move |p| p.get(&path))
+        .await?
+        .ok_or_else(|| ApiError(StatusCode::NOT_FOUND, "no such record".into()))?;
+    Ok(Json(json!({ "record": record_json(&record, true) })))
 }
 
 async fn add_task(
@@ -500,7 +531,7 @@ fn router(projects: Shared) -> Router {
         .route("/api/files", get(list_files))
         .route("/api/file", get(get_file).post(attach_file))
         .route("/api/project", get(get_project))
-        .route("/api/record", post(save_record))
+        .route("/api/record", get(get_record).post(save_record))
         .route("/api/record/property", post(set_property))
         .route("/api/record/remove", post(remove_record))
         .route("/api/notes", post(add_note))

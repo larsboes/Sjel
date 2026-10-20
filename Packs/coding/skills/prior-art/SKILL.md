@@ -1,6 +1,7 @@
 ---
 name: prior-art
-description: Systematic prior-art discovery and build ladder verification before creating new code, modules, dependencies, or architectures. Investigates whether a problem needs solving, whether this codebase or monorepo already solves it, standard library availability, installed dependencies, or minimal composition before authoring new implementations. Trigger: prior art, check prior art, build ladder, should I build this, before writing, reuse over rewrite. Do not use for general codebase browsing without a proposal to build.
+description: >-
+  Systematic prior-art discovery and build ladder verification before creating new code, modules, dependencies, or architectures. Investigates whether a problem needs solving, whether this codebase or monorepo already solves it, standard library availability, installed dependencies, or minimal composition before authoring new implementations. Trigger: prior art, check prior art, build ladder, whether to build, before writing, reuse over rewrite. Do not use for general codebase browsing without a proposal to build.
 allowed-tools: Bash, Read, Grep, Glob
 ---
 

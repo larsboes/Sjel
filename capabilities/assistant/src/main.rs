@@ -495,13 +495,8 @@ fn run_ask(
         content: request.prompt,
     });
 
-    let mut agent = Agent::new(
-        role.clone(),
-        sjel_tools(shell_url),
-        [],
-        Arc::default(),
-    )
-    .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
+    let mut agent = Agent::new(role.clone(), sjel_tools(shell_url), [], Arc::default())
+        .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
     agent.max_turns = MAX_AGENT_TURNS;
 
     let mut tools = Vec::new();
@@ -562,7 +557,11 @@ async fn ask(
     let history_bytes: usize = request.history.iter().map(|t| t.content.len()).sum();
     let combined_len = prompt.len().saturating_add(history_bytes);
     if combined_len > MAX_PROMPT_BYTES
-        || !fits_role(&role, & "x".repeat(combined_len), request.instructions.as_deref())
+        || !fits_role(
+            &role,
+            &"x".repeat(combined_len),
+            request.instructions.as_deref(),
+        )
     {
         return Err(failure(
             StatusCode::PAYLOAD_TOO_LARGE,

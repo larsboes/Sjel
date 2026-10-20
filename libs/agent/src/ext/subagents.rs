@@ -129,7 +129,10 @@ impl Tool for SubagentTool {
         match run_result {
             Ok(()) => {
                 if final_text.trim().is_empty() {
-                    if let Some(Message::Assistant { content: Some(c), .. }) = messages.last() {
+                    if let Some(Message::Assistant {
+                        content: Some(c), ..
+                    }) = messages.last()
+                    {
                         return Ok(c.clone());
                     }
                     Ok("subagent finished with no output".to_string())

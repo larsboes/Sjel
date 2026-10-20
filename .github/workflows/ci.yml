@@ -118,33 +118,14 @@ jobs:
         run: |
           bun install --frozen-lockfile --ignore-scripts
           bunx svelte-kit sync
+      - name: install local subagent dependencies
+        working-directory: Packs/harness/pi-packages/pi-subagents
+        run: bun install --frozen-lockfile --ignore-scripts
+      - name: install local web-access dependencies
+        working-directory: Packs/harness/pi-packages/pi-web-access
+        run: bun install --frozen-lockfile --ignore-scripts
       - name: bun test
         run: bun test
-
-      # The vendored pi packages carry their own test runner, so they run under it rather
-      # than under `bun test` (which bunfig.toml excludes for exactly this reason). Runnable
-      # and green since 2026-10-01: 24 files, 552 tests. It covers UPSTREAM's code only.
-      #
-      # --frozen-lockfile --ignore-scripts are required by tools/check-bun-install-policy.sh,
-      # which also asserts these exact flags appear here.
-      - name: vendored package tests (vitest)
-        working-directory: Packs/harness/pi-packages/accordion
-        run: |
-          bun install --frozen-lockfile --ignore-scripts
-          bun run test
-
-      # The two behavioural deltas need their own step because nothing else can see them: the
-      # vitest suite is green whether they are present or reverted (measured 2026-10-01, both
-      # ways), while this step names the delta that went missing. It runs the extension's own
-      # smoke harness, which drives the real entry point with a mock `pi`, and it is where the
-      # folding default and the compaction gate are actually asserted. Needs the extension's
-      # own dependencies (jiti loads the TypeScript, ws is the smoke client), which the vitest
-      # step installs only at the package root.
-      - name: accordion smoke (the two vendoring deltas)
-        working-directory: Packs/harness/pi-packages/accordion/extension
-        run: |
-          bun install --frozen-lockfile --ignore-scripts
-          node smoke.mjs
 
       # Every tools/*.test.sh, discovered rather than listed — a hand-list is how a committed
       # test comes to run nowhere (the Sjel#116 shape, again). They all drive real scripts

@@ -233,9 +233,9 @@ async function resolveSummaryModelCandidates(
 		if (seen.has(value)) continue;
 		seen.add(value);
 
-		const model = findModelWithProviderRouting(ctx.modelRegistry, spec.provider, spec.id);
+		const model = findModelWithProviderRouting(ctx.modelRegistry, spec.provider, spec.id, ctx.scopedModels);
 		if (!model) {
-			errors.push(`Summary model not found: ${value}`);
+			errors.push(`Summary model not found or not enabled: ${value}`);
 			continue;
 		}
 		if (!isModelInScope(model, ctx.scopedModels)) {

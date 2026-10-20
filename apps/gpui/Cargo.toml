@@ -1,0 +1,37 @@
+[package]
+name = "sjel-gpui"
+version = "0.1.0"
+edition = "2021"
+publish = false
+license = "AGPL-3.0-only"
+description = "Sjel native GPUI desktop application"
+
+# Keep this evaluation app outside Sjel's production workspace and lockfile. One lockfile for
+# the Mac app, the shared core and the iOS app keeps them on one GPUI snapshot (ISA.md
+# Decisions 2026-10-15, step 0).
+[workspace]
+members = ["core", "ios"]
+
+[dependencies]
+sjel-gpui-core = { path = "core" }
+gpui-kit = { version = "=0.7.3", default-features = false, features = ["component", "assets"] }
+chrono = { version = "0.4", default-features = false, features = ["clock"] }
+futures = "0.3"
+reqwest = { version = "0.13", default-features = false, features = ["json"] }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+tokio = { version = "1", features = ["rt", "time", "net"] }
+
+[target.'cfg(target_os = "macos")'.dependencies]
+objc2 = "=0.6.5"
+objc2-app-kit = { version = "=0.3.2", default-features = false, features = ["NSBox", "NSColor", "NSGlassEffectView", "NSGraphics", "NSResponder", "NSView", "objc2-core-foundation"] }
+objc2-foundation = { version = "=0.3.2", default-features = false, features = ["NSGeometry"] }
+raw-window-handle = "=0.6.2"
+
+[dev-dependencies]
+# Same crate gpui-kit resolves; the name `gpui` is what the #[gpui::test] macro expands to.
+gpui = { package = "gpui-pre", version = "=0.3.9", features = ["test-support"] }
+
+[lints.rust]
+unsafe_code = "deny"
+

@@ -120,7 +120,7 @@ function build(options: Options) {
     run(["bun", "run", "build"], join(root, "dashboard"));
   }
   if (options.kind === "macos") {
-    run(["cargo", "build", "--locked", "--release", "--manifest-path", "apps/gpui-prototype/Cargo.toml", "--package", "sjel-gpui-prototype", "--target-dir", options.target]);
+    run(["cargo", "build", "--locked", "--release", "--manifest-path", "apps/gpui/Cargo.toml", "--package", "sjel-gpui", "--target-dir", options.target]);
   }
 }
 
@@ -170,8 +170,8 @@ function macos(options: Options, stage: string) {
   const bundle = join(stage, "Sjel.app");
   const contents = join(bundle, "Contents");
   copy(join(options.target, "release/sjel-desktop-launcher"), join(contents, "MacOS/Sjel"));
-  copy(join(options.target, "release/sjel-gpui-prototype"), join(contents, "Helpers/Sjel Desktop"));
-  copy(join(root, "apps/gpui-prototype/Resources/AppIcon.icns"), join(contents, "Resources/AppIcon.icns"));
+  copy(join(options.target, "release/sjel-gpui"), join(contents, "Helpers/Sjel Desktop"));
+  copy(join(root, "apps/gpui/Resources/AppIcon.icns"), join(contents, "Resources/AppIcon.icns"));
   runtime(options, join(contents, "Resources/runtime"));
   const version = options.version.slice(1);
   writeFileSync(join(contents, "Info.plist"), `<?xml version="1.0" encoding="UTF-8"?>

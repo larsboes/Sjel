@@ -110,6 +110,10 @@
       }
     },
     {
+      "name": "documents",
+      "kind": "capability"
+    },
+    {
       "name": "entities",
       "kind": "capability",
       "service": {
@@ -134,7 +138,7 @@
       "service": {
         "kind": "process",
         "requires": [
-          "vault",
+          "projects",
           "entities"
         ]
       }
@@ -983,6 +987,16 @@
     },
     {
       "from": "entities",
+      "to": "markdown-root",
+      "kinds": [
+        "cargo-dep"
+      ],
+      "evidence": [
+        "capabilities/entities/Cargo.toml"
+      ]
+    },
+    {
+      "from": "entities",
       "to": "route-manifest",
       "kinds": [
         "cargo-dep"
@@ -1234,16 +1248,6 @@
     {
       "from": "inventory",
       "to": "devices",
-      "kinds": [
-        "cargo-dep"
-      ],
-      "evidence": [
-        "capabilities/inventory/Cargo.toml"
-      ]
-    },
-    {
-      "from": "inventory",
-      "to": "markdown-root",
       "kinds": [
         "cargo-dep"
       ],
@@ -2157,16 +2161,6 @@
     },
     {
       "from": "vault",
-      "to": "civil-date",
-      "kinds": [
-        "cargo-dep"
-      ],
-      "evidence": [
-        "capabilities/vault/Cargo.toml"
-      ]
-    },
-    {
-      "from": "vault",
       "to": "content-item",
       "kinds": [
         "cargo-dep"
@@ -2207,16 +2201,6 @@
     },
     {
       "from": "vault",
-      "to": "sjel-http",
-      "kinds": [
-        "cargo-dep"
-      ],
-      "evidence": [
-        "capabilities/vault/Cargo.toml"
-      ]
-    },
-    {
-      "from": "vault",
       "to": "sjel-server",
       "kinds": [
         "cargo-dep"
@@ -2237,7 +2221,7 @@
     },
     {
       "name": "accordion",
-      "verdict": "adopt"
+      "verdict": "watch"
     },
     {
       "name": "apfel",

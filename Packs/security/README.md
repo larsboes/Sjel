@@ -2,6 +2,10 @@
 
 Guard secrets and credentials from agent visibility across harnesses.
 
+Codex's opt-in native filesystem permissions and deletion-approval baseline lives in
+[`tools/templates/codex`](../../tools/templates/codex/README.md). Its documented limits
+differ from Pi's tool-call interception and `vault_exec`; it is not a Pi extension port.
+
 ## What's here
 
 | Artifact | Harness | What it does |

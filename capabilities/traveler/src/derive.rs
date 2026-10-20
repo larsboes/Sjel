@@ -358,8 +358,11 @@ pub fn derive(store: &TravelerStore, trips_prefix: &str) -> Fallible<DerivedTrav
             .destinations
             .sort_by(|a, b| b.trips.cmp(&a.trips).then_with(|| a.name.cmp(&b.name)));
     }
-    companion_patterns
-        .sort_by(|a, b| b.trips.cmp(&a.trips).then_with(|| a.person_id.cmp(&b.person_id)));
+    companion_patterns.sort_by(|a, b| {
+        b.trips
+            .cmp(&a.trips)
+            .then_with(|| a.person_id.cmp(&b.person_id))
+    });
     sort_buckets(&mut months);
     sort_buckets(&mut modes);
 

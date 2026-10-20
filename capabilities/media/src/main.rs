@@ -216,10 +216,7 @@ fn run(args: &[String]) -> Result<i32> {
         ),
         "phash" => (&["--root", "--uuid", "--max-distance", "--db"], &[]),
         "geotags" => (&["--root", "--uuid", "--db"], &[]),
-        "review" => (
-            &["--left", "--right", "--decision", "--note", "--db"],
-            &[],
-        ),
+        "review" => (&["--left", "--right", "--decision", "--note", "--db"], &[]),
         _ => {
             usage();
             return Err(format!("unknown command {verb}").into());
@@ -611,11 +608,8 @@ fn run(args: &[String]) -> Result<i32> {
                 (Some(_), None) => return Err("phash --root requires --uuid".into()),
                 (None, _) => None,
             };
-            let proposals = media::perceptual::propose_near_duplicates(
-                &ledger,
-                uuid.as_deref(),
-                max_distance,
-            )?;
+            let proposals =
+                media::perceptual::propose_near_duplicates(&ledger, uuid.as_deref(), max_distance)?;
             println!(
                 "{}",
                 serde_json::to_string(&serde_json::json!({

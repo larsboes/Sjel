@@ -1,0 +1,15 @@
+prefix_rule(
+    pattern = [["rm", "/bin/rm", "/usr/bin/rm"]],
+    decision = "prompt",
+    justification = "Review the deletion targets before removing files; approve this invocation only.",
+    match = ["rm -rf build", "/bin/rm -- file.txt", "rm file.txt"],
+    not_match = ["rmdir empty-directory", "cargo test", "git status"],
+)
+
+prefix_rule(
+    pattern = [["sudo", "/usr/bin/sudo", "env", "/usr/bin/env", "command"], ["rm", "/bin/rm", "/usr/bin/rm"]],
+    decision = "prompt",
+    justification = "A command wrapper does not remove the need to review deletion targets.",
+    match = ["sudo rm -rf build", "env /bin/rm file.txt", "command rm file.txt"],
+    not_match = ["sudo launchctl list", "env cargo test"],
+)

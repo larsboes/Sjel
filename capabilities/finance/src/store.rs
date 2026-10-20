@@ -1944,10 +1944,8 @@ mod tests {
 
     #[test]
     fn stage_candidates_persists_and_coalesces_location_mcc() {
-        let path = std::env::temp_dir().join(format!(
-            "axon-finance-store-mcc-{}.db",
-            std::process::id()
-        ));
+        let path =
+            std::env::temp_dir().join(format!("axon-finance-store-mcc-{}.db", std::process::id()));
         let _ = std::fs::remove_file(&path);
         let store = FinanceStore::open(&path).unwrap();
         let mut candidate = TransactionCandidate {
@@ -1968,20 +1966,50 @@ mod tests {
             location_country: Some("DE".into()),
             location_mcc: None,
         };
-        assert_eq!(store.stage_candidates(&[candidate.clone()], "2026-08-02").unwrap(), (1, 0));
-        assert_eq!(store.candidate("candidate_mcc_1").unwrap().unwrap().location_mcc, None);
+        assert_eq!(
+            store
+                .stage_candidates(&[candidate.clone()], "2026-08-02")
+                .unwrap(),
+            (1, 0)
+        );
+        assert_eq!(
+            store
+                .candidate("candidate_mcc_1")
+                .unwrap()
+                .unwrap()
+                .location_mcc,
+            None
+        );
 
         candidate.location_mcc = Some("5812".into());
-        assert_eq!(store.stage_candidates(&[candidate.clone()], "2026-08-02").unwrap(), (0, 1));
         assert_eq!(
-            store.candidate("candidate_mcc_1").unwrap().unwrap().location_mcc.as_deref(),
+            store
+                .stage_candidates(&[candidate.clone()], "2026-08-02")
+                .unwrap(),
+            (0, 1)
+        );
+        assert_eq!(
+            store
+                .candidate("candidate_mcc_1")
+                .unwrap()
+                .unwrap()
+                .location_mcc
+                .as_deref(),
             Some("5812")
         );
 
         candidate.location_mcc = None;
-        assert_eq!(store.stage_candidates(&[candidate], "2026-08-02").unwrap(), (0, 1));
         assert_eq!(
-            store.candidate("candidate_mcc_1").unwrap().unwrap().location_mcc.as_deref(),
+            store.stage_candidates(&[candidate], "2026-08-02").unwrap(),
+            (0, 1)
+        );
+        assert_eq!(
+            store
+                .candidate("candidate_mcc_1")
+                .unwrap()
+                .unwrap()
+                .location_mcc
+                .as_deref(),
             Some("5812"),
             "re-importing without an MCC column must not erase a previously captured MCC"
         );

@@ -1053,6 +1053,7 @@ export async function extractContent(
 		...(brightdataError ? [`Bright Data fallback failed: ${brightdataError}`] : []),
 		"",
 		"Fallback options:",
+		"  • For pages requiring JavaScript or an existing login, use the Interceptor browser workflow if available",
 		...(jinaHint ? [jinaHint] : []),
 		`  • Set firecrawlBaseUrl in ${WEB_SEARCH_CONFIG_PATH} to a self-hosted Firecrawl instance`,
 		`  • Set crawl4aiBaseUrl in ${WEB_SEARCH_CONFIG_PATH} to a self-hosted Crawl4AI instance`,
@@ -1173,6 +1174,127 @@ function pdfSizeLimitError(maxSizeMB: number): Error {
 
 function responseSizeLimitError(maxBytes: number): Error {
 	return new Error(`Response too large (${Math.round(maxBytes / 1024 / 1024)}MB)`);
+}
+
+/** Extract local HTML without network access, retaining its source URL and partial readable text. */
+export async function extractHtmlContent(
+	text: string,
+	url: string,
+	signal?: AbortSignal,
+	baseUrl = url,
+	linkHeader: string | null = null,
+): Promise<HttpExtractedContent> {
+	signal?.throwIfAborted();
+	const { parseHTML } = await import("linkedom");
+	const { document } = parseHTML(text);
+	let documentBase = baseUrl;
+	try {
+		documentBase = new URL(document.querySelector("base[href]")?.getAttribute("href") || baseUrl, baseUrl).href;
+	} catch {
+		// Invalid HTML base declarations fall back to the fetched page URL.
+	}
+	Object.defineProperty(document, "baseURI", { value: documentBase, configurable: true });
+	const documentTitle = document.title?.trim() ?? "";
+	const declaredLinks = discoverDeclaredWebLinks(
+		document as unknown as Document,
+		linkHeader,
+		baseUrl,
+	);
+	const { Readability } = await import("@mozilla/readability");
+	signal?.throwIfAborted();
+	const reader = new Readability(document as unknown as Document);
+	const article = reader.parse();
+
+	if (!article) {
+		const rscResult = extractRSCContent(text);
+		if (rscResult && rscResult.content.length >= MIN_USEFUL_CONTENT) {
+			return {
+				url,
+				title: rscResult.title,
+				content: appendDeclaredWebLinks(rscResult.content, declaredLinks),
+				error: null,
+				declaredLinks,
+			};
+		}
+		signal?.throwIfAborted();
+		const defuddleResult = await extractWithDefuddle(text, baseUrl);
+		signal?.throwIfAborted();
+		if (defuddleResult && defuddleResult.content.trim()) {
+			return {
+				url,
+				title: documentTitle || defuddleResult.title,
+				content: appendDeclaredWebLinks(defuddleResult.content, declaredLinks),
+				error: defuddleResult.content.length >= MIN_USEFUL_CONTENT ? null : "Extracted content appears incomplete",
+				declaredLinks,
+			};
+		}
+
+		const jsRendered = isLikelyJSRendered(text);
+		const errorMsg = jsRendered
+			? "Page appears to be JavaScript-rendered (content loads dynamically)"
+			: "Could not extract readable content from HTML structure";
+
+		return {
+			url,
+			title: documentTitle,
+			content: appendDeclaredWebLinks("", declaredLinks),
+			error: errorMsg,
+			declaredLinks,
+		};
+	}
+
+	if (typeof article.content !== "string") {
+		throw new Error("Readability returned invalid article content");
+	}
+	const turndown = await getTurndown();
+	signal?.throwIfAborted();
+	const markdown = turndown.turndown(article.content);
+
+	if (markdown.length < MIN_USEFUL_CONTENT) {
+		const rscResult = extractRSCContent(text);
+		if (rscResult && rscResult.content.length >= MIN_USEFUL_CONTENT) {
+			return {
+				url,
+				title: rscResult.title,
+				content: appendDeclaredWebLinks(rscResult.content, declaredLinks),
+				error: null,
+				declaredLinks,
+			};
+		}
+		signal?.throwIfAborted();
+		let fallbackError: string | undefined;
+		let bestContent = markdown;
+		try {
+			const defuddleResult = await extractWithDefuddle(text, baseUrl);
+			signal?.throwIfAborted();
+			if (defuddleResult && defuddleResult.content.length > bestContent.length) {
+				bestContent = defuddleResult.content;
+			}
+		} catch (error) {
+			signal?.throwIfAborted();
+			fallbackError = errorMessage(error);
+		}
+		if (bestContent.length >= MIN_USEFUL_CONTENT) {
+			return { url, title: article.title || documentTitle, content: appendDeclaredWebLinks(bestContent, declaredLinks), error: null, declaredLinks };
+		}
+		return {
+			url,
+			title: article.title || documentTitle,
+			content: appendDeclaredWebLinks(bestContent, declaredLinks),
+			error: isLikelyJSRendered(text)
+				? "Page appears to be JavaScript-rendered (content loads dynamically)"
+				: `Extracted content appears incomplete${fallbackError ? `; fallback failed: ${fallbackError}` : ""}`,
+			declaredLinks,
+		};
+	}
+
+	return {
+		url,
+		title: article.title || documentTitle,
+		content: appendDeclaredWebLinks(markdown, declaredLinks),
+		error: null,
+		declaredLinks,
+	};
 }
 
 async function extractViaHttp(
@@ -1353,106 +1475,9 @@ async function extractViaHttp(
 			return { url, title, content: text, error: null };
 		}
 
-		const { parseHTML } = await import("linkedom");
-		const { document } = parseHTML(text);
-		const documentTitle = document.title?.trim() ?? "";
-		const declaredLinks = discoverDeclaredWebLinks(
-			document as unknown as Document,
-			response.headers.get("link"),
-			response.url || url,
-		);
-		const { Readability } = await import("@mozilla/readability");
-		const reader = new Readability(document as unknown as Document);
-		const article = reader.parse();
-
-		if (!article) {
-			const rscResult = extractRSCContent(text);
-			if (rscResult && rscResult.content.length >= MIN_USEFUL_CONTENT) {
-				activityMonitor.logComplete(activityId, response.status);
-				return {
-					url,
-					title: rscResult.title,
-					content: appendDeclaredWebLinks(rscResult.content, declaredLinks),
-					error: null,
-					declaredLinks,
-				};
-			}
-			controller.signal.throwIfAborted();
-			const defuddleResult = await extractWithDefuddle(text, response.url || url);
-			controller.signal.throwIfAborted();
-			if (defuddleResult && defuddleResult.content.length >= MIN_USEFUL_CONTENT) {
-				activityMonitor.logComplete(activityId, response.status);
-				return {
-					url,
-					title: documentTitle || defuddleResult.title,
-					content: appendDeclaredWebLinks(defuddleResult.content, declaredLinks),
-					error: null,
-					declaredLinks,
-				};
-			}
-
-			activityMonitor.logComplete(activityId, response.status);
-			const jsRendered = isLikelyJSRendered(text);
-			const errorMsg = jsRendered
-				? "Page appears to be JavaScript-rendered (content loads dynamically)"
-				: "Could not extract readable content from HTML structure";
-
-			return {
-				url,
-				title: documentTitle,
-				content: appendDeclaredWebLinks("", declaredLinks),
-				error: errorMsg,
-				declaredLinks,
-			};
-		}
-
-		if (typeof article.content !== "string") {
-			throw new Error("Readability returned invalid article content");
-		}
-		const markdown = (await getTurndown()).turndown(article.content);
+		const result = await extractHtmlContent(text, url, controller.signal, response.url || url, response.headers.get("link"));
 		activityMonitor.logComplete(activityId, response.status);
-
-		if (markdown.length < MIN_USEFUL_CONTENT) {
-			const rscResult = extractRSCContent(text);
-			if (rscResult && rscResult.content.length >= MIN_USEFUL_CONTENT) {
-				return {
-					url,
-					title: rscResult.title,
-					content: appendDeclaredWebLinks(rscResult.content, declaredLinks),
-					error: null,
-					declaredLinks,
-				};
-			}
-			controller.signal.throwIfAborted();
-			const defuddleResult = await extractWithDefuddle(text, response.url || url);
-			controller.signal.throwIfAborted();
-			if (defuddleResult && defuddleResult.content.length >= MIN_USEFUL_CONTENT) {
-				return {
-					url,
-					title: article.title || documentTitle || defuddleResult.title,
-					content: appendDeclaredWebLinks(defuddleResult.content, declaredLinks),
-					error: null,
-					declaredLinks,
-				};
-			}
-			return {
-				url,
-				title: article.title || documentTitle,
-				content: appendDeclaredWebLinks(markdown, declaredLinks),
-				error: isLikelyJSRendered(text)
-					? "Page appears to be JavaScript-rendered (content loads dynamically)"
-					: "Extracted content appears incomplete",
-				declaredLinks,
-			};
-		}
-
-		return {
-			url,
-			title: article.title || documentTitle,
-			content: appendDeclaredWebLinks(markdown, declaredLinks),
-			error: null,
-			declaredLinks,
-		};
+		return result;
 	} catch (err) {
 		const message = err instanceof Error ? err.message : String(err);
 		if (message.toLowerCase().includes("abort")) {

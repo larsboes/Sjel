@@ -200,11 +200,11 @@ final class SjelMacViewModel: ObservableObject {
         }
     }
 
-    /// Opens the native desktop app, or brings it forward. `apps/gpui-prototype/install` puts it
+    /// Opens the native desktop app, or brings it forward. `apps/gpui/install` puts it
     /// in ~/Applications under this bundle identifier.
     func openDesktopApp() {
         guard let url = NSWorkspace.shared.urlForApplication(withBundleIdentifier: "dev.sjel.desktop") else {
-            openProblem = "The desktop app is not installed (apps/gpui-prototype/install)."
+            openProblem = "The desktop app is not installed (apps/gpui/install)."
             return
         }
         NSWorkspace.shared.openApplication(at: url, configuration: .init()) { _, error in

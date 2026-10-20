@@ -43,6 +43,11 @@ capability that refused this process would otherwise be reported as not running.
   surface, each backed by a live 2s-timeout `GET`. `ok` means the **autostart set**
   is up. Once capabilities start on demand, a stopped on-demand capability is the
   normal state, not a fault.
+- `GET /api/sjel-status/events` — server-sent events, `snapshot` frames carrying `health` and
+  `agent` in one object. A frame is sent when the current one is read and then only when the
+  answers change, so a client that follows this stream reads neither endpoint above on a timer.
+  The fingerprint leaves `uptime_seconds` out; a reader adds its own elapsed time to it. One
+  watcher serves every connection and probes only while one is open.
 - `GET /api/sjel-status/capabilities` — the registry plus live state: kind, scope,
   port, `requires`, `up` (`null` when nothing is declared to poll, meaning unknown
   rather than down) and `panel_url` for a capability that serves its own UI.

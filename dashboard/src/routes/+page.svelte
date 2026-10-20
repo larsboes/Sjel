@@ -33,6 +33,7 @@
   import { poll } from "$lib/ui/poll.svelte";
   import { createListCursor } from "$lib/list-cursor.svelte";
   import { inspectorStore } from "$lib/inspector/inspector.svelte";
+  import { assistantStore } from "$lib/assistant/assistant.svelte";
   import RailSection from "$lib/rail/RailSection.svelte";
   import PinnedLinks from "$lib/PinnedLinks.svelte";
   import RepoStatusCard from "$lib/RepoStatusCard.svelte";
@@ -228,6 +229,14 @@
     reading.filter((d) => today.getTime() - new Date(d.startOrDueAt ?? 0).getTime() < 86_400_000)
       .length,
   );
+
+  const greeting = $derived(
+    today.getHours() < 12 ? "Good morning" : today.getHours() < 18 ? "Good afternoon" : "Good evening",
+  );
+  const urgentCount = $derived(commitments.filter((c) => c.kind.band >= 700).length);
+  const owedCount = $derived(commitments.filter((c) => c.kind.band >= 610 && c.kind.band < 700).length);
+  const focusSpotlight = $derived(filteredCommitments.slice(0, 3));
+  const allOpen = $derived(disclosure.allExpanded(bands.map((b) => b.label)));
 
   const unavailable = $derived(
     KINDS.filter((kind) => sources[kind.key]?.status === "failed").map((kind) => kind.label),
@@ -484,8 +493,55 @@
 
 <div class="home">
   <header class="briefing">
-    <div>
+    <div class="briefing-content">
       <h1>{todayLabel}</h1>
+      <p class="briefing-posture">
+        {greeting}, Lars · {commitments.length} commitments ({urgentCount} urgent · {owedCount} owed) · {readingToday} new in feed
+      </p>
+      <div class="briefing-guidance">
+        <button
+          type="button"
+          class="btn-guide-prompt"
+          onclick={() => assistantStore.openDrawer()}
+          use:tip={"Open Sjel assistant drawer"}
+        >
+          <Icon name="sparkles" size={13} />
+          <span>Ask Sjel or guide an action…</span>
+          <kbd class="guide-kbd">⌘K</kbd>
+        </button>
+        <div class="guidance-quick-chips">
+          <button
+            type="button"
+            class="guidance-chip"
+            class:active={priorityLens === "focus"}
+            onclick={() => (priorityLens = priorityLens === "focus" ? "all" : "focus")}
+            use:tip={"Filter to high-urgency and today items"}
+          >
+            <Icon name="activity" size={12} />
+            <span>Focus ({urgentCount})</span>
+          </button>
+          <button
+            type="button"
+            class="guidance-chip"
+            class:active={priorityLens === "schedule"}
+            onclick={() => (priorityLens = priorityLens === "schedule" ? "all" : "schedule")}
+            use:tip={"Calendar commitments and travel"}
+          >
+            <Icon name="calendar" size={12} />
+            <span>Schedule</span>
+          </button>
+          <button
+            type="button"
+            class="guidance-chip"
+            class:active={priorityLens === "tasks"}
+            onclick={() => (priorityLens = priorityLens === "tasks" ? "all" : "tasks")}
+            use:tip={"Tasks and financial decisions"}
+          >
+            <Icon name="check" size={12} />
+            <span>Tasks ({owedCount})</span>
+          </button>
+        </div>
+      </div>
     </div>
     <a class="library-link" href={link("/feed/library")}>
       Library
@@ -514,13 +570,23 @@
            above the page, because these are three readings of the same column, not three
            modes of the page. -->
       <div class="section-head">
-        <div>
+        <div class="section-head-title">
           <h2 use:tip={homeView === "now" ? "J / K select · Space inspect · Enter open" : undefined}>{viewHeadings[homeView].title}</h2>
+          {#if homeView === "now" && bands.length > 0}
+            <button
+              type="button"
+              class="btn-band-toggle"
+              onclick={() => (allOpen ? disclosure.collapseAll(bands.map((b) => b.label)) : disclosure.expandAll(bands.map((b) => b.label)))}
+              use:tip={allOpen ? "Collapse all ladder bands" : "Expand all ladder bands"}
+            >
+              {allOpen ? "Collapse all" : "Expand all"}
+            </button>
+          {/if}
         </div>
         {#if homeView === "now"}
           <label class="lens">
             <span class="sr">Priority focus</span>
-            <select name="home-lens" bind:value={priorityLens}>
+            <select name="home-lens" bind:value={priorityLens} aria-label="Priority focus filter">
               <option value="all">All ({commitments.length})</option>
               <option value="focus">Today's focus</option>
               <option value="schedule">Schedule & trips</option>
@@ -541,6 +607,66 @@
       </div>
 
       {#if homeView === "now"}
+        {#if focusSpotlight.length > 0}
+          <div class="focus-spotlight" aria-label="Immediate guidance focus">
+            <div class="spotlight-header">
+              <span class="spotlight-kicker">Immediate Focus</span>
+              <span class="spotlight-badge">{urgentCount > 0 ? `${urgentCount} urgent` : `${commitments.length} commitments`}</span>
+            </div>
+            <div class="spotlight-grid">
+              {#each focusSpotlight as item (item.key)}
+                {@const isUrgent = item.kind.band >= 700}
+                {@const why = item.kind.whyHere(item.row, scoreContext)}
+                <div class="spotlight-card" class:urgent={isUrgent}>
+                  <div class="spotlight-card-top">
+                    <span class="spotlight-kind">{item.kind.label}</span>
+                    {#if item.startOrDueAt}
+                      <span class="spotlight-due">{item.startOrDueAt.slice(0, 10)}</span>
+                    {/if}
+                  </div>
+                  <a
+                    class="spotlight-title"
+                    href={item.kind.href(item.row)}
+                    onclick={(e) => {
+                      if (!item.kind.external?.(item.row)) {
+                        e.preventDefault();
+                        openDecision(item);
+                      }
+                    }}
+                  >
+                    {(item.kind as { title?: (r: unknown) => string }).title?.(item.row) ?? item.kind.label}
+                  </a>
+                  {#if why}
+                    <p class="spotlight-why">{why}</p>
+                  {/if}
+                  <div class="spotlight-card-actions">
+                    <button
+                      type="button"
+                      class="btn btn-sm btn-soft spotlight-btn"
+                      onclick={() => inspectDecision(item)}
+                      use:tip={"Inspect details in side panel"}
+                    >
+                      Inspect
+                    </button>
+                    <a
+                      class="btn btn-sm spotlight-btn"
+                      href={item.kind.href(item.row)}
+                      onclick={(e) => {
+                        if (!item.kind.external?.(item.row)) {
+                          e.preventDefault();
+                          openDecision(item);
+                        }
+                      }}
+                    >
+                      Open ↗
+                    </a>
+                  </div>
+                </div>
+              {/each}
+            </div>
+          </div>
+        {/if}
+
         {#if filteredCommitments.length === 0 && commitments.length > 0}
           <div class="priority-empty">
             <p>No items in this priority lens.</p>
@@ -767,6 +893,27 @@
 
       <PinnedLinks />
 
+      <RailSection label="System posture" count={38} open>
+        <div class="system-pulse-card">
+          <div class="pulse-row">
+            <span class="pulse-label">Capabilities</span>
+            <span class="pulse-val">38 online</span>
+          </div>
+          <div class="pulse-row">
+            <span class="pulse-label">Local intelligence</span>
+            <span class="pulse-val">ready</span>
+          </div>
+          <div class="pulse-row">
+            <span class="pulse-label">Producers</span>
+            <span class="pulse-val">swept 10m ago</span>
+          </div>
+          <div class="pulse-action-row">
+            <a class="small-link" href={link("/systems")}>Systems ↗</a>
+            <a class="small-link" href={link("/capabilities")}>Registry ↗</a>
+          </div>
+        </div>
+      </RailSection>
+
       <!-- Machine status, not work. It stays one line until asked: health,
            temperature and memory are things you check, not things you do, and
            three sections of them outweighed the queue they sat beside.
@@ -837,11 +984,263 @@
 
   .briefing {
     display: flex;
-    align-items: end;
+    align-items: flex-start;
     justify-content: space-between;
     gap: var(--space-7);
     padding: var(--space-1) 0 var(--space-6);
     border-bottom: 1px solid var(--rule);
+  }
+
+  .briefing-content {
+    flex: 1 1 auto;
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-2);
+  }
+
+  .briefing-posture {
+    margin: 0;
+    color: var(--text-secondary);
+    font-size: var(--text-sm);
+    line-height: var(--leading-normal);
+  }
+
+  .briefing-guidance {
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: var(--space-3);
+    margin-top: var(--space-1);
+  }
+
+  .btn-guide-prompt {
+    display: inline-flex;
+    align-items: center;
+    gap: var(--space-2);
+    padding: var(--space-2) var(--space-3);
+    background: var(--surface);
+    border: 1px solid var(--rule);
+    border-radius: var(--radius-sm);
+    color: var(--text-secondary);
+    font-size: var(--text-xs);
+    cursor: pointer;
+    transition: background var(--motion-fast) var(--ease-out), border-color var(--motion-fast) var(--ease-out), color var(--motion-fast) var(--ease-out);
+  }
+
+  .btn-guide-prompt:hover {
+    background: var(--card-bg);
+    border-color: var(--primary);
+    color: var(--text-primary);
+  }
+
+  .guide-kbd {
+    display: inline-block;
+    padding: 0 0.35rem;
+    font-size: var(--text-2xs);
+    font-family: var(--font-mono);
+    color: var(--text-tertiary);
+    background: var(--card-bg);
+    border: 1px solid var(--rule);
+    border-radius: 3px;
+  }
+
+  .guidance-quick-chips {
+    display: inline-flex;
+    align-items: center;
+    gap: var(--space-2);
+  }
+
+  .guidance-chip {
+    display: inline-flex;
+    align-items: center;
+    gap: var(--space-1);
+    padding: var(--space-1) var(--space-3);
+    background: transparent;
+    border: 1px solid var(--rule);
+    border-radius: var(--radius-sm);
+    color: var(--text-secondary);
+    font-size: var(--text-2xs);
+    font-weight: 500;
+    cursor: pointer;
+    transition: background var(--motion-fast) var(--ease-out), color var(--motion-fast) var(--ease-out), border-color var(--motion-fast) var(--ease-out);
+  }
+
+  .guidance-chip:hover {
+    background: var(--surface);
+    color: var(--text-primary);
+  }
+
+  .guidance-chip.active {
+    background: var(--primary-soft);
+    border-color: var(--primary);
+    color: var(--primary);
+    font-weight: 600;
+  }
+
+  .section-head-title {
+    display: flex;
+    align-items: center;
+    gap: var(--space-3);
+  }
+
+  .btn-band-toggle {
+    background: transparent;
+    border: 1px solid var(--rule);
+    border-radius: var(--radius-sm);
+    padding: var(--space-1) var(--space-3);
+    font-size: var(--text-2xs);
+    color: var(--text-secondary);
+    cursor: pointer;
+    transition: background var(--motion-fast) var(--ease-out), color var(--motion-fast) var(--ease-out);
+  }
+
+  .btn-band-toggle:hover {
+    background: var(--surface);
+    color: var(--text-primary);
+  }
+
+  .focus-spotlight {
+    margin-bottom: var(--space-5);
+    padding: var(--space-4);
+    background: var(--surface);
+    border: 1px solid var(--rule);
+    border-radius: var(--radius-md);
+  }
+
+  .spotlight-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: var(--space-3);
+  }
+
+  .spotlight-kicker {
+    font-size: var(--text-2xs);
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    color: var(--text-secondary);
+  }
+
+  .spotlight-badge {
+    font-size: var(--text-2xs);
+    padding: 0.1rem 0.4rem;
+    border-radius: var(--radius-sm);
+    background: var(--card-bg);
+    border: 1px solid var(--rule);
+    color: var(--text-secondary);
+  }
+
+  .spotlight-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(14rem, 1fr));
+    gap: var(--space-3);
+  }
+
+  .spotlight-card {
+    display: flex;
+    flex-direction: column;
+    justify-content: space-between;
+    padding: var(--space-3);
+    background: var(--card-bg);
+    border: 1px solid var(--card-border);
+    border-radius: var(--radius-sm);
+    transition: border-color var(--motion-fast) var(--ease-out), box-shadow var(--motion-fast) var(--ease-out);
+  }
+
+  .spotlight-card.urgent {
+    border-left: 3px solid var(--warning);
+  }
+
+  .spotlight-card:hover {
+    border-color: var(--card-border-hover);
+    box-shadow: var(--card-shadow);
+  }
+
+  .spotlight-card-top {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: var(--space-1);
+    font-size: var(--text-2xs);
+  }
+
+  .spotlight-kind {
+    font-weight: 600;
+    text-transform: uppercase;
+    color: var(--primary);
+  }
+
+  .spotlight-due {
+    color: var(--text-tertiary);
+  }
+
+  .spotlight-title {
+    color: var(--text-primary);
+    font-size: var(--text-sm);
+    font-weight: 600;
+    line-height: var(--leading-tight);
+    text-decoration: none;
+    margin-bottom: var(--space-1);
+  }
+
+  .spotlight-title:hover {
+    color: var(--primary);
+    text-decoration: underline;
+  }
+
+  .spotlight-why {
+    margin: 0 0 var(--space-3);
+    font-size: var(--text-xs);
+    color: var(--text-secondary);
+    line-height: var(--leading-normal);
+  }
+
+  .spotlight-card-actions {
+    display: flex;
+    align-items: center;
+    gap: var(--space-2);
+    margin-top: auto;
+  }
+
+  .spotlight-btn {
+    padding: 0.15rem 0.5rem;
+    font-size: var(--text-2xs);
+  }
+
+  .system-pulse-card {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-2);
+    padding: var(--space-3);
+    background: var(--surface);
+    border-radius: var(--radius-sm);
+    border: 1px solid var(--rule);
+    font-size: var(--text-xs);
+  }
+
+  .pulse-row {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+  }
+
+  .pulse-label {
+    color: var(--text-secondary);
+  }
+
+  .pulse-val {
+    font-weight: 600;
+    color: var(--text-primary);
+  }
+
+  .pulse-action-row {
+    display: flex;
+    justify-content: flex-end;
+    gap: var(--space-3);
+    margin-top: var(--space-1);
+    padding-top: var(--space-1);
+    border-top: 1px solid var(--rule);
   }
 
   /* The date is the title (2026-10-09). The headline it replaced promised a list that sat

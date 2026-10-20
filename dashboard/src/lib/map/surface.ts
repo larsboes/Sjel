@@ -155,9 +155,23 @@ export function boot(): Promise<Booted> {
     vendoredGlyphs = new Set(manifest?.glyphs ?? []);
     if (typeof style.sprite === "string") style.sprite = absolute(style.sprite);
     if (style.glyphs) style.glyphs = absolute(style.glyphs);
+    const scope = typeof window !== "undefined" ? window : globalThis;
+    const customTiles = (scope as unknown as { __SJEL_TILES_URL__?: string }).__SJEL_TILES_URL__;
+    if (customTiles && style.sources?.openmaptiles && "tiles" in style.sources.openmaptiles) {
+      (style.sources.openmaptiles as { tiles?: string[] }).tiles = [customTiles];
+    }
     return { maplibregl, style };
   });
   return booting;
+}
+
+/**
+ * Allows swapping the vector basemap tile seam to a local PMTiles or self-hosted tile endpoint,
+ * fulfilling the seam declared in upstreams.toml [openfreemap].
+ */
+export function setTilesEndpoint(url: string | undefined): void {
+  const scope = typeof window !== "undefined" ? window : globalThis;
+  (scope as unknown as { __SJEL_TILES_URL__?: string }).__SJEL_TILES_URL__ = url;
 }
 
 /**

@@ -48,6 +48,9 @@ export function createBandDisclosure() {
     /** `leading` is the first band that has rows — open on a first visit only. */
     isOpen(band: string, leading: string): boolean {
       if (stored === null) return band === leading;
+      // If all bands were marked closed, keep the leading band open so the page is never a dead void
+      const hasAnyOpen = Object.values(stored).some(Boolean);
+      if (!hasAnyOpen) return band === leading;
       return stored[band] === true;
     },
 
@@ -55,14 +58,39 @@ export function createBandDisclosure() {
       // The first toggle materialises the whole record, so the bands the reader
       // left alone are written as closed rather than left to the null branch and
       // re-opened by a later leading-band change.
+      const hasAnyOpen = stored !== null && Object.values(stored).some(Boolean);
+      const isCurrentlyOpen = stored === null ? band === leading : (hasAnyOpen ? stored[band] === true : band === leading);
       const next = { ...(stored ?? { [leading]: true }) };
-      next[band] = !(stored === null ? band === leading : stored[band] === true);
+      next[band] = !isCurrentlyOpen;
       stored = next;
       try {
         localStorage.setItem(KEY, JSON.stringify(next));
       } catch {
         // Kept in memory for this session; the preference simply does not persist.
       }
+    },
+
+    expandAll(bands: string[]) {
+      const next: Record<string, boolean> = {};
+      for (const b of bands) next[b] = true;
+      stored = next;
+      try {
+        localStorage.setItem(KEY, JSON.stringify(next));
+      } catch {}
+    },
+
+    collapseAll(bands: string[]) {
+      const next: Record<string, boolean> = {};
+      for (const b of bands) next[b] = false;
+      stored = next;
+      try {
+        localStorage.setItem(KEY, JSON.stringify(next));
+      } catch {}
+    },
+
+    allExpanded(bands: string[]): boolean {
+      if (!stored || bands.length === 0) return false;
+      return bands.every((b) => stored![b] === true);
     },
   };
 }

@@ -188,6 +188,7 @@ mod db_tests {
                 postal_code_column: Some("PLZ".into()),
                 city_column: None,
                 country_column: Some("Land".into()),
+                mcc_column: None,
             }),
         };
         // The quoted street cell keeps the Amex two-line shape: street, then city.
@@ -262,6 +263,7 @@ mod db_tests {
             postal_code_column: Some("PLZ".into()),
             city_column: None,
             country_column: Some("Land".into()),
+            mcc_column: None,
         });
         let with_location = parse_csv(csv, &mapping).unwrap();
         assert_eq!(with_location[0].id, without_location[0].id);

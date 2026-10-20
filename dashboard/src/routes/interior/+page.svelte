@@ -1572,9 +1572,6 @@
     color: var(--text-tertiary);
     font-size: var(--text-xs);
   }
-  .holds.tight {
-    color: var(--warning-ink);
-  }
 
   .reserves {
     margin-top: 0.85rem;
@@ -1674,20 +1671,6 @@
     }
 
     /* Denser cards: a photo becomes a thumbnail beside the text, the actions a short row. */
-
-
-    /* Solve and Buy & declare: their cards had no inset and a page-sized heading. */
-    section.card {
-      padding: var(--space-4);
-    }
-    section.card h2 {
-      font-size: var(--text-md);
-      line-height: var(--leading-tight);
-      margin: 0 0 var(--space-2);
-    }
-    section.card + section.card {
-      margin-top: var(--space-4);
-    }
     /* Every number and sentence stays; only the air between them goes. */
     /* A warning that wraps keeps its icon on the first line. */
     .unchecked,

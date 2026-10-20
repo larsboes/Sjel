@@ -1712,7 +1712,10 @@ fn data_freshness(ctx: &mut Ctx) {
             ));
             continue;
         }
-        let url = format!("http://127.0.0.1:{port}/__axon/freshness");
+        // The path the contract lives at, from the one place that owns it: libs/sjel-server
+        // routes both the current and the pre-rename name for a capability built before the
+        // 2026-10-20 rename, and the new one is what this asks.
+        let url = format!("http://127.0.0.1:{port}{}", sjel_server::FRESHNESS_PATH);
         let o = cmd(
             "curl",
             &["-s", "--max-time", "4", "-w", "\n%{http_code}", &url],
@@ -1728,7 +1731,10 @@ fn data_freshness(ctx: &mut Ctx) {
             continue;
         }
         let Ok(v) = serde_json::from_str::<Json>(body) else {
-            ctx.bad(format!("{name} — /__axon/freshness did not answer JSON"));
+            ctx.bad(format!(
+                "{name} — {} did not answer JSON",
+                sjel_server::FRESHNESS_PATH
+            ));
             continue;
         };
         let last = v.get("last_arrival_at").filter(|x| !x.is_null());

@@ -177,7 +177,13 @@ pub fn tools_for(capability: &str, mode: Mode, routes: &[Route], gate: &Gate) ->
     let mut tools = Vec::new();
     for route in routes {
         let method = route.method.to_uppercase();
-        if NOT_TOOLS.contains(&route.path.as_str()) || route.path.starts_with("/__axon/") {
+        // A liveness route, not a tool: it answers whether a capability is still taking
+        // delivery, which the shell asks itself. Both names are skipped because both answer
+        // for one release across the 2026-10-20 rename.
+        if NOT_TOOLS.contains(&route.path.as_str())
+            || route.path.starts_with("/__sjel/")
+            || route.path.starts_with("/__axon/")
+        {
             continue;
         }
         let key = format!("{method} {}", route.path);

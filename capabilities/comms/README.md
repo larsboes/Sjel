@@ -409,7 +409,7 @@ needing a force flag.
 `POST /feed/relevance/refresh` writes a `relevance-pass` row into `comms_source_state` with
 the mode that actually answered,
 the counters and an error class — and never `last_success_at`, because that column is the whole
-body of `GET /__axon/freshness`, which answers "is data still reaching this capability".
+body of `GET /__sjel/freshness`, which answers "is data still reaching this capability".
 `local-inference` is excluded from that query for the same reason: a machine whose collectors
 have all stopped must not be held green by a local model answering a drain.
 

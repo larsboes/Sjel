@@ -13,8 +13,11 @@ freshness_advise_hours = "12"
 freshness_stale_hours = "24"
 ```
 
-A declaring service answers `GET /__axon/freshness` with
+A declaring service answers `GET /__sjel/freshness` with
 `{"last_arrival_at": <epoch seconds>}`, or `null` for that field when nothing has arrived.
+The pre-rename `GET /__axon/freshness` answers the same body for one release, because sjel-status
+polls every capability and a capability built before the 2026-10-20 rename cannot answer a path
+it has never heard of; `libs/sjel-server/src/auth.rs` owns both names.
 [`doctor`](../../tools/sjel-cli/src/doctor/checks.rs) reads this endpoint and evaluates the
 declared thresholds. The timestamp measures producer arrival, including a successful sweep that
 finds nothing new. It is not the newest item's publication timestamp: a quiet source is different

@@ -7,7 +7,7 @@ use super::*;
 /// The freshness contract answers for arrivals, not for passes. `relevance-pass`
 /// takes delivery of nothing, and `local-inference` is a model drain writing
 /// `last_success_at` through `capacity::record_success` — so either of them
-/// could hold `GET /__axon/freshness` green with every collector dead, which is
+/// could hold `GET /__sjel/freshness` green with every collector dead, which is
 /// the nine-days-of-an-empty-Inbox failure the endpoint exists to catch.
 /// Two names, one const, one `NOT IN`.
 pub(crate) const PSEUDO_SOURCES: [&str; 2] = ["local-inference", "relevance-pass"];
@@ -110,7 +110,7 @@ impl Store {
     /// Record what a relevance pass did, WITHOUT `last_success_at`.
     ///
     /// Deliberately not `record_sweep_success`. That method writes
-    /// `last_success_at`, which is the whole body of `GET /__axon/freshness`,
+    /// `last_success_at`, which is the whole body of `GET /__sjel/freshness`,
     /// and a pass that re-scores stored rows has collected nothing. What it
     /// writes instead: when it ran, the mode that answered plus the relevance
     /// revision (the cursor), the counters, and — when a chunk fell back — a
@@ -260,7 +260,7 @@ mod db_tests {
 
     /// The D13 regression guard.
     ///
-    /// `newest_source_success` is the entire body of `GET /__axon/freshness`, and
+    /// `newest_source_success` is the entire body of `GET /__sjel/freshness`, and
     /// doctor compares its answer against comms' `freshness_stale_hours`. A pass
     /// that takes delivery of nothing must not be able to answer it — and neither
     /// must the local-model drain, which writes `last_success_at` today.

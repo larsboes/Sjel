@@ -185,9 +185,11 @@ const ROUTES: &[route_manifest::Route] = &[
         "/api/prices/status",
         "Per-instrument price freshness, the newest 50 fetch attempts and the last status per provider. No parameters.",
     ),
+    // A literal for the reason comms gives: the table is parsed as text by
+    // tools/demo-check-paths.test.ts, while the server routes `sjel_server::FRESHNESS_PATH`.
     r(
         "GET",
-        "/__axon/freshness",
+        "/__sjel/freshness",
         "When data last arrived, for the freshness contract. No parameters.",
     ),
     r(
@@ -2186,7 +2188,7 @@ async fn prices_status(State(state): State<AppState>) -> ApiResponse {
     }
 }
 
-/// `GET /__axon/freshness` — when this capability last took delivery of data.
+/// `GET /__sjel/freshness` — when this capability last took delivery of data.
 ///
 /// The shared shape behind `freshness_advise_hours` / `freshness_stale_hours` in
 /// `capabilities/finance/service.toml`, and the same one
@@ -2733,7 +2735,10 @@ fn build_router(state: AppState) -> Router {
         .route("/api/dashboard", get(dashboard_projection))
         .route("/api/portfolio", get(portfolio))
         .route("/api/prices/status", get(prices_status))
-        .route("/__axon/freshness", get(freshness))
+        .route(sjel_server::FRESHNESS_PATH, get(freshness))
+        // The pre-rename path, kept for one release: sjel-status polls every capability and an
+        // older build of it still asks here. libs/sjel-server/src/auth.rs says why both answer.
+        .route(sjel_server::LEGACY_FRESHNESS_PATH, get(freshness))
         .route("/api/decisions", get(list_decisions))
         .route("/api/decisions/run", post(run_decisions))
         .route("/api/decisions/{id}/verdict", post(record_verdict))

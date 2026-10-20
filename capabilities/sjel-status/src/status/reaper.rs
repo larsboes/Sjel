@@ -39,7 +39,10 @@ impl Drop for IdlePanelReaper {
 /// something other than tools/panel-server.ts simply never reports idle and is
 /// therefore never reaped, which is the correct behaviour rather than a gap.
 pub(crate) async fn panel_idle_seconds(client: &reqwest::Client, svc: &Service) -> Option<u64> {
-    let url = format!("http://127.0.0.1:{}/__axon/idle", svc.panel_port);
+    // The panel answers both this name and the pre-rename `/__axon/idle`
+    // (tools/panel-server.ts). A panel that answers neither is a `None` here, which
+    // leaves it alone rather than reaping it on a guess.
+    let url = format!("http://127.0.0.1:{}/__sjel/idle", svc.panel_port);
     let res = client
         .get(&url)
         .timeout(Duration::from_secs(2))

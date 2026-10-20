@@ -93,7 +93,7 @@ use serde_json::json;
 /// answer carries nothing an unauthenticated caller could not learn by
 /// observing that the port accepts a connection.
 ///
-/// `/__axon/freshness` joins them on the same argument and no weaker one. It answers *when* this
+/// `/__sjel/freshness` joins them on the same argument and no weaker one. It answers *when* this
 /// capability last took delivery of data, as one integer — never what the data is, how much of
 /// it there is, or where it came from. A caller who can reach the port can already watch it
 /// accept connections; learning that a collector last succeeded at T tells them nothing further
@@ -101,7 +101,15 @@ use serde_json::json;
 /// capability and must not need each one's credential to ask a liveness-shaped question — the
 /// alternative is a status page that reports a healthy capability as unknown, which is exactly
 /// the failure the two paths above are exempt to prevent.
-const EXEMPT_PATHS: &[&str] = &["/health", "/ready", "/__axon/freshness"];
+const EXEMPT_PATHS: &[&str] = &["/health", "/ready", FRESHNESS_PATH, LEGACY_FRESHNESS_PATH];
+
+/// The freshness route a capability answers, and the name it answered before the 2026-10-20
+/// rename. Both stay routed for one release, for the reason the old header names below stay
+/// accepted: sjel-status polls every capability, and a capability built before the rename cannot
+/// answer a path it has never heard of. Routing only the new one would report healthy
+/// capabilities as unknown for as long as the oldest binary on the machine is old.
+pub const FRESHNESS_PATH: &str = "/__sjel/freshness";
+pub const LEGACY_FRESHNESS_PATH: &str = "/__axon/freshness";
 
 /// The header whose presence makes a request a device-signed one (`axon-device-auth/v1`,
 /// `capabilities/devices/src/auth.rs`). The other three headers are read by the verifier.

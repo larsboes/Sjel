@@ -106,7 +106,7 @@ pub fn month_of(date: &str) -> Option<String> {
 /// characters, `YYYY-MM-DDTHH:MM:SSZ`, UTC. Every stamp this reads was written
 /// by that function, so a wider parser would only widen what can be misread.
 /// `None` rather than a best effort, because the one caller is
-/// `GET /__axon/freshness`: a guessed epoch there is a claim about when data
+/// `GET /__sjel/freshness`: a guessed epoch there is a claim about when data
 /// last arrived, and a wrong one reads as green.
 ///
 /// Rejects the shape AND the calendar -- `iso_day` refuses 2026-02-29 -- and the

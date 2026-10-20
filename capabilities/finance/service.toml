@@ -81,7 +81,7 @@ backup_stale_days  = "2"
 # back on one argument — "a contract whose producer has never run answers with a fault
 # on day one" — and it wrote them in the right order: the ROUTE first, the KEYS second,
 # because declaring a contract for a path that 404s IS the day-one fault.
-# `GET /__axon/freshness` is served now (capabilities/finance/src/server.rs), so this is
+# `GET /__sjel/freshness` is served now (capabilities/finance/src/server.rs), so this is
 # the second step and not the first.
 #
 # What arrival means here: the newest `finance_price_fetches` row with `status = 'ok'`,

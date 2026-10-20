@@ -81,8 +81,8 @@ const HEARTBEAT = `<script>
 (function () {
   var ping = function () {
     if (document.visibilityState !== "visible") return;
-    if (navigator.sendBeacon) navigator.sendBeacon("/__axon/ping");
-    else fetch("/__axon/ping", { method: "POST", keepalive: true }).catch(function () {});
+    if (navigator.sendBeacon) navigator.sendBeacon("/__sjel/ping");
+    else fetch("/__sjel/ping", { method: "POST", keepalive: true }).catch(function () {});
   };
   ping();
   setInterval(ping, ${HEARTBEAT_INTERVAL_MS});
@@ -168,13 +168,18 @@ Bun.serve({
 
     // The liveness pair. `ping` is the browser saying a visible tab exists; `idle`
     // is the reaper asking. Reading the state must never look like using it, so
-    // /__axon/idle deliberately does not touch lastSignal — otherwise a poll every
+    // /__sjel/idle deliberately does not touch lastSignal — otherwise a poll every
     // 30s would keep every panel alive forever.
-    if (url.pathname === "/__axon/ping") {
+    //
+    // Both names answer. The route is not ours alone: an installed panel page carries a
+    // heartbeat injected by an older panel-server, and an older sjel-status reaps through
+    // the old name, so a rename that served only the new one would leave every running
+    // panel unreapable and every new panel unpolled until both sides restart together.
+    if (url.pathname === "/__sjel/ping" || url.pathname === "/__axon/ping") {
       lastSignal = Date.now();
       return new Response(null, { status: 204 });
     }
-    if (url.pathname === "/__axon/idle") {
+    if (url.pathname === "/__sjel/idle" || url.pathname === "/__axon/idle") {
       return Response.json({
         idle_seconds: Math.floor((Date.now() - lastSignal) / 1000),
         last_signal: new Date(lastSignal).toISOString(),

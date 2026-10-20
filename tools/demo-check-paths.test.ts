@@ -202,7 +202,7 @@ describe("declaredRoutes", () => {
         sjelRoutes.includes("/api/sjel-status/capabilities/:name/start"),
     ).toBe(true);
     expect(sjelRoutes).not.toContain("/api/sjel-status/upstreams");
-    expect(declaredRoutes("finance")).toContain("/__axon/freshness");
+    expect(declaredRoutes("finance")).toContain("/__sjel/freshness");
     const tripsRoutes = declaredRoutes("trips");
     expect(
       tripsRoutes.includes("/api/plans/{id}/cost") ||

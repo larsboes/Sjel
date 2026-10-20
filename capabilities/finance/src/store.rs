@@ -1165,7 +1165,7 @@ impl FinanceStore {
     }
 
     /// The most recent moment any provider delivered an observation, as the
-    /// stamp it was written with. The whole body of `GET /__axon/freshness`.
+    /// stamp it was written with. The whole body of `GET /__sjel/freshness`.
     ///
     /// `status = 'ok'` and nothing else, for the reason
     /// `capabilities/comms/src/store/source_state.rs` gives for reading

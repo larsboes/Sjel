@@ -72,7 +72,7 @@ exec a path that exists on no machine but the one where it was compiled by hand.
 
 `capabilities/finance/service.toml` declares `freshness_advise_hours = "48"` and
 `freshness_stale_hours = "96"` since 2026-09-08, and finance serves
-`GET /__axon/freshness` to answer them. Both numbers are this job's own `24h`
+`GET /__sjel/freshness` to answer them. Both numbers are this job's own `24h`
 schedule: advise at two missed runs, stale at four.
 
 This section said the opposite until that day — the keys were deliberately absent,

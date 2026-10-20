@@ -319,7 +319,9 @@ function main(): void {
       const url = new URL(request.url);
       lastSignal = Date.now();
 
-      if (url.pathname === "/__axon/idle") {
+      // Both names answer: an older sjel-status reaps through the pre-rename one
+      // (capabilities/sjel-status/src/status/reaper.rs).
+      if (url.pathname === "/__sjel/idle" || url.pathname === "/__axon/idle") {
         return Response.json({
           idle_seconds: Math.floor((Date.now() - lastSignal) / 1000),
           last_signal: new Date(lastSignal).toISOString(),

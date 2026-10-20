@@ -177,9 +177,13 @@ const ROUTES: &[route_manifest::Route] = &[
         "Rescore feed relevance against the current profiles.",
     ),
     r("GET", "/sources", "Declared feed sources."),
+    // A literal, not `sjel_server::FRESHNESS_PATH`: this table is what the docs and the MCP
+    // route list read, and tools/demo-check-paths.test.ts parses it as text. The server routes
+    // the constant, and doctor polls the constant, so a table that drifted from it would show
+    // up as a capability whose freshness never answers rather than as a silent difference.
     r(
         "GET",
-        "/__axon/freshness",
+        "/__sjel/freshness",
         "When data last arrived, for the freshness contract.",
     ),
     r(
@@ -399,7 +403,10 @@ fn build_router(dashboard_origin: &str) -> Router {
         .route("/content/cloud-providers", get(cloud_providers_handler))
         .route("/content/{source}/{id}", get(content_item_handler))
         .route("/sources", get(sources_handler))
-        .route("/__axon/freshness", get(freshness_handler))
+        .route(sjel_server::FRESHNESS_PATH, get(freshness_handler))
+        // The pre-rename path, kept for one release: sjel-status polls every capability and an
+        // older build of it still asks here. libs/sjel-server/src/auth.rs says why both answer.
+        .route(sjel_server::LEGACY_FRESHNESS_PATH, get(freshness_handler))
         .route("/triage", get(triage_handler))
         .route("/triage/sweep/status", get(triage_sweep_status_handler))
         .route(

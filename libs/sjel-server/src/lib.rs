@@ -39,8 +39,8 @@ pub mod tailnet;
 pub use auth::{
     authenticated, comms_config_token, device_signed_path, normalize_legacy_headers,
     session_cookie, token_from_file, AdmittedDevice, AdmittedPairingClaim, DeviceVerifier,
-    InboundAuth, SessionVerifier, DEVICE_SIGNATURE_HEADER, LEGACY_HEADERS, PAIRING_CLAIM_PATH,
-    SESSION_COOKIE, SESSION_OPEN_PATH,
+    InboundAuth, SessionVerifier, DEVICE_SIGNATURE_HEADER, FRESHNESS_PATH, LEGACY_FRESHNESS_PATH,
+    LEGACY_HEADERS, PAIRING_CLAIM_PATH, SESSION_COOKIE, SESSION_OPEN_PATH,
 };
 pub use session::{session_cookie_header, SignedSessions, SESSION_TTL_SECONDS};
 

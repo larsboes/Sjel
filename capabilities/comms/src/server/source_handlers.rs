@@ -125,7 +125,7 @@ pub(super) async fn source_scan_handler(Json(body): Json<SourceScanBody>) -> Htt
                     // is failing -- and recorded, which this path did not do. `record_run` stays
                     // uncalled because it would write a cursor for a collector that never ran;
                     // `record_sweep_failure` is the call for a source that ran and failed, and it
-                    // leaves `last_success_at` alone, so `/__axon/freshness` still reads this
+                    // leaves `last_success_at` alone, so `/__sjel/freshness` still reads this
                     // source as stale while `GET /sources` gains the class and the streak.
                     //
                     // `last_run_at` moves here, which is the convention the inbox sweep's own
@@ -195,7 +195,7 @@ pub(super) async fn source_scan_handler(Json(body): Json<SourceScanBody>) -> Htt
             }
             // `record_sweep_success`, not `record_run`. This endpoint is what feed-sweep and the
             // dashboard call, and `record_run` writes only `last_run_at` and the cursor, so a
-            // source scanned here could contribute to `GET /__axon/freshness` neither by success
+            // source scanned here could contribute to `GET /__sjel/freshness` neither by success
             // nor by failure. Measured 2026-10-13: `arxiv-ai-recent` and `github-trending-daily`
             // had run every six hours for days with `last_success_at` NULL, which left that
             // contract resting on the inbox sweep alone -- and it went stale the moment gmail's
@@ -268,7 +268,7 @@ pub(super) async fn source_scan_handler(Json(body): Json<SourceScanBody>) -> Htt
     }
 }
 
-/// `GET /__axon/freshness` — when this capability last took delivery of data.
+/// `GET /__sjel/freshness` — when this capability last took delivery of data.
 ///
 /// The shared shape behind `freshness_advise_hours` / `freshness_stale_hours` in
 /// `schemas/service.toml.example`. One integer, `last_arrival_at`, epoch seconds, or `null` if

@@ -55,6 +55,7 @@ pub fn instance_entries(rhythm: &Rhythm, not_before: i64) -> Result<Vec<NewEntry
                 all_day,
                 location: rhythm.location.clone(),
                 notes: None,
+                attendees: Vec::new(),
                 source: "rhythm".into(),
                 external_id: None,
                 rhythm_id: Some(rhythm.id.clone()),

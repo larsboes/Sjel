@@ -97,6 +97,11 @@ const ROUTES: &[route_manifest::Route] = &[
     ),
     r(
         "GET",
+        "/api/layers/photos",
+        "Geotagged media points with capture days and linked locations. GeoJSON.",
+    ),
+    r(
+        "GET",
         "/api/unplaced",
         "Expense transactions with no place link, grouped by exact description, ranked by total. Cents, EUR implied, capped at 200 groups.",
     ),
@@ -945,6 +950,21 @@ async fn people_layer(State(state): State<AppState>) -> ApiResponse {
     }
 }
 
+async fn photos_layer(State(state): State<AppState>) -> ApiResponse {
+    let database_path = state.database_path.clone();
+    match tokio::task::spawn_blocking(move || {
+        PlacesStore::open(&database_path)
+            .and_then(|store| layers::photos_layer(&store))
+            .map_err(|error| error.to_string())
+    })
+    .await
+    {
+        Ok(Ok(body)) => respond(StatusCode::OK, body),
+        Ok(Err(error)) => failed(error),
+        Err(_) => failed("task panicked".into()),
+    }
+}
+
 async fn unplaced(State(state): State<AppState>) -> ApiResponse {
     let database_path = state.database_path.clone();
     match tokio::task::spawn_blocking(move || {
@@ -1276,6 +1296,7 @@ fn build_router(state: AppState) -> Router {
         .route("/api/layers/spend", get(spend_layer))
         .route("/api/layers/travel", get(travel_layer))
         .route("/api/layers/people", get(people_layer))
+        .route("/api/layers/photos", get(photos_layer))
         .route("/api/unplaced", get(unplaced))
         .route("/api/unplaced/assign", post(assign_unplaced))
         .route("/api/people/proposals", get(list_proposals))

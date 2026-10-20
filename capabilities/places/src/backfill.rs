@@ -1096,6 +1096,130 @@ pub fn travelers(store: &PlacesStore, today: &str) -> Fallible<()> {
 }
 
 // ---------------------------------------------------------------------------
+// backfill calendar (register proposals from calendar entries' attendees)
+// ---------------------------------------------------------------------------
+
+#[derive(Debug, Default, PartialEq, Eq)]
+pub struct CalendarReport {
+    pub entries: usize,
+    pub entries_with_attendees: usize,
+    pub without_location: usize,
+    pub pairs: usize,
+    pub proposals_written: usize,
+    pub proposals_existing: usize,
+    pub places_created: usize,
+}
+
+pub fn calendar_from(
+    store: &PlacesStore,
+    calendar_prefix: &str,
+    today: &str,
+) -> Fallible<CalendarReport> {
+    calendar_from_geocoder(store, &Geocoder::new(store), calendar_prefix, today)
+}
+
+pub fn calendar_from_geocoder(
+    store: &PlacesStore,
+    geocoder: &Geocoder,
+    calendar_prefix: &str,
+    today: &str,
+) -> Fallible<CalendarReport> {
+    validate_prefix(calendar_prefix)?;
+    let conn = store.conn()?;
+    let has_table: bool = conn
+        .query_row(
+            "SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = ?1",
+            [&format!("{calendar_prefix}_entries")],
+            |_| Ok(()),
+        )
+        .optional()?
+        .is_some();
+    if !has_table {
+        return Ok(CalendarReport::default());
+    }
+
+    let rows: Vec<(String, Option<String>, String, String, String)> = conn.query_all(
+        &format!(
+            "SELECT id, location, attendees, substr(starts_at, 1, 10), substr(ends_at, 1, 10)
+             FROM {calendar_prefix}_entries
+             WHERE attendees IS NOT NULL AND attendees != '[]'
+             ORDER BY starts_at, id"
+        ),
+        [],
+        |row| {
+            Ok((
+                row.get(0)?,
+                row.get(1)?,
+                row.get(2)?,
+                row.get(3)?,
+                row.get(4)?,
+            ))
+        },
+    )?;
+
+    let mut report = CalendarReport::default();
+    report.entries_with_attendees = rows.len();
+
+    for (entry_id, location, attendees_json, date_start, date_end) in rows {
+        report.entries += 1;
+        let attendees: Vec<String> = serde_json::from_str(&attendees_json).unwrap_or_default();
+        if attendees.is_empty() {
+            continue;
+        }
+        let Some(loc_str) = location.map(|s| s.trim().to_string()).filter(|s| !s.is_empty()) else {
+            report.without_location += 1;
+            continue;
+        };
+
+        // Resolve or geocode place
+        let outcome = geocoder.geocode(&GeocodeQuery::Free(loc_str), None, today)?;
+        let Some(place) = outcome.place else {
+            report.without_location += 1;
+            continue;
+        };
+
+        for person in &attendees {
+            let person = person.trim();
+            if person.is_empty() {
+                continue;
+            }
+            report.pairs += 1;
+            let id = stable_id("pp", &format!("calendar:{person}:{entry_id}"));
+            if store.propose_person_place(
+                &id,
+                person,
+                &place.id,
+                Some(&date_start),
+                Some(&date_end),
+                6500,
+                "calendar-attendees",
+                today,
+            )? {
+                report.proposals_written += 1;
+            } else {
+                report.proposals_existing += 1;
+            }
+        }
+    }
+
+    Ok(report)
+}
+
+pub fn calendar(store: &PlacesStore, today: &str) -> Fallible<()> {
+    let report = calendar_from(store, "calendar", today)?;
+    println!(
+        "backfill calendar: {} entries with attendees, {} pairs, {} proposals written, \
+         {} already present, {} without located destination/location",
+        report.entries_with_attendees,
+        report.pairs,
+        report.proposals_written,
+        report.proposals_existing,
+        report.without_location,
+    );
+    Ok(())
+}
+
+// ---------------------------------------------------------------------------
 // backfill vault
 // ---------------------------------------------------------------------------
 
@@ -2730,5 +2854,50 @@ mod db_tests {
         assert_eq!(again.places_existing, 3);
         assert_eq!(again.proposals_written, 0);
         assert_eq!(again.proposals_existing, 1);
+    }
+
+    #[test]
+    fn calendar_attendees_become_proposals() {
+        let (store, path) = open_test_store("calendar_attendees");
+        {
+            let conn = Connection::open(&path).unwrap();
+            conn.execute_batch(&format!(
+                "CREATE TABLE {SCRATCH}_entries (
+                     id TEXT PRIMARY KEY,
+                     location TEXT,
+                     attendees TEXT NOT NULL,
+                     starts_at TEXT NOT NULL,
+                     ends_at TEXT NOT NULL
+                 );
+                 INSERT INTO {SCRATCH}_entries VALUES
+                 ('entry-1', 'Berlin', '[\"Alice\", \"Bob\"]', '2026-09-10T10:00:00', '2026-09-10T12:00:00'),
+                 ('entry-2', NULL, '[\"Alice\"]', '2026-09-11T10:00:00', '2026-09-11T12:00:00'),
+                 ('entry-3', 'Munich', '[]', '2026-09-12T10:00:00', '2026-09-12T12:00:00');"
+            ))
+            .unwrap();
+        }
+
+        // Stub geocoder for Berlin
+        let (url, _hits) = stub(
+            r#"[{"osm_type":"relation","osm_id":7004,"lat":"52.52","lon":"13.40","name":"Berlin","display_name":"Berlin, Germany","addresstype":"city","address":{"city":"Berlin","country_code":"de"}}]"#,
+        );
+        let geocoder = Geocoder::with_url(&store, url);
+
+        let report = calendar_from_geocoder(&store, &geocoder, SCRATCH, "2026-08-25").unwrap();
+        assert_eq!(report.entries, 2);
+        assert_eq!(report.entries_with_attendees, 2);
+        assert_eq!(report.without_location, 1);
+        assert_eq!(report.pairs, 2);
+        assert_eq!(report.proposals_written, 2);
+
+        let proposed = store.person_places_in_state("proposed").unwrap();
+        assert_eq!(proposed.len(), 2);
+        assert!(proposed.iter().any(|p| p.person == "Alice"));
+        assert!(proposed.iter().any(|p| p.person == "Bob"));
+
+        // Idempotent
+        let again = calendar_from_geocoder(&store, &geocoder, SCRATCH, "2026-08-25").unwrap();
+        assert_eq!(again.proposals_written, 0);
+        assert_eq!(again.proposals_existing, 2);
     }
 }

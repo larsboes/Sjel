@@ -256,6 +256,7 @@ fn candidate_from_note(
         all_day,
         location: pick(&fm, &["location"]),
         notes: None,
+        attendees: Vec::new(),
         source: source_id.to_string(),
         external_id: Some(external_id.to_string()),
         rhythm_id: None,

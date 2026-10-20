@@ -173,6 +173,7 @@ impl CalendarStore {
                 all_day INTEGER NOT NULL DEFAULT 0,
                 location TEXT,
                 notes TEXT,
+                attendees TEXT NOT NULL DEFAULT '[]',
                 source TEXT NOT NULL DEFAULT 'manual',
                 external_id TEXT,
                 rhythm_id TEXT REFERENCES {prefix}_rhythms(id) ON DELETE SET NULL,
@@ -231,6 +232,24 @@ impl CalendarStore {
             ",
             prefix = prefix
         ))?;
+        let has_attendees: bool = conn
+            .query_row(
+                &format!(
+                    "SELECT 1 FROM pragma_table_info('{prefix}_entries') WHERE name = 'attendees'"
+                ),
+                [],
+                |_| Ok(()),
+            )
+            .optional()?
+            .is_some();
+        if !has_attendees {
+            conn.execute(
+                &format!(
+                    "ALTER TABLE {prefix}_entries ADD COLUMN attendees TEXT NOT NULL DEFAULT '[]'"
+                ),
+                [],
+            )?;
+        }
         Ok(())
     }
 
@@ -394,10 +413,10 @@ impl CalendarStore {
         conn.execute(
             &format!(
                 "INSERT INTO {prefix}_entries \
-                 (id, kind, title, starts_at, ends_at, all_day, location, notes, \
+                 (id, kind, title, starts_at, ends_at, all_day, location, notes, attendees, \
                   source, external_id, rhythm_id, payload, created_at, updated_at, \
                   commitment) \
-                 VALUES (?1,?2,?3,?4,?5,?6,?7,?8,?9,?10,?11,?12,?13,?14,?15)",
+                 VALUES (?1,?2,?3,?4,?5,?6,?7,?8,?9,?10,?11,?12,?13,?14,?15,?16)",
                 prefix = self.prefix
             ),
             params![
@@ -409,6 +428,7 @@ impl CalendarStore {
                 entry.all_day as i32,
                 &entry.location,
                 &entry.notes,
+                &serde_json::to_string(&entry.attendees)?,
                 &entry.source,
                 &entry.external_id,
                 &entry.rhythm_id,
@@ -440,15 +460,15 @@ impl CalendarStore {
         Ok(conn.query_row(
             &format!(
                 "INSERT INTO {prefix}_entries \
-                 (id, kind, title, starts_at, ends_at, all_day, location, notes, \
+                 (id, kind, title, starts_at, ends_at, all_day, location, notes, attendees, \
                   source, external_id, rhythm_id, payload, created_at, updated_at, \
                   commitment) \
-                 VALUES (?1,?2,?3,?4,?5,?6,?7,?8,?9,?10,?11,?12,?13,?14,?15) \
+                 VALUES (?1,?2,?3,?4,?5,?6,?7,?8,?9,?10,?11,?12,?13,?14,?15,?16) \
                  ON CONFLICT (source, external_id) WHERE external_id IS NOT NULL \
                  DO UPDATE SET kind=excluded.kind, title=excluded.title, \
                    starts_at=excluded.starts_at, ends_at=excluded.ends_at, \
                    all_day=excluded.all_day, location=excluded.location, \
-                   notes=excluded.notes, rhythm_id=excluded.rhythm_id, \
+                   notes=excluded.notes, attendees=excluded.attendees, rhythm_id=excluded.rhythm_id, \
                    payload=excluded.payload, updated_at=excluded.updated_at, \
                    commitment=CASE WHEN {rank_new} > {rank_old} \
                      THEN excluded.commitment ELSE commitment END \
@@ -473,6 +493,7 @@ impl CalendarStore {
                 entry.all_day as i32,
                 &entry.location,
                 &entry.notes,
+                &serde_json::to_string(&entry.attendees)?,
                 &entry.source,
                 &entry.external_id,
                 &entry.rhythm_id,
@@ -514,6 +535,9 @@ impl CalendarStore {
         if let Some(notes) = &patch.notes {
             entry.notes = notes.clone();
         }
+        if let Some(attendees) = &patch.attendees {
+            entry.attendees = attendees.clone();
+        }
         if let Some(commitment) = patch.commitment {
             entry.commitment = commitment;
         }
@@ -527,7 +551,7 @@ impl CalendarStore {
             &format!(
                 "UPDATE {prefix}_entries SET kind=?2, title=?3, starts_at=?4, ends_at=?5, \
                  all_day=?6, location=?7, notes=?8, rhythm_id=?9, updated_at=?10, \
-                 commitment=?11 WHERE id=?1",
+                 commitment=?11, attendees=?12 WHERE id=?1",
                 prefix = self.prefix
             ),
             params![
@@ -542,6 +566,7 @@ impl CalendarStore {
                 &entry.rhythm_id,
                 &entry.updated_at,
                 entry.commitment.as_str(),
+                &serde_json::to_string(&entry.attendees)?,
             ],
         )?;
         Ok(Some(entry))
@@ -1177,6 +1202,7 @@ fn entry_as_new(entry: &Entry) -> NewEntry {
         all_day: entry.all_day,
         location: entry.location.clone(),
         notes: entry.notes.clone(),
+        attendees: entry.attendees.clone(),
         source: entry.source.clone(),
         external_id: entry.external_id.clone(),
         rhythm_id: entry.rhythm_id.clone(),
@@ -1216,6 +1242,7 @@ fn entry_from_input(input: &NewEntry) -> Entry {
         all_day: input.all_day,
         location: input.location.clone(),
         notes: input.notes.clone(),
+        attendees: input.attendees.clone(),
         source: input.source.clone(),
         external_id: input.external_id.clone(),
         rhythm_id: input.rhythm_id.clone(),
@@ -1245,6 +1272,11 @@ fn context_from_input(input: &NewContext) -> Context {
 /// `CREATE TABLE` would silently re-number a positional read.
 fn entry_from_row(row: &Row) -> rusqlite::Result<Entry> {
     let payload: String = row.get("payload")?;
+    let attendees_raw: Option<String> = row.get("attendees").ok();
+    let attendees: Vec<String> = attendees_raw
+        .as_deref()
+        .and_then(|raw| serde_json::from_str(raw).ok())
+        .unwrap_or_default();
     Ok(Entry {
         id: row.get("id")?,
         kind: row.get("kind")?,
@@ -1255,6 +1287,7 @@ fn entry_from_row(row: &Row) -> rusqlite::Result<Entry> {
         all_day: row.get::<_, i32>("all_day")? != 0,
         location: row.get("location")?,
         notes: row.get("notes")?,
+        attendees,
         source: row.get("source")?,
         external_id: row.get("external_id")?,
         rhythm_id: row.get("rhythm_id")?,
@@ -1373,6 +1406,7 @@ mod db_tests {
             all_day: false,
             location: None,
             notes: None,
+            attendees: Vec::new(),
             source: "manual".to_string(),
             external_id: None,
             rhythm_id: None,

@@ -278,6 +278,38 @@ pub fn index(ledger: &Ledger, root: &Path, uuid: &str, label: &str) -> Result<In
 }
 
 #[derive(Debug, Serialize)]
+pub struct GeotagIndexReport {
+    pub locations_considered: usize,
+    pub geotags_found: usize,
+    pub geotags_recorded: usize,
+}
+
+/// Index EXIF GPS coordinates for all indexed locations of a volume.
+/// Respects PRD N4: indexes coordinates and links to digests/locations, never copies files.
+pub fn index_geotags(ledger: &Ledger, root: &Path, uuid: &str) -> Result<GeotagIndexReport> {
+    let locations = ledger.locations(uuid)?;
+    let mut by_relpath = BTreeMap::new();
+    let mut relpaths = Vec::new();
+    for loc in locations {
+        by_relpath.insert(loc.relpath.clone(), loc.digest);
+        relpaths.push(loc.relpath);
+    }
+    let geotags = preview::file_geotags(root, &relpaths)?;
+    let mut recorded = 0;
+    for (relpath, (lat, lon, captured_at)) in &geotags {
+        if let Some(digest) = by_relpath.get(relpath) {
+            ledger.record_geotag(digest, *lat, *lon, captured_at.as_deref())?;
+            recorded += 1;
+        }
+    }
+    Ok(GeotagIndexReport {
+        locations_considered: relpaths.len(),
+        geotags_found: geotags.len(),
+        geotags_recorded: recorded,
+    })
+}
+
+#[derive(Debug, Serialize)]
 pub struct Audit {
     pub disk_files: usize,
     pub indexed_locations: usize,

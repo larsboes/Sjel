@@ -8,7 +8,7 @@ mod server;
 fn usage() -> ! {
     eprintln!(
         "usage: places-server [server \
-         | backfill <amex|cities|stations|takeout|travelers|vault> \
+         | backfill <amex|calendar|cities|stations|takeout|travelers|vault> \
          | climate fetch [--place <id>] [--force]]"
     );
     std::process::exit(2);
@@ -101,6 +101,7 @@ fn main() {
             let today = places::today();
             let result = match args.get(1).map(String::as_str) {
                 Some("amex") => places::backfill::amex(&store, &today),
+                Some("calendar") => places::backfill::calendar(&store, &today),
                 Some("cities") => places::backfill::cities(&store, &today),
                 Some("stations") => places::backfill::stations(&store, &today),
                 Some("takeout") => places::backfill::takeout(&store, &today),

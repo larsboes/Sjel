@@ -216,6 +216,7 @@ mod tests {
             all_day: false,
             location: Some("Phantasialand, 50321 Brühl".into()),
             notes: Some("Dated ticket, valid only on 10.08.".into()),
+            attendees: Vec::new(),
             source: "manual".into(),
             external_id: None,
             rhythm_id: None,

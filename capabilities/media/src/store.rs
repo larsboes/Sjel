@@ -119,6 +119,16 @@ pub struct ReviewRow {
     pub decided_at: String,
 }
 
+/// One digest's embedded GPS coordinates and capture day (PRD N4: index and link, never copy).
+#[derive(Debug, Clone, PartialEq, Serialize)]
+pub struct GeotagRow {
+    pub digest: String,
+    pub latitude: f64,
+    pub longitude: f64,
+    pub captured_at: Option<String>,
+    pub indexed_at: String,
+}
+
 impl Ledger {
     pub fn open(path: &Path) -> Result<Self> {
         let pool = sjel_store::open_pool(path, "media", |conn| {
@@ -176,6 +186,13 @@ impl Ledger {
                     decided_at TEXT NOT NULL DEFAULT ({now}),
                     PRIMARY KEY (left_digest, right_digest),
                     CHECK(left_digest < right_digest)
+                );
+                CREATE TABLE IF NOT EXISTS media_geotags (
+                    digest TEXT PRIMARY KEY REFERENCES media_files(digest),
+                    latitude REAL NOT NULL CHECK(latitude BETWEEN -90.0 AND 90.0),
+                    longitude REAL NOT NULL CHECK(longitude BETWEEN -180.0 AND 180.0),
+                    captured_at TEXT,
+                    indexed_at TEXT NOT NULL DEFAULT ({now})
                 );",
                 now = sjel_store::NOW
             ))?;
@@ -639,6 +656,52 @@ impl Ledger {
                 decision: row.get(2)?,
                 note: row.get(3)?,
                 decided_at: row.get(4)?,
+            })
+        })?;
+        Ok(rows.collect::<rusqlite::Result<Vec<_>>>()?)
+    }
+
+    pub fn record_geotag(
+        &self,
+        digest: &str,
+        latitude: f64,
+        longitude: f64,
+        captured_at: Option<&str>,
+    ) -> Result<()> {
+        if !(-90.0..=90.0).contains(&latitude) || !(-180.0..=180.0).contains(&longitude) {
+            return Err(format!("coordinates out of bounds: ({latitude}, {longitude})").into());
+        }
+        let conn = self.pool.get()?;
+        conn.execute(
+            &format!(
+                "INSERT INTO media_geotags(digest, latitude, longitude, captured_at, indexed_at)
+                 VALUES(?1, ?2, ?3, ?4, {now})
+                 ON CONFLICT(digest) DO UPDATE SET
+                 latitude = excluded.latitude,
+                 longitude = excluded.longitude,
+                 captured_at = excluded.captured_at,
+                 indexed_at = {now}",
+                now = sjel_store::NOW
+            ),
+            params![digest, latitude, longitude, captured_at],
+        )?;
+        Ok(())
+    }
+
+    pub fn geotags(&self) -> Result<Vec<GeotagRow>> {
+        let conn = self.pool.get()?;
+        let mut stmt = conn.prepare(
+            "SELECT digest, latitude, longitude, captured_at, indexed_at
+             FROM media_geotags
+             ORDER BY digest",
+        )?;
+        let rows = stmt.query_map([], |row| {
+            Ok(GeotagRow {
+                digest: row.get(0)?,
+                latitude: row.get(1)?,
+                longitude: row.get(2)?,
+                captured_at: row.get(3)?,
+                indexed_at: row.get(4)?,
             })
         })?;
         Ok(rows.collect::<rusqlite::Result<Vec<_>>>()?)

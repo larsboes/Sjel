@@ -120,6 +120,8 @@ pub struct Entry {
     pub all_day: bool,
     pub location: Option<String>,
     pub notes: Option<String>,
+    #[serde(default)]
+    pub attendees: Vec<String>,
     pub source: String,
     pub external_id: Option<String>,
     pub rhythm_id: Option<String>,
@@ -149,6 +151,8 @@ pub struct NewEntry {
     pub location: Option<String>,
     #[serde(default)]
     pub notes: Option<String>,
+    #[serde(default)]
+    pub attendees: Vec<String>,
     #[serde(default = "default_source")]
     pub source: String,
     #[serde(default)]
@@ -192,6 +196,8 @@ pub struct UpdateEntry {
         skip_serializing_if = "Option::is_none"
     )]
     pub notes: Option<Option<String>>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub attendees: Option<Vec<String>>,
 }
 
 // Override semantics: ANY patch to a rhythm-linked entry detaches it
@@ -539,6 +545,7 @@ mod tests {
             all_day: false,
             location: None,
             notes: None,
+            attendees: Vec::new(),
             source: "manual".into(),
             external_id: None,
             rhythm_id: None,

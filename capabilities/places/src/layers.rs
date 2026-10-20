@@ -5,7 +5,7 @@
 //! The wire shapes here are the dashboard map's contract; every collection is
 //! GeoJSON with `[longitude, latitude]` coordinate order.
 
-use rusqlite::params;
+use rusqlite::{params, OptionalExtension};
 use sjel_store::QueryAll;
 
 use crate::geocode::{GeocodeQuery, Geocoder};
@@ -738,6 +738,113 @@ pub fn people_layer(store: &PlacesStore, today: &str) -> Fallible<Value> {
             Some(feature(longitude?, latitude?, properties))
         })
         .collect();
+    Ok(collection(features))
+}
+
+/// `GET /api/layers/photos`: GeoJSON FeatureCollection of geotagged media items (PRD N4: index and link, never copy).
+pub fn photos_layer(store: &PlacesStore) -> Fallible<Value> {
+    photos_layer_in(store, "media")
+}
+
+pub fn photos_layer_in(store: &PlacesStore, media_prefix: &str) -> Fallible<Value> {
+    validate_prefix(media_prefix)?;
+    let conn = store.conn()?;
+    let table_name = format!("{media_prefix}_geotags");
+    let has_table: bool = conn
+        .query_row(
+            "SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = ?1",
+            [&table_name],
+            |_| Ok(()),
+        )
+        .optional()?
+        .is_some();
+    if !has_table {
+        return Ok(collection(Vec::new()));
+    }
+
+    let has_locations: bool = conn
+        .query_row(
+            "SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = ?1",
+            [&format!("{media_prefix}_locations")],
+            |_| Ok(()),
+        )
+        .optional()?
+        .is_some();
+
+    let mut features = Vec::new();
+    if has_locations {
+        let rows = conn.query_all(
+            &format!(
+                "SELECT g.digest, g.latitude, g.longitude, g.captured_at, l.uuid, l.relpath
+                 FROM {media_prefix}_geotags g
+                 LEFT JOIN {media_prefix}_locations l ON l.digest = g.digest
+                 ORDER BY g.digest, l.uuid, l.relpath"
+            ),
+            [],
+            |row| {
+                Ok((
+                    row.get::<_, String>(0)?,
+                    row.get::<_, f64>(1)?,
+                    row.get::<_, f64>(2)?,
+                    row.get::<_, Option<String>>(3)?,
+                    row.get::<_, Option<String>>(4)?,
+                    row.get::<_, Option<String>>(5)?,
+                ))
+            },
+        )?;
+
+        let mut by_digest: BTreeMap<String, (f64, f64, Option<String>, Vec<Value>)> =
+            BTreeMap::new();
+        for (digest, lat, lon, captured_at, uuid, relpath) in rows {
+            let entry = by_digest
+                .entry(digest)
+                .or_insert_with(|| (lat, lon, captured_at, Vec::new()));
+            if let (Some(u), Some(r)) = (uuid, relpath) {
+                entry.3.push(json!({ "uuid": u, "relpath": r }));
+            }
+        }
+
+        for (digest, (lat, lon, captured_at, locations)) in by_digest {
+            features.push(feature(
+                lon,
+                lat,
+                json!({
+                    "digest": digest,
+                    "captured_at": captured_at,
+                    "locations": locations,
+                }),
+            ));
+        }
+    } else {
+        let rows = conn.query_all(
+            &format!(
+                "SELECT digest, latitude, longitude, captured_at
+                 FROM {media_prefix}_geotags
+                 ORDER BY digest"
+            ),
+            [],
+            |row| {
+                Ok((
+                    row.get::<_, String>(0)?,
+                    row.get::<_, f64>(1)?,
+                    row.get::<_, f64>(2)?,
+                    row.get::<_, Option<String>>(3)?,
+                ))
+            },
+        )?;
+        for (digest, lat, lon, captured_at) in rows {
+            features.push(feature(
+                lon,
+                lat,
+                json!({
+                    "digest": digest,
+                    "captured_at": captured_at,
+                    "locations": [],
+                }),
+            ));
+        }
+    }
+
     Ok(collection(features))
 }
 

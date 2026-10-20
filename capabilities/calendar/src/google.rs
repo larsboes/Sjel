@@ -71,6 +71,16 @@ pub struct EventTime {
     pub time_zone: Option<String>,
 }
 
+#[derive(Debug, Clone, Default, Serialize, Deserialize, PartialEq)]
+pub struct GoogleAttendee {
+    #[serde(rename = "displayName", default)]
+    pub display_name: Option<String>,
+    #[serde(default)]
+    pub email: Option<String>,
+    #[serde(rename = "self", default)]
+    pub is_self: bool,
+}
+
 /// A `calendar#event` resource, narrowed to the fields this capability reads.
 /// Unknown fields are dropped by serde rather than rejected: Google adds
 /// fields, and an import that fails on a new one would be a scheduled outage.
@@ -85,6 +95,8 @@ pub struct GoogleEvent {
     pub description: Option<String>,
     #[serde(default)]
     pub location: Option<String>,
+    #[serde(default)]
+    pub attendees: Vec<GoogleAttendee>,
     #[serde(default)]
     pub start: EventTime,
     #[serde(default)]
@@ -197,6 +209,20 @@ pub fn map_event(event: &GoogleEvent, tz: &HomeTimezone) -> Result<NewEntry, Str
         .unwrap_or(UNTITLED)
         .to_string();
 
+    let attendees: Vec<String> = event
+        .attendees
+        .iter()
+        .filter(|a| !a.is_self)
+        .filter_map(|a| {
+            a.display_name
+                .as_deref()
+                .or(a.email.as_deref())
+                .map(str::trim)
+                .filter(|s| !s.is_empty())
+                .map(str::to_string)
+        })
+        .collect();
+
     let entry = NewEntry {
         kind: kind_for(event).to_string(),
         commitment: IMPORT_COMMITMENT,
@@ -216,6 +242,7 @@ pub fn map_event(event: &GoogleEvent, tz: &HomeTimezone) -> Result<NewEntry, Str
             .map(str::trim)
             .filter(|s| !s.is_empty())
             .map(str::to_string),
+        attendees,
         source: SOURCE.to_string(),
         external_id: Some(event.id.trim().to_string()),
         rhythm_id: None,
@@ -458,6 +485,7 @@ mod tests {
             all_day: entry.all_day,
             location: entry.location,
             notes: entry.notes,
+            attendees: entry.attendees,
             source: entry.source,
             external_id: entry.external_id,
             rhythm_id: entry.rhythm_id,
@@ -762,6 +790,7 @@ mod tests {
             all_day: false,
             location: Some("München".into()),
             notes: None,
+            attendees: Vec::new(),
             source: "manual".into(),
             external_id: None,
             rhythm_id: None,
@@ -834,6 +863,7 @@ mod tests {
             all_day: false,
             location: None,
             notes: None,
+            attendees: Vec::new(),
             source: "manual".into(),
             external_id: None,
             rhythm_id: None,

@@ -215,6 +215,7 @@ fn run(args: &[String]) -> Result<i32> {
             &["--apply"],
         ),
         "phash" => (&["--root", "--uuid", "--max-distance", "--db"], &[]),
+        "geotags" => (&["--root", "--uuid", "--db"], &[]),
         "review" => (
             &["--left", "--right", "--decision", "--note", "--db"],
             &[],
@@ -631,6 +632,27 @@ fn run(args: &[String]) -> Result<i32> {
             let note = option(opts, "--note")?.unwrap_or_default();
             let row = ledger.record_review(&left, &right, &decision, &note)?;
             println!("{}", serde_json::to_string(&row)?);
+            Ok(0)
+        }
+        "geotags" => {
+            let uuid = option(opts, "--uuid")?;
+            let root = option(opts, "--root")?.map(PathBuf::from);
+            let indexed = match (&root, &uuid) {
+                (Some(r), Some(u)) => {
+                    let verified_uuid = mounted(r, u)?;
+                    Some(media::index_geotags(&ledger, r, &verified_uuid)?)
+                }
+                (Some(_), None) => return Err("geotags --root requires --uuid".into()),
+                (None, _) => None,
+            };
+            let tags = ledger.geotags()?;
+            println!(
+                "{}",
+                serde_json::to_string(&serde_json::json!({
+                    "indexed": indexed,
+                    "geotags": tags,
+                }))?
+            );
             Ok(0)
         }
         "supersede" => {

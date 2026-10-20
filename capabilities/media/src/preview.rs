@@ -1007,6 +1007,152 @@ pub(crate) fn capture_days(
     Ok(out)
 }
 
+fn parse_coord_value(val: &Value) -> Option<f64> {
+    if let Some(num) = val.as_f64() {
+        return Some(num);
+    }
+    if let Some(s) = val.as_str() {
+        let s = s.trim();
+        if let Ok(num) = s.parse::<f64>() {
+            return Some(num);
+        }
+    }
+    None
+}
+
+/// Parse GPS latitude, longitude, and capture day from an ExifTool JSON row.
+pub fn parse_exif_geotag_row(
+    object: &serde_json::Map<String, Value>,
+) -> Option<(f64, f64, Option<String>)> {
+    let mut lat: Option<f64> = None;
+    let mut lon: Option<f64> = None;
+    let mut best_date: Option<(u8, String)> = None;
+
+    for (key, value) in object {
+        let tag = key.rsplit(':').next().unwrap_or(key);
+        match tag {
+            "GPSLatitude" => {
+                if let Some(l) = parse_coord_value(value) {
+                    lat = Some(l);
+                }
+            }
+            "GPSLongitude" => {
+                if let Some(l) = parse_coord_value(value) {
+                    lon = Some(l);
+                }
+            }
+            "GPSPosition" | "GPSCoordinates" => {
+                if lat.is_none() || lon.is_none() {
+                    if let Some(s) = value.as_str() {
+                        let parts: Vec<&str> = s
+                            .split(|c| c == ',' || c == ' ')
+                            .map(str::trim)
+                            .filter(|p| !p.is_empty())
+                            .collect();
+                        if parts.len() >= 2 {
+                            if let (Ok(p_lat), Ok(p_lon)) =
+                                (parts[0].parse::<f64>(), parts[1].parse::<f64>())
+                            {
+                                if lat.is_none() {
+                                    lat = Some(p_lat);
+                                }
+                                if lon.is_none() {
+                                    lon = Some(p_lon);
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+            _ => {}
+        }
+        if let Some(priority) = date_priority(key) {
+            if let Some(day) = value.as_str().and_then(metadata_day) {
+                if best_date.as_ref().is_none_or(|(p, _)| priority < *p) {
+                    best_date = Some((priority, day));
+                }
+            }
+        }
+    }
+
+    let lat = lat?;
+    let lon = lon?;
+    if !(-90.0..=90.0).contains(&lat) || !(-180.0..=180.0).contains(&lon) {
+        return None;
+    }
+    Some((lat, lon, best_date.map(|(_, d)| d)))
+}
+
+pub(crate) const GEOTAG_EXIF_ARGS: &[&str] = &[
+    "-config",
+    "",
+    "-json",
+    "-n",
+    "-a",
+    "-G1",
+    "-s",
+    "-api",
+    "LargeFileSupport=1",
+    "-DateTimeOriginal",
+    "-CreationDate",
+    "-CreateDate",
+    "-TrackCreateDate",
+    "-MediaCreateDate",
+    "-GPSLatitude",
+    "-GPSLongitude",
+    "-GPSCoordinates",
+    "-GPSPosition",
+];
+
+/// Read GPS coordinates and capture date for each file via ExifTool.
+pub fn file_geotags(
+    root: &Path,
+    relpaths: &[String],
+) -> Result<BTreeMap<String, (f64, f64, Option<String>)>> {
+    let mut out = BTreeMap::new();
+    if relpaths.is_empty() {
+        return Ok(out);
+    }
+    let output = match Command::new("exiftool")
+        .args(GEOTAG_EXIF_ARGS)
+        .args(relpaths.iter().map(|rel| root.join(rel)))
+        .output()
+    {
+        Ok(output) => output,
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => {
+            eprintln!("media: exiftool is not on PATH; GPS geotags cannot be read.");
+            return Ok(out);
+        }
+        Err(error) => return Err(error.into()),
+    };
+    if !output.status.success() {
+        return Err("exiftool exited unsuccessfully; no geotags were read".into());
+    }
+    let rows: Vec<Value> = serde_json::from_slice(&output.stdout)?;
+    for row in rows {
+        let Some(source) = row.get("SourceFile").and_then(Value::as_str) else {
+            continue;
+        };
+        let Some(object) = row.as_object() else {
+            continue;
+        };
+        let Some(geotag) = parse_exif_geotag_row(object) else {
+            continue;
+        };
+        let Ok(path) = PathBuf::from(source)
+            .strip_prefix(root)
+            .map(Path::to_path_buf)
+        else {
+            continue;
+        };
+        let Some(relative) = path.to_str() else {
+            continue;
+        };
+        out.insert(relative.to_owned(), geotag);
+    }
+    Ok(out)
+}
+
 fn collection_month(name: &str) -> Option<&str> {
     let prefix = name.get(..7)?;
     if name.as_bytes().get(7).is_some_and(u8::is_ascii_digit) {
@@ -1595,6 +1741,31 @@ mod tests {
         ] {
             assert!(!serialized.contains(private), "{private}");
         }
+    }
+
+    #[test]
+    fn parse_exif_geotag_row_extracts_coordinates_and_capture_date() {
+        let object: serde_json::Map<String, Value> = serde_json::from_value(json!({
+            "GPS:GPSLatitude": 50.7374,
+            "GPS:GPSLongitude": 7.0982,
+            "ExifIFD:DateTimeOriginal": "2026:08:14 15:30:00"
+        }))
+        .unwrap();
+        let parsed = parse_exif_geotag_row(&object).expect("parses numeric GPS tags");
+        assert_eq!(parsed.0, 50.7374);
+        assert_eq!(parsed.1, 7.0982);
+        assert_eq!(parsed.2.as_deref(), Some("2026-08-14"));
+
+        // Combined string coordinates fallback
+        let combined: serde_json::Map<String, Value> = serde_json::from_value(json!({
+            "Composite:GPSPosition": "52.5200, 13.4050",
+            "QuickTime:CreateDate": "2026:09:01"
+        }))
+        .unwrap();
+        let parsed_combined = parse_exif_geotag_row(&combined).expect("parses combined GPSPosition");
+        assert_eq!(parsed_combined.0, 52.5200);
+        assert_eq!(parsed_combined.1, 13.4050);
+        assert_eq!(parsed_combined.2.as_deref(), Some("2026-09-01"));
     }
 
     #[test]

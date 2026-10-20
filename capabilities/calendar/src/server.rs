@@ -977,6 +977,7 @@ async fn sync_trip_plan(State(state): State<AppState>, Path(plan_id): Path<Strin
                 all_day: true,
                 location: Some(place("destination")),
                 notes: None,
+                attendees: Vec::new(),
                 source: "trips".to_string(),
                 external_id: Some(format!("trip:stage:{stage_id}")),
                 rhythm_id: None,
@@ -1024,6 +1025,7 @@ async fn sync_trip_plan(State(state): State<AppState>, Path(plan_id): Path<Strin
                     .get("order_ref")
                     .and_then(|r| r.as_str())
                     .map(|r| format!("Order {r}")),
+                attendees: Vec::new(),
                 source: "trips".to_string(),
                 external_id: Some(format!("trip:booking:{item_id}")),
                 rhythm_id: None,
@@ -1753,6 +1755,7 @@ mod entry_list_class_tests {
             all_day: false,
             location: Some("Bonn".into()),
             notes: None,
+            attendees: Vec::new(),
             source: "web".into(),
             external_id: None,
             rhythm_id: None,

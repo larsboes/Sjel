@@ -53,6 +53,11 @@ pub const ROUTES: &[route_manifest::Route] = &[
         "/api/perceptual",
         "Advisory perceptual near-duplicate candidates from media_phashes and their operator review decisions from media_reviews.",
     ),
+    route_manifest::get(
+        "GET",
+        "/api/geotags",
+        "Indexed EXIF geotags with latitude, longitude, and capture dates from media_geotags.",
+    ),
 ];
 
 struct ApiError {
@@ -114,6 +119,11 @@ fn perceptual_json(ledger: &Ledger) -> Result<Value, String> {
     serde_json::to_value(report).map_err(|error| error.to_string())
 }
 
+fn geotags_json(ledger: &Ledger) -> Result<Value, String> {
+    let rows = ledger.geotags().map_err(|error| error.to_string())?;
+    Ok(json!({ "geotags": rows }))
+}
+
 /// Run a blocking ledger read off the async runtime, so one slow query cannot stall the listener.
 async fn blocking<T>(
     ledger: Arc<Ledger>,
@@ -158,6 +168,10 @@ async fn perceptual(State(ledger): State<Arc<Ledger>>) -> Result<Json<Value>, Ap
     Ok(Json(blocking(ledger, perceptual_json).await?))
 }
 
+async fn geotags(State(ledger): State<Arc<Ledger>>) -> Result<Json<Value>, ApiError> {
+    Ok(Json(blocking(ledger, geotags_json).await?))
+}
+
 fn router(ledger: Arc<Ledger>) -> Router {
     Router::new()
         .route("/health", get(health))
@@ -166,6 +180,7 @@ fn router(ledger: Arc<Ledger>) -> Router {
         .route("/api/ingests", get(ingests))
         .route("/api/ingests/{id}", get(ingest))
         .route("/api/perceptual", get(perceptual))
+        .route("/api/geotags", get(geotags))
         .layer(middleware::from_fn_with_state(
             "media",
             sjel_server::origin::refuse_foreign_origins,

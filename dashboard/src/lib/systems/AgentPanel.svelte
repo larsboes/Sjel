@@ -7,10 +7,10 @@
   import Icon from "$lib/Icon.svelte";
   import Freshness from "$lib/ui/Freshness.svelte";
   import { poll } from "$lib/ui/poll.svelte";
-  import { axonStatus, type AgentMode } from "$lib/api";
+  import { sjelStatus, type AgentMode } from "$lib/api";
 
   // Pending writes are what a person waits on, so the list refreshes while the page is open.
-  const polled = poll({ intervalMs: 5_000, fetch: () => axonStatus.agent() });
+  const polled = poll({ intervalMs: 5_000, fetch: () => sjelStatus.agent() });
   const view = $derived(polled.data);
   let writeError = $state<string | null>(null);
   const err = $derived(polled.error ?? writeError);
@@ -26,7 +26,7 @@
   async function setMode(capability: string, mode: AgentMode) {
     busy = capability;
     try {
-      await axonStatus.setAgentMode(capability, mode);
+      await sjelStatus.setAgentMode(capability, mode);
       await polled.refresh();
       writeError = null;
     } catch (e) {
@@ -39,7 +39,7 @@
   async function decide(id: string, allow: boolean) {
     busy = id;
     try {
-      await axonStatus.decideAgentWrite(id, allow);
+      await sjelStatus.decideAgentWrite(id, allow);
       await polled.refresh();
       writeError = null;
     } catch (e) {

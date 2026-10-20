@@ -12,7 +12,7 @@
   import { onMount } from "svelte";
   import { tip } from "$lib/tip";
   import Icon from "$lib/Icon.svelte";
-  import { axonStatus, type RepoStatus } from "$lib/api";
+  import { sjelStatus, type RepoStatus } from "$lib/api";
   import { dayLabel, daysSince } from "$lib/ui/age";
 
   let { detailed = false }: { detailed?: boolean } = $props();
@@ -28,7 +28,7 @@
 
   onMount(async () => {
     try {
-      repos = (await axonStatus.repos()).repos;
+      repos = (await sjelStatus.repos()).repos;
     } catch (caught) {
       error = caught instanceof Error ? caught.message : String(caught);
     } finally {

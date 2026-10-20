@@ -13,7 +13,7 @@ export * from './api/places';
 export * from './api/media';
 import { jsonInit, request } from './api/core';
 
-export interface AxonStatusHealth {
+export interface SjelStatusHealth {
   ok: boolean;
   version: string;
   uptime_seconds: number;
@@ -598,8 +598,8 @@ export interface CvWrite {
   note?: string;
 }
 
-export const axonStatus = {
-  health: () => request<AxonStatusHealth>('/sjel-status/api/sjel-status/health'),
+export const sjelStatus = {
+  health: () => request<SjelStatusHealth>('/sjel-status/api/sjel-status/health'),
   capabilities: () => request<CapabilityView[]>('/sjel-status/api/sjel-status/capabilities'),
   backups: () =>
     request<{ backups: BackupStatus[]; attempt_error: string | null }>(

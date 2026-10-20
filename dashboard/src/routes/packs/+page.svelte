@@ -12,7 +12,7 @@
   import { onMount } from "svelte";
   import Icon from "$lib/Icon.svelte";
   import PageHeader from "$lib/PageHeader.svelte";
-  import { axonStatus, type PacksView, type HarnessView } from "$lib/api";
+  import { sjelStatus, type PacksView, type HarnessView } from "$lib/api";
   import Chip from "$lib/ui/Chip.svelte";
   import Collection from "$lib/ui/Collection.svelte";
   import type { Column } from "$lib/ui/DataTable.svelte";
@@ -24,7 +24,7 @@
 
   // Slow beat: deployments are a human action, not a stream. The beat is declared here
   // because the page says how old the matrix is when that beat does not land.
-  const polled = poll({ intervalMs: 30_000, fetch: () => axonStatus.packs() });
+  const polled = poll({ intervalMs: 30_000, fetch: () => sjelStatus.packs() });
   let view: PacksView | null = $derived(polled.data);
   const error = $derived(polled.error);
   const loading = $derived(polled.data === null && polled.error === null);
@@ -109,7 +109,7 @@
     notice = null;
     writeError = null;
     try {
-      const result = await axonStatus.writePack({ action, harness, packs });
+      const result = await sjelStatus.writePack({ action, harness, packs });
       notice = `${action} ${result.harness} ${packs.join(", ")} — ${result.detail || "done"}`;
     } catch (e) {
       // A refusal from the launcher is the answer, not a broken page: it names the drifted

@@ -4,7 +4,7 @@
   import ResearchTabs from "$lib/research/ResearchTabs.svelte";
   import { groupUpstreams, matches } from "$lib/research/content";
   import { registers } from "virtual:sjel-research";
-  import { axonStatus } from "$lib/api";
+  import { sjelStatus } from "$lib/api";
   import { DEMO } from "$lib/demo";
 
   // Two registers, one page. systems.toml is what runs beside Sjel; upstreams.toml is every
@@ -33,7 +33,7 @@
     added = null;
     addError = null;
     try {
-      const row = await axonStatus.watchUpstream(addUrl.trim(), addSummary.trim(), addName.trim() || undefined);
+      const row = await sjelStatus.watchUpstream(addUrl.trim(), addSummary.trim(), addName.trim() || undefined);
       added = row.name;
       addUrl = addSummary = addName = "";
     } catch (e) {

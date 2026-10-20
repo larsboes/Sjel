@@ -2,7 +2,7 @@
   import Icon from "$lib/Icon.svelte";
   import Overlay from "$lib/Overlay.svelte";
   import {
-    axonStatus,
+    sjelStatus,
     traveler,
     type TravelProfile,
     type DerivedTravelStats,
@@ -40,7 +40,7 @@
     loading = true;
     error = null;
     try {
-      await axonStatus.start("traveler").catch(() => undefined);
+      await sjelStatus.start("traveler").catch(() => undefined);
       const [profileRes, statsRes] = await Promise.all([
         traveler.profile(),
         traveler.derived().catch(() => null),

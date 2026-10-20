@@ -5,7 +5,7 @@
   import { onMount } from "svelte";
   import Icon from "$lib/Icon.svelte";
   import PageHeader from "$lib/PageHeader.svelte";
-  import { axonStatus, type CvApplication, type CvView, type CvWrite } from "$lib/api";
+  import { sjelStatus, type CvApplication, type CvView, type CvWrite } from "$lib/api";
   import { inTauri } from "$lib/mac-bridge";
   import Chip from "$lib/ui/Chip.svelte";
   import DataTable, { type Column } from "$lib/ui/DataTable.svelte";
@@ -29,7 +29,7 @@
 
   async function load(): Promise<void> {
     try {
-      view = await axonStatus.cv();
+      view = await sjelStatus.cv();
       error = null;
     } catch (e) {
       error = e instanceof Error ? e.message : String(e);
@@ -40,7 +40,7 @@
     busy = true;
     writeError = null;
     try {
-      const result = await axonStatus.writeCv(write);
+      const result = await sjelStatus.writeCv(write);
       if (show) output = [result.detail, result.warnings].filter(Boolean).join("\n\n");
     } catch (e) {
       writeError = e instanceof Error ? e.message : String(e);
@@ -188,7 +188,7 @@
       {/each}
     </ul>
     {#if preview && web}
-      <iframe title={preview} src={axonStatus.cvPdfUrl(preview)}></iframe>
+      <iframe title={preview} src={sjelStatus.cvPdfUrl(preview)}></iframe>
     {/if}
   </section>
 {/if}

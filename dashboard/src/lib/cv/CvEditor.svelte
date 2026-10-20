@@ -3,7 +3,7 @@
    * Edit the master or one application, as a form or as raw YAML. Both save through `cv`, which
    * refuses what does not parse or render and commits what it accepts in the overlay's git.
    */
-  import { axonStatus, type CvView } from "$lib/api";
+  import { sjelStatus, type CvView } from "$lib/api";
   import Chip from "$lib/ui/Chip.svelte";
   import ApplicationForm from "./ApplicationForm.svelte";
   import MasterForm from "./MasterForm.svelte";
@@ -30,7 +30,7 @@
     note = null;
     try {
       if (as === "form") {
-        const loaded = await axonStatus.cvModel<Master | Application>(slug);
+        const loaded = await sjelStatus.cvModel<Master | Application>(slug);
         // Empty overrides exist in the form so they can be typed into; clean() drops them on save.
         if (slug !== "") {
           const a = loaded as Application;
@@ -38,10 +38,10 @@
           a.summary ??= { en: "" };
         }
         model = loaded;
-        if (slug !== "") master ??= await axonStatus.cvModel<Master>("");
+        if (slug !== "") master ??= await sjelStatus.cvModel<Master>("");
         else master = model as Master;
       } else {
-        yaml = (await axonStatus.cvFile(slug)).content;
+        yaml = (await sjelStatus.cvFile(slug)).content;
       }
       file = slug;
       tab = as;
@@ -58,8 +58,8 @@
     note = null;
     try {
       const result = tab === "form"
-        ? await axonStatus.saveCvModel(file, clean($state.snapshot(model)))
-        : await axonStatus.saveCvFile(file, yaml);
+        ? await sjelStatus.saveCvModel(file, clean($state.snapshot(model)))
+        : await sjelStatus.saveCvFile(file, yaml);
       failed = false;
       note = result.detail;
       await open(file, tab);

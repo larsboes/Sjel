@@ -191,7 +191,7 @@ pub(crate) struct CapabilityStatus {
 }
 
 #[derive(Serialize)]
-pub(crate) struct AxonStatusHealth {
+pub(crate) struct SjelStatusHealth {
     pub(crate) ok: bool,
     pub(crate) version: String,
     pub(crate) uptime_seconds: u64,

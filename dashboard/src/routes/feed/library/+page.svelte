@@ -3,7 +3,7 @@
   import { page } from "$app/state";
   import { goto } from "$app/navigation";
   import {
-    axonStatus,
+    sjelStatus,
     comms,
     type CommsEvaluationStatus,
     type FeedEntry,
@@ -116,7 +116,7 @@
 
   async function load() {
     try {
-      await axonStatus.start("comms").catch(() => undefined);
+      await sjelStatus.start("comms").catch(() => undefined);
       const [feed, status] = await Promise.all([
         comms.feed({ days: 3650, includeDismissed: true }),
         comms.evaluationStatus().catch(() => null),

@@ -16,10 +16,10 @@
   import { createBandDisclosure } from "$lib/home/band-disclosure.svelte";
   import StateLine from "$lib/StateLine.svelte";
   import {
-    axonStatus,
+    sjelStatus,
     macmon,
     panelUrl,
-    type AxonStatusHealth,
+    type SjelStatusHealth,
     type CalendarContext,
     type CalendarEntry,
     type CapabilityView,
@@ -137,7 +137,7 @@
   const scoutingSources = $derived(scoutingSource?.sources ?? []);
   const plans = $derived((sources.trip?.source as TripPlan[] | undefined) ?? []);
   const feedEntries = $derived((sources.feed?.source as FeedEntry[] | undefined) ?? []);
-  const health = $derived((sources.system?.source as AxonStatusHealth | undefined) ?? null);
+  const health = $derived((sources.system?.source as SjelStatusHealth | undefined) ?? null);
 
   const tomorrowKey = $derived(
     localDateKey(new Date(today.getFullYear(), today.getMonth(), today.getDate() + 1)),
@@ -462,7 +462,7 @@
     busyProject = project.name;
     actionError = null;
     try {
-      await axonStatus.start(project.name);
+      await sjelStatus.start(project.name);
       await capabilities.refresh();
     } catch (caught) {
       actionError = caught instanceof Error ? caught.message : String(caught);

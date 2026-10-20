@@ -10,7 +10,7 @@
   import { capabilities } from "$lib/capabilities.svelte";
   import { PRIMARY_NAV, UTILITY_NAV, capabilityForPath, withoutCapabilities, link } from "$lib/nav";
   import { createShellStarter } from "$lib/shell-start";
-  import { axonStatus } from "$lib/api";
+  import { sjelStatus } from "$lib/api";
   import SoundscapeDock from "$lib/SoundscapeDock.svelte";
   import AssistantDrawer from "$lib/assistant/AssistantDrawer.svelte";
   import { assistantStore } from "$lib/assistant/assistant.svelte";
@@ -140,7 +140,7 @@
         return Boolean(capability) && capability?.up !== true;
       };
       for (const name of claimStarts(wanted, worthStarting)) {
-        const started = await axonStatus.start(name).then(
+        const started = await sjelStatus.start(name).then(
           (result) => result.up === true,
           // Swallowed: the page itself reports what it could not read, and a failed start
           // is not a second thing to tell the reader about.

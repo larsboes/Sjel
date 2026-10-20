@@ -4,7 +4,7 @@
   import { onMount } from "svelte";
   import Icon from "$lib/Icon.svelte";
   import PageHeader from "$lib/PageHeader.svelte";
-  import { axonStatus, hasPanel, type CapabilityView, type BackupStatus } from "$lib/api";
+  import { sjelStatus, hasPanel, type CapabilityView, type BackupStatus } from "$lib/api";
   import { ageLabel } from "$lib/ui/age";
   import Freshness from "$lib/ui/Freshness.svelte";
   import { poll } from "$lib/ui/poll.svelte";
@@ -24,7 +24,7 @@
   const backupPoll = poll({
     intervalMs: 5_000,
     fetch: async () => {
-      const r = await axonStatus.backups();
+      const r = await sjelStatus.backups();
       return Object.fromEntries(r.backups.map((b) => [b.capability, b]));
     },
   });
@@ -45,7 +45,7 @@
     confirming = null;
     error = null;
     try {
-      await axonStatus.backup(name);
+      await sjelStatus.backup(name);
     } catch (e) {
       error = `backup ${name}: ${e instanceof Error ? e.message : String(e)}`;
     }
@@ -66,7 +66,7 @@
     busy = name;
     error = null;
     try {
-      await axonStatus[action](name);
+      await sjelStatus[action](name);
       await capabilities.refresh();
     } catch (e) {
       error = `${action} ${name}: ${e instanceof Error ? e.message : String(e)}`;

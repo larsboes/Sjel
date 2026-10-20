@@ -47,7 +47,7 @@
   } from "$lib/travel/travel-candidates";
   import { seedFromCandidate } from "$lib/travel/plan-search";
   import {
-    axonStatus,
+    sjelStatus,
     calendar,
     comms,
     places,
@@ -480,7 +480,7 @@
       // Trips is an on-demand capability. Opening its native workspace is the demand;
       // sjel-status owns process control, while every data call still goes to Trips.
       try {
-        await axonStatus.start("trips");
+        await sjelStatus.start("trips");
       } catch {
         // The plan request below carries the reader-facing outage if startup failed.
       }
@@ -497,7 +497,7 @@
   async function loadTravelCandidates(): Promise<void> {
     travelCandidatesLoading = true;
     travelCandidateNotice = null;
-    await axonStatus.start("scouting").catch(() => undefined);
+    await sjelStatus.start("scouting").catch(() => undefined);
 
     let opportunities: ScoutingOpportunity[];
     try {
@@ -513,7 +513,7 @@
     let calendarAvailable = true;
     let verdicts = new Map<string, CalendarCandidateVerdict>();
     if (requests.length > 0) {
-      await axonStatus.start("calendar").catch(() => undefined);
+      await sjelStatus.start("calendar").catch(() => undefined);
       try {
         const response = await calendar.verdicts(requests);
         verdicts = new Map(response.verdicts.map((verdict) => [verdict.id, verdict]));
@@ -795,9 +795,9 @@
     // The supporting sources remain off until a current plan needs fresh results.
     // Startup failures are reflected by the source notices assembled below.
     await Promise.allSettled([
-      axonStatus.start("transit"),
-      axonStatus.start("scouting"),
-      axonStatus.start("calendar"),
+      sjelStatus.start("transit"),
+      sjelStatus.start("scouting"),
+      sjelStatus.start("calendar"),
     ]);
     try {
       const entries = await calendar.entries.list(
@@ -905,7 +905,7 @@
       .map((place) => ({ latitude: place.latitude, longitude: place.longitude }));
     if (keys.length === 0) return;
     try {
-      await axonStatus.start("places").catch(() => undefined);
+      await sjelStatus.start("places").catch(() => undefined);
       climate = await climateFor(keys, { from: plan.date_start, to: plan.date_end });
     } catch {
       // Deliberate empty state — the strip stays absent rather than lying.
@@ -1098,7 +1098,7 @@
     try {
       // Opening Travel normally starts Trips, but a click must also recover after the
       // service was stopped while this page stayed open.
-      await axonStatus.start("trips").catch(() => undefined);
+      await sjelStatus.start("trips").catch(() => undefined);
       obsidianCandidates = await trips.scanObsidian();
       const ready = obsidianCandidates.filter(
         (candidate) => candidate.issues.length === 0 && !candidate.imported_plan_id,

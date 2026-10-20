@@ -31,7 +31,7 @@
   import { assistantStore } from "$lib/assistant/assistant.svelte";
   import {
     ApiError,
-    axonStatus,
+    sjelStatus,
     calendar,
     comms,
     contentItem,
@@ -374,7 +374,7 @@
         // One contract and one route shape, so the reader resolves an item from
         // its source alone — no per-capability branch here at all.
         read: (id, signal) => contentItem(source, id, signal),
-        start: (signal) => axonStatus.start(source === "calendar" ? "calendar" : "comms", signal),
+        start: (signal) => sjelStatus.start(source === "calendar" ? "calendar" : "comms", signal),
         shouldRetry: (cause) => !(cause instanceof ApiError && cause.status === 404),
         onPhase: (phase) => { loadingMessage = phaseMessage(phase); },
       }));

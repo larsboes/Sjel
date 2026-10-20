@@ -38,7 +38,7 @@
     type CalendarView,
   } from "$lib/calendar/types";
   import {
-    axonStatus,
+    sjelStatus,
     calendar,
     trips,
     type CalendarCommitment,
@@ -192,7 +192,7 @@
       // else already started the service, which is what a watchdog was papering
       // over. A failure here is not fatal on its own: the requests below produce
       // the real, specific error.
-      await axonStatus.start("calendar").catch(() => undefined);
+      await sjelStatus.start("calendar").catch(() => undefined);
       const [nextEntries, nextContexts, nextRhythms, nextWindows, nextGoogleExports, nextTrips] = await Promise.all([
         calendar.entries.list(from, to),
         calendar.contexts.list(from, to),

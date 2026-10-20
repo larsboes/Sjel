@@ -1,4 +1,4 @@
-import { axonStatus, hasPanel, type CapabilityView } from "./api";
+import { sjelStatus, hasPanel, type CapabilityView } from "./api";
 import { poll } from "./ui/poll.svelte";
 
 /**
@@ -14,7 +14,7 @@ import { poll } from "./ui/poll.svelte";
  * `ui/Freshness.svelte` and say how old the view is.
  */
 class CapabilityStore {
-  #polled = poll({ intervalMs: 15_000, fetch: () => axonStatus.capabilities() });
+  #polled = poll({ intervalMs: 15_000, fetch: () => sjelStatus.capabilities() });
 
   /** The last list that arrived. A failed poll keeps it: an empty nav is worse than a stale one. */
   get items(): CapabilityView[] {

@@ -3,7 +3,7 @@
   import { page } from "$app/state";
   import Icon from "$lib/Icon.svelte";
   import PageHeader from "$lib/PageHeader.svelte";
-  import { axonStatus, hasPanel, panelUrl } from "$lib/api";
+  import { sjelStatus, hasPanel, panelUrl } from "$lib/api";
   import { capabilities } from "$lib/capabilities.svelte";
   import { titleCase, link } from "$lib/nav";
 
@@ -19,7 +19,7 @@
     starting = true;
     error = null;
     try {
-      await axonStatus.start(name);
+      await sjelStatus.start(name);
       await capabilities.refresh();
     } catch (e) {
       error = e instanceof Error ? e.message : String(e);

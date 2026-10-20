@@ -1,4 +1,4 @@
-import { axonStatus, type AxonStatusHealth } from "../../api";
+import { sjelStatus, type SjelStatusHealth } from "../../api";
 import { link } from "../../nav";
 import type { DecisionKind } from "../decisions";
 
@@ -8,14 +8,14 @@ import type { DecisionKind } from "../decisions";
  * One row or none, and its urgency is zero: there is nothing above it for urgency to
  * break a tie against.
  */
-const system: DecisionKind<AxonStatusHealth | null, AxonStatusHealth> = {
+const system: DecisionKind<SjelStatusHealth | null, SjelStatusHealth> = {
   key: "system",
   band: 10_000,
   label: "System status",
   capability: null,
   view: "SystemRow",
 
-  load: () => axonStatus.health(),
+  load: () => sjelStatus.health(),
   rows: (health) => (health && !health.ok ? [health] : []),
   id: () => "health",
   title: () => "Check autostart",

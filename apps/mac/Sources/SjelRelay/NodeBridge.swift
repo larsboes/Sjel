@@ -1,7 +1,7 @@
 import Foundation
 
 /// What the shell says about itself and every capability with a health surface
-/// (`GET /api/sjel-status/health`, `AxonStatusHealth` in
+/// (`GET /api/sjel-status/health`, `SjelStatusHealth` in
 /// `capabilities/sjel-status/src/status/registry.rs`).
 public struct NodeHealth: Sendable, Equatable, Decodable {
     public struct Capability: Sendable, Equatable, Decodable {

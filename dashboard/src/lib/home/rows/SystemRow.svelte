@@ -1,12 +1,12 @@
 <script lang="ts">
-  import type { AxonStatusHealth } from "../../api";
+  import type { SjelStatusHealth } from "../../api";
   import { link } from "../../nav";
   import Icon from "../../Icon.svelte";
   import ListRow from "../../ListRow.svelte";
   import RowMeta from "../../RowMeta.svelte";
   import type { DecisionRowProps } from "../decisions";
 
-  let { row, id, current, tone, whyHere }: DecisionRowProps<AxonStatusHealth> = $props();
+  let { row, id, current, tone, whyHere }: DecisionRowProps<SjelStatusHealth> = $props();
 
   const down = $derived(
     Object.entries(row.capabilities)

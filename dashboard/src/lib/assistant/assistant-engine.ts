@@ -1,4 +1,4 @@
-import { axonStatus, calendar, comms, entities, interior, macmon, transit, trips, type IntentDraft, type Journey } from '$lib/api';
+import { sjelStatus, calendar, comms, entities, interior, macmon, transit, trips, type IntentDraft, type Journey } from '$lib/api';
 import { addDays, findFreeSlots, localDate, unreadableEntries } from './calendar-slots';
 import { matchedCues, routeByKeywords } from './keyword-router';
 import { decisionEngine } from '$lib/models/decision-engine.svelte';
@@ -241,7 +241,7 @@ export class AssistantEngine {
     // transit is on-demand. Start it before the search, as /travel/connections does on
     // mount (operator ruling 2026-09-24). A failed start is not fatal here: the search
     // below reports the real error.
-    await axonStatus.start('transit').catch(() => undefined);
+    await sjelStatus.start('transit').catch(() => undefined);
 
     let journeys: Journey[];
     try {
@@ -393,7 +393,7 @@ export class AssistantEngine {
 
   private async system(): Promise<Reply> {
     const [healthResult, macmonSample] = await Promise.allSettled([
-      axonStatus.health(),
+      sjelStatus.health(),
       macmon.json(),
     ]);
 

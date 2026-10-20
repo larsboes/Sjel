@@ -23,7 +23,7 @@
     type CursorRow,
   } from "$lib/list-cursor.svelte";
   import {
-    axonStatus,
+    sjelStatus,
     comms,
     type CommsEvaluationStatus,
     type DataClass,
@@ -428,7 +428,7 @@
 
   $effect(() => {
     if (view === "discover" || ready) return;
-    void axonStatus
+    void sjelStatus
       .start("comms")
       .catch(() => undefined)
       .finally(() => {

@@ -4,7 +4,7 @@
   import Icon from "$lib/Icon.svelte";
   import PageHeader from "$lib/PageHeader.svelte";
   import {
-    axonStatus,
+    sjelStatus,
     knowledgeGraph,
     type SelfModelResponse,
     type SelfUnit,
@@ -38,10 +38,10 @@
     lifecycleBusy = name;
     error = null;
     try {
-      if (action === "start") await axonStatus.start(name);
-      else if (action === "stop") await axonStatus.stop(name);
-      else await axonStatus.restart(name);
-      data = await axonStatus.self();
+      if (action === "start") await sjelStatus.start(name);
+      else if (action === "stop") await sjelStatus.stop(name);
+      else await sjelStatus.restart(name);
+      data = await sjelStatus.self();
     } catch (e) {
       error = e instanceof Error ? e.message : String(e);
     } finally {
@@ -50,7 +50,7 @@
   }
 
   onMount(() => {
-    axonStatus
+    sjelStatus
       .self()
       .then((d) => (data = d))
       .catch((e) => (error = e instanceof Error ? e.message : String(e)));
@@ -136,7 +136,7 @@
       inside = await knowledgeGraph.unit(unit);
     } catch {
       try {
-        await axonStatus.start("knowledge-graph");
+        await sjelStatus.start("knowledge-graph");
         inside = await knowledgeGraph.unit(unit);
       } catch (e) {
         inside = null;

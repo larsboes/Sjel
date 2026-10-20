@@ -11,7 +11,7 @@
   import SidePeek from "$lib/ui/SidePeek.svelte";
   import * as invest from "$lib/finance/invest-api";
   import {
-    axonStatus,
+    sjelStatus,
     finance,
     type Burn,
     type FinanceDashboard as FinanceDashboardData,
@@ -104,7 +104,7 @@
   // one finance surface that never started it — on a cold machine it showed a raw
   // request error instead of a capability that had simply not been started.
   onMount(() => {
-    void axonStatus.start("finance").catch(() => undefined);
+    void sjelStatus.start("finance").catch(() => undefined);
     void load(at);
   });
 

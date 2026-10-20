@@ -1,4 +1,4 @@
-import { axonStatus, type HostWatchFinding } from "../../api";
+import { sjelStatus, type HostWatchFinding } from "../../api";
 import { link } from "../../nav";
 import { RESCALE, type DecisionKind } from "../decisions";
 
@@ -22,7 +22,7 @@ const host: DecisionKind<HostWatchFinding[], HostWatchFinding> = {
   // Swallowed on purpose, and the only kind that does. The machine may simply never have
   // run the watch; a "Host watch unavailable" banner on a healthy machine is the false
   // alarm the watcher's own README refuses to produce.
-  load: (ctx) => axonStatus.hostWatch(ctx.signal).catch(() => []),
+  load: (ctx) => sjelStatus.hostWatch(ctx.signal).catch(() => []),
   rows: (findings) => findings,
   id: (finding) => finding.id,
   title: (finding) => finding.title,

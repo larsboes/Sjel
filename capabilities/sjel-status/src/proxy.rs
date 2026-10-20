@@ -38,7 +38,7 @@
 //! `/sjel-status` -> 8082 *with the prefix stripped*, so the client asks for
 //! `/sjel-status/api/sjel-status/capabilities` and 8082 receives `/api/sjel-status/capabilities`.
 //! Serving the bundle from this process removed the hop but not the prefix the client still sends,
-//! and an unrouted path is a page: all ten `axonStatus.*` calls in `dashboard/src/lib/api.ts`
+//! and an unrouted path is a page: all ten `sjelStatus.*` calls in `dashboard/src/lib/api.ts`
 //! answered **200 with the SPA's own HTML**, `JSON.parse` threw on `<!doctype`, and the page that
 //! this process was at that moment serving reported that this process was unavailable. The footer
 //! read `0 capabilities` for the same reason, and `start`/`stop` were on the same dead prefix --
@@ -471,7 +471,7 @@ mod tests {
 
     #[test]
     fn self_prefix_is_stripped_so_own_routes_match() {
-        // Every axonStatus.* call in dashboard/src/lib/api.ts has this shape.
+        // Every sjelStatus.* call in dashboard/src/lib/api.ts has this shape.
         assert_eq!(
             strip("/sjel-status/api/sjel-status/capabilities"),
             "/api/sjel-status/capabilities"

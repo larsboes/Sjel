@@ -21,7 +21,7 @@ const KEYCHAIN_SERVICE: &str = "sjel-inbound-token";
 const TICKET_PATH: &str = "/api/sjel-status/session/ticket";
 const OPEN_PATH: &str = "/session/open?";
 
-/// `GET /api/sjel-status/health` (`AxonStatusHealth` in
+/// `GET /api/sjel-status/health` (`SjelStatusHealth` in
 /// `capabilities/sjel-status/src/status/registry.rs`).
 #[derive(Clone, Debug, Deserialize)]
 pub struct NodeHealth {

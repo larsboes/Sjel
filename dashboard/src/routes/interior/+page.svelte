@@ -15,7 +15,7 @@
   import { tip } from "$lib/tip";
   import { link } from "$lib/nav";
   import {
-    axonStatus,
+    sjelStatus,
     interior,
     inventory,
     InventoryConflict,
@@ -680,7 +680,7 @@
     starting = true;
     error = null;
     try {
-      await axonStatus.start("interior");
+      await sjelStatus.start("interior");
       await capabilities.refresh();
       await load();
       await loadRoomplanReference();

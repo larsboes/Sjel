@@ -8,7 +8,7 @@
   import JourneyOption from "$lib/travel/JourneyOption.svelte";
   import TravelerProfileModal from "$lib/travel/TravelerProfileModal.svelte";
   import {
-    axonStatus,
+    sjelStatus,
     transit,
     JOURNEY_PRIORITIES,
     type Journey,
@@ -81,7 +81,7 @@
   // Reads no state, so it runs once on mount. A failure here is not fatal on its own;
   // the lookup or search that follows reports the real error.
   $effect(() => {
-    void axonStatus.start("transit").catch(() => undefined);
+    void sjelStatus.start("transit").catch(() => undefined);
   });
 
   async function search(): Promise<void> {

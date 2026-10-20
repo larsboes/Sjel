@@ -3,7 +3,7 @@
   import Icon from "$lib/Icon.svelte";
   import { tip } from "$lib/tip";
   import PageHeader from "$lib/PageHeader.svelte";
-  import { axonStatus, macmon, type MacmonSample, type StorageHistory, type StorageReport, type UpdatesReport } from "$lib/api";
+  import { sjelStatus, macmon, type MacmonSample, type StorageHistory, type StorageReport, type UpdatesReport } from "$lib/api";
   import { classTrends, datedAbsences, formatBytes, storageTrend, storageView } from "$lib/systems/storage";
   import AgentPanel from "$lib/systems/AgentPanel.svelte";
   import RuntimeProfile from "$lib/systems/RuntimeProfile.svelte";
@@ -40,7 +40,7 @@
   // would be a dozen network calls every three seconds. While an apply runs, the same report
   // IS the progress, so the poller starts at 4 s and the effect below stops it when the last
   // receipt is no longer running. Null while in flight.
-  const updatesPoll = poll({ intervalMs: 4_000, immediate: false, fetch: () => axonStatus.updates() });
+  const updatesPoll = poll({ intervalMs: 4_000, immediate: false, fetch: () => sjelStatus.updates() });
   let updates: UpdatesReport | null = $derived(updatesPoll.data);
   const updatesErr = $derived(updatesPoll.error);
   let applyErr = $state<string | null>(null);
@@ -74,7 +74,7 @@
   async function applyClass(className: string) {
     applyErr = null;
     try {
-      await axonStatus.updatesApply(className);
+      await sjelStatus.updatesApply(className);
     } catch (e) {
       applyErr = e instanceof Error ? e.message : String(e);
       return;
@@ -118,12 +118,12 @@
 
     // Served by sjel-status, not by macmon, so it answers even when macmon is down —
     // which is the state a full disk is hardest to see in.
-    axonStatus
+    sjelStatus
       .storage()
       .then((d) => { storage = d; storageErr = null; })
       .catch((e) => { storageErr = e instanceof Error ? e.message : String(e); });
 
-    axonStatus
+    sjelStatus
       .storageHistory()
       .then((d) => { history = d; })
       .catch(() => { history = null; });

@@ -166,7 +166,7 @@ pub(crate) async fn self_model_handler() -> Result<Json<Value>, (StatusCode, Jso
 /// The dashboard's long-standing contract: name -> {up, url}. Same shape as before,
 /// now covering every enabled capability instead of two compiled-in names.
 pub(crate) async fn sjel_status_health_handler(
-) -> Result<Json<AxonStatusHealth>, (StatusCode, Json<Value>)> {
+) -> Result<Json<SjelStatusHealth>, (StatusCode, Json<Value>)> {
     let services = registry().await.map_err(bad_gateway)?;
     let up = liveness(&services).await;
 
@@ -207,7 +207,7 @@ pub(crate) async fn sjel_status_health_handler(
         .all(|c| c.up);
     let uptime_seconds = STARTED_AT.get().map(|t| t.elapsed().as_secs()).unwrap_or(0);
 
-    Ok(Json(AxonStatusHealth {
+    Ok(Json(SjelStatusHealth {
         ok,
         version: env!("CARGO_PKG_VERSION").to_string(),
         uptime_seconds,

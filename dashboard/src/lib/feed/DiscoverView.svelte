@@ -5,7 +5,7 @@
   import EntryForm from "$lib/calendar/EntryForm.svelte";
   import Icon from "$lib/Icon.svelte";
   import {
-    axonStatus,
+    sjelStatus,
     calendar,
     type CalendarCandidateVerdict,
     scouting,
@@ -236,7 +236,7 @@
       return;
     }
     try {
-      await axonStatus.start("calendar");
+      await sjelStatus.start("calendar");
       const response = await calendar.verdicts(candidates);
       if (token !== verdictRequest) return;
       calendarVerdicts = new Map(response.verdicts.map((verdict) => [verdict.id, verdict]));
@@ -255,7 +255,7 @@
     busy = candidate.id;
     error = null;
     try {
-      await axonStatus.start("calendar");
+      await sjelStatus.start("calendar");
       await calendar.entries.upsertExternal(data as CalendarNewEntry);
       if (candidate.status !== "saved") {
         await scouting.setStatus(candidate.id, "saved");
@@ -287,7 +287,7 @@
     loading = true;
     error = null;
     try {
-      await axonStatus.start("scouting").catch(() => undefined);
+      await sjelStatus.start("scouting").catch(() => undefined);
       const [sourceResponse] = await Promise.all([
         scouting.sources(),
         loadOpportunities(),

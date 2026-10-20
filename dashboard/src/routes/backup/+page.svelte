@@ -10,7 +10,7 @@
   import Freshness from "$lib/ui/Freshness.svelte";
   import { poll } from "$lib/ui/poll.svelte";
   import {
-    axonStatus,
+    sjelStatus,
     type BackupStatus,
     type BackupTargetView,
     type BackupRunAttempt,
@@ -21,9 +21,9 @@
     intervalMs: 5_000,
     fetch: async () => {
       const [backupsRes, targetsRes, runsRes] = await Promise.all([
-        axonStatus.backups(),
-        axonStatus.backupTargets(),
-        axonStatus.backupRuns(50),
+        sjelStatus.backups(),
+        sjelStatus.backupTargets(),
+        sjelStatus.backupRuns(50),
       ]);
       return {
         backups: backupsRes.backups,
@@ -111,7 +111,7 @@
     verifying[targetId] = true;
     verifyMessage[targetId] = null;
     try {
-      const res = await axonStatus.verifyBackupTarget(targetId);
+      const res = await sjelStatus.verifyBackupTarget(targetId);
       verifyMessage[targetId] = { verdict: res.verdict, detail: res.detail };
       await view.refresh();
     } catch (e) {
@@ -133,7 +133,7 @@
         hours = isNaN(parsed) || parsed <= 0 ? null : parsed;
         targetIntervals[targetId] = hours;
       }
-      await axonStatus.setBackupPolicy(targetId, hours);
+      await sjelStatus.setBackupPolicy(targetId, hours);
       await view.refresh();
     } catch (e) {
       error = `save policy: ${e instanceof Error ? e.message : String(e)}`;
@@ -148,7 +148,7 @@
     error = null;
     try {
       const target = selectedTarget[name] || undefined;
-      await axonStatus.backup(name, target);
+      await sjelStatus.backup(name, target);
     } catch (e) {
       error = `backup ${name}: ${e instanceof Error ? e.message : String(e)}`;
     } finally {

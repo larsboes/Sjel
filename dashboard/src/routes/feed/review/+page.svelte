@@ -5,7 +5,7 @@
   import Icon from "$lib/Icon.svelte";
   import PageHeader from "$lib/PageHeader.svelte";
   import {
-    axonStatus,
+    sjelStatus,
     comms,
     type FeedQualityFlag,
     type FeedQualityRefresh,
@@ -77,7 +77,7 @@
   onMount(() => {
     void (async () => {
       try {
-        await axonStatus.start("comms").catch(() => undefined);
+        await sjelStatus.start("comms").catch(() => undefined);
         await loadQueue();
       } catch (cause) {
         error = cause instanceof Error ? cause.message : "Review queue unavailable.";

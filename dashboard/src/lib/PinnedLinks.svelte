@@ -10,13 +10,13 @@
   import { onMount } from "svelte";
   import Icon from "$lib/Icon.svelte";
   import RailSection from "$lib/rail/RailSection.svelte";
-  import { axonStatus, type PinnedLink } from "$lib/api";
+  import { sjelStatus, type PinnedLink } from "$lib/api";
 
   let links = $state<PinnedLink[]>([]);
 
   onMount(async () => {
     try {
-      links = (await axonStatus.links()).links;
+      links = (await sjelStatus.links()).links;
     } catch {
       // The card is decoration: an unreachable sjel-status already renders loudly in
       // the surfaces that own health, so this stays quiet and empty.

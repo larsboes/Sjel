@@ -1,5 +1,5 @@
 import type { Component } from "svelte";
-import { axonStatus } from "../api";
+import { sjelStatus } from "../api";
 import { capabilities } from "../capabilities.svelte";
 import type { Decision, DecisionKind, LoadContext, ScoreContext } from "./decisions";
 import { score } from "./decisions";
@@ -113,7 +113,7 @@ export function createStarter(demo = false): (capability: string | null) => Prom
       started = (async () => {
         const view = capabilities.byName(capability);
         if (!view || view.up === true) return;
-        await axonStatus.start(capability).catch(() => {
+        await sjelStatus.start(capability).catch(() => {
           // Swallowed: the read below reports the real failure, and a start that could not
           // even be attempted is not a second thing to tell the operator about.
         });

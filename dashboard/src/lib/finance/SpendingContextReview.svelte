@@ -2,7 +2,7 @@
   import { onMount } from "svelte";
   import Icon from "$lib/Icon.svelte";
   import {
-    axonStatus,
+    sjelStatus,
     finance,
     trips,
     type FinanceDashboard,
@@ -100,7 +100,7 @@
       try {
         plans = await trips.list();
       } catch {
-        await axonStatus.start("trips").catch(() => undefined);
+        await sjelStatus.start("trips").catch(() => undefined);
         plans = await trips.list().catch(() => []);
       }
       error = null;

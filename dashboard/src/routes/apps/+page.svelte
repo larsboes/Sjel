@@ -2,7 +2,7 @@
   import { onMount } from "svelte";
   import Icon from "$lib/Icon.svelte";
   import PageHeader from "$lib/PageHeader.svelte";
-  import { axonStatus, panelUrl, type CapabilityView } from "$lib/api";
+  import { sjelStatus, panelUrl, type CapabilityView } from "$lib/api";
   import { capabilities } from "$lib/capabilities.svelte";
   import { titleCase, link } from "$lib/nav";
 
@@ -35,7 +35,7 @@
     busy = project.name;
     error = null;
     try {
-      await axonStatus.start(project.name);
+      await sjelStatus.start(project.name);
       await capabilities.refresh();
     } catch (caught) {
       error = caught instanceof Error ? caught.message : String(caught);

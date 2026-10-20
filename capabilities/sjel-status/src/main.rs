@@ -359,7 +359,15 @@ async fn main() {
         );
         std::process::exit(1);
     });
-    let socket_path = overlay.join("secrets/sjel-status.sock");
+    // The macOS Tailscale network extension is sandboxed: connecting to a socket under the
+    // overlay fails with EPERM. Its entitlements allow read-write under `/Library/Tailscale/`
+    // only, so a macOS deployment sets this to a path there (README, "The tailnet socket").
+    let socket_path = std::env::var_os("SJEL_TAILNET_SOCKET")
+        .filter(|path| !path.is_empty())
+        .map_or_else(
+            || overlay.join("secrets/sjel-status.sock"),
+            std::path::PathBuf::from,
+        );
     let tailnet_auth = sjel_server::InboundAuth::from_deployment().tailnet_proxy_only();
     let local = sjel_server::serve(
         "sjel-status",

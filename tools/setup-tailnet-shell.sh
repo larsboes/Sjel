@@ -8,7 +8,8 @@ command -v tailscale >/dev/null 2>&1 || {
   echo "setup-tailnet-shell: tailscale CLI is not installed" >&2
   exit 1
 }
-SOCKET="$SJEL_OVERLAY_ROOT/secrets/sjel-status.sock"
+# Must match sjel-status: SJEL_TAILNET_SOCKET when the deployment sets it (macOS), else the overlay.
+SOCKET="${SJEL_TAILNET_SOCKET:-$SJEL_OVERLAY_ROOT/secrets/sjel-status.sock}"
 if [ ! -S "$SOCKET" ]; then
   echo "setup-tailnet-shell: protected socket is not live: $SOCKET" >&2
   echo "Start sjel-status after provisioning inbound auth, then retry." >&2

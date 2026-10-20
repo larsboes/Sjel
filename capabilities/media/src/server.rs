@@ -48,6 +48,11 @@ pub const ROUTES: &[route_manifest::Route] = &[
         "/api/ingests/{id}",
         "One ingest run and the disposition of every path it considered.",
     ),
+    route_manifest::get(
+        "GET",
+        "/api/perceptual",
+        "Advisory perceptual near-duplicate candidates from media_phashes and their operator review decisions from media_reviews.",
+    ),
 ];
 
 struct ApiError {
@@ -99,6 +104,16 @@ fn ingest_json(ledger: &Ledger, id: i64) -> Result<Option<Value>, String> {
     Ok(Some(json!({ "run": run, "items": items })))
 }
 
+fn perceptual_json(ledger: &Ledger) -> Result<Value, String> {
+    let report = media::perceptual::propose_near_duplicates(
+        ledger,
+        None,
+        media::perceptual::DEFAULT_MAX_DISTANCE,
+    )
+    .map_err(|error| error.to_string())?;
+    serde_json::to_value(report).map_err(|error| error.to_string())
+}
+
 /// Run a blocking ledger read off the async runtime, so one slow query cannot stall the listener.
 async fn blocking<T>(
     ledger: Arc<Ledger>,
@@ -139,6 +154,10 @@ async fn ingest(
         .ok_or_else(ApiError::not_found)
 }
 
+async fn perceptual(State(ledger): State<Arc<Ledger>>) -> Result<Json<Value>, ApiError> {
+    Ok(Json(blocking(ledger, perceptual_json).await?))
+}
+
 fn router(ledger: Arc<Ledger>) -> Router {
     Router::new()
         .route("/health", get(health))
@@ -146,6 +165,7 @@ fn router(ledger: Arc<Ledger>) -> Router {
         .route("/api/status", get(status))
         .route("/api/ingests", get(ingests))
         .route("/api/ingests/{id}", get(ingest))
+        .route("/api/perceptual", get(perceptual))
         .layer(middleware::from_fn_with_state(
             "media",
             sjel_server::origin::refuse_foreign_origins,

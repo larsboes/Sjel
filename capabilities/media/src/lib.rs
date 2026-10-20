@@ -4,6 +4,7 @@ pub mod duplicates;
 pub mod ingest;
 pub mod mirror;
 pub mod organize;
+pub mod perceptual;
 pub mod preview;
 pub mod reclaim;
 pub mod reconcile;

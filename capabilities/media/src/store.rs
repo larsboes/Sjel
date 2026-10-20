@@ -100,6 +100,25 @@ pub struct ItemRow {
     pub verified: bool,
 }
 
+/// One digest's perceptual hash in the advisory perceptual layer (`F4`).
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+pub struct PhashRow {
+    pub digest: String,
+    pub phash: String,
+    pub algorithm: String,
+    pub computed_at: String,
+}
+
+/// One operator review decision over a pair of distinct digests (`F4`).
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+pub struct ReviewRow {
+    pub left_digest: String,
+    pub right_digest: String,
+    pub decision: String,
+    pub note: String,
+    pub decided_at: String,
+}
+
 impl Ledger {
     pub fn open(path: &Path) -> Result<Self> {
         let pool = sjel_store::open_pool(path, "media", |conn| {
@@ -142,6 +161,21 @@ impl Ledger {
                     relpath TEXT NOT NULL, uuid TEXT NOT NULL, library TEXT NOT NULL,
                     incoming_name TEXT NOT NULL UNIQUE,
                     PRIMARY KEY (ingest_id, relpath)
+                );
+                CREATE TABLE IF NOT EXISTS media_phashes (
+                    digest TEXT PRIMARY KEY REFERENCES media_files(digest),
+                    phash TEXT NOT NULL,
+                    algorithm TEXT NOT NULL DEFAULT 'dhash64',
+                    computed_at TEXT NOT NULL DEFAULT ({now})
+                );
+                CREATE TABLE IF NOT EXISTS media_reviews (
+                    left_digest TEXT NOT NULL,
+                    right_digest TEXT NOT NULL,
+                    decision TEXT NOT NULL CHECK(decision IN ('near_duplicate','distinct','skip')),
+                    note TEXT NOT NULL DEFAULT '',
+                    decided_at TEXT NOT NULL DEFAULT ({now}),
+                    PRIMARY KEY (left_digest, right_digest),
+                    CHECK(left_digest < right_digest)
                 );",
                 now = sjel_store::NOW
             ))?;
@@ -478,5 +512,135 @@ impl Ledger {
             verified=(SELECT count(*) FROM media_ingest_items WHERE ingest_id=?1 AND verified=1)
             WHERE id=?1", now=sjel_store::NOW), [id])?;
         Ok(())
+    }
+
+    pub fn record_phash(&self, digest: &str, phash: u64, algorithm: &str) -> Result<()> {
+        let conn = self.pool.get()?;
+        let hex = format!("{phash:016x}");
+        conn.execute(
+            &format!(
+                "INSERT INTO media_phashes(digest, phash, algorithm)
+                 VALUES(?1, ?2, ?3)
+                 ON CONFLICT(digest) DO UPDATE SET
+                 phash = excluded.phash,
+                 algorithm = excluded.algorithm,
+                 computed_at = {}",
+                sjel_store::NOW
+            ),
+            params![digest, hex, algorithm],
+        )?;
+        Ok(())
+    }
+
+    pub fn phashes(&self) -> Result<Vec<PhashRow>> {
+        let conn = self.pool.get()?;
+        let mut stmt = conn.prepare(
+            "SELECT digest, phash, algorithm, computed_at
+             FROM media_phashes
+             ORDER BY digest",
+        )?;
+        let rows = stmt.query_map([], |row| {
+            Ok(PhashRow {
+                digest: row.get(0)?,
+                phash: row.get(1)?,
+                algorithm: row.get(2)?,
+                computed_at: row.get(3)?,
+            })
+        })?;
+        Ok(rows.collect::<rusqlite::Result<Vec<_>>>()?)
+    }
+
+    pub fn all_locations(&self) -> Result<Vec<Location>> {
+        let conn = self.pool.get()?;
+        let mut stmt = conn.prepare(
+            "SELECT uuid, relpath, digest, size, mtime_ns
+             FROM media_locations
+             ORDER BY uuid, relpath",
+        )?;
+        let rows = stmt.query_map([], |row| {
+            Ok(Location {
+                uuid: row.get(0)?,
+                relpath: row.get(1)?,
+                digest: row.get(2)?,
+                size: row.get(3)?,
+                mtime_ns: row.get(4)?,
+            })
+        })?;
+        Ok(rows.collect::<rusqlite::Result<Vec<_>>>()?)
+    }
+
+    pub fn record_review(
+        &self,
+        first_digest: &str,
+        second_digest: &str,
+        decision: &str,
+        note: &str,
+    ) -> Result<ReviewRow> {
+        let first = first_digest.trim();
+        let second = second_digest.trim();
+        if first.is_empty() || second.is_empty() {
+            return Err("review digests must not be empty".into());
+        }
+        if first == second {
+            return Err("a perceptual review requires two distinct digests".into());
+        }
+        if !matches!(decision, "near_duplicate" | "distinct" | "skip") {
+            return Err(format!(
+                "invalid review decision {decision:?}; expected near_duplicate, distinct, or skip"
+            )
+            .into());
+        }
+        let (left, right) = if first < second {
+            (first, second)
+        } else {
+            (second, first)
+        };
+        let conn = self.pool.get()?;
+        conn.execute(
+            &format!(
+                "INSERT INTO media_reviews(left_digest, right_digest, decision, note)
+                 VALUES(?1, ?2, ?3, ?4)
+                 ON CONFLICT(left_digest, right_digest) DO UPDATE SET
+                 decision = excluded.decision,
+                 note = excluded.note,
+                 decided_at = {}",
+                sjel_store::NOW
+            ),
+            params![left, right, decision, note],
+        )?;
+        Ok(conn.query_row(
+            "SELECT left_digest, right_digest, decision, note, decided_at
+             FROM media_reviews
+             WHERE left_digest = ?1 AND right_digest = ?2",
+            params![left, right],
+            |row| {
+                Ok(ReviewRow {
+                    left_digest: row.get(0)?,
+                    right_digest: row.get(1)?,
+                    decision: row.get(2)?,
+                    note: row.get(3)?,
+                    decided_at: row.get(4)?,
+                })
+            },
+        )?)
+    }
+
+    pub fn reviews(&self) -> Result<Vec<ReviewRow>> {
+        let conn = self.pool.get()?;
+        let mut stmt = conn.prepare(
+            "SELECT left_digest, right_digest, decision, note, decided_at
+             FROM media_reviews
+             ORDER BY left_digest, right_digest",
+        )?;
+        let rows = stmt.query_map([], |row| {
+            Ok(ReviewRow {
+                left_digest: row.get(0)?,
+                right_digest: row.get(1)?,
+                decision: row.get(2)?,
+                note: row.get(3)?,
+                decided_at: row.get(4)?,
+            })
+        })?;
+        Ok(rows.collect::<rusqlite::Result<Vec<_>>>()?)
     }
 }

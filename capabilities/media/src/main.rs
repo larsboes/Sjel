@@ -214,6 +214,11 @@ fn run(args: &[String]) -> Result<i32> {
             ],
             &["--apply"],
         ),
+        "phash" => (&["--root", "--uuid", "--max-distance", "--db"], &[]),
+        "review" => (
+            &["--left", "--right", "--decision", "--note", "--db"],
+            &[],
+        ),
         _ => {
             usage();
             return Err(format!("unknown command {verb}").into());
@@ -583,6 +588,49 @@ fn run(args: &[String]) -> Result<i32> {
                 list.as_deref(),
             )?;
             println!("{}", serde_json::to_string(&report)?);
+            Ok(0)
+        }
+        "phash" => {
+            let uuid = option(opts, "--uuid")?;
+            let root = option(opts, "--root")?.map(PathBuf::from);
+            let max_distance = option(opts, "--max-distance")?
+                .map(|v| v.parse::<u32>())
+                .transpose()
+                .map_err(|_| "--max-distance must be an integer")?
+                .unwrap_or(media::perceptual::DEFAULT_MAX_DISTANCE);
+            let indexed = match (&root, &uuid) {
+                (Some(r), Some(u)) => {
+                    let verified_uuid = mounted(r, u)?;
+                    Some(media::perceptual::index_phashes(
+                        &ledger,
+                        r,
+                        &verified_uuid,
+                    )?)
+                }
+                (Some(_), None) => return Err("phash --root requires --uuid".into()),
+                (None, _) => None,
+            };
+            let proposals = media::perceptual::propose_near_duplicates(
+                &ledger,
+                uuid.as_deref(),
+                max_distance,
+            )?;
+            println!(
+                "{}",
+                serde_json::to_string(&serde_json::json!({
+                    "indexed": indexed,
+                    "perceptual": proposals,
+                }))?
+            );
+            Ok(0)
+        }
+        "review" => {
+            let left = required(opts, "--left")?;
+            let right = required(opts, "--right")?;
+            let decision = required(opts, "--decision")?;
+            let note = option(opts, "--note")?.unwrap_or_default();
+            let row = ledger.record_review(&left, &right, &decision, &note)?;
+            println!("{}", serde_json::to_string(&row)?);
             Ok(0)
         }
         "supersede" => {

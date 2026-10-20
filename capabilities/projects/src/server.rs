@@ -252,7 +252,7 @@ async fn list_tasks(
 async fn list_projects(State(projects): State<Shared>) -> Result<Json<Value>, ApiError> {
     let records = blocking(projects, false, |p| p.all()).await?;
     let mut summaries: Vec<ProjectSummary> = Vec::new();
-    for r in records {
+    for r in records.into_iter().filter(|r| !r.domain) {
         let index = match summaries
             .iter()
             .position(|s| s.name == r.project && s.archived == r.archived)

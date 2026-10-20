@@ -100,7 +100,7 @@ pub fn tasks(projects: &Projects, status: Option<&str>) -> Fallible<Vec<Task>> {
     let mut tasks: Vec<Task> = projects
         .by_kind(Kind::Task)?
         .iter()
-        .filter(|r| !r.archived)
+        .filter(|r| !r.archived && !r.domain)
         .filter(|r| match status {
             Some("open") => !r.done,
             Some("done") => r.done,
@@ -123,7 +123,7 @@ pub fn records(projects: &Projects, kind: Kind) -> Fallible<Vec<Task>> {
     Ok(projects
         .by_kind(kind)?
         .iter()
-        .filter(|r| !r.archived)
+        .filter(|r| !r.archived && !r.domain)
         .map(Task::from_record)
         .collect())
 }
@@ -142,6 +142,9 @@ pub fn add_task(
 ) -> Fallible<Record> {
     let project = check_name(project)?;
     let title = check_name(title)?;
+    if record::is_domain(project) {
+        return Err(format!("{project:?} is a domain, not a project").into());
+    }
     if !(1..=3).contains(&priority) {
         return Err("priority is 1, 2 or 3".into());
     }
@@ -167,6 +170,9 @@ pub fn add_task(
 /// The name is invalid or a project of that name exists.
 pub fn add_project(projects: &Projects, name: &str, summary: &str) -> Fallible<Record> {
     let name = check_name(name)?;
+    if record::is_domain(name) {
+        return Err(format!("{name:?} is a domain, not a project").into());
+    }
     if name == ARCHIVE || !projects.by_project(name)?.is_empty() {
         return Err(format!("a project named {name:?} exists").into());
     }
@@ -368,10 +374,11 @@ pub fn save(
         (Some(_), None) => return Err(SaveError::Refused(format!("{path} exists")).into()),
         (None, Some(_)) => return Err(SaveError::Refused(format!("no record {path:?}")).into()),
         (None, None) => {
-            if !projects
-                .by_project(&record.project)?
-                .iter()
-                .any(|r| !r.archived)
+            if !record.domain
+                && !projects
+                    .by_project(&record.project)?
+                    .iter()
+                    .any(|r| !r.archived)
             {
                 let project = &record.project;
                 return Err(
@@ -388,6 +395,9 @@ pub fn save(
 pub fn new_note(project: &str, title: &str, summary: &str) -> Result<(String, String), String> {
     let project = check_name(project)?;
     let title = check_name(title)?;
+    if record::is_domain(project) {
+        return Err(format!("{project:?} is a domain, not a project"));
+    }
     let summary = summary.replace('"', "'");
     Ok((
         format!("{project}/{title}.md"),
@@ -409,7 +419,8 @@ pub fn attach(projects: &Projects, path: &str, bytes: &[u8]) -> Fallible<Attache
     }
     record::check_attachment(path)?;
     let (project, archived) = record::project_of(path)?;
-    if archived || !projects.by_project(&project)?.iter().any(|r| !r.archived) {
+    let domain = !archived && record::is_domain(&project);
+    if !domain && (archived || !projects.by_project(&project)?.iter().any(|r| !r.archived)) {
         return Err(format!("no live project named {project:?}").into());
     }
     projects.attach(path, bytes)
@@ -666,6 +677,39 @@ mod tests {
         v
     }
 
+    /// A domain folder holds notes only: never a project, a task or a project-list row.
+    #[test]
+    fn a_domain_is_not_a_project() {
+        let (projects, dir) = scratch("domain");
+        let note = Record::from_content(
+            "Atlas/Finance/Subscriptions/Claude Pro.md",
+            "---\ntype: task\ndone: false\n---\nwhy\n".into(),
+        )
+        .unwrap();
+        assert!(note.domain);
+        assert_eq!(
+            note.kind,
+            Kind::Note,
+            "a domain record is a note whatever its type says"
+        );
+        assert!(
+            save(&projects, &note.path, &note.content, None).is_ok(),
+            "no hub needed"
+        );
+        assert!(attach(&projects, "Atlas/Finance/receipt.pdf", b"pdf").is_ok());
+        assert!(add_project(&projects, "Atlas", "").is_err());
+        assert!(add_project(&projects, "Journal", "").is_err());
+        assert!(add_task(&projects, "Atlas", "T", "", None, 2).is_err());
+        assert!(new_note("Journal", "N", "").is_err());
+        assert!(records(&projects, Kind::Note).unwrap().is_empty());
+        assert!(
+            !Record::from_content("Archive/Atlas/x.md", String::new())
+                .unwrap()
+                .domain
+        );
+        fs::remove_dir_all(dir).unwrap();
+    }
+
     #[test]
     fn import_takes_project_notes_and_leaves_the_law() {
         let (projects, dir) = scratch("import");
@@ -860,7 +904,10 @@ mod tests {
             Attached::Differs
         );
         assert_eq!(
-            projects.attachment("W/Assets/manual.pdf").unwrap().as_deref(),
+            projects
+                .attachment("W/Assets/manual.pdf")
+                .unwrap()
+                .as_deref(),
             Some(&b"pdf-1"[..])
         );
         let decoded = decode_base64("data:application/pdf;base64,cGRmLTE=").unwrap();

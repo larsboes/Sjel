@@ -12,6 +12,9 @@ use serde::Serialize;
 
 /// The folder segment that marks a finished project.
 pub const ARCHIVE: &str = "Archive";
+/// Top folders that hold a domain's notes, not a project (ruled 2026-10-20 in the README, "Why
+/// this shape"). Reflections sits under `Atlas/`.
+pub const DOMAINS: [&str; 2] = ["Atlas", "Journal"];
 const TASKS: &str = "Tasks";
 const DEFAULT_PRIORITY: u8 = 2;
 const MAX_TITLE_CHARS: usize = 200;
@@ -45,6 +48,8 @@ pub struct Record {
     pub due: Option<String>,
     pub priority: u8,
     pub archived: bool,
+    /// The record sits under a [`DOMAINS`] folder: no project, no task list, no hub.
+    pub domain: bool,
     pub content: String,
 }
 
@@ -65,10 +70,12 @@ impl Record {
             .unwrap_or_default()
             .to_string();
         let (project, archived) = project_of(path)?;
+        let domain = !archived && is_domain(&project);
         let fields = frontmatter_spanned(&content)
             .map_err(|e| format!("{path}: {e}"))?
             .fields;
         let kind = match fields.get("type").map(String::as_str) {
+            _ if domain => Kind::Note,
             Some("project") => Kind::Project,
             Some("task") => Kind::Task,
             _ if fields.contains_key("done") && folders.iter().skip(1).any(|f| *f == TASKS) => {
@@ -88,6 +95,7 @@ impl Record {
                 .filter(|p| (1..=3).contains(p))
                 .unwrap_or(DEFAULT_PRIORITY),
             archived,
+            domain,
             content,
         })
     }
@@ -97,6 +105,11 @@ impl Record {
             .map(|f| f.fields)
             .unwrap_or_default()
     }
+}
+
+/// The name is a [`DOMAINS`] folder, which no project or task may take.
+pub fn is_domain(name: &str) -> bool {
+    DOMAINS.contains(&name)
 }
 
 /// The project a path belongs to, and whether it sits under `Archive/`.

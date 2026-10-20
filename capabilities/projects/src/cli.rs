@@ -67,7 +67,7 @@ fn run() -> Result<(), Box<dyn std::error::Error>> {
         "projects" => {
             let mut rows: std::collections::BTreeMap<(bool, String), (usize, usize, usize)> =
                 Default::default();
-            for r in projects.all()? {
+            for r in projects.all()?.into_iter().filter(|r| !r.domain) {
                 let row = rows.entry((r.archived, r.project.clone())).or_default();
                 match (r.kind, r.done) {
                     (projects::Kind::Task, false) => row.0 += 1,

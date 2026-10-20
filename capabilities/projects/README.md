@@ -23,8 +23,9 @@ Revised again 2026-10-20: Obsidian keeps Knowledge only. Atlas, Journal and Refl
 into this store one folder at a time, and the store holds every note that is not knowledge.
 Two changes come before the first folder moves:
 
-1. A top folder such as `Atlas/` is a domain, not a project. `project_of` and the project list
-   must tell the two apart.
+1. A top folder in `record::DOMAINS` (`Atlas/`, `Journal/`) is a domain, not a project. Every
+   record in it is a note. It has no hub, no tasks and no row in the project list, and no
+   project, task or new note may take a domain's name. Done 2026-10-20.
 2. Each capability that reads or writes a vault folder must use this store first: finance
    (`Atlas/Finance/Subscriptions`), inventory (`Atlas/Interior`), entities (`Atlas/People`),
    calendar (`Atlas/Events`) and comms (`Atlas/Media`). A note that leaves the vault before its

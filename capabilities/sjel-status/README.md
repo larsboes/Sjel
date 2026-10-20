@@ -103,25 +103,6 @@ is sufficient only while the port stays local. Exposing this over Tailscale mean
 adding real authentication first: "reachable from the phone" and "unauthenticated
 process control" cannot both be true.
 
-### The tailnet socket
-
-Besides the loopback port, the shell serves the same router on a Unix socket for Tailscale Serve,
-with the tailnet-only gate (`src/main.rs`). The socket is `<overlay>/secrets/sjel-status.sock`
-unless `SJEL_TAILNET_SOCKET` names another path. `tools/setup-tailnet-shell.sh` points Serve at
-the same path.
-
-On macOS, the Tailscale network extension is sandboxed. A connection to a socket under the
-overlay fails with `connect: operation not permitted`, and Serve answers 502. The extension's
-entitlements allow read-write only under `/Library/Tailscale/` (read them with
-`codesign -d --entitlements :-` on the extension in `/Library/SystemExtensions/`). A macOS
-deployment therefore puts the socket in an operator-owned directory there and sets it in
-`machine.toml`:
-
-```toml
-[capability.sjel-status]
-env = ["SJEL_TAILNET_SOCKET=/Library/Tailscale/sjel/sjel-status.sock"]
-```
-
 ## Running
 
 Needs `SJEL_ROOT` set, because it shells out to the repo's own tools and its own path is

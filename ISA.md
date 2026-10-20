@@ -45,10 +45,10 @@ see [planning rules](CONTRIBUTING.md#the-backlog-is-isas). Keep external bug rep
 - [ ] ISC-45 — an agent cannot go around the gate. Falsifier: an agent session accesses unredacted data or secrets without going through the gate.
   Open operator actions:
   1. In a new agent session, verify `Read` of `secrets/**` is refused by the user-level configuration floor.
-  2. Serve answers 502 because the sandboxed macOS extension may not reach the overlay socket
-     (`connect: operation not permitted`, 2026-10-20). Move the socket under
-     `/Library/Tailscale/` (`capabilities/sjel-status/README.md`, "The tailnet socket"), rerun
-     `tools/setup-tailnet-shell.sh`, and verify `/health` 200 through Tailscale Serve.
+  2. Serve answers 502: the sandboxed Tailscale app cannot connect to the shell's socket
+     (`connect: operation not permitted`, 2026-10-20). Replace it with the open-source
+     `tailscaled`, rerun `tools/setup-tailnet-shell.sh`, and verify `/health` 200 through
+     Tailscale Serve.
 
 ## Unit work
 

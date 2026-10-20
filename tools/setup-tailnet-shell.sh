@@ -1,5 +1,8 @@
 #!/usr/bin/env bash
 # Human-run setup. Do not invoke from an agent session: this changes Tailscale Serve config.
+# macOS needs the open-source tailscaled (Homebrew `tailscale`). The App Store and standalone
+# apps run Serve in a sandboxed network extension, which gets `connect: operation not permitted`
+# on every user-owned socket path tried (the overlay and /Library/Tailscale/, 2026-10-20).
 set -euo pipefail
 TOOLS_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 source "$TOOLS_DIR/lib/paths.sh"
@@ -8,8 +11,7 @@ command -v tailscale >/dev/null 2>&1 || {
   echo "setup-tailnet-shell: tailscale CLI is not installed" >&2
   exit 1
 }
-# Must match sjel-status: SJEL_TAILNET_SOCKET when the deployment sets it (macOS), else the overlay.
-SOCKET="${SJEL_TAILNET_SOCKET:-$SJEL_OVERLAY_ROOT/secrets/sjel-status.sock}"
+SOCKET="$SJEL_OVERLAY_ROOT/secrets/sjel-status.sock"
 if [ ! -S "$SOCKET" ]; then
   echo "setup-tailnet-shell: protected socket is not live: $SOCKET" >&2
   echo "Start sjel-status after provisioning inbound auth, then retry." >&2

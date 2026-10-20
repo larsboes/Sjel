@@ -61,6 +61,8 @@ nothing is overwritten.
 
 ## Imports and the vault
 
+Decided 2026-10-20: `Atlas/Interior` leaves the vault for the `projects` store, and this capability reads it there first ([ruling](../projects/README.md#why-this-shape-sjel-owns-projects-tasks-and-habits)). Until then, this section describes the current code.
+
 `inventory/*.toml` in the overlay (`data/inventory/inventory`, else `data/interior/inventory`) was
 the source of the first import. Since then the tables are the truth: `import` refuses to run over
 existing rows without `--force`.

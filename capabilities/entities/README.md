@@ -43,6 +43,8 @@ a foreign browser origin. The dashboard reaches it through its same-origin proxy
 
 ## Import
 
+Decided 2026-10-20: `Atlas/People` leaves the vault for the `projects` store, and this capability reads it there first ([ruling](../projects/README.md#why-this-shape-sjel-owns-projects-tasks-and-habits)). Until then, this section describes the current code.
+
 `entities-server import-obsidian [--dry-run]` creates one person per `Atlas/People` note,
 as `capabilities/vault` reads it (`GET /api/people`). `home` becomes a `home_base` fact.
 `host: yes` becomes `sleeping_option: ask`, because a note saying someone could host is a

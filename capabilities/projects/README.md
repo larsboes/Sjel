@@ -15,9 +15,26 @@ and the API call the same functions in `src/ops.rs`.
 ## Why this shape: Sjel owns projects, tasks and habits
 
 Decided 2026-10-09 and revised 2026-10-17. It reverses the PRD's Q48. Sjel owns projects, tasks
-and habits. Obsidian keeps Knowledge, Atlas, Journal and Reflections. The 2026-10-17 revision
+and habits. Obsidian kept Knowledge, Atlas, Journal and Reflections until 2026-10-20 (below). The 2026-10-17 revision
 stores the records as tables in the shared store instead of keeping markdown canonical, after
 the operator compared both. Sjel's CLI and API are the only writers.
+
+Revised again 2026-10-20: Obsidian keeps Knowledge only. Atlas, Journal and Reflections move
+into this store one folder at a time, and the store holds every note that is not knowledge.
+Two changes come before the first folder moves:
+
+1. A top folder such as `Atlas/` is a domain, not a project. `project_of` and the project list
+   must tell the two apart.
+2. Each capability that reads or writes a vault folder must use this store first: finance
+   (`Atlas/Finance/Subscriptions`), inventory (`Atlas/Interior`), entities (`Atlas/People`),
+   calendar (`Atlas/Events`) and comms (`Atlas/Media`). A note that leaves the vault before its
+   reader moves repeats the 2026-08-23 finance loss
+   ([finance](../finance/README.md#when-the-note-is-not-there)).
+
+The vault writebacks retire with that move: the marked regions of finance and inventory, and
+the projections under `Resources/Sjel/`. Each moved vault original goes to the vault's
+`Archive/` first, and the operator deletes it later. The order starts with Finance, Items and Interior, the
+three smallest folders with one clear owner each.
 
 Attachments stay files in the rendered tree, not rows. At 986 MB on 2026-10-18 they would grow
 every backup of the shared database. The page that listed apps under `/projects` moved to

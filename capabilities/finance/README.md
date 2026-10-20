@@ -98,6 +98,8 @@ collapsing the two into one field wrong.
 
 ## Ownership across the vault boundary
 
+Decided 2026-10-20: `Atlas/Finance` leaves the vault for the `projects` store, and this capability reads it there first ([ruling](../projects/README.md#why-this-shape-sjel-owns-projects-tasks-and-habits)). Until then, this section describes the current code.
+
 | Statement | Owner | Written by |
 |---|---|---|
 | Why I pay for this, value check, alternatives | the vault note's prose | the human |

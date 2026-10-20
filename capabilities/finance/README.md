@@ -437,10 +437,10 @@ comments and commit messages too.
 **A trip is context, not a category branch.** A trip expense is also a food expense.
 Duplicating the category tree under a trip prefix would make "what did I spend on
 food this year" answerable only by remembering to union two subtrees. The
-`axon-trip-id` tag is the join, read in `src/analytics.rs` when the projection is
+`sjel-trip-id` tag is the join, read in `src/analytics.rs` when the projection is
 built. Finance stores only the opaque Trips
 plan identifier; the dashboard asks Trips for the current title. Purpose is a
-separate `axon-purpose` tag, and ownership is represented by postings, so category,
+separate `sjel-purpose` tag, and ownership is represented by postings, so category,
 reason and whose money was spent remain independently queryable.
 
 **The format is hledger's; the engine is not.** Until PRD Q50 (2026-08-28)

@@ -293,12 +293,12 @@ pub enum Action {
     RefreshDraft,
     /// The operator confirmed or re-kinded this entry. Sjel is the source of
     /// truth, so the import leaves it alone and reports the divergence.
-    KeepAxonVersion,
+    KeepSjelVersion,
     /// Google withdrew an event the operator never adopted. The draft goes.
     DropDraft,
     /// Google withdrew an event the operator *did* adopt. Sjel wins: the entry
     /// stays, and the operator is told the upstream is gone.
-    KeepCancelledAxonVersion,
+    KeepCancelledSjelVersion,
     /// Google withdrew an event that was never imported. Nothing to do.
     Skip,
 }
@@ -315,10 +315,10 @@ pub fn decide(event: &GoogleEvent, existing: Option<&Entry>) -> Action {
     match (event.is_cancelled(), existing.is_some(), is_draft) {
         (true, false, _) => Action::Skip,
         (true, true, true) => Action::DropDraft,
-        (true, true, false) => Action::KeepCancelledAxonVersion,
+        (true, true, false) => Action::KeepCancelledSjelVersion,
         (false, false, _) => Action::Create,
         (false, true, true) => Action::RefreshDraft,
-        (false, true, false) => Action::KeepAxonVersion,
+        (false, true, false) => Action::KeepSjelVersion,
     }
 }
 
@@ -366,7 +366,7 @@ pub fn export_refusal(entry: &Entry) -> Option<String> {
 /// both ends — Google's exclusive end matches this capability's, so again no
 /// arithmetic.
 ///
-/// `extendedProperties.private.axon_entry_id` is the back-reference. It is not
+/// `extendedProperties.private.sjel_entry_id` is the back-reference. It is not
 /// what the export ledger keys on (that is the returned Google event id), but
 /// it makes an event in the Google UI traceable to the entry that produced it.
 pub fn export_body(entry: &Entry, tz: &HomeTimezone) -> Result<Value, String> {
@@ -397,7 +397,7 @@ pub fn export_body(entry: &Entry, tz: &HomeTimezone) -> Result<Value, String> {
         "start": start,
         "end": end,
         "extendedProperties": {
-            "private": { "axon_entry_id": entry.id, "axon_kind": entry.kind }
+            "private": { "sjel_entry_id": entry.id, "sjel_kind": entry.kind }
         },
     }))
 }
@@ -720,7 +720,7 @@ mod tests {
     }
 
     #[test]
-    fn axon_wins_once_the_operator_has_adopted_the_draft() {
+    fn sjel_wins_once_the_operator_has_adopted_the_draft() {
         let event = page().items[0].clone();
         let mut confirmed = stored(map_event(&event, &berlin()).unwrap(), "cal:entry:1");
         // Adoption is raising the commitment, not re-kinding: he can correct
@@ -728,13 +728,13 @@ mod tests {
         confirmed.kind = "work_onsite".into();
         confirmed.commitment = Commitment::Committed;
 
-        assert_eq!(decide(&event, Some(&confirmed)), Action::KeepAxonVersion);
+        assert_eq!(decide(&event, Some(&confirmed)), Action::KeepSjelVersion);
 
         // ...and a moved Google event still does not move the Sjel one.
         let mut moved = event;
         moved.start.date_time = Some("2026-08-14T15:00:00+02:00".into());
         moved.end.date_time = Some("2026-08-14T16:00:00+02:00".into());
-        assert_eq!(decide(&moved, Some(&confirmed)), Action::KeepAxonVersion);
+        assert_eq!(decide(&moved, Some(&confirmed)), Action::KeepSjelVersion);
     }
 
     #[test]
@@ -749,7 +749,7 @@ mod tests {
         adopted.commitment = Commitment::Committed;
         assert_eq!(
             decide(&cancelled, Some(&adopted)),
-            Action::KeepCancelledAxonVersion
+            Action::KeepCancelledSjelVersion
         );
 
         // Re-kinding alone is a correction, not an adoption: still Google's.
@@ -804,7 +804,7 @@ mod tests {
         assert_eq!(body["end"]["dateTime"], "2026-08-14T20:00:00+02:00");
         assert_eq!(body["summary"], "Vortrag");
         assert_eq!(
-            body["extendedProperties"]["private"]["axon_entry_id"],
+            body["extendedProperties"]["private"]["sjel_entry_id"],
             "cal:entry:9"
         );
 

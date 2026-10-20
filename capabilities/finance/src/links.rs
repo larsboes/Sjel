@@ -1,6 +1,6 @@
 //! What finance answers on `GET /api/links` (docs/capabilities/links.md, LNK-7).
 //!
-//! Finance holds one kind of reference: the `axon-trip-id` tag, projected as
+//! Finance holds one kind of reference: the `sjel-trip-id` tag, projected as
 //! `TransactionRow::trip_id`. A transaction's linkable id is `fin:tx:<source_id>`, because
 //! `source_id` is the fingerprint that survives a projection rebuild and the row `id` is a journal
 //! position that does not (`analytics.rs`, the `transaction_{index}_…` format). A tagged row with

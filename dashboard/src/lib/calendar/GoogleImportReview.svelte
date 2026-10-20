@@ -62,6 +62,8 @@
     return {
       importable: "Importable",
       "likely-duplicate": "Possible duplicate",
+      "already-in-sjel": "Already in Sjel",
+      // Read both: the server emitted the old value until the 2026-10-20 rename.
       "already-in-axon": "Already in Sjel",
       cancelled: "Cancelled in Google",
       invalid: "Not importable",

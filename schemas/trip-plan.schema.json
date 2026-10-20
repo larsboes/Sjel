@@ -127,7 +127,7 @@
       }
     },
     "budget_cents": {
-      "description": "What the trip is MEANT to cost, integer minor units, denominated in `currency`. Finance keeps every actual cent and already tags postings with an axon-trip-id; the intention had no home at all, so the two halves of \"did I overspend\" were an HTTP call apart and never compared.",
+      "description": "What the trip is MEANT to cost, integer minor units, denominated in `currency`. Finance keeps every actual cent and already tags postings with an sjel-trip-id; the intention had no home at all, so the two halves of \"did I overspend\" were an HTTP call apart and never compared.",
       "type": [
         "integer",
         "null"

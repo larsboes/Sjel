@@ -800,15 +800,15 @@ mod tests {
         let dinner = &transactions[4];
         assert_eq!(dinner.description, "group dinner");
         assert_eq!(
-            dinner.tags.get("axon-purpose").map(String::as_str),
+            dinner.tags.get("sjel-purpose").map(String::as_str),
             Some("trip")
         );
         assert_eq!(
-            dinner.tags.get("axon-shared-cents").map(String::as_str),
+            dinner.tags.get("sjel-shared-cents").map(String::as_str),
             Some("3000")
         );
         assert_eq!(
-            dinner.tags.get("axon-trip-id").map(String::as_str),
+            dinner.tags.get("sjel-trip-id").map(String::as_str),
             Some("trip:synthetic")
         );
         assert_eq!(dinner.source_id.as_deref(), Some("synthetic-expense"));
@@ -817,7 +817,7 @@ mod tests {
         assert_eq!(
             repayment
                 .tags
-                .get("axon-reimbursement-for")
+                .get("sjel-reimbursement-for")
                 .map(String::as_str),
             Some("synthetic-expense")
         );

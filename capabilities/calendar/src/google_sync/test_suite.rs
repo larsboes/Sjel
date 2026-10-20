@@ -244,17 +244,17 @@ mod tests {
         events[2].end.date_time = Some("2026-08-19T09:45:00+02:00".into());
 
         let report = import(&store, &FixtureApi::new(events), &settings(), false).unwrap();
-        assert_eq!(report.kept_axon_version, 1);
+        assert_eq!(report.kept_sjel_version, 1);
         assert_eq!(report.refreshed, 1);
         assert_eq!(report.unchanged, 1);
 
-        let axon = store.get("3q7l9v1c8m2p4t6y0x5z");
+        let kept = store.get("3q7l9v1c8m2p4t6y0x5z");
         assert_eq!(
-            axon.starts_at, "2026-08-14T10:00:00",
+            kept.starts_at, "2026-08-14T10:00:00",
             "Sjel wins the collision"
         );
-        assert_eq!(axon.title, "Sprint-Review (verschoben)");
-        assert_eq!(axon.kind, "work_onsite");
+        assert_eq!(kept.title, "Sprint-Review (verschoben)");
+        assert_eq!(kept.kind, "work_onsite");
 
         let draft = store.get("base9x7v5t3r1p_20260819T063000Z");
         assert_eq!(
@@ -266,7 +266,7 @@ mod tests {
         let kept = report
             .outcomes
             .iter()
-            .find(|o| o.action == Action::KeepAxonVersion)
+            .find(|o| o.action == Action::KeepSjelVersion)
             .unwrap();
         assert_eq!(
             kept.google_says.as_ref().unwrap()["start"]["dateTime"],
@@ -296,7 +296,7 @@ mod tests {
 
         let report = import(&store, &FixtureApi::new(cancelled), &settings(), false).unwrap();
         assert_eq!(report.dropped_drafts, 2);
-        assert_eq!(report.kept_axon_version, 1);
+        assert_eq!(report.kept_sjel_version, 1);
         assert_eq!(store.count(), 1);
         assert_eq!(store.get("7h2k4n6q8s0u2w4y6a8c").kind, "away");
     }

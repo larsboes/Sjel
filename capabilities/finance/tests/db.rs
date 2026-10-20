@@ -46,9 +46,9 @@ mod db_tests {
             scale: 2,
         };
         let tags = std::collections::BTreeMap::from([
-            ("axon-purpose".into(), "trip".into()),
-            ("axon-trip-id".into(), "trip:synthetic".into()),
-            ("axon-shared-cents".into(), "600".into()),
+            ("sjel-purpose".into(), "trip".into()),
+            ("sjel-trip-id".into(), "trip:synthetic".into()),
+            ("sjel-shared-cents".into(), "600".into()),
         ]);
         project(
             &[JournalTransaction {

@@ -242,7 +242,7 @@ export interface SharedExpenseSummary {
   currency: string;
 }
 
-/** Per-trip cost roll-up; `trip_id` is the trips plan id (tag `axon-trip-id`). */
+/** Per-trip cost roll-up; `trip_id` is the trips plan id (tag `sjel-trip-id`). */
 export interface TripSpendingSummary {
   trip_id: string;
   personal_spending_cents: number;

@@ -136,7 +136,7 @@ pub struct UpdatePlan {
     pub stages: Option<Vec<TripStage>>,
     pub cover_image_url: Option<String>,
     /// What the trip is meant to cost, in minor units. Finance keeps every
-    /// actual cent and already tags postings with an `axon-trip-id`; this is the
+    /// actual cent and already tags postings with an `sjel-trip-id`; this is the
     /// intention those actuals get compared against, which had no home at all.
     ///
     /// `Option<Option<_>>` so an omitted key ("leave it alone") and an explicit
@@ -210,7 +210,7 @@ pub struct TripPlan {
     pub updated_at: String,
     /// What this trip is meant to cost, in minor units, beside what it actually
     /// did. Finance keeps every actual cent and already tags postings with an
-    /// `axon-trip-id`; the intention had no home at all, so the two halves of
+    /// `sjel-trip-id`; the intention had no home at all, so the two halves of
     /// "did I overspend" were one HTTP call apart and never compared.
     #[serde(default)]
     pub budget_cents: Option<i64>,

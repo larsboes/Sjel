@@ -31,7 +31,7 @@ pub struct ImportReport {
     pub created: usize,
     pub refreshed: usize,
     pub unchanged: usize,
-    pub kept_axon_version: usize,
+    pub kept_sjel_version: usize,
     pub dropped_drafts: usize,
     pub outcomes: Vec<ImportOutcome>,
     pub skipped: Vec<SkippedEvent>,
@@ -46,7 +46,7 @@ pub struct ImportReport {
 pub enum ReviewStatus {
     Importable,
     LikelyDuplicate,
-    AlreadyInAxon,
+    AlreadyInSjel,
     Cancelled,
     Invalid,
 }
@@ -159,16 +159,16 @@ pub(super) fn candidate_for(
     };
 
     match google::decide(event, existing) {
-        Action::Skip | Action::DropDraft | Action::KeepCancelledAxonVersion => {
+        Action::Skip | Action::DropDraft | Action::KeepCancelledSjelVersion => {
             candidate.status = ReviewStatus::Cancelled;
             candidate.reason = Some("Cancelled in Google".into());
         }
-        Action::RefreshDraft | Action::KeepAxonVersion => {
-            candidate.status = ReviewStatus::AlreadyInAxon;
+        Action::RefreshDraft | Action::KeepSjelVersion => {
+            candidate.status = ReviewStatus::AlreadyInSjel;
             candidate.reason = Some(
                 match google::decide(event, existing) {
                     Action::RefreshDraft => "Already imported as an Sjel draft",
-                    Action::KeepAxonVersion => "Already adopted in Sjel; Sjel keeps its version",
+                    Action::KeepSjelVersion => "Already adopted in Sjel; Sjel keeps its version",
                     _ => unreachable!("handled above"),
                 }
                 .into(),
@@ -399,26 +399,26 @@ pub(super) fn import_events(
 
         match google::decide(event, existing.as_ref()) {
             Action::Skip => {}
-            Action::KeepCancelledAxonVersion => {
-                report.kept_axon_version += 1;
+            Action::KeepCancelledSjelVersion => {
+                report.kept_sjel_version += 1;
                 report.outcomes.push(ImportOutcome {
                     google_event_id: event.id.clone(),
                     title: existing
                         .as_ref()
                         .map(|e| e.title.clone())
                         .unwrap_or_default(),
-                    action: Action::KeepCancelledAxonVersion,
+                    action: Action::KeepCancelledSjelVersion,
                     entry_id: existing.as_ref().map(|e| e.id.clone()),
                     google_says: Some(serde_json::json!({ "status": "cancelled" })),
                 });
             }
-            Action::KeepAxonVersion => {
-                let existing = existing.expect("KeepAxonVersion implies an entry");
-                report.kept_axon_version += 1;
+            Action::KeepSjelVersion => {
+                let existing = existing.expect("KeepSjelVersion implies an entry");
+                report.kept_sjel_version += 1;
                 report.outcomes.push(ImportOutcome {
                     google_event_id: event.id.clone(),
                     title: existing.title.clone(),
-                    action: Action::KeepAxonVersion,
+                    action: Action::KeepSjelVersion,
                     entry_id: Some(existing.id),
                     google_says: Some(serde_json::to_value(event).unwrap_or(Value::Null)),
                 });

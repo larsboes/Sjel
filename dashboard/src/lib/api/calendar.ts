@@ -174,6 +174,9 @@ export interface CalendarUpdateRhythm {
 export type GoogleImportReviewStatus =
   | 'importable'
   | 'likely-duplicate'
+  // The pre-rename value stays in the union for one release: a tab opened before the
+  // 2026-10-20 rename is still asking the server it was loaded from.
+  | 'already-in-sjel'
   | 'already-in-axon'
   | 'cancelled'
   | 'invalid';

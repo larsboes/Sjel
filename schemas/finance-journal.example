@@ -42,7 +42,7 @@
 ; (capabilities/finance/src/analytics.rs). Because the format is unchanged, the
 ; same grouping is also one hledger command away for anyone who wants it:
 ;
-;   hledger -f <journal> balance tag:axon-trip-id=trip:synthetic
+;   hledger -f <journal> balance tag:sjel-trip-id=trip:synthetic
 ;
 ; Finance stores only the opaque plan id. The dashboard resolves its current title
 ; through Trips, so neither capability reads the other's store.
@@ -89,18 +89,18 @@ P 2026-08-08 ACME 51,20 EUR
 
 ; Shared trip spending. Only the reviewed personal share is an expense; the rest
 ; remains an asset until repayments settle it.
-2026-06-12 group dinner  ; axon-purpose: trip, axon-own-cents: 1000, axon-shared-cents: 3000, axon-trip-id: trip:synthetic
+2026-06-12 group dinner  ; sjel-purpose: trip, sjel-own-cents: 1000, sjel-shared-cents: 3000, sjel-trip-id: trip:synthetic
     assets:bank:checking                     -40,00 EUR
     expenses:food                             10,00 EUR
     assets:receivable:shared                  30,00 EUR
     ; source-id: synthetic-expense
 
-2026-06-12 metro  ; axon-purpose: trip, axon-own-cents: 640, axon-shared-cents: 0, axon-trip-id: trip:synthetic
+2026-06-12 metro  ; sjel-purpose: trip, sjel-own-cents: 640, sjel-shared-cents: 0, sjel-trip-id: trip:synthetic
     expenses:transport                         6,40 EUR
     assets:bank:checking
 
 ; A repayment reduces the receivable. It is neither income nor negative spending.
-2026-06-13 group repayment  ; axon-reimbursement-for: synthetic-expense
+2026-06-13 group repayment  ; sjel-reimbursement-for: synthetic-expense
     assets:bank:checking                      20,00 EUR
     assets:receivable:shared                 -20,00 EUR
     ; source-id: synthetic-repayment

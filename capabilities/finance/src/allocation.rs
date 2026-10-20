@@ -77,7 +77,7 @@ pub fn rewrite_reimbursement(
     validate_reimbursement(candidate, expense_source_id)?;
     let replacement = render_reimbursement(candidate, expense_source_id)?;
     rewrite_owned_entry(journal, candidate, &replacement, |block| {
-        let current = tag(block, "axon-reimbursement-for")
+        let current = tag(block, "sjel-reimbursement-for")
             .ok_or_else(|| ImportError("journal entry is not an Sjel reimbursement".into()))?;
         render_reimbursement(candidate, current)
     })
@@ -159,12 +159,12 @@ fn render_expense(
     let total = candidate.amount_cents.abs();
     let shared = total - allocation.personal_cents;
     let mut tags = vec![
-        format!("axon-purpose: {}", allocation.purpose.as_str()),
-        format!("axon-own-cents: {}", allocation.personal_cents),
-        format!("axon-shared-cents: {shared}"),
+        format!("sjel-purpose: {}", allocation.purpose.as_str()),
+        format!("sjel-own-cents: {}", allocation.personal_cents),
+        format!("sjel-shared-cents: {shared}"),
     ];
     if let Some(trip_id) = &allocation.trip_id {
-        tags.push(format!("axon-trip-id: {trip_id}"));
+        tags.push(format!("sjel-trip-id: {trip_id}"));
     }
     let mut entry = format!(
         "\n{} * {}  ; {}\n    {}  {} {}\n",
@@ -200,7 +200,7 @@ fn render_reimbursement(
 ) -> ImportResult<String> {
     validate_reimbursement(candidate, expense_source_id)?;
     Ok(format!(
-        "\n{} * {}  ; axon-reimbursement-for: {}\n    {}  {} {}\n    {}  {} {}\n    ; source-id: {}\n",
+        "\n{} * {}  ; sjel-reimbursement-for: {}\n    {}  {} {}\n    {}  {} {}\n    ; source-id: {}\n",
         candidate.booked_at,
         import::sanitize_description(&candidate.description),
         expense_source_id,
@@ -266,13 +266,13 @@ fn owned_block<'a>(journal: &'a str, candidate: &TransactionCandidate) -> Import
 }
 
 fn parse_expense(block: &str) -> ImportResult<ExpenseAllocation> {
-    let purpose = tag(block, "axon-purpose")
+    let purpose = tag(block, "sjel-purpose")
         .and_then(SpendingPurpose::parse)
         .ok_or_else(|| ImportError("journal entry has no valid Sjel purpose".into()))?;
-    let personal_cents = tag(block, "axon-own-cents")
+    let personal_cents = tag(block, "sjel-own-cents")
         .and_then(|value| value.parse().ok())
         .ok_or_else(|| ImportError("journal entry has no valid personal share".into()))?;
-    let trip_id = tag(block, "axon-trip-id").map(str::to_string);
+    let trip_id = tag(block, "sjel-trip-id").map(str::to_string);
     Ok(ExpenseAllocation {
         personal_cents,
         purpose,
@@ -332,8 +332,8 @@ mod tests {
         assert!(changed);
         assert!(journal.contains("expenses:food:dining-out  10.00 EUR"));
         assert!(journal.contains("assets:receivable:shared  30.00 EUR"));
-        assert!(journal.contains("axon-purpose: trip"));
-        assert!(journal.contains("axon-trip-id: trip:plan:synthetic"));
+        assert!(journal.contains("sjel-purpose: trip"));
+        assert!(journal.contains("sjel-trip-id: trip:plan:synthetic"));
 
         let (same, changed) = rewrite_expense(&journal, &candidate, &allocation).unwrap();
         assert!(!changed);
@@ -384,7 +384,7 @@ mod tests {
         let (journal, changed) =
             rewrite_reimbursement(&base, &candidate, "synthetic-expense").unwrap();
         assert!(changed);
-        assert!(journal.contains("axon-reimbursement-for: synthetic-expense"));
+        assert!(journal.contains("sjel-reimbursement-for: synthetic-expense"));
         assert!(journal.contains("assets:receivable:shared  -30.00 EUR"));
         assert!(!journal.contains("income:uncategorized"));
     }

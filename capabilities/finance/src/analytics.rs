@@ -211,15 +211,15 @@ pub fn project(transactions: &[JournalTransaction], currency: &str) -> Vec<Trans
             .unwrap_or(0);
         let purpose = transaction
             .tags
-            .get("axon-purpose")
+            .get("sjel-purpose")
             .and_then(|value| SpendingPurpose::parse(value));
-        let trip_id = transaction.tags.get("axon-trip-id").cloned();
+        let trip_id = transaction.tags.get("sjel-trip-id").cloned();
         let tagged_shared_cents = transaction
             .tags
-            .get("axon-shared-cents")
+            .get("sjel-shared-cents")
             .and_then(|value| value.parse::<i64>().ok())
             .unwrap_or(0);
-        let reimbursement_for = transaction.tags.get("axon-reimbursement-for").cloned();
+        let reimbursement_for = transaction.tags.get("sjel-reimbursement-for").cloned();
         let mut classified = false;
         let mut cash_recorded = false;
         for (posting_index, posting) in transaction.postings.iter().enumerate() {
@@ -909,11 +909,11 @@ mod tests {
     #[test]
     fn the_narrow_trip_route_equals_the_dashboard_number() {
         let mut expense_tags = BTreeMap::new();
-        expense_tags.insert("axon-purpose".into(), "trip".into());
-        expense_tags.insert("axon-trip-id".into(), "trip:synthetic".into());
-        expense_tags.insert("axon-shared-cents".into(), "3000".into());
+        expense_tags.insert("sjel-purpose".into(), "trip".into());
+        expense_tags.insert("sjel-trip-id".into(), "trip:synthetic".into());
+        expense_tags.insert("sjel-shared-cents".into(), "3000".into());
         let mut reimbursement_tags = BTreeMap::new();
-        reimbursement_tags.insert("axon-reimbursement-for".into(), "synthetic-expense".into());
+        reimbursement_tags.insert("sjel-reimbursement-for".into(), "synthetic-expense".into());
         let transactions = vec![
             JournalTransaction {
                 index: 1,
@@ -974,11 +974,11 @@ mod tests {
     #[test]
     fn shared_costs_separate_personal_spending_from_cash_and_reimbursements() {
         let mut expense_tags = BTreeMap::new();
-        expense_tags.insert("axon-purpose".into(), "trip".into());
-        expense_tags.insert("axon-trip-id".into(), "trip:synthetic".into());
-        expense_tags.insert("axon-shared-cents".into(), "3000".into());
+        expense_tags.insert("sjel-purpose".into(), "trip".into());
+        expense_tags.insert("sjel-trip-id".into(), "trip:synthetic".into());
+        expense_tags.insert("sjel-shared-cents".into(), "3000".into());
         let mut reimbursement_tags = BTreeMap::new();
-        reimbursement_tags.insert("axon-reimbursement-for".into(), "synthetic-expense".into());
+        reimbursement_tags.insert("sjel-reimbursement-for".into(), "synthetic-expense".into());
         let transactions = vec![
             JournalTransaction {
                 index: 1,

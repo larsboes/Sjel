@@ -1,0 +1,79 @@
+#!/usr/bin/env bash
+# search-prior-art — checks whether a capability, symbol, or dependency already exists.
+# Bash 3.2-compatible.
+
+set -euo pipefail
+
+usage() {
+    echo "Usage: search-prior-art <query>" >&2
+    echo "Searches codebase, monorepo libs, capabilities, and installed dependencies." >&2
+    exit 1
+}
+
+if [ $# -lt 1 ]; then
+    usage
+fi
+
+QUERY="$1"
+REPO_ROOT="$(git rev-parse --show-toplevel 2>/dev/null || (cd "$(dirname "$0")/../../../../.." && pwd))"
+cd "$REPO_ROOT"
+
+echo "=== Prior Art Search: '$QUERY' ==="
+echo
+
+# 1. Existing symbols in Sjel codebase (libs, capabilities, tools)
+echo "--- 1. Codebase Symbols (libs, capabilities, tools) ---"
+MATCHES=$(rg --smart-case --max-count 5 -g '*.rs' -g '*.ts' "(fn|struct|enum|trait|type|class|interface)\s+[A-Za-z0-9_]*$QUERY" libs/ capabilities/ tools/ 2>/dev/null || true)
+if [ -n "$MATCHES" ]; then
+    echo "$MATCHES"
+else
+    echo "No direct symbol definitions matching '$QUERY' found."
+fi
+echo
+
+# 2. Existing files and directory paths
+echo "--- 2. Existing Modules & Paths ---"
+PATHS=$(find libs capabilities tools -maxdepth 3 -iname "*$QUERY*" 2>/dev/null || true)
+if [ -n "$PATHS" ]; then
+    echo "$PATHS"
+else
+    echo "No matching crate or module paths found."
+fi
+echo
+
+# 3. Installed Cargo dependencies
+echo "--- 3. Installed Rust Dependencies (Cargo.lock) ---"
+if [ -f "Cargo.lock" ]; then
+    CRATES=$(grep -A 1 "name = \"[^\"]*$QUERY" Cargo.lock 2>/dev/null || true)
+    if [ -n "$CRATES" ]; then
+        echo "$CRATES"
+    else
+        echo "No installed Cargo dependencies matching '$QUERY'."
+    fi
+fi
+echo
+
+# 4. Installed Node / Bun dependencies
+echo "--- 4. Installed Node / Bun Dependencies ---"
+if [ -f "bun.lock" ] || [ -f "package.json" ]; then
+    NODE_DEPS=$(rg --max-count 5 "\"$QUERY" package.json bun.lock 2>/dev/null || true)
+    if [ -n "$NODE_DEPS" ]; then
+        echo "$NODE_DEPS"
+    else
+        echo "No installed JS/TS packages matching '$QUERY'."
+    fi
+fi
+echo
+
+# 5. Upstream and systems references
+echo "--- 5. Sjel Upstreams & Systems ---"
+if [ -f "upstreams.toml" ]; then
+    UPSTREAMS=$(grep -i -C 1 "$QUERY" upstreams.toml 2>/dev/null || true)
+    if [ -n "$UPSTREAMS" ]; then
+        echo "$UPSTREAMS"
+    else
+        echo "No upstream references found."
+    fi
+fi
+echo
+echo "=== Prior art scan complete ==="

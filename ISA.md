@@ -57,16 +57,16 @@ owner heading; `F4` under media is not the root feature F4.
   only requests signed with a paired device's key. An iOS Shortcut cannot sign, so an iOS share
   extension in the phone app is the path; a shared-token endpoint was rejected because it opens
   the signed-only listener.
-- **Axon names.** Decided 2026-09-30: rename `axon` in names, headers, prose and the FDA
-  launcher. `X-Axon-*` headers stay accepted until the phone app ships, and FDA is restored after
+- **Sjel names.** Decided 2026-09-30: rename `sjel` in names, headers, prose and the FDA
+  launcher. `X-Sjel-*` headers stay accepted until the phone app ships, and FDA is restored after
   the rename. The `AXON_*` fallback is retired. The config files are renamed: `sjel.toml`,
   `sjel.local.toml` and `sjel.local.toml.example` are the names on disk, and the pre-rename
   `axon.toml` / `axon.local.toml` are still *read* after them, so an older checkout resolves its
   overlay without an edit (`tools/manifest-resolution.test.sh` covers it). Persisted paths and
   compatibility names need their own migration; replacing prose alone does not close the rename.
-  Probe: `git grep -n -i axon`.
+  Probe: `git grep -n -i sjel`.
 
-### From the vault PRD `Axon`
+### From the vault PRD `Sjel`
 
 Migrated 2026-10-15 from §13 of the frozen PRD (now the `projects` record `Sjel/PRD Axon.md`).
 
@@ -145,11 +145,9 @@ Migrated 2026-10-15 from §13 of the frozen PRD (now the `projects` record `Sjel
 
 ### harness · two items
 
-- **`OPERATIONAL_RULES.md`, sorted.** From the 2026-08-22 skills audit (claim C7): sort the old
-  LifeOS operational rules down to what is worth keeping, put them in the private overlay, and
-  make them deployable to the user-level `CLAUDE.md`. The source is only in the overlay's LifeOS
-  backup. Falsifier: a port that carries LifeOS-specific rules across, or edits made only in the
-  live `~/.claude` tree.
-- **A prior-art skill that searches.** Same audit, claim C8: rethink the prior-art and
-  build-ladder skills from the start rather than wrap them. Falsifier: a skill that restates the
-  ladder without a way to actually search.
+- **`OPERATIONAL_RULES.md`, sorted.** (Resolved: old LifeOS rules sorted to durable principles in
+  `<overlay>/config/OPERATIONAL_RULES.md` and `<overlay>/config/operator-profile.json`; stored in
+  `operator-profile` and projected cleanly into `~/.claude/CLAUDE.md` via `operator-profile export --apply`.)
+- **A prior-art skill that searches.** (Resolved: `Packs/coding/skills/prior-art` implements the 7-rung
+  build ladder with executable search script `scripts/search-prior-art` across symbols, modules, crates,
+  and upstreams; synced and verified.)

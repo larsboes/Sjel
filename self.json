@@ -593,6 +593,16 @@
     },
     {
       "from": "assistant",
+      "to": "agent",
+      "kinds": [
+        "cargo-dep"
+      ],
+      "evidence": [
+        "capabilities/assistant/Cargo.toml"
+      ]
+    },
+    {
+      "from": "assistant",
       "to": "inference",
       "kinds": [
         "cargo-dep"
@@ -614,6 +624,16 @@
     {
       "from": "assistant",
       "to": "sjel-config",
+      "kinds": [
+        "cargo-dep"
+      ],
+      "evidence": [
+        "capabilities/assistant/Cargo.toml"
+      ]
+    },
+    {
+      "from": "assistant",
+      "to": "sjel-http",
       "kinds": [
         "cargo-dep"
       ],

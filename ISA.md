@@ -124,11 +124,10 @@ Migrated 2026-10-15 from §13 of the frozen PRD (now the `projects` record `Sjel
 
 ### places · three items
 
-- **Photos layer.** Blocked on an indexer that respects PRD N4 (index and link, never copy).
-  EXIF geotags would also be the best travel-history source.
+- **Photos layer.** (Resolved: `media_geotags` EXIF indexer respects PRD N4; `places` serves `GET /api/layers/photos` with bounding box filtering and cached coordinates.)
 - **Self-hosted tiles.** The basemap still egresses to `tiles.openfreemap.org`; the seam is
   declared swappable to PMTiles.
-- **Register proposals from calendar.** Calendar has no attendee field yet to derive from.
+- **Register proposals from calendar.** (Resolved: `attendees` array on calendar events with `places backfill calendar` extracting participants to registered contacts.)
 
 ### distribution
 

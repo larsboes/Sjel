@@ -3,23 +3,19 @@
 A right-sidebar pane in Obsidian that answers one question about the note in front of you:
 **what does Sjel know about this, and does it agree with what the note says?**
 
-Two note kinds so far.
+One note kind today.
 
 | Note | Reads | Shows |
 | --- | --- | --- |
-| `Atlas/People/*.md` | vault `GET /api/people` | `last_contact`, `met_at` and `mention_count` computed from the Journal, beside the values stored in the note, with each disagreement marked |
 | `Resources/Sjel/Trips/*.md` | trips `GET /api/plans` | a staleness badge: whether the projection's `axon_revision` still matches the plan's `updated_at` |
 
 The trip folder and the `axon_*` keys are what trips writes today
 (`capabilities/trips/src/projection.rs`, `DIR` and `frontmatter`). They carry the old name,
 and the plugin matches the code rather than the name.
 
-A person note is found by its path, and the two sides spell a path differently: vault serves
-back what the filesystem gave it, and three of the 89 files under `Atlas/People/` are stored
-decomposed (NFD) on this APFS volume, while Obsidian normalises to NFC. The lookup therefore
-compares canonical-equivalent paths. Measured 2026-09-09 with an exact `===`, those three
-notes read *"vault has no facts for this note"* in the pane; with the comparison, all three
-are found.
+A people adapter compared `Atlas/People` notes with vault's `GET /api/people` until
+2026-10-20. That folder and the Journal left the vault that day, and the adapter went with
+them: `capabilities/entities` holds people and computes `last_contact` now.
 
 The badge is the useful one. A projection looks the same whether it is current or four
 revisions behind, and until now the only way to find out was to re-run the export and watch
@@ -28,9 +24,8 @@ whether the file changed.
 ## The three properties that are not negotiable
 
 **It reads and never writes.** No note is modified, no frontmatter is written, no command
-mutates anything. vault computes the people facts and serves them beside the stored values;
-it does not write them (`capabilities/vault/src/people.rs`). A pane that wrote the same keys
-would be a second writer with no shared refusal. `tools/check-obsidian-plugins.sh` refuses a
+mutates anything. A pane that wrote what a capability computes would be a second writer with
+no shared refusal. `tools/check-obsidian-plugins.sh` refuses a
 write here.
 
 **It uses `requestUrl`, never a browser request.** `requestUrl` is not a browser request:
@@ -104,7 +99,7 @@ cp capabilities/knowledge-base/plugin/sjel-lens/{manifest.json,main.js,styles.cs
 Copy again after a change here; Obsidian does not follow the repository. Then in Obsidian:
 **Settings → Community plugins → Installed plugins**, reload the list, and turn on *Sjel
 Lens*. Open the pane from the ribbon's scan-eye icon or from the command palette (*Sjel
-Lens: Open the pane*). Open a note under `Atlas/People/`.
+Lens: Open the pane*). Open a trip projection under `Resources/Sjel/Trips/`.
 
 If Sjel's ports have been moved on this machine, set the registry address in **Settings →
 Sjel Lens**. Nothing else in the plugin needs changing.
@@ -124,17 +119,15 @@ bun capabilities/knowledge-base/plugin/sjel-lens.probe.js --vault "<vault root>"
 The first three are hermetic, and CI runs all three: the root `bun test` finds the test
 file, the shell-tests loop runs every `tools/*.test.sh`, and the repo gates run the gate. The probe is the falsifier: it loads this `main.js` through
 the same loader, points its adapters at the services that are running right now, and prints
-what they answer for real notes — including one person whose stored values disagree and one
-whose do not, and a planted revision one hour behind its plan, which must come back `stale`
+what they answer for real notes, including a planted revision one hour behind its plan, which must come back `stale`
 rather than `current`.
 
 ## What it deliberately does not do
 
-- **No writing at all.** vault computes these values and does not write them; this pane
-  only shows the difference.
+- **No writing at all.** This pane only shows the difference.
 - **No third adapter.** Tasks and finance both have HTTP surfaces and neither has a note
   kind that carries a Sjel-owned key to compare against, so a pane for them would restate
   the note back to itself.
-- **No caching beyond the registry.** People and plans are re-read per note. Both answer in
+- **No caching beyond the registry.** Plans are re-read per note. They answer in
   under 30 ms on loopback, measured 2026-09-09, so a cache would buy nothing and could show
   a stale badge — which is the one thing this pane must never do.

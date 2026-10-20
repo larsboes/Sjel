@@ -1,19 +1,15 @@
-//! `vault` — read an Obsidian vault as data, and write back the two keys Sjel owns.
+//! `vault` — read an Obsidian vault as data. Every verb is read-only.
 //!
 //! ```text
 //! vault links  [--root PATH] [--json] [--dead] [--inbound FOLDER]
 //! vault lint   [--root PATH] [--json] [--carrying KEY]
 //! vault class  [--root PATH] [--json] [--only c2] [--list]
-//! vault people [--root PATH] [--json]
-//! vault journal [--root PATH] [--json]
 //! vault bases  [--root PATH] [--json] [--strict]
-//! vault fields [--root PATH] [--json] [--today YYYY-MM-DD] [--apply]
 //! ```
 //!
-//! Every verb but `fields --apply` is read-only. That one writes `last_contact`
-//! and `met_at` on `Atlas/People/**` through the Obsidian Local REST API — see
-//! `src/fields.rs` for what it may write, and `src/obsidian.rs` for how it
-//! writes one key without touching any other byte of the note.
+//! Until 2026-10-20 `people`, `journal`, `names` and `fields` read `Atlas/People` and
+//! `Journal/`, and `fields --apply` wrote two keys back. Both folders left the vault that day;
+//! `capabilities/entities/src/journal.rs` computes `last_contact` from the Journal now.
 //!
 //! ## Why this exists as a binary rather than a skill
 //!
@@ -41,7 +37,7 @@
 
 // The modules live in the library beside this binary, so `vault-server` reads
 // notes through the same loader rather than a second copy of it.
-use vault::{bases, class, fields, graph, journal, lint, names, note, obsidian, people};
+use vault::{bases, class, graph, lint, note};
 
 fn flag(args: &[String], name: &str) -> Option<String> {
     let i = args.iter().position(|a| a == name)?;
@@ -69,12 +65,8 @@ fn main() {
              usage:\n  \
                vault links [--root PATH] [--json] [--dead] [--inbound FOLDER]\n  \
                vault lint  [--root PATH] [--json] [--carrying KEY]\n  \
-               vault names [--root PATH] [--json] [--folder Atlas/People]\n  \
                vault class [--root PATH] [--json] [--only c2] [--list]\n  \
-               vault people [--root PATH] [--json]\n  \
-               vault journal [--root PATH] [--json]\n  \
-               vault bases [--root PATH] [--json] [--strict]\n  \
-               vault fields [--root PATH] [--json] [--today YYYY-MM-DD] [--apply]\n\
+               vault bases [--root PATH] [--json] [--strict]\n\
              \n\
              The root comes from the overlay's config/knowledge.toml unless --root says otherwise."
         );
@@ -215,92 +207,6 @@ fn main() {
             }
         }
 
-        // D2: the three People keys, computed from the Journal so the claim that they are
-        // derivable is measured rather than repeated. Read-only; `fields --apply` is the verb
-        // that writes two of them.
-        "people" => {
-            let rep = people::report(&notes);
-            if json {
-                println!("{}", serde_json::to_string_pretty(&rep).unwrap_or_default());
-            } else {
-                println!("people notes           {}", rep.people);
-                println!("  named in the Journal {}", rep.with_mentions);
-                println!("  carrying a key       {}", rep.carrying_any);
-                println!("  stored value differs {}", rep.disagreeing);
-                println!();
-                println!("mentions  last        first       name");
-                for facts in &rep.facts {
-                    println!(
-                        "{:>8}  {:<10}  {:<10}  {}{}",
-                        facts.mention_count,
-                        facts.last_contact.as_deref().unwrap_or("-"),
-                        facts.met_at.as_deref().unwrap_or("-"),
-                        facts.name,
-                        if facts.disagrees.is_empty() {
-                            String::new()
-                        } else {
-                            format!("   [stored differs: {}]", facts.disagrees.join(", "))
-                        }
-                    );
-                }
-            }
-        }
-
-        // Q106: which of the Journal's six health keys can have a producer, and the one that
-        // does. The verdict per key is `journal::producer_for`, not this printer, so the CLI,
-        // the server and the README cannot end up holding three opinions about it.
-        "journal" => {
-            let rep = journal::report(&notes);
-            if json {
-                println!("{}", serde_json::to_string_pretty(&rep).unwrap_or_default());
-            } else {
-                println!("daily notes            {}", rep.days);
-                println!("  not a date           {}", rep.not_a_day);
-                println!("people register        {}", rep.people_notes);
-                println!();
-                println!("key             present  asserted  comment-only  producer");
-                for key in &rep.keys {
-                    println!(
-                        "{:<14}  {:>7}  {:>8}  {:>12}  {}",
-                        key.key,
-                        key.present,
-                        key.asserted,
-                        key.comment_only,
-                        match key.producer {
-                            journal::Producer::JournalLinks => "journal links",
-                            journal::Producer::SelfReport => "none: self-report",
-                            journal::Producer::HealthStoreUnreachable => "none: no health store",
-                            journal::Producer::Unmeasured => "none: unmeasured",
-                        }
-                    );
-                }
-                println!();
-                println!("social, produced from Journal person links");
-                println!(
-                    "  days naming a person {}",
-                    rep.social.days_with_person_link
-                );
-                println!("  distinct people      {}", rep.social.people_named);
-                println!("  stored social: true  {}", rep.social.stated_true);
-                println!("    links agree        {}", rep.social.agrees);
-                println!("    links differ       {}", rep.social.disagrees);
-                println!(
-                    "  template false, links name somebody {}",
-                    rep.social.unfilled_with_evidence
-                );
-                if !rep.unrendered.is_empty() {
-                    println!();
-                    println!(
-                        "{} frontmatter values are still template expressions:",
-                        rep.unrendered.len()
-                    );
-                    for item in &rep.unrendered {
-                        println!("  {}  {}: {}", item.id, item.key, item.value);
-                    }
-                }
-            }
-        }
-
         // D5, the half a CLI can answer. Base rendering is not checkable from here and this
         // does not pretend it is; what it checks is everything a Base states about the vault
         // before rendering starts — the folders it queries and the keys it draws as columns.
@@ -378,33 +284,6 @@ fn main() {
             }
         }
 
-        // Rung 0 of the redaction ladder. See src/names.rs for why the registry,
-        // not the matching, is the work.
-        "names" => {
-            let folder =
-                flag(&args, "--folder").unwrap_or_else(|| names::DEFAULT_FOLDER.to_string());
-            let reg = names::build(&notes, &folder);
-            if json {
-                println!("{}", serde_json::to_string_pretty(&reg).unwrap_or_default());
-            } else {
-                println!("{} people -> {} tokens", reg.people, reg.tokens.len());
-                if !reg.withheld.is_empty() {
-                    // Withheld, never dropped: a name held back by the stoplist is a
-                    // decision the operator should be able to see and overrule.
-                    println!("\nwithheld as ambiguous ({}):", reg.withheld.len());
-                    for w in &reg.withheld {
-                        println!("  {w}");
-                    }
-                }
-                if !reg.refused.is_empty() {
-                    println!("\nrefused ({}):", reg.refused.len());
-                    for r in &reg.refused {
-                        println!("  {} — {}", r.note, r.reason);
-                    }
-                }
-            }
-        }
-
         // Q9a, the reporting half. The rule itself is in
         // content_item::DataClass::classify_vault_note; this prints what it
         // decided so the folder defaults can be checked against a real vault
@@ -454,127 +333,6 @@ fn main() {
             }
         }
 
-        // The dry run is the default and the write is the flag, which is
-        // `bases --strict` in reverse and for the same reason: a verb whose safe
-        // form needs a flag gets run in its other form by accident.
-        "fields" => {
-            let today = flag(&args, "--today").unwrap_or_else(civil_date::today);
-            if civil_date::unix_day_of_iso(&today).is_none() {
-                die(format!("--today `{today}` is not a YYYY-MM-DD day"));
-            }
-            let rep = people::report(&notes);
-            let plan = fields::plan(&notes, &rep, &today);
-
-            if !has(&args, "--apply") {
-                print_plan(&plan, json, None);
-                return;
-            }
-            // Nothing to write needs no key and no running Obsidian.
-            if !plan.items.iter().any(|i| i.verdict.writes()) {
-                print_plan(&plan, json, Some(&fields::Applied::default()));
-                return;
-            }
-
-            // Connect BEFORE anything else, so "Obsidian is not running" is a
-            // refusal with nothing written rather than a failure halfway down
-            // the list.
-            let api = obsidian::Obsidian::connect().unwrap_or_else(|e| die(e));
-            let applied = fields::apply(&api, &notes, &plan);
-            let stopped = applied.refused.len() + applied.diverged.len();
-            print_plan(&plan, json, Some(&applied));
-            // A run that was asked to write and could not is a failure, whatever
-            // it managed on the other notes. Exiting 0 here is how a broken key
-            // reads as a clean run in a cron log.
-            if stopped > 0 {
-                std::process::exit(1);
-            }
-        }
-
         other => die(format!("unknown command `{other}` (try --help)")),
-    }
-}
-
-/// The plan, and what an apply did with it.
-///
-/// One printer for both, so a dry run and a write cannot present the same vault
-/// differently. `lost_touch` is on it because that is the number the writer
-/// exists to move: `People.base` draws its "Lost Touch" view from
-/// `days_since_contact > 90`, and a producer that leaves it where it was has
-/// not reached the view it was written for.
-fn print_plan(plan: &fields::FieldsPlan, json: bool, applied: Option<&fields::Applied>) {
-    if json {
-        let body = serde_json::json!({ "plan": plan, "applied": applied });
-        println!(
-            "{}",
-            serde_json::to_string_pretty(&body).unwrap_or_default()
-        );
-        return;
-    }
-
-    println!("owned keys");
-    for owned in fields::OWNED {
-        println!(
-            "  {:<13} on {}/**  keeps the {}, read by {}",
-            owned.key,
-            owned.folder,
-            match owned.direction {
-                fields::Direction::Latest => "latest",
-                fields::Direction::Earliest => "earliest",
-            },
-            owned.read_by
-        );
-    }
-    println!();
-    println!("people notes           {}", plan.notes);
-    println!("  create               {}", plan.create);
-    println!("  advance              {}", plan.advance);
-    println!("  unchanged            {}", plan.unchanged);
-    println!("  conflict (recorded)  {}", plan.behind);
-    println!("  refused              {}", plan.refused);
-    println!("  no journal date      {}", plan.not_computed);
-    println!();
-    println!("lost_touch, as of {}", plan.today);
-    println!(
-        "  before               {:>3} of {:>3} carrying last_contact",
-        plan.before.lost, plan.before.carrying
-    );
-    println!(
-        "  after this plan      {:>3} of {:>3}",
-        plan.after.lost, plan.after.carrying
-    );
-
-    if !plan.items.is_empty() {
-        println!();
-        for item in &plan.items {
-            println!("  {:<13} {:<38} {}", item.key, item.id, item.verdict);
-        }
-    }
-
-    let Some(applied) = applied else {
-        let keys = plan.create + plan.advance;
-        println!();
-        println!(
-            "dry run: nothing written. --apply would write {keys} key(s) through the \
-             Obsidian Local REST API; conflicts and refusals are never written."
-        );
-        return;
-    };
-
-    println!();
-    if applied.through.is_empty() {
-        println!("nothing to write; Obsidian was not contacted");
-        return;
-    }
-    println!("written through {}", applied.through);
-    println!("  notes written        {}", applied.notes_written);
-    println!("  keys written         {}", applied.keys_written);
-    println!("  read back as sent    {}", applied.verified);
-    println!("  read back different  {}", applied.diverged.len());
-    println!("  refused at the write {}", applied.refused.len());
-    for refusal in &applied.refused {
-        println!("    REFUSED   {refusal}");
-    }
-    for line in &applied.diverged {
-        println!("    DIVERGED  {line}");
     }
 }

@@ -25,7 +25,8 @@
 //! operator's friends, family and colleagues, which is precisely the class §6
 //! of the PRD says never leaves the host in raw form. It belongs in the private
 //! overlay and must never be committed to this repository. Nothing here writes
-//! it; `vault names --json` produces it.
+//! it; `entities-server names` produces it (capabilities/entities/src/names.rs),
+//! run by tools/people-registry-refresh.sh.
 //!
 //! ## Absent is not empty
 //!
@@ -39,7 +40,7 @@ use std::collections::BTreeSet;
 use std::path::PathBuf;
 use std::sync::OnceLock;
 
-/// Overlay-relative location of the artifact `vault names --json` writes.
+/// Overlay-relative location of the artifact `entities-server names` writes.
 const OVERLAY_REL: &str = "data/vault/people-registry.json";
 
 /// Environment override, for tests and for a deployment that keeps it elsewhere.

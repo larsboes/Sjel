@@ -680,6 +680,16 @@ fn main() {
                 std::process::exit(1);
             }
         }
+        Some("names") => match entities::names::from_store(&store) {
+            Ok(registry) => println!(
+                "{}",
+                serde_json::to_string_pretty(&registry).unwrap_or_default()
+            ),
+            Err(error) => {
+                eprintln!("entities: {error}");
+                std::process::exit(1);
+            }
+        },
         Some("sync-journal") => {
             let dry_run = args.iter().any(|a| a == "--dry-run");
             let report = entities::journal::fetch(&config.projects_url)
@@ -706,7 +716,7 @@ fn main() {
             .block_on(serve(config, store)),
         Some(other) => {
             eprintln!(
-                "usage: entities-server [sync-journal|sync-google [--dry-run]] (got {other:?})"
+                "usage: entities-server [names | sync-journal|sync-google [--dry-run]] (got {other:?})"
             );
             std::process::exit(64);
         }

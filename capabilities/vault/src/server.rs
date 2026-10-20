@@ -1,16 +1,10 @@
 //! `vault-server` — the vault's read-only HTTP surface.
 //!
-//! Two questions, both answered live off the files. Open tasks were a third until
-//! 2026-10-18, when `capabilities/projects` became their owner (capabilities/projects/README.md).
-//!
-//! **What the Journal knows about each person.** D2's three fields, computed
-//! on every request: see `list_people`. The CLI's `vault fields --apply` writes
-//! two of them into the notes; this server stays a read.
-//!
-//! **Which of the Journal's six health keys can be produced at all.** Q106
-//! (2026-09-09) asked for a producer. One of the six has a source and five do
-//! not, and the honest deliverable is that verdict beside the counts: see
-//! `journal_health` and `journal.rs`.
+//! Readiness only, today: is the vault folder there. Open tasks were served here until
+//! 2026-10-18, when `capabilities/projects` became their owner. What the Journal knows about each
+//! person (`/api/people`) and which Journal health keys have a producer (`/api/journal-health`)
+//! were served until 2026-10-20, when `Atlas/People` and `Journal/` left the vault
+//! (capabilities/projects/README.md, "Why this shape").
 //!
 //! ## Read-only, and not by omission
 //!
@@ -34,7 +28,6 @@ use serde_json::{json, Value};
 use tower_http::cors::CorsLayer;
 
 use markdown_root::MarkdownRoot;
-use vault::{journal, people};
 
 /// What this capability answers, served as data beside `/health`.
 const ROUTES: &[route_manifest::Route] = &[
@@ -45,17 +38,6 @@ const ROUTES: &[route_manifest::Route] = &[
         "Readiness: liveness plus a reachable vault.",
     ),
     r("GET", "/routes", "This manifest."),
-    r(
-        "GET",
-        "/api/people",
-        "last_contact, met_at and mention_count per Atlas/People note, computed from Journal/ backlinks, \
-         plus the note's home, host and host_note keys as typed. Never stored.",
-    ),
-    r(
-        "GET",
-        "/api/journal-health",
-        "The six Journal health keys: how many days state each one, which of the six has a producer, and the social value computed from Journal person links. Never stored.",
-    ),
 ];
 
 /// Shorthand so the table above reads as a table.
@@ -154,58 +136,6 @@ async fn ready(State(state): State<AppState>) -> ApiResponse {
     }
 }
 
-/// D2, served as a computed read.
-///
-/// `last_contact`, `met_at` and `mention_count` come out of `Journal/` backlinks. Nothing is
-/// stored by this route, so nothing can be overwritten; the answer is recomputed off the notes
-/// on every request and is stale for exactly as long as the request takes. The writer for two
-/// of the three keys is the CLI's `vault fields --apply` (`fields.rs`), which writes only in
-/// one declared direction per key and records a conflict instead of overwriting a later
-/// hand-typed date.
-///
-/// It serves the drift too — `stored` and `disagrees` per person, the 4 notes whose written
-/// value contradicts the Journal — because the disagreement is the row that tells a reader
-/// which of the two is wrong, and a computed value served alone would look authoritative.
-async fn list_people(State(state): State<AppState>) -> ApiResponse {
-    match with_vault(&state, |vault| {
-        // Two folders, not the vault: `people::report` reads `Atlas/People/` and `Journal/`
-        // and nothing else. See `note::load_under` for the measurement.
-        let (mut notes, _) = vault::note::load_under(vault, people::FOLDER)?;
-        let (journal, _) = vault::note::load_under(vault, people::JOURNAL)?;
-        notes.extend(journal);
-        Ok(people::report(&notes))
-    })
-    .await
-    {
-        Ok(report) => ok(StatusCode::OK, report),
-        Err(response) => response,
-    }
-}
-
-/// Q106, served rather than written, for the same reason `/api/people` is.
-///
-/// Six keys sit on every daily note and one of them has a producer. `journal::report` holds
-/// the verdict per key and the reason for it; this handler only chooses which folders to read.
-///
-/// **Two folders, and both are required.** `Journal/01. Daily Notes/` alone would answer with a
-/// census and a `social` of `false` on every day, because there would be no register to match a
-/// link against — a vault where nobody was ever seen, indistinguishable from a vault where the
-/// People folder moved. That is the reading `people.rs` refuses on the same grounds, so a
-/// missing folder is a 503 that names it and never a zero.
-async fn journal_health(State(state): State<AppState>) -> ApiResponse {
-    match with_vault(&state, |vault| {
-        let (mut notes, _) = vault::note::load_under(vault, journal::DAILY)?;
-        let (register, _) = vault::note::load_under(vault, people::FOLDER)?;
-        notes.extend(register);
-        Ok(journal::report(&notes))
-    })
-    .await
-    {
-        Ok(report) => ok(StatusCode::OK, report),
-        Err(response) => response,
-    }
-}
-
 #[tokio::main]
 async fn main() {
     // The same resolution the CLI uses, so both binaries read one declaration
@@ -248,29 +178,11 @@ fn build_router(state: AppState) -> Router {
         .route("/routes", get(routes))
         .route("/health", get(health))
         .route("/ready", get(ready))
-        .route("/api/people", get(list_people))
-        .route("/api/journal-health", get(journal_health))
         // Permissive CORS, matching every other capability the dashboard reads
-        // directly. This server serves no control surface and no secret, and
-        // the bind is loopback.
-        //
-        // It stopped serving only task titles on 2026-09-08. `/api/people`
-        // answers with 89 real people's names and the dates they were last
-        // named in the Journal — the same names `names.rs` exists to redact
-        // before anything leaves this machine. Loopback is not what holds that
-        // in: `InboundAuth::refuse_without_token` (libs/sjel-server/src/auth.rs)
-        // states the rule, that a page open in the operator's own browser is
-        // already inside the loopback boundary. What holds it in is the token
-        // `sjel_server::serve_local` resolves through
-        // `InboundAuth::from_deployment()`, and a deployment that declares none
-        // leaves this route readable by any origin. Whether this server should
-        // refuse without a token is an operator ruling and not a comment's to
-        // make, so the comment stops at saying what is true.
-        //
-        // Since 2026-09-08 the origin guard below is what makes that concrete:
-        // a page on an origin this deployment does not name cannot read the
-        // route at all, token or no token. The token question above is still
-        // open and still the operator's.
+        // directly. This server serves no control surface and no secret, and the
+        // bind is loopback. Until 2026-10-20 it also served `/api/people` and
+        // `/api/journal-health`, which named real people; both folders left the
+        // vault that day (capabilities/entities/src/journal.rs).
         // ADD NEW ROUTES ABOVE THIS LINE. Below it they lose the origin guard.
         .layer(axum::middleware::from_fn_with_state(
             CAPABILITY,
@@ -310,198 +222,6 @@ mod readiness_tests {
             live["status"], "ok",
             "liveness must not depend on the vault"
         );
-    }
-}
-
-#[cfg(test)]
-mod people_tests {
-    use super::*;
-
-    /// A vault laid out the way the operator's is: one person, two journal entries that name
-    /// them, and a `last_contact` on the note that the Journal contradicts.
-    fn fixture(name: &str) -> std::path::PathBuf {
-        let root = std::env::temp_dir().join(format!("vault-people-{name}-{}", std::process::id()));
-        let _ = std::fs::remove_dir_all(&root);
-        std::fs::create_dir_all(root.join(people::FOLDER)).unwrap();
-        std::fs::create_dir_all(root.join(people::JOURNAL)).unwrap();
-        std::fs::write(
-            root.join(people::FOLDER).join("Erika.md"),
-            "---\nlast_contact: 2020-01-01\nmention_count: 40\n---\n\nbody\n",
-        )
-        .unwrap();
-        std::fs::write(
-            root.join(people::JOURNAL).join("2026-01-05.md"),
-            "coffee with [[Erika]]\n",
-        )
-        .unwrap();
-        std::fs::write(
-            root.join(people::JOURNAL).join("2026-03-09 Monday.md"),
-            "[[Erika]] again, and [[Erika]] twice\n",
-        )
-        .unwrap();
-        root
-    }
-
-    /// D2, end to end through the handler. The three fields are answered off the notes and the
-    /// note on disk is not touched: the route is a read, whatever `vault fields` writes.
-    #[tokio::test]
-    async fn the_three_computed_fields_are_served_and_the_note_is_not_rewritten() {
-        let root = fixture("serves");
-        let note = root.join(people::FOLDER).join("Erika.md");
-        let before = std::fs::read_to_string(&note).unwrap();
-
-        let state = AppState {
-            vault_root: Arc::new(root.to_string_lossy().into_owned()),
-        };
-        let (status, Json(body)) = list_people(State(state)).await;
-        assert_eq!(status, StatusCode::OK, "{body}");
-
-        assert_eq!(body["people"], 1);
-        let erika = &body["facts"][0];
-        // Two notes, not three mentions: a day on which someone came up is one day.
-        assert_eq!(erika["mention_count"], 2);
-        assert_eq!(erika["met_at"], "2026-01-05");
-        assert_eq!(erika["last_contact"], "2026-03-09");
-        // The drift is served beside the computed value, because a computed number alone
-        // would read as authoritative and the stored one is what a human typed.
-        assert_eq!(erika["stored"]["last_contact"], "2020-01-01");
-        assert_eq!(body["disagreeing"], 1);
-        assert_eq!(
-            erika["disagrees"]
-                .as_array()
-                .map(|a| a.len())
-                .unwrap_or_default(),
-            2
-        );
-
-        assert_eq!(
-            std::fs::read_to_string(&note).unwrap(),
-            before,
-            "the route wrote to a note a human owns — §5.5 is one-way"
-        );
-        let _ = std::fs::remove_dir_all(&root);
-    }
-
-    /// A vault with People and no Journal answers 503, not 89 people with zero mentions.
-    /// `people.rs` states the reason: zero is a measurement and absent is a producer that did
-    /// not run, and a route that returned zeroes here would serve the second as the first.
-    #[tokio::test]
-    async fn a_vault_without_a_journal_is_unavailable_rather_than_all_zeroes() {
-        let root = fixture("no-journal");
-        std::fs::remove_dir_all(root.join(people::JOURNAL)).unwrap();
-
-        let state = AppState {
-            vault_root: Arc::new(root.to_string_lossy().into_owned()),
-        };
-        let (status, Json(body)) = list_people(State(state)).await;
-        assert_eq!(status, StatusCode::SERVICE_UNAVAILABLE, "{body}");
-        assert!(
-            body["error"]
-                .as_str()
-                .is_some_and(|e| e.contains("Journal")),
-            "the error must name the folder that is missing: {body}"
-        );
-        let _ = std::fs::remove_dir_all(&root);
-    }
-}
-
-#[cfg(test)]
-mod journal_tests {
-    use super::*;
-
-    /// The operator's layout in miniature: one person in the register, one day that names them
-    /// and says `social: false` anyway, and one day whose `mood` line holds only the template's
-    /// comment.
-    fn fixture(name: &str) -> std::path::PathBuf {
-        let root =
-            std::env::temp_dir().join(format!("vault-journal-{name}-{}", std::process::id()));
-        let _ = std::fs::remove_dir_all(&root);
-        std::fs::create_dir_all(root.join(people::FOLDER)).unwrap();
-        std::fs::create_dir_all(root.join(journal::DAILY)).unwrap();
-        std::fs::write(root.join(people::FOLDER).join("Erika.md"), "---\n---\n").unwrap();
-        std::fs::write(
-            root.join(journal::DAILY).join("2031-03-01.md"),
-            "---\nsocial: false\nmood:                   # 1-5\n---\n\ncoffee with [[Erika]]\n",
-        )
-        .unwrap();
-        std::fs::write(
-            root.join(journal::DAILY).join("2031-03-02.md"),
-            "---\nsocial: false\nmood: 4\n---\n\nalone\n",
-        )
-        .unwrap();
-        root
-    }
-
-    /// Q106 end to end: the census is comment-aware, the one producible key is produced, and
-    /// the notes are not touched.
-    #[tokio::test]
-    async fn the_census_is_served_the_social_value_is_produced_and_nothing_is_written() {
-        let root = fixture("serves");
-        let day = root.join(journal::DAILY).join("2031-03-01.md");
-        let before = std::fs::read_to_string(&day).unwrap();
-
-        let state = AppState {
-            vault_root: Arc::new(root.to_string_lossy().into_owned()),
-        };
-        let (status, Json(body)) = journal_health(State(state)).await;
-        assert_eq!(status, StatusCode::OK, "{body}");
-
-        assert_eq!(body["days"], 2);
-        assert_eq!(body["people_notes"], 1);
-
-        let mood = body["keys"]
-            .as_array()
-            .expect("a keys array")
-            .iter()
-            .find(|k| k["key"] == "mood")
-            .expect("mood is in the census");
-        // Two notes carry the key, one carries a value. A comment-blind reader answers 2 here,
-        // which is the error this census exists to remove.
-        assert_eq!(mood["present"], 2);
-        assert_eq!(mood["asserted"], 1);
-        assert_eq!(mood["comment_only"], 1);
-        assert_eq!(mood["producer"], "self_report");
-
-        // The producer: the day that named a person is social. The stored `false` is the
-        // template's, so it is reported as a row with evidence and nobody's claim behind it —
-        // not as a contradiction, and not silently replaced.
-        assert_eq!(body["social"]["days_with_person_link"], 1);
-        assert_eq!(body["social"]["unfilled_with_evidence"], 1);
-        assert_eq!(body["social"]["disagrees"], 0);
-        assert_eq!(body["entries"][0]["social"], true);
-        assert_eq!(body["entries"][0]["people"][0], "erika");
-        assert_eq!(body["entries"][1]["social"], false);
-
-        assert_eq!(
-            std::fs::read_to_string(&day).unwrap(),
-            before,
-            "the route wrote to a note a human owns — §5.5 is one-way and Q102 opened two \
-             People keys, not the Journal"
-        );
-        let _ = std::fs::remove_dir_all(&root);
-    }
-
-    /// The planted bad input, at the route. Without `Atlas/People/` there is nothing to match a
-    /// link against, so every day would compute `social: false` — a vault where nobody was ever
-    /// seen, which reads exactly like a vault where the register moved. Same refusal
-    /// `/api/people` makes when `Journal/` is gone, and for the same reason.
-    #[tokio::test]
-    async fn a_vault_without_the_people_register_is_unavailable_rather_than_all_false() {
-        let root = fixture("no-register");
-        std::fs::remove_dir_all(root.join(people::FOLDER)).unwrap();
-
-        let state = AppState {
-            vault_root: Arc::new(root.to_string_lossy().into_owned()),
-        };
-        let (status, Json(body)) = journal_health(State(state)).await;
-        assert_eq!(status, StatusCode::SERVICE_UNAVAILABLE, "{body}");
-        assert!(
-            body["error"]
-                .as_str()
-                .is_some_and(|e| e.contains(people::FOLDER)),
-            "the error must name the folder that is missing: {body}"
-        );
-        let _ = std::fs::remove_dir_all(&root);
     }
 }
 
@@ -556,30 +276,11 @@ mod origin_tests {
     }
 
     #[tokio::test]
-    async fn a_foreign_origin_cannot_read_the_people_list() {
+    async fn a_foreign_origin_is_refused_before_the_handler() {
         assert_eq!(
-            status_for("/api/people", Some("https://evil.example")).await,
+            status_for("/ready", Some("https://evil.example")).await,
             StatusCode::FORBIDDEN,
-            "/api/people answered a foreign origin — it is registered below the guard layer"
-        );
-    }
-
-    /// The same refusal on the route that carries the most identifying payload here.
-    /// `/api/journal-health` answers with the people named on each individual day, which is
-    /// strictly more than `/api/people`'s per-person dates. The route sits above the guard
-    /// layer today; without this, moving it below would cost the refusal and break no test.
-    #[tokio::test]
-    async fn a_foreign_origin_cannot_read_who_was_in_each_day() {
-        assert_eq!(
-            status_for("/api/journal-health", Some("https://evil.example")).await,
-            StatusCode::FORBIDDEN,
-            "/api/journal-health answered a foreign origin — it is registered below the \
-             guard layer"
-        );
-        assert_eq!(
-            status_for("/api/journal-health", None).await,
-            StatusCode::SERVICE_UNAVAILABLE,
-            "the control: a caller the guard admits reaches the handler, which finds no vault"
+            "/ready answered a foreign origin — it is registered below the guard layer"
         );
     }
 
@@ -594,7 +295,7 @@ mod origin_tests {
             Some("https://mac.tailnet.ts.net"),
         ] {
             assert_eq!(
-                status_for("/api/people", origin).await,
+                status_for("/ready", origin).await,
                 StatusCode::SERVICE_UNAVAILABLE,
                 "the guard refused a caller it must admit: {origin:?}"
             );

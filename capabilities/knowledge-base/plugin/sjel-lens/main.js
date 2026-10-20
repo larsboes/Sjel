@@ -11,10 +11,9 @@
  * ## Read-only, and mechanically so
  *
  * Every request below is a GET. The plugin never writes a note, never writes frontmatter,
- * and registers no command that mutates anything. vault computes `last_contact`, `met_at`
- * and `mention_count` and serves them beside the stored values; it does not write them
- * (`capabilities/vault/src/people.rs`). A pane that wrote them would be a writer nobody
- * else can see.
+ * and registers no command that mutates anything. A pane that wrote what a capability
+ * computes would be a writer nobody else can see. The people adapter left on 2026-10-20 with
+ * the `Atlas/People` notes; `capabilities/entities` holds people now.
  *
  * ## Why requestUrl and never fetch
  *
@@ -51,8 +50,7 @@ const VIEW_TYPE = "sjel-lens";
 const DEFAULTS = {
   // The one address that cannot be discovered, because discovery starts here.
   registryUrl: "http://127.0.0.1:8082/api/sjel-status/capabilities",
-  // A capability reading a few hundred iCloud-backed notes is the slow case; measured
-  // 2026-09-09, /api/people answers in 0.02–0.03 s and /api/plans in 0.01 s. Four seconds
+  // Measured 2026-09-09, /api/plans answers in 0.01 s. Four seconds
   // is far past both, and past it the pane says so rather than hanging.
   timeoutMs: 4000,
   // The registry moves when a service starts or stops, not per keystroke.
@@ -104,7 +102,6 @@ function resolveCapability(registry, name) {
  * routing rule: a note outside every folder here gets a pane that says so, not an error.
  */
 const ADAPTERS = [
-  { id: "people", label: "People", folder: "Atlas/People/", capability: "vault" },
   { id: "trips", label: "Trip projection", folder: "Resources/Sjel/Trips/", capability: "trips" },
 ];
 
@@ -113,60 +110,12 @@ function adapterFor(path) {
   return ADAPTERS.find((adapter) => path.startsWith(adapter.folder)) || null;
 }
 
-/* -------------------------------------------------------------- people adapter */
+/* ------------------------------------------------------------------- shared */
 
 /** A value from either side of the comparison, as one printable string or null. */
 function printable(value) {
   if (value === null || value === undefined || value === "") return null;
   return String(value);
-}
-
-/**
- * Two note paths, compared the way the only two parties to the comparison spell them.
- *
- * Measured 2026-09-09: three of the 89 files under `Atlas/People/` are stored decomposed
- * (NFD) on this APFS volume, and the vault capability serves back the path the filesystem
- * handed it. Obsidian works composed: `normalizePath` ends in `.normalize("NFC")`, and its
- * own file reconciliation maps `readdir` names through NFC before comparing them with the
- * in-memory path — so `file.path` for those three notes is the composed form. An exact
- * `===` therefore answers "vault has no facts for this note" for notes vault does have
- * facts about, which is the one sentence in this pane that must never be wrong by accident.
- */
-function samePath(left, right) {
-  if (typeof left !== "string" || typeof right !== "string") return false;
-  return left.normalize("NFC") === right.normalize("NFC");
-}
-
-/**
- * What `GET /api/people` says about one note, laid out for display.
- *
- * The disagreement is the server's own verdict (`capabilities/vault/src/people.rs` compares
- * a stored date on its first ten characters, so a wikilink or a time around it is not a
- * disagreement) rather than a second comparison computed here. A key the note does not
- * carry is `stored: null` and never a disagreement — vault only compares keys that exist,
- * and "absent" is a different fact from "wrong".
- */
-function peopleReading(payload, notePath) {
-  const facts = payload && Array.isArray(payload.facts) ? payload.facts : [];
-  const fact = facts.find((row) => row && samePath(row.id, notePath));
-  const total = payload && typeof payload.disagreeing === "number" ? payload.disagreeing : null;
-  if (!fact) {
-    return { found: false, disagreeingInVault: total };
-  }
-  const stored = fact.stored && typeof fact.stored === "object" ? fact.stored : {};
-  const disagrees = Array.isArray(fact.disagrees) ? fact.disagrees : [];
-  const rows = ["last_contact", "met_at", "mention_count"].map((key) => ({
-    key,
-    computed: printable(fact[key]),
-    stored: printable(stored[key]),
-    disagrees: disagrees.includes(key),
-  }));
-  return {
-    found: true,
-    name: typeof fact.name === "string" ? fact.name : null,
-    rows,
-    disagreeingInVault: total,
-  };
 }
 
 /* --------------------------------------------------------------- trips adapter */
@@ -357,49 +306,7 @@ class SjelLensView extends ItemView {
       body.createEl("p", { cls: "sjel-lens-down", text: outcome.reason });
       return;
     }
-    if (adapter.id === "people") this.renderPeople(body, outcome.reading);
-    else this.renderTrip(body, outcome.verdict);
-  }
-
-  renderPeople(parent, reading) {
-    if (!reading.found) {
-      parent.createEl("p", {
-        cls: "sjel-lens-quiet",
-        text: "vault has no facts for this note. It answers for notes directly under Atlas/People/.",
-      });
-      return;
-    }
-    const table = parent.createEl("table", { cls: "sjel-lens-table" });
-    const head = table.createEl("thead").createEl("tr");
-    for (const label of ["", "Computed", "In this note"]) head.createEl("th", { text: label });
-    const rows = table.createEl("tbody");
-    for (const row of reading.rows) {
-      const tr = rows.createEl("tr");
-      if (row.disagrees) tr.addClass("sjel-lens-disagrees");
-      tr.createEl("td", { text: row.key });
-      tr.createEl("td", { text: row.computed === null ? "—" : row.computed });
-      const stored = tr.createEl("td", { text: row.stored === null ? "not stored" : row.stored });
-      if (row.stored === null) stored.addClass("sjel-lens-quiet");
-      if (row.disagrees) {
-        const mark = stored.createSpan({ cls: "sjel-lens-mark" });
-        setIcon(mark, "lucide-triangle-alert");
-        mark.setAttribute("aria-label", "disagrees with the Journal");
-      }
-    }
-    const disagreeing = reading.rows.filter((row) => row.disagrees).length;
-    parent.createEl("p", {
-      cls: "sjel-lens-quiet",
-      text:
-        disagreeing === 0
-          ? "Nothing stored here disagrees with the Journal."
-          : `${disagreeing} stored value${disagreeing === 1 ? "" : "s"} disagree${disagreeing === 1 ? "s" : ""} with the Journal.`,
-    });
-    if (reading.disagreeingInVault !== null) {
-      parent.createEl("p", {
-        cls: "sjel-lens-quiet",
-        text: `${reading.disagreeingInVault} note${reading.disagreeingInVault === 1 ? "" : "s"} in Atlas/People/ disagree in some key.`,
-      });
-    }
+    this.renderTrip(body, outcome.verdict);
   }
 
   renderTrip(parent, verdict) {
@@ -518,10 +425,6 @@ class SjelLens extends Plugin {
     if (!found.ok) return { ok: false, reason: found.reason };
 
     try {
-      if (adapter.id === "people") {
-        const payload = await readJson(`${found.origin}/api/people`, this.settings.timeoutMs);
-        return { ok: true, reading: peopleReading(payload, file.path) };
-      }
       const plans = await readJson(`${found.origin}/api/plans`, this.settings.timeoutMs);
       const frontmatter = (this.app.metadataCache.getFileCache(file) || {}).frontmatter;
       return { ok: true, verdict: tripStaleness(frontmatter, plans) };
@@ -548,10 +451,8 @@ module.exports.lens = {
   adapterFor,
   capabilityOrigin,
   humanDuration,
-  peopleReading,
   readJson,
   resolveCapability,
-  samePath,
   stalenessLabel,
   toEpochSeconds,
   tripStaleness,

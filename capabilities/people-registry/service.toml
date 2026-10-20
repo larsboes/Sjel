@@ -1,4 +1,4 @@
-# people-registry — rung 0's known-person registry, refreshed from the vault.
+# people-registry — rung 0's known-person registry, refreshed from capabilities/entities.
 #
 # The other orphan unit. Same story as capabilities/backup: hand-written, unversioned, and
 # reported by tools/doctor with advice that would have deleted a job doing real work.
@@ -18,8 +18,8 @@ command  = ["tools/people-registry-refresh.sh"]
 # its manifest builds vault-server only. Without these two lines a fresh or cleaned checkout ran
 # this job into "vault binary not built" every 6h. build_output names the artifact to look for,
 # because the command itself is a script that always exists.
-build        = ["cargo", "build", "--locked", "--release", "-p", "sjel-vault", "--bin", "vault"]
-build_output = "target/release/vault"
+build        = ["cargo", "build", "--locked", "--release", "--bin", "entities-server"]
+build_output = "target/release/entities-server"
 
 # 6h, carried over from the unit it replaces. The registry is derived from Atlas/People and goes
 # stale the moment a person note is added; the script refuses to install an empty or malformed

@@ -1,18 +1,13 @@
 # vault
 
-Reads an Obsidian vault as data. Eight CLI verbs and one HTTP surface. The
-server and seven of the verbs are read-only. `fields --apply` writes two
-People keys into the vault, through Obsidian.
+Reads an Obsidian vault as data. Four CLI verbs and one HTTP surface, all
+read-only.
 
 ```
 vault links  [--root PATH] [--json] [--dead] [--inbound FOLDER]
 vault lint   [--root PATH] [--json] [--carrying KEY]
-vault names  [--root PATH] [--json] [--folder Atlas/People]
 vault class  [--root PATH] [--json] [--only c2] [--list]
-vault people [--root PATH] [--json]
-vault journal [--root PATH] [--json]
 vault bases  [--root PATH] [--json] [--strict]
-vault fields [--root PATH] [--json] [--today YYYY-MM-DD] [--apply]
 ```
 
 The root is a personal fact and never lives in this repo. It comes from the
@@ -132,286 +127,27 @@ for one where none is, which is an instrument that cannot be wrong.
 
 ## The server
 
-`vault-server` on `8094`, loopback. Five routes:
+`vault-server` on `8094`, loopback. Three routes:
 
 | Route | Answers |
 |---|---|
 | `GET /health` | Liveness. A literal — it cannot see the vault. |
 | `GET /ready` | Readiness: the vault root resolves. |
 | `GET /routes` | This manifest, as data. |
-| `GET /api/people` | `last_contact`, `met_at` and `mention_count` per person, computed from `Journal/` backlinks. |
-| `GET /api/journal-health` | The six Journal health keys, counted; which of the six can be produced; `social` computed from `Journal/` person links. |
 
 `GET /api/tasks` served band 620 from 2026-08-27 (PRD Q48) to 2026-10-18. It
 retired when `capabilities/projects` became the owner of tasks and the vault's
 `Projects/` moved into Sjel (capabilities/projects/README.md).
 
-**The server has no write route, by design.** A `PATCH` here would make the
-server a second writer of files a human is editing in Obsidian. The one writer in
-this crate is the CLI's `vault fields --apply`, for two People keys, described
-below.
+`GET /api/people` and `GET /api/journal-health` served what the Journal knew about
+each person and which Journal health keys had a producer. They retired on
+2026-10-20 with the CLI's `people`, `journal`, `names` and `fields` verbs, when
+`Atlas/People` and `Journal/` left the vault. `capabilities/entities` computes
+`last_contact` from the Journal in `projects` now (`src/journal.rs`). Git history
+holds the rules those modules recorded (Q106, D2).
 
-### `/api/people` — D2, served computed
-
-`last_contact`, `met_at` and `mention_count` sit on `Atlas/People` notes. All
-three come out of `Journal/` backlinks, and `vault people` and this route
-compute them. The route stores nothing, so it can overwrite nothing; the answer
-is recomputed off the notes on every request and is stale for exactly as long
-as the request takes.
-
-A Base cannot call HTTP, so for the two keys `People.base` reads, the computed
-value also has to reach the note. `vault fields --apply` writes it there; see
-[`fields`](#fields--the-two-people-keys-sjel-writes) below. `mention_count` stays
-served and is never written.
-
-The drift is served beside the value — `stored` and `disagrees` per person, the
-4 notes whose written value contradicts the Journal — because a computed number
-served alone would read as authoritative, and the stored one is what a human
-typed.
-
-The route reads `Atlas/People/` and `Journal/` and not the vault: 442 notes in
-20 ms against 2,757 in 155 ms, measured 2026-09-08. A vault with People and no
-`Journal/` answers **503 and names the folder**, rather than 89 people at zero
-mentions — that is the reading `people.rs` refuses, because zero is a
-measurement and a missing producer is not.
-
-`contact_frequency` is not served, and that is **D1**: how often you want to see
-someone is a judgement, not a backlink count.
-
-## `journal` — Q106, and the five keys that answer "no producer"
-
-PRD **Q106** (2026-09-09) asked for a producer for the six keys every daily note
-carries. **One of the six has a source. Five do not, and saying which is the
-deliverable.**
-
-| Key | Producer | Why |
-|---|---|---|
-| `social` | `Journal/` person links | a day that links an `Atlas/People` note names who was in it |
-| `learning_hours` | none | nothing on the host measures hours |
-| `exercise` | none | Apple Health is unreadable on a Mac |
-| `sleep_quality` | none | same |
-| `energy` | none | a self-report |
-| `mood` | none | a self-report |
-
-The consequence is visible in Obsidian without any of this. `Habits.base` is a
-Base over the same folder that charts these keys, and a chart over keys that are
-almost never filled in plots a handful of points. That is what a producer was
-asked for, and five sixths of it cannot be supplied.
-
-**Apple Health is not a source on a Mac, and that is measured.**
-`HealthKit.framework` ships in `/System/Library/Frameworks` and its headers say
-`API_AVAILABLE(… macos(13.0))`, so the API compiles and stopping there would be
-reasonable. A Swift probe on a current macOS host answers
-`HKHealthStore.isHealthDataAvailable() == false`, and `~/Library/Health` does not
-exist. The framework is present and the store is not. The template describes
-`sleep_quality` as "0-100 (SleepCycle / Apple Health native scale)", and neither
-half of that is reachable without a phone-side export, which is a human act
-rather than a producer.
-
-**`energy` and `mood` are self-reports and this capability will not invent a
-proxy for them.** Sleep would predict mood; a Mac's keystroke rate would predict
-energy. Both would be a number Sjel made up, rendered in a chart the operator
-reads as their own. The honest options are the human or the delete key. The
-recommendation is to **keep both and cut the other four from the template**: the
-two that only a human can fill in are the two worth prompting for, and a template
-that asks six questions and gets one answer trains the person to skip the block.
-Deleting `energy` and `mood` instead would cost `Resources/Bases/Habits.base` its
-`wellbeing` formula and the charts built on it, which is the reason that Base
-exists.
-
-**`social` is produced, and it is served as evidence rather than as a verdict.**
-The rule is the one **Q102** already ratified for `last_contact`: a `Journal/`
-note that links a person is the record of contact with them. `people.rs` reads
-those links per person; `journal.rs` reads the same links per day. The people are
-served beside the boolean, because a derived `true` with no evidence is an
-assertion.
-
-The calendar was the other candidate and it does not work. `calendar_entries`
-covers a far shorter span than the Journal and has no attendee column, so the
-only person-shaped data in it is a name inside an event title. Joining that to
-`Atlas/People` would be a string match on a few overlapping days. It is not an
-honest producer and it is not built.
-
-### Several numbers instead of one accuracy figure
-
-```
-social, produced from Journal person links
-  days naming a person <n>
-  distinct people      <n>
-  stored social: true  <n>
-    links agree        <n>
-    links differ       <n>
-  template false, links name somebody <n>
-```
-
-`social: false` on an untouched note and `social: false` typed by somebody who
-spent the day alone are the same bytes. An instrument that called both a
-disagreement would report every untouched day that names somebody as a
-contradiction, and bury the few days where a human's answer and the links really
-disagree. The split is the finding.
-
-**The only labelled sample is the days a human set `social: true`.** The link
-rule's agreement with those days is the producer's measured recall, and it is not
-perfect: a day can describe meeting several people in prose and link none of
-them. So "`social` has a producer" means a rule with partial recall against the
-only ground truth that exists. That is why it is served as evidence with the
-people beside it, and why nothing writes it.
-
-### A trailing comment is not a value
-
-`mood:                   # 1-5` is the template's own scaffolding, and
-`markdown_root::parse_fields` reads it as the value `# 1-5`. That is correct for
-a parser that also feeds a mail adapter, where `#general` is a value, and wrong
-here. The census reads `Note::raw_frontmatter` with YAML's comment rule instead,
-the same move `lint` makes and for the same reason.
-
-The gap is not cosmetic. The template puts a trailing comment after
-`sleep_quality`, `energy`, `mood` and `learning_hours`, so every unfilled note
-stamped from it carries four keys that a comment-blind reader counts as filled.
-No key in `lint::TRACKED` carries a trailing comment today, so `lint`'s published
-coverage numbers are unaffected; this is a trap set for the next reader of these
-six.
-
-### A template that never ran
-
-A daily note created outside Templater keeps the raw expression:
-
-```
-1 frontmatter values are still template expressions:
-  Journal/01. Daily Notes/2031-03-15.md  week: "[[<% tp.date.now('yyyy-[W]ww', 0, tp.file.title, 'YYYY-MM-DD') %>]]"
-```
-
-It is reported and not repaired, because §5.5 is one-way and this capability has
-no write path. The correct value is the ISO week of the note's date, the form the
-neighbouring notes carry (`week: "[[2031-W11]]"` here).
-
-The detector is for the class: any frontmatter value holding `<%` is a template
-that never ran. The files in `Resources/Templates/` that legitimately hold one
-are outside the daily folder and outside the scan.
-
-It is also narrower than the defect. A `week:` link can be wrong without holding
-a template expression — the wrong ISO week, or an empty `[[]]` — and a `<%` scan
-sees neither. Neither is repaired here.
-
-### Checked by a second implementation, as this crate's rule requires
-
-`acceptance/journal-health.py` is to `vault journal` what `acceptance/link-counts.py`
-is to `vault links`: its own walk, its own `[[...]]` regex, its own
-comment-stripping loop, sharing no code with the crate.
-
-```
-python3 capabilities/vault/acceptance/journal-health.py <vault-root>
-vault journal --root <vault-root>
-```
-
-Diff the two outputs. Every measured number must be identical: the note count,
-the people register, the six `present`/`asserted`/`comment-only` triples, the
-`social` split, and the unrendered notes. The only lines that differ are the
-crate's extra `producer` column and the raw value it prints beside each
-unrendered key. The probe deliberately carries neither: which key can be produced
-is a decision, and a second implementation of a decision is not a check.
-
-One blind spot they share, named so nobody reads their agreement as wider than
-it is: both open a quoted scalar on `'` as well as `"`, so a plain value holding
-an apostrophe — `mood: it's 5 # felt good` — keeps its comment in both.
-
-### More notes than dates
-
-`days` counts notes whose filename starts with a date, and one date can have two
-of them: iCloud writes a conflict copy such as `2031-03-14 2.md` beside
-`2031-03-14.md`. Both resolve to the same date, so `not_a_day` stays 0 and
-`entries` carries two rows with the same `date`. The copy adds 1 to every
-`present` count. **`date` is therefore not a key.** A writer that maps date to
-entry drops one of the two silently, which is a thing to fix before, not after,
-anything writes back.
-
-### What it would take to write `social`
-
-Nothing here writes the Journal. `vault fields` writes two `Atlas/People` keys
-and nothing under `Journal/`. Writing `social` later needs four things, in this
-order:
-
-1. **A ruling that extends Q102 to `Journal/01. Daily Notes/`.** Q102's own test
-   is satisfied already — `Resources/Bases/Habits.base` and
-   `Resources/Bases/Journal.base` both read all six keys, so `social` is not a
-   key invented for a producer. `mention_count` failed that test and `social`
-   passes it.
-2. **A decision about the template defaults.** A writer that only fills blanks
-   would write nothing, because no daily note has a blank `social`. A writer that
-   overwrites `false` would overwrite every untouched day and could not tell them
-   from a deliberate "no".
-3. **A conflict rule for a boolean.** `fields` makes its People writes safe by
-   moving each date in one direction only. `social` is `true` or `false` and has
-   no direction, so that rule does not carry over: with no way to mark a value
-   as Sjel's, the next run overwrites the correction a human made to the last
-   one.
-4. **The contradictions resolved by hand first.** Those are the days where a
-   human wrote `true` and the Journal names nobody, and a producer would silently
-   erase them.
-
-## `fields` — the two People keys Sjel writes
-
-```
-vault fields [--root PATH] [--json] [--today YYYY-MM-DD]           # dry run
-vault fields [--root PATH] [--json] [--today YYYY-MM-DD] --apply   # write
-```
-
-Prose stays in Obsidian; Sjel stores the structured facts and links to the
-notes (top-level `README.md`). `Resources/Bases/People.base` computes
-`days_since_contact` from `last_contact` and `lost_touch` from that, and a
-`.base` cannot call HTTP. So for the Base to see the Journal's value, the key has
-to be on the note.
-
-**What it writes.** `last_contact` and `met_at` on `Atlas/People/**`, under
-those existing names, and nothing else anywhere. The table is `OWNED` in
-`src/fields.rs`. `last_contact` is the newest dated `Journal/` note that links
-the person; `met_at` is the oldest. `mention_count` is not written, because no
-`.base` reads it.
-
-**The monotone rule.** A frontmatter key cannot carry a hash of what the machine
-last wrote, so the writer cannot tell its own value from a human's. Instead each
-key moves in one direction only: `last_contact` only later, `met_at` only
-earlier. A Journal entry is a lower bound on the last contact (contact off the
-Journal can still be later), so moving the date forward adds information and
-destroys none. Tested property: a write never moves a note into the
-`lost_touch` view, only out of it.
-
-**Conflicts.** When the note is already ahead of the Journal (a later
-`last_contact`, an earlier `met_at`), the plan records a `CONFLICT` line and
-never writes that key. There is no `--force`; to take the Journal's value,
-delete the key by hand and run again. A key in a shape the writer cannot rewrite
-exactly (a list, a trailing comment, a duplicate, a non-date, no frontmatter
-block) is `REFUSED` with the reason.
-
-**Dry run by default.** Without `--apply` the verb prints every create, advance,
-conflict and refusal, the `lost_touch` count before and after, and writes
-nothing. `--json` prints the same plan as data. `--today` pins the date the
-`lost_touch` count is taken against.
-
-**`--apply`** writes through the Obsidian Local REST API, with no file fallback.
-It needs Obsidian running with the plugin enabled, and the plugin's API key:
-`OBSIDIAN_API_KEY`, or `obsidian_api_key_file` in the overlay's
-`config/knowledge.toml` (a path under `config/`, or absolute). The URL is
-`OBSIDIAN_API_URL`, `obsidian_api_url`, or `http://127.0.0.1:27123`. With nothing
-to write, it does not contact Obsidian. A wrong key or a stopped Obsidian is
-refused before any write. Any refused or diverged note makes the run exit 1.
-
-**Only the key's line changes.** The plugin's frontmatter `PATCH` re-serialises
-the whole block: measured on a live vault when this writer was first built, it
-dropped the quotes from `met_at`, a key the call never named. So the writer does
-not use it. Per note it reads the bytes with `GET`, requires them to equal the
-bytes the plan read, splices the new scalars with `markdown_root::set_field`
-(every other byte copied), stores the result with a raw-bytes `PUT`, and reads
-the note back to require exactly the bytes it sent. The tests in `src/fields.rs`
-run this against a loopback mock of the API. The plugin's `PUT` takes no
-precondition, so an edit that lands on the same note between that `GET` and the
-`PUT` is not detected.
-
-**`capabilities/entities`** imports `last_contact` from `/api/people`, which is
-the value computed from Journal links and never the key on the note, so the
-written key cannot loop back into the import. On a recorded conflict the note
-keeps the later hand-typed date and entities holds the Journal's; `/api/people`
-shows both in `stored` and `disagrees`.
+**Nothing in this crate writes, by design.** A write route would make the server a
+second writer of files a human is editing in Obsidian.
 
 ## Why a binary
 
@@ -509,11 +245,6 @@ carries a hand-written compatibility shim.
 
 ## Related
 
-- `libs/markdown-root` — containment-checked vault access, recursive walk, and
-  the byte-addressable frontmatter this crate reads. `fields::set_field` uses
-  those offsets to rewrite one scalar and copy every other byte, rather than
-  round-tripping the note through a parser that would reformat Bases embeds and
-  Mermaid fences.
-- [obsidian-local-rest-api](https://github.com/coddingtonbear/obsidian-local-rest-api)
-  (MIT) — the Obsidian plugin `vault fields --apply` writes through. Contract
-  read from its `docs/openapi.yaml`, 5.3.1.
+- `libs/markdown-root` — containment-checked vault access, recursive walk, the
+  byte-addressable frontmatter this crate reads, and the wikilink parser the link
+  checker shares with `capabilities/entities`.

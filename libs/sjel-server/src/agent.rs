@@ -199,7 +199,7 @@ fn people_registry_path(root: &Path) -> Option<PathBuf> {
     }
 }
 
-/// The `tokens` of the artifact `vault names --json` writes, as comms reads them.
+/// The `tokens` of the artifact `entities-server names` writes, as comms reads them.
 fn people_from_artifact(text: &str) -> Option<Vec<String>> {
     let value: Value = serde_json::from_str(text).ok()?;
     Some(

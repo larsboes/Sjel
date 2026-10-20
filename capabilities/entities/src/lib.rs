@@ -9,6 +9,7 @@ pub mod duplicates;
 pub mod google;
 pub mod journal;
 pub mod model;
+pub mod names;
 pub mod places;
 pub mod resolve;
 pub mod store;

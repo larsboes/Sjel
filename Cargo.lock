@@ -5007,15 +5007,12 @@ name = "sjel-vault"
 version = "0.1.0"
 dependencies = [
  "axum",
- "civil-date",
  "content-item",
  "markdown-root",
- "reqwest",
  "route-manifest",
  "serde",
  "serde_json",
  "sjel-config",
- "sjel-http",
  "sjel-server",
  "tokio",
  "tower",

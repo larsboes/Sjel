@@ -1,15 +1,18 @@
 # people-registry
 
-Rung 0's known-person registry, refreshed from the vault every six hours.
+Rung 0's known-person registry, refreshed from `capabilities/entities` every six hours.
 
 `capabilities/comms/src/people_registry.rs` consults a list of the names this operator actually
 knows, because rung 1's person detector only fires after a salutation and misses a bare first
-name. The list is derived from `Atlas/People` and goes stale the moment a person note is added.
+name. The agent gate's pseudonymizer reads the same file (`libs/sjel-server/src/agent.rs`). The
+list is every person in `capabilities/entities` and the operator's own entity, with their
+`aliases` (`entities-server names`, `src/names.rs`), and goes stale the moment a person is added.
+Until 2026-10-20 it came from the vault's `Atlas/People` notes through `vault names`.
 
 The output is C2 data — real names — so it lands in the overlay, which gitignores `/data/*`, and
 never in this repository. `tools/people-registry-refresh.sh` refuses to install an empty or
-malformed result, so a failed vault read leaves the previous good file in place rather than
-blanking rung 0.
+malformed result, so a failed read leaves the previous good file in place rather than blanking
+rung 0.
 
 ## Why this is a capability and not a LaunchAgent
 

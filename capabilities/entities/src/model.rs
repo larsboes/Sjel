@@ -81,6 +81,8 @@ pub fn builtin_fields() -> Vec<FieldDef> {
         // notes carried as body and as the character, highlights, memories and experiences
         // keys until 2026-10-20, when the notes left the vault.
         person("notes", "Notes", "longtext", &[]),
+        // Other names the person goes by. `names.rs` puts them in comms' redaction registry.
+        person("aliases", "Aliases", "tags", &[]),
         // The keys Atlas/People notes carry filled, measured 2026-09-25 across 89 notes, and
         // what Google Contacts carries.
         person("relation", "Relation", "text", &[]),

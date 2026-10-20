@@ -4,7 +4,7 @@
  *
  * Every fixture below is a trimmed copy of a real answer, taken 2026-09-09 from the live
  * loopback services: the registry rows from `/api/sjel-status/capabilities` (then
- * served under its old name), the people rows from the vault capability's `/api/people`, the plan rows from trips' `/api/plans`.
+ * served under its old name) and the plan rows from trips' `/api/plans`.
  * Shapes invented at a desk are how a test passes against an API that changed.
  *
  * The view itself is not here. It needs a workspace, and a fake workspace would report a
@@ -127,138 +127,19 @@ describe("resolveCapability", () => {
 /* ------------------------------------------------------------------- routing */
 
 describe("adapterFor", () => {
-  test("routes the two folders it knows", () => {
-    expect(lens.adapterFor("Atlas/People/Erika Mustermann.md").id).toBe("people");
+  test("routes the folder it knows", () => {
     expect(lens.adapterFor("Resources/Sjel/Trips/Berlin.md").id).toBe("trips");
   });
 
   test("everything else is nobody's note", () => {
     expect(lens.adapterFor("Journal/2026-09-09.md")).toBeNull();
-    expect(lens.adapterFor("Atlas/People/Erika Mustermann.png")).toBeNull();
+    expect(lens.adapterFor("Atlas/People/Erika Mustermann.md")).toBeNull();
+    expect(lens.adapterFor("Resources/Sjel/Trips/Berlin.png")).toBeNull();
     expect(lens.adapterFor(null)).toBeNull();
   });
 
   test("a lookalike folder does not match", () => {
-    expect(lens.adapterFor("Atlas/People-Archive/Someone.md")).toBeNull();
-  });
-});
-
-/* -------------------------------------------------------------------- people */
-
-// Trimmed from GET :8094/api/people, 2026-09-09. Every shape, key and value below is the
-// live answer's; the names are not. This repository is public and the people under
-// Atlas/People/ did not publish anything — so the rows carry placeholder names, the same
-// way capabilities/vault/src/bases.rs writes `Atlas/People/Erika.md`. The second row is a
-// real disagreement, with its real dates and counts, under a name that is nobody's.
-const PEOPLE = {
-  people: 89,
-  with_mentions: 69,
-  carrying_any: 70,
-  disagreeing: 4,
-  facts: [
-    {
-      id: "Atlas/People/Erika Mustermann.md",
-      name: "Erika Mustermann",
-      mention_count: 56,
-      last_contact: "2026-02-18",
-      met_at: "2024-01-08",
-      stored: { last_contact: "2026-02-18", mention_count: "56", met_at: "2024-01-08" },
-      disagrees: [],
-    },
-    {
-      id: "Atlas/People/Max Mustermann.md",
-      name: "Max Mustermann",
-      mention_count: 34,
-      last_contact: "2026-06-17",
-      met_at: "2025-08-08",
-      stored: { last_contact: "2026-07-01", mention_count: "35", met_at: "2025-08-08" },
-      disagrees: ["mention_count", "last_contact"],
-    },
-    {
-      id: "Atlas/People/Nobody Stored.md",
-      name: "Nobody Stored",
-      mention_count: 0,
-      last_contact: null,
-      met_at: null,
-      stored: {},
-      disagrees: [],
-    },
-    {
-      // Written the way the live answer writes three of the 89 rows: decomposed (NFD), an
-      // `e` followed by U+0301, because that is how the file is stored on this APFS volume
-      // and vault serves back the path the filesystem gave it. Obsidian hands the plugin
-      // the composed form. The escape is deliberate — the two spellings are the same
-      // glyph, and a reader has to be able to see which one this line holds.
-      id: "Atlas/People/Rene\u0301 Mustermann.md",
-      name: "Rene\u0301 Mustermann",
-      mention_count: 12,
-      last_contact: "2026-05-04",
-      met_at: "2023-11-02",
-      stored: { last_contact: "2026-05-04", met_at: "2023-11-02" },
-      disagrees: [],
-    },
-  ],
-};
-
-describe("peopleReading", () => {
-  test("an agreeing note shows both sides and marks nothing", () => {
-    const reading = lens.peopleReading(PEOPLE, "Atlas/People/Erika Mustermann.md");
-    expect(reading.found).toBe(true);
-    expect(reading.rows).toEqual([
-      { key: "last_contact", computed: "2026-02-18", stored: "2026-02-18", disagrees: false },
-      { key: "met_at", computed: "2024-01-08", stored: "2024-01-08", disagrees: false },
-      { key: "mention_count", computed: "56", stored: "56", disagrees: false },
-    ]);
-  });
-
-  test("a disagreement marks exactly the keys vault named", () => {
-    const reading = lens.peopleReading(PEOPLE, "Atlas/People/Max Mustermann.md");
-    const marked = reading.rows.filter((row) => row.disagrees).map((row) => row.key);
-    expect(marked).toEqual(["last_contact", "mention_count"]);
-    // met_at agrees on both sides and must not be swept in with them.
-    expect(reading.rows.find((row) => row.key === "met_at").disagrees).toBe(false);
-  });
-
-  test("absent is not the same fact as wrong", () => {
-    // vault only compares keys the note carries, so a note storing nothing disagrees about
-    // nothing. The pane reports the absence and does not pre-judge it.
-    const reading = lens.peopleReading(PEOPLE, "Atlas/People/Nobody Stored.md");
-    expect(reading.rows.every((row) => row.stored === null)).toBe(true);
-    expect(reading.rows.every((row) => row.disagrees === false)).toBe(true);
-    expect(reading.rows.find((row) => row.key === "mention_count").computed).toBe("0");
-  });
-
-  test("a decomposed path from vault matches the composed path Obsidian hands over", () => {
-    // The two sides of this comparison spell the same filename differently: three of the
-    // 89 files under Atlas/People/ are stored NFD on this APFS volume and vault serves the
-    // path the filesystem gave it, while Obsidian normalises to NFC (`normalizePath` ends
-    // in `.normalize("NFC")`). An exact === says "vault has no facts for this note" about
-    // a note vault has facts for — the one sentence in the pane that must not be wrong.
-    const asVaultServesIt = "Atlas/People/Rene\u0301 Mustermann.md";
-    const asObsidianSeesIt = asVaultServesIt.normalize("NFC");
-    expect(asObsidianSeesIt).not.toBe(asVaultServesIt);
-    const reading = lens.peopleReading(PEOPLE, asObsidianSeesIt);
-    expect(reading.found).toBe(true);
-    expect(reading.rows.find((row) => row.key === "last_contact").stored).toBe("2026-05-04");
-  });
-
-  test("samePath compares canonical equivalence and nothing looser", () => {
-    expect(lens.samePath("Atlas/People/A\u0308.md", "Atlas/People/\u00C4.md")).toBe(true);
-    // Case is not normalisation: two different notes may differ only in case, and the
-    // filesystem being case-insensitive is not this function's business.
-    expect(lens.samePath("Atlas/People/a.md", "Atlas/People/A.md")).toBe(false);
-    expect(lens.samePath("Atlas/People/a.md", null)).toBe(false);
-  });
-
-  test("a note vault has no row for is reported as such, with the vault-wide count", () => {
-    const reading = lens.peopleReading(PEOPLE, "Atlas/People/Someone Else.md");
-    expect(reading.found).toBe(false);
-    expect(reading.disagreeingInVault).toBe(4);
-  });
-
-  test("a payload with no facts does not throw", () => {
-    expect(lens.peopleReading({}, "Atlas/People/X.md").found).toBe(false);
-    expect(lens.peopleReading(null, "Atlas/People/X.md").disagreeingInVault).toBeNull();
+    expect(lens.adapterFor("Resources/Sjel/Trips-Archive/Berlin.md")).toBeNull();
   });
 });
 
@@ -368,20 +249,20 @@ describe("readJson", () => {
   }
 
   test("a 200 answers with the parsed body", async () => {
-    const stub = withTransport(async () => ({ status: 200, json: { people: 89 } }));
-    await expect(stub.readJson("http://127.0.0.1:8094/api/people", 1000)).resolves.toEqual({ people: 89 });
+    const stub = withTransport(async () => ({ status: 200, json: { plans: 2 } }));
+    await expect(stub.readJson("http://127.0.0.1:8086/api/plans", 1000)).resolves.toEqual({ plans: 2 });
   });
 
   test("a refusal carries its status into the message", async () => {
     // The origin guard's refusal, as `libs/sjel-server/src/origin.rs` words it. The inbound
     // gate's 401 takes the same path. The pane must print the status, not an empty table.
     const stub = withTransport(async () => ({ status: 403, json: { error: "cross-origin access to vault is not allowed" } }));
-    await expect(stub.readJson("http://127.0.0.1:8094/api/people", 1000)).rejects.toThrow("answered 403");
+    await expect(stub.readJson("http://127.0.0.1:8086/api/plans", 1000)).rejects.toThrow("answered 403");
   });
 
   test("a capability that never answers loses to the deadline", async () => {
     const stub = withTransport(() => new Promise(() => {}));
-    await expect(stub.readJson("http://127.0.0.1:8094/api/people", 20)).rejects.toThrow("did not answer within 20 ms");
+    await expect(stub.readJson("http://127.0.0.1:8086/api/plans", 20)).rejects.toThrow("did not answer within 20 ms");
   });
 
   test("it asks for the status rather than an exception", async () => {
@@ -390,7 +271,7 @@ describe("readJson", () => {
       seen = options;
       return { status: 200, json: {} };
     });
-    await stub.readJson("http://127.0.0.1:8094/api/people", 1000);
+    await stub.readJson("http://127.0.0.1:8086/api/plans", 1000);
     expect(seen.method).toBe("GET");
     expect(seen.throw).toBe(false);
   });

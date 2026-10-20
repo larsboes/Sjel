@@ -11,8 +11,7 @@
  *   bun capabilities/knowledge-base/plugin/sjel-lens.probe.js --vault "<vault root>"
  *
  * The vault root is a machine fact and is never written down here; the trips section needs
- * it to read a projection's frontmatter, and says so and skips if it is absent. The people
- * section needs no vault at all — vault's own answer carries the note paths.
+ * it to read a projection's frontmatter, and says so and skips if it is absent.
  *
  * ## The transport is the point
  *
@@ -122,44 +121,6 @@ async function main() {
   }
   const serving = registry.filter((row) => lens.capabilityOrigin(row) !== null);
   say(`           ${registry.length} capabilities, ${serving.length} with an HTTP surface, ${serving.filter((r) => r.up).length} up`);
-  say("");
-
-  /* --- people ------------------------------------------------------------- */
-
-  const vault = lens.resolveCapability(registry, "vault");
-  say(`people     vault → ${vault.ok ? vault.origin : `REFUSED: ${vault.reason}`}`);
-  if (vault.ok) {
-    const payload = await lens.readJson(`${vault.origin}/api/people`, TIMEOUT);
-    say(`           ${payload.people} people, ${payload.carrying_any} carrying a key, ${payload.disagreeing} disagreeing`);
-    // One note that disagrees and one that does not: an instrument that answers the same
-    // for both is measuring something other than agreement.
-    const disagreeing = payload.facts.find((fact) => fact.disagrees.length > 0);
-    const agreeing = payload.facts.find((fact) => fact.disagrees.length === 0 && Object.keys(fact.stored).length > 0);
-    for (const fact of [disagreeing, agreeing]) {
-      if (!fact) continue;
-      const reading = lens.peopleReading(payload, fact.id);
-      say(`           ${fact.id}`);
-      for (const row of reading.rows) {
-        const stored = row.stored === null ? "not stored" : row.stored;
-        say(`             ${row.key.padEnd(14)} computed ${String(row.computed).padEnd(12)} note ${String(stored).padEnd(12)} ${row.disagrees ? "DISAGREES" : "agrees"}`);
-      }
-    }
-    const missing = lens.peopleReading(payload, "Atlas/People/No Such Person.md");
-    say(`           a note vault has no row for → found=${missing.found}`);
-    // vault serves the path the filesystem gave it; Obsidian hands the plugin the composed
-    // form. Ask for a decomposed row the way Obsidian would ask for it. No name is printed:
-    // the count is the measurement, and this file is read on a public repository.
-    const decomposed = payload.facts.filter((fact) => fact.id !== fact.id.normalize("NFC"));
-    if (decomposed.length === 0) {
-      say("           no NFD path under Atlas/People/ today, so the NFC comparison is untested here");
-    } else {
-      const found = decomposed.filter((fact) => lens.peopleReading(payload, fact.id.normalize("NFC")).found);
-      say(`           ${decomposed.length} NFD path(s) asked for in NFC, as Obsidian hands them over → ${found.length} found`);
-      if (found.length !== decomposed.length) failures += 1;
-    }
-  } else {
-    failures += 1;
-  }
   say("");
 
   /* --- trips -------------------------------------------------------------- */

@@ -1,10 +1,12 @@
 #!/usr/bin/env bash
-# Regenerate rung 0's known-person registry from the vault.
+# Regenerate rung 0's known-person registry from capabilities/entities.
 #
 # Rung 0 (capabilities/comms/src/people_registry.rs) consults a list of the
 # names this operator actually knows, because rung 1's person detector only
 # fires after a salutation and therefore misses a bare first name. The list is
-# derived from Atlas/People and goes stale the moment a person note is added.
+# every person in capabilities/entities with their aliases (src/names.rs), and goes
+# stale the moment a person is added. It came from the vault's Atlas/People notes
+# until 2026-10-20, when they moved into entities.
 #
 # This exists as a script rather than a shell fragment inside a LaunchAgent for
 # the reason every other Sjel agent does the same: a plist that carries quoting,
@@ -18,13 +20,12 @@ set -euo pipefail
 TOOLS_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 source "$TOOLS_DIR/lib/paths.sh"
 
-# CARGO_TARGET_DIR is honoured because a relocated target dir is how build output is kept
-# out of the checkout; see tools/storage/storage, which has done this since it replaced the
-# TypeScript. A bare $SJEL_ROOT/target silently looked in the wrong place once it was set.
-_TARGET_DIR="${CARGO_TARGET_DIR:-$SJEL_ROOT/target}"
-BIN="$_TARGET_DIR/debug/vault"
-[ -x "$BIN" ] || BIN="$_TARGET_DIR/release/vault"
-[ -x "$BIN" ] || { echo "vault binary not built: cargo build -p sjel-vault" >&2; exit 1; }
+# The binary capabilities/people-registry/service.toml declares as its build_output, which the
+# service runner rebuilds before each run. A CARGO_TARGET_DIR copy is only the fallback: it is
+# whatever a developer last built there and can predate the `names` command.
+BIN="$SJEL_ROOT/target/release/entities-server"
+[ -x "$BIN" ] || BIN="${CARGO_TARGET_DIR:-$SJEL_ROOT/target}/release/entities-server"
+[ -x "$BIN" ] || { echo "entities-server not built: tools/service-runner.sh restart entities" >&2; exit 1; }
 
 OUT_DIR="$SJEL_PERSONAL_ROOT/data/vault"
 OUT="$OUT_DIR/people-registry.json"
@@ -36,10 +37,10 @@ mkdir -p "$OUT_DIR"
 TMP="$OUT.tmp.$$"
 trap 'rm -f "$TMP"' EXIT
 
-"$BIN" names --json > "$TMP"
+"$BIN" names > "$TMP"
 
-# A registry that suddenly holds nothing is a vault that failed to load, not a
-# vault with no people. Overwriting a good file with that is the one outcome
+# A registry that suddenly holds nothing is a store that failed to load, not a
+# store with no people. Overwriting a good file with that is the one outcome
 # worth refusing outright.
 count="$(grep -c '"' "$TMP" || true)"
 if ! grep -q '"tokens"' "$TMP" || [ "$count" -lt 3 ]; then

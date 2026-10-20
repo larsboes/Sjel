@@ -40,16 +40,22 @@ def die(msg: str) -> "None":
 def overlay_root() -> Path:
     raw = os.environ.get("SJEL_OVERLAY_ROOT") or os.environ.get("SJEL_PERSONAL_ROOT")
     if not raw:
-        # The machine already declares its overlay in axon.local.toml; read it rather
-        # than making every caller export something the shell init may not have run.
-        for candidate in (Path.home() / "Developer/Axon/axon.local.toml",):
+        # The machine already declares its overlay in sjel.local.toml; read it rather
+        # than making every caller export something the shell init may not have run. The
+        # pre-rename checkout path and file name stay in the list: a machine that has not
+        # pulled and re-run tools/install.sh yet still has only those.
+        for candidate in (
+            Path.home() / "Developer/Sjel/sjel.local.toml",
+            Path.home() / "Developer/Axon/sjel.local.toml",
+            Path.home() / "Developer/Axon/axon.local.toml",
+        ):
             if candidate.exists():
                 m = re.search(r'^overlay\s*=\s*"([^"]+)"', candidate.read_text(), re.M)
                 if m:
                     raw = m.group(1)
                     break
     if not raw:
-        die("overlay unresolved — set SJEL_OVERLAY_ROOT or `overlay` in axon.local.toml")
+        die("overlay unresolved — set SJEL_OVERLAY_ROOT or `overlay` in sjel.local.toml")
     return Path(os.path.expanduser(raw))
 
 

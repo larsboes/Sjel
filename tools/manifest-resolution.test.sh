@@ -22,7 +22,7 @@ if [ ! -f "$LIB_DIR/paths.sh" ]; then
   exit 1
 fi
 
-# An operator's exported SJEL_OVERLAY_ROOT outranks the scratch root's own axon.toml inside
+# An operator's exported SJEL_OVERLAY_ROOT outranks the scratch root's own sjel.toml inside
 # paths.sh, which would make this test resolve the real overlay it is supposed to be replacing
 # (tools/lib/test-support.sh#isolate_axon_env).
 source "$LIB_DIR/test-support.sh"
@@ -32,7 +32,7 @@ mkdir -p "$ROOT/tools/lib"
 cp "$LIB_DIR/paths.sh" "$LIB_DIR/toml.sh" "$ROOT/tools/lib/"
 
 mkdir -p "$OVERLAY/config"
-printf 'overlay = "%s"\n' "$OVERLAY" > "$ROOT/axon.toml"
+printf 'overlay = "%s"\n' "$OVERLAY" > "$ROOT/sjel.toml"
 printf 'os = "linux"\ncontainer_runtime = "docker"\ncapabilities = []\n' > "$OVERLAY/config/machine.toml"
 
 new_manifest() {  # <dir>
@@ -80,6 +80,22 @@ rm -rf "$OVERLAY/capabilities"
 check "root capability still resolves without an overlay caps dir" \
   0 "$ROOT/capabilities/root-only/service.toml" root-only
 check "overlay name is unknown once the dir is gone" 1 "" overlay-only
+
+# A checkout made before the Axon rename still carries axon.toml. The pre-rename names stay
+# readable so that upgrading is a pull, not a manual edit on every machine; the test exists
+# because dropping the fallback would break such a checkout silently, at overlay resolution.
+LEGACY="$SCRATCH/legacy-root"
+mkdir -p "$LEGACY/tools/lib" "$LEGACY/capabilities/legacy"
+cp "$LIB_DIR/paths.sh" "$LIB_DIR/toml.sh" "$LEGACY/tools/lib/"
+printf 'overlay = "%s"\n' "$OVERLAY" > "$LEGACY/axon.toml"
+printf 'kind = "process"\nname = "legacy"\n' > "$LEGACY/capabilities/legacy/service.toml"
+lean() { env -u SJEL_OVERLAY_ROOT -u SJEL_PERSONAL_ROOT bash -c "$1" 2>/dev/null; }
+if [ "$(lean "source '$LEGACY/tools/lib/paths.sh' && printf '%s' \"\$SJEL_OVERLAY_ROOT\"")" != "$OVERLAY" ]; then
+  echo "FAIL: a root that only carries axon.toml no longer resolves its overlay"; fails=$((fails + 1))
+fi
+if [ "$(lean "source '$LEGACY/tools/lib/paths.sh' && axon_manifest_for legacy")" != "$LEGACY/capabilities/legacy/service.toml" ]; then
+  echo "FAIL: a root that only carries axon.toml no longer resolves a capability"; fails=$((fails + 1))
+fi
 
 if [ "$fails" -gt 0 ]; then
   echo "manifest resolution: $fails check(s) failed"

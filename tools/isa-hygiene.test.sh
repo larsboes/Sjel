@@ -90,7 +90,7 @@ plant "ISA.md" 'an Extreme scale generator with no backticks'
 expect_silent_about "an unquoted common word is not a device name" "device name"
 
 safe
-plant "ISA.md" 'axon.local.toml is the overlay pointer; args.local is a known false positive'
+plant "ISA.md" 'sjel.local.toml is the overlay pointer; args.local is a known false positive'
 expect_silent_about "documented .local names are not hostnames" "hostname"
 expect_names "an allowlisted-only line reports clean" "no machine-private strings found"
 

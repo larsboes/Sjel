@@ -33,7 +33,7 @@ isolate_axon_env
 
 mkdir -p "$ROOT/tools/lib" "$OVERLAY/config/machines"
 cp "$LIB_DIR/paths.sh" "$LIB_DIR/toml.sh" "$ROOT/tools/lib/"
-printf 'overlay = "%s"\n' "$OVERLAY" > "$ROOT/axon.toml"
+printf 'overlay = "%s"\n' "$OVERLAY" > "$ROOT/sjel.toml"
 
 HOST="$(hostname -s 2>/dev/null || hostname 2>/dev/null || echo "")"
 if [ -z "$HOST" ]; then
@@ -68,15 +68,15 @@ check "single-file layout resolves" "$OVERLAY/config/machine.toml"
 manifest "$OVERLAY/config/machines/$HOST.toml"
 check "hostname match wins over the legacy file" "$OVERLAY/config/machines/$HOST.toml"
 
-# 3. An explicit name in axon.local.toml wins over the hostname, so a host can carry a
+# 3. An explicit name in sjel.local.toml wins over the hostname, so a host can carry a
 #    role name rather than whatever DNS calls it.
 manifest "$OVERLAY/config/machines/service-node.toml"
-printf 'overlay = "%s"\nmachine = "service-node"\n' "$OVERLAY" > "$ROOT/axon.local.toml"
+printf 'overlay = "%s"\nmachine = "service-node"\n' "$OVERLAY" > "$ROOT/sjel.local.toml"
 check "explicit machine name wins over hostname" "$OVERLAY/config/machines/service-node.toml"
 
 # 4. Naming a machine that does not exist must stop, not fall back: falling back would
 #    silently operate on a different machine's enabled set.
-printf 'overlay = "%s"\nmachine = "does-not-exist"\n' "$OVERLAY" > "$ROOT/axon.local.toml"
+printf 'overlay = "%s"\nmachine = "does-not-exist"\n' "$OVERLAY" > "$ROOT/sjel.local.toml"
 out="$(bash -c "source '$ROOT/tools/lib/paths.sh' 2>&1 >/dev/null; true")"
 rc=0
 bash -c "source '$ROOT/tools/lib/paths.sh' >/dev/null 2>&1" || rc=$?
@@ -88,7 +88,7 @@ if ! printf '%s' "$out" | grep -qF "does-not-exist"; then
 fi
 
 # 5. With machines/ present but no match for this host, the legacy file still answers.
-rm -f "$ROOT/axon.local.toml" "$OVERLAY/config/machines/$HOST.toml"
+rm -f "$ROOT/sjel.local.toml" "$OVERLAY/config/machines/$HOST.toml"
 check "no hostname match falls back to the legacy file" "$OVERLAY/config/machine.toml"
 
 if [ "$fails" -gt 0 ]; then

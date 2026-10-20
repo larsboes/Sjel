@@ -3,7 +3,7 @@
 #
 # Points a single shell at demo/overlay, gives every capability a throwaway database, starts
 # them through the ordinary service runner, then seeds and records. The operator's own overlay
-# and axon.local.toml are never touched — see the SJEL_OVERLAY_ROOT override in tools/lib/paths.sh.
+# and sjel.local.toml are never touched — see the SJEL_OVERLAY_ROOT override in tools/lib/paths.sh.
 #
 # THE COLLISION, and why this script refuses rather than coping. The demo capabilities listen on
 # the SAME ports as a real installation's. They have to: `tools/capability.sh registry` reads

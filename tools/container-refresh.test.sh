@@ -29,7 +29,7 @@ cp "$ROOT/tools/container-refresh.sh" "$FIXTURE/tools/container-refresh.sh"
 cp "$ROOT/tools/lib/toml.sh" "$ROOT/tools/lib/platform.sh" "$ROOT/tools/lib/pipe.sh" "$FIXTURE/tools/lib/"
 
 # paths.sh is the one library this fixture replaces. The real one resolves an overlay from
-# axon.toml, axon.local.toml and the hostname; this test needs a known root instead.
+# sjel.toml, sjel.local.toml and the hostname; this test needs a known root instead.
 cat > "$FIXTURE/tools/lib/paths.sh" <<PATHS
 SJEL_ROOT="$FIXTURE"
 SJEL_PERSONAL_ROOT="$OVERLAY"

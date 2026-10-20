@@ -8,7 +8,7 @@
 #
 # So machine-local configuration lives in two places instead:
 #
-#   axon.local.toml              — `overlay`: where THIS machine's private overlay is.
+#   sjel.local.toml              — `overlay`: where THIS machine's private overlay is.
 #                                  Gitignored, written by tools/install.sh. The one
 #                                  bootstrap fact, because you need it to find the rest.
 #   <overlay>/config/machine.toml — os, container_runtime, `capabilities`, and the
@@ -19,11 +19,11 @@
 # See schemas/machine.toml.example.
 
 [platform]
-name = "axon"
-# Shipped DEFAULT only — a fresh install with no axon.local.toml resolves here.
+name = "sjel"
+# Shipped DEFAULT only — a fresh install with no sjel.local.toml resolves here.
 # Do not edit this to point at your own overlay; run tools/install.sh, which writes
-# axon.local.toml. tools/lib/paths.sh prefers that file and falls back to this value,
-# which is also what keeps a fresh clone working: CI has no axon.local.toml and resolves
+# sjel.local.toml. tools/lib/paths.sh prefers that file and falls back to this value,
+# which is also what keeps a fresh clone working: CI has no sjel.local.toml and resolves
 # this default instead.
 overlay = "~/.axon-overlay"
 

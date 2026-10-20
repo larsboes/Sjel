@@ -41,15 +41,15 @@ ver_gt() {
 # directly by tests that never went through it. Same idiom as delta.sh.
 command -v toml_get_in >/dev/null 2>&1 || . "$(cd "$(dirname "${BASH_SOURCE[0]:-$0}")" && pwd)/toml.sh"
 
-# release_tag_glob — the pattern that decides which tags are release tags, from axon.toml
+# release_tag_glob — the pattern that decides which tags are release tags, from sjel.toml
 # [release] tag_glob. Read rather than hardcoded because six call sites in two languages ask
 # the same question; a literal in each is how a non-release tag takes over version identity.
 # Fails loudly rather than guessing: a missing key means the manifest is wrong, and a silent
 # default would restore exactly the one-home problem this exists to remove.
 release_tag_glob() {
   local g
-  g="$(toml_get_in release tag_glob "${SJEL_ROOT:?SJEL_ROOT unset}/axon.toml")"
-  [ -n "$g" ] || { echo "version.sh: axon.toml has no [release] tag_glob" >&2; return 1; }
+  g="$(toml_get_in release tag_glob "${SJEL_ROOT:?SJEL_ROOT unset}/sjel.toml")"
+  [ -n "$g" ] || { echo "version.sh: sjel.toml has no [release] tag_glob" >&2; return 1; }
   printf '%s' "$g"
 }
 

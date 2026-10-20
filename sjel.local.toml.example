@@ -1,11 +1,11 @@
-# Copy to axon.local.toml (gitignored) — or just run tools/install.sh, which writes it.
+# Copy to sjel.local.toml (gitignored) — or just run tools/install.sh, which writes it.
 #
 # This machine's bootstrap facts: where its private overlay lives, and — when that
 # overlay holds more than one machine — which of them this is. Everything else that
 # differs per machine (os, container_runtime, capabilities, state mounts) lives in the
 # overlay's own manifest. See schemas/machine.toml.example.
 #
-# tools/lib/paths.sh reads this file first and falls back to axon.toml's shipped default.
+# tools/lib/paths.sh reads this file first and falls back to sjel.toml's shipped default.
 # Single-line scalars, quoted — tools/lib/toml.sh's parsing contract.
 
 overlay = "~/.axon-overlay"

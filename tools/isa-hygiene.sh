@@ -47,11 +47,11 @@ if [ -n "$private_names" ]; then
 fi
 
 # Strings that match a pattern above but are not private. A false-positive list, not a place to
-# hide a finding: every entry is justified. `axon.local.toml` is the documented overlay pointer
-# (CONTRIBUTING.md), `args.local` is the `.local`-suffixed name capabilities/printing's own P7
-# probe already names as a false positive, and the loopback and unspecified addresses name no
-# machine.
-false_positives='axon\.local\.toml|args\.local|127\.[0-9]+\.[0-9]+\.[0-9]+|0\.0\.0\.0'
+# hide a finding: every entry is justified. `sjel.local.toml` is the documented overlay pointer
+# (CONTRIBUTING.md) and `axon.local.toml` its pre-rename name, `args.local` is the `.local`-suffixed
+# name capabilities/printing's own P7 probe already names as a false positive, and the loopback
+# and unspecified addresses name no machine.
+false_positives='sjel\.local\.toml|axon\.local\.toml|args\.local|127\.[0-9]+\.[0-9]+\.[0-9]+|0\.0\.0\.0'
 
 isas=()
 while IFS= read -r f; do

@@ -11,11 +11,11 @@ fi
 source "$(dirname "${BASH_SOURCE[0]}")/toml.sh"
 
 # paths.sh resolves which machine this is — single-file layout, config/machines/<host>.toml,
-# or an explicit name in axon.local.toml. Rebuilding the path here would mean a second,
+# or an explicit name in sjel.local.toml. Rebuilding the path here would mean a second,
 # quietly diverging answer to the same question.
 MACHINE_TOML="${SJEL_MACHINE_TOML:-}"
 if [ -z "$MACHINE_TOML" ] || [ ! -f "$MACHINE_TOML" ]; then
-  echo "platform.sh: missing ${MACHINE_TOML:-<unresolved>} — copy schemas/machine.toml.example into the overlay, or name this machine in axon.local.toml" >&2
+  echo "platform.sh: missing ${MACHINE_TOML:-<unresolved>} — copy schemas/machine.toml.example into the overlay, or name this machine in sjel.local.toml" >&2
   return 1 2>/dev/null || exit 1
 fi
 

@@ -54,7 +54,7 @@ done
 
 # Every case below writes a machine.toml into its own scratch overlay and asserts on what the
 # runner reads back. An operator's exported SJEL_OVERLAY_ROOT / SJEL_MACHINE_TOML wins over the
-# scratch axon.toml, so without this the runner reads the REAL machine and the fixture is inert
+# scratch sjel.toml, so without this the runner reads the REAL machine and the fixture is inert
 # (tools/lib/test-support.sh#isolate_axon_env).
 source "$SRC_TOOLS/lib/test-support.sh"
 isolate_axon_env
@@ -68,7 +68,7 @@ cp "$SRC_TOOLS/service-runner.sh" "$SRC_TOOLS/capability.sh" "$ROOT/tools/"
 # platform.sh today, and a list here would silently rot into a "No such file" the next time it
 # picks up a fourth.
 cp "$SRC_TOOLS"/lib/*.sh "$ROOT/tools/lib/"
-printf 'overlay = "%s"\n' "$OVERLAY" > "$ROOT/axon.toml"
+printf 'overlay = "%s"\n' "$OVERLAY" > "$ROOT/sjel.toml"
 printf 'os = "linux"\ncontainer_runtime = "docker"\ncapabilities = ["porthog"]\n' > "$OVERLAY/config/machine.toml"
 
 if [ "$HAVE_BUN" -eq 0 ]; then
@@ -202,7 +202,7 @@ INF_SR="$INF_ROOT/tools/service-runner.sh"
 mkdir -p "$INF_ROOT/tools/lib" "$INF_OVERLAY/config" "$INF_ROOT/capabilities/inferhog"
 cp "$SRC_TOOLS/service-runner.sh" "$SRC_TOOLS/capability.sh" "$INF_ROOT/tools/"
 cp "$SRC_TOOLS"/lib/*.sh "$INF_ROOT/tools/lib/"
-printf 'overlay = "%s"\n' "$INF_OVERLAY" > "$INF_ROOT/axon.toml"
+printf 'overlay = "%s"\n' "$INF_OVERLAY" > "$INF_ROOT/sjel.toml"
 
 # No port and no health_path, so `start` execs the command and returns without waiting on
 # anything — which is why the assertion polls for the file rather than reading it once.
@@ -343,7 +343,7 @@ DK_STATE="$SCRATCH/docker-state"        # absent | stopped | running
 mkdir -p "$DK_ROOT/tools/lib" "$DK_OVERLAY/config" "$DK_BIN" "$DK_ROOT/capabilities/dockhog"
 cp "$SRC_TOOLS/service-runner.sh" "$SRC_TOOLS/capability.sh" "$DK_ROOT/tools/"
 cp "$SRC_TOOLS"/lib/*.sh "$DK_ROOT/tools/lib/"
-printf 'overlay = "%s"\n' "$DK_OVERLAY" > "$DK_ROOT/axon.toml"
+printf 'overlay = "%s"\n' "$DK_OVERLAY" > "$DK_ROOT/sjel.toml"
 printf 'os = "darwin"\ncontainer_runtime = "docker"\ncapabilities = ["dockhog"]\n' \
   > "$DK_OVERLAY/config/machine.toml"
 : > "$DK_OVERLAY/config/dockhog.env"
@@ -419,7 +419,7 @@ DATA_OVERLAY="$SCRATCH/data-overlay"
 mkdir -p "$DATA_ROOT/tools/lib" "$DATA_OVERLAY/config" "$DATA_ROOT/capabilities/filehog"
 cp "$SRC_TOOLS/service-runner.sh" "$SRC_TOOLS/capability.sh" "$DATA_ROOT/tools/"
 cp "$SRC_TOOLS"/lib/*.sh "$DATA_ROOT/tools/lib/"
-printf 'overlay = "%s"\n' "$DATA_OVERLAY" > "$DATA_ROOT/axon.toml"
+printf 'overlay = "%s"\n' "$DATA_OVERLAY" > "$DATA_ROOT/sjel.toml"
 printf 'os = "linux"\ncontainer_runtime = "docker"\ncapabilities = ["filehog"]\n' > "$DATA_OVERLAY/config/machine.toml"
 cat > "$DATA_ROOT/capabilities/filehog/service.toml" <<'TOML'
 kind = "data"

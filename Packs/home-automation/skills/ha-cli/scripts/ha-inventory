@@ -30,14 +30,24 @@ toml_get() {  # toml_get <key> <file> — empty output, exit 0, if key absent
   grep -E "^$1[[:space:]]*=" "$2" | sed -E "s/^$1[[:space:]]*=[[:space:]]*\"([^\"]*)\".*/\1/" || true
 }
 
+_manifest_name() {  # the tracked manifest's name in <dir>, empty if this is not a Sjel root
+  local candidate
+  for candidate in sjel.toml axon.toml; do  # axon.toml is the pre-rename name
+    if [ -f "$1/$candidate" ]; then
+      echo "$candidate"
+      return
+    fi
+  done
+}
+
 _resolve_axon_root() {
-  if [ -n "${SJEL_ROOT:-}" ] && [ -f "$SJEL_ROOT/axon.toml" ]; then
+  if [ -n "${SJEL_ROOT:-}" ] && [ -n "$(_manifest_name "$SJEL_ROOT")" ]; then
     echo "$SJEL_ROOT"
     return
   fi
   local candidate="$SCRIPT_DIR"
   while [ "$candidate" != "/" ]; do
-    if [ -f "$candidate/axon.toml" ]; then
+    if [ -n "$(_manifest_name "$candidate")" ]; then
       echo "$candidate"
       return
     fi
@@ -46,9 +56,14 @@ _resolve_axon_root() {
 }
 
 _resolve_overlay_root() {
-  local raw="${SJEL_HOME_ROOT:-${SJEL_OVERLAY_ROOT:-${SJEL_PERSONAL_ROOT:-}}}"
-  if [ -z "$raw" ] && [ -n "${SJEL_ROOT:-}" ] && [ -f "$SJEL_ROOT/axon.local.toml" ]; then
-    raw="$(toml_get overlay "$SJEL_ROOT/axon.local.toml")"
+  local raw="${SJEL_HOME_ROOT:-${SJEL_OVERLAY_ROOT:-${SJEL_PERSONAL_ROOT:-}}}" local name
+  if [ -z "$raw" ] && [ -n "${SJEL_ROOT:-}" ]; then
+    for name in sjel.local.toml axon.local.toml; do  # axon.local.toml is the pre-rename name
+      if [ -f "$SJEL_ROOT/$name" ]; then
+        raw="$(toml_get overlay "$SJEL_ROOT/$name")"
+        break
+      fi
+    done
   fi
   echo "${raw/#\~/$HOME}"
 }
@@ -75,7 +90,7 @@ SJEL_ROOT="$(_resolve_axon_root)"
 export SJEL_ROOT
 
 OVERLAY_ROOT="$(_resolve_overlay_root)"
-[ -n "$OVERLAY_ROOT" ] || die "overlay is unresolved; set \`overlay\` in axon.local.toml or export SJEL_OVERLAY_ROOT"
+[ -n "$OVERLAY_ROOT" ] || die "overlay is unresolved; set \`overlay\` in sjel.local.toml or export SJEL_OVERLAY_ROOT"
 export SJEL_OVERLAY_ROOT="$OVERLAY_ROOT" SJEL_PERSONAL_ROOT="$OVERLAY_ROOT"
 
 CAP_MANIFEST="$SJEL_ROOT/capabilities/home-assistant/service.toml"

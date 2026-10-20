@@ -25,7 +25,7 @@ name = "knowledge-base"
 # member names as well as sources, so tools/backup.sh runs them through `safe_relative()`, which
 # refuses anything absolute. The vault also sits outside the overlay, under an iCloud container
 # whose location is a fact about this machine rather than about Axon — the same reason
-# [[state_mount]] lives in the overlay and not in axon.toml.
+# [[state_mount]] lives in the overlay and not in sjel.toml.
 #
 # So the member name is tracked here and the machine names only the root it hangs from:
 #

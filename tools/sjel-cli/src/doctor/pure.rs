@@ -1538,7 +1538,7 @@ mod tests {
             assert!(is_sweep_exempt(f, "~/Developer/example-overlay"));
         }
         assert!(!is_sweep_exempt(
-            "axon.toml",
+            "sjel.toml",
             "overlay = \"~/Developer/example-overlay\"\n"
         ));
         assert!(!is_sweep_exempt(
@@ -1579,7 +1579,7 @@ mod tests {
             why_block_bases(&s(&["dashboard/package.json"])),
             s(&["", "dashboard/"])
         );
-        assert_eq!(why_block_bases(&s(&["README.md", "axon.toml"])), s(&[""]));
+        assert_eq!(why_block_bases(&s(&["README.md", "sjel.toml"])), s(&[""]));
     }
 
     // ---- systems reachability

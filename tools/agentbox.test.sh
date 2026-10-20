@@ -27,7 +27,7 @@ trap 'rm -rf "$SCRATCH"' EXIT
 ROOT="$SCRATCH/axon"
 OVERLAY="$SCRATCH/overlay"
 
-# An operator's exported SJEL_OVERLAY_ROOT / SJEL_MACHINE_TOML wins over the scratch axon.toml,
+# An operator's exported SJEL_OVERLAY_ROOT / SJEL_MACHINE_TOML wins over the scratch sjel.toml,
 # so without this the launcher reads the REAL machine and the fixture is inert
 # (tools/lib/test-support.sh#isolate_axon_env).
 source "$SRC_ROOT/tools/lib/test-support.sh"
@@ -37,7 +37,7 @@ mkdir -p "$ROOT/tools/lib" "$ROOT/capabilities/agentbox" "$OVERLAY/config"
 cp "$SRC_ROOT"/tools/lib/*.sh "$ROOT/tools/lib/"
 cp "$SRC_ROOT/capabilities/agentbox/agentbox" "$ROOT/capabilities/agentbox/"
 cp -R "$SRC_ROOT/capabilities/agentbox/profiles" "$ROOT/capabilities/agentbox/"
-printf 'overlay = "%s"\n' "$OVERLAY" > "$ROOT/axon.toml"
+printf 'overlay = "%s"\n' "$OVERLAY" > "$ROOT/sjel.toml"
 printf 'agent = "pi"\nmodel_port = "8000"\n' > "$OVERLAY/config/agentbox.toml"
 
 BOX="$ROOT/capabilities/agentbox/agentbox"

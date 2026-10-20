@@ -132,7 +132,7 @@ function runtime(options: Options, stage: string) {
       : readFileSync(join(root, "capabilities", name, "service.toml"), "utf8");
     writeFileSync(join(stage, "capabilities", name, "service.toml"), text);
   }
-  for (const name of ["axon.toml", "systems.toml", "upstreams.toml", "profiles.toml", "self.json", "LICENSE", "README.md", "CONTRIBUTING.md", "ARCHITECTURE.md", "sjel"]) {
+  for (const name of ["sjel.toml", "systems.toml", "upstreams.toml", "profiles.toml", "self.json", "LICENSE", "README.md", "CONTRIBUTING.md", "ARCHITECTURE.md", "sjel"]) {
     if (existsSync(join(root, name))) copy(join(root, name), join(stage, name));
   }
   for (const name of ["capability.sh", "service-runner.sh", "watchdog.sh", "setup-inbound-auth.sh", "codesign-binary.sh", "doctor", "toolchain-check", "model-check"]) {

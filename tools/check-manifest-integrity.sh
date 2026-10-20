@@ -9,7 +9,7 @@
 # What this gate deliberately no longer checks, and where those checks went:
 # until 2026-07-26 it also validated the ENABLED capability set — that each enabled name
 # had a directory, and that the set was dependency-closed. Both read `capabilities = [...]`
-# from the tracked axon.toml. That field now lives in <overlay>/config/machine.toml, which
+# from the tracked sjel.toml. That field now lives in <overlay>/config/machine.toml, which
 # is per-machine and absent from a fresh clone by construction, so those two checks moved
 # to tools/doctor, which runs on a real machine and can see its overlay. The split is the
 # honest one: this gate checks what is true of the repo, doctor checks what is true of

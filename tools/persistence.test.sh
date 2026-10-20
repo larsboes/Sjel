@@ -31,7 +31,7 @@ done
 [ -n "$SRC_TOOLS" ] || { echo "persistence: cannot find service-runner.sh next to $_dir" >&2; exit 1; }
 
 # Before the scratch root exists, and for the same reason the launchctl stubs above exist: an
-# operator's exported SJEL_OVERLAY_ROOT outranks this sandbox's own axon.toml inside paths.sh, so
+# operator's exported SJEL_OVERLAY_ROOT outranks this sandbox's own sjel.toml inside paths.sh, so
 # every `os = "linux"` case here read the author's real macOS machine.toml and every env-block
 # assertion read the author's real declarations. 14 checks failed locally and none in CI, which is
 # exactly the shape a test cannot warn you about (tools/lib/test-support.sh#isolate_axon_env).
@@ -54,7 +54,7 @@ cp "$SRC_TOOLS/service-runner.sh" "$SRC_TOOLS/capability.sh" "$SRC_TOOLS/watchdo
 # "No such file" the next time service-runner picks up another one.
 cp "$SRC_TOOLS"/lib/*.sh "$ROOT/tools/lib/"
 cp -R "$SRC_TOOLS"/templates/. "$ROOT/tools/templates/"   # -R: templates/ has subdirectories
-printf 'overlay = "%s"\n' "$OVERLAY" > "$ROOT/axon.toml"
+printf 'overlay = "%s"\n' "$OVERLAY" > "$ROOT/sjel.toml"
 
 # --- supervisor stubs ------------------------------------------------------
 # One state file holds the labels the fake supervisor considers loaded, so load/unload and the

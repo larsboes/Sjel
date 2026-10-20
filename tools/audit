@@ -7,7 +7,7 @@
 # scope names the scanners it needs. `tools/audit -h` prints the usage.
 #
 # It sources tools/lib/paths.sh, because the private overlay's location is resolved in one place —
-# axon.local.toml, then axon.toml — and this is the one tool that scans its git history.
+# sjel.local.toml, then sjel.toml — and this is the one tool that scans its git history.
 # bash 3.2-safe (CONTRIBUTING.md#portable-shell).
 set -u
 

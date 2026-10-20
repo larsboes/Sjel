@@ -169,7 +169,7 @@ Three rules keep reclaim safe, all tested:
    a reader acts on is not an overstatement.
 
 The overlay is resolved through `SJEL_PERSONAL_ROOT`, the same way `capabilities/host-net`
-resolves its own policy. The `axon.local.toml` → `axon.toml` order stays owned by
+resolves its own policy. The `sjel.local.toml` → `sjel.toml` order stays owned by
 `tools/lib/paths.sh` and `libs/overlay/overlay.ts`, and the launcher sources `paths.sh`.
 
 ## R6

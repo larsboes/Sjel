@@ -8,7 +8,7 @@
 #
 # It sources tools/lib/paths.sh, because the receipt this reads lives in the overlay
 # (<overlay>/data/host-patch/last.json) and the overlay's location is resolved in one place —
-# axon.local.toml, then axon.toml — never re-derived here.
+# sjel.local.toml, then sjel.toml — never re-derived here.
 # bash 3.2-safe (CONTRIBUTING.md#portable-shell).
 set -u
 

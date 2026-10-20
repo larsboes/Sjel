@@ -43,7 +43,7 @@ cp "$SRC_TOOLS"/lib/*.sh "$ROOT/tools/lib/"
 
 # The logic lives in the sjel-cli crate since 2026-10-02, and the scratch root has no crate.
 sjel_cli_prebuilt
-printf 'overlay = "%s"\n' "$OVERLAY" > "$ROOT/axon.toml"
+printf 'overlay = "%s"\n' "$OVERLAY" > "$ROOT/sjel.toml"
 
 # A toolchain manifest with one entry per scope class. Deliberately not a copy of the real one:
 # these assertions are about the scoping mechanism, and pinning them to the live manifest would

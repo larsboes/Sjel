@@ -6,7 +6,7 @@
 #
 # SJEL_ROOT is set here and tools/lib/paths.sh is NOT sourced. The doctor runs other tools, and
 # paths.sh treats an exported SJEL_OVERLAY_ROOT as a per-invocation override that skips
-# axon.local.toml's `machine =` line, so exporting its results would hand those tools a
+# sjel.local.toml's `machine =` line, so exporting its results would hand those tools a
 # different machine.toml than they resolve on their own. The doctor resolves the overlay itself
 # (tools/sjel-cli/src/doctor/overlay.rs), as doctor.ts did.
 # bash 3.2-safe (CONTRIBUTING.md#portable-shell).

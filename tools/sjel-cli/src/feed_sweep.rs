@@ -70,7 +70,7 @@ pub fn run(argv: &[String]) -> ExitCode {
         Err(e) => return fail(&e),
     };
     let Some(overlay) = paths.overlay_root.clone() else {
-        return fail("no 'overlay' in axon.local.toml or axon.toml — run tools/install.sh");
+        return fail("no 'overlay' in sjel.local.toml or sjel.toml — run tools/install.sh");
     };
     let port = match manifest_port(&paths, "comms") {
         Ok(p) => p,

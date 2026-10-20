@@ -47,7 +47,7 @@ skippable() {
 # isolate_axon_env — drop the SJEL_* environment before a test builds its scratch root.
 #
 # tools/lib/paths.sh answers "which overlay am I" from an exported SJEL_OVERLAY_ROOT first, and
-# only then from axon.local.toml / axon.toml. That precedence is deliberate: it is the
+# only then from sjel.local.toml / sjel.toml. That precedence is deliberate: it is the
 # per-invocation override tools/demo-up uses to run the published demo against demo/overlay
 # while the operator's real overlay stays put.
 #

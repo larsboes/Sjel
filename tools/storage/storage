@@ -2,7 +2,7 @@
 # Thin launcher: storage's logic lives in the sjel-storage crate beside this file.
 #
 # It does two things the binary cannot do for itself. It sources tools/lib/paths.sh, which
-# is what resolves SJEL_ROOT and the active overlay (axon.local.toml, then axon.toml) —
+# is what resolves SJEL_ROOT and the active overlay (sjel.local.toml, then sjel.toml) —
 # sjel-storage reads SJEL_PERSONAL_ROOT and never re-derives that order. And it builds the
 # release binary when it is missing or older than its sources, so `sjel storage` works on a
 # fresh clone without a separate build step.

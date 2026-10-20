@@ -1,6 +1,9 @@
 # This machine's overlay location, written by tools/install.sh. Every machine has its
-# own; the tracked axon.toml carries only a neutral default, so no machine ever has to
+# own; the tracked sjel.toml carries only a neutral default, so no machine ever has to
 # edit a shared file. See schemas/machine.toml.example.
+sjel.local.toml
+# The pre-rename name stays ignored: a checkout that predates the rename still has it on
+# disk, and it holds the same private overlay path.
 axon.local.toml
 
 # Bazel's convenience symlinks (bazel-bin, bazel-out, bazel-testlogs, bazel-<workspace>).

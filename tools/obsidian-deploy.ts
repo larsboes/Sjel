@@ -24,7 +24,7 @@
  * declared is a UI install, and deleting it is not this tool's business.
  *
  * Zero hardcoded paths (CONTRIBUTING.md#one-manifest-per-concern): overlay from
- * axon.local.toml/axon.toml, vault from this machine's machine.toml [[state_mount]]
+ * sjel.local.toml/sjel.toml, vault from this machine's machine.toml [[state_mount]]
  * with data_class = "vault", plugin set from the overlay manifest.
  *
  * Usage:
@@ -52,7 +52,7 @@ const home = homedir();
 const expand = (p: string) => resolve(p.replace(/^~(?=\/|$)/, home));
 
 const overlayResolution = resolveOverlayRoot();
-if (!overlayResolution) throw new Error("no 'overlay' in axon.local.toml or axon.toml — run tools/install.sh");
+if (!overlayResolution) throw new Error("no 'overlay' in sjel.local.toml or sjel.toml — run tools/install.sh");
 const overlay = overlayResolution.root;
 
 // State mounts describe a machine, not the platform, so they live in the overlay's

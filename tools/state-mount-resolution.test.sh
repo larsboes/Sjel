@@ -41,18 +41,18 @@ fails=0
 #
 # Each call gets its own mktemp dir rather than a counter: plant runs inside a command
 # substitution, so any variable it increments is lost with that subshell. An earlier version
-# counted, every case therefore landed in the same directory, and case 5's axon.local.toml
+# counted, every case therefore landed in the same directory, and case 5's sjel.local.toml
 # leaked into every case after it — which the suite caught by failing four of them.
 plant() {
   local base; base="$(mktemp -d "$SCRATCH/case.XXXXXX")"
   local root="$base/axon" overlay="$base/overlay"
   mkdir -p "$root/tools/lib" "$overlay/config/machines"
   cp "$LIB_DIR/paths.sh" "$LIB_DIR/toml.sh" "$root/tools/lib/"
-  printf 'overlay = "%s"\n' "$overlay" > "$root/axon.toml"
+  printf 'overlay = "%s"\n' "$overlay" > "$root/sjel.toml"
   local target="$overlay/config/machine.toml"
   if [ -n "${2:-}" ]; then
     target="$overlay/config/machines/$2.toml"
-    printf 'overlay = "%s"\nmachine = "%s"\n' "$overlay" "$2" > "$root/axon.local.toml"
+    printf 'overlay = "%s"\nmachine = "%s"\n' "$overlay" "$2" > "$root/sjel.local.toml"
   fi
   printf 'os = "linux"\ncontainer_runtime = "docker"\ncapabilities = []\n%s' "$1" > "$target"
   printf '%s' "$root"

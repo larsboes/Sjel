@@ -10,7 +10,7 @@ import { resolveMachineToml } from "./overlay.ts";
 // two must agree, so these cases deliberately mirror it. A change made to one
 // implementation and not the other is a bug even while both test files still pass.
 //
-// The explicit-name case reads the real repository's axon.local.toml and so cannot be
+// The explicit-name case reads the real repository's sjel.local.toml and so cannot be
 // forced from here — it is covered on the shell side, where the file's location is a
 // test input rather than a fixed path.
 

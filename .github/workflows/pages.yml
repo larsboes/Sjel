@@ -67,8 +67,8 @@ jobs:
         with:
           bun-version: latest   # patch first, as in ci.yml — CONTRIBUTING.md#patch-first
 
-      # paths.sh resolves the overlay before anything else runs; with no axon.local.toml it falls
-      # back to axon.toml's shipped default. Same minimal seed ci.yml uses.
+      # paths.sh resolves the overlay before anything else runs; with no sjel.local.toml it falls
+      # back to sjel.toml's shipped default. Same minimal seed ci.yml uses.
       # tools/demo-up overrides it for its own steps by exporting SJEL_OVERLAY_ROOT.
       - name: Minimal overlay for path resolution
         run: |

@@ -173,7 +173,7 @@ tower-http = "0.7"
 # delete the `package."*"` lines; nothing else depends on them.
 #
 # Why this belongs in the tracked file rather than an overlay: it is a fact about Axon's build,
-# identical on every machine and in CI, so it is not a per-machine value (axon.toml's header
+# identical on every machine and in CI, so it is not a per-machine value (sjel.toml's header
 # states that boundary). §9's R6 in the PRD is what made the number worth acting on.
 [profile.dev]
 debug = "line-tables-only"

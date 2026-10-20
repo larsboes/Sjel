@@ -1,14 +1,18 @@
 #!/bin/bash
-# Source this from any Axon/capability script instead of hardcoding paths.
+# Source this from any Sjel/capability script instead of hardcoding paths.
 # Exports SJEL_ROOT and SJEL_OVERLAY_ROOT, resolved dynamically so nothing
 # breaks if either repo gets moved/renamed — set the overlay once, everything
 # downstream picks it up automatically.
 #
-# The overlay location is read from axon.local.toml (gitignored, one per machine,
-# written by tools/install.sh) and falls back to axon.toml's shipped default. That
+# The overlay location is read from sjel.local.toml (gitignored, one per machine,
+# written by tools/install.sh) and falls back to sjel.toml's shipped default. That
 # order is what lets a second machine exist without editing a tracked file, and the
-# fallback is what keeps a fresh clone working — CI has no axon.local.toml and
+# fallback is what keeps a fresh clone working — CI has no sjel.local.toml and
 # resolves the shipped default instead.
+#
+# The pre-rename names (axon.local.toml, axon.toml) are read after both of those, so a
+# checkout made before the rename keeps working until someone runs tools/install.sh.
+# Dropping that read is a one-way break for every machine still carrying the old file.
 
 # Self-locate this file's dir. Under bash, BASH_SOURCE[0] is the sourced path;
 # under zsh (e.g. sourced from ~/.zshrc) BASH_SOURCE is unset, so fall back to
@@ -20,13 +24,13 @@ source "$_lib/toml.sh"
 
 _overlay_raw=""
 # An already-exported SJEL_OVERLAY_ROOT wins over both files. This is the only way to point a
-# single shell at a different deployment without editing something — axon.local.toml is the
+# single shell at a different deployment without editing something — sjel.local.toml is the
 # machine's answer to "which overlay am I", and a tool that rewrote it to borrow another one
 # would leave the machine pointing somewhere else if it died halfway. tools/demo-up is the
 # first caller: it runs the published demonstration against the tracked demo/overlay while the
 # operator's real overlay stays exactly where it was. Deliberately not documented as a general
 # configuration mechanism — it is a per-invocation override, and anything permanent belongs in
-# axon.local.toml where tools/doctor can see it.
+# sjel.local.toml where tools/doctor can see it.
 _overlay_overridden=""
 if [ -n "${SJEL_OVERLAY_ROOT:-}" ]; then
   _overlay_raw="$SJEL_OVERLAY_ROOT"

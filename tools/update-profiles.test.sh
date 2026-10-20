@@ -25,7 +25,7 @@ for f in tools/update.sh tools/lib/paths.sh tools/lib/toml.sh tools/lib/delta.sh
   [ -f "$_root/$f" ] || { echo "missing input: $f"; exit 1; }
   cp "$_root/$f" "$REMOTE/$f"
 done
-cp "$_root/axon.toml" "$REMOTE/axon.toml" 2>/dev/null || true
+cp "$_root/sjel.toml" "$REMOTE/sjel.toml" 2>/dev/null || true
 chmod +x "$REMOTE/tools/update.sh"
 mkdir -p "$REMOTE/capabilities/demo"
 echo "demo" > "$REMOTE/capabilities/demo/README.md"

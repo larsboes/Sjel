@@ -63,7 +63,7 @@ function browsableRemote(raw: string | null): string | null {
   return null;
 }
 
-// releaseGlob is passed in rather than read here: it comes from the spine's axon.toml, and this
+// releaseGlob is passed in rather than read here: it comes from the spine's sjel.toml, and this
 // function also runs against the overlay, which has no release line of its own to consult.
 function read(path: string, role: RepoStatus["role"], releaseGlob: string): RepoStatus {
   const base: RepoStatus = {
@@ -128,7 +128,7 @@ if (!axonRoot) {
 // not an error. It is also private, so only its basename is ever reported.
 const overlayRoot = process.env.SJEL_PERSONAL_ROOT;
 
-// One home for "which tags are release tags" — axon.toml [release] tag_glob, shared with
+// One home for "which tags are release tags" — sjel.toml [release] tag_glob, shared with
 // tools/lib/version.sh and tools/doctor (tools/sjel-cli/src/doctor/checks.rs, CONTRIBUTING.md#the-release-line).
 const releaseGlob = releaseTagGlob(axonRoot);
 

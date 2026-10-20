@@ -63,19 +63,24 @@ import yaml
 _PARENTS = Path(__file__).resolve().parents
 _SELF_ROOT = _PARENTS[5] if len(_PARENTS) > 5 else _PARENTS[-1]
 SJEL_ROOT = Path(os.environ.get("SJEL_ROOT") or _SELF_ROOT)
-# Where the real values live. Resolved from the environment, else from axon.local.toml.
+# Where the real values live. Resolved from the environment, else from sjel.local.toml.
 def _home_overlay_root() -> Path:
     raw = os.environ.get("SJEL_HOME_ROOT") or os.environ.get("SJEL_OVERLAY_ROOT") or os.environ.get("SJEL_PERSONAL_ROOT")
     if not raw:
-        # The machine already declares its overlay in axon.local.toml; requiring the same
+        # The machine already declares its overlay in sjel.local.toml; requiring the same
         # fact in the environment as well made homectl unusable from a plain shell on the
         # host that actually runs Home Assistant.
-        local = SJEL_ROOT / "axon.local.toml"
-        if local.is_file():
+        local = None
+        for name in ("sjel.local.toml", "axon.local.toml"):  # second is the pre-rename name
+            candidate = SJEL_ROOT / name
+            if candidate.is_file():
+                local = candidate
+                break
+        if local is not None:
             with local.open("rb") as fh:
                 raw = tomllib.load(fh).get("overlay")
     if not raw:
-        raise SystemExit("home-automation overlay is unresolved; set `overlay` in axon.local.toml, "
+        raise SystemExit("home-automation overlay is unresolved; set `overlay` in sjel.local.toml, "
                          "source tools/lib/paths.sh, or set SJEL_HOME_ROOT")
     return Path(raw).expanduser()
 

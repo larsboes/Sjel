@@ -58,8 +58,8 @@ trap 'rm -rf "$_fixture"' EXIT
 _g() { git -C "$_fixture" -c user.email=t@example.invalid -c user.name=t -c commit.gpgsign=false "$@" >/dev/null 2>&1; }
 
 _g init -q
-printf '[release]\ntag_glob = "v[0-9]*"\n' > "$_fixture/axon.toml"
-_g add axon.toml
+printf '[release]\ntag_glob = "v[0-9]*"\n' > "$_fixture/sjel.toml"
+_g add sjel.toml
 _g commit -m "release fixture"
 _g tag v0.1.0
 printf 'second\n' > "$_fixture/later.txt"
@@ -74,7 +74,7 @@ SJEL_ROOT="$_fixture"; export SJEL_ROOT
 starts_with() { case "$2" in "$1"*) return 0 ;; *) return 1 ;; esac; }
 contains()    { case "$2" in *"$1"*) return 0 ;; *) return 1 ;; esac; }
 
-check "glob comes from axon.toml"        yes [ "$(release_tag_glob)" = "v[0-9]*" ]
+check "glob comes from sjel.toml"        yes [ "$(release_tag_glob)" = "v[0-9]*" ]
 check "describe_release finds v0.1.0"    yes starts_with v0.1.0 "$(describe_release)"
 check "a non-release tag never wins"     no  contains archive "$(describe_release)"
 # The control: an unrestricted describe DOES pick the marker up, which is the whole point.

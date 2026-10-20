@@ -59,8 +59,10 @@ owner heading; `F4` under media is not the root feature F4.
   the signed-only listener.
 - **Axon names.** Decided 2026-09-30: rename `axon` in names, headers, prose and the FDA
   launcher. `X-Axon-*` headers stay accepted until the phone app ships, and FDA is restored after
-  the rename. The `AXON_*` fallback is retired. Config file fallback reads shipped
-  (`sjel.local.toml` / `axon.local.toml` and `sjel.toml` / `axon.toml`). Persisted paths and
+  the rename. The `AXON_*` fallback is retired. The config files are renamed: `sjel.toml`,
+  `sjel.local.toml` and `sjel.local.toml.example` are the names on disk, and the pre-rename
+  `axon.toml` / `axon.local.toml` are still *read* after them, so an older checkout resolves its
+  overlay without an edit (`tools/manifest-resolution.test.sh` covers it). Persisted paths and
   compatibility names need their own migration; replacing prose alone does not close the rename.
   Probe: `git grep -n -i axon`.
 

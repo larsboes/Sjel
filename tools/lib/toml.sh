@@ -1,6 +1,6 @@
 #!/bin/bash
 # Minimal single-line TOML value extraction, shared by everything that reads
-# a manifest (axon.toml, machine.toml, capabilities/*/service.toml). Not a
+# a manifest (sjel.toml, machine.toml, capabilities/*/service.toml). Not a
 # real TOML parser — handles `key = "value"` and `key = ["a", "b"]` on one
 # line each, which is all Axon's manifests use on purpose (see upstreams.toml
 # style). bash 3.2-safe (macOS stock bash), no mapfile/readarray.

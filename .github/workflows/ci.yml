@@ -230,8 +230,8 @@ jobs:
       #
       # A runner IS a machine, and Axon's contract is that a machine has an overlay, so the
       # honest fix is to give it the minimal one rather than to make the config tolerate its
-      # absence. No axon.local.toml is written: with none present, paths.sh falls back to
-      # axon.toml's shipped default (~/.axon-overlay), which is what this creates.
+      # absence. No sjel.local.toml is written: with none present, paths.sh falls back to
+      # sjel.toml's shipped default (~/.axon-overlay), which is what this creates.
       # `capabilities = []` is deliberate — the registry then returns just the spine, which
       # is all a type check needs. Shape: schemas/machine.toml.example.
       - name: Minimal overlay for the config read

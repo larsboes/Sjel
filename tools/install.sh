@@ -113,10 +113,10 @@ case ":$PATH:" in
 esac
 
 # Where THIS machine's overlay location gets recorded. Gitignored and per-machine, so a
-# second node never has to edit the tracked axon.toml — that file keeps only a neutral
+# second node never has to edit the tracked sjel.toml — that file keeps only a neutral
 # shipped default (consumed by tools/lib/paths.sh as the fallback, not here). See
 # schemas/machine.toml.example.
-SJEL_LOCAL_TOML="$SJEL_ROOT/axon.local.toml"
+SJEL_LOCAL_TOML="$SJEL_ROOT/sjel.local.toml"
 SKELETON="$TOOLS_DIR/templates/overlay-skeleton"
 
 echo "Axon installer"
@@ -156,10 +156,10 @@ else
   read -r -p "Enter OS [macos/linux/windows]: " DETECTED_OS
 fi
 
-# 2) Overlay location — the single write point is axon.local.toml's `overlay` field;
+# 2) Overlay location — the single write point is sjel.local.toml's `overlay` field;
 # tools/lib/paths.sh resolves everything downstream from it, so this is the only place
 # a location decision has to be made. An already-configured machine's own value wins as
-# the prompt default; the tracked axon.toml is only consulted for the shipped fallback.
+# the prompt default; the tracked sjel.toml is only consulted for the shipped fallback.
 CURRENT_OVERLAY=""
 if [ -f "$SJEL_LOCAL_TOML" ]; then
   CURRENT_OVERLAY="$(toml_get overlay "$SJEL_LOCAL_TOML")"
@@ -186,13 +186,13 @@ if [ "$OVERLAY_RAW" != "$CURRENT_OVERLAY" ]; then
   else
     cat > "$SJEL_LOCAL_TOML" <<EOF
 # This machine's overlay location — gitignored, one per machine. Written by
-# tools/install.sh; tools/lib/paths.sh reads it and falls back to axon.toml's
+# tools/install.sh; tools/lib/paths.sh reads it and falls back to sjel.toml's
 # shipped default. Everything else that differs per machine lives in that
 # overlay's own config/machine.toml.
 overlay = "$OVERLAY_RAW"
 EOF
   fi
-  echo "axon.local.toml: overlay = \"$OVERLAY_RAW\""
+  echo "sjel.local.toml: overlay = \"$OVERLAY_RAW\""
 fi
 
 # 3) Scaffold or clone the overlay

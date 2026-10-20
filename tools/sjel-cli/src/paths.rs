@@ -1,6 +1,6 @@
 //! Repository and overlay locations, read from the environment `tools/lib/paths.sh` exports.
 //!
-//! Nothing here derives a location. `paths.sh` owns the axon.local.toml → axon.toml overlay
+//! Nothing here derives a location. `paths.sh` owns the sjel.local.toml → sjel.toml overlay
 //! order and the machine.toml lookup; re-deriving either here would be a second copy of a rule
 //! that has already drifted once between shell and TypeScript (`libs/overlay/overlay.ts`).
 
@@ -46,7 +46,7 @@ impl Paths {
 
     /// The same values, resolved by sourcing tools/lib/paths.sh in a child bash, for the `sjel`
     /// launcher, which must not source it itself. paths.sh treats an EXPORTED
-    /// SJEL_OVERLAY_ROOT as a per-invocation override and then skips axon.local.toml's
+    /// SJEL_OVERLAY_ROOT as a per-invocation override and then skips sjel.local.toml's
     /// `machine = "<name>"`, so exporting its results from `sjel` would hand every tool `sjel`
     /// execs (doctor, storage, update) a different machine.toml than it resolves on its own.
     pub fn from_shell(root: &Path) -> Result<Self, String> {

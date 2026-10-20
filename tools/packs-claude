@@ -7,7 +7,7 @@
 #
 # SJEL_ROOT is set here and tools/lib/paths.sh is NOT sourced, for the reason tools/harnesses'
 # launcher gives: paths.sh treats an exported SJEL_OVERLAY_ROOT as a per-invocation override
-# that skips axon.local.toml's `machine =` line. The Rust side resolves the overlay itself.
+# that skips sjel.local.toml's `machine =` line. The Rust side resolves the overlay itself.
 # bash 3.2-safe (CONTRIBUTING.md#portable-shell).
 set -u
 

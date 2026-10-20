@@ -142,7 +142,7 @@ impl Platform {
             };
             return fail(
                 1,
-                format!("platform.sh: missing {shown} — copy schemas/machine.toml.example into the overlay, or name this machine in axon.local.toml"),
+                format!("platform.sh: missing {shown} — copy schemas/machine.toml.example into the overlay, or name this machine in sjel.local.toml"),
             );
         }
         let machine_table = read_table(&machine)?;

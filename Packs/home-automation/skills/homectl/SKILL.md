@@ -19,7 +19,7 @@ scripts/homectl components [--only NAME] [--dry-run]
 ```
 
 Defaults resolve from `SJEL_OVERLAY_ROOT`, `SJEL_HOME_ROOT`, or the overlay declared by
-`axon.local.toml`:
+`sjel.local.toml`:
 
 - capability input: `<overlay>/capabilities/home-assistant`
 - variables: `<overlay>/config/home-assistant.vars`

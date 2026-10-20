@@ -3,7 +3,7 @@
 # line) and by hand (state mounts). Read by tools/lib/platform.sh, tools/capability.sh,
 # tools/service-runner.sh, tools/update.sh and tools/doctor.
 #
-# Why it lives in the overlay and not in axon.toml: axon.toml is tracked and shared, so a
+# Why it lives in the overlay and not in sjel.toml: sjel.toml is tracked and shared, so a
 # field that differs between two machines cannot live there — one overlay is one instance,
 # so this file has exactly one machine to describe. See
 # the header above.
@@ -46,7 +46,7 @@ container_runtime = "docker"       # "docker" | "podman"
 capabilities = ["home-assistant", "vaultwarden"]
 
 # Rejected alternative: tagging each [[state_mount]] with an owning machine
-# (machines = ["mac"]) and leaving everything in axon.toml. Smaller diff, but it keeps every
+# (machines = ["mac"]) and leaving everything in sjel.toml. Smaller diff, but it keeps every
 # machine's facts in one shared file and makes each node's config grow with the node count —
 # accumulating blocks that are inert everywhere except one place. And `capabilities` has no
 # sensible per-machine encoding that way at all.

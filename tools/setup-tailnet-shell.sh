@@ -5,8 +5,9 @@
 # On macOS the Tailscale app cannot serve the shell: its network extension is sandboxed and gets
 # `connect: operation not permitted` on every user-owned socket path tried (the overlay and
 # /Library/Tailscale/, 2026-10-20). So macOS runs a second, user-level tailscaled in userspace
-# networking mode, named `sjel`, that serves only the shell. The app stays untouched, and no step
-# needs root. The daemon is Homebrew's `tailscale` formula, unlinked so its CLI does not shadow
+# networking mode, named `sjel`, that serves only the shell. The app stays untouched, and the
+# daemon runs as the user; only the one Serve call below uses sudo. The daemon is Homebrew's
+# `tailscale` formula, unlinked so its CLI does not shadow
 # the app's (`brew install tailscale && brew unlink tailscale`).
 set -euo pipefail
 TOOLS_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -57,7 +58,13 @@ EOF
   TS=("$BIN/tailscale" "--socket=$DAEMON_SOCKET")
   echo "Logging in the 'sjel' node. Open the URL it prints, if it prints one."
   "${TS[@]}" up --hostname=sjel
+  # With Tailnet Lock on, a signing node must sign this one. `lock status` prints the command.
+  "${TS[@]}" lock status | grep -i -A3 "locked out" || true
 fi
+# A Unix-socket target needs root for this one call (tailscale ipn/ipnserver/actor.go,
+# connIsLocalAdmin). The config persists in the node's state; the daemon stays the user's.
+SERVE=("${TS[@]}")
+[ "$(uname -s)" = "Darwin" ] && SERVE=(sudo "${TS[@]}")
 
 command -v "${TS[0]}" >/dev/null 2>&1 || {
   echo "setup-tailnet-shell: tailscale CLI is not installed" >&2
@@ -71,7 +78,7 @@ echo "The shell uses the socket-only operator gate; TCP capability routes requir
 read -r -p "Apply this Tailscale Serve change? [y/N]: " CONFIRM
 case "$CONFIRM" in [Yy]*) ;; *) echo "cancelled; no Tailscale config changed"; exit 0 ;; esac
 
-"${TS[@]}" serve --bg "unix:$SOCKET"
+"${SERVE[@]}" serve --bg "unix:$SOCKET"
 echo
 echo "Updated Tailscale Serve configuration:"
 "${TS[@]}" serve status

@@ -79,11 +79,6 @@ Migrated 2026-10-15 from §13 of the frozen PRD (now the `projects` record `Sjel
   carries EUR and a null `risk_free_rate_bp`, but `allocations` is empty. Open: decide the target
   cohort (active allocations sum to 10,000 bp ±50), fill a ticker where one is known (a wrong
   ticker prices the wrong company silently), and install the `finance-prices` launchd unit.
-- **D15 — the reranking stage.** oMLX 0.7.1 serves `bge-reranker-v2-m3-mlx` on loopback, and
-  the overlay declares the `reranking` role. The DE/EN gate passes again
-  (`capabilities/comms/eval/results/2026-10-20-bge-reranker-v2-m3-mlx-omlx-0.7.1.md`). Open: one
-  Comms refresh writes reranker scores. On 2026-10-20 the runtime profile "On the go" deferred
-  it; that switch is the owner's. Then `upstreams.toml` drops "NOT DEPLOYED".
 - **B48 — the trip roll-up numbers.** The budget field, wire and clearing shipped; `by_companion`
   was cut. Open: a budget on a plan and a trip id on a transaction (both data entry). The finance
   per-trip route still answers 200 with five zeros for an untagged trip.

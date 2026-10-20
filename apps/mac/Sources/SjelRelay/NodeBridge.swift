@@ -55,6 +55,47 @@ public enum NodeStatus: Sendable, Equatable {
     case known(NodeHealth)
 }
 
+/// One message in an Ask conversation (`POST /assistant/api/ask`).
+public struct AskTurn: Sendable, Equatable, Codable {
+    public let role: String
+    public let content: String
+
+    public init(role: String, content: String) {
+        self.role = role
+        self.content = content
+    }
+}
+
+/// Reply from `POST /assistant/api/ask` (or deterministic capability fallback).
+public struct AskReply: Sendable, Equatable, Decodable {
+    public let text: String
+    public let model: String
+    public let source: String
+    public let tools: [String]
+
+    enum CodingKeys: String, CodingKey { case text, model, source, tools }
+
+    public init(text: String, model: String, source: String, tools: [String] = []) {
+        self.text = text
+        self.model = model
+        self.source = source
+        self.tools = tools
+    }
+
+    public init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        text = try c.decode(String.self, forKey: .text)
+        model = try c.decode(String.self, forKey: .model)
+        source = try c.decode(String.self, forKey: .source)
+        tools = try c.decodeIfPresent([String].self, forKey: .tools) ?? []
+    }
+}
+
+public enum AskOutcome: Sendable, Equatable {
+    case reply(AskReply)
+    case failure(String)
+}
+
 /// Bridge connecting the native macOS companion to the local Sjel daemon.
 public final class NodeBridge: Sendable {
     public let baseURL: URL
@@ -98,7 +139,16 @@ public final class NodeBridge: Sendable {
     /// (`capabilities/sjel-status/src/status/lifecycle.rs`). Start is `resume`, so it also
     /// clears the hold a stop leaves. Returns nil on success, or the words to show.
     public func setRunning(_ name: String, _ running: Bool) async -> String? {
-        guard let request = lifecycleRequest(name, running) else { return "Sjel has no token on this Mac." }
+        await performLifecycle(name, action: running ? "start" : "stop", label: running ? "Start" : "Stop")
+    }
+
+    /// Restarts one capability through the shell (`POST /api/sjel-status/capabilities/<name>/restart`).
+    public func restart(_ name: String) async -> String? {
+        await performLifecycle(name, action: "restart", label: "Restart")
+    }
+
+    private func performLifecycle(_ name: String, action: String, label: String) async -> String? {
+        guard let request = lifecycleRequest(name, action: action) else { return "Sjel has no token on this Mac." }
         guard let (data, response) = try? await session.data(for: request) else {
             return "Sjel did not answer."
         }
@@ -106,19 +156,22 @@ public final class NodeBridge: Sendable {
         if status == 401 { token.forget() }
         if status == 200 { return nil }
         let error = (try? JSONSerialization.jsonObject(with: data) as? [String: Any])?["error"] as? String
-        return error ?? "\(running ? "Start" : "Stop") \(name) failed (\(status))."
+        return error ?? "\(label) \(name) failed (\(status))."
     }
 
     /// Only a registry name reaches the shell: letters, digits and dashes, nothing a path
     /// could be built from.
     func lifecycleRequest(_ name: String, _ running: Bool) -> URLRequest? {
+        lifecycleRequest(name, action: running ? "start" : "stop")
+    }
+
+    func lifecycleRequest(_ name: String, action: String) -> URLRequest? {
         let safe = !name.isEmpty && name.allSatisfy { $0.isLetter || $0.isNumber || $0 == "-" }
-        guard safe, let bearer = token.get() else { return nil }
-        let action = running ? "start" : "stop"
+        guard safe, ["start", "stop", "restart"].contains(action), let bearer = token.get() else { return nil }
         var request = URLRequest(url: baseURL.appendingPathComponent("api/sjel-status/capabilities/\(name)/\(action)"))
         request.httpMethod = "POST"
         request.setValue("Bearer \(bearer)", forHTTPHeaderField: "Authorization")
-        // A start waits for the service to come up.
+        // A start or restart waits for the service to come up.
         request.timeoutInterval = 60
         return request
     }
@@ -137,5 +190,69 @@ public final class NodeBridge: Sendable {
               (response as? HTTPURLResponse)?.statusCode == 200
         else { return nil }
         return try? JSONDecoder().decode([CalendarEntry].self, from: data)
+    }
+
+    /// Runs one turn in a native Ask session through `POST /assistant/api/ask`, starting the
+    /// on-demand `assistant` capability if it is stopped, and falling back to a live capability
+    /// summary when the local model role is unavailable.
+    public func ask(_ prompt: String, history: [AskTurn] = []) async -> AskOutcome {
+        guard let bearer = token.get() else {
+            return .failure("Sjel has no token on this Mac.")
+        }
+        struct Payload: Encodable {
+            let prompt: String
+            let history: [AskTurn]
+        }
+        guard let body = try? JSONEncoder().encode(Payload(prompt: prompt, history: history)) else {
+            return .failure("Could not encode the question.")
+        }
+        var request = URLRequest(url: baseURL.appendingPathComponent("assistant/api/ask"))
+        request.httpMethod = "POST"
+        request.setValue("Bearer \(bearer)", forHTTPHeaderField: "Authorization")
+        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        request.httpBody = body
+        request.timeoutInterval = 60
+
+        if let (data, response) = try? await session.data(for: request),
+           let http = response as? HTTPURLResponse {
+            if http.statusCode == 200, let reply = try? JSONDecoder().decode(AskReply.self, from: data) {
+                return .reply(reply)
+            }
+            if http.statusCode == 502 {
+                _ = await setRunning("assistant", true)
+                if let (retryData, retryResp) = try? await session.data(for: request),
+                   (retryResp as? HTTPURLResponse)?.statusCode == 200,
+                   let reply = try? JSONDecoder().decode(AskReply.self, from: retryData) {
+                    return .reply(reply)
+                }
+            }
+        }
+        return await capabilityFallback()
+    }
+
+    private func capabilityFallback() async -> AskOutcome {
+        guard case .known(let health) = await status() else {
+            return .failure("Sjel did not answer.")
+        }
+        let upCount = health.capabilities.values.filter(\.up).count
+        let down = health.down
+        var lines = [
+            "Sjel \(health.version) (up \(health.uptimeSeconds / 60)m): \(upCount) of \(health.capabilities.count) capabilities running\(down.isEmpty ? "" : "; down: \(down.joined(separator: ", "))")."
+        ]
+        if let entries = await calendarToday() {
+            let ahead = Today.ahead(entries, now: Date())
+            if ahead.isEmpty {
+                lines.append("Calendar: nothing else today or tomorrow.")
+            } else {
+                let summary = ahead.prefix(4).map { "\($0.title) (\(Today.when($0, now: Date())))" }.joined(separator: ", ")
+                lines.append("Calendar ahead: \(summary).")
+            }
+        }
+        return .reply(AskReply(
+            text: lines.joined(separator: "\n"),
+            model: "capabilities",
+            source: "deterministic",
+            tools: ["sjel_health", "calendar_entries"]
+        ))
     }
 }

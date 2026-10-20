@@ -74,6 +74,10 @@ pub(crate) struct Service {
     /// asks only these, so it carries no code per pair of capabilities.
     #[serde(default)]
     pub(crate) links_to: Vec<String>,
+    #[serde(default)]
+    pub(crate) imports: Vec<String>,
+    #[serde(default)]
+    pub(crate) exports: Vec<String>,
 }
 
 impl Service {

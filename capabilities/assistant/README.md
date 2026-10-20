@@ -28,6 +28,7 @@ fits. The shared example is in
 - `GET /health`: liveness only.
 - `GET /ready`: reports whether the local role is configured; does not return credentials.
 - `POST /api/generate`: `{ "prompt": "...", "instructions": "...", "max_tokens": 512 }`.
+- `POST /api/ask`: `{ "prompt": "...", "history": [{ "role": "user|assistant", "content": "..." }], "instructions": "..." }` — multi-turn session powered by [`libs/agent`](../../libs/agent) with read-only Sjel capability tools (`sjel_health`, `calendar_entries`, `projects_list`, `project_records`, `trips_plans`) and no `bash` or filesystem tools. Returns `{ "text", "model", "source", "tools" }`.
 
 The service binds loopback through `sjel_server::serve_local`. Protected requests require the
 shared inbound token. The shell injects that token on its server-to-server proxy hop; it is never

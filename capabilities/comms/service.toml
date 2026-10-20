@@ -7,6 +7,8 @@ port        = "8083"
 # A person's mail is the triage rows from their emails, as entities holds them; `GET /api/links?to=ent:…`
 # answers it and stores nothing (docs/capabilities/links.md D10). src/links.rs holds the same list.
 links_to = ["ent"]
+imports  = ["rss-atom", "imap-jmap", "youtube-transcript", "hackernews"]
+exports  = ["json"]
 health_path = "/health"
 ready_path  = "/ready"   # availability is judged on this, not on liveness (#126)
 

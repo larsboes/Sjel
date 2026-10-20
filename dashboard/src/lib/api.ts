@@ -32,6 +32,9 @@ export interface CapabilityView {
   /** Id kinds this capability answers `GET /api/links` for (docs/capabilities/links.md D1). Optional
    *  because a sjel-status built before 2026-10-06 does not send it. */
   links_to?: string[];
+  /** Data formats accepted in and emitted out (`service.toml` `imports` / `exports`). */
+  imports?: string[];
+  exports?: string[];
   /** null when the capability declares no health surface — unknown, not down. */
   up: boolean | null;
   health_url: string | null;
@@ -752,6 +755,11 @@ export const axonStatus = {
   stop: (name: string) =>
     request<{ name: string; up: boolean; detail: string }>(
       `/sjel-status/api/sjel-status/capabilities/${encodeURIComponent(name)}/stop`,
+      { method: 'POST' },
+    ),
+  restart: (name: string) =>
+    request<{ name: string; up: boolean; detail: string }>(
+      `/sjel-status/api/sjel-status/capabilities/${encodeURIComponent(name)}/restart`,
       { method: 'POST' },
     ),
 };

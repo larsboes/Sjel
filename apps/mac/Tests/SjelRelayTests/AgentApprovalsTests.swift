@@ -109,11 +109,25 @@ import Testing
         #expect(request.httpMethod == "POST")
         #expect(request.url?.path == "/api/sjel-status/capabilities/knowledge-graph/stop")
         #expect(request.value(forHTTPHeaderField: "Authorization") == "Bearer t")
+
+        let restart = try #require(bridge.lifecycleRequest("projects", action: "restart"))
+        #expect(restart.httpMethod == "POST")
+        #expect(restart.url?.path == "/api/sjel-status/capabilities/projects/restart")
     }
 
     @Test func aNameThatCouldBuildAPathIsRefused() {
         #expect(bridge.lifecycleRequest("../agent/mode", true) == nil)
         #expect(bridge.lifecycleRequest("", true) == nil)
+    }
+
+    @Test func decodesAskReplyWithAndWithoutTools() throws {
+        let withTools = Data(#"{"text":"Calendar is clear.","model":"qwen3:8b","source":"local","tools":["calendar_entries"]}"#.utf8)
+        let reply = try JSONDecoder().decode(AskReply.self, from: withTools)
+        #expect(reply == AskReply(text: "Calendar is clear.", model: "qwen3:8b", source: "local", tools: ["calendar_entries"]))
+
+        let withoutTools = Data(#"{"text":"Ready.","model":"qwen3:8b","source":"local"}"#.utf8)
+        let plain = try JSONDecoder().decode(AskReply.self, from: withoutTools)
+        #expect(plain.tools.isEmpty)
     }
 }
 

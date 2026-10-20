@@ -229,6 +229,11 @@ const ROUTES: &[route_manifest::Route] = &[
         "/api/sjel-status/capabilities/{name}/stop",
         "Stop one capability. Refuses to report success while its port still answers, because something outside the pid file holding it is the case worth seeing.",
     ),
+    r(
+        "POST",
+        "/api/sjel-status/capabilities/{name}/restart",
+        "Restart one capability through service-runner and wait for it to answer.",
+    ),
 ];
 
 /// Shorthand so the table above reads as a table.
@@ -435,6 +440,10 @@ fn build_router(shell: proxy::Proxy) -> Router {
         .route(
             "/api/sjel-status/capabilities/{name}/stop",
             post(stop_handler),
+        )
+        .route(
+            "/api/sjel-status/capabilities/{name}/restart",
+            post(restart_handler),
         )
         .route("/api/sjel-status/backups", get(backups_handler))
         .route(
@@ -1102,6 +1111,7 @@ mod origin_tests {
         for path in [
             "/api/sjel-status/capabilities/not-a-capability/start",
             "/api/sjel-status/capabilities/not-a-capability/stop",
+            "/api/sjel-status/capabilities/not-a-capability/restart",
             "/api/sjel-status/capabilities/not-a-capability/backup",
         ] {
             assert_eq!(

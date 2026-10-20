@@ -388,10 +388,10 @@ impl<'a> Svc<'a> {
                 if process { self.stop_process(hold) } else { self.stop_service(hold) }
             }
             "restart" if process => {
+                self.maybe_build(true)?;
                 if self.stop_process(false)? != 0 {
                     return Ok(1);
                 }
-                self.maybe_build(true)?;
                 self.start_process()
             }
             "restart" => {
@@ -713,7 +713,10 @@ impl<'a> Svc<'a> {
         if !self.schedule.is_empty() {
             return self.run_scheduled();
         }
-        if self.running_pid().is_some() {
+        if let Some(pid) = self.running_pid() {
+            // Refresh mtime on each watchdog check so macOS periodic /tmp cleanup
+            // (daily_clean_tmps_days = 3) never unlinks a live capability's pid file.
+            let _ = std::fs::write(&self.pid_file, format!("{pid}\n"));
             return Ok(0); // already ours, already up
         }
         if self.process_healthy() {

@@ -11,22 +11,26 @@ pub enum Page {
     Capabilities,
     /// Project notes, edited in place. The dashboard has `/projects`, but no nav entry for it.
     Notes,
+    /// Multi-turn capability session (`sjel://ask?q=…`).
+    Ask,
 }
 
 impl Page {
-    pub const ALL: [Page; 3] = [Page::Home, Page::Capabilities, Page::Notes];
+    pub const ALL: [Page; 4] = [Page::Home, Page::Capabilities, Page::Notes, Page::Ask];
 
     pub fn href(self) -> &'static str {
         match self {
             Self::Home => "/",
             Self::Capabilities => "/capabilities",
             Self::Notes => "/projects",
+            Self::Ask => "/ask",
         }
     }
 
     pub fn label(self) -> &'static str {
         match self {
             Self::Notes => "Notes",
+            Self::Ask => "Ask",
             _ => destination(self.href()).map_or("", |d| d.label),
         }
     }
@@ -52,6 +56,7 @@ pub const DESTINATIONS: &[Destination] = &[
     d("/", "Home"),
     d("/context", "Today"),
     d("/calendar", "Calendar"),
+    d("/projects", "Projects"),
     d("/inbox", "Inbox"),
     d("/feed", "Feed"),
     d("/travel", "Travel"),
@@ -81,21 +86,40 @@ pub fn destination(href: &str) -> Option<Destination> {
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum Target {
     Native(Page),
+    /// Open the native Ask session and submit this question in-session.
+    Ask(String),
     /// A dashboard path, query included.
     Dashboard(String),
 }
 
 /// `sjel://calendar/2026-10-15` → the dashboard path `/calendar/2026-10-15`. `sjel://` and
-/// `sjel://home` are Home. Only an exact native path opens natively; a sub-path or a query
-/// goes to the dashboard, which owns the detail.
+/// `sjel://home` are Home. `sjel://ask?q=…` (or `sjel://?ask=…`) opens the native Ask session
+/// with the prompt. Only an exact native path opens natively; another sub-path or query goes to
+/// the dashboard, which owns the detail.
 pub fn parse_deep_link(url: &str) -> Option<Target> {
     let rest = url.strip_prefix("sjel://")?.trim_end_matches('/');
     let path = match rest {
         "" | "home" => "/".to_owned(),
+        rest if rest.starts_with('?') => format!("/{rest}"),
         rest => format!("/{rest}"),
     };
-    if path.contains("..") || path.chars().any(char::is_whitespace) {
+    let path_only = path.split_once('?').map_or(path.as_str(), |(p, _)| p);
+    if path_only.contains("..") || path.chars().any(char::is_whitespace) {
         return None;
+    }
+    if matches!(path_only, "/ask" | "/") && path.contains('?') {
+        if let Ok(parsed) = reqwest::Url::parse(&format!("http://127.0.0.1{path}")) {
+            if let Some((_, q)) = parsed
+                .query_pairs()
+                .find(|(k, _)| matches!(k.as_ref(), "q" | "ask"))
+            {
+                let question = q.trim();
+                if !question.is_empty() {
+                    return Some(Target::Ask(question.to_owned()));
+                }
+                return Some(Target::Native(Page::Ask));
+            }
+        }
     }
     Some(
         match Page::ALL.into_iter().find(|page| page.href() == path) {
@@ -155,6 +179,14 @@ mod tests {
         assert_eq!(
             parse_deep_link("sjel://calendar/2026-10-15"),
             Some(Target::Dashboard("/calendar/2026-10-15".into()))
+        );
+        assert_eq!(
+            parse_deep_link("sjel://ask?q=what%20is%20up%3F"),
+            Some(Target::Ask("what is up?".into()))
+        );
+        assert_eq!(
+            parse_deep_link("sjel://?ask=calendar%20today"),
+            Some(Target::Ask("calendar today".into()))
         );
         assert_eq!(parse_deep_link("sjel://../etc"), None);
         assert_eq!(parse_deep_link("https://calendar"), None);

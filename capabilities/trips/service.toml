@@ -16,6 +16,8 @@ proxy_api_only = "true"
 # Traveller names decided as people answer `GET /api/links?to=ent:…`, and the undecided ones are
 # listed at `/api/people/open` (docs/capabilities/links.md D11). src/people.rs holds the same list.
 links_to = ["ent"]
+imports  = ["json"]
+exports  = ["json", "ics-projection"]
 
 # No `requires` for the store: it is a file this process opens, not a service to wait for
 # (PRD Q45).

@@ -582,6 +582,8 @@ mod tests {
             proxy_extra: vec![],
             requires: vec![],
             links_to: vec![],
+            imports: vec![],
+            exports: vec![],
         };
         let r = Row::from_service(&s);
         assert_eq!(

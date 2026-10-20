@@ -17,6 +17,7 @@ use gpui_kit::{
     FontWeight, KeyBinding, SharedString, Subscription, Window,
 };
 
+use crate::ask::Ask;
 use crate::notes::Notes;
 use crate::route::{self, Destination, Page, Target};
 use crate::selection::{Item, Selection};
@@ -32,6 +33,7 @@ actions!(
         GoHome,
         GoCapabilities,
         GoNotes,
+        GoAsk,
         Refresh,
         /// Open the current page in the web dashboard, logged in.
         OpenInDashboard,
@@ -53,6 +55,7 @@ pub fn bind_keys(cx: &mut App) {
         KeyBinding::new("cmd-1", GoHome, None),
         KeyBinding::new("cmd-2", GoCapabilities, None),
         KeyBinding::new("cmd-3", GoNotes, None),
+        KeyBinding::new("cmd-4", GoAsk, None),
         KeyBinding::new("cmd-r", Refresh, None),
         KeyBinding::new("cmd-d", OpenInDashboard, None),
         KeyBinding::new("j", SelectNext, Some("Workspace")),
@@ -118,6 +121,7 @@ pub struct Workspace {
     pub agent: Remote<AgentView>,
     pub calendar: Remote<Vec<CalendarEntry>>,
     pub notes: Entity<Notes>,
+    pub ask: Entity<Ask>,
     /// Approval ids and capability names with a request in flight.
     pub busy: HashSet<String>,
     pub selection: Selection,
@@ -141,6 +145,7 @@ impl Workspace {
         window.focus(&focus, cx);
         let shell = Shell::new(endpoint).map(Arc::new);
         let notes = cx.new(|_| Notes::new(shell.clone()));
+        let ask = cx.new(|_| Ask::new(shell.clone()));
         let mut workspace = Self {
             page: Page::Home,
             shell,
@@ -148,6 +153,7 @@ impl Workspace {
             agent: Remote::default(),
             calendar: Remote::default(),
             notes,
+            ask,
             busy: HashSet::new(),
             selection: Selection::default(),
             focus,
@@ -195,6 +201,8 @@ impl Workspace {
             self.selection.reset();
             if page == Page::Notes {
                 self.notes.update(cx, |notes, cx| notes.load_projects(cx));
+            } else if page == Page::Ask {
+                self.ask.update(cx, |ask, cx| ask.focus_input(cx));
             }
         }
         cx.notify();
@@ -343,6 +351,11 @@ impl Workspace {
     pub fn open_target(&mut self, target: Target, window: &mut Window, cx: &mut Context<Self>) {
         match target {
             Target::Native(page) => self.go(page, cx),
+            Target::Ask(question) => {
+                self.go(Page::Ask, cx);
+                self.ask
+                    .update(cx, |ask, cx| ask.submit(question, cx));
+            }
             Target::Dashboard(path) => self.open_dashboard(path, window, cx),
         }
     }
@@ -375,6 +388,7 @@ impl Workspace {
                             .icon(IconName::Cpu)
                             .action(GoCapabilities.boxed_clone()),
                         Page::Notes => item.icon(IconName::BookOpen).action(GoNotes.boxed_clone()),
+                        Page::Ask => item.icon(IconName::Bot).action(GoAsk.boxed_clone()),
                     }
                 }));
             let actions = CommandGroup::new().label("Actions").items([
@@ -433,6 +447,10 @@ impl Workspace {
 
     fn on_go_notes(&mut self, _: &GoNotes, _: &mut Window, cx: &mut Context<Self>) {
         self.go(Page::Notes, cx);
+    }
+
+    fn on_go_ask(&mut self, _: &GoAsk, _: &mut Window, cx: &mut Context<Self>) {
+        self.go(Page::Ask, cx);
     }
 
     fn on_refresh(&mut self, _: &Refresh, _: &mut Window, cx: &mut Context<Self>) {
@@ -534,6 +552,7 @@ impl Render for Workspace {
             Page::Home => home::render(self, palette, cx).into_any_element(),
             Page::Capabilities => capabilities::render(self, palette, cx).into_any_element(),
             Page::Notes => self.notes.clone().into_any_element(),
+            Page::Ask => self.ask.clone().into_any_element(),
         };
 
         if let Some(frames) = &self.frames {
@@ -552,6 +571,7 @@ impl Render for Workspace {
             .on_action(cx.listener(Self::on_go_home))
             .on_action(cx.listener(Self::on_go_capabilities))
             .on_action(cx.listener(Self::on_go_notes))
+            .on_action(cx.listener(Self::on_go_ask))
             .on_action(cx.listener(Self::on_refresh))
             .on_action(cx.listener(Self::on_open_in_dashboard))
             .on_action(cx.listener(Self::on_select_next))
@@ -566,8 +586,8 @@ impl Render for Workspace {
                 div()
                     .id("frame")
                     .track_focus(&self.focus)
-                    // The Notes page types into its blocks, so J, K and Enter must reach them.
-                    .when(self.page != Page::Notes, |frame| {
+                    // Notes and Ask type into their fields, so J, K and Enter must reach them.
+                    .when(!matches!(self.page, Page::Notes | Page::Ask), |frame| {
                         frame.key_context("Workspace")
                     })
                     .size_full()
@@ -639,6 +659,7 @@ fn sidebar(
             Page::Home => Kbd::binding_for_action(&GoHome, None, window),
             Page::Capabilities => Kbd::binding_for_action(&GoCapabilities, None, window),
             Page::Notes => Kbd::binding_for_action(&GoNotes, None, window),
+            Page::Ask => Kbd::binding_for_action(&GoAsk, None, window),
         };
         div()
             .id(page.href())
@@ -723,6 +744,7 @@ fn header(view: &Workspace, palette: Palette) -> impl IntoElement {
         Page::Home => chrono::Local::now().format("%A, %B %-d").to_string().into(),
         Page::Capabilities => view.endpoint(),
         Page::Notes => "Project notes, edited in place".into(),
+        Page::Ask => "Multi-turn capability session · ⌥Space from any app".into(),
     };
     let checked = view
         .health

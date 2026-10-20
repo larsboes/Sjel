@@ -5,7 +5,11 @@ import UserNotifications
 
 @main
 struct SjelMacApp: App {
-    @StateObject private var model = SjelMacViewModel()
+    @ObservedObject private var model: SjelMacViewModel
+
+    init() {
+        self.model = SjelMacViewModel()
+    }
 
     var body: some Scene {
         MenuBarExtra {
@@ -57,7 +61,22 @@ final class SjelMacViewModel: ObservableObject {
     }
 
     init() {
-        quickAsk = QuickAsk { [weak self] question in self?.ask(question) }
+        quickAsk = QuickAsk(
+            askInSession: { [weak self] question, history in
+                guard let self else { return .failure("Sjel closed.") }
+                return await self.bridge.ask(question, history: history)
+            },
+            openDesktop: { [weak self] question in
+                self?.openDesktopAsk(question)
+            },
+            openDashboard: { [weak self] question in
+                if let question, !question.isEmpty {
+                    self?.askInDashboard(question)
+                } else {
+                    self?.openDashboard()
+                }
+            }
+        )
         notifications.onDecision = { [weak self] id, allow in
             Task { @MainActor in await self?.decide(id: id, allow: allow) }
         }
@@ -116,17 +135,53 @@ final class SjelMacViewModel: ObservableObject {
         }
     }
 
-    /// Opens the dashboard logged in: a single-use ticket from the shell, then the browser
-    /// (ISA ISC-45). The shell's listener refuses a browser with no session.
+    /// Restarts capabilities one after the other, then reads the health again.
+    func restart(_ names: [String]) {
+        openProblem = nil
+        let names = names.filter { !busy.contains($0) }
+        busy.formUnion(names)
+        Task {
+            for name in names {
+                if let problem = await bridge.restart(name) { openProblem = problem }
+                busy.remove(name)
+            }
+            await refreshStatus()
+        }
+    }
+
+    /// Opens the floating QuickAsk session.
     func showAsk() { quickAsk?.show() }
 
-    /// The question goes to the dashboard's Ask drawer. Encoded here with the strict set, so
-    /// an `&` or `#` in the question stays part of it.
+    /// Answers the question in the native QuickAsk session instead of opening a browser tab.
     func ask(_ question: String) {
+        quickAsk?.show(initialQuestion: question)
+    }
+
+    /// Sends a question to the web dashboard's Ask drawer (`/?ask=…`) when explicitly requested.
+    func askInDashboard(_ question: String) {
         var allowed = CharacterSet.alphanumerics
         allowed.insert(charactersIn: "-._~")
         let encoded = question.addingPercentEncoding(withAllowedCharacters: allowed) ?? ""
         openDashboard(next: "/?ask=\(encoded)")
+    }
+
+    /// Continues the session in the native GPUI desktop app (`sjel://ask?q=…`).
+    func openDesktopAsk(_ question: String?) {
+        var allowed = CharacterSet.alphanumerics
+        allowed.insert(charactersIn: "-._~")
+        let link: String
+        if let q = question?.trimmingCharacters(in: .whitespacesAndNewlines), !q.isEmpty,
+           let encoded = q.addingPercentEncoding(withAllowedCharacters: allowed) {
+            link = "sjel://ask?q=\(encoded)"
+        } else {
+            link = "sjel://ask"
+        }
+        if let url = URL(string: link),
+           NSWorkspace.shared.urlForApplication(withBundleIdentifier: "dev.sjel.desktop") != nil {
+            NSWorkspace.shared.open(url)
+        } else {
+            openDesktopApp()
+        }
     }
 
     func openDashboard(next: String? = nil) {
@@ -236,6 +291,7 @@ enum MenuBarIcon {
 /// ui-craftsmanship rule 2).
 struct SjelMenuBarView: View {
     @ObservedObject var model: SjelMacViewModel
+    @State private var inlineQuestion: String = ""
 
     /// Capability rows in view at once. The list keeps this height in every state, so a status
     /// change never moves what sits below it. More than this scrolls.
@@ -248,6 +304,7 @@ struct SjelMenuBarView: View {
         VStack(alignment: .leading, spacing: 10) {
             header
             actions
+            askBar
             message
             Divider()
             statusSummary
@@ -278,6 +335,11 @@ struct SjelMenuBarView: View {
     }
 
     private var downNames: [String] { health?.down ?? [] }
+    private var upNames: [String] {
+        (health?.rowOrder ?? []).filter { name in
+            name != "sjel-status" && (health?.capabilities[name]?.up == true)
+        }
+    }
 
     private var header: some View {
         HStack(alignment: .firstTextBaseline) {
@@ -297,6 +359,11 @@ struct SjelMenuBarView: View {
             }
             Spacer()
             Menu {
+                Button("Restart Running Capabilities") {
+                    model.restart(upNames)
+                }
+                .disabled(upNames.isEmpty)
+                Divider()
                 Toggle(
                     "Open at Login",
                     isOn: Binding(
@@ -334,8 +401,29 @@ struct SjelMenuBarView: View {
                 .help("Open the native desktop app (⌘O)")
 
             Button("Ask") { model.showAsk() }
-                .help("Ask Sjel from any app with ⌃⌥Space")
+                .keyboardShortcut("k", modifiers: .command)
+                .help("Open QuickAsk from any app with ⌥Space (or ⌃⌥Space)")
         }
+    }
+
+    private var askBar: some View {
+        HStack(spacing: 6) {
+            Image(systemName: "sparkle")
+                .font(.system(size: 11))
+                .foregroundStyle(.secondary)
+            TextField("Ask Sjel… (⌥Space anywhere)", text: $inlineQuestion)
+                .textFieldStyle(.plain)
+                .font(.system(size: 12))
+                .onSubmit {
+                    let trimmed = inlineQuestion.trimmingCharacters(in: .whitespacesAndNewlines)
+                    guard !trimmed.isEmpty else { return }
+                    inlineQuestion = ""
+                    model.ask(trimmed)
+                }
+        }
+        .padding(.horizontal, 8)
+        .padding(.vertical, 5)
+        .background(Color.primary.opacity(0.06), in: RoundedRectangle(cornerRadius: 6))
     }
 
     /// What the last action could not do. Its line is always reserved, so an error appearing
@@ -403,9 +491,15 @@ struct SjelMenuBarView: View {
                         let up = health.capabilities[name]?.up ?? false
                         let onDemand = health.capabilities[name]?.autostart == false
                         // Stopping the shell would take this panel's own source with it.
-                        CapabilityRow(name: name, up: up, onDemand: onDemand, busy: model.busy.contains(name), canStop: name != "sjel-status") {
-                            model.setRunning([name], !up)
-                        }
+                        CapabilityRow(
+                            name: name,
+                            up: up,
+                            onDemand: onDemand,
+                            busy: model.busy.contains(name),
+                            canStop: name != "sjel-status",
+                            action: { model.setRunning([name], !up) },
+                            onRestart: { model.restart([name]) }
+                        )
                     }
                 } else if case .alive = model.status {
                     Text("Capability health needs the deployment token in the Keychain.")
@@ -529,6 +623,7 @@ struct CapabilityRow: View {
     let busy: Bool
     var canStop = true
     let action: () -> Void
+    var onRestart: (() -> Void)? = nil
 
     var body: some View {
         HStack(spacing: 6) {
@@ -537,21 +632,27 @@ struct CapabilityRow: View {
                 .font(.system(size: 11, design: .monospaced))
                 .lineLimit(1)
             Spacer(minLength: 4)
-            Group {
+            HStack(spacing: 6) {
                 if busy {
                     ProgressView().controlSize(.mini)
-                } else if up && !canStop {
-                    Button("Stop") {}
-                        .disabled(true)
-                        .help("The shell serves this panel. Stop it from a terminal.")
                 } else {
-                    Button(up ? "Stop" : "Start", action: action)
-                        .help(up ? "Stop \(name). It stays stopped until you start it." : "Start \(name)")
+                    if up, let onRestart {
+                        Button("↻", action: onRestart)
+                            .help("Restart \(name)")
+                    }
+                    if up && !canStop {
+                        Button("Stop") {}
+                            .disabled(true)
+                            .help("The shell serves this panel. Stop it from a terminal.")
+                    } else {
+                        Button(up ? "Stop" : "Start", action: action)
+                            .help(up ? "Stop \(name). It stays stopped until you start it." : "Start \(name)")
+                    }
                 }
             }
             .buttonStyle(.borderless)
             .font(.system(size: 11))
-            .frame(width: 44, alignment: .trailing)
+            .frame(width: 64, alignment: .trailing)
         }
         .frame(height: 20)
     }

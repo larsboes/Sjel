@@ -4376,12 +4376,15 @@ name = "sjel-assistant"
 version = "0.1.0"
 dependencies = [
  "axum",
+ "chrono",
  "reqwest",
  "route-manifest",
  "schemars",
  "serde",
  "serde_json",
+ "sjel-agent",
  "sjel-config",
+ "sjel-http",
  "sjel-inference",
  "sjel-server",
  "tokio",

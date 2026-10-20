@@ -90,6 +90,10 @@ pub struct Service {
     /// Id kinds this capability answers `GET /api/links` for (docs/capabilities/links.md D1). Kept for an
     /// external capability too: its deployment answers the same route at its endpoint.
     pub links_to: Vec<String>,
+    /// Data formats accepted in and emitted out (`service.toml` `imports` / `exports`), surfaced on
+    /// `/capabilities` so each capability's I/O contract has one home in the shell.
+    pub imports: Vec<String>,
+    pub exports: Vec<String>,
 }
 
 impl Service {
@@ -342,6 +346,8 @@ impl<'a> Ctx<'a> {
             proxy_extra,
             requires,
             links_to: get_array(&table, "links_to"),
+            imports: get_array(&table, "imports"),
+            exports: get_array(&table, "exports"),
         }
     }
 
@@ -725,11 +731,13 @@ fn json(services: &[Service]) -> Result<String, Fail> {
         }
         let _ = write!(
             r,
-            ", \"endpoint\": {}, \"proxy_extra\": {}, \"requires\": {}, \"links_to\": {}}}",
+            ", \"endpoint\": {}, \"proxy_extra\": {}, \"requires\": {}, \"links_to\": {}, \"imports\": {}, \"exports\": {}}}",
             json_str(&s.endpoint)?,
             json_array(&s.proxy_extra)?,
             json_array(&s.requires)?,
-            json_array(&s.links_to)?
+            json_array(&s.links_to)?,
+            json_array(&s.imports)?,
+            json_array(&s.exports)?
         );
         rows.push(r);
     }
@@ -784,6 +792,8 @@ mod tests {
             proxy_extra: vec![],
             requires: vec![],
             links_to: vec![],
+            imports: vec![],
+            exports: vec![],
         };
         assert_eq!(lines(&[s]), "a process capability false\n");
     }

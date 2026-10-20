@@ -3,9 +3,11 @@
 One agent loop. It sends the conversation to a model, runs the tool calls the model asks for,
 appends the results, and repeats until the model answers without a tool call.
 
-A shared library with two intended consumers. The coding CLI in `src/main.rs` is a minimal
-pi alternative. `capabilities/assistant` is the second consumer and does not use it yet. Each
-consumer passes its own tool list. The loop does not change between them.
+A shared library with two consumers. The coding CLI in `src/main.rs` is a minimal
+pi alternative (`tools::coding`). [`capabilities/assistant`](../../capabilities/assistant) is the
+second consumer (`POST /api/ask`), passing read-only Sjel capability tools (`sjel_health`,
+`calendar_entries`, `projects_list`, `project_records`, `trips_plans`) and never `bash`. The loop
+does not change between them.
 
 ## Model and wire format
 

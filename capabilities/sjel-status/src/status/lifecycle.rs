@@ -71,6 +71,12 @@ pub(crate) async fn stop_handler(
     lifecycle(name, "stop").await
 }
 
+pub(crate) async fn restart_handler(
+    Path(name): Path<String>,
+) -> Result<Json<Value>, (StatusCode, Json<Value>)> {
+    lifecycle(name, "restart").await
+}
+
 pub(crate) fn bad_gateway(msg: impl Into<String>) -> (StatusCode, Json<Value>) {
     (
         StatusCode::BAD_GATEWAY,

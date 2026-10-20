@@ -125,7 +125,7 @@ impl Workspace {
                     up: state.up,
                 })
                 .collect(),
-            Page::Notes => Vec::new(),
+            Page::Notes | Page::Ask => Vec::new(),
         }
     }
 

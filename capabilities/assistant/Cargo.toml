@@ -13,11 +13,14 @@ path = "src/main.rs"
 
 [dependencies]
 axum.workspace = true
+chrono.workspace = true
 reqwest.workspace = true
 serde.workspace = true
 serde_json.workspace = true
 tokio = { workspace = true, features = ["macros", "rt-multi-thread", "net"] }
+sjel-agent = { path = "../../libs/agent" }
 sjel-config = { path = "../../libs/sjel-config" }
+sjel-http = { path = "../../libs/sjel-http" }
 sjel-inference = { path = "../../libs/inference" }
 sjel-server = { path = "../../libs/sjel-server" }
 route-manifest = { path = "../../libs/route-manifest" }

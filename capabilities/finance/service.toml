@@ -23,6 +23,8 @@ proxy_api_only = "true"
 # Transactions reference trips by the `axon-trip-id` tag; `GET /api/links?to=trip:plan:…`
 # answers them (docs/capabilities/links.md D1). src/links.rs holds the same list and a test keeps them equal.
 links_to = ["trip:plan"]
+imports  = ["csv", "hledger-journal", "obsidian-markdown"]
+exports  = ["hledger-journal", "json"]
 
 # `ledger = "hledger"` stood here until 2026-08-28. It selected the separately
 # installed accounting engine and carried the toolchain scope that made hosts

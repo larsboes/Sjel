@@ -32,6 +32,22 @@
   let insideLoading = $state(false);
   /** Which file node is picked inside a unit. Its own selection, not the unit's. */
   let insideSelected = $state<string | null>(null);
+  let lifecycleBusy = $state<string | null>(null);
+
+  async function runLifecycle(name: string, action: "start" | "stop" | "restart"): Promise<void> {
+    lifecycleBusy = name;
+    error = null;
+    try {
+      if (action === "start") await axonStatus.start(name);
+      else if (action === "stop") await axonStatus.stop(name);
+      else await axonStatus.restart(name);
+      data = await axonStatus.self();
+    } catch (e) {
+      error = e instanceof Error ? e.message : String(e);
+    } finally {
+      lifecycleBusy = null;
+    }
+  }
 
   onMount(() => {
     axonStatus
@@ -330,6 +346,25 @@
               Look inside
             {/if}
           </button>
+        {/if}
+        {#if detail.service}
+          {@const isUp = live[detail.name] === true}
+          <button
+            class="inside"
+            disabled={lifecycleBusy === detail.name}
+            onclick={() => runLifecycle(detail.name, "restart")}
+          >
+            {lifecycleBusy === detail.name ? "restarting…" : "↻ Restart"}
+          </button>
+          {#if detail.name !== "sjel-status"}
+            <button
+              class="inside"
+              disabled={lifecycleBusy === detail.name}
+              onclick={() => runLifecycle(detail.name, isUp ? "stop" : "start")}
+            >
+              {isUp ? "Stop" : "Start"}
+            </button>
+          {/if}
         {/if}
         <button class="x" onclick={() => select(null)} aria-label="Clear selection">
           <Icon name="close" size={13} />

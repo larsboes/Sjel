@@ -9,6 +9,8 @@ port           = "8103"
 health_path    = "/health"
 ready_path     = "/ready"
 proxy_api_only = "true"
+imports        = ["markdown", "attachments"]
+exports        = ["markdown", "json"]
 backup_paths   = ["data/projects"]
 
 # The records are rows in the shared store, which capabilities/store backs up daily. This

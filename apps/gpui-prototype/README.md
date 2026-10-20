@@ -48,6 +48,15 @@ a `/` menu, drag reorder and a task table without a fork, at 1.6 ms CPU per keys
 1,740-line note. Three GPUI gaps needed outside workarounds: no inline styling outside
 code-editor mode, fixed textarea padding, and key-context precedence.
 
+Step 1 measured on 2026-10-20 (`Sjel Desktop.app` release build, 31.3 MB binary, via
+`SJEL_GPUI_FRAMES` and `ps -o rss=`): first workspace frame builds in 2.99 ms and finishes
+painting at 8.54 ms (`8,537 µs` from `FrameProbe` init), with 101.1 MB resident memory
+(`103,536 KB` RSS) versus 109.1 MB (`111,760 KB` RSS) for the always-resident Swift menu-bar app
+(`Sjel.app`, 0.94 MB binary) and ~220–300 MB for a Tauri + WKWebView process pair. Decision:
+⌘K searches pages and dashboard destinations inside `Sjel Desktop.app` when the GPUI window is
+open, while system-wide ⌃⌥Space stays on `Sjel.app`'s already-resident `QuickAsk` `NSPanel` so
+global invocation pays neither a second 101 MB resident process nor a cold-launch hop.
+
 This is a stack decision, not a speed fix: on 2026-10-09, Sjel's waits came from services, not
 from rendering. It replaces the 2026-10-09 split that gave GPUI only the keyboard surfaces.
 

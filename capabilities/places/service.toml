@@ -8,6 +8,8 @@ port        = "8093"
 # decided as people reference entities; `GET /api/links?to=…` answers both, and undecided names
 # are listed at `/api/people/open` (docs/capabilities/links.md D1, D11). src/links.rs holds the same list.
 links_to = ["fin:tx", "ent"]
+imports  = ["amex-csv", "google-takeout", "obsidian-markdown"]
+exports  = ["geojson", "json"]
 health_path = "/health"
 ready_path  = "/ready"
 

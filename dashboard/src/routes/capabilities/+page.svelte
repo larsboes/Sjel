@@ -120,6 +120,11 @@
             <p class="sub mono">
               {c.kind}{c.port ? ` · :${c.port}` : ""} · {s.label}
             </p>
+            {#if c.imports?.length || c.exports?.length}
+              <p class="sub mono">
+                {#if c.imports?.length}in: {c.imports.join(", ")}{/if}{#if c.imports?.length && c.exports?.length} · {/if}{#if c.exports?.length}out: {c.exports.join(", ")}{/if}
+              </p>
+            {/if}
             {#if confirming === c.name}
               <!-- The impact, before the confirmation and derived from the contract:
                    `holds_service` is true because the manifest declares backup_sqlite,

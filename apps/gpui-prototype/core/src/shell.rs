@@ -13,7 +13,7 @@ use std::time::Duration;
 
 use reqwest::{Method, StatusCode, Url};
 use serde::de::DeserializeOwned;
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
 
 /// The default shell endpoint, from `capabilities/sjel-status/service.toml`.
 pub const DEFAULT_ENDPOINT: &str = "http://127.0.0.1:8082";
@@ -141,6 +141,23 @@ pub struct ProjectRecord {
     /// 1 to 3; the capability reads a missing or other value as 2.
     #[serde(default)]
     pub priority: u8,
+}
+
+/// One message in an Ask conversation (`POST /assistant/api/ask`).
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub struct AskTurn {
+    pub role: String,
+    pub content: String,
+}
+
+/// Reply from `POST /assistant/api/ask` (or deterministic capability fallback).
+#[derive(Clone, Debug, PartialEq, Eq, Deserialize)]
+pub struct AskReply {
+    pub text: String,
+    pub model: String,
+    pub source: String,
+    #[serde(default)]
+    pub tools: Vec<String>,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -292,6 +309,73 @@ impl Shell {
         let action = if running { "start" } else { "stop" };
         let path = format!("/api/sjel-status/capabilities/{name}/{action}");
         self.send(Method::POST, &path, None, 60).await.map(drop)
+    }
+
+    /// Runs one turn in a native Ask session through `POST /assistant/api/ask`, starting the
+    /// on-demand `assistant` capability if it is stopped, and falling back to a direct capability
+    /// summary when the local model role is unavailable.
+    pub async fn ask(&self, prompt: &str, history: &[AskTurn]) -> ShellResult<AskReply> {
+        let body = serde_json::json!({ "prompt": prompt, "history": history });
+        match self
+            .json::<AskReply>(Method::POST, "/assistant/api/ask", Some(body.clone()), 60)
+            .await
+        {
+            Ok(reply) => return Ok(reply),
+            Err(ShellError::Refused(502, _)) => {
+                let _ = self.set_running("assistant", true).await;
+                if let Ok(reply) = self
+                    .json::<AskReply>(Method::POST, "/assistant/api/ask", Some(body), 60)
+                    .await
+                {
+                    return Ok(reply);
+                }
+            }
+            Err(ShellError::NotSetUp | ShellError::Unreachable | ShellError::NotLoopback) => {
+                return self
+                    .json::<AskReply>(Method::POST, "/assistant/api/ask", Some(body), 5)
+                    .await;
+            }
+            Err(_) => {}
+        }
+        self.capability_fallback(prompt).await
+    }
+
+    async fn capability_fallback(&self, prompt: &str) -> ShellResult<AskReply> {
+        let health = self.health().await?;
+        let up = health
+            .capabilities
+            .values()
+            .filter(|c| c.up)
+            .count();
+        let down = health.down();
+        let projects = self.projects().await.unwrap_or_default();
+        let mut lines = vec![format!(
+            "Sjel {} (up {}m): {} of {} capabilities running{}.",
+            health.version,
+            health.uptime_seconds / 60,
+            up,
+            health.capabilities.len(),
+            if down.is_empty() {
+                String::new()
+            } else {
+                format!("; down: {}", down.join(", "))
+            }
+        )];
+        if !projects.is_empty() {
+            let names: Vec<String> = projects
+                .iter()
+                .filter(|p| !p.archived)
+                .map(|p| format!("{} ({})", p.name, p.notes))
+                .collect();
+            lines.push(format!("Active projects: {}.", names.join(", ")));
+        }
+        let _ = prompt;
+        Ok(AskReply {
+            text: lines.join("\n"),
+            model: "capabilities".into(),
+            source: "deterministic".into(),
+            tools: vec!["sjel_health".into(), "projects_list".into()],
+        })
     }
 
     /// A single-use URL that logs the browser in and lands on `next`

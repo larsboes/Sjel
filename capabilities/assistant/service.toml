@@ -5,6 +5,8 @@ build       = ["cargo", "build", "--locked", "--release", "--bin", "assistant-se
 port        = "8100"
 health_path = "/health"
 ready_path  = "/ready"
+imports     = ["calendar", "projects", "sjel-status", "trips"]
+exports     = ["assistant"]
 
 # The dashboard shell proxies /assistant/* to this service. No cloud role is accepted here;
 # cloud assistance needs a separate reviewed preview/approval contract.

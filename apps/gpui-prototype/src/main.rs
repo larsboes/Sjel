@@ -6,6 +6,7 @@ use gpui_kit::{
     WindowHandle, WindowKind, WindowOptions,
 };
 
+mod ask;
 mod block_menu;
 mod blocks;
 mod calendar;
@@ -25,7 +26,7 @@ mod workspace;
 use sjel_gpui_core::{route, shell};
 
 use workspace::{
-    GoCapabilities, GoHome, GoNotes, OpenInDashboard, OpenPalette, Refresh, Workspace,
+    GoAsk, GoCapabilities, GoHome, GoNotes, OpenInDashboard, OpenPalette, Refresh, Workspace,
 };
 
 actions!(sjel, [Quit, CloseWindow]);
@@ -80,6 +81,7 @@ fn main() {
                     MenuItem::action("Home", GoHome),
                     MenuItem::action("Capabilities", GoCapabilities),
                     MenuItem::action("Notes", GoNotes),
+                    MenuItem::action("Ask", GoAsk),
                     MenuItem::separator(),
                     MenuItem::action("Search…", OpenPalette),
                     MenuItem::action("Refresh", Refresh),

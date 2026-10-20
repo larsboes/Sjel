@@ -6,7 +6,7 @@ export interface EntityField {
   kind: EntityKind;
   key: string;
   label: string;
-  field_type: 'text' | 'bool' | 'date' | 'number' | 'enum' | 'emails' | 'phones' | 'url' | 'tags';
+  field_type: 'text' | 'longtext' | 'bool' | 'date' | 'number' | 'enum' | 'emails' | 'phones' | 'url' | 'tags';
   options: string[];
   data_class: 'C0' | 'C1' | 'C2' | 'C3';
   builtin: boolean;

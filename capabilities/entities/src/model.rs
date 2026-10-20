@@ -14,7 +14,7 @@ pub const KINDS: &[&str] = &["person", "organisation", "place", "self"];
 
 /// The value types a field can declare. Each has one check in [`check_value`].
 pub const FIELD_TYPES: &[&str] = &[
-    "text", "bool", "date", "number", "enum", "emails", "phones", "url", "tags",
+    "text", "longtext", "bool", "date", "number", "enum", "emails", "phones", "url", "tags",
 ];
 
 /// PRD §6.1's classes. C2 is a fact about a named person; C3 never leaves in any form.
@@ -76,8 +76,12 @@ pub fn builtin_fields() -> Vec<FieldDef> {
         person("sleeping_note", "Sleeping note", "text", &[]),
         person("emails", "Emails", "emails", &[]),
         person("phones", "Phones", "phones", &[]),
+        // Free prose about the person, markdown, several lines. Holds what the Atlas/People
+        // notes carried as body and as the character, highlights, memories and experiences
+        // keys until 2026-10-20, when the notes left the vault.
+        person("notes", "Notes", "longtext", &[]),
         // The keys Atlas/People notes carry filled, measured 2026-09-25 across 89 notes, and
-        // what Google Contacts carries. Prose keys (character, memories) stay in the note.
+        // what Google Contacts carries.
         person("relation", "Relation", "text", &[]),
         person("company", "Company", "text", &[]),
         person("role", "Role", "text", &[]),
@@ -161,7 +165,7 @@ pub fn check_value(def: &FieldDef, value: &Value) -> Result<Value, String> {
         ))
     };
     match def.field_type.as_str() {
-        "text" | "url" => match value.as_str().map(str::trim) {
+        "text" | "longtext" | "url" => match value.as_str().map(str::trim) {
             Some(text) if !text.is_empty() => Ok(Value::String(text.into())),
             _ => wrong("a non-empty string"),
         },
@@ -324,6 +328,11 @@ mod tests {
         );
         assert!(check_value(field("emails"), &json!(["not-an-address"])).is_err());
         assert!(check_value(field("sleeping_note"), &json!("  ")).is_err());
+        assert_eq!(
+            check_value(field("notes"), &json!("\n## Memories\n\nOne.\nTwo.\n")).unwrap(),
+            json!("## Memories\n\nOne.\nTwo."),
+            "a longtext keeps its inner line breaks"
+        );
     }
 
     #[test]

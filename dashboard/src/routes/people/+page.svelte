@@ -569,7 +569,7 @@
       <h3>Details</h3>
       <form class="fields" onsubmit={saveFields}>
         {#each fields as field (field.key)}
-          <label>
+          <label class:wide={field.field_type === "longtext"}>
             <span>
               {field.label}
               {#if selected.values[field.key]}<small class="src">from {sourceName[selected.values[field.key].source] ?? selected.values[field.key].source}</small>{/if}
@@ -583,6 +583,8 @@
               <select aria-label={field.label} bind:value={draft[field.key]}>
                 <option value="">–</option><option value="true">yes</option><option value="false">no</option>
               </select>
+            {:else if field.field_type === "longtext"}
+              <textarea aria-label={field.label} rows="8" bind:value={draft[field.key]}></textarea>
             {:else}
               <input
                 aria-label={field.label}
@@ -601,7 +603,7 @@
         <form class="fact-form" onsubmit={declareField}>
           <input aria-label="Field label" placeholder="Label, e.g. Climbing grade" bind:value={fieldLabel} required />
           <select aria-label="Field type" bind:value={fieldType}>
-            {#each ["text", "tags", "enum", "bool", "date", "number", "url", "emails", "phones"] as type (type)}
+            {#each ["text", "longtext", "tags", "enum", "bool", "date", "number", "url", "emails", "phones"] as type (type)}
               <option value={type}>{type}</option>
             {/each}
           </select>
@@ -679,7 +681,8 @@
   }
 
   input,
-  select {
+  select,
+  textarea {
     padding: 0.35rem 0.5rem;
     border: 1px solid var(--card-border);
     border-radius: var(--radius-sm);
@@ -760,6 +763,14 @@
     gap: 0.2rem;
     font-size: var(--text-xs);
     color: var(--text-secondary);
+  }
+
+  .fields label.wide {
+    grid-column: 1 / -1;
+  }
+
+  .fields textarea {
+    resize: vertical;
   }
 
   .fields button {

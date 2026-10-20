@@ -175,8 +175,46 @@ pub fn preview_document(
     }
 }
 
+pub fn target_path(home: &std::path::Path, harness: Harness) -> std::path::PathBuf {
+    match harness {
+        Harness::Claude => home.join(".claude").join("CLAUDE.md"),
+        Harness::Codex => home.join(".codex").join("AGENTS.md"),
+        Harness::Pi => home.join(".pi").join("agent").join("AGENTS.md"),
+        Harness::Opencode => home.join(".config").join("opencode").join("AGENTS.md"),
+    }
+}
+
 pub fn claude_target(home: &std::path::Path) -> std::path::PathBuf {
-    home.join(".claude").join("CLAUDE.md")
+    target_path(home, Harness::Claude)
+}
+
+/// Atomically write the updated document with its managed section to `target`.
+pub fn apply_document(
+    target: &std::path::Path,
+    existing: &str,
+    generated: &str,
+) -> Result<SectionChange, String> {
+    let (updated, change) = preview_document(existing, generated)?;
+    if change == SectionChange::Unchanged {
+        return Ok(SectionChange::Unchanged);
+    }
+    let parent = target
+        .parent()
+        .ok_or_else(|| format!("target {} has no parent directory", target.display()))?;
+    std::fs::create_dir_all(parent)
+        .map_err(|e| format!("cannot create directory {}: {e}", parent.display()))?;
+    let file_name = target
+        .file_name()
+        .and_then(|n| n.to_str())
+        .unwrap_or("AGENTS.md");
+    let tmp = parent.join(format!(".{file_name}.sjel-tmp-{}", std::process::id()));
+    std::fs::write(&tmp, updated.as_bytes())
+        .map_err(|e| format!("cannot write temporary file {}: {e}", tmp.display()))?;
+    std::fs::rename(&tmp, target).map_err(|e| {
+        let _ = std::fs::remove_file(&tmp);
+        format!("cannot replace {}: {e}", target.display())
+    })?;
+    Ok(change)
 }
 
 fn require_prompt_safe(classification: Classification, id: &str) -> Result<(), String> {
@@ -291,5 +329,52 @@ mod tests {
         assert!(render(&profile, Harness::Claude)
             .unwrap_err()
             .contains("local-only or secret"));
+    }
+
+    #[test]
+    fn target_paths_cover_all_verified_harnesses_and_apply_preserves_surrounding_prose() {
+        let dir = std::env::temp_dir().join(format!(
+            "sjel-operator-profile-apply-{}",
+            std::process::id()
+        ));
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(&dir).unwrap();
+
+        assert_eq!(
+            target_path(&dir, Harness::Claude),
+            dir.join(".claude/CLAUDE.md")
+        );
+        assert_eq!(
+            target_path(&dir, Harness::Codex),
+            dir.join(".codex/AGENTS.md")
+        );
+        assert_eq!(
+            target_path(&dir, Harness::Pi),
+            dir.join(".pi/agent/AGENTS.md")
+        );
+        assert_eq!(
+            target_path(&dir, Harness::Opencode),
+            dir.join(".config/opencode/AGENTS.md")
+        );
+
+        let codex_file = target_path(&dir, Harness::Codex);
+        std::fs::create_dir_all(codex_file.parent().unwrap()).unwrap();
+        std::fs::write(&codex_file, "# Custom Header\nDo not lose this line.\n").unwrap();
+
+        let generated = render(&profile(), Harness::Claude).unwrap();
+        let existing = std::fs::read_to_string(&codex_file).unwrap();
+        let change = apply_document(&codex_file, &existing, &generated).unwrap();
+        assert_eq!(change, SectionChange::Create);
+
+        let written = std::fs::read_to_string(&codex_file).unwrap();
+        assert!(written.starts_with("# Custom Header\nDo not lose this line.\n"));
+        assert!(written.contains(START_MARKER));
+        assert!(written.contains("concise"));
+        assert!(written.contains(END_MARKER));
+
+        let second = apply_document(&codex_file, &written, &generated).unwrap();
+        assert_eq!(second, SectionChange::Unchanged);
+
+        let _ = std::fs::remove_dir_all(&dir);
     }
 }

@@ -5,14 +5,18 @@ use axum::{
     http::StatusCode,
     middleware,
     response::{IntoResponse, Response},
-    routing::get,
+    routing::{get, post},
     Json, Router,
 };
 use serde::Deserialize;
 use serde_json::{json, Value};
 
 use operator_profile::{
-    config::Config, model::ProfileInput, store::profile_json, OperatorProfileStore, PutOutcome,
+    config::Config,
+    model::{Harness, ProfileInput},
+    render::{self, SectionChange},
+    store::profile_json,
+    OperatorProfileStore, PutOutcome,
 };
 
 const ROUTES: &[route_manifest::Route] = &[
@@ -30,12 +34,27 @@ const ROUTES: &[route_manifest::Route] = &[
         summary: "Replace the canonical operator profile. Requires expected_revision; stale writes return 409 and write nothing.",
         request_schema: Some(route_manifest::schema_of::<PutProfileRequest>),
     },
+    route_manifest::Route {
+        method: "POST",
+        path: "/api/profile/export",
+        summary: "Preview or apply the managed operator-profile section for a verified harness target (claude, codex, pi, opencode). When apply is true, expected_revision is required and must match the stored revision.",
+        request_schema: Some(route_manifest::schema_of::<ExportProfileRequest>),
+    },
 ];
 
 #[derive(Deserialize, schemars::JsonSchema)]
 struct PutProfileRequest {
     profile: ProfileInput,
     expected_revision: u64,
+}
+
+#[derive(Deserialize, schemars::JsonSchema)]
+struct ExportProfileRequest {
+    harness: Harness,
+    #[serde(default)]
+    apply: bool,
+    #[serde(default)]
+    expected_revision: Option<u64>,
 }
 
 struct ApiError {
@@ -128,12 +147,73 @@ async fn put_profile(
     }
 }
 
+async fn export_profile(
+    State(store): State<Arc<OperatorProfileStore>>,
+    Json(request): Json<ExportProfileRequest>,
+) -> Result<Json<Value>, ApiError> {
+    let profile = tokio::task::spawn_blocking(move || store.get().map_err(|e| e.to_string()))
+        .await
+        .map_err(|_| ApiError::internal())?
+        .map_err(|_| ApiError::internal())?
+        .ok_or_else(|| ApiError::bad("no profile is stored yet"))?;
+
+    if request.apply {
+        let expected = request.expected_revision.ok_or_else(|| {
+            ApiError::bad("export with apply=true requires expected_revision matching the reviewed profile revision")
+        })?;
+        if profile.revision != expected {
+            return Err(ApiError::stale(profile.revision));
+        }
+    }
+
+    let generated = render::render(&profile, request.harness).map_err(ApiError::bad)?;
+    let home = std::env::var_os("SJEL_OPERATOR_HOME")
+        .or_else(|| std::env::var_os("HOME"))
+        .map(std::path::PathBuf::from)
+        .ok_or_else(|| ApiError::bad("HOME is not set"))?;
+    let target = render::target_path(&home, request.harness);
+    let existing = match std::fs::read_to_string(&target) {
+        Ok(text) => text,
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => String::new(),
+        Err(_) => return Err(ApiError::internal()),
+    };
+    let change = if request.apply {
+        render::apply_document(&target, &existing, &generated).map_err(ApiError::bad)?
+    } else {
+        render::preview_document(&existing, &generated)
+            .map_err(ApiError::bad)?
+            .1
+    };
+    let change_label = match change {
+        SectionChange::Create => "create",
+        SectionChange::Replace => "replace",
+        SectionChange::Unchanged => "unchanged",
+    };
+    let audit = render::audit(&profile, request.harness);
+    let omitted: Vec<Value> = audit
+        .omitted
+        .into_iter()
+        .map(|(id, reason)| json!({ "id": id, "reason": reason }))
+        .collect();
+    Ok(Json(json!({
+        "harness": request.harness.as_str(),
+        "target": target.display().to_string(),
+        "profile_revision": profile.revision,
+        "applied": request.apply,
+        "change": change_label,
+        "included": audit.included,
+        "omitted": omitted,
+        "generated": generated,
+    })))
+}
+
 fn router(store: Arc<OperatorProfileStore>) -> Router {
     Router::new()
         .route("/health", get(health))
         .route("/ready", get(ready))
         .route("/routes", get(routes))
         .route("/api/profile", get(get_profile).put(put_profile))
+        .route("/api/profile/export", post(export_profile))
         .layer(middleware::from_fn_with_state(
             "operator-profile",
             sjel_server::origin::refuse_foreign_origins,

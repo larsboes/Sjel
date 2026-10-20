@@ -20,7 +20,7 @@ fn run() -> Result<(), Box<dyn std::error::Error>> {
     let mut args = std::env::args().skip(1);
     let command = args
         .next()
-        .ok_or("usage: operator-profile show|put|validate|export --dry-run")?;
+        .ok_or("usage: operator-profile show|put|validate|export (--dry-run | --apply --expected-revision N)")?;
     let store = OperatorProfileStore::open(&sjel_config::database_path())?;
     match command.as_str() {
         "show" => {
@@ -73,23 +73,34 @@ fn run() -> Result<(), Box<dyn std::error::Error>> {
         "export" => {
             let mut harness = None;
             let mut dry_run = false;
+            let mut apply = false;
+            let mut expected_revision = None;
             while let Some(arg) = args.next() {
                 match arg.as_str() {
                     "--dry-run" => dry_run = true,
-                    "--harness" => harness = Some(args.next().ok_or("missing harness id")?),
-                    "--apply" => {
-                        return Err(
-                            "file writes are not implemented; export is dry-run only".into()
-                        );
+                    "--apply" => apply = true,
+                    "--expected-revision" => {
+                        expected_revision =
+                            Some(args.next().ok_or("missing revision")?.parse::<u64>()?)
                     }
+                    "--harness" => harness = Some(args.next().ok_or("missing harness id")?),
                     _ => return Err(format!("unknown argument {arg:?}").into()),
                 }
             }
-            if !dry_run {
-                return Err("export requires --dry-run; no assistant file is written".into());
+            if dry_run && apply {
+                return Err("export accepts either --dry-run or --apply, not both".into());
+            }
+            if !dry_run && !apply {
+                return Err(
+                    "export requires --dry-run (or --apply --expected-revision N); no assistant file is written by default"
+                        .into(),
+                );
             }
             let harness = match harness.as_deref().ok_or("export requires --harness")? {
                 "claude" => Harness::Claude,
+                "codex" => Harness::Codex,
+                "pi" => Harness::Pi,
+                "opencode" => Harness::Opencode,
                 other => {
                     return Err(format!(
                         "no verified user-instruction target for harness {other:?}"
@@ -98,6 +109,18 @@ fn run() -> Result<(), Box<dyn std::error::Error>> {
                 }
             };
             let profile = store.get()?.ok_or("no profile is stored yet")?;
+            if apply {
+                let expected = expected_revision.ok_or(
+                    "export --apply requires --expected-revision <N> matching the reviewed profile revision",
+                )?;
+                if profile.revision != expected {
+                    return Err(format!(
+                        "stale profile revision: expected {expected}, current is {}",
+                        profile.revision
+                    )
+                    .into());
+                }
+            }
             let generated = render::render(&profile, harness)?;
             let target = target_for(harness)?;
             let existing = match std::fs::read_to_string(&target) {
@@ -109,14 +132,21 @@ fn run() -> Result<(), Box<dyn std::error::Error>> {
                     );
                 }
             };
-            let (_, change) = render::preview_document(&existing, &generated)?;
-            let action = match change {
-                SectionChange::Create => "would create managed section",
-                SectionChange::Replace => "would replace managed section",
-                SectionChange::Unchanged => "managed section is current",
+            let current = render::managed_section(&existing)?.map(str::to_owned);
+            let change = if apply {
+                render::apply_document(&target, &existing, &generated)?
+            } else {
+                render::preview_document(&existing, &generated)?.1
+            };
+            let action = match (apply, change) {
+                (false, SectionChange::Create) => "would create managed section",
+                (false, SectionChange::Replace) => "would replace managed section",
+                (false, SectionChange::Unchanged) => "managed section is current",
+                (true, SectionChange::Create) => "created managed section",
+                (true, SectionChange::Replace) => "replaced managed section",
+                (true, SectionChange::Unchanged) => "managed section already current (no write needed)",
             };
             let audit = render::audit(&profile, harness);
-            let current = render::managed_section(&existing)?;
             println!(
                 "harness: {}\ntarget: {}\nprofile revision: {}\nresult: {}",
                 harness.as_str(),
@@ -161,13 +191,8 @@ fn read_profile(source: Option<&str>) -> Result<ProfileInput, Box<dyn std::error
 }
 
 fn target_for(harness: Harness) -> Result<PathBuf, Box<dyn std::error::Error>> {
-    if harness != Harness::Claude {
-        return Err(format!(
-            "no verified user-instruction target for harness '{}'",
-            harness.as_str()
-        )
-        .into());
-    }
-    let home = std::env::var_os("HOME").ok_or("HOME is not set")?;
-    Ok(render::claude_target(Path::new(&home)))
+    let home = std::env::var_os("SJEL_OPERATOR_HOME")
+        .or_else(|| std::env::var_os("HOME"))
+        .ok_or("HOME is not set")?;
+    Ok(render::target_path(Path::new(&home), harness))
 }

@@ -427,28 +427,13 @@
     }
   }
 
-  /** A writeback that hit a conflict is not a failure to report as an error, and
-   *  not a success to report as done. It names the notes and waits for a human.
-   *
-   *  Regions and projections are counted apart because they are different places:
-   *  a region goes inside a note you wrote, a projection is a whole generated file
-   *  for a subscription that has no note. Summing them would report "7 written"
-   *  over a vault where nothing you own was touched. */
+  /** The series copy writes one file per subscription into the overlay. A refused path
+   *  is a file there that this capability did not write, so it is named, not overwritten. */
   function describe(label: string, result: unknown): string {
     if (label === "writeback") {
-      const w = result as WritebackResult;
-      const p = w.projected;
-      const projected =
-        p && p.created + p.updated > 0
-          ? ` ${p.created + p.updated} subscription(s) with no note projected to Resources/Sjel/.`
-          : "";
-      if (w.conflicts.length > 0) {
-        return `${w.written} written, ${w.unchanged} unchanged.${projected} Left alone because you edited inside the block: ${w.conflicts.join(", ")}`;
-      }
-      if (p && p.refused.length > 0) {
-        return `${w.written} written, ${w.unchanged} already correct.${projected} Not written, a note of yours holds the path: ${p.refused.join(", ")}`;
-      }
-      return `${w.written} written, ${w.unchanged} already correct.${projected}`;
+      const p = (result as WritebackResult).projected;
+      const counts = `${p.created + p.updated} written, ${p.unchanged} already correct, ${p.removed.length} removed.`;
+      return p.refused.length > 0 ? `${counts} Not written: ${p.refused.join(", ")}` : counts;
     }
     if (label === 'price' || label === 'state') {
       const write = result as { created: boolean };
@@ -522,10 +507,10 @@
 
     <div class="actions">
       <button disabled={busy} onclick={() => run("import", finance.importVault)}>
-        <Icon name="refresh" size={14} /> Import vault
+        <Icon name="refresh" size={14} /> Import notes
       </button>
       <button disabled={busy} onclick={() => run("writeback", finance.writeback)}>
-        <Icon name="arrow-right" size={14} /> Write back
+        <Icon name="arrow-right" size={14} /> Save series copy
       </button>
     </div>
   </section>
@@ -612,7 +597,7 @@
       onOpen={toggle}
       selected={open}
       inactive={(r) => r.monthlyCents === 0}
-      empty={rows.length === 0 ? "Nothing imported yet. Import vault reads the notes." : "No subscriptions in this pillar."}
+      empty={rows.length === 0 ? "Nothing imported yet. Import notes reads them from projects." : "No subscriptions in this pillar."}
     />
   </div>
 

@@ -1,35 +1,25 @@
-//! Reading subscription notes out of the vault, and writing derived figures back.
+//! Subscription notes: reading them from `projects`, and the series' second copy.
 //!
-//! The boundary this file implements, and the reason it is worth reading closely:
-//! the vault owns why the principal pays for something, whether it is worth it, and
-//! what the alternatives are. This capability owns the price series, the state
-//! series, and anything computed from them. Neither writes the other's fields.
+//! The boundary this file implements: the note owns why the principal pays for something,
+//! whether it is worth it, and what the alternatives are. This capability owns the price
+//! series, the state series, and anything computed from them. Neither writes the other's
+//! fields.
 //!
 //! Reading is one direction of that. A note's frontmatter seeds a subscription: its
 //! current cost becomes the *first* price point, its status becomes the *first*
 //! state change. From then on the series is authoritative and the frontmatter is
 //! not re-read for those fields, because a series cannot be reconstructed from the
-//! single mutable number it replaced.
+//! single mutable number it replaced. The notes live in the `projects` store since
+//! 2026-10-20 (`capabilities/projects/README.md`, "Why this shape") and are read over its
+//! HTTP surface.
 //!
-//! Writing is the other, and it has two branches, which PRD Q31 (2026-08-23) rules
-//! between: write a region into the human's note when one exists, and create a whole
-//! generated file only when none does.
-//!
-//! - **The region.** Derived figures go into a marked region via
-//!   `markdown_root::region`, which guarantees bytes outside the markers survive and
-//!   refuses to overwrite a region a human edited.
-//! - **The projection.** `render_projection`/`export_projections` below, for a
-//!   subscription whose note is not in the vault. Measured 2026-08-28: that is all
-//!   seven of them, because the 2026-08-23 reorganisation moved every finance note out
-//!   under PRD §5.5. The projection is removed the moment a note reappears, so the two
-//!   branches never both hold one subscription's figures.
-//!
-//! This module never opens a file for writing outside those two paths.
+//! Writing is the other: one whole file per subscription under the overlay's
+//! [`PROJECTION_DIR`]. Until 2026-10-20 the figures went into a marked region of the vault
+//! note (PRD Q31). This module never writes a note.
 
 use std::collections::HashMap;
-use std::path::{Path, PathBuf};
 
-use markdown_root::{frontmatter, region, MarkdownRoot, RegionOutcome, RegionSpec};
+use markdown_root::{frontmatter, MarkdownRoot, RegionSpec};
 use serde::Serialize;
 
 use crate::money::{self, EurAmount};
@@ -58,75 +48,69 @@ pub const REGION_OWNER: &str = "finance";
 /// renderer.
 pub const REGION_VERSION: u32 = 3;
 
-/// A note found by the scanner, before anything is persisted.
+/// A subscription note as `projects` stores it, before anything is persisted.
 #[derive(Debug, Clone, PartialEq)]
 pub struct ScannedNote {
-    /// Vault-relative, slash-separated. The import identity.
+    /// The record's path in `projects`, slash-separated. The import identity. It equals the
+    /// note's vault path from before 2026-10-20, so a subscription imported then still matches.
     pub source_path: String,
-    pub absolute: PathBuf,
     pub name: String,
     pub fields: HashMap<String, String>,
 }
 
-#[derive(Debug)]
-pub enum ScanError {
-    Root(markdown_root::RootError),
-    Read { path: PathBuf, detail: String },
-    Frontmatter { path: PathBuf, detail: String },
-}
+/// Where subscription notes live in the `projects` store.
+pub const SUBSCRIPTIONS_DIR: &str = "Atlas/Finance/Subscriptions";
 
-impl std::fmt::Display for ScanError {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self {
-            ScanError::Root(e) => write!(f, "{e}"),
-            ScanError::Read { path, detail } => {
-                write!(f, "cannot read {}: {detail}", path.display())
-            }
-            ScanError::Frontmatter { path, detail } => {
-                write!(f, "frontmatter in {}: {detail}", path.display())
-            }
-        }
-    }
-}
-
-impl std::error::Error for ScanError {}
-
-/// Every markdown note directly inside the configured subscriptions directory.
+/// The notes directly inside [`SUBSCRIPTIONS_DIR`], from `(path, content)` records.
 ///
-/// Read-only, and bounded by `MarkdownRoot`, so a misconfigured directory cannot
-/// walk out of the declared vault. A note that fails to parse is an error naming
-/// the file rather than a silently skipped subscription: a subscription that
-/// vanishes from a burn total because its frontmatter had a typo is exactly the
-/// kind of quietly-wrong figure this whole capability exists to avoid.
-pub fn scan(root: &MarkdownRoot, dir: &Path) -> Result<Vec<ScannedNote>, ScanError> {
-    let pattern = format!("{}/*.md", dir.to_string_lossy().trim_end_matches('/'));
-    let files = root.markdown_files(&pattern).map_err(ScanError::Root)?;
-
-    let mut out = Vec::with_capacity(files.len());
-    for file in files {
-        let body = std::fs::read_to_string(&file).map_err(|e| ScanError::Read {
-            path: file.clone(),
-            detail: e.to_string(),
-        })?;
-        let fields = frontmatter(&body).map_err(|detail| ScanError::Frontmatter {
-            path: file.clone(),
-            detail,
-        })?;
-        let source_path = root
-            .relative_id(&file)
-            .unwrap_or_else(|| file.to_string_lossy().into_owned());
-        let name = file
-            .file_stem()
-            .map(|s| s.to_string_lossy().into_owned())
-            .unwrap_or_else(|| source_path.clone());
+/// A note that fails to parse is an error naming it rather than a silently skipped
+/// subscription: a subscription that vanishes from a burn total because its frontmatter had
+/// a typo is exactly the kind of quietly-wrong figure this whole capability exists to avoid.
+pub fn notes_from_records(records: &[(String, String)]) -> Result<Vec<ScannedNote>, String> {
+    let prefix = format!("{SUBSCRIPTIONS_DIR}/");
+    let mut out = Vec::new();
+    for (path, content) in records {
+        let Some(file) = path.strip_prefix(&prefix) else {
+            continue;
+        };
+        let Some(name) = file.strip_suffix(".md").filter(|n| !n.contains('/')) else {
+            continue;
+        };
+        let fields = frontmatter(content).map_err(|e| format!("frontmatter in {path}: {e}"))?;
         out.push(ScannedNote {
-            source_path,
-            absolute: file,
-            name,
+            source_path: path.clone(),
+            name: name.to_string(),
             fields,
         });
     }
+    out.sort_by(|a, b| a.source_path.cmp(&b.source_path));
     Ok(out)
+}
+
+/// Every subscription note, read through the `projects` HTTP surface.
+///
+/// Blocking: call it from `spawn_blocking`, never on the async runtime.
+pub fn fetch(projects_base_url: &str) -> Result<Vec<ScannedNote>, String> {
+    let client = crate::price::blocking_client()?;
+    // ponytail: reads the whole Atlas domain to keep seven notes; a path-prefix query in
+    // projects is the upgrade once Atlas holds hundreds of records.
+    let url = format!(
+        "{}/api/project?name=Atlas",
+        projects_base_url.trim_end_matches('/')
+    );
+    let body: serde_json::Value =
+        sjel_server::InboundAuth::with_loopback_auth(client.get(&url), &url)
+            .send()
+            .and_then(reqwest::blocking::Response::error_for_status)
+            .and_then(reqwest::blocking::Response::json)
+            .map_err(|e| format!("projects /api/project: {e}"))?;
+    let records: Vec<(String, String)> = body["records"]
+        .as_array()
+        .ok_or("projects /api/project: no records array")?
+        .iter()
+        .filter_map(|r| Some((r["path"].as_str()?.into(), r["content"].as_str()?.into())))
+        .collect();
+    notes_from_records(&records)
 }
 
 /// A frontmatter key that states what a subscription costs.
@@ -557,28 +541,19 @@ fn cycle_word(cycle: BillingCycle) -> &'static str {
 
 /// Q31's home for a subscription whose note is no longer in the vault.
 ///
-/// Vault-relative, not configurable — a second declaration of where machine output goes
-/// is how two hosts write to two folders and neither notices.
-// `Resources/Sjel/Subscriptions` until 2026-10-08, when the vault folder took the product name.
-pub const PROJECTION_DIR: &str = "Resources/Sjel/Subscriptions";
+/// Overlay-relative, beside the decision ledger's copy (`decision::EXPORT_DIR`). Not
+/// configurable: a second declaration of where machine output goes is how two hosts write to
+/// two folders and neither notices. In the vault at `Resources/Sjel/Subscriptions` until
+/// 2026-10-20, when the vault became knowledge only.
+pub const PROJECTION_DIR: &str = "data/finance/subscriptions";
 
-/// One subscription as a whole file, for the case where no note exists to hold a region.
+/// One subscription as a whole file: the second copy of its price and state series.
 ///
-/// This is not a fallback that was designed for; it is the measured state of the vault.
-/// The 2026-08-23 reorganisation (vault commit `ba60231`, ruled in PRD §5.5) moved all
-/// 37 finance notes out to `<overlay>/data/finance/vault-notes/` on the grounds that
-/// they are entity rows rather than things a human wrote sentences into. So on
-/// 2026-08-28 every one of the seven live subscriptions pointed at a note that is not in
-/// the vault, and the region writer had nothing to write into. The series was in no file
-/// anywhere, which is exactly the exposure Q47 named.
-///
-/// Q31 answers it directly: write a region when a human note for the subject exists, and
-/// create a projected file only when none does. This is the "none does" branch. The
-/// region path above is unchanged and takes over the moment a note comes back, because
-/// the writeback prefers it.
-///
-/// The body is `render_block`'s, so the two paths cannot drift into two shapes of the
-/// same figures.
+/// PRD Q47 counts those series among the irreplaceable rows, because a price is observed
+/// once, on the day it changed. Until 2026-10-20 this copy went into a marked region of the
+/// human's vault note, or into a projected vault file when no note existed (PRD Q31). The
+/// note now lives in `projects`, whose rendered tree nobody edits, so the copy is always this
+/// whole file in the overlay, the way the decision ledger's is.
 pub fn render_projection(sub: &Subscription, today: &str, rates: &[FxObservation]) -> String {
     let mut out = String::from("---\n");
     let field = |out: &mut String, key: &str, value: &str| {
@@ -602,15 +577,10 @@ pub fn render_projection(sub: &Subscription, today: &str, rates: &[FxObservation
     out
 }
 
-/// Project every subscription that has no note in the vault, and sweep the rest.
-///
-/// A projection is removed when its subscription is gone **or** when a note for it has
-/// appeared: Q31's promotion, run automatically. `owned` carries the vault-relative
-/// paths of the notes the scanner found, which is what "a note exists" means here.
+/// Write every subscription's file, and remove the files of subscriptions that are gone.
 pub fn export_projections(
     root: &MarkdownRoot,
     subs: &[Subscription],
-    owned: &[String],
     today: &str,
     rates: &[FxObservation],
 ) -> Result<ProjectionReport, markdown_root::RootError> {
@@ -619,9 +589,6 @@ pub fn export_projections(
     let mut wanted: Vec<String> = Vec::new();
 
     for sub in subs {
-        if owned.iter().any(|path| path == &sub.source_path) {
-            continue;
-        }
         let stem = markdown_root::projection::file_stem(&sub.name, &sub.id);
         let path = format!("{PROJECTION_DIR}/{stem}.md");
         match root.write_projection(&path, &spec, &render_projection(sub, today, rates))? {
@@ -632,7 +599,6 @@ pub fn export_projections(
         }
         wanted.push(path);
     }
-
     // A missing folder is zero files, not an error: nothing has been projected yet.
     let existing = match root.markdown_files(&format!("{PROJECTION_DIR}/*.md")) {
         Ok(files) => files,
@@ -661,52 +627,8 @@ pub struct ProjectionReport {
     pub unchanged: usize,
     /// A file exists at the path and this capability did not write it.
     pub refused: Vec<String>,
-    /// The subscription is gone, or its note is back and the region owns it now.
+    /// The subscription is gone.
     pub removed: Vec<String>,
-}
-
-/// What a writeback attempt did to one note.
-#[derive(Debug, Clone, PartialEq)]
-pub enum WriteBack {
-    Created,
-    Updated,
-    /// Already correct. The file was not opened for writing at all, so the vault's
-    /// git history stays free of no-op commits.
-    Unchanged,
-    /// A human edited inside the region. Nothing was written, and both revisions
-    /// come back so the caller can show them rather than pick one.
-    Conflict {
-        theirs: String,
-        ours: String,
-    },
-}
-
-/// Regenerate one note's derived block.
-///
-/// The write happens only on `Created` and `Updated`. Every other outcome, conflict
-/// included, leaves the file exactly as it was found.
-pub fn write_block(
-    path: &Path,
-    sub: &Subscription,
-    today: &str,
-    rates: &[FxObservation],
-) -> Result<WriteBack, Box<dyn std::error::Error>> {
-    let original = std::fs::read_to_string(path)?;
-    let spec = RegionSpec::new(REGION_OWNER, REGION_VERSION);
-    let (updated, outcome) = region::apply(&original, &spec, &render_block(sub, today, rates))?;
-
-    match outcome {
-        RegionOutcome::Created => {
-            std::fs::write(path, updated)?;
-            Ok(WriteBack::Created)
-        }
-        RegionOutcome::Updated => {
-            std::fs::write(path, updated)?;
-            Ok(WriteBack::Updated)
-        }
-        RegionOutcome::Unchanged => Ok(WriteBack::Unchanged),
-        RegionOutcome::Conflict { theirs, ours } => Ok(WriteBack::Conflict { theirs, ours }),
-    }
 }
 
 /// A note and its series disagree about what the money is.
@@ -787,7 +709,6 @@ mod tests {
     fn note(fields: &[(&str, &str)], name: &str) -> ScannedNote {
         ScannedNote {
             source_path: format!("Atlas/Finance/Subscriptions/{name}.md"),
-            absolute: PathBuf::from(format!("/nowhere/{name}.md")),
             name: name.to_string(),
             fields: fields
                 .iter()
@@ -975,7 +896,7 @@ mod tests {
         }
     }
 
-    fn temp_root() -> (PathBuf, MarkdownRoot) {
+    fn temp_root() -> (std::path::PathBuf, MarkdownRoot) {
         let dir = std::env::temp_dir().join(format!(
             "axon-finance-projection-{}-{:?}",
             std::process::id(),
@@ -989,39 +910,63 @@ mod tests {
         (dir, root)
     }
 
-    /// Q31's rule, both directions: a subscription with no note gets a file, and the
-    /// file goes away the moment a note for it exists — because the region in that note
-    /// then owns the figures, and two homes for one number is the failure the whole
-    /// boundary exists to prevent.
+    /// Every subscription gets its file in the overlay, a second pass changes nothing, and
+    /// the file goes when the subscription does.
     #[test]
-    fn a_subscription_is_projected_only_while_it_has_no_note() {
+    fn every_subscription_is_projected_until_it_is_gone() {
         let (dir, root) = temp_root();
         let subs = vec![subscription(
             "Claude Max",
             "Atlas/Finance/Subscriptions/Claude Max.md",
         )];
 
-        let first = export_projections(&root, &subs, &[], "2026-08-28", &[]).unwrap();
+        let first = export_projections(&root, &subs, "2026-08-28", &[]).unwrap();
         assert_eq!((first.created, first.unchanged), (1, 0));
-        let file = dir.join("Resources/Sjel/Subscriptions/Claude Max.md");
+        let file = dir.join("data/finance/subscriptions/Claude Max.md");
         let body = std::fs::read_to_string(&file).unwrap();
         assert!(
             body.contains("| 2026-02-01 | 20.00 EUR | month |"),
             "{body}"
         );
 
-        let second = export_projections(&root, &subs, &[], "2026-08-28", &[]).unwrap();
+        let second = export_projections(&root, &subs, "2026-08-28", &[]).unwrap();
         assert_eq!((second.created, second.unchanged), (0, 1));
 
-        let owned = vec!["Atlas/Finance/Subscriptions/Claude Max.md".to_string()];
-        let third = export_projections(&root, &subs, &owned, "2026-08-28", &[]).unwrap();
+        let third = export_projections(&root, &[], "2026-08-28", &[]).unwrap();
         assert_eq!(
             third.removed,
-            vec!["Resources/Sjel/Subscriptions/Claude Max.md"]
+            vec!["data/finance/subscriptions/Claude Max.md"]
         );
-        assert!(!file.exists(), "the note's region owns the figures now");
+        assert!(!file.exists());
 
         std::fs::remove_dir_all(dir).unwrap();
+    }
+
+    /// Only notes directly in the subscriptions folder are read, and a broken frontmatter
+    /// names its note instead of dropping the subscription.
+    #[test]
+    fn notes_come_from_the_subscriptions_folder_only() {
+        let record = |path: &str, content: &str| (path.to_string(), content.to_string());
+        let notes = notes_from_records(&[
+            record(
+                "Atlas/Finance/Subscriptions/Claude Pro.md",
+                "---\ncost: 20\n---\n",
+            ),
+            record(
+                "Atlas/Finance/Subscriptions/Old/Gone.md",
+                "---\ncost: 1\n---\n",
+            ),
+            record("Atlas/People/Ron.md", "---\ntype: note\n---\n"),
+        ])
+        .unwrap();
+        assert_eq!(notes.len(), 1);
+        assert_eq!(notes[0].name, "Claude Pro");
+        assert_eq!(notes[0].fields["cost"], "20");
+        let broken = notes_from_records(&[record(
+            "Atlas/Finance/Subscriptions/Broken.md",
+            "---\ncost: 20\n",
+        )]);
+        assert!(broken.unwrap_err().contains("Broken.md"));
     }
 
     /// A pipe in a reason ends the row early and shifts every column after it, which

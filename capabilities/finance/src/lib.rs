@@ -32,7 +32,7 @@ pub mod subscription;
 pub use accounting::{AccountingEngine, JournalEngine};
 pub use config::Config;
 pub use money::{burn_in_eur, to_eur, EurAmount, EurBurn, NoRate, DECLARED_CURRENCY};
-pub use obsidian::{scan, seed_from_note, ScanError, ScannedNote, WriteBack};
+pub use obsidian::{seed_from_note, ScannedNote};
 pub use store::FinanceStore;
 pub use subscription::{
     burn_at, burn_by_currency, BillingCycle, Burn, BurnByCurrency, CurrencyBurn, PricePoint, State,

@@ -124,13 +124,12 @@ out=$(SJEL_PERSONAL_ROOT="/nowhere/axon-poison/overlay" \
       SJEL_DB_PATH="/nowhere/axon-poison/overlay/data/axon/axon.db" \
       SJEL_COMMS_CONFIG="/nowhere/axon-poison/overlay/config/comms.json" \
       SJEL_TRIPS_OBSIDIAN_ROOT="$POISON" \
-      SJEL_FINANCE_OBSIDIAN_ROOT="$POISON" \
       SJEL_FINANCE_DECISIONS_ROOT="$POISON" \
       SJEL_INTERIOR_OBSIDIAN_ROOT="$POISON" \
       "$TOOL" --print-env 2>&1); status=$?
 expect_ok "--print-env answers under a poisoned environment"
 for var in SJEL_PERSONAL_ROOT SJEL_OVERLAY_ROOT SJEL_DB_PATH SJEL_COMMS_CONFIG \
-           SJEL_TRIPS_OBSIDIAN_ROOT SJEL_FINANCE_OBSIDIAN_ROOT \
+           SJEL_TRIPS_OBSIDIAN_ROOT \
            SJEL_FINANCE_DECISIONS_ROOT SJEL_INTERIOR_OBSIDIAN_ROOT; do
   expect_not_under "an inherited $var does not survive" "$var" "/nowhere/axon-poison"
 done
@@ -143,7 +142,7 @@ expect_ends_with "the database sits under the sandbox overlay" SJEL_DB_PATH "/ov
 run --print-env
 expect_ok "--print-env with no cargo arguments"
 overlay="$(env_value SJEL_PERSONAL_ROOT)"
-for var in SJEL_TRIPS_OBSIDIAN_ROOT SJEL_FINANCE_OBSIDIAN_ROOT SJEL_FINANCE_DECISIONS_ROOT \
+for var in SJEL_TRIPS_OBSIDIAN_ROOT SJEL_FINANCE_DECISIONS_ROOT \
            SJEL_INTERIOR_OBSIDIAN_ROOT; do
   if [ "$(env_value "$var")" = "$overlay" ]; then
     note_fail "$var points at the sandbox overlay rather than a projection root of its own"

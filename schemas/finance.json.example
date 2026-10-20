@@ -1,8 +1,7 @@
 {
   "_note": "Private overlay template for <overlay>/config/finance.json. Replace placeholders locally. Public code never names an institution, account identifier or personal figure.",
   "obsidian": {
-    "root": "<knowledge-base-root>",
-    "subscriptions_dir": "Atlas/Finance/Subscriptions"
+    "root": "<knowledge-base-root>"
   },
   "journal": "<finance-journal-path>",
   "investment_snapshot": "<finance-investment-snapshot-path>",

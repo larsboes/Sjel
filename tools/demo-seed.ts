@@ -17,7 +17,6 @@
 //   tools/demo-seed --force      skip the not-empty refusal (never the overlay check)
 
 import { execFileSync } from "node:child_process";
-import { mkdirSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 
 import {
@@ -340,10 +339,11 @@ const SEEDERS: Record<string, (ctx: Ctx) => Promise<string>> = {
       })),
     });
 
-    // 5. Subscriptions, seeded from vault notes this writes first. Generated rather than
-    //    committed: they are demo data like everything else, and a tracked markdown file
-    //    that looks like somebody's real note is exactly the confusion to avoid.
-    writeSubscriptionVault();
+    // 5. Subscriptions, seeded from notes this writes into `projects` first, where finance
+    //    reads them. Generated rather than committed: they are demo data like everything
+    //    else, and a tracked markdown file that looks like somebody's real note is exactly
+    //    the confusion to avoid.
+    await writeSubscriptionNotes(ctx.url("/projects/api/record"));
     const imported = await post<{ created: number }>(`${base}/import/obsidian`);
 
     // 6. Proposals. No price fetch first, and none is needed: with no market
@@ -529,10 +529,7 @@ function investmentMapping() {
 
 /** The vault the finance capability imports subscriptions from. Written fresh each run into
  *  demo/vault, which is untracked — see the comment at the call site. */
-function writeSubscriptionVault(): void {
-  const dir = join(SJEL_ROOT, "demo/vault/subscriptions");
-  rmSync(dir, { recursive: true, force: true });
-  mkdirSync(dir, { recursive: true });
+async function writeSubscriptionNotes(record: string): Promise<void> {
   for (const sub of VOCABULARY.subscriptions) {
     const note = [
       "---",
@@ -546,10 +543,11 @@ function writeSubscriptionVault(): void {
       "",
       `# ${sub.name}`,
       "",
-      "A fictional service, in a fictional vault, for a demonstration.",
+      "A fictional service, in a fictional note, for a demonstration.",
       "",
     ].join("\n");
-    writeFileSync(join(dir, `${sub.name.replace(/[^A-Za-z0-9]+/g, "-")}.md`), note);
+    const name = sub.name.replace(/[^A-Za-z0-9]+/g, "-");
+    await post(record, { path: `Atlas/Finance/Subscriptions/${name}.md`, content: note });
   }
 }
 

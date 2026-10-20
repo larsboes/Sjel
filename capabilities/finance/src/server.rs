@@ -18,12 +18,12 @@ use finance::analytics::{self, AnalyticsFilter};
 use finance::balance::{self, ManualBalanceSnapshot, ManualBalanceUpdate, TrackedNetWorth};
 use finance::clock::{iso_day, now_timestamp, today, valid_iso_date};
 use finance::config::{
-    Config, CsvMappingProfile, InstrumentProfile, InvestmentCsvMappingProfile, ObsidianConfig,
-    RecurringCommitment, TargetPolicy,
+    Config, CsvMappingProfile, InstrumentProfile, InvestmentCsvMappingProfile, RecurringCommitment,
+    TargetPolicy,
 };
 use finance::import::{self, CandidateState, CsvMapping, TransactionCandidate};
 use finance::investment::{self, HoldingsCoverage, InvestmentCsvMapping};
-use finance::obsidian::{self, WriteBack};
+use finance::obsidian;
 use finance::planning::{self, PlanningConfig, PlanningReport, SourceExpectation};
 use finance::store::FinanceStore;
 use finance::subscription::{burn_by_currency, PricePoint, StateChange};
@@ -68,17 +68,17 @@ const ROUTES: &[route_manifest::Route] = &[
     r(
         "GET",
         "/api/import/obsidian/scan",
-        "Vault subscription notes that could be imported. Read-only.",
+        "Subscription notes in projects that could be imported. Read-only.",
     ),
     r(
         "POST",
         "/api/import/obsidian",
-        "Import every scanned vault subscription note. Idempotent by vault path.",
+        "Import every subscription note in projects. Idempotent by note path.",
     ),
     r(
         "POST",
         "/api/writeback",
-        "Regenerate the derived block in each note. Conflicts are reported, never resolved.",
+        "Render every subscription's series copy into the overlay. A file it did not write is reported, never overwritten.",
     ),
     r(
         "POST",
@@ -264,7 +264,7 @@ const DEFAULT_CURRENCY: &str = "EUR";
 #[derive(Clone)]
 struct AppState {
     database_path: Arc<PathBuf>,
-    obsidian: Option<ObsidianConfig>,
+    projects_base_url: Arc<String>,
     journal: Option<std::path::PathBuf>,
     commitments: Arc<Vec<RecurringCommitment>>,
     planning: Arc<PlanningConfig>,
@@ -310,16 +310,16 @@ fn failed(error: String) -> ApiResponse {
     )
 }
 
-/// No vault configured is a 409 rather than a 500: nothing is broken, the operator
-/// has not pointed this capability at anything yet, and a stack trace would suggest
-/// otherwise.
-fn no_vault() -> ApiResponse {
+/// No notes source or no overlay is a 409 rather than a 500: nothing is broken, the
+/// operator has not pointed this capability at anything yet, and a stack trace would
+/// suggest otherwise.
+fn not_configured(what: &str) -> ApiResponse {
     response(
         StatusCode::CONFLICT,
         json!({
             "ok": false,
             "capability": "finance",
-            "error": "no vault configured; set the overlay's config/finance.json or SJEL_FINANCE_OBSIDIAN_ROOT"
+            "error": format!("{what} not configured"),
         }),
     )
 }
@@ -1829,10 +1829,11 @@ async fn append_state(
 }
 
 async fn scan_vault(State(state): State<AppState>) -> ApiResponse {
-    let Some(vault) = state.obsidian.clone() else {
-        return no_vault();
-    };
-    match tokio::task::spawn_blocking(move || scan_notes(&vault)).await {
+    let url = state.projects_base_url.clone();
+    if url.is_empty() {
+        return not_configured("projects_base_url");
+    }
+    match tokio::task::spawn_blocking(move || obsidian::fetch(&url)).await {
         Ok(Ok(notes)) => response(
             StatusCode::OK,
             json!({
@@ -1849,13 +1850,14 @@ async fn scan_vault(State(state): State<AppState>) -> ApiResponse {
 }
 
 async fn import_vault(State(state): State<AppState>) -> ApiResponse {
-    let Some(vault) = state.obsidian.clone() else {
-        return no_vault();
-    };
+    let url = state.projects_base_url.clone();
+    if url.is_empty() {
+        return not_configured("projects_base_url");
+    }
     let database_path = state.database_path.clone();
     let now = today();
     match tokio::task::spawn_blocking(move || -> Result<Value, String> {
-        let notes = scan_notes(&vault)?;
+        let notes = obsidian::fetch(&url)?;
         let store = FinanceStore::open(&database_path).map_err(|e| e.to_string())?;
         let (mut created, mut existing) = (0usize, 0usize);
         for note in &notes {
@@ -1887,67 +1889,31 @@ async fn import_vault(State(state): State<AppState>) -> ApiResponse {
     }
 }
 
-/// Regenerate every note's derived block, and project the subscriptions that have no
-/// note left to hold one.
+/// Render every subscription's series into the overlay, the second copy PRD Q47 asks for.
 ///
-/// A conflict is reported and counted, never resolved. The response names each
-/// conflicting note so the operator can look at it, which is the entire difference
-/// between this and a machine that overwrites what somebody wrote.
-///
-/// The second half exists because the first half had nothing to write to. Measured
-/// 2026-08-28: all seven live subscriptions point at notes that left the vault on
-/// 2026-08-23 (vault commit `ba60231`, PRD §5.5), so the price and state series — rows
-/// PRD Q47 counts as irreplaceable — were in no file anywhere. Q31 rules that case
-/// directly: a region when a human note exists, a projected file when none does. The
-/// region path is unchanged and wins whenever a note is there.
+/// Until 2026-10-20 this wrote a marked region into each vault note. The notes moved to
+/// `projects`, whose rendered tree nobody edits, so the copy is now one whole file per
+/// subscription beside the decision ledger's (`obsidian::PROJECTION_DIR`).
 async fn writeback(State(state): State<AppState>) -> ApiResponse {
-    let Some(vault) = state.obsidian.clone() else {
-        return no_vault();
+    let Some(overlay) = state.overlay_root.clone() else {
+        return not_configured("the overlay root");
     };
     let database_path = state.database_path.clone();
     let now = today();
     match tokio::task::spawn_blocking(move || -> Result<Value, String> {
-        let notes = scan_notes_or_empty(&vault)?;
         let store = FinanceStore::open(&database_path).map_err(|e| e.to_string())?;
         let subs = store.list().map_err(|e| e.to_string())?;
-        // PRD Q103: the block states a foreign price in EUR when a published rate
+        // PRD Q103: the file states a foreign price in EUR when a published rate
         // covers the pair, and says it cannot when none does. An empty table is the
         // second case, not a reason to skip the line.
         let rates = store.latest_fx_rates().map_err(|e| e.to_string())?;
-
-        let (mut written, mut unchanged) = (0usize, 0usize);
-        let mut conflicts: Vec<String> = Vec::new();
-        let mut unimported: Vec<String> = Vec::new();
-
-        for note in &notes {
-            let Some(sub) = subs.iter().find(|s| s.source_path == note.source_path) else {
-                unimported.push(note.source_path.clone());
-                continue;
-            };
-            match obsidian::write_block(&note.absolute, sub, &now, &rates)
-                .map_err(|e| e.to_string())?
-            {
-                WriteBack::Created | WriteBack::Updated => written += 1,
-                WriteBack::Unchanged => unchanged += 1,
-                WriteBack::Conflict { .. } => conflicts.push(note.source_path.clone()),
-            }
-        }
-
-        let root =
-            markdown_root::MarkdownRoot::declare(vault.root.clone()).map_err(|e| e.to_string())?;
-        let owned: Vec<String> = notes.iter().map(|n| n.source_path.clone()).collect();
-        let projected = obsidian::export_projections(&root, &subs, &owned, &now, &rates)
+        let root = markdown_root::MarkdownRoot::declare(overlay.as_ref().clone())
             .map_err(|e| e.to_string())?;
-        let mismatches = obsidian::currency_mismatches(&notes, &subs, &now);
-
+        let projected =
+            obsidian::export_projections(&root, &subs, &now, &rates).map_err(|e| e.to_string())?;
         Ok(json!({
-            "ok": conflicts.is_empty() && projected.refused.is_empty() && mismatches.is_empty(),
-            "written": written,
-            "unchanged": unchanged,
-            "conflicts": conflicts,
-            "not_imported": unimported,
+            "ok": projected.refused.is_empty(),
             "projected": projected,
-            "currency_mismatches": mismatches,
         }))
     })
     .await
@@ -1955,34 +1921,6 @@ async fn writeback(State(state): State<AppState>) -> ApiResponse {
         Ok(Ok(body)) => response(StatusCode::OK, body),
         Ok(Err(e)) => failed(e),
         Err(_) => failed("task panicked".into()),
-    }
-}
-
-fn scan_notes(vault: &ObsidianConfig) -> Result<Vec<finance::ScannedNote>, String> {
-    let root =
-        markdown_root::MarkdownRoot::declare(vault.root.clone()).map_err(|e| e.to_string())?;
-    obsidian::scan(&root, &vault.subscriptions_dir).map_err(|e| e.to_string())
-}
-
-/// The scan, with a missing subscriptions directory reported as zero notes.
-///
-/// Only for the writeback path, and only for that one error: since 2026-08-23 the
-/// configured directory is not in the vault at all, and failing there would hide the
-/// projection pass, which is the half that does have somewhere to write.
-///
-/// Matched on the error's *type*, never on its text. `ScanError::Read` renders the same
-/// "cannot read" sentence for a note that exists and cannot be opened — swallowing that
-/// one would project a file for a subscription whose note is right there, which is the
-/// duplicate the whole boundary exists to prevent.
-fn scan_notes_or_empty(vault: &ObsidianConfig) -> Result<Vec<finance::ScannedNote>, String> {
-    let root =
-        markdown_root::MarkdownRoot::declare(vault.root.clone()).map_err(|e| e.to_string())?;
-    match obsidian::scan(&root, &vault.subscriptions_dir) {
-        Ok(notes) => Ok(notes),
-        Err(finance::ScanError::Root(markdown_root::RootError::Unreadable { .. })) => {
-            Ok(Vec::new())
-        }
-        Err(e) => Err(e.to_string()),
     }
 }
 
@@ -2045,7 +1983,7 @@ impl AppState {
         Config {
             database_path: self.database_path.as_ref().clone(),
             port: 0,
-            obsidian: self.obsidian.clone(),
+            projects_base_url: self.projects_base_url.as_ref().clone(),
             journal: self.journal.clone(),
             investment_snapshot: self.investment_snapshot.clone(),
             balance_snapshot: self.balance_snapshot.clone(),
@@ -2647,7 +2585,7 @@ const CAPABILITY: &str = "finance";
 fn state_from(config: Config) -> AppState {
     AppState {
         database_path: Arc::new(config.database_path),
-        obsidian: config.obsidian,
+        projects_base_url: Arc::new(config.projects_base_url),
         journal: config.journal,
         commitments: Arc::new(config.commitments),
         planning: Arc::new(config.planning),
@@ -2977,7 +2915,7 @@ mod tests {
     fn state_on(database: std::path::PathBuf) -> AppState {
         AppState {
             database_path: Arc::new(database),
-            obsidian: None,
+            projects_base_url: Arc::new(String::new()),
             journal: None,
             commitments: Arc::new(Vec::new()),
             planning: Arc::new(PlanningConfig::default()),
@@ -3110,7 +3048,7 @@ mod tests {
 
         let state = AppState {
             database_path: Arc::new(PathBuf::new()),
-            obsidian: None,
+            projects_base_url: Arc::new(String::new()),
             journal: None,
             commitments: Arc::new(Vec::new()),
             planning: Arc::new(PlanningConfig::default()),
@@ -3147,7 +3085,7 @@ mod tests {
         };
         let state = AppState {
             database_path: Arc::new(PathBuf::new()),
-            obsidian: None,
+            projects_base_url: Arc::new(String::new()),
             journal: None,
             commitments: Arc::new(Vec::new()),
             planning: Arc::new(PlanningConfig::default()),
@@ -3192,7 +3130,7 @@ mod tests {
         };
         let state = AppState {
             database_path: Arc::new(PathBuf::new()),
-            obsidian: None,
+            projects_base_url: Arc::new(String::new()),
             journal: None,
             commitments: Arc::new(Vec::new()),
             planning: Arc::new(PlanningConfig::default()),
@@ -3217,7 +3155,7 @@ mod tests {
     async fn investment_confirmation_requires_a_private_snapshot_path() {
         let state = AppState {
             database_path: Arc::new(PathBuf::new()),
-            obsidian: None,
+            projects_base_url: Arc::new(String::new()),
             journal: None,
             commitments: Arc::new(Vec::new()),
             planning: Arc::new(PlanningConfig::default()),

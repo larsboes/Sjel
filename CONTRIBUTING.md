@@ -86,8 +86,8 @@ Do not describe a skipped or unavailable check as passing.
 
 **`SJEL_DB_PATH` isolates the database only.** Vault projections (`comms`, `finance`, `trips`)
 resolve their roots from overlay configurations. When testing against a copy, export isolated
-projection roots as well: `SJEL_TRIPS_OBSIDIAN_ROOT`, `SJEL_FINANCE_OBSIDIAN_ROOT`,
-`SJEL_FINANCE_DECISIONS_ROOT`, and a scratch `SJEL_COMMS_CONFIG`.
+projection roots as well: `SJEL_TRIPS_OBSIDIAN_ROOT`, `SJEL_FINANCE_DECISIONS_ROOT`, and a
+scratch `SJEL_COMMS_CONFIG`.
 
 **Do not `cargo build --release` in a worktree sharing the root `target/`.** That build overwrites
 `target/release/<bin>`, which is the binary supervised by `tools/service-runner.sh`. When testing

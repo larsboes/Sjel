@@ -64,12 +64,12 @@ export SJEL_DB_PATH="$DEMO_DB_PATH"
 #                        finance server parses and appends to itself
 #   investment_snapshot  the reviewed holdings document
 #   balance_snapshot     manual balances, which no bank export can know
-#   obsidian root/dir    the vault tools/demo-seed writes fictional subscription notes into
+#
+# Subscription notes are not a path any more: finance reads them from the demo's own
+# `projects` capability on its default port, and tools/demo-seed writes them there.
 export SJEL_FINANCE_JOURNAL="$DEMO_STATE/demo.journal"
 export SJEL_FINANCE_INVESTMENT_SNAPSHOT="$DEMO_STATE/holdings.json"
 export SJEL_FINANCE_BALANCE_SNAPSHOT="$DEMO_STATE/balances.json"
-export SJEL_FINANCE_OBSIDIAN_ROOT="$SJEL_ROOT/demo/vault"
-export SJEL_FINANCE_OBSIDIAN_DIR="subscriptions"
 
 # The synthetic origin Comms, Scouting and Transit read from. Its address lives in demo.toml
 # and is read from there rather than repeated here, so the port stays a one-place fact.

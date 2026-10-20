@@ -51,10 +51,11 @@ hand when the server is down.
 Environment:
   SJEL_DB_PATH                   the shared SQLite file
   SJEL_PERSONAL_ROOT             the overlay, where config/finance.json lives
-  SJEL_FINANCE_DECISIONS_ROOT    where the month files are written (default: the overlay)
-  SJEL_FINANCE_OBSIDIAN_ROOT     the vault this capability projects into
+  SJEL_FINANCE_DECISIONS_ROOT    where the month files and the subscription series copy are
+                                 written (default: the overlay)
+  SJEL_PROJECTS_BASE_URL         where subscription notes are read (default: projects on 8103)
 
-A verification run should set the last two to a scratch directory. Neither is
+A verification run should set SJEL_FINANCE_DECISIONS_ROOT to a scratch directory. Neither is
 isolated by SJEL_DB_PATH: the exports and the vault projection are files, and
 they land wherever the configuration points.";
 
@@ -287,22 +288,12 @@ fn audit_subscriptions(_rest: &[&str]) -> Result<bool, String> {
         rates.len()
     );
 
-    let notes = match &config.obsidian {
-        Some(vault) => {
-            let root = markdown_root::MarkdownRoot::declare(vault.root.clone())
-                .map_err(|error| error.to_string())?;
-            match finance::obsidian::scan(&root, &vault.subscriptions_dir) {
-                Ok(notes) => notes,
-                // A vault that is not there is a fact worth printing, not a crash: the
-                // store half of this audit is still worth running without it.
-                Err(error) => {
-                    println!("vault not scanned: {error}");
-                    Vec::new()
-                }
-            }
-        }
-        None => {
-            println!("no vault configured, so no note was read");
+    // An unreachable projects capability is a fact worth printing, not a crash: the
+    // store half of this audit is still worth running without the notes.
+    let notes = match finance::obsidian::fetch(&config.projects_base_url) {
+        Ok(notes) => notes,
+        Err(error) => {
+            println!("notes not read: {error}");
             Vec::new()
         }
     };

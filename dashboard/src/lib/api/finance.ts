@@ -48,14 +48,8 @@ export interface Burn {
 
 export interface WritebackResult {
   ok: boolean;
-  written: number;
-  unchanged: number;
-  conflicts: string[];
-  not_imported: string[];
-  /** Subscriptions with no note in the vault, written as whole generated files
-   *  under Resources/Sjel/ instead (PRD Q31). Since the 2026-08-23 vault
-   *  reorganisation moved every finance note to the overlay, this is where the
-   *  price and state series actually land. */
+  /** One whole file per subscription under the overlay's data/finance/subscriptions/,
+   *  the second copy of its price and state series. Notes are never written. */
   projected: {
     created: number;
     updated: number;
@@ -495,7 +489,7 @@ export const finance = {
       '/finance/api/import/obsidian',
       { method: 'POST' },
     ),
-  /** Conflicts come back named, never resolved — the caller shows them. */
+  /** A path held by a file this capability did not write comes back named, never overwritten. */
   writeback: () => request<WritebackResult>('/finance/api/writeback', { method: 'POST' }),
   dashboard: (filters: {
     start?: string;

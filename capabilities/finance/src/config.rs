@@ -17,14 +17,6 @@ use serde::{Deserialize, Serialize};
 use sjel_config::{database_path, expand_tilde, resolve_port};
 use std::path::PathBuf;
 
-/// Where subscription notes live. Journal and budget configuration are separate
-/// because neither requires an Obsidian vault.
-#[derive(Debug, Clone, Deserialize)]
-pub struct ObsidianConfig {
-    pub root: PathBuf,
-    pub subscriptions_dir: PathBuf,
-}
-
 /// A reusable import shape whose values come only from the private overlay.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct CsvMappingProfile {
@@ -174,7 +166,9 @@ pub struct Config {
     /// The one shared SQLite file, under the table prefix `finance` (PRD Q45).
     pub database_path: PathBuf,
     pub port: u16,
-    pub obsidian: Option<ObsidianConfig>,
+    /// Where subscription notes are read: the `projects` capability, over loopback. Empty
+    /// means none is configured, and the note import answers 409.
+    pub projects_base_url: String,
     pub journal: Option<PathBuf>,
     pub investment_snapshot: Option<PathBuf>,
     pub balance_snapshot: Option<PathBuf>,
@@ -201,7 +195,6 @@ pub struct Config {
 
 #[derive(Debug, Deserialize)]
 struct FinanceFileConfig {
-    obsidian: Option<FinanceFileObsidian>,
     journal: Option<String>,
     investment_snapshot: Option<String>,
     balance_snapshot: Option<String>,
@@ -219,23 +212,16 @@ struct FinanceFileConfig {
     targets: Option<TargetPolicy>,
     #[serde(default)]
     comms_base_url: Option<String>,
-}
-
-#[derive(Debug, Deserialize)]
-struct FinanceFileObsidian {
-    root: String,
-    #[serde(default = "default_subscriptions_dir")]
-    subscriptions_dir: String,
-}
-
-fn default_subscriptions_dir() -> String {
-    "Atlas/Finance/Subscriptions".into()
+    #[serde(default)]
+    projects_base_url: Option<String>,
 }
 
 /// comms' loopback port. A capability calling another capability's HTTP contract
 /// rather than linking its crate is the direction `CONTRIBUTING.md#schemas-and-dependency-direction`
 /// asks for, and the port is the deployment's, so the overlay may override it.
 const DEFAULT_COMMS_BASE_URL: &str = "http://127.0.0.1:8083";
+/// projects' loopback port (`capabilities/projects/service.toml`), for the same reason.
+const DEFAULT_PROJECTS_BASE_URL: &str = "http://127.0.0.1:8103";
 
 fn file_config() -> Option<FinanceFileConfig> {
     let overlay = sjel_config::env_var("SJEL_PERSONAL_ROOT").ok()?;
@@ -248,22 +234,14 @@ impl Config {
     pub fn load() -> Self {
         let port = resolve_port(None, None, 8090);
         let personal = file_config();
-        let obsidian = match sjel_config::env_var("SJEL_FINANCE_OBSIDIAN_ROOT") {
-            Ok(root) => Some(ObsidianConfig {
-                root: expand_tilde(&root),
-                subscriptions_dir: PathBuf::from(
-                    sjel_config::env_var("SJEL_FINANCE_OBSIDIAN_DIR")
-                        .unwrap_or_else(|_| default_subscriptions_dir()),
-                ),
-            }),
-            Err(_) => personal
-                .as_ref()
-                .and_then(|config| config.obsidian.as_ref())
-                .map(|obsidian| ObsidianConfig {
-                    root: expand_tilde(&obsidian.root),
-                    subscriptions_dir: PathBuf::from(&obsidian.subscriptions_dir),
-                }),
-        };
+        let projects_base_url = sjel_config::env_var("SJEL_PROJECTS_BASE_URL")
+            .ok()
+            .or_else(|| {
+                personal
+                    .as_ref()
+                    .and_then(|config| config.projects_base_url.clone())
+            })
+            .unwrap_or_else(|| DEFAULT_PROJECTS_BASE_URL.to_string());
         let commitments = personal
             .as_ref()
             .map(|config| config.commitments.clone())
@@ -331,7 +309,7 @@ impl Config {
         Self {
             database_path: database_path(),
             port,
-            obsidian,
+            projects_base_url,
             journal,
             investment_snapshot,
             balance_snapshot,
@@ -350,11 +328,6 @@ impl Config {
 #[cfg(test)]
 mod tests {
     use super::*;
-
-    #[test]
-    fn the_default_directory_matches_where_the_notes_already_live() {
-        assert_eq!(default_subscriptions_dir(), "Atlas/Finance/Subscriptions");
-    }
 
     #[test]
     fn private_csv_mapping_profiles_parse_as_typed_config() {

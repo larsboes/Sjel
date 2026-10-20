@@ -43,20 +43,19 @@ a foreign browser origin. The dashboard reaches it through its same-origin proxy
 
 ## Import
 
-`entities-server import-obsidian [--dry-run]` creates one person per `Atlas/People` note,
-as `capabilities/vault` reads it (`GET /api/people`). `home` becomes a `home_base` fact.
-`host: yes` becomes `sleeping_option: ask`, because a note saying someone could host is a
-reason to ask, not a booking. `host_note` becomes `sleeping_note`. A note that is already
-linked is skipped, so re-running the import changes nothing.
-
-On 2026-10-20 the `Atlas/People` notes left the vault
+People came from the vault's `Atlas/People` notes, one person per note, through the Obsidian
+adapter (`home` became a `home_base` fact, `host: yes` became `sleeping_option: ask`). On
+2026-10-20 the notes left the vault
 ([ruling](../projects/README.md#why-this-shape-sjel-owns-projects-tasks-and-habits)). Every one
 already had its person here, so only the prose moved: the note body and the `character`,
 `highlights`, `memories` and `experiences` keys went into the person's `notes` field, a
-`longtext` (several lines of markdown). `note_ref` was cleared, and the notes sit in the vault's
-`Archive/`. `last_contact`, `met_at` and `mention_count` are computed by `capabilities/vault` from
-Journal backlinks and reached this capability through the notes. They keep their last values
-until the Journal leaves the vault and that computation moves with it.
+`longtext` (several lines of markdown). `note_ref` was cleared, the notes sit in the vault's
+`Archive/`, and the adapter was removed. Values it wrote keep the source `obsidian`.
+
+`entities-server sync-journal [--dry-run]` sets `last_contact` from the Journal in `projects`:
+the latest dated entry that links the person's name (`src/journal.rs`). It only moves the date
+forward, so a later day typed by hand stays. `met_at` and `mention_count` were note keys, never
+fields here, and were not carried over.
 
 ## Duplicates, merge and sources
 

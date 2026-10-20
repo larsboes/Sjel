@@ -4546,6 +4546,7 @@ version = "0.1.0"
 dependencies = [
  "axum",
  "civil-date",
+ "markdown-root",
  "reqwest",
  "route-manifest",
  "rusqlite",

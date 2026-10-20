@@ -1,4 +1,4 @@
-//! entities HTTP surface (port 8097), and the `sync-obsidian` / `sync-google` commands.
+//! entities HTTP surface (port 8097), and the `sync-journal` / `sync-google` commands.
 //!
 //! Same shape as `capabilities/traveler`: blocking store work in `spawn_blocking`, `/ready`
 //! proves the database, `/routes` serves the manifest the tests check against this file.
@@ -491,9 +491,6 @@ async fn entity_sources(State(state): State<Arc<AppState>>, Path(id): Path<Strin
         if s.store.get(&id)?.is_none() {
             return Err(StoreError::NotFound(format!("no entity {id}")));
         }
-        let vault_url = sjel_config::env_var("SJEL_VAULT_URL")
-            .unwrap_or_else(|_| "http://127.0.0.1:8094".into());
-        let mut obsidian: Option<Result<Vec<entities::sync::Incoming>, String>> = None;
         let sources: Vec<Value> = s
             .store
             .externals_of(&id)?
@@ -504,16 +501,9 @@ async fn entity_sources(State(state): State<Arc<AppState>>, Path(id): Path<Strin
                         entities::google::record(&person)
                             .ok_or_else(|| "the contact has no name".to_string())
                     }),
-                    "obsidian" => obsidian
-                        .get_or_insert_with(|| entities::obsidian::fetch(&vault_url))
-                        .as_ref()
-                        .map_err(Clone::clone)
-                        .and_then(|all| {
-                            all.iter()
-                                .find(|r| r.external_id == external_id)
-                                .cloned()
-                                .ok_or_else(|| "the note no longer exists".to_string())
-                        }),
+                    // The Atlas/People notes left the vault on 2026-10-20; their prose is the
+                    // person's `notes` field now.
+                    "obsidian" => Err("the vault note was moved into this person".to_string()),
                     other => Err(format!("no adapter for {other}")),
                 };
                 match record {
@@ -623,14 +613,6 @@ fn run_sync(
     dry_run: bool,
 ) -> Result<(), String> {
     let (records, managed): (Vec<entities::sync::Incoming>, &[&str]) = match system {
-        "obsidian" => {
-            let vault_url = sjel_config::env_var("SJEL_VAULT_URL")
-                .unwrap_or_else(|_| "http://127.0.0.1:8094".into());
-            (
-                entities::obsidian::fetch(&vault_url)?,
-                entities::obsidian::MANAGED,
-            )
-        }
         "google" => {
             let people = entities::google::fetch()?;
             let skipped = people.len();
@@ -691,16 +673,32 @@ fn main() {
     };
     let args: Vec<String> = std::env::args().skip(1).collect();
     match args.first().map(String::as_str) {
-        Some(command @ ("sync-obsidian" | "import-obsidian" | "sync-google")) => {
-            let system = if command == "sync-google" {
-                "google"
-            } else {
-                "obsidian"
-            };
+        Some("sync-google") => {
             let dry_run = args.iter().any(|a| a == "--dry-run");
-            if let Err(error) = run_sync(&config, &store, system, dry_run) {
+            if let Err(error) = run_sync(&config, &store, "google", dry_run) {
                 eprintln!("entities: {error}");
                 std::process::exit(1);
+            }
+        }
+        Some("sync-journal") => {
+            let dry_run = args.iter().any(|a| a == "--dry-run");
+            let report = entities::journal::fetch(&config.projects_url)
+                .map(|records| entities::journal::last_contacts(&records))
+                .and_then(|latest| {
+                    entities::journal::apply(&store, &latest, dry_run).map_err(|e| e.to_string())
+                });
+            match report {
+                Ok(r) => println!(
+                    "sync-journal{}: {} people, {} with a Journal contact, {} updated",
+                    if dry_run { " (dry run)" } else { "" },
+                    r.people,
+                    r.with_contact,
+                    r.updated
+                ),
+                Err(error) => {
+                    eprintln!("entities: {error}");
+                    std::process::exit(1);
+                }
             }
         }
         None => tokio::runtime::Runtime::new()
@@ -708,7 +706,7 @@ fn main() {
             .block_on(serve(config, store)),
         Some(other) => {
             eprintln!(
-                "usage: entities-server [sync-obsidian|sync-google [--dry-run]] (got {other:?})"
+                "usage: entities-server [sync-journal|sync-google [--dry-run]] (got {other:?})"
             );
             std::process::exit(64);
         }

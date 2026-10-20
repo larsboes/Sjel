@@ -27,6 +27,7 @@ pub const SOURCES: &[&str] = &[
     "google",
     "places-register",
     "import",
+    "journal",
 ];
 
 /// The dated facts a person can carry. Both place the entity somewhere for a span of days.

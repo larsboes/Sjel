@@ -14,6 +14,9 @@ pub struct Config {
     /// `capabilities/foundation-models`, the on-device model that advises on unclear
     /// duplicates. Loopback only: C2 goes to it (PRD §6.1).
     pub model_url: String,
+    /// `capabilities/projects`, where the Journal lives since 2026-10-20 (`journal.rs`). Same
+    /// variable and default as `capabilities/finance`.
+    pub projects_url: String,
 }
 
 impl Config {
@@ -25,6 +28,8 @@ impl Config {
                 .unwrap_or_else(|_| "http://127.0.0.1:8093".to_string()),
             model_url: sjel_config::env_var("SJEL_LOCAL_MODEL_URL")
                 .unwrap_or_else(|_| "http://127.0.0.1:8091".to_string()),
+            projects_url: sjel_config::env_var("SJEL_PROJECTS_BASE_URL")
+                .unwrap_or_else(|_| "http://127.0.0.1:8103".to_string()),
         }
     }
 }

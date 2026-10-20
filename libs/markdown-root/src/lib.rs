@@ -539,8 +539,61 @@ pub fn frontmatter_spanned(md: &str) -> Result<Frontmatter, String> {
     })
 }
 
+/// Pull every `[[target]]` out of a body, alias and heading stripped.
+///
+/// Embeds (`![[x]]`) count: an embed that does not resolve renders as nothing,
+/// which is exactly the failure a link check exists to catch. The flag is `true` for a link
+/// that sits before `body_start`, in the frontmatter. Moved here from `capabilities/vault`'s
+/// link checker on 2026-10-20, so every capability that counts links counts the same ones.
+pub fn wikilink_targets(text: &str, body_start: usize) -> Vec<(String, bool)> {
+    let bytes = text.as_bytes();
+    let mut out = Vec::new();
+    let mut i = 0;
+    while i + 1 < bytes.len() {
+        if bytes[i] == b'[' && bytes[i + 1] == b'[' {
+            if let Some(rel) = text[i + 2..].find("]]") {
+                let inner = &text[i + 2..i + 2 + rel];
+                // Newlines never appear inside a wikilink; hitting one means the
+                // opening brackets were something else (a code sample, a table).
+                // Neither does a bracket: Obsidian forbids `[` and `]` in a note
+                // name, so `np.array([[1, 2], [3, 4]])` in a fenced block is a
+                // list literal and `<% tp.date.now('yyyy-[W]ww') %>` is a
+                // Templater expression. Both were counted as links and then as
+                // dead links — 17 of them in this vault, found by an independent
+                // probe that used a `[[([^]\n]+)]]` regex and could not see them.
+                if !inner.contains('\n') && !inner.contains('[') && !inner.contains(']') {
+                    let head = inner.split('|').next().unwrap_or(inner);
+                    let head = head.split('#').next().unwrap_or(head);
+                    let t = head.trim();
+                    if !t.is_empty() {
+                        out.push((t.to_string(), i < body_start));
+                    }
+                }
+                i += 2 + rel + 2;
+                continue;
+            }
+        }
+        i += 1;
+    }
+    out
+}
+
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn wikilink_targets_strip_alias_and_heading_and_skip_code_brackets() {
+        let text = "---\nrelated: [[Ron]]\n---\nSaw [[Erika|E]] and [[Notes/Plan#Day]]. np.array([[1, 2], [3, 4]])";
+        let body_start = text.find("Saw").unwrap();
+        assert_eq!(
+            wikilink_targets(text, body_start),
+            vec![
+                ("Ron".to_string(), true),
+                ("Erika".to_string(), false),
+                ("Notes/Plan".to_string(), false)
+            ]
+        );
+    }
+
     use super::*;
 
     /// A throwaway tree under the OS temp dir, removed on drop.

@@ -107,47 +107,13 @@ pub struct LinkReport {
     pub dead: Vec<DeadLink>,
 }
 
-/// Pull every `[[target]]` out of a body, alias and heading stripped.
-///
-/// Embeds (`![[x]]`) count: an embed that does not resolve renders as nothing,
-/// which is exactly the failure a link check exists to catch.
-fn targets_in(text: &str, body_start: usize) -> Vec<(String, bool)> {
-    let bytes = text.as_bytes();
-    let mut out = Vec::new();
-    let mut i = 0;
-    while i + 1 < bytes.len() {
-        if bytes[i] == b'[' && bytes[i + 1] == b'[' {
-            if let Some(rel) = text[i + 2..].find("]]") {
-                let inner = &text[i + 2..i + 2 + rel];
-                // Newlines never appear inside a wikilink; hitting one means the
-                // opening brackets were something else (a code sample, a table).
-                // Neither does a bracket: Obsidian forbids `[` and `]` in a note
-                // name, so `np.array([[1, 2], [3, 4]])` in a fenced block is a
-                // list literal and `<% tp.date.now('yyyy-[W]ww') %>` is a
-                // Templater expression. Both were counted as links and then as
-                // dead links — 17 of them in this vault, found by an independent
-                // probe that used a `[[([^]\n]+)]]` regex and could not see them.
-                if !inner.contains('\n') && !inner.contains('[') && !inner.contains(']') {
-                    let head = inner.split('|').next().unwrap_or(inner);
-                    let head = head.split('#').next().unwrap_or(head);
-                    let t = head.trim();
-                    if !t.is_empty() {
-                        out.push((t.to_string(), i < body_start));
-                    }
-                }
-                i += 2 + rel + 2;
-                continue;
-            }
-        }
-        i += 1;
-    }
-    out
-}
+use markdown_root::wikilink_targets as targets_in;
 
 /// `targets_in`, for the one other module that needs the same parse.
 ///
 /// `people::linked_basenames` counts journal backlinks and must count exactly what the link
-/// checker counts — a second wikilink parser would drift from this one within a week.
+/// checker counts — a second wikilink parser would drift from this one within a week. The parser
+/// lives in `markdown_root` since 2026-10-20, so `capabilities/entities` reads the same links.
 pub fn targets_for_test(text: &str, body_start: usize) -> Vec<String> {
     targets_in(text, body_start)
         .into_iter()

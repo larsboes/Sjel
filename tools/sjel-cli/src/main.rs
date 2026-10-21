@@ -36,6 +36,7 @@ mod runtime;
 mod schedule;
 mod search;
 mod self_model;
+mod setup;
 mod sparpreis_watch;
 mod time;
 mod toolchain;
@@ -114,6 +115,8 @@ fn sjel(root: &Path, command: &str, rest: &[String]) -> ExitCode {
         "search" => search::run(root, rest),
         // In-process since 2026-10-02: tools/doctor is a launcher for this same entry point.
         "doctor" => doctor::run(rest),
+        // What this machine still needs, and what applying it would do (tools/sjel-cli/src/setup/).
+        "setup" => setup::run(rest),
         // stdio MCP server, and its registration with each harness. Both halves are
         // the sjel-mcp crate: tools/sjel-mcp.ts was the server until 2026-10-04.
         "mcp" => exec(Command::new(tool("tools/sjel-mcp/sjel-mcp")).args(rest)),
@@ -174,6 +177,7 @@ fn help(root: &Path, topic: &str) -> ExitCode {
         // listed `apply` and `prune` after both had become `reclaim`.
         "storage" => return exec(Command::new(root.join("tools/storage/storage")).arg("-h")),
         "update" => help::UPDATE,
+        "setup" => help::SETUP,
         "gates" | "test" => help::GATES,
         "cargo" => help::CARGO,
         "doctor" => "Usage: sjel doctor",

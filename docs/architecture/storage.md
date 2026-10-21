@@ -45,6 +45,11 @@ replica's `seconds_since_success` against its interval, and a surface that must 
 `sync_now` before reading. One file is either the shared local database or a replica, never both,
 and a replica file that already holds local writes is refused rather than converted.
 
+`sjel setup plan turso` is where a deployment finds out what it still needs: the URL, the
+credential, which capabilities link the crate and whether each is built with the feature, and
+what a restart would change. It writes nothing; `apply --confirm` records the settings it owns in
+the private overlay and prints the steps whose files have another owner.
+
 ## Path indirection & state mounts
 
 Resolve deployment paths through the owning configuration API. Machine state mounts are declared

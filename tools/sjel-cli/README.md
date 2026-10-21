@@ -31,6 +31,39 @@ Rust first, and the one-crate shape was decided on 2026-10-02.
 | `sparpreis-watch` | `tools/sparpreis-watch` | TypeScript (`sparpreis-watch.ts` + `sparpreis-watch.test.ts`), 2026-10-04 |
 | `model-check` | `tools/model-check` | TypeScript (`model-check.ts`), 2026-10-04 |
 
+`setup` (2026-10-21) is the first subcommand that is not a port; see below.
+
+## `setup`: the first verb that is not a port
+
+`sjel setup` (`src/setup/`) turns facts five tools already hold into one proposal: probes (what
+is true now), steps (what would change) and verify (how we know it worked). `tools/install.sh`
+bootstraps a host, `machine.toml` records the per-machine facts, `tools/capability.sh` owns the
+enabled set, `tools/harnesses` deploys Packs and `tools/doctor` reports what is broken — none of
+them proposed state, which is what this adds.
+
+Three rules, and they are the contract:
+
+1. **`plan` is the default and writes nothing**, so asking what a machine needs cannot change it.
+2. **`apply` needs `--confirm`** and runs only the steps marked `apply`. Every one is idempotent:
+   a second run reports "already up to date, untouched" rather than rewriting the file.
+3. **A step this tool does not own is printed, never taken.** A cargo feature is a build decision
+   its owner makes; a capability's `[capability.<n>] env` section has its own writer. Both appear
+   as `manual` or `blocked` with the exact path and line.
+
+`verify` asks the thing itself rather than the config file: for `turso` it sends the credential to
+that component's `/info` and reports what came back, because a deployment env that names a primary
+proves nothing about whether the token still works.
+
+A credential is written only from stdin (`--token-stdin`) into the private overlay's deployment
+env — never echoed, never logged, never written to the tracked tree. The report names the key and
+hides the value.
+
+`--json` on all three verbs is the surface a UI renders. The UIs do not execute: the dashboard is
+reachable over the tailnet, and a web app that can install services is a privileged host agent.
+One executor, two views.
+
+Components: `turso` (embedded replicas of a remote Turso primary).
+
 `toolchain-check` was compared with its bash version on this Mac before replacement. Text
 output, JSON (sorted keys) and exit codes were identical for 10 flag combinations, and
 `tools/toolchain-scope.test.sh` passes. One run took 0.31 s against 1.6 s for bash, measured

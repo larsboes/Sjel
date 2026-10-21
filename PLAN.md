@@ -184,3 +184,74 @@ one shared file, and that split is the work, not the sync loop.
 - [x] Update `capabilities/store/README.md` and doctrine recording LibSQL adoption, non-blocking MVCC, and native vector capabilities.
 - [x] Verify `tools/backup.sh` and `tools/restore.sh` isolated recovery ladder (107 tables, 640,464 rows) operates identically on LibSQL format.
 - [x] Keep Sjel self-model (`self.json`) and service manifests (`service.toml`) validated and current.
+
+---
+
+## 6. Topology decision (2026-10-21): this Mac is the primary, the phone is a replica
+
+Decided by the owner after the replica path was found unreachable over the shared `axon.db`.
+The shape, and what each hop is for:
+
+```
+   phone (iOS, Tauri app)          this Mac (Lars-Mac)                 later: home server
+   embedded replica   ──pull/write──▶  sqld  ◀──embedded replica──  capabilities  ──▶  sqld (primary)
+   over tailnet                       primary                        over loopback
+```
+
+1. **This Mac runs `sqld`** (libsql-server) as the primary for the data that must reach the
+   phone. Measured 2026-10-21: `libsql-server-v0.24.32` ships a prebuilt
+   `libsql-server-aarch64-apple-darwin` binary whose `.sha256` matches the published digest, and
+   `sqld --version` runs here. It carries `--auth-jwt-key-file` (Ed25519 public key; clients
+   present JWTs), `--http-listen-addr`, `--grpc-listen-addr`, and `--primary-grpc-url` — so the
+   same binary can later run as a *replica* of a home-server primary, which is what makes the
+   last move a configuration change rather than a rewrite.
+2. **Capabilities that serve phone data hold embedded replicas** of that primary over loopback:
+   reads local, writes forwarded to `sqld`, pulled back on the interval. This is libSQL's own
+   model; the alternative — keeping `axon.db` authoritative and writing a job that pushes a
+   subset somewhere — is a custom replication protocol with its own correctness risk, which is
+   the thing `libsql` exists to avoid.
+3. **The phone holds an embedded replica.** `sjel-turso` checks for `aarch64-apple-ios`
+   (45 s cold, 2026-10-21) and the Tauri app already declares an iOS target
+   (`dashboard/src-tauri/tauri.conf.json` → `bundle.iOS`, minimum 16.0, team 52Q4FQ5XN8,
+   `gen/apple` present). Reads are local and work offline; writes go to the Mac when it is
+   reachable, which is what an embedded replica means.
+4. **Reachability is the tailnet, not the internet.** This machine is `100.116.104.41`
+   (`Lars-Mac`) on the tailnet; a primary bound there is reachable by the owner's devices only.
+   `sjel doctor`'s tailnet identity gate reports no `tailscale serve` HTTPS handler, so nothing
+   injects an identity header — `sqld`'s own JWT check is the access control for this port, and
+   it must be configured before the port is opened to the tailnet.
+5. **A later home server changes one setting.** Its `sqld` becomes the primary; this Mac and the
+   phone keep their replicas and point `SJEL_TURSO_URL` at it. Nothing in the storage layer
+   changes, which is the whole reason to build it this way now.
+
+### Proven 2026-10-21: the pull path works
+
+The `libsql 0.10.0` crate and the `sqld 0.24.32` binary — a 2025-02 release train — do sync. A
+scratch primary on loopback (`sqld --db-path … --http-listen-addr 127.0.0.1:8880`) plus
+`libs/sjel-turso/tests/live_primary.rs` showed, in 0.24 s: a write through replica A reaching the
+primary, a pull bringing it back, and a second replica that had never seen the row finding it on
+its first pull — the pull that runs before the DDL. `sync_stats()` reported `syncs >= 1`,
+`failures = 0`, and the primary's own SQLite file
+(`<db-path>/dbs/default/data`) held the table the forwarded DDL created.
+
+The test reads the deployment's own `SJEL_TURSO_URL` / `SJEL_TURSO_AUTH_TOKEN`, so it skips with
+a printed reason when no primary is named — a machine with none does not fail a suite it cannot
+satisfy — and becomes a real check the moment `sjel setup` records a primary. What it does not
+cover yet: JWT authentication (`sqld --auth-jwt-key-file`), which the phone's replica will need
+before the port is reachable from the tailnet.
+
+### What this commits us to, stated plainly
+- **The `axon.db` split is on the critical path.** One file cannot be a replica and a local
+  database, and `axon.db` is opened by twenty capability modules. Only the capabilities whose
+  data the phone needs move to the primary; the rest may stay local, but they must stop sharing
+  that one file first.
+- **The ten libsql advisories stay until libsql moves to hyper 1 / rustls 0.23**, so CI's
+  `Security` job stays red. Accepted as the price of this topology, recorded in the open-decision
+  block above rather than waived in `osv-scanner.toml`.
+- **`sqld` becomes supervised software**, not a one-off: a pinned version with its digest, an
+  `upstreams.toml` entry with a review, a start/stop path Sjel owns, and a place in the backup
+  contract. A primary that nobody backs up is worse than no primary.
+- **Token minting is Sjel's job.** `sqld` authenticates JWTs signed by a key it holds the public
+  half of; the private key belongs in the OS keychain, and `sjel setup` is the surface that
+  mints a token, writes `SJEL_TURSO_URL` / `SJEL_TURSO_AUTH_TOKEN`, and verifies with a real
+  pull — the verification that has never once run.

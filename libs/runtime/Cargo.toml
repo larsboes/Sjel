@@ -11,6 +11,9 @@ publish = false
 sjel-config = { path = "../sjel-config" }
 serde = { workspace = true, features = ["derive"] }
 serde_json.workspace = true
+# One derive needs it: `Update` is sjel-status's `POST /runtime` body, and a manifest schema has
+# to be derived from the struct serde parses rather than hand-written beside it.
+schemars = "1.2.2"
 
 [lints]
 workspace = true

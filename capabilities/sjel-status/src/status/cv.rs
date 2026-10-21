@@ -61,7 +61,7 @@ pub(crate) async fn cv_handler() -> Result<Json<Value>, (StatusCode, Json<Value>
 }
 
 /// Body of `POST /api/sjel-status/cv`. Fields not used by an action are ignored.
-#[derive(Deserialize, Default)]
+#[derive(Deserialize, Default, schemars::JsonSchema)]
 #[serde(default)]
 pub(crate) struct CvRequest {
     pub(crate) action: String,
@@ -145,7 +145,7 @@ fn plan_cv(r: &CvRequest) -> Result<Vec<String>, String> {
 }
 
 /// Which file the editor reads or writes: the master when `slug` is empty, else one application.
-#[derive(Deserialize, Default)]
+#[derive(Deserialize, Default, schemars::JsonSchema)]
 #[serde(default)]
 pub(crate) struct CvFile {
     pub(crate) slug: String,
@@ -188,7 +188,7 @@ pub(crate) async fn cv_file_write_handler(
 }
 
 /// Body of `PUT /api/sjel-status/cv/model`.
-#[derive(Deserialize, Default)]
+#[derive(Deserialize, Default, schemars::JsonSchema)]
 #[serde(default)]
 pub(crate) struct CvModel {
     pub(crate) slug: String,

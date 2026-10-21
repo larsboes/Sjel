@@ -138,7 +138,7 @@ pub(crate) const APPLY_CLASSES: &[&str] = &[
     "npm",
 ];
 
-#[derive(serde::Deserialize)]
+#[derive(serde::Deserialize, schemars::JsonSchema)]
 pub(crate) struct ApplyRequest {
     pub(crate) class: String,
 }

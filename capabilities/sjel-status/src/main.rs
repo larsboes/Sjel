@@ -108,46 +108,51 @@ const ROUTES: &[route_manifest::Route] = &[
         "/api/sjel-status/backup/runs",
         "Every backup attempt, newest first, including the ones that failed. Optional ?limit=N (default 50, max 500).",
     ),
-    r(
-        "POST",
-        "/api/sjel-status/backup/policy",
-        "Set a target's interval, or turn it off. Body: { target, interval_hours } where null means off and one hour is the minimum.",
-    ),
-    r(
-        "POST",
-        "/api/sjel-status/backup/verify",
-        "Rehearse a target: hash its newest recorded archive and restore it in isolation under its own receipt. Body: { target }.",
-    ),
+    route_manifest::Route {
+        method: "POST",
+        path: "/api/sjel-status/backup/policy",
+        summary: "Set a target's interval, or turn it off. Body: { target, interval_hours } where null means off and one hour is the minimum.",
+        request_schema: Some(route_manifest::schema_of::<status::PolicyRequest>),
+    },
+    route_manifest::Route {
+        method: "POST",
+        path: "/api/sjel-status/backup/verify",
+        summary: "Rehearse a target: hash its newest recorded archive and restore it in isolation under its own receipt. Body: { target }.",
+        request_schema: Some(route_manifest::schema_of::<status::VerifyRequest>),
+    },
     r(
         "GET",
         "/api/sjel-status/host-watch",
         "Open findings from the hourly host watch: a runaway process or a filling disk.",
     ),
-    r(
-        "POST",
-        "/api/sjel-status/upstreams/watch",
-        "Append a `watch` row to upstreams.toml: noted, not audited, grants nothing. Body: { url, summary, name? }. 400 carries the refusal.",
-    ),
+    route_manifest::Route {
+        method: "POST",
+        path: "/api/sjel-status/upstreams/watch",
+        summary: "Append a `watch` row to upstreams.toml: noted, not audited, grants nothing. Body: { url, summary, name? }. 400 carries the refusal.",
+        request_schema: Some(route_manifest::schema_of::<status::WatchRequest>),
+    },
     r(
         "GET",
         "/api/sjel-status/packs",
         "Every Pack skill against every agent harness: deployed, drifted, or unowned at the destination.",
     ),
-    r(
-        "POST",
-        "/api/sjel-status/packs",
-        "Deploy, sync or remove Packs on one harness. Owner-only: this surface admits no agent token.",
-    ),
+    route_manifest::Route {
+        method: "POST",
+        path: "/api/sjel-status/packs",
+        summary: "Deploy, sync or remove Packs on one harness. Owner-only: this surface admits no agent token.",
+        request_schema: Some(route_manifest::schema_of::<status::PackWriteRequest>),
+    },
     r(
         "GET",
         "/api/sjel-status/cv",
         "CV profiles, applications and built PDFs with staleness. From capabilities/cv/cv status --json.",
     ),
-    r(
-        "POST",
-        "/api/sjel-status/cv",
-        "Run one cv verb: build, build-all, app-new, app-build, app-status, linkedin-pull, linkedin-diff, linkedin-sheet. 400 carries the refusal.",
-    ),
+    route_manifest::Route {
+        method: "POST",
+        path: "/api/sjel-status/cv",
+        summary: "Run one cv verb: build, build-all, app-new, app-build, app-status, linkedin-pull, linkedin-diff, linkedin-sheet. 400 carries the refusal.",
+        request_schema: Some(route_manifest::schema_of::<status::CvRequest>),
+    },
     r(
         "GET",
         "/api/sjel-status/cv/pdf",
@@ -158,21 +163,23 @@ const ROUTES: &[route_manifest::Route] = &[
         "/api/sjel-status/cv/file",
         "Raw YAML of the CV master, or of one application with ?slug=.",
     ),
-    r(
-        "PUT",
-        "/api/sjel-status/cv/file",
-        "Replace the CV master or one application. Body: { slug?, content }. Parsed and rendered first; 400 carries the refusal. Committed in the overlay's git.",
-    ),
+    route_manifest::Route {
+        method: "PUT",
+        path: "/api/sjel-status/cv/file",
+        summary: "Replace the CV master or one application. Body: { slug?, content }. Parsed and rendered first; 400 carries the refusal. Committed in the overlay's git.",
+        request_schema: Some(route_manifest::schema_of::<status::CvFile>),
+    },
     r(
         "GET",
         "/api/sjel-status/cv/model",
         "The CV master, or one application with ?slug=, as typed JSON for the form editor.",
     ),
-    r(
-        "PUT",
-        "/api/sjel-status/cv/model",
-        "Replace the CV master or one application from typed JSON. Body: { slug?, model }. Same checks and commit as /cv/file.",
-    ),
+    route_manifest::Route {
+        method: "PUT",
+        path: "/api/sjel-status/cv/model",
+        summary: "Replace the CV master or one application from typed JSON. Body: { slug?, model }. Same checks and commit as /cv/file.",
+        request_schema: Some(route_manifest::schema_of::<status::CvModel>),
+    },
     r(
         "GET",
         "/api/sjel-status/storage",
@@ -188,13 +195,19 @@ const ROUTES: &[route_manifest::Route] = &[
         "/api/sjel-status/updates",
         "Software installed outside this checkout: who owns moving each class, what is stale, and the last apply's outcome. From tools/updates' own report --json.",
     ),
-    r(
-        "POST",
-        "/api/sjel-status/updates/apply",
-        "Start one class of software moving. Body: { class } from brew, uv, rustup, graphify, interceptor, cargo, npm. Answers 202 immediately; the tool writes a receipt the next GET carries as lastApply.",
-    ),
+    route_manifest::Route {
+        method: "POST",
+        path: "/api/sjel-status/updates/apply",
+        summary: "Start one class of software moving. Body: { class } from brew, uv, rustup, graphify, interceptor, cargo, npm. Answers 202 immediately; the tool writes a receipt the next GET carries as lastApply.",
+        request_schema: Some(route_manifest::schema_of::<status::ApplyRequest>),
+    },
     r("GET", "/api/sjel-status/runtime", "Runtime selection, effective profile, power and On-the-go exceptions."),
-    r("POST", "/api/sjel-status/runtime", "Owner-only: save selection and/or persistent On-the-go exceptions."),
+    route_manifest::Route {
+        method: "POST",
+        path: "/api/sjel-status/runtime",
+        summary: "Owner-only: save selection and/or persistent On-the-go exceptions.",
+        request_schema: Some(route_manifest::schema_of::<sjel_runtime::Update>),
+    },
     r(
         "GET",
         "/api/sjel-status/agent",
@@ -205,16 +218,18 @@ const ROUTES: &[route_manifest::Route] = &[
         "/api/sjel-status/events",
         "The health and agent answers as server-sent events: one `snapshot` frame per change, carrying both. Read instead of polling the two above.",
     ),
-    r(
-        "POST",
-        "/api/sjel-status/agent/mode",
-        "Set one capability's agent mode. Body: { capability, mode } where mode is off, read-only, ask or auto.",
-    ),
-    r(
-        "POST",
-        "/api/sjel-status/agent/approvals/{id}",
-        "Allow or deny one agent write that waits in ask mode. Body: { allow }.",
-    ),
+    route_manifest::Route {
+        method: "POST",
+        path: "/api/sjel-status/agent/mode",
+        summary: "Set one capability's agent mode. Body: { capability, mode } where mode is off, read-only, ask or auto.",
+        request_schema: Some(route_manifest::schema_of::<status::ModeBody>),
+    },
+    route_manifest::Route {
+        method: "POST",
+        path: "/api/sjel-status/agent/approvals/{id}",
+        summary: "Allow or deny one agent write that waits in ask mode. Body: { allow }.",
+        request_schema: Some(route_manifest::schema_of::<status::DecisionBody>),
+    },
     r(
         "POST",
         "/api/sjel-status/session/ticket",
@@ -230,11 +245,12 @@ const ROUTES: &[route_manifest::Route] = &[
         "/api/sjel-status/session/logout",
         "End this browser's session and clear its cookie.",
     ),
-    r(
-        "POST",
-        "/api/sjel-status/capabilities/{name}/backup",
-        "Request a backup of one capability. Accepts the run and returns; poll /backups for the outcome.",
-    ),
+    route_manifest::Route {
+        method: "POST",
+        path: "/api/sjel-status/capabilities/{name}/backup",
+        summary: "Request a backup of one capability. Accepts the run and returns; poll /backups for the outcome.",
+        request_schema: Some(route_manifest::schema_of::<status::RunRequest>),
+    },
     // Undeclared until 2026-08-31, and served the whole time. The dashboard's panel page
     // calls both; `/routes` denied they existed. The coverage test below did not catch it:
     // its detector required the path literal to sit immediately after the opening paren,

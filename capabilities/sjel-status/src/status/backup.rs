@@ -60,7 +60,7 @@ pub(crate) fn contract_target(
 /// Optional, and absent means "the target the manifest declares". A body is accepted so
 /// the surface can offer a choice; the no-body form is what the dashboard already sends, so
 /// both have to keep working.
-#[derive(Deserialize, Default)]
+#[derive(Deserialize, Default, schemars::JsonSchema)]
 pub(crate) struct RunRequest {
     #[serde(default)]
     pub(crate) target: Option<String>,
@@ -395,7 +395,7 @@ pub(crate) struct RunQuery {
 }
 
 /// Body of `POST .../backup/policy`: the interval an operator chose for a target.
-#[derive(Deserialize)]
+#[derive(Deserialize, schemars::JsonSchema)]
 pub(crate) struct PolicyRequest {
     pub(crate) target: String,
     /// `null` is off. Absent is also off, so a caller cannot accidentally leave the previous
@@ -435,7 +435,7 @@ pub(crate) async fn backup_policy_handler(
 }
 
 /// Body of `POST .../backup/verify`.
-#[derive(Deserialize)]
+#[derive(Deserialize, schemars::JsonSchema)]
 pub(crate) struct VerifyRequest {
     pub(crate) target: String,
 }

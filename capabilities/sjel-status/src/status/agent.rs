@@ -58,7 +58,7 @@ pub(crate) async fn agent_handler() -> Result<Json<Value>, (StatusCode, Json<Val
     })))
 }
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Deserialize, schemars::JsonSchema)]
 pub(crate) struct ModeBody {
     capability: String,
     mode: String,
@@ -100,7 +100,7 @@ pub(crate) async fn agent_mode_handler(
     ))
 }
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Deserialize, schemars::JsonSchema)]
 pub(crate) struct DecisionBody {
     allow: bool,
 }

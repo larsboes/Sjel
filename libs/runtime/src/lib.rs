@@ -14,7 +14,9 @@ pub const POWER_MAX_AGE_SECONDS: u64 = 90;
 const DEFERRED_PREFIX: &str = "deferred by runtime profile:";
 static WRITER: Mutex<()> = Mutex::new(());
 
-#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(
+    Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize, schemars::JsonSchema,
+)]
 #[serde(rename_all = "kebab-case")]
 pub enum Selection {
     #[default]
@@ -23,7 +25,9 @@ pub enum Selection {
     OnTheGo,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
+#[derive(
+    Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize, schemars::JsonSchema,
+)]
 #[serde(rename_all = "kebab-case")]
 pub enum Category {
     OtherLocalModels,
@@ -75,7 +79,7 @@ pub struct Settings {
     pub revision: u64,
 }
 
-#[derive(Debug, Clone, Default, Deserialize, Serialize)]
+#[derive(Debug, Clone, Default, Deserialize, Serialize, schemars::JsonSchema)]
 #[serde(deny_unknown_fields)]
 pub struct Update {
     pub selection: Option<Selection>,

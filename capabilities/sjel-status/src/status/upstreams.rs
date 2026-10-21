@@ -1,7 +1,7 @@
 use super::*;
 
 /// Body of `POST .../upstreams/watch`.
-#[derive(Deserialize)]
+#[derive(Deserialize, schemars::JsonSchema)]
 pub(crate) struct WatchRequest {
     pub(crate) url: String,
     pub(crate) summary: String,

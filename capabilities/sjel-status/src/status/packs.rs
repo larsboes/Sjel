@@ -67,7 +67,7 @@ pub(crate) async fn packs_handler() -> Result<Json<Value>, (StatusCode, Json<Val
 }
 
 /// Body of `POST /api/sjel-status/packs`.
-#[derive(Deserialize)]
+#[derive(Deserialize, schemars::JsonSchema)]
 pub(crate) struct PackWriteRequest {
     pub(crate) action: String,
     pub(crate) harness: String,

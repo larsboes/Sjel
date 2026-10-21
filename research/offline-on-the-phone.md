@@ -87,9 +87,18 @@ The phone side is built, without UI. `mirror_sync` fetches the manifest, compare
 device holds, fetches the copy if it differs, and `mirror_status` reports when it was built, what it
 holds and whether the file still matches its digest. The fetch, the checks and the reader are one
 module, tested against a fake transport and a real SQLite file; `dashboard/src/lib/mirror.ts` is the
-typed seam a page will use. With no page reading the copy yet, one sync also runs shortly after app
-start (`spawn_mirror_sync` in `src-tauri/src/lib.rs`), so the copy exists on a device at all rather
-than waiting for a caller that does not exist.
+typed seam a page will use. One sync also runs shortly after app start (`spawn_mirror_sync` in
+`src-tauri/src/lib.rs`), so the copy exists on a device even before a page asks for it.
+
+**The projects page reads it (2026-10-21).** `/projects` falls back to the copy when the Mac does not
+answer (`lib/projects/offline.ts`, and the rules it keeps are tested in
+`vite/offline-copy.test.ts`): the sidebar lists the projects the copy holds, the index lists every
+note, and a selected project renders its records — title, task state, and the markdown body — from
+the device. The page says so and says how old the copy is, and every edit is refused while it is
+reading the copy: the copy is opened read-only, and a write made here could not reach the Mac
+anyway. The rich tables (`DatabaseTable`, which needs the vault's frontmatter map) stay Mac-only;
+the copy has no `fields`, `data_class` or `uri`, and the page shows what it has rather than filling
+those in.
 
 What the device refuses, and why each refusal is the point:
 

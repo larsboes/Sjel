@@ -23,6 +23,8 @@
   import { link } from "$lib/nav";
   import { tip } from "$lib/tip";
   import { focusRow } from "$lib/list-cursor.svelte";
+  import type { MirrorCopy } from "$lib/mirror";
+  import { copyAge, projectFromCopy, projectIndexFromCopy } from "./offline";
 
   /**
    * Projects, their tasks and their notes, from `capabilities/projects` (its README).
@@ -35,6 +37,16 @@
   let records = $state<ProjectRecord[]>([]);
   let listState = $state<"loading" | "error" | "ready">("loading");
   let recordState = $state<"loading" | "error" | "empty" | "ready">("empty");
+  /**
+   * The copy this device holds, when the Mac could not answer and the copy did
+   * (`src-tauri/src/mirror.rs`, route R1 in `research/offline-on-the-phone.md`). Non-null means
+   * everything on this page is read from the device and nothing may be written: the copy is opened
+   * read-only, and an edit made here could not reach the Mac anyway.
+   */
+  let copy = $state<MirrorCopy | null>(null);
+  /** The notes the copy holds, for the list shown when no project is selected. */
+  let copyNotes = $state<ProjectRecord[]>([]);
+  const readOnly = $derived(copy !== null);
   let error = $state<string | null>(null);
   let busy = $state(false);
 
@@ -93,7 +105,7 @@
   $effect(() => {
     if (open && recordState === "ready") focusRow(document.getElementById(`record-${open}`));
   });
-  const canAdd = $derived(selected !== null && !records.some((r) => r.archived));
+  const canAdd = $derived(!readOnly && selected !== null && !records.some((r) => r.archived));
 
   /** Undated after dated: a deadline is what expires. Plain comparison, ISO dates sort as text. */
   const byDue = (a: string | null, b: string | null) => (a === b ? 0 : a === null ? 1 : b === null ? -1 : a < b ? -1 : 1);
@@ -140,10 +152,22 @@
     try {
       list = await projects.list();
       listState = "ready";
+      return;
     } catch (e) {
       error = message(e);
-      listState = "error";
     }
+    // The Mac did not answer. The copy can still name the projects and hold every note, which is
+    // what a page opened on a train needs: which projects exist, and what is written in them.
+    const fromCopy = await projectIndexFromCopy();
+    if (!fromCopy) {
+      listState = "error";
+      return;
+    }
+    list = fromCopy.projects;
+    copyNotes = fromCopy.notes;
+    copy = fromCopy.copy;
+    error = null;
+    listState = "ready";
   }
 
   async function loadRecords(name: string | null) {
@@ -155,11 +179,21 @@
     recordState = "loading";
     try {
       records = await projects.get(name);
+      copy = null;
       recordState = "ready";
+      return;
     } catch (e) {
       error = message(e);
-      recordState = "error";
     }
+    const fromCopy = await projectFromCopy(name);
+    if (!fromCopy) {
+      recordState = "error";
+      return;
+    }
+    copy = fromCopy.copy;
+    error = null;
+    records = fromCopy.records;
+    recordState = "ready";
   }
 
   /** Each segment with the number of the first checkbox in it, so a box in the third markdown run
@@ -180,6 +214,10 @@
   }
 
   async function write(run: () => Promise<unknown>) {
+    if (readOnly) {
+      error = "This is this device's copy, and nothing here can reach the Mac. Connect to it to edit.";
+      return;
+    }
     busy = true;
     error = null;
     try {
@@ -508,33 +546,63 @@
   </nav>
 
   <section aria-live="polite">
+    {#if copy}
+      <p class="device-copy" role="status">
+        Reading this device's copy, built <strong>{copyAge(copy)}</strong>. {copy.rows.toLocaleString()} rows over
+        {copy.tables.length} tables; edits wait for the Mac.
+      </p>
+    {/if}
+
     {#if !selected}
-      <h2>Projects</h2>
-      <DatabaseTable kinds={["project"]} columns={["status", "open", "priority", "start", "due", "class"]} storeKey="projects" {stamp} />
-      <h2>All tasks</h2>
-      <DatabaseTable
-        kinds={["task"]}
-        columns={["project", "status", "due", "scheduled", "priority", "context", "energy", "class"]}
-        storeKey="tasks"
-        {stamp}
-        onchange={() => {
-          stamp++;
-          void loadList();
-        }}
-      />
-      <h2>All notes</h2>
-      <DatabaseTable
-        kinds={["note"]}
-        columns={["project", "summary", "maturity", "type", "categories", "class"]}
-        storeKey="all-notes"
-        {stamp}
-        onchange={() => {
-          stamp++;
-          void loadList();
-        }}
-      />
+      {#if copy}
+        <h2>All notes</h2>
+        <p class="device-copy-hint">
+          {copyNotes.length.toLocaleString()} note(s) in the copy. Pick one to read it without the Mac.
+        </p>
+        <ul class="device-notes">
+          {#each copyNotes as n (n.path)}
+            <li>
+              <a href={link(`/projects?project=${encodeURIComponent(recordProject(n.path))}&open=${encodeURIComponent(n.path)}`)}>
+                <span class="title">{n.title}</span>
+                <span class="meta">{recordProject(n.path)}</span>
+              </a>
+            </li>
+          {/each}
+        </ul>
+      {:else}
+        <h2>Projects</h2>
+        <DatabaseTable kinds={["project"]} columns={["status", "open", "priority", "start", "due", "class"]} storeKey="projects" {stamp} />
+        <h2>All tasks</h2>
+        <DatabaseTable
+          kinds={["task"]}
+          columns={["project", "status", "due", "scheduled", "priority", "context", "energy", "class"]}
+          storeKey="tasks"
+          {stamp}
+          onchange={() => {
+            stamp++;
+            void loadList();
+          }}
+        />
+        <h2>All notes</h2>
+        <DatabaseTable
+          kinds={["note"]}
+          columns={["project", "summary", "maturity", "type", "categories", "class"]}
+          storeKey="all-notes"
+          {stamp}
+          onchange={() => {
+            stamp++;
+            void loadList();
+          }}
+        />
+      {/if}
     {:else}
       <StateLine state={recordState} message={recordState === "error" ? (error ?? undefined) : "Reading the project…"} onRetry={() => loadRecords(selected)} />
+      {#if copy && recordState === "ready" && records.length === 0}
+        <p class="device-copy-hint">
+          This device's copy holds no records for “{selected}”. It may have been created since the copy was built
+          {copyAge(copy)}, or be empty.
+        </p>
+      {/if}
       {#if recordState === "ready"}
         {#if error}<p class="error" role="alert">{error}</p>{/if}
 
@@ -548,7 +616,8 @@
               <button
                 type="button"
                 class="btn btn-soft btn-sm"
-                disabled={busy}
+                disabled={busy || readOnly}
+                use:tip={readOnly ? "Archiving needs the Mac" : "Archive this project"}
                 onclick={() => toggleArchiveProject(hub)}
               >
                 {hub.archived ? "Unarchive" : "Archive"}
@@ -557,7 +626,8 @@
             <button
               type="button"
               class="btn btn-danger-soft btn-sm"
-              disabled={busy}
+              disabled={busy || readOnly}
+              use:tip={readOnly ? "Deleting needs the Mac" : "Delete this project"}
               onclick={() => selected && deleteProject(selected)}
             >
               Delete Project
@@ -907,7 +977,8 @@
           <button
             type="button"
             class="btn-icon"
-            use:tip={"Edit note"}
+            use:tip={readOnly ? "Editing needs the Mac" : "Edit note"}
+            disabled={readOnly}
             onclick={() => {
               editing = { path: record.path, base: record.content };
               draft = record.content;
@@ -920,7 +991,8 @@
             <button
               type="button"
               class="btn-icon btn-danger-soft"
-              use:tip={"Delete note"}
+              use:tip={readOnly ? "Deleting needs the Mac" : "Delete note"}
+              disabled={readOnly}
               onclick={() => deleteRecord(record.path, record.title)}
             >
               <Icon name="trash" size={13} /> Delete
@@ -1492,6 +1564,44 @@
 
   .error {
     color: var(--danger);
+  }
+
+  /* The device's copy: a status line, not an alarm. It says what is being read and how old it is,
+     which is the one fact a person needs to judge whether to trust what they are looking at. */
+  .device-copy {
+    margin: 0 0 1rem;
+    padding: 0.5rem 0.7rem;
+    font-size: var(--text-sm);
+    color: var(--text-secondary);
+    background: color-mix(in srgb, var(--rule) 12%, transparent);
+    border-left: 2px solid var(--rule);
+  }
+
+  .device-copy-hint {
+    margin: 0 0 0.6rem;
+    font-size: var(--text-sm);
+    color: var(--text-secondary);
+  }
+
+  .device-notes {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+  }
+
+  .device-notes li a {
+    display: flex;
+    justify-content: space-between;
+    gap: 1rem;
+    padding: 0.4rem 0.2rem;
+    border-bottom: 1px solid var(--rule);
+    text-decoration: none;
+  }
+
+  .device-notes .meta {
+    color: var(--text-secondary);
+    font-size: var(--text-sm);
+    white-space: nowrap;
   }
 
   /* Floating Hover Preview Card */

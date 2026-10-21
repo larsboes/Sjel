@@ -351,7 +351,9 @@ across — read-only, one-way, stale by its build time — and the rule above st
 is ever synchronized *back*, and nothing writes to the copy. What it holds is the Mac's decision,
 not the app's. A fetch is refused unless the bytes, the sha256 in the manifest, `integrity_check`
 and the per-table row counts all agree, because a partial database that opens looks exactly like a
-complete one.
+complete one. `/projects` reads it when the Mac does not answer — the project list, the note index
+and one project's records, with the copy's age in a status line and every edit refused
+(`lib/projects/offline.ts`). The rich tables still need the Mac: the copy carries no frontmatter map.
 
 **A client reads from its own replica (decided 2026-10-19).** A page never waits for the node
 before it paints. For the paths in `OFFLINE_PROJECTION_PATHS` and `C1_PREFIXES`

@@ -41,18 +41,20 @@ fn profile_input_round_trips_as_json_without_logging_values() {
     assert!(!format!("{original:?}").contains("concise"));
 }
 
-#[test]
-fn profile_store_refuses_unconditional_stale_write() {
+#[tokio::test]
+async fn profile_store_refuses_unconditional_stale_write() {
     let root = std::env::temp_dir().join(format!("sjel-profile-api-test-{}", std::process::id()));
     let _ = std::fs::remove_dir_all(&root);
     std::fs::create_dir_all(&root).unwrap();
-    let store = OperatorProfileStore::open(&root.join("profile.db")).unwrap();
+    let store = OperatorProfileStore::open(&root.join("profile.db"))
+        .await
+        .unwrap();
     assert!(matches!(
-        store.put(&input(), 0).unwrap(),
+        store.put(&input(), 0).await.unwrap(),
         operator_profile::PutOutcome::Stored(_)
     ));
     assert!(matches!(
-        store.put(&input(), 0).unwrap(),
+        store.put(&input(), 0).await.unwrap(),
         operator_profile::PutOutcome::Stale {
             current_revision: 1
         }

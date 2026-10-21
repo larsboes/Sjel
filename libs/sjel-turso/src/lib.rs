@@ -4,12 +4,18 @@
 //! vector search over Sjel's shared SQLite-compatible database (`axon.db`).
 
 use std::collections::{HashMap, HashSet};
-use std::error::Error;
+use std::error::Error as StdError;
 use std::path::{Path, PathBuf};
 use std::sync::{Arc, Mutex, OnceLock};
 
 /// Re-export the underlying LibSQL crate so capabilities do not depend on it directly.
 pub use libsql;
+
+/// What every fallible operation in this crate returns.
+pub type Error = Box<dyn StdError + Send + Sync>;
+
+/// The result of a fallible operation in this crate.
+pub type Result<T> = std::result::Result<T, Error>;
 
 /// The canonical stored timestamp, as a SQL expression.
 ///
@@ -60,7 +66,7 @@ fn database_registry() -> &'static Mutex<HashMap<PathBuf, Arc<libsql::Database>>
     REGISTRY.get_or_init(|| Mutex::new(HashMap::new()))
 }
 
-fn canonical_key(path: &Path) -> Result<PathBuf, Box<dyn Error + Send + Sync>> {
+fn canonical_key(path: &Path) -> Result<PathBuf> {
     let name = path
         .file_name()
         .ok_or_else(|| format!("database path {} names no file", path.display()))?;
@@ -74,9 +80,7 @@ fn canonical_key(path: &Path) -> Result<PathBuf, Box<dyn Error + Send + Sync>> {
 }
 
 /// Return or initialize a shared [`libsql::Database`] instance for a local database path.
-pub async fn database_for(
-    path: impl AsRef<Path>,
-) -> Result<Arc<libsql::Database>, Box<dyn Error + Send + Sync>> {
+pub async fn database_for(path: impl AsRef<Path>) -> Result<Arc<libsql::Database>> {
     let key = canonical_key(path.as_ref())?;
     {
         let registry = database_registry()
@@ -103,9 +107,7 @@ pub async fn database_for(
 }
 
 /// Open a new connection to a local LibSQL database with standard PRAGMAs applied.
-pub async fn open_local(
-    path: impl AsRef<Path>,
-) -> Result<libsql::Connection, Box<dyn Error + Send + Sync>> {
+pub async fn open_local(path: impl AsRef<Path>) -> Result<libsql::Connection> {
     let db = database_for(path).await?;
     let conn = db.connect()?;
     conn.execute_batch(CONNECTION_PRAGMAS).await?;
@@ -126,10 +128,10 @@ pub async fn migrate_once<F, Fut>(
     path: impl AsRef<Path>,
     prefix: &str,
     ddl: F,
-) -> Result<(), Box<dyn Error + Send + Sync>>
+) -> Result<()>
 where
     F: FnOnce(libsql::Connection) -> Fut,
-    Fut: std::future::Future<Output = Result<(), Box<dyn Error + Send + Sync>>>,
+    Fut: std::future::Future<Output = Result<()>>,
 {
     let key = canonical_key(path.as_ref())?;
     let done_key = format!("{}\u{1f}{prefix}", key.to_string_lossy());
@@ -149,6 +151,79 @@ where
         .unwrap_or_else(|poisoned| poisoned.into_inner());
     done.insert(done_key);
     Ok(())
+}
+
+/// A shared local database, opened once per path, with Sjel's PRAGMAs and prefix migration applied.
+///
+/// The async counterpart of `sjel_store::open_pool`: a capability holds one `Store` for the life of
+/// the process and calls [`Store::connect`] to read or [`Store::begin`] to write. The file is the
+/// same one every other capability's prefix lives in; only the engine differs.
+///
+/// ```no_run
+/// # async fn example() -> Result<(), sjel_turso::Error> {
+/// let store = sjel_turso::Store::open("/path/axon.db", "places", |conn| async move {
+///     conn.execute("CREATE TABLE IF NOT EXISTS places_items (id TEXT PRIMARY KEY)", ())
+///         .await?;
+///     Ok(())
+/// })
+/// .await?;
+/// let conn = store.connect().await?;
+/// # Ok(())
+/// # }
+/// ```
+pub struct Store {
+    path: PathBuf,
+    db: Arc<libsql::Database>,
+}
+
+impl Store {
+    /// Open the database at `path`, apply the PRAGMAs, and run `ddl` once per process for `prefix`.
+    ///
+    /// The prefix is the capability's namespace in the shared file, exactly as it is for
+    /// `sjel_store::open_pool`. Reopening the same path in the same process reuses the connection
+    /// pool and skips the DDL.
+    ///
+    /// # Errors
+    /// The path names no file, or the DDL failed.
+    pub async fn open<F, Fut>(path: impl AsRef<Path>, prefix: &str, ddl: F) -> Result<Self>
+    where
+        F: FnOnce(libsql::Connection) -> Fut,
+        Fut: std::future::Future<Output = Result<()>>,
+    {
+        let path = canonical_key(path.as_ref())?;
+        let conn = open_local(&path).await?;
+        migrate_once(&conn, &path, prefix, ddl).await?;
+        drop(conn);
+        let db = database_for(&path).await?;
+        Ok(Self { path, db })
+    }
+
+    /// The canonical path of the file this store holds.
+    pub fn path(&self) -> &Path {
+        &self.path
+    }
+
+    /// A connection for one read, with the PRAGMAs applied.
+    ///
+    /// # Errors
+    /// The database refused a connection.
+    pub async fn connect(&self) -> Result<libsql::Connection> {
+        let conn = self.db.connect()?;
+        conn.execute_batch(CONNECTION_PRAGMAS).await?;
+        Ok(conn)
+    }
+
+    /// A write transaction on its own connection.
+    ///
+    /// The caller decides the outcome: `commit` keeps the writes, and dropping the returned
+    /// transaction rolls them back, so a failed write leaves the file as it was.
+    ///
+    /// # Errors
+    /// The database refused a connection or a transaction.
+    pub async fn begin(&self) -> Result<libsql::Transaction> {
+        let conn = self.connect().await?;
+        Ok(conn.transaction().await?)
+    }
 }
 
 #[cfg(test)]
@@ -201,9 +276,12 @@ mod tests {
 
         assert_eq!(run_count.load(std::sync::atomic::Ordering::SeqCst), 1);
 
-        conn.execute("INSERT INTO sample_items (name) VALUES (?1)", ["turso test"])
-            .await
-            .unwrap();
+        conn.execute(
+            "INSERT INTO sample_items (name) VALUES (?1)",
+            ["turso test"],
+        )
+        .await
+        .unwrap();
 
         let mut rows = conn
             .query("SELECT name FROM sample_items WHERE id = 1", ())
@@ -284,5 +362,121 @@ mod tests {
         assert_eq!(id, 1);
         assert_eq!(title, "Doc X");
         assert!(dist < 0.05, "cosine distance must be very close to 0");
+    }
+
+    /// The DDL a `Store::open` call runs, in the shape a capability writes it.
+    async fn create_notes(conn: libsql::Connection) -> Result<()> {
+        conn.execute(
+            "CREATE TABLE IF NOT EXISTS notes_items (id INTEGER PRIMARY KEY, body TEXT)",
+            (),
+        )
+        .await?;
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn store_commits_a_written_transaction() {
+        let db_path = temp_db("store_commit");
+        let store = Store::open(&db_path, "notes", create_notes).await.unwrap();
+
+        let tx = store.begin().await.unwrap();
+        tx.execute("INSERT INTO notes_items (body) VALUES ('kept')", ())
+            .await
+            .unwrap();
+        tx.commit().await.unwrap();
+
+        let conn = store.connect().await.unwrap();
+        let mut rows = conn
+            .query("SELECT body FROM notes_items", ())
+            .await
+            .unwrap();
+        let row = rows.next().await.unwrap().expect("committed row");
+        let body: String = row.get(0).unwrap();
+        assert_eq!(body, "kept");
+    }
+
+    #[tokio::test]
+    async fn dropping_a_transaction_writes_nothing() {
+        let db_path = temp_db("store_rollback");
+        let store = Store::open(&db_path, "notes", create_notes).await.unwrap();
+
+        {
+            let tx = store.begin().await.unwrap();
+            tx.execute("INSERT INTO notes_items (body) VALUES ('dropped')", ())
+                .await
+                .unwrap();
+        }
+        tokio::task::yield_now().await;
+
+        let conn = store.connect().await.unwrap();
+        let mut rows = conn
+            .query("SELECT COUNT(*) FROM notes_items", ())
+            .await
+            .unwrap();
+        let row = rows.next().await.unwrap().expect("count row");
+        let count: i64 = row.get(0).unwrap();
+        assert_eq!(count, 0, "an uncommitted write must not reach the file");
+    }
+
+    #[tokio::test]
+    async fn reopening_the_same_path_skips_the_ddl() {
+        let db_path = temp_db("store_reopen");
+        Store::open(&db_path, "notes", create_notes).await.unwrap();
+
+        // The second open runs its own DDL only if the once-per-process record is missing. A
+        // closure that creates a table the first run did not would fail here with a duplicate.
+        Store::open(&db_path, "notes", |conn| async move {
+            conn.execute(
+                "CREATE TABLE IF NOT EXISTS notes_items (id INTEGER PRIMARY KEY, body TEXT)",
+                (),
+            )
+            .await?;
+            Ok(())
+        })
+        .await
+        .unwrap();
+
+        let store = Store::open(&db_path, "notes", |conn| async move {
+            conn.execute("CREATE TABLE notes_items (id INTEGER PRIMARY KEY)", ())
+                .await?;
+            Ok(())
+        })
+        .await
+        .unwrap();
+        assert_eq!(store.path(), canonical_key(&db_path).unwrap());
+    }
+
+    #[tokio::test]
+    async fn a_store_crosses_tokio_workers() {
+        let db_path = temp_db("store_send");
+        let store = Arc::new(Store::open(&db_path, "notes", create_notes).await.unwrap());
+
+        let handles: Vec<_> = (0..8)
+            .map(|i| {
+                let store = store.clone();
+                tokio::spawn(async move {
+                    let tx = store.begin().await.unwrap();
+                    tx.execute(
+                        "INSERT INTO notes_items (body) VALUES (?1)",
+                        [format!("note-{i}")],
+                    )
+                    .await
+                    .unwrap();
+                    tx.commit().await.unwrap();
+                })
+            })
+            .collect();
+        for handle in handles {
+            handle.await.unwrap();
+        }
+
+        let conn = store.connect().await.unwrap();
+        let mut rows = conn
+            .query("SELECT COUNT(*) FROM notes_items", ())
+            .await
+            .unwrap();
+        let row = rows.next().await.unwrap().expect("count row");
+        let count: i64 = row.get(0).unwrap();
+        assert_eq!(count, 8, "every concurrent writer must land");
     }
 }

@@ -2,7 +2,7 @@
 
 Sjel's private, versioned source for durable operator preferences, principles, boundaries, and interaction style. It is separate from identity facts (`entities`), project memory, and skills.
 
-The profile store uses the shared SQLite database resolved by `sjel_config::database_path`; profile values stay in the active overlay. The API binds to loopback and refuses foreign browser origins. Writes require the revision previously read, so a stale client cannot silently replace the profile.
+The profile store uses the shared SQLite database resolved by `sjel_config::database_path`; profile values stay in the active overlay. It opens that file through `sjel-turso` (LibSQL) rather than `sjel-store`: the table is the same one, and the async connection lets a handler await its read instead of handing it to `spawn_blocking` (the first capability cut over, PLAN.md Phase 4). The API binds to loopback and refuses foreign browser origins. Writes require the revision previously read, so a stale client cannot silently replace the profile.
 
 ## First interface
 

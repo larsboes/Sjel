@@ -1446,7 +1446,7 @@
     },
     {
       "from": "operator-profile",
-      "to": "sjel-store",
+      "to": "sjel-turso",
       "kinds": [
         "cargo-dep"
       ],

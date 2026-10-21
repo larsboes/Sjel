@@ -10,21 +10,28 @@ use operator_profile::{
 };
 
 fn main() {
-    if let Err(error) = run() {
+    let runtime = match tokio::runtime::Runtime::new() {
+        Ok(runtime) => runtime,
+        Err(error) => {
+            eprintln!("operator-profile: tokio runtime could not start: {error}");
+            std::process::exit(1);
+        }
+    };
+    if let Err(error) = runtime.block_on(run()) {
         eprintln!("operator-profile: {error}");
         std::process::exit(1);
     }
 }
 
-fn run() -> Result<(), Box<dyn std::error::Error>> {
+async fn run() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     let mut args = std::env::args().skip(1);
     let command = args
         .next()
         .ok_or("usage: operator-profile show|put|validate|export (--dry-run | --apply --expected-revision N)")?;
-    let store = OperatorProfileStore::open(&sjel_config::database_path())?;
+    let store = OperatorProfileStore::open(&sjel_config::database_path()).await?;
     match command.as_str() {
         "show" => {
-            let profile = store.get()?;
+            let profile = store.get().await?;
             let stored = profile.is_some();
             println!(
                 "{}",
@@ -59,7 +66,7 @@ fn run() -> Result<(), Box<dyn std::error::Error>> {
                 expected.ok_or("put requires --expected-revision (use 0 for a new profile)")?;
             let input = read_profile(source.as_deref())?;
             input.validate().map_err(io::Error::other)?;
-            match store.put(&input, expected)? {
+            match store.put(&input, expected).await? {
                 PutOutcome::Stored(profile) => {
                     println!("stored profile revision {}", profile.revision)
                 }
@@ -108,7 +115,7 @@ fn run() -> Result<(), Box<dyn std::error::Error>> {
                     .into());
                 }
             };
-            let profile = store.get()?.ok_or("no profile is stored yet")?;
+            let profile = store.get().await?.ok_or("no profile is stored yet")?;
             if apply {
                 let expected = expected_revision.ok_or(
                     "export --apply requires --expected-revision <N> matching the reviewed profile revision",
@@ -181,7 +188,9 @@ fn run() -> Result<(), Box<dyn std::error::Error>> {
     Ok(())
 }
 
-fn read_profile(source: Option<&str>) -> Result<ProfileInput, Box<dyn std::error::Error>> {
+fn read_profile(
+    source: Option<&str>,
+) -> Result<ProfileInput, Box<dyn std::error::Error + Send + Sync>> {
     let mut input = String::new();
     match source {
         Some(path) if path != "-" => std::fs::read_to_string(path)?.clone_into(&mut input),
@@ -192,7 +201,7 @@ fn read_profile(source: Option<&str>) -> Result<ProfileInput, Box<dyn std::error
     Ok(serde_json::from_str(&input)?)
 }
 
-fn target_for(harness: Harness) -> Result<PathBuf, Box<dyn std::error::Error>> {
+fn target_for(harness: Harness) -> Result<PathBuf, Box<dyn std::error::Error + Send + Sync>> {
     let home = std::env::var_os("SJEL_OPERATOR_HOME")
         .or_else(|| std::env::var_os("HOME"))
         .ok_or("HOME is not set")?;

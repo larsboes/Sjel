@@ -94,10 +94,7 @@ async fn health() -> Json<Value> {
 }
 
 async fn ready(State(store): State<Arc<OperatorProfileStore>>) -> Result<Json<Value>, ApiError> {
-    tokio::task::spawn_blocking(move || store.ping().map_err(|error| error.to_string()))
-        .await
-        .map_err(|_| ApiError::internal())?
-        .map_err(|_| ApiError::internal())?;
+    store.ping().await.map_err(|_| ApiError::internal())?;
     Ok(Json(
         json!({ "status": "ready", "service": "operator-profile" }),
     ))
@@ -110,11 +107,7 @@ async fn routes() -> Json<Value> {
 async fn get_profile(
     State(store): State<Arc<OperatorProfileStore>>,
 ) -> Result<Json<Value>, ApiError> {
-    let profile =
-        tokio::task::spawn_blocking(move || store.get().map_err(|error| error.to_string()))
-            .await
-            .map_err(|_| ApiError::internal())?
-            .map_err(|_| ApiError::internal())?;
+    let profile = store.get().await.map_err(|_| ApiError::internal())?;
     let stored = profile.is_some();
     let body = profile_json(profile).map_err(|_| ApiError::internal())?;
     Ok(Json(json!({ "profile": body, "stored": stored })))
@@ -127,14 +120,10 @@ async fn put_profile(
     request.profile.validate().map_err(ApiError::bad)?;
     let input = request.profile;
     let expected_revision = request.expected_revision;
-    let outcome = tokio::task::spawn_blocking(move || {
-        store
-            .put(&input, expected_revision)
-            .map_err(|error| error.to_string())
-    })
-    .await
-    .map_err(|_| ApiError::internal())?
-    .map_err(|_| ApiError::internal())?;
+    let outcome = store
+        .put(&input, expected_revision)
+        .await
+        .map_err(|_| ApiError::internal())?;
     match outcome {
         PutOutcome::Stored(profile) => {
             let body = profile_json(Some(profile)).map_err(|_| ApiError::internal())?;
@@ -151,9 +140,9 @@ async fn export_profile(
     State(store): State<Arc<OperatorProfileStore>>,
     Json(request): Json<ExportProfileRequest>,
 ) -> Result<Json<Value>, ApiError> {
-    let profile = tokio::task::spawn_blocking(move || store.get().map_err(|e| e.to_string()))
+    let profile = store
+        .get()
         .await
-        .map_err(|_| ApiError::internal())?
         .map_err(|_| ApiError::internal())?
         .ok_or_else(|| ApiError::bad("no profile is stored yet"))?;
 
@@ -223,7 +212,7 @@ fn router(store: Arc<OperatorProfileStore>) -> Router {
 
 pub async fn serve() {
     let config = Config::load();
-    let store = match OperatorProfileStore::open(&config.database_path) {
+    let store = match OperatorProfileStore::open(&config.database_path).await {
         Ok(store) => store,
         Err(_) => {
             eprintln!("operator-profile: cannot open private profile store");
@@ -242,6 +231,7 @@ fn main() {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use tower::util::ServiceExt;
 
     #[test]
     fn manifest_covers_routes_and_write_schema() {
@@ -257,5 +247,99 @@ mod tests {
         assert_eq!(empty["fields"], json!({}));
         let body = json!({ "profile": empty, "stored": false });
         assert_eq!(body["stored"], json!(false));
+    }
+
+    /// Drives the wired router with no listener and no token: `router` carries the handlers, and
+    /// inbound auth is the layer `serve_local` adds around them.
+    async fn call(
+        router: &Router,
+        request: axum::http::Request<axum::body::Body>,
+    ) -> (StatusCode, Value) {
+        let response = router
+            .clone()
+            .oneshot(request)
+            .await
+            .expect("router answered");
+        let status = response.status();
+        let bytes = axum::body::to_bytes(response.into_body(), 1 << 20)
+            .await
+            .expect("body");
+        let body = serde_json::from_slice(&bytes).unwrap_or(Value::Null);
+        (status, body)
+    }
+
+    fn sample_profile() -> ProfileInput {
+        ProfileInput {
+            schema_version: operator_profile::model::SCHEMA_VERSION,
+            fields: std::collections::BTreeMap::from([(
+                "verbosity".to_string(),
+                operator_profile::model::FieldInput {
+                    category: operator_profile::ProfileCategory::InteractionStyle,
+                    value: operator_profile::FieldValue::Text("short".into()),
+                    classification: operator_profile::Classification::C1,
+                    export_to: Vec::new(),
+                },
+            )]),
+            statements: std::collections::BTreeMap::new(),
+        }
+    }
+
+    fn put_request(expected_revision: u64) -> axum::http::Request<axum::body::Body> {
+        let body = serde_json::to_vec(&json!({
+            "profile": sample_profile(),
+            "expected_revision": expected_revision,
+        }))
+        .expect("body encodes");
+        axum::http::Request::builder()
+            .method("PUT")
+            .uri("/api/profile")
+            .header("content-type", "application/json")
+            .body(axum::body::Body::from(body))
+            .expect("request builds")
+    }
+
+    #[tokio::test]
+    async fn ready_and_profile_routes_answer_from_the_async_store() {
+        let dir = std::env::temp_dir().join(format!("sjel-profile-router-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(&dir).unwrap();
+        let store = OperatorProfileStore::open(&dir.join("axon.db"))
+            .await
+            .expect("store opens");
+        let router = router(Arc::new(store));
+
+        let (status, body) = call(
+            &router,
+            axum::http::Request::builder()
+                .uri("/ready")
+                .body(axum::body::Body::empty())
+                .unwrap(),
+        )
+        .await;
+        assert_eq!(status, StatusCode::OK);
+        assert_eq!(body["status"], json!("ready"));
+
+        let (status, body) = call(
+            &router,
+            axum::http::Request::builder()
+                .uri("/api/profile")
+                .body(axum::body::Body::empty())
+                .unwrap(),
+        )
+        .await;
+        assert_eq!(status, StatusCode::OK);
+        assert_eq!(body["stored"], json!(false));
+
+        let (status, body) = call(&router, put_request(0)).await;
+        assert_eq!(status, StatusCode::OK);
+        assert_eq!(body["stored"], json!(true));
+        assert_eq!(body["profile"]["revision"], json!(1));
+
+        let (status, body) = call(&router, put_request(0)).await;
+        assert_eq!(status, StatusCode::CONFLICT);
+        assert_eq!(body["code"], json!("stale_profile"));
+        assert_eq!(body["current_revision"], json!(1));
+
+        std::fs::remove_dir_all(dir).unwrap();
     }
 }

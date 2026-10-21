@@ -31,3 +31,31 @@ Connections apply:
 - `busy_timeout = 5000` (5-second grace before refusal)
 - `foreign_keys = ON` (explicit referential integrity)
 - Standard Sjel ISO-8601 millisecond timestamps via `sjel_turso::NOW` and `sjel_turso::now_offset()`.
+
+## `Store`: the shape a capability holds
+
+`sjel_store::open_pool(path, prefix, migrate)` is what seventeen capabilities were written against.
+[`Store`](src/lib.rs) is its async counterpart, and it exists so a cutover is a changed open call
+rather than a rewritten crate:
+
+```rust
+// Opens the file, applies the PRAGMAs, runs this capability's DDL once per (file, prefix).
+let store = sjel_turso::Store::open(&database_path, "places", |conn| async move {
+    conn.execute("CREATE TABLE IF NOT EXISTS places_items (...);", ()).await?;
+    Ok(())
+}).await?;
+
+let conn = store.connect().await?;  // one read
+let tx = store.begin().await?;      // one write: `commit` keeps it, dropping it rolls back
+```
+
+## One engine per binary
+
+A capability links **either** `sjel-store` (`rusqlite`) **or** `sjel-turso` (`libsql`), never
+both: each bundles its own SQLite and the duplicate C symbols do not link. That is the whole
+meaning of a full cutover — the schema, the store, the handlers and the CLI move together, and
+`rusqlite` leaves that binary's dependency graph. `cargo tree -p <capability> -e normal | grep
+rusqlite` answers whether one is still there.
+
+The first capability to finish that move is `capabilities/operator-profile` (2026-10-21). Its
+table is still in the same shared file; only the engine differs.

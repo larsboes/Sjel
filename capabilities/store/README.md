@@ -15,6 +15,13 @@ indexing (`libsql_vector_idx`, `vector_distance_cos`) and non-blocking multi-wri
 async Tokio runtimes and the Zed GPUI desktop app (`apps/gpui`), while synchronous services continue
 reading through `rusqlite` (`libs/sjel-store`).
 
+**The first capability to finish the cutover is `operator-profile` (2026-10-21).** Its schema,
+store, handlers, CLI and tests run on `sjel-turso` alone; `rusqlite` left its dependency graph with
+them, because one binary cannot link both bundled SQLite libraries. The table did not move — it is
+in this file, byte-compatible, and the existing row was read back unchanged after the switch. The
+pattern it settled is in `libs/sjel-turso/README.md`; the remaining sixteen capabilities follow it
+one at a time.
+
 **One file, not one per capability.** Cross-schema joins within one database are a single
 connection with no `dblink` or foreign-data-wrapper machinery. A file per capability would have
 bought migration isolation Sjel already gets from table prefixes, and paid for it with exactly the

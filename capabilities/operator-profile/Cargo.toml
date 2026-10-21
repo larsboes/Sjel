@@ -25,13 +25,19 @@ route-manifest = { path = "../../libs/route-manifest" }
 schemars = "1.2.2"
 serde = { workspace = true, features = ["derive"] }
 serde_json.workspace = true
-rusqlite.workspace = true
 sjel-config = { path = "../../libs/sjel-config" }
 sjel-server = { path = "../../libs/sjel-server" }
-sjel-store = { path = "../../libs/sjel-store" }
+# LibSQL, not `sjel-store`: this is the first capability cut over (PLAN.md Phase 4). The table lives
+# in the same shared file; the engine is async, so handlers await a read instead of handing one to
+# `spawn_blocking`. `rusqlite` leaves this crate's link graph with it -- two bundled SQLite C
+# libraries in one binary is the collision `sjel-store` and `sjel-turso` exist apart to avoid.
+sjel-turso = { path = "../../libs/sjel-turso" }
 tokio = { workspace = true, features = ["macros", "rt-multi-thread", "net"] }
 
 [dev-dependencies]
+# `ServiceExt::oneshot`, so the router test drives the wired handlers with no listener and no
+# port. The same pattern capabilities/transit and capabilities/sjel-status use.
+tower = { workspace = true, features = ["util"] }
 reqwest = { workspace = true, features = ["json"] }
 
 [lints]

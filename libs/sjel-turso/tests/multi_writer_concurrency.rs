@@ -101,7 +101,10 @@ async fn test_multi_writer_concurrency_on_turso() {
     assert_eq!(count, 50);
 
     // Verify duration is small and concurrent
-    println!("Completed 50 concurrent writes across 10 workers in {:?}", elapsed);
+    println!(
+        "Completed 50 concurrent writes across 10 workers in {:?}",
+        elapsed
+    );
 
     // 3. Vector Search Verification
     conn.execute_batch(

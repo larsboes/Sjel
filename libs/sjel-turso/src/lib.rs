@@ -752,4 +752,42 @@ mod tests {
         let count: i64 = row.get(0).unwrap();
         assert_eq!(count, 8, "every concurrent writer must land");
     }
+
+    /// `begin` takes the writer lock up front, before its transaction reads or writes anything.
+    ///
+    /// The one observable difference: while `begin`'s transaction is open, a second connection's
+    /// deferred transaction can still read but is refused the moment it writes — which can only
+    /// happen because the lock is already held. With a deferred `begin` the lock would still be
+    /// free at that point and that write would land, which is the failure this guards.
+    ///
+    /// The refusal is immediate rather than waited out: SQLite does not retry a failed lock
+    /// upgrade, so `busy_timeout` never enters into it.
+    #[tokio::test]
+    async fn begin_takes_the_writer_lock_before_it_reads_or_writes() {
+        let db_path = temp_db("store_immediate");
+        let store = Store::open(&db_path, "notes", create_notes).await.unwrap();
+
+        let held = store.begin().await.unwrap();
+        let other = store.connect().await.unwrap();
+        let other_tx = other.transaction().await.unwrap();
+        let mut rows = other_tx
+            .query("SELECT COUNT(*) FROM notes_items", ())
+            .await
+            .unwrap();
+        rows.next().await.unwrap().expect("count row");
+        drop(rows);
+
+        let message = other_tx
+            .execute("INSERT INTO notes_items (body) VALUES ('other')", ())
+            .await
+            .expect_err("the writer lock is already held by `begin`")
+            .to_string();
+        drop(other_tx);
+
+        held.commit().await.unwrap();
+        assert!(
+            message.contains("locked"),
+            "unexpected refusal from the upgrade: {message}"
+        );
+    }
 }

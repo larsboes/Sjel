@@ -49,6 +49,19 @@ let conn = store.connect().await?;  // one read
 let tx = store.begin().await?;      // one write: `commit` keeps it, dropping it rolls back
 ```
 
+`begin` starts `BEGIN IMMEDIATE`, so the writer lock is taken before the transaction reads
+anything. That is not an optimisation: a deferred transaction that reads and then writes must
+upgrade into the lock, and SQLite answers a failed upgrade with `SQLITE_BUSY` at once —
+`busy_timeout` does not retry that case, which is how a read-then-write capability loses writes
+under two writers. `tests::begin_takes_the_writer_lock_before_it_reads_or_writes` in `src/lib.rs`
+is the regression that fails without it.
+
+One trap in testing it: a `#[tokio::test]` runs on a current-thread runtime, and a transaction
+blocked on the writer lock starves the task that would commit and release it. The wait then runs
+the full `busy_timeout` and fails on its own timeout (measured 2026-10-21: 5.26s, then
+`database is locked`) instead of on the behaviour being measured. Use
+`#[tokio::test(flavor = "multi_thread")]` for a test that holds a lock across an await.
+
 ## One engine per binary
 
 A capability links **either** `sjel-store` (`rusqlite`) **or** `sjel-turso` (`libsql`), never

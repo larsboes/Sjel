@@ -35,10 +35,11 @@ pub struct Repo {
 /// The one direct handle on the local database file, shared by every `Repo` clone.
 ///
 /// The connection is what is worth keeping, not the `Database` it came from. Opening one costs
-/// 0.04 ms, but a fresh connection starts on an empty SQLite page cache and pays to fault the rows
-/// back in, so its first query costs 0.58 ms where the same query costs 0.03 ms on a handle that
-/// already ran one. A poll is a handful of queries every 10 s, so this is the difference between
-/// paying that fault on every poll and paying it once per process.
+/// 0.05 ms, but a fresh connection starts on an empty SQLite page cache and pays to fault the rows
+/// back in, so opening and reading once costs 0.68 ms where the same read costs 0.02 ms on a handle
+/// that already ran one. A poll is a handful of queries every 10 s, so this is the difference
+/// between paying that fault on every poll and paying it once per process. The numbers come from
+/// `holding_one_connection_beats_opening_one_per_read` in this module's tests.
 ///
 /// The cache holds a read view, never a transaction: every read here drains its own `Rows`, and a
 /// WAL reader between queries sees what the capability processes committed after the handle was
@@ -794,11 +795,13 @@ mod tests {
     /// Ignored by default: it reads a file outside the checkout and prints timings instead of
     /// asserting one, which a shared machine cannot promise. Run it with
     ///
-    ///     cargo test --manifest-path apps/gpui/Cargo.toml --bin sjel-gpui \
+    ///     cargo test --release --manifest-path apps/gpui/Cargo.toml --bin sjel-gpui \
     ///         holding_one_connection -- --ignored --nocapture
     ///
-    /// `SJEL_DB_PATH` or an overlay's `data/axon/axon.db` has to exist; without one it says so and
-    /// passes. Both halves read the same rows, so a change that made one path wrong fails here.
+    /// The release profile is the one the quotes in this module and in the README come from; the
+    /// test profile prints the same ratio at larger milliseconds. `SJEL_DB_PATH` or an overlay's
+    /// `data/axon/axon.db` has to exist; without one it says so and passes. Every path reads the
+    /// same rows, so a change that made one of them wrong fails here.
     #[test]
     #[ignore = "needs this machine's database; prints timings"]
     fn holding_one_connection_beats_opening_one_per_read() {
@@ -810,12 +813,15 @@ mod tests {
                      FROM projects_records WHERE kind = 'task'";
 
         tokio::runtime::Runtime::new().unwrap().block_on(async {
-            // One open per read, which is what every fetch did before the handle was kept.
+            // One open per read, which is what every fetch did before the handle was kept, and the
+            // open on its own, which is the part that was never the cost.
             let mut per_read = Vec::new();
+            let mut open_only = Vec::new();
             let mut per_read_rows = 0;
             for _ in 0..10 {
                 let started = Instant::now();
                 let conn = open_local(&path).await.expect("the database opens");
+                open_only.push(started.elapsed());
                 per_read_rows = drain(&conn, query).await;
                 per_read.push(started.elapsed());
             }
@@ -838,6 +844,7 @@ mod tests {
             let mib =
                 std::fs::metadata(&path).map(|m| m.len()).unwrap_or(0) as f64 / (1024.0 * 1024.0);
             println!("{} ({mib:.0} MiB): {held_rows} task rows", path.display());
+            println!("open, no read:             {:?} median", median(open_only));
             println!("open + read, one per read: {:?} median", median(per_read));
             println!("held connection, read:     {:?} median", median(held));
         });

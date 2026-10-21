@@ -72,6 +72,11 @@ its own. Run them alone with:
 cargo test --workspace --locked -- db_tests::
 ~~~
 
+A performance claim is proved by a probe this repository can re-run, not by a scratch program
+outside the checkout: an ignored test beside the code it measures, or a script under `tools/`. The
+comment or README that states the number names that probe, so the next person can repeat it on
+their own machine and see whether it still holds.
+
 Run `bun run check` and `bun run build` in `dashboard/` when dashboard code changes. The
 check does not compile a template; the build does. A package that `tools/discover-ui-packages`
 reports is checked and built the same way in CI, so run both there too. Manifest or

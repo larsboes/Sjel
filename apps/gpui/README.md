@@ -35,11 +35,11 @@ the caller re-read only what it changed.
 Where a local `axon.db` is readable, `src/data/` answers projects, tasks, calendar and record
 reads from it and falls back to the shell otherwise, over one LibSQL handle opened once per process
 and shared by every clone. Holding the connection rather than reopening it is the point: opening
-costs 0.04 ms, but a fresh connection starts on an empty SQLite page cache, so its first query
-costs 0.58 ms against 0.03 ms on a handle that already ran one, and a poll runs several. How the
-numbers were measured: `cargo test --manifest-path apps/gpui/Cargo.toml --bin sjel-gpui
-holding_one_connection -- --ignored --nocapture`, which times both paths against this machine's
-database.
+one costs 0.05 ms, but a fresh connection starts on an empty SQLite page cache, so opening and
+reading once costs 0.68 ms against 0.02 ms for the same read on a handle that already ran one, and
+a poll runs several. How the numbers were measured: `cargo test --release --manifest-path
+apps/gpui/Cargo.toml --bin sjel-gpui holding_one_connection -- --ignored --nocapture`, which times
+all three against this machine's database.
 
 Going back to a note opened in the last five minutes costs no read at all. `src/data/notes.rs`
 keeps the 16 notes opened most recently, most recent first, so tabbing back to one is a memory hit

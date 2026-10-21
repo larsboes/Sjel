@@ -69,6 +69,22 @@ const ROUTES: &[route_manifest::Route] = &[
     ),
     r(
         "GET",
+        "/api/sjel-status/setup",
+        "What this machine still needs for a component, probed by `sjel setup plan`.",
+    ),
+    r(
+        "GET",
+        "/api/sjel-status/setup/verify",
+        "Ask the component's own system whether the recorded settings work.",
+    ),
+    route_manifest::Route {
+        method: "POST",
+        path: "/api/sjel-status/setup/apply",
+        summary: "Run the steps `sjel setup plan` marks apply, then verify. Carries no credential: a token is CLI stdin only.",
+        request_schema: Some(route_manifest::schema_of::<status::SetupApplyRequest>),
+    },
+    r(
+        "GET",
         "/api/sjel-status/repos",
         "Sjel and overlay repo state.",
     ),
@@ -464,6 +480,9 @@ fn build_router(shell: proxy::Proxy) -> Router {
             "/api/sjel-status/backup/verify",
             post(backup_verify_handler),
         )
+        .route("/api/sjel-status/setup", get(setup_handler))
+        .route("/api/sjel-status/setup/verify", get(setup_verify_handler))
+        .route("/api/sjel-status/setup/apply", post(setup_apply_handler))
         .route("/api/sjel-status/host-watch", get(host_watch_handler))
         .route(
             "/api/sjel-status/packs",

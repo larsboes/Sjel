@@ -98,7 +98,7 @@ impl Kind {
     }
 }
 
-#[derive(Debug, Serialize)]
+#[derive(Debug, Clone, Serialize)]
 struct Probe {
     id: &'static str,
     label: String,
@@ -106,7 +106,7 @@ struct Probe {
     detail: String,
 }
 
-#[derive(Debug, Serialize)]
+#[derive(Debug, Clone, Serialize)]
 struct Step {
     kind: Kind,
     label: String,
@@ -115,12 +115,41 @@ struct Step {
     done: bool,
 }
 
-#[derive(Debug, Serialize)]
+#[derive(Debug, Clone, Serialize)]
 struct Plan {
     component: &'static str,
     purpose: &'static str,
     probes: Vec<Probe>,
     steps: Vec<Step>,
+}
+
+/// The JSON a verb prints, so a UI reads one document per request instead of concatenated ones.
+#[derive(Debug, Serialize)]
+struct PlansJson {
+    components: Vec<Plan>,
+}
+
+#[derive(Debug, Serialize)]
+struct VerifiesJson {
+    components: Vec<VerifyJson>,
+}
+
+#[derive(Debug, Serialize)]
+struct VerifyJson {
+    component: &'static str,
+    probes: Vec<Probe>,
+}
+
+#[derive(Debug, Serialize)]
+struct AppliesJson {
+    components: Vec<ApplyJson>,
+}
+
+#[derive(Debug, Serialize)]
+struct ApplyJson {
+    component: &'static str,
+    applied: Vec<String>,
+    verify: Vec<Probe>,
 }
 
 /// The overlay's deployment-wide settings file, which this tool owns.
@@ -279,7 +308,9 @@ pub fn run(rest: &[String]) -> ExitCode {
             };
             let plans: Vec<Plan> = chosen.iter().map(|c| (c.plan)(&paths, &env)).collect();
             if json {
-                print_json(&plans);
+                print_json(&PlansJson {
+                    components: plans.clone(),
+                });
             } else {
                 for plan in &plans {
                     print_plan(plan);
@@ -327,6 +358,7 @@ pub fn run(rest: &[String]) -> ExitCode {
                 None
             };
             let mut failed = false;
+            let mut applies: Vec<ApplyJson> = Vec::new();
             for c in &chosen {
                 if c.name != "turso" {
                     eprintln!("sjel setup apply: {} has no apply path", c.name);
@@ -335,13 +367,23 @@ pub fn run(rest: &[String]) -> ExitCode {
                 }
                 match turso::apply(&paths, &env, &options, token.as_deref()) {
                     Ok(summary) => {
-                        if json {
-                            print_json(&summary);
-                        } else {
+                        if !json {
                             for line in &summary.lines {
                                 println!("{line}");
                             }
                         }
+                        // Verify after every apply: an apply that cannot show its effect is a hope.
+                        let probes = (c.verify)(&paths, &env);
+                        if !json {
+                            println!("\n{} — verification", c.name);
+                            print_probes(&probes);
+                        }
+                        failed |= probes.iter().any(|p| p.mark != Mark::Ok);
+                        applies.push(ApplyJson {
+                            component: c.name,
+                            applied: summary.lines,
+                            verify: probes,
+                        });
                     }
                     Err(message) => {
                         eprintln!("sjel setup apply {}: {message}", c.name);
@@ -349,22 +391,12 @@ pub fn run(rest: &[String]) -> ExitCode {
                     }
                 }
             }
+            if json {
+                print_json(&AppliesJson {
+                    components: applies,
+                });
+            }
             if failed {
-                return ExitCode::FAILURE;
-            }
-            // Verify after every apply: an apply that cannot show its effect is a hope.
-            let mut bad = false;
-            for c in &chosen {
-                let probes = (c.verify)(&paths, &env);
-                bad |= probes.iter().any(|p| p.mark != Mark::Ok);
-                if json {
-                    print_json(&probes);
-                } else {
-                    println!("\n{} — verification", c.name);
-                    print_probes(&probes);
-                }
-            }
-            if bad {
                 ExitCode::FAILURE
             } else {
                 ExitCode::SUCCESS
@@ -376,15 +408,21 @@ pub fn run(rest: &[String]) -> ExitCode {
                 Err(message) => return usage(&message),
             };
             let mut bad = false;
+            let mut components: Vec<VerifyJson> = Vec::new();
             for c in &chosen {
                 let probes = (c.verify)(&paths, &env);
-                if json {
-                    print_json(&probes);
-                } else {
+                if !json {
                     println!("{} — verification", c.name);
                     print_probes(&probes);
                 }
                 bad |= probes.iter().any(|p| p.mark != Mark::Ok);
+                components.push(VerifyJson {
+                    component: c.name,
+                    probes,
+                });
+            }
+            if json {
+                print_json(&VerifiesJson { components });
             }
             if bad {
                 ExitCode::FAILURE

@@ -598,6 +598,42 @@ export interface CvWrite {
   note?: string;
 }
 
+
+/** One probe a `sjel setup` verb reports: a fact about this machine, with how it came out. */
+export interface SetupProbe {
+  id: string;
+  label: string;
+  mark: "ok" | "missing" | "warn" | "blocked";
+  detail: string;
+}
+
+/** One step a plan would run. `kind` decides whether `apply` touches it. */
+export interface SetupStep {
+  kind: "apply" | "manual" | "blocked";
+  label: string;
+  detail: string;
+  done: boolean;
+}
+
+export interface SetupPlan {
+  component: string;
+  purpose: string;
+  probes: SetupProbe[];
+  steps: SetupStep[];
+}
+
+export interface SetupPlans {
+  components: SetupPlan[];
+}
+
+export interface SetupVerification {
+  components: { component: string; probes: SetupProbe[] }[];
+}
+
+export interface SetupApplied {
+  components: { component: string; applied: string[]; verify: SetupProbe[] }[];
+}
+
 export const sjelStatus = {
   health: () => request<SjelStatusHealth>('/sjel-status/api/sjel-status/health'),
   capabilities: () => request<CapabilityView[]>('/sjel-status/api/sjel-status/capabilities'),
@@ -641,6 +677,14 @@ export const sjelStatus = {
         headers: { 'Content-Type': 'application/json' },
       },
     ),
+  /** What this machine still needs, from `sjel setup plan --json`. Writes nothing. */
+  setup: () => request<SetupPlans>('/sjel-status/api/sjel-status/setup'),
+  /** Ask the component's own system whether the recorded settings work. Leaves the machine. */
+  setupVerify: () => request<SetupVerification>('/sjel-status/api/sjel-status/setup/verify'),
+  /** Run the steps the plan marks apply, then verify. The route carries no credential at all: a
+   *  token is CLI stdin only, so this can record a URL and an interval and nothing more. */
+  setupApply: (body: { component?: string; url?: string; interval_secs?: number }) =>
+    request<SetupApplied>('/sjel-status/api/sjel-status/setup/apply', jsonInit('POST', body)),
   self: () => request<SelfModelResponse>('/sjel-status/api/sjel-status/self'),
   repos: () => request<{ repos: RepoStatus[] }>('/sjel-status/api/sjel-status/repos'),
   links: () => request<{ links: PinnedLink[] }>('/sjel-status/api/sjel-status/links'),

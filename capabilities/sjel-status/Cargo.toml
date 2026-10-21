@@ -29,6 +29,10 @@ devices = { package = "sjel-devices", path = "../devices" }
 # records and this file owns the surface -- the same split as `devices` above.
 backup = { package = "sjel-backup", path = "../backup" }
 route-manifest = { path = "../../libs/route-manifest" }
+# `route_manifest::schema_of` needs the deriving type to implement `JsonSchema`, which is
+# schemars' trait. One request body declares one (the setup apply), so the tables that
+# already carry 16 undeclared write bodies do not grow a 17th.
+schemars = "1.2.2"
 # The browser login (src/session.rs): a random single-use ticket, and the digest kept for it
 # in memory. The session itself is signed by sjel-server, so nothing here is stored.
 getrandom.workspace = true

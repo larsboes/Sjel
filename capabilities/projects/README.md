@@ -12,6 +12,12 @@ the second copy Principle 8 asks for, the way finance renders its decisions.
 The API binds to loopback, needs the operator token and refuses foreign browser origins. The CLI
 and the API call the same functions in `src/ops.rs`.
 
+The store runs on `sjel-turso` (LibSQL), the second capability cut over from `sjel-store`
+(2026-10-21, PLAN.md Phase 4). The rows are in the same shared file and `rusqlite` left this
+crate's dependency graph; the reason is the engine, not the file: `apps/gpui` already reads
+`projects_records` directly over `libsql`, and now the capability that writes them uses the same
+one. Reads and writes are awaited; the rendered tree stays ordinary synchronous file I/O.
+
 ## Why this shape: Sjel owns projects, tasks and habits
 
 Decided 2026-10-09 and revised 2026-10-17. It reverses the PRD's Q48. Sjel owns projects, tasks

@@ -21,13 +21,20 @@ const USAGE: &str = "usage: projects <command>
   render                                       re-render every record";
 
 fn main() {
-    if let Err(error) = run() {
+    let runtime = match tokio::runtime::Runtime::new() {
+        Ok(runtime) => runtime,
+        Err(error) => {
+            eprintln!("projects: tokio runtime could not start: {error}");
+            std::process::exit(1);
+        }
+    };
+    if let Err(error) = runtime.block_on(run()) {
         eprintln!("projects: {error}");
         std::process::exit(1);
     }
 }
 
-fn run() -> Result<(), Box<dyn std::error::Error>> {
+async fn run() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     let args: Vec<String> = std::env::args().skip(1).collect();
     let Some(command) = args.first() else {
         return Err(USAGE.into());
@@ -44,7 +51,7 @@ fn run() -> Result<(), Box<dyn std::error::Error>> {
             .map(String::as_str)
             .ok_or(USAGE)
     };
-    let projects = open_default()?;
+    let projects = open_default().await?;
     match command.as_str() {
         "list" => {
             let status = if args.iter().any(|a| a == "--all") {
@@ -54,7 +61,7 @@ fn run() -> Result<(), Box<dyn std::error::Error>> {
             } else {
                 Some("open")
             };
-            for t in ops::tasks(&projects, status)? {
+            for t in ops::tasks(&projects, status).await? {
                 println!(
                     "{} P{} {:10} {}  [{}]",
                     if t.done { "x" } else { " " },
@@ -68,7 +75,7 @@ fn run() -> Result<(), Box<dyn std::error::Error>> {
         "projects" => {
             let mut rows: std::collections::BTreeMap<(bool, String), (usize, usize, usize)> =
                 Default::default();
-            for r in projects.all()?.into_iter().filter(|r| !r.domain) {
+            for r in projects.all().await?.into_iter().filter(|r| !r.domain) {
                 let row = rows.entry((r.archived, r.project.clone())).or_default();
                 match (r.kind, r.done) {
                     (projects::Kind::Task, false) => row.0 += 1,
@@ -90,7 +97,8 @@ fn run() -> Result<(), Box<dyn std::error::Error>> {
                 flag("--summary").unwrap_or_default(),
                 flag("--due"),
                 priority,
-            )?;
+            )
+            .await?;
             println!("added {}", r.path);
         }
         "new-project" => {
@@ -98,7 +106,8 @@ fn run() -> Result<(), Box<dyn std::error::Error>> {
                 &projects,
                 positional(1)?,
                 flag("--summary").unwrap_or_default(),
-            )?;
+            )
+            .await?;
             println!("added {}", r.path);
         }
         "new-note" => {
@@ -109,13 +118,14 @@ fn run() -> Result<(), Box<dyn std::error::Error>> {
             )?;
             println!(
                 "added {}",
-                ops::save(&projects, &path, &content, None)?.path
+                ops::save(&projects, &path, &content, None).await?.path
             );
         }
         "edit" => {
             let path = positional(1)?;
             let base = projects
-                .get(path)?
+                .get(path)
+                .await?
                 .ok_or_else(|| format!("no record {path:?}"))?
                 .content;
             let scratch =
@@ -132,17 +142,17 @@ fn run() -> Result<(), Box<dyn std::error::Error>> {
             if edited == base {
                 println!("unchanged {path}");
             } else {
-                ops::save(&projects, path, &edited, Some(&base))?;
+                ops::save(&projects, path, &edited, Some(&base)).await?;
                 println!("saved {path}");
             }
         }
         "done" | "reopen" => {
-            let r = ops::set_done(&projects, positional(1)?, command == "done")?;
+            let r = ops::set_done(&projects, positional(1)?, command == "done").await?;
             println!("{} {}", if r.done { "done" } else { "open" }, r.path);
         }
         "set" => {
             let value = args.get(3).map(String::as_str).unwrap_or_default();
-            let r = ops::set_property(&projects, positional(1)?, positional(2)?, value)?;
+            let r = ops::set_property(&projects, positional(1)?, positional(2)?, value).await?;
             println!(
                 "{}: {}",
                 r.path,
@@ -153,7 +163,7 @@ fn run() -> Result<(), Box<dyn std::error::Error>> {
             let path = positional(1)?;
             let file = positional(2)?;
             let bytes = std::fs::read(file)?;
-            match ops::attach(&projects, path, &bytes)? {
+            match ops::attach(&projects, path, &bytes).await? {
                 projects::store::Attached::New => println!("attached {path}"),
                 projects::store::Attached::Unchanged => println!("unchanged {path}"),
                 projects::store::Attached::Differs => {
@@ -166,12 +176,12 @@ fn run() -> Result<(), Box<dyn std::error::Error>> {
         }
         "remove" => {
             let path = positional(1)?;
-            let removed = projects.remove(path)?;
+            let removed = projects.remove(path).await?;
             println!("{} {path}", if removed { "removed" } else { "no record" });
         }
         "normalize" => {
             let apply = args.iter().any(|a| a == "--apply");
-            let report = ops::normalize(&projects, apply)?;
+            let report = ops::normalize(&projects, apply).await?;
             for n in &report {
                 println!("{}\n  {}", n.path, n.changes.join("\n  "));
             }
@@ -188,7 +198,8 @@ fn run() -> Result<(), Box<dyn std::error::Error>> {
                 &PathBuf::from(positional(1)?),
                 flag("--only"),
                 flag("--folder"),
-            )?;
+            )
+            .await?;
             for (path, reason) in &report.skipped {
                 println!("skipped {path}: {reason}");
             }
@@ -203,7 +214,8 @@ fn run() -> Result<(), Box<dyn std::error::Error>> {
         }
         "freeze-vault" => {
             let report =
-                ops::freeze_vault(&projects, &PathBuf::from(positional(1)?), flag("--only"))?;
+                ops::freeze_vault(&projects, &PathBuf::from(positional(1)?), flag("--only"))
+                    .await?;
             for (path, reason) in &report.skipped {
                 println!("skipped {path}: {reason}");
             }
@@ -215,7 +227,7 @@ fn run() -> Result<(), Box<dyn std::error::Error>> {
             );
         }
         "verify" => {
-            let drift = projects.verify()?;
+            let drift = projects.verify().await?;
             for path in &drift.stale {
                 println!("stale    {path}");
             }
@@ -230,7 +242,7 @@ fn run() -> Result<(), Box<dyn std::error::Error>> {
                 );
             }
         }
-        "render" => println!("rendered {} records", projects.render_all()?),
+        "render" => println!("rendered {} records", projects.render_all().await?),
         _ => return Err(USAGE.into()),
     }
     Ok(())

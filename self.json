@@ -1586,7 +1586,7 @@
     },
     {
       "from": "projects",
-      "to": "sjel-store",
+      "to": "sjel-turso",
       "kinds": [
         "cargo-dep"
       ],

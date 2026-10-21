@@ -1,4 +1,8 @@
 //! Every operation the CLI and the API share, so both write through one path.
+//!
+//! These are `async` because the store is: the database is LibSQL (`sjel-turso`) and every read or
+//! write is awaited. The vault and rendered-tree file I/O inside them stays synchronous — it is
+//! ordinary local disk work on a handful of KB per record, and `markdown_root` has no async walk.
 
 use std::{fs, path::Path};
 
@@ -11,7 +15,7 @@ use crate::{
     store::{Attached, Projects},
 };
 
-type Fallible<T> = Result<T, Box<dyn std::error::Error>>;
+type Fallible<T> = Result<T, Box<dyn std::error::Error + Send + Sync>>;
 
 /// The frontmatter key a frozen vault note carries. The vault reader skips such notes.
 pub const MOVED_TO: &str = "moved_to";
@@ -96,9 +100,10 @@ fn project_links(fields: &std::collections::HashMap<String, String>) -> Option<V
 }
 
 /// Open tasks of live projects, ordered the way the vault reader orders them.
-pub fn tasks(projects: &Projects, status: Option<&str>) -> Fallible<Vec<Task>> {
+pub async fn tasks(projects: &Projects, status: Option<&str>) -> Fallible<Vec<Task>> {
     let mut tasks: Vec<Task> = projects
-        .by_kind(Kind::Task)?
+        .by_kind(Kind::Task)
+        .await?
         .iter()
         .filter(|r| !r.archived && !r.domain)
         .filter(|r| match status {
@@ -119,9 +124,10 @@ pub fn tasks(projects: &Projects, status: Option<&str>) -> Fallible<Vec<Task>> {
 }
 
 /// Every record of one kind in live projects, in the task shape, ordered by path.
-pub fn records(projects: &Projects, kind: Kind) -> Fallible<Vec<Task>> {
+pub async fn records(projects: &Projects, kind: Kind) -> Fallible<Vec<Task>> {
     Ok(projects
-        .by_kind(kind)?
+        .by_kind(kind)
+        .await?
         .iter()
         .filter(|r| !r.archived && !r.domain)
         .map(Task::from_record)
@@ -132,7 +138,7 @@ pub fn records(projects: &Projects, kind: Kind) -> Fallible<Vec<Task>> {
 ///
 /// # Errors
 /// The project does not exist or is archived, a field is invalid, or the task exists.
-pub fn add_task(
+pub async fn add_task(
     projects: &Projects,
     project: &str,
     title: &str,
@@ -152,15 +158,20 @@ pub fn add_task(
         chrono::NaiveDate::parse_from_str(due, "%Y-%m-%d")
             .map_err(|_| format!("{due:?}: due is a date, YYYY-MM-DD"))?;
     }
-    if !projects.by_project(project)?.iter().any(|r| !r.archived) {
+    if !projects
+        .by_project(project)
+        .await?
+        .iter()
+        .any(|r| !r.archived)
+    {
         return Err(format!("no live project named {project:?}").into());
     }
     let path = format!("{project}/Tasks/{title}.md");
-    if projects.get(&path)?.is_some() {
+    if projects.get(&path).await?.is_some() {
         return Err(format!("{path} exists").into());
     }
     let record = Record::from_content(&path, record::new_task(project, summary, due, priority))?;
-    projects.put(&record)?;
+    projects.put(&record).await?;
     Ok(record)
 }
 
@@ -168,19 +179,19 @@ pub fn add_task(
 ///
 /// # Errors
 /// The name is invalid or a project of that name exists.
-pub fn add_project(projects: &Projects, name: &str, summary: &str) -> Fallible<Record> {
+pub async fn add_project(projects: &Projects, name: &str, summary: &str) -> Fallible<Record> {
     let name = check_name(name)?;
     if record::is_domain(name) {
         return Err(format!("{name:?} is a domain, not a project").into());
     }
-    if name == ARCHIVE || !projects.by_project(name)?.is_empty() {
+    if name == ARCHIVE || !projects.by_project(name).await?.is_empty() {
         return Err(format!("a project named {name:?} exists").into());
     }
     let record = Record::from_content(
         &format!("{name}/{name}.md"),
         record::new_project(name, summary),
     )?;
-    projects.put(&record)?;
+    projects.put(&record).await?;
     Ok(record)
 }
 
@@ -188,15 +199,16 @@ pub fn add_project(projects: &Projects, name: &str, summary: &str) -> Fallible<R
 ///
 /// # Errors
 /// No task has that id.
-pub fn set_done(projects: &Projects, id: &str, done: bool) -> Fallible<Record> {
+pub async fn set_done(projects: &Projects, id: &str, done: bool) -> Fallible<Record> {
     let current = projects
-        .get(id)?
+        .get(id)
+        .await?
         .filter(|r| r.kind == Kind::Task)
         .ok_or_else(|| format!("no task {id:?}"))?;
     let today = chrono::Local::now().format("%Y-%m-%d").to_string();
     let content = record::set_done(&current.content, done, &today)?;
     let record = Record::from_content(id, content)?;
-    projects.put(&record)?;
+    projects.put(&record).await?;
     Ok(record)
 }
 
@@ -217,9 +229,15 @@ const DERIVED_KEYS: [&str; 3] = ["type", "done", MOVED_TO];
 ///
 /// # Errors
 /// No such record, a derived key, a value the schema refuses, or an archived record.
-pub fn set_property(projects: &Projects, path: &str, key: &str, value: &str) -> Fallible<Record> {
+pub async fn set_property(
+    projects: &Projects,
+    path: &str,
+    key: &str,
+    value: &str,
+) -> Fallible<Record> {
     let current = projects
-        .get(path)?
+        .get(path)
+        .await?
         .ok_or_else(|| format!("no record {path:?}"))?;
     if current.archived {
         return Err(format!("{path} is archived").into());
@@ -259,7 +277,7 @@ pub fn set_property(projects: &Projects, path: &str, key: &str, value: &str) -> 
         record::set_field(&current.content, key, (!value.is_empty()).then_some(value))?
     };
     let record = Record::from_content(path, content)?;
-    projects.put(&record)?;
+    projects.put(&record).await?;
     Ok(record)
 }
 
@@ -276,9 +294,9 @@ pub struct Normalized {
 /// a done task gets `status: done`, an open one keeps `doing` or `waiting` and otherwise gets
 /// `open`. `done_date:` becomes `completed:`. A priority outside 1 to 3 moves to the nearest end.
 /// Without `apply` nothing is written.
-pub fn normalize(projects: &Projects, apply: bool) -> Fallible<Vec<Normalized>> {
+pub async fn normalize(projects: &Projects, apply: bool) -> Fallible<Vec<Normalized>> {
     let mut report = Vec::new();
-    for current in projects.by_kind(Kind::Task)? {
+    for current in projects.by_kind(Kind::Task).await? {
         let fields = current.fields();
         let mut content = current.content.clone();
         let mut changes = Vec::new();
@@ -313,7 +331,9 @@ pub fn normalize(projects: &Projects, apply: bool) -> Fallible<Vec<Normalized>> 
             continue;
         }
         if apply {
-            projects.put(&Record::from_content(&current.path, content)?)?;
+            projects
+                .put(&Record::from_content(&current.path, content)?)
+                .await?;
         }
         report.push(Normalized {
             path: current.path,
@@ -356,7 +376,7 @@ impl std::error::Error for SaveError {}
 /// # Errors
 /// `Stale` when the base is out of date; `Refused` for a bad path, an oversized body, a new note
 /// outside a live project, or an existing path with no base.
-pub fn save(
+pub async fn save(
     projects: &Projects,
     path: &str,
     content: &str,
@@ -368,7 +388,7 @@ pub fn save(
         );
     }
     let record = Record::from_content(path, content.to_string()).map_err(SaveError::Refused)?;
-    match (projects.get(path)?, base) {
+    match (projects.get(path).await?, base) {
         (Some(current), Some(base)) if current.content == base => {}
         (Some(current), Some(_)) => return Err(SaveError::Stale(current.content).into()),
         (Some(_), None) => return Err(SaveError::Refused(format!("{path} exists")).into()),
@@ -376,7 +396,8 @@ pub fn save(
         (None, None) => {
             if !record.domain
                 && !projects
-                    .by_project(&record.project)?
+                    .by_project(&record.project)
+                    .await?
                     .iter()
                     .any(|r| !r.archived)
             {
@@ -387,7 +408,7 @@ pub fn save(
             }
         }
     }
-    projects.put(&record)?;
+    projects.put(&record).await?;
     Ok(record)
 }
 
@@ -413,14 +434,21 @@ pub const MAX_ATTACHMENT_BYTES: usize = 32 * 1024 * 1024;
 /// # Errors
 /// The path is not a valid attachment path, the project is not live, or the file exceeds
 /// [`MAX_ATTACHMENT_BYTES`].
-pub fn attach(projects: &Projects, path: &str, bytes: &[u8]) -> Fallible<Attached> {
+pub async fn attach(projects: &Projects, path: &str, bytes: &[u8]) -> Fallible<Attached> {
     if bytes.len() > MAX_ATTACHMENT_BYTES {
         return Err(format!("an attachment is at most {MAX_ATTACHMENT_BYTES} bytes").into());
     }
     record::check_attachment(path)?;
     let (project, archived) = record::project_of(path)?;
     let domain = !archived && record::is_domain(&project);
-    if !domain && (archived || !projects.by_project(&project)?.iter().any(|r| !r.archived)) {
+    if !domain
+        && (archived
+            || !projects
+                .by_project(&project)
+                .await?
+                .iter()
+                .any(|r| !r.archived))
+    {
         return Err(format!("no live project named {project:?}").into());
     }
     projects.attach(path, bytes)
@@ -488,7 +516,7 @@ pub struct ImportReport {
 ///
 /// With `folder`, the root is the vault itself and only that domain folder moves, under the
 /// same path (`Atlas/Finance/...`), so a link that names the vault path still names the record.
-pub fn import(
+pub async fn import(
     projects: &Projects,
     vault_projects: &Path,
     only: Option<&str>,
@@ -539,14 +567,14 @@ pub fn import(
             report.skipped.push((id, "frozen: imported before".into()));
             continue;
         }
-        match projects.get(&id)? {
+        match projects.get(&id).await? {
             Some(existing) if existing.content == record.content => report.unchanged.push(id),
             Some(_) => report.skipped.push((
                 id,
                 "changed in Sjel since its import; not overwritten".into(),
             )),
             None => {
-                projects.put(&record)?;
+                projects.put(&record).await?;
                 report.imported.push(id);
             }
         }
@@ -588,13 +616,13 @@ pub struct FreezeReport {
 ///
 /// Only a note whose bytes still equal its imported row is touched, so an edit made in the
 /// vault after the import is reported, never frozen over.
-pub fn freeze_vault(
+pub async fn freeze_vault(
     projects: &Projects,
     vault_projects: &Path,
     only: Option<&str>,
 ) -> Fallible<FreezeReport> {
     let mut report = FreezeReport::default();
-    for record in projects.all()? {
+    for record in projects.all().await? {
         if only.is_some_and(|name| name != record.project) {
             continue;
         }
@@ -697,9 +725,9 @@ mod tests {
     }
 
     /// A domain folder imports under its vault path and takes nothing outside it.
-    #[test]
-    fn a_domain_folder_imports_under_its_vault_path() {
-        let (projects, dir) = scratch("domain-import");
+    #[tokio::test]
+    async fn a_domain_folder_imports_under_its_vault_path() {
+        let (projects, dir) = scratch("domain-import").await;
         let v = dir.join("vault");
         for (path, content) in [
             (
@@ -715,22 +743,27 @@ mod tests {
             fs::create_dir_all(file.parent().unwrap()).unwrap();
             fs::write(file, content).unwrap();
         }
-        let report = import(&projects, &v, None, Some("Atlas/Finance")).unwrap();
+        let report = import(&projects, &v, None, Some("Atlas/Finance"))
+            .await
+            .unwrap();
         assert_eq!(report.imported.len(), 2, "{report:?}");
         assert_eq!(report.attached, vec!["Atlas/Finance/receipt.pdf"]);
         let note = projects
             .get("Atlas/Finance/Subscriptions/Claude Pro.md")
+            .await
             .unwrap()
             .unwrap();
         assert!(note.domain);
-        assert!(import(&projects, &v, None, Some("Knowledge")).is_err());
+        assert!(import(&projects, &v, None, Some("Knowledge"))
+            .await
+            .is_err());
         fs::remove_dir_all(dir).unwrap();
     }
 
     /// A domain folder holds notes only: never a project, a task or a project-list row.
-    #[test]
-    fn a_domain_is_not_a_project() {
-        let (projects, dir) = scratch("domain");
+    #[tokio::test]
+    async fn a_domain_is_not_a_project() {
+        let (projects, dir) = scratch("domain").await;
         let note = Record::from_content(
             "Atlas/Finance/Subscriptions/Claude Pro.md",
             "---\ntype: task\ndone: false\n---\nwhy\n".into(),
@@ -743,15 +776,21 @@ mod tests {
             "a domain record is a note whatever its type says"
         );
         assert!(
-            save(&projects, &note.path, &note.content, None).is_ok(),
+            save(&projects, &note.path, &note.content, None)
+                .await
+                .is_ok(),
             "no hub needed"
         );
-        assert!(attach(&projects, "Atlas/Finance/receipt.pdf", b"pdf").is_ok());
-        assert!(add_project(&projects, "Atlas", "").is_err());
-        assert!(add_project(&projects, "Journal", "").is_err());
-        assert!(add_task(&projects, "Atlas", "T", "", None, 2).is_err());
+        assert!(attach(&projects, "Atlas/Finance/receipt.pdf", b"pdf")
+            .await
+            .is_ok());
+        assert!(add_project(&projects, "Atlas", "").await.is_err());
+        assert!(add_project(&projects, "Journal", "").await.is_err());
+        assert!(add_task(&projects, "Atlas", "T", "", None, 2)
+            .await
+            .is_err());
         assert!(new_note("Journal", "N", "").is_err());
-        assert!(records(&projects, Kind::Note).unwrap().is_empty());
+        assert!(records(&projects, Kind::Note).await.unwrap().is_empty());
         assert!(
             !Record::from_content("Archive/Atlas/x.md", String::new())
                 .unwrap()
@@ -760,11 +799,11 @@ mod tests {
         fs::remove_dir_all(dir).unwrap();
     }
 
-    #[test]
-    fn import_takes_project_notes_and_leaves_the_law() {
-        let (projects, dir) = scratch("import");
+    #[tokio::test]
+    async fn import_takes_project_notes_and_leaves_the_law() {
+        let (projects, dir) = scratch("import").await;
         let v = vault(&dir);
-        let report = import(&projects, &v, None, None).unwrap();
+        let report = import(&projects, &v, None, None).await.unwrap();
         assert_eq!(report.imported.len(), 6, "{report:?}");
         assert!(report.imported.iter().any(|p| p == "Sjel/PRD Axon.md"));
         assert_eq!(
@@ -774,44 +813,65 @@ mod tests {
         assert!(!report.imported.iter().any(|p| p.contains("Knowledge-Base")));
         assert_eq!(report.skipped.len(), 1, "Projects.md has no project folder");
         assert_eq!(
-            import(&projects, &v, None, None).unwrap().unchanged.len(),
+            import(&projects, &v, None, None)
+                .await
+                .unwrap()
+                .unchanged
+                .len(),
             6
         );
-        let open = tasks(&projects, Some("open")).unwrap();
+        let open = tasks(&projects, Some("open")).await.unwrap();
         assert_eq!(open.len(), 1, "the archived task is not served");
         assert_eq!(open[0].uri, "/projects?project=Waschmaschine");
         fs::remove_dir_all(dir).unwrap();
     }
 
-    #[test]
-    fn freeze_marks_unchanged_notes_and_import_then_skips_them() {
-        let (projects, dir) = scratch("freeze");
+    #[tokio::test]
+    async fn freeze_marks_unchanged_notes_and_import_then_skips_them() {
+        let (projects, dir) = scratch("freeze").await;
         let v = vault(&dir);
-        import(&projects, &v, Some("Waschmaschine"), None).unwrap();
+        import(&projects, &v, Some("Waschmaschine"), None)
+            .await
+            .unwrap();
         fs::write(
             v.join("Waschmaschine/Waschmaschine Links.md"),
             "edited in vault",
         )
         .unwrap();
-        let report = freeze_vault(&projects, &v, None).unwrap();
+        let report = freeze_vault(&projects, &v, None).await.unwrap();
         assert_eq!(report.frozen.len(), 2);
         assert_eq!(report.skipped.len(), 1);
         let note = fs::read_to_string(v.join("Waschmaschine/Tasks/Schlauch.md")).unwrap();
         assert!(note.starts_with("---\ntype: task\ndone: false\npriority: 1\nmoved_to: \"sjel projects/Waschmaschine/Tasks/Schlauch.md\"\n---\n> [!warning] Moved to Sjel"));
         assert!(note.ends_with("\nx\n"));
-        assert_eq!(freeze_vault(&projects, &v, None).unwrap().already.len(), 2);
-        let again = import(&projects, &v, Some("Waschmaschine"), None).unwrap();
+        assert_eq!(
+            freeze_vault(&projects, &v, None)
+                .await
+                .unwrap()
+                .already
+                .len(),
+            2
+        );
+        let again = import(&projects, &v, Some("Waschmaschine"), None)
+            .await
+            .unwrap();
         assert!(again.imported.is_empty());
         fs::remove_dir_all(dir).unwrap();
     }
 
-    #[test]
-    fn import_never_overwrites_a_change_made_in_sjel() {
-        let (projects, dir) = scratch("conflict");
+    #[tokio::test]
+    async fn import_never_overwrites_a_change_made_in_sjel() {
+        let (projects, dir) = scratch("conflict").await;
         let v = vault(&dir);
-        import(&projects, &v, Some("Waschmaschine"), None).unwrap();
-        set_done(&projects, "Waschmaschine/Tasks/Schlauch.md", true).unwrap();
-        let report = import(&projects, &v, Some("Waschmaschine"), None).unwrap();
+        import(&projects, &v, Some("Waschmaschine"), None)
+            .await
+            .unwrap();
+        set_done(&projects, "Waschmaschine/Tasks/Schlauch.md", true)
+            .await
+            .unwrap();
+        let report = import(&projects, &v, Some("Waschmaschine"), None)
+            .await
+            .unwrap();
         let conflicts: Vec<_> = report
             .skipped
             .iter()
@@ -821,6 +881,7 @@ mod tests {
         assert!(
             projects
                 .get("Waschmaschine/Tasks/Schlauch.md")
+                .await
                 .unwrap()
                 .unwrap()
                 .done
@@ -828,66 +889,93 @@ mod tests {
         fs::remove_dir_all(dir).unwrap();
     }
 
-    #[test]
-    fn set_property_checks_schema_keys_and_status_drives_done() {
-        let (projects, dir) = scratch("property");
-        add_project(&projects, "W", "").unwrap();
-        let path = add_task(&projects, "W", "x", "", None, 2).unwrap().path;
-        assert!(set_property(&projects, &path, "priority", "4").is_err());
-        assert!(set_property(&projects, &path, "due", "24.10.").is_err());
-        assert!(set_property(&projects, &path, "status", "todo").is_err());
-        assert!(set_property(&projects, &path, "done", "true").is_err());
-        let r = set_property(&projects, &path, "context", "Werkstatt").unwrap();
+    #[tokio::test]
+    async fn set_property_checks_schema_keys_and_status_drives_done() {
+        let (projects, dir) = scratch("property").await;
+        add_project(&projects, "W", "").await.unwrap();
+        let path = add_task(&projects, "W", "x", "", None, 2)
+            .await
+            .unwrap()
+            .path;
+        assert!(set_property(&projects, &path, "priority", "4")
+            .await
+            .is_err());
+        assert!(set_property(&projects, &path, "due", "24.10.")
+            .await
+            .is_err());
+        assert!(set_property(&projects, &path, "status", "todo")
+            .await
+            .is_err());
+        assert!(set_property(&projects, &path, "done", "true")
+            .await
+            .is_err());
+        let r = set_property(&projects, &path, "context", "Werkstatt")
+            .await
+            .unwrap();
         assert_eq!(r.fields()["context"], "Werkstatt");
-        let r = set_property(&projects, &path, "status", "done").unwrap();
+        let r = set_property(&projects, &path, "status", "done")
+            .await
+            .unwrap();
         assert!(r.done && r.fields().contains_key("completed"));
-        let r = set_property(&projects, &path, "status", "waiting").unwrap();
+        let r = set_property(&projects, &path, "status", "waiting")
+            .await
+            .unwrap();
         assert!(!r.done && !r.fields().contains_key("completed"));
         assert_eq!(r.fields()["status"], "waiting");
-        let r = set_property(&projects, &path, "due", "").unwrap();
+        let r = set_property(&projects, &path, "due", "").await.unwrap();
         assert_eq!(r.due, None);
-        assert!(set_property(&projects, "W/W.md", "status", "open").is_err());
-        set_property(&projects, "W/W.md", "status", "done").unwrap();
-        assert_eq!(records(&projects, Kind::Project).unwrap().len(), 1);
+        assert!(set_property(&projects, "W/W.md", "status", "open")
+            .await
+            .is_err());
+        set_property(&projects, "W/W.md", "status", "done")
+            .await
+            .unwrap();
+        assert_eq!(records(&projects, Kind::Project).await.unwrap().len(), 1);
         fs::remove_dir_all(dir).unwrap();
     }
 
-    #[test]
-    fn normalize_lets_done_decide_status_and_only_writes_when_applied() {
-        let (projects, dir) = scratch("normalize");
+    #[tokio::test]
+    async fn normalize_lets_done_decide_status_and_only_writes_when_applied() {
+        let (projects, dir) = scratch("normalize").await;
         let messy =
             "---\ntype: task\ndone: true\nstatus: open\ndone_date: 2026-01-02\npriority: 5\n---\n";
         projects
             .put(&Record::from_content("W/Tasks/a.md", messy.into()).unwrap())
+            .await
             .unwrap();
         let clean = "---\ntype: task\ndone: false\nstatus: waiting\npriority: 1\n---\n";
         projects
             .put(&Record::from_content("W/Tasks/b.md", clean.into()).unwrap())
+            .await
             .unwrap();
-        let report = normalize(&projects, false).unwrap();
+        let report = normalize(&projects, false).await.unwrap();
         assert_eq!(report.len(), 1, "{report:?}");
         assert_eq!(report[0].changes.len(), 3);
         assert_eq!(
-            projects.get("W/Tasks/a.md").unwrap().unwrap().content,
+            projects.get("W/Tasks/a.md").await.unwrap().unwrap().content,
             messy
         );
-        normalize(&projects, true).unwrap();
-        let a = projects.get("W/Tasks/a.md").unwrap().unwrap().content;
+        normalize(&projects, true).await.unwrap();
+        let a = projects.get("W/Tasks/a.md").await.unwrap().unwrap().content;
         assert_eq!(
             a,
             "---\ntype: task\ndone: true\nstatus: done\npriority: 3\ncompleted: 2026-01-02\n---\n"
         );
-        assert!(normalize(&projects, false).unwrap().is_empty());
+        assert!(normalize(&projects, false).await.unwrap().is_empty());
         fs::remove_dir_all(dir).unwrap();
     }
 
-    #[test]
-    fn add_task_needs_a_live_project_and_a_valid_date() {
-        let (projects, dir) = scratch("add");
-        assert!(add_task(&projects, "Nope", "x", "", None, 2).is_err());
-        add_project(&projects, "Waschmaschine", "W").unwrap();
-        assert!(add_project(&projects, "Waschmaschine", "W").is_err());
-        assert!(add_task(&projects, "Waschmaschine", "x", "", Some("24.10."), 2).is_err());
+    #[tokio::test]
+    async fn add_task_needs_a_live_project_and_a_valid_date() {
+        let (projects, dir) = scratch("add").await;
+        assert!(add_task(&projects, "Nope", "x", "", None, 2).await.is_err());
+        add_project(&projects, "Waschmaschine", "W").await.unwrap();
+        assert!(add_project(&projects, "Waschmaschine", "W").await.is_err());
+        assert!(
+            add_task(&projects, "Waschmaschine", "x", "", Some("24.10."), 2)
+                .await
+                .is_err()
+        );
         let r = add_task(
             &projects,
             "Waschmaschine",
@@ -896,64 +984,82 @@ mod tests {
             Some("2026-10-20"),
             1,
         )
+        .await
         .unwrap();
         assert_eq!(r.path, "Waschmaschine/Tasks/Schelle kaufen.md");
-        assert!(add_task(&projects, "Waschmaschine", "Schelle kaufen", "", None, 1).is_err());
-        assert_eq!(tasks(&projects, Some("open")).unwrap().len(), 1);
+        assert!(
+            add_task(&projects, "Waschmaschine", "Schelle kaufen", "", None, 1)
+                .await
+                .is_err()
+        );
+        assert_eq!(tasks(&projects, Some("open")).await.unwrap().len(), 1);
         fs::remove_dir_all(dir).unwrap();
     }
 
-    #[test]
-    fn save_refuses_a_stale_base_and_creates_notes_only_in_live_projects() {
-        let (projects, dir) = scratch("save");
-        add_project(&projects, "W", "").unwrap();
-        let hub = projects.get("W/W.md").unwrap().unwrap();
+    #[tokio::test]
+    async fn save_refuses_a_stale_base_and_creates_notes_only_in_live_projects() {
+        let (projects, dir) = scratch("save").await;
+        add_project(&projects, "W", "").await.unwrap();
+        let hub = projects.get("W/W.md").await.unwrap().unwrap();
         let edited = format!("{}\nmore\n", hub.content);
-        save(&projects, "W/W.md", &edited, Some(&hub.content)).unwrap();
+        save(&projects, "W/W.md", &edited, Some(&hub.content))
+            .await
+            .unwrap();
         assert_eq!(
             fs::read_to_string(projects.root().join("W/W.md")).unwrap(),
             edited
         );
-        let stale = save(&projects, "W/W.md", "x", Some(&hub.content)).unwrap_err();
+        let stale = save(&projects, "W/W.md", "x", Some(&hub.content))
+            .await
+            .unwrap_err();
         assert!(
             matches!(stale.downcast_ref::<SaveError>(), Some(SaveError::Stale(c)) if *c == edited)
         );
         assert!(
-            save(&projects, "W/W.md", "x", None).is_err(),
+            save(&projects, "W/W.md", "x", None).await.is_err(),
             "an existing path needs a base"
         );
         let (path, content) = new_note("W", "Links", "parts").unwrap();
         assert_eq!(
-            save(&projects, &path, &content, None).unwrap().kind,
+            save(&projects, &path, &content, None).await.unwrap().kind,
             Kind::Note
         );
         let (elsewhere, content) = new_note("Nope", "Links", "").unwrap();
-        assert!(save(&projects, &elsewhere, &content, None).is_err());
+        assert!(save(&projects, &elsewhere, &content, None).await.is_err());
         assert!(save(
             &projects,
             "W/big.md",
             &"x".repeat(MAX_CONTENT_BYTES + 1),
             None
         )
+        .await
         .is_err());
         fs::remove_dir_all(dir).unwrap();
     }
 
-    #[test]
-    fn attach_requires_a_live_project_and_refuses_different_bytes() {
-        let (projects, dir) = scratch("ops-attach");
-        assert!(attach(&projects, "W/Assets/manual.pdf", b"pdf-1").is_err());
-        add_project(&projects, "W", "").unwrap();
+    #[tokio::test]
+    async fn attach_requires_a_live_project_and_refuses_different_bytes() {
+        let (projects, dir) = scratch("ops-attach").await;
+        assert!(attach(&projects, "W/Assets/manual.pdf", b"pdf-1")
+            .await
+            .is_err());
+        add_project(&projects, "W", "").await.unwrap();
         assert_eq!(
-            attach(&projects, "W/Assets/manual.pdf", b"pdf-1").unwrap(),
+            attach(&projects, "W/Assets/manual.pdf", b"pdf-1")
+                .await
+                .unwrap(),
             Attached::New
         );
         assert_eq!(
-            attach(&projects, "W/Assets/manual.pdf", b"pdf-1").unwrap(),
+            attach(&projects, "W/Assets/manual.pdf", b"pdf-1")
+                .await
+                .unwrap(),
             Attached::Unchanged
         );
         assert_eq!(
-            attach(&projects, "W/Assets/manual.pdf", b"pdf-2").unwrap(),
+            attach(&projects, "W/Assets/manual.pdf", b"pdf-2")
+                .await
+                .unwrap(),
             Attached::Differs
         );
         assert_eq!(

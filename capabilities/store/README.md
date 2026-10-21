@@ -19,8 +19,13 @@ reading through `rusqlite` (`libs/sjel-store`).
 store, handlers, CLI and tests run on `sjel-turso` alone; `rusqlite` left its dependency graph with
 them, because one binary cannot link both bundled SQLite libraries. The table did not move — it is
 in this file, byte-compatible, and the existing row was read back unchanged after the switch. The
-pattern it settled is in `libs/sjel-turso/README.md`; the remaining sixteen capabilities follow it
-one at a time.
+pattern it settled is in `libs/sjel-turso/README.md`; the remaining capabilities follow it one at a
+time.
+
+**`projects` followed the same day**, and is the larger proof: all 1221 rows of the canonical note
+text, re-read through LibSQL and compared byte for byte against the rendered second copy, with no
+drift (measured 2026-10-21). It is also the table `apps/gpui` reads directly, so the capability that
+writes it and the app that reads it now share one engine.
 
 **One file, not one per capability.** Cross-schema joins within one database are a single
 connection with no `dblink` or foreign-data-wrapper machinery. A file per capability would have

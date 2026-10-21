@@ -12,8 +12,8 @@ pub use store::Projects;
 ///
 /// # Errors
 /// No overlay is configured, so a write would have no second copy, or the store cannot open.
-pub fn open_default() -> Result<Projects, Box<dyn std::error::Error>> {
+pub async fn open_default() -> Result<Projects, Box<dyn std::error::Error + Send + Sync>> {
     let root = Projects::default_root()
         .ok_or("SJEL_PERSONAL_ROOT is not set: no overlay to render projects into")?;
-    Projects::open(&sjel_config::database_path(), root)
+    Projects::open(&sjel_config::database_path(), root).await
 }

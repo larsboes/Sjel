@@ -25,14 +25,22 @@ chrono.workspace = true
 content-item = { path = "../../libs/content-item" }
 markdown-root = { path = "../../libs/markdown-root" }
 route-manifest = { path = "../../libs/route-manifest" }
-rusqlite.workspace = true
 schemars = "1.2.2"
 serde = { workspace = true, features = ["derive"] }
 serde_json.workspace = true
 sjel-config = { path = "../../libs/sjel-config" }
 sjel-server = { path = "../../libs/sjel-server" }
-sjel-store = { path = "../../libs/sjel-store" }
+# LibSQL, not `sjel-store`: the second capability cut over (PLAN.md Phase 4). The rows stay in the
+# shared file, and the app that already reads them directly (`apps/gpui` over raw `libsql`) now
+# shares the engine with the capability that writes them. `rusqlite` leaves this crate's graph with
+# it -- one binary cannot link both bundled SQLite libraries.
+sjel-turso = { path = "../../libs/sjel-turso" }
 tokio = { workspace = true, features = ["macros", "rt-multi-thread", "net"] }
+
+[dev-dependencies]
+# `ServiceExt::oneshot`, so the router test drives the wired handlers with no listener and no
+# port. The same pattern capabilities/transit, sjel-status and operator-profile use.
+tower = { workspace = true, features = ["util"] }
 
 [lints]
 workspace = true

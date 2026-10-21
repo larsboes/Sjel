@@ -6,10 +6,11 @@ A shared library, not a capability: no domain of its own, no CLI
 (CONTRIBUTING.md#three-architectural-nouns). Consumers declare an `sjel-store` path dependency in the
 workspace.
 
-**This is no longer the only way in.** `capabilities/operator-profile` opens the same file through
-`libs/sjel-turso` (LibSQL) since 2026-10-21, the first capability cut over (PLAN.md Phase 4). A
-binary links one engine or the other, never both — each bundles its own SQLite and the C symbols
-collide — so the sections below describe the `rusqlite` path the remaining capabilities still take.
+**This is no longer the only way in.** `capabilities/operator-profile` and `capabilities/projects`
+open the same file through `libs/sjel-turso` (LibSQL) since 2026-10-21, the first two capabilities
+cut over (PLAN.md Phase 4). A binary links one engine or the other, never both — each bundles its
+own SQLite and the C symbols collide — so the sections below describe the `rusqlite` path the
+remaining capabilities still take.
 
 ## One file, table prefixes
 

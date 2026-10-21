@@ -3,6 +3,11 @@
 //! The database is canonical. The rendered tree under `<overlay>/data/projects/` is the second
 //! copy Principle 8 asks for, written the way finance writes its decisions: whole file,
 //! temp-plus-rename, mode 0600.
+//!
+//! The database is LibSQL through `sjel-turso`, so every read and write is awaited. The rendered
+//! tree stays ordinary synchronous file I/O: it is a few KB per record on the overlay, and
+//! `markdown_root` walks directories with no async form. Keeping that split means the reactor
+//! waits on the database and never on a temp-file rename.
 
 use std::{
     fs,
@@ -11,15 +16,15 @@ use std::{
     path::{Path, PathBuf},
 };
 
-use rusqlite::{params, Connection, OptionalExtension, Row};
+use sjel_turso::{libsql, Store};
 
 use crate::record::{check_attachment, Kind, Record};
 
 pub const PREFIX: &str = "projects";
-type Fallible<T> = Result<T, Box<dyn std::error::Error>>;
+type Fallible<T> = Result<T, Box<dyn std::error::Error + Send + Sync>>;
 
 pub struct Projects {
-    pool: sjel_store::Pool,
+    db: Store,
     root: PathBuf,
 }
 
@@ -46,9 +51,9 @@ impl Projects {
     ///
     /// # Errors
     /// The database cannot be opened or migrated.
-    pub fn open(database: &Path, root: PathBuf) -> Fallible<Self> {
-        let pool = sjel_store::open_pool(database, PREFIX, migrate)?;
-        Ok(Self { pool, root })
+    pub async fn open(database: &Path, root: PathBuf) -> Fallible<Self> {
+        let db = Store::open(database, PREFIX, migrate).await?;
+        Ok(Self { db, root })
     }
 
     /// `<overlay>/data/projects`, or nothing when no overlay is configured.
@@ -60,8 +65,12 @@ impl Projects {
         &self.root
     }
 
-    pub fn ping(&self) -> Fallible<()> {
-        self.pool.get()?.query_row("SELECT 1", [], |_| Ok(()))?;
+    pub async fn ping(&self) -> Fallible<()> {
+        let conn = self.db.connect().await?;
+        let mut rows = conn.query("SELECT 1", ()).await?;
+        rows.next()
+            .await?
+            .ok_or_else(|| std::io::Error::other("`SELECT 1` returned no row"))?;
         Ok(())
     }
 
@@ -70,9 +79,8 @@ impl Projects {
     /// # Errors
     /// The write or the render failed. A failed render leaves the row written; `render_all`
     /// repairs the file, and `verify` reports it until then.
-    pub fn put(&self, record: &Record) -> Fallible<()> {
-        let mut conn = self.pool.get()?;
-        let tx = sjel_store::write_transaction(&mut conn)?;
+    pub async fn put(&self, record: &Record) -> Fallible<()> {
+        let tx = self.db.begin().await?;
         tx.execute(
             &format!(
                 "INSERT INTO projects_records
@@ -82,21 +90,22 @@ impl Projects {
                    title = excluded.title, done = excluded.done, due = excluded.due,
                    priority = excluded.priority, archived = excluded.archived,
                    content = excluded.content, updated_at = excluded.updated_at",
-                now = sjel_store::NOW
+                now = sjel_turso::NOW
             ),
-            params![
-                record.path,
-                record.project,
+            (
+                record.path.as_str(),
+                record.project.as_str(),
                 record.kind.as_str(),
-                record.title,
+                record.title.as_str(),
                 record.done,
-                record.due,
+                record.due.as_deref(),
                 record.priority,
                 record.archived,
-                record.content
-            ],
-        )?;
-        tx.commit()?;
+                record.content.as_str(),
+            ),
+        )
+        .await?;
+        tx.commit().await?;
         self.render(record)
     }
 
@@ -104,11 +113,13 @@ impl Projects {
     ///
     /// # Errors
     /// The delete or the file removal failed.
-    pub fn remove(&self, path: &str) -> Fallible<bool> {
-        let mut conn = self.pool.get()?;
-        let tx = sjel_store::write_transaction(&mut conn)?;
-        let removed = tx.execute("DELETE FROM projects_records WHERE path = ?1", [path])? > 0;
-        tx.commit()?;
+    pub async fn remove(&self, path: &str) -> Fallible<bool> {
+        let tx = self.db.begin().await?;
+        let removed = tx
+            .execute("DELETE FROM projects_records WHERE path = ?1", [path])
+            .await?
+            > 0;
+        tx.commit().await?;
         match fs::remove_file(self.root.join(path)) {
             Err(e) if e.kind() != std::io::ErrorKind::NotFound => return Err(e.into()),
             _ => {}
@@ -116,50 +127,53 @@ impl Projects {
         Ok(removed)
     }
 
-    pub fn get(&self, path: &str) -> Fallible<Option<Record>> {
-        let conn = self.pool.get()?;
-        Ok(conn
-            .query_row(
+    pub async fn get(&self, path: &str) -> Fallible<Option<Record>> {
+        let conn = self.db.connect().await?;
+        let mut rows = conn
+            .query(
                 "SELECT path, content FROM projects_records WHERE path = ?1",
                 [path],
-                path_and_content,
             )
-            .optional()?
-            .map(|(p, c)| Record::from_content(&p, c))
-            .transpose()?)
+            .await?;
+        let Some(row) = rows.next().await? else {
+            return Ok(None);
+        };
+        Ok(Some(record_from_row(&row)?))
     }
 
     /// Every record, ordered by path.
-    pub fn all(&self) -> Fallible<Vec<Record>> {
+    pub async fn all(&self) -> Fallible<Vec<Record>> {
         self.query(
             "SELECT path, content FROM projects_records ORDER BY path",
-            [],
+            Vec::new(),
         )
+        .await
     }
 
-    pub fn by_kind(&self, kind: Kind) -> Fallible<Vec<Record>> {
+    pub async fn by_kind(&self, kind: Kind) -> Fallible<Vec<Record>> {
         self.query(
             "SELECT path, content FROM projects_records WHERE kind = ?1 ORDER BY path",
-            [kind.as_str()],
+            vec![kind.as_str().into()],
         )
+        .await
     }
 
-    pub fn by_project(&self, project: &str) -> Fallible<Vec<Record>> {
+    pub async fn by_project(&self, project: &str) -> Fallible<Vec<Record>> {
         self.query(
             "SELECT path, content FROM projects_records WHERE project = ?1 ORDER BY path",
-            [project],
+            vec![project.into()],
         )
+        .await
     }
 
-    fn query<P: rusqlite::Params>(&self, sql: &str, params: P) -> Fallible<Vec<Record>> {
-        let conn = self.pool.get()?;
-        let mut stmt = conn.prepare(sql)?;
-        let rows = stmt
-            .query_map(params, path_and_content)?
-            .collect::<Result<Vec<_>, _>>()?;
-        rows.into_iter()
-            .map(|(p, c)| Record::from_content(&p, c).map_err(Into::into))
-            .collect()
+    async fn query(&self, sql: &str, params: Vec<libsql::Value>) -> Fallible<Vec<Record>> {
+        let conn = self.db.connect().await?;
+        let mut rows = conn.query(sql, params).await?;
+        let mut records = Vec::new();
+        while let Some(row) = rows.next().await? {
+            records.push(record_from_row(&row)?);
+        }
+        Ok(records)
     }
 
     /// Store an attachment: a binary file of a project, kept as a file in the tree.
@@ -228,8 +242,8 @@ impl Projects {
     }
 
     /// Re-render every record. Repairs any file `verify` reports as stale.
-    pub fn render_all(&self) -> Fallible<usize> {
-        let records = self.all()?;
+    pub async fn render_all(&self) -> Fallible<usize> {
+        let records = self.all().await?;
         for record in &records {
             self.render(record)?;
         }
@@ -237,8 +251,8 @@ impl Projects {
     }
 
     /// Compare the store with the rendered tree, byte for byte.
-    pub fn verify(&self) -> Fallible<Drift> {
-        let records = self.all()?;
+    pub async fn verify(&self) -> Fallible<Drift> {
+        let records = self.all().await?;
         let mut drift = Drift::default();
         for record in &records {
             match fs::read(self.root.join(&record.path)) {
@@ -262,11 +276,17 @@ impl Projects {
     }
 }
 
-fn path_and_content(row: &Row<'_>) -> rusqlite::Result<(String, String)> {
-    Ok((row.get(0)?, row.get(1)?))
+/// `path, content` is the whole row a record needs: every other column is derived from the
+/// content when the record is read, so the file stays the single source of the fields.
+fn record_from_row(row: &libsql::Row) -> Fallible<Record> {
+    let path: String = row.get(0)?;
+    let content: String = row.get(1)?;
+    Ok(Record::from_content(&path, content)?)
 }
 
-fn migrate(conn: &Connection) -> Fallible<()> {
+/// The table this capability owns in the shared file. `kind` and `priority` carry the same
+/// constraints `record.rs` enforces, so a hand-written row cannot disagree with a rendered one.
+async fn migrate(conn: libsql::Connection) -> Fallible<()> {
     conn.execute_batch(
         "CREATE TABLE IF NOT EXISTS projects_records (
             path TEXT PRIMARY KEY,
@@ -282,7 +302,8 @@ fn migrate(conn: &Connection) -> Fallible<()> {
         );
         CREATE INDEX IF NOT EXISTS projects_records_project ON projects_records (project);
         CREATE INDEX IF NOT EXISTS projects_records_kind ON projects_records (kind, done);",
-    )?;
+    )
+    .await?;
     Ok(())
 }
 
@@ -290,11 +311,13 @@ fn migrate(conn: &Connection) -> Fallible<()> {
 pub(crate) mod tests {
     use super::*;
 
-    pub(crate) fn scratch(name: &str) -> (Projects, PathBuf) {
+    pub(crate) async fn scratch(name: &str) -> (Projects, PathBuf) {
         let dir = std::env::temp_dir().join(format!("sjel-projects-{}-{name}", std::process::id()));
         let _ = fs::remove_dir_all(&dir);
         fs::create_dir_all(&dir).unwrap();
-        let projects = Projects::open(&dir.join("axon.db"), dir.join("rendered")).unwrap();
+        let projects = Projects::open(&dir.join("axon.db"), dir.join("rendered"))
+            .await
+            .unwrap();
         (projects, dir)
     }
 
@@ -307,41 +330,47 @@ pub(crate) mod tests {
     }
 
     /// A write and its file change together.
-    #[test]
-    fn every_put_renders_the_same_bytes() {
-        let (projects, dir) = scratch("render");
+    #[tokio::test]
+    async fn every_put_renders_the_same_bytes() {
+        let (projects, dir) = scratch("render").await;
         let first = task("Waschmaschine/Tasks/Schlauch.md", false);
-        projects.put(&first).unwrap();
+        projects.put(&first).await.unwrap();
         let file = projects.root().join(&first.path);
         assert_eq!(fs::read_to_string(&file).unwrap(), first.content);
         let second = task("Waschmaschine/Tasks/Schlauch.md", true);
-        projects.put(&second).unwrap();
+        projects.put(&second).await.unwrap();
         assert_eq!(fs::read_to_string(&file).unwrap(), second.content);
-        assert_eq!(projects.verify().unwrap(), Drift::default());
+        assert_eq!(projects.verify().await.unwrap(), Drift::default());
         fs::remove_dir_all(dir).unwrap();
     }
 
     /// Rows rebuilt from the rendered tree equal the live rows.
-    #[test]
-    fn a_store_rebuilt_from_the_files_is_identical() {
-        let (projects, dir) = scratch("roundtrip");
-        projects.put(&task("A/Tasks/One.md", false)).unwrap();
-        projects.put(&task("Archive/B/Tasks/Two.md", true)).unwrap();
-        let rebuilt = Projects::open(&dir.join("rebuilt.db"), dir.join("unused")).unwrap();
+    #[tokio::test]
+    async fn a_store_rebuilt_from_the_files_is_identical() {
+        let (projects, dir) = scratch("roundtrip").await;
+        projects.put(&task("A/Tasks/One.md", false)).await.unwrap();
+        projects
+            .put(&task("Archive/B/Tasks/Two.md", true))
+            .await
+            .unwrap();
+        let rebuilt = Projects::open(&dir.join("rebuilt.db"), dir.join("unused"))
+            .await
+            .unwrap();
         let tree = markdown_root::MarkdownRoot::declare(projects.root()).unwrap();
         for file in tree.markdown_files_recursive().unwrap() {
             let id = tree.relative_id(&file).unwrap();
             rebuilt
                 .put(&Record::from_content(&id, fs::read_to_string(file).unwrap()).unwrap())
+                .await
                 .unwrap();
         }
-        assert_eq!(rebuilt.all().unwrap(), projects.all().unwrap());
+        assert_eq!(rebuilt.all().await.unwrap(), projects.all().await.unwrap());
         fs::remove_dir_all(dir).unwrap();
     }
 
-    #[test]
-    fn an_attachment_is_written_once_and_never_overwritten() {
-        let (projects, dir) = scratch("attach");
+    #[tokio::test]
+    async fn an_attachment_is_written_once_and_never_overwritten() {
+        let (projects, dir) = scratch("attach").await;
         assert_eq!(
             projects.attach("A/Assets/x.png", b"png").unwrap(),
             Attached::New
@@ -360,31 +389,31 @@ pub(crate) mod tests {
         );
         assert!(projects.attach("A/x.md", b"note").is_err());
         assert!(projects.attachment("../secret.png").is_err());
-        projects.put(&task("A/Tasks/One.md", false)).unwrap();
+        projects.put(&task("A/Tasks/One.md", false)).await.unwrap();
         assert_eq!(projects.attachments().unwrap(), vec!["A/Assets/x.png"]);
         assert_eq!(
-            projects.verify().unwrap(),
+            projects.verify().await.unwrap(),
             Drift::default(),
             "attachments are not orphans"
         );
         fs::remove_dir_all(dir).unwrap();
     }
 
-    #[test]
-    fn verify_reports_a_changed_file_and_an_orphan() {
-        let (projects, dir) = scratch("drift");
+    #[tokio::test]
+    async fn verify_reports_a_changed_file_and_an_orphan() {
+        let (projects, dir) = scratch("drift").await;
         let record = task("A/Tasks/One.md", false);
-        projects.put(&record).unwrap();
+        projects.put(&record).await.unwrap();
         fs::write(projects.root().join(&record.path), "edited").unwrap();
         fs::write(projects.root().join("A/stray.md"), "x").unwrap();
-        let drift = projects.verify().unwrap();
+        let drift = projects.verify().await.unwrap();
         assert_eq!(drift.stale, vec!["A/Tasks/One.md"]);
         assert_eq!(drift.orphaned, vec!["A/stray.md"]);
-        projects.render_all().unwrap();
-        assert!(projects.verify().unwrap().stale.is_empty());
-        assert!(projects.remove("A/Tasks/One.md").unwrap());
+        projects.render_all().await.unwrap();
+        assert!(projects.verify().await.unwrap().stale.is_empty());
+        assert!(projects.remove("A/Tasks/One.md").await.unwrap());
         assert!(!projects.root().join("A/Tasks/One.md").exists());
-        assert!(!projects.remove("A/Tasks/One.md").unwrap());
+        assert!(!projects.remove("A/Tasks/One.md").await.unwrap());
         fs::remove_dir_all(dir).unwrap();
     }
 }

@@ -205,28 +205,17 @@ impl IntoResponse for ApiError {
 
 type Shared = Arc<Projects>;
 
-/// Run blocking store work; a refused write is a 400, anything else a 500.
-async fn blocking<T: Send + 'static>(
-    projects: Shared,
-    refused_is_bad: bool,
-    work: impl FnOnce(&Projects) -> Result<T, Box<dyn std::error::Error>> + Send + 'static,
-) -> Result<T, ApiError> {
-    tokio::task::spawn_blocking(move || work(&projects).map_err(|e| e.to_string()))
-        .await
-        .map_err(|_| {
-            ApiError(
-                StatusCode::INTERNAL_SERVER_ERROR,
-                "projects operation failed".into(),
-            )
-        })?
-        .map_err(|message| {
-            let status = if refused_is_bad {
-                StatusCode::BAD_REQUEST
-            } else {
-                StatusCode::INTERNAL_SERVER_ERROR
-            };
-            ApiError(status, message)
-        })
+/// A store or ops failure as a response: a refused write is a 400, anything else a 500.
+///
+/// The handlers await the store directly now, so there is no `spawn_blocking` join error to fold
+/// into the 500 branch; only the capability's own refusal reaches here.
+fn api_error(refused_is_bad: bool, error: Box<dyn std::error::Error + Send + Sync>) -> ApiError {
+    let status = if refused_is_bad {
+        StatusCode::BAD_REQUEST
+    } else {
+        StatusCode::INTERNAL_SERVER_ERROR
+    };
+    ApiError(status, error.to_string())
 }
 
 async fn health() -> Json<Value> {
@@ -234,7 +223,7 @@ async fn health() -> Json<Value> {
 }
 
 async fn ready(State(projects): State<Shared>) -> Result<Json<Value>, ApiError> {
-    blocking(projects, false, |p| p.ping()).await?;
+    projects.ping().await.map_err(|e| api_error(false, e))?;
     Ok(Json(json!({ "status": "ready", "service": "projects" })))
 }
 
@@ -254,15 +243,14 @@ async fn list_tasks(
             ));
         }
     }
-    let tasks = blocking(projects, false, move |p| {
-        ops::tasks(p, query.status.as_deref())
-    })
-    .await?;
+    let tasks = ops::tasks(&projects, query.status.as_deref())
+        .await
+        .map_err(|e| api_error(false, e))?;
     Ok(Json(json!({ "tasks": tasks })))
 }
 
 async fn list_projects(State(projects): State<Shared>) -> Result<Json<Value>, ApiError> {
-    let records = blocking(projects, false, |p| p.all()).await?;
+    let records = projects.all().await.map_err(|e| api_error(false, e))?;
     let mut summaries: Vec<ProjectSummary> = Vec::new();
     for r in records.into_iter().filter(|r| !r.domain) {
         let index = match summaries
@@ -294,12 +282,14 @@ async fn list_records(
     State(projects): State<Shared>,
     Query(query): Query<KindQuery>,
 ) -> Result<Json<Value>, ApiError> {
-    let records = blocking(projects, false, move |p| ops::records(p, query.kind)).await?;
+    let records = ops::records(&projects, query.kind)
+        .await
+        .map_err(|e| api_error(false, e))?;
     Ok(Json(json!({ "records": records })))
 }
 
 async fn list_files(State(projects): State<Shared>) -> Result<Json<Value>, ApiError> {
-    let files = blocking(projects, false, |p| p.attachments()).await?;
+    let files = projects.attachments().map_err(|e| api_error(false, e))?;
     Ok(Json(json!({ "files": files })))
 }
 
@@ -307,7 +297,7 @@ async fn list_files(State(projects): State<Shared>) -> Result<Json<Value>, ApiEr
 /// unsniffable, so an SVG or HTML file from the vault cannot run script in the dashboard origin.
 async fn get_file(State(projects): State<Shared>, Query(query): Query<FileQuery>) -> Response {
     let path = query.path.clone();
-    match blocking(projects, true, move |p| p.attachment(&path)).await {
+    match projects.attachment(&path).map_err(|e| api_error(true, e)) {
         Ok(Some(bytes)) => {
             let extension = query
                 .path
@@ -371,7 +361,10 @@ async fn get_project(
 ) -> Result<Json<Value>, ApiError> {
     let name = query.name;
     let with_content = query.content.unwrap_or(true);
-    let records = blocking(projects, false, move |p| p.by_project(&name)).await?;
+    let records = projects
+        .by_project(&name)
+        .await
+        .map_err(|e| api_error(false, e))?;
     if records.is_empty() {
         return Err(ApiError(StatusCode::NOT_FOUND, "no such project".into()));
     }
@@ -387,8 +380,10 @@ async fn get_record(
     Query(query): Query<RecordQuery>,
 ) -> Result<Json<Value>, ApiError> {
     let path = query.path;
-    let record = blocking(projects, false, move |p| p.get(&path))
-        .await?
+    let record = projects
+        .get(&path)
+        .await
+        .map_err(|e| api_error(false, e))?
         .ok_or_else(|| ApiError(StatusCode::NOT_FOUND, "no such record".into()))?;
     Ok(Json(json!({ "record": record_json(&record, true) })))
 }
@@ -397,17 +392,16 @@ async fn add_task(
     State(projects): State<Shared>,
     Json(body): Json<AddTask>,
 ) -> Result<(StatusCode, Json<Value>), ApiError> {
-    let record = blocking(projects, true, move |p| {
-        ops::add_task(
-            p,
-            &body.project,
-            &body.title,
-            &body.summary,
-            body.due.as_deref().filter(|d| !d.is_empty()),
-            body.priority.unwrap_or(2),
-        )
-    })
-    .await?;
+    let record = ops::add_task(
+        &projects,
+        &body.project,
+        &body.title,
+        &body.summary,
+        body.due.as_deref().filter(|d| !d.is_empty()),
+        body.priority.unwrap_or(2),
+    )
+    .await
+    .map_err(|e| api_error(true, e))?;
     Ok((
         StatusCode::CREATED,
         Json(json!({ "task": ops::Task::from_record(&record) })),
@@ -418,10 +412,9 @@ async fn set_done(
     State(projects): State<Shared>,
     Json(body): Json<SetDone>,
 ) -> Result<Json<Value>, ApiError> {
-    let record = blocking(projects, true, move |p| {
-        ops::set_done(p, &body.id, body.done)
-    })
-    .await?;
+    let record = ops::set_done(&projects, &body.id, body.done)
+        .await
+        .map_err(|e| api_error(true, e))?;
     Ok(Json(json!({ "task": ops::Task::from_record(&record) })))
 }
 
@@ -429,10 +422,9 @@ async fn add_project(
     State(projects): State<Shared>,
     Json(body): Json<AddProject>,
 ) -> Result<(StatusCode, Json<Value>), ApiError> {
-    let record = blocking(projects, true, move |p| {
-        ops::add_project(p, &body.name, &body.summary)
-    })
-    .await?;
+    let record = ops::add_project(&projects, &body.name, &body.summary)
+        .await
+        .map_err(|e| api_error(true, e))?;
     Ok((
         StatusCode::CREATED,
         Json(json!({ "project": record.project })),
@@ -440,24 +432,20 @@ async fn add_project(
 }
 
 async fn save_record(State(projects): State<Shared>, Json(body): Json<SaveRecord>) -> Response {
-    let outcome = tokio::task::spawn_blocking(move || {
-        ops::save(&projects, &body.path, &body.content, Some(&body.base)).map_err(|e| {
-            match e.downcast::<ops::SaveError>() {
-                Ok(save) => *save,
-                Err(other) => ops::SaveError::Refused(other.to_string()),
-            }
-        })
-    })
-    .await;
+    let outcome = ops::save(&projects, &body.path, &body.content, Some(&body.base))
+        .await
+        .map_err(|e| match e.downcast::<ops::SaveError>() {
+            Ok(save) => *save,
+            Err(other) => ops::SaveError::Refused(other.to_string()),
+        });
     match outcome {
-        Ok(Ok(record)) => Json(json!({ "path": record.path, "kind": record.kind })).into_response(),
-        Ok(Err(ops::SaveError::Stale(current))) => (
+        Ok(record) => Json(json!({ "path": record.path, "kind": record.kind })).into_response(),
+        Err(ops::SaveError::Stale(current)) => (
             StatusCode::CONFLICT,
             Json(json!({ "error": "the note changed since it was read; nothing was saved", "code": "stale", "current": current })),
         )
             .into_response(),
-        Ok(Err(ops::SaveError::Refused(why))) => ApiError(StatusCode::BAD_REQUEST, why).into_response(),
-        Err(_) => ApiError(StatusCode::INTERNAL_SERVER_ERROR, "projects operation failed".into()).into_response(),
+        Err(ops::SaveError::Refused(why)) => ApiError(StatusCode::BAD_REQUEST, why).into_response(),
     }
 }
 
@@ -465,10 +453,9 @@ async fn set_property(
     State(projects): State<Shared>,
     Json(body): Json<SetProperty>,
 ) -> Result<Json<Value>, ApiError> {
-    let record = blocking(projects, true, move |p| {
-        ops::set_property(p, &body.path, &body.key, &body.value)
-    })
-    .await?;
+    let record = ops::set_property(&projects, &body.path, &body.key, &body.value)
+        .await
+        .map_err(|e| api_error(true, e))?;
     Ok(Json(json!({ "task": ops::Task::from_record(&record) })))
 }
 
@@ -476,11 +463,11 @@ async fn add_note(
     State(projects): State<Shared>,
     Json(body): Json<AddNote>,
 ) -> Result<(StatusCode, Json<Value>), ApiError> {
-    let record = blocking(projects, true, move |p| {
-        let (path, content) = ops::new_note(&body.project, &body.title, &body.summary)?;
-        ops::save(p, &path, &content, None)
-    })
-    .await?;
+    let (path, content) = ops::new_note(&body.project, &body.title, &body.summary)
+        .map_err(|why| api_error(true, why.into()))?;
+    let record = ops::save(&projects, &path, &content, None)
+        .await
+        .map_err(|e| api_error(true, e))?;
     Ok((StatusCode::CREATED, Json(json!({ "path": record.path }))))
 }
 
@@ -488,7 +475,10 @@ async fn remove_record(
     State(projects): State<Shared>,
     Json(body): Json<RemoveRecord>,
 ) -> Result<Json<Value>, ApiError> {
-    let removed = blocking(projects, true, move |p| p.remove(&body.path)).await?;
+    let removed = projects
+        .remove(&body.path)
+        .await
+        .map_err(|e| api_error(true, e))?;
     Ok(Json(json!({ "removed": removed })))
 }
 
@@ -499,7 +489,9 @@ async fn attach_file(
     let bytes =
         ops::decode_base64(&body.base64).map_err(|e| ApiError(StatusCode::BAD_REQUEST, e))?;
     let path = body.path.clone();
-    let outcome = blocking(projects, true, move |p| ops::attach(p, &path, &bytes)).await?;
+    let outcome = ops::attach(&projects, &path, &bytes)
+        .await
+        .map_err(|e| api_error(true, e))?;
     match outcome {
         projects::store::Attached::New => Ok((
             StatusCode::CREATED,
@@ -544,7 +536,7 @@ fn router(projects: Shared) -> Router {
 
 async fn serve() {
     let port = sjel_config::resolve_port(None, None, 8103);
-    let projects = match projects::open_default() {
+    let projects = match projects::open_default().await {
         Ok(projects) => projects,
         Err(error) => {
             eprintln!("projects: {error}");
@@ -563,11 +555,152 @@ fn main() {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use tower::util::ServiceExt;
 
     #[test]
     fn manifest_covers_routes_and_write_schemas() {
         let source = include_str!("server.rs");
         assert!(route_manifest::undeclared_routes(source, ROUTES).is_empty());
         assert!(route_manifest::bodies_without_schemas(ROUTES).is_empty());
+    }
+
+    /// Drives the wired router with no listener and no token: `router` carries the handlers, and
+    /// inbound auth is the layer `serve_local` adds around them.
+    async fn call(
+        router: &Router,
+        request: axum::http::Request<axum::body::Body>,
+    ) -> (StatusCode, Value) {
+        let response = router
+            .clone()
+            .oneshot(request)
+            .await
+            .expect("router answered");
+        let status = response.status();
+        let bytes = axum::body::to_bytes(response.into_body(), 1 << 20)
+            .await
+            .expect("body");
+        (
+            status,
+            serde_json::from_slice(&bytes).unwrap_or(Value::Null),
+        )
+    }
+
+    fn post(uri: &str, body: Value) -> axum::http::Request<axum::body::Body> {
+        axum::http::Request::builder()
+            .method("POST")
+            .uri(uri)
+            .header("content-type", "application/json")
+            .body(axum::body::Body::from(
+                serde_json::to_vec(&body).expect("body encodes"),
+            ))
+            .expect("request builds")
+    }
+
+    fn get(uri: &str) -> axum::http::Request<axum::body::Body> {
+        axum::http::Request::builder()
+            .uri(uri)
+            .body(axum::body::Body::empty())
+            .expect("request builds")
+    }
+
+    /// The whole write path answers through the async store: create, read back, save, refuse a
+    /// stale save, and remove.
+    #[tokio::test]
+    async fn project_routes_answer_from_the_async_store() {
+        let dir = std::env::temp_dir().join(format!("sjel-projects-router-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(&dir).unwrap();
+        let projects = Projects::open(&dir.join("axon.db"), dir.join("rendered"))
+            .await
+            .expect("store opens");
+        let router = router(Arc::new(projects));
+
+        for (uri, expected) in [("/ready", "ready"), ("/health", "ok")] {
+            let (status, body) = call(&router, get(uri)).await;
+            assert_eq!(status, StatusCode::OK, "{uri}");
+            assert_eq!(body["status"], json!(expected), "{uri}");
+        }
+
+        let (status, body) = call(
+            &router,
+            post("/api/projects", json!({ "name": "W", "summary": "w" })),
+        )
+        .await;
+        assert_eq!(status, StatusCode::CREATED);
+        assert_eq!(body["project"], json!("W"));
+
+        let (status, body) = call(
+            &router,
+            post(
+                "/api/tasks",
+                json!({ "project": "W", "title": "x", "due": "2026-10-24", "priority": 1 }),
+            ),
+        )
+        .await;
+        assert_eq!(status, StatusCode::CREATED);
+        assert_eq!(body["task"]["id"], json!("W/Tasks/x.md"));
+
+        let (status, body) = call(&router, get("/api/tasks?status=open")).await;
+        assert_eq!(status, StatusCode::OK);
+        assert_eq!(body["tasks"].as_array().map(Vec::len), Some(1));
+
+        let (status, body) = call(&router, get("/api/projects")).await;
+        assert_eq!(status, StatusCode::OK);
+        assert_eq!(body["projects"][0]["name"], json!("W"));
+        assert_eq!(body["projects"][0]["open"], json!(1));
+
+        let (status, body) = call(
+            &router,
+            post(
+                "/api/tasks/done",
+                json!({ "id": "W/Tasks/x.md", "done": true }),
+            ),
+        )
+        .await;
+        assert_eq!(status, StatusCode::OK);
+        assert_eq!(body["task"]["done"], json!(true));
+
+        let (status, body) = call(&router, get("/api/record?path=W/Tasks/x.md")).await;
+        assert_eq!(status, StatusCode::OK);
+        let base = body["record"]["content"]
+            .as_str()
+            .expect("content")
+            .to_string();
+
+        let edited = format!("{base}\nmore\n");
+        let (status, _) = call(
+            &router,
+            post(
+                "/api/record",
+                json!({ "path": "W/Tasks/x.md", "content": edited, "base": base }),
+            ),
+        )
+        .await;
+        assert_eq!(status, StatusCode::OK);
+
+        let (status, body) = call(
+            &router,
+            post(
+                "/api/record",
+                json!({ "path": "W/Tasks/x.md", "content": "gone", "base": base }),
+            ),
+        )
+        .await;
+        assert_eq!(status, StatusCode::CONFLICT);
+        assert_eq!(body["code"], json!("stale"));
+
+        let (status, body) = call(
+            &router,
+            post("/api/record/remove", json!({ "path": "W/Tasks/x.md" })),
+        )
+        .await;
+        assert_eq!(status, StatusCode::OK);
+        assert_eq!(body["removed"], json!(true));
+
+        let (status, body) = call(&router, get("/api/tasks?status=open")).await;
+        assert_eq!(status, StatusCode::OK);
+        assert_eq!(body["tasks"].as_array().map(Vec::len), Some(0));
+
+        std::fs::remove_dir_all(dir).unwrap();
     }
 }

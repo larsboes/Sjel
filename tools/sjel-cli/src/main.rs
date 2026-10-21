@@ -15,6 +15,7 @@ use std::os::unix::process::CommandExt as _;
 use std::path::{Path, PathBuf};
 use std::process::{Command, ExitCode, ExitStatus};
 
+mod app;
 mod audit;
 mod capability;
 mod distribution;
@@ -113,6 +114,8 @@ fn sjel(root: &Path, command: &str, rest: &[String]) -> ExitCode {
             ExitCode::SUCCESS
         }
         "search" => search::run(root, rest),
+        // Native macOS application bundles (GPUI desktop and menu bar).
+        "app" => app::run(root, rest),
         // In-process since 2026-10-02: tools/doctor is a launcher for this same entry point.
         "doctor" => doctor::run(rest),
         // What this machine still needs, and what applying it would do (tools/sjel-cli/src/setup/).
@@ -183,6 +186,7 @@ fn help(root: &Path, topic: &str) -> ExitCode {
         "doctor" => "Usage: sjel doctor",
         "distribution" => distribution::USAGE,
         "search" => "Usage: sjel search <words...>",
+        "app" => app::USAGE,
         "capture" => {
             "Usage: sjel capture [url] [text] [#buy|#look|#go|#learn]  (no words: list unsorted)"
         }

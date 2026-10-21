@@ -59,6 +59,7 @@ codesign --verify --strict "$bundle"
 
 # Quit a running copy before replacing it, then start the new one.
 osascript -e "tell application id \"$BUNDLE_ID\" to quit" >/dev/null 2>&1 || true
+sleep 0.5
 mkdir -p "$(dirname "$DEST")"
 rm -rf "$DEST"
 mv "$bundle" "$DEST"

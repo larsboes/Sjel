@@ -15,6 +15,8 @@ Discover Sjel:
                                  What is filling this disk, and what is safe to reclaim
   update [--json|--offline]      Software installed outside this checkout, and what is stale
   update apply [--only <class>]  Move what Sjel owns, and delegate the rest
+  app [update|install|status|open] [desktop|mac|all]
+                                 Build, install, update or open native macOS applications
 
 Check a change before pushing it:
   gates                          Run CI's repo gates here, from CI's own definition

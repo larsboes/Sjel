@@ -200,6 +200,8 @@ final class SjelMacViewModel: ObservableObject {
         }
     }
 
+    @Published var isUpdatingDesktopApp: Bool = false
+
     /// Opens the native desktop app, or brings it forward. `apps/gpui/install` puts it
     /// in ~/Applications under this bundle identifier.
     func openDesktopApp() {
@@ -210,6 +212,44 @@ final class SjelMacViewModel: ObservableObject {
         NSWorkspace.shared.openApplication(at: url, configuration: .init()) { _, error in
             Task { @MainActor in
                 self.openProblem = error.map { "Could not open the desktop app: \($0.localizedDescription)" }
+            }
+        }
+    }
+
+    /// Rebuilds and installs the desktop app in the background.
+    func updateDesktopApp() {
+        guard !isUpdatingDesktopApp else { return }
+        isUpdatingDesktopApp = true
+        openProblem = "Building and updating Sjel Desktop…"
+        Task.detached {
+            let task = Process()
+            task.executableURL = URL(fileURLWithPath: "/bin/bash")
+            let home = FileManager.default.homeDirectoryForCurrentUser
+            let installScript = home.appendingPathComponent("Developer/Sjel/apps/gpui/install").path
+            if FileManager.default.fileExists(atPath: installScript) {
+                task.arguments = [installScript]
+            } else {
+                task.arguments = ["-c", "sjel app update desktop"]
+            }
+            let pipe = Pipe()
+            task.standardOutput = pipe
+            task.standardError = pipe
+            do {
+                try task.run()
+                task.waitUntilExit()
+                await MainActor.run {
+                    self.isUpdatingDesktopApp = false
+                    if task.terminationStatus == 0 {
+                        self.openProblem = "Sjel Desktop updated."
+                    } else {
+                        self.openProblem = "Desktop update failed (code \(task.terminationStatus))."
+                    }
+                }
+            } catch {
+                await MainActor.run {
+                    self.isUpdatingDesktopApp = false
+                    self.openProblem = "Desktop update error: \(error.localizedDescription)"
+                }
             }
         }
     }
@@ -359,6 +399,11 @@ struct SjelMenuBarView: View {
             }
             Spacer()
             Menu {
+                Button(model.isUpdatingDesktopApp ? "Updating Desktop App…" : "Update Desktop App") {
+                    model.updateDesktopApp()
+                }
+                .disabled(model.isUpdatingDesktopApp)
+                Divider()
                 Button("Restart Running Capabilities") {
                     model.restart(upNames)
                 }

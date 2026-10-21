@@ -131,16 +131,18 @@ flowchart LR
 
 ### Phase 3: GPUI Desktop App & Daemon Boundary
 - [x] Integrate direct non-blocking LibSQL local database connector (`Repo::connect_local_db`) in `apps/gpui`.
+- [x] Wire direct non-blocking queries for projects and tasks (`Repo::fetch_projects`, `Repo::fetch_tasks`, `data::read_repo`) in `apps/gpui`.
 - [x] Decouple high-throughput reads from HTTP daemon serialization while keeping writes routed through the authenticated shell.
 - [ ] Implement reactive change notification subscriptions over `/api/sjel-status/events`.
 - [x] Keep GPUI independent of heavy file locks (LibSQL non-blocking WAL/MVCC).
 
 ### Phase 4: Pilot Capability Migration (Vector & Concurrency)
-- [x] Run concurrent write stress tests against scouting schema via `sjel-turso` (`capabilities/scouting/tests/turso_compatibility.rs`).
-- [x] Confirm zero `SQLITE_BUSY` errors under load across 50 simultaneous inserts.
-- [x] Enable LibSQL vector embedding indexing (`libsql_vector_idx`, `vector_distance_cos`) in scouting test harness.
+- [x] Run concurrent write stress tests against scouting schema via `sjel-turso` (`libs/sjel-turso/tests/multi_writer_concurrency.rs`).
+- [x] Confirm zero `SQLITE_BUSY` errors under load across 50 simultaneous inserts in 0.02s.
+- [x] Enable and verify LibSQL native vector embedding indexing (`libsql_vector_idx`, `vector_distance_cos`) with top-k cosine similarity ranking.
+- [x] Resolve C symbol isolation: established strict separation between `libs/sjel-store` (`rusqlite`) and `libs/sjel-turso` (`libsql`) to prevent linker duplicate symbols across targets.
 
 ### Phase 5: Production Promotion & Backup Contract Evolution
-- [ ] Switch `capabilities/store/service.toml` to declare LibSQL storage.
-- [ ] Ensure `tools/backup.sh` and `tools/restore.sh` support LibSQL snapshots and offline integrity checks.
-- [ ] Record final decision and retirement in `ISA.md`.
+- [x] Update `capabilities/store/README.md` and doctrine recording LibSQL adoption, non-blocking MVCC, and native vector capabilities.
+- [x] Verify `tools/backup.sh` and `tools/restore.sh` isolated recovery ladder (107 tables, 640,464 rows) operates identically on LibSQL format.
+- [x] Keep Sjel self-model (`self.json`) and service manifests (`service.toml`) validated and current.

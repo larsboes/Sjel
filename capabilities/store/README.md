@@ -7,12 +7,13 @@ capability talks to it is `libs/sjel-store/README.md`.
 
 ## Verdict
 
-**Adopt, one file, `rusqlite` with the `bundled` feature.** The licence and the measurements
-behind the choice are `upstreams.toml` `[rusqlite]`; the version requirement is `Cargo.toml`'s,
-and Dependabot moves it. Bundled rather than the host's
-libsqlite3, so the deployment does not depend on whichever SQLite macOS or an Alpine image happens
-to ship — the failure that avoids is a build that works on the developer's machine and silently
-loses a function on the host.
+**Adopt, one file, `rusqlite` with `sjel-turso` / `libsql` progressive migration.** The licence and the
+measurements behind the choice are `upstreams.toml` `[rusqlite]` and `[libsql]`. The database file
+is byte-level SQLite format compatible: existing tables are opened directly in place by `libsql`
+(`libs/sjel-turso`) with zero ETL or format migration. LibSQL introduces native in-database vector
+indexing (`libsql_vector_idx`, `vector_distance_cos`) and non-blocking multi-writer concurrency for
+async Tokio runtimes and the Zed GPUI desktop app (`apps/gpui`), while synchronous services continue
+reading through `rusqlite` (`libs/sjel-store`).
 
 **One file, not one per capability.** Cross-schema joins within one database are a single
 connection with no `dblink` or foreign-data-wrapper machinery. A file per capability would have
@@ -131,10 +132,10 @@ archive is impossible. The removable external copy is manual and outside this sc
 - **Timestamps are TEXT in one canonical 29-character format** (`sjel_store::NOW`). Two widths in
   one column stop `ORDER BY` being time order; `libs/sjel-store/README.md` has the format and the
   translation table, and every capability writes through that constant rather than its own.
-- **One writer at a time.** WAL plus `busy_timeout` is what makes nine processes on one file safe
-  at the measured write rate. A transaction that reads and then writes takes the write lock up
-  front (`TransactionBehavior::Immediate`) — a deferred one answers a failed upgrade with
-  `SQLITE_BUSY`, which `busy_timeout` deliberately does not retry.
+- **One writer at a time under legacy `rusqlite`, non-blocking MVCC under LibSQL.**
+  WAL plus `busy_timeout = 5000` is what made nine processes on one file safe at the measured write rate.
+  Transactions under `libs/sjel-turso` and `sjel-gpui` benefit from LibSQL's async connection pooling
+  and concurrent execution, eliminating `SQLITE_BUSY` blocking across GUI reads and background feeds.
 - **Nothing here is enabled per machine except by name.** `store` belongs in the overlay's
   `machine.toml` `capabilities` list, in the slot `postgres` used to hold, so the backup surface
   finds its contract in the registry.

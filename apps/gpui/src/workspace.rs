@@ -20,7 +20,7 @@ use crate::data::{self, Busy, Remote, Repo};
 use crate::projects::Projects;
 use crate::route::{self, Destination, Page, Target};
 use crate::selection::{Item, Selection};
-use crate::shell::{self, AgentView, CalendarEntry, NodeHealth, ShellError, Snapshot};
+use crate::shell::{self, AgentView, CalendarEntry, GlobalTask, NodeHealth, ShellError, Snapshot};
 use crate::theme::Palette;
 use crate::{capabilities, home};
 
@@ -79,6 +79,7 @@ pub struct Workspace {
     pub health: Remote<NodeHealth>,
     pub agent: Remote<AgentView>,
     pub calendar: Remote<Vec<CalendarEntry>>,
+    pub focus_tasks: Remote<Vec<GlobalTask>>,
     pub projects: Entity<Projects>,
     pub ask: Entity<Ask>,
     /// Approval ids and capability names with a request in flight.
@@ -113,6 +114,7 @@ impl Workspace {
             health: Remote::default(),
             agent: Remote::default(),
             calendar: Remote::default(),
+            focus_tasks: Remote::default(),
             projects,
             ask,
             busy: Busy::default(),
@@ -233,6 +235,57 @@ impl Workspace {
             &repo,
             move |r| async move { r.fetch_calendar(&from, &to).await },
         );
+        let repo_tasks = self.repo.clone();
+        data::read_repo(
+            cx,
+            self,
+            |w| &mut w.focus_tasks,
+            &repo_tasks,
+            move |r| async move { r.fetch_tasks(Some("open")).await },
+        );
+    }
+
+    pub fn toggle_task(
+        &mut self,
+        path: String,
+        done: bool,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) {
+        let repo = self.repo.clone();
+        let id = path.clone();
+        data::write(
+            cx,
+            window,
+            self,
+            &repo,
+            data::Press::quiet(if done { "Task completed." } else { "Task reopened." }),
+            move |s| async move { s.set_task_done(&id, done).await },
+            |this, updated, cx| {
+                if let Some(task) = updated {
+                    if let Some(tasks) = &mut this.focus_tasks.value {
+                        if let Some(pos) = tasks.iter().position(|t| t.id == task.id) {
+                            if task.done {
+                                tasks.remove(pos);
+                            } else {
+                                tasks[pos] = task;
+                            }
+                        }
+                    }
+                }
+                cx.notify();
+            },
+        );
+    }
+
+    pub fn go_to_project(&mut self, name: String, cx: &mut Context<Self>) {
+        self.page = Page::Projects;
+        self.projects.update(cx, |projects, cx| {
+            projects.open_project(name, cx);
+            projects.tab = crate::projects::ProjectsTab::Hubs;
+            cx.notify();
+        });
+        cx.notify();
     }
 
     pub fn decide(&mut self, id: String, allow: bool, window: &mut Window, cx: &mut Context<Self>) {

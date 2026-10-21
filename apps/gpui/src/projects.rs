@@ -107,7 +107,7 @@ impl Projects {
         }
     }
 
-    fn open_project(&mut self, name: String, cx: &mut Context<Self>) {
+    pub fn open_project(&mut self, name: String, cx: &mut Context<Self>) {
         self.project = Some((name.clone(), Remote::new_loading()));
         self.editor = None;
         self.opening = None;
@@ -693,6 +693,7 @@ impl Projects {
     fn all_tasks_table(
         &self,
         tasks: &[GlobalTask],
+        search_input: &Entity<InputState>,
         palette: Palette,
         cx: &mut Context<Self>,
     ) -> AnyElement {
@@ -704,38 +705,46 @@ impl Projects {
         let filter_bar = div()
             .flex()
             .items_center()
+            .justify_between()
             .gap_2()
             .mb_2()
-            .child(filter_pill(
-                "Open",
-                open_count,
-                self.global_task_filter == TaskFilter::Open,
-                palette,
-                cx.listener(|view, _, _, cx| {
-                    view.global_task_filter = TaskFilter::Open;
-                    cx.notify();
-                }),
-            ))
-            .child(filter_pill(
-                "All",
-                all_count,
-                self.global_task_filter == TaskFilter::All,
-                palette,
-                cx.listener(|view, _, _, cx| {
-                    view.global_task_filter = TaskFilter::All;
-                    cx.notify();
-                }),
-            ))
-            .child(filter_pill(
-                "Done",
-                done_count,
-                self.global_task_filter == TaskFilter::Done,
-                palette,
-                cx.listener(|view, _, _, cx| {
-                    view.global_task_filter = TaskFilter::Done;
-                    cx.notify();
-                }),
-            ));
+            .child(
+                div()
+                    .flex()
+                    .items_center()
+                    .gap_2()
+                    .child(filter_pill(
+                        "Open",
+                        open_count,
+                        self.global_task_filter == TaskFilter::Open,
+                        palette,
+                        cx.listener(|view, _, _, cx| {
+                            view.global_task_filter = TaskFilter::Open;
+                            cx.notify();
+                        }),
+                    ))
+                    .child(filter_pill(
+                        "All",
+                        all_count,
+                        self.global_task_filter == TaskFilter::All,
+                        palette,
+                        cx.listener(|view, _, _, cx| {
+                            view.global_task_filter = TaskFilter::All;
+                            cx.notify();
+                        }),
+                    ))
+                    .child(filter_pill(
+                        "Done",
+                        done_count,
+                        self.global_task_filter == TaskFilter::Done,
+                        palette,
+                        cx.listener(|view, _, _, cx| {
+                            view.global_task_filter = TaskFilter::Done;
+                            cx.notify();
+                        }),
+                    )),
+            )
+            .child(div().w(px(220.)).child(Input::new(search_input).small()));
 
         let header = row()
             .min_h(px(32.))
@@ -750,9 +759,15 @@ impl Projects {
             .into_any_element();
         let mut rows = vec![header];
 
+        let query = self.search_query.as_str();
         let filtered: Vec<_> = tasks
             .iter()
             .filter(|t| self.global_task_filter.matches(t.done))
+            .filter(|t| {
+                query.is_empty()
+                    || t.title.to_lowercase().contains(query)
+                    || t.project.to_lowercase().contains(query)
+            })
             .collect();
 
         for (index, task) in filtered.into_iter().enumerate() {
@@ -1105,10 +1120,11 @@ impl Render for Projects {
         );
 
         if self.tab == ProjectsTab::AllTasks {
+            let search_input = self.search_input_field(window, cx);
             let body = match (&self.all_tasks.value, &self.all_tasks.error) {
                 (_, Some(error)) => note(error.to_string(), palette.red),
                 (None, None) => placeholder(320.),
-                (Some(tasks), None) => self.all_tasks_table(tasks, palette, cx),
+                (Some(tasks), None) => self.all_tasks_table(tasks, &search_input, palette, cx),
             };
             return div()
                 .id("all-tasks")
@@ -1345,5 +1361,53 @@ mod tests {
         cx.run_until_parked();
         let projects = slot.take().unwrap();
         projects.read_with(cx, |projects, _| assert!(projects.new_task.is_some()));
+    }
+
+    #[gpui::test]
+    fn all_tasks_tab_filters_by_query(cx: &mut TestAppContext) {
+        cx.update(gpui_kit::init);
+        let slot = std::rc::Rc::new(std::cell::RefCell::new(None));
+        let found = slot.clone();
+        let (_, cx) = cx.add_window_view(move |window, cx| {
+            let view = cx.new(|_| {
+                let mut projects = Projects::new(Repo::new(Err(ShellError::NotLoopback)));
+                projects.tab = ProjectsTab::AllTasks;
+                projects.search_query = "berlin".into();
+                projects.all_tasks = Remote {
+                    value: Some(vec![
+                        GlobalTask {
+                            id: "P/1.md".into(),
+                            kind: "task".into(),
+                            title: "Book train to Berlin".into(),
+                            done: false,
+                            due: None,
+                            priority: 1,
+                            summary: None,
+                            project: "Travel".into(),
+                        },
+                        GlobalTask {
+                            id: "P/2.md".into(),
+                            kind: "task".into(),
+                            title: "Update resume".into(),
+                            done: false,
+                            due: None,
+                            priority: 2,
+                            summary: None,
+                            project: "Career".into(),
+                        },
+                    ]),
+                    ..Remote::default()
+                };
+                projects
+            });
+            found.replace(Some(view.clone()));
+            gpui_kit::component::Root::new(view, window, cx)
+        });
+        cx.run_until_parked();
+        let projects = slot.take().unwrap();
+        projects.read_with(cx, |projects, _| {
+            assert_eq!(projects.tab, ProjectsTab::AllTasks);
+            assert_eq!(projects.search_query, "berlin");
+        });
     }
 }

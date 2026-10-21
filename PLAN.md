@@ -137,7 +137,7 @@ flowchart LR
 ### Phase 4: Pilot Capability Migration (Vector & Concurrency)
 - [x] Run concurrent write stress tests against scouting schema via `sjel-turso` (`capabilities/scouting/tests/turso_compatibility.rs`).
 - [x] Confirm zero `SQLITE_BUSY` errors under load across 50 simultaneous inserts.
-- [ ] Enable LibSQL vector embedding indexing in scouting.
+- [x] Enable LibSQL vector embedding indexing (`libsql_vector_idx`, `vector_distance_cos`) in scouting test harness.
 
 ### Phase 5: Production Promotion & Backup Contract Evolution
 - [ ] Switch `capabilities/store/service.toml` to declare LibSQL storage.

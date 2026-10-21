@@ -34,6 +34,21 @@ pub fn now_offset(modifier: &str) -> String {
     format!("strftime('{STAMP_FORMAT}','now',{modifier})")
 }
 
+/// Format a slice of `f32` numbers into a LibSQL vector literal string (`"[0.1, 0.2, 0.3]"`).
+pub fn format_vector(vector: &[f32]) -> String {
+    let mut out = String::with_capacity(vector.len() * 8 + 2);
+    out.push('[');
+    for (i, v) in vector.iter().enumerate() {
+        if i > 0 {
+            out.push_str(", ");
+        }
+        use std::fmt::Write;
+        let _ = write!(&mut out, "{v}");
+    }
+    out.push(']');
+    out
+}
+
 /// Standard PRAGMAs applied to every local LibSQL connection.
 pub const CONNECTION_PRAGMAS: &str = "
     PRAGMA busy_timeout = 5000;
@@ -197,5 +212,69 @@ mod tests {
         let offset = now_offset("'+7 days'");
         assert!(offset.contains("'+7 days'"));
         assert!(offset.contains(STAMP_FORMAT));
+    }
+
+    #[tokio::test]
+    async fn native_vector_index_and_top_k() {
+        let db_path = temp_db("vector_test");
+        let conn = open_local(&db_path).await.unwrap();
+
+        conn.execute_batch(
+            "
+            CREATE TABLE vector_docs (
+                id INTEGER PRIMARY KEY,
+                title TEXT,
+                embedding F32_BLOB(3)
+            );
+            CREATE INDEX vector_docs_idx ON vector_docs(libsql_vector_idx(embedding));
+            ",
+        )
+        .await
+        .unwrap();
+
+        let v1 = format_vector(&[1.0, 0.0, 0.0]);
+        let v2 = format_vector(&[0.0, 1.0, 0.0]);
+        let v3 = format_vector(&[0.0, 0.0, 1.0]);
+
+        conn.execute(
+            "INSERT INTO vector_docs (id, title, embedding) VALUES (1, 'Doc X', vector(?1))",
+            [v1.as_str()],
+        )
+        .await
+        .unwrap();
+        conn.execute(
+            "INSERT INTO vector_docs (id, title, embedding) VALUES (2, 'Doc Y', vector(?1))",
+            [v2.as_str()],
+        )
+        .await
+        .unwrap();
+        conn.execute(
+            "INSERT INTO vector_docs (id, title, embedding) VALUES (3, 'Doc Z', vector(?1))",
+            [v3.as_str()],
+        )
+        .await
+        .unwrap();
+
+        // Query nearest to [0.95, 0.1, 0.0]
+        let query_vec = format_vector(&[0.95, 0.1, 0.0]);
+        let mut rows = conn
+            .query(
+                "SELECT id, title, vector_distance_cos(embedding, vector(?1)) as dist 
+                 FROM vector_docs 
+                 ORDER BY dist ASC 
+                 LIMIT 1",
+                [query_vec.as_str()],
+            )
+            .await
+            .unwrap();
+
+        let row = rows.next().await.unwrap().expect("nearest row");
+        let id: i64 = row.get(0).unwrap();
+        let title: String = row.get(1).unwrap();
+        let dist: f64 = row.get(2).unwrap();
+
+        assert_eq!(id, 1);
+        assert_eq!(title, "Doc X");
+        assert!(dist < 0.05, "cosine distance must be very close to 0");
     }
 }

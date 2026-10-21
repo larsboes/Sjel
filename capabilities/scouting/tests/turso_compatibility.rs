@@ -119,4 +119,59 @@ async fn scouting_schema_and_concurrent_writes_on_turso() {
         ranked_count += 1;
     }
     assert_eq!(ranked_count, 20, "2 items per task with score >= 0.8");
+
+    // 5. In-DB Vector Search Test: Vector embeddings column and index
+    conn.execute_batch(
+        "
+        ALTER TABLE scouting_opportunities ADD COLUMN embedding F32_BLOB(3);
+        CREATE INDEX IF NOT EXISTS scouting_opp_vec_idx ON scouting_opportunities(libsql_vector_idx(embedding));
+        ",
+    )
+    .await
+    .unwrap();
+
+    // Populate embeddings for 3 specific opportunities
+    let v_ml = sjel_turso::format_vector(&[0.9, 0.1, 0.0]); // ML heavy
+    let v_sys = sjel_turso::format_vector(&[0.0, 0.9, 0.1]); // Systems heavy
+    let v_bio = sjel_turso::format_vector(&[0.0, 0.1, 0.9]); // Bio heavy
+
+    conn.execute(
+        "UPDATE scouting_opportunities SET embedding = vector(?1) WHERE id = 'opp-0-0'",
+        [v_ml.as_str()],
+    )
+    .await
+    .unwrap();
+    conn.execute(
+        "UPDATE scouting_opportunities SET embedding = vector(?1) WHERE id = 'opp-0-1'",
+        [v_sys.as_str()],
+    )
+    .await
+    .unwrap();
+    conn.execute(
+        "UPDATE scouting_opportunities SET embedding = vector(?1) WHERE id = 'opp-0-2'",
+        [v_bio.as_str()],
+    )
+    .await
+    .unwrap();
+
+    // Perform vector semantic search: search for focus profile near ML ([0.85, 0.15, 0.0])
+    let query_vector = sjel_turso::format_vector(&[0.85, 0.15, 0.0]);
+    let mut vec_rows = conn
+        .query(
+            "SELECT id, vector_distance_cos(embedding, vector(?1)) as distance 
+             FROM scouting_opportunities 
+             WHERE embedding IS NOT NULL 
+             ORDER BY distance ASC 
+             LIMIT 1",
+            [query_vector.as_str()],
+        )
+        .await
+        .unwrap();
+
+    let best_match = vec_rows.next().await.unwrap().expect("nearest match");
+    let match_id: String = best_match.get(0).unwrap();
+    let distance: f64 = best_match.get(1).unwrap();
+
+    assert_eq!(match_id, "opp-0-0", "ML opportunity must be closest to query profile");
+    assert!(distance < 0.05, "Cosine distance should be minimal");
 }

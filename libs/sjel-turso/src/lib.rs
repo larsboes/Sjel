@@ -769,7 +769,12 @@ mod tests {
 
         let held = store.begin().await.unwrap();
         let other = store.connect().await.unwrap();
-        let other_tx = other.transaction().await.unwrap();
+        // Deferred on purpose: being refused the upgrade is the subject of this test, so the
+        // behaviour is named rather than left to the default.
+        let other_tx = other
+            .transaction_with_behavior(libsql::TransactionBehavior::Deferred)
+            .await
+            .unwrap();
         let mut rows = other_tx
             .query("SELECT COUNT(*) FROM notes_items", ())
             .await

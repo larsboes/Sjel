@@ -127,11 +127,11 @@ flowchart LR
 ### Phase 2: Upstreams Gate & Storage Abstraction
 - [x] Add `[libsql]` upstream entry with formal review in `upstreams.toml`.
 - [x] Provide unified storage adapter in `libs/sjel-turso` (supporting LibSQL async concurrency, PRAGMAs, and once-per-process migration tracking).
-- [x] Add embedded replicas to that adapter behind the opt-in `replica` feature: a remote URL, auth token and pull interval from `SJEL_TURSO_URL` / `SJEL_TURSO_AUTH_TOKEN` / `SJEL_TURSO_SYNC_INTERVAL_SECS`, a first pull before the DDL, a background loop, and `Store::sync_stats()` for a freshness surface. No live primary existed to pull from, so the pull path itself is unverified.
+- [x] Add embedded replicas to that adapter: a remote URL, auth token and pull interval from `SJEL_TURSO_URL` / `SJEL_TURSO_AUTH_TOKEN` / `SJEL_TURSO_SYNC_INTERVAL_SECS`, a first pull before the DDL, a background loop, and `Store::sync_stats()` for a freshness surface. The engine is a default feature (2026-10-21) so following a primary is configuration rather than a Cargo.toml edit, and `sjel setup plan|apply|verify turso` is the setup path: the shell renders the plan, the CLI writes and restarts. No live primary existed to pull from, so the pull path itself is unverified.
 - [x] Verify compilation across all targets (`cargo check --workspace` and `cargo test -p sjel-turso`).
 
 ### Phase 3: GPUI Desktop App & Daemon Boundary
-- [x] Integrate direct non-blocking LibSQL local database connector (`Repo::connect_local_db`) in `apps/gpui`.
+- [x] Integrate direct non-blocking LibSQL local database connector in `apps/gpui`: one handle per process, opened on first read and shared by every `Repo` clone, with the shell as its fallback.
 - [x] Wire direct non-blocking queries for projects, tasks, calendar entries, project records, and notes (`Repo::fetch_projects`, `Repo::fetch_tasks`, `Repo::fetch_calendar`, `Repo::fetch_project_records`, `Repo::fetch_record`, `data::read_repo`) in `apps/gpui`.
 - [x] Decouple high-throughput reads from HTTP daemon serialization while keeping writes routed through the authenticated shell.
 - [ ] Implement reactive change notification subscriptions over `/api/sjel-status/events`.

@@ -80,7 +80,7 @@ const ROUTES: &[route_manifest::Route] = &[
     route_manifest::Route {
         method: "POST",
         path: "/api/sjel-status/setup/apply",
-        summary: "Run the steps `sjel setup plan` marks apply, then verify. Carries no credential: a token is CLI stdin only.",
+        summary: "Run the steps `sjel setup plan` lists, then verify. A submitted credential is piped to the tool's stdin, never logged and never echoed.",
         request_schema: Some(route_manifest::schema_of::<status::SetupApplyRequest>),
     },
     r(

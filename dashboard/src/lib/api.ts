@@ -609,7 +609,6 @@ export interface SetupProbe {
 
 /** One step a plan would run. `kind` decides whether `apply` touches it. */
 export interface SetupStep {
-  kind: "apply" | "manual" | "blocked";
   label: string;
   detail: string;
   done: boolean;
@@ -681,9 +680,9 @@ export const sjelStatus = {
   setup: () => request<SetupPlans>('/sjel-status/api/sjel-status/setup'),
   /** Ask the component's own system whether the recorded settings work. Leaves the machine. */
   setupVerify: () => request<SetupVerification>('/sjel-status/api/sjel-status/setup/verify'),
-  /** Run the steps the plan marks apply, then verify. The route carries no credential at all: a
-   *  token is CLI stdin only, so this can record a URL and an interval and nothing more. */
-  setupApply: (body: { component?: string; url?: string; interval_secs?: number }) =>
+  /** Run the steps the plan lists, then verify. The credential travels on loopback to sjel-status,
+   *  which pipes it to the tool's stdin: never argv, never a log, never back in a response. */
+  setupApply: (body: { component?: string; url?: string; interval_secs?: number; token?: string }) =>
     request<SetupApplied>('/sjel-status/api/sjel-status/setup/apply', jsonInit('POST', body)),
   self: () => request<SelfModelResponse>('/sjel-status/api/sjel-status/self'),
   repos: () => request<{ repos: RepoStatus[] }>('/sjel-status/api/sjel-status/repos'),

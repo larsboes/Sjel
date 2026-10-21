@@ -529,6 +529,34 @@ impl<'a> Svc<'a> {
         Ok(())
     }
 
+    /// The deployment's own settings, from `<overlay>/config/deployment.env`, as KEY=VALUE pairs.
+    ///
+    /// Why every process gets these: a setting that is true of the whole deployment (which Turso
+    /// primary to follow, the home timezone, a LAN port) was reaching only the code that read the
+    /// file itself, so a capability had to repeat the same two lines in its own
+    /// `[capability.<n>] env` to see them — and a machine set up through `sjel setup` could not
+    /// deliver anything to a process at all. One file, one source of the deployment's settings.
+    ///
+    /// Only `KEY=value` lines with a non-empty value, the contract `sjel_config::deployment_value`
+    /// applies to the same file. A missing file is an empty set, not an error: a deployment with
+    /// no such file is one that has no deployment-wide settings yet.
+    fn deployment_env() -> R<Vec<(String, String)>> {
+        let Some(path) = sjel_config::overlay_config("deployment.env") else {
+            return Ok(Vec::new());
+        };
+        let body = match std::fs::read_to_string(&path) {
+            Ok(body) => body,
+            Err(error) if error.kind() == std::io::ErrorKind::NotFound => return Ok(Vec::new()),
+            Err(error) => {
+                return fail(
+                    1,
+                    format!("service-runner.sh: cannot read {}: {error}", path.display()),
+                )
+            }
+        };
+        Ok(deployment_entries(&body))
+    }
+
     /// The machine's `[capability.<cap>] env` from machine.toml, as KEY=VALUE pairs.
     ///
     /// One reader for every path that needs it: the launchd/systemd unit (`persist::env_block`
@@ -543,12 +571,12 @@ impl<'a> Svc<'a> {
     /// Process-kind only, deliberately: a container takes its environment from `--env-file`,
     /// and `docker run` inherits nothing, so an entry here would be silently inert for one.
     pub fn cap_env(&self) -> R<Vec<(String, String)>> {
+        let mut out = Self::deployment_env()?;
         let entries = self
             .platform
             .cap_section(&self.cap)
             .map(|t| get_array(t, "env"))
             .unwrap_or_default();
-        let mut out = Vec::with_capacity(entries.len());
         for line in entries {
             let Some((k, v)) = line.split_once('=') else {
                 return fail(
@@ -559,7 +587,12 @@ impl<'a> Svc<'a> {
                     ),
                 );
             };
-            out.push((k.to_owned(), v.to_owned()));
+            // The capability's own entry wins over the deployment's, which is the only reading
+            // that lets a machine override one setting for one service without moving the rest.
+            match out.iter_mut().find(|(existing, _)| existing == k) {
+                Some(slot) => slot.1 = v.to_owned(),
+                None => out.push((k.to_owned(), v.to_owned())),
+            }
         }
         Ok(out)
     }
@@ -1303,6 +1336,20 @@ pub fn get_array(t: &toml::Table, key: &str) -> Vec<String> {
         .unwrap_or_default()
 }
 
+/// The `KEY=value` lines of a deployment env body, in file order.
+///
+/// Blank lines, `#` comments and lines whose value is empty are skipped — the same rule
+/// `sjel_config::deployment_value` applies, because these two read one file.
+fn deployment_entries(body: &str) -> Vec<(String, String)> {
+    body.lines()
+        .map(|line| line.trim())
+        .filter(|line| !line.is_empty() && !line.starts_with('#'))
+        .filter_map(|line| line.split_once('='))
+        .map(|(key, value)| (key.trim().to_owned(), value.trim().to_owned()))
+        .filter(|(key, value)| !key.is_empty() && !value.is_empty())
+        .collect()
+}
+
 /// The sections of the overlay's config/systems.local.toml whose `owner = "self"`, in file
 /// order, comma-joined: SJEL_INFERENCE_TRUSTED_PEERS. The rule of `trusted_peer_ids` in
 /// tools/lib/external-ref.sh, which backup.sh and setup-secret.sh still source.
@@ -1418,6 +1465,25 @@ mod tests {
 
     fn cargo_build() -> Vec<String> {
         vec!["cargo".to_owned(), "build".to_owned()]
+    }
+
+    #[test]
+    fn the_deployment_env_reaches_a_process_and_a_capability_can_override_one_name() {
+        // The rule that lets `sjel setup` deliver a setting to a running capability at all: the
+        // deployment's file is the base, and one capability may override one name.
+        let body = "# the primary this deployment follows\nSJEL_TURSO_URL=libsql://primary.turso.io\n\nSJEL_HOME_TIMEZONE=\nSJEL_LAN_PORT=8443\n";
+        let entries = deployment_entries(body);
+        assert_eq!(
+            entries,
+            vec![
+                (
+                    "SJEL_TURSO_URL".to_owned(),
+                    "libsql://primary.turso.io".to_owned()
+                ),
+                ("SJEL_LAN_PORT".to_owned(), "8443".to_owned()),
+            ],
+            "comments, blank lines and empty values are not settings"
+        );
     }
 
     #[test]

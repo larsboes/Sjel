@@ -8,16 +8,17 @@
    * What this machine still needs, and what applying it would do.
    *
    * The page renders `sjel setup plan --json` and never decides anything itself: the probes, the
-   * steps and the guard all belong to `tools/sjel-cli/src/setup/`. Two things it deliberately
-   * cannot do:
+   * steps and the guard all belong to `tools/sjel-cli/src/setup/`, and every step in a plan is one
+   * that tool runs. This page exists so a reader sees the plan first and supplies the two facts
+   * only they have: which primary, and its credential.
    *
-   * - It cannot supply a credential. `POST /setup/apply` carries a URL and an interval and has no
-   *   token field, so a replica's token stays on the CLI's stdin where it is not copied into a
-   *   browser, a proxy and an access log. The card says so rather than pretending the form is
-   *   complete.
-   * - It does not poll. A plan is filesystem-only and cheap, but a verify leaves the machine and
-   *   an apply writes, so both are asked for by a click; a timer would make an install happen
-   *   because a tab was left open.
+   * The credential is a write-only field. It goes to sjel-status on loopback, which pipes it to
+   * the tool's stdin — never argv, never a log, never a response — and the tool writes it into the
+   * private overlay and reports it by name. Nothing on this page ever displays it again.
+   *
+   * It does not poll. A plan is filesystem-only and cheap, but a verify leaves the machine and an
+   * apply writes, so both are asked for by a click; a timer would make an install happen because a
+   * tab was left open.
    */
   let plans = $state<SetupPlan[] | null>(null);
   let readError = $state<string | null>(null);
@@ -28,6 +29,8 @@
   let confirming = $state<SetupPlan | null>(null);
   let url = $state("");
   let interval = $state("");
+  /** Write-only: sent with the apply, never rendered back and cleared from the form after. */
+  let credential = $state("");
 
   async function load(): Promise<void> {
     busy = "plan";
@@ -68,6 +71,7 @@
         component: plan.component,
         ...(url.trim() ? { url: url.trim() } : {}),
         ...(interval.trim() && Number(interval) > 0 ? { interval_secs: Number(interval) } : {}),
+        ...(credential.trim() ? { token: credential.trim() } : {}),
       });
       const mine = answer.components.find((c) => c.component === plan.component);
       applied = mine?.applied ?? [];
@@ -77,6 +81,7 @@
       confirming = null;
       url = "";
       interval = "";
+      credential = "";
     } catch (e) {
       actionError = e instanceof Error ? e.message : String(e);
     } finally {
@@ -98,8 +103,19 @@
     }
   }
 
+  /** Steps this apply would run: everything the plan has open, plus nothing when it is complete. */
   function applyable(plan: SetupPlan): number {
-    return plan.steps.filter((s) => s.kind === "apply" && !s.done).length;
+    return plan.steps.filter((step) => !step.done).length;
+  }
+
+  /** Whether the form carries anything to write. An apply with no values is the no-op that told a
+   *  reader "already up to date, untouched" after they pressed a button expecting work. */
+  function hasInput(): boolean {
+    return (
+      url.trim().length > 0 ||
+      credential.trim().length > 0 ||
+      (interval.trim().length > 0 && Number(interval) > 0)
+    );
   }
 
   onMount(() => {
@@ -164,10 +180,10 @@
         <h3>Steps</h3>
         <ul class="steps">
           {#each plan.steps as step}
-            <li class="step {step.kind}">
-              <span class="kind">{step.kind}</span>
+            <li class="step" class:done={step.done}>
+              <span class="mark" aria-hidden="true">{step.done ? "✓" : "·"}</span>
               <div>
-                <p class="step-line">{step.done ? "✓ " : ""}{step.label}</p>
+                <p class="step-line">{step.label}</p>
                 <p class="detail pre">{step.detail}</p>
               </div>
             </li>
@@ -179,34 +195,48 @@
         {#if confirming === plan}
           <div class="confirm">
             <p class="confirm-lead">
-              Applying writes {applyable(plan)} setting(s) to the private overlay and then verifies.
-              It does not touch a Cargo.toml, start a service or accept a credential — those stay on
-              the command line, where a token never leaves stdin.
+              Sjel writes the settings to the private overlay and restarts what follows the primary.
+              It edits no Cargo.toml — the replica engine is a default feature — and it needs nothing
+              from you except the two facts below.
             </p>
             <label>
               Primary URL
               <input bind:value={url} placeholder="libsql://your-database.turso.io" spellcheck="false" />
             </label>
             <label>
+              Credential
+              <input
+                bind:value={credential}
+                type="password"
+                autocomplete="off"
+                placeholder="the primary's auth token"
+                spellcheck="false"
+              />
+            </label>
+            <label>
               Pull interval, seconds
               <input bind:value={interval} inputmode="numeric" placeholder="60" />
             </label>
             <div class="confirm-actions">
-              <button class="primary" onclick={() => confirmApply(plan)} disabled={busy !== null}>
-                Apply {applyable(plan)} step(s)
+              <button
+                class="primary"
+                onclick={() => confirmApply(plan)}
+                disabled={busy !== null || !hasInput()}
+              >
+                Apply
               </button>
               <button class="ghost" onclick={() => (confirming = null)} disabled={busy !== null}>
                 Cancel
               </button>
             </div>
             <p class="detail">
-              The credential is not part of this form: run
-              <code>sjel setup apply turso --confirm --token-stdin &lt; token.txt</code> on the machine.
+              The credential goes straight into the private overlay: piped to the tool's stdin, never
+              logged, never shown here again. Leave a field empty to keep what is already recorded.
             </p>
           </div>
         {:else}
           <button class="primary" onclick={() => (confirming = plan)} disabled={busy !== null}>
-            Review and apply {applyable(plan)} step(s)
+            Set up {plan.component}
           </button>
         {/if}
       {/if}
@@ -296,20 +326,17 @@
   }
   .step {
     display: grid;
-    grid-template-columns: 4.4rem 1fr;
+    grid-template-columns: 1.1rem 1fr;
     gap: 0.6rem;
     padding: 0.35rem 0;
     border-top: 1px solid var(--card-border);
   }
-  .step .kind {
-    font-size: 0.72rem;
-    letter-spacing: 0.04em;
-    text-transform: uppercase;
+  .step .mark {
+    font-family: var(--font-mono);
     color: var(--text-secondary);
-    padding-top: 0.15rem;
   }
-  .step.apply .kind {
-    color: var(--accent);
+  .step.done .mark {
+    color: var(--success);
   }
   .step-line {
     margin: 0;

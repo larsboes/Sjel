@@ -37,8 +37,9 @@ Migrations run once per database file and table prefix in each process, through
 A device can read from a local copy of a remote Turso primary instead of the shared file. The copy
 holds the primary's write-ahead log, so reads are local and writes are forwarded to the primary.
 [`sjel-turso`](../../libs/sjel-turso/README.md) owns the open call, the first pull before the DDL,
-and the background interval; it is an opt-in cargo feature because the sync client brings its own
-networking stack.
+and the background interval. The replica engine is a default feature rather than an opt-in one,
+because following a primary has to be configuration: an opt-in feature meant editing a Cargo.toml per
+capability, which is the one thing a machine's setup cannot do for itself.
 
 Freshness is a configured promise, not a guarantee. A capability that publishes health reports the
 replica's `seconds_since_success` against its interval, and a surface that must be exact calls
@@ -46,9 +47,12 @@ replica's `seconds_since_success` against its interval, and a surface that must 
 and a replica file that already holds local writes is refused rather than converted.
 
 `sjel setup plan turso` is where a deployment finds out what it still needs: the URL, the
-credential, which capabilities link the crate and whether each is built with the feature, and
-what a restart would change. It writes nothing; `apply --confirm` records the settings it owns in
-the private overlay and prints the steps whose files have another owner.
+credential, and which capabilities would restart to read them. It writes nothing; `apply --confirm`
+records the settings in the private overlay and restarts the followers.
+
+The settings reach a process because `tools/service-runner.sh` passes the overlay's deployment
+settings into everything it starts. A deployment-wide setting has one home, and a capability's own
+`[capability.<n>] env` entry overrides one name when a machine needs that.
 
 ## Path indirection & state mounts
 

@@ -74,15 +74,20 @@ The first capability to finish that move is `capabilities/operator-profile` (202
 `capabilities/projects` followed it the same day. Their tables are still in the same shared file;
 only the engine differs.
 
-## Embedded replicas (opt-in `replica` feature)
+## Embedded replicas (default `replica` feature)
 
 A replica is a local file that holds the primary's write-ahead log. Reads never leave the machine;
 writes do, because LibSQL forwards them to the primary and the next pull brings them back. That
 trade is the whole feature: it buys read latency and spends write latency, so it suits a device
 that reads often and writes rarely, not the server that owns the data.
 
-The sync client is opt-in per consumer, because it brings its own networking stack (hyper, tonic,
-rustls): `sjel-turso = { path = "../libs/sjel-turso", features = ["replica"] }`.
+The sync client is on by default (decided 2026-10-21). It brings its own networking stack — hyper,
+tonic, rustls — which took this crate's normal dependency graph from 56 to 188 packages. That cost is
+paid once per workspace, because everything else that speaks TLS already links the same crates. The
+alternative was an opt-in feature, and it meant every capability that wanted a replica needed
+`features = ["replica"]` added to its Cargo.toml: a machine could not be set up without editing
+tracked source, so `sjel setup` would have had to edit it. Configuration beats a code edit. A build
+that must stay light opts out with `default-features = false`.
 
 ```rust
 // A replica when the deployment's settings name one, else the shared local file.
@@ -127,7 +132,11 @@ What the open does, and what it refuses:
   remove the file for a fresh copy; converting a live capability file would replace local state
   with the primary's log.
 
+The settings reach a capability's process because `tools/service-runner.sh` passes
+`<overlay>/config/deployment.env` into every process it starts (2026-10-21). Before that, a
+capability had to repeat the same names in its own `[capability.<n>] env`, so there was no route from
+"the deployment follows this primary" to "the program sees it".
+
 The pull path itself is LibSQL's and is unverified here: this repository has no primary to point at,
-so `cargo test -p sjel-turso --features replica` covers this crate's decisions (refusing a
-misconfiguration before any network call, the one-file conflicts, and what a local store reports),
-not a live sync.
+so the tests cover this crate's decisions (refusing a misconfiguration before any network call, the
+one-file conflicts, and what a local store reports), not a live sync.

@@ -44,23 +44,26 @@ them proposed state, which is what this adds.
 Three rules, and they are the contract:
 
 1. **`plan` is the default and writes nothing**, so asking what a machine needs cannot change it.
-2. **`apply` needs `--confirm`** and runs only the steps marked `apply`. Every one is idempotent:
-   a second run reports "already up to date, untouched" rather than rewriting the file.
-3. **A step this tool does not own is printed, never taken.** A cargo feature is a build decision
-   its owner makes; a capability's `[capability.<n>] env` section has its own writer. Both appear
-   as `manual` or `blocked` with the exact path and line.
+2. **`apply` needs `--confirm`.** Every step is idempotent: a second run reports "already up to
+   date, untouched" rather than rewriting the file.
+3. **Every step in a plan is a step this tool runs.** The first version listed work for a reader —
+   add a cargo feature here, add an env line there, restart that — and a setup surface that prints
+   commands has moved the work back to the reader. Those steps were removed the same day by making
+   them Sjel's job: `replica` became a default feature of `sjel-turso`, and the runner began passing
+   the deployment env to every process it starts.
 
 `verify` asks the thing itself rather than the config file: for `turso` it sends the credential to
 that component's `/info` and reports what came back, because a deployment env that names a primary
 proves nothing about whether the token still works.
 
 A credential is written only from stdin (`--token-stdin`) into the private overlay's deployment
-env — never echoed, never logged, never written to the tracked tree. The report names the key and
-hides the value.
+env — never in argv, never echoed, never logged, never written to the tracked tree. The report names
+the key and hides the value. The shell pipes it there too: the field on `/setup` goes to sjel-status
+on loopback, which hands it to this tool on stdin.
 
-`--json` on all three verbs is the surface a UI renders. The UIs do not execute: the dashboard is
-reachable over the tailnet, and a web app that can install services is a privileged host agent.
-One executor, two views.
+`--json` on all three verbs is the surface a UI renders. The UIs do not execute: sjel-status runs
+these verbs and forwards their JSON, so the dashboard is reachable over the tailnet without becoming
+a privileged host agent. One executor, two views.
 
 Components: `turso` (embedded replicas of a remote Turso primary).
 

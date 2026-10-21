@@ -12,11 +12,13 @@
 //!   is not being changed cannot be broken by asking what it needs.
 //! - **Apply needs `--confirm`.** It runs only the steps marked `apply`, and every one of them is
 //!   idempotent: the second run reports "already set, untouched" instead of rewriting.
-//! - **A step Sjel cannot take is stated, not skipped.** A credential is written from stdin into
-//!   the private overlay and never printed; a source change (a cargo feature) and an env line in a
-//!   file another tool owns are `manual` or `blocked` with the exact path and line, because a
-//!   setup tool that edits a shared manifest behind its owner's back is a second writer of a rule
-//!   that already has one.
+//! - **Every step in a plan is one this tool runs.** That is a constraint, not an accident. The
+//!   first version of this listed steps for a person to run — add a cargo feature here, add an env
+//!   line there, restart that — and a setup surface that prints commands has moved the work back
+//!   to the reader. Those two steps were removed the same day by making them Sjel's job (the
+//!   feature became a default, and the runner began passing the deployment env to every process).
+//!   A component that genuinely cannot take a step needs a decision about where that step lives,
+//!   not a `manual` label.
 //!
 //! Verify is the part that makes the rest honest: it asks the primary, not the config file,
 //! whether the credential works.
@@ -76,28 +78,6 @@ impl Mark {
     }
 }
 
-/// What kind of step this is, which decides whether `apply` touches it.
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize)]
-#[serde(rename_all = "snake_case")]
-enum Kind {
-    /// `apply` runs it.
-    Apply,
-    /// A person runs it, or edits a file this tool does not own.
-    Manual,
-    /// A source or manifest change Sjel does not make on its own.
-    Blocked,
-}
-
-impl Kind {
-    fn label(self) -> &'static str {
-        match self {
-            Kind::Apply => "apply",
-            Kind::Manual => "manual",
-            Kind::Blocked => "blocked",
-        }
-    }
-}
-
 #[derive(Debug, Clone, Serialize)]
 struct Probe {
     id: &'static str,
@@ -108,10 +88,9 @@ struct Probe {
 
 #[derive(Debug, Clone, Serialize)]
 struct Step {
-    kind: Kind,
     label: String,
     detail: String,
-    /// True when the probe says this step is already done, so `apply` skips it.
+    /// True when the probes say this is already done, so `apply` skips it.
     done: bool,
 }
 
@@ -317,11 +296,11 @@ pub fn run(rest: &[String]) -> ExitCode {
                 }
                 println!(
                     "Dry run: nothing was written. `sjel setup apply <component> --confirm` runs the \
-                     {} step(s) marked apply.",
+                     {} step(s) still open.",
                     plans
                         .iter()
                         .flat_map(|p| &p.steps)
-                        .filter(|s| s.kind == Kind::Apply && !s.done)
+                        .filter(|s| !s.done)
                         .count()
                 );
             }
@@ -373,7 +352,11 @@ pub fn run(rest: &[String]) -> ExitCode {
                             }
                         }
                         // Verify after every apply: an apply that cannot show its effect is a hope.
-                        let probes = (c.verify)(&paths, &env);
+                        // Re-read the file, because the snapshot above predates the write — a
+                        // verification against the old body reports the setting it just stored as
+                        // absent, which is the one failure mode worse than no verification.
+                        let written = deployment_env(&paths);
+                        let probes = (c.verify)(&paths, &written);
                         if !json {
                             println!("\n{} — verification", c.name);
                             print_probes(&probes);
@@ -487,14 +470,9 @@ fn print_plan(plan: &Plan) {
     if !plan.steps.is_empty() {
         println!("\nSteps");
         for step in &plan.steps {
-            println!(
-                "  {:<8} {} {}",
-                step.kind.label(),
-                if step.done { "✓" } else { "·" },
-                step.label
-            );
+            println!("  {} {}", if step.done { "✓" } else { "·" }, step.label);
             for line in step.detail.lines() {
-                println!("           {line}");
+                println!("      {line}");
             }
         }
     }

@@ -12,13 +12,17 @@ name = "sjel_turso"
 path = "src/lib.rs"
 
 [features]
-default = []
-# Embedded replicas. Turns on LibSQL's sync client, which pulls a remote primary's
-# write-ahead log into the local file. It brings its own networking stack (hyper, tonic,
-# rustls), so it is opt-in per consumer rather than paid for by every binary that links
-# this crate: `sjel-turso = { workspace = true, features = ["replica"] }`.
+# Embedded replicas are ON by default, decided 2026-10-21: following a remote primary has to
+# be configuration, not a source edit. An opt-in feature meant every capability that wanted one
+# needed `features = ["replica"]` added to its Cargo.toml and a rebuild, so a machine could not
+# be set up without editing tracked files — and `sjel setup` would have had to edit them.
 #
-# Verified with `cargo test -p sjel-turso --features replica`.
+# The cost, measured on this Mac: sjel-turso's normal dependency graph goes from 56 to 188
+# packages, because LibSQL's sync client brings hyper, tonic and rustls. Those are built once
+# per workspace and shared with everything else that already links them, so the price is one
+# compile, not one per capability. A build that must stay light opts out explicitly with
+# `default-features = false`.
+default = ["replica"]
 replica = ["libsql/sync", "libsql/tls"]
 
 [dependencies]

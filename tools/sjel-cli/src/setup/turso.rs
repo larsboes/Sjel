@@ -1,21 +1,24 @@
 //! The `turso` component: follow a remote Turso (LibSQL) primary as a local replica.
 //!
-//! `libs/sjel-turso` gained embedded replicas on 2026-10-21 (`replica` feature). This is the
-//! setup half of that: a deployment needs one URL, one credential and one pull interval, and a
-//! capability needs to be built with the feature and to receive those three settings in its own
-//! environment. Two of those four things this tool can write; the other two belong to files with
-//! another owner, so they are printed with the exact path and line instead.
+//! `libs/sjel-turso` carries embedded replicas as a default feature (decided 2026-10-21), and
+//! `tools/service-runner.sh` passes the deployment's own settings into every process it starts.
+//! Those two facts are what make this component configuration instead of source work: nothing here
+//! edits a Cargo.toml, and a capability needs no per-capability wiring to see the three settings.
 //!
-//! The settings names are `sjel_turso::ReplicaConfig::from_env`'s, which is the reader. Renaming
-//! one here without renaming it there would produce a setup that verifies and a process that does
-//! not follow the primary, so the three constants are the interface.
+//! So the whole component is "write two names into the private overlay, restart what follows the
+//! primary, then ask the primary whether the credential works". A step that still needed a person
+//! would be a defect in that sentence, not in the plan.
+//!
+//! The setting names are `sjel_turso::ReplicaConfig::from_env`'s, which is the reader. Renaming one
+//! here without renaming it there would produce a setup that verifies and a process that does not
+//! follow the primary, so the three constants are the interface.
 
 use std::path::PathBuf;
 use std::time::Duration;
 
 use serde::Serialize;
 
-use super::{EnvFile, Kind, Mark, Plan, Probe, Step};
+use super::{EnvFile, Mark, Plan, Probe, Step};
 use crate::paths::Paths;
 
 /// The setting that names the primary, read by `sjel_turso::ReplicaConfig::from_env`.
@@ -42,29 +45,14 @@ pub(crate) struct Applied {
     pub lines: Vec<String>,
 }
 
-/// How a capability would receive the three settings in its own environment, or why it cannot.
-#[derive(Debug, Clone, PartialEq, Eq)]
-enum Channel {
-    /// A process-kind capability: `<overlay>/config/machine.toml` `[capability.<name>] env`.
-    MachineEnv,
-    /// A container: its `service.toml` `env_file`, relative to the overlay.
-    ManifestEnvFile(PathBuf),
-    /// No manifest and no machine section, so nothing would read the settings.
-    None,
-}
-
-/// A capability (or app) that links `sjel-turso` and could therefore follow the primary.
+/// A capability that links `sjel-turso`, and so follows the primary once it restarts.
 #[derive(Debug, Clone)]
 struct Consumer {
     name: String,
-    /// `sjel-turso = { …, features = ["replica"] }` is present in its Cargo.toml.
-    replica_feature: bool,
-    channel: Channel,
     enabled: bool,
 }
 
-/// Every crate in this checkout that depends on `sjel-turso`, with the two facts that decide
-/// whether following a primary would do anything.
+/// Every crate in this checkout that depends on `sjel-turso`.
 fn consumers(paths: &Paths) -> Vec<Consumer> {
     let enabled = enabled_capabilities(paths);
     let mut out = Vec::new();
@@ -77,28 +65,25 @@ fn consumers(paths: &Paths) -> Vec<Consumer> {
         let Ok(entries) = std::fs::read_dir(&root) else {
             continue;
         };
-        let mut names: Vec<PathBuf> = entries
+        let mut dirs: Vec<PathBuf> = entries
             .filter_map(Result::ok)
             .map(|entry| entry.path())
             .filter(|path| path.is_dir())
             .collect();
-        names.sort();
-        for dir in names {
-            let manifest = dir.join("Cargo.toml");
-            let Ok(body) = std::fs::read_to_string(&manifest) else {
+        dirs.sort();
+        for dir in dirs {
+            let Ok(body) = std::fs::read_to_string(dir.join("Cargo.toml")) else {
                 continue;
             };
-            let Some(replica_feature) = turso_dependency(&body) else {
+            if !depends_on_turso(&body) {
                 continue;
-            };
+            }
             let name = dir
                 .file_name()
                 .map(|n| n.to_string_lossy().into_owned())
                 .unwrap_or_default();
             out.push(Consumer {
-                channel: channel(paths, &name),
                 enabled: enabled.contains(&name),
-                replica_feature,
                 name,
             });
         }
@@ -106,52 +91,25 @@ fn consumers(paths: &Paths) -> Vec<Consumer> {
     out
 }
 
-/// `Some(has_replica_feature)` when `body` declares `sjel-turso`, `None` when it does not.
+/// Whether a Cargo.toml declares `sjel-turso`.
 ///
-/// Reads the dependency line and the two that follow it, because `features = [...]` wraps when it
-/// is long. What it must not do is match on a comment that mentions the crate: a line whose first
-/// non-space character is `#` is skipped.
-fn turso_dependency(body: &str) -> Option<bool> {
+/// The feature list no longer matters — `replica` is a default feature of the crate — so this is a
+/// presence check. It reads the dependency line and the line after it, because a long `features`
+/// array wraps, and it skips a comment: a line whose first non-space character is `#` is prose.
+fn depends_on_turso(body: &str) -> bool {
     let lines: Vec<&str> = body.lines().collect();
-    for (index, line) in lines.iter().enumerate() {
+    lines.iter().enumerate().any(|(index, line)| {
         let code = line.split('#').next().unwrap_or("").trim();
         if !code.starts_with("sjel-turso") {
-            continue;
+            return false;
         }
-        let window = lines[index..lines.len().min(index + 3)].join(" ");
-        let code_part = window.split('#').next().unwrap_or("");
-        return Some(code_part.contains("\"replica\""));
-    }
-    None
-}
-
-/// How `name` would get the settings: the machine's `[capability.<name>] env` for a process, the
-/// manifest's `env_file` for a container, nothing when neither exists.
-fn channel(paths: &Paths, name: &str) -> Channel {
-    let Some(manifest) = paths.manifest_for(name) else {
-        // No manifest: this crate is a library or an app the shell does not start, so only a
-        // process environment outside this deployment could carry the settings.
-        return Channel::None;
-    };
-    let body = std::fs::read_to_string(&manifest).unwrap_or_default();
-    let field = |key: &str| {
-        body.lines()
-            .map(|line| line.split('#').next().unwrap_or("").trim())
-            .find_map(|line| line.strip_prefix(&format!("{key} = ")))
-            .map(|value| value.trim().trim_matches('"').to_owned())
-            .filter(|value| !value.is_empty())
-    };
-    match field("env_file") {
-        Some(file) => Channel::ManifestEnvFile(
-            paths
-                .overlay_root
-                .clone()
-                .unwrap_or_else(|| PathBuf::from("."))
-                .join(file),
-        ),
-        // A process-kind capability, whose environment comes from machine.toml.
-        None => Channel::MachineEnv,
-    }
+        let window = lines[index..lines.len().min(index + 2)].join(" ");
+        window
+            .split('#')
+            .next()
+            .unwrap_or("")
+            .contains("sjel-turso")
+    })
 }
 
 /// The enabled capability names from `<overlay>/config/machine.toml`.
@@ -208,19 +166,6 @@ fn interval(env: &EnvFile) -> Option<u64> {
         .filter(|secs| *secs > 0)
 }
 
-/// How this consumer's process would receive the settings, in one line for a step's detail.
-fn channel_note(consumer: &Consumer) -> String {
-    match &consumer.channel {
-        Channel::MachineEnv => {
-            format!("through [capability.{}] env in machine.toml", consumer.name)
-        }
-        Channel::ManifestEnvFile(path) => format!("through its env_file {}", path.display()),
-        Channel::None => {
-            "no manifest and no machine section, so nothing carries the settings yet".to_owned()
-        }
-    }
-}
-
 pub(super) fn plan(paths: &Paths, env: &EnvFile) -> Plan {
     let consumers = consumers(paths);
     let url = url(env);
@@ -251,7 +196,7 @@ pub(super) fn plan(paths: &Paths, env: &EnvFile) -> Plan {
             Mark::Missing
         },
         detail: match &url {
-            Some(url) => format!("{url} (where a primary it is; verify says whether it answers)"),
+            Some(url) => url.clone(),
             None => "no primary named, and no replica can be opened without one".to_owned(),
         },
     });
@@ -280,29 +225,25 @@ pub(super) fn plan(paths: &Paths, env: &EnvFile) -> Plan {
         ),
     });
 
-    let wired: Vec<&Consumer> = consumers.iter().filter(|c| c.enabled).collect();
+    let enabled: Vec<&Consumer> = consumers.iter().filter(|c| c.enabled).collect();
     probes.push(Probe {
         id: "consumers",
-        label: "consumers".to_owned(),
-        mark: match wired.is_empty() {
-            true => Mark::Warn,
-            false => Mark::Ok,
+        label: "followers".to_owned(),
+        mark: match (consumers.is_empty(), enabled.is_empty()) {
+            (true, _) => Mark::Warn,
+            (false, true) => Mark::Warn,
+            (false, false) => Mark::Ok,
         },
         detail: match consumers.is_empty() {
             true => "no crate in this checkout links sjel-turso".to_owned(),
             false => format!(
-                "links sjel-turso: {}",
+                "{}, and the runner passes the deployment env into each one's process",
                 consumers
                     .iter()
                     .map(|c| format!(
-                        "{} ({}, {})",
+                        "{} ({})",
                         c.name,
-                        if c.enabled { "enabled" } else { "disabled" },
-                        if c.replica_feature {
-                            "replica feature on"
-                        } else {
-                            "replica feature off"
-                        }
+                        if c.enabled { "enabled" } else { "disabled" }
                     ))
                     .collect::<Vec<String>>()
                     .join("; ")
@@ -310,99 +251,46 @@ pub(super) fn plan(paths: &Paths, env: &EnvFile) -> Plan {
         },
     });
 
-    // Steps. `apply` writes the two settings it owns, and nothing else.
+    // Everything below is `apply`: each step is a write this tool makes, and the plan is the only
+    // place a reader sees it first.
+    let nothing_to_write = url.is_some() && token.is_some();
     steps.push(Step {
-        kind: Kind::Apply,
-        label: format!("record {URL_KEY} in the deployment env"),
+        label: format!("record {URL_KEY} and {INTERVAL_KEY}"),
         detail: match (paths.overlay_root.is_some(), &url) {
             (false, _) => "blocked: no overlay resolved".to_owned(),
-            (true, None) => "run: sjel setup apply turso --confirm --url <libsql://…>".to_string(),
+            (true, None) => format!("writes both names to {}", env.path().display()),
             (true, Some(_)) => "already recorded, untouched".to_owned(),
         },
         done: url.is_some(),
     });
 
     steps.push(Step {
-        kind: Kind::Apply,
-        label: format!("store {TOKEN_KEY} from stdin in the deployment env"),
+        label: format!("store {TOKEN_KEY}"),
         detail: match token.is_some() {
             true => "already present, untouched".to_owned(),
-            false => "run: sjel setup apply turso --confirm --token-stdin < token.txt".to_owned(),
+            // The value arrives through the form (which pipes it to this process's stdin) and is
+            // written into the private overlay. It is never echoed, logged or put in argv.
+            false => format!(
+                "written to {} from the credential you submit; never printed",
+                env.path().display()
+            ),
         },
         done: token.is_some(),
     });
 
-    let unbuilt: Vec<&Consumer> = consumers.iter().filter(|c| !c.replica_feature).collect();
-    if !unbuilt.is_empty() {
-        let channels: Vec<String> = unbuilt
-            .iter()
-            .map(|c| format!("{} ({})", c.name, channel_note(c)))
-            .collect();
+    if !enabled.is_empty() {
         steps.push(Step {
-            kind: Kind::Blocked,
-            label: "build a consumer with the replica feature".to_owned(),
-            detail: format!(
-                "add `features = [\"replica\"]` to the sjel-turso dependency in each Cargo.toml \
-                 named here. Sjel does not edit a Cargo.toml: a feature is a build decision its \
-                 owner makes.\nWired up afterwards: {}",
-                channels.join("; ")
+            label: format!(
+                "restart {} so it reads the settings",
+                enabled
+                    .iter()
+                    .map(|c| c.name.as_str())
+                    .collect::<Vec<&str>>()
+                    .join(", ")
             ),
-            done: false,
-        });
-    }
-
-    if let Some(pending) = consumers
-        .iter()
-        .find(|c| c.enabled && c.channel == Channel::None)
-    {
-        steps.push(Step {
-            kind: Kind::Blocked,
-            label: "give an enabled consumer somewhere to read the settings".to_owned(),
-            detail: format!(
-                "{} is enabled but has no service.toml env_file and no [capability.{}] section, so \
-                 nothing passes {URL_KEY} into its process",
-                pending.name, pending.name
-            ),
-            done: false,
-        });
-    }
-
-    for consumer in &consumers {
-        let (kind, detail) = match &consumer.channel {
-            Channel::MachineEnv => (
-                Kind::Manual,
-                format!(
-                    "in <overlay>/config/machine.toml:\n[capability.{}]\nenv = [\"{URL_KEY}=…\", \
-                     \"{TOKEN_KEY}=…\"]",
-                    consumer.name
-                ),
-            ),
-            Channel::ManifestEnvFile(path) => (
-                Kind::Manual,
-                format!(
-                    "append {URL_KEY}, {TOKEN_KEY} and {INTERVAL_KEY} to {} (private, in the \
-                     overlay, the same place its other runtime values live)",
-                    path.display()
-                ),
-            ),
-            Channel::None => continue,
-        };
-        if !consumer.replica_feature {
-            // The feature decides whether the settings are read at all; the env line is only worth
-            // stating once they would be.
-            continue;
-        }
-        steps.push(Step {
-            kind,
-            label: format!("give {} the three settings", consumer.name),
-            detail,
-            done: false,
-        });
-        steps.push(Step {
-            kind: Kind::Manual,
-            label: format!("restart {}", consumer.name),
-            detail: format!("tools/service-runner.sh restart {}", consumer.name),
-            done: false,
+            detail: "each one restarts against the deployment env the runner now passes it"
+                .to_owned(),
+            done: nothing_to_write,
         });
     }
 
@@ -414,10 +302,10 @@ pub(super) fn plan(paths: &Paths, env: &EnvFile) -> Plan {
     }
 }
 
-/// Write what this tool owns, and report every step it left to a person.
+/// Write what this tool owns, restart what follows it, and report what happened.
 ///
 /// Idempotent: a second run with the same arguments finds the values already there, writes
-/// nothing and says so.
+/// nothing, restarts nothing and says so.
 pub(crate) fn apply(
     paths: &Paths,
     env: &EnvFile,
@@ -447,26 +335,47 @@ pub(crate) fn apply(
         path: env.path().to_path_buf(),
         body: env.body.clone(),
     };
+    // One outcome per setting, from that setting's own write: a shared flag made the second key
+    // report "set" because the first one had changed.
     let mut changed = false;
     if let Some(url) = options.url {
-        changed |= next.set(URL_KEY, url.trim());
+        let wrote = next.set(URL_KEY, url.trim());
+        changed |= wrote;
         lines.push(format!(
             "{URL_KEY}: {}",
-            if changed { "set" } else { "unchanged" }
+            if wrote { "set" } else { "unchanged" }
         ));
     }
     if let Some(secs) = options.interval_secs {
-        changed |= next.set(INTERVAL_KEY, &secs.to_string());
-        lines.push(format!("{INTERVAL_KEY}: {secs}"));
+        let wrote = next.set(INTERVAL_KEY, &secs.to_string());
+        changed |= wrote;
+        lines.push(format!(
+            "{INTERVAL_KEY}: {}",
+            if wrote {
+                secs.to_string()
+            } else {
+                "unchanged".to_owned()
+            }
+        ));
     }
     if let Some(token) = token {
         if token.trim().is_empty() {
-            return Err("the token on stdin was empty".to_owned());
+            return Err("the credential submitted was empty".to_owned());
         }
-        changed |= next.set(TOKEN_KEY, token.trim());
-        lines.push(format!("{TOKEN_KEY}: stored (value hidden)"));
+        let wrote = next.set(TOKEN_KEY, token.trim());
+        changed |= wrote;
+        lines.push(format!(
+            "{TOKEN_KEY}: {}",
+            if wrote {
+                "stored (value hidden)"
+            } else {
+                "unchanged (value hidden)"
+            }
+        ));
     }
     if !changed {
+        // Per-setting lines are noise when every one of them says nothing happened.
+        lines.clear();
         lines.push(format!(
             "{}: already up to date, untouched",
             env.path().display()
@@ -484,17 +393,35 @@ pub(crate) fn apply(
         .map_err(|e| format!("cannot write {}: {e}", env.path().display()))?;
     lines.insert(0, format!("{}: written", env.path().display()));
 
-    for consumer in consumers(paths)
-        .iter()
-        .filter(|c| c.enabled && c.replica_feature)
-    {
-        lines.push(format!(
-            "{}: settings reach it only after the step printed by `sjel setup plan turso`",
-            consumer.name
-        ));
+    // A capability reads the settings at start, so the write reaches it only through a restart.
+    // This is the step that used to be printed for a person to run.
+    for consumer in consumers(paths).iter().filter(|c| c.enabled) {
+        lines.push(restart(paths, &consumer.name));
     }
     lines.push("next: sjel setup verify turso".to_owned());
     Ok(Applied { lines })
+}
+
+/// Restart one enabled capability through the runner that owns its lifecycle.
+///
+/// The runner is the only thing that knows how a capability is started on this machine (a launchd
+/// unit, a systemd unit, a plain process), so this shells out to it rather than re-deriving that.
+fn restart(paths: &Paths, name: &str) -> String {
+    let runner = paths.root.join("tools/service-runner.sh");
+    match std::process::Command::new(&runner)
+        .args(["restart", name])
+        .output()
+    {
+        Ok(output) if output.status.success() => format!("restart {name}: up"),
+        Ok(output) => format!(
+            "restart {name}: failed — {}",
+            String::from_utf8_lossy(&output.stderr).trim()
+        ),
+        Err(error) => format!(
+            "restart {name}: could not run {}: {error}",
+            runner.display()
+        ),
+    }
 }
 
 /// Ask the primary itself whether the credential works.
@@ -528,7 +455,7 @@ pub(super) fn verify(paths: &Paths, env: &EnvFile) -> Vec<Probe> {
             id: "primary",
             label: "primary".to_owned(),
             mark: Mark::Missing,
-            detail: "not probed: no token to present".to_owned(),
+            detail: "not probed: no credential to present".to_owned(),
         },
         _ => Probe {
             id: "primary",
@@ -539,27 +466,20 @@ pub(super) fn verify(paths: &Paths, env: &EnvFile) -> Vec<Probe> {
     };
     probes.push(primary);
 
-    let consumers = consumers(paths);
-    let wired: Vec<&Consumer> = consumers
-        .iter()
-        .filter(|c| c.enabled && c.replica_feature)
-        .collect();
+    let enabled: Vec<Consumer> = consumers(paths).into_iter().filter(|c| c.enabled).collect();
     probes.push(Probe {
         id: "wiring",
-        label: "consumer wiring".to_owned(),
-        mark: match wired.is_empty() {
-            true => Mark::Blocked,
+        label: "followers".to_owned(),
+        mark: match enabled.is_empty() {
+            true => Mark::Warn,
             false => Mark::Ok,
         },
-        detail: match wired.is_empty() {
-            true => {
-                "no enabled capability is built with the replica feature, so nothing follows the \
-                 primary yet; the plan prints the two steps that change that"
-                    .to_owned()
-            }
-            false => wired
+        detail: match enabled.is_empty() {
+            true => "no enabled capability links sjel-turso, so nothing follows the primary yet"
+                .to_owned(),
+            false => enabled
                 .iter()
-                .map(|c| format!("{} ready to follow it", c.name))
+                .map(|c| format!("{} restarts against the settings", c.name))
                 .collect::<Vec<String>>()
                 .join("; "),
         },
@@ -609,13 +529,13 @@ fn probe_primary(url: &str, token: &str) -> Probe {
                 Mark::Warn
             };
             let detail = match status.is_success() {
-                true => format!(
-                    "{info} answered {status} — the primary offers the sync protocol to this token"
-                ),
+                true => {
+                    format!("{info} answered {status} — the primary offers the sync protocol")
+                }
                 false => format!(
                     "{info} answered {status} — {}",
                     if mark == Mark::Blocked {
-                        "the token was refused; rotate it with --token-stdin"
+                        "the credential was refused; submit a fresh one"
                     } else {
                         "check the URL and that the database exists"
                     }
@@ -642,22 +562,22 @@ mod tests {
     use super::*;
 
     #[test]
-    fn a_dependency_line_without_the_feature_is_off() {
+    fn a_crate_that_links_the_engine_is_a_follower() {
         let body = "[dependencies]\nsjel-turso = { path = \"../../libs/sjel-turso\" }\n";
-        assert_eq!(turso_dependency(body), Some(false));
+        assert!(depends_on_turso(body));
     }
 
     #[test]
-    fn the_feature_is_found_on_its_own_line() {
-        let body = "[dependencies]\nsjel-turso = { path = \"../../libs/sjel-turso\",\n    features = [\"replica\"] }\n";
-        assert_eq!(turso_dependency(body), Some(true));
+    fn a_wrapped_dependency_line_is_still_found() {
+        let body = "[dependencies]\nsjel-turso = { path = \"../../libs/sjel-turso\",\n    default-features = false }\n";
+        assert!(depends_on_turso(body));
     }
 
     #[test]
     fn a_comment_about_the_crate_is_not_a_dependency() {
         let body =
             "# sjel-turso is the engine here, see the README\n[dependencies]\nserde = \"1\"\n";
-        assert_eq!(turso_dependency(body), None);
+        assert!(!depends_on_turso(body));
     }
 
     #[test]
@@ -671,9 +591,9 @@ mod tests {
 
     #[test]
     fn an_apply_with_a_bad_scheme_is_refused_before_writing() {
-        let mut env = EnvFile {
+        let env = EnvFile {
             path: PathBuf::from("/tmp/does-not-matter.env"),
-            body: String::new(),
+            body: "untouched\n".to_owned(),
         };
         let err = apply(
             &paths_stub(),
@@ -687,7 +607,6 @@ mod tests {
         .unwrap_err();
         assert!(err.contains("names no primary"), "{err}");
         assert_eq!(env.value(URL_KEY), None);
-        env.body.push_str("untouched\n");
         assert!(env.body.contains("untouched"));
     }
 

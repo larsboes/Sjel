@@ -1,4 +1,5 @@
 use super::*;
+use std::path::Path;
 
 /// What this machine still needs for a component, and what applying it would do.
 ///
@@ -9,12 +10,22 @@ use super::*;
 /// that already has one, and the two would disagree the first time one of them moved — which on
 /// this route means a dashboard button that writes something the CLI would have refused.
 ///
-/// ## Why the credential has no route
+/// ## Where the credential goes
 ///
-/// `SetupApplyRequest` carries a component, a URL and an interval. It deliberately has no token
-/// field: a credential belongs on stdin of the CLI the operator runs, never in an HTTP body that a
-/// browser, a reverse proxy and an access log each get a copy of. A replica cannot be set up from
-/// this surface alone, and saying so is better than accepting the field.
+/// `SetupApplyRequest` carries a component, a URL, an interval and — since 2026-10-21 — the
+/// primary's credential, because the alternative was telling the operator to open a terminal and
+/// redirect a file into a command. Three rules keep that from becoming an access-log entry:
+///
+/// 1. It is never put in argv. The child gets it on stdin (`--token-stdin`), which is also the only
+///    path the tool accepts one from.
+/// 2. It is never echoed. This handler returns the tool's JSON, and the tool reports the setting by
+///    name ("stored, value hidden") rather than by value.
+/// 3. It is never logged. Nothing in this module or in `interpret_tool_report` prints a request
+///    body, and a failure message quotes the tool's stderr, not the request.
+///
+/// The remaining exposure is the loopback hop itself: browser → this process on 127.0.0.1. That is
+/// the same surface that already starts and stops capabilities, and it refuses cross-origin writes
+/// (src/lib/inbound-auth.ts), so it is not a new reachability, only a new field.
 ///
 /// ## Why `--json` and one document
 ///
@@ -33,6 +44,9 @@ pub(crate) struct SetupApplyRequest {
     component: Option<String>,
     url: Option<String>,
     interval_secs: Option<u64>,
+    /// The primary's credential. Write-only: it is piped to the tool's stdin and never returned.
+    #[serde(default, skip_serializing)]
+    token: Option<String>,
 }
 
 /// The plan and the verification, in one answer.
@@ -91,23 +105,73 @@ pub(crate) async fn setup_apply_handler(
         args.push(interval);
     }
 
+    let token = request
+        .token
+        .as_deref()
+        .map(str::trim)
+        .filter(|value| !value.is_empty());
+    if token.is_some() {
+        args.push("--token-stdin");
+    }
+
     // `--confirm` is on the command line by construction: this route IS the confirmation, and it
     // exists only after the operator has read the plan in the UI.
-    run_setup(&args).await.map(Json).map_err(bad_gateway)
+    run_setup_with(&args, token)
+        .await
+        .map(Json)
+        .map_err(bad_gateway)
 }
 
 /// Run one `sjel setup` verb and return its JSON.
 async fn run_setup(args: &[&str]) -> Result<Value, String> {
-    let root = axon_root()?;
+    run_setup_with(args, None).await
+}
+
+/// [`run_setup`] with an optional value for the child's stdin.
+///
+/// `stdin_value` is the only way a credential leaves this process, and it leaves through a pipe:
+/// never argv (visible in `ps`), never the environment, never this process's stdout.
+async fn run_setup_with(args: &[&str], stdin_value: Option<&str>) -> Result<Value, String> {
+    run_setup_at(&axon_root()?, args, stdin_value).await
+}
+
+/// The two functions above with the checkout handed in, so a test can run a fake `sjel` and check
+/// what actually crossed the process boundary.
+async fn run_setup_at(
+    root: &Path,
+    args: &[&str],
+    stdin_value: Option<&str>,
+) -> Result<Value, String> {
     let mut command = tokio::process::Command::new(root.join("sjel"));
     // `setup` is the command; each caller passes only the verb and its flags.
     command
         .arg("setup")
         .args(args)
-        .current_dir(&root)
+        .current_dir(root)
+        .stdin(if stdin_value.is_some() {
+            std::process::Stdio::piped()
+        } else {
+            std::process::Stdio::null()
+        })
+        .stdout(std::process::Stdio::piped())
+        .stderr(std::process::Stdio::piped())
         // The launcher prints its lazy-build note on stderr; stdout is the document.
         .kill_on_drop(true);
-    let output = tokio::time::timeout(SETUP_TIMEOUT, command.output())
+
+    let mut child = command
+        .spawn()
+        .map_err(|e| format!("could not run sjel setup: {e}"))?;
+    if let Some(value) = stdin_value {
+        use tokio::io::AsyncWriteExt as _;
+        if let Some(mut stdin) = child.stdin.take() {
+            // A closed pipe means the tool exited without reading — a refusal it already explained,
+            // so the wait below reports that rather than a write error.
+            let _ = stdin.write_all(value.as_bytes()).await;
+            let _ = stdin.write_all(b"\n").await;
+            let _ = stdin.shutdown().await;
+        }
+    }
+    let output = tokio::time::timeout(SETUP_TIMEOUT, child.wait_with_output())
         .await
         .map_err(|_| {
             format!(
@@ -129,31 +193,64 @@ async fn run_setup(args: &[&str]) -> Result<Value, String> {
 mod tests {
     use super::*;
 
-    /// The credential has no way in. A field added here would be the first place a token travels
-    /// over HTTP, through a proxy and into a log, and this test is what makes that a deliberate
-    /// commit rather than a convenient one.
+    /// A submitted credential is accepted, and it never comes back out.
+    ///
+    /// The field exists because the alternative was telling the operator to run a command, but it
+    /// is write-only: the type skips it when serializing, so no response, log line or schema dump
+    /// carries the value. `run_setup_with` hands it to the child on stdin and nowhere else.
     #[test]
-    fn the_apply_body_carries_no_credential() {
-        let body = serde_json::json!({
+    fn a_submitted_credential_is_write_only() {
+        let request: SetupApplyRequest = serde_json::from_value(serde_json::json!({
             "component": "turso",
             "url": "libsql://example.turso.io",
             "interval_secs": 120,
-        });
-        let request: SetupApplyRequest =
-            serde_json::from_value(body).expect("a body without a credential deserializes");
+            "token": "primary-credential",
+        }))
+        .expect("the form body deserializes");
         assert_eq!(request.component.as_deref(), Some("turso"));
         assert_eq!(request.interval_secs, Some(120));
+        assert_eq!(request.token.as_deref(), Some("primary-credential"));
 
-        let rest = serde_json::to_value(SetupApplyRequest {
-            component: None,
-            url: None,
-            interval_secs: None,
-        })
-        .expect("serializes");
+        let echoed = serde_json::to_value(&request).expect("serializes");
         assert!(
-            !rest.to_string().to_lowercase().contains("token"),
-            "the request type must not grow a token field: {rest}"
+            !echoed.to_string().contains("primary-credential"),
+            "the credential must not come back out: {echoed}"
         );
+        assert!(!echoed.to_string().contains("token"), "{echoed}");
+    }
+
+    /// The credential reaches the tool on stdin and nowhere else.
+    ///
+    /// Measured through a real child process, because the property is about a process boundary:
+    /// the fake `sjel` reports its argv and its stdin, so an implementation that passed the value
+    /// as an argument — where `ps` and a shell history can see it — fails here.
+    #[tokio::test]
+    async fn the_credential_reaches_the_tool_on_stdin_and_not_in_argv() {
+        let dir = std::env::temp_dir().join(format!("sjel-status-setup-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let fake = dir.join("sjel");
+        std::fs::write(
+            &fake,
+            "#!/bin/sh\nprintf '{\"argv\":\"%s\",\"stdin\":\"%s\"}' \"$*\" \"$(cat)\"\n",
+        )
+        .unwrap();
+        let mut perms = std::fs::metadata(&fake).unwrap().permissions();
+        std::os::unix::fs::PermissionsExt::set_mode(&mut perms, 0o755);
+        std::fs::set_permissions(&fake, perms).unwrap();
+
+        let report = run_setup_at(
+            &dir,
+            &["apply", "turso", "--confirm", "--json", "--token-stdin"],
+            Some("primary-credential"),
+        )
+        .await
+        .expect("the fake tool answered");
+
+        assert_eq!(report["stdin"], "primary-credential");
+        let argv = report["argv"].as_str().unwrap_or_default();
+        assert!(!argv.contains("primary-credential"), "argv: {argv}");
+        assert!(argv.contains("--token-stdin"), "argv: {argv}");
+        let _ = std::fs::remove_dir_all(&dir);
     }
 
     #[test]
@@ -161,5 +258,6 @@ mod tests {
         let request: SetupApplyRequest = serde_json::from_value(serde_json::json!({}))
             .expect("an empty body is a plan-with-defaults");
         assert_eq!(request.component, None);
+        assert_eq!(request.token, None);
     }
 }

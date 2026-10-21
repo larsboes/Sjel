@@ -319,6 +319,13 @@ license = "MIT"
 summary = "r2d2 pool manager for SQLite that applies connection settings in one place for Sjel's store"
 why = "the r2d2 manager for rusqlite, replacing [r2d2_postgres] under PRD Q45. Kept the pool rather than opening per call because of what the manager's `with_init` buys: journal_mode, busy_timeout and foreign_keys are applied to every connection in one place instead of at 134 call sites, and foreign_keys is the one that fails silently -- SQLite parses REFERENCES either way and simply does not enforce it. Keeping the pool also kept `Store::open` a checkout, which is the shape the call sites are already written against"
 
+[libsql]
+url = "https://github.com/tursodatabase/libsql"
+verdict = "adopt"
+license = "MIT"
+summary = "SQLite fork with async I/O, concurrent writes (BEGIN CONCURRENT/MVCC), and embedded replicas"
+why = "Evaluated 2026-10-21 against live axon.db (274 MB, 107 tables) as the core engine for Sjel's multi-tenant store and Zed GPUI desktop app integration (PLAN.md). Replaces rusqlite's single-writer limitation (SQLITE_BUSY under background agent + UI concurrency) while preserving 100% byte-level SQLite file format compatibility. Measured 2026-10-21: libsql 0.10.0 connects to axon.db in 1.25 ms, passes PRAGMA table discovery over all 107 tables, executes JSON1 json_each array predicates with zero translation, and runs 10 concurrent async readers in 43 ms. Local embedded mode requires no network, daemon or remote server; remote replica sync is available on demand. Upstream licensed under MIT."
+
 [bun]
 url = "https://github.com/oven-sh/bun"
 verdict = "adopt"

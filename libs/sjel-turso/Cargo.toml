@@ -1,0 +1,21 @@
+[package]
+name = "sjel-turso"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+description = "Turso / LibSQL storage engine for Sjel: async multi-writer concurrency, MVCC, and embedded replicas."
+publish = false
+
+[lib]
+name = "sjel_turso"
+path = "src/lib.rs"
+
+[dependencies]
+libsql.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+tokio = { workspace = true, features = ["sync", "rt", "macros"] }
+
+[lints]
+workspace = true

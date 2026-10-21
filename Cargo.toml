@@ -30,6 +30,7 @@ members = [
     "libs/sjel-http",
     "libs/sjel-server",
     "libs/sjel-store",
+    "libs/sjel-turso",
     "libs/candidate-fingerprint",
     "libs/civil-date",
     "libs/device-auth",
@@ -134,6 +135,7 @@ rayon = "1"
 proptest = "1"
 regex = "1"
 rusqlite = { version = "0.40", features = ["bundled"] }
+libsql = { version = "0.10.0", default-features = false, features = ["core"] }
 serde = "1.0"
 serde_json = "1.0"
 sha2 = "0.11"

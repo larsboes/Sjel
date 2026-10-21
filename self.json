@@ -111,7 +111,12 @@
     },
     {
       "name": "documents",
-      "kind": "capability"
+      "kind": "capability",
+      "service": {
+        "kind": "process",
+        "requires": [],
+        "port": "8104"
+      }
     },
     {
       "name": "entities",
@@ -442,6 +447,10 @@
     },
     {
       "name": "sjel-store",
+      "kind": "lib"
+    },
+    {
+      "name": "sjel-turso",
       "kind": "lib"
     },
     {
@@ -963,6 +972,56 @@
       ],
       "evidence": [
         "capabilities/devices/Cargo.toml"
+      ]
+    },
+    {
+      "from": "documents",
+      "to": "extraction",
+      "kinds": [
+        "cargo-dep"
+      ],
+      "evidence": [
+        "capabilities/documents/Cargo.toml"
+      ]
+    },
+    {
+      "from": "documents",
+      "to": "route-manifest",
+      "kinds": [
+        "cargo-dep"
+      ],
+      "evidence": [
+        "capabilities/documents/Cargo.toml"
+      ]
+    },
+    {
+      "from": "documents",
+      "to": "sjel-config",
+      "kinds": [
+        "cargo-dep"
+      ],
+      "evidence": [
+        "capabilities/documents/Cargo.toml"
+      ]
+    },
+    {
+      "from": "documents",
+      "to": "sjel-server",
+      "kinds": [
+        "cargo-dep"
+      ],
+      "evidence": [
+        "capabilities/documents/Cargo.toml"
+      ]
+    },
+    {
+      "from": "documents",
+      "to": "sjel-store",
+      "kinds": [
+        "cargo-dep"
+      ],
+      "evidence": [
+        "capabilities/documents/Cargo.toml"
       ]
     },
     {
@@ -2421,6 +2480,10 @@
     },
     {
       "name": "kitinerary",
+      "verdict": "adopt"
+    },
+    {
+      "name": "libsql",
       "verdict": "adopt"
     },
     {

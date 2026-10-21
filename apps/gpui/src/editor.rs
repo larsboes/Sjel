@@ -23,6 +23,7 @@ use gpui_kit::{
 
 use crate::block_menu::{self, Choice};
 use crate::blocks::{Block, Doc, Kind};
+use crate::data::Notes;
 use crate::inline::{Inline, Mark};
 use crate::projects::Projects;
 use crate::shell::{self, ProjectRecord, Shell, ShellError};
@@ -115,6 +116,8 @@ pub struct NoteEditor {
     menu: Option<Menu>,
     shell: Arc<Shell>,
     projects: WeakEntity<Projects>,
+    /// The notes the app keeps in memory: this editor leaves the body it wrote there.
+    notes: Notes,
 }
 
 impl NoteEditor {
@@ -122,6 +125,7 @@ impl NoteEditor {
         record: ProjectRecord,
         shell: Arc<Shell>,
         projects: WeakEntity<Projects>,
+        notes: Notes,
         window: &mut Window,
         cx: &mut Context<Self>,
     ) -> Self {
@@ -146,6 +150,7 @@ impl NoteEditor {
             menu: None,
             shell,
             projects,
+            notes,
             doc,
         };
         if editor.doc.blocks.is_empty() {
@@ -525,6 +530,9 @@ impl NoteEditor {
                 match result {
                     Ok(()) => {
                         editor.base = content;
+                        // Opening this note again shows what was just written, not the read that
+                        // opened it: the editor owns the body, the frontmatter is untouched.
+                        editor.notes.set_content(&editor.path, &editor.base);
                         editor.saved_revision = revision;
                         editor.problem = None;
                         // Typing during the save left more to send.
@@ -1060,6 +1068,7 @@ mod tests {
                     record(),
                     shell,
                     gpui_kit::WeakEntity::new_invalid(),
+                    Notes::default(),
                     window,
                     cx,
                 )

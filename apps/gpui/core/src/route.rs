@@ -71,6 +71,7 @@ pub const DESTINATIONS: &[Destination] = &[
     d("/systems", "Systems"),
     d("/capabilities", "Capabilities"),
     d("/backup", "Backup"),
+    d("/setup", "Setup"),
     d("/self", "Self-model"),
     d("/cv", "CV"),
     d("/packs", "Packs"),

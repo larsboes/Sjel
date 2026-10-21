@@ -14,12 +14,14 @@ mod capabilities;
 mod data;
 mod editor;
 mod frames;
+mod header;
 mod home;
 mod inline;
 #[cfg(target_os = "macos")]
 mod macos_glass;
 mod projects;
 mod selection;
+mod sidebar;
 mod tasks;
 mod theme;
 mod ui;

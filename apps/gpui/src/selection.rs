@@ -115,7 +115,11 @@ impl Workspace {
                     items.extend(health.down().into_iter().map(Item::Down));
                 }
                 items.extend((0..self.ahead().len()).map(Item::Entry));
-                items.extend(self.urgent_tasks().into_iter().map(|t| Item::FocusTask(t.id)));
+                items.extend(
+                    self.urgent_tasks()
+                        .into_iter()
+                        .map(|t| Item::FocusTask(t.id)),
+                );
                 items
             }
             Page::Capabilities => self

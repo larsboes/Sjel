@@ -6,31 +6,119 @@
 
 use std::collections::HashSet;
 use std::future::Future;
+use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use std::time::{Duration, Instant};
 
 use gpui_kit::component::notification::Notification;
 use gpui_kit::component::WindowExt;
 use gpui_kit::{Context, SharedString, Window};
+use tokio::sync::Mutex;
 
 use sjel_gpui_core::shell::{self, Shell, ShellError, ShellResult};
+
+mod notes;
+
+pub use notes::Notes;
 
 /// Data older than this shows its age beside the page title.
 pub const STALE_AFTER: Duration = Duration::from_secs(30);
 
-/// The shell client, or the reason there is none.
+/// The shell client, or the reason there is none, and the notes read recently.
 #[derive(Clone)]
 pub struct Repo {
     shell: Result<Arc<Shell>, ShellError>,
+    local: Arc<LocalDb>,
+    notes: Notes,
+}
+
+/// The one direct handle on the local database file, shared by every `Repo` clone.
+///
+/// The connection is what is worth keeping, not the `Database` it came from. Opening one costs
+/// 0.04 ms, but a fresh connection starts on an empty SQLite page cache and pays to fault the rows
+/// back in, so its first query costs 0.58 ms where the same query costs 0.03 ms on a handle that
+/// already ran one. A poll is a handful of queries every 10 s, so this is the difference between
+/// paying that fault on every poll and paying it once per process.
+///
+/// The cache holds a read view, never a transaction: every read here drains its own `Rows`, and a
+/// WAL reader between queries sees what the capability processes committed after the handle was
+/// opened. An open that fails is retried on the next read, because the file can appear after the
+/// app starts.
+///
+/// The guard is a `tokio::sync::Mutex` because opening awaits, as in `sjel_turso::database_for`.
+#[derive(Default)]
+struct LocalDb {
+    conn: Mutex<Option<libsql::Connection>>,
+}
+
+impl LocalDb {
+    /// The shared connection to the configured database, opened on first use.
+    async fn connection(&self) -> Option<libsql::Connection> {
+        let path = Repo::local_db_path()?;
+        self.connection_at(&path).await
+    }
+
+    /// The shared connection to `path`, opened on first use and reused afterwards.
+    async fn connection_at(&self, path: &Path) -> Option<libsql::Connection> {
+        let mut slot = self.conn.lock().await;
+        if let Some(conn) = slot.as_ref() {
+            return Some(conn.clone());
+        }
+        let conn = open_local(path).await?;
+        *slot = Some(conn.clone());
+        Some(conn)
+    }
+}
+
+/// Open one read connection to `path`, with the PRAGMAs every read of this database expects.
+async fn open_local(path: &Path) -> Option<libsql::Connection> {
+    let db = libsql::Builder::new_local(path).build().await.ok()?;
+    let conn = db.connect().ok()?;
+    conn.execute_batch("PRAGMA busy_timeout = 5000;")
+        .await
+        .ok()?;
+    Some(conn)
+}
+
+/// The database path this machine's environment names, whether or not a test may open it.
+///
+/// `Repo::local_db_path` adds the test gate; the probe in this module's tests asks this instead,
+/// because measuring the held connection needs a database that is not in memory.
+#[allow(dead_code)]
+fn configured_db_path() -> Option<PathBuf> {
+    if let Ok(p) = std::env::var("SJEL_DB_PATH") {
+        let path = PathBuf::from(p);
+        if path.exists() {
+            return Some(path);
+        }
+    }
+    for var in ["SJEL_OVERLAY_ROOT", "SJEL_PERSONAL_ROOT"] {
+        if let Ok(overlay) = std::env::var(var) {
+            let candidate = PathBuf::from(overlay).join("data/axon/axon.db");
+            if candidate.exists() {
+                return Some(candidate);
+            }
+        }
+    }
+    None
 }
 
 impl Repo {
     pub fn new(shell: Result<Arc<Shell>, ShellError>) -> Self {
-        Self { shell }
+        Self {
+            shell,
+            local: Arc::new(LocalDb::default()),
+            notes: Notes::default(),
+        }
     }
 
     pub fn shell(&self) -> ShellResult<Arc<Shell>> {
         self.shell.clone()
+    }
+
+    /// The notes opened recently, so a note someone tabs back to opens without a read.
+    pub fn notes(&self) -> &Notes {
+        &self.notes
     }
 
     pub fn endpoint(&self) -> SharedString {
@@ -46,48 +134,23 @@ impl Repo {
     }
 
     /// Return the resolved local database path from `SJEL_DB_PATH` or the overlay default.
-    #[allow(dead_code)]
-    pub fn local_db_path() -> Option<std::path::PathBuf> {
+    ///
+    /// Tests get `None`, so no test reads this machine's database by accident; the probe that
+    /// measures the held connection asks [`configured_db_path`] instead.
+    pub fn local_db_path() -> Option<PathBuf> {
         #[cfg(test)]
         {
-            return None;
+            None
         }
-        #[allow(unreachable_code)]
-        if let Ok(p) = std::env::var("SJEL_DB_PATH") {
-            let path = std::path::PathBuf::from(p);
-            if path.exists() {
-                return Some(path);
-            }
+        #[cfg(not(test))]
+        {
+            configured_db_path()
         }
-        if let Ok(overlay) = std::env::var("SJEL_OVERLAY_ROOT") {
-            let candidate = std::path::PathBuf::from(overlay).join("data/axon/axon.db");
-            if candidate.exists() {
-                return Some(candidate);
-            }
-        }
-        if let Ok(overlay) = std::env::var("SJEL_PERSONAL_ROOT") {
-            let candidate = std::path::PathBuf::from(overlay).join("data/axon/axon.db");
-            if candidate.exists() {
-                return Some(candidate);
-            }
-        }
-        None
-    }
-
-    /// Open a direct non-blocking read connection to the local LibSQL database for zero-latency queries.
-    #[allow(dead_code)]
-    pub async fn connect_local_db() -> Result<libsql::Connection, Box<dyn std::error::Error + Send + Sync>> {
-        let path = Self::local_db_path().ok_or("no local Sjel database file found")?;
-        let path_str = path.to_str().ok_or("invalid UTF-8 database path")?;
-        let db = libsql::Builder::new_local(path_str).build().await?;
-        let conn = db.connect()?;
-        conn.execute_batch("PRAGMA busy_timeout = 5000;").await?;
-        Ok(conn)
     }
 
     /// Read projects directly from local LibSQL database if accessible, otherwise fallback to shell.
     pub async fn fetch_projects(&self) -> ShellResult<Vec<sjel_gpui_core::shell::ProjectSummary>> {
-        if let Ok(conn) = Self::connect_local_db().await {
+        if let Some(conn) = self.local.connection().await {
             if let Ok(mut rows) = conn
                 .query(
                     "SELECT project, MAX(archived) as archived, \
@@ -124,8 +187,11 @@ impl Repo {
     }
 
     /// Read tasks directly from local LibSQL database if accessible, otherwise fallback to shell.
-    pub async fn fetch_tasks(&self, status: Option<&str>) -> ShellResult<Vec<sjel_gpui_core::shell::GlobalTask>> {
-        if let Ok(conn) = Self::connect_local_db().await {
+    pub async fn fetch_tasks(
+        &self,
+        status: Option<&str>,
+    ) -> ShellResult<Vec<sjel_gpui_core::shell::GlobalTask>> {
+        if let Some(conn) = self.local.connection().await {
             let filter = match status {
                 Some("open") => " AND done = 0",
                 Some("done") => " AND done != 0",
@@ -172,14 +238,17 @@ impl Repo {
         from: &str,
         to: &str,
     ) -> ShellResult<Vec<sjel_gpui_core::shell::CalendarEntry>> {
-        if let Ok(conn) = Self::connect_local_db().await {
+        if let Some(conn) = self.local.connection().await {
             let from_bound = format!("{from}T00:00:00");
             let to_bound = format!("{to}T23:59:59");
             let query = "SELECT title, starts_at, ends_at, all_day, commitment \
                          FROM calendar_entries \
                          WHERE starts_at <= ?1 AND ends_at >= ?2 \
                          ORDER BY starts_at ASC";
-            if let Ok(mut rows) = conn.query(query, libsql::params![to_bound, from_bound]).await {
+            if let Ok(mut rows) = conn
+                .query(query, libsql::params![to_bound, from_bound])
+                .await
+            {
                 let mut list = Vec::new();
                 while let Ok(Some(row)) = rows.next().await {
                     let title: String = row.get(0).unwrap_or_default();
@@ -207,7 +276,7 @@ impl Repo {
         &self,
         project: &str,
     ) -> ShellResult<Vec<sjel_gpui_core::shell::ProjectRecord>> {
-        if let Ok(conn) = Self::connect_local_db().await {
+        if let Some(conn) = self.local.connection().await {
             let query = "SELECT path, kind, title, done, due, priority \
                          FROM projects_records \
                          WHERE project = ?1 \
@@ -240,9 +309,25 @@ impl Repo {
         shell.project(project).await
     }
 
-    /// Read a single record with its content directly from local LibSQL database, otherwise fallback to shell.
-    pub async fn fetch_record(&self, path: &str) -> ShellResult<sjel_gpui_core::shell::ProjectRecord> {
-        if let Ok(conn) = Self::connect_local_db().await {
+    /// Read a single record with its content: from memory when it was opened recently, otherwise
+    /// from the local LibSQL database, otherwise from the shell. Every answer is kept, so opening
+    /// the same note again costs no read, no disk and no network.
+    pub async fn fetch_record(
+        &self,
+        path: &str,
+    ) -> ShellResult<sjel_gpui_core::shell::ProjectRecord> {
+        if let Some(record) = self.notes.get(path) {
+            return Ok(record);
+        }
+        let record = self.read_record(path).await?;
+        self.notes.put(&record);
+        Ok(record)
+    }
+
+    /// The slow half of [`Repo::fetch_record`]: one record with its content, from the local LibSQL
+    /// database otherwise from the shell.
+    async fn read_record(&self, path: &str) -> ShellResult<sjel_gpui_core::shell::ProjectRecord> {
+        if let Some(conn) = self.local.connection().await {
             let query = "SELECT path, kind, title, content, done, due, priority \
                          FROM projects_records \
                          WHERE path = ?1 LIMIT 1";
@@ -279,14 +364,20 @@ impl Repo {
 
     /// Update soundscape playback (`POST /soundscape/api/soundscape/state`).
     #[allow(dead_code)]
-    pub async fn set_soundscape_playing(&self, playing: bool) -> ShellResult<sjel_gpui_core::shell::SoundscapeState> {
+    pub async fn set_soundscape_playing(
+        &self,
+        playing: bool,
+    ) -> ShellResult<sjel_gpui_core::shell::SoundscapeState> {
         let shell = self.shell()?;
         shell.set_soundscape_playing(playing).await
     }
 
     /// Update soundscape preset (`POST /soundscape/api/soundscape/state`).
     #[allow(dead_code)]
-    pub async fn set_soundscape_preset(&self, preset: &str) -> ShellResult<sjel_gpui_core::shell::SoundscapeState> {
+    pub async fn set_soundscape_preset(
+        &self,
+        preset: &str,
+    ) -> ShellResult<sjel_gpui_core::shell::SoundscapeState> {
         let shell = self.shell()?;
         shell.set_soundscape_preset(preset).await
     }
@@ -528,6 +619,45 @@ pub fn write<C, T, F, Fut>(
 
 #[cfg(test)]
 mod tests {
+    use sjel_gpui_core::shell::{ProjectRecord, ShellError};
+
+    use super::*;
+
+    fn note(path: &str) -> ProjectRecord {
+        ProjectRecord {
+            path: path.into(),
+            kind: "note".into(),
+            title: "Plan".into(),
+            content: "# Plan\n".into(),
+            done: false,
+            due: None,
+            priority: 2,
+        }
+    }
+
+    #[test]
+    fn a_kept_note_opens_with_no_database_and_no_shell() {
+        tokio::runtime::Builder::new_current_thread()
+            .enable_all()
+            .build()
+            .unwrap()
+            .block_on(async {
+                // Neither a database path (there is none under test) nor a shell to ask: the only
+                // answer this repo can give is one it already holds.
+                let repo = Repo::new(Err(ShellError::NotLoopback));
+                let kept = note("P/Plan.md");
+                repo.notes().put(&kept);
+
+                let read = repo.fetch_record("P/Plan.md").await.expect("from memory");
+                assert_eq!(read.content, kept.content);
+                assert_eq!(read.title, kept.title);
+
+                // The same read for a note that is not kept fails, which is what makes the line
+                // above proof that nothing was read.
+                assert!(repo.fetch_record("P/Other.md").await.is_err());
+            });
+    }
+
     #[test]
     fn test_direct_libsql_queries() {
         tokio::runtime::Runtime::new().unwrap().block_on(async {
@@ -609,5 +739,123 @@ mod tests {
             let title: String = cal_row.get(0).unwrap();
             assert_eq!(title, "Team Sync");
         });
+    }
+
+    /// A cached handle must see writes committed after it opened, because the file it reads is
+    /// written by the capability processes while the app is running.
+    #[test]
+    fn a_reused_connection_sees_writes_committed_after_it_opened() {
+        tokio::runtime::Builder::new_current_thread()
+            .enable_all()
+            .build()
+            .unwrap()
+            .block_on(async {
+                let dir = std::env::temp_dir().join(format!(
+                    "sjel-gpui-reused-connection-{}",
+                    std::time::SystemTime::now()
+                        .duration_since(std::time::UNIX_EPOCH)
+                        .unwrap()
+                        .as_nanos()
+                ));
+                let _ = std::fs::remove_dir_all(&dir);
+                std::fs::create_dir_all(&dir).unwrap();
+                let path = dir.join("axon.db");
+
+                let writer = super::open_local(&path).await.unwrap();
+                writer
+                    .execute_batch(
+                        "CREATE TABLE IF NOT EXISTS t (x INTEGER); INSERT INTO t VALUES (1);",
+                    )
+                    .await
+                    .unwrap();
+
+                let local = super::LocalDb::default();
+                assert_eq!(count(&local.connection_at(&path).await.unwrap()).await, 1);
+
+                writer
+                    .execute("INSERT INTO t VALUES (2)", ())
+                    .await
+                    .unwrap();
+
+                assert_eq!(count(&local.connection_at(&path).await.unwrap()).await, 2);
+
+                std::fs::remove_dir_all(&dir).unwrap();
+            });
+    }
+
+    async fn count(conn: &libsql::Connection) -> i64 {
+        let mut rows = conn.query("SELECT COUNT(*) FROM t", ()).await.unwrap();
+        let row = rows.next().await.unwrap().unwrap();
+        row.get(0).unwrap()
+    }
+
+    /// What holding one connection buys, measured against a database this machine already has.
+    ///
+    /// Ignored by default: it reads a file outside the checkout and prints timings instead of
+    /// asserting one, which a shared machine cannot promise. Run it with
+    ///
+    ///     cargo test --manifest-path apps/gpui/Cargo.toml --bin sjel-gpui \
+    ///         holding_one_connection -- --ignored --nocapture
+    ///
+    /// `SJEL_DB_PATH` or an overlay's `data/axon/axon.db` has to exist; without one it says so and
+    /// passes. Both halves read the same rows, so a change that made one path wrong fails here.
+    #[test]
+    #[ignore = "needs this machine's database; prints timings"]
+    fn holding_one_connection_beats_opening_one_per_read() {
+        let Some(path) = configured_db_path() else {
+            println!("no local database: set SJEL_DB_PATH or SJEL_PERSONAL_ROOT");
+            return;
+        };
+        let query = "SELECT path, kind, title, done, due, priority, project \
+                     FROM projects_records WHERE kind = 'task'";
+
+        tokio::runtime::Runtime::new().unwrap().block_on(async {
+            // One open per read, which is what every fetch did before the handle was kept.
+            let mut per_read = Vec::new();
+            let mut per_read_rows = 0;
+            for _ in 0..10 {
+                let started = Instant::now();
+                let conn = open_local(&path).await.expect("the database opens");
+                per_read_rows = drain(&conn, query).await;
+                per_read.push(started.elapsed());
+            }
+
+            // One open, reused, which is what a poll does now.
+            let local = LocalDb::default();
+            let mut held = Vec::new();
+            let mut held_rows = 0;
+            for _ in 0..10 {
+                let started = Instant::now();
+                let conn = local
+                    .connection_at(&path)
+                    .await
+                    .expect("the database opens");
+                held_rows = drain(&conn, query).await;
+                held.push(started.elapsed());
+            }
+
+            assert_eq!(per_read_rows, held_rows, "both paths read the same rows");
+            let mib =
+                std::fs::metadata(&path).map(|m| m.len()).unwrap_or(0) as f64 / (1024.0 * 1024.0);
+            println!("{} ({mib:.0} MiB): {held_rows} task rows", path.display());
+            println!("open + read, one per read: {:?} median", median(per_read));
+            println!("held connection, read:     {:?} median", median(held));
+        });
+    }
+
+    /// How many rows `sql` returns on `conn`.
+    async fn drain(conn: &libsql::Connection, sql: &str) -> usize {
+        let mut rows = conn.query(sql, ()).await.expect("query runs");
+        let mut read = 0;
+        while rows.next().await.expect("row").is_some() {
+            read += 1;
+        }
+        read
+    }
+
+    /// The middle timing, which one scheduler hiccup cannot move.
+    fn median(mut timings: Vec<Duration>) -> Duration {
+        timings.sort_unstable();
+        timings[timings.len() / 2]
     }
 }

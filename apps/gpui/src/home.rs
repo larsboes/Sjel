@@ -234,6 +234,8 @@ fn focus_tasks(
                         .enumerate()
                         .map(|(index, task)| {
                             let task_id = task.id.clone();
+                            let task_toggle_id = task.id.clone();
+                            let task_priority_id = task.id.clone();
                             let proj_name = task.project.clone();
                             let due = task.due.clone().filter(|d| !d.is_empty());
                             let priority = task.priority.clamp(1, 3);
@@ -244,9 +246,16 @@ fn focus_tasks(
                                     div().w(px(20.)).child(
                                         Checkbox::new(("home-task-done", index))
                                             .checked(task.done)
-                                            .on_click(cx.listener(move |view, done: &bool, window, cx| {
-                                                view.toggle_task(task_id.clone(), *done, window, cx);
-                                            })),
+                                            .on_click(cx.listener(
+                                                move |view, done: &bool, window, cx| {
+                                                    view.toggle_task(
+                                                        task_toggle_id.clone(),
+                                                        *done,
+                                                        window,
+                                                        cx,
+                                                    );
+                                                },
+                                            )),
                                     ),
                                 )
                                 .child(
@@ -280,7 +289,38 @@ fn focus_tasks(
                                     &today,
                                     palette,
                                 )))
-                                .child(div().w(px(48.)).child(priority_pill(priority, palette)))
+                                .child(
+                                    div()
+                                        .id(("home-priority-btn", index))
+                                        .w(px(48.))
+                                        .cursor_pointer()
+                                        .hover(move |s| s.opacity(0.8))
+                                        .on_click(cx.listener({
+                                            let id = task_priority_id.clone();
+                                            move |view, _, window, cx| {
+                                                view.cycle_task_priority(
+                                                    id.clone(),
+                                                    priority,
+                                                    window,
+                                                    cx,
+                                                );
+                                            }
+                                        }))
+                                        .child(priority_pill(priority, palette)),
+                                )
+                                .when(marked, |row| {
+                                    row.child(
+                                        div()
+                                            .flex_none()
+                                            .px(px(6.))
+                                            .py(px(1.5))
+                                            .rounded(px(3.))
+                                            .bg(rgba(palette.accent << 8 | 0x24))
+                                            .text_color(rgb(palette.accent))
+                                            .text_xs()
+                                            .child("Space"),
+                                    )
+                                })
                                 .into_any_element()
                         })
                         .collect(),

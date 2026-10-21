@@ -1,18 +1,20 @@
-//! The main window: sidebar, page header, the current page, the command palette and toasts.
+//! The main window's life cycle and routing: it opens the window, reads and follows the shell,
+//! decides which page is current, and owns the command palette, the selection and the toasts.
+//!
+//! What the window is made of lives beside it: `sidebar` draws the column and `header` the title
+//! row, each reading this view and calling back into it.
 
 use std::time::Duration;
 
 use futures::StreamExt;
-use gpui_kit::component::button::{Button, ButtonVariants};
 use gpui_kit::component::command::{Command, CommandGroup, CommandItem, CommandState};
 use gpui_kit::component::dialog::Dialog;
-use gpui_kit::component::kbd::Kbd;
 use gpui_kit::component::notification::Notification;
 use gpui_kit::component::scroll::ScrollableElement;
-use gpui_kit::component::{IconName, IndexPath, Sizable, Theme, WindowExt};
+use gpui_kit::component::{IconName, IndexPath, Theme, WindowExt};
 use gpui_kit::{
     actions, div, prelude::*, px, rgb, rgba, Action, App, Context, Entity, FocusHandle, Focusable,
-    FontWeight, KeyBinding, SharedString, Subscription, Window,
+    KeyBinding, SharedString, Subscription, Window,
 };
 
 use crate::ask::Ask;
@@ -24,7 +26,7 @@ use crate::shell::{
     self, AgentView, CalendarEntry, GlobalTask, NodeHealth, ShellError, Snapshot, SoundscapeState,
 };
 use crate::theme::Palette;
-use crate::{capabilities, home};
+use crate::{capabilities, header, home, sidebar};
 
 actions!(
     sjel,
@@ -64,14 +66,12 @@ pub fn bind_keys(cx: &mut App) {
         KeyBinding::new("k", SelectPrevious, Some("Workspace")),
         KeyBinding::new("up", SelectPrevious, Some("Workspace")),
         KeyBinding::new("enter", RunPrimary, Some("Workspace")),
+        KeyBinding::new("space", RunPrimary, Some("Workspace")),
         KeyBinding::new("cmd-backspace", RunSecondary, Some("Workspace")),
         KeyBinding::new("escape", ClearSelection, Some("Workspace")),
     ]);
 }
 
-const SIDEBAR_WIDTH: f32 = 208.;
-/// The gap between the glass sidebar and the window edge.
-const GLASS_INSET: f32 = 8.;
 /// How often the open window reads the shell again.
 const POLL: Duration = Duration::from_secs(10);
 
@@ -159,6 +159,11 @@ impl Workspace {
 
     pub fn endpoint(&self) -> SharedString {
         self.repo.endpoint()
+    }
+
+    /// True when a local database answers, which the sidebar shows as its read path.
+    pub fn has_direct_db(&self) -> bool {
+        self.repo.has_direct_db()
     }
 
     pub fn go(&mut self, page: Page, cx: &mut Context<Self>) {
@@ -269,7 +274,11 @@ impl Workspace {
             window,
             self,
             &repo,
-            data::Press::quiet(if playing { "Soundscape started." } else { "Soundscape paused." }),
+            data::Press::quiet(if playing {
+                "Soundscape started."
+            } else {
+                "Soundscape paused."
+            }),
             move |s| async move { s.set_soundscape_playing(playing).await },
             |this, updated, cx| {
                 if let Some(state) = updated {
@@ -280,11 +289,7 @@ impl Workspace {
         );
     }
 
-    pub fn cycle_soundscape_preset(
-        &mut self,
-        window: &mut Window,
-        cx: &mut Context<Self>,
-    ) {
+    pub fn cycle_soundscape_preset(&mut self, window: &mut Window, cx: &mut Context<Self>) {
         let current = self
             .soundscape
             .value
@@ -331,7 +336,11 @@ impl Workspace {
             window,
             self,
             &repo,
-            data::Press::quiet(if done { "Task completed." } else { "Task reopened." }),
+            data::Press::quiet(if done {
+                "Task completed."
+            } else {
+                "Task reopened."
+            }),
             move |s| async move { s.set_task_done(&id, done).await },
             |this, updated, cx| {
                 if let Some(task) = updated {
@@ -342,6 +351,37 @@ impl Workspace {
                             } else {
                                 tasks[pos] = task;
                             }
+                        }
+                    }
+                }
+                cx.notify();
+            },
+        );
+    }
+
+    pub fn cycle_task_priority(
+        &mut self,
+        path: String,
+        current: u8,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) {
+        let next = (current.clamp(1, 3) % 3) + 1;
+        let p_str = next.to_string();
+        let target_path = path.clone();
+        let repo = self.repo.clone();
+        data::write(
+            cx,
+            window,
+            self,
+            &repo,
+            data::Press::quiet("Priority updated."),
+            move |s| async move { s.set_property(&target_path, "priority", &p_str).await },
+            |this, updated, cx| {
+                if let Some(task) = updated {
+                    if let Some(tasks) = &mut this.focus_tasks.value {
+                        if let Some(pos) = tasks.iter().position(|t| t.id == task.id) {
+                            tasks[pos] = task;
                         }
                     }
                 }
@@ -595,8 +635,8 @@ impl Workspace {
             self.native_glass_attempted = true;
             self.native_glass = crate::macos_glass::NativeGlassRegion::attach(
                 window,
-                SIDEBAR_WIDTH.into(),
-                GLASS_INSET.into(),
+                sidebar::WIDTH.into(),
+                sidebar::GLASS_INSET.into(),
                 16.0,
             )
             .ok();
@@ -678,11 +718,11 @@ impl Render for Workspace {
                     .flex()
                     .child(
                         div()
-                            .w(px(SIDEBAR_WIDTH))
+                            .w(px(sidebar::WIDTH))
                             .flex_none()
                             .h_full()
-                            .when(glass, |column| column.p(px(GLASS_INSET)))
-                            .child(sidebar(self, palette, glass, window, cx)),
+                            .when(glass, |column| column.p(px(sidebar::GLASS_INSET)))
+                            .child(sidebar::render(self, palette, glass, window, cx)),
                     )
                     .child(
                         div()
@@ -691,7 +731,7 @@ impl Render for Workspace {
                             .when(glass, |page| page.bg(rgba(tint)))
                             .flex()
                             .flex_col()
-                            .child(header(self, palette))
+                            .child(header::render(self, palette))
                             .child(if self.page == Page::Projects {
                                 // Projects scrolls inside itself: its editor lays out only the
                                 // blocks on screen, which needs a bounded height.
@@ -715,325 +755,6 @@ impl Render for Workspace {
                     ),
             )
             .children(self.frames.as_ref().map(|frames| frames.paint_marker()))
-    }
-}
-
-fn sidebar(
-    view: &Workspace,
-    palette: Palette,
-    glass: bool,
-    window: &mut Window,
-    cx: &mut Context<Workspace>,
-) -> impl IntoElement {
-    let status = match (&view.health.value, &view.health.error) {
-        (_, Some(error)) => (palette.red, SharedString::from(error.to_string())),
-        (Some(health), None) => (
-            if health.down().is_empty() {
-                palette.green
-            } else {
-                palette.amber
-            },
-            format!(
-                "{} · up {}",
-                health.version,
-                uptime(health.uptime_seconds + view.health.age_of_value())
-            )
-            .into(),
-        ),
-        (None, None) => (palette.muted, "Connecting…".into()),
-    };
-    let nav = Page::ALL.into_iter().map(|page| {
-        let selected = page == view.page;
-        let shortcut = match page {
-            Page::Home => Kbd::binding_for_action(&GoHome, None, window),
-            Page::Capabilities => Kbd::binding_for_action(&GoCapabilities, None, window),
-            Page::Projects => Kbd::binding_for_action(&GoProjects, None, window),
-            Page::Ask => Kbd::binding_for_action(&GoAsk, None, window),
-        };
-        div()
-            .id(page.href())
-            .flex()
-            .items_center()
-            .justify_between()
-            .px_3()
-            .py(px(6.))
-            .rounded(px(7.))
-            .when(selected, |row| row.bg(rgba(palette.raised)))
-            .text_color(rgb(if selected {
-                palette.text
-            } else {
-                palette.muted
-            }))
-            .cursor_pointer()
-            .hover(move |style| style.bg(rgba(palette.raised)).text_color(rgb(palette.text)))
-            .on_click(cx.listener(move |view, _, _, cx| view.go(page, cx)))
-            .child(page.label())
-            .children(shortcut.map(|kbd| kbd.appearance(false)))
-    });
-
-    div()
-        .size_full()
-        .flex()
-        .flex_col()
-        .gap_1()
-        // Clears the transparent titlebar's traffic lights; the glass inset already moves it down.
-        .pt(px(if glass { 52. - GLASS_INSET } else { 52. }))
-        .px_3()
-        .pb_4()
-        .when(!glass, |sidebar| {
-            sidebar
-                .bg(rgba(palette.raised))
-                .border_r_1()
-                .border_color(rgba(palette.border))
-        })
-        .children(nav)
-        .child(div().flex_1())
-        .child(soundscape_widget(view, palette, cx))
-        .child(
-            div()
-                .id("palette-hint")
-                .flex()
-                .items_center()
-                .justify_between()
-                .px_3()
-                .py(px(6.))
-                .rounded(px(7.))
-                .text_sm()
-                .text_color(rgb(palette.muted))
-                .cursor_pointer()
-                .hover(move |style| style.bg(rgba(palette.raised)))
-                .on_click(|_, window, cx| window.dispatch_action(OpenPalette.boxed_clone(), cx))
-                .child("Search")
-                .children(
-                    Kbd::binding_for_action(&OpenPalette, None, window)
-                        .map(|k| k.appearance(false)),
-                ),
-        )
-        .child(
-            div()
-                .flex()
-                .items_center()
-                .justify_between()
-                .px_3()
-                .pt_2()
-                .text_xs()
-                .text_color(rgb(palette.muted))
-                .child(
-                    div()
-                        .flex()
-                        .items_center()
-                        .gap_2()
-                        .min_w_0()
-                        .child(
-                            div()
-                                .flex_none()
-                                .size(px(7.))
-                                .rounded_full()
-                                .bg(rgb(status.0)),
-                        )
-                        .child(div().truncate().child(status.1)),
-                )
-                .child(
-                    div()
-                        .flex()
-                        .items_center()
-                        .gap_1()
-                        .flex_none()
-                        .child(
-                            div()
-                                .size(px(6.))
-                                .rounded_full()
-                                .bg(rgb(if view.repo.has_direct_db() {
-                                    palette.accent
-                                } else {
-                                    palette.muted
-                                })),
-                        )
-                        .child(
-                            div()
-                                .text_xs()
-                                .child(if view.repo.has_direct_db() {
-                                    "libsql"
-                                } else {
-                                    "http"
-                                }),
-                        ),
-                ),
-        )
-}
-
-fn soundscape_widget(
-    view: &Workspace,
-    palette: Palette,
-    cx: &mut Context<Workspace>,
-) -> impl IntoElement {
-    let state = view.soundscape.value.as_ref();
-    let is_up = view
-        .health
-        .value
-        .as_ref()
-        .map(|h| {
-            h.capabilities
-                .get("soundscape")
-                .map(|c| c.up)
-                .unwrap_or(false)
-        })
-        .unwrap_or(false);
-
-    if !is_up && state.is_none() {
-        return div().into_any_element();
-    }
-
-    let playing = state.map(|s| s.playing).unwrap_or(false);
-    let preset = state.map(|s| s.preset.as_str()).unwrap_or("edm");
-
-    div()
-        .id("soundscape-mini-player")
-        .mx_1()
-        .mb_1()
-        .px_2()
-        .py(px(5.))
-        .rounded(px(7.))
-        .bg(rgba(palette.raised))
-        .flex()
-        .items_center()
-        .justify_between()
-        .gap_2()
-        .text_xs()
-        .child(
-            div()
-                .flex()
-                .items_center()
-                .gap_1()
-                .min_w_0()
-                .child(
-                    div()
-                        .flex_none()
-                        .size(px(6.))
-                        .rounded_full()
-                        .bg(rgb(if playing { palette.green } else { palette.muted })),
-                )
-                .child(
-                    div()
-                        .id("soundscape-preset-btn")
-                        .cursor_pointer()
-                        .truncate()
-                        .text_color(rgb(palette.text))
-                        .hover(move |s| s.text_color(rgb(palette.accent)))
-                        .on_click(cx.listener(|view, _, window, cx| {
-                            view.cycle_soundscape_preset(window, cx);
-                        }))
-                        .child(format!("♪ {preset}")),
-                ),
-        )
-        .child(
-            div()
-                .id("soundscape-toggle-btn")
-                .flex_none()
-                .px_2()
-                .py(px(2.))
-                .rounded(px(4.))
-                .bg(rgba(if playing {
-                    palette.accent << 8 | 0x24
-                } else {
-                    palette.raised
-                }))
-                .text_color(rgb(if playing { palette.accent } else { palette.muted }))
-                .cursor_pointer()
-                .hover(move |s| s.text_color(rgb(palette.text)))
-                .on_click(cx.listener(move |view, _, window, cx| {
-                    view.toggle_soundscape(!playing, window, cx);
-                }))
-                .child(if playing { "Pause" } else { "Play" }),
-        )
-        .into_any_element()
-}
-
-fn header(view: &Workspace, palette: Palette) -> impl IntoElement {
-    let subtitle: SharedString = match view.page {
-        Page::Home => chrono::Local::now().format("%A, %B %-d").to_string().into(),
-        Page::Capabilities => view.endpoint(),
-        Page::Projects => "Projects, tasks and notes, in one place".into(),
-        Page::Ask => "Multi-turn capability session · ⌥Space from any app".into(),
-    };
-    let checked = view
-        .health
-        .age()
-        .map(|elapsed| format!("checked {} ago", ago(elapsed)));
-    div()
-        .flex()
-        .items_end()
-        .justify_between()
-        .px_8()
-        .pt(px(44.))
-        .pb_5()
-        .child(
-            div()
-                .flex()
-                .flex_col()
-                .gap_1()
-                .child(
-                    div()
-                        .text_2xl()
-                        .font_weight(FontWeight::SEMIBOLD)
-                        .child(view.page.label()),
-                )
-                .child(
-                    div()
-                        .text_sm()
-                        .text_color(rgb(palette.muted))
-                        .child(subtitle),
-                ),
-        )
-        .child(
-            div()
-                .flex()
-                .items_center()
-                .gap_1()
-                .children(checked.map(|label| {
-                    div()
-                        .text_xs()
-                        .text_color(rgb(palette.amber))
-                        .mr_2()
-                        .child(label)
-                }))
-                .child(
-                    Button::new("refresh")
-                        .ghost()
-                        .small()
-                        .icon(IconName::RotateCw)
-                        .loading(view.health.loading || view.agent.loading || view.calendar.loading)
-                        .tooltip("Refresh (⌘R)")
-                        .on_click(|_, window, cx| {
-                            window.dispatch_action(Refresh.boxed_clone(), cx)
-                        }),
-                )
-                .child(
-                    Button::new("open-in-dashboard")
-                        .ghost()
-                        .small()
-                        .icon(IconName::ExternalLink)
-                        .tooltip("Open in the dashboard (⌘D)")
-                        .on_click(|_, window, cx| {
-                            window.dispatch_action(OpenInDashboard.boxed_clone(), cx)
-                        }),
-                ),
-        )
-}
-
-pub fn uptime(seconds: u64) -> String {
-    match seconds {
-        s if s < 3600 => format!("{}m", s / 60),
-        s if s < 86_400 => format!("{}h", s / 3600),
-        s => format!("{}d {}h", s / 86_400, s % 86_400 / 3600),
-    }
-}
-
-pub fn ago(elapsed: Duration) -> String {
-    match elapsed.as_secs() {
-        s if s < 60 => format!("{s}s"),
-        s if s < 3600 => format!("{}m", s / 60),
-        s => format!("{}h", s / 3600),
     }
 }
 
@@ -1176,25 +897,7 @@ mod tests {
                 Some(Item::FocusTask("Atlas/Projects/Test/Tasks/Task1.md".into()))
             );
         });
-    }
-
-    #[gpui::test]
-    fn sidebar_soundscape_and_storage_indicator(cx: &mut TestAppContext) {
-        let (view, cx) = open(cx);
-        view.update(cx, |view, cx| {
-            view.soundscape.value = Some(SoundscapeState {
-                preset: "focus".into(),
-                playing: true,
-                volume: 0.8,
-                energy: 0.6,
-            });
-            cx.notify();
-        });
-        view.read_with(cx, |view, _| {
-            let state = view.soundscape.value.as_ref().unwrap();
-            assert_eq!(state.preset, "focus");
-            assert!(state.playing);
-            assert!(!view.repo.has_direct_db());
-        });
+        // Space runs primary on the selected focus task
+        cx.simulate_keystrokes("space");
     }
 }

@@ -129,16 +129,26 @@ impl Projects {
         .detach();
     }
 
-    /// Reads one note before opening it. A list read carries no content, so this is the only
-    /// read that does.
+    /// Opens one note. A note read in the last few minutes is in memory, so it opens in the frame
+    /// the click lands in; otherwise this reads it first, because a list read carries no content.
     fn open_note(&mut self, path: String, save: bool, window: &mut Window, cx: &mut Context<Self>) {
+        if let Some(record) = self.repo.notes().get(&path) {
+            self.opening = None;
+            self.show_note(record, save, window, cx);
+            return;
+        }
         self.opening = Some(path.clone());
         cx.notify();
+        let requested = path.clone();
         let repo = self.repo.clone();
         let work = shell::run(async move { repo.fetch_record(&path).await });
         cx.spawn_in(window, async move |this, cx| {
             let result = work.await.unwrap_or(Err(ShellError::Unreachable));
             let _ = this.update_in(cx, |view, window, cx| {
+                // A note opened since this read started owns the screen: this answer is stale.
+                if view.opening.as_deref() != Some(requested.as_str()) {
+                    return;
+                }
                 view.opening = None;
                 match result {
                     Ok(record) => view.show_note(record, save, window, cx),
@@ -163,7 +173,8 @@ impl Projects {
             return;
         };
         let notes = cx.entity().downgrade();
-        let editor = cx.new(|cx| NoteEditor::new(record, shell, notes, window, cx));
+        let kept = self.repo.notes().clone();
+        let editor = cx.new(|cx| NoteEditor::new(record, shell, notes, kept, window, cx));
         if !save {
             editor.update(cx, |editor, _| editor.editable_saves = false);
         }
@@ -239,6 +250,8 @@ impl Projects {
         cx: &mut Context<Self>,
     ) {
         let done_text = if done { "Done." } else { "Open again." };
+        // The write changes the record's frontmatter: the next open must read it, not remember it.
+        self.repo.notes().forget(&path);
         let repo = self.repo.clone();
         data::write(
             cx,
@@ -266,6 +279,7 @@ impl Projects {
     }
 
     fn remove_record(&mut self, path: String, window: &mut Window, cx: &mut Context<Self>) {
+        self.repo.notes().forget(&path);
         let repo = self.repo.clone();
         data::write(
             cx,
@@ -292,6 +306,8 @@ impl Projects {
         cx: &mut Context<Self>,
     ) {
         let path = record.path.clone();
+        // The write changes the record's frontmatter: the next open must read it, not remember it.
+        self.repo.notes().forget(&path);
         let repo = self.repo.clone();
         data::write(
             cx,
@@ -769,6 +785,22 @@ impl Projects {
                     || t.project.to_lowercase().contains(query)
             })
             .collect();
+
+        if filtered.is_empty() && !tasks.is_empty() {
+            rows.push(
+                row()
+                    .min_h(px(40.))
+                    .py_2()
+                    .text_sm()
+                    .text_color(rgb(palette.muted))
+                    .child(if query.is_empty() {
+                        "No tasks in this filter view.".to_string()
+                    } else {
+                        format!("No tasks matching \"{query}\".")
+                    })
+                    .into_any_element(),
+            );
+        }
 
         for (index, task) in filtered.into_iter().enumerate() {
             let toggle = task.clone();

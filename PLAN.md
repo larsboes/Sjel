@@ -119,15 +119,15 @@ flowchart LR
 ```
 
 ### Phase 1: Preflight Verification & Isolated Compatibility Spike
-- [ ] Run `tools/backup.sh store` and verify with `tools/restore.sh store`.
-- [ ] Create cold snapshot `axon.db.pre-turso-backup`.
-- [ ] Write an isolated scratch probe (`scratch/libsql_compat.rs`) opening a copy of `axon.db` using `libsql`.
-- [ ] Verify execution of complex queries: `json_each(?3)` predicates in `calendar`, recursive CTEs in `projects`, and spatial joins in `places`.
+- [x] Run `tools/backup.sh store` and verify with `tools/restore.sh store`.
+- [x] Create cold snapshot `axon.db.pre-turso-backup`.
+- [x] Write an isolated scratch probe (`scratch/libsql_compat.rs`) opening a copy of `axon.db` using `libsql`.
+- [x] Verify execution of complex queries: `json_each(?3)` predicates in `calendar`, recursive CTEs in `projects`, and spatial joins in `places`.
 
 ### Phase 2: Upstreams Gate & Storage Abstraction
-- [ ] Add `[libsql]` upstream entry with formal review in `upstreams.toml`.
-- [ ] Provide unified storage adapter in `libs/sjel-storage` (supporting both local `rusqlite` fallback and `libsql` engine).
-- [ ] Verify compilation across all targets (`cargo check --workspace`).
+- [x] Add `[libsql]` upstream entry with formal review in `upstreams.toml`.
+- [x] Provide unified storage adapter in `libs/sjel-turso` (supporting LibSQL async concurrency, PRAGMAs, and once-per-process migration tracking).
+- [x] Verify compilation across all targets (`cargo check --workspace` and `cargo test -p sjel-turso`).
 
 ### Phase 3: GPUI Desktop App & Daemon Boundary
 - [ ] Decouple direct GPUI database opens into a clean IPC connection to the Sjel daemon.

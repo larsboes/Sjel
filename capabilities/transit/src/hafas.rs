@@ -131,7 +131,7 @@ pub fn is_regional_train_name(name: &str) -> bool {
         if let Some(rest) = trimmed.strip_prefix(prefix) {
             if rest.is_empty()
                 || rest.starts_with(' ')
-                || rest.chars().next().map_or(false, |c| c.is_ascii_digit())
+                || rest.chars().next().is_some_and(|c| c.is_ascii_digit())
             {
                 return true;
             }

@@ -10,18 +10,27 @@
 #   capability  undeclared_write_bodies
 calendar        18
 devices          4
+documents        0
 entities         0
 finance         19
 interior        11
-inventory        6
+inventory        5
 media            0
 operator-profile 0
 places           5
+projects         0
 punctuality      1
 scouting         3
-sjel-status     16
+# 16 -> 17 on 2026-10-21: `POST /capabilities/{name}/restart` arrived with no
+# body at all, and a `Route` cannot yet say "this POST reads no body" — the
+# field it would use, `request_schema`, means the opposite when absent. Of the
+# 17, twelve serve a handler that parses `Json<T>` and should carry
+# `schema_of::<T>()`; the other five (start, stop, restart, session/ticket,
+# session/logout) take only a path. Give `Route` a way to declare no body and
+# this number falls to 5 without a schema being invented.
+sjel-status     17
 soundscape       2
 transit          1
 traveler         0
-trips            6
+trips            4
 vault            0

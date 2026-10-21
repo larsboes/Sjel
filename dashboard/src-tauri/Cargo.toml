@@ -45,6 +45,10 @@ device-auth = { path = "../../libs/device-auth", features = ["pinned-tls"] }
 # "Library research" table's A4 row. Same requirement as the root workspace's
 # `[workspace.dependencies]` rusqlite; bundled, so iOS links its own SQLite.
 rusqlite = { version = "0.40", features = ["bundled"] }
+# sha256 over the fetched copy, to compare it with the digest in the Mac's manifest
+# (src/mirror.rs). Same requirement as the root workspace's `[workspace.dependencies]` sha2;
+# this crate is its own workspace, so it cannot inherit it.
+sha2 = "0.11"
 # Local notifications for a new Sparpreis low (PRD Q115 follow-up, 2026-09-25). Local
 # only: no APNs, no push key. Pinned exactly, per upstreams.toml [tauri-plugin-notification].
 tauri-plugin-notification = "=2.5.0"

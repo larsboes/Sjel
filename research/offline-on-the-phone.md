@@ -73,13 +73,53 @@ Two facts the build taught that the plan did not anticipate:
   `calendar_rhythms`; taking one without the other is what a phone set *is*. The copy therefore runs
   with constraint enforcement off and reports what it broke: the manifest carries `integrity` and
   `foreign_key_violations`, and the phone set currently reports **0**, because it takes both.
-- **The size is dominated by one table**, not spread evenly. 11.1 MB for 1,871 rows means a table
-  holds blobs; a phone-side copy budget should watch `places_places` before it watches anything else.
+- **The size is one column, not one table of blobs.** Measured on the copy the same day:
+  `projects_records.content` accounts for **9,738,041 of the 11,141,120 bytes** (87%), because the
+  phone set carries 1,119 notes, 59 tasks and 43 projects in one table. `places_places` has no blob
+  column at all (11 scalars: id, name, kind, address, city, country, latitude, longitude, source,
+  external_ref, created_at). So the budget lever is note bodies, not places, and the number to watch
+  is the vault's growth rather than any single media column. (The first version of this entry said
+  the opposite; it was inferred from rows-to-bytes and was wrong.)
 
-What is still missing for the phone to *use* this: the iOS app has to fetch it (the route and the
-manifest are ready), store it, and read it — none of which is started. The route is behind the same
-inbound gate as every other surface, so the transport question is already answered; the device-side
-questions from *What this entry does not show* below are not.
+## R1 on the device, 2026-10-21: `src-tauri/src/mirror.rs`
+
+The phone side is built, without UI. `mirror_sync` fetches the manifest, compares it with what the
+device holds, fetches the copy if it differs, and `mirror_status` reports when it was built, what it
+holds and whether the file still matches its digest. The fetch, the checks and the reader are one
+module, tested against a fake transport and a real SQLite file; `dashboard/src/lib/mirror.ts` is the
+typed seam a page will use. With no page reading the copy yet, one sync also runs shortly after app
+start (`spawn_mirror_sync` in `src-tauri/src/lib.rs`), so the copy exists on a device at all rather
+than waiting for a caller that does not exist.
+
+What the device refuses, and why each refusal is the point:
+
+- **a copy whose bytes or sha256 disagree with the manifest**, before anything is written;
+- **a copy that fails `PRAGMA integrity_check`** once written to its final directory;
+- **a copy whose per-table row counts are not what the manifest claims** — a partial database that
+  opens is otherwise indistinguishable from a complete one;
+- **a stored copy that no longer matches its own manifest** on any later read, so a corrupted file is
+  never served as data.
+
+The write order is the second half of it: `mirror.db.part`, checked in place, renamed over
+`mirror.db`, and the manifest written only after the file it describes. A reader gets the previous
+copy whole or the new one whole.
+
+**Two decisions taken with the owner on 2026-10-21, and what each costs:**
+
+1. *The mirror becomes the offline store for project-shaped data.* The phone already keeps a
+   URL-keyed snapshot of what it has fetched (`src-tauri/src/sync.rs`): interior, inventory trips and
+   media answers, `/projects/api/tasks`, `/vault/api/people`, `/calendar/api/entries`. That reopens a
+   visited page and is empty for a page or filter never opened. The copy answers both. The bounded
+   version chosen is that notes and project detail come from the copy, the snapshot cache keeps
+   interior/trips/media, and the task list can migrate later. The cost is real and recorded rather
+   than removed: for as long as both exist, one page may read the same rows from two stores with
+   different fetch times, and the copy's own freshness is what says which is older.
+2. *The app asks the Mac to rebuild.* Nothing refreshed the copy after `sjel mirror build` ran by
+   hand, so a device could hold a two-week-old copy that looked current.
+   `POST /api/sjel-status/mirror/rebuild` builds on demand and answers the fresh manifest, and the
+   app asks for it when its copy is older than twelve hours. No timer to supervise, and nothing
+   happens when the app is never opened. The cost: a copy that nobody asks for stays stale, so the
+   status line has to show the age rather than leaving it implied.
 
 ## Decided 2026-10-21
 
@@ -110,8 +150,9 @@ Not a roadmap — the trigger that makes the next route the obvious one.
 
 ## What this entry does not show
 
-- No measurement of how large a phone-side copy would be for a realistic table set, nor of iPhone
-  storage or read latency on it. R1's size is unknown until the table set is chosen.
+- No measurement of iPhone storage or read latency on the copy. Its size on the Mac is measured
+  (11.1 MB, 87% note bodies); what the same file costs once SQLite opens it inside the app, and how
+  long a query takes on the phone, is not.
 - No measurement of libSQL replica behaviour across a primary restart, or of what a phone does when
   its primary is unreachable for days (write queueing, conflict behaviour). R2/R3/R4 all depend on
   it and none of it is tested here.

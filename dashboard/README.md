@@ -343,6 +343,16 @@ explicitly admitted offline views, and its `outbox` is a queue of idempotent, re
 item edits. The database file is never synchronized as a file. Offline answers are marked stale;
 conflicts are visible and require a person to resolve them.
 
+**A copy of a table set is a second, different thing (2026-10-21).** A snapshot of what the phone has
+asked for cannot answer a page it has not visited, so the Mac also publishes a whole-table copy
+that the phone fetches as one file (`src-tauri/src/mirror.rs`, `sjel mirror build`, route R1 in
+[`research/offline-on-the-phone.md`](../research/offline-on-the-phone.md)). It is a file copied
+across — read-only, one-way, stale by its build time — and the rule above stands: no database file
+is ever synchronized *back*, and nothing writes to the copy. What it holds is the Mac's decision,
+not the app's. A fetch is refused unless the bytes, the sha256 in the manifest, `integrity_check`
+and the per-table row counts all agree, because a partial database that opens looks exactly like a
+complete one.
+
 **A client reads from its own replica (decided 2026-10-19).** A page never waits for the node
 before it paints. For the paths in `OFFLINE_PROJECTION_PATHS` and `C1_PREFIXES`
 (`src-tauri/src/sync.rs`), the replica is the read source, online or not. Every other path stays

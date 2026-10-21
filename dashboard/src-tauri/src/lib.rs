@@ -1,6 +1,7 @@
 #[cfg(mobile)]
 mod device_identity;
 mod mac_bridge;
+mod mirror;
 mod sync;
 
 use std::time::Duration;
@@ -46,6 +47,12 @@ pub fn run() {
             mac_bridge::sync_entries,
             mac_bridge::sync_flush,
             mac_bridge::sync_resolve,
+            mirror::mirror_status,
+            mirror::mirror_sync,
+            mirror::mirror_tasks,
+            mirror::mirror_records,
+            mirror::mirror_projects,
+            mirror::mirror_project_records,
             device_identity::device_identity_get,
             device_identity::device_identity_reset,
         ]);
@@ -61,6 +68,12 @@ pub fn run() {
         mac_bridge::sync_entries,
         mac_bridge::sync_flush,
         mac_bridge::sync_resolve,
+        mirror::mirror_status,
+        mirror::mirror_sync,
+        mirror::mirror_tasks,
+        mirror::mirror_records,
+        mirror::mirror_projects,
+        mirror::mirror_project_records,
     ]);
 
     #[cfg(mobile)]
@@ -78,10 +91,50 @@ pub fn run() {
             }
             app.manage(mac_bridge::Local::open(app.handle()));
             spawn_flush_loop(app.handle().clone());
+            spawn_mirror_sync(app.handle().clone());
             Ok(())
         })
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
+}
+
+/// Fetches the device's copy of the Mac's data once, shortly after start.
+///
+/// The manifest is a few hundred bytes and the copy crosses only when what the Mac built differs
+/// from what the device holds, so this is cheap on a start that has nothing to do. It runs here
+/// because no page reads the copy yet: without this, `mirror_sync` would be unreachable code and the
+/// copy would never exist on a device. A page that wants it fresh calls the same command.
+///
+/// A failure is logged and nothing else: an unreachable Mac leaves whatever copy is already stored,
+/// and its age is what `mirror_status` reports.
+fn spawn_mirror_sync<R: tauri::Runtime>(app: tauri::AppHandle<R>) {
+    std::thread::spawn(move || {
+        // Let the connection settings and this device's identity settle before the first request.
+        std::thread::sleep(Duration::from_secs(5));
+        tauri::async_runtime::block_on(async {
+            let mirror = match mirror::Mirror::open(&app) {
+                Ok(mirror) => mirror,
+                Err(error) => {
+                    log::warn!("mirror: {error}");
+                    return;
+                }
+            };
+            let transport = match mac_bridge::transport(&app) {
+                Ok(transport) => transport,
+                // Not configured yet: the app was never paired with a node, which is not a failure.
+                Err(_) => return,
+            };
+            match mirror.sync(&transport, true).await {
+                Ok(outcome) => log::info!(
+                    "mirror: {} ({} bytes fetched, {} rows in the copy)",
+                    outcome.action,
+                    outcome.transferred,
+                    outcome.status.copy.as_ref().map_or(0, |copy| copy.rows)
+                ),
+                Err(error) => log::warn!("mirror: {error}"),
+            }
+        });
+    });
 }
 
 /// Flushes pending edits once at start and then every [`FLUSH_INTERVAL`] while any wait. The

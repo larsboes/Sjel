@@ -42,16 +42,17 @@ sjel setup — what this machine still needs, and what applying it would do.
       Probe this machine and print what would change. Writes nothing; this is the default.
 
   sjel setup apply [component] --confirm [--url <url>] [--interval-secs <n>] [--token-stdin]
-      Run the steps marked `apply`, then verify. Without --confirm it prints the plan and exits 2.
+      Run every step in the plan, then verify. Without --confirm it prints the plan and exits 2.
       --token-stdin reads a credential from stdin and stores it in the private overlay; it is
       never echoed, never logged and never written to the tracked tree.
 
   sjel setup verify [component] [--json]
       Ask the primary itself whether the credential works. Exits 1 when a check fails.
 
-Components are `turso` (embedded replicas of a remote Turso primary). Nothing here installs a
-capability or edits a Cargo.toml: those steps are printed with the exact path and line, because
-the file has an owner and it is not this tool.";
+Components are `turso` (embedded replicas of a remote Turso primary). A step with a kind is gone
+rather than kept for a case nothing produces: every step in a plan is a write this tool makes, so
+there is nothing here to copy into a shell. It edits no Cargo.toml — the replica engine is a
+default feature — and installs no capability.";
 
 /// How a probe came out. Ordered by how much attention it asks for when a list is sorted.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize)]

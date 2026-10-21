@@ -126,7 +126,7 @@
 <PageHeader
   badge="Setup"
   title="What this machine still needs"
-  desc="Probed from this machine, not remembered. Applying runs only the steps Sjel owns; a step whose file belongs to something else is printed with its path."
+  desc="Probed from this machine, not remembered. Every step in a plan is one Sjel runs, so there is nothing here to copy into a shell."
 >
   {#snippet actions()}
     <div class="actions">

@@ -130,6 +130,41 @@ flowchart LR
 - [x] Add embedded replicas to that adapter: a remote URL, auth token and pull interval from `SJEL_TURSO_URL` / `SJEL_TURSO_AUTH_TOKEN` / `SJEL_TURSO_SYNC_INTERVAL_SECS`, a first pull before the DDL, a background loop, and `Store::sync_stats()` for a freshness surface. The engine is a default feature (2026-10-21) so following a primary is configuration rather than a Cargo.toml edit, and `sjel setup plan|apply|verify turso` is the setup path: the shell renders the plan, the CLI writes and restarts. No live primary existed to pull from, so the pull path itself is unverified.
 - [x] Verify compilation across all targets (`cargo check --workspace` and `cargo test -p sjel-turso`).
 
+#### Open decision (2026-10-21): what the replica path is for
+
+Measured while re-checking the setup work, and left open rather than decided:
+
+1. **It cannot be switched on over the shared database.** `projects` and `operator-profile`
+   both open `sjel_config::database_path()`, which is the `axon.db` twenty capability modules
+   share, and LibSQL refuses to turn a file that holds its own writes into a replica
+   (`libs/sjel-turso/src/replica.rs`, *"remove the file to start a fresh copy"*). So a primary
+   pasted into `/setup` fails at open time, or requires deleting this machine's database. The
+   per-process registry guard cannot see the other eighteen processes writing the same file.
+   *Correction to the line above: "the pull path is unverified" understates it — with this
+   wiring it is unreachable.*
+2. **It costs ten unpatchable advisories.** Every finding left in `Cargo.lock` — h2 0.3.27,
+   rustls 0.22.4 twice, rustls-webpki 0.102.8 five times (RUSTSEC-2026-0104, CVSS 7.5), bincode
+   1.3.3, libsql-sqlite3-parser — is reached through `libsql 0.10.0`, the newest release, which
+   pins hyper 0.14 / tonic 0.11 / hyper-rustls 0.25. `osv-scanner.toml` cannot waive a known
+   vulnerability, so the Security job stays red for as long as the sync feature is in the
+   workspace. Removing the feature is the only local fix; making it non-default is not, because
+   `Cargo.lock` lists optional dependencies too.
+3. **A phone replica is buildable.** `sjel-turso` checks clean for `aarch64-apple-ios`
+   (45 s cold, 2026-10-21), and a phone starts empty, so LibSQL's refusal does not apply to it.
+   What it needs is a primary that is not Turso Cloud: `sqld` is neither on Homebrew nor on
+   crates.io, so a local primary means building it from Turso's repository and supervising a
+   second daemon.
+4. **The tailnet listener already covers "one more device".** A paired phone drives this Mac's
+   data over Tailscale (8443). What a replica would add is *offline* reads and reads while this
+   Mac is asleep — nothing else.
+
+The decision is open because the cheap move and the interesting move disagree: deleting the
+path greens Security today and forecloses the phone-in-the-bag case, while keeping it means a
+permanently red scanner until libsql moves to hyper 1 / rustls 0.23. Whichever way it goes, the
+prerequisite for any replica — this device's or another's — is the same: `axon.db` stops being
+one shared file, and that split is the work, not the sync loop.
+
+
 ### Phase 3: GPUI Desktop App & Daemon Boundary
 - [x] Integrate direct non-blocking LibSQL local database connector in `apps/gpui`: one handle per process, opened on first read and shared by every `Repo` clone, with the shell as its fallback.
 - [x] Wire direct non-blocking queries for projects, tasks, calendar entries, project records, and notes (`Repo::fetch_projects`, `Repo::fetch_tasks`, `Repo::fetch_calendar`, `Repo::fetch_project_records`, `Repo::fetch_record`, `data::read_repo`) in `apps/gpui`.

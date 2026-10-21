@@ -43,6 +43,11 @@ impl Repo {
     /// Return the resolved local database path from `SJEL_DB_PATH` or the overlay default.
     #[allow(dead_code)]
     pub fn local_db_path() -> Option<std::path::PathBuf> {
+        #[cfg(test)]
+        {
+            return None;
+        }
+        #[allow(unreachable_code)]
         if let Ok(p) = std::env::var("SJEL_DB_PATH") {
             let path = std::path::PathBuf::from(p);
             if path.exists() {
@@ -154,6 +159,111 @@ impl Repo {
         }
         let shell = self.shell()?;
         shell.tasks(status).await
+    }
+
+    /// Read calendar entries directly from local LibSQL database if accessible, otherwise fallback to shell.
+    pub async fn fetch_calendar(
+        &self,
+        from: &str,
+        to: &str,
+    ) -> ShellResult<Vec<sjel_gpui_core::shell::CalendarEntry>> {
+        if let Ok(conn) = Self::connect_local_db().await {
+            let from_bound = format!("{from}T00:00:00");
+            let to_bound = format!("{to}T23:59:59");
+            let query = "SELECT title, starts_at, ends_at, all_day, commitment \
+                         FROM calendar_entries \
+                         WHERE starts_at <= ?1 AND ends_at >= ?2 \
+                         ORDER BY starts_at ASC";
+            if let Ok(mut rows) = conn.query(query, libsql::params![to_bound, from_bound]).await {
+                let mut list = Vec::new();
+                while let Ok(Some(row)) = rows.next().await {
+                    let title: String = row.get(0).unwrap_or_default();
+                    let starts_at: String = row.get(1).unwrap_or_default();
+                    let ends_at: String = row.get(2).unwrap_or_default();
+                    let all_day_int: i64 = row.get(3).unwrap_or(0);
+                    let commitment: String = row.get(4).unwrap_or_else(|_| "possible".into());
+                    list.push(sjel_gpui_core::shell::CalendarEntry {
+                        title,
+                        starts_at,
+                        ends_at,
+                        all_day: all_day_int != 0,
+                        commitment,
+                    });
+                }
+                return Ok(list);
+            }
+        }
+        let shell = self.shell()?;
+        shell.calendar(from, to).await
+    }
+
+    /// Read project records directly from local LibSQL database if accessible, otherwise fallback to shell.
+    pub async fn fetch_project_records(
+        &self,
+        project: &str,
+    ) -> ShellResult<Vec<sjel_gpui_core::shell::ProjectRecord>> {
+        if let Ok(conn) = Self::connect_local_db().await {
+            let query = "SELECT path, kind, title, done, due, priority \
+                         FROM projects_records \
+                         WHERE project = ?1 \
+                         ORDER BY done ASC, priority DESC, path ASC";
+            if let Ok(mut rows) = conn.query(query, libsql::params![project]).await {
+                let mut list = Vec::new();
+                while let Ok(Some(row)) = rows.next().await {
+                    let path: String = row.get(0).unwrap_or_default();
+                    let kind: String = row.get(1).unwrap_or_else(|_| "task".into());
+                    let title: String = row.get(2).unwrap_or_default();
+                    let done_int: i64 = row.get(3).unwrap_or(0);
+                    let due: Option<String> = row.get(4).ok();
+                    let priority_int: i64 = row.get(5).unwrap_or(2);
+                    list.push(sjel_gpui_core::shell::ProjectRecord {
+                        path,
+                        kind,
+                        title,
+                        content: String::new(),
+                        done: done_int != 0,
+                        due,
+                        priority: priority_int.clamp(1, 3) as u8,
+                    });
+                }
+                if !list.is_empty() {
+                    return Ok(list);
+                }
+            }
+        }
+        let shell = self.shell()?;
+        shell.project(project).await
+    }
+
+    /// Read a single record with its content directly from local LibSQL database, otherwise fallback to shell.
+    pub async fn fetch_record(&self, path: &str) -> ShellResult<sjel_gpui_core::shell::ProjectRecord> {
+        if let Ok(conn) = Self::connect_local_db().await {
+            let query = "SELECT path, kind, title, content, done, due, priority \
+                         FROM projects_records \
+                         WHERE path = ?1 LIMIT 1";
+            if let Ok(mut rows) = conn.query(query, libsql::params![path]).await {
+                if let Ok(Some(row)) = rows.next().await {
+                    let path: String = row.get(0).unwrap_or_default();
+                    let kind: String = row.get(1).unwrap_or_else(|_| "note".into());
+                    let title: String = row.get(2).unwrap_or_default();
+                    let content: String = row.get(3).unwrap_or_default();
+                    let done_int: i64 = row.get(4).unwrap_or(0);
+                    let due: Option<String> = row.get(5).ok();
+                    let priority_int: i64 = row.get(6).unwrap_or(2);
+                    return Ok(sjel_gpui_core::shell::ProjectRecord {
+                        path,
+                        kind,
+                        title,
+                        content,
+                        done: done_int != 0,
+                        due,
+                        priority: priority_int.clamp(1, 3) as u8,
+                    });
+                }
+            }
+        }
+        let shell = self.shell()?;
+        shell.record(path).await
     }
 }
 
@@ -389,4 +499,90 @@ pub fn write<C, T, F, Fut>(
         });
     })
     .detach();
+}
+
+#[cfg(test)]
+mod tests {
+    #[test]
+    fn test_direct_libsql_queries() {
+        tokio::runtime::Runtime::new().unwrap().block_on(async {
+            let db = libsql::Builder::new_local(":memory:").build().await.unwrap();
+            let conn = db.connect().unwrap();
+
+            conn.execute_batch(
+                "
+                CREATE TABLE projects_records (
+                    path TEXT PRIMARY KEY,
+                    project TEXT NOT NULL,
+                    kind TEXT NOT NULL,
+                    title TEXT NOT NULL,
+                    done INTEGER NOT NULL,
+                    due TEXT,
+                    priority INTEGER NOT NULL,
+                    archived INTEGER NOT NULL,
+                    content TEXT NOT NULL,
+                    updated_at TEXT NOT NULL
+                );
+                CREATE TABLE calendar_entries (
+                    id TEXT PRIMARY KEY,
+                    title TEXT NOT NULL,
+                    starts_at TEXT NOT NULL,
+                    ends_at TEXT NOT NULL,
+                    all_day INTEGER NOT NULL,
+                    commitment TEXT NOT NULL
+                );
+                INSERT INTO projects_records VALUES (
+                    'p1/note.md', 'p1', 'note', 'Note Title', 0, NULL, 2, 0, '# Note Body', '2026-10-21'
+                );
+                INSERT INTO projects_records VALUES (
+                    'p1/task.md', 'p1', 'task', 'Task Title', 1, '2026-10-22', 3, 0, '', '2026-10-21'
+                );
+                INSERT INTO calendar_entries VALUES (
+                    'cal:1', 'Team Sync', '2026-10-21T10:00:00', '2026-10-21T11:00:00', 0, 'committed'
+                );
+                ",
+            )
+            .await
+            .unwrap();
+
+            // Query projects
+            let mut rows = conn
+                .query(
+                    "SELECT project, MAX(archived) as archived, \
+                     SUM(CASE WHEN kind = 'task' AND done = 0 THEN 1 ELSE 0 END) as open, \
+                     SUM(CASE WHEN kind = 'task' AND done != 0 THEN 1 ELSE 0 END) as done, \
+                     SUM(CASE WHEN kind = 'note' THEN 1 ELSE 0 END) as notes \
+                     FROM projects_records GROUP BY project ORDER BY project",
+                    (),
+                )
+                .await
+                .unwrap();
+            let row = rows.next().await.unwrap().unwrap();
+            let name: String = row.get(0).unwrap();
+            assert_eq!(name, "p1");
+            let open: i64 = row.get(2).unwrap();
+            let done: i64 = row.get(3).unwrap();
+            let notes: i64 = row.get(4).unwrap();
+            assert_eq!(open, 0);
+            assert_eq!(done, 1);
+            assert_eq!(notes, 1);
+
+            // Query calendar
+            let from_bound = "2026-10-21T00:00:00";
+            let to_bound = "2026-10-21T23:59:59";
+            let mut cal_rows = conn
+                .query(
+                    "SELECT title, starts_at, ends_at, all_day, commitment \
+                     FROM calendar_entries \
+                     WHERE starts_at <= ?1 AND ends_at >= ?2 \
+                     ORDER BY starts_at ASC",
+                    libsql::params![to_bound, from_bound],
+                )
+                .await
+                .unwrap();
+            let cal_row = cal_rows.next().await.unwrap().unwrap();
+            let title: String = cal_row.get(0).unwrap();
+            assert_eq!(title, "Team Sync");
+        });
+    }
 }

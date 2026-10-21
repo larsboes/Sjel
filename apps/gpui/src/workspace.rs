@@ -226,12 +226,12 @@ impl Workspace {
         }
         let (from, to) = crate::calendar::range(chrono::Local::now().naive_local());
         let repo = self.repo.clone();
-        data::read(
+        data::read_repo(
             cx,
             self,
             |w| &mut w.calendar,
             &repo,
-            move |s| async move { s.calendar(&from, &to).await },
+            move |r| async move { r.fetch_calendar(&from, &to).await },
         );
     }
 

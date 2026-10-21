@@ -108,15 +108,13 @@ impl Projects {
     }
 
     fn open_project(&mut self, name: String, cx: &mut Context<Self>) {
-        let Ok(shell) = self.repo.shell() else {
-            return;
-        };
         self.project = Some((name.clone(), Remote::new_loading()));
         self.editor = None;
         self.opening = None;
         cx.notify();
         let request = name.clone();
-        let work = shell::run(async move { shell.project(&request).await });
+        let repo = self.repo.clone();
+        let work = shell::run(async move { repo.fetch_project_records(&request).await });
         cx.spawn(async move |this, cx| {
             let result = work.await.unwrap_or(Err(ShellError::Unreachable));
             let _ = this.update(cx, |view, cx| {
@@ -134,12 +132,10 @@ impl Projects {
     /// Reads one note before opening it. A list read carries no content, so this is the only
     /// read that does.
     fn open_note(&mut self, path: String, save: bool, window: &mut Window, cx: &mut Context<Self>) {
-        let Ok(shell) = self.repo.shell() else {
-            return;
-        };
         self.opening = Some(path.clone());
         cx.notify();
-        let work = shell::run(async move { shell.record(&path).await });
+        let repo = self.repo.clone();
+        let work = shell::run(async move { repo.fetch_record(&path).await });
         cx.spawn_in(window, async move |this, cx| {
             let result = work.await.unwrap_or(Err(ShellError::Unreachable));
             let _ = this.update_in(cx, |view, window, cx| {

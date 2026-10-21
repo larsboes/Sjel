@@ -13,10 +13,9 @@
 //! here without renaming it there would produce a setup that verifies and a process that does not
 //! follow the primary, so the three constants are the interface.
 
+use serde::Serialize;
 use std::path::PathBuf;
 use std::time::Duration;
-
-use serde::Serialize;
 
 use super::{EnvFile, Mark, Plan, Probe, Step};
 use crate::paths::Paths;
@@ -38,6 +37,10 @@ const DEFAULT_INTERVAL_SECS: u64 = 60;
 pub(crate) struct Options<'a> {
     pub url: Option<&'a str>,
     pub interval_secs: Option<u64>,
+    /// Lifetime of a credential this tool mints, in days.
+    pub mint_days: u64,
+    /// Mint a fresh credential even when one is already recorded.
+    pub remint: bool,
 }
 
 #[derive(Debug, Serialize)]
@@ -211,7 +214,11 @@ pub(super) fn plan(paths: &Paths, env: &EnvFile) -> Plan {
         },
         detail: match token.is_some() {
             true => "present (value never printed)".to_owned(),
-            false => "absent — a token-protected primary answers 401 without it".to_owned(),
+            false => {
+                "absent — a primary that authenticates answers 401 without it. Apply mints one \
+                 from this deployment's own signing key unless a credential is submitted"
+                    .to_owned()
+            }
         },
     });
 
@@ -268,10 +275,13 @@ pub(super) fn plan(paths: &Paths, env: &EnvFile) -> Plan {
         label: format!("store {TOKEN_KEY}"),
         detail: match token.is_some() {
             true => "already present, untouched".to_owned(),
-            // The value arrives through the form (which pipes it to this process's stdin) and is
-            // written into the private overlay. It is never echoed, logged or put in argv.
+            // Two routes reach this setting, and which one runs is the caller's choice: a
+            // submitted credential is written as given (it belongs to somebody else's primary),
+            // and otherwise one is minted from the key in the Keychain.
             false => format!(
-                "written to {} from the credential you submit; never printed",
+                "minted from this deployment's signing key and written to {}; the value is never \
+                 printed, and the public half goes beside it for sqld --auth-jwt-key-file. A \
+                 submitted credential is used instead when one is piped in",
                 env.path().display()
             ),
         },
@@ -338,6 +348,33 @@ pub(crate) fn apply(
     // One outcome per setting, from that setting's own write: a shared flag made the second key
     // report "set" because the first one had changed.
     let mut changed = false;
+    // Provisioning a primary this deployment owns is the default when nothing else supplies a
+    // credential: mint one from the Keychain key, and publish the public half where `sqld` reads
+    // it. A submitted credential wins, because that one belongs to somebody else's primary.
+    let mut minted_public: Option<PathBuf> = None;
+    let effective_token: Option<String> = match token {
+        Some(submitted) => {
+            if submitted.trim().is_empty() {
+                return Err("the credential submitted was empty".to_owned());
+            }
+            Some(submitted.trim().to_owned())
+        }
+        None => {
+            let recorded = env.value(TOKEN_KEY);
+            if recorded.is_some() && !options.remint {
+                recorded
+            } else {
+                let (minted, public) =
+                    super::mint::mint_for_local_primary(paths, options.mint_days)?;
+                minted_public = Some(public);
+                lines.push(format!(
+                    "{TOKEN_KEY}: minted for {} day(s) from this deployment's signing key",
+                    options.mint_days
+                ));
+                Some(minted)
+            }
+        }
+    };
     if let Some(url) = options.url {
         let wrote = next.set(URL_KEY, url.trim());
         changed |= wrote;
@@ -358,19 +395,24 @@ pub(crate) fn apply(
             }
         ));
     }
-    if let Some(token) = token {
-        if token.trim().is_empty() {
-            return Err("the credential submitted was empty".to_owned());
-        }
-        let wrote = next.set(TOKEN_KEY, token.trim());
+    if let Some(token) = &effective_token {
+        let wrote = next.set(TOKEN_KEY, token);
         changed |= wrote;
+        if minted_public.is_none() {
+            lines.push(format!(
+                "{TOKEN_KEY}: {}",
+                if wrote {
+                    "stored (value hidden)"
+                } else {
+                    "unchanged (value hidden)"
+                }
+            ));
+        }
+    }
+    if let Some(public) = &minted_public {
         lines.push(format!(
-            "{TOKEN_KEY}: {}",
-            if wrote {
-                "stored (value hidden)"
-            } else {
-                "unchanged (value hidden)"
-            }
+            "public key: {} — start sqld with --auth-jwt-key-file pointing at it",
+            public.display()
         ));
     }
     if !changed {
@@ -488,17 +530,27 @@ pub(super) fn verify(paths: &Paths, env: &EnvFile) -> Vec<Probe> {
     probes
 }
 
-/// `GET <primary>/info` with the credential, which is the probe libsql itself performs when it
-/// opens a replica. A 200 means the primary offers the sync protocol; 401/403 means the token is
-/// wrong or revoked; anything else is reported as it came.
+/// Ask the primary whether this credential works, over the door libsql itself uses.
+///
+/// Two endpoints, because two kinds of primary answer differently — measured against
+/// `sqld 0.24.32` on 2026-10-21, where `GET /info` (Turso Cloud's sync-info endpoint) answers 404
+/// and `POST /v2/pipeline` (the HTTP half of Hrana) is the one that runs a statement:
+///
+/// 1. `POST <base>/v2/pipeline` with a `SELECT 1`: the same authenticated path a replica's writes
+///    take, so a 2xx means the value was accepted *and* a statement ran.
+/// 2. `GET <base>/info`, which is what a Turso Cloud primary offers.
+/// 3. `GET <base>/health`, unauthenticated on `sqld`: it proves the host is there and says nothing
+///    about the credential, and its report says exactly that.
+///
+/// 401/403 from either of the first two is a refusal and is reported as one. That matters more
+/// than it looks: libsql's client reports a refused value as "Timeout performing handshake with
+/// primary", so without this probe a wrong one reads as a network fault.
 fn probe_primary(url: &str, token: &str) -> Probe {
     let base = url.trim_end_matches('/');
     let endpoint = match base.strip_prefix("libsql://") {
         Some(rest) => format!("https://{rest}"),
         None => base.to_owned(),
     };
-    let info = format!("{endpoint}/info");
-    let label = "primary".to_owned();
 
     let http = match sjel_http::client(
         sjel_http::Purpose::new("sjel-setup"),
@@ -508,53 +560,108 @@ fn probe_primary(url: &str, token: &str) -> Probe {
         Err(e) => {
             return Probe {
                 id: "primary",
-                label,
+                label: "primary".to_owned(),
                 mark: Mark::Warn,
                 detail: format!("cannot build an HTTP client: {e}"),
             }
         }
     };
 
-    let response = http.get(&info).bearer_auth(token).send();
-    match response {
-        Ok(response) => {
-            let status = response.status();
-            let mark = if status.is_success() {
-                Mark::Ok
-            } else if status == reqwest::StatusCode::UNAUTHORIZED
-                || status == reqwest::StatusCode::FORBIDDEN
-            {
-                Mark::Blocked
-            } else {
-                Mark::Warn
-            };
-            let detail = match status.is_success() {
-                true => {
-                    format!("{info} answered {status} — the primary offers the sync protocol")
-                }
-                false => format!(
-                    "{info} answered {status} — {}",
-                    if mark == Mark::Blocked {
-                        "the credential was refused; submit a fresh one"
-                    } else {
-                        "check the URL and that the database exists"
-                    }
-                ),
-            };
-            Probe {
+    let statement = format!("{endpoint}/v2/pipeline");
+    let sql = r#"{"requests":[{"type":"execute","stmt":{"sql":"SELECT 1"}}]}"#;
+    match http
+        .post(&statement)
+        .bearer_auth(token)
+        .header("content-type", "application/json")
+        .body(sql)
+        .send()
+    {
+        Ok(response) if response.status().is_success() => {
+            return Probe {
                 id: "primary",
-                label,
-                mark,
-                detail,
+                label: "primary".to_owned(),
+                mark: Mark::Ok,
+                detail: format!(
+                    "{statement} accepted it and ran a statement ({}) — the primary speaks Hrana \
+                     over HTTP",
+                    response.status()
+                ),
             }
         }
+        Ok(response) if refused(response.status()) => {
+            return Probe {
+                id: "primary",
+                label: "primary".to_owned(),
+                mark: Mark::Blocked,
+                detail: format!(
+                    "{statement} answered {} — it was refused. Mint a fresh one with `sjel setup \
+                     apply turso --confirm --remint`, or submit the primary's own",
+                    response.status()
+                ),
+            }
+        }
+        // A primary that does not serve the pipeline endpoint is not a failure by itself: a Turso
+        // Cloud database answers at `/info` instead.
+        Ok(_) | Err(_) => {}
+    }
+
+    let info = format!("{endpoint}/info");
+    if let Ok(response) = http.get(&info).bearer_auth(token).send() {
+        let status = response.status();
+        if status.is_success() {
+            return Probe {
+                id: "primary",
+                label: "primary".to_owned(),
+                mark: Mark::Ok,
+                detail: format!("{info} answered {status} — the primary offers the sync protocol"),
+            };
+        }
+        if refused(status) {
+            return Probe {
+                id: "primary",
+                label: "primary".to_owned(),
+                mark: Mark::Blocked,
+                detail: format!("{info} answered {status} — it was refused; submit a fresh one"),
+            };
+        }
+    }
+
+    // Last: is anything there at all? This proves reachability and nothing else.
+    let health = format!("{endpoint}/health");
+    match http.get(&health).send() {
+        Ok(response) if response.status().is_success() => Probe {
+            id: "primary",
+            label: "primary".to_owned(),
+            mark: Mark::Warn,
+            detail: format!(
+                "{health} answered {} but neither {statement} nor {info} did — the host is up, and \
+                 this probe cannot tell from here whether the value works; a pull is the only \
+                 answer, and `libs/sjel-turso/tests/live_primary.rs` runs one",
+                response.status()
+            ),
+        },
+        Ok(response) => Probe {
+            id: "primary",
+            label: "primary".to_owned(),
+            mark: Mark::Warn,
+            detail: format!(
+                "{health} answered {} — check the URL and that the primary is running",
+                response.status()
+            ),
+        },
         Err(e) => Probe {
             id: "primary",
-            label,
+            label: "primary".to_owned(),
             mark: Mark::Warn,
-            detail: format!("{info} did not answer: {e}"),
+            detail: format!("{health} did not answer: {e}"),
         },
     }
+}
+
+/// Whether a status means "this value is not accepted" — a different failure from "this endpoint
+/// is not here", and one that must not be reported as the other.
+fn refused(status: reqwest::StatusCode) -> bool {
+    status == reqwest::StatusCode::UNAUTHORIZED || status == reqwest::StatusCode::FORBIDDEN
 }
 
 #[cfg(test)]
@@ -601,6 +708,8 @@ mod tests {
             &Options {
                 url: Some("axon-owner.turso.io"),
                 interval_secs: None,
+                mint_days: super::super::mint::DEFAULT_MINT_DAYS,
+                remint: false,
             },
             None,
         )
@@ -622,6 +731,8 @@ mod tests {
             &Options {
                 url: None,
                 interval_secs: Some(0),
+                mint_days: super::super::mint::DEFAULT_MINT_DAYS,
+                remint: false,
             },
             None,
         )
@@ -639,6 +750,8 @@ mod tests {
         let options = Options {
             url: Some("libsql://example.turso.io"),
             interval_secs: Some(120),
+            mint_days: super::super::mint::DEFAULT_MINT_DAYS,
+            remint: false,
         };
 
         let env = EnvFile::read(record.clone());
@@ -673,6 +786,44 @@ mod tests {
             second.lines
         );
         assert_eq!(std::fs::read_to_string(&record).unwrap(), body);
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    /// A credential already in the deployment record is reused, and nothing is minted: these
+    /// tests must never touch this machine's Keychain, so every path that mints is kept out of
+    /// them. Minting is exercised end to end by `sjel setup apply` against a real primary.
+    #[test]
+    fn a_recorded_credential_is_reused_without_minting() {
+        let dir = std::env::temp_dir().join(format!("sjel-setup-reuse-{}", std::process::id()));
+        std::fs::create_dir_all(dir.join("config")).unwrap();
+        let record = dir.join("config").join("deployment");
+        std::fs::write(
+            &record,
+            "SJEL_TURSO_URL=libsql://first.turso.io\nSJEL_TURSO_AUTH_TOKEN=already-there\n",
+        )
+        .unwrap();
+        let mut paths = paths_stub();
+        paths.overlay_root = Some(dir.clone());
+
+        let options = Options {
+            url: Some("libsql://second.turso.io"),
+            interval_secs: None,
+            mint_days: super::super::mint::DEFAULT_MINT_DAYS,
+            remint: false,
+        };
+        let env = EnvFile::read(record.clone());
+        let applied = apply(&paths, &env, &options, None).unwrap();
+
+        let body = std::fs::read_to_string(&record).unwrap();
+        assert!(
+            body.contains("SJEL_TURSO_AUTH_TOKEN=already-there"),
+            "the recorded credential must survive a url change: {body}"
+        );
+        assert!(
+            !applied.lines.join("\n").contains("minted"),
+            "nothing should have been minted: {:?}",
+            applied.lines
+        );
         let _ = std::fs::remove_dir_all(&dir);
     }
 

@@ -15,6 +15,7 @@
 //! Measured against `sqld 0.24.32` on 2026-10-21: a replica carrying a token minted here pulls and
 //! writes, and the same replica without one is refused.
 
+use std::error::Error as StdError;
 use std::time::{SystemTime, UNIX_EPOCH};
 
 use base64::engine::general_purpose::URL_SAFE_NO_PAD;
@@ -22,7 +23,15 @@ use base64::Engine as _;
 use ring::rand::SystemRandom;
 use ring::signature::{Ed25519KeyPair, KeyPair as _};
 
-use crate::{Error, Result};
+/// What a fallible operation in this crate returns.
+///
+/// Deliberately the same shape `sjel-turso` uses: callers re-export these types beside the crate's
+/// own, and a second error vocabulary would make `?` at the boundary need a conversion that says
+/// nothing.
+pub type Error = Box<dyn StdError + Send + Sync>;
+
+/// The result of a fallible operation in this crate.
+pub type Result<T> = std::result::Result<T, Error>;
 
 /// What a minted token lets its holder do on the primary.
 ///

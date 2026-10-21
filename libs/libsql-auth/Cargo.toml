@@ -1,0 +1,18 @@
+[package]
+name = "libsql-auth"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+description = "Mint the JWT a libSQL server (sqld) authenticates, and hold the Ed25519 pair it is signed with."
+publish = false
+
+[dependencies]
+# Signing only: `ring` generates the Ed25519 pair and signs with it, `base64` writes the two
+# encodings `sqld` reads, `serde_json` builds the header and claims.
+ring = "0.17"
+base64 = "0.21"
+serde_json.workspace = true
+
+[lints]
+workspace = true

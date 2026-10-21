@@ -25,6 +25,7 @@ members = [
     "capabilities/trips",
     "capabilities/vault",
     "libs/agent",
+    "libs/libsql-auth",
     "libs/sjel-config",
     "libs/sjel-credentials",
     "libs/sjel-http",

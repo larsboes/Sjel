@@ -66,6 +66,11 @@ sjel-inference = { path = "../../libs/inference" }
 # `sjel-http` needs anyway, so this is mostly a link cost rather than a compile one. `reqwest` is
 # named only for the request, response and URL types those two hand back.
 sjel-http = { path = "../../libs/sjel-http" }
+# Minting the primary's JWT, and the Keychain entry its signing key lives in. `libsql-auth`
+# deliberately carries no libsql: this binary already links `sjel-store`, and two SQLite copies
+# in one executable clash at link time.
+libsql-auth = { path = "../../libs/libsql-auth" }
+sjel-credentials = { path = "../../libs/sjel-credentials" }
 sjel-server = { path = "../../libs/sjel-server" }
 reqwest = { workspace = true, features = ["blocking", "json"] }
 

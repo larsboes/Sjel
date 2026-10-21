@@ -261,9 +261,53 @@ a PKCS#8 document that belongs in the OS keychain; `sqld` gets only the 32-byte 
 base64url without padding.
 
 **One gap this exposed, worth fixing before an operator meets it:** `libsql`'s client reports a
-refused credential as `Timeout performing handshake with primary`. Wrong, absent and revoked all
-look like a network problem, and the primary logs nothing at INFO. Whoever wires `sjel setup
-verify` has to say "the primary refused this token" itself, because the client will not.
+refused value as `Timeout performing handshake with primary`. Wrong, absent and revoked all look
+like a network problem, and the primary logs nothing at INFO. `sjel setup verify` therefore probes
+over HTTP first and names the refusal itself.
+
+### Wired end to end, 2026-10-21: `sjel setup` provisions a primary it owns
+
+`tools/sjel-cli/src/setup/mint.rs` holds the missing half:
+
+- the **private** half lives in the macOS Keychain under `com.sjel.credential.turso-primary-key`,
+  created on first use and reused after — regenerating it would invalidate every value ever
+  minted, so nothing does that implicitly;
+- the **public** half is written to `<overlay>/config/sqld-auth.pub`, the file
+  `sqld --auth-jwt-key-file` reads;
+- the **value** is written into the overlay's `deployment.env` like any other setting, and reported
+  only by its presence.
+
+`apply` mints when neither a submitted nor a recorded value exists, so provisioning a self-hosted
+primary is one command: `sjel setup apply turso --confirm --url http://127.0.0.1:8890`.
+`--token-stdin` still wins for a primary somebody else runs, `--remint` forces a fresh one, and
+`--mint-days` sets its lifetime (default 30).
+
+Against a scratch `sqld` started with the written public key, in a scratch overlay so none of this
+deployment's own files were touched:
+
+1. `apply` minted, wrote the record and the public key, and reported the primary as not answering —
+   the honest answer, because it was not running yet;
+2. started `sqld` with that key → `sjel setup verify turso` reported `✓ primary`;
+3. the value read back out of the record (through `vault_exec`, never printed) passed
+   `tests/live_primary.rs` in 0.22 s;
+4. a submitted bogus value made `verify` answer `401 Unauthorized — it was refused`, in words an
+   operator can act on;
+5. `--remint` restored a working one, which also proves the Keychain key was reused rather than
+   regenerated: the primary had been started with the *first* public key.
+
+**One probe defect fixed on the way, and it would have shipped:** `verify` asked `GET /info`, which
+is Turso Cloud's endpoint. `sqld 0.24.32` answers 404 there, so a healthy self-hosted primary was
+reported as "check the URL and that the database exists". The probe now runs `POST /v2/pipeline`
+with a `SELECT 1` — the authenticated door a replica's writes take — falls back to `/info` for a
+cloud primary, and reports `/health` as reachability only when neither answers.
+
+### Next, in order
+
+1. `sqld` as managed software: a pinned binary with its digest, an `upstreams.toml` entry with a
+   review, start/stop owned by `tools/service-runner.sh`, an update class, and backup coverage.
+2. The `axon.db` split for the first capability the phone needs, which is what makes a replica over
+   that file possible at all.
+3. The Tauri iOS app holding its own replica (`sjel-turso` already builds for the target).
 
 ### What this commits us to, stated plainly
 - **The `axon.db` split is on the critical path.** One file cannot be a replica and a local

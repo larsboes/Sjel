@@ -13,14 +13,15 @@ use std::sync::{Arc, Mutex, OnceLock};
 pub use libsql;
 
 #[cfg(feature = "replica")]
-mod auth;
-#[cfg(feature = "replica")]
 mod replica;
 
 /// JWT minting for a primary that authenticates its clients, re-exported for the `replica`
-/// feature's callers: an embedded replica cannot write to a `sqld` that demands a token.
+/// feature's callers: an embedded replica cannot write to a `sqld` that demands a credential.
+///
+/// Implemented in `libsql-auth`, which carries no libsql at all — `tools/sjel-cli` needs to mint
+/// and must not link a second SQLite into the same binary as `sjel-store`.
 #[cfg(feature = "replica")]
-pub use auth::{Access, PrimaryKey};
+pub use libsql_auth::{Access, PrimaryKey};
 
 /// Embedded-replica configuration, re-exported for the `replica` feature's callers.
 #[cfg(feature = "replica")]

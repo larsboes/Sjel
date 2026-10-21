@@ -31,6 +31,7 @@ use serde::Serialize;
 
 use crate::paths::Paths;
 
+mod mint;
 mod turso;
 
 const HELP: &str = "\
@@ -42,9 +43,15 @@ sjel setup — what this machine still needs, and what applying it would do.
       Probe this machine and print what would change. Writes nothing; this is the default.
 
   sjel setup apply [component] --confirm [--url <url>] [--interval-secs <n>] [--token-stdin]
+                   [--remint] [--mint-days <n>]
       Run every step in the plan, then verify. Without --confirm it prints the plan and exits 2.
       --token-stdin reads a credential from stdin and stores it in the private overlay; it is
-      never echoed, never logged and never written to the tracked tree.
+      never echoed, never logged and never written to the tracked tree. Use it for a primary
+      somebody else runs.
+      With neither a submitted nor a recorded credential, the credential is MINTED here: the
+      signing key lives in the Keychain, its public half is written to the overlay for
+      `sqld --auth-jwt-key-file`, and the token is written like any other setting. --remint mints
+      a fresh one anyway; --mint-days sets its lifetime (default 30).
 
   sjel setup verify [component] [--json]
       Ask the primary itself whether the credential works. Exits 1 when a check fails.
@@ -244,6 +251,8 @@ pub fn run(rest: &[String]) -> ExitCode {
     let mut url: Option<String> = None;
     let mut interval_secs: Option<u64> = None;
     let mut token_stdin = false;
+    let mut mint_days: Option<u64> = None;
+    let mut remint = false;
 
     let mut iter = rest.iter().peekable();
     while let Some(arg) = iter.next() {
@@ -255,6 +264,11 @@ pub fn run(rest: &[String]) -> ExitCode {
             "--json" => json = true,
             "--confirm" => confirm = true,
             "--token-stdin" => token_stdin = true,
+            "--remint" => remint = true,
+            "--mint-days" => match iter.next().map(|v| v.parse::<u64>()) {
+                Some(Ok(days)) if days > 0 => mint_days = Some(days),
+                _ => return usage("--mint-days needs a whole number of days, at least 1"),
+            },
             "--url" => match iter.next() {
                 Some(value) => url = Some(value.clone()),
                 None => return usage("--url needs a value"),
@@ -315,6 +329,8 @@ pub fn run(rest: &[String]) -> ExitCode {
             let options = turso::Options {
                 url: url.as_deref(),
                 interval_secs,
+                mint_days: mint_days.unwrap_or(mint::DEFAULT_MINT_DAYS),
+                remint,
             };
             if !confirm {
                 for c in &chosen {

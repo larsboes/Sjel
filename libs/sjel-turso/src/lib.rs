@@ -13,7 +13,14 @@ use std::sync::{Arc, Mutex, OnceLock};
 pub use libsql;
 
 #[cfg(feature = "replica")]
+mod auth;
+#[cfg(feature = "replica")]
 mod replica;
+
+/// JWT minting for a primary that authenticates its clients, re-exported for the `replica`
+/// feature's callers: an embedded replica cannot write to a `sqld` that demands a token.
+#[cfg(feature = "replica")]
+pub use auth::{Access, PrimaryKey};
 
 /// Embedded-replica configuration, re-exported for the `replica` feature's callers.
 #[cfg(feature = "replica")]

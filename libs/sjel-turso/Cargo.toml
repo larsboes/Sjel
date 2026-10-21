@@ -27,6 +27,11 @@ replica = ["libsql/sync", "libsql/tls"]
 
 [dependencies]
 libsql.workspace = true
+# Minting the JWT a primary authenticates: `ring` generates the Ed25519 pair and signs with it,
+# `base64` writes the two encodings `sqld` reads. Both are already compiled for this workspace —
+# `ring` through rustls, `base64` through half a dozen crates — so this adds no build.
+ring = "0.17"
+base64 = "0.21"
 serde.workspace = true
 serde_json.workspace = true
 tokio = { workspace = true, features = ["sync", "rt", "macros", "time"] }

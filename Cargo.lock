@@ -5742,7 +5742,9 @@ dependencies = [
 name = "sjel-turso"
 version = "0.1.0"
 dependencies = [
+ "base64 0.21.7",
  "libsql",
+ "ring",
  "serde",
  "serde_json",
  "tokio",

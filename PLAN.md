@@ -240,6 +240,31 @@ satisfy — and becomes a real check the moment `sjel setup` records a primary. 
 cover yet: JWT authentication (`sqld --auth-jwt-key-file`), which the phone's replica will need
 before the port is reachable from the tailnet.
 
+### Also proven 2026-10-21: the token path, both directions
+
+`sqld --auth-jwt-key-file` plus `sjel_turso::PrimaryKey` (`libs/sjel-turso/src/auth.rs`) is the
+authenticated form of the same thing. Against a scratch primary started with a generated public
+key, the HTTP API answered:
+
+| credential | `POST /v2/pipeline` |
+| --- | --- |
+| none | 401 |
+| a token minted by `PrimaryKey`, claims `{"a":"rw","exp":…}` | 200 |
+| a token signed by a different key | 401 |
+
+and the replica test passed in 0.21 s with that token in `SJEL_TURSO_AUTH_TOKEN`.
+
+The claims are `sqld`'s, copied from `libsql-server` rather than guessed at: `jsonwebtoken`
+decodes with `Algorithm::EdDSA` only, `a` is `"ro"` or `"rw"`, `id` names a namespace and may be
+absent on a `--db-path` server, and `p` (fine-grained scopes) is unused here. The private half is
+a PKCS#8 document that belongs in the OS keychain; `sqld` gets only the 32-byte public key,
+base64url without padding.
+
+**One gap this exposed, worth fixing before an operator meets it:** `libsql`'s client reports a
+refused credential as `Timeout performing handshake with primary`. Wrong, absent and revoked all
+look like a network problem, and the primary logs nothing at INFO. Whoever wires `sjel setup
+verify` has to say "the primary refused this token" itself, because the client will not.
+
 ### What this commits us to, stated plainly
 - **The `axon.db` split is on the critical path.** One file cannot be a replica and a local
   database, and `axon.db` is opened by twenty capability modules. Only the capabilities whose

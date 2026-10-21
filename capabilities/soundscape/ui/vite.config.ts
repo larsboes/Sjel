@@ -1,7 +1,7 @@
 import { sveltekit } from "@sveltejs/kit/vite";
 import { defineConfig } from "vite";
 
-import { loadInboundCredential } from "../../../tools/lib/inbound-auth";
+import { loadInboundCredential } from "../../../tools/lib/inbound-auth.mts";
 
 // No proxy table here, unlike the spine dashboard: this surface talks to exactly one
 // capability — its own — so the dev server only needs that one target. The port comes

@@ -1,8 +1,8 @@
 import type { ProxyOptions } from "vite";
 
-import { loadInboundCredential, type InboundCredential } from "../../tools/lib/inbound-auth.ts";
+import { loadInboundCredential, type InboundCredential } from "../../tools/lib/inbound-auth.mts";
 
-// The token itself is read in tools/lib/inbound-auth.ts, shared with the tools that call a
+// The token itself is read in tools/lib/inbound-auth.mts, shared with the tools that call a
 // capability. This file keeps only what is Vite's: attaching it to the proxy hop.
 export type InboundProxyCredential = InboundCredential;
 export const loadInboundProxyCredential = loadInboundCredential;

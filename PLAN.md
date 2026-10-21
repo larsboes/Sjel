@@ -377,18 +377,25 @@ to read with this Mac asleep. If it does not, C is free and A is unnecessary.
 
 ### Next, in order
 
-1. Whichever shape the decision above lands on. Under A: `projects` alone moves; the other 17 stay
-   in `axon.db`, and only then does `SJEL_TURSO_URL` get written.
-2. The Tauri iOS app holding its own replica (`sjel-turso` already builds for the target), pulling
-   from `http://100.116.104.41:8089` over the tailnet with a minted JWT.
+1. Whatever gives the phone something to read while this Mac is unreachable. Under today's
+   one-database decision that is the **snapshot mirror** (R1 in
+   [research/offline-on-the-phone.md](../research/offline-on-the-phone.md)): an export of a chosen
+   table set, fetched over the tailnet, read locally. It moves no data between files and changes no
+   capability. A split stays available later and is not on the path to it.
+2. The Tauri iOS app holding that copy (`sjel-turso` already builds for the target), pulling from
+   `http://100.116.104.41:8089` over the tailnet with a minted JWT — or, for R1, fetching a file.
 3. An `sjel update` class for the pinned binary, so "who moves it" has one answer instead of
    "you, when you read the README".
 
 ### What this commits us to, stated plainly
-- **The `axon.db` split is on the critical path.** One file cannot be a replica and a local
-  database, and `axon.db` is opened by twenty capability modules. Only the capabilities whose
-  data the phone needs move to the primary; the rest may stay local, but they must stop sharing
-  that one file first.
+- **One database, for now, decided 2026-10-21.** Nothing is split: `projects` keeps writing
+  `axon.db` and `SJEL_TURSO_URL` stays unset, so the primary holds no data until the phone's need is
+  concrete. The owner's goal is *all data offline on the phone, or as much as possible*, and the
+  five routes to that — snapshot mirror, one capability, domain groups, the whole file, today's
+  tailnet client — are costed in
+  [research/offline-on-the-phone.md](../research/offline-on-the-phone.md), with the measurement
+  that matters: R4 (the whole file) costs an 18-capability engine migration, not a data move, and
+  R1 (a snapshot mirror) costs nothing outside a new export path.
 - **The ten libsql advisories stay until libsql moves to hyper 1 / rustls 0.23**, so CI's
   `Security` job stays red. Accepted as the price of this topology, recorded in the open-decision
   block above rather than waived in `osv-scanner.toml`.

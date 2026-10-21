@@ -275,6 +275,10 @@
       }
     },
     {
+      "name": "libsql-auth",
+      "kind": "lib"
+    },
+    {
       "name": "links",
       "kind": "lib"
     },
@@ -475,6 +479,15 @@
           "transit",
           "trips"
         ]
+      }
+    },
+    {
+      "name": "sqld",
+      "kind": "capability",
+      "service": {
+        "kind": "process",
+        "requires": [],
+        "port": "8089"
       }
     },
     {
@@ -1855,6 +1868,16 @@
       ]
     },
     {
+      "from": "sjel-turso",
+      "to": "libsql-auth",
+      "kinds": [
+        "cargo-dep"
+      ],
+      "evidence": [
+        "libs/sjel-turso/Cargo.toml"
+      ]
+    },
+    {
       "from": "soundscape",
       "to": "route-manifest",
       "kinds": [
@@ -1936,6 +1959,16 @@
     },
     {
       "from": "tools",
+      "to": "libsql-auth",
+      "kinds": [
+        "cargo-dep"
+      ],
+      "evidence": [
+        "tools/sjel-cli/Cargo.toml"
+      ]
+    },
+    {
+      "from": "tools",
       "to": "runtime",
       "kinds": [
         "cargo-dep"
@@ -1954,6 +1987,16 @@
         "tools/capability-auth/Cargo.toml",
         "tools/sjel-cli/Cargo.toml",
         "tools/storage/Cargo.toml"
+      ]
+    },
+    {
+      "from": "tools",
+      "to": "sjel-credentials",
+      "kinds": [
+        "cargo-dep"
+      ],
+      "evidence": [
+        "tools/sjel-cli/Cargo.toml"
       ]
     },
     {
@@ -2484,6 +2527,10 @@
     },
     {
       "name": "libsql",
+      "verdict": "adopt"
+    },
+    {
+      "name": "libsql-server",
       "verdict": "adopt"
     },
     {

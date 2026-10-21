@@ -78,18 +78,26 @@ pub async fn database_for(
     path: impl AsRef<Path>,
 ) -> Result<Arc<libsql::Database>, Box<dyn Error + Send + Sync>> {
     let key = canonical_key(path.as_ref())?;
-    let mut registry = database_registry()
-        .lock()
-        .map_err(|e| format!("database registry lock poisoned: {e}"))?;
-
-    if let Some(existing) = registry.get(&key) {
-        return Ok(existing.clone());
+    {
+        let registry = database_registry()
+            .lock()
+            .map_err(|e| format!("database registry lock poisoned: {e}"))?;
+        if let Some(existing) = registry.get(&key) {
+            return Ok(existing.clone());
+        }
     }
 
     let path_str = key
         .to_str()
         .ok_or_else(|| format!("non-UTF-8 database path: {}", key.display()))?;
     let db = Arc::new(libsql::Builder::new_local(path_str).build().await?);
+
+    let mut registry = database_registry()
+        .lock()
+        .map_err(|e| format!("database registry lock poisoned: {e}"))?;
+    if let Some(existing) = registry.get(&key) {
+        return Ok(existing.clone());
+    }
     registry.insert(key, db.clone());
     Ok(db)
 }

@@ -131,7 +131,7 @@ flowchart LR
 
 ### Phase 3: GPUI Desktop App & Daemon Boundary
 - [x] Integrate direct non-blocking LibSQL local database connector (`Repo::connect_local_db`) in `apps/gpui`.
-- [x] Wire direct non-blocking queries for projects and tasks (`Repo::fetch_projects`, `Repo::fetch_tasks`, `data::read_repo`) in `apps/gpui`.
+- [x] Wire direct non-blocking queries for projects, tasks, calendar entries, project records, and notes (`Repo::fetch_projects`, `Repo::fetch_tasks`, `Repo::fetch_calendar`, `Repo::fetch_project_records`, `Repo::fetch_record`, `data::read_repo`) in `apps/gpui`.
 - [x] Decouple high-throughput reads from HTTP daemon serialization while keeping writes routed through the authenticated shell.
 - [ ] Implement reactive change notification subscriptions over `/api/sjel-status/events`.
 - [x] Keep GPUI independent of heavy file locks (LibSQL non-blocking WAL/MVCC).

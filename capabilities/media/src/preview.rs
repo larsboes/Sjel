@@ -1041,24 +1041,22 @@ pub fn parse_exif_geotag_row(
                     lon = Some(l);
                 }
             }
-            "GPSPosition" | "GPSCoordinates" => {
-                if lat.is_none() || lon.is_none() {
-                    if let Some(s) = value.as_str() {
-                        let parts: Vec<&str> = s
-                            .split(|c| c == ',' || c == ' ')
-                            .map(str::trim)
-                            .filter(|p| !p.is_empty())
-                            .collect();
-                        if parts.len() >= 2 {
-                            if let (Ok(p_lat), Ok(p_lon)) =
-                                (parts[0].parse::<f64>(), parts[1].parse::<f64>())
-                            {
-                                if lat.is_none() {
-                                    lat = Some(p_lat);
-                                }
-                                if lon.is_none() {
-                                    lon = Some(p_lon);
-                                }
+            "GPSPosition" | "GPSCoordinates" if lat.is_none() || lon.is_none() => {
+                if let Some(s) = value.as_str() {
+                    let parts: Vec<&str> = s
+                        .split([',', ' '])
+                        .map(str::trim)
+                        .filter(|p| !p.is_empty())
+                        .collect();
+                    if parts.len() >= 2 {
+                        if let (Ok(p_lat), Ok(p_lon)) =
+                            (parts[0].parse::<f64>(), parts[1].parse::<f64>())
+                        {
+                            if lat.is_none() {
+                                lat = Some(p_lat);
+                            }
+                            if lon.is_none() {
+                                lon = Some(p_lon);
                             }
                         }
                     }
@@ -1104,11 +1102,12 @@ pub(crate) const GEOTAG_EXIF_ARGS: &[&str] = &[
     "-GPSPosition",
 ];
 
+/// One file's GPS coordinates and capture date, keyed by relative path. Named because the tuple
+/// repeats in every reader and clippy counts four levels of nesting as a smell.
+type Geotags = BTreeMap<String, (f64, f64, Option<String>)>;
+
 /// Read GPS coordinates and capture date for each file via ExifTool.
-pub fn file_geotags(
-    root: &Path,
-    relpaths: &[String],
-) -> Result<BTreeMap<String, (f64, f64, Option<String>)>> {
+pub fn file_geotags(root: &Path, relpaths: &[String]) -> Result<Geotags> {
     let mut out = BTreeMap::new();
     if relpaths.is_empty() {
         return Ok(out);

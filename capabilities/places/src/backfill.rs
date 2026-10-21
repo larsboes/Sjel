@@ -1157,8 +1157,10 @@ pub fn calendar_from_geocoder(
         },
     )?;
 
-    let mut report = CalendarReport::default();
-    report.entries_with_attendees = rows.len();
+    let mut report = CalendarReport {
+        entries_with_attendees: rows.len(),
+        ..CalendarReport::default()
+    };
 
     for (entry_id, location, attendees_json, date_start, date_end) in rows {
         report.entries += 1;

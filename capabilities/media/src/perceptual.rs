@@ -12,6 +12,9 @@
 
 use std::collections::BTreeMap;
 use std::path::Path;
+// `sips` is a macOS tool, so the only use is behind `#[cfg(target_os = "macos")]`: ungated, this
+// import is unused on Linux and `-D warnings` fails CI's strict clippy on a crate that is fine.
+#[cfg(target_os = "macos")]
 use std::process::Command;
 
 use serde::Serialize;

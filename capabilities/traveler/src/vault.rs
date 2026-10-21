@@ -387,12 +387,9 @@ fn parse_heading(trimmed: &str) -> Option<&str> {
 }
 
 fn admissible_heading(heading: &str) -> Option<&'static str> {
-    for candidate in ["Interests", "Preferences", "Constraints", "Travel"] {
-        if heading.eq_ignore_ascii_case(candidate) {
-            return Some(candidate);
-        }
-    }
-    None
+    ["Interests", "Preferences", "Constraints", "Travel"]
+        .into_iter()
+        .find(|candidate| heading.eq_ignore_ascii_case(candidate))
 }
 
 fn strip_quotes(raw: &str) -> String {

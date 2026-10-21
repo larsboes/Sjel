@@ -32,6 +32,19 @@ fail immediately when it upgrades a read lock, even with a busy timeout configur
 Migrations run once per database file and table prefix in each process, through
 `sjel_store::migrate_once`. The migration transaction also takes the write lock first.
 
+## Embedded replicas
+
+A device can read from a local copy of a remote Turso primary instead of the shared file. The copy
+holds the primary's write-ahead log, so reads are local and writes are forwarded to the primary.
+[`sjel-turso`](../../libs/sjel-turso/README.md) owns the open call, the first pull before the DDL,
+and the background interval; it is an opt-in cargo feature because the sync client brings its own
+networking stack.
+
+Freshness is a configured promise, not a guarantee. A capability that publishes health reports the
+replica's `seconds_since_success` against its interval, and a surface that must be exact calls
+`sync_now` before reading. One file is either the shared local database or a replica, never both,
+and a replica file that already holds local writes is refused rather than converted.
+
 ## Path indirection & state mounts
 
 Resolve deployment paths through the owning configuration API. Machine state mounts are declared

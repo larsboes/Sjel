@@ -127,6 +127,7 @@ flowchart LR
 ### Phase 2: Upstreams Gate & Storage Abstraction
 - [x] Add `[libsql]` upstream entry with formal review in `upstreams.toml`.
 - [x] Provide unified storage adapter in `libs/sjel-turso` (supporting LibSQL async concurrency, PRAGMAs, and once-per-process migration tracking).
+- [x] Add embedded replicas to that adapter behind the opt-in `replica` feature: a remote URL, auth token and pull interval from `SJEL_TURSO_URL` / `SJEL_TURSO_AUTH_TOKEN` / `SJEL_TURSO_SYNC_INTERVAL_SECS`, a first pull before the DDL, a background loop, and `Store::sync_stats()` for a freshness surface. No live primary existed to pull from, so the pull path itself is unverified.
 - [x] Verify compilation across all targets (`cargo check --workspace` and `cargo test -p sjel-turso`).
 
 ### Phase 3: GPUI Desktop App & Daemon Boundary

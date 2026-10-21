@@ -39,6 +39,41 @@ impl Repo {
             Err(error) => error.to_string().into(),
         }
     }
+
+    /// Return the resolved local database path from `SJEL_DB_PATH` or the overlay default.
+    #[allow(dead_code)]
+    pub fn local_db_path() -> Option<std::path::PathBuf> {
+        if let Ok(p) = std::env::var("SJEL_DB_PATH") {
+            let path = std::path::PathBuf::from(p);
+            if path.exists() {
+                return Some(path);
+            }
+        }
+        if let Ok(overlay) = std::env::var("SJEL_OVERLAY_ROOT") {
+            let candidate = std::path::PathBuf::from(overlay).join("data/axon/axon.db");
+            if candidate.exists() {
+                return Some(candidate);
+            }
+        }
+        if let Ok(home) = std::env::var("HOME") {
+            let candidate = std::path::PathBuf::from(home).join("Developer/sjel-personal/data/axon/axon.db");
+            if candidate.exists() {
+                return Some(candidate);
+            }
+        }
+        None
+    }
+
+    /// Open a direct non-blocking read connection to the local LibSQL database for zero-latency queries.
+    #[allow(dead_code)]
+    pub async fn connect_local_db() -> Result<libsql::Connection, Box<dyn std::error::Error + Send + Sync>> {
+        let path = Self::local_db_path().ok_or("no local Sjel database file found")?;
+        let path_str = path.to_str().ok_or("invalid UTF-8 database path")?;
+        let db = libsql::Builder::new_local(path_str).build().await?;
+        let conn = db.connect()?;
+        conn.execute_batch("PRAGMA busy_timeout = 5000;").await?;
+        Ok(conn)
+    }
 }
 
 /// The last answer for one slot. A failed read keeps the value on screen and adds the error.

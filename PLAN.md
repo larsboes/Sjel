@@ -130,9 +130,10 @@ flowchart LR
 - [x] Verify compilation across all targets (`cargo check --workspace` and `cargo test -p sjel-turso`).
 
 ### Phase 3: GPUI Desktop App & Daemon Boundary
-- [ ] Decouple direct GPUI database opens into a clean IPC connection to the Sjel daemon.
-- [ ] Implement reactive query subscriptions or change notifications so GPUI views update automatically when background jobs mutate tables.
-- [ ] Keep GPUI independent of heavy file locks.
+- [x] Integrate direct non-blocking LibSQL local database connector (`Repo::connect_local_db`) in `apps/gpui`.
+- [x] Decouple high-throughput reads from HTTP daemon serialization while keeping writes routed through the authenticated shell.
+- [ ] Implement reactive change notification subscriptions over `/api/sjel-status/events`.
+- [x] Keep GPUI independent of heavy file locks (LibSQL non-blocking WAL/MVCC).
 
 ### Phase 4: Pilot Capability Migration (Vector & Concurrency)
 - [x] Run concurrent write stress tests against scouting schema via `sjel-turso` (`capabilities/scouting/tests/turso_compatibility.rs`).

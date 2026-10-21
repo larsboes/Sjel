@@ -46,6 +46,41 @@ server: 20 capability processes open one SQLite file directly.
 R4 is the only route that gives everything, and it is the largest item in the plan. R1 is the only
 route that gives anything today without touching a single capability.
 
+## R1 built, 2026-10-21: `sjel mirror`
+
+The snapshot mirror exists on the Mac side: `sjel mirror build` writes a consistent, digest-verified
+copy of a chosen table set to `<overlay>/data/mirror/mirror.db`, and `sjel-status` serves it at
+`GET /api/sjel-status/mirror` (with range support) beside `GET /api/sjel-status/mirror/manifest`.
+
+Measured on this machine the same day:
+
+| | |
+| --- | --- |
+| default phone set | 7 tables: `projects_records` (1,221), `calendar_entries` (51), `calendar_rhythms` (0), `entities_entities` (294), `entities_facts` (34), `places_places` (252), `places_person_places` (19) |
+| size | **11.1 MB**, 1,871 rows |
+| build time | under a second against a 275 MB source |
+| consistency | every table copied inside one read transaction; `PRAGMA integrity_check` → `ok` |
+| fetch | 11,141,120 bytes over the authenticated route, sha256 identical to the manifest's, `integrity_check` `ok` on the fetched file, 1,221 projects readable |
+
+The safety properties are the ones that mattered: the copy is built beside its destination and
+renamed into place, so a fetch during a rebuild gets the previous copy whole or the new one whole;
+a named table that does not exist is an error rather than a silent omission; and a failed copy is
+removed rather than left half-written.
+
+Two facts the build taught that the plan did not anticipate:
+
+- **A subset breaks foreign keys, and that is not a defect.** `calendar_entries` references
+  `calendar_rhythms`; taking one without the other is what a phone set *is*. The copy therefore runs
+  with constraint enforcement off and reports what it broke: the manifest carries `integrity` and
+  `foreign_key_violations`, and the phone set currently reports **0**, because it takes both.
+- **The size is dominated by one table**, not spread evenly. 11.1 MB for 1,871 rows means a table
+  holds blobs; a phone-side copy budget should watch `places_places` before it watches anything else.
+
+What is still missing for the phone to *use* this: the iOS app has to fetch it (the route and the
+manifest are ready), store it, and read it — none of which is started. The route is behind the same
+inbound gate as every other surface, so the transport question is already answered; the device-side
+questions from *What this entry does not show* below are not.
+
 ## Decided 2026-10-21
 
 **One database for now.** Nothing is split. The primary exists (`sqld` on `127.0.0.1:8089`, JWT

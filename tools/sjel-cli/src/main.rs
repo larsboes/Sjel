@@ -25,6 +25,7 @@ mod harnesses;
 mod help;
 mod host_watch;
 mod inference_keys;
+mod mirror;
 mod model_check;
 mod pack_hook;
 mod packs;
@@ -120,6 +121,8 @@ fn sjel(root: &Path, command: &str, rest: &[String]) -> ExitCode {
         "doctor" => doctor::run(rest),
         // What this machine still needs, and what applying it would do (tools/sjel-cli/src/setup/).
         "setup" => setup::run(rest),
+        // A read-only copy of this machine's data, for a device that is not here.
+        "mirror" => mirror::run(rest),
         // stdio MCP server, and its registration with each harness. Both halves are
         // the sjel-mcp crate: tools/sjel-mcp.ts was the server until 2026-10-04.
         "mcp" => exec(Command::new(tool("tools/sjel-mcp/sjel-mcp")).args(rest)),
@@ -180,6 +183,7 @@ fn help(root: &Path, topic: &str) -> ExitCode {
         // listed `apply` and `prune` after both had become `reclaim`.
         "storage" => return exec(Command::new(root.join("tools/storage/storage")).arg("-h")),
         "update" => help::UPDATE,
+        "mirror" => help::MIRROR,
         "setup" => help::SETUP,
         "gates" | "test" => help::GATES,
         "cargo" => help::CARGO,

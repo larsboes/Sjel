@@ -69,6 +69,16 @@ const ROUTES: &[route_manifest::Route] = &[
     ),
     r(
         "GET",
+        "/api/sjel-status/mirror/manifest",
+        "What the read-only copy for another device holds, when it was built, and its digest — the cheap half of a fetch, so a phone can decide whether to ship a whole database.",
+    ),
+    r(
+        "GET",
+        "/api/sjel-status/mirror",
+        "The read-only copy itself, with range support so a phone can resume. Built by `sjel mirror build`; nothing here decides its contents.",
+    ),
+    r(
+        "GET",
         "/api/sjel-status/setup",
         "What this machine still needs for a component, probed by `sjel setup plan`.",
     ),
@@ -496,6 +506,11 @@ fn build_router(shell: proxy::Proxy) -> Router {
             "/api/sjel-status/backup/verify",
             post(backup_verify_handler),
         )
+        .route(
+            "/api/sjel-status/mirror/manifest",
+            get(mirror_manifest_handler),
+        )
+        .route("/api/sjel-status/mirror", get(mirror_file_handler))
         .route("/api/sjel-status/setup", get(setup_handler))
         .route("/api/sjel-status/setup/verify", get(setup_verify_handler))
         .route("/api/sjel-status/setup/apply", post(setup_apply_handler))

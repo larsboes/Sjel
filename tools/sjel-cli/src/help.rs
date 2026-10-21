@@ -51,6 +51,21 @@ Manage Packs:
 
 Run 'sjel help <command>' for focused help."#;
 
+pub const MIRROR: &str = r#"Usage: sjel mirror [build|status|path] [--all|--tables a,b,c] [--out <path>]
+
+A read-only copy of this machine's data, for a device that is not here: the phone
+cannot hold an embedded replica while eighteen capabilities open the database
+directly, so it holds a copy and reads that.
+
+  build                   the phone set (projects, calendar, entities, places) into
+                          <overlay>/data/mirror/mirror.db, inside one read transaction
+  build --all             every table; carries comms, documents and finance with it
+  build --tables a,b,c    exactly these, and a name that does not exist is an error
+  status                  when, from where, how much, and the digest
+  path                    where the copy lives
+
+Nothing writes to the copy, and nothing written on the device comes back."#;
+
 pub const SETUP: &str = r#"Usage: sjel setup [plan|apply|verify] [component] [flags]
 
 Reports what this machine still needs for a component, and what applying it would

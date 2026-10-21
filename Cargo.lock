@@ -5169,10 +5169,12 @@ dependencies = [
 name = "sjel-cli"
 version = "0.1.0"
 dependencies = [
+ "chrono",
  "civil-date",
  "libsql-auth",
  "regex",
  "reqwest",
+ "rusqlite",
  "serde",
  "serde_json",
  "sha2 0.11.0",

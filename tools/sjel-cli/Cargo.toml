@@ -47,6 +47,11 @@ zeroize.workspace = true
 sjel-config = { path = "../../libs/sjel-config" }
 sjel-runtime = { path = "../../libs/runtime" }
 sjel-store = { path = "../../libs/sjel-store" }
+# The workspace's SQLite, for `sjel mirror`: it copies tables between two files in one read
+# transaction. Already linked through sjel-store, so this adds no build.
+rusqlite = { workspace = true }
+# The build timestamp in the manifest, in the RFC 3339 form every other artefact here uses.
+chrono = { workspace = true }
 sjel-skill-metadata = { path = "../../libs/skill-metadata" }
 # `tools/model-check` asks the registry the same questions every capability asks it: is this
 # backend on loopback, and is this backend's credential present. Both rules live in

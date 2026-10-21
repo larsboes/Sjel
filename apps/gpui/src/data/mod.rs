@@ -233,6 +233,35 @@ impl Repo {
         shell.tasks(status).await
     }
 
+    /// Read notes directly from local LibSQL database if accessible, otherwise fallback to shell.
+    pub async fn fetch_all_notes(&self) -> ShellResult<Vec<sjel_gpui_core::shell::GlobalNote>> {
+        if let Some(conn) = self.local.connection().await {
+            let query = "SELECT path, kind, title, project \
+                         FROM projects_records WHERE kind != 'task' \
+                         ORDER BY project ASC, path ASC";
+            if let Ok(mut rows) = conn.query(query, ()).await {
+                let mut list = Vec::new();
+                while let Ok(Some(row)) = rows.next().await {
+                    let path: String = row.get(0).unwrap_or_default();
+                    let kind: String = row.get(1).unwrap_or_else(|_| "note".into());
+                    let title: String = row.get(2).unwrap_or_default();
+                    let project: String = row.get(3).unwrap_or_default();
+                    list.push(sjel_gpui_core::shell::GlobalNote {
+                        path,
+                        kind,
+                        title,
+                        project,
+                    });
+                }
+                if !list.is_empty() {
+                    return Ok(list);
+                }
+            }
+        }
+        let shell = self.shell()?;
+        shell.notes().await
+    }
+
     /// Read calendar entries directly from local LibSQL database if accessible, otherwise fallback to shell.
     pub async fn fetch_calendar(
         &self,

@@ -175,6 +175,17 @@ pub struct GlobalTask {
     pub project: String,
 }
 
+/// One note across projects (`GET /projects/api/records`).
+#[derive(Clone, Debug, Deserialize, Serialize, PartialEq, Eq)]
+pub struct GlobalNote {
+    pub path: String,
+    #[serde(default)]
+    pub kind: String,
+    pub title: String,
+    #[serde(default)]
+    pub project: String,
+}
+
 /// The soundscape playback state (`GET /soundscape/api/soundscape/state`).
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 pub struct SoundscapeState {
@@ -324,6 +335,62 @@ impl Shell {
         let path = with_query("/projects/api/record", &[("path", path)]);
         let one: One = self.json(Method::GET, &path, None, 10).await?;
         Ok(one.record)
+    }
+
+    /// Every note across projects (`GET /projects/api/records`).
+    pub async fn notes(&self) -> ShellResult<Vec<GlobalNote>> {
+        #[derive(Deserialize)]
+        struct Records {
+            records: Vec<RecordItem>,
+        }
+        #[derive(Deserialize)]
+        struct RecordItem {
+            id: String,
+            #[serde(default)]
+            kind: String,
+            title: String,
+            #[serde(default)]
+            project: String,
+        }
+        let notes_req: Result<Records, _> = self
+            .json(
+                Method::GET,
+                "/projects/api/records?kind=note&content=false",
+                None,
+                10,
+            )
+            .await;
+        let mut list = Vec::new();
+        if let Ok(records) = notes_req {
+            for r in records.records {
+                list.push(GlobalNote {
+                    path: r.id,
+                    kind: r.kind,
+                    title: r.title,
+                    project: r.project,
+                });
+            }
+        }
+        if let Ok(projects) = self
+            .json::<Records>(
+                Method::GET,
+                "/projects/api/records?kind=project&content=false",
+                None,
+                10,
+            )
+            .await
+        {
+            for r in projects.records {
+                list.push(GlobalNote {
+                    path: r.id,
+                    kind: r.kind,
+                    title: r.title,
+                    project: r.project,
+                });
+            }
+        }
+        list.sort_by(|a, b| a.project.cmp(&b.project).then_with(|| a.title.cmp(&b.title)));
+        Ok(list)
     }
 
     /// Replaces a record's content. `base` is the content the edit started from; the capability

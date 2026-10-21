@@ -175,6 +175,18 @@ pub struct GlobalTask {
     pub project: String,
 }
 
+/// The soundscape playback state (`GET /soundscape/api/soundscape/state`).
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+pub struct SoundscapeState {
+    pub preset: String,
+    #[serde(default)]
+    pub playing: bool,
+    #[serde(default)]
+    pub volume: f32,
+    #[serde(default)]
+    pub energy: f32,
+}
+
 /// One message in an Ask conversation (`POST /assistant/api/ask`).
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub struct AskTurn {
@@ -529,6 +541,29 @@ impl Shell {
         }
         let ticket: Ticket = self.json(Method::POST, TICKET_PATH, None, 5).await?;
         landing_url(&self.base, &ticket.open, next).ok_or(ShellError::Unreadable)
+    }
+
+    /// Read soundscape state (`GET /soundscape/api/soundscape/state`).
+    pub async fn soundscape_state(&self) -> ShellResult<SoundscapeState> {
+        self.json(Method::GET, "/soundscape/api/soundscape/state", None, 3).await
+    }
+
+    /// Update playback status (`POST /soundscape/api/soundscape/state`).
+    pub async fn set_soundscape_playing(&self, playing: bool) -> ShellResult<SoundscapeState> {
+        let body = serde_json::json!({
+            "playing": playing,
+            "origin": "gpui",
+        });
+        self.json(Method::POST, "/soundscape/api/soundscape/state", Some(body), 3).await
+    }
+
+    /// Update soundscape preset (`POST /soundscape/api/soundscape/state`).
+    pub async fn set_soundscape_preset(&self, preset: &str) -> ShellResult<SoundscapeState> {
+        let body = serde_json::json!({
+            "preset": preset,
+            "origin": "gpui",
+        });
+        self.json(Method::POST, "/soundscape/api/soundscape/state", Some(body), 3).await
     }
 
     async fn json<T: DeserializeOwned>(

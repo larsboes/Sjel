@@ -40,6 +40,11 @@ impl Repo {
         }
     }
 
+    /// True if direct non-blocking LibSQL local access is active.
+    pub fn has_direct_db(&self) -> bool {
+        Self::local_db_path().is_some()
+    }
+
     /// Return the resolved local database path from `SJEL_DB_PATH` or the overlay default.
     #[allow(dead_code)]
     pub fn local_db_path() -> Option<std::path::PathBuf> {
@@ -264,6 +269,26 @@ impl Repo {
         }
         let shell = self.shell()?;
         shell.record(path).await
+    }
+
+    /// Read soundscape state (`GET /soundscape/api/soundscape/state`).
+    pub async fn soundscape_state(&self) -> ShellResult<sjel_gpui_core::shell::SoundscapeState> {
+        let shell = self.shell()?;
+        shell.soundscape_state().await
+    }
+
+    /// Update soundscape playback (`POST /soundscape/api/soundscape/state`).
+    #[allow(dead_code)]
+    pub async fn set_soundscape_playing(&self, playing: bool) -> ShellResult<sjel_gpui_core::shell::SoundscapeState> {
+        let shell = self.shell()?;
+        shell.set_soundscape_playing(playing).await
+    }
+
+    /// Update soundscape preset (`POST /soundscape/api/soundscape/state`).
+    #[allow(dead_code)]
+    pub async fn set_soundscape_preset(&self, preset: &str) -> ShellResult<sjel_gpui_core::shell::SoundscapeState> {
+        let shell = self.shell()?;
+        shell.set_soundscape_preset(preset).await
     }
 }
 

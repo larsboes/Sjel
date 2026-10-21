@@ -20,7 +20,9 @@ use crate::data::{self, Busy, Remote, Repo};
 use crate::projects::Projects;
 use crate::route::{self, Destination, Page, Target};
 use crate::selection::{Item, Selection};
-use crate::shell::{self, AgentView, CalendarEntry, GlobalTask, NodeHealth, ShellError, Snapshot};
+use crate::shell::{
+    self, AgentView, CalendarEntry, GlobalTask, NodeHealth, ShellError, Snapshot, SoundscapeState,
+};
 use crate::theme::Palette;
 use crate::{capabilities, home};
 
@@ -80,6 +82,7 @@ pub struct Workspace {
     pub agent: Remote<AgentView>,
     pub calendar: Remote<Vec<CalendarEntry>>,
     pub focus_tasks: Remote<Vec<GlobalTask>>,
+    pub soundscape: Remote<SoundscapeState>,
     pub projects: Entity<Projects>,
     pub ask: Entity<Ask>,
     /// Approval ids and capability names with a request in flight.
@@ -115,6 +118,7 @@ impl Workspace {
             agent: Remote::default(),
             calendar: Remote::default(),
             focus_tasks: Remote::default(),
+            soundscape: Remote::default(),
             projects,
             ask,
             busy: Busy::default(),
@@ -242,6 +246,74 @@ impl Workspace {
             |w| &mut w.focus_tasks,
             &repo_tasks,
             move |r| async move { r.fetch_tasks(Some("open")).await },
+        );
+        let repo_sound = self.repo.clone();
+        data::read_repo(
+            cx,
+            self,
+            |w| &mut w.soundscape,
+            &repo_sound,
+            move |r| async move { r.soundscape_state().await },
+        );
+    }
+
+    pub fn toggle_soundscape(
+        &mut self,
+        playing: bool,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) {
+        let repo = self.repo.clone();
+        data::write(
+            cx,
+            window,
+            self,
+            &repo,
+            data::Press::quiet(if playing { "Soundscape started." } else { "Soundscape paused." }),
+            move |s| async move { s.set_soundscape_playing(playing).await },
+            |this, updated, cx| {
+                if let Some(state) = updated {
+                    this.soundscape.value = Some(state);
+                    cx.notify();
+                }
+            },
+        );
+    }
+
+    pub fn cycle_soundscape_preset(
+        &mut self,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) {
+        let current = self
+            .soundscape
+            .value
+            .as_ref()
+            .map(|s| s.preset.as_str())
+            .unwrap_or("edm");
+        const PRESETS: [&str; 6] = ["edm", "ambient", "lofi", "focus", "relax", "sleep"];
+        let next_idx = match PRESETS.iter().position(|&p| p == current) {
+            Some(i) => (i + 1) % PRESETS.len(),
+            None => 0,
+        };
+        let next = PRESETS[next_idx].to_string();
+        let repo = self.repo.clone();
+        data::write(
+            cx,
+            window,
+            self,
+            &repo,
+            data::Press::quiet("Preset updated."),
+            move |s| {
+                let n = next.clone();
+                async move { s.set_soundscape_preset(&n).await }
+            },
+            |this, updated, cx| {
+                if let Some(state) = updated {
+                    this.soundscape.value = Some(state);
+                    cx.notify();
+                }
+            },
         );
     }
 
@@ -716,6 +788,7 @@ fn sidebar(
         })
         .children(nav)
         .child(div().flex_1())
+        .child(soundscape_widget(view, palette, cx))
         .child(
             div()
                 .id("palette-hint")
@@ -740,20 +813,140 @@ fn sidebar(
             div()
                 .flex()
                 .items_center()
-                .gap_2()
+                .justify_between()
                 .px_3()
                 .pt_2()
                 .text_xs()
                 .text_color(rgb(palette.muted))
                 .child(
                     div()
-                        .flex_none()
-                        .size(px(7.))
-                        .rounded_full()
-                        .bg(rgb(status.0)),
+                        .flex()
+                        .items_center()
+                        .gap_2()
+                        .min_w_0()
+                        .child(
+                            div()
+                                .flex_none()
+                                .size(px(7.))
+                                .rounded_full()
+                                .bg(rgb(status.0)),
+                        )
+                        .child(div().truncate().child(status.1)),
                 )
-                .child(div().truncate().child(status.1)),
+                .child(
+                    div()
+                        .flex()
+                        .items_center()
+                        .gap_1()
+                        .flex_none()
+                        .child(
+                            div()
+                                .size(px(6.))
+                                .rounded_full()
+                                .bg(rgb(if view.repo.has_direct_db() {
+                                    palette.accent
+                                } else {
+                                    palette.muted
+                                })),
+                        )
+                        .child(
+                            div()
+                                .text_xs()
+                                .child(if view.repo.has_direct_db() {
+                                    "libsql"
+                                } else {
+                                    "http"
+                                }),
+                        ),
+                ),
         )
+}
+
+fn soundscape_widget(
+    view: &Workspace,
+    palette: Palette,
+    cx: &mut Context<Workspace>,
+) -> impl IntoElement {
+    let state = view.soundscape.value.as_ref();
+    let is_up = view
+        .health
+        .value
+        .as_ref()
+        .map(|h| {
+            h.capabilities
+                .get("soundscape")
+                .map(|c| c.up)
+                .unwrap_or(false)
+        })
+        .unwrap_or(false);
+
+    if !is_up && state.is_none() {
+        return div().into_any_element();
+    }
+
+    let playing = state.map(|s| s.playing).unwrap_or(false);
+    let preset = state.map(|s| s.preset.as_str()).unwrap_or("edm");
+
+    div()
+        .id("soundscape-mini-player")
+        .mx_1()
+        .mb_1()
+        .px_2()
+        .py(px(5.))
+        .rounded(px(7.))
+        .bg(rgba(palette.raised))
+        .flex()
+        .items_center()
+        .justify_between()
+        .gap_2()
+        .text_xs()
+        .child(
+            div()
+                .flex()
+                .items_center()
+                .gap_1()
+                .min_w_0()
+                .child(
+                    div()
+                        .flex_none()
+                        .size(px(6.))
+                        .rounded_full()
+                        .bg(rgb(if playing { palette.green } else { palette.muted })),
+                )
+                .child(
+                    div()
+                        .id("soundscape-preset-btn")
+                        .cursor_pointer()
+                        .truncate()
+                        .text_color(rgb(palette.text))
+                        .hover(move |s| s.text_color(rgb(palette.accent)))
+                        .on_click(cx.listener(|view, _, window, cx| {
+                            view.cycle_soundscape_preset(window, cx);
+                        }))
+                        .child(format!("♪ {preset}")),
+                ),
+        )
+        .child(
+            div()
+                .id("soundscape-toggle-btn")
+                .flex_none()
+                .px_2()
+                .py(px(2.))
+                .rounded(px(4.))
+                .bg(rgba(if playing {
+                    palette.accent << 8 | 0x24
+                } else {
+                    palette.raised
+                }))
+                .text_color(rgb(if playing { palette.accent } else { palette.muted }))
+                .cursor_pointer()
+                .hover(move |s| s.text_color(rgb(palette.text)))
+                .on_click(cx.listener(move |view, _, window, cx| {
+                    view.toggle_soundscape(!playing, window, cx);
+                }))
+                .child(if playing { "Pause" } else { "Play" }),
+        )
+        .into_any_element()
 }
 
 fn header(view: &Workspace, palette: Palette) -> impl IntoElement {
@@ -982,6 +1175,26 @@ mod tests {
                 view.selected(),
                 Some(Item::FocusTask("Atlas/Projects/Test/Tasks/Task1.md".into()))
             );
+        });
+    }
+
+    #[gpui::test]
+    fn sidebar_soundscape_and_storage_indicator(cx: &mut TestAppContext) {
+        let (view, cx) = open(cx);
+        view.update(cx, |view, cx| {
+            view.soundscape.value = Some(SoundscapeState {
+                preset: "focus".into(),
+                playing: true,
+                volume: 0.8,
+                energy: 0.6,
+            });
+            cx.notify();
+        });
+        view.read_with(cx, |view, _| {
+            let state = view.soundscape.value.as_ref().unwrap();
+            assert_eq!(state.preset, "focus");
+            assert!(state.playing);
+            assert!(!view.repo.has_direct_db());
         });
     }
 }

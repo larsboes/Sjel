@@ -5043,6 +5043,7 @@ dependencies = [
  "sjel-server",
  "sjel-store",
  "sjel-transit",
+ "sjel-turso",
  "thiserror 2.0.21",
  "tokio",
  "tower",

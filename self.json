@@ -1756,6 +1756,16 @@
     },
     {
       "from": "scouting",
+      "to": "sjel-turso",
+      "kinds": [
+        "cargo-dep"
+      ],
+      "evidence": [
+        "capabilities/scouting/Cargo.toml"
+      ]
+    },
+    {
+      "from": "scouting",
       "to": "transit",
       "kinds": [
         "cargo-dep"

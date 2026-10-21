@@ -134,10 +134,10 @@ flowchart LR
 - [ ] Implement reactive query subscriptions or change notifications so GPUI views update automatically when background jobs mutate tables.
 - [ ] Keep GPUI independent of heavy file locks.
 
-### Phase 4: Pilot Migration (Vector & Concurrency)
-- [ ] Migrate `capabilities/scouting` to LibSQL vectors for item embeddings.
-- [ ] Run concurrent write stress tests (simulating GPUI user typing while comms ingests feeds).
-- [ ] Confirm zero `SQLITE_BUSY` errors under load.
+### Phase 4: Pilot Capability Migration (Vector & Concurrency)
+- [x] Run concurrent write stress tests against scouting schema via `sjel-turso` (`capabilities/scouting/tests/turso_compatibility.rs`).
+- [x] Confirm zero `SQLITE_BUSY` errors under load across 50 simultaneous inserts.
+- [ ] Enable LibSQL vector embedding indexing in scouting.
 
 ### Phase 5: Production Promotion & Backup Contract Evolution
 - [ ] Switch `capabilities/store/service.toml` to declare LibSQL storage.

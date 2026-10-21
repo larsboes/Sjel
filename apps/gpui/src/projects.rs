@@ -577,15 +577,17 @@ impl Projects {
             ));
 
         let header = row()
-            .min_h(px(32.))
+            .min_h(px(34.))
             .py_1()
+            .bg(rgba(palette.raised & 0x00ffffff | 0x30000000))
             .text_xs()
+            .font_weight(FontWeight::MEDIUM)
             .text_color(rgb(palette.muted))
-            .child(div().w(px(20.)))
-            .child(div().flex_1().child("Task"))
-            .child(div().w(px(120.)).child("Due"))
-            .child(div().w(px(64.)).child("Priority"))
             .child(div().w(px(24.)))
+            .child(div().flex_1().child("TASK"))
+            .child(div().w(px(120.)).child("DUE"))
+            .child(div().w(px(64.)).child("PRIORITY"))
+            .child(div().w(px(28.)))
             .into_any_element();
         let mut rows = vec![header];
 
@@ -593,6 +595,22 @@ impl Projects {
             .into_iter()
             .filter(|t| self.task_filter.matches(t.done))
             .collect();
+
+        if filtered.is_empty() && !records.is_empty() {
+            rows.push(
+                row()
+                    .min_h(px(40.))
+                    .py_2()
+                    .text_sm()
+                    .text_color(rgb(palette.muted))
+                    .child(match self.task_filter {
+                        TaskFilter::Open => "No open tasks in this project.",
+                        TaskFilter::Done => "No completed tasks yet.",
+                        TaskFilter::All => "No tasks in this project.",
+                    })
+                    .into_any_element(),
+            );
+        }
 
         for (index, task) in filtered.into_iter().enumerate() {
             let (toggle, open, del) = (task.clone(), task.clone(), task.clone());
@@ -624,11 +642,14 @@ impl Projects {
             let priority = task.priority.clamp(1, 3);
             rows.push(
                 row()
+                    .id(("task-row", index))
+                    .group("task-row")
                     .min_h(px(40.))
                     .py_1()
+                    .hover(move |s| s.bg(rgba(palette.raised & 0x00ffffff | 0x55000000)))
                     .when(task.done, |row| row.opacity(0.55))
                     .child(
-                        div().w(px(20.)).child(
+                        div().w(px(24.)).flex().items_center().child(
                             Checkbox::new(("task-done", index))
                                 .checked(task.done)
                                 .on_click(cx.listener(move |view, done: &bool, window, cx| {
@@ -670,11 +691,13 @@ impl Projects {
                             .child(priority_pill(priority, palette)),
                     )
                     .child(
-                        div().w(px(24.)).flex().justify_center().child(
+                        div().w(px(28.)).flex().justify_center().child(
                             div()
                                 .id(("del-task", index))
                                 .cursor_pointer()
                                 .text_color(rgb(palette.muted))
+                                .opacity(0.)
+                                .group_hover("task-row", |s| s.opacity(1.))
                                 .hover(move |s| s.text_color(rgb(palette.red)))
                                 .on_click(cx.listener(move |view, _, window, cx| {
                                     view.remove_record(del.path.clone(), window, cx)
@@ -689,7 +712,7 @@ impl Projects {
             row()
                 .min_h(px(40.))
                 .py_1()
-                .child(div().w(px(20.)).text_color(rgb(palette.muted)).child("+"))
+                .child(div().w(px(24.)).flex().items_center().text_color(rgb(palette.muted)).child("+"))
                 .child(
                     div()
                         .flex_1()
@@ -763,15 +786,17 @@ impl Projects {
             .child(div().w(px(220.)).child(Input::new(search_input).small()));
 
         let header = row()
-            .min_h(px(32.))
+            .min_h(px(34.))
             .py_1()
+            .bg(rgba(palette.raised & 0x00ffffff | 0x30000000))
             .text_xs()
+            .font_weight(FontWeight::MEDIUM)
             .text_color(rgb(palette.muted))
-            .child(div().w(px(20.)))
-            .child(div().flex_1().child("Task"))
-            .child(div().w(px(140.)).child("Project"))
-            .child(div().w(px(120.)).child("Due"))
-            .child(div().w(px(64.)).child("Priority"))
+            .child(div().w(px(24.)))
+            .child(div().flex_1().child("TASK"))
+            .child(div().w(px(140.)).child("PROJECT"))
+            .child(div().w(px(120.)).child("DUE"))
+            .child(div().w(px(64.)).child("PRIORITY"))
             .into_any_element();
         let mut rows = vec![header];
 
@@ -809,11 +834,14 @@ impl Projects {
             let priority = task.priority.clamp(1, 3);
             rows.push(
                 row()
+                    .id(("all-task-row", index))
+                    .group("all-task-row")
                     .min_h(px(40.))
                     .py_1()
+                    .hover(move |s| s.bg(rgba(palette.raised & 0x00ffffff | 0x55000000)))
                     .when(task.done, |row| row.opacity(0.55))
                     .child(
-                        div().w(px(20.)).child(
+                        div().w(px(24.)).flex().items_center().child(
                             Checkbox::new(("all-task-done", index))
                                 .checked(task.done)
                                 .on_click(cx.listener(move |view, done: &bool, window, cx| {
@@ -836,14 +864,20 @@ impl Projects {
                             div()
                                 .id(("proj-tag", index))
                                 .px_2()
-                                .py(px(2.))
+                                .py(px(1.5))
                                 .rounded(px(4.))
-                                .bg(rgba(palette.raised))
+                                .bg(rgba(palette.accent & 0x00ffffff | 0x12000000))
+                                .border_1()
+                                .border_color(rgba(palette.accent & 0x00ffffff | 0x24000000))
                                 .text_color(rgb(palette.accent))
                                 .text_xs()
+                                .font_weight(FontWeight::MEDIUM)
                                 .truncate()
                                 .cursor_pointer()
-                                .hover(move |s| s.text_color(rgb(palette.text)))
+                                .hover(move |s| {
+                                    s.bg(rgba(palette.accent & 0x00ffffff | 0x22000000))
+                                        .text_color(rgb(palette.text))
+                                })
                                 .on_click(cx.listener(move |view, _, _, cx| {
                                     view.open_project(proj_name.clone(), cx);
                                     view.tab = ProjectsTab::Hubs;
@@ -883,7 +917,6 @@ impl Render for Projects {
                 .size_full()
                 .flex()
                 .flex_col()
-                .gap_3()
                 .px_8()
                 .pt_5()
                 .pb_4()
@@ -893,30 +926,40 @@ impl Render for Projects {
                 .border_color(rgba(palette.border))
                 .child(
                     div()
+                        .w_full()
+                        .max_w(px(760.))
+                        .mx_auto()
+                        .size_full()
                         .flex()
-                        .items_center()
-                        .gap_2()
-                        .child(back_button(
-                            format!("‹ {project_name}"),
-                            cx.listener(|view, _, _, cx| view.close_note(cx)),
-                            palette,
-                        ))
-                        .child(div().text_xs().text_color(rgb(palette.muted)).child("/"))
+                        .flex_col()
+                        .gap_3()
                         .child(
                             div()
-                                .text_xs()
-                                .font_weight(FontWeight::MEDIUM)
-                                .text_color(rgb(palette.muted))
-                                .child(title.clone()),
-                        ),
+                                .flex()
+                                .items_center()
+                                .gap_2()
+                                .child(back_button(
+                                    format!("‹ {project_name}"),
+                                    cx.listener(|view, _, _, cx| view.close_note(cx)),
+                                    palette,
+                                ))
+                                .child(div().text_xs().text_color(rgb(palette.muted)).child("/"))
+                                .child(
+                                    div()
+                                        .text_xs()
+                                        .font_weight(FontWeight::MEDIUM)
+                                        .text_color(rgb(palette.muted))
+                                        .child(title.clone()),
+                                ),
+                        )
+                        .child(
+                            div()
+                                .text_2xl()
+                                .font_weight(FontWeight::SEMIBOLD)
+                                .child(title),
+                        )
+                        .child(div().flex_1().min_h_0().child(editor.clone())),
                 )
-                .child(
-                    div()
-                        .text_2xl()
-                        .font_weight(FontWeight::SEMIBOLD)
-                        .child(title),
-                )
-                .child(div().flex_1().min_h_0().child(editor.clone()))
                 .into_any_element();
         }
         if self.project.is_some() {
@@ -970,31 +1013,63 @@ impl Render for Projects {
                                 let del = record.clone();
                                 row()
                                     .id(("record", index))
+                                    .group("record-row")
+                                    .min_h(px(40.))
+                                    .py_1()
                                     .cursor_pointer()
-                                    .hover(move |style| style.bg(rgba(palette.raised)))
+                                    .hover(move |style| {
+                                        style.bg(rgba(palette.raised & 0x00ffffff | 0x55000000))
+                                    })
                                     .on_click(cx.listener(move |view, _, window, cx| {
                                         view.open_note(open.path.clone(), true, window, cx)
                                     }))
+                                    .child(
+                                        div()
+                                            .w(px(24.))
+                                            .flex()
+                                            .items_center()
+                                            .child(
+                                                div()
+                                                    .size(px(20.))
+                                                    .rounded(px(4.))
+                                                    .bg(rgba(palette.raised))
+                                                    .flex()
+                                                    .items_center()
+                                                    .justify_center()
+                                                    .text_xs()
+                                                    .text_color(rgb(palette.muted))
+                                                    .child("≡"),
+                                            ),
+                                    )
                                     .child(
                                         div()
                                             .flex_1()
                                             .min_w_0()
                                             .truncate()
                                             .text_sm()
+                                            .hover(move |s| s.text_color(rgb(palette.accent)))
                                             .child(record.title.clone()),
                                     )
                                     .child(
                                         div()
+                                            .px_2()
+                                            .py(px(1.5))
+                                            .rounded(px(4.))
+                                            .bg(rgba(palette.raised))
+                                            .border_1()
+                                            .border_color(rgba(palette.border))
                                             .text_xs()
                                             .text_color(rgb(palette.muted))
                                             .child(record.kind.clone()),
                                     )
                                     .child(
-                                        div().w(px(24.)).flex().justify_center().child(
+                                        div().w(px(28.)).flex().justify_center().child(
                                             div()
                                                 .id(("del-note", index))
                                                 .cursor_pointer()
                                                 .text_color(rgb(palette.muted))
+                                                .opacity(0.)
+                                                .group_hover("record-row", |s| s.opacity(1.))
                                                 .hover(move |s| s.text_color(rgb(palette.red)))
                                                 .on_click(cx.listener(
                                                     move |view, _, window, cx| {

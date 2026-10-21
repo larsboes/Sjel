@@ -578,8 +578,15 @@ impl NoteEditor {
         let mono = cx.theme().mono_font_family.clone();
         let indent = block.prefix.len() - block.prefix.trim_start().len();
         let gutter: AnyElement = match block.kind {
-            Kind::Bullet => div().child("•").into_any_element(),
+            Kind::Bullet => div()
+                .text_sm()
+                .text_color(rgb(palette.accent))
+                .child("•")
+                .into_any_element(),
             Kind::Numbered => div()
+                .text_xs()
+                .font_weight(FontWeight::MEDIUM)
+                .text_color(rgb(palette.muted))
                 .child(block.prefix.trim().to_owned())
                 .into_any_element(),
             Kind::Todo(done) => {
@@ -602,11 +609,11 @@ impl NoteEditor {
                 // caret.
                 .mx(-TEXTAREA.input_px())
                 .my(-TEXTAREA.input_py())
-                .line_height(relative(1.25))
+                .line_height(relative(1.3))
                 .readonly(!self.editable);
             // The textarea sets its own text size, so a heading styles the textarea itself.
             match block.kind {
-                Kind::Heading(1) => field.text_2xl().font_weight(FontWeight::SEMIBOLD),
+                Kind::Heading(1) => field.text_2xl().font_weight(FontWeight::BOLD),
                 Kind::Heading(2) => field.text_xl().font_weight(FontWeight::SEMIBOLD),
                 Kind::Heading(_) => field.text_lg().font_weight(FontWeight::SEMIBOLD),
                 _ => field,
@@ -618,23 +625,28 @@ impl NoteEditor {
         let field = match block.kind {
             Kind::Heading(1) => div()
                 .text_2xl()
-                .font_weight(FontWeight::SEMIBOLD)
+                .font_weight(FontWeight::BOLD)
+                .text_color(rgb(palette.text))
                 .child(field),
             Kind::Heading(2) => div()
                 .text_xl()
                 .font_weight(FontWeight::SEMIBOLD)
+                .text_color(rgb(palette.text))
                 .child(field),
             Kind::Heading(_) => div()
                 .text_lg()
                 .font_weight(FontWeight::SEMIBOLD)
+                .text_color(rgb(palette.text))
                 .child(field),
             Kind::Quote => div()
-                .border_l_2()
+                .border_l_3()
                 .border_color(rgba(palette.accent))
-                .pl_3()
-                .py(px(2.))
+                .rounded_r(px(8.))
+                .bg(rgba(palette.accent & 0x00ffffff | 0x0c000000))
+                .px_3()
+                .py(px(4.))
                 .italic()
-                .text_color(rgb(palette.muted))
+                .text_color(rgb(palette.text))
                 .child(field),
             Kind::Todo(true) => div()
                 .text_color(rgb(palette.muted))
@@ -643,12 +655,33 @@ impl NoteEditor {
             Kind::Code => div()
                 .font_family(mono.clone())
                 .text_sm()
-                .p_3()
                 .rounded(px(8.))
                 .bg(rgba(palette.raised))
                 .border_1()
                 .border_color(rgba(palette.border))
-                .child(field),
+                .overflow_hidden()
+                .child(
+                    div()
+                        .flex()
+                        .items_center()
+                        .justify_between()
+                        .px_3()
+                        .py(px(3.))
+                        .bg(rgba(palette.surface | 0x88))
+                        .border_b_1()
+                        .border_color(rgba(palette.border))
+                        .text_xs()
+                        .text_color(rgb(palette.muted))
+                        .child("code")
+                        .child(
+                            div()
+                                .text_xs()
+                                .text_color(rgb(palette.muted))
+                                .opacity(0.6)
+                                .child("snippet"),
+                        ),
+                )
+                .child(div().p_3().child(field)),
             _ => div().child(field),
         };
         let label: SharedString = Inline::parse(&block.text).text.into();
@@ -725,7 +758,7 @@ impl NoteEditor {
                     .flex()
                     .justify_end()
                     // The text's line height, so the marker sits on the first line.
-                    .line_height(relative(1.25))
+                    .line_height(relative(1.3))
                     .text_color(rgb(palette.muted))
                     .child(gutter),
             )
@@ -843,7 +876,7 @@ fn formatted(
         .id(("formatted", index))
         .w_full()
         // The textarea's line height, so a block keeps its height when it gains the caret.
-        .line_height(relative(1.25))
+        .line_height(relative(1.3))
         .cursor_text()
         .on_mouse_down(
             MouseButton::Left,
@@ -917,6 +950,7 @@ fn runs(
 impl Render for NoteEditor {
     fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         let palette = Palette::for_appearance(window.appearance());
+        let mono = cx.theme().mono_font_family.clone();
         let (status_text, bad) = self.status();
         let dot_color = match (bad, self.saving, self.revision != self.saved_revision) {
             (true, _, _) => palette.red,
@@ -932,33 +966,46 @@ impl Render for NoteEditor {
             .map(|b| b.text.split_whitespace().count())
             .sum::<usize>();
 
+        let est_minutes = word_count.div_ceil(200);
+        let reading_time = if est_minutes <= 1 {
+            "1 min read".to_string()
+        } else {
+            format!("{est_minutes} min read")
+        };
+
+        let status_badge = div()
+            .flex()
+            .items_center()
+            .gap_1p5()
+            .px_2()
+            .py(px(1.5))
+            .rounded_full()
+            .bg(rgba(dot_color & 0xffffff | 0x18000000))
+            .child(div().size(px(6.)).rounded_full().bg(rgb(dot_color)))
+            .child(
+                div()
+                    .text_xs()
+                    .font_weight(FontWeight::MEDIUM)
+                    .text_color(rgb(if bad { palette.red } else { palette.muted }))
+                    .child(status_text.to_owned()),
+            );
+
         let status_bar = div()
             .flex()
             .items_center()
             .justify_between()
-            .pb_2()
+            .pb_2p5()
             .border_b_1()
             .border_color(rgba(palette.border))
             .text_xs()
-            .child(
-                div()
-                    .flex()
-                    .items_center()
-                    .gap_2()
-                    .child(div().size(px(6.)).rounded_full().bg(rgb(dot_color)))
-                    .child(
-                        div()
-                            .text_color(rgb(if bad { palette.red } else { palette.muted }))
-                            .child(status_text.to_owned()),
-                    ),
-            )
+            .child(status_badge)
             .child(
                 div()
                     .flex()
                     .items_center()
                     .gap_3()
                     .text_color(rgb(palette.muted))
-                    .child(format!("{word_count} words · {block_count} blocks"))
+                    .child(format!("{word_count} words · {block_count} blocks · {reading_time}"))
                     .child(div().w(px(1.)).h(px(10.)).bg(rgba(palette.border)))
                     .child("Esc to close · / for blocks"),
             );
@@ -973,7 +1020,7 @@ impl Render for NoteEditor {
         .pb_4();
 
         let footer = div()
-            .pt_2()
+            .pt_2p5()
             .border_t_1()
             .border_color(rgba(palette.border))
             .flex()
@@ -986,16 +1033,65 @@ impl Render for NoteEditor {
                     .flex()
                     .items_center()
                     .gap_3()
-                    .child("⌘S Save")
+                    .child(
+                        div()
+                            .flex()
+                            .items_center()
+                            .gap_1()
+                            .child(
+                                div()
+                                    .px_1p5()
+                                    .py(px(0.5))
+                                    .rounded(px(3.))
+                                    .bg(rgba(palette.raised))
+                                    .font_family(mono.clone())
+                                    .text_xs()
+                                    .child("⌘S"),
+                            )
+                            .child("Save"),
+                    )
                     .child("·")
-                    .child("⌘[ Close")
+                    .child(
+                        div()
+                            .flex()
+                            .items_center()
+                            .gap_1()
+                            .child(
+                                div()
+                                    .px_1p5()
+                                    .py(px(0.5))
+                                    .rounded(px(3.))
+                                    .bg(rgba(palette.raised))
+                                    .font_family(mono.clone())
+                                    .text_xs()
+                                    .child("⌘["),
+                            )
+                            .child("Close"),
+                    )
                     .child("·")
-                    .child("⌘⇧↑/↓ Move block"),
+                    .child(
+                        div()
+                            .flex()
+                            .items_center()
+                            .gap_1()
+                            .child(
+                                div()
+                                    .px_1p5()
+                                    .py(px(0.5))
+                                    .rounded(px(3.))
+                                    .bg(rgba(palette.raised))
+                                    .font_family(mono)
+                                    .text_xs()
+                                    .child("⌘⇧↑/↓"),
+                            )
+                            .child("Move block"),
+                    ),
             )
             .child(
                 div()
                     .text_xs()
                     .text_color(rgb(palette.muted))
+                    .opacity(0.8)
                     .child(self.path.clone()),
             );
 

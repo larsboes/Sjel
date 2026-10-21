@@ -106,22 +106,39 @@ pub fn filter_pill(
 }
 
 pub fn priority_pill(priority: u8, palette: Palette) -> AnyElement {
-    let (bg_color, text_color, label) = match priority {
-        1 => (palette.red & 0xffffff | 0x25000000, palette.red, "P1"),
-        2 => (palette.raised, palette.text, "P2"),
-        _ => (palette.raised, palette.muted, "P3"),
+    let (bg_color, border_color, text_color, label) = match priority {
+        1 => (
+            palette.red & 0xffffff | 0x20000000,
+            palette.red & 0xffffff | 0x40000000,
+            palette.red,
+            "P1",
+        ),
+        2 => (
+            palette.amber & 0xffffff | 0x18000000,
+            palette.amber & 0xffffff | 0x35000000,
+            palette.amber,
+            "P2",
+        ),
+        _ => (
+            palette.raised,
+            palette.border,
+            palette.muted,
+            "P3",
+        ),
     };
     div()
         .px_2()
         .py(px(1.5))
         .rounded(px(4.))
         .bg(rgba(bg_color))
+        .border_1()
+        .border_color(rgba(border_color))
         .text_color(rgb(text_color))
         .text_xs()
         .font_weight(if priority == 1 {
             FontWeight::SEMIBOLD
         } else {
-            FontWeight::NORMAL
+            FontWeight::MEDIUM
         })
         .child(label)
         .into_any_element()
@@ -133,7 +150,9 @@ pub fn due_badge(due: Option<&str>, done: bool, today: &str, palette: Palette) -
             .px_2()
             .py(px(1.5))
             .rounded(px(4.))
-            .bg(rgba(palette.amber & 0xffffff | 0x25000000))
+            .bg(rgba(palette.amber & 0xffffff | 0x22000000))
+            .border_1()
+            .border_color(rgba(palette.amber & 0xffffff | 0x38000000))
             .text_color(rgb(palette.amber))
             .text_xs()
             .font_weight(FontWeight::MEDIUM)
@@ -144,6 +163,8 @@ pub fn due_badge(due: Option<&str>, done: bool, today: &str, palette: Palette) -
             .py(px(1.5))
             .rounded(px(4.))
             .bg(rgba(palette.raised))
+            .border_1()
+            .border_color(rgba(palette.border))
             .text_color(rgb(palette.text))
             .text_xs()
             .font_weight(FontWeight::MEDIUM)
@@ -153,10 +174,12 @@ pub fn due_badge(due: Option<&str>, done: bool, today: &str, palette: Palette) -
             .px_2()
             .py(px(1.5))
             .rounded(px(4.))
-            .bg(rgba(palette.red & 0xffffff | 0x25000000))
+            .bg(rgba(palette.red & 0xffffff | 0x22000000))
+            .border_1()
+            .border_color(rgba(palette.red & 0xffffff | 0x38000000))
             .text_color(rgb(palette.red))
             .text_xs()
-            .font_weight(FontWeight::MEDIUM)
+            .font_weight(FontWeight::SEMIBOLD)
             .child(format!("Overdue · {d}"))
             .into_any_element(),
         DueStatus::Upcoming(d) => div()
@@ -164,6 +187,8 @@ pub fn due_badge(due: Option<&str>, done: bool, today: &str, palette: Palette) -
             .py(px(1.5))
             .rounded(px(4.))
             .bg(rgba(palette.raised))
+            .border_1()
+            .border_color(rgba(palette.border))
             .text_color(rgb(palette.muted))
             .text_xs()
             .child(d)

@@ -491,6 +491,16 @@ impl Workspace {
             Some(Item::Approval(id)) => self.decide(id, true, window, cx),
             Some(Item::Down(name)) => self.set_running(name, true, window, cx),
             Some(Item::Entry(_)) => self.open_dashboard("/calendar".into(), window, cx),
+            Some(Item::FocusTask(id)) => {
+                let current_done = self
+                    .focus_tasks
+                    .value
+                    .as_ref()
+                    .and_then(|tasks| tasks.iter().find(|t| t.id == id))
+                    .map(|t| t.done)
+                    .unwrap_or(false);
+                self.toggle_task(id, !current_done, window, cx);
+            }
             Some(Item::Capability { name, up: false }) => self.set_running(name, true, window, cx),
             Some(Item::Capability { up: true, .. }) | None => {}
         }
@@ -919,6 +929,59 @@ mod tests {
         view.read_with(cx, |view, _| {
             assert_eq!(view.page, Page::Home);
             assert_eq!(view.selection.cursor, None);
+        });
+    }
+
+    #[gpui::test]
+    fn home_focus_tasks_keyboard_navigation(cx: &mut TestAppContext) {
+        let (view, cx) = open(cx);
+        view.update(cx, |view, cx| {
+            view.page = Page::Home;
+            view.health.value = None;
+            view.focus_tasks.value = Some(vec![
+                GlobalTask {
+                    id: "Atlas/Projects/Test/Tasks/Task1.md".into(),
+                    kind: "task".into(),
+                    title: "Focus on LibSQL".into(),
+                    priority: 1,
+                    due: None,
+                    done: false,
+                    summary: None,
+                    project: "Test".into(),
+                },
+                GlobalTask {
+                    id: "Atlas/Projects/Test/Tasks/Task2.md".into(),
+                    kind: "task".into(),
+                    title: "Fix bug".into(),
+                    priority: 2,
+                    due: Some("2020-01-01".into()),
+                    done: false,
+                    summary: None,
+                    project: "Test".into(),
+                },
+            ]);
+            cx.notify();
+        });
+        cx.simulate_keystrokes("j");
+        view.read_with(cx, |view, _| {
+            assert_eq!(
+                view.selected(),
+                Some(Item::FocusTask("Atlas/Projects/Test/Tasks/Task1.md".into()))
+            );
+        });
+        cx.simulate_keystrokes("j");
+        view.read_with(cx, |view, _| {
+            assert_eq!(
+                view.selected(),
+                Some(Item::FocusTask("Atlas/Projects/Test/Tasks/Task2.md".into()))
+            );
+        });
+        cx.simulate_keystrokes("k");
+        view.read_with(cx, |view, _| {
+            assert_eq!(
+                view.selected(),
+                Some(Item::FocusTask("Atlas/Projects/Test/Tasks/Task1.md".into()))
+            );
         });
     }
 }

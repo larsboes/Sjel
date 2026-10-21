@@ -218,21 +218,12 @@ fn focus_tasks(
     cx: &mut Context<Workspace>,
 ) -> impl IntoElement {
     let today = chrono::Local::now().format("%Y-%m-%d").to_string();
+    let selected = view.selected();
     let body = match (&view.focus_tasks.value, &view.focus_tasks.error) {
         (_, Some(error)) => note(format!("Could not load tasks. {error}"), palette.muted),
         (None, None) => placeholder(56.),
-        (Some(tasks), None) => {
-            let urgent: Vec<_> = tasks
-                .iter()
-                .filter(|t| !t.done)
-                .filter(|t| {
-                    t.priority == 1
-                        || t.due
-                            .as_deref()
-                            .is_some_and(|d| !d.is_empty() && d <= today.as_str())
-                })
-                .take(6)
-                .collect();
+        (Some(_), None) => {
+            let urgent = view.urgent_tasks();
 
             if urgent.is_empty() {
                 note("No urgent or overdue tasks today.", palette.muted)
@@ -246,7 +237,9 @@ fn focus_tasks(
                             let proj_name = task.project.clone();
                             let due = task.due.clone().filter(|d| !d.is_empty());
                             let priority = task.priority.clamp(1, 3);
-                            row()
+                            let marked = selected == Some(Item::FocusTask(task_id.clone()));
+                            view.selection
+                                .mark(row(), marked, palette)
                                 .child(
                                     div().w(px(20.)).child(
                                         Checkbox::new(("home-task-done", index))

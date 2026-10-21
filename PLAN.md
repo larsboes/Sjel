@@ -341,11 +341,44 @@ Measured on this machine:
   until something opens it. It cleared on the next run. Worth teaching `backup.sh` that a declared
   database that has never existed is "nothing to back up yet" rather than a failure.
 
+### Open decision (2026-10-21): one database, or one per capability
+
+Left open by the owner after asking the right question — *if we split, which one do I search later?*
+— and it is not a question to answer from doctrine, because the doctrine's stated reason does not
+survive measurement.
+
+**Measured, so the next reader does not re-derive it:**
+
+- `capabilities/store/README.md` and `docs/architecture/storage.md` both justify one file by
+  cross-schema joins being a single connection. Across every SQL literal in every capability there
+  is **one** statement that spans two prefixes: `INSERT INTO inventory_item SELECT … FROM
+  interior_item`, a migration helper. There is no lattice of correlation queries to protect.
+- `projects` — the capability the phone needs first — is **one table** (`projects_records`), 1,221
+  rows, **zero JOINs**, already on `libsql` via `sjel-turso`.
+- 18 capabilities open the shared file through `sjel-store` (`rusqlite`); 2 through `sjel-turso`.
+- **`sqld` serves the existing `axon.db` as it stands**: a `sqlite3 .backup` copy of the live file
+  (275 MB, 108 tables) placed at `<db-path>/dbs/default/data` answered `sqlite_master` and
+  capability queries over Hrana with no conversion. So making the real database a primary is a
+  *copy*, not an ETL.
+
+**The three shapes and what each costs:**
+
+| | files | cost | what it buys |
+| --- | --- | --- | --- |
+| **A** split only what the phone needs | 2–3 | one rule for reach (`<overlay>/data/<cap>/<cap>.db`), one more backup contract, one `ATTACH`-able join | offline phone in days |
+| **B** one file, `sqld` owns it | 1 | migrate 18 capabilities off `rusqlite`; reads become loopback round trips | no reach problem; everything reaches the phone |
+| **C** no replica yet | 1 | nothing | the phone keeps driving this Mac over the tailnet |
+
+The load-bearing fact for the decision: **B's obstacle is the engine migration, not the data**, and
+**A's reach cost is a rule plus `ATTACH`, not a hunt**. Recommendation on the table is A, scoped to
+`projects` only — a 20-way split is what the store README rightly warned against, and a one-table,
+zero-JOIN move is not that. What would settle it is not more analysis: it is whether the phone has
+to read with this Mac asleep. If it does not, C is free and A is unnecessary.
+
 ### Next, in order
 
-1. The `axon.db` split for the first capability the phone needs, which is what makes a replica over
-   that file possible at all. Only then does `SJEL_TURSO_URL` get written, and `projects` starts
-   following this primary instead of holding its own file.
+1. Whichever shape the decision above lands on. Under A: `projects` alone moves; the other 17 stay
+   in `axon.db`, and only then does `SJEL_TURSO_URL` get written.
 2. The Tauri iOS app holding its own replica (`sjel-turso` already builds for the target), pulling
    from `http://100.116.104.41:8089` over the tailnet with a minted JWT.
 3. An `sjel update` class for the pinned binary, so "who moves it" has one answer instead of

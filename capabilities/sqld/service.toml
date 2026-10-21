@@ -1,0 +1,41 @@
+# sqld — the libSQL primary this machine hosts, for other devices to hold a replica of.
+#
+# Shape: schemas/service.toml.example (process kind). The binary is Turso's published release,
+# adopted as-is (upstreams.toml [libsql-server]) and installed by tools/install-sqld.sh at a pinned
+# version and digest: it is on neither Homebrew nor crates.io, so nothing else on this machine
+# would ever put it there.
+kind        = "process"
+name        = "sqld"
+command     = ["sqld", "--http-listen-addr", "127.0.0.1:${SJEL_PORT}", "--grpc-listen-addr", "127.0.0.1:8105"]
+port        = "8089"
+health_path = "/health"
+routes_absent = "libsql-server, not a Sjel capability: it serves the Hrana protocol and /health, and has no route manifest of its own"
+# The primary has to be up before anything that follows it, and `sjel setup apply turso --host-here`
+# is what configures and enables this row: the two paths it needs are deployment settings, so a
+# machine that never ran that command never enables the capability, and `autostart` cannot run it
+# unconfigured.
+autostart   = "true"
+
+# WHERE THE DATA IS. Not argv and not a literal here, because it is a machine fact and this file is
+# tracked: `sqld` reads SQLD_DB_PATH and SQLD_AUTH_JWT_KEY_FILE from the environment, and
+# tools/service-runner.sh passes the overlay's deployment settings into every process it starts.
+# One home per fact, and the private home is the overlay.
+#
+# The database itself is <SQLD_DB_PATH>/dbs/default/data. Backed up OPEN with `sqlite3 .backup`,
+# which the schema allows precisely when every reader is a host process on this machine — sqld is
+# one, so the WAL's one-host rule holds. Stopping the primary to take a cold copy would mean every
+# follower's writes fail for the duration, which is an outage rather than a backup.
+backup_sqlite_online  = "data/sqld/dbs/default/data"
+backup_target         = "backup-target"
+backup_retain         = "7"
+backup_advise_days    = "1"
+backup_stale_days     = "7"
+
+# Why the gRPC listener is bound explicitly rather than left out: sqld serves gRPC for *replica
+# chains* — the shape this becomes when a home server takes over as primary and this Mac keeps a
+# replica. Left unset it still opens a port; binding it to loopback on a known number means the
+# machine's open-port surface is a decision rather than a default.
+#
+# Not proxied by the dashboard: this port is the phone's, over the tailnet, once the phone's replica
+# exists. That exposure is a separate decision with its own control (sqld's JWT check), and it is
+# not implied by this manifest.

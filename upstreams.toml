@@ -326,6 +326,13 @@ license = "MIT"
 summary = "SQLite fork with async I/O, concurrent writes (BEGIN CONCURRENT/MVCC), and embedded replicas"
 why = "Evaluated 2026-10-21 against live axon.db (274 MB, 107 tables) as the core engine for Sjel's multi-tenant store and Zed GPUI desktop app integration (PLAN.md). Replaces rusqlite's single-writer limitation (SQLITE_BUSY under background agent + UI concurrency) while preserving 100% byte-level SQLite file format compatibility. Measured 2026-10-21: libsql 0.10.0 connects to axon.db in 1.25 ms, passes PRAGMA table discovery over all 107 tables, executes JSON1 json_each array predicates with zero translation, and runs 10 concurrent async readers in 43 ms. Local embedded mode requires no network, daemon or remote server; remote replica sync is available on demand. Upstream licensed under MIT."
 
+[libsql-server]
+url = "https://github.com/tursodatabase/libsql"
+verdict = "adopt"
+license = "MIT"
+summary = "sqld, the libSQL database server: the primary a phone or a second machine holds an embedded replica of"
+why = "The server half of the same repository as [libsql], split into its own row because it is consumed completely differently: the crate comes from crates.io and is pinned by Cargo.lock, while sqld ships only as release binaries and is installed by tools/install-sqld.sh at one version and one digest (libsql-server-v0.24.32, aarch64-apple-darwin, sha256 ced2a9d6...381dd, verified against the archive this machine installed on 2026-10-21). Not on Homebrew and not on crates.io, which is why a repository script owns it rather than a package manager. Adopted for the topology decided 2026-10-21 (PLAN.md section 6): this Mac is the primary, a phone is the first replica, and a home server takes over later by changing SJEL_TURSO_URL and nothing else. The pin is a compatibility fact, not a preference: 0.24.32 is the release measured against the libsql 0.10.0 crate (pull, forwarded write, a second replica seeing the first one's write). Upstream has been quiet since 2025-02-14; that is recorded as a risk rather than as comfort, because a primary is now on the critical path for whatever replicates from it. Untrusted surface when it is exposed beyond loopback: sqld's own JWT check, minted by libs/libsql-auth from a key in the macOS Keychain."
+
 [bun]
 url = "https://github.com/oven-sh/bun"
 verdict = "adopt"

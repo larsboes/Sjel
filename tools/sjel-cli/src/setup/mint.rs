@@ -93,10 +93,20 @@ pub(crate) fn write_public_key(paths: &Paths, key: &PrimaryKey) -> Result<PathBu
     Ok(path)
 }
 
-/// Mint a credential for this deployment's own primary: a month's read-write token, plus the
+/// Write the public half where `sqld` reads it, and answer the path.
+///
+/// Loads the signing key from the Keychain, creating it on first use. Written every time rather
+/// than only when absent: the file is public, and a key that changed with the file left behind
+/// would make every credential fail with no hint why.
+pub(crate) fn ensure_public_key(paths: &Paths) -> Result<PathBuf, String> {
+    let key = signing_key()?;
+    write_public_key(paths, &key)
+}
+
+/// Mint a credential for this deployment's own primary: a month's read-write one, plus the
 /// public key file the primary must be started with.
 ///
-/// Answers `(token, public key path)`. The token is returned to be written into the deployment
+/// Answers `(value, public key path)`. The value is returned to be written into the deployment
 /// record by the caller, which is the only place it may land.
 pub(crate) fn mint_for_local_primary(
     paths: &Paths,

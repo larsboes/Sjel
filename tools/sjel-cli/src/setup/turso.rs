@@ -41,6 +41,9 @@ pub(crate) struct Options<'a> {
     pub mint_days: u64,
     /// Mint a fresh credential even when one is already recorded.
     pub remint: bool,
+    /// Host the primary on this machine: install the binary if missing, record its two paths,
+    /// enable the `sqld` capability and start it.
+    pub host_here: bool,
 }
 
 #[derive(Debug, Serialize)]
@@ -144,11 +147,39 @@ fn enabled_capabilities(paths: &Paths) -> Vec<String> {
         .collect()
 }
 
-/// The resolved primary URL, from the deployment record or this process's environment.
-fn url(env: &EnvFile) -> Option<String> {
+/// The resolved primary URL: the deployment record's, this process's environment, or — when this
+/// machine hosts the primary and nothing has pointed a follower at it yet — the hosted one.
+///
+/// The last fallback is what lets `verify` answer "does this machine's own primary accept the
+/// credential it holds" without also telling every follower to follow it: `SJEL_TURSO_URL` is what
+/// a *replica* reads, and a replica over the shared `axon.db` cannot open until that file is
+/// split. Recording it early would take `projects` down to make a setup command look complete.
+fn url(paths: &Paths, env: &EnvFile) -> Option<String> {
+    recorded_url(env).or_else(|| hosted_url(paths))
+}
+
+/// The URL as the deployment record and this process's environment state it, with no fallback.
+///
+/// Separate from [`url`] because the two are not the same claim: a surface that says
+/// "SJEL_TURSO_URL ✓" about a *hosted* primary would be claiming followers read a setting that is
+/// deliberately absent from the record.
+fn recorded_url(env: &EnvFile) -> Option<String> {
     env.value(URL_KEY)
         .or_else(|| std::env::var(URL_KEY).ok().filter(|v| !v.trim().is_empty()))
         .map(|value| value.trim().to_owned())
+}
+
+/// The loopback URL of a primary this machine hosts, when the `sqld` capability is enabled.
+fn hosted_url(paths: &Paths) -> Option<String> {
+    if !enabled_capabilities(paths)
+        .iter()
+        .any(|name| name == "sqld")
+    {
+        return None;
+    }
+    sqld_port(paths)
+        .ok()
+        .map(|port| format!("http://127.0.0.1:{port}"))
 }
 
 /// The resolved credential. Read, never printed: every message about it says whether it is there.
@@ -171,7 +202,7 @@ fn interval(env: &EnvFile) -> Option<u64> {
 
 pub(super) fn plan(paths: &Paths, env: &EnvFile) -> Plan {
     let consumers = consumers(paths);
-    let url = url(env);
+    let url = url(paths, env);
     let token = token(env);
     let mut probes = Vec::new();
     let mut steps = Vec::new();
@@ -198,9 +229,16 @@ pub(super) fn plan(paths: &Paths, env: &EnvFile) -> Plan {
         } else {
             Mark::Missing
         },
-        detail: match &url {
-            Some(url) => url.clone(),
-            None => "no primary named, and no replica can be opened without one".to_owned(),
+        detail: match (&url, recorded_url(env).is_some()) {
+            (Some(url), true) => url.clone(),
+            // A hosted primary is reachable and verified here, and deliberately not recorded:
+            // the setting is what a *replica* reads, and no replica can open over the shared
+            // database until that file is split. Saying "set" would be the wrong fact.
+            (Some(url), false) => format!(
+                "{url} — hosted here and not recorded: no replica can open over the shared \
+                 database until its own file exists"
+            ),
+            (None, _) => "no primary named, and no replica can be opened without one".to_owned(),
         },
     });
 
@@ -415,7 +453,24 @@ pub(crate) fn apply(
             public.display()
         ));
     }
-    if !changed {
+    // Hosting the primary here is a third kind of fact: where its data is, which key it checks,
+    // and whether the service is running at all. All three are machine facts, so the settings go
+    // into the deployment record and the service goes through the tools that own those decisions.
+    if options.host_here {
+        let (sqld_lines, local_url) = host_primary(paths, &mut next, &mut changed, options)?;
+        lines.extend(sqld_lines);
+        if options.url.is_none() {
+            // Deliberately NOT written into the record unless the operator passed --url: that
+            // setting is what a *replica* reads, and no replica can open over the shared `axon.db`
+            // yet. Recording it early would take `projects` down to make a setup command look
+            // complete. Here the URL is reported, so the day the split lands it is one flag away.
+            lines.push(format!(
+                "a replica will follow {local_url} once its own data file is separate; \
+                 {URL_KEY} stays unset until then"
+            ));
+        }
+    }
+    if !changed && !options.host_here {
         // Per-setting lines are noise when every one of them says nothing happened.
         lines.clear();
         lines.push(format!(
@@ -424,16 +479,26 @@ pub(crate) fn apply(
         ));
         return Ok(Applied { lines });
     }
-    if paths.overlay_root.is_none() {
-        return Err(format!(
-            "no overlay resolved, so {} is not a private file — refusing to write a deployment \
-             setting outside one",
-            env.path().display()
-        ));
+    if changed {
+        if paths.overlay_root.is_none() {
+            return Err(format!(
+                "no overlay resolved, so {} is not a private file — refusing to write a deployment \
+                 setting outside one",
+                env.path().display()
+            ));
+        }
+        next.write()
+            .map_err(|e| format!("cannot write {}: {e}", env.path().display()))?;
+        lines.insert(0, format!("{}: written", env.path().display()));
     }
-    next.write()
-        .map_err(|e| format!("cannot write {}: {e}", env.path().display()))?;
-    lines.insert(0, format!("{}: written", env.path().display()));
+
+    // The host steps run AFTER the write, and that order is the whole reason the primary is not
+    // started with an empty configuration: `sqld` reads SQLD_DB_PATH and SQLD_AUTH_JWT_KEY_FILE
+    // from its environment at exec time, so starting it before the record exists makes it open a
+    // database called `data.sqld` in whatever directory it happened to inherit.
+    if options.host_here {
+        lines.extend(host_primary_start(paths)?);
+    }
 
     // A capability reads the settings at start, so the write reaches it only through a restart.
     // This is the step that used to be printed for a person to run.
@@ -442,6 +507,132 @@ pub(crate) fn apply(
     }
     lines.push("next: sjel setup verify turso".to_owned());
     Ok(Applied { lines })
+}
+
+/// Host the primary on this machine: the binary, its two paths, and the service itself.
+///
+/// Answers the lines to report and the URL this deployment should record. Every step here defers
+/// to the tool that owns its decision — the installer for the binary, `tools/capability.sh` for the
+/// enabled set, the runner for the process — because a setup step that re-derived one of those
+/// would eventually disagree with it, and the disagreement would look like a working machine.
+fn host_primary(
+    paths: &Paths,
+    next: &mut EnvFile,
+    changed: &mut bool,
+    _options: &Options<'_>,
+) -> Result<(Vec<String>, String), String> {
+    let mut lines = Vec::new();
+
+    // 1. The binary. One pinned version, one digest, and the script refuses anything else.
+    let installer = paths.root.join("tools/install-sqld.sh");
+    match std::process::Command::new(&installer).output() {
+        Ok(output) if output.status.success() => {
+            let last = String::from_utf8_lossy(&output.stdout)
+                .lines()
+                .last()
+                .unwrap_or("installed")
+                .to_owned();
+            lines.push(last);
+        }
+        Ok(output) => {
+            return Err(format!(
+                "{} failed: {}",
+                installer.display(),
+                String::from_utf8_lossy(&output.stderr).trim()
+            ))
+        }
+        Err(e) => return Err(format!("cannot run {}: {e}", installer.display())),
+    }
+
+    // 2. Where the primary keeps its data and which public key it checks. Two machine facts; the
+    //    process kind has no env field, and the deployment record is private, so this is where a
+    //    per-process setting has one home.
+    let root = paths
+        .overlay_root
+        .as_ref()
+        .ok_or("no overlay resolved, so a hosted primary has nowhere private to keep its data")?;
+    let data = root.join("data").join("sqld");
+    std::fs::create_dir_all(&data).map_err(|e| format!("cannot create {}: {e}", data.display()))?;
+    let key_file = super::mint::ensure_public_key(paths)?;
+    for (key, value) in [
+        ("SQLD_DB_PATH", data.display().to_string()),
+        ("SQLD_AUTH_JWT_KEY_FILE", key_file.display().to_string()),
+    ] {
+        let wrote = next.set(key, &value);
+        *changed |= wrote;
+        lines.push(format!(
+            "{key}: {} ({value})",
+            if wrote { "set" } else { "unchanged" }
+        ));
+    }
+
+    // 4. The port is the manifest's, not a literal here: the dashboard proxies whatever the
+    //    registry says, and a second copy of the number would drift from it.
+    let port = sqld_port(paths)?;
+    let url = format!("http://127.0.0.1:{port}");
+
+    Ok((lines, url))
+}
+
+/// Enable and start the hosted primary. Separate from [`host_primary`] because it must run after
+/// the deployment record is on disk: the process reads its paths from the environment at exec.
+fn host_primary_start(paths: &Paths) -> Result<Vec<String>, String> {
+    let mut lines = Vec::new();
+    if !enabled_capabilities(paths)
+        .iter()
+        .any(|name| name == "sqld")
+    {
+        lines.push(run_tool(
+            paths,
+            "tools/capability.sh",
+            &["enable", "sqld"],
+            "enable sqld",
+        )?);
+    }
+    lines.push(run_tool(
+        paths,
+        "tools/service-runner.sh",
+        &["start", "sqld"],
+        "start sqld",
+    )?);
+    Ok(lines)
+}
+
+/// The port the `sqld` manifest declares, read from the manifest itself.
+fn sqld_port(paths: &Paths) -> Result<String, String> {
+    let manifest = paths.caps_dir.join("sqld").join("service.toml");
+    let body = std::fs::read_to_string(&manifest).map_err(|e| {
+        format!(
+            "cannot read {}: {e} — the sqld capability is not in this checkout",
+            manifest.display()
+        )
+    })?;
+    body.lines()
+        .find_map(|line| {
+            let code = line.split('#').next().unwrap_or("").trim();
+            let rest = code.strip_prefix("port")?.trim_start();
+            let value = rest.strip_prefix('=')?.trim_start();
+            Some(value.trim_matches('"').to_owned())
+        })
+        .filter(|port| !port.is_empty())
+        .ok_or_else(|| format!("{} declares no port", manifest.display()))
+}
+
+/// Run one of this repository's tools, answering its last output line or its failure.
+fn run_tool(paths: &Paths, tool: &str, args: &[&str], label: &str) -> Result<String, String> {
+    let path = paths.root.join(tool);
+    match std::process::Command::new(&path).args(args).output() {
+        Ok(output) if output.status.success() => Ok(String::from_utf8_lossy(&output.stdout)
+            .lines()
+            .last()
+            .map(|line| format!("{label}: {line}"))
+            .unwrap_or_else(|| format!("{label}: ok"))),
+        Ok(output) => Err(format!(
+            "{label} failed: {}",
+            String::from_utf8_lossy(&output.stderr).trim()
+        )),
+        Err(e) => Err(format!("cannot run {}: {e}", path.display())),
+    }
 }
 
 /// Restart one enabled capability through the runner that owns its lifecycle.
@@ -473,7 +664,7 @@ fn restart(paths: &Paths, name: &str) -> String {
 /// token is still valid.
 pub(super) fn verify(paths: &Paths, env: &EnvFile) -> Vec<Probe> {
     let mut probes = Vec::new();
-    let url = url(env);
+    let url = url(paths, env);
     let token = token(env);
 
     probes.push(Probe {
@@ -486,7 +677,13 @@ pub(super) fn verify(paths: &Paths, env: &EnvFile) -> Vec<Probe> {
         detail: format!(
             "{}: url {}, token {}",
             env.path().display(),
-            if url.is_some() { "present" } else { "absent" },
+            // `recorded_url` rather than the resolved one: a hosted primary is reachable without
+            // being recorded, and this line is about the file.
+            match (recorded_url(env).is_some(), url.is_some()) {
+                (true, _) => "present",
+                (false, true) => "absent (the primary is hosted here)",
+                (false, false) => "absent",
+            },
             if token.is_some() { "present" } else { "absent" }
         ),
     });
@@ -710,6 +907,7 @@ mod tests {
                 interval_secs: None,
                 mint_days: super::super::mint::DEFAULT_MINT_DAYS,
                 remint: false,
+                host_here: false,
             },
             None,
         )
@@ -733,6 +931,7 @@ mod tests {
                 interval_secs: Some(0),
                 mint_days: super::super::mint::DEFAULT_MINT_DAYS,
                 remint: false,
+                host_here: false,
             },
             None,
         )
@@ -752,6 +951,7 @@ mod tests {
             interval_secs: Some(120),
             mint_days: super::super::mint::DEFAULT_MINT_DAYS,
             remint: false,
+            host_here: false,
         };
 
         let env = EnvFile::read(record.clone());
@@ -810,6 +1010,7 @@ mod tests {
             interval_secs: None,
             mint_days: super::super::mint::DEFAULT_MINT_DAYS,
             remint: false,
+            host_here: false,
         };
         let env = EnvFile::read(record.clone());
         let applied = apply(&paths, &env, &options, None).unwrap();

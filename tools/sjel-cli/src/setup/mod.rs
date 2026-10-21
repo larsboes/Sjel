@@ -43,7 +43,7 @@ sjel setup — what this machine still needs, and what applying it would do.
       Probe this machine and print what would change. Writes nothing; this is the default.
 
   sjel setup apply [component] --confirm [--url <url>] [--interval-secs <n>] [--token-stdin]
-                   [--remint] [--mint-days <n>]
+                   [--remint] [--mint-days <n>] [--host-here]
       Run every step in the plan, then verify. Without --confirm it prints the plan and exits 2.
       --token-stdin reads a credential from stdin and stores it in the private overlay; it is
       never echoed, never logged and never written to the tracked tree. Use it for a primary
@@ -52,6 +52,9 @@ sjel setup — what this machine still needs, and what applying it would do.
       signing key lives in the Keychain, its public half is written to the overlay for
       `sqld --auth-jwt-key-file`, and the token is written like any other setting. --remint mints
       a fresh one anyway; --mint-days sets its lifetime (default 30).
+      --host-here hosts the primary on THIS machine: install the pinned sqld binary, record where
+      its data and its public key live, enable the capability and start it. The URL defaults to
+      the manifest's port on loopback. Without it, nothing here starts a server.
 
   sjel setup verify [component] [--json]
       Ask the primary itself whether the credential works. Exits 1 when a check fails.
@@ -253,6 +256,7 @@ pub fn run(rest: &[String]) -> ExitCode {
     let mut token_stdin = false;
     let mut mint_days: Option<u64> = None;
     let mut remint = false;
+    let mut host_here = false;
 
     let mut iter = rest.iter().peekable();
     while let Some(arg) = iter.next() {
@@ -265,6 +269,7 @@ pub fn run(rest: &[String]) -> ExitCode {
             "--confirm" => confirm = true,
             "--token-stdin" => token_stdin = true,
             "--remint" => remint = true,
+            "--host-here" => host_here = true,
             "--mint-days" => match iter.next().map(|v| v.parse::<u64>()) {
                 Some(Ok(days)) if days > 0 => mint_days = Some(days),
                 _ => return usage("--mint-days needs a whole number of days, at least 1"),
@@ -331,6 +336,7 @@ pub fn run(rest: &[String]) -> ExitCode {
                 interval_secs,
                 mint_days: mint_days.unwrap_or(mint::DEFAULT_MINT_DAYS),
                 remint,
+                host_here,
             };
             if !confirm {
                 for c in &chosen {

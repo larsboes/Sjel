@@ -162,6 +162,16 @@ min_version = "0.7.0"
 why = "capabilities/macmon execs it as `macmon serve` for the dashboard's Systems page; tools/sysmon power execs the same binary as a TUI. Absent for weeks while the capability was enabled, because a capability's own command was not a declared tool here and nothing else looked."
 install_macos = "cargo install macmon --locked"   # latest; min_version above is a floor, not a target (Q77)
 
+[sqld]
+required = "optional"
+os = "macos"
+needed_by = ["capability:sqld"]
+upstream = "libsql-server"
+version_cmd = "sqld --version"
+min_version = "0.24.32"
+why = "capabilities/sqld runs it as the libSQL primary other devices replicate from. On neither Homebrew nor crates.io, and the version is a compatibility fact rather than a preference: 0.24.32 is the release measured against the libsql 0.10.0 crate this repository links (pull, forwarded write, second replica, 2026-10-21). Pinned rather than latest, so this is the one entry here whose install hint is a repository script instead of a package manager."
+install_macos = "tools/install-sqld.sh"   # pinned version + digest, into ~/.local/bin
+
 [exiftool]
 required = "optional"
 upstream = "exiftool"

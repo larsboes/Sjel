@@ -301,13 +301,55 @@ reported as "check the URL and that the database exists". The probe now runs `PO
 with a `SELECT 1` — the authenticated door a replica's writes take — falls back to `/info` for a
 cloud primary, and reports `/health` as reachability only when neither answers.
 
+### Step 1 done, 2026-10-21: `sqld` is a service this machine owns
+
+`capabilities/sqld/` is a manifest and a README, no code: the manifest turns a binary into a row
+in the registry that `service-runner.sh`, `tools/capability.sh`, the watchdog, `backup.sh` and
+`sjel-status` all already understand.
+
+| piece | where |
+| --- | --- |
+| the binary | `tools/install-sqld.sh` — pinned 0.24.32, digest literal, `--check`/`--force` |
+| the contract | `capabilities/sqld/service.toml`, `[libsql-server]` in `upstreams.toml`, `[sqld]` in `toolchain.toml` |
+| the facts | `SQLD_DB_PATH`, `SQLD_AUTH_JWT_KEY_FILE` in the deployment record |
+| the lifecycle | `tools/service-runner.sh start|stop|status sqld`, launchd unit installed |
+| the backup | `backup_sqlite_online = "data/sqld/dbs/default/data"`, retain 7, daily |
+
+`SQLD_DB_PATH` and the key file are settings rather than argv because both are machine facts and
+the manifest is tracked: `sqld` reads them from the environment, and the runner passes the
+deployment record into every process it starts.
+
+Measured on this machine:
+
+1. `sjel setup apply turso --confirm --host-here` — installed nothing (already pinned), wrote the
+   record and the public key, enabled the capability, started it, and verified:
+   `✓ primary http://127.0.0.1:8089/v2/pipeline accepted it and ran a statement (200 OK)`.
+2. `tools/service-runner.sh status sqld` → `process running (pid 97201) healthy`;
+   `install-persistence sqld` → `com.sjel.sqld.plist`, so it survives a reboot.
+3. `tools/backup.sh sqld` → live `sqlite3 .backup` copy, `integrity_check: ok`, 1,150-byte tarball
+   at the destination, pruned to 7, receipt written.
+
+**Two things this turned up, both recorded rather than smoothed over:**
+
+- The gRPC listener was first bound to 8099, which a running `operator-profile` process holds while
+  its manifest claims a different port — so `sqld` died with `Address already in use` and the
+  runner correctly refused to call the start successful. The manifest now uses 8105, and the stray
+  process on 8099 is its own problem, not this one's. The runner catching it is the argument for
+  starting services through the runner instead of by hand.
+- A backup scheduled between "enable" and "first client connects" fails with `declared SQLite
+  database is missing: data/sqld/dbs/default/data`, because a fresh primary has no namespace file
+  until something opens it. It cleared on the next run. Worth teaching `backup.sh` that a declared
+  database that has never existed is "nothing to back up yet" rather than a failure.
+
 ### Next, in order
 
-1. `sqld` as managed software: a pinned binary with its digest, an `upstreams.toml` entry with a
-   review, start/stop owned by `tools/service-runner.sh`, an update class, and backup coverage.
-2. The `axon.db` split for the first capability the phone needs, which is what makes a replica over
-   that file possible at all.
-3. The Tauri iOS app holding its own replica (`sjel-turso` already builds for the target).
+1. The `axon.db` split for the first capability the phone needs, which is what makes a replica over
+   that file possible at all. Only then does `SJEL_TURSO_URL` get written, and `projects` starts
+   following this primary instead of holding its own file.
+2. The Tauri iOS app holding its own replica (`sjel-turso` already builds for the target), pulling
+   from `http://100.116.104.41:8089` over the tailnet with a minted JWT.
+3. An `sjel update` class for the pinned binary, so "who moves it" has one answer instead of
+   "you, when you read the README".
 
 ### What this commits us to, stated plainly
 - **The `axon.db` split is on the critical path.** One file cannot be a replica and a local

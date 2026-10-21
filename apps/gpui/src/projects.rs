@@ -79,23 +79,23 @@ impl Projects {
     pub fn load_projects(&mut self, cx: &mut Context<Self>) {
         self.load_all_tasks(cx);
         let repo = self.repo.clone();
-        data::read(
+        data::read_repo(
             cx,
             self,
             |p| &mut p.projects,
             &repo,
-            |s| async move { s.projects().await },
+            |r| async move { r.fetch_projects().await },
         );
     }
 
     pub fn load_all_tasks(&mut self, cx: &mut Context<Self>) {
         let repo = self.repo.clone();
-        data::read(
+        data::read_repo(
             cx,
             self,
             |p| &mut p.all_tasks,
             &repo,
-            |s| async move { s.tasks(None).await },
+            |r| async move { r.fetch_tasks(None).await },
         );
     }
 

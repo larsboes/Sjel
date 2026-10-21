@@ -55,8 +55,8 @@ impl Repo {
                 return Some(candidate);
             }
         }
-        if let Ok(home) = std::env::var("HOME") {
-            let candidate = std::path::PathBuf::from(home).join("Developer/sjel-personal/data/axon/axon.db");
+        if let Ok(overlay) = std::env::var("SJEL_PERSONAL_ROOT") {
+            let candidate = std::path::PathBuf::from(overlay).join("data/axon/axon.db");
             if candidate.exists() {
                 return Some(candidate);
             }
@@ -73,6 +73,87 @@ impl Repo {
         let conn = db.connect()?;
         conn.execute_batch("PRAGMA busy_timeout = 5000;").await?;
         Ok(conn)
+    }
+
+    /// Read projects directly from local LibSQL database if accessible, otherwise fallback to shell.
+    pub async fn fetch_projects(&self) -> ShellResult<Vec<sjel_gpui_core::shell::ProjectSummary>> {
+        if let Ok(conn) = Self::connect_local_db().await {
+            if let Ok(mut rows) = conn
+                .query(
+                    "SELECT project, MAX(archived) as archived, \
+                     SUM(CASE WHEN kind = 'task' AND done = 0 THEN 1 ELSE 0 END) as open, \
+                     SUM(CASE WHEN kind = 'task' AND done != 0 THEN 1 ELSE 0 END) as done, \
+                     SUM(CASE WHEN kind = 'note' THEN 1 ELSE 0 END) as notes \
+                     FROM projects_records GROUP BY project ORDER BY project",
+                    (),
+                )
+                .await
+            {
+                let mut list = Vec::new();
+                while let Ok(Some(row)) = rows.next().await {
+                    let name: String = row.get(0).unwrap_or_default();
+                    let archived_int: i64 = row.get(1).unwrap_or(0);
+                    let open: i64 = row.get(2).unwrap_or(0);
+                    let done: i64 = row.get(3).unwrap_or(0);
+                    let notes: i64 = row.get(4).unwrap_or(0);
+                    list.push(sjel_gpui_core::shell::ProjectSummary {
+                        name,
+                        archived: archived_int != 0,
+                        open: open.max(0) as usize,
+                        done: done.max(0) as usize,
+                        notes: notes.max(0) as usize,
+                    });
+                }
+                if !list.is_empty() {
+                    return Ok(list);
+                }
+            }
+        }
+        let shell = self.shell()?;
+        shell.projects().await
+    }
+
+    /// Read tasks directly from local LibSQL database if accessible, otherwise fallback to shell.
+    pub async fn fetch_tasks(&self, status: Option<&str>) -> ShellResult<Vec<sjel_gpui_core::shell::GlobalTask>> {
+        if let Ok(conn) = Self::connect_local_db().await {
+            let filter = match status {
+                Some("open") => " AND done = 0",
+                Some("done") => " AND done != 0",
+                _ => "",
+            };
+            let query = format!(
+                "SELECT path, kind, title, done, due, priority, project \
+                 FROM projects_records WHERE kind = 'task'{filter} \
+                 ORDER BY done ASC, priority DESC, due ASC"
+            );
+            if let Ok(mut rows) = conn.query(&query, ()).await {
+                let mut list = Vec::new();
+                while let Ok(Some(row)) = rows.next().await {
+                    let id: String = row.get(0).unwrap_or_default();
+                    let kind: String = row.get(1).unwrap_or_else(|_| "task".into());
+                    let title: String = row.get(2).unwrap_or_default();
+                    let done_int: i64 = row.get(3).unwrap_or(0);
+                    let due: Option<String> = row.get(4).ok();
+                    let priority_int: i64 = row.get(5).unwrap_or(2);
+                    let project: String = row.get(6).unwrap_or_default();
+                    list.push(sjel_gpui_core::shell::GlobalTask {
+                        id,
+                        kind,
+                        title,
+                        done: done_int != 0,
+                        due,
+                        priority: priority_int.clamp(1, 3) as u8,
+                        summary: None,
+                        project,
+                    });
+                }
+                if !list.is_empty() {
+                    return Ok(list);
+                }
+            }
+        }
+        let shell = self.shell()?;
+        shell.tasks(status).await
     }
 }
 
@@ -215,6 +296,36 @@ pub fn read<C, T, F, Fut>(
     }
     cx.notify();
     let work = shell::run(request(shell));
+    cx.spawn(async move |weak, cx| {
+        let result = work.await.unwrap_or(Err(ShellError::Unreachable));
+        let _ = weak.update(cx, |this, cx| {
+            slot(this).settle(result);
+            cx.notify();
+        });
+    })
+    .detach();
+}
+
+/// Reads into `slot` via `Repo` (which can use direct local DB or Shell fallback),
+/// unless that slot is already loading.
+pub fn read_repo<C, T, F, Fut>(
+    cx: &mut Context<C>,
+    this: &mut C,
+    slot: fn(&mut C) -> &mut Remote<T>,
+    repo: &Repo,
+    request: F,
+) where
+    C: 'static,
+    T: Send + 'static,
+    F: FnOnce(Repo) -> Fut,
+    Fut: Future<Output = ShellResult<T>> + Send + 'static,
+{
+    if !slot(this).begin() {
+        return;
+    }
+    cx.notify();
+    let repo_clone = repo.clone();
+    let work = shell::run(request(repo_clone));
     cx.spawn(async move |weak, cx| {
         let result = work.await.unwrap_or(Err(ShellError::Unreachable));
         let _ = weak.update(cx, |this, cx| {

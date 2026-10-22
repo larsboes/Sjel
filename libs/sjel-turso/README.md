@@ -1,6 +1,6 @@
 # libs/sjel-turso
 
-Turso and LibSQL storage engine for Sjel: **async multi-writer concurrency (`BEGIN CONCURRENT` / MVCC), embedded replicas, and native vector search**.
+Turso and LibSQL storage engine for Sjel: **async multi-writer concurrency (`BEGIN CONCURRENT` / MVCC) and native vector search**.
 
 A shared library, not a capability: no domain of its own, no CLI (CONTRIBUTING.md#three-architectural-nouns). Consumers declare an `sjel-turso` path dependency in the workspace.
 
@@ -74,69 +74,17 @@ The first capability to finish that move is `capabilities/operator-profile` (202
 `capabilities/projects` followed it the same day. Their tables are still in the same shared file;
 only the engine differs.
 
-## Embedded replicas (default `replica` feature)
+## Embedded replicas: removed 2026-10-22
 
-A replica is a local file that holds the primary's write-ahead log. Reads never leave the machine;
-writes do, because LibSQL forwards them to the primary and the next pull brings them back. That
-trade is the whole feature: it buys read latency and spends write latency, so it suits a device
-that reads often and writes rarely, not the server that owns the data.
+This crate followed a remote `sqld` primary as an embedded replica from 2026-10-21, on by default.
+It was removed a day later, before anything used it. LibSQL's sync client pins hyper-rustls 0.25,
+which pulls rustls 0.22, rustls-webpki 0.102 and h2 0.3. Those carry 10 known advisories, one
+rated High (RUSTSEC-2026-0104), and libsql 0.10.0, the newest release, has no fix. Upstream
+[issue #2266](https://github.com/tursodatabase/libsql/issues/2266) tracks the pin. The migration
+that would lift it, [PR #2224](https://github.com/tursodatabase/libsql/pull/2224), is a stale
+draft. A Cargo feature that defaults to off would not have helped: Cargo locks every declared
+feature, so the crates stayed in `Cargo.lock` until the feature itself was deleted (measured).
 
-The sync client is on by default (decided 2026-10-21). It brings its own networking stack — hyper,
-tonic, rustls — which took this crate's normal dependency graph from 56 to 188 packages. That cost is
-paid once per workspace, because everything else that speaks TLS already links the same crates. The
-alternative was an opt-in feature, and it meant every capability that wanted a replica needed
-`features = ["replica"]` added to its Cargo.toml: a machine could not be set up without editing
-tracked source, so `sjel setup` would have had to edit it. Configuration beats a code edit. A build
-that must stay light opts out with `default-features = false`.
-
-```rust
-// A replica when the deployment's settings name one, else the shared local file.
-let store = sjel_turso::Store::open_with(
-    &path,
-    "places",
-    sjel_turso::Source::from_env()?,
-    migrate,
-)
-.await?;
-```
-
-[`ReplicaConfig::from_env`](src/replica.rs) reads:
-
-| Setting | Meaning |
-| --- | --- |
-| `SJEL_TURSO_URL` | The primary, e.g. `libsql://axon-owner.turso.io`. Unset means no replica. |
-| `SJEL_TURSO_AUTH_TOKEN` | The primary's credential, from the environment or the keychain, never from a tracked file. |
-| `SJEL_TURSO_SYNC_INTERVAL_SECS` | Overrides the 60-second pull interval. |
-
-A configured replica that cannot be opened is an error, never a fallback to the local file: a
-silent fallback is a device that stopped seeing the primary's writes with no signal.
-
-What the open does, and what it refuses:
-
-- The first pull runs before the DDL, so the migration decides the schema against the primary's
-  current state and not against an empty file. A background task then pulls every interval and
-  reports the first failure of each streak once.
-- A replica connection carries no connection PRAGMAs. LibSQL's sync connection parses every
-  statement to decide whether the primary must serve it, and its parser rejects
-  `PRAGMA busy_timeout = <n>` outright while treating `PRAGMA foreign_keys = ON` as a write for the
-  primary. The settings are moot there anyway: writes are the primary's and reads take no writer's
-  lock. `Store::connection` records which functions to re-read if a later libsql lifts the limit.
-- `Store::sync_now()` pulls on demand, for a read that must not be stale. `Store::sync_stats()`
-  returns `syncs`, `failures`, `frames_synced`, `last_error` and `seconds_since_success`;
-  seconds since success against the interval is the staleness bound a health surface should
-  publish rather than claiming the replica is current.
-- One file cannot be both the shared local database and a replica, in either order, and one file
-  cannot follow two primaries or two intervals. Each is an error naming the conflict, not a second
-  sync loop on the same path.
-- A file that holds its own writes cannot become a replica. LibSQL refuses it and the error says to
-  remove the file for a fresh copy; converting a live capability file would replace local state
-  with the primary's log.
-
-The settings reach a capability's process because `tools/service-runner.sh` passes
-`<overlay>/config/deployment.env` into every process it starts (2026-10-21). Before that, a
-capability had to repeat the same names in its own `[capability.<n>] env`, so there was no route from
-"the deployment follows this primary" to "the program sees it".
-
-The pull path itself is LibSQL's and is unverified here: this repository has no primary to point at,
-so the tests cover this crate's decisions (refusing a misconfiguration before any network call, the
-one-file conflicts, and what a local store reports), not a live sync.
+To bring replicas back, revert the commit that removed them. Do that when the phone has to write
+through a replica (R2 in `research/offline-on-the-phone.md`) and libsql has moved to rustls 0.23,
+or fork libsql at that point.

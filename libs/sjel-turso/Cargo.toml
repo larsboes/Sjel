@@ -4,33 +4,15 @@ version.workspace = true
 edition.workspace = true
 rust-version.workspace = true
 license.workspace = true
-description = "Turso / LibSQL storage engine for Sjel: async multi-writer concurrency, MVCC, and embedded replicas."
+description = "Turso / LibSQL storage engine for Sjel: async multi-writer concurrency and MVCC."
 publish = false
 
 [lib]
 name = "sjel_turso"
 path = "src/lib.rs"
 
-[features]
-# Embedded replicas are ON by default, decided 2026-10-21: following a remote primary has to
-# be configuration, not a source edit. An opt-in feature meant every capability that wanted one
-# needed `features = ["replica"]` added to its Cargo.toml and a rebuild, so a machine could not
-# be set up without editing tracked files — and `sjel setup` would have had to edit them.
-#
-# The cost, measured on this Mac: sjel-turso's normal dependency graph goes from 56 to 188
-# packages, because LibSQL's sync client brings hyper, tonic and rustls. Those are built once
-# per workspace and shared with everything else that already links them, so the price is one
-# compile, not one per capability. A build that must stay light opts out explicitly with
-# `default-features = false`.
-default = ["replica"]
-replica = ["libsql/sync", "libsql/tls"]
-
 [dependencies]
 libsql.workspace = true
-# The JWT a primary authenticates is minted here, in a crate with no libsql in it: the CLI that
-# runs `sjel setup` must not link this crate (it already links `sjel-store`, and two SQLite copies
-# in one binary clash), so the minting cannot live behind this crate's dependency graph.
-libsql-auth = { path = "../libsql-auth" }
 serde.workspace = true
 serde_json.workspace = true
 tokio = { workspace = true, features = ["sync", "rt", "macros", "time"] }

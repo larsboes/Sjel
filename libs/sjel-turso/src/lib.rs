@@ -1,6 +1,6 @@
 //! Turso / LibSQL storage engine for Sjel.
 //!
-//! Provides async multi-writer concurrency, MVCC, embedded replicas, and
+//! Provides async multi-writer concurrency, MVCC, and
 //! vector search over Sjel's shared SQLite-compatible database (`axon.db`).
 
 use std::collections::{HashMap, HashSet};
@@ -12,20 +12,8 @@ use std::sync::{Arc, Mutex, OnceLock};
 /// Re-export the underlying LibSQL crate so capabilities do not depend on it directly.
 pub use libsql;
 
-#[cfg(feature = "replica")]
-mod replica;
 
-/// JWT minting for a primary that authenticates its clients, re-exported for the `replica`
-/// feature's callers: an embedded replica cannot write to a `sqld` that demands a credential.
-///
-/// Implemented in `libsql-auth`, which carries no libsql at all — `tools/sjel-cli` needs to mint
-/// and must not link a second SQLite into the same binary as `sjel-store`.
-#[cfg(feature = "replica")]
-pub use libsql_auth::{Access, PrimaryKey};
 
-/// Embedded-replica configuration, re-exported for the `replica` feature's callers.
-#[cfg(feature = "replica")]
-pub use replica::{ReplicaConfig, SyncStats};
 
 /// What every fallible operation in this crate returns.
 pub type Error = Box<dyn StdError + Send + Sync>;
@@ -77,11 +65,9 @@ pub const CONNECTION_PRAGMAS: &str = "
     PRAGMA foreign_keys = ON;
 ";
 
-/// One entry in the process-wide database registry: a local file or its replica, never both.
+/// One entry in the process-wide database registry: a local file, opened once per process.
 enum DbEntry {
     Local(Arc<libsql::Database>),
-    #[cfg(feature = "replica")]
-    Replica(Arc<replica::Replica>),
 }
 
 /// The registry is a `tokio::sync::Mutex` because opening a database awaits.
@@ -111,8 +97,7 @@ fn canonical_key(path: &Path) -> Result<PathBuf> {
 /// Return or initialize a shared [`libsql::Database`] instance for a local database path.
 ///
 /// # Errors
-/// The path names no file, the file is already open as an embedded replica in this process, or
-/// LibSQL refused to open it.
+/// The path names no file, or LibSQL refused to open it.
 pub async fn database_for(path: impl AsRef<Path>) -> Result<Arc<libsql::Database>> {
     local_entry(&canonical_key(path.as_ref())?).await
 }
@@ -122,16 +107,6 @@ async fn local_entry(path: &Path) -> Result<Arc<libsql::Database>> {
     let mut registry = database_registry().lock().await;
     match registry.get(path) {
         Some(DbEntry::Local(db)) => return Ok(Arc::clone(db)),
-        #[cfg(feature = "replica")]
-        Some(DbEntry::Replica(entry)) => {
-            return Err(format!(
-                "{} is already open as an embedded replica of {} in this process; a file is either \
-                 the shared local database or a replica, and LibSQL cannot be both on one file",
-                path.display(),
-                entry.config().public_url()
-            )
-            .into())
-        }
         None => {}
     }
 
@@ -143,44 +118,6 @@ async fn local_entry(path: &Path) -> Result<Arc<libsql::Database>> {
     Ok(db)
 }
 
-/// The registry's replica entry for `path`, opened and pulled once on first use.
-#[cfg(feature = "replica")]
-async fn replica_entry(
-    path: &Path,
-    config: replica::ReplicaConfig,
-) -> Result<Arc<replica::Replica>> {
-    let mut registry = database_registry().lock().await;
-    match registry.get(path) {
-        Some(DbEntry::Replica(entry)) => {
-            return match entry.config().difference(&config) {
-                None => Ok(Arc::clone(entry)),
-                Some(field) => Err(format!(
-                    "{} is already open as a replica of {} in this process with a different {field}; \
-                     one file cannot follow two primaries or two intervals, so close the first open \
-                     or align the configuration",
-                    path.display(),
-                    entry.config().public_url()
-                )
-                .into()),
-            }
-        }
-        Some(DbEntry::Local(_)) => {
-            return Err(format!(
-                "{} is already open as the shared local database in this process; a replica of a \
-                 remote primary needs its own file, and pointing one at the live file would replace \
-                 local state with the primary's log",
-                path.display()
-            )
-            .into())
-        }
-        None => {}
-    }
-
-    let entry = replica::Replica::open(path, config).await?;
-    entry.start_background();
-    registry.insert(path.to_path_buf(), DbEntry::Replica(Arc::clone(&entry)));
-    Ok(entry)
-}
 
 /// Open a new connection to a local LibSQL database with standard PRAGMAs applied.
 pub async fn open_local(path: impl AsRef<Path>) -> Result<libsql::Connection> {
@@ -250,8 +187,6 @@ where
 pub struct Store {
     path: PathBuf,
     db: Arc<libsql::Database>,
-    #[cfg(feature = "replica")]
-    replica: Option<Arc<replica::Replica>>,
 }
 
 /// Where a [`Store`] gets its data.
@@ -259,30 +194,8 @@ pub struct Store {
 pub enum Source {
     /// The shared local file that every capability's prefix lives in.
     Local,
-    /// A local copy of a remote primary, pulled in the background.
-    ///
-    /// Reads never leave the machine. Writes do: LibSQL forwards them to the primary, so a replica
-    /// buys read latency and costs write latency.
-    #[cfg(feature = "replica")]
-    Replica(ReplicaConfig),
 }
 
-impl Source {
-    /// The source the deployment asks for: a replica when [`ReplicaConfig::from_env`] names one,
-    /// else the shared local file.
-    ///
-    /// # Errors
-    /// A replica is configured and unusable. That is an error rather than a quiet fall back to the
-    /// local file, because a device that meant to follow a primary and instead reads a stale local
-    /// copy reports neither.
-    #[cfg(feature = "replica")]
-    pub fn from_env() -> Result<Self> {
-        Ok(match ReplicaConfig::from_env()? {
-            Some(config) => Self::Replica(config),
-            None => Self::Local,
-        })
-    }
-}
 
 impl Store {
     /// Open the database at `path`, apply the PRAGMAs, and run `ddl` once per process for `prefix`.
@@ -301,15 +214,15 @@ impl Store {
         Self::open_with(path, prefix, Source::Local, ddl).await
     }
 
-    /// Open the local file, or a synced copy of a remote primary, with one call site.
+    /// Open the file `source` names.
     ///
-    /// This is the shape a capability branches on once, where `source` comes from its own config:
-    /// the migration and the PRAGMAs are the same either way, so the branch is an open call and not
-    /// a second store.
+    /// `Source` has one variant since 2026-10-22. Its embedded-replica variant left with the
+    /// `replica` feature, because LibSQL's sync client pinned rustls 0.22 and rustls-webpki 0.102
+    /// with no fixed release (`research/offline-on-the-phone.md`, "Replica removed"). It stays an
+    /// enum so the replica can come back without changing a caller.
     ///
     /// # Errors
-    /// The path names no file, the replica is misconfigured, the primary refused the pull, or the
-    /// DDL failed.
+    /// The path names no file, or the DDL failed.
     pub async fn open_with<F, Fut>(
         path: impl AsRef<Path>,
         prefix: &str,
@@ -328,45 +241,7 @@ impl Store {
                 store.initialise(prefix, ddl).await?;
                 Ok(store)
             }
-            #[cfg(feature = "replica")]
-            Source::Replica(config) => {
-                let entry = replica_entry(&path, config).await?;
-                let db = entry.database();
-                let store = Self {
-                    path,
-                    db,
-                    replica: Some(entry),
-                };
-                store.initialise(prefix, ddl).await?;
-                Ok(store)
-            }
         }
-    }
-
-    /// Open `path` as a local copy of the remote primary `config` names.
-    ///
-    /// The first pull happens before the DDL runs, so the migration decides the schema against the
-    /// primary's current state rather than against an empty file. After that, a background task
-    /// pulls every [`ReplicaConfig::interval`].
-    ///
-    /// Like every other open, the first pull runs while the process-wide database registry is held,
-    /// so a primary that never answers holds up the next open in this process instead of letting one
-    /// capability run against a copy nobody verified.
-    ///
-    /// # Errors
-    /// Same as [`Store::open_with`], plus a refused first pull.
-    #[cfg(feature = "replica")]
-    pub async fn open_replica<F, Fut>(
-        path: impl AsRef<Path>,
-        prefix: &str,
-        config: ReplicaConfig,
-        ddl: F,
-    ) -> Result<Self>
-    where
-        F: FnOnce(libsql::Connection) -> Fut,
-        Fut: std::future::Future<Output = Result<()>>,
-    {
-        Self::open_with(path, prefix, Source::Replica(config), ddl).await
     }
 
     /// Run this prefix's DDL on a fresh connection, once per process.
@@ -379,50 +254,16 @@ impl Store {
         migrate_once(&conn, &self.path, prefix, ddl).await
     }
 
-    /// A local store, in the shape the struct takes when no replica is configured.
+    /// A local store.
     fn local(path: PathBuf, db: Arc<libsql::Database>) -> Self {
         Self {
             path,
             db,
-            #[cfg(feature = "replica")]
-            replica: None,
         }
     }
 
-    /// Pull the primary's log now, instead of waiting for the next background interval.
-    ///
-    /// A read is current to the last successful pull. This is the call that makes it current now,
-    /// at the cost of one network round trip, so a surface that must not show a stale row asks for
-    /// it before reading rather than shortening the interval for everyone.
-    ///
-    /// # Errors
-    /// The store is local, or the pull failed.
-    #[cfg(feature = "replica")]
-    pub async fn sync_now(&self) -> Result<Option<u64>> {
-        let Some(entry) = self.replica.as_ref() else {
-            return Err(
-                "this store is local; open it with `Store::open_replica` to pull from a \
-                        primary"
-                    .into(),
-            );
-        };
-        entry.sync_now().await
-    }
 
-    /// How this store's pulls have gone, or `None` when the store is local.
-    ///
-    /// `seconds_since_success` against the configured interval is the honest staleness bound: a
-    /// replica that has not synced for three intervals is a replica whose reads nobody should trust.
-    #[cfg(feature = "replica")]
-    pub fn sync_stats(&self) -> Option<SyncStats> {
-        self.replica.as_ref().map(|entry| entry.stats())
-    }
 
-    /// Whether this store reads a local copy of a remote primary.
-    #[cfg(feature = "replica")]
-    pub fn is_replica(&self) -> bool {
-        self.replica.is_some()
-    }
 
     /// The canonical path of the file this store holds.
     pub fn path(&self) -> &Path {
@@ -441,18 +282,6 @@ impl Store {
     /// and migrations.
     async fn connection(&self) -> Result<libsql::Connection> {
         let conn = self.db.connect()?;
-        #[cfg(feature = "replica")]
-        if self.replica.is_some() {
-            // A replica's connection is LibSQL's `RemoteConnection`, which parses every statement
-            // to decide whether the primary must serve it. Its parser classifies the assigned form
-            // of a PRAGMA as a write to the primary, and rejects `PRAGMA busy_timeout = <n>`
-            // outright, so `execute_batch(CONNECTION_PRAGMAS)` fails on exactly the connection this
-            // store exists for. The settings are also moot here: writes are the primary's, which
-            // applies its own, and reads never take a writer's lock. Verify against
-            // `libsql::parser::pragma_kind` and `libsql::replication::connection`'s
-            // `should_execute_local` before assuming a later libsql version lifted the limit.
-            return Ok(conn);
-        }
         conn.execute_batch(CONNECTION_PRAGMAS).await?;
         Ok(conn)
     }
@@ -480,14 +309,6 @@ impl fmt::Debug for Store {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         let mut out = f.debug_struct("Store");
         out.field("path", &self.path);
-        #[cfg(feature = "replica")]
-        out.field(
-            "replica_url",
-            &self
-                .replica
-                .as_ref()
-                .map(|entry| entry.config().public_url()),
-        );
         out.finish_non_exhaustive()
     }
 }

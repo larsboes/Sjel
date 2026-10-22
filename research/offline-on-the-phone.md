@@ -141,6 +141,15 @@ same numbers. Two things argued against doing it now: the owner is not yet sure 
 data belongs on a phone at all, and every split is a one-way move of data plus a permanent extra
 place to look.
 
+## Replica removed, 2026-10-22
+
+`libs/sjel-turso` no longer has the `replica` feature. Nothing used it: `SJEL_TURSO_URL` was unset
+and the primary held no data. The phone was never a replica either. It links libsql `core` only,
+reads the R1 copy, and replays its own write queue (`apps/gpui/core/src/sync.rs`). The feature cost
+10 known advisories in `Cargo.lock` with no fixed libsql release (`libs/sjel-turso/README.md`,
+"Embedded replicas: removed 2026-10-22"). R2 now has one more precondition: libsql on rustls 0.23,
+or a fork.
+
 ## What would settle each step
 
 Not a roadmap — the trigger that makes the next route the obvious one.

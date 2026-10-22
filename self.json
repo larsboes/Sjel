@@ -1249,6 +1249,26 @@
     },
     {
       "from": "inference",
+      "to": "sjel-config",
+      "kinds": [
+        "cargo-dep"
+      ],
+      "evidence": [
+        "libs/inference/Cargo.toml"
+      ]
+    },
+    {
+      "from": "inference",
+      "to": "sjel-credentials",
+      "kinds": [
+        "cargo-dep"
+      ],
+      "evidence": [
+        "libs/inference/Cargo.toml"
+      ]
+    },
+    {
+      "from": "inference",
       "to": "sjel-http",
       "kinds": [
         "cargo-dep"
@@ -1865,16 +1885,6 @@
       ],
       "evidence": [
         "capabilities/sjel-status/Cargo.toml"
-      ]
-    },
-    {
-      "from": "sjel-turso",
-      "to": "libsql-auth",
-      "kinds": [
-        "cargo-dep"
-      ],
-      "evidence": [
-        "libs/sjel-turso/Cargo.toml"
       ]
     },
     {
@@ -2640,6 +2650,10 @@
     {
       "name": "pengsida-research-notes",
       "verdict": "quarry"
+    },
+    {
+      "name": "pi-ai-auth",
+      "verdict": "inspiration"
     },
     {
       "name": "pi-coding-agent",

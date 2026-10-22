@@ -82,7 +82,10 @@ fn entries() -> Vec<Entry> {
         ),
         One("Data freshness (declared contracts)", data_freshness),
         One("Backups (receipts, and the archives they name)", backups),
-        One("Remote backups (receipts served on the tailnet)", remote_backups),
+        One(
+            "Remote backups (receipts served on the tailnet)",
+            remote_backups,
+        ),
         One("Port uniqueness (declared, both roots)", port_uniqueness),
         Packs,
         One("Doctrine freshness (README why-blocks)", doctrine_freshness),
@@ -2460,11 +2463,15 @@ fn remote_backups(ctx: &mut Ctx) {
             ));
             continue;
         }
-        let at = serde_json::from_str::<Json>(&o.stdout)
-            .ok()
-            .and_then(|r| r.get("at").and_then(Json::as_str).and_then(pure::parse_iso_ms));
+        let at = serde_json::from_str::<Json>(&o.stdout).ok().and_then(|r| {
+            r.get("at")
+                .and_then(Json::as_str)
+                .and_then(pure::parse_iso_ms)
+        });
         let Some(ms) = at else {
-            ctx.bad(format!("{id} — its backup receipt carries no readable 'at'"));
+            ctx.bad(format!(
+                "{id} — its backup receipt carries no readable 'at'"
+            ));
             continue;
         };
         let age = (now_secs() * 1000.0 - ms) / 3_600_000.0;

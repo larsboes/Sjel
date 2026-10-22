@@ -263,7 +263,9 @@ impl Api {
             .trim()
             .to_owned();
         let team = std::fs::read_to_string(home.join(".appstoreconnect/team_id"))
-            .map_err(|_| "~/.appstoreconnect/team_id is missing: write the 10-character Apple team ID there")?
+            .map_err(|_| {
+                "~/.appstoreconnect/team_id is missing: write the 10-character Apple team ID there"
+            })?
             .trim()
             .to_owned();
         if team.len() != 10 || !team.chars().all(|c| c.is_ascii_alphanumeric()) {

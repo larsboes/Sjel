@@ -12,9 +12,6 @@ use std::sync::{Arc, Mutex, OnceLock};
 /// Re-export the underlying LibSQL crate so capabilities do not depend on it directly.
 pub use libsql;
 
-
-
-
 /// What every fallible operation in this crate returns.
 pub type Error = Box<dyn StdError + Send + Sync>;
 
@@ -118,7 +115,6 @@ async fn local_entry(path: &Path) -> Result<Arc<libsql::Database>> {
     Ok(db)
 }
 
-
 /// Open a new connection to a local LibSQL database with standard PRAGMAs applied.
 pub async fn open_local(path: impl AsRef<Path>) -> Result<libsql::Connection> {
     let db = database_for(path).await?;
@@ -196,7 +192,6 @@ pub enum Source {
     Local,
 }
 
-
 impl Store {
     /// Open the database at `path`, apply the PRAGMAs, and run `ddl` once per process for `prefix`.
     ///
@@ -256,14 +251,8 @@ impl Store {
 
     /// A local store.
     fn local(path: PathBuf, db: Arc<libsql::Database>) -> Self {
-        Self {
-            path,
-            db,
-        }
+        Self { path, db }
     }
-
-
-
 
     /// The canonical path of the file this store holds.
     pub fn path(&self) -> &Path {

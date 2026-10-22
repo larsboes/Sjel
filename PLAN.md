@@ -212,7 +212,7 @@ The shape, and what each hop is for:
    the thing `libsql` exists to avoid.
 3. **The phone holds an embedded replica.** `sjel-turso` checks for `aarch64-apple-ios`
    (45 s cold, 2026-10-21) and the Tauri app already declares an iOS target
-   (`dashboard/src-tauri/tauri.conf.json` → `bundle.iOS`, minimum 16.0, team 52Q4FQ5XN8,
+   (`dashboard/src-tauri/tauri.conf.json` → `bundle.iOS`, minimum 16.0, a signing team set,
    `gen/apple` present). Reads are local and work offline; writes go to the Mac when it is
    reachable, which is what an embedded replica means.
 4. **Reachability is the tailnet, not the internet.** This machine is `100.116.104.41`

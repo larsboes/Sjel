@@ -34,3 +34,18 @@ Always:
 `graphify query "<question>"` first, `graphify path "<A>" "<B>"` for a relationship, and
 `graphify explain "<concept>"` for one concept. Dirty `graphify-out/` files are normal. After a
 code change, run `graphify update .`.
+
+## Current Priority: GPUI Universal App & Standalone iOS
+
+Active engineering focus is on unifying and porting the native GPUI client ([`apps/gpui`](apps/gpui/README.md))
+across platforms (macOS, iOS, and subsequent Linux/Windows targets):
+
+1. **Shared cross-platform core and UI**: Extract and share views, navigation, editor blocks, and
+   data adapters between desktop and mobile rather than maintaining diverged mobile stubs.
+2. **Standalone and offline-first iOS capability**: The iPhone app must function autonomously without
+   requiring an active connection to the Mac host.
+   - On-device local store (embedded SQLite/LibSQL or local cache in the app sandbox).
+   - Local note viewing and editing, task management, and capture.
+   - Offline queue with bi-directional delta synchronization whenever the Mac LAN listener is discovered.
+   - Graceful degradation: local search and cached reads remain responsive when disconnected.
+

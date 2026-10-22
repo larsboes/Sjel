@@ -3,23 +3,21 @@ project: sjel
 type: isa
 phase: climbing
 progress: 89
-principal_stated_goal: "I want no new issues, I wanna get rid of all issues for sjel and sjel personal and only carry through normal ISAs etc."
+principal_stated_goal: "Track concrete work in GitHub Issues; retire ISA entries and dated decision prose incrementally as code, tests, and owner docs become the source of truth."
 ---
 
 # ISA · Sjel
 
-Keep the current ISA organization while cleaning up open work incrementally. Claims stay
-until their probes pass or the principal withdraws them with a reason. Explanations and ideas
-belong in the owning README or `docs/`. Remove completed and withdrawn items after their
-enduring contracts reach their owners; Git keeps the history.
+Use GitHub Issues for concrete work a maintainer or contributor can test or complete. The
+existing ISA is a transition backlog for unresolved claims with falsifiable probes, not ordinary
+tasks. Retire entries incrementally as their truth moves into code, tests, or owner docs; Git
+keeps history.
 
 Decisions live with their owner ([rule](CONTRIBUTING.md#decisions-live-with-their-owner)), never
 here. Verification rules live in the `sjel` skill's `on-verification.md`.
 
-Outside bug reports may use GitHub Issues; our backlog stays here. Nothing automatically
-creates a work item. Move enduring content to its owner before closing a claim. Do not create
-another planning file during cleanup. A possible later migration to one `PLAN.md` is deferred;
-see [planning rules](CONTRIBUTING.md#the-backlog-is-isas). Keep external bug reporting available.
+Issues remain open to outside reports. Temporary plans may guide active work, but do not create a
+second standing backlog. See [planning rules](CONTRIBUTING.md#issues-and-the-isa-transition).
 
 ## Features
 

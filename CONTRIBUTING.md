@@ -9,10 +9,13 @@ operator-specific policy.
 Name the consumer and the outcome. An interesting technology without a concrete Sjel consumer
 remains an idea, not an implementation commitment.
 
-No backlog entry is required to start. Add a claim to the owning ISA only when something
-must outlive the change itself: a defect being left unfixed, or a decision that needs a record.
-Write it as a claim with the probe that would falsify it, not as a description. The issue tracker
-takes reports from outside the project; it is not where this project's work is planned.
+Use GitHub Issues for concrete work that a maintainer or contributor can test or complete.
+Name the consumer, outcome, and acceptance check. Use `type:idea` for experiments that may conclude not to build. Keep temporary plans with the active task; remove them when the work ends.
+
+The existing ISA is a transition backlog, not a task list. Keep only unresolved claims with a
+probe that could falsify them. Move enduring behavior into code, tests, or the owning docs, then
+remove the resolved claim. Comments explain local invariants, not dated decisions; Git keeps the
+history.
 
 Before external code or adopted design influence enters the tree, record its canonical source in
 `upstreams.toml`. Record the license and verdict there too, then state precisely what Sjel
@@ -686,9 +689,10 @@ Repository-wide doctrine lives here. Do not create a detached decision-log direc
 ### Scratch is not documentation
 
 `to-integrate/` is ignored pre-git scratch and may never be cited by permanent files. Unjudged
-external leads and speculative ideas belong in the owning README or relevant `docs/` section.
-Promote one into the ISA when it becomes actionable work. Adopted dependencies and influences
-pass through `upstreams.toml` and the consuming owner.
+external leads belong in the owning README or relevant `docs/` section. When a lead becomes a
+concrete experiment someone can run, track it in a `type:idea` issue. Adopted dependencies and
+influences pass through `upstreams.toml` and the consuming owner.
+
 ### Quarries and one-way migration
 
 Legacy tooling and LifeOS-mono archives are quarries, not dependencies. Migrate
@@ -696,27 +700,21 @@ material into Sjel deliberately, redact it, verify the new owner, and leave the 
 user explicitly approves removal. Never bulk-import their history or treat an archive location as
 permanent provenance.
 
-### The backlog is ISAs
+### Issues and the ISA transition
 
-Open work lives in the existing ISA organization. Preserve its current divisions and clean
-them incrementally; do not add a parallel backlog or consolidate them as incidental cleanup.
-Keep actionable, unfinished work there. Explanations, design reasoning and speculative ideas
-belong in the owning README or `docs/`, linked from an open item when needed.
+Use GitHub Issues for discrete work that someone can test or complete. State the consumer,
+outcome, and acceptance check. `type:idea` marks an experiment that may end without an
+implementation. Issues remain open to outside reports as well.
 
-A later migration may replace the ISAs with one `PLAN.md` containing only work still to do.
-That migration is deferred. It must preserve unresolved work, remove the planning entries it
-replaces, and leave completed history in Git. Do not create `PLAN.md` alongside the active
-ISAs now, or introduce another TODO, HANDOFF or ROADMAP surface.
+Keep the existing ISA organization while it is retired incrementally. An ISA entry is for an
+unresolved claim with an owner and a probe, not ordinary work or completed history. When its
+probe passes or the principal withdraws it, move any lasting contract to code, tests, or the
+owning docs, then remove the entry. Git keeps history.
 
-Each open claim names a probe that could falsify it; completion requires evidence. After the
-probe passes or the principal withdraws the item with a reason, move enduring contracts to
-their owners and remove the item. Git keeps history. Do not create a completed-work archive
-or add a changelog section to an ISA.
-
-The tracker stays reachable for reports from outside the project. Those are inbound mail, not the
-backlog; anything adopted from one becomes a claim in the owning ISA, with its capability or
-Pack named. Shipped interface contracts belong in the owner's technical manual and are verified
-by its doctor or self-test. Do not add another planning surface or a standing specification type.
+A temporary plan may guide one active task; it is not a second backlog or a source of truth.
+Code and tests own implemented behavior. Comments explain local invariants, not dated decisions.
+Shipped interfaces belong in the owner's technical manual and are verified by its doctor or
+self-test.
 
 ## Placement guide
 
@@ -733,8 +731,9 @@ by its doctor or self-test. Do not add another planning surface or a standing sp
 | Machine fact or private state | Active overlay | Resolve it dynamically; never copy it into public prose |
 | Shared operator logic | `tools/lib/` | Source it from every caller |
 | Technical manual & specs | `docs/` | Bounded interface specifications and architecture diagrams |
-| Interesting unjudged lead | Owning README or relevant `docs/` section | Promote to an ISA claim when actionable; apply the provenance gate before adoption |
-| Unfinished work, plan or todo | A claim in the owning ISA | Reasoning that outlives the work moves into the owning README |
+| Interesting unjudged lead | Owning README or relevant `docs/` section | Track a runnable experiment in a `type:idea` issue; apply the provenance gate before adoption |
+| Concrete work someone can test or do | GitHub Issue | State the consumer, outcome, and acceptance check |
+| Unresolved claim that needs a falsifiable probe | Owning ISA during transition | Move lasting truth to code, tests, or owner docs, then remove the claim |
 
 ## Control surface
 

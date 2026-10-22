@@ -120,3 +120,6 @@ axon-local-*.lock
 /plugins/*/ios/.build/
 /plugins/*/ios/.swiftpm/
 /plugins/local-network/.tauri/
+
+# Interceptor research ledgers: per-machine scratch from a browsing session, not project source.
+/.interceptor-research/

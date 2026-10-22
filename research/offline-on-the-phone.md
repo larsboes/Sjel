@@ -150,6 +150,25 @@ reads the R1 copy, and replays its own write queue (`apps/gpui/core/src/sync.rs`
 "Embedded replicas: removed 2026-10-22"). R2 now has one more precondition: libsql on rustls 0.23,
 or a fork.
 
+## Decided 2026-10-22: the phone stands on its own
+
+Taken with the owner on 2026-10-22. Each line is a rule a build can be tested against.
+
+1. **The phone's data is the real record, not a cache of the Mac's.** What is typed on the phone
+   lives in its own store first. A Mac, when there is one, receives it through the write queue
+   (`apps/gpui/core/src/sync.rs`); it is never required for the data to exist.
+2. **The app works without ever being paired.** A first launch with no Mac on the network opens
+   to an empty, usable local store, not to an error or a join screen that blocks.
+3. **Pairing is offered, never forced.** Setup may ask once. A settings page is always reachable
+   and pairs in a few taps, after which the setup that follows runs on its own: discovery,
+   allow in the dashboard, first sync.
+4. **The scope without a Mac is local data only:** notes, tasks, projects and capture. Anything
+   that needs a Mac service (mail, finance, the knowledge vault, local inference) shows a plain
+   "needs your Mac" state rather than an empty or broken page.
+
+Falsifier for 1 and 2: a simulator that has never seen a Mac, with the app freshly installed,
+cannot create a note and find it again after a relaunch.
+
 ## What would settle each step
 
 Not a roadmap — the trigger that makes the next route the obvious one.

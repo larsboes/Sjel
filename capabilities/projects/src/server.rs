@@ -73,7 +73,7 @@ const ROUTES: &[route_manifest::Route] = &[
     route_manifest::Route {
         method: "POST",
         path: "/api/record",
-        summary: "Replace a record's whole content. `base` is the content the edit started from; a stale base returns 409 with the current content and writes nothing.",
+        summary: "Replace a record's whole content. `base` is the content the edit started from; a stale base returns 409 with the current content and writes nothing. Without `base` it creates the record at that path, and refuses (400) when the path exists.",
         request_schema: Some(route_manifest::schema_of::<SaveRecord>),
     },
     route_manifest::Route {
@@ -129,7 +129,10 @@ struct AddProject {
 struct SaveRecord {
     path: String,
     content: String,
-    base: String,
+    /// The content the edit started from. Absent creates the record, and is refused when the path
+    /// already exists, so a create can never overwrite.
+    #[serde(default)]
+    base: Option<String>,
 }
 
 #[derive(Deserialize, schemars::JsonSchema)]
@@ -440,7 +443,7 @@ async fn add_project(
 }
 
 async fn save_record(State(projects): State<Shared>, Json(body): Json<SaveRecord>) -> Response {
-    let outcome = ops::save(&projects, &body.path, &body.content, Some(&body.base))
+    let outcome = ops::save(&projects, &body.path, &body.content, body.base.as_deref())
         .await
         .map_err(|e| match e.downcast::<ops::SaveError>() {
             Ok(save) => *save,
@@ -696,6 +699,13 @@ mod tests {
         .await;
         assert_eq!(status, StatusCode::CONFLICT);
         assert_eq!(body["code"], json!("stale"));
+
+        // No base creates, and only where nothing is yet.
+        let created = json!({ "path": "W/Notes/new.md", "content": "# New\n" });
+        let (status, _) = call(&router, post("/api/record", created.clone())).await;
+        assert_eq!(status, StatusCode::OK);
+        let (status, _) = call(&router, post("/api/record", created)).await;
+        assert_eq!(status, StatusCode::BAD_REQUEST);
 
         let (status, body) = call(
             &router,

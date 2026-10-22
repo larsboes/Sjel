@@ -75,28 +75,39 @@ published. The command never publishes a public release. It uses the maintainer'
 `gh` authentication; preparation does not require it. Do not replace an existing release's
 assets with unreviewed preparation files.
 
-Native iOS archive preparation is separate from the Tauri phone installer:
+Native iOS archive and TestFlight upload are separate from the Tauri phone installer:
 
 ```bash
-tools/distribution/ios-archive --version 0.1.0 --build 1 --out /tmp/sjel-ios-prep
+sjel testflight                       # archive, upload, wait for processing, set What to Test
+sjel testflight --notes "Pair with the Mac …"
+sjel testflight status                # newest build and its processing state
+tools/distribution/ios-archive --version 0.1.0 --build 1 --out /tmp/sjel-ios-prep   # unsigned, local only
 ```
 
-This builds `aarch64-apple-ios` and a generic physical-device archive, using a separate generated
-Xcode project. It never changes the Simulator project or installs on a phone. The default
-archive is unsigned. The owner can later supply `--team TEAM_ID` to archive with configured
-signing, and `--export` to produce an App Store Connect export. Xcode accounts, certificates
-and provisioning must already be available; the command does not create credentials or grant
-account access. No upload occurs. Use Xcode Organizer to distribute the signed archive after
-reviewing it.
+`sjel testflight` (`tools/sjel-cli/src/testflight.rs`) reads the bundle ID, team and version from
+`apps/gpui/ios/host/project.yml` and signs its own App Store Connect token from the key in
+`~/.appstoreconnect` (one `AuthKey_*.p8` with the App Manager role, and an `issuer_id`). It never
+prints that token. The build number is `git rev-list --count HEAD`, or one past the newest upload
+if that is higher, because Apple refuses a number it has already seen. The build itself is
+`tools/distribution/ios-archive`. It builds `aarch64-apple-ios` and a device archive in a separate
+generated Xcode project, and it never touches the Simulator project or a phone.
 
-Before TestFlight, configure the App Store Connect app for `dev.sjel.ios`, a unique build number,
-supported OS version, privacy disclosures and required-reason API manifests, encryption/export
-answers, and review access through synthetic data and an accessible test node. Do not give
-reviewers household credentials or private data. Validate these against the final binary;
-preparation does not invent declarations. TestFlight builds expire after 90 days and external
-testing may need review; see [Apple's TestFlight documentation](https://developer.apple.com/help/app-store-connect/test-a-beta-version/testflight-overview/).
+Two things the key cannot do, measured 2026-10-22:
+
+1. Create the app record. Apple's API refuses `POST /v1/apps` for every role, so
+   `sjel testflight app` registers the bundle ID and prints the one step for the App Store
+   Connect UI. The record is named `Sjel Life`, because the store name `Sjel` is taken. The home
+   screen still shows `Sjel`.
+2. Sign with a cloud-managed certificate, which needs an Admin key. The export uses the Apple
+   Distribution identity in the login keychain instead, with the profile `dev.sjel.ios App Store`
+   that `sjel testflight profile` makes and installs.
+
+Every build goes to the internal group `Team`, which sees all builds and needs no Beta App
+Review. Its testers are added once in App Store Connect (TestFlight → Team → Testers). External
+testing needs Beta App Review per build, and builds expire after 90 days; see
+[Apple's TestFlight documentation](https://developer.apple.com/help/app-store-connect/test-a-beta-version/testflight-overview/).
 `tools/phone-install` remains the Tauri development-phone path; the native Simulator path is
-`apps/gpui-prototype/ios/run-sim`. Neither command is a TestFlight publisher.
+`apps/gpui/ios/run-sim`. Neither installs from TestFlight.
 
 ### Optional capabilities and the later friend trial
 

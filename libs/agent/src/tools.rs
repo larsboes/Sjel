@@ -1,17 +1,18 @@
-//! The coding tool set: read, write, edit, bash, grep, find.
+//! The coding tool set: read, write, edit, bash, grep, find, ls.
 //!
-//! The same six pi gives a model. `grep` and `find` run in-process on ripgrep's own crates
+//! The same seven pi gives a model. `grep` and `find` run in-process on ripgrep's own crates
 //! (`ignore`, `grep-searcher`, `grep-regex`) instead of spawning a process per call. The walk
 //! uses every core and respects `.gitignore`, so a search skips `target/` and `node_modules/`
-//! without being told. `read`, `grep` and `find` are read-only, so the loop runs a batch of
-//! them in parallel.
+//! without being told. `read`, `grep`, `find` and `ls` are read-only, so the loop runs a batch
+//! of them in parallel.
 //!
 //! Paths are relative to the working directory the tools were built with. They are NOT
 //! confined to it, the same as pi: `bash` can reach anything the process can, so a path check
 //! on the file tools would be decoration. A front end that must confine the model (the
 //! assistant capability) does not hand it these tools.
 
-use std::io::Read;
+use std::collections::BTreeMap;
+use std::io::{BufRead, BufReader, Read};
 use std::path::{Path, PathBuf};
 use std::process::{Child, Command, Stdio};
 use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
@@ -30,12 +31,13 @@ use crate::Tool;
 /// The most text one tool result puts in the context window.
 const OUTPUT_LIMIT: usize = 30_000;
 const READ_LINE_LIMIT: usize = 2_000;
+const LIST_ENTRY_LIMIT: usize = 500;
 /// The longest line one grep match shows. Minified files have lines of megabytes.
 const LINE_LIMIT: usize = 300;
 const BASH_DEFAULT_TIMEOUT: u64 = 120;
 const BASH_MAX_TIMEOUT: u64 = 600;
 
-/// The six coding tools, rooted at `root`. `bash` kills its command when `stop` turns true,
+/// The coding tools, rooted at `root`. `bash` kills its command when `stop` turns true,
 /// so pass the same flag the [`crate::Agent`] holds.
 pub fn coding(root: &Path, stop: &Arc<AtomicBool>) -> Vec<Box<dyn Tool>> {
     let root = root.to_path_buf();
@@ -45,7 +47,8 @@ pub fn coding(root: &Path, stop: &Arc<AtomicBool>) -> Vec<Box<dyn Tool>> {
         Box::new(EditFile(root.clone())),
         Box::new(Bash(root.clone(), Arc::clone(stop))),
         Box::new(Grep(root.clone())),
-        Box::new(Find(root)),
+        Box::new(Find(root.clone())),
+        Box::new(ListDir(root)),
     ]
 }
 
@@ -93,8 +96,8 @@ impl Tool for ReadFile {
     }
     fn run(&self, args: &Value) -> Result<String, String> {
         let path = resolve(&self.0, str_arg(args, "path")?);
-        let text =
-            std::fs::read_to_string(&path).map_err(|e| format!("{}: {e}", path.display()))?;
+        let file = std::fs::File::open(&path).map_err(|e| format!("{}: {e}", path.display()))?;
+        let mut reader = BufReader::new(file);
         let offset = args
             .get("offset")
             .and_then(Value::as_u64)
@@ -108,13 +111,56 @@ impl Tool for ReadFile {
         let take = usize::try_from(limit)
             .unwrap_or(usize::MAX)
             .min(READ_LINE_LIMIT);
-        let total = text.lines().count();
-        let mut out: String = text
-            .lines()
-            .skip(skip)
-            .take(take)
-            .collect::<Vec<_>>()
-            .join("\n");
+        let first_line = skip.saturating_add(1);
+        let last_line = skip.saturating_add(take);
+        let mut line = String::new();
+        let mut total = 0usize;
+        let mut selected_bytes = 0usize;
+        let mut out = String::new();
+        let mut truncated = false;
+
+        loop {
+            line.clear();
+            let bytes = reader
+                .read_line(&mut line)
+                .map_err(|e| format!("{}: {e}", path.display()))?;
+            if bytes == 0 {
+                break;
+            }
+            total = total.saturating_add(1);
+            if total < first_line || total > last_line {
+                continue;
+            }
+
+            let content = match line.strip_suffix('\n') {
+                Some(without_newline) => without_newline
+                    .strip_suffix('\r')
+                    .unwrap_or(without_newline),
+                None => line.as_str(),
+            };
+            if total > first_line {
+                selected_bytes = selected_bytes.saturating_add(1);
+            }
+            selected_bytes = selected_bytes.saturating_add(content.len());
+
+            if !out.is_empty() {
+                if out.len() < OUTPUT_LIMIT {
+                    out.push('\n');
+                } else {
+                    truncated = true;
+                }
+            }
+            if out.len() < OUTPUT_LIMIT {
+                let remaining = OUTPUT_LIMIT - out.len();
+                let end = content.floor_char_boundary(remaining);
+                out.push_str(&content[..end]);
+                truncated |= end < content.len();
+            } else {
+                truncated |= !content.is_empty();
+            }
+        }
+
+        let shown_bytes = out.len();
         let shown_to = skip.saturating_add(take).min(total);
         if shown_to < total {
             out.push_str(&format!(
@@ -122,7 +168,15 @@ impl Tool for ReadFile {
                 shown_to + 1
             ));
         }
-        Ok(cap(&out, OUTPUT_LIMIT))
+        if truncated {
+            out.push_str(&format!(
+                "\n[truncated: {} of {} bytes shown]",
+                shown_bytes, selected_bytes
+            ));
+            Ok(out)
+        } else {
+            Ok(cap(&out, OUTPUT_LIMIT))
+        }
     }
 }
 
@@ -430,6 +484,75 @@ impl Tool for Find {
         } else {
             found
         })
+    }
+}
+
+struct ListDir(PathBuf);
+impl Tool for ListDir {
+    fn name(&self) -> &'static str {
+        "ls"
+    }
+    fn description(&self) -> &'static str {
+        "List visible entries in one directory, sorted by name. Directories end with /. Hidden entries are omitted. Returns at most 500 entries."
+    }
+    fn parameters(&self) -> Value {
+        json!({ "type": "object", "properties": {
+            "path": { "type": "string", "description": "Directory to list. Default: the working directory." }
+        }})
+    }
+    fn read_only(&self) -> bool {
+        true
+    }
+    fn run(&self, args: &Value) -> Result<String, String> {
+        let path = resolve(
+            &self.0,
+            args.get("path").and_then(Value::as_str).unwrap_or("."),
+        );
+        let entries = std::fs::read_dir(&path).map_err(|e| format!("{}: {e}", path.display()))?;
+        // Keep only the lexicographically first LIST_ENTRY_LIMIT entries, even for enormous
+        // directories. This bounds memory while keeping the result deterministic.
+        let mut names = BTreeMap::new();
+        let mut visible = 0usize;
+        for entry in entries {
+            let entry = entry.map_err(|e| format!("{}: {e}", path.display()))?;
+            let name = entry.file_name().to_string_lossy().into_owned();
+            if name.starts_with('.') {
+                continue;
+            }
+            visible = visible.saturating_add(1);
+            let is_dir = entry
+                .file_type()
+                .map_err(|e| format!("{}: {e}", entry.path().display()))?
+                .is_dir();
+            if names.len() < LIST_ENTRY_LIMIT {
+                names.insert(name, is_dir);
+            } else if names
+                .last_key_value()
+                .is_some_and(|(last, _)| name.as_str() < last.as_str())
+            {
+                names.pop_last();
+                names.insert(name, is_dir);
+            }
+        }
+
+        if names.is_empty() {
+            return Ok("(no visible entries)".into());
+        }
+        let listed = names.len();
+        let mut out = names
+            .into_iter()
+            .map(|(name, is_dir)| {
+                if is_dir {
+                    format!("{name}/\n")
+                } else {
+                    format!("{name}\n")
+                }
+            })
+            .collect::<String>();
+        if visible > listed {
+            out.push_str(&format!("[showing {listed} of {visible} entries]\n"));
+        }
+        Ok(cap(&out, OUTPUT_LIMIT))
     }
 }
 

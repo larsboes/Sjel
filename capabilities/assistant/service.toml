@@ -8,5 +8,6 @@ ready_path  = "/ready"
 imports     = ["calendar", "projects", "sjel-status", "trips"]
 exports     = ["assistant"]
 
-# The dashboard shell proxies /assistant/* to this service. No cloud role is accepted here;
-# cloud assistance needs a separate reviewed preview/approval contract.
+# The dashboard shell proxies /assistant/* to this service. Cloud Ask accepts only an explicitly
+# confirmed public prompt through a reviewed HTTPS role, with no history, tools, extensions,
+# steering, or caller-supplied instructions; the agent enforces the daily request ledger.

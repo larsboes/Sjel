@@ -128,17 +128,26 @@ impl Projects {
     }
 
     pub async fn get(&self, path: &str) -> Fallible<Option<Record>> {
+        Ok(self.get_timed(path).await?.map(|(record, _)| record))
+    }
+
+    /// One record with the moment its row was last written.
+    ///
+    /// The time is the row's `updated_at`, which changes on every `put`, so a replica can ask
+    /// "did this change since I last read it?" without asking for the content.
+    pub async fn get_timed(&self, path: &str) -> Fallible<Option<(Record, String)>> {
         let conn = self.db.connect().await?;
         let mut rows = conn
             .query(
-                "SELECT path, content FROM projects_records WHERE path = ?1",
+                "SELECT path, content, updated_at FROM projects_records WHERE path = ?1",
                 [path],
             )
             .await?;
         let Some(row) = rows.next().await? else {
             return Ok(None);
         };
-        Ok(Some(record_from_row(&row)?))
+        let record = record_from_row(&row)?;
+        Ok(Some((record, row.get(2)?)))
     }
 
     /// Every record, ordered by path.
@@ -164,6 +173,26 @@ impl Projects {
             vec![project.into()],
         )
         .await
+    }
+
+    /// One project's records, each with the moment its row was last written.
+    ///
+    /// A replica reads this with every content left out and then fetches only the records whose
+    /// time moved, instead of re-reading a project of 183 notes that did not change.
+    pub async fn by_project_timed(&self, project: &str) -> Fallible<Vec<(Record, String)>> {
+        let conn = self.db.connect().await?;
+        let mut rows = conn
+            .query(
+                "SELECT path, content, updated_at FROM projects_records WHERE project = ?1 ORDER BY path",
+                vec![libsql::Value::from(project)],
+            )
+            .await?;
+        let mut records = Vec::new();
+        while let Some(row) = rows.next().await? {
+            let record = record_from_row(&row)?;
+            records.push((record, row.get(2)?));
+        }
+        Ok(records)
     }
 
     async fn query(&self, sql: &str, params: Vec<libsql::Value>) -> Fallible<Vec<Record>> {

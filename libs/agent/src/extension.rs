@@ -76,7 +76,7 @@ pub fn select(config: &[String], flags: &[String]) -> Result<Vec<String>, String
                         return Err(format!(
                             "`--ext {flag}`: use `none` to clear the set, `+name` to add one, \
                              or `-name` to remove one"
-                        ))
+                        ));
                     }
                 };
                 if add && !names.iter().any(|n| n == name) {

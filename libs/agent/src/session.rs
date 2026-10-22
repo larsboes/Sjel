@@ -8,7 +8,7 @@
 //! Where the files live is the front end's decision. The CLI puts them in the private overlay.
 
 use std::fs::OpenOptions;
-use std::io::{BufRead, BufReader, Write};
+use std::io::{Read, Write};
 use std::os::unix::fs::OpenOptionsExt as _;
 use std::path::{Path, PathBuf};
 
@@ -61,21 +61,59 @@ pub fn overwrite(path: &Path, messages: &[Message]) -> std::io::Result<()> {
     std::fs::rename(&tmp, path)
 }
 
-/// Reads a session back. A line that does not parse is an error with its line number, not a
-/// skipped line: a conversation with a hole in it sends tool results without their calls.
+/// Reads a session back. An invalid, unterminated final line is treated as an interrupted write
+/// and truncated before returning; a malformed complete line is an error with its line number.
+/// Skipping a complete line could send tool results without their calls.
 pub fn load(path: &Path) -> Result<Vec<Message>, String> {
-    let file = std::fs::File::open(path).map_err(|e| format!("{}: {e}", path.display()))?;
+    let mut file = OpenOptions::new()
+        .read(true)
+        .write(true)
+        .open(path)
+        .map_err(|e| format!("{}: {e}", path.display()))?;
+    let mut bytes = Vec::new();
+    file.read_to_end(&mut bytes)
+        .map_err(|e| format!("{}: {e}", path.display()))?;
+
     let mut messages = Vec::new();
-    for (i, line) in BufReader::new(file).lines().enumerate() {
-        let line = line.map_err(|e| format!("{}: {e}", path.display()))?;
-        if line.trim().is_empty() {
-            continue;
+    let mut offset = 0;
+    for (i, line) in bytes.split_inclusive(|byte| *byte == b'\n').enumerate() {
+        let terminated = line.ends_with(b"\n");
+        let line = line.strip_suffix(b"\n").unwrap_or(line);
+        let text = match std::str::from_utf8(line) {
+            Ok(text) => text,
+            Err(_) if !terminated && offset + line.len() == bytes.len() => {
+                file.set_len(offset as u64)
+                    .map_err(|e| format!("{}: {e}", path.display()))?;
+                return Ok(messages);
+            }
+            Err(error) => return Err(format!("{}:{}: {error}", path.display(), i + 1)),
+        };
+        if !text.trim().is_empty() {
+            match serde_json::from_str::<Message>(text) {
+                Ok(message) if !matches!(message, Message::System { .. }) => {
+                    messages.push(message);
+                }
+                Ok(_) => {}
+                Err(_) if !terminated && offset + line.len() == bytes.len() => {
+                    // An unterminated final record can be a write interrupted by a crash. Drop
+                    // only that tail so the next append starts on a clean line. Complete lines
+                    // still fail loudly: skipping one could pair tool results with the wrong call.
+                    file.set_len(offset as u64)
+                        .map_err(|e| format!("{}: {e}", path.display()))?;
+                    return Ok(messages);
+                }
+                Err(error) => {
+                    return Err(format!("{}:{}: {error}", path.display(), i + 1));
+                }
+            }
         }
-        let message: Message = serde_json::from_str(&line)
-            .map_err(|e| format!("{}:{}: {e}", path.display(), i + 1))?;
-        if !matches!(message, Message::System { .. }) {
-            messages.push(message);
-        }
+        offset += line.len() + usize::from(terminated);
+    }
+    if !bytes.is_empty() && !bytes.ends_with(b"\n") {
+        // A complete record can reach disk before its line terminator. Restore the delimiter so
+        // the next append cannot merge its JSON into this record.
+        file.write_all(b"\n")
+            .map_err(|e| format!("{}: {e}", path.display()))?;
     }
     Ok(messages)
 }
@@ -146,5 +184,78 @@ mod tests {
 
         std::fs::write(&path, "{\"role\":\"user\",\"content\":\"x\"}\nnot json\n").unwrap();
         assert!(load(&path).unwrap_err().contains(":2:"));
+    }
+
+    #[test]
+    fn load_truncates_an_interrupted_final_record_before_the_next_append() {
+        let dir =
+            std::env::temp_dir().join(format!("sjel-agent-session-tail-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        let path = new_path(&dir);
+        let first = Message::User {
+            content: "kept".into(),
+        };
+        append(&path, std::slice::from_ref(&first)).unwrap();
+        let mut interrupted = std::fs::OpenOptions::new()
+            .append(true)
+            .open(&path)
+            .unwrap();
+        interrupted
+            .write_all(b"{\"role\":\"assistant\",\"content\":\"partial")
+            .unwrap();
+        drop(interrupted);
+
+        let loaded = load(&path).unwrap();
+        assert_eq!(loaded.as_slice(), std::slice::from_ref(&first));
+        assert!(std::fs::read(&path).unwrap().ends_with(b"\n"));
+
+        let next = Message::User {
+            content: "next".into(),
+        };
+        append(&path, std::slice::from_ref(&next)).unwrap();
+        assert_eq!(load(&path).unwrap(), [first, next]);
+    }
+
+    #[test]
+    fn load_terminates_a_complete_final_record_before_the_next_append() {
+        let dir =
+            std::env::temp_dir().join(format!("sjel-agent-session-line-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        let path = new_path(&dir);
+        let first = Message::User {
+            content: "kept".into(),
+        };
+        let record = serde_json::to_vec(&first).unwrap();
+        std::fs::create_dir_all(path.parent().unwrap()).unwrap();
+        std::fs::write(&path, &record).unwrap();
+
+        let loaded = load(&path).unwrap();
+        assert_eq!(loaded.as_slice(), std::slice::from_ref(&first));
+        assert!(std::fs::read(&path).unwrap().ends_with(b"\n"));
+
+        let next = Message::User {
+            content: "next".into(),
+        };
+        append(&path, std::slice::from_ref(&next)).unwrap();
+        assert_eq!(load(&path).unwrap(), [first, next]);
+    }
+
+    #[test]
+    fn load_truncates_an_incomplete_utf8_tail() {
+        let dir =
+            std::env::temp_dir().join(format!("sjel-agent-session-utf8-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        let path = new_path(&dir);
+        let first = Message::User {
+            content: "kept".into(),
+        };
+        append(&path, std::slice::from_ref(&first)).unwrap();
+        let mut bytes = std::fs::read(&path).unwrap();
+        bytes.extend_from_slice(b"{\"role\":\"user\",\"content\":\"");
+        bytes.extend_from_slice(&[0xF0, 0x9F]);
+        std::fs::write(&path, bytes).unwrap();
+
+        assert_eq!(load(&path).unwrap(), [first]);
+        assert!(std::fs::read(&path).unwrap().ends_with(b"\n"));
     }
 }

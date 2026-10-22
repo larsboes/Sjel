@@ -174,7 +174,7 @@ impl McpTransport for StdioTransport {
                 Ok(Err(e)) => return Err(format!("child stdout error: {e}")),
                 Err(mpsc::RecvTimeoutError::Timeout) => continue,
                 Err(mpsc::RecvTimeoutError::Disconnected) => {
-                    return Err("child closed stdout unexpectedly".to_string())
+                    return Err("child closed stdout unexpectedly".to_string());
                 }
             }
         }
@@ -261,7 +261,7 @@ impl McpTransport for HttpTransport {
                 Ok(Err(e)) => return Err(format!("HTTP request error: {e}")),
                 Err(mpsc::RecvTimeoutError::Timeout) => continue,
                 Err(mpsc::RecvTimeoutError::Disconnected) => {
-                    return Err("HTTP transport thread ended unexpectedly".to_string())
+                    return Err("HTTP transport thread ended unexpectedly".to_string());
                 }
             }
         }

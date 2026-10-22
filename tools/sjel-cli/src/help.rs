@@ -17,6 +17,7 @@ Discover Sjel:
   update apply [--only <class>]  Move what Sjel owns, and delegate the rest
   app [update|install|status|open] [desktop|mac|all]
                                  Build, install, update or open native macOS applications
+  testflight [ship|status]       Archive the iOS app, upload it and publish it to TestFlight
 
 Check a change before pushing it:
   gates                          Run CI's repo gates here, from CI's own definition
@@ -27,6 +28,7 @@ Operate capabilities:
   distribution verify <archive> --sha256 <digest>  Verify a release capability package without installing
   distribution install-package <archive> --sha256 <digest>  Install into a packaged runtime; do not start
   runtime status                 Runtime mode, power and On-the-go exceptions
+  provider list|login|logout     Manage model-provider sign-ins in the OS keychain
   runtime mode <mode>            Owner-only: auto, normal or on-the-go
   runtime allow <category> on|off Owner-only: persistent On-the-go exception
   capability list                List registered HTTP capability surfaces and health
@@ -114,6 +116,16 @@ Categories: other-local-models, remote-models, bulk-indexing, transcription, med
 Auto follows fresh power observations after the operator saves it. An unconfigured install
 stays Normal until a selection is saved. Exceptions persist but have no effect in Normal.
 Writes require owner credentials. Agent sessions keep their agent token and are refused."#;
+
+pub const PROVIDER: &str = r#"Usage: sjel provider <command>
+
+  list                           Show configured provider sign-ins
+  login [provider]               Sign in through a browser or enter a hidden API key
+  logout <provider>              Remove its credentials from Keychain
+
+Providers: openai (ChatGPT browser sign-in), openai-api, deepseek, opencode-go,
+nvidia-nim and gemini. The inference profile selects the model and endpoint.
+OpenAI ChatGPT sessions use the Responses API; API keys remain a separate credential."#;
 
 pub const CLAUDE: &str = r#"Usage: sjel claude [apply|check] [--force] [--dry-run]
 

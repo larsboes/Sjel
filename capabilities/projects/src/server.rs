@@ -45,12 +45,12 @@ const ROUTES: &[route_manifest::Route] = &[
     route_manifest::get(
         "GET",
         "/api/record",
-        "One record, content included. ?path= names it.",
+        "One record, content included, with `updated_at`: the moment its row was last written. ?path= names it.",
     ),
     route_manifest::get(
         "GET",
         "/api/project",
-        "One project's records. ?name= selects it; ?content=false leaves every content out, for a list that only draws titles.",
+        "One project's records, each with `updated_at`. ?name= selects it; ?content=false leaves every content out, for a list that only draws titles or asks a replica which records moved.",
     ),
     route_manifest::Route {
         method: "POST",
@@ -341,7 +341,10 @@ async fn get_file(State(projects): State<Shared>, Query(query): Query<FileQuery>
 }
 
 /// One record in the shape `GET /api/project` and `GET /api/record` share.
-fn record_json(record: &projects::Record, with_content: bool) -> Value {
+///
+/// `updated_at` is left out of the reads that do not carry it, so the shape stays one shape and a
+/// reader that never looks at the key never has to.
+fn record_json(record: &projects::Record, with_content: bool, updated_at: Option<&str>) -> Value {
     let class = ops::classify_record(record);
     let mut value = json!({
         "path": record.path, "kind": record.kind, "title": record.title,
@@ -351,6 +354,9 @@ fn record_json(record: &projects::Record, with_content: bool) -> Value {
     });
     if with_content {
         value["content"] = json!(record.content);
+    }
+    if let Some(updated_at) = updated_at {
+        value["updated_at"] = json!(updated_at);
     }
     value
 }
@@ -362,7 +368,7 @@ async fn get_project(
     let name = query.name;
     let with_content = query.content.unwrap_or(true);
     let records = projects
-        .by_project(&name)
+        .by_project_timed(&name)
         .await
         .map_err(|e| api_error(false, e))?;
     if records.is_empty() {
@@ -370,7 +376,7 @@ async fn get_project(
     }
     let records: Vec<Value> = records
         .iter()
-        .map(|record| record_json(record, with_content))
+        .map(|(record, updated_at)| record_json(record, with_content, Some(updated_at)))
         .collect();
     Ok(Json(json!({ "records": records })))
 }
@@ -380,12 +386,14 @@ async fn get_record(
     Query(query): Query<RecordQuery>,
 ) -> Result<Json<Value>, ApiError> {
     let path = query.path;
-    let record = projects
-        .get(&path)
+    let (record, updated_at) = projects
+        .get_timed(&path)
         .await
         .map_err(|e| api_error(false, e))?
         .ok_or_else(|| ApiError(StatusCode::NOT_FOUND, "no such record".into()))?;
-    Ok(Json(json!({ "record": record_json(&record, true) })))
+    Ok(Json(
+        json!({ "record": record_json(&record, true, Some(&updated_at)) }),
+    ))
 }
 
 async fn add_task(
@@ -700,6 +708,91 @@ mod tests {
         let (status, body) = call(&router, get("/api/tasks?status=open")).await;
         assert_eq!(status, StatusCode::OK);
         assert_eq!(body["tasks"].as_array().map(Vec::len), Some(0));
+
+        std::fs::remove_dir_all(dir).unwrap();
+    }
+
+    /// A replica reads the project without contents and asks which records moved, so every record
+    /// the two record reads answer with carries the moment its row was last written.
+    #[tokio::test]
+    async fn record_reads_carry_the_moment_the_row_was_written() {
+        let dir = std::env::temp_dir().join(format!("sjel-projects-stamp-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(&dir).unwrap();
+        let projects = Projects::open(&dir.join("axon.db"), dir.join("rendered"))
+            .await
+            .expect("store opens");
+        let router = router(Arc::new(projects));
+
+        let (status, _) = call(
+            &router,
+            post("/api/projects", json!({ "name": "R", "summary": "r" })),
+        )
+        .await;
+        assert_eq!(status, StatusCode::CREATED);
+        for title in ["one", "two"] {
+            let (status, _) = call(
+                &router,
+                post("/api/tasks", json!({ "project": "R", "title": title })),
+            )
+            .await;
+            assert_eq!(status, StatusCode::CREATED);
+        }
+
+        let (status, body) = call(&router, get("/api/project?name=R&content=false")).await;
+        assert_eq!(status, StatusCode::OK);
+        let listed = body["records"].as_array().expect("records");
+        assert_eq!(listed.len(), 3, "the hub and both tasks");
+        for record in listed {
+            assert!(record.get("content").is_none(), "content=false: {record}");
+            assert!(
+                record["updated_at"].as_str().is_some_and(|s| s.len() > 20),
+                "no stamp on {record}"
+            );
+        }
+        let before = listed
+            .iter()
+            .find(|r| r["path"] == json!("R/Tasks/one.md"))
+            .and_then(|r| r["updated_at"].as_str())
+            .expect("task stamp")
+            .to_string();
+
+        let (status, body) = call(&router, get("/api/record?path=R/Tasks/two.md")).await;
+        assert_eq!(status, StatusCode::OK);
+        assert!(
+            body["record"]["updated_at"].as_str().is_some(),
+            "the single read stamps too: {body}"
+        );
+        let base = body["record"]["content"].as_str().expect("content");
+        tokio::time::sleep(std::time::Duration::from_millis(5)).await;
+        let (status, _) = call(
+            &router,
+            post(
+                "/api/record",
+                json!({ "path": "R/Tasks/two.md", "content": format!("{base}\nmore\n"), "base": base }),
+            ),
+        )
+        .await;
+        assert_eq!(status, StatusCode::OK);
+
+        let (status, body) = call(&router, get("/api/project?name=R&content=false")).await;
+        assert_eq!(status, StatusCode::OK);
+        let listed = body["records"].as_array().expect("records");
+        let after = listed
+            .iter()
+            .find(|r| r["path"] == json!("R/Tasks/one.md"))
+            .and_then(|r| r["updated_at"].as_str())
+            .expect("task stamp");
+        assert_eq!(
+            after, before,
+            "a write to one record does not stamp another"
+        );
+        let moved = listed
+            .iter()
+            .find(|r| r["path"] == json!("R/Tasks/two.md"))
+            .and_then(|r| r["updated_at"].as_str())
+            .expect("task stamp");
+        assert_ne!(moved, before, "the saved record's stamp moved");
 
         std::fs::remove_dir_all(dir).unwrap();
     }

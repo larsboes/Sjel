@@ -13,8 +13,8 @@ static TEMP_COUNTER: AtomicU64 = AtomicU64::new(0);
 
 /// Lifecycle coordinator shared by the operator CLI and native desktop commands.
 ///
-/// The catalog stores provider references only. `materialize` is the sole operation that copies
-/// secret bytes out of a provider, and it writes them directly to an owner-only runtime file.
+/// The catalog stores provider references only. `get` returns an opaque, zeroizing value for an
+/// in-process request. `materialize` writes a copy directly to an owner-only runtime file.
 pub struct CredentialManager {
     catalog_path: PathBuf,
     providers: HashMap<ProviderKind, Arc<dyn CredentialProvider>>,
@@ -50,6 +50,19 @@ impl CredentialManager {
             .ok_or(CredentialError::NotFound)?;
         self.provider(entry.reference.kind())?
             .status(id, &entry.reference)
+    }
+
+    /// Read a value for the named consumer. The returned value remains non-printable and is
+    /// zeroized when dropped; callers should keep its lifetime limited to one request.
+    pub fn get(&self, id: &CredentialId) -> Result<crate::SecretValue, CredentialError> {
+        let catalog = CredentialCatalog::load(&self.catalog_path)?;
+        let entry = catalog
+            .credentials
+            .iter()
+            .find(|entry| &entry.id == id)
+            .ok_or(CredentialError::NotFound)?;
+        self.provider(entry.reference.kind())?
+            .get(id, &entry.reference)
     }
 
     pub fn create(
@@ -292,6 +305,9 @@ mod tests {
             )
             .unwrap();
         assert_eq!(manager.status(&id).unwrap(), Presence::Present);
+        assert_eq!(manager.get(&id).unwrap().expose_bytes(), b"test-token-only");
+        let catalog = fs::read_to_string(&catalog_path).unwrap();
+        assert!(!catalog.contains("test-token-only"));
         manager.materialize(&id, &runtime_path).unwrap();
         assert_eq!(fs::read(&runtime_path).unwrap(), b"test-token-only");
         #[cfg(unix)]

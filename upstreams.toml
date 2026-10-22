@@ -697,6 +697,13 @@ license = "MIT"
 summary = "Coding agent that Sjel's agentbox runs in a container, taken from the release binary"
 why = "the coding agent capabilities/agentbox puts in a container -- a micro-VM until Q75 retired apple/container on 2026-09-02, and the [apple-container] row below carries what that cost. Adopted from the GitHub release TARBALL, not npm: releases ship a self-contained aarch64 ELF, so the image needs no Node and no npm and CONTRIBUTING.md#language-tooling is satisfied rather than excepted -- which the Medium writeup this was built from could not do, because it predates the rename (badlogic/pi-mono -> earendil-works/pi, package @mariozechner/pi-coding-agent -> @earendil-works/pi-coding-agent) and pins an npm install of a package that stopped at 0.73.1 while the project moved to 0.82.x. Upstream's own docs/security.md states pi has no built-in sandbox by design and that isolation must come from the OS or a virtualization boundary -- so this follows the tool's security model instead of bolting one on. See capabilities/agentbox/README.md for the three upstream-sanctioned patterns and why whole-process containment won here. Since Q77 (2026-09-02) `agentbox build` and `agentbox host-install` resolve GitHub's /releases/latest themselves and verify the tarball against THAT release's published SHA256SUMS, so no version or checksum literal exists anywhere for this entry -- and the host shim that refused `pi update` is deleted, because it existed to protect the literal"
 
+[pi-ai-auth]
+url = "https://github.com/earendil-works/pi/tree/main/packages/ai"
+verdict = "inspiration"
+license = "MIT"
+summary = "Reference for provider-neutral OAuth login and credential refresh in Sjel's Rust agent"
+why = "Read 2026-10-22 for Pi's OpenAI ChatGPT OAuth provider flow and its provider-neutral login/refresh shape. Inspiration only: Sjel reimplements the flow in Rust, persists credentials through sjel-credentials in the OS keychain, and does not vendor or import Pi code. OpenAI request handling remains subject to Sjel's reviewed-provider and c0 data-class gates."
+
 [apple-container]
 url = "https://github.com/apple/container"
 verdict = "reject"

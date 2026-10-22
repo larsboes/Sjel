@@ -31,6 +31,7 @@ mod pack_hook;
 mod packs;
 mod paths;
 mod persist;
+mod provider_login;
 mod registry;
 mod runargs;
 mod runner;
@@ -40,6 +41,7 @@ mod search;
 mod self_model;
 mod setup;
 mod sparpreis_watch;
+mod testflight;
 mod time;
 mod toolchain;
 mod ui_packages;
@@ -91,6 +93,7 @@ fn main() -> ExitCode {
         "self" => return self_model::run(rest),
         "updates" => return updates::run(rest),
         "inference-keys" => return inference_keys::run(rest),
+        "provider" => return provider_login::run(rest),
         "discover-ui-packages" => return ui_packages::run(rest),
         _ => {}
     }
@@ -151,7 +154,9 @@ fn sjel(root: &Path, command: &str, rest: &[String]) -> ExitCode {
         "capability" => capability::command(root, rest),
         "capture" => capability::command(root, &[&["capture".to_string()], rest].concat()),
         "runtime" => runtime::run(root, rest),
+        "provider" => provider_login::run(rest),
         "distribution" => distribution::run(root, rest),
+        "testflight" => testflight::run(root, rest),
         "agent" => match rest.first().map(String::as_str) {
             Some("enroll") => {
                 exec(Command::new(tool("tools/capability-auth/capability-auth")).arg("enroll"))
@@ -175,6 +180,7 @@ fn help(root: &Path, topic: &str) -> ExitCode {
         "" => help::USAGE,
         "capability" => help::CAPABILITY,
         "runtime" => help::RUNTIME,
+        "provider" => help::PROVIDER,
         "claude" => help::CLAUDE,
         "mcp" => help::MCP,
         "pack" => help::PACK,
@@ -189,6 +195,7 @@ fn help(root: &Path, topic: &str) -> ExitCode {
         "cargo" => help::CARGO,
         "doctor" => "Usage: sjel doctor",
         "distribution" => distribution::USAGE,
+        "testflight" => testflight::USAGE,
         "search" => "Usage: sjel search <words...>",
         "app" => app::USAGE,
         "capture" => {

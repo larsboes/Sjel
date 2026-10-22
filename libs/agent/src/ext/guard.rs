@@ -81,7 +81,7 @@ impl Extension for Guard {
         match call.function.name.as_str() {
             "read" => read_gate(arg("path")),
             "edit" => edit_gate(arg("path")),
-            "grep" | "find" => search_gate(
+            "grep" | "find" | "ls" => search_gate(
                 &call.function.name,
                 arg("path"),
                 arg("pattern"),
@@ -798,8 +798,10 @@ mod tests {
             if !schema.contains("\"path\"") && !schema.contains("\"command\"") {
                 continue;
             }
-            let seen = matches!(tool.name(), "read" | "edit" | "grep" | "find" | "bash")
-                || unguarded_on_purpose.contains(&tool.name());
+            let seen = matches!(
+                tool.name(),
+                "read" | "edit" | "grep" | "find" | "ls" | "bash"
+            ) || unguarded_on_purpose.contains(&tool.name());
             assert!(
                 seen,
                 "the core tool `{}` takes a path or a command and the guard does not look at it",

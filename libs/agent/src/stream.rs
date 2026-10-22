@@ -151,6 +151,101 @@ pub fn fold(
     })
 }
 
+/// Folds OpenAI Responses API events into the agent's provider-neutral message shape.
+pub fn fold_responses(
+    mut reader: impl BufRead,
+    stop: &AtomicBool,
+    on: &mut impl FnMut(Event<'_>),
+) -> Result<Message, AgentError> {
+    let mut content = String::new();
+    let mut calls = std::collections::BTreeMap::<usize, ToolCall>::new();
+    let mut line = String::new();
+    while !stop.load(Ordering::Relaxed) {
+        line.clear();
+        if reader.read_line(&mut line)? == 0 {
+            break;
+        }
+        let Some(data) = line.trim_end().strip_prefix("data:").map(str::trim_start) else {
+            continue;
+        };
+        if data == "[DONE]" {
+            break;
+        }
+        let event: serde_json::Value = serde_json::from_str(data)
+            .map_err(|e| AgentError::Malformed(format!("{e}: {}", crate::tools::cap(data, 300))))?;
+        let kind = event
+            .get("type")
+            .and_then(serde_json::Value::as_str)
+            .unwrap_or_default();
+        if kind == "error" || kind == "response.failed" {
+            return Err(AgentError::Malformed(crate::tools::cap(
+                &event.to_string(),
+                2_000,
+            )));
+        }
+        if let Some(delta) = event.get("delta").and_then(serde_json::Value::as_str) {
+            match kind {
+                "response.output_text.delta" | "response.refusal.delta" => {
+                    on(Event::Text(delta));
+                    content.push_str(delta);
+                }
+                "response.reasoning_summary_text.delta" => on(Event::Reasoning(delta)),
+                "response.function_call_arguments.delta" => {
+                    let index = event
+                        .get("output_index")
+                        .and_then(serde_json::Value::as_u64)
+                        .unwrap_or(0) as usize;
+                    calls
+                        .entry(index)
+                        .or_insert_with(|| ToolCall {
+                            id: String::new(),
+                            kind: crate::function_kind(),
+                            function: FunctionCall::default(),
+                        })
+                        .function
+                        .arguments
+                        .push_str(delta);
+                }
+                _ => {}
+            }
+        }
+        if kind == "response.output_item.added" || kind == "response.output_item.done" {
+            let index = event
+                .get("output_index")
+                .and_then(serde_json::Value::as_u64)
+                .unwrap_or(0) as usize;
+            if let Some(item) = event.get("item").filter(|item| {
+                item.get("type").and_then(serde_json::Value::as_str) == Some("function_call")
+            }) {
+                let call = calls.entry(index).or_insert_with(|| ToolCall {
+                    id: String::new(),
+                    kind: crate::function_kind(),
+                    function: FunctionCall::default(),
+                });
+                if let Some(id) = item.get("call_id").and_then(serde_json::Value::as_str) {
+                    call.id = id.to_owned();
+                }
+                if let Some(name) = item.get("name").and_then(serde_json::Value::as_str) {
+                    call.function.name = name.to_owned();
+                }
+                if let Some(arguments) = item.get("arguments").and_then(serde_json::Value::as_str) {
+                    call.function.arguments = arguments.to_owned();
+                }
+            }
+        }
+    }
+    let mut calls = calls.into_values().collect::<Vec<_>>();
+    for (index, call) in calls.iter_mut().enumerate() {
+        if call.id.is_empty() {
+            call.id = format!("call_{index}");
+        }
+    }
+    Ok(Message::Assistant {
+        content: (!content.is_empty()).then_some(content),
+        tool_calls: (!calls.is_empty()).then_some(calls),
+    })
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -192,6 +287,42 @@ mod tests {
         assert_eq!(calls[0].id, "a");
         assert_eq!(calls[0].function.name, "read");
         assert_eq!(calls[0].function.arguments, "{\"path\":1}");
+    }
+
+    #[test]
+    fn responses_events_fold_text_reasoning_and_function_calls() {
+        let sse = concat!(
+            "data: {\"type\":\"response.output_text.delta\",\"delta\":\"Hi\"}\n",
+            "data: {\"type\":\"response.reasoning_summary_text.delta\",\"delta\":\"think\"}\n",
+            "data: {\"type\":\"response.output_item.added\",\"output_index\":2,\"item\":{\"type\":\"function_call\",\"call_id\":\"call_1\",\"name\":\"read\",\"arguments\":\"\"}}\n",
+            "data: {\"type\":\"response.function_call_arguments.delta\",\"output_index\":2,\"delta\":\"{}\"}\n",
+            "data: [DONE]\n",
+        );
+        let mut text = String::new();
+        let mut thinking = String::new();
+        let message =
+            fold_responses(
+                sse.as_bytes(),
+                &AtomicBool::new(false),
+                &mut |event| match event {
+                    Event::Text(value) => text.push_str(value),
+                    Event::Reasoning(value) => thinking.push_str(value),
+                    _ => {}
+                },
+            )
+            .unwrap();
+        assert_eq!(text, "Hi");
+        assert_eq!(thinking, "think");
+        let Message::Assistant {
+            tool_calls: Some(calls),
+            ..
+        } = message
+        else {
+            panic!("expected call")
+        };
+        assert_eq!(calls[0].id, "call_1");
+        assert_eq!(calls[0].function.name, "read");
+        assert_eq!(calls[0].function.arguments, "{}");
     }
 
     #[test]

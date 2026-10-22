@@ -111,6 +111,8 @@ mod tests {
                 api: sjel_inference::Api::Ollama,
                 base_url: "http://127.0.0.1:11434".into(),
                 api_key_file: None,
+                api_key_credential_id: None,
+                oauth_credential_id: None,
                 provided_by: None,
             },
             model: "some-unmeasured-ocr-model".into(),

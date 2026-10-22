@@ -2,7 +2,7 @@
 //!
 //! Credential descriptors contain only identifiers, labels, provider selection, and provider
 //! references. Secret bytes are a separate type and are never serializable or printable. This
-//! boundary is shared by the operator CLI and native Tauri commands; callers must not return a
+//! boundary is shared by the operator CLI, agent, and native clients; callers must not return a
 //! [`SecretValue`] to a webview or include one in diagnostics.
 
 mod keychain;

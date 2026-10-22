@@ -4581,6 +4581,7 @@ version = "0.1.0"
 dependencies = [
  "axum",
  "chrono",
+ "futures",
  "reqwest",
  "route-manifest",
  "schemars",
@@ -4651,15 +4652,19 @@ dependencies = [
 name = "sjel-cli"
 version = "0.1.0"
 dependencies = [
+ "base64 0.22.1",
  "chrono",
  "civil-date",
+ "getrandom 0.4.3",
  "libsql-auth",
  "regex",
  "reqwest",
+ "ring",
  "rusqlite",
  "serde",
  "serde_json",
  "sha2 0.11.0",
+ "signal-hook",
  "sjel-config",
  "sjel-credentials",
  "sjel-http",
@@ -4855,10 +4860,13 @@ dependencies = [
  "reqwest",
  "serde",
  "serde_json",
+ "sjel-config",
+ "sjel-credentials",
  "sjel-http",
  "sjel-runtime",
  "thiserror 2.0.21",
  "toml",
+ "zeroize",
 ]
 
 [[package]]

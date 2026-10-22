@@ -26,7 +26,7 @@ This implements it.
 
 Two levels. Callers only ever touch the second.
 
-- A **backend** is a server: an API shape (`openai` or `ollama`), a base URL, optionally a
+- A **backend** is a server: an API shape (`openai`, `openai_responses` or `ollama`), a base URL, optionally a
   file to read a bearer key out of, and optionally the id of the host that serves it
   (`provided_by`). Declared once.
 - A **role** is a job: `embedding`, `reranking`, `summarization`, `ocr`, or an explicitly named
@@ -92,9 +92,11 @@ anywhere, and moving between them is a config edit rather than a code change.
 
 `src/lib.rs` serves the Rust capabilities that need model roles (Scouting and Comms today). It reads
 `inference.json`, honours the backend override, and resolves bearer keys from the referenced
-private file. Consumers receive a resolved role without hardcoding a URL or model. Comms also
+private file or OS keychain. Consumers receive a resolved role without hardcoding a URL or model. Comms also
 uses the resolved role for model readiness, mixed query/document embedding batches and
-OpenAI-compatible chat completion routing. Reranking roles use the Cohere/Jina-compatible
+OpenAI-compatible chat completion routing. The shared agent also supports ChatGPT OAuth through
+the Responses API, including streamed text and function calls; rotated refresh tokens are written
+back to the OS keychain. Reranking roles use the Cohere/Jina-compatible
 `/v1/rerank` shape, restore sorted results to input order and reject incomplete, duplicate or
 out-of-range scores before a consumer can persist them. The Ollama-native API has no equivalent
 route, so a reranking role names no Ollama model and simply does not resolve on a machine that
@@ -115,8 +117,8 @@ HTTPS backend, and declare `provider_name`, `cloud_data_tier`, `billing_mode`, a
 tiers are `public` and `pseudonymized_personal`; supported billing boundaries are `free_only`
 and `prepaid_credit`. There is deliberately no unbounded pay-as-you-go mode. The public API may
 expose that safe policy, role, model and protocol label, but never the backend URL, account ID,
-key-file path or key value. A configured role remains unavailable until its private key file
-contains a value. Selecting one records provider intent; a consumer must still implement an
+key-file path, credential identifier or key value. A configured role remains unavailable until
+its private key file or OS-keychain entry contains a value. Selecting one records provider intent; a consumer must still implement an
 explicit execution boundary before any request is made.
 
 The explicitly selected role runs first. `failover_priority` then orders only roles with the
@@ -128,8 +130,15 @@ provider account's billing configuration, which the operator must also keep free
 
 Relative `api_key_file` paths resolve beside the private `inference.json`. This lets an overlay
 reference a gitignored `runtime-secrets/` file without recording one workstation's absolute
-path. `tools/materialize-inference-key` is the human-run bridge from the matching Vaultwarden
-Secure Note into that local file; it never prints the value.
+path. New provider keys can live directly in the OS keychain; set `api_key_credential_id` to the
+credential ID and manage it with `sjel provider login|logout`. Key values never enter the
+catalog or inference config. Existing `api_key_file` references remain supported.
+
+The current hosted request adapter uses OpenAI Chat Completions. OpenCode Go exposes different
+API families for some models (`/responses` and `/messages`); select only models whose Go endpoint
+uses `/chat/completions` until those protocols have dedicated adapters. OpenCode Go and direct
+DeepSeek also remain unavailable to cloud Ask until their provider and model data policies pass
+the Sjel review gate.
 
 ## Machine override
 

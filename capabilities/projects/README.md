@@ -60,8 +60,10 @@ written back into a journal entry.
 - `GET /api/projects`, `GET /api/project?name=`: the list and one project's records.
   `content=false` leaves every record's content out, for a reader that draws a list of titles
   and reads the one record it opens; a project of 185 notes is 55 KB that way and 2.0 MB with
-  the content in.
-- `GET /api/record?path=`: one record with its content.
+  the content in. Every record of these two reads also carries `updated_at`, the moment its row
+  was last written, so a replica can ask which records moved instead of reading a project again
+  (measured: 544 of 1,221 records written in one day on this machine).
+- `GET /api/record?path=`: one record with its content, and its `updated_at`.
 - `GET /api/records?kind=project|task|note`: every live record of one kind in the task shape,
   with `kind` and all its properties. The dashboard's tables and note embeds read it.
 - `POST /api/tasks`, `POST /api/tasks/done`, `POST /api/projects`, `POST /api/notes`: create and

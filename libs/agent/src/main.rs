@@ -39,6 +39,18 @@ const DIM: &str = "\x1b[2m";
 const RESET: &str = "\x1b[0m";
 /// The status a shell reports for a process ended by SIGINT.
 const INTERRUPTED: u8 = 130;
+const LOGIN_PROVIDERS: &[&str] = &[
+    "openai",
+    "openai-api",
+    "deepseek",
+    "opencode-go",
+    "nvidia-nim",
+    "gemini",
+];
+
+fn known_login_provider(provider: &str) -> bool {
+    LOGIN_PROVIDERS.contains(&provider)
+}
 
 struct Args {
     role: String,
@@ -171,7 +183,7 @@ fn run(args: Args) -> Result<ExitCode, String> {
                 .ok_or_else(|| format!("no session to continue in {}", dir.display()))?,
         ),
         (Resume::Latest, None) => {
-            return Err("--continue needs an overlay (SJEL_PERSONAL_ROOT)".into())
+            return Err("--continue needs an overlay (SJEL_PERSONAL_ROOT)".into());
         }
         (Resume::New, dir) => dir.as_deref().map(session::new_path),
     };
@@ -256,9 +268,30 @@ fn run(args: Args) -> Result<ExitCode, String> {
                 }
                 continue;
             }
+            command if command == "/login" || command.starts_with("/login ") => {
+                let provider = command.strip_prefix("/login").unwrap_or("").trim();
+                if !provider.is_empty() && !known_login_provider(provider) {
+                    eprintln!("sjel-agent: unknown provider; use `/login` to choose one");
+                    continue;
+                }
+                let mut child = std::process::Command::new("sjel");
+                child.args(["provider", "login"]);
+                if !provider.is_empty() {
+                    child.arg(provider);
+                }
+                match child.status() {
+                    Ok(status) if status.success() => {}
+                    Ok(_) => eprintln!("sjel-agent: provider login did not complete"),
+                    Err(_) => eprintln!(
+                        "sjel-agent: cannot start `sjel provider login`; run it from a terminal"
+                    ),
+                }
+                continue;
+            }
             "/help" => {
                 eprintln!("Commands:");
                 eprintln!("  /history  - Show prompt history in this session");
+                eprintln!("  /login    - Sign in to a model provider or store its API key");
                 eprintln!("  /clear    - Clear the terminal screen");
                 eprintln!("  /exit     - Exit the session (or Ctrl-D)");
                 continue;
@@ -280,6 +313,20 @@ fn run(args: Args) -> Result<ExitCode, String> {
                 save(&messages);
             }
         }
+    }
+}
+
+#[cfg(test)]
+mod login_command_tests {
+    use super::known_login_provider;
+
+    #[test]
+    fn only_public_provider_slugs_can_reach_the_child_argv() {
+        assert!(known_login_provider("deepseek"));
+        assert!(known_login_provider("openai"));
+        assert!(known_login_provider("openai-api"));
+        assert!(known_login_provider("opencode-go"));
+        assert!(!known_login_provider("key-value-must-not-be-forwarded"));
     }
 }
 
@@ -425,7 +472,8 @@ struct SkillsSection {
 fn system_prompt(cwd: &Path) -> String {
     let mut system = format!(
         "You are a coding agent working in {}. Use the tools to read, search and change files \
-         and to run commands. Use grep and find to search, not bash. Request independent reads \
+         and to run commands. Use ls to inspect directories, and grep and find to search, not bash. \
+         Request independent reads \
          and searches together in one turn: they run in parallel. Read a file before you edit \
          it. When the task is done, answer with a short summary of what you changed.",
         cwd.display()

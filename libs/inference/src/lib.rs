@@ -67,6 +67,10 @@ pub enum Api {
     /// `POST {base_url}/embeddings`, bearer auth, `data[].embedding` back.
     /// oMLX, LM Studio, Ollama's own `/v1` shim, and every hosted provider.
     OpenAi,
+    /// OpenAI Responses API. Used for ChatGPT OAuth sessions; those credentials cannot call
+    /// the API-key chat-completions endpoint.
+    #[serde(rename = "openai_responses")]
+    OpenAiResponses,
     /// `POST {base_url}/api/embed`, no auth, `embeddings` back. Ollama native.
     Ollama,
 }
@@ -74,7 +78,7 @@ pub enum Api {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Backend {
     pub api: Api,
-    /// For `OpenAi` this includes the version segment, e.g.
+    /// For OpenAI-compatible APIs this includes the version segment, e.g.
     /// `http://127.0.0.1:8000/v1`. For `Ollama` it is the bare origin.
     pub base_url: String,
     /// A file to read a bearer key from. If it parses as JSON, `.auth.api_key`
@@ -83,6 +87,14 @@ pub struct Backend {
     /// Never a key value inline — secrets are references in this repo.
     #[serde(default)]
     pub api_key_file: Option<String>,
+    /// Credential catalog ID managed by `sjel provider login`. The value is read from the OS
+    /// keychain for each request and is never copied into inference config or session data.
+    #[serde(default)]
+    pub api_key_credential_id: Option<String>,
+    /// OAuth credential catalog ID. The keychain value contains an access/refresh token pair;
+    /// tokens are refreshed before expiry and never copied into configuration or session data.
+    #[serde(default)]
+    pub oauth_credential_id: Option<String>,
     /// The `systems.local.toml` id of the host that serves this backend, when
     /// it is not this machine (PRD Q39, 2026-08-25). The same `provided_by`
     /// vocabulary `tools/lib/external-ref.sh` already owns for a capability
@@ -755,6 +767,7 @@ impl ResolvedRole {
         let base = self.backend.base_url.trim_end_matches('/');
         match self.backend.api {
             Api::OpenAi => format!("{base}/embeddings"),
+            Api::OpenAiResponses => format!("{base}/embeddings"),
             Api::Ollama => format!("{base}/api/embed"),
         }
     }
@@ -763,6 +776,7 @@ impl ResolvedRole {
         let base = self.backend.base_url.trim_end_matches('/');
         match self.backend.api {
             Api::OpenAi => Ok(format!("{base}/rerank")),
+            Api::OpenAiResponses => Err("the OpenAI Responses API does not expose /rerank".into()),
             Api::Ollama => Err("the Ollama-native API does not expose /v1/rerank".into()),
         }
     }
@@ -773,8 +787,13 @@ impl ResolvedRole {
         let base = self.backend.base_url.trim_end_matches('/');
         match self.backend.api {
             Api::OpenAi => format!("{base}/chat/completions"),
+            Api::OpenAiResponses => format!("{base}/responses"),
             Api::Ollama => format!("{base}/v1/chat/completions"),
         }
+    }
+
+    pub fn uses_responses_api(&self) -> bool {
+        self.backend.api == Api::OpenAiResponses
     }
 
     pub fn provider_label(&self) -> &'static str {
@@ -784,12 +803,15 @@ impl ResolvedRole {
         if self.is_trusted_peer() {
             return match self.backend.api {
                 Api::OpenAi => "OpenAI-compatible trusted-peer endpoint",
+                Api::OpenAiResponses => "OpenAI Responses trusted-peer endpoint",
                 Api::Ollama => "Ollama-compatible trusted-peer endpoint",
             };
         }
         match (self.backend.api, self.is_loopback()) {
             (Api::OpenAi, true) => "OpenAI-compatible local endpoint",
             (Api::OpenAi, false) => "OpenAI-compatible cloud endpoint",
+            (Api::OpenAiResponses, true) => "OpenAI Responses local endpoint",
+            (Api::OpenAiResponses, false) => "OpenAI Responses cloud endpoint",
             (Api::Ollama, true) => "Ollama-compatible local endpoint",
             (Api::Ollama, false) => "Ollama-compatible cloud endpoint",
         }
@@ -888,7 +910,11 @@ impl ResolvedRole {
     }
 
     pub fn bearer_key(&self) -> Option<String> {
-        api_key_from_file(self.backend.api_key_file.as_deref())
+        if self.backend.api == Api::OpenAiResponses {
+            return oauth_access_token(self.backend.oauth_credential_id.as_deref());
+        }
+        api_key_from_credential(self.backend.api_key_credential_id.as_deref())
+            .or_else(|| api_key_from_file(self.backend.api_key_file.as_deref()))
     }
 
     /// Cheap readiness probe that confirms the role's selected model is listed
@@ -912,7 +938,7 @@ impl ResolvedRole {
             return false;
         }
         let endpoint = match self.backend.api {
-            Api::OpenAi => format!("{base}/models"),
+            Api::OpenAi | Api::OpenAiResponses => format!("{base}/models"),
             Api::Ollama => format!("{base}/api/tags"),
         };
         let mut request = client.get(endpoint);
@@ -929,13 +955,15 @@ impl ResolvedRole {
             _ => return false,
         };
         let models = match self.backend.api {
-            Api::OpenAi => body.get("data").and_then(|models| models.as_array()),
+            Api::OpenAi | Api::OpenAiResponses => {
+                body.get("data").and_then(|models| models.as_array())
+            }
             Api::Ollama => body.get("models").and_then(|models| models.as_array()),
         };
         models.is_some_and(|models| {
             models.iter().any(|model| {
                 let installed = match self.backend.api {
-                    Api::OpenAi => model.get("id"),
+                    Api::OpenAi | Api::OpenAiResponses => model.get("id"),
                     Api::Ollama => model.get("name").or_else(|| model.get("model")),
                 }
                 .and_then(|value| value.as_str())
@@ -1075,6 +1103,9 @@ impl ResolvedRole {
         runtime: &sjel_runtime::Status,
         inputs: &[(String, TextRole)],
     ) -> Result<Vec<Vec<f32>>, String> {
+        if self.backend.api == Api::OpenAiResponses {
+            return Err("the OpenAI Responses API cannot produce embeddings".into());
+        }
         if inputs.is_empty() {
             return Ok(Vec::new());
         }
@@ -1116,6 +1147,9 @@ impl ResolvedRole {
                 body.data.sort_by_key(|datum| datum.index);
                 body.data.into_iter().map(|datum| datum.embedding).collect()
             }
+            Api::OpenAiResponses => {
+                return Err("the OpenAI Responses API cannot produce embeddings".into());
+            }
         };
 
         if vectors.len() != inputs.len() {
@@ -1126,6 +1160,177 @@ impl ResolvedRole {
             ));
         }
         Ok(vectors)
+    }
+}
+
+fn api_key_from_credential(id: Option<&str>) -> Option<String> {
+    use sjel_credentials::{CredentialId, CredentialManager, CredentialProvider, KeychainProvider};
+    use std::sync::Arc;
+
+    let id = CredentialId::parse(id?.to_owned()).ok()?;
+    let catalog_path = sjel_config::overlay_config("credentials.toml")?;
+    let providers: Vec<Arc<dyn CredentialProvider>> = vec![Arc::new(KeychainProvider::system())];
+    let manager = CredentialManager::new(catalog_path, providers).ok()?;
+    let secret = manager.get(&id).ok()?;
+    std::str::from_utf8(secret.expose_bytes())
+        .ok()
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
+        .map(str::to_owned)
+}
+
+#[derive(Deserialize, Serialize)]
+struct OpenAiOAuthCredential {
+    access_token: String,
+    refresh_token: String,
+    expires_at_ms: u64,
+    client_id: String,
+    scopes: Vec<String>,
+}
+
+impl Drop for OpenAiOAuthCredential {
+    fn drop(&mut self) {
+        use zeroize::Zeroize as _;
+        self.access_token.zeroize();
+        self.refresh_token.zeroize();
+    }
+}
+
+fn oauth_access_token(id: Option<&str>) -> Option<String> {
+    use sjel_credentials::{
+        CredentialId, CredentialManager, CredentialProvider, KeychainProvider, SecretValue,
+    };
+    use std::sync::{Arc, Mutex, OnceLock};
+    use zeroize::Zeroizing;
+
+    static REFRESH_LOCK: OnceLock<Mutex<()>> = OnceLock::new();
+    let id = CredentialId::parse(id?.to_owned()).ok()?;
+    let catalog_path = sjel_config::overlay_config("credentials.toml")?;
+    let providers: Vec<Arc<dyn CredentialProvider>> = vec![Arc::new(KeychainProvider::system())];
+    let manager = CredentialManager::new(catalog_path, providers).ok()?;
+    let _guard = REFRESH_LOCK.get_or_init(|| Mutex::new(())).lock().ok()?;
+    let _file_guard = OAuthRefreshFileLock::acquire()?;
+    let raw = manager.get(&id).ok()?;
+    let encoded = Zeroizing::new(std::str::from_utf8(raw.expose_bytes()).ok()?.to_owned());
+    let mut credential: OpenAiOAuthCredential = serde_json::from_str(&encoded).ok()?;
+    let now = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .ok()?
+        .as_millis();
+    if !credential
+        .scopes
+        .iter()
+        .any(|scope| scope == "chatgpt.tokens.use.direct")
+    {
+        return None;
+    }
+    if u128::from(credential.expires_at_ms) <= now {
+        let response = sjel_http::client(
+            sjel_http::Purpose::new("openai-oauth-refresh"),
+            std::time::Duration::from_secs(30),
+        )
+        .ok()?
+        .post("https://auth.openai.com/api/accounts/oauth/token")
+        .form(&[
+            ("grant_type", "refresh_token"),
+            ("client_id", credential.client_id.as_str()),
+            ("refresh_token", credential.refresh_token.as_str()),
+            ("resource", "https://api.openai.com/v1"),
+        ])
+        .send()
+        .ok()?;
+        if !response.status().is_success() {
+            return None;
+        }
+        #[derive(Deserialize)]
+        struct Refresh {
+            access_token: String,
+            refresh_token: String,
+            expires_in: u64,
+            scope: Option<String>,
+        }
+        let refreshed = response.json::<Refresh>().ok()?;
+        if refreshed.access_token.is_empty() || refreshed.refresh_token.is_empty() {
+            return None;
+        }
+        let scope = refreshed.scope.as_deref().unwrap_or(
+            "openid profile email offline_access resource.invoke chatgpt.tokens.use.direct",
+        );
+        if !scope
+            .split_whitespace()
+            .any(|scope| scope == "chatgpt.tokens.use.direct")
+        {
+            return None;
+        }
+        credential.access_token = refreshed.access_token;
+        credential.refresh_token = refreshed.refresh_token;
+        credential.scopes = scope.split_whitespace().map(str::to_owned).collect();
+        credential.expires_at_ms = u64::try_from(
+            now.saturating_add(u128::from(refreshed.expires_in).saturating_mul(1000))
+                .saturating_sub(180_000),
+        )
+        .ok()?;
+        let serialized = Zeroizing::new(serde_json::to_string(&credential).ok()?);
+        let updated = SecretValue::new(serialized.as_bytes().to_vec()).ok()?;
+        manager.update(&id, &updated).ok()?;
+    }
+    credential
+        .scopes
+        .iter()
+        .any(|scope| scope == "chatgpt.tokens.use.direct")
+        .then(|| credential.access_token.clone())
+}
+
+struct OAuthRefreshFileLock(std::path::PathBuf);
+
+impl OAuthRefreshFileLock {
+    fn acquire() -> Option<Self> {
+        use std::fs::OpenOptions;
+        use std::io::Write as _;
+        use std::time::{Duration, Instant, SystemTime};
+
+        let path = sjel_config::overlay_config("provider-openai-oauth-refresh.lock")?;
+        let start = Instant::now();
+        loop {
+            let mut options = OpenOptions::new();
+            options.write(true).create_new(true);
+            #[cfg(unix)]
+            {
+                use std::os::unix::fs::OpenOptionsExt as _;
+                options.mode(0o600);
+            }
+            match options.open(&path) {
+                Ok(mut file) => {
+                    if writeln!(file, "{}", std::process::id()).is_err() {
+                        let _ = std::fs::remove_file(&path);
+                        return None;
+                    }
+                    return Some(Self(path));
+                }
+                Err(error) if error.kind() == std::io::ErrorKind::AlreadyExists => {
+                    let stale = std::fs::metadata(&path)
+                        .and_then(|metadata| metadata.modified())
+                        .ok()
+                        .and_then(|modified| SystemTime::now().duration_since(modified).ok())
+                        .is_some_and(|age| age > Duration::from_secs(120));
+                    if stale {
+                        let _ = std::fs::remove_file(&path);
+                        continue;
+                    }
+                    if start.elapsed() >= Duration::from_secs(35) {
+                        return None;
+                    }
+                    std::thread::sleep(Duration::from_millis(50));
+                }
+                Err(_) => return None,
+            }
+        }
+    }
+}
+
+impl Drop for OAuthRefreshFileLock {
+    fn drop(&mut self) {
+        let _ = std::fs::remove_file(&self.0);
     }
 }
 
@@ -1247,6 +1452,8 @@ mod tests {
                 api: Api::OpenAi,
                 base_url: base_url.into(),
                 api_key_file: None,
+                api_key_credential_id: None,
+                oauth_credential_id: None,
                 provided_by: provided_by.map(str::to_string),
             },
             model: "m".into(),
@@ -1359,6 +1566,56 @@ mod tests {
         SAMPLE.parse::<InferenceConfig>().expect("sample parses")
     }
 
+    #[test]
+    fn cloud_assistant_examples_are_reviewed_and_fail_closed_until_ready() {
+        let config: InferenceConfig = include_str!("../inference.config.example.json")
+            .parse()
+            .expect("shared inference example parses");
+        let mut nim = config
+            .role_on("cloud_assistant_nvidia_nim", None)
+            .expect("NIM profile exists");
+        assert_eq!(nim.model, "deepseek-ai/deepseek-v4.1-flash");
+        assert_eq!(nim.provider_name.as_deref(), Some("NVIDIA NIM"));
+        assert!(nim.has_cloud_policy());
+        assert!(nim.billing_active_on("2026-10-22"));
+        assert_eq!(nim.max_requests_per_day, Some(1));
+        nim.backend.api_key_file = None;
+        assert!(
+            !nim.dispatch_ready(),
+            "a profile with no credential reference must stay inert"
+        );
+
+        let mut openai = config
+            .role_on("cloud_assistant_openai", None)
+            .expect("OpenAI profile exists");
+        assert_eq!(openai.model, "gpt-4.1-mini");
+        assert!(openai.has_cloud_policy());
+        assert!(
+            !openai.billing_active_on("2026-10-22"),
+            "example prepaid profile stays inactive until its real expiry is configured"
+        );
+        openai.backend.api_key_file = None;
+        assert!(!openai.dispatch_ready());
+
+        let mut google = config
+            .role_on("cloud_assistant_google", None)
+            .expect("Google profile exists");
+        assert_eq!(google.model, "gemini-3.6-flash");
+        assert_eq!(google.provider_name.as_deref(), Some("Google"));
+        assert!(google.has_cloud_policy());
+        assert!(google.billing_active_on("2026-10-22"));
+        assert_eq!(google.max_requests_per_day, Some(1));
+        google.backend.api_key_file = None;
+        assert!(!google.dispatch_ready());
+
+        let reviewed = ReviewedProvidersList::parse_toml(include_str!("../../../providers.toml"))
+            .expect("review registry parses");
+        for profile in ["NVIDIA NIM", "OpenAI", "Google"] {
+            let policy = reviewed.get(profile).expect("profile provider is reviewed");
+            assert!(class_admits(&policy.highest_data_class, "c0"));
+        }
+    }
+
     fn write_temp_key(name: &str, content: &str) -> PathBuf {
         let directory =
             std::env::temp_dir().join(format!("sjel-inference-key-{}-{name}", std::process::id()));
@@ -1400,6 +1657,8 @@ mod tests {
                 api: Api::OpenAi,
                 base_url: "https://api.example.com/v1".into(),
                 api_key_file: Some("/private/key-file".into()),
+                api_key_credential_id: None,
+                oauth_credential_id: None,
                 provided_by: None,
             },
         );
@@ -1571,6 +1830,14 @@ mod tests {
             cfg.role("embedding").unwrap().chat_completions_endpoint(),
             "http://127.0.0.1:11434/v1/chat/completions"
         );
+        let mut openai = cfg.role("embedding").unwrap();
+        openai.backend.api = Api::OpenAiResponses;
+        openai.backend.base_url = "http://127.0.0.1:8000/v1".into();
+        assert_eq!(
+            openai.chat_completions_endpoint(),
+            "http://127.0.0.1:8000/v1/responses"
+        );
+        assert!(openai.uses_responses_api());
     }
 
     #[test]
@@ -1597,6 +1864,22 @@ mod tests {
         assert_eq!(api_key_from_file(raw.to_str()), Some("sk-raw".into()));
         let _ = std::fs::remove_dir_all(json.parent().unwrap());
         let _ = std::fs::remove_dir_all(raw.parent().unwrap());
+    }
+
+    #[test]
+    fn backend_credential_source_is_only_a_stable_id() {
+        let backend: Backend = serde_json::from_value(serde_json::json!({
+            "api": "openai",
+            "base_url": "https://api.deepseek.com",
+            "api_key_credential_id": "inference-deepseek"
+        }))
+        .unwrap();
+        assert_eq!(
+            backend.api_key_credential_id.as_deref(),
+            Some("inference-deepseek")
+        );
+        let encoded = serde_json::to_string(&backend).unwrap();
+        assert!(!encoded.contains("sk-"));
     }
 
     #[test]
@@ -1652,6 +1935,8 @@ mod tests {
                 api: Api::OpenAi,
                 base_url: "https://api.example.com/v1".into(),
                 api_key_file: None,
+                api_key_credential_id: None,
+                oauth_credential_id: None,
                 provided_by: None,
             },
         );
@@ -1696,6 +1981,8 @@ mod tests {
                 api: Api::OpenAi,
                 base_url: "https://api.example.com/v1".into(),
                 api_key_file: None,
+                api_key_credential_id: None,
+                oauth_credential_id: None,
                 provided_by: None,
             },
         );
@@ -1773,6 +2060,8 @@ mod tests {
                 api: Api::OpenAi,
                 base_url: "https://api.example.com/v1".into(),
                 api_key_file: None,
+                api_key_credential_id: None,
+                oauth_credential_id: None,
                 provided_by: None,
             },
         );
@@ -1887,6 +2176,8 @@ mod tests {
                 api: Api::OpenAi,
                 base_url: "https://api.example.com/v1".into(),
                 api_key_file: None,
+                api_key_credential_id: None,
+                oauth_credential_id: None,
                 provided_by: None,
             },
         );

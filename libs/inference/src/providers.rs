@@ -27,7 +27,9 @@ pub struct ReviewedProvidersList {
 pub enum ProviderAdmissionError {
     #[error("provider {0:?} is not named in reviewed providers list (providers.toml)")]
     UnreviewedProvider(String),
-    #[error("provider {provider:?} review expired on {expires_on} (reviewed {reviewed_at}, 12-month limit)")]
+    #[error(
+        "provider {provider:?} review expired on {expires_on} (reviewed {reviewed_at}, 12-month limit)"
+    )]
     ReviewExpired {
         provider: String,
         reviewed_at: String,

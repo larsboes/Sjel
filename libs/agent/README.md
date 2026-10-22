@@ -13,26 +13,46 @@ does not change between them.
 
 The model comes from a `sjel-inference` role (`libs/inference`). The CLI uses the role
 `coding` unless `--role` names another. Requests use streamed OpenAI chat completions with
-`tools`, which oMLX, Ollama's `/v1` shim and every hosted backend in the overlay accept. The loop
-forwards `chat_template_kwargs` and `request_overrides` from the role, the same pass-through
-as `capabilities/assistant/src/main.rs`.
+`tools` by default. OpenAI ChatGPT OAuth roles use the streamed Responses API, with function-call
+and tool-result messages translated by the agent. Both protocols share the same data-class
+admission and request limits.
 
 HTTP is blocking, through `sjel-http`. An async caller runs `Agent::run` inside
 `spawn_blocking`, which is the pattern `libs/sjel-http/Cargo.toml` states for the workspace.
+
+## Cloud calls
+
+`Agent::run` refuses a remote HTTPS role because its inputs and tool results have no provenance
+labels. `Agent::run_public` is the narrow opt-in: the caller attests the complete conversation
+as c0, and the agent then requires a current reviewed provider, active billing policy, configured
+credential, input ceiling, and a durable per-role daily request reservation in the private
+overlay. It also refuses tools and extensions, whose data egress is not classed at the value
+level. The reservation is written before dispatch; malformed ledgers and lock timeouts refuse
+the request. c1 requires a reviewed pseudonymized derivative and is not admitted by this method.
 
 The response streams. `src/stream.rs` folds the server-sent events into one message and
 passes each text fragment to the front end as it arrives. Fragment strings are borrowed from
 the line buffer, so most of them reach the terminal without an allocation.
 
+## Steering and follow-ups
+
+`Agent::input_queue()` returns a cloneable handle that an embedding can keep while
+`Agent::run` is active. `steer` adds a user message after the current tool batch and before the
+next model request. `follow_up` adds one after the current prompt receives its final answer.
+The queue is bounded to 32 messages; a full queue returns `InputQueueError::Full` so the caller
+can apply backpressure or tell the user the message was not accepted.
+
 ## Coding tools
 
-`tools::coding(root)` returns `read`, `write`, `edit`, `bash`, `grep` and `find`, the same
-set pi gives a model. Two choices differ from pi:
+`tools::coding(root)` returns `read`, `write`, `edit`, `bash`, `grep`, `find` and `ls`, the
+same core tools pi gives a model. Two choices differ from pi:
 
 - `grep` and `find` run in-process on ripgrep's own crates (`ignore`, `grep-searcher`,
   `grep-regex`). There is no process per call. The walk uses every core, respects
   `.gitignore`, and stops when the 30 KB output budget is spent.
-- `read`, `grep` and `find` declare themselves read-only. When every call in one model turn
+- `ls` uses `std::fs` directly, omits hidden entries, sorts names, and caps the listing at 500
+  entries.
+- `read`, `grep`, `find` and `ls` declare themselves read-only. When every call in one model turn
   is read-only, the loop runs them on scoped threads. A turn that reads five files waits for
   the slowest read, not the sum.
 
@@ -182,6 +202,15 @@ cd <project> && sjel-agent "fix the failing test in foo.rs"   # one prompt, then
 cd <project> && sjel-agent                                     # one prompt per line, /exit stops
 cd <project> && sjel-agent --continue                          # resume the newest session here
 ```
+
+Use `/login` inside the interactive agent to choose a provider, `/login openai` for ChatGPT
+browser sign-in, or `/login deepseek` to go directly to its hidden API-key prompt. OAuth tokens
+and API keys are saved in the OS keychain; slash commands are handled locally and never enter
+model history.
+The equivalent operator commands are `sjel provider list`, `sjel provider login <provider>`,
+and `sjel provider logout <provider>`. Add `api_key_credential_id` or `oauth_credential_id` to
+a backend in the private `config/inference.json` to select its keychain entry. ChatGPT OAuth
+uses `api: "openai_responses"` with `oauth_credential_id: "inference-openai-chatgpt"`.
 
 The answer streams to stdout. Thinking, tool calls and their results go to stderr.
 

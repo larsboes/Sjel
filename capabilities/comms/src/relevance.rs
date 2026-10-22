@@ -863,6 +863,8 @@ mod repair_tests {
                 api: Api::OpenAi,
                 base_url: base_url.into(),
                 api_key_file: None,
+                api_key_credential_id: None,
+                oauth_credential_id: None,
                 provided_by: None,
             },
             model: "stub-embed".into(),

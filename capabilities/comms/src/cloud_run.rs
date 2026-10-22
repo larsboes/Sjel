@@ -1354,7 +1354,13 @@ mod tests {
                 !audit_leak.raw_c2_violations.is_empty(),
                 "audit must catch raw email leak"
             );
-            assert!(audit_leak.raw_c2_violations[0].contains("raw_leak@secret.com"));
+            // Any position, not the first: the audit lists registry name matches before emails,
+            // and the registry is the operator's overlay file, so on a machine whose registry
+            // holds a "John" the first violation is the name and the email comes second.
+            assert!(audit_leak
+                .raw_c2_violations
+                .iter()
+                .any(|v| v.contains("raw_leak@secret.com")));
         }
 
         /// Product Rule 5 (answering Akhawe and Felt): Routine autonomous processing

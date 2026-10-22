@@ -1227,7 +1227,10 @@ fn day_window_bounds(from: &str, to: &str) -> StoreResult<(String, String)> {
     if to_day < from_day {
         return Err("to must be on or after from".into());
     }
-    Ok((format!("{from}T00:00:00"), format!("{to}T00:00:00")))
+    // The end is the bare date, not `{to}T00:00:00`. An all-day entry stores `YYYY-MM-DD`, which
+    // sorts before `YYYY-MM-DDT00:00:00`, so the timestamp bound let all-day entries starting on
+    // `to` through while it shut out timed ones. Against the bare date both are excluded.
+    Ok((format!("{from}T00:00:00"), to.to_owned()))
 }
 
 fn entry_from_input(input: &NewEntry) -> Entry {
@@ -1366,13 +1369,20 @@ mod tests {
     }
 
     #[test]
-    fn day_window_uses_midnight_boundaries_for_timed_entries() {
+    fn day_window_excludes_its_end_day_for_both_entry_shapes() {
         let (from, to) = day_window_bounds("2026-07-30", "2026-07-31").unwrap();
         assert_eq!(from, "2026-07-30T00:00:00");
-        assert_eq!(to, "2026-07-31T00:00:00");
 
         let same_day_end = "2026-07-30T12:00:00";
         assert!(same_day_end > from.as_str());
+        // `starts_at < to` keeps the last hour of the 30th and drops everything on the 31st,
+        // timed or all-day.
+        assert!("2026-07-30T23:30:00" < to.as_str());
+        assert!("2026-07-30" < to.as_str());
+        assert!("2026-07-31T00:00:00" >= to.as_str());
+        assert!("2026-07-31" >= to.as_str());
+        // An all-day entry ending (exclusively) on `from` is not in the window.
+        assert!("2026-07-30" <= from.as_str());
     }
 }
 
@@ -1484,6 +1494,23 @@ mod db_tests {
         store
             .create_entry(&an_entry("after", "2026-08-16", "event"))
             .unwrap();
+        // All-day on the end day: its bare `2026-08-16` once sorted inside the window.
+        store
+            .create_entry(&NewEntry {
+                starts_at: "2026-08-16".into(),
+                ends_at: "2026-08-17".into(),
+                all_day: true,
+                ..an_entry("all-day after", "2026-08-16", "event")
+            })
+            .unwrap();
+        store
+            .create_entry(&NewEntry {
+                starts_at: "2026-08-15".into(),
+                ends_at: "2026-08-16".into(),
+                all_day: true,
+                ..an_entry("all-day inside", "2026-08-15", "event")
+            })
+            .unwrap();
 
         let titles: Vec<String> = store
             .list_entries("2026-08-15", "2026-08-16", &[])
@@ -1491,7 +1518,7 @@ mod db_tests {
             .into_iter()
             .map(|entry| entry.title)
             .collect();
-        assert_eq!(titles, vec!["inside"]);
+        assert_eq!(titles, vec!["all-day inside", "inside"]);
         assert!(store.list_entries("2026-08-16", "2026-08-15", &[]).is_err());
     }
 

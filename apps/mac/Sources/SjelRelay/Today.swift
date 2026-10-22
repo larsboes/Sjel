@@ -44,11 +44,13 @@ public enum Today {
         (entry.allDay ? day : time).date(from: entry.endsAt)
     }
 
-    /// The query range: today and tomorrow. `to` is inclusive: asking for the 8th to the
-    /// 9th returned an entry starting on the 9th (2026-10-08).
+    /// The query range for today and tomorrow. `to` is exclusive
+    /// (`capabilities/calendar/src/store.rs`, `list_entries`), so it is the day after tomorrow.
+    /// The 2026-10-08 reading that it was inclusive came from all-day entries, which the window
+    /// let through by mistake until 2026-10-22; timed entries on `to` were always left out.
     public static func range(now: Date, calendar: Calendar = .current) -> (from: String, to: String) {
         let today = calendar.startOfDay(for: now)
-        let after = calendar.date(byAdding: .day, value: 1, to: today) ?? today
+        let after = calendar.date(byAdding: .day, value: 2, to: today) ?? today
         return (day.string(from: today), day.string(from: after))
     }
 

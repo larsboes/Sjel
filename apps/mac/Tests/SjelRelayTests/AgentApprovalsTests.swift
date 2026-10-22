@@ -162,6 +162,6 @@ import Testing
     @Test func theRangeIsTodayAndTomorrow() {
         let range = Today.range(now: now)
         #expect(range.from == "2026-10-08")
-        #expect(range.to == "2026-10-09")
+        #expect(range.to == "2026-10-10")
     }
 }

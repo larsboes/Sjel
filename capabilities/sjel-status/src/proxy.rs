@@ -89,6 +89,8 @@ pub(crate) struct Proxy {
     /// Shared inbound token sent only from this server to protected capability APIs. The
     /// browser never receives it; the shell injects it after its own listener admits the request.
     deployment_authorization: Option<HeaderValue>,
+    /// The same deployment credential, to recognise it on a request bound for comms.
+    deployment: sjel_server::InboundAuth,
     client: reqwest::Client,
     ui_dir: String,
 }
@@ -106,6 +108,17 @@ const HOP_BY_HOP: [&str; 8] = [
     "transfer-encoding",
     "upgrade",
 ];
+
+/// Drops the deployment token from a request bound for comms, so the comms credential replaces
+/// it. The shell has already admitted the request with that token, and comms accepts only its own
+/// credential, so a native client holding the deployment token got 401 where a cookie-borne
+/// browser request got through. Any other token (an agent's own) is left for comms to judge.
+fn exchange_deployment_token(headers: &mut HeaderMap, deployment: &sjel_server::InboundAuth) {
+    if deployment.presents_token(headers) {
+        headers.remove(axum::http::header::AUTHORIZATION);
+        headers.remove("x-sjel-token");
+    }
+}
 
 fn insert_authorization_if_absent(headers: &mut HeaderMap, auth: Option<&HeaderValue>) {
     if !headers.contains_key(axum::http::header::AUTHORIZATION) {
@@ -181,6 +194,7 @@ impl Proxy {
             deployment_authorization: sjel_server::InboundAuth::from_deployment()
                 .bearer_header()
                 .and_then(|value| HeaderValue::from_str(&value).ok()),
+            deployment: sjel_server::InboundAuth::from_deployment(),
             client: reqwest::Client::new(),
             ui_dir,
         }
@@ -373,6 +387,7 @@ async fn forward(proxy: &Proxy, route: Route, req: Request) -> Response {
         headers.insert(name.clone(), value.clone());
     }
     if route.inject_comms_auth {
+        exchange_deployment_token(&mut headers, &proxy.deployment);
         insert_authorization_if_absent(&mut headers, proxy.comms_authorization.as_ref());
     } else {
         insert_authorization_if_absent(&mut headers, proxy.deployment_authorization.as_ref());
@@ -636,6 +651,37 @@ mod tests {
         insert_authorization_if_absent(&mut agent, Some(&shared));
         assert_eq!(
             agent[axum::http::header::AUTHORIZATION],
+            "Bearer agent-token"
+        );
+    }
+
+    #[test]
+    fn comms_gets_its_own_credential_in_place_of_the_deployment_token() {
+        let deployment = sjel_server::InboundAuth::with_token(Some("deployment-token".into()));
+        let comms = HeaderValue::from_static("Bearer comms-token");
+        let upstream = |presented: Option<(&'static str, &'static str)>| {
+            let mut headers = HeaderMap::new();
+            if let Some((name, value)) = presented {
+                headers.insert(name, HeaderValue::from_static(value));
+            }
+            exchange_deployment_token(&mut headers, &deployment);
+            insert_authorization_if_absent(&mut headers, Some(&comms));
+            headers[axum::http::header::AUTHORIZATION].clone()
+        };
+        // The native app: admitted by the shell with the deployment token.
+        assert_eq!(
+            upstream(Some(("authorization", "Bearer deployment-token"))),
+            "Bearer comms-token"
+        );
+        assert_eq!(
+            upstream(Some(("x-sjel-token", "deployment-token"))),
+            "Bearer comms-token"
+        );
+        // The browser: a session cookie and no header.
+        assert_eq!(upstream(None), "Bearer comms-token");
+        // An agent's own token reaches comms as itself.
+        assert_eq!(
+            upstream(Some(("authorization", "Bearer agent-token"))),
             "Bearer agent-token"
         );
     }

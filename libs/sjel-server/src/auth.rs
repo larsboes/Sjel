@@ -467,6 +467,18 @@ impl InboundAuth {
         self.token.as_ref().map(|t| format!("Bearer {t}"))
     }
 
+    /// Whether `headers` present this deployment's own token, compared in constant time. The
+    /// shell's proxy asks this to exchange the token for comms' credential, which comms requires
+    /// instead (`capabilities/sjel-status/src/proxy.rs`).
+    pub fn presents_token(&self, headers: &HeaderMap) -> bool {
+        match (self.token.as_deref(), presented_token(headers)) {
+            (Some(expected), Some(presented)) => {
+                constant_time_eq(presented.as_bytes(), expected.as_bytes())
+            }
+            _ => false,
+        }
+    }
+
     /// Add the deployment credential only when `url` names this machine's loopback interface.
     /// Internal capability calls use this helper; it must not leak the token to a configured
     /// remote endpoint or a model provider.

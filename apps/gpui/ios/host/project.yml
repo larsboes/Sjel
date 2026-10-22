@@ -1,5 +1,6 @@
 # XcodeGen spec for the UIKit host. `ios/run-sim` generates the project and passes RUST_LIB,
-# the static library cargo built for the simulator.
+# the static library cargo built for the simulator. `tools/distribution/ios-archive` generates it
+# too, for the signed device archive TestFlight takes.
 name: SjelIOS
 options:
   bundleIdPrefix: dev.sjel
@@ -12,12 +13,27 @@ targets:
     sources:
       - path: App.swift
       - path: DeviceIdentity.swift
+      - path: Discovery.swift
+      - path: Assets.xcassets
+      - path: PrivacyInfo.xcprivacy
     info:
       path: Info.plist
       properties:
         CFBundleDisplayName: Sjel
+        # What TestFlight and the App Store show as the build's version.
+        CFBundleShortVersionString: 0.1.0
+        CFBundleVersion: "1"
+        # Nothing here encrypts more than TLS, which is the exempt case. Without this key the
+        # upload asks the question on every build and waits for an answer.
+        ITSAppUsesNonExemptEncryption: false
+        UISupportedInterfaceOrientations:
+          - UIInterfaceOrientationPortrait
+        UIRequiresFullScreen: true
         # Bonjour names (`<mac>.local`) on the local network: the LAN listener's address.
         NSLocalNetworkUsageDescription: Sjel talks to your Mac on this network.
+        # The service type the Mac advertises and Discovery.swift browses.
+        NSBonjourServices:
+          - _sjel._tcp
         UILaunchScreen: {}
         UIApplicationSceneManifest:
           UIApplicationSupportsMultipleScenes: false
@@ -26,13 +42,16 @@ targets:
         PRODUCT_BUNDLE_IDENTIFIER: dev.sjel.ios
         SWIFT_VERSION: "5.0"
         SWIFT_OBJC_BRIDGING_HEADER: Embedding.h
-        # Ad-hoc ("Sign to Run Locally"), Xcode's simulator default. An unsigned app has no
-        # application identifier, and the Keychain refuses it the device key.
-        CODE_SIGN_IDENTITY: "-"
-        CODE_SIGN_STYLE: Manual
+        # A device build signs for the App Store: `ios-archive --team <TEAM_ID>` passes the team
+        # and -allowProvisioningUpdates on the command line, so no account identifier lives in
+        # this file. The Simulator keeps the ad-hoc identity Xcode uses there: an unsigned app
+        # has no application identifier, and the Keychain refuses it the key.
+        CODE_SIGN_STYLE: Automatic
+        "CODE_SIGN_IDENTITY[sdk=iphonesimulator*]": "-"
         # The Rust library links statically; Xcode's debug dylib loader does not apply.
         ENABLE_DEBUG_DYLIB: NO
         ARCHS: arm64
+        ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
         OTHER_LDFLAGS:
           - "-force_load"
           - "$(RUST_LIB)"
@@ -46,3 +65,29 @@ targets:
           - "-framework AVFoundation"
           - "-framework CoreMedia"
           - "-framework WebKit"
+  # A touch check, not a feature test: GPUI paints every pixel, so only a real tap proves that
+  # UIKit's touch reaches the view (`UITests/JoinTap.swift`). ios/run-sim --tap runs it.
+  SjelIOSUITests:
+    type: bundle.ui-testing
+    platform: iOS
+    sources:
+      - path: UITests
+    dependencies:
+      - target: SjelIOS
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: dev.sjel.ios.uitests
+        GENERATE_INFOPLIST_FILE: YES
+        TEST_TARGET_NAME: SjelIOS
+        CODE_SIGN_IDENTITY: "-"
+        CODE_SIGN_STYLE: Manual
+        SWIFT_VERSION: "5.0"
+        ARCHS: arm64
+schemes:
+  SjelIOS:
+    build:
+      targets:
+        SjelIOS: all
+    test:
+      targets:
+        - SjelIOSUITests

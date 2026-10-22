@@ -1005,7 +1005,9 @@ impl Render for NoteEditor {
                     .items_center()
                     .gap_3()
                     .text_color(rgb(palette.muted))
-                    .child(format!("{word_count} words · {block_count} blocks · {reading_time}"))
+                    .child(format!(
+                        "{word_count} words · {block_count} blocks · {reading_time}"
+                    ))
                     .child(div().w(px(1.)).h(px(10.)).bg(rgba(palette.border)))
                     .child("Esc to close · / for blocks"),
             );

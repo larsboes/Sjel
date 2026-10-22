@@ -220,6 +220,31 @@ impl DeviceClient {
 
     /// A signed GET of `shell_path`, for example `/api/sjel-status/health`.
     pub async fn get<T: DeserializeOwned>(&self, shell_path: &str) -> Result<T, String> {
+        let (status, body) = self.signed(Method::GET, shell_path, &[]).await?;
+        decode(status, &body)
+    }
+
+    /// A signed POST to `shell_path` with `body`.
+    pub async fn post<T: DeserializeOwned>(
+        &self,
+        shell_path: &str,
+        body: &[u8],
+    ) -> Result<T, String> {
+        let (status, body) = self.signed(Method::POST, shell_path, body).await?;
+        decode(status, &body)
+    }
+
+    /// One signed request, answered with the status and body as the Mac sent them.
+    ///
+    /// The status is returned rather than turned into an error because a caller can read what a
+    /// refusal carries: a stale save answers `409` with the content that is there now, and a sync
+    /// replays the edit over it (`core/src/sync.rs`).
+    pub async fn signed(
+        &self,
+        method: Method,
+        shell_path: &str,
+        body: &[u8],
+    ) -> Result<(u16, Vec<u8>), String> {
         let timestamp = SystemTime::now()
             .duration_since(UNIX_EPOCH)
             .map_err(|_| "the clock is before 1970".to_string())?
@@ -228,22 +253,35 @@ impl DeviceClient {
         let headers = device_auth::signed_headers(
             &self.node.device_id,
             timestamp,
-            "GET",
+            method.as_str(),
             shell_path,
-            b"",
+            body,
             |m| sign(m),
         )?;
         let mut request = self
             .client
-            .request(Method::GET, format!("{}{shell_path}", self.node.base));
+            .request(method, format!("{}{shell_path}", self.node.base));
+        if !body.is_empty() {
+            request = request.header(reqwest::header::CONTENT_TYPE, "application/json");
+        }
         for (name, value) in headers {
             request = request.header(name, value);
         }
-        let response = request
-            .send()
+        let response = if body.is_empty() {
+            request
+        } else {
+            request.body(body.to_vec())
+        }
+        .send()
+        .await
+        .map_err(|error| format!("The Mac did not answer: {error}"))?;
+        let status = response.status().as_u16();
+        let body = response
+            .bytes()
             .await
-            .map_err(|error| format!("The Mac did not answer: {error}"))?;
-        read(response).await
+            .map_err(|error| format!("The Mac's answer stopped part way: {error}"))?
+            .to_vec();
+        Ok((status, body))
     }
 }
 
@@ -258,17 +296,22 @@ fn pinned_client(pin: &str) -> Result<reqwest::Client, String> {
         .map_err(|error| format!("TLS client: {error}"))
 }
 
+/// Reads one unsigned answer: the pairing requests, before there is a device key to sign with.
 async fn read<T: DeserializeOwned>(response: reqwest::Response) -> Result<T, String> {
-    let status = response.status();
-    if status.is_success() {
-        return response
-            .json()
-            .await
+    let status = response.status().as_u16();
+    let body = response
+        .bytes()
+        .await
+        .map_err(|error| format!("The Mac's answer stopped part way: {error}"))?;
+    decode(status, &body)
+}
+
+fn decode<T: DeserializeOwned>(status: u16, body: &[u8]) -> Result<T, String> {
+    if (200..300).contains(&status) {
+        return serde_json::from_slice(body)
             .map_err(|_| "The Mac answered with something this app cannot read.".into());
     }
-    let error = response
-        .json::<serde_json::Value>()
-        .await
+    let error = serde_json::from_slice::<serde_json::Value>(body)
         .ok()
         .and_then(|body| body.get("error")?.as_str().map(str::to_owned));
     Err(error.unwrap_or_else(|| format!("The Mac refused the request ({status}).")))

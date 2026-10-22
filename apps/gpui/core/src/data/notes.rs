@@ -4,12 +4,17 @@
 //! shell. Reading it again to see the text that was on screen a click ago is the one read this
 //! cache exists to remove. Every write the app makes drops the note it wrote, so what is kept is
 //! never older than the last write of this app; [`NOTE_TTL`] bounds how old it can be.
+//!
+//! It lives beside [`Repo`] because it is the same read path on both platforms: the editor keeps
+//! one whether a `Context` exists or not.
+//!
+//! [`Repo`]: super::Repo
 
 use std::collections::VecDeque;
 use std::sync::{Arc, Mutex, MutexGuard};
 use std::time::{Duration, Instant};
 
-use sjel_gpui_core::shell::ProjectRecord;
+use crate::shell::ProjectRecord;
 
 /// How long a kept note opens without a read. An edit made elsewhere in that window is caught by
 /// the next save, which the capability refuses when the note changed since it was read.
@@ -64,8 +69,8 @@ impl Notes {
 
     /// Records the body this app just saved on the note at `path`, if it is kept.
     ///
-    /// The editor writes the body only (`crate::blocks::Doc` holds the frontmatter verbatim and
-    /// does not edit it), so the rest of the kept record still holds.
+    /// The editor writes the body only (`apps/gpui/src/blocks.rs` holds the frontmatter verbatim
+    /// and does not edit it), so the rest of the kept record still holds.
     pub fn set_content(&self, path: &str, content: &str) {
         let mut kept = self.lock();
         if let Some(one) = kept.iter_mut().find(|one| one.record.path == path) {

@@ -10,10 +10,11 @@ description = "Sjel native GPUI desktop application"
 # the Mac app, the shared core and the iOS app keeps them on one GPUI snapshot (ISA.md
 # Decisions 2026-10-15, step 0).
 [workspace]
-members = ["core", "ios"]
+members = ["core", "ios", "ui"]
 
 [dependencies]
 sjel-gpui-core = { path = "core" }
+sjel-gpui-ui = { path = "ui" }
 gpui-kit = { version = "=0.7.3", default-features = false, features = ["component", "assets"] }
 chrono = { version = "0.4", default-features = false, features = ["clock"] }
 futures = "0.3"
@@ -22,6 +23,7 @@ serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 tokio = { version = "1", features = ["rt", "sync", "time", "net"] }
 libsql = { version = "0.10.0", default-features = false, features = ["core"] }
+zeroize = "=1.9.1"
 
 [target.'cfg(target_os = "macos")'.dependencies]
 objc2 = "=0.6.5"
@@ -32,6 +34,9 @@ raw-window-handle = "=0.6.2"
 [dev-dependencies]
 # Same crate gpui-kit resolves; the name `gpui` is what the #[gpui::test] macro expands to.
 gpui = { package = "gpui-pre", version = "=0.3.9", features = ["test-support"] }
+# `cfg(test)` marks only the crate that declares the test, so `core`'s local-database gate has to
+# arrive as a feature: without it these window tests would read this machine's real axon.db.
+sjel-gpui-core = { path = "core", features = ["test-support"] }
 
 [lints.rust]
 unsafe_code = "deny"

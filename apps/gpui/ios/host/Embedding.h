@@ -9,3 +9,5 @@ void gpui_ios_layout_view(void *window);
 bool gpui_ios_request_frame(void *window);
 void gpui_ios_did_become_active(void *app);
 void gpui_ios_will_resign_active(void *app);
+// ios/src/lib.rs: one browse answer from Discovery.swift, `{"nodes":[…],"denied":false}`.
+void sjel_ios_nodes(const char *json);

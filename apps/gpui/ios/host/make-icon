@@ -1,0 +1,23 @@
+#!/usr/bin/env bash
+# ios/host/make-icon — build the iOS app icon from brand/sjel-icon-maskable.svg.
+#
+# An iOS app icon is a full-bleed 1024 px square with no alpha and no rounded corners: the system
+# applies its own mask, and a transparent pixel reaches the App Store as a validation error. The
+# maskable source keeps the mark inside the centre 70%, so that mask crops only the field. Needs
+# rsvg-convert and ImageMagick; the output is committed, so a build does not run this.
+set -euo pipefail
+HERE="$(cd "$(dirname "$0")" && pwd)"
+SRC="$HERE/../../../../brand/sjel-icon-maskable.svg"
+OUT="$HERE/Assets.xcassets/AppIcon.appiconset/Icon-1024.png"
+
+[ -f "$SRC" ] || { echo "make-icon: missing $SRC" >&2; exit 1; }
+mkdir -p "$(dirname "$OUT")"
+rsvg-convert -w 1024 -h 1024 "$SRC" -o "$OUT"
+# -alpha remove paints the field behind the mark, then -alpha off drops the channel entirely.
+magick "$OUT" -background '#16748D' -alpha remove -alpha off -depth 8 -strip "$OUT"
+size="$(magick identify -format '%wx%h' "$OUT")"
+[ "$size" = 1024x1024 ] || { echo "make-icon: expected 1024x1024, got $size" >&2; exit 1; }
+case "$(magick identify -format '%[channels]' "$OUT")" in
+  *a*) echo "make-icon: the icon still carries an alpha channel" >&2; exit 1 ;;
+esac
+echo "make-icon: wrote $OUT"

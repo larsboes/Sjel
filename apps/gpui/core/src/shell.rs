@@ -205,6 +205,17 @@ pub struct AskTurn {
     pub content: String,
 }
 
+/// Configured cloud role exposed by the local assistant's privacy-safe discovery route.
+#[derive(Clone, Debug, PartialEq, Eq, Deserialize)]
+pub struct AskProvider {
+    pub role: String,
+    pub provider: String,
+    pub model: String,
+    pub data_tier: String,
+    pub available: bool,
+    pub reason: Option<String>,
+}
+
 /// Reply from `POST /assistant/api/ask` (or deterministic capability fallback).
 #[derive(Clone, Debug, PartialEq, Eq, Deserialize)]
 pub struct AskReply {
@@ -213,6 +224,29 @@ pub struct AskReply {
     pub source: String,
     #[serde(default)]
     pub tools: Vec<String>,
+}
+
+/// One streamed event from `POST /assistant/api/ask/stream`.
+#[derive(Clone, Debug, Deserialize)]
+pub struct AskEvent {
+    #[serde(rename = "type")]
+    pub kind: String,
+    #[serde(default)]
+    pub content: String,
+    #[serde(default)]
+    pub name: String,
+    #[serde(default)]
+    pub arguments: String,
+    #[serde(default)]
+    pub text: String,
+    #[serde(default)]
+    pub model: String,
+    #[serde(default)]
+    pub source: String,
+    #[serde(default)]
+    pub tools: Vec<String>,
+    #[serde(default)]
+    pub message: String,
 }
 
 /// One frame of `GET /api/sjel-status/events`: both answers, pushed when either changes.
@@ -237,6 +271,8 @@ pub enum ShellError {
     Refused(u16, Option<String>),
     /// The shell answered 200 with a body this client cannot read.
     Unreadable,
+    /// A provider credential could not be written to the OS keychain.
+    CredentialUnavailable,
 }
 
 impl fmt::Display for ShellError {
@@ -252,6 +288,9 @@ impl fmt::Display for ShellError {
             Self::Refused(_, Some(error)) => f.write_str(error),
             Self::Refused(status, None) => write!(f, "Sjel refused the request ({status})."),
             Self::Unreadable => f.write_str("Sjel answered with something this app cannot read."),
+            Self::CredentialUnavailable => {
+                f.write_str("Could not save the provider API key to the OS keychain.")
+            }
         }
     }
 }
@@ -389,7 +428,11 @@ impl Shell {
                 });
             }
         }
-        list.sort_by(|a, b| a.project.cmp(&b.project).then_with(|| a.title.cmp(&b.title)));
+        list.sort_by(|a, b| {
+            a.project
+                .cmp(&b.project)
+                .then_with(|| a.title.cmp(&b.title))
+        });
         Ok(list)
     }
 
@@ -565,7 +608,259 @@ impl Shell {
         self.capability_fallback(prompt).await
     }
 
+    /// Lists configured provider roles without retrieving credential values or endpoint URLs.
+    pub async fn ask_providers(&self) -> ShellResult<Vec<AskProvider>> {
+        let result = self
+            .json::<Vec<AskProvider>>(Method::GET, "/assistant/api/ask/providers", None, 10)
+            .await;
+        match result {
+            Err(ShellError::Refused(502, _)) => {
+                let _ = self.set_running("assistant", true).await;
+                self.json::<Vec<AskProvider>>(Method::GET, "/assistant/api/ask/providers", None, 10)
+                    .await
+            }
+            other => other,
+        }
+    }
+
+    /// Store a provider key without sending it to the Sjel HTTP service. The input is held in a
+    /// zeroizing buffer, and the private catalog receives only the stable credential ID.
+    pub async fn store_provider_key(
+        &self,
+        provider: &str,
+        key: zeroize::Zeroizing<String>,
+    ) -> ShellResult<()> {
+        let (slug, label) = match provider {
+            "openai" => ("openai", "OpenAI API"),
+            "deepseek" => ("deepseek", "DeepSeek API"),
+            "opencode-go" => ("opencode-go", "OpenCode Go API"),
+            "nvidia-nim" => ("nvidia-nim", "NVIDIA NIM API"),
+            "gemini" => ("gemini", "Google Gemini API (AI Studio)"),
+            _ => return Err(ShellError::CredentialUnavailable),
+        };
+        let catalog = sjel_config::overlay_config("credentials.toml")
+            .ok_or(ShellError::CredentialUnavailable)?;
+        tokio::task::spawn_blocking(move || {
+            use sjel_credentials::{
+                CredentialId, CredentialManager, CredentialProvider, KeychainProvider,
+                ProviderKind, SecretValue,
+            };
+            use std::sync::Arc;
+
+            let id = CredentialId::parse(format!("inference-{slug}"))
+                .map_err(|_| ShellError::CredentialUnavailable)?;
+            let providers: Vec<Arc<dyn CredentialProvider>> =
+                vec![Arc::new(KeychainProvider::system())];
+            let manager = CredentialManager::new(catalog, providers)
+                .map_err(|_| ShellError::CredentialUnavailable)?;
+            let secret = SecretValue::new(key.as_bytes().to_vec())
+                .map_err(|_| ShellError::CredentialUnavailable)?;
+            let exists = manager
+                .list()
+                .map_err(|_| ShellError::CredentialUnavailable)?
+                .iter()
+                .any(|entry| entry.id == id);
+            if exists {
+                manager.update(&id, &secret)
+            } else {
+                manager
+                    .create(
+                        id,
+                        label.to_owned(),
+                        ProviderKind::Keychain,
+                        vec!["sjel-inference".to_owned()],
+                        &secret,
+                    )
+                    .map(|_| ())
+            }
+            .map_err(|_| ShellError::CredentialUnavailable)
+        })
+        .await
+        .map_err(|_| ShellError::CredentialUnavailable)?
+    }
+
+    /// Remove a saved provider key by its public provider slug.
+    pub async fn remove_provider_key(&self, provider: &str) -> ShellResult<()> {
+        let slug = match provider {
+            "openai" | "deepseek" | "opencode-go" | "nvidia-nim" | "gemini" => provider,
+            _ => return Err(ShellError::CredentialUnavailable),
+        }
+        .to_owned();
+        let catalog = sjel_config::overlay_config("credentials.toml")
+            .ok_or(ShellError::CredentialUnavailable)?;
+        tokio::task::spawn_blocking(move || {
+            use sjel_credentials::{
+                CredentialId, CredentialManager, CredentialProvider, KeychainProvider,
+            };
+            use std::sync::Arc;
+
+            let id = CredentialId::parse(format!("inference-{slug}"))
+                .map_err(|_| ShellError::CredentialUnavailable)?;
+            let providers: Vec<Arc<dyn CredentialProvider>> =
+                vec![Arc::new(KeychainProvider::system())];
+            let manager = CredentialManager::new(catalog, providers)
+                .map_err(|_| ShellError::CredentialUnavailable)?;
+            manager
+                .delete(&id)
+                .map_err(|_| ShellError::CredentialUnavailable)
+        })
+        .await
+        .map_err(|_| ShellError::CredentialUnavailable)?
+    }
+
+    /// Starts an event-streamed Ask run and returns its steering ID with a receiver for events.
+    pub async fn ask_stream(
+        &self,
+        prompt: &str,
+        history: &[AskTurn],
+    ) -> ShellResult<(u64, UnboundedReceiver<AskEvent>)> {
+        self.ask_stream_with_provider(prompt, history, None, false)
+            .await
+    }
+
+    /// Stream Ask with an explicit cloud role and per-prompt public-data acknowledgement.
+    pub async fn ask_stream_with_provider(
+        &self,
+        prompt: &str,
+        history: &[AskTurn],
+        provider_role: Option<&str>,
+        confirm_public_send: bool,
+    ) -> ShellResult<(u64, UnboundedReceiver<AskEvent>)> {
+        let mut body = serde_json::json!({
+            "prompt": prompt,
+            "history": history,
+            "confirm_public_send": confirm_public_send,
+        });
+        if let Some(role) = provider_role {
+            body["provider_role"] = serde_json::Value::String(role.to_owned());
+        }
+        if provider_role.is_some() && !history.is_empty() {
+            return Err(ShellError::Refused(
+                409,
+                Some("cloud Ask does not send local conversation history".into()),
+            ));
+        }
+        let response = match self
+            .send(
+                Method::POST,
+                "/assistant/api/ask/stream",
+                Some(body.clone()),
+                600,
+            )
+            .await
+        {
+            Ok(response) => response,
+            Err(ShellError::Refused(502, _)) => {
+                let _ = self.set_running("assistant", true).await;
+                match self
+                    .send(Method::POST, "/assistant/api/ask/stream", Some(body), 600)
+                    .await
+                {
+                    Ok(response) => response,
+                    Err(error) if provider_role.is_some() => return Err(error),
+                    Err(_) => return self.fallback_ask_stream(prompt).await,
+                }
+            }
+            Err(ShellError::NotSetUp | ShellError::Unreachable | ShellError::NotLoopback) => {
+                if provider_role.is_some() {
+                    return Err(ShellError::Unreachable);
+                }
+                return self.fallback_ask_stream(prompt).await;
+            }
+            Err(ShellError::Refused(404 | 405, _)) => {
+                if provider_role.is_some() {
+                    return Err(ShellError::Refused(
+                        503,
+                        Some("the assistant API does not support cloud Ask".into()),
+                    ));
+                }
+                let reply = self.ask(prompt, history).await?;
+                return Ok(Self::completed_ask_stream(reply));
+            }
+            Err(ShellError::Refused(503, _)) if provider_role.is_none() => {
+                return self.fallback_ask_stream(prompt).await;
+            }
+            Err(error) => return Err(error),
+        };
+        let run_id = response
+            .headers()
+            .get("x-sjel-ask-run")
+            .and_then(|value| value.to_str().ok())
+            .and_then(|value| value.parse::<u64>().ok())
+            .ok_or(ShellError::Unreadable)?;
+        let (to, from) = futures::channel::mpsc::unbounded();
+        spawn(async move {
+            let mut response = response;
+            let mut buffer = Vec::new();
+            loop {
+                let chunk = match response.chunk().await {
+                    Ok(Some(chunk)) => chunk,
+                    Ok(None) | Err(_) => break,
+                };
+                buffer.extend_from_slice(&chunk);
+                while let Some(data) = next_frame(&mut buffer) {
+                    if let Ok(event) = serde_json::from_str::<AskEvent>(&data) {
+                        let terminal = matches!(event.kind.as_str(), "done" | "error" | "stopped");
+                        if to.unbounded_send(event).is_err() || terminal {
+                            return;
+                        }
+                    }
+                }
+            }
+        });
+        Ok((run_id, from))
+    }
+
+    async fn fallback_ask_stream(
+        &self,
+        prompt: &str,
+    ) -> ShellResult<(u64, UnboundedReceiver<AskEvent>)> {
+        let reply = self.capability_fallback(prompt).await?;
+        Ok(Self::completed_ask_stream(reply))
+    }
+
+    fn completed_ask_stream(reply: AskReply) -> (u64, UnboundedReceiver<AskEvent>) {
+        let (to, from) = futures::channel::mpsc::unbounded();
+        let _ = to.unbounded_send(AskEvent {
+            kind: "done".into(),
+            content: String::new(),
+            name: String::new(),
+            arguments: String::new(),
+            text: reply.text,
+            model: reply.model,
+            source: reply.source,
+            tools: reply.tools,
+            message: String::new(),
+        });
+        (0, from)
+    }
+
+    /// Queues an instruction for the next model request in an active Ask run.
+    pub async fn steer_ask(&self, run_id: u64, message: &str) -> ShellResult<()> {
+        let path = format!("/assistant/api/ask/{run_id}/steer");
+        let body = serde_json::json!({ "message": message });
+        self.send(Method::POST, &path, Some(body), 5)
+            .await
+            .map(drop)
+    }
+
+    /// Requests cooperative cancellation of an active Ask run.
+    pub async fn stop_ask(&self, run_id: u64) -> ShellResult<()> {
+        let path = format!("/assistant/api/ask/{run_id}/stop");
+        self.send(Method::POST, &path, Some(serde_json::json!({})), 5)
+            .await
+            .map(drop)
+    }
+
     async fn capability_fallback(&self, prompt: &str) -> ShellResult<AskReply> {
+        if !is_capability_status_question(prompt) {
+            return Ok(AskReply {
+                text: "The local assistant is unavailable, so I can’t answer that prompt yet. I can still show a live capability summary when you ask which capabilities are up.".into(),
+                model: "assistant unavailable".into(),
+                source: "fallback".into(),
+                tools: Vec::new(),
+            });
+        }
         let health = self.health().await?;
         let up = health.capabilities.values().filter(|c| c.up).count();
         let down = health.down();
@@ -590,7 +885,6 @@ impl Shell {
                 .collect();
             lines.push(format!("Active projects: {}.", names.join(", ")));
         }
-        let _ = prompt;
         Ok(AskReply {
             text: lines.join("\n"),
             model: "capabilities".into(),
@@ -612,7 +906,8 @@ impl Shell {
 
     /// Read soundscape state (`GET /soundscape/api/soundscape/state`).
     pub async fn soundscape_state(&self) -> ShellResult<SoundscapeState> {
-        self.json(Method::GET, "/soundscape/api/soundscape/state", None, 3).await
+        self.json(Method::GET, "/soundscape/api/soundscape/state", None, 3)
+            .await
     }
 
     /// Update playback status (`POST /soundscape/api/soundscape/state`).
@@ -621,7 +916,13 @@ impl Shell {
             "playing": playing,
             "origin": "gpui",
         });
-        self.json(Method::POST, "/soundscape/api/soundscape/state", Some(body), 3).await
+        self.json(
+            Method::POST,
+            "/soundscape/api/soundscape/state",
+            Some(body),
+            3,
+        )
+        .await
     }
 
     /// Update soundscape preset (`POST /soundscape/api/soundscape/state`).
@@ -630,7 +931,13 @@ impl Shell {
             "preset": preset,
             "origin": "gpui",
         });
-        self.json(Method::POST, "/soundscape/api/soundscape/state", Some(body), 3).await
+        self.json(
+            Method::POST,
+            "/soundscape/api/soundscape/state",
+            Some(body),
+            3,
+        )
+        .await
     }
 
     async fn json<T: DeserializeOwned>(
@@ -703,6 +1010,22 @@ impl Shell {
         *cached = Some(token.to_owned());
         Ok(token.to_owned())
     }
+}
+
+fn is_capability_status_question(prompt: &str) -> bool {
+    let words: Vec<String> = prompt
+        .to_ascii_lowercase()
+        .split(|character: char| !character.is_ascii_alphanumeric())
+        .filter(|word| !word.is_empty())
+        .map(str::to_owned)
+        .collect();
+    let asks_about_capabilities = words
+        .iter()
+        .any(|word| word.starts_with("capabilit") || word == "services");
+    let asks_about_status = ["up", "running", "status", "health", "available"]
+        .iter()
+        .any(|term| words.iter().any(|word| word == term));
+    asks_about_capabilities && asks_about_status
 }
 
 /// A path with its query, each pair encoded once. The capability owns the names; this only joins
@@ -843,6 +1166,16 @@ mod tests {
     use super::*;
 
     #[test]
+    fn deterministic_fallback_only_answers_capability_status_questions() {
+        assert!(is_capability_status_question(
+            "Which capabilities are up right now?"
+        ));
+        assert!(is_capability_status_question("Show capability health"));
+        assert!(!is_capability_status_question("hi"));
+        assert!(!is_capability_status_question("List my active projects"));
+    }
+
+    #[test]
     fn endpoint_must_be_loopback_http() {
         assert!(Shell::new("http://127.0.0.1:8082").is_ok());
         assert!(Shell::new("http://localhost:9000/").is_ok());
@@ -931,6 +1264,27 @@ mod tests {
     }
 
     #[test]
+    fn cloud_ask_rejects_history_before_any_request() {
+        let shell = Shell::new("http://127.0.0.1:1").unwrap();
+        let history = [AskTurn {
+            role: "user".into(),
+            content: "local conversation".into(),
+        }];
+
+        let error = futures::executor::block_on(shell.ask_stream_with_provider(
+            "public prompt",
+            &history,
+            Some("cloud_assistant_demo"),
+            true,
+        ))
+        .unwrap_err();
+
+        assert!(
+            matches!(error, ShellError::Refused(409, Some(reason)) if reason.contains("does not send local conversation history"))
+        );
+    }
+
+    #[test]
     fn frames_come_out_whole_and_leave_the_rest() {
         let mut buffer =
             b"event: snapshot\ndata: {\"agent\":1}\n\n: keep-alive\n\nevent: snapshot\ndata: {\"hea"
@@ -957,5 +1311,16 @@ mod tests {
         let failed: Snapshot = serde_json::from_str(r#"{"error":"agent policy: x"}"#).unwrap();
         assert_eq!(failed.error.as_deref(), Some("agent policy: x"));
         assert!(failed.health.is_none());
+    }
+
+    #[test]
+    fn an_ask_event_preserves_live_tool_activity() {
+        let event: AskEvent = serde_json::from_str(
+            r#"{"type":"tool_call","name":"calendar_entries","arguments":"{\"from\":\"2026-10-21\"}"}"#,
+        )
+        .unwrap();
+        assert_eq!(event.kind, "tool_call");
+        assert_eq!(event.name, "calendar_entries");
+        assert!(event.arguments.contains("2026-10-21"));
     }
 }

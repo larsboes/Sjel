@@ -4,7 +4,14 @@ version = "0.1.0"
 edition = "2021"
 publish = false
 license = "AGPL-3.0-only"
-description = "What the Mac and iOS GPUI apps share: destinations and the shell client"
+description = "What the Mac and iOS GPUI apps share: the data layer, destinations and the shell client"
+
+[features]
+# Marks a build whose tests must not reach this machine's real data. `Repo::local_db_path` answers
+# `None` when it is on. It exists because `cfg(test)` marks only the crate that declares the test:
+# the app's window tests would otherwise read this machine's `axon.db` through the shared `Repo`.
+# The app enables it from its dev-dependencies.
+test-support = []
 
 [dependencies]
 # The axon-device-auth/v1 protocol and the pinned TLS client for the LAN listener, shared with
@@ -19,6 +26,11 @@ serde_json = "1"
 # `rt-multi-thread`: a token read through `/usr/bin/security` blocks its worker, so a second
 # worker keeps an unrelated request from waiting on it (src/shell.rs).
 tokio = { version = "1", features = ["rt", "rt-multi-thread", "time", "net"] }
+libsql = { version = "0.10.0", default-features = false, features = ["core"] }
+sjel-config = { path = "../../../libs/sjel-config" }
+sjel-credentials = { path = "../../../libs/sjel-credentials" }
+zeroize = "=1.9.1"
+
 
 [lints.rust]
 unsafe_code = "deny"

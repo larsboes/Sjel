@@ -7,8 +7,10 @@ The app has four pages. **Home** shows what needs you now: agent writes that wai
 kept-running capabilities that do not answer, calendar entries still ahead today and tomorrow, and
 the recent agent writes. **Capabilities** lists every capability with start and stop. **Projects**
 lists projects, tasks and notes, draws tasks as a table with due and priority edited in place, and
-edits a note as blocks (`src/editor.rs`, `src/blocks.rs`). **Ask** runs a multi-turn capability
-session in the window.
+edits a note as blocks (`src/editor.rs`, `src/blocks.rs`). **Ask** streams the model's answer and
+read-only tool activity into the transcript; the composer steers an active run at its next model
+step. Its API keys panel uses a masked input and stores keys directly in the OS keychain; the
+keys never go through the Ask service or the conversation.
 
 Every block keeps its markdown verbatim, so a save writes back exactly what the editor did not
 change; a note that does not round-trip opens read-only. A save follows each pause in typing and
@@ -28,24 +30,34 @@ without that stream keeps the timer.
 A project's records arrive without their content, and the note editor reads the one record it
 opens. A task's done, due and priority go to the capability, which owns the frontmatter edit and
 answers with the record's new frontmatter, so the table patches one row instead of reading the
-project again. `src/data/` is the only module that talks to the shell: a read keeps its last good
-value while it retries and never runs twice at once, and a write toasts its outcome and then lets
-the caller re-read only what it changed.
+project again. `core/src/data/` holds every read and write against the shell, and
+`src/data/mod.rs` keeps the half that needs a window: a read settles into the slot the page draws
+and never runs twice at once, and a write toasts its outcome and then lets the caller re-read only
+what it changed. The phone drives the same `Remote` and the same note cache through its own event
+loop, because none of that half needs GPUI.
 
-Where a local `axon.db` is readable, `src/data/` answers projects, tasks, calendar and record
-reads from it and falls back to the shell otherwise, over one LibSQL handle opened once per process
-and shared by every clone. Holding the connection rather than reopening it is the point: opening
-one costs 0.05 ms, but a fresh connection starts on an empty SQLite page cache, so opening and
-reading once costs 0.68 ms against 0.02 ms for the same read on a handle that already ran one, and
-a poll runs several. How the numbers were measured: `cargo test --release --manifest-path
-apps/gpui/Cargo.toml --bin sjel-gpui holding_one_connection -- --ignored --nocapture`, which times
-all three against this machine's database.
+Where a local `axon.db` is readable, `Repo` in `core/src/data/repo.rs` answers projects, tasks,
+calendar and record reads from it and falls back to the shell otherwise, over one LibSQL handle
+opened once per process and shared by every clone. Holding the connection rather than reopening it
+is the point: opening one costs 0.05 ms, but a fresh connection starts on an empty SQLite page
+cache, so opening and reading once costs 0.68 ms against 0.02 ms for the same read on a handle that
+already ran one, and a poll runs several. How the numbers were measured: `cargo test --release
+--manifest-path apps/gpui/core/Cargo.toml holding_one_connection -- --ignored --nocapture`, which
+times all three against this machine's database.
 
-Going back to a note opened in the last five minutes costs no read at all. `src/data/notes.rs`
+Going back to a note opened in the last five minutes costs no read at all. `core/src/data/notes.rs`
 keeps the 16 notes opened most recently, most recent first, so tabbing back to one is a memory hit
 and the frame the click lands in: 0.42 µs at p50 for a 21 KB note, in a release build. Every write
 the app makes to a record drops that record, so a kept note is never older than the last write, and
 the editor leaves the body it saved in place of the one it opened.
+
+The phone reads a different file for a different reason. `Board` in `core/src/data/board.rs` is
+the view model a records list draws: it holds the rows and the count of writes still queued, and
+answers the tasks and the notes without a view filtering them. Every write lands in the replica and
+in `_offline_mutations` first, so the list behaves the same whether or not the Mac answers, and
+`core/src/sync.rs` replays that queue later. The Mac app keeps no replica of its own — it reads the
+host's database through `Repo` — so `Board::default_path` names a file only in the phone's app
+container, and `SJEL_REPLICA_PATH` is how the Mac tries the phone's view.
 
 The app and the web dashboard share one set of destinations. `core/src/route.rs` copies the paths
 and labels of `dashboard/src/lib/nav.ts`, and a test fails when the two differ. A page with a
@@ -88,7 +100,8 @@ GPUI snapshot (step 0 above).
 | Member | What it holds |
 |---|---|
 | `.` | The Mac app |
-| `core/` | What both apps share: the destinations, the shell client and a paired device's client. No GPUI types. |
+| `core/` | What both apps share: the destinations, the shell client, a paired device's client, the offline replica and the two-way sync. No GPUI types. |
+| `ui/` | What both apps share for GPUI: semantic design tokens (Palette), density rules, layout primitives, document/block renderer and navigation bar. |
 | `ios/` | The iOS app: GPUI content in `src/lib.rs`, the UIKit host in `host/` |
 
 On iOS, UIKit owns the window, the navigation bar and the safe areas. GPUI draws the content in a
@@ -98,10 +111,55 @@ version. The iOS 27 SDK starts only apps with the UIScene life cycle, so the hos
 delegate.
 
 The iOS app has no inbound token: it is a paired device (`core/src/device.rs`), signed with its
-Keychain key over TLS pinned to the Mac's LAN listener. `ios/src/lib.rs` says how a simulator joins
-until Bonjour discovery and a camera scanner exist. `ios/run-sim` builds the app, runs it on a
-headless simulator and prints a screenshot path; it needs Xcode, XcodeGen and the
-`aarch64-apple-ios-sim` Rust target, and never opens Simulator.app.
+Keychain key over TLS pinned to the Mac's LAN listener. The Mac is found over Bonjour:
+`host/Discovery.swift` browses `_sjel._tcp`, whose TXT record carries host, port and certificate
+fingerprint, and hands every result to `sjel_ios_nodes` in `ios/src/lib.rs`, which shows the card
+the person taps Join on. `SJEL_JOIN` and `SJEL_PAIR` stay as the fallbacks for a host that cannot
+browse and for the QR code. What does not exist yet is the camera scanner that would read that QR
+code on a phone.
+
+`ios/run-sim` builds the app, runs it on a headless simulator and prints a screenshot path; it
+needs Xcode, XcodeGen and the `aarch64-apple-ios-sim` Rust target, and never opens Simulator.app.
+`ios/run-sim --tap` runs the touch check instead: taps Join on the discovered Mac and keeps a
+screenshot before and after, because GPUI paints its own pixels and a screenshot alone cannot show
+whether a finger reached it.
+
+The iOS app reads and writes a local replica (`core/src/store.rs`, LibSQL in the app container), so
+the store, the tasks and the notes answer with the Mac out of range. Every local write is also
+logged in `_offline_mutations`, and `core/src/sync.rs` replays that log at the Mac once the pairing
+is live: the queued writes go out oldest first, then every live project is listed without its
+contents and only the records whose `updated_at` moved are read in full. A record with an unsent
+local edit is skipped by the pull, and a record the Mac no longer has is deleted here. Two edits of
+the same note are settled in the phone's favour: the queued text is replayed over the Mac's version
+on the 409 and the report counts it, so nothing typed offline is lost. A note made on the phone in
+a project the Mac does not have yet creates that project first. The sync runs when the pairing
+answers at launch, after every local write, and on the Sync button; a phone that has not reached
+the Mac this launch never starts one, because its queue is the only copy of those edits.
+
+The iOS app works with no Mac at all (`research/offline-on-the-phone.md`, "Decided 2026-10-22: the
+phone stands on its own"). It opens on **Tasks & Notes**, the phone's own records with the
+queued/synced badge and the report of the last sync. A fresh install starts empty and queues
+nothing, so pairing later sends the Mac only what the person wrote. A store that cannot open says
+so on that page instead of falling back to memory. **Settings** holds the pairing: the found Mac,
+the Join tap, and the capability health list it answers with once the owner allows the device. It
+has no distribution yet, and touch is verified only through the Join tap
+(`host/UITests/JoinTap.swift`).
+
+### Shipping it to TestFlight
+
+One command archives, signs, uploads, waits for App Store Connect to process the build, and sets
+its What to Test note from the latest commit subjects:
+
+```sh
+sjel testflight            # or: sjel testflight --notes "…"
+```
+
+The record is `Sjel Life` (the store name `Sjel` is taken), the bundle `dev.sjel.ios`, the SKU
+`sjel-ios-001`. The icon is `host/Assets.xcassets` (rebuild it with `host/make-icon`), and
+`host/PrivacyInfo.xcprivacy` declares the two required-reason APIs a Rust binary actually touches.
+`ITSAppUsesNonExemptEncryption` is false, because the app encrypts nothing beyond TLS. What the
+App Store Connect key can and cannot do, and the one-time steps in the web UI, are in
+[the operations guide](../../docs/operations/index.md).
 
 ## Keys
 
@@ -155,6 +213,7 @@ These checks run while you keep working in other apps. None of them activates th
 | `./bench-scroll [page]` | CPU cost of one scroll frame, from the app's own scroll run |
 | `SJEL_GPUI_BENCH_NOTE=<record path> ./bench-scroll projects` | CPU cost of one keystroke in that note; saving is off |
 | `ios/run-sim` | Screenshot of the iOS app on a headless simulator |
+| `ios/run-sim --tap` | The touch check: taps Join on the discovered Mac, screenshots before and after |
 
 `preview` and `bench-scroll` show the window for a few seconds in the bottom-right corner, above
 other apps. GPUI paints nothing while another window covers it, so a hidden window cannot be

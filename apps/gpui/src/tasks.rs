@@ -23,38 +23,8 @@ impl TaskFilter {
     }
 }
 
-#[derive(Clone, Debug, PartialEq, Eq)]
-pub enum DueStatus {
-    Overdue(String),
-    Today,
-    Tomorrow,
-    Upcoming(String),
-    None,
-}
-
-pub fn due_status(due: Option<&str>, done: bool, today: &str) -> DueStatus {
-    let Some(due) = due.filter(|d| !d.is_empty()) else {
-        return DueStatus::None;
-    };
-    if done {
-        return DueStatus::Upcoming(due.to_string());
-    }
-    if due < today {
-        DueStatus::Overdue(due.to_string())
-    } else if due == today {
-        DueStatus::Today
-    } else {
-        if let (Ok(d), Ok(t)) = (
-            chrono::NaiveDate::parse_from_str(due, "%Y-%m-%d"),
-            chrono::NaiveDate::parse_from_str(today, "%Y-%m-%d"),
-        ) {
-            if d == t + chrono::Duration::days(1) {
-                return DueStatus::Tomorrow;
-            }
-        }
-        DueStatus::Upcoming(due.to_string())
-    }
-}
+#[allow(unused_imports)]
+pub use sjel_gpui_ui::{due_status, DueStatus};
 
 /// A due date as the table accepts it: empty, or `YYYY-MM-DD`.
 pub fn valid_due(due: &str) -> bool {

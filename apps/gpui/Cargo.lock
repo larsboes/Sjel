@@ -6509,6 +6509,20 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "33f4fe9184a62d842c9ef383018f3306d8ba224fd9d836f56d7288308847c256"
 
 [[package]]
+name = "sjel-config"
+version = "0.1.0"
+
+[[package]]
+name = "sjel-credentials"
+version = "0.1.0"
+dependencies = [
+ "serde",
+ "thiserror 2.0.21",
+ "toml 1.1.7+spec-1.1.0",
+ "zeroize",
+]
+
+[[package]]
 name = "sjel-gpui"
 version = "0.1.0"
 dependencies = [
@@ -6525,7 +6539,9 @@ dependencies = [
  "serde",
  "serde_json",
  "sjel-gpui-core",
+ "sjel-gpui-ui",
  "tokio",
+ "zeroize",
 ]
 
 [[package]]
@@ -6534,10 +6550,14 @@ version = "0.1.0"
 dependencies = [
  "device-auth",
  "futures",
+ "libsql",
  "reqwest",
  "serde",
  "serde_json",
+ "sjel-config",
+ "sjel-credentials",
  "tokio",
+ "zeroize",
 ]
 
 [[package]]
@@ -6549,9 +6569,23 @@ dependencies = [
  "gpui-kit",
  "gpui-pre",
  "gpui-pre-mobile",
+ "serde",
  "serde_json",
  "sjel-gpui-core",
+ "sjel-gpui-ui",
  "tokio",
+]
+
+[[package]]
+name = "sjel-gpui-ui"
+version = "0.1.0"
+dependencies = [
+ "chrono",
+ "gpui-kit",
+ "gpui-pre",
+ "serde",
+ "serde_json",
+ "sjel-gpui-core",
 ]
 
 [[package]]

@@ -36,6 +36,7 @@ final class SjelController: UIViewController {
     private var gpuiWindow: UnsafeMutableRawPointer!
     private var content: UIViewController!
     private var displayLink: CADisplayLink?
+    private var discovery: Discovery?
 
     override func viewDidLoad() {
         super.viewDidLoad()
@@ -45,6 +46,10 @@ final class SjelController: UIViewController {
         gpui_ios_set_embedded()
         gpui_ios_register_app()
         gpui_ios_run_demo()
+        // Browses for the Mac while the app is open; every answer goes to Rust (Discovery.swift).
+        let discovery = Discovery()
+        discovery.start()
+        self.discovery = discovery
         guard let window = gpui_ios_get_window(), let controller = gpui_ios_view_controller(window) else {
             fatalError("GPUI did not create its view")
         }

@@ -1,16 +1,20 @@
 #!/usr/bin/env bash
-# Build the native GPUI iOS archive in a separate generated host project. Never install or upload.
+# Build the native GPUI iOS archive in a separate generated host project. Never install on a phone;
+# --upload sends it to App Store Connect (TestFlight) with the local API key.
 set -euo pipefail
 
 usage() {
-  echo "tools/distribution/ios-archive --version X.Y.Z --build NUMBER --out NEW_DIR [--team TEAM_ID] [--export]"
+  echo "tools/distribution/ios-archive --version X.Y.Z --build NUMBER --out NEW_DIR [--team TEAM_ID] [--export] [--upload]"
   echo "Without --team this prepares an unsigned archive. --export requires a signing team."
+  echo "--upload sends the exported build to App Store Connect with the API key in"
+  echo "~/.appstoreconnect (one AuthKey_*.p8 and an issuer_id). It needs no Xcode account."
 }
-version=""; build=""; out=""; team=""; export_ipa=false
+version=""; build=""; out=""; team=""; export_ipa=false; upload=false
 while [ "$#" -gt 0 ]; do
   case "$1" in
     --help|-h) usage; exit 0 ;;
     --export) export_ipa=true; shift ;;
+    --upload) upload=true; export_ipa=true; shift ;;
     --version|--build|--out|--team)
       [ "$#" -ge 2 ] || { usage >&2; exit 2; }
       case "$1" in
@@ -27,6 +31,7 @@ if [ -n "$team" ]; then
   [[ "$team" =~ ^[A-Z0-9]{10}$ ]] || { echo "invalid Apple team identifier" >&2; exit 2; }
 fi
 [ "$export_ipa" = false ] || [ -n "$team" ] || { echo "--export requires --team" >&2; exit 2; }
+[ "$upload" = false ] || [ -n "$team" ] || { echo "--upload requires --team" >&2; exit 2; }
 [ "$(uname -s)" = Darwin ] || { echo "iOS archive preparation requires macOS" >&2; exit 1; }
 for tool in cargo xcrun xcodebuild xcodegen; do
   command -v "$tool" >/dev/null || { echo "missing build tool: $tool" >&2; exit 1; }
@@ -41,8 +46,13 @@ host="$stage/host"
 mkdir -p "$host"
 # Copy source inputs only; never reuse a Simulator build or generated project.
 for source in "$root/apps/gpui/ios/host/"*.swift "$root/apps/gpui/ios/host/"*.h \
-  "$root/apps/gpui/ios/host/project.yml"; do
+  "$root/apps/gpui/ios/host/project.yml" "$root/apps/gpui/ios/host/PrivacyInfo.xcprivacy"; do
   [ -f "$source" ] && cp "$source" "$host/$(basename "$source")"
+done
+# Directories the project spec names: the icon catalog ships in the bundle, the UI tests exist so
+# the generated project resolves (they are not built by the archive).
+for dir in Assets.xcassets UITests; do
+  [ -d "$root/apps/gpui/ios/host/$dir" ] && cp -R "$root/apps/gpui/ios/host/$dir" "$host/$dir"
 done
 [ -f "$host/project.yml" ] || { echo "native host project spec is missing" >&2; exit 1; }
 target="$out/cargo-target"
@@ -55,40 +65,65 @@ rust_lib="$target/aarch64-apple-ios/release/libsjel_gpui_ios.a"
 /usr/libexec/PlistBuddy -c "Set :CFBundleVersion $build" "$host/Info.plist"
 
 signing=(CODE_SIGNING_ALLOWED=NO)
+update=()
 if [ -n "$team" ]; then
   signing=(CODE_SIGNING_ALLOWED=YES CODE_SIGN_STYLE=Automatic "DEVELOPMENT_TEAM=$team" \
     "CODE_SIGN_IDENTITY=Apple Development" PROVISIONING_PROFILE_SPECIFIER=)
+  # -allowProvisioningUpdates registers the App ID and its profile from this key, so the archive
+  # needs no Xcode account and no profile made by hand.
+  keys_dir="$HOME/.appstoreconnect/private_keys"
+  keys=( "$keys_dir"/AuthKey_*.p8 )
+  [ "${#keys[@]}" -eq 1 ] && [ -f "${keys[0]}" ] && [ -f "$HOME/.appstoreconnect/issuer_id" ] || {
+    echo "no App Store Connect key: put one AuthKey_*.p8 and an issuer_id in ~/.appstoreconnect" >&2
+    exit 1
+  }
+  key_id="$(basename "${keys[0]}" .p8)"; key_id="${key_id#AuthKey_}"
+  update=(-allowProvisioningUpdates
+    -authenticationKeyPath "${keys[0]}"
+    -authenticationKeyID "$key_id"
+    -authenticationKeyIssuerID "$(tr -d '[:space:]' < "$HOME/.appstoreconnect/issuer_id")")
 fi
 xcodebuild -project "$host/SjelIOS.xcodeproj" -scheme SjelIOS -configuration Release \
   -sdk iphoneos -destination 'generic/platform=iOS' -archivePath "$out/Sjel.xcarchive" \
   -derivedDataPath "$out/derived-data" "RUST_LIB=$rust_lib" \
   "MARKETING_VERSION=$version" "CURRENT_PROJECT_VERSION=$build" \
   GENERATE_INFOPLIST_FILE=NO INFOPLIST_KEY_CFBundleShortVersionString="$version" \
-  INFOPLIST_KEY_CFBundleVersion="$build" "${signing[@]}" archive
+  INFOPLIST_KEY_CFBundleVersion="$build" "${signing[@]}" "${update[@]}" archive
 
 if [ -n "$team" ]; then
+  upload_destination=export
+  [ "$upload" = true ] && upload_destination=upload
   cat > "$out/ExportOptions.plist" <<EOF
 <?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0"><dict>
 <key>method</key><string>app-store-connect</string>
-<key>destination</key><string>export</string>
+<key>destination</key><string>${upload_destination}</string>
 <key>teamID</key><string>$team</string>
-<key>signingStyle</key><string>automatic</string>
+<key>signingStyle</key><string>manual</string>
+<key>signingCertificate</key><string>Apple Distribution</string>
+<key>provisioningProfiles</key><dict><key>dev.sjel.ios</key><string>dev.sjel.ios App Store</string></dict>
 <key>manageAppVersionAndBuildNumber</key><false/>
 <key>uploadSymbols</key><true/>
 </dict></plist>
 EOF
 fi
 if [ "$export_ipa" = true ]; then
+  # Automatic export signs with a cloud-managed certificate, which needs an Admin key; the local
+  # Apple Distribution certificate plus this profile needs only App Manager.
+  "$root/sjel" testflight profile
   xcodebuild -exportArchive -archivePath "$out/Sjel.xcarchive" \
-    -exportOptionsPlist "$out/ExportOptions.plist" -exportPath "$out/export"
+    -exportOptionsPlist "$out/ExportOptions.plist" -exportPath "$out/export" "${update[@]}"
 fi
 cat > "$out/READINESS.txt" <<EOF
 Native GPUI iOS archive: $version ($build)
-Nothing installed or uploaded. An unsigned archive cannot be distributed.
-For TestFlight, the owner must configure signing, App Store Connect, privacy/export-compliance
-answers and review access, then distribute the signed archive through Xcode Organizer.
-This command does not grant Developer Mode, pair a phone or install an app.
+Uploaded: $upload. An unsigned archive cannot be distributed.
+The App Store Connect app record must exist before an upload is accepted:
+sjel testflight app
+This command does not install on a phone, grant Developer Mode or pair a device.
 EOF
-echo "Prepared $out/Sjel.xcarchive. Nothing installed or uploaded."
+if [ "$upload" = true ]; then
+  echo "Uploaded $version ($build) to App Store Connect from $out/Sjel.xcarchive."
+else
+  echo "Prepared $out/Sjel.xcarchive. Nothing installed or uploaded."
+fi

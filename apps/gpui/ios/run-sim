@@ -7,10 +7,23 @@
 # --join asks this Mac's LAN listener to register the app as a device. It passes the Mac's
 # Bonjour name, the listener port (SJEL_LAN_PORT, default 8443) and the certificate's SHA-256,
 # none of them secret, and leaves the simulator running: allow the device in the dashboard's
-# Devices panel, then run this script again to see the signed result.
+# Devices panel, then run this script again to see the signed result. With Bonjour discovery in
+# the app (`host/Discovery.swift`) a browse finds the Mac instead, so this stays for a host that
+# cannot browse.
+#
+# --tap runs the touch check (`host/UITests/JoinTap.swift`): it taps Join on the discovered Mac
+# and takes a screenshot before and after, because GPUI paints its own pixels and a screenshot
+# alone cannot show whether a finger reached it.
 set -euo pipefail
 join=false
-[ "${1:-}" = --join ] && join=true
+tap=false
+for arg in "$@"; do
+  case "$arg" in
+    --join) join=true ;;
+    --tap) tap=true ;;
+    *) echo "ios/run-sim: unknown argument $arg" >&2; exit 1 ;;
+  esac
+done
 [ "$(uname -s)" = Darwin ] || { echo "ios/run-sim: macOS only" >&2; exit 1; }
 command -v xcodegen >/dev/null || { echo "ios/run-sim: needs xcodegen (brew install xcodegen)" >&2; exit 1; }
 
@@ -35,6 +48,20 @@ if ! xcrun simctl list devices | grep -q "$udid) (Booted)"; then
   booted_here=true
 fi
 xcrun simctl bootstatus "$udid" -b >/dev/null
+
+if $tap; then
+  # xcodebuild boots and drives the simulator itself; nothing opens Simulator.app.
+  result="${TMPDIR:-/tmp}/sjel-ios-tap-$(date +%s).xcresult"
+  xcodebuild -project "$HOST/SjelIOS.xcodeproj" -scheme SjelIOS -sdk iphonesimulator \
+    -configuration Debug -derivedDataPath "$HOST/build" -resultBundlePath "$result" \
+    -destination "platform=iOS Simulator,id=$udid" -quiet RUST_LIB="$rust_lib" test
+  shots="${TMPDIR:-/tmp}/sjel-ios-tap-shots-$(date +%s)"
+  xcrun xcresulttool export attachments --path "$result" --output-path "$shots" >/dev/null
+  echo "$result"
+  ls "$shots"/*.png
+  exit 0
+fi
+
 xcrun simctl install "$udid" "$app"
 if $join; then
   port="${SJEL_LAN_PORT:-8443}"

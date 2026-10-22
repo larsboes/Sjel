@@ -25,6 +25,7 @@ mod sidebar;
 mod tasks;
 mod theme;
 mod ui;
+pub mod update;
 mod workspace;
 
 use sjel_gpui_core::{route, shell};

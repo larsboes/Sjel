@@ -619,15 +619,10 @@ impl Projects {
         cx: &mut Context<Self>,
     ) -> AnyElement {
         let today = chrono::Local::now().format("%Y-%m-%d").to_string();
-        let open_count = records
-            .iter()
-            .filter(|r| r.kind == "task" && !r.done)
-            .count();
-        let done_count = records
-            .iter()
-            .filter(|r| r.kind == "task" && r.done)
-            .count();
-        let all_count = open_count + done_count;
+        let board = sjel_gpui_core::data::Board::from_records(records.to_vec());
+        let open_count = board.open_tasks().count();
+        let all_count = board.tasks().count();
+        let done_count = all_count.saturating_sub(open_count);
 
         let filter_bar = div()
             .flex()
@@ -801,7 +796,14 @@ impl Projects {
             row()
                 .min_h(px(40.))
                 .py_1()
-                .child(div().w(px(24.)).flex().items_center().text_color(rgb(palette.muted)).child("+"))
+                .child(
+                    div()
+                        .w(px(24.))
+                        .flex()
+                        .items_center()
+                        .text_color(rgb(palette.muted))
+                        .child("+"),
+                )
                 .child(
                     div()
                         .flex_1()
@@ -1064,26 +1066,22 @@ impl Projects {
                     .py_1()
                     .hover(move |s| s.bg(rgba(palette.raised & 0x00ffffff | 0x55000000)))
                     .child(
-                        div()
-                            .w(px(24.))
-                            .flex()
-                            .items_center()
-                            .child(
-                                div()
-                                    .size(px(20.))
-                                    .rounded(px(4.))
-                                    .bg(rgba(palette.raised))
-                                    .flex()
-                                    .items_center()
-                                    .justify_center()
-                                    .text_xs()
-                                    .text_color(rgb(if is_hub {
-                                        palette.accent
-                                    } else {
-                                        palette.muted
-                                    }))
-                                    .child(if is_hub { "★" } else { "≡" }),
-                            ),
+                        div().w(px(24.)).flex().items_center().child(
+                            div()
+                                .size(px(20.))
+                                .rounded(px(4.))
+                                .bg(rgba(palette.raised))
+                                .flex()
+                                .items_center()
+                                .justify_center()
+                                .text_xs()
+                                .text_color(rgb(if is_hub {
+                                    palette.accent
+                                } else {
+                                    palette.muted
+                                }))
+                                .child(if is_hub { "★" } else { "≡" }),
+                        ),
                     )
                     .child(
                         div()
@@ -1208,7 +1206,9 @@ impl Render for Projects {
                                         cx.listener(|view, _, _, cx| view.close_note(cx)),
                                         palette,
                                     ))
-                                    .child(div().text_xs().text_color(rgb(palette.muted)).child("/"))
+                                    .child(
+                                        div().text_xs().text_color(rgb(palette.muted)).child("/"),
+                                    )
                                     .child(
                                         div()
                                             .text_xs()
@@ -1254,30 +1254,22 @@ impl Render for Projects {
             };
             let project_name = name.clone();
 
-            let open_tasks = records
-                .value
-                .as_ref()
-                .map(|r| r.iter().filter(|t| t.kind == "task" && !t.done).count())
-                .unwrap_or(0);
-            let done_tasks = records
-                .value
-                .as_ref()
-                .map(|r| r.iter().filter(|t| t.kind == "task" && t.done).count())
-                .unwrap_or(0);
-            let _ = done_tasks;
-            let supporting_notes_count = records
+            let (open_tasks, supporting_notes_count) = records
                 .value
                 .as_ref()
                 .map(|r| {
-                    r.iter()
+                    let board = sjel_gpui_core::data::Board::from_records(r.clone());
+                    let open = board.open_tasks().count();
+                    let notes = board
+                        .notes()
                         .filter(|t| {
-                            t.kind != "task"
-                                && t.kind != "project"
+                            t.kind != "project"
                                 && t.path != format!("{project_name}/{project_name}.md")
                         })
-                        .count()
+                        .count();
+                    (open, notes)
                 })
-                .unwrap_or(0);
+                .unwrap_or((0, 0));
 
             // Project header bar with breadcrumb and section tabs
             let project_header = div()
@@ -1533,7 +1525,10 @@ impl Render for Projects {
                                                 palette,
                                             ))
                                             .child(
-                                                div().text_xs().text_color(rgb(palette.muted)).child("/"),
+                                                div()
+                                                    .text_xs()
+                                                    .text_color(rgb(palette.muted))
+                                                    .child("/"),
                                             )
                                             .child(
                                                 div()
@@ -1559,11 +1554,12 @@ impl Render for Projects {
                             }
                             (None, None) => placeholder(240.).into_any_element(),
                             (Some(records_list), None) => {
-                                let note_records: Vec<_> = records_list
-                                    .iter()
+                                let board =
+                                    sjel_gpui_core::data::Board::from_records(records_list.clone());
+                                let note_records: Vec<_> = board
+                                    .notes()
                                     .filter(|record| {
-                                        record.kind != "task"
-                                            && record.kind != "project"
+                                        record.kind != "project"
                                             && record.path
                                                 != format!("{project_name}/{project_name}.md")
                                     })
@@ -1605,22 +1601,18 @@ impl Render for Projects {
                                                     },
                                                 ))
                                                 .child(
-                                                    div()
-                                                        .w(px(24.))
-                                                        .flex()
-                                                        .items_center()
-                                                        .child(
-                                                            div()
-                                                                .size(px(20.))
-                                                                .rounded(px(4.))
-                                                                .bg(rgba(palette.raised))
-                                                                .flex()
-                                                                .items_center()
-                                                                .justify_center()
-                                                                .text_xs()
-                                                                .text_color(rgb(palette.muted))
-                                                                .child("≡"),
-                                                        ),
+                                                    div().w(px(24.)).flex().items_center().child(
+                                                        div()
+                                                            .size(px(20.))
+                                                            .rounded(px(4.))
+                                                            .bg(rgba(palette.raised))
+                                                            .flex()
+                                                            .items_center()
+                                                            .justify_center()
+                                                            .text_xs()
+                                                            .text_color(rgb(palette.muted))
+                                                            .child("≡"),
+                                                    ),
                                                 )
                                                 .child(
                                                     div()
@@ -1646,34 +1638,29 @@ impl Render for Projects {
                                                         .child(record.kind.clone()),
                                                 )
                                                 .child(
-                                                    div()
-                                                        .w(px(28.))
-                                                        .flex()
-                                                        .justify_center()
-                                                        .child(
-                                                            div()
-                                                                .id(("del-note", index))
-                                                                .cursor_pointer()
-                                                                .text_color(rgb(palette.muted))
-                                                                .opacity(0.)
-                                                                .group_hover(
-                                                                    "record-row",
-                                                                    |s| s.opacity(1.),
-                                                                )
-                                                                .hover(move |s| {
-                                                                    s.text_color(rgb(palette.red))
-                                                                })
-                                                                .on_click(cx.listener(
-                                                                    move |view, _, window, cx| {
-                                                                        view.remove_record(
-                                                                            del.path.clone(),
-                                                                            window,
-                                                                            cx,
-                                                                        )
-                                                                    },
-                                                                ))
-                                                                .child("×"),
-                                                        ),
+                                                    div().w(px(28.)).flex().justify_center().child(
+                                                        div()
+                                                            .id(("del-note", index))
+                                                            .cursor_pointer()
+                                                            .text_color(rgb(palette.muted))
+                                                            .opacity(0.)
+                                                            .group_hover("record-row", |s| {
+                                                                s.opacity(1.)
+                                                            })
+                                                            .hover(move |s| {
+                                                                s.text_color(rgb(palette.red))
+                                                            })
+                                                            .on_click(cx.listener(
+                                                                move |view, _, window, cx| {
+                                                                    view.remove_record(
+                                                                        del.path.clone(),
+                                                                        window,
+                                                                        cx,
+                                                                    )
+                                                                },
+                                                            ))
+                                                            .child("×"),
+                                                    ),
                                                 )
                                                 .into_any_element()
                                         })

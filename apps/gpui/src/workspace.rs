@@ -14,7 +14,7 @@ use gpui_kit::component::scroll::ScrollableElement;
 use gpui_kit::component::{IconName, IndexPath, Theme, WindowExt};
 use gpui_kit::{
     actions, div, prelude::*, px, rgb, rgba, Action, App, Context, Entity, FocusHandle, Focusable,
-    KeyBinding, SharedString, Subscription, Window,
+    KeyBinding, SharedString, Subscription, Window, WindowAppearance,
 };
 
 use crate::ask::Ask;
@@ -25,7 +25,7 @@ use crate::selection::{Item, Selection};
 use crate::shell::{
     self, AgentView, CalendarEntry, GlobalTask, NodeHealth, ShellError, Snapshot, SoundscapeState,
 };
-use crate::theme::Palette;
+use crate::theme::{AppearanceSettings, GlassStyle, Palette};
 use crate::{capabilities, header, home, sidebar};
 
 actions!(
@@ -47,6 +47,14 @@ actions!(
         /// Deny or stop the selected row.
         RunSecondary,
         ClearSelection,
+        /// Toggle the appearance and transparency panel.
+        ToggleAppearancePanel,
+        /// Toggle the application update popover.
+        ToggleUpdatePopover,
+        /// Check git repository for newer commits.
+        CheckForUpdates,
+        /// Trigger background rebuild and install of Sjel Desktop.
+        RebuildApp,
     ]
 );
 
@@ -90,6 +98,11 @@ pub struct Workspace {
     pub selection: Selection,
     /// True once the shell pushes its answers, so the timer stops reading them.
     streaming: bool,
+    pub show_appearance_panel: bool,
+    pub appearance_settings: AppearanceSettings,
+    pub update_info: Option<crate::update::UpdateInfo>,
+    pub show_update_popover: bool,
+    pub rebuild_state: crate::update::RebuildState,
     focus: FocusHandle,
     _appearance: Option<Subscription>,
     frames: Option<crate::frames::FrameProbe>,
@@ -111,6 +124,7 @@ impl Workspace {
         let repo = Repo::new(shell::Shell::new(endpoint).map(std::sync::Arc::new));
         let projects = cx.new(|_| Projects::new(repo.clone()));
         let ask = cx.new(|_| Ask::new(repo.clone()));
+        let appearance_settings = AppearanceSettings::load();
         let mut workspace = Self {
             page: Page::Home,
             repo,
@@ -125,6 +139,11 @@ impl Workspace {
             selection: Selection::default(),
             streaming: false,
             focus,
+            show_appearance_panel: false,
+            appearance_settings,
+            update_info: None,
+            show_update_popover: false,
+            rebuild_state: crate::update::RebuildState::Idle,
             _appearance: Some(appearance),
             frames: crate::frames::FrameProbe::from_env(),
             #[cfg(target_os = "macos")]
@@ -133,6 +152,7 @@ impl Workspace {
             native_glass_attempted: false,
         };
         workspace.refresh(cx);
+        workspace.check_updates(cx);
         workspace.follow(cx);
         if let (Some(frames), true) = (
             workspace.frames.clone(),
@@ -158,7 +178,7 @@ impl Workspace {
     }
 
     pub fn endpoint(&self) -> SharedString {
-        self.repo.endpoint()
+        self.repo.endpoint().into()
     }
 
     /// True when a local database answers, which the sidebar shows as its read path.
@@ -260,6 +280,61 @@ impl Workspace {
             &repo_sound,
             move |r| async move { r.soundscape_state().await },
         );
+        self.check_updates(cx);
+    }
+
+    pub fn check_updates(&mut self, cx: &mut Context<Self>) {
+        cx.spawn(async move |this, cx| {
+            let info = cx
+                .background_executor()
+                .spawn(async move {
+                    crate::update::find_repo_root()
+                        .and_then(|repo| crate::update::check_git_updates(&repo))
+                })
+                .await;
+            let _ = this.update(cx, |view, cx| {
+                view.update_info = info;
+                cx.notify();
+            });
+        })
+        .detach();
+    }
+
+    pub fn trigger_rebuild(&mut self, window: &mut Window, cx: &mut Context<Self>) {
+        let Some(repo_root) = crate::update::find_repo_root() else {
+            window.push_notification(
+                Notification::error("Could not locate Sjel repository root."),
+                cx,
+            );
+            return;
+        };
+        self.rebuild_state = crate::update::RebuildState::Building;
+        self.show_update_popover = true;
+        cx.notify();
+        window.push_notification(
+            Notification::info("Rebuilding Sjel Desktop in background..."),
+            cx,
+        );
+
+        let root = repo_root.clone();
+        cx.spawn(async move |this, cx| {
+            let res = cx
+                .background_executor()
+                .spawn(async move { crate::update::execute_rebuild(&root) })
+                .await;
+            let _ = this.update(cx, |view, cx| {
+                match res {
+                    Ok(msg) => {
+                        view.rebuild_state = crate::update::RebuildState::Success(msg);
+                    }
+                    Err(err) => {
+                        view.rebuild_state = crate::update::RebuildState::Failed(err);
+                    }
+                }
+                cx.notify();
+            });
+        })
+        .detach();
     }
 
     pub fn toggle_soundscape(
@@ -510,6 +585,18 @@ impl Workspace {
                     .icon(IconName::RotateCw)
                     .action(Refresh.boxed_clone()),
                 CommandItem::new()
+                    .label("Check for App Updates")
+                    .icon(IconName::RotateCw)
+                    .action(CheckForUpdates.boxed_clone()),
+                CommandItem::new()
+                    .label("Rebuild Sjel Desktop")
+                    .icon(IconName::RotateCw)
+                    .action(RebuildApp.boxed_clone()),
+                CommandItem::new()
+                    .label("Appearance & Transparency")
+                    .icon(IconName::Palette)
+                    .action(ToggleAppearancePanel.boxed_clone()),
+                CommandItem::new()
                     .label("Open this page in the dashboard")
                     .icon(IconName::ExternalLink)
                     .action(OpenInDashboard.boxed_clone()),
@@ -583,6 +670,58 @@ impl Workspace {
         self.open_dashboard(self.page.href().to_owned(), window, cx);
     }
 
+    fn on_toggle_appearance_panel(
+        &mut self,
+        _: &ToggleAppearancePanel,
+        _: &mut Window,
+        cx: &mut Context<Self>,
+    ) {
+        self.show_appearance_panel = !self.show_appearance_panel;
+        cx.notify();
+    }
+
+    fn on_toggle_update_popover(
+        &mut self,
+        _: &ToggleUpdatePopover,
+        _: &mut Window,
+        cx: &mut Context<Self>,
+    ) {
+        self.show_update_popover = !self.show_update_popover;
+        cx.notify();
+    }
+
+    fn on_check_for_updates(
+        &mut self,
+        _: &CheckForUpdates,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) {
+        window.push_notification(Notification::info("Checking for Sjel updates..."), cx);
+        cx.spawn(async move |this, cx| {
+            let info = cx
+                .background_executor()
+                .spawn(async move {
+                    crate::update::find_repo_root()
+                        .and_then(|r| crate::update::check_git_updates(&r))
+                })
+                .await;
+            let _ = this.update(cx, |view, cx| {
+                view.update_info = info.clone();
+                if let Some(ref update) = info {
+                    if update.is_update_available() {
+                        view.show_update_popover = true;
+                    }
+                }
+                cx.notify();
+            });
+        })
+        .detach();
+    }
+
+    fn on_rebuild_app(&mut self, _: &RebuildApp, window: &mut Window, cx: &mut Context<Self>) {
+        self.trigger_rebuild(window, cx);
+    }
+
     fn on_select_next(&mut self, _: &SelectNext, _: &mut Window, cx: &mut Context<Self>) {
         self.selection.step(1, self.items().len());
         cx.notify();
@@ -630,7 +769,13 @@ impl Workspace {
     /// AppKit then
     /// paints the tint under the sidebar, and this returns true so GPUI tints only the page.
     #[cfg(target_os = "macos")]
-    fn attach_glass(&mut self, window: &mut Window, tint: u32) -> bool {
+    fn attach_glass(&mut self, window: &mut Window, tint: u32, enabled: bool) -> bool {
+        if !enabled {
+            if let Some(glass) = &mut self.native_glass {
+                glass.set_tint(tint);
+            }
+            return false;
+        }
         if !self.native_glass_attempted && std::env::var_os("SJEL_GPUI_NO_GLASS").is_none() {
             self.native_glass_attempted = true;
             self.native_glass = crate::macos_glass::NativeGlassRegion::attach(
@@ -655,7 +800,7 @@ impl Workspace {
     }
 
     #[cfg(not(target_os = "macos"))]
-    fn attach_glass(&mut self, _: &mut Window, _: u32) -> bool {
+    fn attach_glass(&mut self, _: &mut Window, _: u32, _: bool) -> bool {
         false
     }
 }
@@ -665,13 +810,21 @@ impl Render for Workspace {
         if let Some(frames) = &self.frames {
             frames.render_started();
         }
-        let palette = Palette::for_appearance(window.appearance());
-        let tint = if opaque_window() {
-            palette.window_tint | 0xff
+        let is_dark = self.appearance_settings.theme_mode.is_dark(matches!(
+            window.appearance(),
+            WindowAppearance::Dark | WindowAppearance::VibrantDark
+        ));
+        let base_palette = if is_dark {
+            Palette::dark()
         } else {
-            palette.window_tint
+            Palette::light()
         };
-        let glass = self.attach_glass(window, tint);
+        let palette = self
+            .appearance_settings
+            .apply_to_palette(base_palette, is_dark);
+        let tint = palette.window_tint;
+        let glass_requested = self.appearance_settings.glass == GlassStyle::LiquidGlass;
+        let glass = self.attach_glass(window, tint, glass_requested);
         let page = match self.page {
             Page::Home => home::render(self, palette, cx).into_any_element(),
             Page::Capabilities => capabilities::render(self, palette, cx).into_any_element(),
@@ -703,6 +856,10 @@ impl Render for Workspace {
             .on_action(cx.listener(Self::on_clear_selection))
             .on_action(cx.listener(Self::on_run_primary))
             .on_action(cx.listener(Self::on_run_secondary))
+            .on_action(cx.listener(Self::on_toggle_appearance_panel))
+            .on_action(cx.listener(Self::on_toggle_update_popover))
+            .on_action(cx.listener(Self::on_check_for_updates))
+            .on_action(cx.listener(Self::on_rebuild_app))
             .size_full()
             .when(!glass, |root| root.bg(rgba(tint)))
             .text_color(rgb(palette.text))
@@ -726,12 +883,68 @@ impl Render for Workspace {
                     )
                     .child(
                         div()
+                            .relative()
                             .flex_1()
                             .h_full()
                             .when(glass, |page| page.bg(rgba(tint)))
                             .flex()
                             .flex_col()
                             .child(header::render(self, palette))
+                            .when(self.show_appearance_panel, |col| {
+                                let entity = cx.entity().clone();
+                                let change_entity = entity.clone();
+                                col.child(div().absolute().top(px(85.)).right(px(32.)).child(
+                                    crate::ui::appearance_panel(
+                                        self.appearance_settings,
+                                        palette,
+                                        move |new_settings, _, app| {
+                                            let _ = new_settings.save();
+                                            change_entity.update(app, |view, cx| {
+                                                view.appearance_settings = new_settings;
+                                                cx.notify();
+                                            });
+                                        },
+                                        move |_, app| {
+                                            entity.update(app, |view, cx| {
+                                                view.show_appearance_panel = false;
+                                                cx.notify();
+                                            });
+                                        },
+                                    ),
+                                ))
+                            })
+                            .when(self.show_update_popover, |col| {
+                                if let Some(info) = &self.update_info {
+                                    let entity = cx.entity().clone();
+                                    let rebuild_entity = entity.clone();
+                                    let close_entity = entity.clone();
+                                    let info_clone = info.clone();
+                                    let state = self.rebuild_state.clone();
+                                    col.child(div().absolute().top(px(85.)).right(px(32.)).child(
+                                        crate::update::update_popover(
+                                            &info_clone,
+                                            &state,
+                                            palette,
+                                            move |window, app| {
+                                                rebuild_entity.update(app, |view, cx| {
+                                                    view.trigger_rebuild(window, cx);
+                                                });
+                                            },
+                                            move |_, app| {
+                                                close_entity.update(app, |view, cx| {
+                                                    view.show_update_popover = false;
+                                                    cx.notify();
+                                                });
+                                            },
+                                            move |_, _| {
+                                                crate::update::relaunch_app();
+                                            },
+                                        ),
+                                    ))
+                                } else {
+                                    col
+                                }
+                            })
                             .child(if self.page == Page::Projects {
                                 // Projects scrolls inside itself: its editor lays out only the
                                 // blocks on screen, which needs a bounded height.

@@ -10,13 +10,28 @@ use gpui_kit::{div, prelude::*, px, rgb, Action, FontWeight, SharedString};
 
 use crate::route::Page;
 use crate::theme::Palette;
-use crate::workspace::{OpenInDashboard, Refresh, Workspace};
+use crate::workspace::{
+    OpenInDashboard, Refresh, ToggleAppearancePanel, ToggleUpdatePopover, Workspace,
+};
 
 pub fn render(view: &Workspace, palette: Palette) -> impl IntoElement {
     let checked = view
         .health
         .age()
         .map(|elapsed| format!("checked {} ago", ago(elapsed)));
+    let update_pill = view
+        .update_info
+        .as_ref()
+        .filter(|u| u.is_update_available())
+        .map(|info| {
+            div()
+                .id("update-badge-wrapper")
+                .mr_2()
+                .on_click(|_, window, cx| {
+                    window.dispatch_action(ToggleUpdatePopover.boxed_clone(), cx);
+                })
+                .child(crate::update::update_badge(info.commits_behind, palette))
+        });
     div()
         .flex()
         .items_end()
@@ -47,6 +62,7 @@ pub fn render(view: &Workspace, palette: Palette) -> impl IntoElement {
                 .flex()
                 .items_center()
                 .gap_1()
+                .children(update_pill)
                 .children(checked.map(|label| {
                     div()
                         .text_xs()
@@ -63,6 +79,16 @@ pub fn render(view: &Workspace, palette: Palette) -> impl IntoElement {
                         .tooltip("Refresh (⌘R)")
                         .on_click(|_, window, cx| {
                             window.dispatch_action(Refresh.boxed_clone(), cx)
+                        }),
+                )
+                .child(
+                    Button::new("appearance")
+                        .ghost()
+                        .small()
+                        .icon(IconName::Palette)
+                        .tooltip("Appearance & Transparency")
+                        .on_click(|_, window, cx| {
+                            window.dispatch_action(ToggleAppearancePanel.boxed_clone(), cx)
                         }),
                 )
                 .child(

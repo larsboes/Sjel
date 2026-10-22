@@ -1,0 +1,18 @@
+[package]
+name = "sjel-gpui-ui"
+version = "0.1.0"
+edition = "2021"
+publish = false
+license = "AGPL-3.0-only"
+description = "Shared GPUI design system, tokens, and primitives for Sjel desktop and mobile"
+
+[dependencies]
+sjel-gpui-core = { path = "../core" }
+gpui-kit = { version = "=0.7.3", default-features = false, features = ["component"] }
+gpui = { package = "gpui-pre", version = "=0.3.9", default-features = false }
+chrono = { version = "0.4", default-features = false, features = ["clock"] }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+
+[lints.rust]
+unsafe_code = "deny"

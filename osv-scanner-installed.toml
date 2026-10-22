@@ -329,3 +329,26 @@ id = "GHSA-h37v-hp6w-2pp8"
 ignoreUntil = 2027-01-01
 reason = "ml-dsa 0.0.4 encoding issue. Same reach and same end as RUSTSEC-2025-0144: tauri-cli's embedded Cargo.lock."
 
+
+# Certificate trust, not code execution: the two tools below bundle a root store or verifier that
+# still trusts distrusted emSign intermediates. Both are already the newest release on crates.io
+# (checked 2026-10-22), and `cargo install --locked` reads the Cargo.lock published inside each
+# crate, so nothing here can move the transitive versions. Reach: cargo-deny fetches the RustSec
+# advisory database from GitHub over TLS; xberg-cli extracts local files and opens TLS only when
+# given a URL (not verified beyond its --help). Exploiting either needs a certificate chained to a
+# distrusted emSign intermediate plus a network position to present it. Ends when the maintainer
+# republishes with rustls-webpki >= 0.103.16 and webpki-roots / webpki-root-certs >= 1.0.10.
+[[IgnoredVulns]]
+id = "RUSTSEC-2026-0382"
+ignoreUntil = 2026-12-01
+reason = "rustls-webpki 0.103.13 (cargo-deny 0.20.2) and 0.103.15 (xberg-cli 1.3.10) may accept distrusted intermediates. Both crates are the newest release; their embedded Cargo.lock pins it. Reach and end: see the comment above."
+
+[[IgnoredVulns]]
+id = "RUSTSEC-2026-0381"
+ignoreUntil = 2026-12-01
+reason = "webpki-roots 1.0.7 (cargo-deny 0.20.2) and 1.0.9 (xberg-cli 1.3.10) bundle the emSign ECC Root CA - G3. Same reach and end as RUSTSEC-2026-0382."
+
+[[IgnoredVulns]]
+id = "RUSTSEC-2026-0383"
+ignoreUntil = 2026-12-01
+reason = "webpki-root-certs 1.0.9 (xberg-cli 1.3.10) bundles the emSign ECC Root CA - G3. Same reach and end as RUSTSEC-2026-0382."

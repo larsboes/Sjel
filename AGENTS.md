@@ -48,4 +48,8 @@ across platforms (macOS, iOS, and subsequent Linux/Windows targets):
    - Local note viewing and editing, task management, and capture.
    - Offline queue with bi-directional delta synchronization whenever the Mac LAN listener is discovered.
    - Graceful degradation: local search and cached reads remain responsive when disconnected.
+3. **The dashboard is the second consumer, and it retires** (decided 2026-10-22). Port each
+   dashboard page to GPUI, then improve it there. A rule the two clients share goes into a
+   capability or `apps/gpui/core`, never only into `dashboard/`. Do not start new feature work
+   in the dashboard. It retires when GPUI covers its pages.
 

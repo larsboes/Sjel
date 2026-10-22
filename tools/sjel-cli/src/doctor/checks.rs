@@ -82,6 +82,7 @@ fn entries() -> Vec<Entry> {
         ),
         One("Data freshness (declared contracts)", data_freshness),
         One("Backups (receipts, and the archives they name)", backups),
+        One("Remote backups (receipts served on the tailnet)", remote_backups),
         One("Port uniqueness (declared, both roots)", port_uniqueness),
         Packs,
         One("Doctrine freshness (README why-blocks)", doctrine_freshness),
@@ -2429,6 +2430,56 @@ fn container_refresh(ctx: &mut Ctx) {
             ", none moved".to_owned()
         };
         ctx.ok(format!("images refreshed {h}h ago{ran}"));
+    }
+}
+
+/// Backups another host runs, read from the receipt that host serves on the tailnet. An overlay
+/// `config/systems.local.toml` entry opts in with `backup_receipt` (a URL answering
+/// `{"at": "<ISO-8601>"}`, written only on success) and `backup_stale_hours`. The family Pi's
+/// backups stopped on 2026-08-01 and nothing noticed until 2026-10-22; its `ops/nightly` now
+/// writes this receipt. Prints the system id, never the URL, as the reachability probe does.
+fn remote_backups(ctx: &mut Ctx) {
+    let path = overlay_dir(ctx).join("config/systems.local.toml");
+    let Ok(systems) = read_toml(&path) else {
+        ctx.ok("no readable overlay systems.local.toml — no remote backup declared");
+        return;
+    };
+    let mut declared = false;
+    for (id, entry) in &systems {
+        let Some(url) = entry.get("backup_receipt").and_then(toml::Value::as_str) else {
+            continue;
+        };
+        declared = true;
+        let stale = entry
+            .get("backup_stale_hours")
+            .map_or(26.0, |v| super::js_number(Some(v)));
+        let o = cmd("curl", &["-sf", "--max-time", "4", url]);
+        if !o.success() {
+            ctx.warn(format!(
+                "{id} — its backup receipt did not answer; is the host up and on the tailnet?"
+            ));
+            continue;
+        }
+        let at = serde_json::from_str::<Json>(&o.stdout)
+            .ok()
+            .and_then(|r| r.get("at").and_then(Json::as_str).and_then(pure::parse_iso_ms));
+        let Some(ms) = at else {
+            ctx.bad(format!("{id} — its backup receipt carries no readable 'at'"));
+            continue;
+        };
+        let age = (now_secs() * 1000.0 - ms) / 3_600_000.0;
+        let h = js_num(js_round(age));
+        if age > stale {
+            ctx.bad(format!(
+                "{id} — last successful backup {h}h ago, past its {}h limit",
+                js_num(stale)
+            ));
+        } else {
+            ctx.ok(format!("{id} — last successful backup {h}h ago"));
+        }
+    }
+    if !declared {
+        ctx.ok("no systems.local.toml entry declares a backup_receipt");
     }
 }
 

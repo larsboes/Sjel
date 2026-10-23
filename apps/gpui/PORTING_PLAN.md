@@ -97,16 +97,22 @@
 
 These come before the roadmap in section 4. The roadmap resumes when they are done.
 
-1. **Ask and Search are one panel.** One input takes a search or a prompt. A mode switch offers
-   *Auto*, *Ask* and *Search*; Auto decides from the text, and the panel shows which way it went so
-   one keystroke can flip it. The panel opens two ways from the same view: as an overlay (the ⌘K
-   position) and docked as a right sidebar beside the page. ⌘2 (Ask) and ⌘K both reach it. Open:
-   what Search searches. The shell has no cross-capability search today (only transit's and
-   interior's own `/api/search`), and the app holds no local index.
-2. **The right sidebar is where Sjel works in view.** The docked panel is the seat of the later
-   adaptive UI: while Sjel runs a task, the operator sees it search, open a page and change a
-   value, live, instead of receiving only the result. Build the panel so a stream of agent steps
-   (the Ask turn's tool activity today) can drive navigation in the main column.
+1. **Ask and Search are one panel, as an overlay.** One input takes a search or a prompt. A mode
+   switch offers *Auto*, *Ask* and *Search*; Auto decides from the text, and the panel shows which
+   way it went so one keystroke can flip it. ⌘2 (Ask) and ⌘K both reach it.
+   - Decided 2026-10-23: **overlay only for now**, in the ⌘K position. The docked right sidebar
+     comes with item 2, not before.
+   - Decided 2026-10-23: **Search is local and server, streamed.** Local results show at once:
+     pages, destinations, and the rows the app already loads (tasks, notes, people, documents,
+     inventory, finance). Server results append as they arrive, from a new shell `/api/search`
+     that fans out to the capabilities. Today the shell has no cross-capability search (only
+     transit's and interior's own `/api/search`), and the app holds no local index.
+2. **The right sidebar is where Sjel works in view.** A docked panel beside the page is the seat
+   of the later adaptive UI, driven by what Sjel is doing: while it runs a task, the operator sees
+   it search, open a page and change a value, live, instead of receiving only the result. Build
+   the overlay from item 1 so the same view can dock here later, and so a stream of agent steps
+   (the Ask turn's tool activity today) can drive navigation in the main column. The soundscape
+   panel also slides in from the right edge; how the two share it is decided when this is built.
 3. **Soundscape, what the 2026-10-23 pass left.** The phone has no player:
    `core/src/soundscape` is platform-free, so the iOS app needs an output device and a panel, not
    a second engine. The panel's own open state and the mixer disclosure are not kept across

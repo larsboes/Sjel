@@ -33,6 +33,13 @@ const STOPLIST: &[&str] = &[
     "Alle", "Aber", "Auch", "Dann", "Denn", "Mehr", "Sehr", "Viel", "Ende",
     // English words that are also surnames.
     "Personal", "Social", "Best", "Young", "Green", "Brown", "Church",
+    // Name particles and prepositions inside a multi-word name ("Max aus Bonn", "van Dijk").
+    // They identify nobody and match every German sentence: the agent view turned "Paper aus
+    // der Bachelorarbeit" into "Paper <TRAVELER_…> der Bachelorarbeit" (2026-10-23).
+    "aus", "von", "van", "del", "den", "der", "die", "das", "und", "bei",
+    // Ordinary words a contact name carried, found in the registry on 2026-10-23. "Events"
+    // tokenized every task's `events:` key.
+    "Events", "Support", "Arbeit", "Bar", "Bikes",
 ];
 
 const MIN_TOKEN: usize = 3;
@@ -127,6 +134,20 @@ pub fn from_store(store: &EntitiesStore) -> Result<Registry, StoreError> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn particles_and_ordinary_words_in_a_name_are_withheld_not_matched() {
+        let r = build(&[
+            person("Max aus Bonn", &[]),
+            person("Events Team Hamburg", &[]),
+            person("eliah", &[]),
+        ]);
+        assert!(!r.tokens.iter().any(|t| t == "aus" || t == "Events"), "{:?}", r.tokens);
+        assert!(r.withheld.contains(&"aus".to_string()) && r.withheld.contains(&"Events".to_string()));
+        // A real name typed in lowercase still redacts: a leak costs more than a wrong match.
+        assert!(r.tokens.contains(&"eliah".to_string()));
+        assert!(r.tokens.contains(&"Max".to_string()));
+    }
 
     fn person(name: &str, aliases: &[&str]) -> (String, Vec<String>) {
         (

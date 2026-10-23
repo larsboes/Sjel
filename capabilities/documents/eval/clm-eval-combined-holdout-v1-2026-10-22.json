@@ -1,0 +1,861 @@
+{
+  "model": "mlx-community/CLM-v0.1-8B-MLX-4bit",
+  "revision": "489b421bafc007e3ae409528d77006d26d362689",
+  "adapter": "loopback System One (/v1/systemone)",
+  "corpus": "clm-corpus-combined-holdout-v1.json",
+  "corpus_sha256": "24a8db9f2fc3eed56ea2440a0a53e4bf159f2d3220adda9eb558108c0c6d77ca",
+  "event_prompt": "gathering-material",
+  "category_descriptions": {
+    "Finance": "An invoice, bill, receipt, payment, or financial statement.",
+    "Reference": "A manual, guide, API reference, or general technical documentation.",
+    "Events": "Material for a gathering or public activity, such as a meeting, concert, workshop, talk, exhibition, or sports fixture; includes invitations, schedules, tickets, and registration details."
+  },
+  "samples": 48,
+  "correct": 40,
+  "accuracy": 0.8333,
+  "by_language": {
+    "de": {
+      "samples": 24,
+      "correct": 23,
+      "accuracy": 0.9583
+    },
+    "en": {
+      "samples": 24,
+      "correct": 17,
+      "accuracy": 0.7083
+    }
+  },
+  "by_category": {
+    "Events": {
+      "samples": 16,
+      "correct": 11,
+      "accuracy": 0.6875
+    },
+    "Finance": {
+      "samples": 16,
+      "correct": 15,
+      "accuracy": 0.9375
+    },
+    "Reference": {
+      "samples": 16,
+      "correct": 14,
+      "accuracy": 0.875
+    }
+  },
+  "by_difficulty": {
+    "clear": {
+      "samples": 36,
+      "correct": 31,
+      "accuracy": 0.8611
+    },
+    "overlap": {
+      "samples": 12,
+      "correct": 9,
+      "accuracy": 0.75
+    }
+  },
+  "confidence_margin_summary": {
+    "correct_mean": 0.5402,
+    "incorrect_mean": 0.4603,
+    "wrong_margin_ge_05": 3,
+    "note": "CLM margin is not calibrated; 0.5 is a descriptive bucket, not a filing threshold."
+  },
+  "confusion": {
+    "Events -> Events": 11,
+    "Events -> Finance": 3,
+    "Events -> Reference": 2,
+    "Finance -> Events": 1,
+    "Finance -> Finance": 15,
+    "Reference -> Finance": 2,
+    "Reference -> Reference": 14
+  },
+  "misclassified": [
+    {
+      "id": "ch-en-finance-room-deposit",
+      "language": "en",
+      "expected": "Finance",
+      "difficulty": "overlap",
+      "predicted": "Events",
+      "correct": false,
+      "confidence_margin": 0.377,
+      "probabilities": {
+        "Finance": 0.3971,
+        "Reference": 0.0183,
+        "Events": 0.5846
+      }
+    },
+    {
+      "id": "ch-en-events-graduation",
+      "language": "en",
+      "expected": "Events",
+      "difficulty": "clear",
+      "predicted": "Finance",
+      "correct": false,
+      "confidence_margin": 0.457,
+      "probabilities": {
+        "Finance": 0.638,
+        "Reference": 0.11,
+        "Events": 0.252
+      }
+    },
+    {
+      "id": "ch-en-events-tournament",
+      "language": "en",
+      "expected": "Events",
+      "difficulty": "clear",
+      "predicted": "Reference",
+      "correct": false,
+      "confidence_margin": 0.4646,
+      "probabilities": {
+        "Finance": 0.2107,
+        "Reference": 0.6431,
+        "Events": 0.1462
+      }
+    },
+    {
+      "id": "ch-en-events-open-studio",
+      "language": "en",
+      "expected": "Events",
+      "difficulty": "clear",
+      "predicted": "Reference",
+      "correct": false,
+      "confidence_margin": 0.1765,
+      "probabilities": {
+        "Finance": 0.3733,
+        "Reference": 0.451,
+        "Events": 0.1757
+      }
+    },
+    {
+      "id": "ch-en-events-parent-night",
+      "language": "en",
+      "expected": "Events",
+      "difficulty": "overlap",
+      "predicted": "Finance",
+      "correct": false,
+      "confidence_margin": 0.5507,
+      "probabilities": {
+        "Finance": 0.7005,
+        "Reference": 0.059,
+        "Events": 0.2405
+      }
+    },
+    {
+      "id": "ch-de-events-poetry",
+      "language": "de",
+      "expected": "Events",
+      "difficulty": "clear",
+      "predicted": "Finance",
+      "correct": false,
+      "confidence_margin": 0.1757,
+      "probabilities": {
+        "Finance": 0.4504,
+        "Reference": 0.1023,
+        "Events": 0.4473
+      }
+    },
+    {
+      "id": "ch-en-reference-data-dictionary",
+      "language": "en",
+      "expected": "Reference",
+      "difficulty": "clear",
+      "predicted": "Finance",
+      "correct": false,
+      "confidence_margin": 0.9553,
+      "probabilities": {
+        "Finance": 0.9702,
+        "Reference": 0.0194,
+        "Events": 0.0104
+      }
+    },
+    {
+      "id": "ch-en-reference-registration-api",
+      "language": "en",
+      "expected": "Reference",
+      "difficulty": "overlap",
+      "predicted": "Finance",
+      "correct": false,
+      "confidence_margin": 0.5253,
+      "probabilities": {
+        "Finance": 0.6835,
+        "Reference": 0.302,
+        "Events": 0.0145
+      }
+    }
+  ],
+  "results": [
+    {
+      "id": "ch-en-finance-insurance",
+      "language": "en",
+      "expected": "Finance",
+      "difficulty": "clear",
+      "predicted": "Finance",
+      "correct": true,
+      "confidence_margin": 0.5286,
+      "probabilities": {
+        "Finance": 0.6857,
+        "Reference": 0.0095,
+        "Events": 0.3048
+      }
+    },
+    {
+      "id": "ch-en-finance-bank-transfer",
+      "language": "en",
+      "expected": "Finance",
+      "difficulty": "clear",
+      "predicted": "Finance",
+      "correct": true,
+      "confidence_margin": 0.9762,
+      "probabilities": {
+        "Finance": 0.9842,
+        "Reference": 0.0032,
+        "Events": 0.0126
+      }
+    },
+    {
+      "id": "ch-en-finance-tax-summary",
+      "language": "en",
+      "expected": "Finance",
+      "difficulty": "clear",
+      "predicted": "Finance",
+      "correct": true,
+      "confidence_margin": 0.8148,
+      "probabilities": {
+        "Finance": 0.8766,
+        "Reference": 0.0377,
+        "Events": 0.0857
+      }
+    },
+    {
+      "id": "ch-en-finance-royalty",
+      "language": "en",
+      "expected": "Finance",
+      "difficulty": "clear",
+      "predicted": "Finance",
+      "correct": true,
+      "confidence_margin": 0.3576,
+      "probabilities": {
+        "Finance": 0.5718,
+        "Reference": 0.0918,
+        "Events": 0.3364
+      }
+    },
+    {
+      "id": "ch-en-finance-purchase",
+      "language": "en",
+      "expected": "Finance",
+      "difficulty": "clear",
+      "predicted": "Finance",
+      "correct": true,
+      "confidence_margin": 0.978,
+      "probabilities": {
+        "Finance": 0.9854,
+        "Reference": 0.0078,
+        "Events": 0.0068
+      }
+    },
+    {
+      "id": "ch-en-finance-savings",
+      "language": "en",
+      "expected": "Finance",
+      "difficulty": "clear",
+      "predicted": "Finance",
+      "correct": true,
+      "confidence_margin": 0.9524,
+      "probabilities": {
+        "Finance": 0.9683,
+        "Reference": 0.0028,
+        "Events": 0.0289
+      }
+    },
+    {
+      "id": "ch-en-finance-room-deposit",
+      "language": "en",
+      "expected": "Finance",
+      "difficulty": "overlap",
+      "predicted": "Events",
+      "correct": false,
+      "confidence_margin": 0.377,
+      "probabilities": {
+        "Finance": 0.3971,
+        "Reference": 0.0183,
+        "Events": 0.5846
+      }
+    },
+    {
+      "id": "ch-en-finance-symposium-travel",
+      "language": "en",
+      "expected": "Finance",
+      "difficulty": "overlap",
+      "predicted": "Finance",
+      "correct": true,
+      "confidence_margin": 0.337,
+      "probabilities": {
+        "Finance": 0.558,
+        "Reference": 0.2518,
+        "Events": 0.1902
+      }
+    },
+    {
+      "id": "ch-de-finance-insurance",
+      "language": "de",
+      "expected": "Finance",
+      "difficulty": "clear",
+      "predicted": "Finance",
+      "correct": true,
+      "confidence_margin": 0.6878,
+      "probabilities": {
+        "Finance": 0.7919,
+        "Reference": 0.0789,
+        "Events": 0.1292
+      }
+    },
+    {
+      "id": "ch-de-finance-bank-transfer",
+      "language": "de",
+      "expected": "Finance",
+      "difficulty": "clear",
+      "predicted": "Finance",
+      "correct": true,
+      "confidence_margin": 0.7541,
+      "probabilities": {
+        "Finance": 0.8361,
+        "Reference": 0.0982,
+        "Events": 0.0657
+      }
+    },
+    {
+      "id": "ch-de-finance-tax-summary",
+      "language": "de",
+      "expected": "Finance",
+      "difficulty": "clear",
+      "predicted": "Finance",
+      "correct": true,
+      "confidence_margin": 0.4605,
+      "probabilities": {
+        "Finance": 0.6403,
+        "Reference": 0.2429,
+        "Events": 0.1168
+      }
+    },
+    {
+      "id": "ch-de-finance-royalty",
+      "language": "de",
+      "expected": "Finance",
+      "difficulty": "clear",
+      "predicted": "Finance",
+      "correct": true,
+      "confidence_margin": 0.5989,
+      "probabilities": {
+        "Finance": 0.7326,
+        "Reference": 0.2093,
+        "Events": 0.0581
+      }
+    },
+    {
+      "id": "ch-de-finance-purchase",
+      "language": "de",
+      "expected": "Finance",
+      "difficulty": "clear",
+      "predicted": "Finance",
+      "correct": true,
+      "confidence_margin": 0.512,
+      "probabilities": {
+        "Finance": 0.6747,
+        "Reference": 0.2334,
+        "Events": 0.0919
+      }
+    },
+    {
+      "id": "ch-de-finance-savings",
+      "language": "de",
+      "expected": "Finance",
+      "difficulty": "clear",
+      "predicted": "Finance",
+      "correct": true,
+      "confidence_margin": 0.1411,
+      "probabilities": {
+        "Finance": 0.4274,
+        "Reference": 0.3012,
+        "Events": 0.2714
+      }
+    },
+    {
+      "id": "ch-de-finance-room-deposit",
+      "language": "de",
+      "expected": "Finance",
+      "difficulty": "overlap",
+      "predicted": "Finance",
+      "correct": true,
+      "confidence_margin": 0.1463,
+      "probabilities": {
+        "Finance": 0.4309,
+        "Reference": 0.3917,
+        "Events": 0.1774
+      }
+    },
+    {
+      "id": "ch-de-finance-symposium-travel",
+      "language": "de",
+      "expected": "Finance",
+      "difficulty": "overlap",
+      "predicted": "Finance",
+      "correct": true,
+      "confidence_margin": 0.4215,
+      "probabilities": {
+        "Finance": 0.6143,
+        "Reference": 0.2967,
+        "Events": 0.0889
+      }
+    },
+    {
+      "id": "ch-en-events-jazz",
+      "language": "en",
+      "expected": "Events",
+      "difficulty": "clear",
+      "predicted": "Events",
+      "correct": true,
+      "confidence_margin": 0.3058,
+      "probabilities": {
+        "Finance": 0.1915,
+        "Reference": 0.2712,
+        "Events": 0.5372
+      }
+    },
+    {
+      "id": "ch-en-events-graduation",
+      "language": "en",
+      "expected": "Events",
+      "difficulty": "clear",
+      "predicted": "Finance",
+      "correct": false,
+      "confidence_margin": 0.457,
+      "probabilities": {
+        "Finance": 0.638,
+        "Reference": 0.11,
+        "Events": 0.252
+      }
+    },
+    {
+      "id": "ch-en-events-poetry",
+      "language": "en",
+      "expected": "Events",
+      "difficulty": "clear",
+      "predicted": "Events",
+      "correct": true,
+      "confidence_margin": 0.2326,
+      "probabilities": {
+        "Finance": 0.1494,
+        "Reference": 0.3622,
+        "Events": 0.4884
+      }
+    },
+    {
+      "id": "ch-en-events-sailing",
+      "language": "en",
+      "expected": "Events",
+      "difficulty": "clear",
+      "predicted": "Events",
+      "correct": true,
+      "confidence_margin": 0.4382,
+      "probabilities": {
+        "Finance": 0.245,
+        "Reference": 0.1295,
+        "Events": 0.6255
+      }
+    },
+    {
+      "id": "ch-en-events-tournament",
+      "language": "en",
+      "expected": "Events",
+      "difficulty": "clear",
+      "predicted": "Reference",
+      "correct": false,
+      "confidence_margin": 0.4646,
+      "probabilities": {
+        "Finance": 0.2107,
+        "Reference": 0.6431,
+        "Events": 0.1462
+      }
+    },
+    {
+      "id": "ch-en-events-open-studio",
+      "language": "en",
+      "expected": "Events",
+      "difficulty": "clear",
+      "predicted": "Reference",
+      "correct": false,
+      "confidence_margin": 0.1765,
+      "probabilities": {
+        "Finance": 0.3733,
+        "Reference": 0.451,
+        "Events": 0.1757
+      }
+    },
+    {
+      "id": "ch-en-events-ticket",
+      "language": "en",
+      "expected": "Events",
+      "difficulty": "overlap",
+      "predicted": "Events",
+      "correct": true,
+      "confidence_margin": 0.3624,
+      "probabilities": {
+        "Finance": 0.4105,
+        "Reference": 0.0145,
+        "Events": 0.5749
+      }
+    },
+    {
+      "id": "ch-en-events-parent-night",
+      "language": "en",
+      "expected": "Events",
+      "difficulty": "overlap",
+      "predicted": "Finance",
+      "correct": false,
+      "confidence_margin": 0.5507,
+      "probabilities": {
+        "Finance": 0.7005,
+        "Reference": 0.059,
+        "Events": 0.2405
+      }
+    },
+    {
+      "id": "ch-de-events-jazz",
+      "language": "de",
+      "expected": "Events",
+      "difficulty": "clear",
+      "predicted": "Events",
+      "correct": true,
+      "confidence_margin": 0.2989,
+      "probabilities": {
+        "Finance": 0.2248,
+        "Reference": 0.2426,
+        "Events": 0.5326
+      }
+    },
+    {
+      "id": "ch-de-events-graduation",
+      "language": "de",
+      "expected": "Events",
+      "difficulty": "clear",
+      "predicted": "Events",
+      "correct": true,
+      "confidence_margin": 0.1083,
+      "probabilities": {
+        "Finance": 0.2297,
+        "Reference": 0.3648,
+        "Events": 0.4055
+      }
+    },
+    {
+      "id": "ch-de-events-poetry",
+      "language": "de",
+      "expected": "Events",
+      "difficulty": "clear",
+      "predicted": "Finance",
+      "correct": false,
+      "confidence_margin": 0.1757,
+      "probabilities": {
+        "Finance": 0.4504,
+        "Reference": 0.1023,
+        "Events": 0.4473
+      }
+    },
+    {
+      "id": "ch-de-events-sailing",
+      "language": "de",
+      "expected": "Events",
+      "difficulty": "clear",
+      "predicted": "Events",
+      "correct": true,
+      "confidence_margin": 0.353,
+      "probabilities": {
+        "Finance": 0.339,
+        "Reference": 0.0924,
+        "Events": 0.5686
+      }
+    },
+    {
+      "id": "ch-de-events-tournament",
+      "language": "de",
+      "expected": "Events",
+      "difficulty": "clear",
+      "predicted": "Events",
+      "correct": true,
+      "confidence_margin": 0.3001,
+      "probabilities": {
+        "Finance": 0.0909,
+        "Reference": 0.3757,
+        "Events": 0.5334
+      }
+    },
+    {
+      "id": "ch-de-events-open-studio",
+      "language": "de",
+      "expected": "Events",
+      "difficulty": "clear",
+      "predicted": "Events",
+      "correct": true,
+      "confidence_margin": 0.1543,
+      "probabilities": {
+        "Finance": 0.2695,
+        "Reference": 0.2944,
+        "Events": 0.4362
+      }
+    },
+    {
+      "id": "ch-de-events-ticket",
+      "language": "de",
+      "expected": "Events",
+      "difficulty": "overlap",
+      "predicted": "Events",
+      "correct": true,
+      "confidence_margin": 0.6366,
+      "probabilities": {
+        "Finance": 0.2351,
+        "Reference": 0.0072,
+        "Events": 0.7577
+      }
+    },
+    {
+      "id": "ch-de-events-parent-night",
+      "language": "de",
+      "expected": "Events",
+      "difficulty": "overlap",
+      "predicted": "Events",
+      "correct": true,
+      "confidence_margin": 0.1227,
+      "probabilities": {
+        "Finance": 0.2037,
+        "Reference": 0.3811,
+        "Events": 0.4151
+      }
+    },
+    {
+      "id": "ch-en-reference-solar",
+      "language": "en",
+      "expected": "Reference",
+      "difficulty": "clear",
+      "predicted": "Reference",
+      "correct": true,
+      "confidence_margin": 0.7572,
+      "probabilities": {
+        "Finance": 0.1092,
+        "Reference": 0.8381,
+        "Events": 0.0527
+      }
+    },
+    {
+      "id": "ch-en-reference-backup",
+      "language": "en",
+      "expected": "Reference",
+      "difficulty": "clear",
+      "predicted": "Reference",
+      "correct": true,
+      "confidence_margin": 0.9413,
+      "probabilities": {
+        "Finance": 0.0372,
+        "Reference": 0.9609,
+        "Events": 0.002
+      }
+    },
+    {
+      "id": "ch-en-reference-data-dictionary",
+      "language": "en",
+      "expected": "Reference",
+      "difficulty": "clear",
+      "predicted": "Finance",
+      "correct": false,
+      "confidence_margin": 0.9553,
+      "probabilities": {
+        "Finance": 0.9702,
+        "Reference": 0.0194,
+        "Events": 0.0104
+      }
+    },
+    {
+      "id": "ch-en-reference-bicycle",
+      "language": "en",
+      "expected": "Reference",
+      "difficulty": "clear",
+      "predicted": "Reference",
+      "correct": true,
+      "confidence_margin": 0.7722,
+      "probabilities": {
+        "Finance": 0.133,
+        "Reference": 0.8482,
+        "Events": 0.0188
+      }
+    },
+    {
+      "id": "ch-en-reference-citations",
+      "language": "en",
+      "expected": "Reference",
+      "difficulty": "clear",
+      "predicted": "Reference",
+      "correct": true,
+      "confidence_margin": 0.223,
+      "probabilities": {
+        "Finance": 0.4147,
+        "Reference": 0.482,
+        "Events": 0.1032
+      }
+    },
+    {
+      "id": "ch-en-reference-printer",
+      "language": "en",
+      "expected": "Reference",
+      "difficulty": "clear",
+      "predicted": "Reference",
+      "correct": true,
+      "confidence_margin": 0.9506,
+      "probabilities": {
+        "Finance": 0.0288,
+        "Reference": 0.9671,
+        "Events": 0.0041
+      }
+    },
+    {
+      "id": "ch-en-reference-event-config",
+      "language": "en",
+      "expected": "Reference",
+      "difficulty": "overlap",
+      "predicted": "Reference",
+      "correct": true,
+      "confidence_margin": 0.4727,
+      "probabilities": {
+        "Finance": 0.0556,
+        "Reference": 0.6484,
+        "Events": 0.296
+      }
+    },
+    {
+      "id": "ch-en-reference-registration-api",
+      "language": "en",
+      "expected": "Reference",
+      "difficulty": "overlap",
+      "predicted": "Finance",
+      "correct": false,
+      "confidence_margin": 0.5253,
+      "probabilities": {
+        "Finance": 0.6835,
+        "Reference": 0.302,
+        "Events": 0.0145
+      }
+    },
+    {
+      "id": "ch-de-reference-solar",
+      "language": "de",
+      "expected": "Reference",
+      "difficulty": "clear",
+      "predicted": "Reference",
+      "correct": true,
+      "confidence_margin": 0.7909,
+      "probabilities": {
+        "Finance": 0.0588,
+        "Reference": 0.8606,
+        "Events": 0.0806
+      }
+    },
+    {
+      "id": "ch-de-reference-backup",
+      "language": "de",
+      "expected": "Reference",
+      "difficulty": "clear",
+      "predicted": "Reference",
+      "correct": true,
+      "confidence_margin": 0.9136,
+      "probabilities": {
+        "Finance": 0.0268,
+        "Reference": 0.9424,
+        "Events": 0.0308
+      }
+    },
+    {
+      "id": "ch-de-reference-data-dictionary",
+      "language": "de",
+      "expected": "Reference",
+      "difficulty": "clear",
+      "predicted": "Reference",
+      "correct": true,
+      "confidence_margin": 0.1473,
+      "probabilities": {
+        "Finance": 0.2758,
+        "Reference": 0.4315,
+        "Events": 0.2927
+      }
+    },
+    {
+      "id": "ch-de-reference-bicycle",
+      "language": "de",
+      "expected": "Reference",
+      "difficulty": "clear",
+      "predicted": "Reference",
+      "correct": true,
+      "confidence_margin": 0.9318,
+      "probabilities": {
+        "Finance": 0.0277,
+        "Reference": 0.9546,
+        "Events": 0.0177
+      }
+    },
+    {
+      "id": "ch-de-reference-citations",
+      "language": "de",
+      "expected": "Reference",
+      "difficulty": "clear",
+      "predicted": "Reference",
+      "correct": true,
+      "confidence_margin": 0.3684,
+      "probabilities": {
+        "Finance": 0.0519,
+        "Reference": 0.5789,
+        "Events": 0.3692
+      }
+    },
+    {
+      "id": "ch-de-reference-printer",
+      "language": "de",
+      "expected": "Reference",
+      "difficulty": "clear",
+      "predicted": "Reference",
+      "correct": true,
+      "confidence_margin": 0.9107,
+      "probabilities": {
+        "Finance": 0.0468,
+        "Reference": 0.9404,
+        "Events": 0.0127
+      }
+    },
+    {
+      "id": "ch-de-reference-event-config",
+      "language": "de",
+      "expected": "Reference",
+      "difficulty": "overlap",
+      "predicted": "Reference",
+      "correct": true,
+      "confidence_margin": 0.7293,
+      "probabilities": {
+        "Finance": 0.0121,
+        "Reference": 0.8196,
+        "Events": 0.1684
+      }
+    },
+    {
+      "id": "ch-de-reference-registration-api",
+      "language": "de",
+      "expected": "Reference",
+      "difficulty": "overlap",
+      "predicted": "Reference",
+      "correct": true,
+      "confidence_margin": 0.7203,
+      "probabilities": {
+        "Finance": 0.1594,
+        "Reference": 0.8136,
+        "Events": 0.027
+      }
+    }
+  ],
+  "warning": "Synthetic results only; this corpus is not representative of personal documents and does not authorize automatic filing."
+}

@@ -132,7 +132,22 @@ impl Workspace {
                     up: state.up,
                 })
                 .collect(),
-            Page::Projects | Page::Ask => Vec::new(),
+            Page::Projects
+            | Page::Context
+            | Page::Ask
+            | Page::Travel
+            | Page::Feed
+            | Page::Inbox
+            | Page::Calendar
+            | Page::Documents
+            | Page::Backup
+            | Page::Finance
+            | Page::People
+            | Page::Inventory
+            | Page::Software
+            | Page::Import
+            | Page::Systems
+            | Page::Settings => Vec::new(),
         }
     }
 

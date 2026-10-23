@@ -14,19 +14,40 @@ use axum::{
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
 
-use crate::{library::MAX_BYTES, Document, Library, LibraryError, Review, Stored};
+use crate::{
+    classification::{ProposalReviewRequest, StoredProposal},
+    library::MAX_BYTES,
+    review::{CandidateKind, DecisionAction, DuplicateDecision},
+    Document, Library, LibraryError, Review, Stored,
+};
 
 const DEFAULT_PORT: u16 = 8104;
 
 const ROUTES: &[route_manifest::Route] = &[
     route_manifest::get("GET", "/health", "Check document service liveness."),
     route_manifest::get("GET", "/routes", "Describe the operator-only document API. Agent credentials are not admitted."),
-    route_manifest::get("GET", "/api/documents", "List metadata only. Optional q searches local text; status filters inbox/filed/archived; limit (1..500) and offset paginate."),
-    route_manifest::get("GET", "/api/documents/{id}", "Read metadata and extracted text in the authenticated operator UI."),
+    route_manifest::get("GET", "/api/documents", "List metadata only. Optional q searches local text; status filters inbox/filed/archived; sha256 returns the records holding those bytes under any filename; limit (1..500) and offset paginate."),
+    route_manifest::get("GET", "/api/documents/{id}", "Read metadata, locally extracted text, and independent local rule proposals in the authenticated operator UI."),
     route_manifest::get("GET", "/api/documents/{id}/original", "Read hash-verified original bytes. download=true forces attachment disposition."),
+    route_manifest::get("GET", "/api/documents/duplicates", "Read paginated exact-copy and advisory duplicate candidates without extracted text."),
+    route_manifest::Route {
+        method: "POST", path: "/api/documents/duplicates/review",
+        request_schema: Some(route_manifest::schema_of::<DuplicateDecision>),
+        summary: "Persist an operator decision for a current duplicate candidate. Originals and records are retained.",
+    },
+    route_manifest::Route {
+        method: "POST", path: "/api/documents/{id}/proposals/{proposal_id}/review",
+        request_schema: Some(route_manifest::schema_of::<ProposalReviewRequest>),
+        summary: "Append an operator review outcome to one classification proposal. This does not file the document.",
+    },
+    route_manifest::Route {
+        method: "POST", path: "/api/documents/{id}/proposals/regenerate",
+        request_schema: Some(route_manifest::schema_of::<RegenerateProposalRequest>),
+        summary: "Generate a new deterministic rule-proposal run. Every run is stored separately and does not file the document.",
+    },
     route_manifest::Route {
         method: "POST", path: "/api/documents", request_schema: Some(binary_schema),
-        summary: "Upload raw original bytes with required filename query parameter. Sensitive names are refused before reading the body. Maximum 128 MiB; idempotent by bytes and filename.",
+        summary: "Upload raw original bytes with required filename query parameter. Sensitive names are refused before reading the body. Maximum 128 MiB; idempotent by bytes and filename. Returns local rule proposals separately from filing metadata.",
     },
     route_manifest::Route {
         method: "PATCH", path: "/api/documents/{id}",
@@ -126,6 +147,7 @@ fn require_document(library: &Library, id: &str) -> Result<Document, ApiError> {
 struct ListQuery {
     q: Option<String>,
     status: Option<String>,
+    sha256: Option<String>,
     limit: Option<usize>,
     offset: Option<usize>,
 }
@@ -143,7 +165,10 @@ async fn list(
     }
     let offset = query.offset.unwrap_or(0);
     blocking(library, move |library| {
-        let documents = library.list(query.status.as_deref())?;
+        let documents = match &query.sha256 {
+            Some(sha256) => library.by_hash(sha256)?,
+            None => library.list(query.status.as_deref())?,
+        };
         let q = query.q.unwrap_or_default().trim().to_lowercase();
         let matched: Vec<_> = documents
             .iter()
@@ -171,15 +196,112 @@ async fn list(
     .await
 }
 
+#[derive(Default, Deserialize)]
+struct DuplicateQuery {
+    kind: Option<String>,
+    limit: Option<usize>,
+    offset: Option<usize>,
+}
+
+async fn duplicate_candidates(
+    State(library): State<Arc<Library>>,
+    Query(query): Query<DuplicateQuery>,
+) -> Result<Json<Value>, ApiError> {
+    let limit = query.limit.unwrap_or(50);
+    if !(1..=100).contains(&limit) {
+        return Err(ApiError(
+            StatusCode::BAD_REQUEST,
+            "limit must be 1..100".into(),
+        ));
+    }
+    let kind = match query.kind.as_deref() {
+        None => None,
+        Some("exact_copy") => Some(CandidateKind::ExactCopy),
+        Some("rescan") => Some(CandidateKind::Rescan),
+        Some("part") => Some(CandidateKind::Part),
+        Some(_) => {
+            return Err(ApiError(
+                StatusCode::BAD_REQUEST,
+                "kind must be exact_copy, rescan or part".into(),
+            ))
+        }
+    };
+    let offset = query.offset.unwrap_or(0);
+    blocking(library, move |library| {
+        let documents = library.list(None)?;
+        let sources = library.sources()?;
+        let reviewed: std::collections::HashSet<_> = library
+            .duplicate_decisions()?
+            .into_iter()
+            .map(|decision| decision.candidate_key)
+            .collect();
+        let candidates: Vec<_> = crate::duplicates::candidates(&documents, &sources)
+            .into_iter()
+            .filter(|candidate| !reviewed.contains(&candidate.candidate_key))
+            .filter(|candidate| kind.is_none_or(|kind| candidate.kind == kind))
+            .collect();
+        let total = candidates.len();
+        let page: Vec<_> = candidates.into_iter().skip(offset).take(limit).collect();
+        Ok(Json(
+            json!({"candidates": page, "total": total, "offset": offset, "limit": limit}),
+        ))
+    })
+    .await
+}
+
+async fn review_duplicate(
+    State(library): State<Arc<Library>>,
+    Json(decision): Json<DuplicateDecision>,
+) -> Result<Json<Value>, ApiError> {
+    decision
+        .validate()
+        .map_err(|error| ApiError(StatusCode::BAD_REQUEST, error.to_string()))?;
+    blocking(library, move |library| {
+        let documents = library.list(None)?;
+        let sources = library.sources()?;
+        let candidate = crate::duplicates::candidates(&documents, &sources)
+            .into_iter()
+            .find(|candidate| candidate.candidate_key == decision.candidate_key)
+            .ok_or_else(|| {
+                ApiError(
+                    StatusCode::CONFLICT,
+                    "duplicate candidate changed; refresh the review queue".into(),
+                )
+            })?;
+        if candidate.kind != decision.kind || candidate.member_ids != decision.member_ids {
+            return Err(ApiError(
+                StatusCode::CONFLICT,
+                "duplicate candidate changed; refresh the review queue".into(),
+            ));
+        }
+        if let DecisionAction::Split { parent_id, .. } = &decision.action {
+            if candidate.kind != CandidateKind::Part
+                || candidate.part.as_ref().map(|part| &part.parent_id) != Some(parent_id)
+            {
+                return Err(ApiError(
+                    StatusCode::BAD_REQUEST,
+                    "split parent must match the candidate's containing document".into(),
+                ));
+            }
+        }
+        library.save_duplicate_decision(&decision)?;
+        Ok(Json(json!({"decision": decision})))
+    })
+    .await
+}
+
 async fn detail(
     State(library): State<Arc<Library>>,
     Path(id): Path<String>,
 ) -> Result<Json<Value>, ApiError> {
     blocking(library, move |library| {
         let document = require_document(library, &id)?;
-        Ok(Json(
-            json!({"document": Summary::from(&document), "text": document.extracted_text}),
-        ))
+        let proposals: Vec<StoredProposal> = library.proposal_records(&document.id)?;
+        Ok(Json(json!({
+            "document": Summary::from(&document),
+            "text": document.extracted_text,
+            "proposals": proposals,
+        })))
     })
     .await
 }
@@ -210,15 +332,52 @@ async fn upload(
             Stored::New(d) => (d, true),
             Stored::Unchanged(d) => (d, false),
         };
+        let proposals = library.proposal_records(&document.id)?;
         Ok((
             if created {
                 StatusCode::CREATED
             } else {
                 StatusCode::OK
             },
-            Json(json!({"document": Summary::from(&document), "created": created})),
+            Json(json!({
+                "document": Summary::from(&document),
+                "proposals": proposals,
+                "created": created,
+            })),
         )
             .into_response())
+    })
+    .await
+}
+
+#[derive(Deserialize, schemars::JsonSchema)]
+#[serde(deny_unknown_fields)]
+struct RegenerateProposalRequest {}
+
+async fn regenerate_proposals(
+    State(library): State<Arc<Library>>,
+    Path(id): Path<String>,
+    Json(_request): Json<RegenerateProposalRequest>,
+) -> Result<Json<Vec<StoredProposal>>, ApiError> {
+    blocking(library, move |library| {
+        require_document(library, &id)?;
+        Ok(Json(library.regenerate_rule_proposals(&id)?))
+    })
+    .await
+}
+
+async fn review_proposal(
+    State(library): State<Arc<Library>>,
+    Path((id, proposal_id)): Path<(String, String)>,
+    Json(review): Json<ProposalReviewRequest>,
+) -> Result<Json<StoredProposal>, ApiError> {
+    blocking(library, move |library| {
+        require_document(library, &id)?;
+        Ok(Json(library.review_proposal(
+            &id,
+            &proposal_id,
+            review.outcome,
+        )?))
     })
     .await
 }
@@ -323,6 +482,19 @@ fn router(library: Arc<Library>) -> Router {
             get(|| async { Json(route_manifest::manifest("documents", ROUTES)) }),
         )
         .route("/api/documents", get(list).post(upload))
+        .route("/api/documents/duplicates", get(duplicate_candidates))
+        .route(
+            "/api/documents/duplicates/review",
+            axum::routing::post(review_duplicate),
+        )
+        .route(
+            "/api/documents/{id}/proposals/regenerate",
+            axum::routing::post(regenerate_proposals),
+        )
+        .route(
+            "/api/documents/{id}/proposals/{proposal_id}/review",
+            axum::routing::post(review_proposal),
+        )
         .route(
             "/api/documents/{id}",
             get(detail).patch(review).delete(archive),
@@ -399,6 +571,106 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn sha256_lookup_finds_the_bytes_under_every_filename() {
+        let (app, _root) = fixture();
+        for name in ["a.pdf", "b.pdf"] {
+            let path = format!("/api/documents?filename={name}");
+            assert_eq!(call(&app, "POST", &path, "same bytes").await.status(), StatusCode::CREATED);
+        }
+        let sha = crate::library::hex(&<sha2::Sha256 as sha2::Digest>::digest(b"same bytes"));
+        let found = json_body(call(&app, "GET", &format!("/api/documents?sha256={sha}"), "").await).await;
+        assert_eq!(found["total"], 2);
+        let absent = json_body(call(&app, "GET", &format!("/api/documents?sha256={}", "0".repeat(64)), "").await).await;
+        assert_eq!(absent["total"], 0);
+    }
+
+    #[tokio::test]
+    async fn duplicate_queue_requires_a_human_decision_and_keeps_both_originals() {
+        let (app, root) = fixture();
+        let first = call(
+            &app,
+            "POST",
+            "/api/documents?filename=copy-a.txt",
+            "Synthetic duplicate test content",
+        )
+        .await;
+        assert_eq!(first.status(), StatusCode::CREATED);
+        let first = json_body(first).await["document"]["id"]
+            .as_str()
+            .unwrap()
+            .to_owned();
+        let second = call(
+            &app,
+            "POST",
+            "/api/documents?filename=copy-b.txt",
+            "Synthetic duplicate test content",
+        )
+        .await;
+        assert_eq!(second.status(), StatusCode::CREATED);
+        let second = json_body(second).await["document"]["id"]
+            .as_str()
+            .unwrap()
+            .to_owned();
+
+        let queue = call(
+            &app,
+            "GET",
+            "/api/documents/duplicates?kind=exact_copy&limit=10",
+            "",
+        )
+        .await;
+        assert_eq!(queue.status(), StatusCode::OK);
+        let queue = json_body(queue).await;
+        assert_eq!(queue["total"], 1);
+        let mut expected_members = vec![first.clone(), second.clone()];
+        expected_members.sort();
+        assert_eq!(
+            queue["candidates"][0]["member_ids"],
+            json!(expected_members)
+        );
+        assert!(queue["candidates"][0].get("extracted_text").is_none());
+        let key = queue["candidates"][0]["candidate_key"].as_str().unwrap();
+        let decision = json!({
+            "candidate_key": key,
+            "kind": "exact_copy",
+            "member_ids": expected_members,
+            "action": {"action": "confirm_group", "survivor_id": first.clone()}
+        });
+        let saved = call(
+            &app,
+            "POST",
+            "/api/documents/duplicates/review",
+            &decision.to_string(),
+        )
+        .await;
+        assert_eq!(saved.status(), StatusCode::OK);
+        let queue = call(&app, "GET", "/api/documents/duplicates?kind=exact_copy", "").await;
+        assert_eq!(json_body(queue).await["total"], 0);
+
+        let rows = call(&app, "GET", "/api/documents?limit=10", "").await;
+        assert_eq!(json_body(rows).await["total"], 2);
+        assert_eq!(
+            call(&app, "GET", &format!("/api/documents/{first}/original"), "")
+                .await
+                .status(),
+            StatusCode::OK
+        );
+        assert_eq!(
+            call(
+                &app,
+                "GET",
+                &format!("/api/documents/{second}/original"),
+                ""
+            )
+            .await
+            .status(),
+            StatusCode::OK
+        );
+        drop(app);
+        std::fs::remove_dir_all(root).unwrap();
+    }
+
+    #[tokio::test]
     async fn operator_credential_is_required_for_metadata_and_originals() {
         let (app, root) = fixture();
         let app = sjel_server::authenticated(
@@ -436,6 +708,41 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn regeneration_appends_a_distinct_run_without_filing() {
+        let (app, root) = fixture();
+        let upload = call(
+            &app,
+            "POST",
+            "/api/documents?filename=guide.txt",
+            "manual guide",
+        )
+        .await;
+        let created = json_body(upload).await;
+        let id = created["document"]["id"].as_str().unwrap();
+        let first_id = created["proposals"][0]["id"].as_str().unwrap();
+        let regenerated = call(
+            &app,
+            "POST",
+            &format!("/api/documents/{id}/proposals/regenerate"),
+            "{}",
+        )
+        .await;
+        assert_eq!(regenerated.status(), StatusCode::OK);
+        let new_run = json_body(regenerated).await;
+        assert_eq!(new_run.as_array().unwrap().len(), 1);
+        assert_ne!(new_run[0]["id"], first_id);
+        assert_ne!(
+            new_run[0]["generation_id"],
+            created["proposals"][0]["generation_id"]
+        );
+        let detail = json_body(call(&app, "GET", &format!("/api/documents/{id}"), "").await).await;
+        assert_eq!(detail["proposals"].as_array().unwrap().len(), 2);
+        assert_eq!(detail["document"]["status"], "inbox");
+        assert!(detail["document"]["category"].is_null());
+        std::fs::remove_dir_all(root).unwrap();
+    }
+
+    #[tokio::test]
     async fn upload_replay_metadata_search_review_and_archive_share_one_original() {
         let (app, root) = fixture();
         let upload = call(
@@ -449,6 +756,38 @@ mod tests {
         let created = json_body(upload).await;
         let id = created["document"]["id"].as_str().unwrap();
         assert_eq!(created["document"]["data_class"], "c2");
+        assert_eq!(created["document"]["status"], "inbox");
+        assert_eq!(
+            created["proposals"][0]["proposal"]["outcome"]["category"],
+            "Reference"
+        );
+        assert_eq!(
+            created["proposals"][0]["proposal"]["outcome"]["evidence"]["quote"],
+            "manual"
+        );
+        let proposal_id = created["proposals"][0]["id"].as_str().unwrap();
+        for outcome in ["accepted", "rejected"] {
+            let response = call(
+                &app,
+                "POST",
+                &format!("/api/documents/{id}/proposals/{proposal_id}/review"),
+                &format!(r#"{{"outcome":"{outcome}"}}"#),
+            )
+            .await;
+            assert_eq!(response.status(), StatusCode::OK);
+        }
+        let reviewed =
+            json_body(call(&app, "GET", &format!("/api/documents/{id}"), "").await).await;
+        assert_eq!(
+            reviewed["proposals"][0]["review_history"]
+                .as_array()
+                .unwrap()
+                .len(),
+            2
+        );
+        assert_eq!(reviewed["proposals"][0]["proposal"]["review"], "rejected");
+        assert_eq!(reviewed["document"]["status"], "inbox");
+        assert!(reviewed["document"]["category"].is_null());
         let replay = call(
             &app,
             "POST",
@@ -466,6 +805,22 @@ mod tests {
         assert!(listed["documents"][0].get("text").is_none());
         let detail = json_body(call(&app, "GET", &format!("/api/documents/{id}"), "").await).await;
         assert!(detail["text"].as_str().unwrap().contains("optics"));
+        assert_eq!(
+            detail["proposals"][0]["proposal"]["source"]["kind"],
+            "rules"
+        );
+        assert_eq!(
+            detail["proposals"][0]["proposal"]["outcome"]["category"],
+            "Reference"
+        );
+        assert_eq!(detail["proposals"][0]["proposal"]["review"], "rejected");
+        assert_eq!(
+            detail["proposals"][0]["review_history"]
+                .as_array()
+                .unwrap()
+                .len(),
+            2
+        );
         let filed = call(
             &app,
             "PATCH",

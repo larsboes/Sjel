@@ -1,0 +1,52 @@
+{
+  "purpose": "Development-only Apple Foundation Model prompt selection; the next fresh corpus is reserved for one-shot cross-source evaluation.",
+  "model": "apple-foundationmodel",
+  "model_revision": null,
+  "backend": "foundation-models",
+  "development_corpus": "clm-corpus-hybrid-v1.json",
+  "development_corpus_sha256": "a9c4212188d5c10a4956511895bc5e9b4e4e55f336d81efdbd4cf0d0b0c2ba0f",
+  "evidence_policy": {
+    "max_words": 20,
+    "max_characters": 160,
+    "must_be_exact_contiguous_source_substring": true
+  },
+  "selection_rule": "Maximize valid proposals; tie-break by category accuracy, then fewer over-limit quotes. If still tied, keep the shorter prompt.",
+  "selected_prompt": "documents-category-v2-evidence-bounded",
+  "variants": [
+    {
+      "id": "documents-category-v2-evidence-bounded",
+      "prompt_sha256": "c26705dfc7c98f30375a9ffbaed73834b5f8e793ef976d9eb1615b44b2760b3f",
+      "prompt": "Classify the supplied synthetic document by its primary purpose. Choose exactly one allowed category. Use the category descriptions. Return the shortest useful evidence as an exact, contiguous quote copied from the document text. The quote must have no more than 20 whitespace-separated words and no more than 160 characters. Do not paraphrase or add words.\nFinance: invoices, bills, receipts, payments, account statements, or reimbursements\nEvents: invitations, schedules, programs, tickets, or registration for gatherings and activities\nReference: manuals, instructions, technical guides, API documentation, or procedures",
+      "generation": {
+        "temperature": 0,
+        "max_tokens": 160
+      },
+      "category_correct": 48,
+      "category_accuracy": 1.0,
+      "valid_proposals": 45,
+      "valid_proposals_correct": 45,
+      "valid_proposal_precision": 1.0,
+      "valid_proposal_coverage": 0.9375,
+      "over_limit_evidence": 0,
+      "invalid_evidence": 3
+    },
+    {
+      "id": "documents-category-v3-exact-evidence",
+      "prompt_sha256": "034783e46871f1912f0cfa4d064a5fde828960c75d01517ffbfd1ec606dcbaa5",
+      "prompt": "Classify the supplied synthetic document by its primary purpose. Choose exactly one allowed category. Use the category descriptions. Return the shortest useful evidence as one exact, contiguous quote copied from the document text. It must contain no more than 20 whitespace-separated words and no more than 160 characters. Copy every character exactly. Do not use ellipses, omit words, normalize spelling or punctuation, paraphrase, or add words. If you cannot give an exact quote, return an empty evidence string.\nFinance: invoices, bills, receipts, payments, account statements, or reimbursements\nEvents: invitations, schedules, programs, tickets, or registration for gatherings and activities\nReference: manuals, instructions, technical guides, API documentation, or procedures",
+      "generation": {
+        "temperature": 0,
+        "max_tokens": 160
+      },
+      "category_correct": 48,
+      "category_accuracy": 1.0,
+      "valid_proposals": 45,
+      "valid_proposals_correct": 45,
+      "valid_proposal_precision": 1.0,
+      "valid_proposal_coverage": 0.9375,
+      "over_limit_evidence": 1,
+      "invalid_evidence": 2
+    }
+  ],
+  "warning": "Synthetic development results only; no personal documents were used and no production role is wired."
+}

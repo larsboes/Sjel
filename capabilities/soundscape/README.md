@@ -7,10 +7,18 @@ it owns what should be playing. The sound itself is made in the browser.
 
 ## Why this shape: the conductor is here, the synth is not
 
-Web Audio runs in a browser and cannot run anywhere else. A Rust process cannot
-generate this sound, and rendering audio here to stream it back would be a worse
-system for no gain: higher latency, an encoder in the path, and a server that has to
-stay up for a page to make noise.
+Web Audio runs in a browser and cannot run anywhere else. A Rust *server* cannot
+generate this sound for a page, and rendering audio here to stream it back would be a
+worse system for no gain: higher latency, an encoder in the path, and a server that
+has to stay up for a page to make noise.
+
+A native *client* is a different case, and it now exists: the GPUI app has an audio
+device and synthesizes this state itself in `apps/gpui/core/src/soundscape/`, ported
+from the browser engine's musical material. It reads and patches the same state
+through the endpoints below, so the conductor stays the one answer to "what should be
+playing". See [the GPUI README](../../apps/gpui/README.md#soundscape-a-window-with-its-own-synth).
+Nothing here changes for the browser: it still owns oscillators, scheduling and the
+arrangement clock on a page.
 
 So the split is not "backend and frontend". It is **intent and execution**. This
 process owns the preset, the six scene parameters, the layer mix, the seed and any
@@ -25,7 +33,7 @@ its own state and its own contract, per `CONTRIBUTING.md#placement-guide`.
 ### What this process deliberately does not own
 
 **The arrangement clock.** The musical phase is a function of the audio context's own time,
-which exists only in the browser. Publishing a phase from here would put two clocks
+which exists only in the surface that is playing. Publishing a phase from here would put two clocks
 in disagreement about the same bar, and the one that is wrong would be this one.
 `GET /api/soundscape/state` therefore carries no phase; the surface computes it.
 The conductor does own a session's duration and elapsed wall time because every

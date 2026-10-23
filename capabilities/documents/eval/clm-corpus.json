@@ -1,0 +1,14 @@
+[
+  {"id":"en-finance-invoice","language":"en","expected":"Finance","text":"Invoice from Northwind Utilities. Electricity supply for October. Amount due: 84.20 EUR. Payment deadline: November 15."},
+  {"id":"de-finance-bill","language":"de","expected":"Finance","text":"Rechnung der Beispielenergie GmbH. Stromverbrauch im Oktober: 214 kWh. Gesamtbetrag: 84,20 EUR. Fällig am 15. November."},
+  {"id":"en-finance-receipt","language":"en","expected":"Finance","text":"Payment receipt. Card payment accepted. Total paid: 38.50 EUR. Transaction reference: DEMO-1042."},
+  {"id":"de-finance-invoice","language":"de","expected":"Finance","text":"Zahlungserinnerung zur Rechnung 2026-104. Offener Betrag 126,00 EUR. Bitte überweisen Sie den Betrag bis zum 30. November."},
+  {"id":"en-events-conference","language":"en","expected":"Events","text":"You are invited to the Northstar Research Conference. The program begins at 09:00; registration closes on November 10."},
+  {"id":"de-events-conference","language":"de","expected":"Events","text":"Einladung zur Beispiel-Fachkonferenz. Das Programm startet um 09:00 Uhr. Die Anmeldung ist bis zum 10. November möglich."},
+  {"id":"en-events-workshop","language":"en","expected":"Events","text":"Workshop agenda: opening remarks at 10:00, three sessions, a lunch break, and a closing discussion at 16:00."},
+  {"id":"de-events-concert","language":"de","expected":"Events","text":"Eintrittskarte für das Beispielkonzert am 22. November. Einlass ab 19:00 Uhr, Beginn um 20:00 Uhr."},
+  {"id":"en-reference-manual","language":"en","expected":"Reference","text":"Installation manual. Connect the power cable, open Settings, select Network, and follow the setup instructions."},
+  {"id":"de-reference-guide","language":"de","expected":"Reference","text":"Benutzerhandbuch: Schließen Sie das Gerät an die Stromversorgung an. Öffnen Sie Einstellungen und folgen Sie der Anleitung zur Einrichtung."},
+  {"id":"en-reference-api","language":"en","expected":"Reference","text":"API reference for the fictional Atlas client. The document lists method signatures, parameter types, return values, and examples."},
+  {"id":"de-reference-documentation","language":"de","expected":"Reference","text":"Technische Dokumentation mit Übersicht, Konfigurationsbeispielen und einer Schritt-für-Schritt-Anleitung zur Fehlerbehebung."}
+]

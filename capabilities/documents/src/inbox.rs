@@ -1,4 +1,4 @@
-//! Non-recursive local intake. Planning reads directory metadata only.
+//! Local folder intake. Planning reads directory metadata only.
 
 use std::{
     fs::{self, File, Metadata},
@@ -23,6 +23,10 @@ pub struct InboxFile {
 }
 
 impl InboxFile {
+    pub fn path(&self) -> &Path {
+        &self.path
+    }
+
     /// Read a bounded original only if it still matches the planned regular file.
     ///
     /// # Errors
@@ -69,27 +73,45 @@ fn unchanged(before: &Metadata, after: &Metadata) -> bool {
 /// # Errors
 /// The directory is a symlink, the limit is zero, or directory metadata is unreadable.
 pub fn scan(directory: &Path, limit: usize) -> Result<Plan, LibraryError> {
+    scan_with(directory, limit, false, false)
+}
+
+/// [`scan`], optionally descending into subdirectories and admitting names the
+/// filename screen would exclude. Hidden directories and symlinks are never
+/// followed. Admitting sensitive names is an explicit operator decision for a
+/// folder the operator names; the bytes still stay local.
+///
+/// # Errors
+/// As [`scan`], or a subdirectory is unreadable.
+pub fn scan_with(
+    directory: &Path,
+    limit: usize,
+    recursive: bool,
+    include_sensitive: bool,
+) -> Result<Plan, LibraryError> {
     if limit == 0 || !fs::symlink_metadata(directory)?.is_dir() {
         return Err(LibraryError::Invalid(
             "inbox needs a real directory and a positive limit".into(),
         ));
     }
     let mut files = Vec::new();
-    for entry in fs::read_dir(directory)? {
-        let entry = entry?;
-        let metadata = fs::symlink_metadata(entry.path())?;
-        if !metadata.is_file() {
-            continue;
-        }
-        let Some(filename) = entry.file_name().to_str().map(str::to_owned) else {
-            continue;
-        };
-        if supported(&filename) {
-            files.push(InboxFile {
-                filename,
-                path: entry.path(),
-                metadata,
-            });
+    let mut pending = vec![directory.to_path_buf()];
+    while let Some(dir) = pending.pop() {
+        for entry in fs::read_dir(&dir)? {
+            let entry = entry?;
+            let metadata = fs::symlink_metadata(entry.path())?;
+            let Some(filename) = entry.file_name().to_str().map(str::to_owned) else {
+                continue;
+            };
+            if metadata.is_dir() && recursive && !filename.starts_with('.') {
+                pending.push(entry.path());
+            } else if metadata.is_file() && supported(&filename) {
+                files.push(InboxFile {
+                    filename,
+                    path: entry.path(),
+                    metadata,
+                });
+            }
         }
     }
     files.sort_by(|a, b| {
@@ -105,7 +127,7 @@ pub fn scan(directory: &Path, limit: usize) -> Result<Plan, LibraryError> {
     };
     let now = SystemTime::now();
     for file in files {
-        if sensitive_name(&file.filename) {
+        if !include_sensitive && sensitive_name(&file.filename) {
             plan.excluded += 1;
         } else if file.metadata.len() == 0
             || file.metadata.len() > MAX_BYTES as u64
@@ -128,8 +150,6 @@ fn supported(filename: &str) -> bool {
         matches!(
             extension.to_ascii_lowercase().as_str(),
             "pdf"
-                | "txt"
-                | "md"
                 | "doc"
                 | "docx"
                 | "xls"
@@ -140,7 +160,6 @@ fn supported(filename: &str) -> bool {
                 | "ods"
                 | "odp"
                 | "rtf"
-                | "csv"
                 | "epub"
                 | "pages"
                 | "numbers"
@@ -213,9 +232,9 @@ mod tests {
     #[test]
     fn latest_limit_precedes_sensitive_exclusions_without_backfill() {
         let root = scratch();
-        old_file(&root, "older.txt", 300);
+        old_file(&root, "older.docx", 300);
         old_file(&root, "invoice.pdf", 200);
-        old_file(&root, "SECRETS.txt", 100);
+        old_file(&root, "SECRETS.pdf", 100);
         let plan = scan(&root, 2).unwrap();
         assert_eq!(plan.excluded, 1);
         assert_eq!(plan.files.len(), 1);
@@ -227,11 +246,12 @@ mod tests {
     #[test]
     fn skips_links_subdirectories_unsupported_and_unsettled_files() {
         let root = scratch();
-        old_file(&root, "kept.MD", 100);
+        old_file(&root, "kept.PDF", 100);
         old_file(&root, "installer.dmg", 100);
-        fs::write(root.join("new.txt"), b"upload in progress").unwrap();
+        old_file(&root, "note.md", 100);
+        fs::write(root.join("new.pdf"), b"upload in progress").unwrap();
         fs::create_dir(root.join("nested.pdf")).unwrap();
-        std::os::unix::fs::symlink(root.join("kept.MD"), root.join("link.txt")).unwrap();
+        std::os::unix::fs::symlink(root.join("kept.PDF"), root.join("link.pdf")).unwrap();
         let plan = scan(&root, 10).unwrap();
         assert_eq!(plan.unready, 1);
         assert_eq!(plan.files.len(), 1);
@@ -240,14 +260,34 @@ mod tests {
     }
 
     #[test]
+    fn recursion_and_sensitive_names_are_opt_in() {
+        let root = scratch();
+        fs::create_dir(root.join("nested")).unwrap();
+        fs::create_dir(root.join(".hidden")).unwrap();
+        old_file(&root, "top.pdf", 100);
+        old_file(&root.join("nested"), "bank-letter.pdf", 100);
+        old_file(&root.join(".hidden"), "skipped.pdf", 100);
+        assert_eq!(scan(&root, 10).unwrap().files.len(), 1);
+        let screened = scan_with(&root, 10, true, false).unwrap();
+        assert_eq!((screened.files.len(), screened.excluded), (1, 1));
+        let admitted = scan_with(&root, 10, true, true).unwrap();
+        assert_eq!((admitted.files.len(), admitted.excluded), (2, 0));
+        assert!(admitted
+            .files
+            .iter()
+            .any(|f| f.path().ends_with("nested/bank-letter.pdf")));
+        fs::remove_dir_all(root).unwrap();
+    }
+
+    #[test]
     fn refuses_a_planned_file_replaced_by_a_symlink_or_changed() {
         let root = scratch();
-        old_file(&root, "input.txt", 100);
+        old_file(&root, "input.pdf", 100);
         let plan = scan(&root, 10).unwrap();
-        fs::write(root.join("input.txt"), b"different").unwrap();
+        fs::write(root.join("input.pdf"), b"different").unwrap();
         assert!(plan.files[0].read().is_err());
-        fs::remove_file(root.join("input.txt")).unwrap();
-        std::os::unix::fs::symlink("missing", root.join("input.txt")).unwrap();
+        fs::remove_file(root.join("input.pdf")).unwrap();
+        std::os::unix::fs::symlink("missing", root.join("input.pdf")).unwrap();
         assert!(plan.files[0].read().is_err());
         fs::remove_dir_all(root).unwrap();
     }

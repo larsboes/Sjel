@@ -344,6 +344,16 @@ impl ThemeMode {
         }
     }
 
+    /// The appearance to force on every window, or `None` to follow the system. Forcing it at the
+    /// window keeps the native glass, gpui-component's theme and the palette on one mode.
+    pub fn forced_appearance(self) -> Option<WindowAppearance> {
+        match self {
+            Self::System => None,
+            Self::Dark => Some(WindowAppearance::Dark),
+            Self::Light => Some(WindowAppearance::Light),
+        }
+    }
+
     pub fn is_dark(self, system_dark: bool) -> bool {
         match self {
             Self::System => system_dark,

@@ -1,0 +1,860 @@
+{
+  "model": "mlx-community/CLM-v0.1-8B-MLX-4bit",
+  "revision": "489b421bafc007e3ae409528d77006d26d362689",
+  "adapter": "loopback System One (/v1/systemone)",
+  "corpus": "clm-corpus-hybrid-v1.json",
+  "corpus_sha256": "a9c4212188d5c10a4956511895bc5e9b4e4e55f336d81efdbd4cf0d0b0c2ba0f",
+  "event_prompt": "gathering-material",
+  "category_descriptions": {
+    "Finance": "An invoice, bill, receipt, payment, or financial statement.",
+    "Reference": "A manual, guide, API reference, or general technical documentation.",
+    "Events": "Material for a gathering or public activity, such as a meeting, concert, workshop, talk, exhibition, or sports fixture; includes invitations, schedules, tickets, and registration details."
+  },
+  "samples": 48,
+  "correct": 40,
+  "accuracy": 0.8333,
+  "by_language": {
+    "de": {
+      "samples": 24,
+      "correct": 21,
+      "accuracy": 0.875
+    },
+    "en": {
+      "samples": 24,
+      "correct": 19,
+      "accuracy": 0.7917
+    }
+  },
+  "by_category": {
+    "Events": {
+      "samples": 16,
+      "correct": 10,
+      "accuracy": 0.625
+    },
+    "Finance": {
+      "samples": 16,
+      "correct": 16,
+      "accuracy": 1.0
+    },
+    "Reference": {
+      "samples": 16,
+      "correct": 14,
+      "accuracy": 0.875
+    }
+  },
+  "by_difficulty": {
+    "clear": {
+      "samples": 36,
+      "correct": 30,
+      "accuracy": 0.8333
+    },
+    "overlap": {
+      "samples": 12,
+      "correct": 10,
+      "accuracy": 0.8333
+    }
+  },
+  "confidence_margin_summary": {
+    "correct_mean": 0.5572,
+    "incorrect_mean": 0.2907,
+    "wrong_margin_ge_05": 1,
+    "note": "CLM margin is not calibrated; 0.5 is a descriptive bucket, not a filing threshold."
+  },
+  "confusion": {
+    "Events -> Events": 10,
+    "Events -> Finance": 5,
+    "Events -> Reference": 1,
+    "Finance -> Finance": 16,
+    "Reference -> Finance": 2,
+    "Reference -> Reference": 14
+  },
+  "misclassified": [
+    {
+      "id": "hy-en-events-orchestra",
+      "language": "en",
+      "expected": "Events",
+      "difficulty": "clear",
+      "predicted": "Finance",
+      "correct": false,
+      "confidence_margin": 0.306,
+      "probabilities": {
+        "Finance": 0.5373,
+        "Reference": 0.0614,
+        "Events": 0.4013
+      }
+    },
+    {
+      "id": "hy-en-events-exhibition",
+      "language": "en",
+      "expected": "Events",
+      "difficulty": "clear",
+      "predicted": "Finance",
+      "correct": false,
+      "confidence_margin": 0.3719,
+      "probabilities": {
+        "Finance": 0.5813,
+        "Reference": 0.0785,
+        "Events": 0.3402
+      }
+    },
+    {
+      "id": "hy-en-events-workshop-ticket",
+      "language": "en",
+      "expected": "Events",
+      "difficulty": "overlap",
+      "predicted": "Finance",
+      "correct": false,
+      "confidence_margin": 0.8124,
+      "probabilities": {
+        "Finance": 0.8749,
+        "Reference": 0.0611,
+        "Events": 0.064
+      }
+    },
+    {
+      "id": "hy-de-events-webinar",
+      "language": "de",
+      "expected": "Events",
+      "difficulty": "clear",
+      "predicted": "Finance",
+      "correct": false,
+      "confidence_margin": 0.0988,
+      "probabilities": {
+        "Finance": 0.3992,
+        "Reference": 0.3931,
+        "Events": 0.2077
+      }
+    },
+    {
+      "id": "hy-de-events-book-club",
+      "language": "de",
+      "expected": "Events",
+      "difficulty": "clear",
+      "predicted": "Reference",
+      "correct": false,
+      "confidence_margin": 0.1763,
+      "probabilities": {
+        "Finance": 0.195,
+        "Reference": 0.4509,
+        "Events": 0.3541
+      }
+    },
+    {
+      "id": "hy-de-events-town-hall",
+      "language": "de",
+      "expected": "Events",
+      "difficulty": "overlap",
+      "predicted": "Finance",
+      "correct": false,
+      "confidence_margin": 0.085,
+      "probabilities": {
+        "Finance": 0.39,
+        "Reference": 0.3148,
+        "Events": 0.2952
+      }
+    },
+    {
+      "id": "hy-en-reference-api",
+      "language": "en",
+      "expected": "Reference",
+      "difficulty": "clear",
+      "predicted": "Finance",
+      "correct": false,
+      "confidence_margin": 0.3043,
+      "probabilities": {
+        "Finance": 0.5362,
+        "Reference": 0.1972,
+        "Events": 0.2666
+      }
+    },
+    {
+      "id": "hy-en-reference-procedure",
+      "language": "en",
+      "expected": "Reference",
+      "difficulty": "clear",
+      "predicted": "Finance",
+      "correct": false,
+      "confidence_margin": 0.1709,
+      "probabilities": {
+        "Finance": 0.4473,
+        "Reference": 0.3449,
+        "Events": 0.2079
+      }
+    }
+  ],
+  "results": [
+    {
+      "id": "hy-en-finance-mobile-plan",
+      "language": "en",
+      "expected": "Finance",
+      "difficulty": "clear",
+      "predicted": "Finance",
+      "correct": true,
+      "confidence_margin": 0.4609,
+      "probabilities": {
+        "Finance": 0.6406,
+        "Reference": 0.0114,
+        "Events": 0.348
+      }
+    },
+    {
+      "id": "hy-en-finance-refund",
+      "language": "en",
+      "expected": "Finance",
+      "difficulty": "clear",
+      "predicted": "Finance",
+      "correct": true,
+      "confidence_margin": 0.8716,
+      "probabilities": {
+        "Finance": 0.9144,
+        "Reference": 0.0244,
+        "Events": 0.0611
+      }
+    },
+    {
+      "id": "hy-en-finance-card-summary",
+      "language": "en",
+      "expected": "Finance",
+      "difficulty": "clear",
+      "predicted": "Finance",
+      "correct": true,
+      "confidence_margin": 0.9878,
+      "probabilities": {
+        "Finance": 0.9919,
+        "Reference": 0.0019,
+        "Events": 0.0062
+      }
+    },
+    {
+      "id": "hy-en-finance-membership",
+      "language": "en",
+      "expected": "Finance",
+      "difficulty": "clear",
+      "predicted": "Finance",
+      "correct": true,
+      "confidence_margin": 0.2824,
+      "probabilities": {
+        "Finance": 0.5216,
+        "Reference": 0.0221,
+        "Events": 0.4563
+      }
+    },
+    {
+      "id": "hy-en-finance-reimbursement",
+      "language": "en",
+      "expected": "Finance",
+      "difficulty": "clear",
+      "predicted": "Finance",
+      "correct": true,
+      "confidence_margin": 0.7925,
+      "probabilities": {
+        "Finance": 0.8617,
+        "Reference": 0.0463,
+        "Events": 0.092
+      }
+    },
+    {
+      "id": "hy-en-finance-license-renewal",
+      "language": "en",
+      "expected": "Finance",
+      "difficulty": "clear",
+      "predicted": "Finance",
+      "correct": true,
+      "confidence_margin": 0.7677,
+      "probabilities": {
+        "Finance": 0.8452,
+        "Reference": 0.0782,
+        "Events": 0.0767
+      }
+    },
+    {
+      "id": "hy-en-finance-event-deposit",
+      "language": "en",
+      "expected": "Finance",
+      "difficulty": "overlap",
+      "predicted": "Finance",
+      "correct": true,
+      "confidence_margin": 0.6751,
+      "probabilities": {
+        "Finance": 0.7834,
+        "Reference": 0.0177,
+        "Events": 0.199
+      }
+    },
+    {
+      "id": "hy-en-finance-event-travel",
+      "language": "en",
+      "expected": "Finance",
+      "difficulty": "overlap",
+      "predicted": "Finance",
+      "correct": true,
+      "confidence_margin": 0.7244,
+      "probabilities": {
+        "Finance": 0.8163,
+        "Reference": 0.0277,
+        "Events": 0.156
+      }
+    },
+    {
+      "id": "hy-de-finance-mobile-plan",
+      "language": "de",
+      "expected": "Finance",
+      "difficulty": "clear",
+      "predicted": "Finance",
+      "correct": true,
+      "confidence_margin": 0.4015,
+      "probabilities": {
+        "Finance": 0.601,
+        "Reference": 0.26,
+        "Events": 0.139
+      }
+    },
+    {
+      "id": "hy-de-finance-refund",
+      "language": "de",
+      "expected": "Finance",
+      "difficulty": "clear",
+      "predicted": "Finance",
+      "correct": true,
+      "confidence_margin": 0.54,
+      "probabilities": {
+        "Finance": 0.6933,
+        "Reference": 0.1663,
+        "Events": 0.1404
+      }
+    },
+    {
+      "id": "hy-de-finance-card-summary",
+      "language": "de",
+      "expected": "Finance",
+      "difficulty": "clear",
+      "predicted": "Finance",
+      "correct": true,
+      "confidence_margin": 0.4785,
+      "probabilities": {
+        "Finance": 0.6524,
+        "Reference": 0.1416,
+        "Events": 0.206
+      }
+    },
+    {
+      "id": "hy-de-finance-membership",
+      "language": "de",
+      "expected": "Finance",
+      "difficulty": "clear",
+      "predicted": "Finance",
+      "correct": true,
+      "confidence_margin": 0.4006,
+      "probabilities": {
+        "Finance": 0.6004,
+        "Reference": 0.062,
+        "Events": 0.3376
+      }
+    },
+    {
+      "id": "hy-de-finance-reimbursement",
+      "language": "de",
+      "expected": "Finance",
+      "difficulty": "clear",
+      "predicted": "Finance",
+      "correct": true,
+      "confidence_margin": 0.2864,
+      "probabilities": {
+        "Finance": 0.5243,
+        "Reference": 0.1323,
+        "Events": 0.3434
+      }
+    },
+    {
+      "id": "hy-de-finance-license-renewal",
+      "language": "de",
+      "expected": "Finance",
+      "difficulty": "clear",
+      "predicted": "Finance",
+      "correct": true,
+      "confidence_margin": 0.2667,
+      "probabilities": {
+        "Finance": 0.5111,
+        "Reference": 0.4292,
+        "Events": 0.0597
+      }
+    },
+    {
+      "id": "hy-de-finance-event-deposit",
+      "language": "de",
+      "expected": "Finance",
+      "difficulty": "overlap",
+      "predicted": "Finance",
+      "correct": true,
+      "confidence_margin": 0.3047,
+      "probabilities": {
+        "Finance": 0.5365,
+        "Reference": 0.1541,
+        "Events": 0.3094
+      }
+    },
+    {
+      "id": "hy-de-finance-event-travel",
+      "language": "de",
+      "expected": "Finance",
+      "difficulty": "overlap",
+      "predicted": "Finance",
+      "correct": true,
+      "confidence_margin": 0.1367,
+      "probabilities": {
+        "Finance": 0.4245,
+        "Reference": 0.2803,
+        "Events": 0.2952
+      }
+    },
+    {
+      "id": "hy-en-events-garden-tour",
+      "language": "en",
+      "expected": "Events",
+      "difficulty": "clear",
+      "predicted": "Events",
+      "correct": true,
+      "confidence_margin": 0.3094,
+      "probabilities": {
+        "Finance": 0.3036,
+        "Reference": 0.1568,
+        "Events": 0.5396
+      }
+    },
+    {
+      "id": "hy-en-events-orchestra",
+      "language": "en",
+      "expected": "Events",
+      "difficulty": "clear",
+      "predicted": "Finance",
+      "correct": false,
+      "confidence_margin": 0.306,
+      "probabilities": {
+        "Finance": 0.5373,
+        "Reference": 0.0614,
+        "Events": 0.4013
+      }
+    },
+    {
+      "id": "hy-en-events-community-day",
+      "language": "en",
+      "expected": "Events",
+      "difficulty": "clear",
+      "predicted": "Events",
+      "correct": true,
+      "confidence_margin": 0.0808,
+      "probabilities": {
+        "Finance": 0.3495,
+        "Reference": 0.2633,
+        "Events": 0.3872
+      }
+    },
+    {
+      "id": "hy-en-events-webinar",
+      "language": "en",
+      "expected": "Events",
+      "difficulty": "clear",
+      "predicted": "Events",
+      "correct": true,
+      "confidence_margin": 0.3736,
+      "probabilities": {
+        "Finance": 0.2334,
+        "Reference": 0.1842,
+        "Events": 0.5824
+      }
+    },
+    {
+      "id": "hy-en-events-book-club",
+      "language": "en",
+      "expected": "Events",
+      "difficulty": "clear",
+      "predicted": "Events",
+      "correct": true,
+      "confidence_margin": 0.53,
+      "probabilities": {
+        "Finance": 0.1781,
+        "Reference": 0.1352,
+        "Events": 0.6867
+      }
+    },
+    {
+      "id": "hy-en-events-exhibition",
+      "language": "en",
+      "expected": "Events",
+      "difficulty": "clear",
+      "predicted": "Finance",
+      "correct": false,
+      "confidence_margin": 0.3719,
+      "probabilities": {
+        "Finance": 0.5813,
+        "Reference": 0.0785,
+        "Events": 0.3402
+      }
+    },
+    {
+      "id": "hy-en-events-workshop-ticket",
+      "language": "en",
+      "expected": "Events",
+      "difficulty": "overlap",
+      "predicted": "Finance",
+      "correct": false,
+      "confidence_margin": 0.8124,
+      "probabilities": {
+        "Finance": 0.8749,
+        "Reference": 0.0611,
+        "Events": 0.064
+      }
+    },
+    {
+      "id": "hy-en-events-town-hall",
+      "language": "en",
+      "expected": "Events",
+      "difficulty": "overlap",
+      "predicted": "Events",
+      "correct": true,
+      "confidence_margin": 0.424,
+      "probabilities": {
+        "Finance": 0.3337,
+        "Reference": 0.0503,
+        "Events": 0.616
+      }
+    },
+    {
+      "id": "hy-de-events-garden-tour",
+      "language": "de",
+      "expected": "Events",
+      "difficulty": "clear",
+      "predicted": "Events",
+      "correct": true,
+      "confidence_margin": 0.4378,
+      "probabilities": {
+        "Finance": 0.2831,
+        "Reference": 0.0916,
+        "Events": 0.6252
+      }
+    },
+    {
+      "id": "hy-de-events-orchestra",
+      "language": "de",
+      "expected": "Events",
+      "difficulty": "clear",
+      "predicted": "Events",
+      "correct": true,
+      "confidence_margin": 0.523,
+      "probabilities": {
+        "Finance": 0.2154,
+        "Reference": 0.1025,
+        "Events": 0.682
+      }
+    },
+    {
+      "id": "hy-de-events-community-day",
+      "language": "de",
+      "expected": "Events",
+      "difficulty": "clear",
+      "predicted": "Events",
+      "correct": true,
+      "confidence_margin": 0.4501,
+      "probabilities": {
+        "Finance": 0.1107,
+        "Reference": 0.256,
+        "Events": 0.6334
+      }
+    },
+    {
+      "id": "hy-de-events-webinar",
+      "language": "de",
+      "expected": "Events",
+      "difficulty": "clear",
+      "predicted": "Finance",
+      "correct": false,
+      "confidence_margin": 0.0988,
+      "probabilities": {
+        "Finance": 0.3992,
+        "Reference": 0.3931,
+        "Events": 0.2077
+      }
+    },
+    {
+      "id": "hy-de-events-book-club",
+      "language": "de",
+      "expected": "Events",
+      "difficulty": "clear",
+      "predicted": "Reference",
+      "correct": false,
+      "confidence_margin": 0.1763,
+      "probabilities": {
+        "Finance": 0.195,
+        "Reference": 0.4509,
+        "Events": 0.3541
+      }
+    },
+    {
+      "id": "hy-de-events-exhibition",
+      "language": "de",
+      "expected": "Events",
+      "difficulty": "clear",
+      "predicted": "Events",
+      "correct": true,
+      "confidence_margin": 0.4113,
+      "probabilities": {
+        "Finance": 0.1599,
+        "Reference": 0.2326,
+        "Events": 0.6075
+      }
+    },
+    {
+      "id": "hy-de-events-workshop-ticket",
+      "language": "de",
+      "expected": "Events",
+      "difficulty": "overlap",
+      "predicted": "Events",
+      "correct": true,
+      "confidence_margin": 0.4195,
+      "probabilities": {
+        "Finance": 0.242,
+        "Reference": 0.145,
+        "Events": 0.613
+      }
+    },
+    {
+      "id": "hy-de-events-town-hall",
+      "language": "de",
+      "expected": "Events",
+      "difficulty": "overlap",
+      "predicted": "Finance",
+      "correct": false,
+      "confidence_margin": 0.085,
+      "probabilities": {
+        "Finance": 0.39,
+        "Reference": 0.3148,
+        "Events": 0.2952
+      }
+    },
+    {
+      "id": "hy-en-reference-device",
+      "language": "en",
+      "expected": "Reference",
+      "difficulty": "clear",
+      "predicted": "Reference",
+      "correct": true,
+      "confidence_margin": 0.9888,
+      "probabilities": {
+        "Finance": 0.0059,
+        "Reference": 0.9925,
+        "Events": 0.0016
+      }
+    },
+    {
+      "id": "hy-en-reference-api",
+      "language": "en",
+      "expected": "Reference",
+      "difficulty": "clear",
+      "predicted": "Finance",
+      "correct": false,
+      "confidence_margin": 0.3043,
+      "probabilities": {
+        "Finance": 0.5362,
+        "Reference": 0.1972,
+        "Events": 0.2666
+      }
+    },
+    {
+      "id": "hy-en-reference-safety",
+      "language": "en",
+      "expected": "Reference",
+      "difficulty": "clear",
+      "predicted": "Reference",
+      "correct": true,
+      "confidence_margin": 0.8645,
+      "probabilities": {
+        "Finance": 0.0709,
+        "Reference": 0.9096,
+        "Events": 0.0194
+      }
+    },
+    {
+      "id": "hy-en-reference-style",
+      "language": "en",
+      "expected": "Reference",
+      "difficulty": "clear",
+      "predicted": "Reference",
+      "correct": true,
+      "confidence_margin": 0.226,
+      "probabilities": {
+        "Finance": 0.4817,
+        "Reference": 0.484,
+        "Events": 0.0343
+      }
+    },
+    {
+      "id": "hy-en-reference-troubleshooting",
+      "language": "en",
+      "expected": "Reference",
+      "difficulty": "clear",
+      "predicted": "Reference",
+      "correct": true,
+      "confidence_margin": 0.7631,
+      "probabilities": {
+        "Finance": 0.1486,
+        "Reference": 0.8421,
+        "Events": 0.0093
+      }
+    },
+    {
+      "id": "hy-en-reference-procedure",
+      "language": "en",
+      "expected": "Reference",
+      "difficulty": "clear",
+      "predicted": "Finance",
+      "correct": false,
+      "confidence_margin": 0.1709,
+      "probabilities": {
+        "Finance": 0.4473,
+        "Reference": 0.3449,
+        "Events": 0.2079
+      }
+    },
+    {
+      "id": "hy-en-reference-events-api",
+      "language": "en",
+      "expected": "Reference",
+      "difficulty": "overlap",
+      "predicted": "Reference",
+      "correct": true,
+      "confidence_margin": 0.7922,
+      "probabilities": {
+        "Finance": 0.1291,
+        "Reference": 0.8615,
+        "Events": 0.0095
+      }
+    },
+    {
+      "id": "hy-en-reference-performance",
+      "language": "en",
+      "expected": "Reference",
+      "difficulty": "overlap",
+      "predicted": "Reference",
+      "correct": true,
+      "confidence_margin": 0.9293,
+      "probabilities": {
+        "Finance": 0.0468,
+        "Reference": 0.9529,
+        "Events": 0.0003
+      }
+    },
+    {
+      "id": "hy-de-reference-device",
+      "language": "de",
+      "expected": "Reference",
+      "difficulty": "clear",
+      "predicted": "Reference",
+      "correct": true,
+      "confidence_margin": 0.9362,
+      "probabilities": {
+        "Finance": 0.015,
+        "Reference": 0.9575,
+        "Events": 0.0275
+      }
+    },
+    {
+      "id": "hy-de-reference-api",
+      "language": "de",
+      "expected": "Reference",
+      "difficulty": "clear",
+      "predicted": "Reference",
+      "correct": true,
+      "confidence_margin": 0.7185,
+      "probabilities": {
+        "Finance": 0.0186,
+        "Reference": 0.8123,
+        "Events": 0.169
+      }
+    },
+    {
+      "id": "hy-de-reference-safety",
+      "language": "de",
+      "expected": "Reference",
+      "difficulty": "clear",
+      "predicted": "Reference",
+      "correct": true,
+      "confidence_margin": 0.8284,
+      "probabilities": {
+        "Finance": 0.0511,
+        "Reference": 0.8856,
+        "Events": 0.0633
+      }
+    },
+    {
+      "id": "hy-de-reference-style",
+      "language": "de",
+      "expected": "Reference",
+      "difficulty": "clear",
+      "predicted": "Reference",
+      "correct": true,
+      "confidence_margin": 0.4627,
+      "probabilities": {
+        "Finance": 0.1066,
+        "Reference": 0.6418,
+        "Events": 0.2516
+      }
+    },
+    {
+      "id": "hy-de-reference-troubleshooting",
+      "language": "de",
+      "expected": "Reference",
+      "difficulty": "clear",
+      "predicted": "Reference",
+      "correct": true,
+      "confidence_margin": 0.8629,
+      "probabilities": {
+        "Finance": 0.0273,
+        "Reference": 0.9086,
+        "Events": 0.0641
+      }
+    },
+    {
+      "id": "hy-de-reference-procedure",
+      "language": "de",
+      "expected": "Reference",
+      "difficulty": "clear",
+      "predicted": "Reference",
+      "correct": true,
+      "confidence_margin": 0.1698,
+      "probabilities": {
+        "Finance": 0.1156,
+        "Reference": 0.4465,
+        "Events": 0.4379
+      }
+    },
+    {
+      "id": "hy-de-reference-events-api",
+      "language": "de",
+      "expected": "Reference",
+      "difficulty": "overlap",
+      "predicted": "Reference",
+      "correct": true,
+      "confidence_margin": 0.7671,
+      "probabilities": {
+        "Finance": 0.0356,
+        "Reference": 0.8447,
+        "Events": 0.1196
+      }
+    },
+    {
+      "id": "hy-de-reference-performance",
+      "language": "de",
+      "expected": "Reference",
+      "difficulty": "overlap",
+      "predicted": "Reference",
+      "correct": true,
+      "confidence_margin": 0.6431,
+      "probabilities": {
+        "Finance": 0.1365,
+        "Reference": 0.7621,
+        "Events": 0.1014
+      }
+    }
+  ],
+  "warning": "Synthetic results only; this corpus is not representative of personal documents and does not authorize automatic filing."
+}

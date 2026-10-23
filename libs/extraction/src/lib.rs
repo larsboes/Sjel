@@ -212,11 +212,10 @@ pub trait Extractor: Sync {
 /// it sits last — and it owns exactly one class, `Image`, because pixels are the
 /// one input with no text layer to try first.
 ///
-/// `Pdf` is deliberately NOT its second class. A PDF that defeated rung 1 needs
-/// rasterizing before rung 2 can see it, `tools/visocr` renders page one of a
-/// PDF and nothing else, and a registry entry here would turn that into a silent
-/// first-page read. [`ladder::read_scanned`] is where a caller that has already
-/// rasterized comes in.
+/// `Pdf` is deliberately NOT its second class: the registry answers a class
+/// with the cheapest rung, and a PDF tries its own text layer first. A PDF that
+/// defeated rung 1 goes to [`ladder::read_scanned`], which reads every page
+/// through `tools/visocr`'s PDFKit renderer.
 ///
 /// A consumer that builds this crate without the `xberg` feature has no PDF
 /// rung and gets `None` for that class. That is the same answer, for the same

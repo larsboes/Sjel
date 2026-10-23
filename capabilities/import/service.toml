@@ -1,0 +1,8 @@
+# import: sorts a folder to the capability that owns each file and records every outcome.
+kind          = "process"
+name          = "import"
+command       = ["target/release/sjel-import", "serve"]
+build         = ["cargo", "build", "--locked", "--release", "--bin", "sjel-import"]
+port          = "8107"
+health_path   = "/health"
+proxy_api_only = "true"

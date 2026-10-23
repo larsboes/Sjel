@@ -3,14 +3,157 @@
 A native desktop surface for Sjel. It is intentionally outside the production Cargo workspace: it
 does not change Sjel's shipping UI, capability processes, or production dependency lockfiles.
 
-The app has four pages. **Home** shows what needs you now: agent writes that wait for approval,
+The app has twelve pages, and ⌘1–⌘9 open the first nine in sidebar order. **Home** shows what needs you now: agent writes that wait for approval,
 kept-running capabilities that do not answer, calendar entries still ahead today and tomorrow, and
 the recent agent writes. **Capabilities** lists every capability with start and stop. **Projects**
 lists projects, tasks and notes, draws tasks as a table with due and priority edited in place, and
-edits a note as blocks (`src/editor.rs`, `src/blocks.rs`). **Ask** streams the model's answer and
+edits a note as blocks (`ui/src/projects.rs`, `ui/src/editor.rs`, `core/src/blocks.rs`). The
+iPhone uses the same page. **Ask** streams the model's answer and
 read-only tool activity into the transcript; the composer steers an active run at its next model
 step. Its API keys panel uses a masked input and stores keys directly in the OS keychain; the
 keys never go through the Ask service or the conversation.
+
+**Feed** triages the comms feed of the last 30 days: New, Kept and Dismissed, with a News or
+Media filter, newest day first and the best-ranked entry first within a day. The keys are the
+dashboard's: j and k move, s keeps, d dismisses, u undoes, Enter or o opens the reader, ⇧O opens the
+original, and Escape goes back. Decisions go through `POST /comms/feed/:id/status` only, which
+records them for the ranking model. The shell exchanges the app's deployment token for comms'
+own credential (`capabilities/sjel-status/src/proxy.rs`). Digests, cloud processing, the review
+queue and the library stay in the dashboard for now.
+
+Feed's **Mail** tab triages Gmail proposals (comms `/triage`): Pending, Archived, Trash, Dismissed
+or All, filtered by category and grouped in the order `core/src/mail.rs` owns. x selects; d
+dismisses from Sjel, w toggles Gmail's Waiting label, e archives and # trashes, and the category
+buttons recategorize. Every write goes through `POST /comms/triage/bulk`. Archive, trash and the
+Tax or Receipts category (which redacts the stored subject and preview) ask first; Enter confirms
+and Escape cancels. o opens the thread in Gmail. Sweeps, reconciling and classification passes
+stay in the dashboard for now. The list renders 200 rows at a time.
+
+**Inbox** sorts the capture inbox (comms `/captures`): links and thoughts from `sjel capture`, the
+iOS share sheet or its own field, where `#buy`, `#look`, `#go` and `#learn` set the tag. The
+rules in `core/src/capture.rs` suggest where each item goes: wishlist (inventory), feed or places.
+Nothing moves until r or the row's button sends it, or Apply sends every suggestion. e marks
+done, d dismisses, t cycles the tag, o opens the link and n types a new capture. The rules
+mirror `dashboard/src/lib/capture.ts`; change both together until the web page retires.
+
+**Calendar** draws the calendar capability as a month grid or a week of day columns, with the
+selected day's entries beside it. Arrows or h/j/k/l move the day, [ and ] page, t is today, m and
+w switch the view, e steps through the day's entries, n adds one (title, time or all day, kind,
+commitment) and ⌫ deletes the selected one after Enter confirms. A day window is `[from, to)`
+(`capabilities/calendar/src/store.rs`); grids and the entry draft live in `core/src/calendar.rs`.
+Contexts, rhythms, free days, Google import and export, and trip drafts stay in the dashboard.
+
+**Documents** is a native local library view over the Documents capability. It filters Inbox, Filed, or All; searches filenames, extracted titles, categories and project labels; sorts by filename; and opens one record's locally extracted text and original PDF. The reader shows independent source proposals, exact evidence, disagreement, and append-only review history. Agree, Reject and Override record a review only; **File as …** remains a separate explicit filing action. Regenerate rules creates a new proposal run without replacing earlier records. Model-based classification is not wired yet.
+
+**Travel** opens a trip library, with current and upcoming trips first and past trips behind
+Show past trips. Open a trip for four subpages: **Overview**, **Itinerary**, **Map** and
+**Saved items**. Overview lists the locations; Itinerary shows the saved stages and dated items;
+Saved items includes activities, stays and bookings with their recorded properties and source
+links. A stop's Show on map action opens Map at that location. Selecting a numbered map marker
+shows its name, address and coordinates. Trips returns to the library, and each subpage opens at
+the top of its scroll area.
+
+The Mac sidebar, ⌘5 and `sjel://travel` open Travel; `sjel://map` opens its map subpage. Trip links
+use `sjel://travel/<id>/overview`, `/itinerary`, `/map` or `/items`, and Copy link keeps the trip
+and subpage. The iPhone's Travel tab uses the same views. `ui/src/travel.rs` owns the state, with
+rendering and reads under `ui/src/travel/`; `core/src/travel/` holds detail contracts and routes.
+The clients read `/trips/api/plans` and load `/trips/api/plans/<id>` when a trip is opened, using
+the Mac shell or the phone's signed device client. Successful reads are saved locally with their
+timestamps. Open a trip while connected once to retain its items for offline reading. Refresh
+failures keep the previous answer visible. Creating plans and editing bookings use the dashboard.
+
+The default map uses OpenStreetMap raster tiles, GPUI images and labelled stops, without a webview or
+another rendering dependency. Drag to pan; the scroll wheel and a trackpad pinch zoom, both about
+the pointer rather than the centre. Fit trip and the zoom buttons sit on the map. The map takes the
+wheel while the pointer is over it, so the page scrolls when the pointer is anywhere else. On
+desktop the stops list sits beside the map; on iPhone it sits below. Selecting a stop recenters the
+map and highlights its marker. Lines connect saved stage endpoints; they are not calculated road
+or rail routes. Only the visible Map subpage requests tiles, four at a time, and any request for a
+camera the gesture has already left is cancelled. Attribution stays visible. Viewed tiles are
+cached on disk; **Cached only** prevents new tile requests. Loading and map errors appear over the
+map, and missing areas offer retry.
+
+**Imagery is never thrown away mid-gesture.** The camera is a fractional zoom, and both map paths
+draw what is already on screen with the gesture applied: a tile of a coarser level is drawn at
+`256 · 2^(zoom − tile.zoom)`, and a tile that is missing is covered by its nearest cached ancestor
+upscaled, so a zoom or a pan never reveals a blank square. Requests go out once the gesture has been
+quiet for 140 ms (`MAP_SETTLE` in `ui/src/travel/map.rs`). Kept tiles are bounded at four levels
+around the current one, 400 tiles in all. The loading chip is reserved for "nothing to look at
+yet"; it does not blink over imagery that is already there.
+
+This cache covers areas already viewed, not a downloaded city or country. OpenStreetMap's
+[standard tile policy](https://operations.osmfoundation.org/policies/tiles/) prohibits bulk and
+offline prefetch, so downloadable map regions need a provider that explicitly permits them.
+The phone needs the Mac once to obtain trips, but loads map tiles directly over its own connection.
+Opening Map loads its visible area automatically.
+
+**A typed place gets its coordinate here, and only here.** Trips stores a place as it was typed:
+the dashboard's place field mints `place:<slug>` with a null coordinate unless the operator picks
+a suggested station, and `trips draft-intent` does the same on purpose. Both maps downstream then
+had nothing to draw — the world overview in this app, and no pin in the dashboard. `core/src/travel/places.rs`
+resolves those names through `POST /places/api/geocode` (the capability that owns geocoding,
+started on demand) and keeps the answers in `places.json` beside the plan snapshot. A coordinate
+that arrives with the record is never overridden. The cache is why the map is instant on a second
+open and still correct offline; the dashboard reads the stored record and stays unresolved until
+the capability resolves it server-side. Places the geocoder cannot place keep reading
+"Coordinates not available" — the map falls back to its world overview and the stops that do
+resolve still draw. While the first answer is in flight the map holds back its world-overview tile
+request rather than spending it on twelve tiles the fitted view throws away.
+
+### Native vector map prototype (macOS)
+
+Build and install the experimental MapLibre Native path with:
+
+```sh
+apps/gpui/install --native-maps
+```
+
+Travel → Map starts with OpenFreeMap's vector basemap. **Use raster map** switches back to the
+existing implementation. This requires no account, API key or webview. The feature flag is
+`native-maps`; the installer uses the binding's pinned precompiled native core and includes its
+license notices. The installed app inherits `SJEL_GPUI_NATIVE_MAPS=1`, so its own Rebuild action
+keeps the prototype enabled. `SJEL_GPUI_NATIVE_MAPS=0 apps/gpui/install` restores the default build.
+
+`ui/src/travel/native_renderer.rs` owns the native engine; `vector.rs` owns a single worker and
+one pending request. MapLibre objects stay on that thread. Camera changes render an image,
+convert RGBA to GPUI's BGRA format and compose it beneath the GPUI itinerary markers. The
+camera accounts for MapLibre's 512px tile convention versus the raster view's 256px convention.
+Stale camera results are discarded.
+
+Every wait goes through the binding's own `StyleLoadRequest::wait` / `RenderRequest::wait`. Those
+park on the thread's MapLibre run loop, which on macOS is CoreFoundation: a completion callback
+only runs while that loop runs, so a hand-rolled `RunLoopHandle::tick()` + sleep loop never
+delivers one and each attempt spends its whole budget before failing. Measured here: the same
+Berlin frame renders in 837 ms through `wait()` and never completes through tick polling — which
+is what used to make opening Map stall for 12 s and then fall back to raster.
+
+The renderer is built with a pixel ratio equal to the window's scale factor, so a Retina window
+gets one image pixel per device pixel at the same geographic extent; the frame is drawn at point
+size. The worker rebuilds its map when that ratio changes. The wait itself carries no deadline, so
+`vector.rs` caps the caller side at 12 seconds and switches to raster when it expires.
+
+Between renders the frame follows the gesture: it is drawn scaled by `2^(zoom − frame.zoom)` and
+centred on where the frame's own centre projects at the current camera, so a pinch or a pan answers
+immediately and the crisp frame arrives one settle later. That is why the vector path does not need
+MapLibre's continuous renderer: every frame of that path is a full Metal render plus a CPU readback
+of the whole image, paid sixty times a second to show a map that is redrawn once per gesture.
+
+This prototype copies pixels rather than sharing Metal textures. It does not yet establish
+smooth continuous rendering, iPhone support or downloadable offline regions.
+Vector mode requires a network connection; the raster cache controls apply only to raster mode.
+The default iPhone build still uses the shared raster view. The adoption verdict, exact pin and
+licenses are recorded under `maplibre-native-rs` in the root `upstreams.toml`.
+
+A standalone render probe writes a public Berlin map without opening a window or reading trips:
+
+```sh
+MLN_PRECOMPILE=1 cargo run --manifest-path apps/gpui/Cargo.toml -p sjel-gpui-ui \
+  --example native-map --features native-maps --locked -- /tmp/sjel-maplibre-berlin.png
+```
+
+The process needs access to a Metal device. A sandbox without GPU access cannot validate the
+render, even when compilation succeeds; the adapter reports that condition before entering
+native core.
 
 Every block keeps its markdown verbatim, so a save writes back exactly what the editor did not
 change; a note that does not round-trip opens read-only. A save follows each pause in typing and
@@ -30,11 +173,9 @@ without that stream keeps the timer.
 A project's records arrive without their content, and the note editor reads the one record it
 opens. A task's done, due and priority go to the capability, which owns the frontmatter edit and
 answers with the record's new frontmatter, so the table patches one row instead of reading the
-project again. `core/src/data/` holds every read and write against the shell, and
-`src/data/mod.rs` keeps the half that needs a window: a read settles into the slot the page draws
-and never runs twice at once, and a write toasts its outcome and then lets the caller re-read only
-what it changed. The phone drives the same `Remote` and the same note cache through its own event
-loop, because none of that half needs GPUI.
+project again. `core/src/data/` holds every read and write, and `ui/src/data.rs` keeps the half
+that needs a window: a read settles into the slot the page draws and never runs twice at once, and
+a write toasts its outcome and then lets the caller re-read only what it changed.
 
 Where a local `axon.db` is readable, `Repo` in `core/src/data/repo.rs` answers projects, tasks,
 calendar and record reads from it and falls back to the shell otherwise, over one LibSQL handle
@@ -51,13 +192,14 @@ and the frame the click lands in: 0.42 µs at p50 for a 21 KB note, in a release
 the app makes to a record drops that record, so a kept note is never older than the last write, and
 the editor leaves the body it saved in place of the one it opened.
 
-The phone reads a different file for a different reason. `Board` in `core/src/data/board.rs` is
-the view model a records list draws: it holds the rows and the count of writes still queued, and
-answers the tasks and the notes without a view filtering them. Every write lands in the replica and
-in `_offline_mutations` first, so the list behaves the same whether or not the Mac answers, and
-`core/src/sync.rs` replays that queue later. The Mac app keeps no replica of its own — it reads the
-host's database through `Repo` — so `Board::default_path` names a file only in the phone's app
-container, and `SJEL_REPLICA_PATH` is how the Mac tries the phone's view.
+The phone reads a different file for a different reason. Its Projects page runs over
+`Repo::replica`, which reads the phone's replica and never asks a shell. Every write lands in the
+replica and in `_offline_mutations` first, so the page behaves the same whether or not the Mac
+answers, and `core/src/sync.rs` replays that queue later. A project made on the phone is its hub
+note until the sync creates the project on the Mac. `Board` in `core/src/data/board.rs` keeps the
+count of writes still queued, for the badge and the sync. The Mac app keeps no replica of its own.
+It reads the host's database through `Repo`, so `Board::default_path` names a file only in the
+phone's app container, and `SJEL_REPLICA_PATH` is how the Mac tries the phone's view.
 
 The app and the web dashboard share one set of destinations. `core/src/route.rs` copies the paths
 and labels of `dashboard/src/lib/nav.ts`, and a test fails when the two differ. A page with a
@@ -85,10 +227,13 @@ The move has four steps:
    open again.
 1. **Done.** A command palette, measured for start time and resident memory against Tauri.
 2. **In progress.** The dashboard's routes, ported into this app: `context`, `calendar` and `inbox`
-   first, with the native `capabilities` page as the reference. GPUI draws the charts. The map
-   comes last, with `gpui-webview` as the fallback. Home, Capabilities, Projects and Ask are here;
-   `/context` is next, and it joins calendar, trips and finance rather than repeating one
-   capability's page.
+   first, with the native `capabilities` page as the reference. GPUI draws the charts. Travel now
+   has a shared native map view: raster maps work on both clients, with the MapLibre vector
+   prototype available on macOS. The dashboard keeps its vector map. Home, Today, Capabilities,
+   Systems, Projects, Ask, Travel, Feed, Inbox, Calendar, Documents, Backup, Finance, People,
+   Inventory, Software and Import are native. `/systems` is the one that is not a capability's
+   page: it puts macmon's live sample beside storage, updates, the runtime profile, the hourly
+   host watch and the agent's reach, each read from whoever already owns that answer (`src/systems.rs`).
 3. Test and review, then decide: switch, keep both, or stop. Svelte and Tauri stay live until that
    review.
 
@@ -101,7 +246,7 @@ GPUI snapshot (step 0 above).
 |---|---|
 | `.` | The Mac app |
 | `core/` | What both apps share: the destinations, the shell client, a paired device's client, the offline replica and the two-way sync. No GPUI types. |
-| `ui/` | What both apps share for GPUI: semantic design tokens (Palette), density rules, layout primitives, document/block renderer and navigation bar. |
+| `ui/` | What both apps share for GPUI: semantic design tokens (Palette), density rules, layout primitives, document/block renderer, the Projects page, the note editor and navigation bar. |
 | `ios/` | The iOS app: GPUI content in `src/lib.rs`, the UIKit host in `host/` |
 
 On iOS, UIKit owns the window, the navigation bar and the safe areas. GPUI draws the content in a
@@ -137,8 +282,10 @@ answers at launch, after every local write, and on the Sync button; a phone that
 the Mac this launch never starts one, because its queue is the only copy of those edits.
 
 The iOS app works with no Mac at all (`research/offline-on-the-phone.md`, "Decided 2026-10-22: the
-phone stands on its own"). It opens on **Tasks & Notes**, the phone's own records with the
-queued/synced badge and the report of the last sync. A fresh install starts empty and queues
+phone stands on its own"). It opens on **Projects**, the Mac's Projects page over the phone's own
+records, under the queued/synced badge and the report of the last sync. Tables drop the project and
+type columns at phone width. The software keyboard opens with a note and after a tap into a text
+field, because gpui-mobile raises none on focus. A fresh install starts empty and queues
 nothing, so pairing later sends the Mac only what the person wrote. A store that cannot open says
 so on that page instead of falling back to memory. **Settings** holds the pairing: the found Mac,
 the Join tap, and the capability health list it answers with once the owner allows the device. It
@@ -161,14 +308,69 @@ The record is `Sjel Life` (the store name `Sjel` is taken), the bundle `dev.sjel
 App Store Connect key can and cannot do, and the one-time steps in the web UI, are in
 [the operations guide](../../docs/operations/index.md).
 
+## Soundscape: a window with its own synth
+
+`⌘⇧M`, the sidebar's ♪ row, or **Window ▸ Soundscape** opens a second window: the player, with a
+drawn field, a transport, a preset row, an eleven-value mixer and the timed scenarios.
+
+It is the one page that is a window rather than a destination, because a soundscape is something
+you leave on beside a note, not a page you read inside it.
+
+### Why there is a synthesizer in this app
+
+The dashboard makes this sound in the browser, and `capabilities/soundscape/README.md` explains why
+that split is right for a page: the conductor owns *what* should be playing, the browser owns
+oscillators and the clock. A native app has an audio device, so the same contract lands differently
+-- the conductor still owns intent (preset, parameters, layers, seed, session), and
+`core/src/soundscape/` executes it against the device's own sample clock.
+
+- `core/src/soundscape/music.rs` is the browser's musical material, moved to Rust: the chord tables,
+  the EDM motif, the scape scales and roots, the six drift LFOs, the arrangement arc. Two surfaces
+  that sound different while both claiming to play "focus" would be worse than one surface.
+- `synth.rs`, `fx.rs` and `engine.rs` are not a port: voices are fixed slots in an array with a
+  closed-form envelope instead of scheduled Web Audio nodes, the room is Freeverb rather than a
+  convolution of generated noise (a six-second impulse is a twelve-second FFT), and there is no
+  lookahead scheduler because the audio callback *is* the clock. Each of those files says so where
+  it deviates.
+- `src/audio.rs` is the Mac's device, through `cpal`. The stream lives in a `Global`, not in the
+  view, so closing the window does not cut the music.
+- `src/viz.rs` draws the field from the synth's own spectrum: seven ridges, one per slice of the
+  bands, drifting at their own rates, with a ring per kick and a comet per note. It is not the
+  dashboard's fluid sim -- that one is a GPU solver in a browser canvas -- and it is not a
+  simulation at all: every number in it comes from what is sounding.
+
+The conductor stays the only source of truth. Every control writes a *patch* (`POST
+/soundscape/api/soundscape/state`), never a whole state, because the dashboard and the phone drive
+the same session; the window polls the conductor every three seconds so another surface's change
+arrives here on its own. When the conductor is unreachable the window keeps sounding the last known
+intent and says so in the strip -- it writes nothing, and it never becomes a second store.
+
+| Key | Action |
+|---|---|
+| `space` | Play or pause |
+| `⇧⌘N` | Next preset |
+| `⌘⇧M` | Open or raise the window |
+| `⌘W` | Close it; the app keeps running and the music keeps playing |
+
+A bar is its own control: press anywhere on the track to set the value, drag to sweep it. A dragged
+value reaches the synth immediately and the conductor at most every 180 ms, so the sound never lags
+the hand and a sweep is one write rather than dozens.
+
+`SJEL_GPUI_AUDIO_PROBE=<seconds>` is the check for "there is no sound": it starts the synth on the
+real device, prints the measured level, spectrum and event counts for that many seconds, and quits
+with a verdict. `SJEL_GPUI_SOUNDSCAPE=1` opens the window at launch and `=play` also starts it
+through the conductor, which is what a screenshot test or a quick listen needs.
+
 ## Keys
 
 | Key | Action |
 |---|---|
 | ⌘K | Search pages and dashboard destinations |
-| ⌘1, ⌘2, ⌘3, ⌘4 | Home, Capabilities, Projects, Ask |
+| ⌘1 … ⌘9 | Home, Today, Capabilities, Systems, Projects, Ask, Travel, Feed, Inbox |
+| `g` + a letter | The rest by chord: `g x` Systems, `g u` Import, `g ,` Settings |
 | ⌘R | Refresh |
 | ⌘D | Open the current page in the dashboard |
+| ⌘⇧M | Open the Soundscape window |
 | J / K, ↓ / ↑ | Select the next or previous row |
 | ↩ | Run the selected row's main action: Allow, Start, or open the calendar in the dashboard |
 | ⌘⌫ | Run the selected row's costly action: Deny or Stop |
@@ -181,7 +383,7 @@ a paragraph, then joins it to the block above; `# `, `- `, `[] `, `1. ` or `> ` 
 paragraph's start changes its kind. `⌘S` saves, `⌘[` goes back to the project, and `/` in an empty
 paragraph opens the block menu (also on the `⋮⋮` handle, which also drags). Only the block with the
 caret shows its markdown; every other block shows its formatting with the markers hidden
-(`src/inline.rs`).
+(`core/src/inline.rs`).
 
 A project page shows its tasks as a table above its notes (`src/tasks.rs`): open first, then due
 date, then priority. A click on the due date edits it (↩ saves, leaving keeps the old date), a click
@@ -204,11 +406,19 @@ cargo run          # development
 
 ## Testing without taking focus
 
+When a sandbox blocks PID inspection, Interceptor can report a live daemon as stopped or owned
+by another user. Confirm its loopback `/health` response and process ownership before changing
+the installation. Use `interceptor --ws` for browser and native commands against the running
+daemon; this transport avoids the CLI's process probe. `preview` selects it explicitly. A
+successful `interceptor --ws macos trust` and a background screenshot verify native access;
+`interceptor --ws contexts --verbose` verifies the browser extension. Do not reset permissions
+or reinstall solely because the PID probe failed.
+
 These checks run while you keep working in other apps. None of them activates the app.
 
 | Command | What it checks |
 |---|---|
-| `cargo test --workspace` | Routes, calendar rules, the shell client and its stream parser, and keyboard navigation in a headless GPUI window |
+| `cargo test --workspace` | Routes, calendar rules, the shell client and its stream parser, keyboard navigation in a headless GPUI window, and the synth (every preset, eight bars, envelopes, the room, the spectrum) |
 | `./preview [page] [light\|dark]` | Screenshot of the installed app, through Interceptor |
 | `./bench-scroll [page]` | CPU cost of one scroll frame, from the app's own scroll run |
 | `SJEL_GPUI_BENCH_NOTE=<record path> ./bench-scroll projects` | CPU cost of one keystroke in that note; saving is off |
@@ -224,13 +434,15 @@ measured. Run `./install` first: both scripts use the installed release build.
 | `SJEL_GPUI_NO_ACTIVATE=1` | Start and follow `sjel://` links without taking focus |
 | `SJEL_GPUI_FLOAT=1` | Open the window in the bottom-right corner, above other apps |
 | `SJEL_GPUI_OPEN=sjel://…` | Open this destination after start |
-| `SJEL_GPUI_APPEARANCE=light\|dark` | Preview a palette without changing the system setting |
+| `SJEL_GPUI_APPEARANCE=light\|dark` | Preview a palette without changing the system setting or the mode saved in Settings (⌘,) |
 | `SJEL_GPUI_OPAQUE=1` | Draw an opaque window instead of the blurred one |
 | `SJEL_GPUI_NO_GLASS=1` | Draw the normal sidebar instead of the glass one |
 | `SJEL_GPUI_FRAMES=<file>` | Log the timings of each frame (`src/frames.rs`) |
 | `SJEL_GPUI_BENCH_SCROLL=1` | Scroll the page down and up, then quit |
 | `SJEL_GPUI_NO_SAVE=1` | Edit notes without writing them, to try the editor on real notes |
 | `SJEL_GPUI_BENCH_NOTE=<record path>` | Open that note with saving off, type 240 characters, then quit |
+| `SJEL_GPUI_SOUNDSCAPE=1\|play` | Open the Soundscape window at launch, and with `play` start it through the conductor |
+| `SJEL_GPUI_AUDIO_PROBE=<seconds>` | Run the synth on the real device, print what it measures, and quit |
 
 The app icon comes from `brand/sjel-icon-maskable.svg`. `Resources/make-icon` builds
 `Resources/AppIcon.icns` from it. Run it again after a change to the brand mark.

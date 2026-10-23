@@ -14,16 +14,26 @@ use gpui_kit::component::scroll::ScrollableElement;
 use gpui_kit::component::{IconName, IndexPath, Theme, WindowExt};
 use gpui_kit::{
     actions, div, prelude::*, px, rgb, rgba, Action, App, Context, Entity, FocusHandle, Focusable,
-    KeyBinding, SharedString, Subscription, Window, WindowAppearance,
+    KeyBinding, ScrollHandle, SharedString, Subscription, Window, WindowAppearance,
 };
 
 use crate::ask::Ask;
+use crate::backup::{self, BackupPage};
+use crate::calendar_view::CalendarPage;
+use crate::context_view::ContextPage;
 use crate::data::{self, Busy, Remote, Repo};
+use crate::documents::Documents;
+use crate::feed::Feed;
+use crate::finance_view::FinancePage;
+use crate::inbox::Inbox;
+use crate::inventory_view::InventoryPage;
+use crate::people_view::PeoplePage;
 use crate::projects::Projects;
 use crate::route::{self, Destination, Page, Target};
 use crate::selection::{Item, Selection};
 use crate::shell::{
-    self, AgentView, CalendarEntry, GlobalTask, NodeHealth, ShellError, Snapshot, SoundscapeState,
+    self, AgentView, Backups, CalendarEntry, GlobalTask, NodeHealth, ShellError, Snapshot,
+    SoundscapeState,
 };
 use crate::theme::{AppearanceSettings, GlassStyle, Palette};
 use crate::{capabilities, header, home, sidebar};
@@ -33,10 +43,12 @@ actions!(
     [
         /// Search pages and dashboard destinations.
         OpenPalette,
-        GoHome,
-        GoCapabilities,
-        GoProjects,
-        GoAsk,
+        /// Focus the active page's search field or open the search palette.
+        FocusSearch,
+        /// Step to the next page in the sidebar.
+        NextPage,
+        /// Step to the previous page in the sidebar.
+        PrevPage,
         Refresh,
         /// Open the current page in the web dashboard, logged in.
         OpenInDashboard,
@@ -47,10 +59,22 @@ actions!(
         /// Deny or stop the selected row.
         RunSecondary,
         ClearSelection,
-        /// Toggle the appearance and transparency panel.
-        ToggleAppearancePanel,
-        /// Toggle the application update popover.
-        ToggleUpdatePopover,
+        /// Turn to the previous page of the open document.
+        DocPrevPage,
+        /// Turn to the next page of the open document.
+        DocNextPage,
+        /// Toggle 1x / 2x zoom on the open document reader.
+        DocToggleZoom,
+        /// Open Settings at the section it showed last.
+        OpenSettings,
+        /// Open Settings at Appearance.
+        OpenAppearance,
+        /// Open the soundscape player window.
+        OpenSoundscape,
+        /// Toggle playback of the soundscape ambient synthesizer.
+        ToggleSoundscape,
+        /// Advance to the next ambient soundscape preset.
+        CycleSoundscapePreset,
         /// Check git repository for newer commits.
         CheckForUpdates,
         /// Trigger background rebuild and install of Sjel Desktop.
@@ -58,17 +82,61 @@ actions!(
     ]
 );
 
+/// Open a page. One action serves every page, so a page added to `Page::ALL` gets its ⌘ number,
+/// sidebar hint, palette row and Go menu item from `nav_pages` without another edit.
+#[derive(Clone, PartialEq, gpui::Action)]
+#[action(namespace = sjel, no_json)]
+pub struct GoTo(pub Page);
+
+/// The pages the sidebar, ⌘1–⌘9 and the Go menu list, in that order. Settings has ⌘, instead.
+pub fn nav_pages() -> impl Iterator<Item = Page> {
+    Page::ALL.into_iter().filter(|page| *page != Page::Settings)
+}
+
+fn page_icon(page: Page) -> IconName {
+    match page {
+        Page::Home | Page::Software => IconName::LayoutDashboard,
+        Page::Context => IconName::Sun,
+        Page::Capabilities => IconName::Cpu,
+        Page::Systems => IconName::MemoryStick,
+        Page::Projects | Page::Documents | Page::Import => IconName::Folder,
+        Page::Ask => IconName::Bot,
+        Page::Travel => IconName::Globe,
+        Page::Feed => IconName::BookOpen,
+        Page::Inbox => IconName::Inbox,
+        Page::Calendar => IconName::Calendar,
+        Page::Backup => IconName::HardDrive,
+        Page::Finance => IconName::ChartPie,
+        Page::People => IconName::CircleUser,
+        Page::Inventory => IconName::Folder,
+        Page::Settings => IconName::Settings,
+    }
+}
+
 /// Workspace key bindings. Navigation keys bind to the "Workspace" context, which only the page
 /// frame carries, so they stay quiet while the palette's query field has focus.
 pub fn bind_keys(cx: &mut App) {
     cx.bind_keys([
         KeyBinding::new("cmd-k", OpenPalette, None),
-        KeyBinding::new("cmd-1", GoHome, None),
-        KeyBinding::new("cmd-2", GoCapabilities, None),
-        KeyBinding::new("cmd-3", GoProjects, None),
-        KeyBinding::new("cmd-4", GoAsk, None),
+        KeyBinding::new("cmd-f", FocusSearch, None),
         KeyBinding::new("cmd-r", Refresh, None),
         KeyBinding::new("cmd-d", OpenInDashboard, None),
+        KeyBinding::new("cmd-,", OpenSettings, None),
+        KeyBinding::new("cmd-[", ClearSelection, None),
+        KeyBinding::new("escape", ClearSelection, None),
+        // Sequential page cycling
+        KeyBinding::new("cmd-alt-right", NextPage, None),
+        KeyBinding::new("shift-cmd-]", NextPage, None),
+        KeyBinding::new("ctrl-tab", NextPage, None),
+        KeyBinding::new("cmd-alt-left", PrevPage, None),
+        KeyBinding::new("shift-cmd-[", PrevPage, None),
+        KeyBinding::new("ctrl-shift-tab", PrevPage, None),
+        // Soundscape ambient audio controls
+        KeyBinding::new("cmd-alt-space", ToggleSoundscape, None),
+        KeyBinding::new("shift-cmd-u", ToggleSoundscape, None),
+        KeyBinding::new("cmd-alt-p", CycleSoundscapePreset, None),
+        // Workspace scoped navigation & selection
+        KeyBinding::new("/", FocusSearch, Some("Workspace")),
         KeyBinding::new("j", SelectNext, Some("Workspace")),
         KeyBinding::new("down", SelectNext, Some("Workspace")),
         KeyBinding::new("k", SelectPrevious, Some("Workspace")),
@@ -76,7 +144,57 @@ pub fn bind_keys(cx: &mut App) {
         KeyBinding::new("enter", RunPrimary, Some("Workspace")),
         KeyBinding::new("space", RunPrimary, Some("Workspace")),
         KeyBinding::new("cmd-backspace", RunSecondary, Some("Workspace")),
-        KeyBinding::new("escape", ClearSelection, Some("Workspace")),
+        KeyBinding::new("[", DocPrevPage, Some("Workspace")),
+        KeyBinding::new("left", DocPrevPage, Some("Workspace")),
+        KeyBinding::new("pageup", DocPrevPage, Some("Workspace")),
+        KeyBinding::new("]", DocNextPage, Some("Workspace")),
+        KeyBinding::new("right", DocNextPage, Some("Workspace")),
+        KeyBinding::new("pagedown", DocNextPage, Some("Workspace")),
+        KeyBinding::new("z", DocToggleZoom, Some("Workspace")),
+        KeyBinding::new("cmd-=", DocToggleZoom, Some("Workspace")),
+        KeyBinding::new("cmd-+", DocToggleZoom, Some("Workspace")),
+        // Vim chords for fast page jumps
+        KeyBinding::new("g h", GoTo(Page::Home), Some("Workspace")),
+        KeyBinding::new("g o", GoTo(Page::Context), Some("Workspace")),
+        KeyBinding::new("g t", GoTo(Page::Context), Some("Workspace")),
+        KeyBinding::new("g m", GoTo(Page::Capabilities), Some("Workspace")),
+        KeyBinding::new("g p", GoTo(Page::Projects), Some("Workspace")),
+        KeyBinding::new("g a", GoTo(Page::Ask), Some("Workspace")),
+        KeyBinding::new("g v", GoTo(Page::Travel), Some("Workspace")),
+        KeyBinding::new("g e", GoTo(Page::Feed), Some("Workspace")),
+        KeyBinding::new("g n", GoTo(Page::Inbox), Some("Workspace")),
+        KeyBinding::new("g c", GoTo(Page::Calendar), Some("Workspace")),
+        KeyBinding::new("g d", GoTo(Page::Documents), Some("Workspace")),
+        KeyBinding::new("g b", GoTo(Page::Backup), Some("Workspace")),
+        KeyBinding::new("g f", GoTo(Page::Finance), Some("Workspace")),
+        KeyBinding::new("g r", GoTo(Page::People), Some("Workspace")),
+        KeyBinding::new("g i", GoTo(Page::Inventory), Some("Workspace")),
+        KeyBinding::new("g s", GoTo(Page::Software), Some("Workspace")),
+        KeyBinding::new("g u", GoTo(Page::Import), Some("Workspace")),
+        KeyBinding::new("g x", GoTo(Page::Systems), Some("Workspace")),
+        KeyBinding::new("g ,", GoTo(Page::Settings), Some("Workspace")),
+    ]);
+    cx.bind_keys(
+        nav_pages()
+            .zip(1..=9)
+            .map(|(page, n)| KeyBinding::new(&format!("cmd-{n}"), GoTo(page), None)),
+    );
+    cx.bind_keys([
+        KeyBinding::new("cmd-0", GoTo(Page::Documents), None),
+        KeyBinding::new("shift-cmd-d", GoTo(Page::Documents), None),
+        KeyBinding::new("shift-cmd-b", GoTo(Page::Backup), None),
+        KeyBinding::new("shift-cmd-f", GoTo(Page::Finance), None),
+        KeyBinding::new("shift-cmd-p", GoTo(Page::People), None),
+        KeyBinding::new("shift-cmd-i", GoTo(Page::Inventory), None),
+        KeyBinding::new("shift-cmd-s", GoTo(Page::Software), None),
+        KeyBinding::new("shift-cmd-c", GoTo(Page::Calendar), None),
+        KeyBinding::new("shift-cmd-t", GoTo(Page::Travel), None),
+        KeyBinding::new("shift-cmd-k", GoTo(Page::Projects), None),
+        KeyBinding::new("shift-cmd-a", GoTo(Page::Ask), None),
+        KeyBinding::new("shift-cmd-e", GoTo(Page::Feed), None),
+        KeyBinding::new("shift-cmd-n", GoTo(Page::Inbox), None),
+        KeyBinding::new("shift-cmd-h", GoTo(Page::Home), None),
+        KeyBinding::new("shift-cmd-o", GoTo(Page::Context), None),
     ]);
 }
 
@@ -91,19 +209,39 @@ pub struct Workspace {
     pub calendar: Remote<Vec<CalendarEntry>>,
     pub focus_tasks: Remote<Vec<GlobalTask>>,
     pub soundscape: Remote<SoundscapeState>,
+    pub backups: Remote<Backups>,
     pub projects: Entity<Projects>,
     pub ask: Entity<Ask>,
+    pub travel: Entity<sjel_gpui_ui::travel::Travel>,
+    pub documents: Entity<Documents>,
+    pub feed: Entity<Feed>,
+    pub inbox: Entity<Inbox>,
+    pub calendar_page: Entity<CalendarPage>,
+    pub context_page: Entity<ContextPage>,
+    pub finance_page: Entity<FinancePage>,
+    pub people_page: Entity<PeoplePage>,
+    pub backup_page: Entity<BackupPage>,
+    pub inventory_page: Entity<InventoryPage>,
+    pub software: Entity<crate::software::Software>,
+    pub import: Entity<crate::import::ImportPage>,
+    pub systems: Entity<crate::systems::SystemsPage>,
     /// Approval ids and capability names with a request in flight.
     pub busy: Busy,
     pub selection: Selection,
+    /// The page list in the sidebar. At eighteen pages it is taller than a small window, so the
+    /// column scrolls and the selected row is brought into view when the page changes.
+    pub nav_scroll: ScrollHandle,
     /// True once the shell pushes its answers, so the timer stops reading them.
     streaming: bool,
-    pub show_appearance_panel: bool,
     pub appearance_settings: AppearanceSettings,
+    /// The section Settings shows.
+    pub settings_section: crate::settings::Section,
     pub update_info: Option<crate::update::UpdateInfo>,
-    pub show_update_popover: bool,
     pub rebuild_state: crate::update::RebuildState,
     focus: FocusHandle,
+    /// Set when the page changes. The old page's field may have had focus and is gone from the
+    /// tree, which would leave every shortcut with no path to this view.
+    refocus: bool,
     _appearance: Option<Subscription>,
     frames: Option<crate::frames::FrameProbe>,
     #[cfg(target_os = "macos")]
@@ -114,8 +252,9 @@ pub struct Workspace {
 
 impl Workspace {
     pub fn new(endpoint: &str, window: &mut Window, cx: &mut Context<Self>) -> Self {
-        let appearance = cx.observe_window_appearance(window, |_, window, cx| {
+        let appearance = cx.observe_window_appearance(window, |view, window, cx| {
             Theme::sync_system_appearance(Some(window), cx);
+            view.sync_kit_accent(cx);
             cx.notify();
         });
         Theme::sync_system_appearance(Some(window), cx);
@@ -124,6 +263,24 @@ impl Workspace {
         let repo = Repo::new(shell::Shell::new(endpoint).map(std::sync::Arc::new));
         let projects = cx.new(|_| Projects::new(repo.clone()));
         let ask = cx.new(|_| Ask::new(repo.clone()));
+        let travel = cx.new(|_| {
+            sjel_gpui_ui::travel::Travel::new(
+                repo.shell().ok().map(sjel_gpui_core::travel::Source::Shell),
+                sjel_gpui_ui::Density::Desktop,
+            )
+        });
+        let documents = cx.new(|_| Documents::new(repo.clone()));
+        let feed = cx.new(|cx| Feed::new(repo.clone(), cx));
+        let inbox = cx.new(|cx| Inbox::new(repo.clone(), cx));
+        let calendar_page = cx.new(|cx| CalendarPage::new(repo.clone(), cx));
+        let context_page = cx.new(|cx| ContextPage::new(repo.clone(), cx));
+        let finance_page = cx.new(|cx| FinancePage::new(repo.clone(), cx));
+        let people_page = cx.new(|cx| PeoplePage::new(repo.clone(), cx));
+        let backup_page = cx.new(|cx| BackupPage::new(repo.clone(), cx));
+        let inventory_page = cx.new(|cx| InventoryPage::new(repo.clone(), cx));
+        let software = cx.new(|_| crate::software::Software::new(repo.clone()));
+        let import = cx.new(|_| crate::import::ImportPage::new(repo.clone()));
+        let systems = cx.new(|_| crate::systems::SystemsPage::new(repo.clone()));
         let appearance_settings = AppearanceSettings::load();
         let mut workspace = Self {
             page: Page::Home,
@@ -133,16 +290,31 @@ impl Workspace {
             calendar: Remote::default(),
             focus_tasks: Remote::default(),
             soundscape: Remote::default(),
+            backups: Remote::default(),
             projects,
             ask,
+            travel,
+            documents,
+            feed,
+            inbox,
+            calendar_page,
+            context_page,
+            finance_page,
+            people_page,
+            backup_page,
+            inventory_page,
+            software,
+            import,
+            systems,
             busy: Busy::default(),
             selection: Selection::default(),
+            nav_scroll: ScrollHandle::new(),
             streaming: false,
             focus,
-            show_appearance_panel: false,
+            refocus: false,
             appearance_settings,
+            settings_section: crate::settings::Section::default(),
             update_info: None,
-            show_update_popover: false,
             rebuild_state: crate::update::RebuildState::Idle,
             _appearance: Some(appearance),
             frames: crate::frames::FrameProbe::from_env(),
@@ -151,6 +323,7 @@ impl Workspace {
             #[cfg(target_os = "macos")]
             native_glass_attempted: false,
         };
+        workspace.sync_kit_accent(cx);
         workspace.refresh(cx);
         workspace.check_updates(cx);
         workspace.follow(cx);
@@ -188,16 +361,86 @@ impl Workspace {
 
     pub fn go(&mut self, page: Page, cx: &mut Context<Self>) {
         if self.page != page {
+            let previous = self.page;
+            if previous == Page::Travel {
+                self.travel.update(cx, |travel, _| travel.deactivate());
+            }
+            // Leaving Systems stops its clocks: three beats that ask the machine a question are
+            // worth nothing while the page is not drawn.
+            if previous == Page::Systems {
+                self.systems
+                    .update(cx, |systems, cx| systems.deactivate(cx));
+            }
             self.page = page;
+            self.refocus = true;
             self.selection.reset();
+            self.reveal_page(page, cx);
             if page == Page::Projects {
                 self.projects
                     .update(cx, |projects, cx| projects.load_projects(cx));
             } else if page == Page::Ask {
                 self.ask.update(cx, |ask, cx| ask.focus_input(cx));
+            } else if page == Page::Travel {
+                self.travel.update(cx, |travel, cx| travel.activate(cx));
+            } else if page == Page::Backup {
+                self.backup_page.update(cx, |b, cx| b.activate(cx));
+            } else if page == Page::Software {
+                self.software.update(cx, |software, cx| software.load(cx));
+            } else if page == Page::Import {
+                self.import.update(cx, |import, cx| import.load(cx));
+            } else if page == Page::Systems {
+                self.systems.update(cx, |systems, cx| systems.activate(cx));
+            } else if page == Page::Documents {
+                self.documents
+                    .update(cx, |documents, cx| documents.load(cx));
+            } else if page == Page::Feed {
+                self.feed.update(cx, |feed, cx| feed.activate(cx));
+            } else if page == Page::Inbox {
+                self.inbox.update(cx, |inbox, cx| inbox.activate(cx));
+            } else if page == Page::Calendar {
+                self.calendar_page
+                    .update(cx, |calendar, cx| calendar.activate(cx));
+            } else if page == Page::Context {
+                self.context_page
+                    .update(cx, |context, cx| context.activate(cx));
+            } else if page == Page::Finance {
+                self.finance_page
+                    .update(cx, |finance, cx| finance.activate(cx));
+            } else if page == Page::People {
+                self.people_page
+                    .update(cx, |people, cx| people.activate(cx));
+            } else if page == Page::Inventory {
+                self.inventory_page.update(cx, |p, cx| p.activate(cx));
             }
         }
         cx.notify();
+    }
+
+    /// Brings the open page's row to the top of the sidebar list.
+    ///
+    /// One request is not enough. A scroll target is resolved against the rows the viewport
+    /// has painted, so the first request can only reach as far as the list had already been
+    /// scrolled, and each further frame reaches a little further. Four frames covers the
+    /// eighteen rows, and a list that fits its window is four no-ops.
+    fn reveal_page(&mut self, page: Page, cx: &mut Context<Self>) {
+        let Some(index) = nav_pages().position(|listed| listed == page) else {
+            return;
+        };
+        cx.spawn(async move |weak, cx| {
+            for _ in 0..4 {
+                let requested = weak.update(cx, |view, cx| {
+                    view.nav_scroll.scroll_to_top_of_item(index);
+                    cx.notify();
+                });
+                if requested.is_err() {
+                    return;
+                }
+                cx.background_executor()
+                    .timer(Duration::from_millis(8))
+                    .await;
+            }
+        })
+        .detach();
     }
 
     /// Follows the shell's change stream. Until a frame arrives the timer keeps reading health
@@ -255,6 +498,16 @@ impl Workspace {
                 |s| async move { s.agent().await },
             );
         }
+        // Only while the page is open: the answer reads a receipt per capability.
+        if self.page == Page::Backup {
+            data::read(
+                cx,
+                self,
+                |w| &mut w.backups,
+                &repo,
+                |s| async move { s.backups().await },
+            );
+        }
         let (from, to) = crate::calendar::range(chrono::Local::now().naive_local());
         let repo = self.repo.clone();
         data::read_repo(
@@ -309,7 +562,6 @@ impl Workspace {
             return;
         };
         self.rebuild_state = crate::update::RebuildState::Building;
-        self.show_update_popover = true;
         cx.notify();
         window.push_notification(
             Notification::info("Rebuilding Sjel Desktop in background..."),
@@ -515,6 +767,32 @@ impl Workspace {
         );
     }
 
+    /// Starts a backup of every capability with a contract. Each run is accepted and returns;
+    /// the poll shows them finish. Runs of different capabilities may overlap by design.
+    pub fn back_up_all(&mut self, window: &mut Window, cx: &mut Context<Self>) {
+        let names: Vec<String> = self
+            .backups
+            .value
+            .iter()
+            .flat_map(|b| b.backups.iter().map(|status| status.capability.clone()))
+            .collect();
+        let repo = self.repo.clone();
+        data::write(
+            cx,
+            window,
+            self,
+            &repo,
+            data::Press::once(|w| &mut w.busy, backup::BACK_UP_ALL, "Backup started."),
+            move |s| async move {
+                for name in names {
+                    s.backup(&name).await?;
+                }
+                Ok(())
+            },
+            |this, _, cx| this.refresh(cx),
+        );
+    }
+
     /// Opens `path` in the browser, logged in with a single-use ticket.
     pub fn open_dashboard(&mut self, path: String, window: &mut Window, cx: &mut Context<Self>) {
         let shell = match self.repo.shell() {
@@ -537,7 +815,18 @@ impl Workspace {
 
     pub fn open_target(&mut self, target: Target, window: &mut Window, cx: &mut Context<Self>) {
         match target {
+            Target::Native(Page::Travel) => {
+                self.go(Page::Travel, cx);
+                self.travel.update(cx, |travel, cx| {
+                    travel.open_route(sjel_gpui_core::travel::TravelRoute::Trips, cx)
+                });
+            }
             Target::Native(page) => self.go(page, cx),
+            Target::Travel(route) => {
+                self.go(Page::Travel, cx);
+                self.travel
+                    .update(cx, |travel, cx| travel.open_route(route, cx));
+            }
             Target::Ask(question) => {
                 self.go(Page::Ask, cx);
                 self.ask.update(cx, |ask, cx| ask.submit(question, cx));
@@ -564,19 +853,11 @@ impl Workspace {
             let (native, web) = (native.clone(), web.clone());
             let pages = CommandGroup::new()
                 .label("Go to")
-                .items(native.iter().map(|page| {
-                    let item = CommandItem::new().label(page.label());
+                .items(native.iter().map(|&page| {
+                    let item = CommandItem::new().label(page.label()).icon(page_icon(page));
                     match page {
-                        Page::Home => item
-                            .icon(IconName::LayoutDashboard)
-                            .action(GoHome.boxed_clone()),
-                        Page::Capabilities => item
-                            .icon(IconName::Cpu)
-                            .action(GoCapabilities.boxed_clone()),
-                        Page::Projects => {
-                            item.icon(IconName::Folder).action(GoProjects.boxed_clone())
-                        }
-                        Page::Ask => item.icon(IconName::Bot).action(GoAsk.boxed_clone()),
+                        Page::Settings => item.action(OpenSettings.boxed_clone()),
+                        _ => item.action(GoTo(page).boxed_clone()),
                     }
                 }));
             let actions = CommandGroup::new().label("Actions").items([
@@ -593,13 +874,19 @@ impl Workspace {
                     .icon(IconName::RotateCw)
                     .action(RebuildApp.boxed_clone()),
                 CommandItem::new()
-                    .label("Appearance & Transparency")
+                    .label("Appearance")
                     .icon(IconName::Palette)
-                    .action(ToggleAppearancePanel.boxed_clone()),
+                    .keywords(["theme", "dark", "light", "accent", "glass", "transparency"])
+                    .action(OpenAppearance.boxed_clone()),
                 CommandItem::new()
                     .label("Open this page in the dashboard")
                     .icon(IconName::ExternalLink)
                     .action(OpenInDashboard.boxed_clone()),
+                CommandItem::new()
+                    .label("Soundscape")
+                    .icon(IconName::Play)
+                    .keywords(["music", "audio", "focus", "ambient", "lofi", "player"])
+                    .action(OpenSoundscape.boxed_clone()),
             ]);
             let dashboard = CommandGroup::new()
                 .label("Open in dashboard")
@@ -637,27 +924,45 @@ impl Workspace {
         window.focus(&query, cx);
     }
 
-    fn on_go_home(&mut self, _: &GoHome, _: &mut Window, cx: &mut Context<Self>) {
-        self.go(Page::Home, cx);
-    }
-
-    fn on_go_capabilities(&mut self, _: &GoCapabilities, _: &mut Window, cx: &mut Context<Self>) {
-        self.go(Page::Capabilities, cx);
-    }
-
-    fn on_go_projects(&mut self, _: &GoProjects, _: &mut Window, cx: &mut Context<Self>) {
-        self.go(Page::Projects, cx);
-    }
-
-    fn on_go_ask(&mut self, _: &GoAsk, _: &mut Window, cx: &mut Context<Self>) {
-        self.go(Page::Ask, cx);
+    fn on_go_to(&mut self, GoTo(page): &GoTo, _: &mut Window, cx: &mut Context<Self>) {
+        self.go(*page, cx);
     }
 
     fn on_refresh(&mut self, _: &Refresh, _: &mut Window, cx: &mut Context<Self>) {
+        self.refresh_current_page(cx);
+    }
+
+    pub fn refresh_current_page(&mut self, cx: &mut Context<Self>) {
         self.refresh(cx);
         if self.page == Page::Projects {
             self.projects
                 .update(cx, |projects, cx| projects.load_projects(cx));
+        } else if self.page == Page::Travel {
+            self.travel.update(cx, |travel, cx| travel.refresh(cx));
+        } else if self.page == Page::Documents {
+            self.documents
+                .update(cx, |documents, cx| documents.load(cx));
+        } else if self.page == Page::Feed {
+            self.feed.update(cx, |feed, cx| feed.refresh(cx));
+        } else if self.page == Page::Inbox {
+            self.inbox.update(cx, |inbox, cx| inbox.load(cx));
+        } else if self.page == Page::Calendar {
+            self.calendar_page
+                .update(cx, |calendar, cx| calendar.refresh(cx));
+        } else if self.page == Page::Context {
+            self.context_page
+                .update(cx, |context, cx| context.refresh(cx));
+        } else if self.page == Page::Finance {
+            self.finance_page
+                .update(cx, |finance, cx| finance.refresh(cx));
+        } else if self.page == Page::People {
+            self.people_page.update(cx, |people, cx| people.refresh(cx));
+        } else if self.page == Page::Backup {
+            self.backup_page.update(cx, |b, cx| b.refresh(cx));
+        } else if self.page == Page::Inventory {
+            self.inventory_page.update(cx, |p, cx| p.refresh(cx));
+        } else if self.page == Page::Systems {
+            self.systems.update(cx, |p, cx| p.refresh(cx));
         }
     }
 
@@ -670,24 +975,64 @@ impl Workspace {
         self.open_dashboard(self.page.href().to_owned(), window, cx);
     }
 
-    fn on_toggle_appearance_panel(
+    fn on_open_settings(&mut self, _: &OpenSettings, _: &mut Window, cx: &mut Context<Self>) {
+        self.open_settings(None, cx);
+    }
+
+    fn on_open_appearance(&mut self, _: &OpenAppearance, _: &mut Window, cx: &mut Context<Self>) {
+        self.open_settings(Some(crate::settings::Section::Appearance), cx);
+    }
+
+    /// The player is its own window, so this hands the gesture to `soundscape::open`.
+    fn on_open_soundscape(&mut self, _: &OpenSoundscape, _: &mut Window, cx: &mut Context<Self>) {
+        crate::soundscape::open(cx, crate::soundscape::Mode::Full);
+    }
+
+    /// Opens Settings, at `section` when one is given and at the last one shown otherwise.
+    pub fn open_settings(
         &mut self,
-        _: &ToggleAppearancePanel,
-        _: &mut Window,
+        section: Option<crate::settings::Section>,
         cx: &mut Context<Self>,
     ) {
-        self.show_appearance_panel = !self.show_appearance_panel;
+        if let Some(section) = section {
+            self.settings_section = section;
+        }
+        if section == Some(crate::settings::Section::Updates) && self.update_info.is_none() {
+            self.check_updates(cx);
+        }
+        self.go(Page::Settings, cx);
+    }
+
+    /// Saves `next` and applies it. A theme mode is forced on the window, so the native glass and
+    /// gpui-component's widgets turn with the palette; the window's appearance observer then
+    /// syncs the rest.
+    pub fn set_appearance(&mut self, next: AppearanceSettings, cx: &mut Context<Self>) {
+        if next.theme_mode != self.appearance_settings.theme_mode {
+            cx.set_window_appearance(next.theme_mode.forced_appearance());
+        }
+        self.appearance_settings = next;
+        if let Err(error) = next.save() {
+            eprintln!("sjel-gpui: appearance not saved: {error}");
+        }
+        self.sync_kit_accent(cx);
         cx.notify();
     }
 
-    fn on_toggle_update_popover(
-        &mut self,
-        _: &ToggleUpdatePopover,
-        _: &mut Window,
-        cx: &mut Context<Self>,
-    ) {
-        self.show_update_popover = !self.show_update_popover;
-        cx.notify();
+    /// gpui-component paints primary buttons, switches and focus rings in its own blue. This
+    /// gives them the accent the palette uses.
+    fn sync_kit_accent(&self, cx: &mut App) {
+        let dark = Theme::global(cx).is_dark();
+        let accent: gpui_kit::Hsla = rgb(self.appearance_settings.accent.color_rgb(dark)).into();
+        Theme::update(cx, |theme| {
+            theme.colors.primary = accent;
+            theme.colors.primary_hover = accent.opacity(0.9);
+            theme.colors.primary_active = accent.opacity(0.8);
+            theme.colors.ring = accent;
+            theme.colors.button_primary = accent;
+            theme.colors.button_primary_hover = accent.opacity(0.9);
+            theme.colors.button_primary_active = accent.opacity(0.8);
+            theme.colors.button_primary_foreground = gpui_kit::white();
+        });
     }
 
     fn on_check_for_updates(
@@ -707,12 +1052,7 @@ impl Workspace {
                 .await;
             let _ = this.update(cx, |view, cx| {
                 view.update_info = info.clone();
-                if let Some(ref update) = info {
-                    if update.is_update_available() {
-                        view.show_update_popover = true;
-                    }
-                }
-                cx.notify();
+                view.open_settings(Some(crate::settings::Section::Updates), cx);
             });
         })
         .detach();
@@ -723,17 +1063,117 @@ impl Workspace {
     }
 
     fn on_select_next(&mut self, _: &SelectNext, _: &mut Window, cx: &mut Context<Self>) {
-        self.selection.step(1, self.items().len());
+        if self.page == Page::Documents {
+            self.documents
+                .update(cx, |docs, cx| docs.select_relative(1, cx));
+        } else {
+            self.selection.step(1, self.items().len());
+        }
         cx.notify();
     }
 
     fn on_select_previous(&mut self, _: &SelectPrevious, _: &mut Window, cx: &mut Context<Self>) {
-        self.selection.step(-1, self.items().len());
+        if self.page == Page::Documents {
+            self.documents
+                .update(cx, |docs, cx| docs.select_relative(-1, cx));
+        } else {
+            self.selection.step(-1, self.items().len());
+        }
         cx.notify();
+    }
+
+    fn on_doc_prev_page(&mut self, _: &DocPrevPage, _: &mut Window, cx: &mut Context<Self>) {
+        if self.page == Page::Documents {
+            self.documents
+                .update(cx, |docs, cx| docs.go_to_page(-1, cx));
+        }
+    }
+
+    fn on_doc_next_page(&mut self, _: &DocNextPage, _: &mut Window, cx: &mut Context<Self>) {
+        if self.page == Page::Documents {
+            self.documents.update(cx, |docs, cx| docs.go_to_page(1, cx));
+        }
+    }
+
+    fn on_doc_toggle_zoom(&mut self, _: &DocToggleZoom, _: &mut Window, cx: &mut Context<Self>) {
+        if self.page == Page::Documents {
+            self.documents.update(cx, |docs, cx| docs.toggle_zoom(cx));
+        }
+    }
+
+    fn on_next_page(&mut self, _: &NextPage, _: &mut Window, cx: &mut Context<Self>) {
+        let pages: Vec<Page> = nav_pages().collect();
+        if let Some(pos) = pages.iter().position(|&p| p == self.page) {
+            let next = pages[(pos + 1) % pages.len()];
+            self.go(next, cx);
+        } else if let Some(&first) = pages.first() {
+            self.go(first, cx);
+        }
+    }
+
+    fn on_prev_page(&mut self, _: &PrevPage, _: &mut Window, cx: &mut Context<Self>) {
+        let pages: Vec<Page> = nav_pages().collect();
+        if let Some(pos) = pages.iter().position(|&p| p == self.page) {
+            let prev = pages[(pos + pages.len() - 1) % pages.len()];
+            self.go(prev, cx);
+        } else if let Some(&first) = pages.first() {
+            self.go(first, cx);
+        }
+    }
+
+    fn on_focus_search(&mut self, _: &FocusSearch, window: &mut Window, cx: &mut Context<Self>) {
+        match self.page {
+            Page::Documents => {
+                self.documents
+                    .update(cx, |docs, cx| docs.focus_search(window, cx));
+            }
+            Page::Finance => {
+                self.finance_page
+                    .update(cx, |fin, cx| fin.focus_search(window, cx));
+            }
+            Page::People => {
+                self.people_page
+                    .update(cx, |people, cx| people.focus_search(window, cx));
+            }
+            Page::Inventory => {
+                self.inventory_page
+                    .update(cx, |inv, cx| inv.focus_search(window, cx));
+            }
+            _ => {
+                self.open_palette(&OpenPalette, window, cx);
+            }
+        }
+    }
+
+    fn on_toggle_soundscape(
+        &mut self,
+        _: &ToggleSoundscape,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) {
+        let playing = self
+            .soundscape
+            .value
+            .as_ref()
+            .map(|s| s.playing)
+            .unwrap_or(false);
+        self.toggle_soundscape(!playing, window, cx);
+    }
+
+    fn on_cycle_soundscape_preset(
+        &mut self,
+        _: &CycleSoundscapePreset,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) {
+        self.cycle_soundscape_preset(window, cx);
     }
 
     fn on_clear_selection(&mut self, _: &ClearSelection, _: &mut Window, cx: &mut Context<Self>) {
         self.selection.clear();
+        if self.page == Page::Documents {
+            self.documents.update(cx, |docs, cx| docs.close(cx));
+        }
         cx.notify();
     }
 
@@ -825,17 +1265,78 @@ impl Render for Workspace {
         let tint = palette.window_tint;
         let glass_requested = self.appearance_settings.glass == GlassStyle::LiquidGlass;
         let glass = self.attach_glass(window, tint, glass_requested);
+        if std::mem::take(&mut self.refocus) {
+            window.focus(&self.focus, cx);
+        }
         let page = match self.page {
             Page::Home => home::render(self, palette, cx).into_any_element(),
             Page::Capabilities => capabilities::render(self, palette, cx).into_any_element(),
+            Page::Backup => {
+                self.backup_page
+                    .update(cx, |backup, cx| backup.set_palette(palette, cx));
+                self.backup_page.clone().into_any_element()
+            }
+            Page::Software => self.software.clone().into_any_element(),
+            Page::Import => self.import.clone().into_any_element(),
+            Page::Systems => self.systems.clone().into_any_element(),
+            Page::Documents => {
+                self.documents
+                    .update(cx, |documents, cx| documents.set_palette(palette, cx));
+                self.documents.clone().into_any_element()
+            }
+            Page::Feed => {
+                self.feed
+                    .update(cx, |feed, cx| feed.set_palette(palette, cx));
+                self.feed.clone().into_any_element()
+            }
+            Page::Inbox => {
+                self.inbox
+                    .update(cx, |inbox, cx| inbox.set_palette(palette, cx));
+                self.inbox.clone().into_any_element()
+            }
+            Page::Calendar => {
+                self.calendar_page
+                    .update(cx, |calendar, cx| calendar.set_palette(palette, cx));
+                self.calendar_page.clone().into_any_element()
+            }
+            Page::Context => {
+                self.context_page
+                    .update(cx, |context, cx| context.set_palette(palette, cx));
+                self.context_page.clone().into_any_element()
+            }
+            Page::Finance => {
+                self.finance_page
+                    .update(cx, |finance, cx| finance.set_palette(palette, cx));
+                self.finance_page.clone().into_any_element()
+            }
+            Page::People => {
+                self.people_page
+                    .update(cx, |people, cx| people.set_palette(palette, cx));
+                self.people_page.clone().into_any_element()
+            }
+            Page::Inventory => {
+                self.inventory_page
+                    .update(cx, |p, cx| p.set_palette(palette, cx));
+                self.inventory_page.clone().into_any_element()
+            }
             Page::Projects => self.projects.clone().into_any_element(),
             Page::Ask => self.ask.clone().into_any_element(),
+            Page::Travel => {
+                self.travel
+                    .update(cx, |travel, cx| travel.set_palette(palette, cx));
+                self.travel.clone().into_any_element()
+            }
+            Page::Settings => crate::settings::render(self, palette, window, cx).into_any_element(),
         };
 
         if let Some(frames) = &self.frames {
             frames.render_finished();
         }
-        let scroll = self.selection.scroll.clone();
+        let scroll = if self.page == Page::Travel {
+            self.travel.read(cx).scroll_handle()
+        } else {
+            self.selection.scroll.clone()
+        };
         // Actions sit on the outer element, so the palette (a child of it) can dispatch them.
         // Focus and the "Workspace" key context sit on the inner frame only, so J and K never
         // fire while a palette query has focus.
@@ -845,19 +1346,25 @@ impl Render for Workspace {
                 root.on_scroll_wheel(move |_, _, _| frames.input())
             })
             .on_action(cx.listener(Self::open_palette))
-            .on_action(cx.listener(Self::on_go_home))
-            .on_action(cx.listener(Self::on_go_capabilities))
-            .on_action(cx.listener(Self::on_go_projects))
-            .on_action(cx.listener(Self::on_go_ask))
+            .on_action(cx.listener(Self::on_focus_search))
+            .on_action(cx.listener(Self::on_next_page))
+            .on_action(cx.listener(Self::on_prev_page))
+            .on_action(cx.listener(Self::on_go_to))
             .on_action(cx.listener(Self::on_refresh))
             .on_action(cx.listener(Self::on_open_in_dashboard))
             .on_action(cx.listener(Self::on_select_next))
             .on_action(cx.listener(Self::on_select_previous))
             .on_action(cx.listener(Self::on_clear_selection))
+            .on_action(cx.listener(Self::on_doc_prev_page))
+            .on_action(cx.listener(Self::on_doc_next_page))
+            .on_action(cx.listener(Self::on_doc_toggle_zoom))
+            .on_action(cx.listener(Self::on_toggle_soundscape))
+            .on_action(cx.listener(Self::on_cycle_soundscape_preset))
             .on_action(cx.listener(Self::on_run_primary))
             .on_action(cx.listener(Self::on_run_secondary))
-            .on_action(cx.listener(Self::on_toggle_appearance_panel))
-            .on_action(cx.listener(Self::on_toggle_update_popover))
+            .on_action(cx.listener(Self::on_open_settings))
+            .on_action(cx.listener(Self::on_open_appearance))
+            .on_action(cx.listener(Self::on_open_soundscape))
             .on_action(cx.listener(Self::on_check_for_updates))
             .on_action(cx.listener(Self::on_rebuild_app))
             .size_full()
@@ -868,9 +1375,20 @@ impl Render for Workspace {
                     .id("frame")
                     .track_focus(&self.focus)
                     // Projects and Ask type into their fields, so J, K and Enter must reach them.
-                    .when(!matches!(self.page, Page::Projects | Page::Ask), |frame| {
-                        frame.key_context("Workspace")
-                    })
+                    .when(
+                        !matches!(
+                            self.page,
+                            Page::Projects
+                                | Page::Ask
+                                | Page::Travel
+                                | Page::Feed
+                                | Page::Inbox
+                                | Page::Calendar
+                                | Page::Software
+                                | Page::Settings
+                        ),
+                        |frame| frame.key_context("Workspace"),
+                    )
                     .size_full()
                     .flex()
                     .child(
@@ -885,86 +1403,58 @@ impl Render for Workspace {
                         div()
                             .relative()
                             .flex_1()
+                            // The page column may not be wider than the window: Documents draws a
+                            // table whose min-content width would otherwise push the column out.
+                            .min_w_0()
                             .h_full()
                             .when(glass, |page| page.bg(rgba(tint)))
                             .flex()
                             .flex_col()
-                            .child(header::render(self, palette))
-                            .when(self.show_appearance_panel, |col| {
-                                let entity = cx.entity().clone();
-                                let change_entity = entity.clone();
-                                col.child(div().absolute().top(px(85.)).right(px(32.)).child(
-                                    crate::ui::appearance_panel(
-                                        self.appearance_settings,
-                                        palette,
-                                        move |new_settings, _, app| {
-                                            let _ = new_settings.save();
-                                            change_entity.update(app, |view, cx| {
-                                                view.appearance_settings = new_settings;
-                                                cx.notify();
-                                            });
-                                        },
-                                        move |_, app| {
-                                            entity.update(app, |view, cx| {
-                                                view.show_appearance_panel = false;
-                                                cx.notify();
-                                            });
-                                        },
-                                    ),
-                                ))
-                            })
-                            .when(self.show_update_popover, |col| {
-                                if let Some(info) = &self.update_info {
-                                    let entity = cx.entity().clone();
-                                    let rebuild_entity = entity.clone();
-                                    let close_entity = entity.clone();
-                                    let info_clone = info.clone();
-                                    let state = self.rebuild_state.clone();
-                                    col.child(div().absolute().top(px(85.)).right(px(32.)).child(
-                                        crate::update::update_popover(
-                                            &info_clone,
-                                            &state,
-                                            palette,
-                                            move |window, app| {
-                                                rebuild_entity.update(app, |view, cx| {
-                                                    view.trigger_rebuild(window, cx);
-                                                });
-                                            },
-                                            move |_, app| {
-                                                close_entity.update(app, |view, cx| {
-                                                    view.show_update_popover = false;
-                                                    cx.notify();
-                                                });
-                                            },
-                                            move |_, _| {
-                                                crate::update::relaunch_app();
-                                            },
-                                        ),
-                                    ))
+                            .child(header::render(self, palette, cx))
+                            .child(
+                                if matches!(
+                                    self.page,
+                                    Page::Projects
+                                        | Page::Settings
+                                        | Page::Documents
+                                        | Page::Calendar
+                                        | Page::Context
+                                        | Page::Finance
+                                        | Page::People
+                                        | Page::Backup
+                                        | Page::Inventory
+                                ) {
+                                    // Projects, Settings, Documents, Calendar, Context and Finance manage their own layout
+                                    // and scroll boundaries. Documents, Calendar, Context and Finance need full width.
+                                    div().id("page").flex_1().min_h_0().px_8().pb_8().child(
+                                        div()
+                                            .size_full()
+                                            .when(
+                                                !matches!(
+                                                    self.page,
+                                                    Page::Documents
+                                                        | Page::Calendar
+                                                        | Page::Context
+                                                        | Page::Finance
+                                                        | Page::People
+                                                        | Page::Backup
+                                                        | Page::Inventory
+                                                ),
+                                                |el| el.max_w(px(880.)),
+                                            )
+                                            .child(page),
+                                    )
                                 } else {
-                                    col
-                                }
-                            })
-                            .child(if self.page == Page::Projects {
-                                // Projects scrolls inside itself: its editor lays out only the
-                                // blocks on screen, which needs a bounded height.
-                                div()
-                                    .id("page")
-                                    .flex_1()
-                                    .min_h_0()
-                                    .px_8()
-                                    .pb_8()
-                                    .child(div().size_full().max_w(px(880.)).child(page))
-                            } else {
-                                div()
-                                    .id("page")
-                                    .flex_1()
-                                    .min_h_0()
-                                    .overflow_y_scroll()
-                                    .track_scroll(&scroll)
-                                    .vertical_scrollbar(&scroll)
-                                    .child(div().px_8().pb_8().max_w(px(880.)).child(page))
-                            }),
+                                    div()
+                                        .id("page")
+                                        .flex_1()
+                                        .min_h_0()
+                                        .overflow_y_scroll()
+                                        .track_scroll(&scroll)
+                                        .vertical_scrollbar(&scroll)
+                                        .child(div().px_8().pb_8().max_w(px(880.)).child(page))
+                                },
+                            ),
                     ),
             )
             .children(self.frames.as_ref().map(|frames| frames.paint_marker()))
@@ -1060,6 +1550,15 @@ mod tests {
     }
 
     #[gpui::test]
+    fn the_first_nine_sidebar_pages_have_number_keys(cx: &mut TestAppContext) {
+        let (view, cx) = open(cx);
+        for (page, n) in nav_pages().zip(1..=9) {
+            cx.simulate_keystrokes(&format!("cmd-{n}"));
+            view.read_with(cx, |view, _| assert_eq!(view.page, page));
+        }
+    }
+
+    #[gpui::test]
     fn home_focus_tasks_keyboard_navigation(cx: &mut TestAppContext) {
         let (view, cx) = open(cx);
         view.update(cx, |view, cx| {
@@ -1112,5 +1611,82 @@ mod tests {
         });
         // Space runs primary on the selected focus task
         cx.simulate_keystrokes("space");
+    }
+
+    #[gpui::test]
+    fn every_sidebar_page_has_a_shortcut(cx: &mut TestAppContext) {
+        let (view, cx) = open(cx);
+        cx.simulate_keystrokes("cmd-0");
+        view.read_with(cx, |view, _| assert_eq!(view.page, Page::Documents));
+        cx.simulate_keystrokes("shift-cmd-b");
+        view.read_with(cx, |view, _| assert_eq!(view.page, Page::Backup));
+        cx.simulate_keystrokes("shift-cmd-f");
+        view.read_with(cx, |view, _| assert_eq!(view.page, Page::Finance));
+        cx.simulate_keystrokes("shift-cmd-p");
+        view.read_with(cx, |view, _| assert_eq!(view.page, Page::People));
+        cx.simulate_keystrokes("shift-cmd-i");
+        view.read_with(cx, |view, _| assert_eq!(view.page, Page::Inventory));
+        cx.simulate_keystrokes("shift-cmd-s");
+        view.read_with(cx, |view, _| assert_eq!(view.page, Page::Software));
+        // Import has no ⌘⇧ letter: shift-cmd-u toggles the soundscape. It has `g u`, which
+        // needs a page without its own text input.
+        cx.simulate_keystrokes("shift-cmd-h");
+        cx.simulate_keystrokes("g u");
+        view.read_with(cx, |view, _| assert_eq!(view.page, Page::Import));
+        // Systems is the same shape: no ⌘ letter of its own, so `g x`.
+        cx.simulate_keystrokes("shift-cmd-h");
+        cx.simulate_keystrokes("g x");
+        view.read_with(cx, |view, _| assert_eq!(view.page, Page::Systems));
+    }
+
+    #[gpui::test]
+    fn sequential_page_cycling(cx: &mut TestAppContext) {
+        let (view, cx) = open(cx);
+        view.update(cx, |view, cx| view.go(Page::Home, cx));
+        cx.simulate_keystrokes("cmd-alt-right");
+        view.read_with(cx, |view, _| assert_eq!(view.page, Page::Context));
+        cx.simulate_keystrokes("cmd-alt-left");
+        view.read_with(cx, |view, _| assert_eq!(view.page, Page::Home));
+        // Backwards from the first page wraps to the last one the sidebar lists, and Systems
+        // sits fourth in that history rather than at the end.
+        cx.simulate_keystrokes("shift-cmd-[");
+        view.read_with(cx, |view, _| assert_eq!(view.page, Page::Import));
+        cx.simulate_keystrokes("shift-cmd-[");
+        view.read_with(cx, |view, _| assert_eq!(view.page, Page::Software));
+        view.update(cx, |view, cx| view.go(Page::Capabilities, cx));
+        cx.simulate_keystrokes("shift-cmd-]");
+        view.read_with(cx, |view, _| assert_eq!(view.page, Page::Systems));
+    }
+
+    #[gpui::test]
+    fn vim_g_chords_switch_pages(cx: &mut TestAppContext) {
+        let (view, cx) = open(cx);
+        cx.simulate_keystrokes("g h");
+        view.read_with(cx, |view, _| assert_eq!(view.page, Page::Home));
+        cx.simulate_keystrokes("g d");
+        view.read_with(cx, |view, _| assert_eq!(view.page, Page::Documents));
+        cx.simulate_keystrokes("g f");
+        view.read_with(cx, |view, _| assert_eq!(view.page, Page::Finance));
+        cx.simulate_keystrokes("g b");
+        view.read_with(cx, |view, _| assert_eq!(view.page, Page::Backup));
+        cx.simulate_keystrokes("g x");
+        view.read_with(cx, |view, _| assert_eq!(view.page, Page::Systems));
+    }
+
+    #[gpui::test]
+    fn focus_search_opens_on_pages(cx: &mut TestAppContext) {
+        let (view, cx) = open(cx);
+        // On Documents
+        view.update(cx, |view, cx| view.go(Page::Documents, cx));
+        cx.simulate_keystrokes("cmd-f");
+        // On Finance
+        view.update(cx, |view, cx| view.go(Page::Finance, cx));
+        cx.simulate_keystrokes("/");
+        // On People
+        view.update(cx, |view, cx| view.go(Page::People, cx));
+        cx.simulate_keystrokes("/");
+        // On Inventory
+        view.update(cx, |view, cx| view.go(Page::Inventory, cx));
+        cx.simulate_keystrokes("/");
     }
 }

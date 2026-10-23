@@ -30,6 +30,7 @@
   <a href="#how-it-works">How it works</a> ·
   <a href="#measured">Measured</a> ·
   <a href="research/README.md">Research</a> ·
+  <a href="PLAN.md">Plan</a> ·
   <a href="ISA.md">Open work</a>
 </p>
 

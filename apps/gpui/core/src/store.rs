@@ -330,7 +330,23 @@ impl TursoStore {
         .map_err(|e| StoreError::Libsql(format!("update task priority failed: {e}")))?;
 
         let payload = serde_json::json!({ "priority": priority }).to_string();
-        self.queue_mutation(path, "set_task_priority", &payload).await?;
+        self.queue_mutation(path, "set_task_priority", &payload)
+            .await?;
+        Ok(())
+    }
+
+    /// Sets or clears (`""`) a task's due date locally and queues an offline mutation.
+    pub async fn set_task_due(&self, path: &str, due: &str) -> StoreResult<()> {
+        let conn = self.connection().await?;
+        conn.execute(
+            "UPDATE projects_records SET due = NULLIF(?1, ''), updated_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now') WHERE path = ?2",
+            libsql::params![due, path],
+        )
+        .await
+        .map_err(|e| StoreError::Libsql(format!("update task due failed: {e}")))?;
+
+        let payload = serde_json::json!({ "due": due }).to_string();
+        self.queue_mutation(path, "set_task_due", &payload).await?;
         Ok(())
     }
 

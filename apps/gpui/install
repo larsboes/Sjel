@@ -9,6 +9,13 @@ set -euo pipefail
 APP_DIR="$(cd "$(dirname "$0")" && pwd)"
 DEST="${SJEL_DESKTOP_APP_DEST:-$HOME/Applications/Sjel Desktop.app}"
 BUNDLE_ID="dev.sjel.desktop"
+native_maps="${SJEL_GPUI_NATIVE_MAPS:-0}"
+case "${1:-}" in
+  --native-maps) native_maps=1 ;;
+  "") ;;
+  *) echo "Usage: apps/gpui/install [--native-maps]" >&2; exit 2 ;;
+esac
+case "$native_maps" in 0|1) ;; *) echo "SJEL_GPUI_NATIVE_MAPS must be 0 or 1" >&2; exit 2 ;; esac
 
 identity="${SJEL_CODESIGN_IDENTITY:-}"
 if [ -z "$identity" ]; then
@@ -16,7 +23,14 @@ if [ -z "$identity" ]; then
 fi
 [ -n "$identity" ] || { echo "apps/gpui/install: no code-signing identity in the keychain" >&2; exit 1; }
 
-(cd "$APP_DIR" && cargo build --release)
+# One commit for the binary (build.rs reads SJEL_BUILD_COMMIT) and for Info.plist, where the
+# menu-bar app reads it to tell whether this bundle is behind the checkout.
+commit="$(git -C "$APP_DIR" rev-parse --short HEAD 2>/dev/null || echo dev)"
+if [ "$native_maps" = 1 ]; then
+  (cd "$APP_DIR" && SJEL_BUILD_COMMIT="$commit" MLN_PRECOMPILE=1 cargo build --release --locked --features native-maps)
+else
+  (cd "$APP_DIR" && SJEL_BUILD_COMMIT="$commit" cargo build --release)
+fi
 target_dir="$(cd "$APP_DIR" && cargo metadata --no-deps --format-version 1 | sed -n 's/.*"target_directory":"\([^"]*\)".*/\1/p')"
 binary="$target_dir/release/sjel-gpui"
 
@@ -27,6 +41,9 @@ mkdir -p "$bundle/Contents/MacOS" "$bundle/Contents/Resources"
 cp "$binary" "$bundle/Contents/MacOS/Sjel Desktop"
 # Built from brand/sjel-icon-maskable.svg by Resources/make-icon.
 cp "$APP_DIR/Resources/AppIcon.icns" "$bundle/Contents/Resources/"
+if [ "$native_maps" = 1 ]; then
+  cp "$APP_DIR/Resources/MapLibre-LICENSES.txt" "$bundle/Contents/Resources/"
+fi
 version="$(git -C "$APP_DIR" describe --tags --always 2>/dev/null || echo 0.0.0)"
 # A Finder or NSWorkspace launch gets only /usr/bin:/bin:/usr/sbin:/sbin; the app runs `sjel`.
 cat > "$bundle/Contents/Info.plist" <<PLIST
@@ -42,6 +59,7 @@ cat > "$bundle/Contents/Info.plist" <<PLIST
   <key>CFBundleIconFile</key><string>AppIcon</string>
   <key>CFBundleShortVersionString</key><string>$version</string>
   <key>CFBundleVersion</key><string>$version</string>
+  <key>SjelBuildCommit</key><string>$commit</string>
   <key>LSMinimumSystemVersion</key><string>14.0</string>
   <key>NSHighResolutionCapable</key><true/>
   <!-- sjel://<dashboard path>: route.rs opens it natively or in the dashboard. -->
@@ -54,6 +72,7 @@ cat > "$bundle/Contents/Info.plist" <<PLIST
   </array>
   <key>LSEnvironment</key>
   <dict>
+    <key>SJEL_GPUI_NATIVE_MAPS</key><string>$native_maps</string>
     <key>PATH</key><string>$HOME/.local/bin:$HOME/.cargo/bin:/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin</string>
   </dict>
 </dict>
@@ -62,11 +81,25 @@ PLIST
 codesign --force --sign "$identity" --identifier "$BUNDLE_ID" --options runtime "$bundle"
 codesign --verify --strict "$bundle"
 
-osascript -e "tell application id \"$BUNDLE_ID\" to quit" >/dev/null 2>&1 || true
+# Quit a running copy before replacing it, and start the new one afterwards. The in-app rebuild
+# (src/update.rs) runs this script as a child of the copy it quits: its stdout pipe closes with
+# the app, so nothing below writes to stdout until the new copy is open.
+is_running() { [ "$(osascript -e "application id \"$BUNDLE_ID\" is running" 2>/dev/null)" = true ]; }
+was_running=false
+if is_running; then
+  was_running=true
+  osascript -e "tell application id \"$BUNDLE_ID\" to quit" >/dev/null 2>&1 || true
+  for _ in $(seq 50); do is_running || break; sleep 0.1; done
+fi
 mkdir -p "$(dirname "$DEST")"
 rm -rf "$DEST"
 mv "$bundle" "$DEST"
 # Re-register so LaunchServices picks up the new LSEnvironment.
-/System/Library/Frameworks/CoreServices.framework/Frameworks/LaunchServices.framework/Support/lsregister -f "$DEST"
-echo "apps/gpui/install: installed $DEST"
-echo "Open it from the Sjel menu bar: Open App."
+/System/Library/Frameworks/CoreServices.framework/Frameworks/LaunchServices.framework/Support/lsregister -f "$DEST" >/dev/null 2>&1
+if $was_running; then
+  open "$DEST"
+  echo "apps/gpui/install: installed and restarted $DEST"
+else
+  echo "apps/gpui/install: installed $DEST"
+  echo "Open it from the Sjel menu bar: Open App."
+fi

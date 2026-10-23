@@ -58,14 +58,10 @@ const UNIT_SEPARATOR: char = '\u{1f}';
 
 /// Apple Vision, through `tools/visocr`.
 ///
-/// Registered for [`InputClass::Image`] and for nothing else. A PDF is
-/// deliberately not this rung's input, even a scanned one:
-/// `NSImage(contentsOfFile:)` renders page one of a PDF and nothing else
-/// (`tools/visocr/visocr.swift`), so accepting the class would mean returning
-/// one page's text under a `producer` claiming the document was read. Sjel has
-/// no rasterizer, and a silent truncation is the exact failure this crate exists
-/// to prevent, so the honest boundary is that rung 2 reads pixels. Rasterizing a
-/// PDF into pages is a named follow-up, not something to fake here.
+/// Registered for [`InputClass::Image`] and for nothing else. A scanned PDF
+/// reaches this rung through [`read_pdf`] instead: `tools/visocr` renders every
+/// page of a `.pdf` path through PDFKit, but the registry must keep answering
+/// `Pdf` with rung 1 first, and a build without xberg must keep answering `None`.
 pub struct VisionOcr;
 
 impl Extractor for VisionOcr {
@@ -84,40 +80,58 @@ impl Extractor for VisionOcr {
                 class: doc.class,
             });
         }
-
-        let temp = TempFile::write(doc.bytes)?;
-        let mut read = recognize(std::slice::from_ref(&temp.0))?;
-        let (_, text) = read.pop().ok_or_else(|| ExtractionError::Engine {
-            engine: ENGINE,
-            why: "visocr returned no record for the page".into(),
-        })?;
-
-        // Never `Ok("")`. An empty record means either "this file would not
-        // load" or "this page had no text", and visocr cannot tell them apart
-        // (its header says so). Both are this rung failing on this document,
-        // and an empty body stored as success is indistinguishable from a page
-        // that genuinely had nothing.
-        if text.trim().is_empty() {
-            return Err(ExtractionError::Engine {
-                engine: ENGINE,
-                why: "recognized no text on this page".into(),
-            });
-        }
-
-        Ok(Extraction {
-            // A photographed page has no title of its own, and inventing one
-            // from the first recognized line would be a judgement, not a read.
-            title: None,
-            text: cap(text),
-            // Vision returns text observations, not layout. `upstreams.toml
-            // [auge]` records what that costs on a table: the rows come back
-            // column-major and interleaved. `None` is the honest answer, and
-            // the caller has to see it rather than be handed a flattened
-            // substitute.
-            markdown: None,
-            producer: ENGINE,
-        })
+        read(doc)
     }
+}
+
+/// Read every page of a PDF that has no text layer. Pages are joined with a form
+/// feed (`\x0c`), as `tools/visocr` emits them.
+///
+/// # Errors
+/// The input is not a PDF, visocr is absent, or no page carried text.
+pub fn read_pdf(doc: &Document<'_>) -> Result<Extraction> {
+    if doc.class != InputClass::Pdf {
+        return Err(ExtractionError::UnsupportedClass {
+            extractor: ENGINE,
+            class: doc.class,
+        });
+    }
+    read(doc)
+}
+
+fn read(doc: &Document<'_>) -> Result<Extraction> {
+    let temp = TempFile::write(doc.bytes)?;
+    let mut read = recognize(std::slice::from_ref(&temp.0))?;
+    let (_, text) = read.pop().ok_or_else(|| ExtractionError::Engine {
+        engine: ENGINE,
+        why: "visocr returned no record for the page".into(),
+    })?;
+
+    // Never `Ok("")`. An empty record means either "this file would not
+    // load" or "this page had no text", and visocr cannot tell them apart
+    // (its header says so). Both are this rung failing on this document,
+    // and an empty body stored as success is indistinguishable from a page
+    // that genuinely had nothing.
+    if text.trim().is_empty() {
+        return Err(ExtractionError::Engine {
+            engine: ENGINE,
+            why: "recognized no text on this page".into(),
+        });
+    }
+
+    Ok(Extraction {
+        // A photographed page has no title of its own, and inventing one
+        // from the first recognized line would be a judgement, not a read.
+        title: None,
+        text: cap(text),
+        // Vision returns text observations, not layout. `upstreams.toml
+        // [auge]` records what that costs on a table: the rows come back
+        // column-major and interleaved. `None` is the honest answer, and
+        // the caller has to see it rather than be handed a flattened
+        // substitute.
+        markdown: None,
+        producer: ENGINE,
+    })
 }
 
 /// Read many pages in one process.
@@ -333,14 +347,15 @@ mod tests {
     }
 
     #[test]
-    fn a_pdf_is_not_this_rung_s_input_even_a_scanned_one() {
-        // visocr renders page one of a PDF and nothing else, so accepting the
-        // class would mean a silent first-page read. Refusing the class is what
-        // keeps that from being possible at all.
+    fn a_pdf_reaches_vision_only_through_read_pdf() {
+        // The registry entry stays pixels-only, so `for_class(Pdf)` never
+        // returns this rung; scanned PDFs come in through `read_pdf`.
         let error = VisionOcr
             .extract(&Document::pdf(b"%PDF-1.4"))
-            .expect_err("rung 2 reads pixels");
+            .expect_err("the registered rung reads pixels");
         assert_eq!(error.to_string(), "apple-vision does not read pdf input");
+        let error = read_pdf(&Document::image(b"\x89PNG\r\n\x1a\n")).expect_err("pdf only");
+        assert_eq!(error.to_string(), "apple-vision does not read image input");
     }
 
     #[test]

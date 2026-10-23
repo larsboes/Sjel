@@ -232,6 +232,15 @@
       }
     },
     {
+      "name": "import",
+      "kind": "capability",
+      "service": {
+        "kind": "process",
+        "requires": [],
+        "port": "8107"
+      }
+    },
+    {
       "name": "inference",
       "kind": "lib"
     },
@@ -460,6 +469,15 @@
     {
       "name": "skill-metadata",
       "kind": "lib"
+    },
+    {
+      "name": "software",
+      "kind": "capability",
+      "service": {
+        "kind": "process",
+        "requires": [],
+        "port": "8106"
+      }
     },
     {
       "name": "soundscape",
@@ -1238,6 +1256,56 @@
       ]
     },
     {
+      "from": "import",
+      "to": "route-manifest",
+      "kinds": [
+        "cargo-dep"
+      ],
+      "evidence": [
+        "capabilities/import/Cargo.toml"
+      ]
+    },
+    {
+      "from": "import",
+      "to": "sjel-config",
+      "kinds": [
+        "cargo-dep"
+      ],
+      "evidence": [
+        "capabilities/import/Cargo.toml"
+      ]
+    },
+    {
+      "from": "import",
+      "to": "sjel-http",
+      "kinds": [
+        "cargo-dep"
+      ],
+      "evidence": [
+        "capabilities/import/Cargo.toml"
+      ]
+    },
+    {
+      "from": "import",
+      "to": "sjel-server",
+      "kinds": [
+        "cargo-dep"
+      ],
+      "evidence": [
+        "capabilities/import/Cargo.toml"
+      ]
+    },
+    {
+      "from": "import",
+      "to": "sjel-store",
+      "kinds": [
+        "cargo-dep"
+      ],
+      "evidence": [
+        "capabilities/import/Cargo.toml"
+      ]
+    },
+    {
       "from": "inference",
       "to": "runtime",
       "kinds": [
@@ -1888,6 +1956,46 @@
       ]
     },
     {
+      "from": "software",
+      "to": "route-manifest",
+      "kinds": [
+        "cargo-dep"
+      ],
+      "evidence": [
+        "capabilities/software/Cargo.toml"
+      ]
+    },
+    {
+      "from": "software",
+      "to": "sjel-config",
+      "kinds": [
+        "cargo-dep"
+      ],
+      "evidence": [
+        "capabilities/software/Cargo.toml"
+      ]
+    },
+    {
+      "from": "software",
+      "to": "sjel-server",
+      "kinds": [
+        "cargo-dep"
+      ],
+      "evidence": [
+        "capabilities/software/Cargo.toml"
+      ]
+    },
+    {
+      "from": "software",
+      "to": "sjel-turso",
+      "kinds": [
+        "cargo-dep"
+      ],
+      "evidence": [
+        "capabilities/software/Cargo.toml"
+      ]
+    },
+    {
       "from": "soundscape",
       "to": "route-manifest",
       "kinds": [
@@ -2408,6 +2516,10 @@
       "verdict": "watch"
     },
     {
+      "name": "clm-mlx-community",
+      "verdict": "evaluate"
+    },
+    {
       "name": "colibri",
       "verdict": "inspiration"
     },
@@ -2566,6 +2678,10 @@
     {
       "name": "maplibre-gl-js",
       "verdict": "adopt"
+    },
+    {
+      "name": "maplibre-native-rs",
+      "verdict": "evaluate"
     },
     {
       "name": "mcp-audit",

@@ -1,0 +1,11 @@
+kind        = "process"
+name        = "software"
+command     = ["target/release/software", "serve"]
+build       = ["cargo", "build", "--locked", "--release", "--bin", "software"]
+port        = "8106"
+health_path = "/health"
+ready_path  = "/ready"
+# Kept running so the scan on start and every six hours keeps sizes and last-used dates current
+# without the review page having to wait for one.
+autostart   = "true"
+proxy_api_only = "true"

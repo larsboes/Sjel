@@ -1,0 +1,917 @@
+{
+  "model": "mlx-community/CLM-v0.1-8B-MLX-4bit",
+  "revision": "489b421bafc007e3ae409528d77006d26d362689",
+  "adapter": "loopback System One (/v1/systemone)",
+  "corpus": "clm-corpus-holdout-v1.json",
+  "corpus_sha256": "dc8031871c17893a30033886f87c39e5c158b7311c287104ca2340e26be8bb3a",
+  "event_prompt": "gathering-material",
+  "category_descriptions": {
+    "Finance": "An invoice, bill, receipt, payment, or financial statement.",
+    "Reference": "A manual, guide, API reference, or general technical documentation.",
+    "Events": "Material for a gathering or public activity, such as a meeting, concert, workshop, talk, exhibition, or sports fixture; includes invitations, schedules, tickets, and registration details."
+  },
+  "samples": 48,
+  "correct": 36,
+  "accuracy": 0.75,
+  "by_language": {
+    "de": {
+      "samples": 24,
+      "correct": 18,
+      "accuracy": 0.75
+    },
+    "en": {
+      "samples": 24,
+      "correct": 18,
+      "accuracy": 0.75
+    }
+  },
+  "by_category": {
+    "Events": {
+      "samples": 16,
+      "correct": 9,
+      "accuracy": 0.5625
+    },
+    "Finance": {
+      "samples": 16,
+      "correct": 12,
+      "accuracy": 0.75
+    },
+    "Reference": {
+      "samples": 16,
+      "correct": 15,
+      "accuracy": 0.9375
+    }
+  },
+  "by_difficulty": {
+    "clear": {
+      "samples": 36,
+      "correct": 29,
+      "accuracy": 0.8056
+    },
+    "overlap": {
+      "samples": 12,
+      "correct": 7,
+      "accuracy": 0.5833
+    }
+  },
+  "confidence_margin_summary": {
+    "correct_mean": 0.5873,
+    "incorrect_mean": 0.3265,
+    "wrong_margin_ge_05": 2,
+    "note": "CLM margin is not calibrated; 0.5 is a descriptive bucket, not a filing threshold."
+  },
+  "confusion": {
+    "Events -> Events": 9,
+    "Events -> Finance": 4,
+    "Events -> Reference": 3,
+    "Finance -> Events": 4,
+    "Finance -> Finance": 12,
+    "Reference -> Finance": 1,
+    "Reference -> Reference": 15
+  },
+  "misclassified": [
+    {
+      "id": "hold-en-finance-donation",
+      "language": "en",
+      "expected": "Finance",
+      "difficulty": "clear",
+      "predicted": "Events",
+      "correct": false,
+      "confidence_margin": 0.4855,
+      "probabilities": {
+        "Finance": 0.3252,
+        "Reference": 0.0178,
+        "Events": 0.657
+      }
+    },
+    {
+      "id": "hold-en-finance-speaker-honorarium",
+      "language": "en",
+      "expected": "Finance",
+      "difficulty": "overlap",
+      "predicted": "Events",
+      "correct": false,
+      "confidence_margin": 0.4273,
+      "probabilities": {
+        "Finance": 0.3653,
+        "Reference": 0.0165,
+        "Events": 0.6182
+      }
+    },
+    {
+      "id": "hold-de-finance-hall",
+      "language": "de",
+      "expected": "Finance",
+      "difficulty": "overlap",
+      "predicted": "Events",
+      "correct": false,
+      "confidence_margin": 0.2398,
+      "probabilities": {
+        "Finance": 0.2905,
+        "Reference": 0.2163,
+        "Events": 0.4932
+      }
+    },
+    {
+      "id": "hold-de-finance-speaker",
+      "language": "de",
+      "expected": "Finance",
+      "difficulty": "overlap",
+      "predicted": "Events",
+      "correct": false,
+      "confidence_margin": 0.1595,
+      "probabilities": {
+        "Finance": 0.4184,
+        "Reference": 0.1419,
+        "Events": 0.4397
+      }
+    },
+    {
+      "id": "hold-en-events-board-meeting",
+      "language": "en",
+      "expected": "Events",
+      "difficulty": "clear",
+      "predicted": "Finance",
+      "correct": false,
+      "confidence_margin": 0.584,
+      "probabilities": {
+        "Finance": 0.7227,
+        "Reference": 0.0757,
+        "Events": 0.2016
+      }
+    },
+    {
+      "id": "hold-en-events-screening",
+      "language": "en",
+      "expected": "Events",
+      "difficulty": "clear",
+      "predicted": "Reference",
+      "correct": false,
+      "confidence_margin": 0.2363,
+      "probabilities": {
+        "Finance": 0.2393,
+        "Reference": 0.4908,
+        "Events": 0.2698
+      }
+    },
+    {
+      "id": "hold-en-events-race",
+      "language": "en",
+      "expected": "Events",
+      "difficulty": "clear",
+      "predicted": "Finance",
+      "correct": false,
+      "confidence_margin": 0.5494,
+      "probabilities": {
+        "Finance": 0.6996,
+        "Reference": 0.1163,
+        "Events": 0.1841
+      }
+    },
+    {
+      "id": "hold-de-events-screening",
+      "language": "de",
+      "expected": "Events",
+      "difficulty": "clear",
+      "predicted": "Reference",
+      "correct": false,
+      "confidence_margin": 0.198,
+      "probabilities": {
+        "Finance": 0.073,
+        "Reference": 0.4654,
+        "Events": 0.4617
+      }
+    },
+    {
+      "id": "hold-de-events-lecture",
+      "language": "de",
+      "expected": "Events",
+      "difficulty": "clear",
+      "predicted": "Reference",
+      "correct": false,
+      "confidence_margin": 0.283,
+      "probabilities": {
+        "Finance": 0.1658,
+        "Reference": 0.522,
+        "Events": 0.3122
+      }
+    },
+    {
+      "id": "hold-de-events-race",
+      "language": "de",
+      "expected": "Events",
+      "difficulty": "clear",
+      "predicted": "Finance",
+      "correct": false,
+      "confidence_margin": 0.1861,
+      "probabilities": {
+        "Finance": 0.4574,
+        "Reference": 0.3332,
+        "Events": 0.2094
+      }
+    },
+    {
+      "id": "hold-de-events-market",
+      "language": "de",
+      "expected": "Events",
+      "difficulty": "overlap",
+      "predicted": "Finance",
+      "correct": false,
+      "confidence_margin": 0.1132,
+      "probabilities": {
+        "Finance": 0.4088,
+        "Reference": 0.234,
+        "Events": 0.3572
+      }
+    },
+    {
+      "id": "hold-en-reference-event-system",
+      "language": "en",
+      "expected": "Reference",
+      "difficulty": "overlap",
+      "predicted": "Finance",
+      "correct": false,
+      "confidence_margin": 0.4556,
+      "probabilities": {
+        "Finance": 0.6371,
+        "Reference": 0.3103,
+        "Events": 0.0526
+      }
+    }
+  ],
+  "results": [
+    {
+      "id": "hold-en-finance-internet",
+      "language": "en",
+      "expected": "Finance",
+      "difficulty": "clear",
+      "predicted": "Finance",
+      "correct": true,
+      "confidence_margin": 0.9642,
+      "probabilities": {
+        "Finance": 0.9761,
+        "Reference": 0.0074,
+        "Events": 0.0165
+      }
+    },
+    {
+      "id": "hold-en-finance-credit-note",
+      "language": "en",
+      "expected": "Finance",
+      "difficulty": "clear",
+      "predicted": "Finance",
+      "correct": true,
+      "confidence_margin": 0.946,
+      "probabilities": {
+        "Finance": 0.964,
+        "Reference": 0.0116,
+        "Events": 0.0244
+      }
+    },
+    {
+      "id": "hold-en-finance-donation",
+      "language": "en",
+      "expected": "Finance",
+      "difficulty": "clear",
+      "predicted": "Events",
+      "correct": false,
+      "confidence_margin": 0.4855,
+      "probabilities": {
+        "Finance": 0.3252,
+        "Reference": 0.0178,
+        "Events": 0.657
+      }
+    },
+    {
+      "id": "hold-en-finance-quarterly",
+      "language": "en",
+      "expected": "Finance",
+      "difficulty": "clear",
+      "predicted": "Finance",
+      "correct": true,
+      "confidence_margin": 0.8968,
+      "probabilities": {
+        "Finance": 0.9312,
+        "Reference": 0.0571,
+        "Events": 0.0117
+      }
+    },
+    {
+      "id": "hold-en-finance-annual-premium",
+      "language": "en",
+      "expected": "Finance",
+      "difficulty": "clear",
+      "predicted": "Finance",
+      "correct": true,
+      "confidence_margin": 0.4821,
+      "probabilities": {
+        "Finance": 0.6547,
+        "Reference": 0.2003,
+        "Events": 0.145
+      }
+    },
+    {
+      "id": "hold-en-finance-office-supplies",
+      "language": "en",
+      "expected": "Finance",
+      "difficulty": "clear",
+      "predicted": "Finance",
+      "correct": true,
+      "confidence_margin": 0.714,
+      "probabilities": {
+        "Finance": 0.8093,
+        "Reference": 0.0354,
+        "Events": 0.1552
+      }
+    },
+    {
+      "id": "hold-en-finance-venue-rental",
+      "language": "en",
+      "expected": "Finance",
+      "difficulty": "overlap",
+      "predicted": "Finance",
+      "correct": true,
+      "confidence_margin": 0.5125,
+      "probabilities": {
+        "Finance": 0.675,
+        "Reference": 0.082,
+        "Events": 0.2429
+      }
+    },
+    {
+      "id": "hold-en-finance-speaker-honorarium",
+      "language": "en",
+      "expected": "Finance",
+      "difficulty": "overlap",
+      "predicted": "Events",
+      "correct": false,
+      "confidence_margin": 0.4273,
+      "probabilities": {
+        "Finance": 0.3653,
+        "Reference": 0.0165,
+        "Events": 0.6182
+      }
+    },
+    {
+      "id": "hold-de-finance-internet",
+      "language": "de",
+      "expected": "Finance",
+      "difficulty": "clear",
+      "predicted": "Finance",
+      "correct": true,
+      "confidence_margin": 0.2134,
+      "probabilities": {
+        "Finance": 0.4756,
+        "Reference": 0.3902,
+        "Events": 0.1343
+      }
+    },
+    {
+      "id": "hold-de-finance-credit-note",
+      "language": "de",
+      "expected": "Finance",
+      "difficulty": "clear",
+      "predicted": "Finance",
+      "correct": true,
+      "confidence_margin": 0.4896,
+      "probabilities": {
+        "Finance": 0.6598,
+        "Reference": 0.1702,
+        "Events": 0.17
+      }
+    },
+    {
+      "id": "hold-de-finance-donation",
+      "language": "de",
+      "expected": "Finance",
+      "difficulty": "clear",
+      "predicted": "Finance",
+      "correct": true,
+      "confidence_margin": 0.5805,
+      "probabilities": {
+        "Finance": 0.7203,
+        "Reference": 0.121,
+        "Events": 0.1586
+      }
+    },
+    {
+      "id": "hold-de-finance-quarterly",
+      "language": "de",
+      "expected": "Finance",
+      "difficulty": "clear",
+      "predicted": "Finance",
+      "correct": true,
+      "confidence_margin": 0.5912,
+      "probabilities": {
+        "Finance": 0.7275,
+        "Reference": 0.0958,
+        "Events": 0.1767
+      }
+    },
+    {
+      "id": "hold-de-finance-premium",
+      "language": "de",
+      "expected": "Finance",
+      "difficulty": "clear",
+      "predicted": "Finance",
+      "correct": true,
+      "confidence_margin": 0.7848,
+      "probabilities": {
+        "Finance": 0.8565,
+        "Reference": 0.0262,
+        "Events": 0.1173
+      }
+    },
+    {
+      "id": "hold-de-finance-supplies",
+      "language": "de",
+      "expected": "Finance",
+      "difficulty": "clear",
+      "predicted": "Finance",
+      "correct": true,
+      "confidence_margin": 0.4073,
+      "probabilities": {
+        "Finance": 0.6048,
+        "Reference": 0.0674,
+        "Events": 0.3277
+      }
+    },
+    {
+      "id": "hold-de-finance-hall",
+      "language": "de",
+      "expected": "Finance",
+      "difficulty": "overlap",
+      "predicted": "Events",
+      "correct": false,
+      "confidence_margin": 0.2398,
+      "probabilities": {
+        "Finance": 0.2905,
+        "Reference": 0.2163,
+        "Events": 0.4932
+      }
+    },
+    {
+      "id": "hold-de-finance-speaker",
+      "language": "de",
+      "expected": "Finance",
+      "difficulty": "overlap",
+      "predicted": "Events",
+      "correct": false,
+      "confidence_margin": 0.1595,
+      "probabilities": {
+        "Finance": 0.4184,
+        "Reference": 0.1419,
+        "Events": 0.4397
+      }
+    },
+    {
+      "id": "hold-en-events-reading",
+      "language": "en",
+      "expected": "Events",
+      "difficulty": "clear",
+      "predicted": "Events",
+      "correct": true,
+      "confidence_margin": 0.1227,
+      "probabilities": {
+        "Finance": 0.409,
+        "Reference": 0.1758,
+        "Events": 0.4151
+      }
+    },
+    {
+      "id": "hold-en-events-open-house",
+      "language": "en",
+      "expected": "Events",
+      "difficulty": "clear",
+      "predicted": "Events",
+      "correct": true,
+      "confidence_margin": 0.3263,
+      "probabilities": {
+        "Finance": 0.3779,
+        "Reference": 0.0712,
+        "Events": 0.5509
+      }
+    },
+    {
+      "id": "hold-en-events-board-meeting",
+      "language": "en",
+      "expected": "Events",
+      "difficulty": "clear",
+      "predicted": "Finance",
+      "correct": false,
+      "confidence_margin": 0.584,
+      "probabilities": {
+        "Finance": 0.7227,
+        "Reference": 0.0757,
+        "Events": 0.2016
+      }
+    },
+    {
+      "id": "hold-en-events-screening",
+      "language": "en",
+      "expected": "Events",
+      "difficulty": "clear",
+      "predicted": "Reference",
+      "correct": false,
+      "confidence_margin": 0.2363,
+      "probabilities": {
+        "Finance": 0.2393,
+        "Reference": 0.4908,
+        "Events": 0.2698
+      }
+    },
+    {
+      "id": "hold-en-events-lecture",
+      "language": "en",
+      "expected": "Events",
+      "difficulty": "clear",
+      "predicted": "Events",
+      "correct": true,
+      "confidence_margin": 0.1467,
+      "probabilities": {
+        "Finance": 0.3077,
+        "Reference": 0.2612,
+        "Events": 0.4311
+      }
+    },
+    {
+      "id": "hold-en-events-race",
+      "language": "en",
+      "expected": "Events",
+      "difficulty": "clear",
+      "predicted": "Finance",
+      "correct": false,
+      "confidence_margin": 0.5494,
+      "probabilities": {
+        "Finance": 0.6996,
+        "Reference": 0.1163,
+        "Events": 0.1841
+      }
+    },
+    {
+      "id": "hold-en-events-market",
+      "language": "en",
+      "expected": "Events",
+      "difficulty": "overlap",
+      "predicted": "Events",
+      "correct": true,
+      "confidence_margin": 0.3458,
+      "probabilities": {
+        "Finance": 0.3584,
+        "Reference": 0.0778,
+        "Events": 0.5638
+      }
+    },
+    {
+      "id": "hold-en-events-tour",
+      "language": "en",
+      "expected": "Events",
+      "difficulty": "overlap",
+      "predicted": "Events",
+      "correct": true,
+      "confidence_margin": 0.2712,
+      "probabilities": {
+        "Finance": 0.1447,
+        "Reference": 0.3411,
+        "Events": 0.5141
+      }
+    },
+    {
+      "id": "hold-de-events-reading",
+      "language": "de",
+      "expected": "Events",
+      "difficulty": "clear",
+      "predicted": "Events",
+      "correct": true,
+      "confidence_margin": 0.1657,
+      "probabilities": {
+        "Finance": 0.1943,
+        "Reference": 0.3619,
+        "Events": 0.4438
+      }
+    },
+    {
+      "id": "hold-de-events-open-house",
+      "language": "de",
+      "expected": "Events",
+      "difficulty": "clear",
+      "predicted": "Events",
+      "correct": true,
+      "confidence_margin": 0.2242,
+      "probabilities": {
+        "Finance": 0.236,
+        "Reference": 0.2812,
+        "Events": 0.4828
+      }
+    },
+    {
+      "id": "hold-de-events-board-meeting",
+      "language": "de",
+      "expected": "Events",
+      "difficulty": "clear",
+      "predicted": "Events",
+      "correct": true,
+      "confidence_margin": 0.2918,
+      "probabilities": {
+        "Finance": 0.1695,
+        "Reference": 0.3026,
+        "Events": 0.5279
+      }
+    },
+    {
+      "id": "hold-de-events-screening",
+      "language": "de",
+      "expected": "Events",
+      "difficulty": "clear",
+      "predicted": "Reference",
+      "correct": false,
+      "confidence_margin": 0.198,
+      "probabilities": {
+        "Finance": 0.073,
+        "Reference": 0.4654,
+        "Events": 0.4617
+      }
+    },
+    {
+      "id": "hold-de-events-lecture",
+      "language": "de",
+      "expected": "Events",
+      "difficulty": "clear",
+      "predicted": "Reference",
+      "correct": false,
+      "confidence_margin": 0.283,
+      "probabilities": {
+        "Finance": 0.1658,
+        "Reference": 0.522,
+        "Events": 0.3122
+      }
+    },
+    {
+      "id": "hold-de-events-race",
+      "language": "de",
+      "expected": "Events",
+      "difficulty": "clear",
+      "predicted": "Finance",
+      "correct": false,
+      "confidence_margin": 0.1861,
+      "probabilities": {
+        "Finance": 0.4574,
+        "Reference": 0.3332,
+        "Events": 0.2094
+      }
+    },
+    {
+      "id": "hold-de-events-market",
+      "language": "de",
+      "expected": "Events",
+      "difficulty": "overlap",
+      "predicted": "Finance",
+      "correct": false,
+      "confidence_margin": 0.1132,
+      "probabilities": {
+        "Finance": 0.4088,
+        "Reference": 0.234,
+        "Events": 0.3572
+      }
+    },
+    {
+      "id": "hold-de-events-tour",
+      "language": "de",
+      "expected": "Events",
+      "difficulty": "overlap",
+      "predicted": "Events",
+      "correct": true,
+      "confidence_margin": 0.5013,
+      "probabilities": {
+        "Finance": 0.1704,
+        "Reference": 0.1621,
+        "Events": 0.6675
+      }
+    },
+    {
+      "id": "hold-en-reference-install",
+      "language": "en",
+      "expected": "Reference",
+      "difficulty": "clear",
+      "predicted": "Reference",
+      "correct": true,
+      "confidence_margin": 0.857,
+      "probabilities": {
+        "Finance": 0.0335,
+        "Reference": 0.9047,
+        "Events": 0.0619
+      }
+    },
+    {
+      "id": "hold-en-reference-command",
+      "language": "en",
+      "expected": "Reference",
+      "difficulty": "clear",
+      "predicted": "Reference",
+      "correct": true,
+      "confidence_margin": 0.9744,
+      "probabilities": {
+        "Finance": 0.01,
+        "Reference": 0.983,
+        "Events": 0.0071
+      }
+    },
+    {
+      "id": "hold-en-reference-maintenance",
+      "language": "en",
+      "expected": "Reference",
+      "difficulty": "clear",
+      "predicted": "Reference",
+      "correct": true,
+      "confidence_margin": 0.8634,
+      "probabilities": {
+        "Finance": 0.0885,
+        "Reference": 0.9089,
+        "Events": 0.0026
+      }
+    },
+    {
+      "id": "hold-en-reference-glossary",
+      "language": "en",
+      "expected": "Reference",
+      "difficulty": "clear",
+      "predicted": "Reference",
+      "correct": true,
+      "confidence_margin": 0.7643,
+      "probabilities": {
+        "Finance": 0.12,
+        "Reference": 0.8428,
+        "Events": 0.0372
+      }
+    },
+    {
+      "id": "hold-en-reference-assembly",
+      "language": "en",
+      "expected": "Reference",
+      "difficulty": "clear",
+      "predicted": "Reference",
+      "correct": true,
+      "confidence_margin": 0.9389,
+      "probabilities": {
+        "Finance": 0.0298,
+        "Reference": 0.9593,
+        "Events": 0.0109
+      }
+    },
+    {
+      "id": "hold-en-reference-migration",
+      "language": "en",
+      "expected": "Reference",
+      "difficulty": "clear",
+      "predicted": "Reference",
+      "correct": true,
+      "confidence_margin": 0.9972,
+      "probabilities": {
+        "Finance": 0.001,
+        "Reference": 0.9981,
+        "Events": 0.0009
+      }
+    },
+    {
+      "id": "hold-en-reference-event-system",
+      "language": "en",
+      "expected": "Reference",
+      "difficulty": "overlap",
+      "predicted": "Finance",
+      "correct": false,
+      "confidence_margin": 0.4556,
+      "probabilities": {
+        "Finance": 0.6371,
+        "Reference": 0.3103,
+        "Events": 0.0526
+      }
+    },
+    {
+      "id": "hold-en-reference-calendar",
+      "language": "en",
+      "expected": "Reference",
+      "difficulty": "overlap",
+      "predicted": "Reference",
+      "correct": true,
+      "confidence_margin": 0.2559,
+      "probabilities": {
+        "Finance": 0.2011,
+        "Reference": 0.5039,
+        "Events": 0.295
+      }
+    },
+    {
+      "id": "hold-de-reference-install",
+      "language": "de",
+      "expected": "Reference",
+      "difficulty": "clear",
+      "predicted": "Reference",
+      "correct": true,
+      "confidence_margin": 0.9251,
+      "probabilities": {
+        "Finance": 0.0299,
+        "Reference": 0.9501,
+        "Events": 0.02
+      }
+    },
+    {
+      "id": "hold-de-reference-command",
+      "language": "de",
+      "expected": "Reference",
+      "difficulty": "clear",
+      "predicted": "Reference",
+      "correct": true,
+      "confidence_margin": 0.7615,
+      "probabilities": {
+        "Finance": 0.0057,
+        "Reference": 0.841,
+        "Events": 0.1533
+      }
+    },
+    {
+      "id": "hold-de-reference-maintenance",
+      "language": "de",
+      "expected": "Reference",
+      "difficulty": "clear",
+      "predicted": "Reference",
+      "correct": true,
+      "confidence_margin": 0.7998,
+      "probabilities": {
+        "Finance": 0.0864,
+        "Reference": 0.8666,
+        "Events": 0.0471
+      }
+    },
+    {
+      "id": "hold-de-reference-glossary",
+      "language": "de",
+      "expected": "Reference",
+      "difficulty": "clear",
+      "predicted": "Reference",
+      "correct": true,
+      "confidence_margin": 0.3524,
+      "probabilities": {
+        "Finance": 0.0986,
+        "Reference": 0.5683,
+        "Events": 0.3331
+      }
+    },
+    {
+      "id": "hold-de-reference-assembly",
+      "language": "de",
+      "expected": "Reference",
+      "difficulty": "clear",
+      "predicted": "Reference",
+      "correct": true,
+      "confidence_margin": 0.5972,
+      "probabilities": {
+        "Finance": 0.0146,
+        "Reference": 0.7315,
+        "Events": 0.2539
+      }
+    },
+    {
+      "id": "hold-de-reference-migration",
+      "language": "de",
+      "expected": "Reference",
+      "difficulty": "clear",
+      "predicted": "Reference",
+      "correct": true,
+      "confidence_margin": 0.813,
+      "probabilities": {
+        "Finance": 0.0265,
+        "Reference": 0.8753,
+        "Events": 0.0982
+      }
+    },
+    {
+      "id": "hold-de-reference-event-api",
+      "language": "de",
+      "expected": "Reference",
+      "difficulty": "overlap",
+      "predicted": "Reference",
+      "correct": true,
+      "confidence_margin": 0.5901,
+      "probabilities": {
+        "Finance": 0.0356,
+        "Reference": 0.7267,
+        "Events": 0.2376
+      }
+    },
+    {
+      "id": "hold-de-reference-calendar",
+      "language": "de",
+      "expected": "Reference",
+      "difficulty": "overlap",
+      "predicted": "Reference",
+      "correct": true,
+      "confidence_margin": 0.6751,
+      "probabilities": {
+        "Finance": 0.1176,
+        "Reference": 0.7834,
+        "Events": 0.099
+      }
+    }
+  ],
+  "warning": "Synthetic results only; this corpus is not representative of personal documents and does not authorize automatic filing."
+}

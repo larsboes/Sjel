@@ -5,13 +5,14 @@
 //! that AppKit paints under it cannot drift from the column GPUI reserves.
 
 use gpui_kit::component::kbd::Kbd;
+use gpui_kit::component::scroll::ScrollableElement as _;
 use gpui_kit::{div, prelude::*, px, rgb, rgba, Action, AnyElement, Context, SharedString, Window};
 
 use crate::data::Remote;
 use crate::route::Page;
 use crate::shell::NodeHealth;
 use crate::theme::Palette;
-use crate::workspace::{GoAsk, GoCapabilities, GoHome, GoProjects, OpenPalette, Workspace};
+use crate::workspace::{nav_pages, GoTo, OpenPalette, OpenSettings, Workspace};
 
 /// The column the sidebar occupies, and the gap the glass panel leaves to the window edge.
 pub const WIDTH: f32 = 208.;
@@ -39,37 +40,43 @@ pub fn render(
                 .border_r_1()
                 .border_color(rgba(palette.border))
         })
-        .children(nav(view, palette, window, cx))
-        .child(div().flex_1())
+        // The page list is the only part that scrolls: at eighteen pages it is taller than a
+        // laptop window, and the soundscape player, Settings and the footer must stay reachable.
+        .child(
+            div()
+                .id("sidebar-nav")
+                .flex_1()
+                .min_h_0()
+                .overflow_y_scroll()
+                .track_scroll(&view.nav_scroll)
+                .vertical_scrollbar(&view.nav_scroll)
+                .children(nav(view, palette, window, cx)),
+        )
         .child(soundscape(view, palette, cx))
         .child(palette_hint(palette, window))
+        .child(settings_row(view, palette, window, cx))
         .child(footer(view, palette))
 }
 
-/// One row per native page, each with the shortcut that opens it.
+/// One row per native page, each with the shortcut that opens it. Settings sits at the bottom
+/// instead, beside Search.
 fn nav(
     view: &Workspace,
     palette: Palette,
     window: &mut Window,
     cx: &mut Context<Workspace>,
 ) -> Vec<AnyElement> {
-    Page::ALL
-        .into_iter()
+    nav_pages()
         .map(move |page| {
             let selected = page == view.page;
-            let shortcut = match page {
-                Page::Home => Kbd::binding_for_action(&GoHome, None, window),
-                Page::Capabilities => Kbd::binding_for_action(&GoCapabilities, None, window),
-                Page::Projects => Kbd::binding_for_action(&GoProjects, None, window),
-                Page::Ask => Kbd::binding_for_action(&GoAsk, None, window),
-            };
+            let shortcut = Kbd::binding_for_action(&GoTo(page), None, window);
             div()
                 .id(page.href())
                 .flex()
                 .items_center()
                 .justify_between()
                 .px_3()
-                .py(px(6.))
+                .py(px(4.))
                 .rounded(px(7.))
                 .when(selected, |row| row.bg(rgba(palette.raised)))
                 .text_color(rgb(if selected {
@@ -137,6 +144,9 @@ fn soundscape(view: &Workspace, palette: Palette, cx: &mut Context<Workspace>) -
                         .text_color(rgb(palette.text))
                         .hover(move |s| s.text_color(rgb(palette.accent)))
                         .on_click(cx.listener(|view, _, window, cx| {
+                            // The row is the way into the player: the strip can cycle a preset, but
+                            // only the window shows what is playing.
+                            crate::soundscape::open(cx, crate::soundscape::Mode::Full);
                             view.cycle_soundscape_preset(window, cx);
                         }))
                         .child(format!("♪ {preset}")),
@@ -162,6 +172,7 @@ fn soundscape(view: &Workspace, palette: Palette, cx: &mut Context<Workspace>) -
                 .cursor_pointer()
                 .hover(move |s| s.text_color(rgb(palette.text)))
                 .on_click(cx.listener(move |view, _, window, cx| {
+                    crate::soundscape::open(cx, crate::soundscape::Mode::Full);
                     view.toggle_soundscape(!playing, window, cx);
                 }))
                 .child(if playing { "Pause" } else { "Play" }),
@@ -227,6 +238,35 @@ fn palette_hint(palette: Palette, window: &mut Window) -> impl IntoElement {
         .children(Kbd::binding_for_action(&OpenPalette, None, window).map(|k| k.appearance(false)))
 }
 
+fn settings_row(
+    view: &Workspace,
+    palette: Palette,
+    window: &mut Window,
+    cx: &mut Context<Workspace>,
+) -> impl IntoElement {
+    let selected = view.page == Page::Settings;
+    div()
+        .id("settings-row")
+        .flex()
+        .items_center()
+        .justify_between()
+        .px_3()
+        .py(px(6.))
+        .rounded(px(7.))
+        .text_sm()
+        .when(selected, |row| row.bg(rgba(palette.raised)))
+        .text_color(rgb(if selected {
+            palette.text
+        } else {
+            palette.muted
+        }))
+        .cursor_pointer()
+        .hover(move |style| style.bg(rgba(palette.raised)))
+        .on_click(cx.listener(|view, _, _, cx| view.open_settings(None, cx)))
+        .child("Settings")
+        .children(Kbd::binding_for_action(&OpenSettings, None, window).map(|k| k.appearance(false)))
+}
+
 /// The shell's own health, then the path the app reads it through.
 fn footer(view: &Workspace, palette: Palette) -> impl IntoElement {
     let (color, label) = status(&view.health, palette);
@@ -261,7 +301,7 @@ fn footer(view: &Workspace, palette: Palette) -> impl IntoElement {
 
 /// What the status dot and its line say: refused, degraded, settled, or still connecting. The
 /// uptime counts up between frames, so it adds the age of the answer it came with.
-fn status(health: &Remote<NodeHealth>, palette: Palette) -> (u32, SharedString) {
+pub(crate) fn status(health: &Remote<NodeHealth>, palette: Palette) -> (u32, SharedString) {
     match (&health.value, &health.error) {
         (_, Some(error)) => (palette.red, SharedString::from(error.to_string())),
         (Some(node), None) => (
@@ -282,7 +322,7 @@ fn status(health: &Remote<NodeHealth>, palette: Palette) -> (u32, SharedString) 
 }
 
 /// The read path in use, and a dot that says which one it is.
-fn storage(direct_db: bool, palette: Palette) -> (&'static str, u32) {
+pub(crate) fn storage(direct_db: bool, palette: Palette) -> (&'static str, u32) {
     if direct_db {
         ("libsql", palette.accent)
     } else {

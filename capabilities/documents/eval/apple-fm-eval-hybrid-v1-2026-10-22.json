@@ -1,0 +1,885 @@
+{
+  "model": "apple-foundationmodel",
+  "model_revision": null,
+  "backend": "foundation-models",
+  "prompt_version": "documents-category-v1",
+  "prompt_sha256": "bcb4e5f8f7f86eed407b6044b53a48348e9aa18372a7707662eae01dee0f094d",
+  "prompt": "Classify the supplied synthetic document by its primary purpose. Choose exactly one allowed category. Use the category descriptions. Return evidence as an exact, contiguous quote copied from the document text; do not paraphrase or add words.\nFinance: invoices, bills, receipts, payments, account statements, or reimbursements\nEvents: invitations, schedules, programs, tickets, or registration for gatherings and activities\nReference: manuals, instructions, technical guides, API documentation, or procedures",
+  "response_format": "strict JSON Schema; category enum and exact evidence quote",
+  "corpus": "clm-corpus-hybrid-v1.json",
+  "corpus_sha256": "a9c4212188d5c10a4956511895bc5e9b4e4e55f336d81efdbd4cf0d0b0c2ba0f",
+  "samples": 48,
+  "category_predictions": 48,
+  "category_correct": 47,
+  "category_accuracy": 0.9792,
+  "valid_proposals": 48,
+  "valid_proposals_correct": 47,
+  "valid_proposal_precision": 0.9792,
+  "valid_proposal_coverage": 1.0,
+  "invalid_evidence": 0,
+  "parse_errors": 0,
+  "by_language": {
+    "de": {
+      "samples": 24,
+      "category_predictions": 24,
+      "category_correct": 24,
+      "valid_proposals": 24,
+      "valid_proposals_correct": 24
+    },
+    "en": {
+      "samples": 24,
+      "category_predictions": 24,
+      "category_correct": 23,
+      "valid_proposals": 24,
+      "valid_proposals_correct": 23
+    }
+  },
+  "by_expected_category": {
+    "Events": {
+      "samples": 16,
+      "category_predictions": 16,
+      "category_correct": 16,
+      "valid_proposals": 16,
+      "valid_proposals_correct": 16
+    },
+    "Finance": {
+      "samples": 16,
+      "category_predictions": 16,
+      "category_correct": 15,
+      "valid_proposals": 16,
+      "valid_proposals_correct": 15
+    },
+    "Reference": {
+      "samples": 16,
+      "category_predictions": 16,
+      "category_correct": 16,
+      "valid_proposals": 16,
+      "valid_proposals_correct": 16
+    }
+  },
+  "confusion": {
+    "Events -> Events": 16,
+    "Finance -> Events": 1,
+    "Finance -> Finance": 15,
+    "Reference -> Reference": 16
+  },
+  "results": [
+    {
+      "id": "hy-en-finance-mobile-plan",
+      "language": "en",
+      "expected": "Finance",
+      "difficulty": "clear",
+      "predicted": "Finance",
+      "correct": true,
+      "confidence": null,
+      "evidence_valid": true,
+      "evidence_span": {
+        "start": 0,
+        "end": 148,
+        "text": "Monthly statement for the fictional Juniper mobile plan. Service charges total 28.40 EUR, tax is 4.54 EUR, and the balance is payable by 18 January."
+      },
+      "proposal_valid": true,
+      "parse_error": false
+    },
+    {
+      "id": "hy-en-finance-refund",
+      "language": "en",
+      "expected": "Finance",
+      "difficulty": "clear",
+      "predicted": "Finance",
+      "correct": true,
+      "confidence": null,
+      "evidence_valid": true,
+      "evidence_span": {
+        "start": 0,
+        "end": 163,
+        "text": "Refund notice R-1048 from Sample Outfitters. A return of 44.90 EUR has been approved and will be credited to the original payment method within five business days."
+      },
+      "proposal_valid": true,
+      "parse_error": false
+    },
+    {
+      "id": "hy-en-finance-card-summary",
+      "language": "en",
+      "expected": "Finance",
+      "difficulty": "clear",
+      "predicted": "Finance",
+      "correct": true,
+      "confidence": null,
+      "evidence_valid": true,
+      "evidence_span": {
+        "start": 0,
+        "end": 148,
+        "text": "Card account summary for the fictional Cedar account. It lists purchases, refunds, fees, the statement closing balance, and the minimum payment due."
+      },
+      "proposal_valid": true,
+      "parse_error": false
+    },
+    {
+      "id": "hy-en-finance-membership",
+      "language": "en",
+      "expected": "Finance",
+      "difficulty": "clear",
+      "predicted": "Finance",
+      "correct": true,
+      "confidence": null,
+      "evidence_valid": true,
+      "evidence_span": {
+        "start": 66,
+        "end": 135,
+        "text": "The renewal amount is 72.00 EUR and the payment reference is NS-7721."
+      },
+      "proposal_valid": true,
+      "parse_error": false
+    },
+    {
+      "id": "hy-en-finance-reimbursement",
+      "language": "en",
+      "expected": "Finance",
+      "difficulty": "clear",
+      "predicted": "Finance",
+      "correct": true,
+      "confidence": null,
+      "evidence_valid": true,
+      "evidence_span": {
+        "start": 0,
+        "end": 136,
+        "text": "Expense reimbursement record for sample travel. It lists approved rail and lodging costs, the reimbursable total, and the transfer date."
+      },
+      "proposal_valid": true,
+      "parse_error": false
+    },
+    {
+      "id": "hy-en-finance-license-renewal",
+      "language": "en",
+      "expected": "Finance",
+      "difficulty": "clear",
+      "predicted": "Finance",
+      "correct": true,
+      "confidence": null,
+      "evidence_valid": true,
+      "evidence_span": {
+        "start": 0,
+        "end": 142,
+        "text": "Renewal invoice for the fictional Atlas design software license. The document lists the annual fee, tax, invoice number, and payment deadline."
+      },
+      "proposal_valid": true,
+      "parse_error": false
+    },
+    {
+      "id": "hy-en-finance-event-deposit",
+      "language": "en",
+      "expected": "Finance",
+      "difficulty": "overlap",
+      "predicted": "Events",
+      "correct": false,
+      "confidence": null,
+      "evidence_valid": true,
+      "evidence_span": {
+        "start": 0,
+        "end": 80,
+        "text": "Deposit statement for reserving a room for the Cedar Society's winter gathering."
+      },
+      "proposal_valid": true,
+      "parse_error": false
+    },
+    {
+      "id": "hy-en-finance-event-travel",
+      "language": "en",
+      "expected": "Finance",
+      "difficulty": "overlap",
+      "predicted": "Finance",
+      "correct": true,
+      "confidence": null,
+      "evidence_valid": true,
+      "evidence_span": {
+        "start": 0,
+        "end": 165,
+        "text": "Reimbursement form for travel to a fictional Northstar symposium. The form records ticket costs, meal allowance, tax treatment, and the amount approved for transfer."
+      },
+      "proposal_valid": true,
+      "parse_error": false
+    },
+    {
+      "id": "hy-de-finance-mobile-plan",
+      "language": "de",
+      "expected": "Finance",
+      "difficulty": "clear",
+      "predicted": "Finance",
+      "correct": true,
+      "confidence": null,
+      "evidence_valid": true,
+      "evidence_span": {
+        "start": 0,
+        "end": 160,
+        "text": "Monatsabrechnung für den fiktiven Juniper-Mobilfunktarif. Die Gebühren betragen 28,40 EUR, die Steuer 4,54 EUR. Der offene Betrag ist bis zum 18. Januar fällig."
+      },
+      "proposal_valid": true,
+      "parse_error": false
+    },
+    {
+      "id": "hy-de-finance-refund",
+      "language": "de",
+      "expected": "Finance",
+      "difficulty": "clear",
+      "predicted": "Finance",
+      "correct": true,
+      "confidence": null,
+      "evidence_valid": true,
+      "evidence_span": {
+        "start": 51,
+        "end": 179,
+        "text": "Eine Rückgabe über 44,90 EUR wurde genehmigt und wird innerhalb von fünf Werktagen auf das ursprüngliche Zahlungsmittel gebucht."
+      },
+      "proposal_valid": true,
+      "parse_error": false
+    },
+    {
+      "id": "hy-de-finance-card-summary",
+      "language": "de",
+      "expected": "Finance",
+      "difficulty": "clear",
+      "predicted": "Finance",
+      "correct": true,
+      "confidence": null,
+      "evidence_valid": true,
+      "evidence_span": {
+        "start": 0,
+        "end": 128,
+        "text": "Kartenkontoübersicht des fiktiven Cedar-Kontos. Aufgeführt sind Käufe, Erstattungen, Gebühren, Abschlusssaldo und Mindestbetrag."
+      },
+      "proposal_valid": true,
+      "parse_error": false
+    },
+    {
+      "id": "hy-de-finance-membership",
+      "language": "de",
+      "expected": "Finance",
+      "difficulty": "clear",
+      "predicted": "Finance",
+      "correct": true,
+      "confidence": null,
+      "evidence_valid": true,
+      "evidence_span": {
+        "start": 0,
+        "end": 148,
+        "text": "Mitteilung zum jährlichen Mitgliedsbeitrag der Northstar-Archivgesellschaft. Die Verlängerung kostet 72,00 EUR; die Zahlungsreferenz lautet NS-7721."
+      },
+      "proposal_valid": true,
+      "parse_error": false
+    },
+    {
+      "id": "hy-de-finance-reimbursement",
+      "language": "de",
+      "expected": "Finance",
+      "difficulty": "clear",
+      "predicted": "Finance",
+      "correct": true,
+      "confidence": null,
+      "evidence_valid": true,
+      "evidence_span": {
+        "start": 0,
+        "end": 134,
+        "text": "Erstattungsnachweis für eine Beispielreise. Aufgeführt sind genehmigte Bahn- und Übernachtungskosten, Gesamtsumme und Überweisungstag."
+      },
+      "proposal_valid": true,
+      "parse_error": false
+    },
+    {
+      "id": "hy-de-finance-license-renewal",
+      "language": "de",
+      "expected": "Finance",
+      "difficulty": "clear",
+      "predicted": "Finance",
+      "correct": true,
+      "confidence": null,
+      "evidence_valid": true,
+      "evidence_span": {
+        "start": 0,
+        "end": 136,
+        "text": "Verlängerungsrechnung für die fiktive Atlas-Designsoftware. Das Schreiben nennt Jahresgebühr, Steuer, Rechnungsnummer und Zahlungsfrist."
+      },
+      "proposal_valid": true,
+      "parse_error": false
+    },
+    {
+      "id": "hy-de-finance-event-deposit",
+      "language": "de",
+      "expected": "Finance",
+      "difficulty": "overlap",
+      "predicted": "Finance",
+      "correct": true,
+      "confidence": null,
+      "evidence_valid": true,
+      "evidence_span": {
+        "start": 0,
+        "end": 149,
+        "text": "Abrechnung der Anzahlung für einen Raum beim Wintertreffen des Cedar-Vereins. Enthalten sind Vorauszahlung, erstattungsfähiger Anteil und Restbetrag;"
+      },
+      "proposal_valid": true,
+      "parse_error": false
+    },
+    {
+      "id": "hy-de-finance-event-travel",
+      "language": "de",
+      "expected": "Finance",
+      "difficulty": "overlap",
+      "predicted": "Finance",
+      "correct": true,
+      "confidence": null,
+      "evidence_valid": true,
+      "evidence_span": {
+        "start": 0,
+        "end": 171,
+        "text": "Erstattungsformular für die Reise zu einem fiktiven Northstar-Symposium. Es erfasst Fahrkarten, Verpflegungspauschale, Steuerbehandlung und genehmigten Überweisungsbetrag."
+      },
+      "proposal_valid": true,
+      "parse_error": false
+    },
+    {
+      "id": "hy-en-events-garden-tour",
+      "language": "en",
+      "expected": "Events",
+      "difficulty": "clear",
+      "predicted": "Events",
+      "correct": true,
+      "confidence": null,
+      "evidence_valid": true,
+      "evidence_span": {
+        "start": 0,
+        "end": 159,
+        "text": "Booking confirmation for the Cedar botanical garden tour on 22 January. The group meets at 10:15 by the north gate; the guided walk lasts about ninety minutes."
+      },
+      "proposal_valid": true,
+      "parse_error": false
+    },
+    {
+      "id": "hy-en-events-orchestra",
+      "language": "en",
+      "expected": "Events",
+      "difficulty": "clear",
+      "predicted": "Events",
+      "correct": true,
+      "confidence": null,
+      "evidence_valid": true,
+      "evidence_span": {
+        "start": 0,
+        "end": 149,
+        "text": "Admission pass for the fictional Juniper Chamber Orchestra concert. The performance begins at 19:30 on Friday, and doors open thirty minutes earlier."
+      },
+      "proposal_valid": true,
+      "parse_error": false
+    },
+    {
+      "id": "hy-en-events-community-day",
+      "language": "en",
+      "expected": "Events",
+      "difficulty": "clear",
+      "predicted": "Events",
+      "correct": true,
+      "confidence": null,
+      "evidence_valid": true,
+      "evidence_span": {
+        "start": 0,
+        "end": 90,
+        "text": "Programme for Northstar Community Day, held at the riverside pavilion from 12:00 to 17:00."
+      },
+      "proposal_valid": true,
+      "parse_error": false
+    },
+    {
+      "id": "hy-en-events-webinar",
+      "language": "en",
+      "expected": "Events",
+      "difficulty": "clear",
+      "predicted": "Events",
+      "correct": true,
+      "confidence": null,
+      "evidence_valid": true,
+      "evidence_span": {
+        "start": 0,
+        "end": 149,
+        "text": "Registration confirmation for a live online session called 'Designing Small Gardens'. It starts on 25 January at 16:00 and includes the joining link."
+      },
+      "proposal_valid": true,
+      "parse_error": false
+    },
+    {
+      "id": "hy-en-events-book-club",
+      "language": "en",
+      "expected": "Events",
+      "difficulty": "clear",
+      "predicted": "Events",
+      "correct": true,
+      "confidence": null,
+      "evidence_valid": true,
+      "evidence_span": {
+        "start": 0,
+        "end": 85,
+        "text": "The Cedar book circle will meet on 19 January at 18:30 to discuss the selected novel."
+      },
+      "proposal_valid": true,
+      "parse_error": false
+    },
+    {
+      "id": "hy-en-events-exhibition",
+      "language": "en",
+      "expected": "Events",
+      "difficulty": "clear",
+      "predicted": "Events",
+      "correct": true,
+      "confidence": null,
+      "evidence_valid": true,
+      "evidence_span": {
+        "start": 0,
+        "end": 163,
+        "text": "Opening-night invitation for the fictional Atlas print exhibition. Guests are welcome from 18:00 on 20 January; the collection remains on display through February."
+      },
+      "proposal_valid": true,
+      "parse_error": false
+    },
+    {
+      "id": "hy-en-events-workshop-ticket",
+      "language": "en",
+      "expected": "Events",
+      "difficulty": "overlap",
+      "predicted": "Events",
+      "correct": true,
+      "confidence": null,
+      "evidence_valid": true,
+      "evidence_span": {
+        "start": 0,
+        "end": 176,
+        "text": "Entry ticket for a one-day bicycle repair workshop. It names the venue, check-in time, session blocks, and participant number; the ticket face also shows a small admission fee."
+      },
+      "proposal_valid": true,
+      "parse_error": false
+    },
+    {
+      "id": "hy-en-events-town-hall",
+      "language": "en",
+      "expected": "Events",
+      "difficulty": "overlap",
+      "predicted": "Events",
+      "correct": true,
+      "confidence": null,
+      "evidence_valid": true,
+      "evidence_span": {
+        "start": 0,
+        "end": 158,
+        "text": "Public notice for a neighborhood town-hall meeting on 28 January. The agenda covers street lighting and park access; residents may attend in person or online."
+      },
+      "proposal_valid": true,
+      "parse_error": false
+    },
+    {
+      "id": "hy-de-events-garden-tour",
+      "language": "de",
+      "expected": "Events",
+      "difficulty": "clear",
+      "predicted": "Events",
+      "correct": true,
+      "confidence": null,
+      "evidence_valid": true,
+      "evidence_span": {
+        "start": 0,
+        "end": 152,
+        "text": "Buchungsbestätigung für die Cedar-Gartenführung am 22. Januar. Die Gruppe trifft sich um 10:15 Uhr am Nordtor; der Rundgang dauert etwa neunzig Minuten."
+      },
+      "proposal_valid": true,
+      "parse_error": false
+    },
+    {
+      "id": "hy-de-events-orchestra",
+      "language": "de",
+      "expected": "Events",
+      "difficulty": "clear",
+      "predicted": "Events",
+      "correct": true,
+      "confidence": null,
+      "evidence_valid": true,
+      "evidence_span": {
+        "start": 0,
+        "end": 69,
+        "text": "Eintrittskarte für das Konzert des fiktiven Juniper-Kammerorchesters."
+      },
+      "proposal_valid": true,
+      "parse_error": false
+    },
+    {
+      "id": "hy-de-events-community-day",
+      "language": "de",
+      "expected": "Events",
+      "difficulty": "clear",
+      "predicted": "Events",
+      "correct": true,
+      "confidence": null,
+      "evidence_valid": true,
+      "evidence_span": {
+        "start": 0,
+        "end": 146,
+        "text": "Programm des Northstar-Nachbarschaftstags am Flusspavillon von 12:00 bis 17:00 Uhr. Aufgeführt sind Vorführungen, Musik und Angebote für Familien."
+      },
+      "proposal_valid": true,
+      "parse_error": false
+    },
+    {
+      "id": "hy-de-events-webinar",
+      "language": "de",
+      "expected": "Events",
+      "difficulty": "clear",
+      "predicted": "Events",
+      "correct": true,
+      "confidence": null,
+      "evidence_valid": true,
+      "evidence_span": {
+        "start": 0,
+        "end": 142,
+        "text": "Anmeldebestätigung für die Online-Veranstaltung 'Kleine Gärten gestalten'. Sie beginnt am 25. Januar um 16:00 Uhr und enthält den Zugangslink."
+      },
+      "proposal_valid": true,
+      "parse_error": false
+    },
+    {
+      "id": "hy-de-events-book-club",
+      "language": "de",
+      "expected": "Events",
+      "difficulty": "clear",
+      "predicted": "Events",
+      "correct": true,
+      "confidence": null,
+      "evidence_valid": true,
+      "evidence_span": {
+        "start": 0,
+        "end": 99,
+        "text": "Der Cedar-Lesekreis trifft sich am 19. Januar um 18:30 Uhr zur Besprechung des ausgewählten Romans."
+      },
+      "proposal_valid": true,
+      "parse_error": false
+    },
+    {
+      "id": "hy-de-events-exhibition",
+      "language": "de",
+      "expected": "Events",
+      "difficulty": "clear",
+      "predicted": "Events",
+      "correct": true,
+      "confidence": null,
+      "evidence_valid": true,
+      "evidence_span": {
+        "start": 0,
+        "end": 94,
+        "text": "Einladung zur Eröffnung der fiktiven Atlas-Druckgrafik-Ausstellung am 20. Januar ab 18:00 Uhr."
+      },
+      "proposal_valid": true,
+      "parse_error": false
+    },
+    {
+      "id": "hy-de-events-workshop-ticket",
+      "language": "de",
+      "expected": "Events",
+      "difficulty": "overlap",
+      "predicted": "Events",
+      "correct": true,
+      "confidence": null,
+      "evidence_valid": true,
+      "evidence_span": {
+        "start": 0,
+        "end": 173,
+        "text": "Teilnahmekarte für einen eintägigen Fahrradreparaturkurs. Sie nennt Ort, Einlass, Programmpunkte und Teilnehmernummer; auf der Karte steht auch ein kleiner Teilnahmebeitrag."
+      },
+      "proposal_valid": true,
+      "parse_error": false
+    },
+    {
+      "id": "hy-de-events-town-hall",
+      "language": "de",
+      "expected": "Events",
+      "difficulty": "overlap",
+      "predicted": "Events",
+      "correct": true,
+      "confidence": null,
+      "evidence_valid": true,
+      "evidence_span": {
+        "start": 0,
+        "end": 170,
+        "text": "Öffentliche Mitteilung zu einer Bürgerversammlung am 28. Januar. Auf der Tagesordnung stehen Straßenbeleuchtung und Parkzugang; Teilnahme vor Ort oder online ist möglich."
+      },
+      "proposal_valid": true,
+      "parse_error": false
+    },
+    {
+      "id": "hy-en-reference-device",
+      "language": "en",
+      "expected": "Reference",
+      "difficulty": "clear",
+      "predicted": "Reference",
+      "correct": true,
+      "confidence": null,
+      "evidence_valid": true,
+      "evidence_span": {
+        "start": 61,
+        "end": 151,
+        "text": "It explains pairing, status lights, calibration, and how to replace the coin-cell battery."
+      },
+      "proposal_valid": true,
+      "parse_error": false
+    },
+    {
+      "id": "hy-en-reference-api",
+      "language": "en",
+      "expected": "Reference",
+      "difficulty": "clear",
+      "predicted": "Reference",
+      "correct": true,
+      "confidence": null,
+      "evidence_valid": true,
+      "evidence_span": {
+        "start": 0,
+        "end": 147,
+        "text": "API reference for the Cedar inventory service. It documents authentication fields, item lookup parameters, response codes, and pagination examples."
+      },
+      "proposal_valid": true,
+      "parse_error": false
+    },
+    {
+      "id": "hy-en-reference-safety",
+      "language": "en",
+      "expected": "Reference",
+      "difficulty": "clear",
+      "predicted": "Reference",
+      "correct": true,
+      "confidence": null,
+      "evidence_valid": true,
+      "evidence_span": {
+        "start": 0,
+        "end": 155,
+        "text": "Safety instructions for a sample portable induction plate. Keep the ventilation slots clear, use compatible cookware, and disconnect power before cleaning."
+      },
+      "proposal_valid": true,
+      "parse_error": false
+    },
+    {
+      "id": "hy-en-reference-style",
+      "language": "en",
+      "expected": "Reference",
+      "difficulty": "clear",
+      "predicted": "Reference",
+      "correct": true,
+      "confidence": null,
+      "evidence_valid": true,
+      "evidence_span": {
+        "start": 45,
+        "end": 133,
+        "text": "It defines heading levels, citation format, table captions, and rules for abbreviations."
+      },
+      "proposal_valid": true,
+      "parse_error": false
+    },
+    {
+      "id": "hy-en-reference-troubleshooting",
+      "language": "en",
+      "expected": "Reference",
+      "difficulty": "clear",
+      "predicted": "Reference",
+      "correct": true,
+      "confidence": null,
+      "evidence_valid": true,
+      "evidence_span": {
+        "start": 0,
+        "end": 129,
+        "text": "Troubleshooting manual for the Atlas label printer. The table maps warning lights to causes and gives reset and paper-feed steps."
+      },
+      "proposal_valid": true,
+      "parse_error": false
+    },
+    {
+      "id": "hy-en-reference-procedure",
+      "language": "en",
+      "expected": "Reference",
+      "difficulty": "clear",
+      "predicted": "Reference",
+      "correct": true,
+      "confidence": null,
+      "evidence_valid": true,
+      "evidence_span": {
+        "start": 0,
+        "end": 143,
+        "text": "Laboratory procedure for a fictional water-quality test. It lists sample handling, reagent order, timing, equipment checks, and disposal steps."
+      },
+      "proposal_valid": true,
+      "parse_error": false
+    },
+    {
+      "id": "hy-en-reference-events-api",
+      "language": "en",
+      "expected": "Reference",
+      "difficulty": "overlap",
+      "predicted": "Reference",
+      "correct": true,
+      "confidence": null,
+      "evidence_valid": true,
+      "evidence_span": {
+        "start": 0,
+        "end": 152,
+        "text": "Developer guide for the Cedar event-booking service. It explains how to create a session, query available dates, and interpret a seat-capacity response."
+      },
+      "proposal_valid": true,
+      "parse_error": false
+    },
+    {
+      "id": "hy-en-reference-performance",
+      "language": "en",
+      "expected": "Reference",
+      "difficulty": "overlap",
+      "predicted": "Reference",
+      "correct": true,
+      "confidence": null,
+      "evidence_valid": true,
+      "evidence_span": {
+        "start": 0,
+        "end": 141,
+        "text": "Technical note explaining the Atlas calendar application's reminder algorithm, supported recurrence rules, and time-zone conversion behavior."
+      },
+      "proposal_valid": true,
+      "parse_error": false
+    },
+    {
+      "id": "hy-de-reference-device",
+      "language": "de",
+      "expected": "Reference",
+      "difficulty": "clear",
+      "predicted": "Reference",
+      "correct": true,
+      "confidence": null,
+      "evidence_valid": true,
+      "evidence_span": {
+        "start": 0,
+        "end": 129,
+        "text": "Kurzanleitung für den fiktiven Juniper-Luftfeuchtesensor. Sie erklärt Kopplung, Statusanzeigen, Kalibrierung und Batteriewechsel."
+      },
+      "proposal_valid": true,
+      "parse_error": false
+    },
+    {
+      "id": "hy-de-reference-api",
+      "language": "de",
+      "expected": "Reference",
+      "difficulty": "clear",
+      "predicted": "Reference",
+      "correct": true,
+      "confidence": null,
+      "evidence_valid": true,
+      "evidence_span": {
+        "start": 0,
+        "end": 153,
+        "text": "API-Referenz des Cedar-Warenbestandsdienstes. Dokumentiert sind Authentifizierungsfelder, Suchparameter, Antwortcodes und Beispiele zur Seitennavigation."
+      },
+      "proposal_valid": true,
+      "parse_error": false
+    },
+    {
+      "id": "hy-de-reference-safety",
+      "language": "de",
+      "expected": "Reference",
+      "difficulty": "clear",
+      "predicted": "Reference",
+      "correct": true,
+      "confidence": null,
+      "evidence_valid": true,
+      "evidence_span": {
+        "start": 0,
+        "end": 173,
+        "text": "Sicherheitshinweise für eine tragbare Beispiel-Induktionsplatte. Lüftungsschlitze freihalten, geeignetes Kochgeschirr verwenden und vor der Reinigung den Netzstecker ziehen."
+      },
+      "proposal_valid": true,
+      "parse_error": false
+    },
+    {
+      "id": "hy-de-reference-style",
+      "language": "de",
+      "expected": "Reference",
+      "difficulty": "clear",
+      "predicted": "Reference",
+      "correct": true,
+      "confidence": null,
+      "evidence_valid": true,
+      "evidence_span": {
+        "start": 0,
+        "end": 143,
+        "text": "Formatleitfaden für fiktive Northstar-Berichte. Er legt Überschriften, Zitierweise, Tabellenbeschriftungen und den Umgang mit Abkürzungen fest."
+      },
+      "proposal_valid": true,
+      "parse_error": false
+    },
+    {
+      "id": "hy-de-reference-troubleshooting",
+      "language": "de",
+      "expected": "Reference",
+      "difficulty": "clear",
+      "predicted": "Reference",
+      "correct": true,
+      "confidence": null,
+      "evidence_valid": true,
+      "evidence_span": {
+        "start": 0,
+        "end": 141,
+        "text": "Fehlerhandbuch für den Atlas-Etikettendrucker. Eine Tabelle ordnet Warnleuchten den Ursachen zu und beschreibt Zurücksetzen und Papiereinzug."
+      },
+      "proposal_valid": true,
+      "parse_error": false
+    },
+    {
+      "id": "hy-de-reference-procedure",
+      "language": "de",
+      "expected": "Reference",
+      "difficulty": "clear",
+      "predicted": "Reference",
+      "correct": true,
+      "confidence": null,
+      "evidence_valid": true,
+      "evidence_span": {
+        "start": 0,
+        "end": 157,
+        "text": "Laborvorschrift für einen fiktiven Wasserqualitätstest. Aufgeführt sind Probenbehandlung, Reihenfolge der Reagenzien, Zeiten, Gerätekontrolle und Entsorgung."
+      },
+      "proposal_valid": true,
+      "parse_error": false
+    },
+    {
+      "id": "hy-de-reference-events-api",
+      "language": "de",
+      "expected": "Reference",
+      "difficulty": "overlap",
+      "predicted": "Reference",
+      "correct": true,
+      "confidence": null,
+      "evidence_valid": true,
+      "evidence_span": {
+        "start": 0,
+        "end": 163,
+        "text": "Entwicklerleitfaden des Cedar-Veranstaltungsdienstes. Er beschreibt das Anlegen eines Termins, die Suche nach verfügbaren Tagen und die Antwort zur Platzkapazität."
+      },
+      "proposal_valid": true,
+      "parse_error": false
+    },
+    {
+      "id": "hy-de-reference-performance",
+      "language": "de",
+      "expected": "Reference",
+      "difficulty": "overlap",
+      "predicted": "Reference",
+      "correct": true,
+      "confidence": null,
+      "evidence_valid": true,
+      "evidence_span": {
+        "start": 0,
+        "end": 153,
+        "text": "Technische Notiz zum Erinnerungsalgorithmus der Atlas-Kalenderanwendung. Erläutert werden Wiederholungsregeln, Auslösezeitpunkte und Zeitzonenumrechnung."
+      },
+      "proposal_valid": true,
+      "parse_error": false
+    }
+  ],
+  "warning": "Synthetic results only; this one-shot evaluation does not authorize document dispatch or automatic filing."
+}

@@ -52,4 +52,6 @@ across platforms (macOS, iOS, and subsequent Linux/Windows targets):
    dashboard page to GPUI, then improve it there. A rule the two clients share goes into a
    capability or `apps/gpui/core`, never only into `dashboard/`. Do not start new feature work
    in the dashboard. It retires when GPUI covers its pages.
+   See [`apps/gpui/PORTING_PLAN.md`](apps/gpui/PORTING_PLAN.md) for the active route migration matrix,
+   work packages for concurrent sessions, and the UI/UX polish roadmap.
 

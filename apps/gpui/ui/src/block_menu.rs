@@ -1,7 +1,7 @@
 //! The kinds a block can turn into, for the `/` menu and the block handle, and the filter that
 //! narrows them as the user types after `/`.
 
-use crate::blocks::Kind;
+use sjel_gpui_core::blocks::Kind;
 
 pub struct Choice {
     pub label: &'static str,

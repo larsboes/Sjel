@@ -4,7 +4,7 @@
 //! record's new frontmatter (`POST /api/tasks/done`, `POST /api/record/property`). The table
 //! draws that answer, so nothing here rewrites a note.
 
-use crate::shell::ProjectRecord;
+use sjel_gpui_core::shell::ProjectRecord;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum TaskFilter {
@@ -24,7 +24,7 @@ impl TaskFilter {
 }
 
 #[allow(unused_imports)]
-pub use sjel_gpui_ui::{due_status, DueStatus};
+pub use crate::{due_status, DueStatus};
 
 /// A due date as the table accepts it: empty, or `YYYY-MM-DD`.
 pub fn valid_due(due: &str) -> bool {

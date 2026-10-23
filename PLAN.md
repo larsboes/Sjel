@@ -1,10 +1,102 @@
-# Architecture Plan: Controlled Migration from SQLite to Turso (LibSQL)
+# Sjel plan
+
+The one ordered plan for Sjel (decided 2026-10-23). It puts the tracks in order and records
+the decisions that shape them. It is not a task list. Concrete work goes to GitHub Issues,
+unresolved claims stay in [`ISA.md`](ISA.md), and a decision moves to its owner's README when
+it is built.
+
+## Order
+
+| # | Track | Why it is here | Detail |
+|---|---|---|---|
+| 1 | GPUI universal app and standalone iPhone, with the storage work it needs | The current priority in [`AGENTS.md`](AGENTS.md). The operator chose it over data-first on 2026-10-23. The phone is a replica (§6 below), so storage moves with it. | [`apps/gpui/PORTING_PLAN.md`](apps/gpui/PORTING_PLAN.md), [Storage](#storage-controlled-migration-from-sqlite-to-turso-libsql) |
+| 2 | Data into Sjel: import routes, the rest of the vault, the journal | Every file has one owner and one way in. | [Track 2](#track-2-data-into-sjel) |
+| 3 | Restructure, with the comment and documentation sweep in the same pass | Each file changes once. | [Track 3](#track-3-restructure-and-sweep) |
+| 4 | Data formats: conversion and enrichment | Needs the owners from track 2. | [Track 4](#track-4-data-formats) |
+| — | Knowledge out of the vault | Deferred until it hurts (operator, 2026-10-23). The vault stays the knowledge base. | — |
+
+## Track 1: GPUI and storage
+
+- The route matrix and work packages are in `apps/gpui/PORTING_PLAN.md`. A concurrent session
+  created it on 2026-10-23 and it is not committed yet. It folds into this file after that.
+- Fix when it folds in: its matrix names `capabilities/context`, `capabilities/people` and
+  `capabilities/travel`, and none of them exist (capability list, 2026-10-23).
+- Open claims: DOC-4, DOC-5, IMP-2, DIST-1 to DIST-4, and "Capture from the phone" in `ISA.md`.
+
+## Track 2: Data into Sjel
+
+Measured 2026-10-23 with `sjel-import plan /Volumes/Extreme/archive` (25,348 entries) and the
+documents library (7,154 records):
+
+| What the router reports | What is there |
+|---|---|
+| 643 documents | All 643 already in Sjel (`present`) |
+| 5,788 media | 5,297 are resources inside 12 Swift Playgrounds `.playgroundbook` bundles. About 490 are personal photos and audio, about 60 of them figures in paper and talk projects. |
+| 3,009 notes | 2,074 are LifeOS and Claude agent state. 237 are Notability `.note` files. About 700 are other `.md` and `.txt` files. |
+| 0 finance | No bank-statement CSV in the archive |
+| 5,888 text records in documents | 2,149 copies of vault notes and 3,127 agent state. None was filed or categorized. |
+
+Decisions:
+
+1. **Media: check, then queue** (2026-10-23). The media library stays on the two mirrored
+   external drives. Import hashes a photo or a recording and asks media whether a library holds
+   it, through a new read-only route. A held file is `present`. A new file waits in a queue
+   until a library drive is mounted, and `media ingest` then reads it from its source. Nothing
+   is copied to the laptop.
+2. **The vault keeps knowledge only, and the rest comes into Sjel.** The 2026-10-20 ruling
+   already says this ([projects README](capabilities/projects/README.md#why-this-shape-sjel-owns-projects-tasks-and-habits)).
+   Finance, Items, Interior, People, Events, Media, Reflections and Journal have moved. Open:
+   Documents, Focus and Personal (`ISA.md`, projects item). `Atlas/Personal/Archive/Schule`
+   (139 notes, 1,279 files): its notes go to the projects store and its PDFs and scans to
+   documents.
+3. **The journal gets its own capability, later** (2026-10-23). Today its 353 records are the
+   `Journal/` domain of the projects store. The split moves them, with habits and daily
+   metrics, to a `journal` capability.
+4. **The old text records are archived, with their bytes kept** (2026-10-23), after their
+   notes have an owner. Nothing is removed.
+5. **Router fixes, from the measurement:** skip Swift Playgrounds bundles (`.playgroundbook`,
+   `.playgroundmodule`, `.swiftpm`) and agent-state folders. Route `.key` (Keynote) to documents.
+   Documents expects `.keynote`, which no file uses, so documents changes too.
+6. **Finance** keeps its route. Its import contract waits for the first real bank export.
+
+Open claims: IMP-1, DOC-1 to DOC-3, DOC-6, DOC-7, the media `To Sort/` item and the projects
+item in `ISA.md`.
+
+## Track 3: Restructure and sweep
+
+- **Sweep** (2026-10-23): remove every code comment, config comment and README paragraph that
+  repeats a decision, a rule or a history that Git or the owner's code already holds. Shrink
+  bloated sub-READMEs. Do it module by module, in the same pass as the restructure.
+- First change the rule that forbids it: "Do not run a separate sweep" in
+  `Packs/harness/skills/sjel/references/on-documentation.md`.
+- An example of what goes: `.gitignore:46` says "PLAN.md is gone".
+- The restructure scope is not decided. That decision comes on the day the track starts.
+
+## Track 4: Data formats
+
+- **PDF rule** (2026-10-23): official documents (contracts, invoices, certificates, tax notices)
+  stay PDF-first. For any other document, the extracted data in the owning capability is what
+  Sjel uses. The original stays archived and hash-verified and is never removed.
+- Convert Notability and GoodNotes archives (237 `.note` files in the archive) to PDF, then OCR
+  and enrich them.
+- Align the data formats across capabilities, so a fact has one shape wherever it is stored.
+
+## Open questions
+
+| # | Question | Decided by |
+|---|---|---|
+| P1 | Who owns the 700 notes in the archive that are outside the vault and the agent state? | Operator, before track 2 starts |
+| P2 | What does the restructure change: crate layout, capability boundaries, or both? | Operator, when track 3 starts |
+| P3 | In which track do F6, F9, B47, B48, B49, BKP-5, the traveler F4 item, the Packs/travel item and the host-patch item go? | Next planning round |
+| P4 | The replica path and one database or several | [§ Phase 2 open decision](#open-decision-2026-10-21-what-the-replica-path-is-for) and [§6](#open-decision-2026-10-21-one-database-or-one-per-capability) |
+
+## Storage: Controlled Migration from SQLite to Turso (LibSQL)
 
 > **Context**: Sjel currently persists all capability state into a single SQLite database (`axon.db`, ~273 MB, 108 tables) managed synchronously via `rusqlite` in WAL mode (PRD Q45). As the Zed GPUI desktop app evolves, background agents scale, and mobile shells connect, SQLite's single-writer limitation (`SQLITE_BUSY`) and lack of native embedded vector search create friction. This plan lays out a safe, stepwise migration to Turso / LibSQL with strict backup guarantees, zero data loss, and seamless GPUI integration.
 
 ---
 
-## 1. High-Level Architecture & System Boundaries
+### 1. High-Level Architecture & System Boundaries
 
 Turso/LibSQL serves as the multi-tenant, concurrent, embedded storage engine backing the Sjel core daemon, desktop GPUI shell, and remote clients.
 
@@ -55,7 +147,7 @@ flowchart TD
 
 ---
 
-## 2. Why Turso / LibSQL (Key Advantages & Measured Delta)
+### 2. Why Turso / LibSQL (Key Advantages & Measured Delta)
 
 | Feature | Current SQLite (`rusqlite`) | Target Turso (`libsql`) | Architectural Value for Sjel |
 |---|---|---|---|
@@ -67,7 +159,7 @@ flowchart TD
 
 ---
 
-## 3. Strict Backup & Recovery Invariant (Recovery Ladder)
+### 3. Strict Backup & Recovery Invariant (Recovery Ladder)
 
 No migration step may proceed without verifying the 4-tier recovery ladder.
 
@@ -91,7 +183,7 @@ sequenceDiagram
     Sandbox-->>Verifier: 8. Verify exact match (0 live state touched)
 ```
 
-### Verification Commands
+#### Verification Commands
 
 1. **Take automated backup & receipt**:
    ```bash
@@ -108,7 +200,7 @@ sequenceDiagram
 
 ---
 
-## 4. Phased Rollout Roadmap
+### 4. Phased Rollout Roadmap
 
 ```mermaid
 flowchart LR
@@ -118,19 +210,19 @@ flowchart LR
     P4 --> P5["Phase 5: Full Cutover & Manifest Update<br/>• Update store manifest<br/>• Update tools/backup.sh<br/>• Archive legacy rusqlite"]
 ```
 
-### Phase 1: Preflight Verification & Isolated Compatibility Spike
+#### Phase 1: Preflight Verification & Isolated Compatibility Spike
 - [x] Run `tools/backup.sh store` and verify with `tools/restore.sh store`.
 - [x] Create cold snapshot `axon.db.pre-turso-backup`.
 - [x] Write an isolated scratch probe (`scratch/libsql_compat.rs`) opening a copy of `axon.db` using `libsql`.
 - [x] Verify execution of complex queries: `json_each(?3)` predicates in `calendar`, recursive CTEs in `projects`, and spatial joins in `places`.
 
-### Phase 2: Upstreams Gate & Storage Abstraction
+#### Phase 2: Upstreams Gate & Storage Abstraction
 - [x] Add `[libsql]` upstream entry with formal review in `upstreams.toml`.
 - [x] Provide unified storage adapter in `libs/sjel-turso` (supporting LibSQL async concurrency, PRAGMAs, and once-per-process migration tracking).
 - [x] Add embedded replicas to that adapter: a remote URL, auth token and pull interval from `SJEL_TURSO_URL` / `SJEL_TURSO_AUTH_TOKEN` / `SJEL_TURSO_SYNC_INTERVAL_SECS`, a first pull before the DDL, a background loop, and `Store::sync_stats()` for a freshness surface. The engine is a default feature (2026-10-21) so following a primary is configuration rather than a Cargo.toml edit, and `sjel setup plan|apply|verify turso` is the setup path: the shell renders the plan, the CLI writes and restarts. No live primary existed to pull from, so the pull path itself is unverified.
 - [x] Verify compilation across all targets (`cargo check --workspace` and `cargo test -p sjel-turso`).
 
-#### Open decision (2026-10-21): what the replica path is for
+##### Open decision (2026-10-21): what the replica path is for
 
 Measured while re-checking the setup work, and left open rather than decided:
 
@@ -165,14 +257,14 @@ prerequisite for any replica — this device's or another's — is the same: `ax
 one shared file, and that split is the work, not the sync loop.
 
 
-### Phase 3: GPUI Desktop App & Daemon Boundary
+#### Phase 3: GPUI Desktop App & Daemon Boundary
 - [x] Integrate direct non-blocking LibSQL local database connector in `apps/gpui`: one handle per process, opened on first read and shared by every `Repo` clone, with the shell as its fallback.
 - [x] Wire direct non-blocking queries for projects, tasks, calendar entries, project records, and notes (`Repo::fetch_projects`, `Repo::fetch_tasks`, `Repo::fetch_calendar`, `Repo::fetch_project_records`, `Repo::fetch_record`, `data::read_repo`) in `apps/gpui`.
 - [x] Decouple high-throughput reads from HTTP daemon serialization while keeping writes routed through the authenticated shell.
 - [ ] Implement reactive change notification subscriptions over `/api/sjel-status/events`.
 - [x] Keep GPUI independent of heavy file locks (LibSQL non-blocking WAL/MVCC).
 
-### Phase 4: Pilot Capability Migration (Vector & Concurrency)
+#### Phase 4: Pilot Capability Migration (Vector & Concurrency)
 - [x] Run concurrent write stress tests against scouting schema via `sjel-turso` (`libs/sjel-turso/tests/multi_writer_concurrency.rs`).
 - [x] Confirm zero `SQLITE_BUSY` errors under load across 50 simultaneous inserts in 0.02s.
 - [x] Enable and verify LibSQL native vector embedding indexing (`libsql_vector_idx`, `vector_distance_cos`) with top-k cosine similarity ranking.
@@ -180,14 +272,14 @@ one shared file, and that split is the work, not the sync loop.
 - [x] Cut one capability over end to end as the pattern: `operator-profile` (2026-10-21) — schema, store, HTTP handlers, CLI and tests on `sjel-turso`, `rusqlite` gone from its dependency graph, and the existing row read back unchanged from the live database. `Store` in `libs/sjel-turso` is the shape the remaining capabilities follow; `places` and `scouting` are still on `rusqlite`.
 - [x] Second cutover on the same pattern, at real size: `projects` (2026-10-21) — 1221 rows re-read through LibSQL and compared byte for byte against the rendered second copy with no drift, every `spawn_blocking` site in its handlers replaced by an awaited store call, and a router test covering create/read/save/stale-save/remove. It is also the table `apps/gpui` reads directly, so writer and reader now share one engine.
 
-### Phase 5: Production Promotion & Backup Contract Evolution
+#### Phase 5: Production Promotion & Backup Contract Evolution
 - [x] Update `capabilities/store/README.md` and doctrine recording LibSQL adoption, non-blocking MVCC, and native vector capabilities.
 - [x] Verify `tools/backup.sh` and `tools/restore.sh` isolated recovery ladder (107 tables, 640,464 rows) operates identically on LibSQL format.
 - [x] Keep Sjel self-model (`self.json`) and service manifests (`service.toml`) validated and current.
 
 ---
 
-## 6. Topology decision (2026-10-21): this Mac is the primary, the phone is a replica
+### 6. Topology decision (2026-10-21): this Mac is the primary, the phone is a replica
 
 Decided by the owner after the replica path was found unreachable over the shared `axon.db`.
 The shape, and what each hop is for:
@@ -224,7 +316,7 @@ The shape, and what each hop is for:
    phone keep their replicas and point `SJEL_TURSO_URL` at it. Nothing in the storage layer
    changes, which is the whole reason to build it this way now.
 
-### Proven 2026-10-21: the pull path works
+#### Proven 2026-10-21: the pull path works
 
 The `libsql 0.10.0` crate and the `sqld 0.24.32` binary — a 2025-02 release train — do sync. A
 scratch primary on loopback (`sqld --db-path … --http-listen-addr 127.0.0.1:8880`) plus
@@ -240,7 +332,7 @@ satisfy — and becomes a real check the moment `sjel setup` records a primary. 
 cover yet: JWT authentication (`sqld --auth-jwt-key-file`), which the phone's replica will need
 before the port is reachable from the tailnet.
 
-### Also proven 2026-10-21: the token path, both directions
+#### Also proven 2026-10-21: the token path, both directions
 
 `sqld --auth-jwt-key-file` plus `sjel_turso::PrimaryKey` (`libs/sjel-turso/src/auth.rs`) is the
 authenticated form of the same thing. Against a scratch primary started with a generated public
@@ -265,7 +357,7 @@ refused value as `Timeout performing handshake with primary`. Wrong, absent and 
 like a network problem, and the primary logs nothing at INFO. `sjel setup verify` therefore probes
 over HTTP first and names the refusal itself.
 
-### Wired end to end, 2026-10-21: `sjel setup` provisions a primary it owns
+#### Wired end to end, 2026-10-21: `sjel setup` provisions a primary it owns
 
 `tools/sjel-cli/src/setup/mint.rs` holds the missing half:
 
@@ -301,7 +393,7 @@ reported as "check the URL and that the database exists". The probe now runs `PO
 with a `SELECT 1` — the authenticated door a replica's writes take — falls back to `/info` for a
 cloud primary, and reports `/health` as reachability only when neither answers.
 
-### Step 1 done, 2026-10-21: `sqld` is a service this machine owns
+#### Step 1 done, 2026-10-21: `sqld` is a service this machine owns
 
 `capabilities/sqld/` is a manifest and a README, no code: the manifest turns a binary into a row
 in the registry that `service-runner.sh`, `tools/capability.sh`, the watchdog, `backup.sh` and
@@ -341,7 +433,7 @@ Measured on this machine:
   until something opens it. It cleared on the next run. Worth teaching `backup.sh` that a declared
   database that has never existed is "nothing to back up yet" rather than a failure.
 
-### Open decision (2026-10-21): one database, or one per capability
+#### Open decision (2026-10-21): one database, or one per capability
 
 Left open by the owner after asking the right question — *if we split, which one do I search later?*
 — and it is not a question to answer from doctrine, because the doctrine's stated reason does not
@@ -375,7 +467,7 @@ The load-bearing fact for the decision: **B's obstacle is the engine migration, 
 zero-JOIN move is not that. What would settle it is not more analysis: it is whether the phone has
 to read with this Mac asleep. If it does not, C is free and A is unnecessary.
 
-### Next, in order
+#### Next, in order
 
 1. Whatever gives the phone something to read while this Mac is unreachable. Under today's
    one-database decision that is the **snapshot mirror** (R1 in
@@ -387,7 +479,7 @@ to read with this Mac asleep. If it does not, C is free and A is unnecessary.
 3. An `sjel update` class for the pinned binary, so "who moves it" has one answer instead of
    "you, when you read the README".
 
-### What this commits us to, stated plainly
+#### What this commits us to, stated plainly
 - **One database, for now, decided 2026-10-21.** Nothing is split: `projects` keeps writing
   `axon.db` and `SJEL_TURSO_URL` stays unset, so the primary holds no data until the phone's need is
   concrete. The owner's goal is *all data offline on the phone, or as much as possible*, and the

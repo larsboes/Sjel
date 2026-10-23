@@ -119,6 +119,7 @@ final class SjelMacViewModel: ObservableObject {
         status = await bridge.status()
         checkedAt = Date()
         today = await bridge.calendarToday().map { Today.ahead($0, now: Date()) }
+        desktopUpdate = await DesktopUpdate.check()
     }
 
     /// Starts or stops capabilities one after the other, then reads the health again.
@@ -201,6 +202,8 @@ final class SjelMacViewModel: ObservableObject {
     }
 
     @Published var isUpdatingDesktopApp: Bool = false
+    /// Commits the checkout has that the installed desktop app lacks; nil when it has them all.
+    @Published var desktopUpdate: DesktopUpdate? = nil
 
     /// Opens the native desktop app, or brings it forward. `apps/gpui/install` puts it
     /// in ~/Applications under this bundle identifier.
@@ -241,6 +244,7 @@ final class SjelMacViewModel: ObservableObject {
                     self.isUpdatingDesktopApp = false
                     if task.terminationStatus == 0 {
                         self.openProblem = "Sjel Desktop updated."
+                        self.desktopUpdate = nil
                     } else {
                         self.openProblem = "Desktop update failed (code \(task.terminationStatus))."
                     }
@@ -350,6 +354,10 @@ struct SjelMenuBarView: View {
             statusSummary
             capabilityList
 
+            if let update = model.desktopUpdate {
+                Divider()
+                desktopUpdateRow(update)
+            }
             if !model.pendingWrites.isEmpty {
                 Divider()
                 approvals
@@ -511,6 +519,31 @@ struct SjelMenuBarView: View {
             startAll
         }
         .frame(height: 20)
+    }
+
+    /// Shown only while the installed desktop app is behind the checkout.
+    private func desktopUpdateRow(_ update: DesktopUpdate) -> some View {
+        HStack(spacing: 8) {
+            Image(systemName: "arrow.up.circle.fill")
+                .foregroundStyle(.tint)
+            VStack(alignment: .leading, spacing: 1) {
+                Text("Sjel Desktop update")
+                    .font(.system(size: 12, weight: .medium))
+                Text("\(update.behind) newer commit\(update.behind == 1 ? "" : "s") · \(update.newest)")
+                    .font(.system(size: 10))
+                    .foregroundStyle(.secondary)
+                    .lineLimit(1)
+                    .truncationMode(.tail)
+                    .help(update.newest)
+            }
+            Spacer(minLength: 6)
+            Button(model.isUpdatingDesktopApp ? "Updating…" : "Update") {
+                model.updateDesktopApp()
+            }
+            .controlSize(.small)
+            .disabled(model.isUpdatingDesktopApp)
+            .help("Builds and installs Sjel Desktop (apps/gpui/install), then restarts it")
+        }
     }
 
     /// Always in place. Disabled when nothing is down, and the tip says why.

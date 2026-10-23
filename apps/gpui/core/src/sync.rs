@@ -230,6 +230,7 @@ async fn replay<H: Host>(
         "save_record" => save(store, host, report, &mutation.path, &payload).await,
         "set_task_done" => done(store, host, report, &mutation.path, &payload).await,
         "set_task_priority" => priority(store, host, report, &mutation.path, &payload).await,
+        "set_task_due" => due(host, &mutation.path, &payload).await,
         "delete_record" => remove(store, host, report, &mutation.path).await,
         other => Err(format!("this app has no way to replay a {other}")),
     }
@@ -248,6 +249,21 @@ async fn priority<H: Host>(
         host,
         RECORD_PROPERTY,
         json!({ "path": path, "key": "priority", "value": p }),
+    )
+    .await?;
+    if !reply.ok() && !reply.missing() {
+        return Err(reply.refused());
+    }
+    Ok(())
+}
+
+/// Replays a due date change. An empty date clears it.
+async fn due<H: Host>(host: &H, path: &str, payload: &Value) -> Result<(), String> {
+    let due = payload["due"].as_str().unwrap_or_default();
+    let reply = post(
+        host,
+        RECORD_PROPERTY,
+        json!({ "path": path, "key": "due", "value": due }),
     )
     .await?;
     if !reply.ok() && !reply.missing() {
@@ -347,40 +363,13 @@ async fn create<H: Host>(
     content: &str,
 ) -> Result<String, String> {
     ensure_project(host, &state.project).await?;
-    let is_task = state.kind == "task";
-    let reply = if is_task {
-        post(
-            host,
-            TASKS,
-            json!({
-                "project": state.project,
-                "title": state.title,
-                "summary": "",
-                "due": state.due,
-                "priority": state.priority,
-            }),
-        )
-        .await?
+    let made = if state.kind == "project" {
+        // A project made on the phone is its hub note here. Creating the project made the Mac's
+        // own hub, so the phone takes over that path instead of adding a second note.
+        hub_path(host, &state.project).await?
     } else {
-        post(
-            host,
-            NOTES,
-            json!({ "project": state.project, "title": state.title, "summary": "" }),
-        )
-        .await?
+        create_record(host, state).await?
     };
-    if !reply.ok() {
-        return Err(reply.refused());
-    }
-    let made = reply
-        .json()
-        .and_then(|body| {
-            body["path"]
-                .as_str()
-                .or_else(|| body["task"]["id"].as_str())
-                .map(str::to_owned)
-        })
-        .ok_or("the Mac did not say which path it created")?;
     store.rekey(path, &made).await.map_err(|e| e.to_string())?;
     report.created += 1;
 
@@ -406,6 +395,69 @@ async fn create<H: Host>(
         .await
         .map_err(|e| e.to_string())?;
     Ok(made)
+}
+
+/// The path of a project's hub record on the Mac.
+async fn hub_path<H: Host>(host: &H, project: &str) -> Result<String, String> {
+    let reply = get(
+        host,
+        &format!("{PROJECT}?name={}&content=false", quote(project)),
+    )
+    .await?;
+    if !reply.ok() {
+        return Err(reply.refused());
+    }
+    reply
+        .json()
+        .and_then(|body| {
+            body["records"].as_array()?.iter().find_map(|record| {
+                (record["kind"].as_str() == Some("project"))
+                    .then(|| record["path"].as_str().map(str::to_owned))
+                    .flatten()
+            })
+        })
+        .ok_or_else(|| format!("the Mac has no hub note for {project}"))
+}
+
+/// Creates a task or a note on the Mac, answering with the path the Mac picked.
+async fn create_record<H: Host>(
+    host: &H,
+    state: &crate::store::SyncState,
+) -> Result<String, String> {
+    let is_task = state.kind == "task";
+    let reply = if is_task {
+        post(
+            host,
+            TASKS,
+            json!({
+                "project": state.project,
+                "title": state.title,
+                "summary": "",
+                "due": state.due,
+                "priority": state.priority,
+            }),
+        )
+        .await?
+    } else {
+        post(
+            host,
+            NOTES,
+            json!({ "project": state.project, "title": state.title, "summary": "" }),
+        )
+        .await?
+    };
+    if !reply.ok() {
+        return Err(reply.refused());
+    }
+    reply
+        .json()
+        .and_then(|body| {
+            body["path"]
+                .as_str()
+                .or_else(|| body["task"]["id"].as_str())
+                .map(str::to_owned)
+        })
+        .ok_or_else(|| "the Mac did not say which path it created".to_owned())
 }
 
 /// Replays one done toggle, creating the task on the Mac first when it has never had it.

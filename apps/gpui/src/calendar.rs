@@ -8,14 +8,12 @@ use crate::shell::CalendarEntry;
 const DAY: &str = "%Y-%m-%d";
 const TIME: &str = "%Y-%m-%dT%H:%M:%S";
 
-/// The query range: today and tomorrow, both inclusive.
+/// The query range for today and tomorrow. `to` is exclusive
+/// (`capabilities/calendar/src/store.rs`, `list_entries`), so it is the day after tomorrow.
 pub fn range(now: NaiveDateTime) -> (String, String) {
     let today = now.date();
-    let tomorrow = today + Duration::days(1);
-    (
-        today.format(DAY).to_string(),
-        tomorrow.format(DAY).to_string(),
-    )
+    let after = today + Duration::days(2);
+    (today.format(DAY).to_string(), after.format(DAY).to_string())
 }
 
 fn start(entry: &CalendarEntry) -> Option<NaiveDateTime> {
@@ -76,6 +74,7 @@ mod tests {
             ends_at: ends_at.into(),
             all_day,
             commitment: "planned".into(),
+            ..CalendarEntry::default()
         }
     }
 
@@ -84,10 +83,10 @@ mod tests {
     }
 
     #[test]
-    fn range_is_today_and_tomorrow() {
+    fn range_covers_today_and_tomorrow_with_an_exclusive_end() {
         assert_eq!(
             range(at("2026-12-31T23:00:00")),
-            ("2026-12-31".into(), "2027-01-01".into())
+            ("2026-12-31".into(), "2027-01-02".into())
         );
     }
 

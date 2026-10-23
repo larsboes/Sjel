@@ -8,8 +8,12 @@ use std::path::{Path, PathBuf};
 use std::process::Command;
 
 use gpui_kit::component::button::{Button, ButtonVariants};
+use gpui_kit::component::popover::Popover;
 use gpui_kit::component::{Disableable, IconName, Sizable};
-use gpui_kit::{div, prelude::*, px, rgb, rgba, App, ClipboardItem, FontWeight, Window};
+use gpui_kit::{div, prelude::*, px, rgb, Anchor, Entity, FontWeight};
+
+use crate::settings::Section;
+use crate::workspace::Workspace;
 
 use crate::theme::Palette;
 
@@ -30,14 +34,14 @@ pub struct UpdateInfo {
     pub commits_behind: usize,
     pub commits: Vec<CommitSummary>,
     pub repo_root: PathBuf,
+    pub has_uncommitted_changes: bool,
 }
 
 impl UpdateInfo {
+    /// True when the checkout has commits this build lacks. Uncommitted changes do not count:
+    /// agents edit this checkout all day, so they would keep the pill lit for nothing.
     pub fn is_update_available(&self) -> bool {
         self.commits_behind > 0
-            || (self.running_commit != "dev"
-                && !self.running_commit.is_empty()
-                && self.running_commit != self.latest_commit)
     }
 }
 
@@ -145,6 +149,13 @@ pub fn check_git_updates(repo_root: &Path) -> Option<UpdateInfo> {
         }
     }
 
+    let status_out = Command::new("git")
+        .args(["status", "--porcelain"])
+        .current_dir(repo_root)
+        .output()
+        .ok();
+    let has_uncommitted_changes = status_out.map(|o| !o.stdout.is_empty()).unwrap_or(false);
+
     Some(UpdateInfo {
         running_commit: RUNNING_COMMIT,
         build_time: BUILD_TIME,
@@ -152,6 +163,7 @@ pub fn check_git_updates(repo_root: &Path) -> Option<UpdateInfo> {
         commits_behind,
         commits,
         repo_root: repo_root.to_path_buf(),
+        has_uncommitted_changes,
     })
 }
 
@@ -187,287 +199,112 @@ pub fn execute_rebuild(repo_root: &Path) -> Result<String, String> {
     }
 }
 
-/// Relaunches Sjel Desktop application.
-pub fn relaunch_app() {
-    let _ = Command::new("open")
-        .args(["-n", "-a", "Sjel Desktop"])
-        .spawn();
-    std::process::exit(0);
-}
-
-/// Renders the floating update popover card.
-pub fn update_popover<FRebuild, FClose, FRelaunch>(
+/// The header's update control: a small pill that opens a popover with the newest commits,
+/// Rebuild, and a link to Settings › Updates. The caller shows it only when commits are waiting.
+pub fn header_pill(
     info: &UpdateInfo,
-    state: &RebuildState,
+    building: bool,
     palette: Palette,
-    on_rebuild: FRebuild,
-    on_close: FClose,
-    on_relaunch: FRelaunch,
-) -> impl IntoElement
-where
-    FRebuild: Fn(&mut Window, &mut App) + 'static + Clone,
-    FClose: Fn(&mut Window, &mut App) + 'static + Clone,
-    FRelaunch: Fn(&mut Window, &mut App) + 'static + Clone,
-{
-    let close = on_close.clone();
-    let mut card = div()
-        .id("update-popover")
-        .flex()
-        .flex_col()
-        .gap_3()
-        .p_4()
-        .w(px(360.))
-        .rounded(px(12.))
-        .bg(rgba(palette.surface))
-        .border_1()
-        .border_color(rgba(palette.border));
-
-    // Header
-    let header = div()
-        .flex()
-        .items_center()
-        .justify_between()
-        .pb_1()
-        .border_b_1()
-        .border_color(rgba(palette.border))
-        .child(
-            div()
-                .flex()
-                .items_center()
-                .gap_2()
-                .child(
-                    div()
-                        .text_sm()
-                        .font_weight(FontWeight::SEMIBOLD)
-                        .text_color(rgb(palette.text))
-                        .child("App Update Available"),
-                )
-                .when(info.commits_behind > 0, |el| {
-                    el.child(
-                        div()
-                            .text_xs()
-                            .px_2()
-                            .py(px(1.))
-                            .rounded_full()
-                            .bg(rgba(palette.amber & 0xffffff | 0x24000000))
-                            .text_color(rgb(palette.amber))
-                            .font_weight(FontWeight::MEDIUM)
-                            .child(format!("+{} commits", info.commits_behind)),
-                    )
-                }),
+    workspace: Entity<Workspace>,
+) -> impl IntoElement {
+    let label = if building {
+        "Building…".to_owned()
+    } else {
+        format!("{} new", info.commits_behind)
+    };
+    let info = info.clone();
+    Popover::new("update-popover")
+        .anchor(Anchor::TopRight)
+        .trigger(
+            Button::new("update-pill")
+                .small()
+                .outline()
+                .icon(IconName::ArrowUp)
+                .loading(building)
+                .label(label)
+                .tooltip("Sjel Desktop update"),
         )
-        .child(
+        .content(move |_, _, cx| {
+            let details = workspace.clone();
+            let rebuild = workspace.clone();
+            let behind = info.commits_behind;
             div()
-                .id("close-update")
-                .text_xs()
-                .cursor_pointer()
-                .px_2()
-                .py(px(2.))
-                .rounded(px(4.))
-                .bg(rgba(palette.raised))
-                .text_color(rgb(palette.muted))
-                .hover(|s| s.text_color(rgb(palette.text)))
-                .on_click(move |_, window, app| close(window, app))
-                .child("✕"),
-        );
-    card = card.child(header);
-
-    // Commit diff summary
-    let meta_row = div()
-        .flex()
-        .items_center()
-        .justify_between()
-        .text_xs()
-        .text_color(rgb(palette.muted))
-        .child(format!("Running {}", info.running_commit))
-        .child(format!("Latest {}", info.latest_commit));
-    card = card.child(meta_row);
-
-    // Recent commits list
-    if !info.commits.is_empty() {
-        let mut list_box = div()
-            .flex()
-            .flex_col()
-            .gap_1()
-            .p_2()
-            .rounded(px(6.))
-            .bg(rgba(palette.raised))
-            .border_1()
-            .border_color(rgba(palette.border & 0xffffff | 0x30000000));
-
-        for commit in info.commits.iter().take(4) {
-            let row = div()
-                .flex()
-                .items_center()
-                .gap_2()
-                .child(
-                    div()
-                        .text_xs()
-                        .px_1()
-                        .rounded(px(3.))
-                        .bg(rgba(palette.surface))
-                        .text_color(rgb(palette.accent))
-                        .child(commit.sha.clone()),
-                )
-                .child(
-                    div()
-                        .text_xs()
-                        .text_color(rgb(palette.text))
-                        .truncate()
-                        .child(commit.message.clone()),
-                );
-            list_box = list_box.child(row);
-        }
-        card = card.child(list_box);
-    }
-
-    // State actions
-    match state {
-        RebuildState::Idle => {
-            let rebuild = on_rebuild.clone();
-            let action_bar = div()
-                .flex()
-                .items_center()
-                .gap_2()
-                .child(
-                    Button::new("rebuild-now")
-                        .primary()
-                        .small()
-                        .icon(IconName::RotateCw)
-                        .label("Rebuild & Install")
-                        .tooltip("Runs apps/gpui/install in the background")
-                        .on_click(move |_, window, app| rebuild(window, app)),
-                )
-                .child(
-                    Button::new("copy-command")
-                        .ghost()
-                        .small()
-                        .icon(IconName::Copy)
-                        .label("Copy Command")
-                        .tooltip("Copy build command to clipboard")
-                        .on_click(|_, _, cx| {
-                            cx.write_to_clipboard(ClipboardItem::new_string(
-                                "cd apps/gpui && ./install".to_string(),
-                            ));
-                        }),
-                );
-            card = card.child(action_bar);
-            card = card.child(
-                div()
-                    .text_xs()
-                    .text_color(rgb(palette.muted))
-                    .child("Rebuilds release bundle to ~/Applications/Sjel Desktop.app"),
-            );
-        }
-        RebuildState::Building => {
-            let building_box = div()
-                .flex()
-                .items_center()
-                .gap_2()
-                .p_2()
-                .rounded(px(6.))
-                .bg(rgba(palette.accent & 0xffffff | 0x18000000))
-                .child(
-                    Button::new("building-indicator")
-                        .ghost()
-                        .small()
-                        .loading(true)
-                        .label("Rebuilding Sjel Desktop...")
-                        .disabled(true),
-                );
-            card = card.child(building_box);
-            card = card.child(
-                div()
-                    .text_xs()
-                    .text_color(rgb(palette.muted))
-                    .child("Cargo release build in progress. You can keep using Sjel."),
-            );
-        }
-        RebuildState::Success(msg) => {
-            let relaunch = on_relaunch.clone();
-            let success_box = div()
+                .w(px(320.))
                 .flex()
                 .flex_col()
-                .gap_2()
-                .p_2()
-                .rounded(px(6.))
-                .bg(rgba(palette.green & 0xffffff | 0x18000000))
-                .border_1()
-                .border_color(rgba(palette.green & 0xffffff | 0x40000000))
+                .gap_3()
                 .child(
                     div()
-                        .text_xs()
-                        .font_weight(FontWeight::MEDIUM)
-                        .text_color(rgb(palette.green))
-                        .child(format!("✓ {}", msg)),
+                        .flex()
+                        .flex_col()
+                        .gap(px(2.))
+                        .child(
+                            div()
+                                .text_sm()
+                                .font_weight(FontWeight::SEMIBOLD)
+                                .child("Update available"),
+                        )
+                        .child(
+                            div()
+                                .text_xs()
+                                .text_color(rgb(palette.muted))
+                                .child(format!(
+                                    "{behind} commit{} newer than this build ({})",
+                                    if behind == 1 { "" } else { "s" },
+                                    info.running_commit
+                                )),
+                        ),
                 )
-                .child(
-                    Button::new("relaunch-now")
-                        .primary()
-                        .small()
-                        .label("Restart Sjel Desktop Now")
-                        .on_click(move |_, window, app| relaunch(window, app)),
-                );
-            card = card.child(success_box);
-        }
-        RebuildState::Failed(err) => {
-            let rebuild = on_rebuild.clone();
-            let err_box = div()
-                .flex()
-                .flex_col()
-                .gap_2()
-                .p_2()
-                .rounded(px(6.))
-                .bg(rgba(palette.red & 0xffffff | 0x18000000))
-                .border_1()
-                .border_color(rgba(palette.red & 0xffffff | 0x40000000))
                 .child(
                     div()
-                        .text_xs()
-                        .text_color(rgb(palette.red))
-                        .child(format!("Rebuild failed: {}", err)),
+                        .flex()
+                        .flex_col()
+                        .gap_1()
+                        .children(info.commits.iter().take(3).map(|commit| {
+                            div()
+                                .flex()
+                                .gap_2()
+                                .text_xs()
+                                .child(
+                                    div()
+                                        .flex_none()
+                                        .text_color(rgb(palette.accent))
+                                        .child(commit.sha.clone()),
+                                )
+                                .child(div().min_w_0().truncate().child(commit.message.clone()))
+                        })),
                 )
                 .child(
-                    Button::new("retry-rebuild")
-                        .primary()
-                        .small()
-                        .label("Retry Rebuild")
-                        .on_click(move |_, window, app| rebuild(window, app)),
-                );
-            card = card.child(err_box);
-        }
-    }
-
-    card
-}
-
-/// Renders the clickable header update pill when an update is available.
-pub fn update_badge(commits_behind: usize, palette: Palette) -> impl IntoElement {
-    div()
-        .id("update-available-badge")
-        .flex()
-        .items_center()
-        .gap_1()
-        .px_2()
-        .py(px(3.))
-        .rounded_full()
-        .bg(rgba(palette.amber & 0xffffff | 0x24000000))
-        .border_1()
-        .border_color(rgba(palette.amber & 0xffffff | 0x60000000))
-        .cursor_pointer()
-        .hover(|s| s.bg(rgba(palette.amber & 0xffffff | 0x38000000)))
-        .child(div().size(px(6.)).rounded_full().bg(rgb(palette.amber)))
-        .child(
-            div()
-                .text_xs()
-                .font_weight(FontWeight::MEDIUM)
-                .text_color(rgb(palette.amber))
-                .child(if commits_behind > 0 {
-                    format!("Update ({} behind)", commits_behind)
-                } else {
-                    "Update Available".to_string()
-                }),
-        )
+                    div()
+                        .flex()
+                        .justify_end()
+                        .gap_2()
+                        .child(
+                            Button::new("update-details")
+                                .ghost()
+                                .small()
+                                .label("Details")
+                                .on_click(cx.listener(move |state, _, window, cx| {
+                                    state.dismiss(window, cx);
+                                    details.update(cx, |view, cx| {
+                                        view.open_settings(Some(Section::Updates), cx)
+                                    });
+                                })),
+                        )
+                        .child(
+                            Button::new("update-rebuild")
+                                .primary()
+                                .small()
+                                .label("Rebuild")
+                                .disabled(building)
+                                .tooltip("Builds, installs, and restarts Sjel Desktop")
+                                .on_click(cx.listener(move |state, _, window, cx| {
+                                    state.dismiss(window, cx);
+                                    rebuild.update(cx, |view, cx| view.trigger_rebuild(window, cx));
+                                })),
+                        ),
+                )
+        })
 }
 
 #[cfg(test)]
@@ -483,6 +320,7 @@ mod tests {
             commits_behind: 0,
             commits: vec![],
             repo_root: PathBuf::from("/tmp"),
+            has_uncommitted_changes: false,
         };
         assert!(!same.is_update_available());
 
@@ -496,8 +334,20 @@ mod tests {
                 message: "latest feature".into(),
             }],
             repo_root: PathBuf::from("/tmp"),
+            has_uncommitted_changes: false,
         };
         assert!(behind.is_update_available());
+
+        let uncommitted = UpdateInfo {
+            running_commit: "abc1234",
+            build_time: "2026-10-22",
+            latest_commit: "abc1234".to_string(),
+            commits_behind: 0,
+            commits: vec![],
+            repo_root: PathBuf::from("/tmp"),
+            has_uncommitted_changes: true,
+        };
+        assert!(!uncommitted.is_update_available());
     }
 
     #[test]

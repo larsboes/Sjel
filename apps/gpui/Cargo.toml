@@ -12,10 +12,15 @@ description = "Sjel native GPUI desktop application"
 [workspace]
 members = ["core", "ios", "ui"]
 
+[features]
+native-maps = ["sjel-gpui-ui/native-maps"]
+
 [dependencies]
 sjel-gpui-core = { path = "core" }
 sjel-gpui-ui = { path = "ui" }
 gpui-kit = { version = "=0.7.3", default-features = false, features = ["component", "assets"] }
+# Same crate gpui-kit resolves. `#[derive(gpui::Action)]` expands to `gpui::` paths.
+gpui = { package = "gpui-pre", version = "=0.3.9", default-features = false }
 chrono = { version = "0.4", default-features = false, features = ["clock"] }
 futures = "0.3"
 reqwest = { version = "0.13", default-features = false, features = ["json"] }
@@ -24,11 +29,23 @@ serde_json = "1"
 tokio = { version = "1", features = ["rt", "sync", "time", "net"] }
 libsql = { version = "0.10.0", default-features = false, features = ["core"] }
 zeroize = "=1.9.1"
+# CoreAudio on the Mac, ALSA on Linux, CoreAudio on iOS: the soundscape window synthesizes its
+# own audio (`src/soundscape`), and Web Audio is not available outside a browser. cpal reaches
+# the device without any C toolchain step -- on macOS it goes through objc2-audio-toolbox, not
+# bindgen.
+cpal = "0.16"
 
 [target.'cfg(target_os = "macos")'.dependencies]
 objc2 = "=0.6.5"
 objc2-app-kit = { version = "=0.3.2", default-features = false, features = ["NSBox", "NSColor", "NSGlassEffectView", "NSGraphics", "NSResponder", "NSView", "objc2-core-foundation"] }
 objc2-foundation = { version = "=0.3.2", default-features = false, features = ["NSGeometry"] }
+# PDF pages are drawn by Core Graphics, the renderer already on this machine and already trusted
+# for scanned pages (`tools/visocr`). Features are named rather than defaulted: the default set
+# pulls every Core Graphics surface this app never calls.
+objc2-core-foundation = { version = "=0.3.2", default-features = false, features = ["std", "CFCGTypes", "CFData"] }
+objc2-core-graphics = { version = "=0.3.2", default-features = false, features = ["std", "CGAffineTransform", "CGBase", "CGBitmapContext", "CGColorSpace", "CGContext", "CGDataProvider", "CGGeometry", "CGImage", "CGPDFDocument", "CGPDFPage"] }
+# `gpui`'s `RenderImage` takes `image::Frame`, so a drawn page needs the same crate `gpui` resolves.
+image = { version = "=0.25.10", default-features = false }
 raw-window-handle = "=0.6.2"
 
 [dev-dependencies]

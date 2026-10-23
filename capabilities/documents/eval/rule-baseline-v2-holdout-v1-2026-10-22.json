@@ -1,0 +1,1523 @@
+{
+  "schema": "sjel.documents.rule-baseline/v1",
+  "date": "2026-10-22",
+  "purpose": "Measure the existing deterministic keyword suggester independently from model proposals.",
+  "source": "capabilities/documents/src/library.rs::suggest_category",
+  "input_boundary": "Synthetic text only; each sample uses the neutral filename synthetic.txt.",
+  "proposal_policy": "Suggestions are advisory; this report does not file or archive documents.",
+  "evidence_note": "The current suggestion reason does not retain the matched source span.",
+  "datasets": {
+    "clm-corpus-v2.json": {
+      "samples": 48,
+      "proposed": 16,
+      "correct": 14,
+      "wrong": 2,
+      "unresolved": 32,
+      "precision": 0.875,
+      "by_expected_category": {
+        "Events": {
+          "proposed": 3,
+          "correct": 2,
+          "wrong": 1
+        },
+        "Finance": {
+          "proposed": 9,
+          "correct": 9,
+          "wrong": 0
+        },
+        "Reference": {
+          "proposed": 4,
+          "correct": 3,
+          "wrong": 1
+        }
+      },
+      "by_language": {
+        "de": {
+          "proposed": 6,
+          "correct": 6,
+          "wrong": 0
+        },
+        "en": {
+          "proposed": 10,
+          "correct": 8,
+          "wrong": 2
+        }
+      },
+      "predictions": [
+        {
+          "id": "en-finance-invoice",
+          "language": "en",
+          "expected": "Finance",
+          "predicted": "Finance",
+          "correct": true
+        },
+        {
+          "id": "en-finance-receipt",
+          "language": "en",
+          "expected": "Finance",
+          "predicted": "Finance",
+          "correct": true
+        },
+        {
+          "id": "en-finance-account-statement",
+          "language": "en",
+          "expected": "Finance",
+          "predicted": null,
+          "correct": false
+        },
+        {
+          "id": "en-finance-refund",
+          "language": "en",
+          "expected": "Finance",
+          "predicted": null,
+          "correct": false
+        },
+        {
+          "id": "en-finance-subscription",
+          "language": "en",
+          "expected": "Finance",
+          "predicted": "Finance",
+          "correct": true
+        },
+        {
+          "id": "en-finance-expenses",
+          "language": "en",
+          "expected": "Finance",
+          "predicted": "Finance",
+          "correct": true
+        },
+        {
+          "id": "en-finance-event-fee",
+          "language": "en",
+          "expected": "Finance",
+          "predicted": "Finance",
+          "correct": true
+        },
+        {
+          "id": "en-finance-purchase-order",
+          "language": "en",
+          "expected": "Finance",
+          "predicted": null,
+          "correct": false
+        },
+        {
+          "id": "de-finance-utility-bill",
+          "language": "de",
+          "expected": "Finance",
+          "predicted": "Finance",
+          "correct": true
+        },
+        {
+          "id": "de-finance-payment-reminder",
+          "language": "de",
+          "expected": "Finance",
+          "predicted": "Finance",
+          "correct": true
+        },
+        {
+          "id": "de-finance-receipt",
+          "language": "de",
+          "expected": "Finance",
+          "predicted": null,
+          "correct": false
+        },
+        {
+          "id": "de-finance-subscription",
+          "language": "de",
+          "expected": "Finance",
+          "predicted": "Finance",
+          "correct": true
+        },
+        {
+          "id": "de-finance-account-statement",
+          "language": "de",
+          "expected": "Finance",
+          "predicted": null,
+          "correct": false
+        },
+        {
+          "id": "de-finance-refund",
+          "language": "de",
+          "expected": "Finance",
+          "predicted": null,
+          "correct": false
+        },
+        {
+          "id": "de-finance-event-invoice",
+          "language": "de",
+          "expected": "Finance",
+          "predicted": "Finance",
+          "correct": true
+        },
+        {
+          "id": "de-finance-purchase",
+          "language": "de",
+          "expected": "Finance",
+          "predicted": null,
+          "correct": false
+        },
+        {
+          "id": "en-events-conference",
+          "language": "en",
+          "expected": "Events",
+          "predicted": "Events",
+          "correct": true
+        },
+        {
+          "id": "en-events-workshop",
+          "language": "en",
+          "expected": "Events",
+          "predicted": null,
+          "correct": false
+        },
+        {
+          "id": "en-events-calendar-invite",
+          "language": "en",
+          "expected": "Events",
+          "predicted": null,
+          "correct": false
+        },
+        {
+          "id": "en-events-festival",
+          "language": "en",
+          "expected": "Events",
+          "predicted": null,
+          "correct": false
+        },
+        {
+          "id": "en-events-webinar",
+          "language": "en",
+          "expected": "Events",
+          "predicted": null,
+          "correct": false
+        },
+        {
+          "id": "en-events-exhibition",
+          "language": "en",
+          "expected": "Events",
+          "predicted": null,
+          "correct": false
+        },
+        {
+          "id": "en-events-ticket",
+          "language": "en",
+          "expected": "Events",
+          "predicted": "Finance",
+          "correct": false
+        },
+        {
+          "id": "en-events-registration-fee",
+          "language": "en",
+          "expected": "Events",
+          "predicted": null,
+          "correct": false
+        },
+        {
+          "id": "de-events-conference",
+          "language": "de",
+          "expected": "Events",
+          "predicted": "Events",
+          "correct": true
+        },
+        {
+          "id": "de-events-concert",
+          "language": "de",
+          "expected": "Events",
+          "predicted": null,
+          "correct": false
+        },
+        {
+          "id": "de-events-workshop",
+          "language": "de",
+          "expected": "Events",
+          "predicted": null,
+          "correct": false
+        },
+        {
+          "id": "de-events-theatre",
+          "language": "de",
+          "expected": "Events",
+          "predicted": null,
+          "correct": false
+        },
+        {
+          "id": "de-events-webinar",
+          "language": "de",
+          "expected": "Events",
+          "predicted": null,
+          "correct": false
+        },
+        {
+          "id": "de-events-exhibition",
+          "language": "de",
+          "expected": "Events",
+          "predicted": null,
+          "correct": false
+        },
+        {
+          "id": "de-events-registration",
+          "language": "de",
+          "expected": "Events",
+          "predicted": null,
+          "correct": false
+        },
+        {
+          "id": "de-events-match-ticket",
+          "language": "de",
+          "expected": "Events",
+          "predicted": null,
+          "correct": false
+        },
+        {
+          "id": "en-reference-manual",
+          "language": "en",
+          "expected": "Reference",
+          "predicted": "Reference",
+          "correct": true
+        },
+        {
+          "id": "en-reference-api",
+          "language": "en",
+          "expected": "Reference",
+          "predicted": null,
+          "correct": false
+        },
+        {
+          "id": "en-reference-troubleshooting",
+          "language": "en",
+          "expected": "Reference",
+          "predicted": "Reference",
+          "correct": true
+        },
+        {
+          "id": "en-reference-datasheet",
+          "language": "en",
+          "expected": "Reference",
+          "predicted": null,
+          "correct": false
+        },
+        {
+          "id": "en-reference-safety",
+          "language": "en",
+          "expected": "Reference",
+          "predicted": null,
+          "correct": false
+        },
+        {
+          "id": "en-reference-network",
+          "language": "en",
+          "expected": "Reference",
+          "predicted": null,
+          "correct": false
+        },
+        {
+          "id": "en-reference-conference-protocol",
+          "language": "en",
+          "expected": "Reference",
+          "predicted": "Events",
+          "correct": false
+        },
+        {
+          "id": "en-reference-release-notes",
+          "language": "en",
+          "expected": "Reference",
+          "predicted": null,
+          "correct": false
+        },
+        {
+          "id": "de-reference-guide",
+          "language": "de",
+          "expected": "Reference",
+          "predicted": "Reference",
+          "correct": true
+        },
+        {
+          "id": "de-reference-documentation",
+          "language": "de",
+          "expected": "Reference",
+          "predicted": null,
+          "correct": false
+        },
+        {
+          "id": "de-reference-operating",
+          "language": "de",
+          "expected": "Reference",
+          "predicted": null,
+          "correct": false
+        },
+        {
+          "id": "de-reference-datasheet",
+          "language": "de",
+          "expected": "Reference",
+          "predicted": null,
+          "correct": false
+        },
+        {
+          "id": "de-reference-safety",
+          "language": "de",
+          "expected": "Reference",
+          "predicted": null,
+          "correct": false
+        },
+        {
+          "id": "de-reference-api",
+          "language": "de",
+          "expected": "Reference",
+          "predicted": null,
+          "correct": false
+        },
+        {
+          "id": "de-reference-event-protocol",
+          "language": "de",
+          "expected": "Reference",
+          "predicted": null,
+          "correct": false
+        },
+        {
+          "id": "de-reference-release-notes",
+          "language": "de",
+          "expected": "Reference",
+          "predicted": null,
+          "correct": false
+        }
+      ],
+      "corpus": "clm-corpus-v2.json",
+      "corpus_sha256": "6e9f4bd5c320030406592ab56cd834d508b1c9d5314766573956407846d35e7c",
+      "coverage": 0.3333
+    },
+    "clm-corpus-holdout-v1.json": {
+      "samples": 48,
+      "proposed": 10,
+      "correct": 9,
+      "wrong": 1,
+      "unresolved": 38,
+      "precision": 0.9,
+      "by_expected_category": {
+        "Events": {
+          "proposed": 1,
+          "correct": 0,
+          "wrong": 1
+        },
+        "Finance": {
+          "proposed": 6,
+          "correct": 6,
+          "wrong": 0
+        },
+        "Reference": {
+          "proposed": 3,
+          "correct": 3,
+          "wrong": 0
+        }
+      },
+      "by_language": {
+        "de": {
+          "proposed": 4,
+          "correct": 4,
+          "wrong": 0
+        },
+        "en": {
+          "proposed": 6,
+          "correct": 5,
+          "wrong": 1
+        }
+      },
+      "predictions": [
+        {
+          "id": "hold-en-finance-internet",
+          "language": "en",
+          "expected": "Finance",
+          "predicted": null,
+          "correct": false
+        },
+        {
+          "id": "hold-en-finance-credit-note",
+          "language": "en",
+          "expected": "Finance",
+          "predicted": null,
+          "correct": false
+        },
+        {
+          "id": "hold-en-finance-donation",
+          "language": "en",
+          "expected": "Finance",
+          "predicted": "Finance",
+          "correct": true
+        },
+        {
+          "id": "hold-en-finance-quarterly",
+          "language": "en",
+          "expected": "Finance",
+          "predicted": null,
+          "correct": false
+        },
+        {
+          "id": "hold-en-finance-annual-premium",
+          "language": "en",
+          "expected": "Finance",
+          "predicted": null,
+          "correct": false
+        },
+        {
+          "id": "hold-en-finance-office-supplies",
+          "language": "en",
+          "expected": "Finance",
+          "predicted": "Finance",
+          "correct": true
+        },
+        {
+          "id": "hold-en-finance-venue-rental",
+          "language": "en",
+          "expected": "Finance",
+          "predicted": null,
+          "correct": false
+        },
+        {
+          "id": "hold-en-finance-speaker-honorarium",
+          "language": "en",
+          "expected": "Finance",
+          "predicted": null,
+          "correct": false
+        },
+        {
+          "id": "hold-de-finance-internet",
+          "language": "de",
+          "expected": "Finance",
+          "predicted": "Finance",
+          "correct": true
+        },
+        {
+          "id": "hold-de-finance-credit-note",
+          "language": "de",
+          "expected": "Finance",
+          "predicted": null,
+          "correct": false
+        },
+        {
+          "id": "hold-de-finance-donation",
+          "language": "de",
+          "expected": "Finance",
+          "predicted": null,
+          "correct": false
+        },
+        {
+          "id": "hold-de-finance-quarterly",
+          "language": "de",
+          "expected": "Finance",
+          "predicted": null,
+          "correct": false
+        },
+        {
+          "id": "hold-de-finance-premium",
+          "language": "de",
+          "expected": "Finance",
+          "predicted": null,
+          "correct": false
+        },
+        {
+          "id": "hold-de-finance-supplies",
+          "language": "de",
+          "expected": "Finance",
+          "predicted": "Finance",
+          "correct": true
+        },
+        {
+          "id": "hold-de-finance-hall",
+          "language": "de",
+          "expected": "Finance",
+          "predicted": "Finance",
+          "correct": true
+        },
+        {
+          "id": "hold-de-finance-speaker",
+          "language": "de",
+          "expected": "Finance",
+          "predicted": "Finance",
+          "correct": true
+        },
+        {
+          "id": "hold-en-events-reading",
+          "language": "en",
+          "expected": "Events",
+          "predicted": null,
+          "correct": false
+        },
+        {
+          "id": "hold-en-events-open-house",
+          "language": "en",
+          "expected": "Events",
+          "predicted": null,
+          "correct": false
+        },
+        {
+          "id": "hold-en-events-board-meeting",
+          "language": "en",
+          "expected": "Events",
+          "predicted": null,
+          "correct": false
+        },
+        {
+          "id": "hold-en-events-screening",
+          "language": "en",
+          "expected": "Events",
+          "predicted": null,
+          "correct": false
+        },
+        {
+          "id": "hold-en-events-lecture",
+          "language": "en",
+          "expected": "Events",
+          "predicted": null,
+          "correct": false
+        },
+        {
+          "id": "hold-en-events-race",
+          "language": "en",
+          "expected": "Events",
+          "predicted": null,
+          "correct": false
+        },
+        {
+          "id": "hold-en-events-market",
+          "language": "en",
+          "expected": "Events",
+          "predicted": null,
+          "correct": false
+        },
+        {
+          "id": "hold-en-events-tour",
+          "language": "en",
+          "expected": "Events",
+          "predicted": "Reference",
+          "correct": false
+        },
+        {
+          "id": "hold-de-events-reading",
+          "language": "de",
+          "expected": "Events",
+          "predicted": null,
+          "correct": false
+        },
+        {
+          "id": "hold-de-events-open-house",
+          "language": "de",
+          "expected": "Events",
+          "predicted": null,
+          "correct": false
+        },
+        {
+          "id": "hold-de-events-board-meeting",
+          "language": "de",
+          "expected": "Events",
+          "predicted": null,
+          "correct": false
+        },
+        {
+          "id": "hold-de-events-screening",
+          "language": "de",
+          "expected": "Events",
+          "predicted": null,
+          "correct": false
+        },
+        {
+          "id": "hold-de-events-lecture",
+          "language": "de",
+          "expected": "Events",
+          "predicted": null,
+          "correct": false
+        },
+        {
+          "id": "hold-de-events-race",
+          "language": "de",
+          "expected": "Events",
+          "predicted": null,
+          "correct": false
+        },
+        {
+          "id": "hold-de-events-market",
+          "language": "de",
+          "expected": "Events",
+          "predicted": null,
+          "correct": false
+        },
+        {
+          "id": "hold-de-events-tour",
+          "language": "de",
+          "expected": "Events",
+          "predicted": null,
+          "correct": false
+        },
+        {
+          "id": "hold-en-reference-install",
+          "language": "en",
+          "expected": "Reference",
+          "predicted": null,
+          "correct": false
+        },
+        {
+          "id": "hold-en-reference-command",
+          "language": "en",
+          "expected": "Reference",
+          "predicted": null,
+          "correct": false
+        },
+        {
+          "id": "hold-en-reference-maintenance",
+          "language": "en",
+          "expected": "Reference",
+          "predicted": "Reference",
+          "correct": true
+        },
+        {
+          "id": "hold-en-reference-glossary",
+          "language": "en",
+          "expected": "Reference",
+          "predicted": null,
+          "correct": false
+        },
+        {
+          "id": "hold-en-reference-assembly",
+          "language": "en",
+          "expected": "Reference",
+          "predicted": null,
+          "correct": false
+        },
+        {
+          "id": "hold-en-reference-migration",
+          "language": "en",
+          "expected": "Reference",
+          "predicted": "Reference",
+          "correct": true
+        },
+        {
+          "id": "hold-en-reference-event-system",
+          "language": "en",
+          "expected": "Reference",
+          "predicted": null,
+          "correct": false
+        },
+        {
+          "id": "hold-en-reference-calendar",
+          "language": "en",
+          "expected": "Reference",
+          "predicted": "Reference",
+          "correct": true
+        },
+        {
+          "id": "hold-de-reference-install",
+          "language": "de",
+          "expected": "Reference",
+          "predicted": null,
+          "correct": false
+        },
+        {
+          "id": "hold-de-reference-command",
+          "language": "de",
+          "expected": "Reference",
+          "predicted": null,
+          "correct": false
+        },
+        {
+          "id": "hold-de-reference-maintenance",
+          "language": "de",
+          "expected": "Reference",
+          "predicted": null,
+          "correct": false
+        },
+        {
+          "id": "hold-de-reference-glossary",
+          "language": "de",
+          "expected": "Reference",
+          "predicted": null,
+          "correct": false
+        },
+        {
+          "id": "hold-de-reference-assembly",
+          "language": "de",
+          "expected": "Reference",
+          "predicted": null,
+          "correct": false
+        },
+        {
+          "id": "hold-de-reference-migration",
+          "language": "de",
+          "expected": "Reference",
+          "predicted": null,
+          "correct": false
+        },
+        {
+          "id": "hold-de-reference-event-api",
+          "language": "de",
+          "expected": "Reference",
+          "predicted": null,
+          "correct": false
+        },
+        {
+          "id": "hold-de-reference-calendar",
+          "language": "de",
+          "expected": "Reference",
+          "predicted": null,
+          "correct": false
+        }
+      ],
+      "corpus": "clm-corpus-holdout-v1.json",
+      "corpus_sha256": "dc8031871c17893a30033886f87c39e5c158b7311c287104ca2340e26be8bb3a",
+      "coverage": 0.2083
+    },
+    "clm-corpus-hybrid-v1.json": {
+      "samples": 48,
+      "proposed": 11,
+      "correct": 9,
+      "wrong": 2,
+      "unresolved": 37,
+      "precision": 0.8181818181818182,
+      "by_expected_category": {
+        "Events": {
+          "proposed": 1,
+          "correct": 0,
+          "wrong": 1
+        },
+        "Finance": {
+          "proposed": 4,
+          "correct": 4,
+          "wrong": 0
+        },
+        "Reference": {
+          "proposed": 6,
+          "correct": 5,
+          "wrong": 1
+        }
+      },
+      "by_language": {
+        "de": {
+          "proposed": 5,
+          "correct": 4,
+          "wrong": 1
+        },
+        "en": {
+          "proposed": 6,
+          "correct": 5,
+          "wrong": 1
+        }
+      },
+      "predictions": [
+        {
+          "id": "hy-en-finance-mobile-plan",
+          "language": "en",
+          "expected": "Finance",
+          "predicted": null,
+          "correct": false
+        },
+        {
+          "id": "hy-en-finance-refund",
+          "language": "en",
+          "expected": "Finance",
+          "predicted": null,
+          "correct": false
+        },
+        {
+          "id": "hy-en-finance-card-summary",
+          "language": "en",
+          "expected": "Finance",
+          "predicted": null,
+          "correct": false
+        },
+        {
+          "id": "hy-en-finance-membership",
+          "language": "en",
+          "expected": "Finance",
+          "predicted": null,
+          "correct": false
+        },
+        {
+          "id": "hy-en-finance-reimbursement",
+          "language": "en",
+          "expected": "Finance",
+          "predicted": null,
+          "correct": false
+        },
+        {
+          "id": "hy-en-finance-license-renewal",
+          "language": "en",
+          "expected": "Finance",
+          "predicted": "Finance",
+          "correct": true
+        },
+        {
+          "id": "hy-en-finance-event-deposit",
+          "language": "en",
+          "expected": "Finance",
+          "predicted": null,
+          "correct": false
+        },
+        {
+          "id": "hy-en-finance-event-travel",
+          "language": "en",
+          "expected": "Finance",
+          "predicted": null,
+          "correct": false
+        },
+        {
+          "id": "hy-de-finance-mobile-plan",
+          "language": "de",
+          "expected": "Finance",
+          "predicted": "Finance",
+          "correct": true
+        },
+        {
+          "id": "hy-de-finance-refund",
+          "language": "de",
+          "expected": "Finance",
+          "predicted": null,
+          "correct": false
+        },
+        {
+          "id": "hy-de-finance-card-summary",
+          "language": "de",
+          "expected": "Finance",
+          "predicted": null,
+          "correct": false
+        },
+        {
+          "id": "hy-de-finance-membership",
+          "language": "de",
+          "expected": "Finance",
+          "predicted": null,
+          "correct": false
+        },
+        {
+          "id": "hy-de-finance-reimbursement",
+          "language": "de",
+          "expected": "Finance",
+          "predicted": null,
+          "correct": false
+        },
+        {
+          "id": "hy-de-finance-license-renewal",
+          "language": "de",
+          "expected": "Finance",
+          "predicted": "Finance",
+          "correct": true
+        },
+        {
+          "id": "hy-de-finance-event-deposit",
+          "language": "de",
+          "expected": "Finance",
+          "predicted": "Finance",
+          "correct": true
+        },
+        {
+          "id": "hy-de-finance-event-travel",
+          "language": "de",
+          "expected": "Finance",
+          "predicted": null,
+          "correct": false
+        },
+        {
+          "id": "hy-en-events-garden-tour",
+          "language": "en",
+          "expected": "Events",
+          "predicted": "Reference",
+          "correct": false
+        },
+        {
+          "id": "hy-en-events-orchestra",
+          "language": "en",
+          "expected": "Events",
+          "predicted": null,
+          "correct": false
+        },
+        {
+          "id": "hy-en-events-community-day",
+          "language": "en",
+          "expected": "Events",
+          "predicted": null,
+          "correct": false
+        },
+        {
+          "id": "hy-en-events-webinar",
+          "language": "en",
+          "expected": "Events",
+          "predicted": null,
+          "correct": false
+        },
+        {
+          "id": "hy-en-events-book-club",
+          "language": "en",
+          "expected": "Events",
+          "predicted": null,
+          "correct": false
+        },
+        {
+          "id": "hy-en-events-exhibition",
+          "language": "en",
+          "expected": "Events",
+          "predicted": null,
+          "correct": false
+        },
+        {
+          "id": "hy-en-events-workshop-ticket",
+          "language": "en",
+          "expected": "Events",
+          "predicted": null,
+          "correct": false
+        },
+        {
+          "id": "hy-en-events-town-hall",
+          "language": "en",
+          "expected": "Events",
+          "predicted": null,
+          "correct": false
+        },
+        {
+          "id": "hy-de-events-garden-tour",
+          "language": "de",
+          "expected": "Events",
+          "predicted": null,
+          "correct": false
+        },
+        {
+          "id": "hy-de-events-orchestra",
+          "language": "de",
+          "expected": "Events",
+          "predicted": null,
+          "correct": false
+        },
+        {
+          "id": "hy-de-events-community-day",
+          "language": "de",
+          "expected": "Events",
+          "predicted": null,
+          "correct": false
+        },
+        {
+          "id": "hy-de-events-webinar",
+          "language": "de",
+          "expected": "Events",
+          "predicted": null,
+          "correct": false
+        },
+        {
+          "id": "hy-de-events-book-club",
+          "language": "de",
+          "expected": "Events",
+          "predicted": null,
+          "correct": false
+        },
+        {
+          "id": "hy-de-events-exhibition",
+          "language": "de",
+          "expected": "Events",
+          "predicted": null,
+          "correct": false
+        },
+        {
+          "id": "hy-de-events-workshop-ticket",
+          "language": "de",
+          "expected": "Events",
+          "predicted": null,
+          "correct": false
+        },
+        {
+          "id": "hy-de-events-town-hall",
+          "language": "de",
+          "expected": "Events",
+          "predicted": null,
+          "correct": false
+        },
+        {
+          "id": "hy-en-reference-device",
+          "language": "en",
+          "expected": "Reference",
+          "predicted": "Reference",
+          "correct": true
+        },
+        {
+          "id": "hy-en-reference-api",
+          "language": "en",
+          "expected": "Reference",
+          "predicted": null,
+          "correct": false
+        },
+        {
+          "id": "hy-en-reference-safety",
+          "language": "en",
+          "expected": "Reference",
+          "predicted": null,
+          "correct": false
+        },
+        {
+          "id": "hy-en-reference-style",
+          "language": "en",
+          "expected": "Reference",
+          "predicted": "Reference",
+          "correct": true
+        },
+        {
+          "id": "hy-en-reference-troubleshooting",
+          "language": "en",
+          "expected": "Reference",
+          "predicted": "Reference",
+          "correct": true
+        },
+        {
+          "id": "hy-en-reference-procedure",
+          "language": "en",
+          "expected": "Reference",
+          "predicted": null,
+          "correct": false
+        },
+        {
+          "id": "hy-en-reference-events-api",
+          "language": "en",
+          "expected": "Reference",
+          "predicted": "Reference",
+          "correct": true
+        },
+        {
+          "id": "hy-en-reference-performance",
+          "language": "en",
+          "expected": "Reference",
+          "predicted": null,
+          "correct": false
+        },
+        {
+          "id": "hy-de-reference-device",
+          "language": "de",
+          "expected": "Reference",
+          "predicted": null,
+          "correct": false
+        },
+        {
+          "id": "hy-de-reference-api",
+          "language": "de",
+          "expected": "Reference",
+          "predicted": null,
+          "correct": false
+        },
+        {
+          "id": "hy-de-reference-safety",
+          "language": "de",
+          "expected": "Reference",
+          "predicted": null,
+          "correct": false
+        },
+        {
+          "id": "hy-de-reference-style",
+          "language": "de",
+          "expected": "Reference",
+          "predicted": null,
+          "correct": false
+        },
+        {
+          "id": "hy-de-reference-troubleshooting",
+          "language": "de",
+          "expected": "Reference",
+          "predicted": "Reference",
+          "correct": true
+        },
+        {
+          "id": "hy-de-reference-procedure",
+          "language": "de",
+          "expected": "Reference",
+          "predicted": null,
+          "correct": false
+        },
+        {
+          "id": "hy-de-reference-events-api",
+          "language": "de",
+          "expected": "Reference",
+          "predicted": null,
+          "correct": false
+        },
+        {
+          "id": "hy-de-reference-performance",
+          "language": "de",
+          "expected": "Reference",
+          "predicted": "Finance",
+          "correct": false
+        }
+      ],
+      "corpus": "clm-corpus-hybrid-v1.json",
+      "corpus_sha256": "a9c4212188d5c10a4956511895bc5e9b4e4e55f336d81efdbd4cf0d0b0c2ba0f",
+      "coverage": 0.2292
+    },
+    "clm-corpus-combined-holdout-v1.json": {
+      "samples": 48,
+      "proposed": 13,
+      "correct": 11,
+      "wrong": 2,
+      "unresolved": 35,
+      "precision": 0.8461538461538461,
+      "by_expected_category": {
+        "Events": {
+          "proposed": 1,
+          "correct": 0,
+          "wrong": 1
+        },
+        "Finance": {
+          "proposed": 6,
+          "correct": 6,
+          "wrong": 0
+        },
+        "Reference": {
+          "proposed": 6,
+          "correct": 5,
+          "wrong": 1
+        }
+      },
+      "by_language": {
+        "de": {
+          "proposed": 5,
+          "correct": 5,
+          "wrong": 0
+        },
+        "en": {
+          "proposed": 8,
+          "correct": 6,
+          "wrong": 2
+        }
+      },
+      "predictions": [
+        {
+          "id": "ch-en-finance-insurance",
+          "language": "en",
+          "expected": "Finance",
+          "predicted": null,
+          "correct": false
+        },
+        {
+          "id": "ch-en-finance-bank-transfer",
+          "language": "en",
+          "expected": "Finance",
+          "predicted": null,
+          "correct": false
+        },
+        {
+          "id": "ch-en-finance-tax-summary",
+          "language": "en",
+          "expected": "Finance",
+          "predicted": null,
+          "correct": false
+        },
+        {
+          "id": "ch-en-finance-royalty",
+          "language": "en",
+          "expected": "Finance",
+          "predicted": null,
+          "correct": false
+        },
+        {
+          "id": "ch-en-finance-purchase",
+          "language": "en",
+          "expected": "Finance",
+          "predicted": "Finance",
+          "correct": true
+        },
+        {
+          "id": "ch-en-finance-savings",
+          "language": "en",
+          "expected": "Finance",
+          "predicted": null,
+          "correct": false
+        },
+        {
+          "id": "ch-en-finance-room-deposit",
+          "language": "en",
+          "expected": "Finance",
+          "predicted": "Finance",
+          "correct": true
+        },
+        {
+          "id": "ch-en-finance-symposium-travel",
+          "language": "en",
+          "expected": "Finance",
+          "predicted": null,
+          "correct": false
+        },
+        {
+          "id": "ch-de-finance-insurance",
+          "language": "de",
+          "expected": "Finance",
+          "predicted": "Finance",
+          "correct": true
+        },
+        {
+          "id": "ch-de-finance-bank-transfer",
+          "language": "de",
+          "expected": "Finance",
+          "predicted": null,
+          "correct": false
+        },
+        {
+          "id": "ch-de-finance-tax-summary",
+          "language": "de",
+          "expected": "Finance",
+          "predicted": null,
+          "correct": false
+        },
+        {
+          "id": "ch-de-finance-royalty",
+          "language": "de",
+          "expected": "Finance",
+          "predicted": "Finance",
+          "correct": true
+        },
+        {
+          "id": "ch-de-finance-purchase",
+          "language": "de",
+          "expected": "Finance",
+          "predicted": "Finance",
+          "correct": true
+        },
+        {
+          "id": "ch-de-finance-savings",
+          "language": "de",
+          "expected": "Finance",
+          "predicted": null,
+          "correct": false
+        },
+        {
+          "id": "ch-de-finance-room-deposit",
+          "language": "de",
+          "expected": "Finance",
+          "predicted": null,
+          "correct": false
+        },
+        {
+          "id": "ch-de-finance-symposium-travel",
+          "language": "de",
+          "expected": "Finance",
+          "predicted": "Finance",
+          "correct": true
+        },
+        {
+          "id": "ch-en-events-jazz",
+          "language": "en",
+          "expected": "Events",
+          "predicted": null,
+          "correct": false
+        },
+        {
+          "id": "ch-en-events-graduation",
+          "language": "en",
+          "expected": "Events",
+          "predicted": null,
+          "correct": false
+        },
+        {
+          "id": "ch-en-events-poetry",
+          "language": "en",
+          "expected": "Events",
+          "predicted": null,
+          "correct": false
+        },
+        {
+          "id": "ch-en-events-sailing",
+          "language": "en",
+          "expected": "Events",
+          "predicted": "Reference",
+          "correct": false
+        },
+        {
+          "id": "ch-en-events-tournament",
+          "language": "en",
+          "expected": "Events",
+          "predicted": null,
+          "correct": false
+        },
+        {
+          "id": "ch-en-events-open-studio",
+          "language": "en",
+          "expected": "Events",
+          "predicted": null,
+          "correct": false
+        },
+        {
+          "id": "ch-en-events-ticket",
+          "language": "en",
+          "expected": "Events",
+          "predicted": null,
+          "correct": false
+        },
+        {
+          "id": "ch-en-events-parent-night",
+          "language": "en",
+          "expected": "Events",
+          "predicted": null,
+          "correct": false
+        },
+        {
+          "id": "ch-de-events-jazz",
+          "language": "de",
+          "expected": "Events",
+          "predicted": null,
+          "correct": false
+        },
+        {
+          "id": "ch-de-events-graduation",
+          "language": "de",
+          "expected": "Events",
+          "predicted": null,
+          "correct": false
+        },
+        {
+          "id": "ch-de-events-poetry",
+          "language": "de",
+          "expected": "Events",
+          "predicted": null,
+          "correct": false
+        },
+        {
+          "id": "ch-de-events-sailing",
+          "language": "de",
+          "expected": "Events",
+          "predicted": null,
+          "correct": false
+        },
+        {
+          "id": "ch-de-events-tournament",
+          "language": "de",
+          "expected": "Events",
+          "predicted": null,
+          "correct": false
+        },
+        {
+          "id": "ch-de-events-open-studio",
+          "language": "de",
+          "expected": "Events",
+          "predicted": null,
+          "correct": false
+        },
+        {
+          "id": "ch-de-events-ticket",
+          "language": "de",
+          "expected": "Events",
+          "predicted": null,
+          "correct": false
+        },
+        {
+          "id": "ch-de-events-parent-night",
+          "language": "de",
+          "expected": "Events",
+          "predicted": null,
+          "correct": false
+        },
+        {
+          "id": "ch-en-reference-solar",
+          "language": "en",
+          "expected": "Reference",
+          "predicted": "Reference",
+          "correct": true
+        },
+        {
+          "id": "ch-en-reference-backup",
+          "language": "en",
+          "expected": "Reference",
+          "predicted": null,
+          "correct": false
+        },
+        {
+          "id": "ch-en-reference-data-dictionary",
+          "language": "en",
+          "expected": "Reference",
+          "predicted": null,
+          "correct": false
+        },
+        {
+          "id": "ch-en-reference-bicycle",
+          "language": "en",
+          "expected": "Reference",
+          "predicted": "Reference",
+          "correct": true
+        },
+        {
+          "id": "ch-en-reference-citations",
+          "language": "en",
+          "expected": "Reference",
+          "predicted": "Reference",
+          "correct": true
+        },
+        {
+          "id": "ch-en-reference-printer",
+          "language": "en",
+          "expected": "Reference",
+          "predicted": "Finance",
+          "correct": false
+        },
+        {
+          "id": "ch-en-reference-event-config",
+          "language": "en",
+          "expected": "Reference",
+          "predicted": null,
+          "correct": false
+        },
+        {
+          "id": "ch-en-reference-registration-api",
+          "language": "en",
+          "expected": "Reference",
+          "predicted": "Reference",
+          "correct": true
+        },
+        {
+          "id": "ch-de-reference-solar",
+          "language": "de",
+          "expected": "Reference",
+          "predicted": null,
+          "correct": false
+        },
+        {
+          "id": "ch-de-reference-backup",
+          "language": "de",
+          "expected": "Reference",
+          "predicted": null,
+          "correct": false
+        },
+        {
+          "id": "ch-de-reference-data-dictionary",
+          "language": "de",
+          "expected": "Reference",
+          "predicted": null,
+          "correct": false
+        },
+        {
+          "id": "ch-de-reference-bicycle",
+          "language": "de",
+          "expected": "Reference",
+          "predicted": "Reference",
+          "correct": true
+        },
+        {
+          "id": "ch-de-reference-citations",
+          "language": "de",
+          "expected": "Reference",
+          "predicted": null,
+          "correct": false
+        },
+        {
+          "id": "ch-de-reference-printer",
+          "language": "de",
+          "expected": "Reference",
+          "predicted": null,
+          "correct": false
+        },
+        {
+          "id": "ch-de-reference-event-config",
+          "language": "de",
+          "expected": "Reference",
+          "predicted": null,
+          "correct": false
+        },
+        {
+          "id": "ch-de-reference-registration-api",
+          "language": "de",
+          "expected": "Reference",
+          "predicted": null,
+          "correct": false
+        }
+      ],
+      "corpus": "clm-corpus-combined-holdout-v1.json",
+      "corpus_sha256": "24a8db9f2fc3eed56ea2440a0a53e4bf159f2d3220adda9eb558108c0c6d77ca",
+      "coverage": 0.2708
+    }
+  }
+}

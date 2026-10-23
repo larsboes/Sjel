@@ -1,11 +1,13 @@
 //! The local-first read path: the Mac's own database when it is readable, the shell otherwise.
 //!
-//! `Repo` is the adapter the Mac app reads through, and the same adapter a future phone client
-//! would point at the Mac through its paired-device client. It reads; it queues nothing. The
-//! offline log beside a replica belongs to [`Board`](super::Board).
+//! `Repo` is the adapter the Projects page reads and writes through on both platforms. On the Mac
+//! it reads this machine's database and writes through the shell. On the phone it holds the
+//! replica ([`Repo::replica`]): every read answers from it, and every write lands there first and
+//! is logged in `_offline_mutations`, which `crate::sync` replays at the Mac.
 
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
+use std::time::{SystemTime, UNIX_EPOCH};
 
 use tokio::sync::Mutex;
 
@@ -14,7 +16,9 @@ use crate::shell::{
     ShellResult, SoundscapeState,
 };
 
-use super::Notes;
+use crate::store::{StoreError, TursoStore};
+
+use super::{board::task_path, Notes};
 
 /// The shell client, or the reason there is none, the local handle, and the notes read recently.
 #[derive(Clone)]
@@ -22,6 +26,60 @@ pub struct Repo {
     shell: Result<Arc<Shell>, ShellError>,
     local: Arc<LocalDb>,
     notes: Notes,
+    replica: Option<Replica>,
+}
+
+/// The phone's own store, and what to run after each write to it.
+#[derive(Clone)]
+struct Replica {
+    store: Arc<TursoStore>,
+    /// The phone refreshes its queued count and starts a sync here.
+    wrote: Arc<dyn Fn() + Send + Sync>,
+}
+
+impl Replica {
+    /// One record of the replica, with its content.
+    async fn record(&self, path: &str) -> ShellResult<ProjectRecord> {
+        self.store
+            .fetch_record(path)
+            .await
+            .map_err(store_error)?
+            .ok_or_else(|| ShellError::Store(format!("{path} is not on this device")))
+    }
+
+    /// A task as a task write answers it, read back after the write.
+    async fn task(&self, path: &str) -> ShellResult<GlobalTask> {
+        (self.wrote)();
+        let record = self.record(path).await?;
+        Ok(GlobalTask {
+            project: project_of(&record.path).to_owned(),
+            id: record.path,
+            kind: record.kind,
+            title: record.title,
+            done: record.done,
+            due: record.due,
+            priority: record.priority,
+            summary: None,
+        })
+    }
+}
+
+fn store_error(error: StoreError) -> ShellError {
+    ShellError::Store(error.to_string())
+}
+
+/// The project a record path lives in: its first segment.
+fn project_of(path: &str) -> &str {
+    path.split('/').next().unwrap_or(path)
+}
+
+/// `<project>/Note-<seconds>.md`, the path a note made on this device has until the Mac names it.
+fn note_path(project: &str, at: SystemTime) -> String {
+    let secs = at
+        .duration_since(UNIX_EPOCH)
+        .map(|since| since.as_secs())
+        .unwrap_or(0);
+    format!("{}/Note-{secs}.md", project.trim_end_matches('/'))
 }
 
 /// The one direct handle on the local database file, shared by every `Repo` clone.
@@ -102,6 +160,43 @@ impl Repo {
             shell,
             local: Arc::new(LocalDb::default()),
             notes: Notes::default(),
+            replica: None,
+        }
+    }
+
+    /// The phone's `Repo`: it reads and writes `store` and never asks a shell. `wrote` runs after
+    /// every write, so the app can show the queued count and start a sync.
+    pub fn replica(store: Arc<TursoStore>, wrote: impl Fn() + Send + Sync + 'static) -> Self {
+        Self {
+            shell: Err(ShellError::Store("this device has no shell".to_owned())),
+            local: Arc::new(LocalDb::default()),
+            notes: Notes::default(),
+            replica: Some(Replica {
+                store,
+                wrote: Arc::new(wrote),
+            }),
+        }
+    }
+
+    /// True on the phone, where the replica is the record and the Mac is optional.
+    pub fn is_replica(&self) -> bool {
+        self.replica.is_some()
+    }
+
+    /// The connection reads go to: the replica's, otherwise this Mac's database file.
+    async fn connection(&self) -> Option<libsql::Connection> {
+        match &self.replica {
+            Some(replica) => replica.store.connection().await.ok(),
+            None => self.local.connection().await,
+        }
+    }
+
+    /// The shell a read falls back to. The replica's answer is final, empty or not: a phone has
+    /// no shell to ask instead.
+    fn fallback(&self) -> ShellResult<Arc<Shell>> {
+        match &self.replica {
+            Some(_) => Err(ShellError::Store("the store did not answer".to_owned())),
+            None => self.shell(),
         }
     }
 
@@ -125,7 +220,7 @@ impl Repo {
 
     /// True if direct non-blocking LibSQL local access is active.
     pub fn has_direct_db(&self) -> bool {
-        Self::local_db_path().is_some()
+        self.replica.is_some() || Self::local_db_path().is_some()
     }
 
     /// Return the resolved local database path from `SJEL_DB_PATH` or the overlay default.
@@ -149,14 +244,22 @@ impl Repo {
 
     /// Read projects directly from the local LibSQL database if accessible, otherwise the shell.
     pub async fn fetch_projects(&self) -> ShellResult<Vec<ProjectSummary>> {
-        if let Some(conn) = self.local.connection().await {
+        if let Some(conn) = self.connection().await {
             if let Ok(mut rows) = conn
                 .query(
-                    "SELECT project, MAX(archived) as archived, \
-                     SUM(CASE WHEN kind = 'task' AND done = 0 THEN 1 ELSE 0 END) as open, \
-                     SUM(CASE WHEN kind = 'task' AND done != 0 THEN 1 ELSE 0 END) as done, \
-                     SUM(CASE WHEN kind = 'note' THEN 1 ELSE 0 END) as notes \
-                     FROM projects_records GROUP BY project ORDER BY project",
+                    // The replica keeps no archived flag: the pull leaves archived projects out.
+                    &format!(
+                        "SELECT project, {} as archived, \
+                         SUM(CASE WHEN kind = 'task' AND done = 0 THEN 1 ELSE 0 END) as open, \
+                         SUM(CASE WHEN kind = 'task' AND done != 0 THEN 1 ELSE 0 END) as done, \
+                         SUM(CASE WHEN kind = 'note' THEN 1 ELSE 0 END) as notes \
+                         FROM projects_records GROUP BY project ORDER BY project",
+                        if self.replica.is_some() {
+                            "0"
+                        } else {
+                            "MAX(archived)"
+                        }
+                    ),
                     (),
                 )
                 .await
@@ -176,18 +279,18 @@ impl Repo {
                         notes: notes.max(0) as usize,
                     });
                 }
-                if !list.is_empty() {
+                if !list.is_empty() || self.replica.is_some() {
                     return Ok(list);
                 }
             }
         }
-        let shell = self.shell()?;
+        let shell = self.fallback()?;
         shell.projects().await
     }
 
     /// Read tasks directly from the local LibSQL database if accessible, otherwise the shell.
     pub async fn fetch_tasks(&self, status: Option<&str>) -> ShellResult<Vec<GlobalTask>> {
-        if let Some(conn) = self.local.connection().await {
+        if let Some(conn) = self.connection().await {
             let filter = match status {
                 Some("open") => " AND done = 0",
                 Some("done") => " AND done != 0",
@@ -219,18 +322,18 @@ impl Repo {
                         project,
                     });
                 }
-                if !list.is_empty() {
+                if !list.is_empty() || self.replica.is_some() {
                     return Ok(list);
                 }
             }
         }
-        let shell = self.shell()?;
+        let shell = self.fallback()?;
         shell.tasks(status).await
     }
 
     /// Read notes directly from the local LibSQL database if accessible, otherwise the shell.
     pub async fn fetch_all_notes(&self) -> ShellResult<Vec<GlobalNote>> {
-        if let Some(conn) = self.local.connection().await {
+        if let Some(conn) = self.connection().await {
             let query = "SELECT path, kind, title, project \
                          FROM projects_records WHERE kind != 'task' \
                          ORDER BY project ASC, path ASC";
@@ -248,24 +351,26 @@ impl Repo {
                         project,
                     });
                 }
-                if !list.is_empty() {
+                if !list.is_empty() || self.replica.is_some() {
                     return Ok(list);
                 }
             }
         }
-        let shell = self.shell()?;
+        let shell = self.fallback()?;
         shell.notes().await
     }
 
     /// Read calendar entries directly from the local LibSQL database if accessible, otherwise the
     /// shell.
     pub async fn fetch_calendar(&self, from: &str, to: &str) -> ShellResult<Vec<CalendarEntry>> {
-        if let Some(conn) = self.local.connection().await {
+        if let Some(conn) = self.connection().await {
+            // The window the calendar capability uses (`day_window_bounds` in its store.rs):
+            // `[from, to)`, with the bare `to` date so all-day and timed entries end alike.
             let from_bound = format!("{from}T00:00:00");
-            let to_bound = format!("{to}T23:59:59");
+            let to_bound = to.to_owned();
             let query = "SELECT title, starts_at, ends_at, all_day, commitment \
                          FROM calendar_entries \
-                         WHERE starts_at <= ?1 AND ends_at >= ?2 \
+                         WHERE starts_at < ?1 AND ends_at > ?2 \
                          ORDER BY starts_at ASC";
             if let Ok(mut rows) = conn
                 .query(query, libsql::params![to_bound, from_bound])
@@ -284,19 +389,20 @@ impl Repo {
                         ends_at,
                         all_day: all_day_int != 0,
                         commitment,
+                        ..CalendarEntry::default()
                     });
                 }
                 return Ok(list);
             }
         }
-        let shell = self.shell()?;
+        let shell = self.fallback()?;
         shell.calendar(from, to).await
     }
 
     /// Read project records directly from the local LibSQL database if accessible, otherwise the
     /// shell.
     pub async fn fetch_project_records(&self, project: &str) -> ShellResult<Vec<ProjectRecord>> {
-        if let Some(conn) = self.local.connection().await {
+        if let Some(conn) = self.connection().await {
             let query = "SELECT path, kind, title, done, due, priority \
                          FROM projects_records \
                          WHERE project = ?1 \
@@ -320,12 +426,12 @@ impl Repo {
                         priority: priority_int.clamp(1, 3) as u8,
                     });
                 }
-                if !list.is_empty() {
+                if !list.is_empty() || self.replica.is_some() {
                     return Ok(list);
                 }
             }
         }
-        let shell = self.shell()?;
+        let shell = self.fallback()?;
         shell.project(project).await
     }
 
@@ -344,7 +450,7 @@ impl Repo {
     /// The slow half of [`Repo::fetch_record`]: one record with its content, from the local LibSQL
     /// database otherwise from the shell.
     async fn read_record(&self, path: &str) -> ShellResult<ProjectRecord> {
-        if let Some(conn) = self.local.connection().await {
+        if let Some(conn) = self.connection().await {
             let query = "SELECT path, kind, title, content, done, due, priority \
                          FROM projects_records \
                          WHERE path = ?1 LIMIT 1";
@@ -369,27 +475,146 @@ impl Repo {
                 }
             }
         }
-        let shell = self.shell()?;
+        let shell = self.fallback()?;
         shell.record(path).await
+    }
+
+    /// Writes a note's body. The Mac sends the base, so the capability refuses (409) an edit made
+    /// over a newer version. The phone writes its replica; the sync settles a conflict there.
+    /// Either way the kept copy becomes what was written, so opening the note again shows it.
+    pub async fn save_record(&self, path: &str, content: &str, base: &str) -> ShellResult<()> {
+        match &self.replica {
+            None => self.shell()?.save_record(path, content, base).await?,
+            Some(replica) => {
+                let record = replica.record(path).await?;
+                replica
+                    .store
+                    .save_record(project_of(path), path, &record.kind, &record.title, content)
+                    .await
+                    .map_err(store_error)?;
+                (replica.wrote)();
+            }
+        }
+        self.notes.set_content(path, content);
+        Ok(())
+    }
+
+    /// Ticks or reopens a task, answering with its new frontmatter.
+    pub async fn set_task_done(&self, path: &str, done: bool) -> ShellResult<GlobalTask> {
+        let Some(replica) = &self.replica else {
+            return self.shell()?.set_task_done(path, done).await;
+        };
+        replica
+            .store
+            .set_task_done(path, done)
+            .await
+            .map_err(store_error)?;
+        replica.task(path).await
+    }
+
+    /// Writes one frontmatter field of a task (`due` or `priority`), answering with its new
+    /// frontmatter.
+    pub async fn set_property(
+        &self,
+        path: &str,
+        key: &str,
+        value: &str,
+    ) -> ShellResult<GlobalTask> {
+        let Some(replica) = &self.replica else {
+            return self.shell()?.set_property(path, key, value).await;
+        };
+        let written = match key {
+            "due" => replica.store.set_task_due(path, value).await,
+            "priority" => {
+                let priority = value
+                    .parse::<u8>()
+                    .map_err(|_| ShellError::Store(format!("{value} is not a priority")))?;
+                replica.store.set_task_priority(path, priority).await
+            }
+            other => return Err(ShellError::Store(format!("this device cannot set {other}"))),
+        };
+        written.map_err(store_error)?;
+        replica.task(path).await
+    }
+
+    /// Adds a task to a project.
+    pub async fn add_task(&self, project: &str, title: &str) -> ShellResult<()> {
+        let Some(replica) = &self.replica else {
+            return self.shell()?.add_task(project, title).await;
+        };
+        let path = task_path(project, SystemTime::now());
+        replica
+            .store
+            .save_record(project, &path, "task", title, "")
+            .await
+            .map_err(store_error)?;
+        (replica.wrote)();
+        Ok(())
+    }
+
+    /// Adds a note to a project.
+    pub async fn add_note(&self, project: &str, title: &str) -> ShellResult<()> {
+        let Some(replica) = &self.replica else {
+            return self.shell()?.add_note(project, title).await;
+        };
+        let path = note_path(project, SystemTime::now());
+        replica
+            .store
+            .save_record(project, &path, "note", title, &format!("# {title}\n"))
+            .await
+            .map_err(store_error)?;
+        (replica.wrote)();
+        Ok(())
+    }
+
+    /// Adds a project. On the phone that is its hub note, which the sync creates the project for.
+    pub async fn add_project(&self, name: &str, summary: &str) -> ShellResult<()> {
+        let Some(replica) = &self.replica else {
+            return self.shell()?.add_project(name, summary).await;
+        };
+        let hub = format!("{name}/{name}.md");
+        replica
+            .store
+            // Empty, so the first sync keeps the hub the Mac's template writes (`sync::create`).
+            .save_record(name, &hub, "project", name, "")
+            .await
+            .map_err(store_error)?;
+        (replica.wrote)();
+        Ok(())
+    }
+
+    /// Removes a record.
+    pub async fn remove_record(&self, path: &str) -> ShellResult<()> {
+        self.notes.forget(path);
+        let Some(replica) = &self.replica else {
+            return self.shell()?.remove_record(path).await;
+        };
+        replica
+            .store
+            .delete_record(path)
+            .await
+            .map_err(store_error)?;
+        (replica.wrote)();
+        Ok(())
     }
 
     /// Read soundscape state (`GET /soundscape/api/soundscape/state`).
     pub async fn soundscape_state(&self) -> ShellResult<SoundscapeState> {
-        let shell = self.shell()?;
+        let shell = self.fallback()?;
         shell.soundscape_state().await
     }
 
     /// Update soundscape playback (`POST /soundscape/api/soundscape/state`).
     #[allow(dead_code)]
     pub async fn set_soundscape_playing(&self, playing: bool) -> ShellResult<SoundscapeState> {
-        let shell = self.shell()?;
+        let shell = self.fallback()?;
         shell.set_soundscape_playing(playing).await
     }
 
     /// Update soundscape preset (`POST /soundscape/api/soundscape/state`).
     #[allow(dead_code)]
     pub async fn set_soundscape_preset(&self, preset: &str) -> ShellResult<SoundscapeState> {
-        let shell = self.shell()?;
+        let shell = self.fallback()?;
         shell.set_soundscape_preset(preset).await
     }
 }

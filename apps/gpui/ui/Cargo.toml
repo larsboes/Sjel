@@ -6,6 +6,9 @@ publish = false
 license = "AGPL-3.0-only"
 description = "Shared GPUI design system, tokens, and primitives for Sjel desktop and mobile"
 
+[features]
+native-maps = ["dep:maplibre_native", "dep:image", "dep:metal"]
+
 [dependencies]
 sjel-gpui-core = { path = "../core" }
 gpui-kit = { version = "=0.7.3", default-features = false, features = ["component"] }
@@ -13,6 +16,22 @@ gpui = { package = "gpui-pre", version = "=0.3.9", default-features = false }
 chrono = { version = "0.4", default-features = false, features = ["clock"] }
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
+futures = "0.3"
+
+[target.'cfg(target_os = "macos")'.dependencies]
+maplibre_native = { version = "=0.10.0", default-features = false, features = ["metal"], optional = true }
+image = { version = "=0.25.10", default-features = false, features = ["png"], optional = true }
+metal = { version = "=0.33.0", optional = true }
+
+[[example]]
+name = "native-map"
+required-features = ["native-maps"]
+
+[dev-dependencies]
+# Same crate gpui-kit resolves; the name `gpui` is what the #[gpui::test] macro expands to.
+gpui = { package = "gpui-pre", version = "=0.3.9", features = ["test-support"] }
+# Keeps `Repo` off this machine's real axon.db in the Projects window tests (core's Cargo.toml).
+sjel-gpui-core = { path = "../core", features = ["test-support"] }
 
 [lints.rust]
 unsafe_code = "deny"

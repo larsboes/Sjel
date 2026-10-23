@@ -1,0 +1,1489 @@
+{
+  "schema": "sjel.documents.cross-source-evaluation/v1",
+  "purpose": "Compare separate source outputs for operator review; this report computes no merged category.",
+  "corpus": "clm-corpus-combined-holdout-v1.json",
+  "corpus_sha256": "24a8db9f2fc3eed56ea2440a0a53e4bf159f2d3220adda9eb558108c0c6d77ca",
+  "samples": 48,
+  "sources": {
+    "rules": {
+      "category_predictions": 13,
+      "category_correct": 11,
+      "category_accuracy_over_corpus": 0.2292,
+      "evidence_valid_proposals": 0,
+      "evidence_valid_proposals_correct": 0,
+      "evidence_note": "No source span is returned by the existing deterministic suggestion."
+    },
+    "clm": {
+      "category_predictions": 48,
+      "category_correct": 40,
+      "category_accuracy_over_corpus": 0.8333,
+      "evidence_valid_proposals": 0,
+      "evidence_valid_proposals_correct": 0,
+      "evidence_note": "CLM returns category scores only; no source evidence span."
+    },
+    "apple_foundation_models": {
+      "category_predictions": 47,
+      "category_correct": 47,
+      "category_accuracy_over_corpus": 0.9792,
+      "evidence_valid_proposals": 45,
+      "evidence_valid_proposals_correct": 45,
+      "evidence_note": "Exact source substring within the operator-selected 20-word/160-character limit."
+    }
+  },
+  "pairwise": {
+    "rules__clm": {
+      "both_predicted": 13,
+      "agree": 9,
+      "conflict": 4,
+      "agreement_ids": [
+        "ch-en-finance-purchase",
+        "ch-de-finance-insurance",
+        "ch-de-finance-royalty",
+        "ch-de-finance-purchase",
+        "ch-de-finance-symposium-travel",
+        "ch-en-reference-solar",
+        "ch-en-reference-bicycle",
+        "ch-en-reference-citations",
+        "ch-de-reference-bicycle"
+      ],
+      "conflict_ids": [
+        "ch-en-finance-room-deposit",
+        "ch-en-events-sailing",
+        "ch-en-reference-printer",
+        "ch-en-reference-registration-api"
+      ]
+    },
+    "rules__apple_foundation_models": {
+      "both_predicted": 13,
+      "agree": 11,
+      "conflict": 2,
+      "agreement_ids": [
+        "ch-en-finance-purchase",
+        "ch-en-finance-room-deposit",
+        "ch-de-finance-insurance",
+        "ch-de-finance-royalty",
+        "ch-de-finance-purchase",
+        "ch-de-finance-symposium-travel",
+        "ch-en-reference-solar",
+        "ch-en-reference-bicycle",
+        "ch-en-reference-citations",
+        "ch-en-reference-registration-api",
+        "ch-de-reference-bicycle"
+      ],
+      "conflict_ids": [
+        "ch-en-events-sailing",
+        "ch-en-reference-printer"
+      ]
+    },
+    "clm__apple_foundation_models": {
+      "both_predicted": 47,
+      "agree": 39,
+      "conflict": 8,
+      "agreement_ids": [
+        "ch-en-finance-insurance",
+        "ch-en-finance-bank-transfer",
+        "ch-en-finance-tax-summary",
+        "ch-en-finance-royalty",
+        "ch-en-finance-purchase",
+        "ch-en-finance-savings",
+        "ch-en-finance-symposium-travel",
+        "ch-de-finance-insurance",
+        "ch-de-finance-bank-transfer",
+        "ch-de-finance-royalty",
+        "ch-de-finance-purchase",
+        "ch-de-finance-savings",
+        "ch-de-finance-room-deposit",
+        "ch-de-finance-symposium-travel",
+        "ch-en-events-jazz",
+        "ch-en-events-poetry",
+        "ch-en-events-sailing",
+        "ch-en-events-ticket",
+        "ch-de-events-jazz",
+        "ch-de-events-graduation",
+        "ch-de-events-sailing",
+        "ch-de-events-tournament",
+        "ch-de-events-open-studio",
+        "ch-de-events-ticket",
+        "ch-de-events-parent-night",
+        "ch-en-reference-solar",
+        "ch-en-reference-backup",
+        "ch-en-reference-bicycle",
+        "ch-en-reference-citations",
+        "ch-en-reference-printer",
+        "ch-en-reference-event-config",
+        "ch-de-reference-solar",
+        "ch-de-reference-backup",
+        "ch-de-reference-data-dictionary",
+        "ch-de-reference-bicycle",
+        "ch-de-reference-citations",
+        "ch-de-reference-printer",
+        "ch-de-reference-event-config",
+        "ch-de-reference-registration-api"
+      ],
+      "conflict_ids": [
+        "ch-en-finance-room-deposit",
+        "ch-en-events-graduation",
+        "ch-en-events-tournament",
+        "ch-en-events-open-studio",
+        "ch-en-events-parent-night",
+        "ch-de-events-poetry",
+        "ch-en-reference-data-dictionary",
+        "ch-en-reference-registration-api"
+      ]
+    }
+  },
+  "any_correct_category_prediction": 48,
+  "any_correct_evidence_proposal": 45,
+  "samples_with_category_conflict": 10,
+  "safety_blocks": 1,
+  "preblocked_ids": [
+    "ch-de-finance-tax-summary"
+  ],
+  "results": [
+    {
+      "id": "ch-en-finance-insurance",
+      "expected": "Finance",
+      "predictions": {
+        "rules": {
+          "category": null,
+          "correct": null,
+          "proposal_valid": false,
+          "confidence": null,
+          "failure": null
+        },
+        "clm": {
+          "category": "Finance",
+          "correct": true,
+          "proposal_valid": false,
+          "confidence": 0.5286,
+          "failure": null
+        },
+        "apple_foundation_models": {
+          "category": "Finance",
+          "correct": true,
+          "proposal_valid": true,
+          "confidence": null,
+          "failure": null
+        }
+      },
+      "category_conflict": false
+    },
+    {
+      "id": "ch-en-finance-bank-transfer",
+      "expected": "Finance",
+      "predictions": {
+        "rules": {
+          "category": null,
+          "correct": null,
+          "proposal_valid": false,
+          "confidence": null,
+          "failure": null
+        },
+        "clm": {
+          "category": "Finance",
+          "correct": true,
+          "proposal_valid": false,
+          "confidence": 0.9762,
+          "failure": null
+        },
+        "apple_foundation_models": {
+          "category": "Finance",
+          "correct": true,
+          "proposal_valid": true,
+          "confidence": null,
+          "failure": null
+        }
+      },
+      "category_conflict": false
+    },
+    {
+      "id": "ch-en-finance-tax-summary",
+      "expected": "Finance",
+      "predictions": {
+        "rules": {
+          "category": null,
+          "correct": null,
+          "proposal_valid": false,
+          "confidence": null,
+          "failure": null
+        },
+        "clm": {
+          "category": "Finance",
+          "correct": true,
+          "proposal_valid": false,
+          "confidence": 0.8148,
+          "failure": null
+        },
+        "apple_foundation_models": {
+          "category": "Finance",
+          "correct": true,
+          "proposal_valid": true,
+          "confidence": null,
+          "failure": null
+        }
+      },
+      "category_conflict": false
+    },
+    {
+      "id": "ch-en-finance-royalty",
+      "expected": "Finance",
+      "predictions": {
+        "rules": {
+          "category": null,
+          "correct": null,
+          "proposal_valid": false,
+          "confidence": null,
+          "failure": null
+        },
+        "clm": {
+          "category": "Finance",
+          "correct": true,
+          "proposal_valid": false,
+          "confidence": 0.3576,
+          "failure": null
+        },
+        "apple_foundation_models": {
+          "category": "Finance",
+          "correct": true,
+          "proposal_valid": false,
+          "confidence": null,
+          "failure": null
+        }
+      },
+      "category_conflict": false
+    },
+    {
+      "id": "ch-en-finance-purchase",
+      "expected": "Finance",
+      "predictions": {
+        "rules": {
+          "category": "Finance",
+          "correct": true,
+          "proposal_valid": false,
+          "confidence": null,
+          "failure": null
+        },
+        "clm": {
+          "category": "Finance",
+          "correct": true,
+          "proposal_valid": false,
+          "confidence": 0.978,
+          "failure": null
+        },
+        "apple_foundation_models": {
+          "category": "Finance",
+          "correct": true,
+          "proposal_valid": true,
+          "confidence": null,
+          "failure": null
+        }
+      },
+      "category_conflict": false
+    },
+    {
+      "id": "ch-en-finance-savings",
+      "expected": "Finance",
+      "predictions": {
+        "rules": {
+          "category": null,
+          "correct": null,
+          "proposal_valid": false,
+          "confidence": null,
+          "failure": null
+        },
+        "clm": {
+          "category": "Finance",
+          "correct": true,
+          "proposal_valid": false,
+          "confidence": 0.9524,
+          "failure": null
+        },
+        "apple_foundation_models": {
+          "category": "Finance",
+          "correct": true,
+          "proposal_valid": true,
+          "confidence": null,
+          "failure": null
+        }
+      },
+      "category_conflict": false
+    },
+    {
+      "id": "ch-en-finance-room-deposit",
+      "expected": "Finance",
+      "predictions": {
+        "rules": {
+          "category": "Finance",
+          "correct": true,
+          "proposal_valid": false,
+          "confidence": null,
+          "failure": null
+        },
+        "clm": {
+          "category": "Events",
+          "correct": false,
+          "proposal_valid": false,
+          "confidence": 0.377,
+          "failure": null
+        },
+        "apple_foundation_models": {
+          "category": "Finance",
+          "correct": true,
+          "proposal_valid": true,
+          "confidence": null,
+          "failure": null
+        }
+      },
+      "category_conflict": true
+    },
+    {
+      "id": "ch-en-finance-symposium-travel",
+      "expected": "Finance",
+      "predictions": {
+        "rules": {
+          "category": null,
+          "correct": null,
+          "proposal_valid": false,
+          "confidence": null,
+          "failure": null
+        },
+        "clm": {
+          "category": "Finance",
+          "correct": true,
+          "proposal_valid": false,
+          "confidence": 0.337,
+          "failure": null
+        },
+        "apple_foundation_models": {
+          "category": "Finance",
+          "correct": true,
+          "proposal_valid": true,
+          "confidence": null,
+          "failure": null
+        }
+      },
+      "category_conflict": false
+    },
+    {
+      "id": "ch-de-finance-insurance",
+      "expected": "Finance",
+      "predictions": {
+        "rules": {
+          "category": "Finance",
+          "correct": true,
+          "proposal_valid": false,
+          "confidence": null,
+          "failure": null
+        },
+        "clm": {
+          "category": "Finance",
+          "correct": true,
+          "proposal_valid": false,
+          "confidence": 0.6878,
+          "failure": null
+        },
+        "apple_foundation_models": {
+          "category": "Finance",
+          "correct": true,
+          "proposal_valid": true,
+          "confidence": null,
+          "failure": null
+        }
+      },
+      "category_conflict": false
+    },
+    {
+      "id": "ch-de-finance-bank-transfer",
+      "expected": "Finance",
+      "predictions": {
+        "rules": {
+          "category": null,
+          "correct": null,
+          "proposal_valid": false,
+          "confidence": null,
+          "failure": null
+        },
+        "clm": {
+          "category": "Finance",
+          "correct": true,
+          "proposal_valid": false,
+          "confidence": 0.7541,
+          "failure": null
+        },
+        "apple_foundation_models": {
+          "category": "Finance",
+          "correct": true,
+          "proposal_valid": true,
+          "confidence": null,
+          "failure": null
+        }
+      },
+      "category_conflict": false
+    },
+    {
+      "id": "ch-de-finance-tax-summary",
+      "expected": "Finance",
+      "predictions": {
+        "rules": {
+          "category": null,
+          "correct": null,
+          "proposal_valid": false,
+          "confidence": null,
+          "failure": null
+        },
+        "clm": {
+          "category": "Finance",
+          "correct": true,
+          "proposal_valid": false,
+          "confidence": 0.4605,
+          "failure": null
+        },
+        "apple_foundation_models": {
+          "category": null,
+          "correct": null,
+          "proposal_valid": false,
+          "confidence": null,
+          "failure": "safety_block"
+        }
+      },
+      "category_conflict": false
+    },
+    {
+      "id": "ch-de-finance-royalty",
+      "expected": "Finance",
+      "predictions": {
+        "rules": {
+          "category": "Finance",
+          "correct": true,
+          "proposal_valid": false,
+          "confidence": null,
+          "failure": null
+        },
+        "clm": {
+          "category": "Finance",
+          "correct": true,
+          "proposal_valid": false,
+          "confidence": 0.5989,
+          "failure": null
+        },
+        "apple_foundation_models": {
+          "category": "Finance",
+          "correct": true,
+          "proposal_valid": true,
+          "confidence": null,
+          "failure": null
+        }
+      },
+      "category_conflict": false
+    },
+    {
+      "id": "ch-de-finance-purchase",
+      "expected": "Finance",
+      "predictions": {
+        "rules": {
+          "category": "Finance",
+          "correct": true,
+          "proposal_valid": false,
+          "confidence": null,
+          "failure": null
+        },
+        "clm": {
+          "category": "Finance",
+          "correct": true,
+          "proposal_valid": false,
+          "confidence": 0.512,
+          "failure": null
+        },
+        "apple_foundation_models": {
+          "category": "Finance",
+          "correct": true,
+          "proposal_valid": true,
+          "confidence": null,
+          "failure": null
+        }
+      },
+      "category_conflict": false
+    },
+    {
+      "id": "ch-de-finance-savings",
+      "expected": "Finance",
+      "predictions": {
+        "rules": {
+          "category": null,
+          "correct": null,
+          "proposal_valid": false,
+          "confidence": null,
+          "failure": null
+        },
+        "clm": {
+          "category": "Finance",
+          "correct": true,
+          "proposal_valid": false,
+          "confidence": 0.1411,
+          "failure": null
+        },
+        "apple_foundation_models": {
+          "category": "Finance",
+          "correct": true,
+          "proposal_valid": true,
+          "confidence": null,
+          "failure": null
+        }
+      },
+      "category_conflict": false
+    },
+    {
+      "id": "ch-de-finance-room-deposit",
+      "expected": "Finance",
+      "predictions": {
+        "rules": {
+          "category": null,
+          "correct": null,
+          "proposal_valid": false,
+          "confidence": null,
+          "failure": null
+        },
+        "clm": {
+          "category": "Finance",
+          "correct": true,
+          "proposal_valid": false,
+          "confidence": 0.1463,
+          "failure": null
+        },
+        "apple_foundation_models": {
+          "category": "Finance",
+          "correct": true,
+          "proposal_valid": false,
+          "confidence": null,
+          "failure": null
+        }
+      },
+      "category_conflict": false
+    },
+    {
+      "id": "ch-de-finance-symposium-travel",
+      "expected": "Finance",
+      "predictions": {
+        "rules": {
+          "category": "Finance",
+          "correct": true,
+          "proposal_valid": false,
+          "confidence": null,
+          "failure": null
+        },
+        "clm": {
+          "category": "Finance",
+          "correct": true,
+          "proposal_valid": false,
+          "confidence": 0.4215,
+          "failure": null
+        },
+        "apple_foundation_models": {
+          "category": "Finance",
+          "correct": true,
+          "proposal_valid": true,
+          "confidence": null,
+          "failure": null
+        }
+      },
+      "category_conflict": false
+    },
+    {
+      "id": "ch-en-events-jazz",
+      "expected": "Events",
+      "predictions": {
+        "rules": {
+          "category": null,
+          "correct": null,
+          "proposal_valid": false,
+          "confidence": null,
+          "failure": null
+        },
+        "clm": {
+          "category": "Events",
+          "correct": true,
+          "proposal_valid": false,
+          "confidence": 0.3058,
+          "failure": null
+        },
+        "apple_foundation_models": {
+          "category": "Events",
+          "correct": true,
+          "proposal_valid": true,
+          "confidence": null,
+          "failure": null
+        }
+      },
+      "category_conflict": false
+    },
+    {
+      "id": "ch-en-events-graduation",
+      "expected": "Events",
+      "predictions": {
+        "rules": {
+          "category": null,
+          "correct": null,
+          "proposal_valid": false,
+          "confidence": null,
+          "failure": null
+        },
+        "clm": {
+          "category": "Finance",
+          "correct": false,
+          "proposal_valid": false,
+          "confidence": 0.457,
+          "failure": null
+        },
+        "apple_foundation_models": {
+          "category": "Events",
+          "correct": true,
+          "proposal_valid": true,
+          "confidence": null,
+          "failure": null
+        }
+      },
+      "category_conflict": true
+    },
+    {
+      "id": "ch-en-events-poetry",
+      "expected": "Events",
+      "predictions": {
+        "rules": {
+          "category": null,
+          "correct": null,
+          "proposal_valid": false,
+          "confidence": null,
+          "failure": null
+        },
+        "clm": {
+          "category": "Events",
+          "correct": true,
+          "proposal_valid": false,
+          "confidence": 0.2326,
+          "failure": null
+        },
+        "apple_foundation_models": {
+          "category": "Events",
+          "correct": true,
+          "proposal_valid": true,
+          "confidence": null,
+          "failure": null
+        }
+      },
+      "category_conflict": false
+    },
+    {
+      "id": "ch-en-events-sailing",
+      "expected": "Events",
+      "predictions": {
+        "rules": {
+          "category": "Reference",
+          "correct": false,
+          "proposal_valid": false,
+          "confidence": null,
+          "failure": null
+        },
+        "clm": {
+          "category": "Events",
+          "correct": true,
+          "proposal_valid": false,
+          "confidence": 0.4382,
+          "failure": null
+        },
+        "apple_foundation_models": {
+          "category": "Events",
+          "correct": true,
+          "proposal_valid": true,
+          "confidence": null,
+          "failure": null
+        }
+      },
+      "category_conflict": true
+    },
+    {
+      "id": "ch-en-events-tournament",
+      "expected": "Events",
+      "predictions": {
+        "rules": {
+          "category": null,
+          "correct": null,
+          "proposal_valid": false,
+          "confidence": null,
+          "failure": null
+        },
+        "clm": {
+          "category": "Reference",
+          "correct": false,
+          "proposal_valid": false,
+          "confidence": 0.4646,
+          "failure": null
+        },
+        "apple_foundation_models": {
+          "category": "Events",
+          "correct": true,
+          "proposal_valid": true,
+          "confidence": null,
+          "failure": null
+        }
+      },
+      "category_conflict": true
+    },
+    {
+      "id": "ch-en-events-open-studio",
+      "expected": "Events",
+      "predictions": {
+        "rules": {
+          "category": null,
+          "correct": null,
+          "proposal_valid": false,
+          "confidence": null,
+          "failure": null
+        },
+        "clm": {
+          "category": "Reference",
+          "correct": false,
+          "proposal_valid": false,
+          "confidence": 0.1765,
+          "failure": null
+        },
+        "apple_foundation_models": {
+          "category": "Events",
+          "correct": true,
+          "proposal_valid": true,
+          "confidence": null,
+          "failure": null
+        }
+      },
+      "category_conflict": true
+    },
+    {
+      "id": "ch-en-events-ticket",
+      "expected": "Events",
+      "predictions": {
+        "rules": {
+          "category": null,
+          "correct": null,
+          "proposal_valid": false,
+          "confidence": null,
+          "failure": null
+        },
+        "clm": {
+          "category": "Events",
+          "correct": true,
+          "proposal_valid": false,
+          "confidence": 0.3624,
+          "failure": null
+        },
+        "apple_foundation_models": {
+          "category": "Events",
+          "correct": true,
+          "proposal_valid": true,
+          "confidence": null,
+          "failure": null
+        }
+      },
+      "category_conflict": false
+    },
+    {
+      "id": "ch-en-events-parent-night",
+      "expected": "Events",
+      "predictions": {
+        "rules": {
+          "category": null,
+          "correct": null,
+          "proposal_valid": false,
+          "confidence": null,
+          "failure": null
+        },
+        "clm": {
+          "category": "Finance",
+          "correct": false,
+          "proposal_valid": false,
+          "confidence": 0.5507,
+          "failure": null
+        },
+        "apple_foundation_models": {
+          "category": "Events",
+          "correct": true,
+          "proposal_valid": true,
+          "confidence": null,
+          "failure": null
+        }
+      },
+      "category_conflict": true
+    },
+    {
+      "id": "ch-de-events-jazz",
+      "expected": "Events",
+      "predictions": {
+        "rules": {
+          "category": null,
+          "correct": null,
+          "proposal_valid": false,
+          "confidence": null,
+          "failure": null
+        },
+        "clm": {
+          "category": "Events",
+          "correct": true,
+          "proposal_valid": false,
+          "confidence": 0.2989,
+          "failure": null
+        },
+        "apple_foundation_models": {
+          "category": "Events",
+          "correct": true,
+          "proposal_valid": true,
+          "confidence": null,
+          "failure": null
+        }
+      },
+      "category_conflict": false
+    },
+    {
+      "id": "ch-de-events-graduation",
+      "expected": "Events",
+      "predictions": {
+        "rules": {
+          "category": null,
+          "correct": null,
+          "proposal_valid": false,
+          "confidence": null,
+          "failure": null
+        },
+        "clm": {
+          "category": "Events",
+          "correct": true,
+          "proposal_valid": false,
+          "confidence": 0.1083,
+          "failure": null
+        },
+        "apple_foundation_models": {
+          "category": "Events",
+          "correct": true,
+          "proposal_valid": true,
+          "confidence": null,
+          "failure": null
+        }
+      },
+      "category_conflict": false
+    },
+    {
+      "id": "ch-de-events-poetry",
+      "expected": "Events",
+      "predictions": {
+        "rules": {
+          "category": null,
+          "correct": null,
+          "proposal_valid": false,
+          "confidence": null,
+          "failure": null
+        },
+        "clm": {
+          "category": "Finance",
+          "correct": false,
+          "proposal_valid": false,
+          "confidence": 0.1757,
+          "failure": null
+        },
+        "apple_foundation_models": {
+          "category": "Events",
+          "correct": true,
+          "proposal_valid": true,
+          "confidence": null,
+          "failure": null
+        }
+      },
+      "category_conflict": true
+    },
+    {
+      "id": "ch-de-events-sailing",
+      "expected": "Events",
+      "predictions": {
+        "rules": {
+          "category": null,
+          "correct": null,
+          "proposal_valid": false,
+          "confidence": null,
+          "failure": null
+        },
+        "clm": {
+          "category": "Events",
+          "correct": true,
+          "proposal_valid": false,
+          "confidence": 0.353,
+          "failure": null
+        },
+        "apple_foundation_models": {
+          "category": "Events",
+          "correct": true,
+          "proposal_valid": true,
+          "confidence": null,
+          "failure": null
+        }
+      },
+      "category_conflict": false
+    },
+    {
+      "id": "ch-de-events-tournament",
+      "expected": "Events",
+      "predictions": {
+        "rules": {
+          "category": null,
+          "correct": null,
+          "proposal_valid": false,
+          "confidence": null,
+          "failure": null
+        },
+        "clm": {
+          "category": "Events",
+          "correct": true,
+          "proposal_valid": false,
+          "confidence": 0.3001,
+          "failure": null
+        },
+        "apple_foundation_models": {
+          "category": "Events",
+          "correct": true,
+          "proposal_valid": true,
+          "confidence": null,
+          "failure": null
+        }
+      },
+      "category_conflict": false
+    },
+    {
+      "id": "ch-de-events-open-studio",
+      "expected": "Events",
+      "predictions": {
+        "rules": {
+          "category": null,
+          "correct": null,
+          "proposal_valid": false,
+          "confidence": null,
+          "failure": null
+        },
+        "clm": {
+          "category": "Events",
+          "correct": true,
+          "proposal_valid": false,
+          "confidence": 0.1543,
+          "failure": null
+        },
+        "apple_foundation_models": {
+          "category": "Events",
+          "correct": true,
+          "proposal_valid": true,
+          "confidence": null,
+          "failure": null
+        }
+      },
+      "category_conflict": false
+    },
+    {
+      "id": "ch-de-events-ticket",
+      "expected": "Events",
+      "predictions": {
+        "rules": {
+          "category": null,
+          "correct": null,
+          "proposal_valid": false,
+          "confidence": null,
+          "failure": null
+        },
+        "clm": {
+          "category": "Events",
+          "correct": true,
+          "proposal_valid": false,
+          "confidence": 0.6366,
+          "failure": null
+        },
+        "apple_foundation_models": {
+          "category": "Events",
+          "correct": true,
+          "proposal_valid": true,
+          "confidence": null,
+          "failure": null
+        }
+      },
+      "category_conflict": false
+    },
+    {
+      "id": "ch-de-events-parent-night",
+      "expected": "Events",
+      "predictions": {
+        "rules": {
+          "category": null,
+          "correct": null,
+          "proposal_valid": false,
+          "confidence": null,
+          "failure": null
+        },
+        "clm": {
+          "category": "Events",
+          "correct": true,
+          "proposal_valid": false,
+          "confidence": 0.1227,
+          "failure": null
+        },
+        "apple_foundation_models": {
+          "category": "Events",
+          "correct": true,
+          "proposal_valid": true,
+          "confidence": null,
+          "failure": null
+        }
+      },
+      "category_conflict": false
+    },
+    {
+      "id": "ch-en-reference-solar",
+      "expected": "Reference",
+      "predictions": {
+        "rules": {
+          "category": "Reference",
+          "correct": true,
+          "proposal_valid": false,
+          "confidence": null,
+          "failure": null
+        },
+        "clm": {
+          "category": "Reference",
+          "correct": true,
+          "proposal_valid": false,
+          "confidence": 0.7572,
+          "failure": null
+        },
+        "apple_foundation_models": {
+          "category": "Reference",
+          "correct": true,
+          "proposal_valid": true,
+          "confidence": null,
+          "failure": null
+        }
+      },
+      "category_conflict": false
+    },
+    {
+      "id": "ch-en-reference-backup",
+      "expected": "Reference",
+      "predictions": {
+        "rules": {
+          "category": null,
+          "correct": null,
+          "proposal_valid": false,
+          "confidence": null,
+          "failure": null
+        },
+        "clm": {
+          "category": "Reference",
+          "correct": true,
+          "proposal_valid": false,
+          "confidence": 0.9413,
+          "failure": null
+        },
+        "apple_foundation_models": {
+          "category": "Reference",
+          "correct": true,
+          "proposal_valid": true,
+          "confidence": null,
+          "failure": null
+        }
+      },
+      "category_conflict": false
+    },
+    {
+      "id": "ch-en-reference-data-dictionary",
+      "expected": "Reference",
+      "predictions": {
+        "rules": {
+          "category": null,
+          "correct": null,
+          "proposal_valid": false,
+          "confidence": null,
+          "failure": null
+        },
+        "clm": {
+          "category": "Finance",
+          "correct": false,
+          "proposal_valid": false,
+          "confidence": 0.9553,
+          "failure": null
+        },
+        "apple_foundation_models": {
+          "category": "Reference",
+          "correct": true,
+          "proposal_valid": true,
+          "confidence": null,
+          "failure": null
+        }
+      },
+      "category_conflict": true
+    },
+    {
+      "id": "ch-en-reference-bicycle",
+      "expected": "Reference",
+      "predictions": {
+        "rules": {
+          "category": "Reference",
+          "correct": true,
+          "proposal_valid": false,
+          "confidence": null,
+          "failure": null
+        },
+        "clm": {
+          "category": "Reference",
+          "correct": true,
+          "proposal_valid": false,
+          "confidence": 0.7722,
+          "failure": null
+        },
+        "apple_foundation_models": {
+          "category": "Reference",
+          "correct": true,
+          "proposal_valid": true,
+          "confidence": null,
+          "failure": null
+        }
+      },
+      "category_conflict": false
+    },
+    {
+      "id": "ch-en-reference-citations",
+      "expected": "Reference",
+      "predictions": {
+        "rules": {
+          "category": "Reference",
+          "correct": true,
+          "proposal_valid": false,
+          "confidence": null,
+          "failure": null
+        },
+        "clm": {
+          "category": "Reference",
+          "correct": true,
+          "proposal_valid": false,
+          "confidence": 0.223,
+          "failure": null
+        },
+        "apple_foundation_models": {
+          "category": "Reference",
+          "correct": true,
+          "proposal_valid": true,
+          "confidence": null,
+          "failure": null
+        }
+      },
+      "category_conflict": false
+    },
+    {
+      "id": "ch-en-reference-printer",
+      "expected": "Reference",
+      "predictions": {
+        "rules": {
+          "category": "Finance",
+          "correct": false,
+          "proposal_valid": false,
+          "confidence": null,
+          "failure": null
+        },
+        "clm": {
+          "category": "Reference",
+          "correct": true,
+          "proposal_valid": false,
+          "confidence": 0.9506,
+          "failure": null
+        },
+        "apple_foundation_models": {
+          "category": "Reference",
+          "correct": true,
+          "proposal_valid": true,
+          "confidence": null,
+          "failure": null
+        }
+      },
+      "category_conflict": true
+    },
+    {
+      "id": "ch-en-reference-event-config",
+      "expected": "Reference",
+      "predictions": {
+        "rules": {
+          "category": null,
+          "correct": null,
+          "proposal_valid": false,
+          "confidence": null,
+          "failure": null
+        },
+        "clm": {
+          "category": "Reference",
+          "correct": true,
+          "proposal_valid": false,
+          "confidence": 0.4727,
+          "failure": null
+        },
+        "apple_foundation_models": {
+          "category": "Reference",
+          "correct": true,
+          "proposal_valid": true,
+          "confidence": null,
+          "failure": null
+        }
+      },
+      "category_conflict": false
+    },
+    {
+      "id": "ch-en-reference-registration-api",
+      "expected": "Reference",
+      "predictions": {
+        "rules": {
+          "category": "Reference",
+          "correct": true,
+          "proposal_valid": false,
+          "confidence": null,
+          "failure": null
+        },
+        "clm": {
+          "category": "Finance",
+          "correct": false,
+          "proposal_valid": false,
+          "confidence": 0.5253,
+          "failure": null
+        },
+        "apple_foundation_models": {
+          "category": "Reference",
+          "correct": true,
+          "proposal_valid": true,
+          "confidence": null,
+          "failure": null
+        }
+      },
+      "category_conflict": true
+    },
+    {
+      "id": "ch-de-reference-solar",
+      "expected": "Reference",
+      "predictions": {
+        "rules": {
+          "category": null,
+          "correct": null,
+          "proposal_valid": false,
+          "confidence": null,
+          "failure": null
+        },
+        "clm": {
+          "category": "Reference",
+          "correct": true,
+          "proposal_valid": false,
+          "confidence": 0.7909,
+          "failure": null
+        },
+        "apple_foundation_models": {
+          "category": "Reference",
+          "correct": true,
+          "proposal_valid": true,
+          "confidence": null,
+          "failure": null
+        }
+      },
+      "category_conflict": false
+    },
+    {
+      "id": "ch-de-reference-backup",
+      "expected": "Reference",
+      "predictions": {
+        "rules": {
+          "category": null,
+          "correct": null,
+          "proposal_valid": false,
+          "confidence": null,
+          "failure": null
+        },
+        "clm": {
+          "category": "Reference",
+          "correct": true,
+          "proposal_valid": false,
+          "confidence": 0.9136,
+          "failure": null
+        },
+        "apple_foundation_models": {
+          "category": "Reference",
+          "correct": true,
+          "proposal_valid": true,
+          "confidence": null,
+          "failure": null
+        }
+      },
+      "category_conflict": false
+    },
+    {
+      "id": "ch-de-reference-data-dictionary",
+      "expected": "Reference",
+      "predictions": {
+        "rules": {
+          "category": null,
+          "correct": null,
+          "proposal_valid": false,
+          "confidence": null,
+          "failure": null
+        },
+        "clm": {
+          "category": "Reference",
+          "correct": true,
+          "proposal_valid": false,
+          "confidence": 0.1473,
+          "failure": null
+        },
+        "apple_foundation_models": {
+          "category": "Reference",
+          "correct": true,
+          "proposal_valid": true,
+          "confidence": null,
+          "failure": null
+        }
+      },
+      "category_conflict": false
+    },
+    {
+      "id": "ch-de-reference-bicycle",
+      "expected": "Reference",
+      "predictions": {
+        "rules": {
+          "category": "Reference",
+          "correct": true,
+          "proposal_valid": false,
+          "confidence": null,
+          "failure": null
+        },
+        "clm": {
+          "category": "Reference",
+          "correct": true,
+          "proposal_valid": false,
+          "confidence": 0.9318,
+          "failure": null
+        },
+        "apple_foundation_models": {
+          "category": "Reference",
+          "correct": true,
+          "proposal_valid": true,
+          "confidence": null,
+          "failure": null
+        }
+      },
+      "category_conflict": false
+    },
+    {
+      "id": "ch-de-reference-citations",
+      "expected": "Reference",
+      "predictions": {
+        "rules": {
+          "category": null,
+          "correct": null,
+          "proposal_valid": false,
+          "confidence": null,
+          "failure": null
+        },
+        "clm": {
+          "category": "Reference",
+          "correct": true,
+          "proposal_valid": false,
+          "confidence": 0.3684,
+          "failure": null
+        },
+        "apple_foundation_models": {
+          "category": "Reference",
+          "correct": true,
+          "proposal_valid": true,
+          "confidence": null,
+          "failure": null
+        }
+      },
+      "category_conflict": false
+    },
+    {
+      "id": "ch-de-reference-printer",
+      "expected": "Reference",
+      "predictions": {
+        "rules": {
+          "category": null,
+          "correct": null,
+          "proposal_valid": false,
+          "confidence": null,
+          "failure": null
+        },
+        "clm": {
+          "category": "Reference",
+          "correct": true,
+          "proposal_valid": false,
+          "confidence": 0.9107,
+          "failure": null
+        },
+        "apple_foundation_models": {
+          "category": "Reference",
+          "correct": true,
+          "proposal_valid": true,
+          "confidence": null,
+          "failure": null
+        }
+      },
+      "category_conflict": false
+    },
+    {
+      "id": "ch-de-reference-event-config",
+      "expected": "Reference",
+      "predictions": {
+        "rules": {
+          "category": null,
+          "correct": null,
+          "proposal_valid": false,
+          "confidence": null,
+          "failure": null
+        },
+        "clm": {
+          "category": "Reference",
+          "correct": true,
+          "proposal_valid": false,
+          "confidence": 0.7293,
+          "failure": null
+        },
+        "apple_foundation_models": {
+          "category": "Reference",
+          "correct": true,
+          "proposal_valid": true,
+          "confidence": null,
+          "failure": null
+        }
+      },
+      "category_conflict": false
+    },
+    {
+      "id": "ch-de-reference-registration-api",
+      "expected": "Reference",
+      "predictions": {
+        "rules": {
+          "category": null,
+          "correct": null,
+          "proposal_valid": false,
+          "confidence": null,
+          "failure": null
+        },
+        "clm": {
+          "category": "Reference",
+          "correct": true,
+          "proposal_valid": false,
+          "confidence": 0.7203,
+          "failure": null
+        },
+        "apple_foundation_models": {
+          "category": "Reference",
+          "correct": true,
+          "proposal_valid": true,
+          "confidence": null,
+          "failure": null
+        }
+      },
+      "category_conflict": false
+    }
+  ],
+  "policy": "The sources remain separate. Missing, malformed, safety-blocked, or evidence-invalid outputs are not turned into proposals; human review remains the filing decision."
+}

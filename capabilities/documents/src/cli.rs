@@ -1,7 +1,7 @@
 use documents::{open_default, Review, Stored};
 use std::os::unix::fs::OpenOptionsExt;
 
-const USAGE: &str = "usage: documents <command>\n  intake <file>                      add original bytes to the inbox\n  inbox <folder> [--limit N] [--dry-run]  latest documents (default 100), local only\n  watch <folder>                     poll all documents every 60 seconds\n  list [--status inbox|filed|archived]\n  search <words...>                  search filenames and local extracted text\n  review <id> <category> [--project NAME]\n  archive <id>\n  export <id> <destination>      copy an original without overwriting\n  restore-index                      reconstruct missing rows from sidecars\n  verify                              hash-check every stored original";
+const USAGE: &str = "usage: documents <command>\n  intake <file>                      add original bytes to the inbox\n  inbox <folder> [--limit N] [--dry-run] [--recursive] [--include-sensitive]\n                                     latest documents (default 100), local only\n  duplicates                         copies, rescans and split parts; changes nothing\n  watch <folder>                     poll all documents every 60 seconds\n  list [--status inbox|filed|archived]\n  search <words...>                  search filenames and local extracted text\n  review <id> <category> [--project NAME]\n  archive <id>\n  export <id> <destination>      copy an original without overwriting\n  restore-index                      reconstruct missing rows from sidecars\n  verify                              hash-check every stored original";
 
 fn main() {
     if let Err(error) = run() {
@@ -169,6 +169,47 @@ fn run() -> Result<(), Box<dyn std::error::Error>> {
             file.sync_all()?;
             println!("exported {id} to {}", destination.display());
         }
+        "duplicates" => {
+            let documents = library.list(None)?;
+            let report = documents::duplicates::report(&documents, &library.sources()?);
+            let name = |id: &str| {
+                documents
+                    .iter()
+                    .find(|d| d.id == id)
+                    .map_or("?", |d| d.filename.as_str())
+                    .to_string()
+            };
+            println!("{} exact copy group(s)", report.copies.len());
+            for group in &report.copies {
+                println!("  sha256 {}", &group.sha256[..12]);
+                for id in &group.ids {
+                    println!("    record {}  {}", &id[..12], name(id));
+                }
+                for path in &group.paths {
+                    println!("    found at {path}");
+                }
+            }
+            println!("{} probable rescan pair(s) — review", report.rescans.len());
+            for pair in &report.rescans {
+                println!(
+                    "  {:.2}  {}  ≈  {}",
+                    pair.score,
+                    name(&pair.a),
+                    name(&pair.b)
+                );
+                println!("        {}  {}", &pair.a[..12], &pair.b[..12]);
+            }
+            println!("{} probable split part(s) — review", report.parts.len());
+            for pair in &report.parts {
+                println!(
+                    "  {:.2}  {}  ⊂  {}",
+                    pair.score,
+                    name(&pair.a),
+                    name(&pair.b)
+                );
+                println!("        {}  {}", &pair.a[..12], &pair.b[..12]);
+            }
+        }
         "restore-index" => {
             let (restored, unchanged) = library.restore_index()?;
             println!("restored {restored} metadata row(s); {unchanged} already matched");
@@ -192,21 +233,28 @@ fn run() -> Result<(), Box<dyn std::error::Error>> {
 fn intake_folder(args: &[String]) -> Result<(), Box<dyn std::error::Error>> {
     let folder = args.first().filter(|s| !s.starts_with('-')).ok_or(USAGE)?;
     let mut limit = 100;
-    let mut dry_run = false;
+    let (mut dry_run, mut recursive, mut include_sensitive) = (false, false, false);
     let mut options = args[1..].iter();
     while let Some(option) = options.next() {
         match option.as_str() {
             "--dry-run" if !dry_run => dry_run = true,
+            "--recursive" if !recursive => recursive = true,
+            "--include-sensitive" if !include_sensitive => include_sensitive = true,
             "--limit" => limit = options.next().ok_or(USAGE)?.parse::<usize>()?,
             _ => return Err(USAGE.into()),
         }
     }
-    let plan = documents::inbox::scan(std::path::Path::new(folder), limit)?;
+    let plan = documents::inbox::scan_with(
+        std::path::Path::new(folder),
+        limit,
+        recursive,
+        include_sensitive,
+    )?;
     println!("selected {} eligible document(s); {} excluded by filename; {} unready (empty, oversized, or modified within 30 seconds)",
         plan.files.len(), plan.excluded, plan.unready);
     if dry_run {
         for file in &plan.files {
-            println!("would import {}", file.filename);
+            println!("would import {}", file.path().display());
         }
         return Ok(());
     }
@@ -226,6 +274,15 @@ fn import_plan(
             .and_then(|bytes| library.intake(&file.filename, &bytes))
         {
             Ok(stored) => {
+                let id = match &stored {
+                    Stored::New(document) | Stored::Unchanged(document) => &document.id,
+                };
+                if let Err(error) = library.record_source(id, file.path()) {
+                    eprintln!(
+                        "could not record where {} was found: {error}",
+                        file.filename
+                    );
+                }
                 let document = match stored {
                     Stored::New(document) => {
                         added += 1;

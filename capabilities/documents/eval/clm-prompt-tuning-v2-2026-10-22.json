@@ -1,0 +1,223 @@
+{
+  "purpose": "Development-only CLM event-description tuning; holdout was not scored during selection.",
+  "model": "mlx-community/CLM-v0.1-8B-MLX-4bit",
+  "revision": "489b421bafc007e3ae409528d77006d26d362689",
+  "development_corpus": "clm-corpus-v2.json",
+  "development_corpus_sha256": "6e9f4bd5c320030406592ab56cd834d508b1c9d5314766573956407846d35e7c",
+  "selection_rule": "Highest overall accuracy on the balanced development corpus; tie-break by Events accuracy; retain baseline on a full tie.",
+  "selected_prompt": "gathering-material",
+  "variants": [
+    {
+      "id": "baseline",
+      "event_description": "An invitation, conference program, event ticket, or event registration.",
+      "accuracy": 0.6667,
+      "by_language": {
+        "de": {
+          "samples": 24,
+          "correct": 17,
+          "accuracy": 0.7083
+        },
+        "en": {
+          "samples": 24,
+          "correct": 15,
+          "accuracy": 0.625
+        }
+      },
+      "by_category": {
+        "Events": {
+          "samples": 16,
+          "correct": 1,
+          "accuracy": 0.0625
+        },
+        "Finance": {
+          "samples": 16,
+          "correct": 16,
+          "accuracy": 1.0
+        },
+        "Reference": {
+          "samples": 16,
+          "correct": 15,
+          "accuracy": 0.9375
+        }
+      },
+      "by_difficulty": {
+        "clear": {
+          "samples": 36,
+          "correct": 25,
+          "accuracy": 0.6944
+        },
+        "overlap": {
+          "samples": 12,
+          "correct": 7,
+          "accuracy": 0.5833
+        }
+      },
+      "confusion": {
+        "Events -> Events": 1,
+        "Events -> Finance": 9,
+        "Events -> Reference": 6,
+        "Finance -> Finance": 16,
+        "Reference -> Finance": 1,
+        "Reference -> Reference": 15
+      },
+      "misclassified_ids": [
+        "en-events-conference",
+        "en-events-workshop",
+        "en-events-calendar-invite",
+        "en-events-festival",
+        "en-events-webinar",
+        "en-events-exhibition",
+        "en-events-ticket",
+        "en-events-registration-fee",
+        "de-events-concert",
+        "de-events-workshop",
+        "de-events-theatre",
+        "de-events-webinar",
+        "de-events-exhibition",
+        "de-events-registration",
+        "de-events-match-ticket",
+        "en-reference-conference-protocol"
+      ]
+    },
+    {
+      "id": "scheduled-activity",
+      "event_description": "A document about a scheduled activity people attend or organize, such as an invitation, agenda, program, ticket, meeting notice, or registration confirmation.",
+      "accuracy": 0.6458,
+      "by_language": {
+        "de": {
+          "samples": 24,
+          "correct": 16,
+          "accuracy": 0.6667
+        },
+        "en": {
+          "samples": 24,
+          "correct": 15,
+          "accuracy": 0.625
+        }
+      },
+      "by_category": {
+        "Events": {
+          "samples": 16,
+          "correct": 0,
+          "accuracy": 0.0
+        },
+        "Finance": {
+          "samples": 16,
+          "correct": 16,
+          "accuracy": 1.0
+        },
+        "Reference": {
+          "samples": 16,
+          "correct": 15,
+          "accuracy": 0.9375
+        }
+      },
+      "by_difficulty": {
+        "clear": {
+          "samples": 36,
+          "correct": 24,
+          "accuracy": 0.6667
+        },
+        "overlap": {
+          "samples": 12,
+          "correct": 7,
+          "accuracy": 0.5833
+        }
+      },
+      "confusion": {
+        "Events -> Finance": 10,
+        "Events -> Reference": 6,
+        "Finance -> Finance": 16,
+        "Reference -> Finance": 1,
+        "Reference -> Reference": 15
+      },
+      "misclassified_ids": [
+        "en-events-conference",
+        "en-events-workshop",
+        "en-events-calendar-invite",
+        "en-events-festival",
+        "en-events-webinar",
+        "en-events-exhibition",
+        "en-events-ticket",
+        "en-events-registration-fee",
+        "de-events-conference",
+        "de-events-concert",
+        "de-events-workshop",
+        "de-events-theatre",
+        "de-events-webinar",
+        "de-events-exhibition",
+        "de-events-registration",
+        "de-events-match-ticket",
+        "en-reference-conference-protocol"
+      ]
+    },
+    {
+      "id": "gathering-material",
+      "event_description": "Material for a gathering or public activity, such as a meeting, concert, workshop, talk, exhibition, or sports fixture; includes invitations, schedules, tickets, and registration details.",
+      "accuracy": 0.8125,
+      "by_language": {
+        "de": {
+          "samples": 24,
+          "correct": 19,
+          "accuracy": 0.7917
+        },
+        "en": {
+          "samples": 24,
+          "correct": 20,
+          "accuracy": 0.8333
+        }
+      },
+      "by_category": {
+        "Events": {
+          "samples": 16,
+          "correct": 10,
+          "accuracy": 0.625
+        },
+        "Finance": {
+          "samples": 16,
+          "correct": 15,
+          "accuracy": 0.9375
+        },
+        "Reference": {
+          "samples": 16,
+          "correct": 14,
+          "accuracy": 0.875
+        }
+      },
+      "by_difficulty": {
+        "clear": {
+          "samples": 36,
+          "correct": 33,
+          "accuracy": 0.9167
+        },
+        "overlap": {
+          "samples": 12,
+          "correct": 6,
+          "accuracy": 0.5
+        }
+      },
+      "confusion": {
+        "Events -> Events": 10,
+        "Events -> Finance": 5,
+        "Events -> Reference": 1,
+        "Finance -> Events": 1,
+        "Finance -> Finance": 15,
+        "Reference -> Events": 1,
+        "Reference -> Finance": 1,
+        "Reference -> Reference": 14
+      },
+      "misclassified_ids": [
+        "de-finance-purchase",
+        "en-events-conference",
+        "en-events-festival",
+        "en-events-ticket",
+        "de-events-theatre",
+        "de-events-registration",
+        "de-events-match-ticket",
+        "en-reference-conference-protocol",
+        "de-reference-event-protocol"
+      ]
+    }
+  ],
+  "warning": "Development results select a prompt only; they do not estimate holdout performance or authorize filing."
+}

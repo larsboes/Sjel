@@ -6,31 +6,29 @@ use std::time::Duration;
 
 use gpui_kit::component::button::{Button, ButtonVariants};
 use gpui_kit::component::{IconName, Sizable};
-use gpui_kit::{div, prelude::*, px, rgb, Action, FontWeight, SharedString};
+use gpui_kit::{div, prelude::*, px, rgb, Context, FontWeight, SharedString};
 
 use crate::route::Page;
 use crate::theme::Palette;
-use crate::workspace::{
-    OpenInDashboard, Refresh, ToggleAppearancePanel, ToggleUpdatePopover, Workspace,
-};
+use crate::workspace::Workspace;
 
-pub fn render(view: &Workspace, palette: Palette) -> impl IntoElement {
+pub fn render(view: &Workspace, palette: Palette, cx: &mut Context<Workspace>) -> impl IntoElement {
     let checked = view
         .health
         .age()
         .map(|elapsed| format!("checked {} ago", ago(elapsed)));
+    // Settings › Updates says the same at length, so the pill stays out of Settings.
     let update_pill = view
         .update_info
         .as_ref()
-        .filter(|u| u.is_update_available())
+        .filter(|info| info.is_update_available() && view.page != Page::Settings)
         .map(|info| {
-            div()
-                .id("update-badge-wrapper")
-                .mr_2()
-                .on_click(|_, window, cx| {
-                    window.dispatch_action(ToggleUpdatePopover.boxed_clone(), cx);
-                })
-                .child(crate::update::update_badge(info.commits_behind, palette))
+            div().flex_none().mr_2().child(crate::update::header_pill(
+                info,
+                view.rebuild_state == crate::update::RebuildState::Building,
+                palette,
+                cx.entity(),
+            ))
         });
     div()
         .flex()
@@ -41,6 +39,8 @@ pub fn render(view: &Workspace, palette: Palette) -> impl IntoElement {
         .pb_5()
         .child(
             div()
+                .flex_1()
+                .min_w_0()
                 .flex()
                 .flex_col()
                 .gap_1()
@@ -53,6 +53,7 @@ pub fn render(view: &Workspace, palette: Palette) -> impl IntoElement {
                 .child(
                     div()
                         .text_sm()
+                        .truncate()
                         .text_color(rgb(palette.muted))
                         .child(subtitle(view)),
                 ),
@@ -60,6 +61,7 @@ pub fn render(view: &Workspace, palette: Palette) -> impl IntoElement {
         .child(
             div()
                 .flex()
+                .flex_none()
                 .items_center()
                 .gap_1()
                 .children(update_pill)
@@ -77,19 +79,17 @@ pub fn render(view: &Workspace, palette: Palette) -> impl IntoElement {
                         .icon(IconName::RotateCw)
                         .loading(view.health.loading || view.agent.loading || view.calendar.loading)
                         .tooltip("Refresh (⌘R)")
-                        .on_click(|_, window, cx| {
-                            window.dispatch_action(Refresh.boxed_clone(), cx)
-                        }),
+                        .on_click(cx.listener(|view, _, _, cx| {
+                            view.refresh_current_page(cx);
+                        })),
                 )
                 .child(
-                    Button::new("appearance")
+                    Button::new("settings")
                         .ghost()
                         .small()
-                        .icon(IconName::Palette)
-                        .tooltip("Appearance & Transparency")
-                        .on_click(|_, window, cx| {
-                            window.dispatch_action(ToggleAppearancePanel.boxed_clone(), cx)
-                        }),
+                        .icon(IconName::Settings)
+                        .tooltip("Settings (⌘,)")
+                        .on_click(cx.listener(|view, _, _, cx| view.open_settings(None, cx))),
                 )
                 .child(
                     Button::new("open-in-dashboard")
@@ -97,9 +97,9 @@ pub fn render(view: &Workspace, palette: Palette) -> impl IntoElement {
                         .small()
                         .icon(IconName::ExternalLink)
                         .tooltip("Open in the dashboard (⌘D)")
-                        .on_click(|_, window, cx| {
-                            window.dispatch_action(OpenInDashboard.boxed_clone(), cx)
-                        }),
+                        .on_click(cx.listener(|view, _, window, cx| {
+                            view.open_dashboard(view.page.href().to_owned(), window, cx);
+                        })),
                 ),
         )
 }
@@ -108,9 +108,27 @@ pub fn render(view: &Workspace, palette: Palette) -> impl IntoElement {
 fn subtitle(view: &Workspace) -> SharedString {
     match view.page {
         Page::Home => chrono::Local::now().format("%A, %B %-d").to_string().into(),
+        Page::Context => "Daily command center: events, due tasks, and expenses".into(),
         Page::Capabilities => view.endpoint(),
         Page::Projects => "Projects, tasks and notes, in one place".into(),
         Page::Ask => "Multi-turn capability session · ⌥Space from any app".into(),
+        Page::Travel => "Trips, itinerary stops and maps".into(),
+        Page::Feed => "What the collectors brought in, ranked for you".into(),
+        Page::Inbox => "Captured, not sorted yet".into(),
+        Page::Calendar => "Your days, from the calendar capability".into(),
+        Page::Documents => "Personal documents, filing and review".into(),
+        Page::Backup => "Backup targets, rehearsal verification, and attempt history".into(),
+        Page::Finance => "Personal ledger, accounts and recurring subscriptions".into(),
+        Page::People => "Contact registry and personal relationship profiles".into(),
+        Page::Inventory => {
+            "Household inventory, wishlist budget, and interior spatial layout".into()
+        }
+        Page::Software => "Apps on this Mac: size, last used, and what to keep".into(),
+        Page::Import => "Bring a folder into Sjel, each file to its owner".into(),
+        Page::Systems => {
+            "This Mac now: temperature, power, disk, updates and the agent's reach".into()
+        }
+        Page::Settings => view.settings_section.summary().into(),
     }
 }
 

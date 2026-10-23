@@ -1,0 +1,36 @@
+[package]
+name = "sjel-import"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+description = "One import for Sjel: sorts every file of a folder to the capability that owns it and records each file's outcome."
+publish = false
+
+[lib]
+name = "import"
+path = "src/lib.rs"
+
+# sjel-import, not import: ImageMagick installs `import` on PATH.
+[[bin]]
+name = "sjel-import"
+path = "src/main.rs"
+
+[dependencies]
+axum.workspace = true
+chrono.workspace = true
+reqwest.workspace = true
+route-manifest = { path = "../../libs/route-manifest" }
+rusqlite.workspace = true
+schemars = "1.2.2"
+serde = { workspace = true, features = ["derive"] }
+serde_json.workspace = true
+sha2.workspace = true
+sjel-config = { path = "../../libs/sjel-config" }
+sjel-http = { path = "../../libs/sjel-http" }
+sjel-server = { path = "../../libs/sjel-server" }
+sjel-store = { path = "../../libs/sjel-store" }
+tokio = { workspace = true, features = ["rt-multi-thread", "macros"] }
+
+[lints]
+workspace = true

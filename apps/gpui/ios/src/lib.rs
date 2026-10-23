@@ -23,14 +23,15 @@ use futures::StreamExt;
 use serde::Deserialize;
 
 use gpui::{div, prelude::*, px, rgb, Context, MouseButton, SharedString, Window};
-use sjel_gpui_core::blocks::Doc;
 use sjel_gpui_core::data::Board;
+use sjel_gpui_core::data::Repo;
 use sjel_gpui_core::device::{self, DeviceClient, Node, Signer};
-use sjel_gpui_core::shell::{self, NodeHealth, ProjectRecord};
+use sjel_gpui_core::shell::{self, NodeHealth};
 use sjel_gpui_core::sync::{self, Report};
+use sjel_gpui_ui::projects::{Projects, ProjectsEvent};
 use sjel_gpui_ui::{
-    mobile_tab_bar, render_doc, AccentColor, AppearanceSettings, BackgroundTone, Density, NavItem,
-    Palette, ThemeMode,
+    mobile_tab_bar, AccentColor, AppearanceSettings, BackgroundTone, Density, NavItem, Palette,
+    ThemeMode,
 };
 
 mod identity;
@@ -45,16 +46,10 @@ const LOCAL_NETWORK_DENIED: &str =
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Tab {
-    TasksNotes,
+    Projects,
+    Travel,
     /// Pairing with a Mac: offered here, never required (research/offline-on-the-phone.md).
     Settings,
-}
-
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub enum FilterKind {
-    All,
-    Tasks,
-    Notes,
 }
 
 enum Event {
@@ -68,6 +63,8 @@ enum Event {
     Ready(Node, NodeHealth),
     /// The phone's replica after it was opened, read or written: its rows and queued count.
     Board(Board),
+    /// The Projects page wrote the replica: the queued count moved and a sync may start.
+    Wrote,
     /// The replica did not open, and why. Nothing typed can be kept until it does.
     StoreFailed(String),
     /// A sync finished: what it moved, or why it could not run, plus the replica after it.
@@ -128,13 +125,14 @@ pub struct Capabilities {
     /// True from the tap until the owner decides, so the button cannot be pressed twice.
     joining: bool,
     active_tab: Tab,
-    filter: FilterKind,
+    travel: gpui::Entity<sjel_gpui_ui::travel::Travel>,
     /// The phone's own copy of the Mac's records and the queue beside it, or `None` until it
     /// opens. `Board` is the view model: it answers the rows to draw without this view filtering
     /// them, and it keeps the `TursoStore` the sync needs.
     board: Option<Board>,
-    selected_note: Option<ProjectRecord>,
-    /// Why the replica did not open, shown on the Tasks & Notes page in place of a silent blank.
+    /// The Mac's Projects page over the replica (`sjel_gpui_ui::projects`), once the store opens.
+    projects: Option<gpui::Entity<Projects>>,
+    /// Why the replica did not open, shown on the Projects page in place of a silent blank.
     store_error: Option<SharedString>,
     /// The paired Mac, once this launch has reached it. `None` means every sync rests: a phone
     /// that has not reached the Mac keeps its queue.
@@ -185,13 +183,10 @@ impl Capabilities {
                         Event::Status(text) => view.status = text.into(),
                         Event::StoreFailed(text) => view.store_error = Some(text.into()),
                         Event::Board(board) => {
-                            // The open note follows the replica, so a body this app just saved is
-                            // the one still on screen.
-                            if let Some(ref current) = view.selected_note {
-                                if let Some(updated) =
-                                    board.records().iter().find(|r| r.path == current.path)
-                                {
-                                    view.selected_note = Some(updated.clone());
+                            if view.projects.is_none() {
+                                if let Some(store) = board.store().cloned() {
+                                    let projects = view.open_projects(store, cx);
+                                    view.projects = Some(projects);
                                 }
                             }
                             view.board = Some(board);
@@ -244,16 +239,38 @@ impl Capabilities {
                             view.found.clear();
                             view.joining = false;
                             match DeviceClient::new(node, Arc::new(identity::sign)) {
-                                Ok(client) => view.client = Some(Arc::new(client)),
+                                Ok(client) => {
+                                    let client = Arc::new(client);
+                                    view.travel.update(cx, |travel, _| {
+                                        travel.set_source(sjel_gpui_core::travel::Source::Device(
+                                            client.clone(),
+                                        ))
+                                    });
+                                    view.client = Some(client);
+                                }
                                 Err(error) => {
                                     view.synced = Some(format!("Cannot sync: {error}").into())
                                 }
                             }
                             view.maybe_sync(cx);
                         }
+                        Event::Wrote => {
+                            if let Some(board) = view.board.clone() {
+                                let events = view.events.clone();
+                                shell::spawn(async move {
+                                    let mut board = board;
+                                    let _ = board.reload().await;
+                                    let _ = events.unbounded_send(Event::Board(board));
+                                });
+                            }
+                        }
                         Event::Synced(outcome, board) => {
                             view.syncing = false;
                             view.board = Some(board);
+                            // The pull may have changed any record the page shows.
+                            if let Some(projects) = &view.projects {
+                                projects.update(cx, |projects, cx| projects.reload(cx));
+                            }
                             view.synced = Some(
                                 match outcome {
                                     Ok(report) => report.summary(),
@@ -286,9 +303,9 @@ impl Capabilities {
             rows: Vec::new(),
             found: Vec::new(),
             joining: false,
-            active_tab: Tab::TasksNotes,
-            filter: FilterKind::All,
-            selected_note: None,
+            active_tab: Tab::Projects,
+            travel: cx.new(|_| sjel_gpui_ui::travel::Travel::new(None, Density::Mobile)),
+            projects: None,
             store_error: None,
             board: None,
             client: None,
@@ -324,165 +341,44 @@ impl Capabilities {
         cx.notify();
     }
 
-    fn toggle_task(&mut self, path: String, done: bool, cx: &mut Context<Self>) {
-        let Some(mut board) = self.board.clone() else {
-            return;
-        };
-        // The tick lands in the frame it was made in; the write below settles it.
-        board.mark_done(&path, done);
-        self.board = Some(board.clone());
-        cx.notify();
-
+    /// The Projects page over the replica. Every write it makes comes back as [`Event::Wrote`].
+    fn open_projects(
+        &mut self,
+        store: Arc<sjel_gpui_core::store::TursoStore>,
+        cx: &mut Context<Self>,
+    ) -> gpui::Entity<Projects> {
         let events = self.events.clone();
-        shell::spawn(async move {
-            let mut board = board;
-            let _ = board.toggle_task(&path, done).await;
-            let _ = events.unbounded_send(Event::Board(board));
+        let repo = Repo::replica(store, move || {
+            let _ = events.unbounded_send(Event::Wrote);
         });
+        let projects = cx.new(|_| Projects::new(repo).with_density(Density::Mobile));
+        cx.subscribe(&projects, |_, _, event, _| match event {
+            ProjectsEvent::Editing(open) => keyboard(*open),
+        })
+        .detach();
+        projects.update(cx, |projects, cx| projects.load_projects(cx));
+        projects
     }
+}
 
-    fn add_quick_task(&mut self, cx: &mut Context<Self>) {
-        let Some(board) = self.board.clone() else {
-            return;
-        };
-        let events = self.events.clone();
-        let timestamp = std::time::SystemTime::now()
-            .duration_since(std::time::UNIX_EPOCH)
-            .unwrap_or_default()
-            .as_secs();
-        let title = format!("Mobile Task #{timestamp}");
-
-        shell::spawn(async move {
-            let mut board = board;
-            // The path is the replica's to name, so two captures a second apart cannot collide.
-            let _ = board.add_task("Inbox", &title).await;
-            let _ = events.unbounded_send(Event::Board(board));
-        });
-        cx.notify();
+/// Shows or hides the software keyboard as a note's editor opens or closes.
+fn keyboard(open: bool) {
+    #[cfg(target_os = "ios")]
+    if open {
+        gpui_mobile::show_keyboard();
+    } else {
+        gpui_mobile::hide_keyboard();
     }
+    #[cfg(not(target_os = "ios"))]
+    let _ = open;
+}
 
-    fn open_note(&mut self, note: ProjectRecord, cx: &mut Context<Self>) {
-        self.selected_note = Some(note);
-        cx.notify();
-    }
-
-    fn close_note(&mut self, cx: &mut Context<Self>) {
-        self.selected_note = None;
-        cx.notify();
-    }
-
-    fn add_quick_note(&mut self, cx: &mut Context<Self>) {
-        let Some(board) = self.board.clone() else {
-            return;
-        };
-        let events = self.events.clone();
-        let timestamp = std::time::SystemTime::now()
-            .duration_since(std::time::UNIX_EPOCH)
-            .unwrap_or_default()
-            .as_secs();
-        let path = format!("Inbox/Note-{timestamp}.md");
-        let title = format!("Mobile Note #{timestamp}");
-        let content = format!("# {title}\n\n- [ ] First thought\n\nCaptured offline on iOS.");
-
-        shell::spawn(async move {
-            let mut board = board;
-            let _ = board.save_note("Inbox", &path, &title, &content).await;
-            let _ = events.unbounded_send(Event::Board(board));
-        });
-        cx.notify();
-    }
-
-    fn cycle_task_priority(&mut self, path: String, cx: &mut Context<Self>) {
-        let Some(mut board) = self.board.clone() else {
-            return;
-        };
-        let next_p = board.cycle_priority(&path);
-        self.board = Some(board.clone());
-        cx.notify();
-
-        let events = self.events.clone();
-        shell::spawn(async move {
-            let mut board = board;
-            let _ = board.set_priority(&path, next_p).await;
-            let _ = events.unbounded_send(Event::Board(board));
-        });
-    }
-
-    fn delete_note(&mut self, path: String, cx: &mut Context<Self>) {
-        let Some(board) = self.board.clone() else {
-            return;
-        };
-        self.selected_note = None;
-        cx.notify();
-
-        let events = self.events.clone();
-        shell::spawn(async move {
-            let mut board = board;
-            let _ = board.delete_record(&path).await;
-            let _ = events.unbounded_send(Event::Board(board));
-        });
-    }
-
-    fn toggle_note_block_todo(&mut self, block_idx: usize, cx: &mut Context<Self>) {
-        let Some(ref mut note) = self.selected_note else {
-            return;
-        };
-        let mut doc = Doc::parse(&note.content);
-        if let Some(block) = doc.blocks.get_mut(block_idx) {
-            block.toggle_done();
-            let new_content = doc.markdown();
-            note.content = new_content.clone();
-            let path = note.path.clone();
-            let title = note.title.clone();
-            let project = path.split('/').next().unwrap_or("Inbox").to_string();
-
-            // The new body shows in the list at once; `save_note` below writes it and queues the
-            // write for the Mac.
-            if let Some(board) = self.board.as_mut() {
-                board.set_content(&path, &new_content);
-            }
-            cx.notify();
-
-            if let Some(board) = self.board.clone() {
-                let events = self.events.clone();
-                shell::spawn(async move {
-                    let mut board = board;
-                    let _ = board.save_note(&project, &path, &title, &new_content).await;
-                    let _ = events.unbounded_send(Event::Board(board));
-                });
-            }
-        }
-    }
-
-    fn append_to_selected_note(&mut self, text: &str, cx: &mut Context<Self>) {
-        let Some(ref mut note) = self.selected_note else {
-            return;
-        };
-        let mut new_content = note.content.clone();
-        if !new_content.ends_with('\n') {
-            new_content.push('\n');
-        }
-        new_content.push_str(text);
-        new_content.push('\n');
-        note.content = new_content.clone();
-        let path = note.path.clone();
-        let title = note.title.clone();
-        let project = path.split('/').next().unwrap_or("Inbox").to_string();
-
-        if let Some(board) = self.board.as_mut() {
-            board.set_content(&path, &new_content);
-        }
-        cx.notify();
-
-        if let Some(board) = self.board.clone() {
-            let events = self.events.clone();
-            shell::spawn(async move {
-                let mut board = board;
-                let _ = board.save_note(&project, &path, &title, &new_content).await;
-                let _ = events.unbounded_send(Event::Board(board));
-            });
-        }
-    }
+/// The software keyboard's height, so the open note's caret stays above it.
+fn keyboard_inset() -> f32 {
+    #[cfg(target_os = "ios")]
+    return gpui_mobile::keyboard_height();
+    #[cfg(not(target_os = "ios"))]
+    0.0
 }
 
 /// The saved node, or a new one, then the node's health as this device.
@@ -582,6 +478,12 @@ impl Render for Capabilities {
         let palette = self.appearance.apply_to_palette(base_palette, is_dark);
         let page_bg = palette.window_tint >> 8;
         let is_mac = self.active_tab == Tab::Settings;
+        let is_travel = self.active_tab == Tab::Travel;
+        self.travel
+            .update(cx, |travel, cx| travel.set_palette(palette, cx));
+        if let Some(projects) = &self.projects {
+            projects.update(cx, |projects, cx| projects.set_palette(palette, cx));
+        }
         div()
             .id("capabilities")
             .size_full()
@@ -593,8 +495,19 @@ impl Render for Capabilities {
             .child(
                 div()
                     .id("ios-scroll-content")
+                    .when(is_travel, |page| {
+                        page.track_scroll(&self.travel.read(cx).scroll_handle())
+                    })
                     .flex_1()
-                    .overflow_y_scroll()
+                    .min_h_0()
+                    // Projects scrolls inside itself, so the page holds still around it.
+                    .when(is_mac || is_travel, |page| page.overflow_y_scroll())
+                    // gpui-mobile raises no keyboard on focus. Only text fields take focus here,
+                    // so after a tap the keyboard follows whether one holds it.
+                    .on_mouse_up(
+                        MouseButton::Left,
+                        cx.listener(|_, _, window, cx| keyboard(window.focused(cx).is_some())),
+                    )
                     .p_4()
                     .flex()
                     .flex_col()
@@ -930,492 +843,72 @@ impl Render for Capabilities {
                                 ),
                         )
                     })
-                    .when(!is_mac, |page| {
-                        if let Some(note) = self.selected_note.clone() {
-                            let doc = Doc::parse(&note.content);
-                            let title = note.title.clone();
-                            let path = note.path.clone();
-
-                            page.child(
-                                div()
-                                    .flex()
-                                    .items_center()
-                                    .justify_between()
-                                    .pb_2()
-                                    .border_b_1()
-                                    .border_color(rgb(0xe5e7eb))
-                                    .child(
+                    .when(is_travel, |page| page.child(self.travel.clone()))
+                    .when(!is_mac && !is_travel, |page| {
+                        let pending = self.board.as_ref().map_or(0, Board::pending);
+                        page.when_some(self.store_error.clone(), |page, error| {
+                            page.child(div().text_sm().text_color(rgb(0xd70015)).child(error))
+                        })
+                        .child(
+                            div()
+                                .flex()
+                                .items_center()
+                                .justify_between()
+                                .child(
+                                    div()
+                                        .px_2()
+                                        .py(px(2.))
+                                        .rounded_full()
+                                        .bg(if pending > 0 {
+                                            rgb(0xff9500)
+                                        } else {
+                                            rgb(0x248a3d)
+                                        })
+                                        .text_color(rgb(0xffffff))
+                                        .text_xs()
+                                        .child(if pending > 0 {
+                                            format!("{pending} queued for the Mac")
+                                        } else {
+                                            "Saved on this phone".into()
+                                        }),
+                                )
+                                .when(self.client.is_some(), |row| {
+                                    row.child(
                                         div()
                                             .px_3()
                                             .py(px(6.))
                                             .rounded(px(8.))
                                             .bg(rgb(0xe5e7eb))
-                                            .text_xs()
-                                            .font_weight(gpui::FontWeight::MEDIUM)
-                                            .text_color(rgb(0x1c1c1e))
-                                            .child("← Back")
-                                            .on_mouse_down(
-                                                MouseButton::Left,
-                                                cx.listener(|view, _, _, cx| {
-                                                    view.close_note(cx);
-                                                }),
-                                            ),
-                                    )
-                                    .child(
-                                        div()
-                                            .flex()
-                                            .flex_col()
-                                            .items_center()
-                                            .child(
-                                                div()
-                                                    .text_sm()
-                                                    .font_weight(gpui::FontWeight::SEMIBOLD)
-                                                    .child(title),
-                                            )
-                                            .child(
-                                                div()
-                                                    .text_xs()
-                                                    .text_color(rgb(0x8e8e93))
-                                                    .child(path.clone()),
-                                            ),
-                                    )
-                                    .child(
-                                        div()
-                                            .flex()
-                                            .items_center()
-                                            .gap_2()
-                                            .child(
-                                                div()
-                                                    .px_2()
-                                                    .py(px(5.))
-                                                    .rounded(px(6.))
-                                                    .bg(rgb(0x0a84ff))
-                                                    .text_xs()
-                                                    .font_weight(gpui::FontWeight::MEDIUM)
-                                                    .text_color(rgb(0xffffff))
-                                                    .child("+ Todo")
-                                                    .on_mouse_down(
-                                                        MouseButton::Left,
-                                                        cx.listener(|view, _, _, cx| {
-                                                            view.append_to_selected_note(
-                                                                "- [ ] New thought",
-                                                                cx,
-                                                            );
-                                                        }),
-                                                    ),
-                                            )
-                                            .child(
-                                                div()
-                                                    .px_2()
-                                                    .py(px(5.))
-                                                    .rounded(px(6.))
-                                                    .bg(rgb(0xe5e7eb))
-                                                    .text_xs()
-                                                    .font_weight(gpui::FontWeight::MEDIUM)
-                                                    .text_color(rgb(0x1c1c1e))
-                                                    .child("+ Section")
-                                                    .on_mouse_down(
-                                                        MouseButton::Left,
-                                                        cx.listener(|view, _, _, cx| {
-                                                            view.append_to_selected_note(
-                                                                "## New Section",
-                                                                cx,
-                                                            );
-                                                        }),
-                                                    ),
-                                            )
-                                            .child({
-                                                let del_path = path.clone();
-                                                div()
-                                                    .px_2()
-                                                    .py(px(5.))
-                                                    .rounded(px(6.))
-                                                    .bg(rgb(0xffebee))
-                                                    .text_xs()
-                                                    .font_weight(gpui::FontWeight::MEDIUM)
-                                                    .text_color(rgb(0xd32f2f))
-                                                    .child("Delete")
-                                                    .on_mouse_down(
-                                                        MouseButton::Left,
-                                                        cx.listener(move |view, _, _, cx| {
-                                                            view.delete_note(del_path.clone(), cx);
-                                                        }),
-                                                    )
-                                            }),
-                                    ),
-                            )
-                            .child(
-                                div()
-                                    .rounded(px(12.))
-                                    .bg(rgb(0xffffff))
-                                    .p_4()
-                                    .child({
-                                        let entity = cx.entity().clone();
-                                        render_doc(
-                                            &doc,
-                                            palette,
-                                            Density::Mobile,
-                                            Some(move |idx: usize, _: &gpui_kit::ClickEvent, _: &mut gpui::Window, app: &mut gpui::App| {
-                                                entity.update(app, |view, cx| {
-                                                    view.toggle_note_block_todo(idx, cx);
-                                                });
-                                            }),
-                                        )
-                                    }),
-                            )
-                        } else {
-                            // The replica answers the rows, so this view filters nothing itself.
-                            let (open_tasks, notes, pending) = match self.board.as_ref() {
-                                Some(board) => (
-                                    board.tasks().cloned().collect::<Vec<_>>(),
-                                    board.notes().cloned().collect::<Vec<_>>(),
-                                    board.pending(),
-                                ),
-                                None => (Vec::new(), Vec::new(), 0),
-                            };
-
-                            page.when_some(self.store_error.clone(), |page, error| {
-                                page.child(div().text_sm().text_color(rgb(0xd70015)).child(error))
-                            })
-                            .child(
-                                div()
-                                    .flex()
-                                    .items_center()
-                                    .justify_between()
-                                    .child(
-                                        div()
-                                            .flex()
-                                            .items_center()
-                                            .gap_2()
-                                            .child(
-                                                div()
-                                                    .text_sm()
-                                                    .font_weight(gpui::FontWeight::SEMIBOLD)
-                                                    .child("On-Device Store (Turso)"),
-                                            )
-                                            .child(
-                                                div()
-                                                    .px_2()
-                                                    .py(px(2.))
-                                                    .rounded_full()
-                                                    .bg(if pending > 0 {
-                                                        rgb(0xff9500)
-                                                    } else {
-                                                        rgb(0x248a3d)
-                                                    })
-                                                    .text_color(rgb(0xffffff))
-                                                    .text_xs()
-                                                    .child(if pending > 0 {
-                                                        format!("{pending} queued")
-                                                    } else {
-                                                        "Local ✓".into()
-                                                    }),
-                                            ),
-                                    )
-                                    .child(
-                                        div()
-                                            .flex()
-                                            .items_center()
-                                            .gap_2()
-                                            .when(self.client.is_some(), |row| {
-                                                row.child(
-                                                    div()
-                                                        .px_3()
-                                                        .py(px(6.))
-                                                        .rounded(px(8.))
-                                                        .bg(rgb(0xe5e7eb))
-                                                        .text_color(if self.syncing {
-                                                            rgb(0x8e8e93)
-                                                        } else {
-                                                            rgb(0x1c1c1e)
-                                                        })
-                                                        .text_xs()
-                                                        .font_weight(gpui::FontWeight::MEDIUM)
-                                                        .child(if self.syncing {
-                                                            "Syncing…"
-                                                        } else {
-                                                            "Sync"
-                                                        })
-                                                        .on_mouse_down(
-                                                            MouseButton::Left,
-                                                            cx.listener(|view, _, _, cx| {
-                                                                view.maybe_sync(cx)
-                                                            }),
-                                                        ),
-                                                )
+                                            .text_color(if self.syncing {
+                                                rgb(0x8e8e93)
+                                            } else {
+                                                rgb(0x1c1c1e)
                                             })
-                                            .child(
-                                                div()
-                                                    .px_3()
-                                                    .py(px(6.))
-                                                    .rounded(px(8.))
-                                                    .bg(rgb(0x0a84ff))
-                                                    .text_color(rgb(0xffffff))
-                                                    .text_xs()
-                                                    .font_weight(gpui::FontWeight::MEDIUM)
-                                                    .child("+ Task")
-                                                    .on_mouse_down(
-                                                        MouseButton::Left,
-                                                        cx.listener(|view, _, _, cx| {
-                                                            view.add_quick_task(cx)
-                                                        }),
-                                                    ),
-                                            )
-                                            .child(
-                                                div()
-                                                    .px_3()
-                                                    .py(px(6.))
-                                                    .rounded(px(8.))
-                                                    .bg(rgb(0x34c759))
-                                                    .text_color(rgb(0xffffff))
-                                                    .text_xs()
-                                                    .font_weight(gpui::FontWeight::MEDIUM)
-                                                    .child("+ Note")
-                                                    .on_mouse_down(
-                                                        MouseButton::Left,
-                                                        cx.listener(|view, _, _, cx| {
-                                                            view.add_quick_note(cx)
-                                                        }),
-                                                    ),
-                                            ),
-                                    ),
-                            )
-                            .when_some(self.synced.clone(), |page, synced| {
-                                page.child(div().text_xs().text_color(rgb(0x8e8e93)).child(synced))
-                            })
-                            // Filter Pills
-                            .child(
-                                div()
-                                    .flex()
-                                    .items_center()
-                                    .gap_2()
-                                    .child(
-                                        div()
-                                            .px_3()
-                                            .py(px(4.))
-                                            .rounded_full()
-                                            .bg(if self.filter == FilterKind::All { rgb(0x0a84ff) } else { rgb(0xffffff) })
-                                            .text_color(if self.filter == FilterKind::All { rgb(0xffffff) } else { rgb(0x646b77) })
                                             .text_xs()
                                             .font_weight(gpui::FontWeight::MEDIUM)
-                                            .child(format!("All ({})", open_tasks.len() + notes.len()))
+                                            .child(if self.syncing { "Syncing…" } else { "Sync" })
                                             .on_mouse_down(
                                                 MouseButton::Left,
-                                                cx.listener(|view, _, _, cx| {
-                                                    view.filter = FilterKind::All;
-                                                    cx.notify();
-                                                }),
+                                                cx.listener(|view, _, _, cx| view.maybe_sync(cx)),
                                             ),
                                     )
-                                    .child(
-                                        div()
-                                            .px_3()
-                                            .py(px(4.))
-                                            .rounded_full()
-                                            .bg(if self.filter == FilterKind::Tasks { rgb(0x0a84ff) } else { rgb(0xffffff) })
-                                            .text_color(if self.filter == FilterKind::Tasks { rgb(0xffffff) } else { rgb(0x646b77) })
-                                            .text_xs()
-                                            .font_weight(gpui::FontWeight::MEDIUM)
-                                            .child(format!("Tasks ({})", open_tasks.len()))
-                                            .on_mouse_down(
-                                                MouseButton::Left,
-                                                cx.listener(|view, _, _, cx| {
-                                                    view.filter = FilterKind::Tasks;
-                                                    cx.notify();
-                                                }),
-                                            ),
-                                    )
-                                    .child(
-                                        div()
-                                            .px_3()
-                                            .py(px(4.))
-                                            .rounded_full()
-                                            .bg(if self.filter == FilterKind::Notes { rgb(0x0a84ff) } else { rgb(0xffffff) })
-                                            .text_color(if self.filter == FilterKind::Notes { rgb(0xffffff) } else { rgb(0x646b77) })
-                                            .text_xs()
-                                            .font_weight(gpui::FontWeight::MEDIUM)
-                                            .child(format!("Notes ({})", notes.len()))
-                                            .on_mouse_down(
-                                                MouseButton::Left,
-                                                cx.listener(|view, _, _, cx| {
-                                                    view.filter = FilterKind::Notes;
-                                                    cx.notify();
-                                                }),
-                                            ),
-                                    ),
-                            )
-                            .when(self.filter != FilterKind::Notes, |page| {
+                                }),
+                        )
+                        .when_some(self.synced.clone(), |page, synced| {
+                            page.child(div().text_xs().text_color(rgb(0x8e8e93)).child(synced))
+                        })
+                        .when_some(
+                            self.projects.clone(),
+                            |page, projects| {
                                 page.child(
                                     div()
-                                        .rounded(px(12.))
-                                        .bg(rgb(0xffffff))
-                                        .p_3()
-                                        .flex()
-                                        .flex_col()
-                                        .gap_2()
-                                        .child(
-                                            div()
-                                                .text_xs()
-                                                .text_color(rgb(0x646b77))
-                                                .font_weight(gpui::FontWeight::SEMIBOLD)
-                                                .child(format!("Tasks ({})", open_tasks.len())),
-                                        )
-                                        .children(open_tasks.into_iter().map(|task| {
-                                            let path = task.path.clone();
-                                            let done = task.done;
-                                            let p_path = task.path.clone();
-                                            let del_path = task.path.clone();
-                                            let (bg_color, text_color) = match task.priority {
-                                                1 => (rgb(0xffe5e5), rgb(0xd9383a)),
-                                                2 => (rgb(0xfff3d6), rgb(0xb36b00)),
-                                                _ => (rgb(0xe5e7eb), rgb(0x646b77)),
-                                            };
-                                            div()
-                                                .px_2()
-                                                .py(px(6.))
-                                                .flex()
-                                                .items_center()
-                                                .gap_3()
-                                                .rounded(px(6.))
-                                                .bg(rgb(0xf9fafb))
-                                                .child(
-                                                    div()
-                                                        .size(px(20.))
-                                                        .rounded(px(4.))
-                                                        .border_1()
-                                                        .border_color(if done {
-                                                            rgb(0x248a3d)
-                                                        } else {
-                                                            rgb(0x9aa0a6)
-                                                        })
-                                                        .bg(if done {
-                                                            rgb(0x248a3d)
-                                                        } else {
-                                                            rgb(0xffffff)
-                                                        })
-                                                        .flex()
-                                                        .items_center()
-                                                        .justify_center()
-                                                        .text_color(rgb(0xffffff))
-                                                        .text_xs()
-                                                        .child(if done { "✓" } else { "" })
-                                                        .on_mouse_down(
-                                                            MouseButton::Left,
-                                                            cx.listener(move |view, _, _, cx| {
-                                                                view.toggle_task(
-                                                                    path.clone(),
-                                                                    !done,
-                                                                    cx,
-                                                                );
-                                                            }),
-                                                        ),
-                                                )
-                                                .child(
-                                                    div()
-                                                        .flex_1()
-                                                        .text_sm()
-                                                        .text_color(if done {
-                                                            rgb(0x8e8e93)
-                                                        } else {
-                                                            rgb(0x1c1c1e)
-                                                        })
-                                                        .child(task.title.clone()),
-                                                )
-                                                .child(
-                                                    div()
-                                                        .px_2()
-                                                        .py(px(2.))
-                                                        .rounded(px(4.))
-                                                        .bg(bg_color)
-                                                        .text_color(text_color)
-                                                        .text_xs()
-                                                        .font_weight(gpui::FontWeight::SEMIBOLD)
-                                                        .child(format!("P{}", task.priority))
-                                                        .on_mouse_down(
-                                                            MouseButton::Left,
-                                                            cx.listener(move |view, _, _, cx| {
-                                                                view.cycle_task_priority(p_path.clone(), cx);
-                                                            }),
-                                                        ),
-                                                )
-                                                .child(
-                                                    div()
-                                                        .px_1()
-                                                        .text_xs()
-                                                        .text_color(rgb(0xb0b5bd))
-                                                        .child("×")
-                                                        .on_mouse_down(
-                                                            MouseButton::Left,
-                                                            cx.listener(move |view, _, _, cx| {
-                                                                view.delete_note(del_path.clone(), cx);
-                                                            }),
-                                                        ),
-                                                )
-                                        }))
+                                        .flex_1()
+                                        .min_h_0()
+                                        .mb(px(keyboard_inset()))
+                                        .child(projects),
                                 )
-                            })
-                            .when(self.filter != FilterKind::Tasks, |page| {
-                                page.child(
-                                    div()
-                                        .rounded(px(12.))
-                                        .bg(rgb(0xffffff))
-                                        .p_3()
-                                        .flex()
-                                        .flex_col()
-                                        .gap_2()
-                                        .child(
-                                            div()
-                                                .text_xs()
-                                                .text_color(rgb(0x646b77))
-                                                .font_weight(gpui::FontWeight::SEMIBOLD)
-                                                .child(format!("Offline Notes ({})", notes.len())),
-                                        )
-                                        .children(notes.into_iter().map(|note| {
-                                            let note_for_tap = note.clone();
-                                            div()
-                                                .px_2()
-                                                .py(px(8.))
-                                                .flex()
-                                                .items_center()
-                                                .gap_3()
-                                                .rounded(px(6.))
-                                                .bg(rgb(0xf9fafb))
-                                                .child(div().text_sm().child("📄"))
-                                                .child(
-                                                    div()
-                                                        .flex_1()
-                                                        .flex()
-                                                        .flex_col()
-                                                        .gap_1()
-                                                        .child(
-                                                            div()
-                                                                .text_sm()
-                                                                .font_weight(gpui::FontWeight::MEDIUM)
-                                                                .child(note.title.clone()),
-                                                        )
-                                                        .child(
-                                                            div()
-                                                                .text_xs()
-                                                                .text_color(rgb(0x8e8e93))
-                                                                .child(note.path.clone()),
-                                                        ),
-                                                )
-                                                .child(
-                                                    div()
-                                                        .text_xs()
-                                                        .text_color(rgb(0x8e8e93))
-                                                        .child("→"),
-                                                )
-                                                .on_mouse_down(
-                                                    MouseButton::Left,
-                                                    cx.listener(move |view, _, _, cx| {
-                                                        view.open_note(note_for_tap.clone(), cx);
-                                                    }),
-                                                )
-                                        }))
-                                )
-                            })
-                        }
+                            },
+                        )
                     }),
             )
             // Bottom Tab Bar
@@ -1423,10 +916,16 @@ impl Render for Capabilities {
                 let pending = self.board.as_ref().map_or(0, Board::pending);
                 let items = [
                     NavItem {
-                        id: "tasks_notes",
-                        label: "Tasks & Notes",
+                        id: "projects",
+                        label: "Projects",
                         icon: "📝",
                         badge: if pending > 0 { Some(pending) } else { None },
+                    },
+                    NavItem {
+                        id: "travel",
+                        label: "Travel",
+                        icon: "◎",
+                        badge: None,
                     },
                     NavItem {
                         id: "settings",
@@ -1435,7 +934,11 @@ impl Render for Capabilities {
                         badge: None,
                     },
                 ];
-                let active_id = if is_mac { "settings" } else { "tasks_notes" };
+                let active_id = match self.active_tab {
+                    Tab::Settings => "settings",
+                    Tab::Travel => "travel",
+                    Tab::Projects => "projects",
+                };
                 let entity = cx.entity().clone();
                 mobile_tab_bar(
                     &items,
@@ -1443,10 +946,17 @@ impl Render for Capabilities {
                     palette,
                     move |id: &'static str, _: &mut gpui::Window, app: &mut gpui::App| {
                         entity.update(app, |view, cx| {
+                            if view.active_tab == Tab::Travel {
+                                view.travel.update(cx, |travel, _| travel.deactivate());
+                            }
                             view.active_tab = match id {
                                 "settings" => Tab::Settings,
-                                _ => Tab::TasksNotes,
+                                "travel" => Tab::Travel,
+                                _ => Tab::Projects,
                             };
+                            if view.active_tab == Tab::Travel {
+                                view.travel.update(cx, |travel, cx| travel.activate(cx));
+                            }
                             cx.notify();
                         });
                     },

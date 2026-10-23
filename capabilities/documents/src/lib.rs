@@ -1,8 +1,12 @@
 #![deny(unsafe_code)]
 
+pub mod classification;
+pub mod duplicates;
 pub mod inbox;
 mod library;
+pub mod review;
 pub mod server;
+pub mod split;
 
 pub use library::{Document, Library, LibraryError, Review, Stored};
 
@@ -13,5 +17,7 @@ pub use library::{Document, Library, LibraryError, Review, Stored};
 pub fn open_default() -> Result<Library, LibraryError> {
     let root = sjel_config::overlay_data_dir("documents")
         .ok_or_else(|| LibraryError::Invalid("no active Sjel overlay".into()))?;
-    Library::open(&sjel_config::database_path(), root)
+    let classification =
+        classification::ClassificationConfig::load().map_err(LibraryError::Invalid)?;
+    Library::open_with_config(&sjel_config::database_path(), root, classification)
 }

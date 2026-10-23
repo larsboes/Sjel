@@ -21,7 +21,8 @@ deleted, when a source turns out wrong.
   injection, confirmation fatigue.
 - [How much does the assistant's harness matter?](assistant-harness.md): HarnessTax.
 - [Can a local model make typed decisions for Sjel?](local-decision-models.md):
-  CLM-8B, candidate scoring, the existing local adapter, and unproven deployment and calibration.
+  CLM candidate scoring, Apple Foundation Models, keyword rules, and the limits of a synthetic
+  English/German Documents comparison.
 - [Can the phone read Sjel's data without this Mac?](offline-on-the-phone.md): five routes to an
   offline copy, measured against this machine's 275 MB / 108-table database, and what decides each.
 

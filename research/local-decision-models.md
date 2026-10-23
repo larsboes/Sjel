@@ -72,10 +72,11 @@ decision for a model or provider.
 
 ## What the sources do not show
 
-- That the exact encoder/head combination runs correctly and usefully on this Mac, or that an
-  alternative pooling runtime preserves its behavior.
-- That CLM improves Sjel's category or routing decisions over explicit mappings, simple rules,
-  or the existing local models. A synthetic wire probe cannot settle that comparison.
+- The 4-bit community MLX port loaded and scored locally on this Mac, but that does not establish
+  parity with the upstream vLLM path or portability to another serving stack.
+- One balanced synthetic Documents set compares CLM, Apple Foundation Models and current keyword
+  rules. It does not establish accuracy on real documents or general superiority for Sjel tasks.
+  CLM and the current rules also lack evidence spans required by the proposal contract.
 - That candidate probabilities or the documented confidence margin justify an autonomy threshold
   such as 0.95 on these tasks. Task-specific accuracy, abstention and calibration need measurement.
 - That a text-only model can infer an event, person or subject when the supplied filenames and
@@ -93,8 +94,37 @@ request. Ollama served three decision models on an Apple M4 Pro for the
 | `nimble` (9B) | 42/43 | 740 ms | 893 ms |
 | `tev1:0.8b` | 36/43 | 71 ms | 86 ms |
 
-The result files are in [`benchmarks/decisions/results/`](benchmarks/decisions/results/). CLM
-was not run: its serving recipe is not installed here. The two larger models are at the ceiling
-of this small set, so it does not separate them. Harder or real-shaped cases are needed before a
-choice between them. Ollama's `confidence` for a choice differs from CLM's documented definition
-(top probability minus the mean of the others), so the two cannot be compared directly.
+The result files are in [`benchmarks/decisions/results/`](benchmarks/decisions/results/). The two
+larger models are at the ceiling of this small set, so it does not separate them. Harder or
+real-shaped cases are needed before a choice between them. Ollama's `confidence` for a choice
+differs from CLM's documented definition (top probability minus the mean of the others), so the
+two cannot be compared directly.
+
+## Measured 2026-10-22 — synthetic Documents categories
+
+A separate 48-item English/German corpus was used for a cross-source comparison. It was hand-made,
+balanced across Finance, Events and Reference, and split into clear and overlapping examples. The
+CLM event description and Apple FM evidence prompt were selected on separate development sets;
+this comparison corpus was evaluated with those prompts fixed. No personal documents or `c3` content
+entered any prompt.
+
+| Source | Result on the 48-item comparison set | What remains unavailable |
+|---|---|---|
+| Deterministic keyword rules | 13 category suggestions; 11 correct, 2 wrong | No exact source span; only 1 Events suggestion, incorrect |
+| CLM, 4-bit MLX port | 40/48 correct; Events 11/16 | Category scores only; confidence is uncalibrated |
+| Apple Foundation Models via local `apfel` | 47 correct category outputs of 48 samples; one safety block | 45/48 exact, bounded evidence proposals, all correct; no confidence; two unusable quotes |
+
+The Apple model blocked one synthetic tax-summary request with its safety guardrail. The evaluator
+recorded no proposal and did not rephrase or retry. Across sources, category outputs conflicted on
+10/48 samples. At least one source returned the expected category on all 48, but only 45 samples had
+a correct proposal with evidence meeting the selected 20-word / 160-character limit. These are
+small synthetic results, not a measured production error rate. No result is wired to Documents,
+and the shared review/fusion behavior has not been implemented.
+
+The frozen inputs and reports are in
+[`capabilities/documents/eval/`](../capabilities/documents/eval/):
+`clm-corpus-combined-holdout-v1.json`, `clm-eval-combined-holdout-v1-2026-10-22.json`,
+`apple-fm-eval-combined-holdout-v1-2026-10-22.json`,
+`rule-baseline-v2-holdout-v1-2026-10-22.json`, and
+`cross-source-eval-combined-holdout-v1-2026-10-22.json`. The comparison set is spent; do not tune
+prompts or rules on it.

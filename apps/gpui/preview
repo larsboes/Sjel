@@ -12,7 +12,7 @@ for _ in $(seq 50); do pgrep -f "Sjel Desktop.app/Contents/MacOS" >/dev/null || 
 open -g --env SJEL_GPUI_NO_ACTIVATE=1 --env SJEL_GPUI_FLOAT=1 --env "SJEL_GPUI_OPEN=sjel://$PAGE" \
   ${APPEARANCE:+--env SJEL_GPUI_APPEARANCE=$APPEARANCE} ${SJEL_GPUI_NO_GLASS:+--env SJEL_GPUI_NO_GLASS=1} "$HOME/Applications/Sjel Desktop.app"
 sleep 3
-shot="$(cd "${TMPDIR:-/tmp}" && interceptor macos screenshot --app "Sjel Desktop" --save --format png \
+shot="$(cd "${TMPDIR:-/tmp}" && interceptor --ws macos screenshot --app "Sjel Desktop" --save --format png \
   | sed -n 's/.*"filePath": "\([^"]*\)".*/\1/p')"
 osascript -e 'tell application id "dev.sjel.desktop" to quit' >/dev/null 2>&1 || true
 echo "$shot"

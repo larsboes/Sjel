@@ -32,8 +32,16 @@ use crate::{math, ocr_role, Document, Extraction, ExtractionError, Extractor, Re
 /// `role` is the deployment's `ocr` role, looked up by the caller — this crate
 /// never loads configuration. `None` is the ordinary state today and is not an
 /// error by itself; it only becomes one on a page that needs rung 3.
+///
+/// A `Pdf` input is read page by page ([`crate::vision::read_pdf`]); call this
+/// for a PDF only after rung 1 found no text layer.
 pub fn read_scanned(doc: &Document<'_>, role: Option<&ResolvedRole>) -> Result<Extraction> {
-    walk(VisionOcr.extract(doc), doc, role, ocr_role::read)
+    let rung2 = if doc.class == crate::InputClass::Pdf {
+        crate::vision::read_pdf(doc)
+    } else {
+        VisionOcr.extract(doc)
+    };
+    walk(rung2, doc, role, ocr_role::read)
 }
 
 /// What rung 3 is, as a signature: the role the caller resolved, and the page.

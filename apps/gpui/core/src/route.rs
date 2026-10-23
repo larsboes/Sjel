@@ -8,27 +8,86 @@
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Page {
     Home,
+    Context,
     Capabilities,
     Projects,
     /// Multi-turn capability session (`sjel://ask?q=…`).
     Ask,
+    /// This Mac's own numbers: temperature, power, disk, updates and the agent's reach
+    /// (`sjel://systems`). Named after the dashboard page that retires when this covers it.
+    Systems,
+    Travel,
+    Feed,
+    Inbox,
+    Calendar,
+    Documents,
+    Backup,
+    Finance,
+    People,
+    Inventory,
+    /// Apps on this Mac and the operator's decision about each (`sjel://software`). The
+    /// dashboard has no page of that name, so it is not in `DESTINATIONS`.
+    Software,
+    /// Sort a folder into Sjel and see what each file became (`sjel://import`). The dashboard
+    /// has no page of that name, so it is not in `DESTINATIONS`.
+    Import,
+    /// Appearance, connection, updates and shortcuts (`sjel://settings`). The dashboard has no
+    /// page of that name, so it is not in `DESTINATIONS`.
+    Settings,
 }
 
 impl Page {
-    pub const ALL: [Page; 4] = [Page::Home, Page::Capabilities, Page::Projects, Page::Ask];
+    pub const ALL: [Page; 18] = [
+        Page::Home,
+        Page::Context,
+        Page::Capabilities,
+        Page::Systems,
+        Page::Projects,
+        Page::Ask,
+        Page::Travel,
+        Page::Feed,
+        Page::Inbox,
+        Page::Calendar,
+        Page::Documents,
+        Page::Backup,
+        Page::Finance,
+        Page::People,
+        Page::Inventory,
+        Page::Software,
+        Page::Import,
+        Page::Settings,
+    ];
 
     pub fn href(self) -> &'static str {
         match self {
             Self::Home => "/",
+            Self::Context => "/context",
             Self::Capabilities => "/capabilities",
             Self::Projects => "/projects",
             Self::Ask => "/ask",
+            Self::Travel => "/travel",
+            Self::Feed => "/feed",
+            Self::Inbox => "/inbox",
+            Self::Calendar => "/calendar",
+            Self::Documents => "/documents",
+            Self::Backup => "/backup",
+            Self::Finance => "/finance",
+            Self::People => "/people",
+            Self::Inventory => "/inventory",
+            Self::Software => "/software",
+            Self::Import => "/import",
+            Self::Systems => "/systems",
+            Self::Settings => "/settings",
         }
     }
 
     pub fn label(self) -> &'static str {
         match self {
             Self::Ask => "Ask",
+            Self::Settings => "Settings",
+            Self::Software => "Software",
+            Self::Import => "Import",
+            Self::Systems => "Systems",
             _ => destination(self.href()).map_or("", |d| d.label),
         }
     }
@@ -42,6 +101,12 @@ pub struct Destination {
 
 impl Destination {
     pub fn page(self) -> Option<Page> {
+        if self.href == "/map" {
+            return Some(Page::Travel);
+        }
+        if self.href == "/wishlist" || self.href == "/interior" {
+            return Some(Page::Inventory);
+        }
         Page::ALL.into_iter().find(|page| page.href() == self.href)
     }
 }
@@ -86,6 +151,7 @@ pub fn destination(href: &str) -> Option<Destination> {
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum Target {
     Native(Page),
+    Travel(crate::travel::TravelRoute),
     /// Open the native Ask session and submit this question in-session.
     Ask(String),
     /// A dashboard path, query included.
@@ -94,8 +160,8 @@ pub enum Target {
 
 /// `sjel://calendar/2026-10-15` → the dashboard path `/calendar/2026-10-15`. `sjel://` and
 /// `sjel://home` are Home. `sjel://ask?q=…` (or `sjel://?ask=…`) opens the native Ask session
-/// with the prompt. Only an exact native path opens natively; another sub-path or query goes to
-/// the dashboard, which owns the detail.
+/// with the prompt. Travel also recognizes its trip subpages. Other subpaths and queries go to
+/// the dashboard, which owns those details.
 pub fn parse_deep_link(url: &str) -> Option<Target> {
     let rest = url.strip_prefix("sjel://")?.trim_end_matches('/');
     let path = match rest {
@@ -106,6 +172,11 @@ pub fn parse_deep_link(url: &str) -> Option<Target> {
     let path_only = path.split_once('?').map_or(path.as_str(), |(p, _)| p);
     if path_only.contains("..") || path.chars().any(char::is_whitespace) {
         return None;
+    }
+    if path != "/travel" {
+        if let Some(route) = crate::travel::TravelRoute::parse(&path) {
+            return Some(Target::Travel(route));
+        }
     }
     if matches!(path_only, "/ask" | "/") && path.contains('?') {
         if let Ok(parsed) = reqwest::Url::parse(&format!("http://127.0.0.1{path}")) {
@@ -122,7 +193,11 @@ pub fn parse_deep_link(url: &str) -> Option<Target> {
         }
     }
     Some(
-        match Page::ALL.into_iter().find(|page| page.href() == path) {
+        match Page::ALL
+            .into_iter()
+            .find(|page| page.href() == path)
+            .or_else(|| destination(&path).and_then(Destination::page))
+        {
             Some(page) => Target::Native(page),
             None => Target::Dashboard(path),
         },
@@ -167,6 +242,20 @@ mod tests {
 
     #[test]
     fn deep_links_round_trip() {
+        for section in crate::travel::TripSection::ALL {
+            let trip = crate::travel::TravelRoute::Trip {
+                id: "trip:plan:1234abcd".into(),
+                section,
+            };
+            assert_eq!(
+                parse_deep_link(&deep_link(&trip.href())),
+                Some(Target::Travel(trip))
+            );
+        }
+        assert_eq!(
+            parse_deep_link("sjel://map"),
+            Some(Target::Travel(crate::travel::TravelRoute::Map))
+        );
         assert_eq!(parse_deep_link("sjel://"), Some(Target::Native(Page::Home)));
         assert_eq!(
             parse_deep_link("sjel://home"),

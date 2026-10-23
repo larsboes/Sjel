@@ -1,0 +1,35 @@
+[package]
+name = "sjel-software"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+description = "The apps on this Mac, what each holds on disk, when it was last used, and what the operator decided about it."
+publish = false
+
+[lib]
+name = "software"
+path = "src/lib.rs"
+
+[[bin]]
+name = "software"
+path = "src/main.rs"
+
+[dependencies]
+axum.workspace = true
+chrono.workspace = true
+route-manifest = { path = "../../libs/route-manifest" }
+schemars = "1.2.2"
+serde = { workspace = true, features = ["derive"] }
+serde_json.workspace = true
+sjel-config = { path = "../../libs/sjel-config" }
+sjel-server = { path = "../../libs/sjel-server" }
+# LibSQL through sjel-turso, as operator-profile: the tables live in the shared database file.
+sjel-turso = { path = "../../libs/sjel-turso" }
+tokio = { workspace = true, features = ["macros", "rt-multi-thread", "net", "time"] }
+
+[dev-dependencies]
+tower = { workspace = true, features = ["util"] }
+
+[lints]
+workspace = true

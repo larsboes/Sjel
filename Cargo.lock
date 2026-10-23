@@ -4854,6 +4854,26 @@ dependencies = [
 ]
 
 [[package]]
+name = "sjel-import"
+version = "0.1.0"
+dependencies = [
+ "axum",
+ "chrono",
+ "reqwest",
+ "route-manifest",
+ "rusqlite",
+ "schemars",
+ "serde",
+ "serde_json",
+ "sha2 0.11.0",
+ "sjel-config",
+ "sjel-http",
+ "sjel-server",
+ "sjel-store",
+ "tokio",
+]
+
+[[package]]
 name = "sjel-inference"
 version = "0.1.0"
 dependencies = [
@@ -5099,6 +5119,23 @@ dependencies = [
 [[package]]
 name = "sjel-skill-metadata"
 version = "0.1.0"
+
+[[package]]
+name = "sjel-software"
+version = "0.1.0"
+dependencies = [
+ "axum",
+ "chrono",
+ "route-manifest",
+ "schemars",
+ "serde",
+ "serde_json",
+ "sjel-config",
+ "sjel-server",
+ "sjel-turso",
+ "tokio",
+ "tower",
+]
 
 [[package]]
 name = "sjel-soundscape"

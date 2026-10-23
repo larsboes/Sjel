@@ -7,34 +7,49 @@ use gpui_kit::{
 };
 
 mod ask;
-mod block_menu;
-mod blocks;
+mod audio;
+mod backup;
 mod calendar;
+mod calendar_view;
 mod capabilities;
+mod context_view;
 mod data;
+mod documents;
 mod editor;
+mod feed;
+mod finance_view;
 mod frames;
 mod header;
 mod home;
-mod inline;
+mod import;
+mod inbox;
+mod inventory_view;
 #[cfg(target_os = "macos")]
 mod macos_glass;
+mod mail;
+#[cfg(target_os = "macos")]
+mod pdf_kit;
+mod people_view;
 mod projects;
 mod selection;
+mod settings;
 mod sidebar;
-mod tasks;
+mod software;
+mod soundscape;
+mod systems;
 mod theme;
 mod ui;
 pub mod update;
+mod viz;
 mod workspace;
 
 use sjel_gpui_core::{route, shell};
 
 use workspace::{
-    GoAsk, GoCapabilities, GoHome, GoProjects, OpenInDashboard, OpenPalette, Refresh, Workspace,
+    nav_pages, GoTo, OpenInDashboard, OpenPalette, OpenSettings, OpenSoundscape, Refresh, Workspace,
 };
 
-actions!(sjel, [Quit, CloseWindow]);
+actions!(sjel, [Quit, CloseWindow, OpenSoundscapeMini]);
 
 /// The one main window, so a `sjel://` link or a Dock click finds it again.
 struct MainWindow {
@@ -57,18 +72,39 @@ fn main() {
     });
     app.run(move |cx: &mut App| {
         gpui_kit::init(cx);
-        match std::env::var("SJEL_GPUI_APPEARANCE").as_deref() {
-            Ok("light") => cx.set_window_appearance(Some(WindowAppearance::Light)),
-            Ok("dark") => cx.set_window_appearance(Some(WindowAppearance::Dark)),
-            _ => {}
+        // The theme mode saved in Settings, unless SJEL_GPUI_APPEARANCE overrides it for a test.
+        let forced = match std::env::var("SJEL_GPUI_APPEARANCE").as_deref() {
+            Ok("light") => Some(WindowAppearance::Light),
+            Ok("dark") => Some(WindowAppearance::Dark),
+            _ => theme::AppearanceSettings::load()
+                .theme_mode
+                .forced_appearance(),
+        };
+        if forced.is_some() {
+            cx.set_window_appearance(forced);
         }
         workspace::bind_keys(cx);
         editor::bind_keys(cx);
+        feed::bind_keys(cx);
+        inbox::bind_keys(cx);
+        mail::bind_keys(cx);
+        calendar_view::bind_keys(cx);
+        context_view::bind_keys(cx);
+        finance_view::bind_keys(cx);
+        people_view::bind_keys(cx);
+        backup::bind_keys(cx);
+        inventory_view::bind_keys(cx);
+        soundscape::bind_keys(cx);
         cx.bind_keys([
             KeyBinding::new("cmd-w", CloseWindow, None),
             KeyBinding::new("cmd-q", Quit, None),
+            KeyBinding::new("shift-cmd-m", OpenSoundscapeMini, None),
         ]);
         cx.on_action(|_: &Quit, cx| cx.quit());
+        cx.on_action(|_: &OpenSoundscape, cx| soundscape::open(cx, soundscape::Mode::Full));
+        // The mini player is the glanceable one, so it gets the keystroke; the full window has the
+        // menu item and the mini's expand button.
+        cx.on_action(|_: &OpenSoundscapeMini, cx| soundscape::toggle_mini(cx));
         cx.on_action(|_: &CloseWindow, cx| {
             if let Some(window) = cx.active_window() {
                 let _ = window.update(cx, |_, window, _| window.remove_window());
@@ -77,26 +113,34 @@ fn main() {
         cx.set_menus([
             Menu {
                 name: "Sjel".into(),
-                items: vec![MenuItem::action("Quit Sjel", Quit)],
-                disabled: false,
-            },
-            Menu {
-                name: "Go".into(),
                 items: vec![
-                    MenuItem::action("Home", GoHome),
-                    MenuItem::action("Capabilities", GoCapabilities),
-                    MenuItem::action("Projects", GoProjects),
-                    MenuItem::action("Ask", GoAsk),
+                    MenuItem::action("Settings…", OpenSettings),
                     MenuItem::separator(),
-                    MenuItem::action("Search…", OpenPalette),
-                    MenuItem::action("Refresh", Refresh),
-                    MenuItem::action("Open in Dashboard", OpenInDashboard),
+                    MenuItem::action("Quit Sjel", Quit),
                 ],
                 disabled: false,
             },
             Menu {
+                name: "Go".into(),
+                items: nav_pages()
+                    .map(|page| MenuItem::action(page.label(), GoTo(page)))
+                    .chain([
+                        MenuItem::separator(),
+                        MenuItem::action("Search…", OpenPalette),
+                        MenuItem::action("Refresh", Refresh),
+                        MenuItem::action("Open in Dashboard", OpenInDashboard),
+                    ])
+                    .collect(),
+                disabled: false,
+            },
+            Menu {
                 name: "Window".into(),
-                items: vec![MenuItem::action("Close", CloseWindow)],
+                items: vec![
+                    MenuItem::action("Soundscape", OpenSoundscape),
+                    MenuItem::action("Soundscape Mini", OpenSoundscapeMini),
+                    MenuItem::separator(),
+                    MenuItem::action("Close", CloseWindow),
+                ],
                 disabled: false,
             },
         ]);
@@ -104,6 +148,26 @@ fn main() {
         main_window(cx);
         if let Ok(url) = std::env::var("SJEL_GPUI_OPEN") {
             open_link(&url, cx);
+        }
+        // `SJEL_GPUI_SOUNDSCAPE=1`: open the player at launch, so a test or a screenshot finds it
+        // without a click. `SJEL_GPUI_SOUNDSCAPE=play` also starts it, and starts it *through the
+        // conductor* -- the instructor of state is not this window, so a local `set_playing` here
+        // would be overwritten by the first read.
+        match std::env::var("SJEL_GPUI_SOUNDSCAPE").as_deref() {
+            Ok("1") => soundscape::open(cx, soundscape::Mode::Full),
+            Ok("play") => {
+                soundscape::open(cx, soundscape::Mode::Full);
+                soundscape::play_through_conductor(cx);
+            }
+            Ok("mini") => soundscape::open(cx, soundscape::Mode::Mini),
+            Ok("mini-play") => {
+                soundscape::open(cx, soundscape::Mode::Mini);
+                soundscape::play_through_conductor(cx);
+            }
+            _ => {}
+        }
+        if let Some(seconds) = audio_probe_seconds() {
+            probe_audio(seconds, cx);
         }
         cx.spawn(async move |cx| {
             while let Some(url) = url_rx.next().await {
@@ -206,4 +270,64 @@ fn open_link(url: &str, cx: &mut App) {
 /// test run does not take focus from the person at the Mac.
 fn activates() -> bool {
     std::env::var_os("SJEL_GPUI_NO_ACTIVATE").is_none()
+}
+
+/// `SJEL_GPUI_AUDIO_PROBE=<seconds>`: start the soundscape on the real device, print what the
+/// synth measures, and quit. This is the check for "there is no sound": it exercises the device,
+/// the engine and the spectrum in one run, without a window and without anyone having to listen.
+fn audio_probe_seconds() -> Option<u64> {
+    std::env::var("SJEL_GPUI_AUDIO_PROBE")
+        .ok()
+        .and_then(|value| value.parse().ok())
+        .filter(|seconds| *seconds > 0)
+}
+
+fn probe_audio(seconds: u64, cx: &mut App) {
+    let audio = audio::audio(cx);
+    match (audio.device_name(), audio.sample_rate(), audio.error()) {
+        (Some(name), Some(rate), _) => println!("device: {name} at {rate:.0} Hz"),
+        (_, _, Some(error)) => println!("no device: {error}"),
+        _ => println!("no device"),
+    }
+    audio
+        .control
+        .set_preset(sjel_gpui_core::soundscape::Preset::Focus);
+    audio.control.set_volume(0.8);
+    audio.control.set_playing(true);
+
+    let visual = audio.visual.clone();
+    cx.spawn(async move |cx| {
+        let mut loudest = 0f32;
+        let mut all: Vec<f32> = Vec::new();
+        for tick in 0..(seconds * 4) {
+            cx.background_executor()
+                .timer(std::time::Duration::from_millis(250))
+                .await;
+            let (rms, kicks, notes) = (visual.rms(), visual.kicks(), visual.notes());
+            let bands = visual.bands();
+            let top = bands.iter().fold(0f32, |best, band| best.max(*band));
+            loudest = loudest.max(rms);
+            all.push(rms);
+            println!(
+                "{:.2}s rms {rms:.4} peak {:.4} bands {top:.2} voices {} kicks {kicks} notes {notes} preset {} profile {:?}",
+                tick as f32 / 4.,
+                visual.peak(),
+                visual.voices(),
+                visual.preset().key(),
+                bands.map(|band| (band * 100.) as u32),
+            );
+        }
+        let sounded = all.iter().filter(|rms| **rms > 0.001).count();
+        println!(
+            "measured {sounded} of {} ticks above silence, loudest rms {loudest:.4}",
+            all.len()
+        );
+        if loudest <= 0.001 {
+            println!("VERDICT: silent -- the device opened but nothing reached it");
+        } else {
+            println!("VERDICT: sounding");
+        }
+        cx.update(|cx| cx.quit());
+    })
+    .detach();
 }

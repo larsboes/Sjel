@@ -369,7 +369,7 @@ A bar is its own control: press anywhere on the track to set the value, drag to 
 value reaches the synth immediately and the conductor at most every 180 ms, so the sound never lags
 the hand and a sweep is one write rather than dozens.
 
-The sidebar's ♪ row, the palette and the global keys (`⌥⌘Space`, `⌥⌘P`) write play and preset
+The sidebar's ♪ row, the finder and the global keys (`⌥⌘Space`, `⌥⌘P`) write play and preset
 through the panel, so the panel is the one writer of both and its guard against a stale poll covers
 every surface.
 
@@ -388,11 +388,25 @@ through the conductor, which is what a screenshot test or a quick listen needs.
 `SJEL_GPUI_NO_AUDIO=1` keeps the app off the output device -- for a headless run, or a test that
 opens the panel without taking the speakers.
 
+## The finder: one input for a search or a question
+
+⌘K opens one input over the window. It searches the pages, the app's actions, the dashboard
+destinations, and the projects, open tasks and notes in the Mac's database, and it asks. In
+**Auto** the words decide: a question mark, an opening question or request word ("what",
+"summarize", "wann"), or five words and more make a question; a name or two keywords make a
+search (`core/src/search.rs`). The decision shows beside the input, ⌘↩ goes the other way, and ⌘/
+switches between Auto, Ask and Search. An arrow key picks a result, and Enter opens a picked result
+whatever the words look like. In Auto, a search that finds nothing is asked instead.
+
+A question is answered in place, through the same Ask session as ⌘2, so the Ask page shows the whole
+conversation. Results from the server (`/api/search`) are the next step: `PORTING_PLAN.md`,
+section 3.
+
 ## Keys
 
 | Key | Action |
 |---|---|
-| ⌘K | Search pages and dashboard destinations |
+| ⌘K | The finder: search, or ask (see below) |
 | ⌘1 … ⌘9 | Today, Ask, Inbox, Calendar, Projects, Documents, Travel, Life, Sjel — each at its last tab |
 | ⌘⌥↑ / ⌘⌥↓ | The area above or below in the sidebar |
 | ⌘⇧[ / ⌘⇧] (also ⌃⇥, ⌘⌥←/→) | The tab before or after the open area's |
@@ -477,7 +491,7 @@ measured. Run `./install` first: both scripts use the installed release build.
 The app icon comes from `brand/sjel-icon-maskable.svg`. `Resources/make-icon` builds
 `Resources/AppIcon.icns` from it. Run it again after a change to the brand mark.
 
-The app uses the components of the pinned `gpui-kit = 0.7.3` facade (command palette, dialog,
+The app uses the components of the pinned `gpui-kit = 0.7.3` facade (input, dialog,
 notification, button, tag, kbd) and adds no second GPUI dependency. Its lockfile resolves one
 `gpui-pre` family. GPUI is still pre-1.0, so this is not a production dependency decision.
 
@@ -497,5 +511,5 @@ not a supported GPUI hosting API.
   exposing credentials to the client?
 
 The app is an evaluation surface, not a dashboard port. A destination gets a native page when the
-native form does something the browser cannot do as well. Until then, the palette opens it in the
+native form does something the browser cannot do as well. Until then, the finder opens it in the
 dashboard.

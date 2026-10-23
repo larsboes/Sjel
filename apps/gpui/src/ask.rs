@@ -65,6 +65,16 @@ struct ToolActivity {
     result: String,
 }
 
+/// One question and its answer as it stands.
+#[derive(Clone, Debug, Default, PartialEq)]
+pub struct Exchange {
+    pub prompt: String,
+    pub answer: String,
+    pub tools: Vec<String>,
+    pub error: Option<String>,
+    pub loading: bool,
+}
+
 pub struct Ask {
     repo: Repo,
     turns: Vec<Turn>,
@@ -114,6 +124,28 @@ impl Ask {
         }
     }
 
+    /// The newest question and what has come back so far, for the finder's inline answer. The
+    /// conversation stays here: the finder shows one exchange, and ⌘2 shows all of them.
+    pub fn latest(&self) -> Option<Exchange> {
+        let prompt = self
+            .turns
+            .iter()
+            .rposition(|turn| turn.role == Role::User)?;
+        let after = &self.turns[prompt + 1..];
+        let answer = after.iter().find(|turn| turn.role == Role::Assistant);
+        Some(Exchange {
+            prompt: self.turns[prompt].content.clone(),
+            answer: answer.map(|turn| turn.content.clone()).unwrap_or_default(),
+            tools: answer.map(|turn| turn.tools.clone()).unwrap_or_default(),
+            error: after
+                .iter()
+                .rev()
+                .find(|turn| turn.role == Role::Error)
+                .map(|turn| turn.content.clone()),
+            loading: self.loading,
+        })
+    }
+
     pub fn focus_input(&mut self, cx: &mut Context<Self>) {
         self.focus_next = true;
         cx.notify();
@@ -142,6 +174,15 @@ impl Ask {
         let shell = match self.repo.shell() {
             Ok(shell) => shell,
             Err(error) => {
+                // The question stays on screen above the reason it was not sent, so it can be
+                // read back and sent again.
+                self.turns.push(Turn {
+                    role: Role::User,
+                    content: prompt,
+                    meta: None,
+                    tools: Vec::new(),
+                    activity: Vec::new(),
+                });
                 self.turns.push(Turn {
                     role: Role::Error,
                     content: error.to_string(),

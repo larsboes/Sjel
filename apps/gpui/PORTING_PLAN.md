@@ -107,6 +107,11 @@ These come before the roadmap in section 4. The roadmap resumes when they are do
      inventory, finance). Server results append as they arrive, from a new shell `/api/search`
      that fans out to the capabilities. Today the shell has no cross-capability search (only
      transit's and interior's own `/api/search`), and the app holds no local index.
+   - Done 2026-10-23, local stage: `core/src/search.rs` (the Auto rule, the ranking) and
+     `src/finder.rs` (the overlay on ⌘K, which replaces the command palette and keeps its pages,
+     actions and dashboard destinations as results). Projects, open tasks and notes come from the
+     Mac's database. A question streams in place through the shared `Ask` session.
+   - Next: the shell's `/api/search`, appended below the local results.
 2. **The right sidebar is where Sjel works in view.** A docked panel beside the page is the seat
    of the later adaptive UI, driven by what Sjel is doing: while it runs a task, the operator sees
    it search, open a page and change a value, live, instead of receiving only the result. Build

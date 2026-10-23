@@ -7,14 +7,12 @@
 use std::time::Duration;
 
 use futures::StreamExt;
-use gpui_kit::component::command::{Command, CommandGroup, CommandItem, CommandState};
-use gpui_kit::component::dialog::Dialog;
 use gpui_kit::component::notification::Notification;
 use gpui_kit::component::scroll::ScrollableElement;
-use gpui_kit::component::{IconName, IndexPath, Theme, WindowExt};
+use gpui_kit::component::{Theme, WindowExt};
 use gpui_kit::{
-    actions, div, prelude::*, px, rgb, rgba, Action, App, Context, Entity, FocusHandle, Focusable,
-    KeyBinding, SharedString, Subscription, Window, WindowAppearance,
+    actions, div, prelude::*, px, rgb, rgba, Action, App, Context, Entity, FocusHandle, KeyBinding,
+    SharedString, Subscription, Window, WindowAppearance,
 };
 
 use crate::ask::Ask;
@@ -25,11 +23,12 @@ use crate::data::{self, Busy, Remote, Repo};
 use crate::documents::Documents;
 use crate::feed::Feed;
 use crate::finance_view::FinancePage;
+use crate::finder::{Finder, FinderEvent, Hit, Open};
 use crate::inbox::Inbox;
 use crate::inventory_view::InventoryPage;
 use crate::people_view::PeoplePage;
 use crate::projects::Projects;
-use crate::route::{self, Destination, Page, Target};
+use crate::route::{self, Page, Target};
 use crate::selection::{Item, Selection};
 use crate::shell::{
     self, AgentView, Backups, GlobalTask, NodeHealth, ShellError, Snapshot, SoundscapeState,
@@ -101,6 +100,55 @@ pub struct OpenArea(pub Area);
 
 /// Every page an area holds, in sidebar then tab order. Settings has ⌘, instead, and the old
 /// Today page is part of Home.
+/// Everything the command palette offered, as finder results: every page with its breadcrumb,
+/// the app's actions, and the dashboard pages that have no native page yet.
+fn finder_commands() -> Vec<Hit> {
+    let pages = nav_pages().chain([Page::Settings]).map(|page| Hit {
+        kind: "page",
+        title: page_title(page),
+        detail: page.label().to_owned(),
+        open: Open::Page(page),
+    });
+    let action = |title: &str, detail: &str, open: fn() -> Box<dyn Action>| Hit {
+        kind: "action",
+        title: title.to_owned(),
+        detail: detail.to_owned(),
+        open: Open::Action(open),
+    };
+    let actions = [
+        action("Refresh", "reload this page", || Refresh.boxed_clone()),
+        action("Check for App Updates", "update", || {
+            CheckForUpdates.boxed_clone()
+        }),
+        action("Rebuild Sjel Desktop", "build install", || {
+            RebuildApp.boxed_clone()
+        }),
+        action(
+            "Appearance",
+            "theme dark light accent glass transparency",
+            || OpenAppearance.boxed_clone(),
+        ),
+        action("Open this page in the dashboard", "web browser", || {
+            OpenInDashboard.boxed_clone()
+        }),
+        action(
+            "Soundscape",
+            "music audio focus ambient lofi player ⌘0",
+            || OpenSoundscape.boxed_clone(),
+        ),
+    ];
+    let dashboard = route::DESTINATIONS
+        .iter()
+        .filter(|destination| destination.page().is_none())
+        .map(|destination| Hit {
+            kind: "dashboard",
+            title: destination.label.to_owned(),
+            detail: destination.href.to_owned(),
+            open: Open::Dashboard(destination.href),
+        });
+    pages.chain(actions).chain(dashboard).collect()
+}
+
 pub fn nav_pages() -> impl Iterator<Item = Page> {
     Area::ALL
         .into_iter()
@@ -116,37 +164,13 @@ pub fn page_title(page: Page) -> String {
     }
 }
 
-fn page_icon(page: Page) -> IconName {
-    match page {
-        Page::Home | Page::Software => IconName::LayoutDashboard,
-        Page::Context => IconName::Sun,
-        Page::Capabilities => IconName::Cpu,
-        Page::Systems => IconName::MemoryStick,
-        Page::Projects | Page::Documents | Page::Import | Page::Cv | Page::Media => {
-            IconName::Folder
-        }
-        Page::Ask => IconName::Bot,
-        Page::Travel => IconName::Globe,
-        Page::Feed => IconName::BookOpen,
-        Page::Inbox => IconName::Inbox,
-        Page::Calendar => IconName::Calendar,
-        Page::Backup => IconName::HardDrive,
-        Page::Finance => IconName::ChartPie,
-        Page::People => IconName::CircleUser,
-        Page::Inventory => IconName::Folder,
-        Page::Packs => IconName::Folder,
-        Page::SelfModel => IconName::Cpu,
-        Page::Research => IconName::BookOpen,
-        Page::Setup => IconName::Cpu,
-        Page::Settings => IconName::Settings,
-    }
-}
-
 /// Workspace key bindings. Navigation keys bind to the "Workspace" context, which only the page
 /// frame carries, so they stay quiet while the palette's query field has focus.
 pub fn bind_keys(cx: &mut App) {
     // What the panel itself carries: space, the next preset, and the way out.
     cx.bind_keys(crate::soundscape::Soundscape::keys());
+    cx.bind_keys(Finder::keys());
+    cx.bind_keys([Finder::mode_key()]);
     cx.bind_keys([
         KeyBinding::new("cmd-k", OpenPalette, None),
         KeyBinding::new("cmd-f", FocusSearch, None),
@@ -297,6 +321,9 @@ pub struct Workspace {
     /// lives in an app global, so the view may as well too. `None` until something opens it, which is
     /// what keeps a fresh window from paying for a panel nobody is looking at.
     pub soundscape_panel: Option<Entity<crate::soundscape::Soundscape>>,
+    /// One input for a search or a prompt (⌘K), drawn over the whole window.
+    pub finder: Entity<Finder>,
+    _finder: Subscription,
     frames: Option<crate::frames::FrameProbe>,
     #[cfg(target_os = "macos")]
     native_glass: Option<crate::macos_glass::NativeGlassRegion>,
@@ -343,6 +370,11 @@ impl Workspace {
         let research_page = cx.new(|_| crate::research_view::ResearchPage::new(repo.clone()));
         let setup_page = cx.new(|_| crate::setup_view::SetupPage::new(repo.clone()));
         let appearance_settings = AppearanceSettings::load();
+        let finder = {
+            let (repo, ask) = (repo.clone(), ask.clone());
+            cx.new(|cx| Finder::new(repo, ask, finder_commands(), cx))
+        };
+        let finder_events = cx.subscribe_in(&finder, window, Self::on_finder);
         let mut workspace = Self {
             page: Page::Home,
             tabs: Tabs::default(),
@@ -352,6 +384,8 @@ impl Workspace {
             focus_tasks: Remote::default(),
             soundscape: Remote::default(),
             soundscape_panel: None,
+            finder,
+            _finder: finder_events,
             backups: Remote::default(),
             projects,
             ask,
@@ -435,6 +469,10 @@ impl Workspace {
         // Today was its own page and is part of Home now; its old shortcuts and links land here.
         let page = area::canonical(page);
         self.tabs.visit(page);
+        // Going somewhere is what the finder was for, whichever key did it (⌘2 included).
+        if self.finder.read(cx).is_open() {
+            self.finder.update(cx, |finder, cx| finder.close(cx));
+        }
         if self.page != page {
             let previous = self.page;
             if previous == Page::Travel {
@@ -887,96 +925,39 @@ impl Workspace {
         }
     }
 
-    fn open_palette(&mut self, _: &OpenPalette, window: &mut Window, cx: &mut Context<Self>) {
-        if window.has_active_dialog(cx) {
-            return;
-        }
-        let state = cx.new(|cx| CommandState::new(window, cx));
-        let this = cx.entity();
-        let native: Vec<Page> = nav_pages().chain([Page::Settings]).collect();
-        let web: Vec<Destination> = route::DESTINATIONS
-            .iter()
-            .copied()
-            .filter(|d| d.page().is_none())
-            .collect();
-        let palette_state = state.clone();
-        window.open_dialog(cx, move |dialog: Dialog, _, _| {
-            let this = this.clone();
-            let (native, web) = (native.clone(), web.clone());
-            let pages = CommandGroup::new()
-                .label("Go to")
-                .items(native.iter().map(|&page| {
-                    let item = CommandItem::new()
-                        .label(page_title(page))
-                        .icon(page_icon(page))
-                        .keywords([page.label()]);
-                    match page {
-                        Page::Settings => item.action(OpenSettings.boxed_clone()),
-                        _ => item.action(GoTo(page).boxed_clone()),
-                    }
-                }));
-            let actions = CommandGroup::new().label("Actions").items([
-                CommandItem::new()
-                    .label("Refresh")
-                    .icon(IconName::RotateCw)
-                    .action(Refresh.boxed_clone()),
-                CommandItem::new()
-                    .label("Check for App Updates")
-                    .icon(IconName::RotateCw)
-                    .action(CheckForUpdates.boxed_clone()),
-                CommandItem::new()
-                    .label("Rebuild Sjel Desktop")
-                    .icon(IconName::RotateCw)
-                    .action(RebuildApp.boxed_clone()),
-                CommandItem::new()
-                    .label("Appearance")
-                    .icon(IconName::Palette)
-                    .keywords(["theme", "dark", "light", "accent", "glass", "transparency"])
-                    .action(OpenAppearance.boxed_clone()),
-                CommandItem::new()
-                    .label("Open this page in the dashboard")
-                    .icon(IconName::ExternalLink)
-                    .action(OpenInDashboard.boxed_clone()),
-                CommandItem::new()
-                    .label("Soundscape")
-                    .icon(IconName::Play)
-                    .keywords(["music", "audio", "focus", "ambient", "lofi", "player"])
-                    .action(OpenSoundscape.boxed_clone()),
-            ]);
-            let dashboard = CommandGroup::new()
-                .label("Open in dashboard")
-                .items(web.iter().map(|d| {
-                    CommandItem::new()
-                        .label(d.label)
-                        .icon(IconName::Globe)
-                        .keywords([d.href])
-                }));
-            let on_confirm = {
-                let web = web.clone();
-                move |path: IndexPath, window: &mut Window, cx: &mut App| {
-                    window.close_dialog(cx);
-                    if path.section == 2 {
-                        if let Some(d) = web.get(path.row) {
-                            let href = d.href.to_owned();
-                            this.update(cx, |view, cx| view.open_dashboard(href, window, cx));
-                        }
-                    }
+    fn open_palette(&mut self, _: &OpenPalette, _: &mut Window, cx: &mut Context<Self>) {
+        self.finder.update(cx, |finder, cx| finder.toggle(cx));
+    }
+
+    /// What a finder result asks for. The finder only names a place; going there is the
+    /// workspace's, the same as for a sidebar row or a deep link.
+    fn on_finder(
+        &mut self,
+        _: &Entity<Finder>,
+        event: &FinderEvent,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) {
+        match event {
+            FinderEvent::Closed => {
+                self.refocus = true;
+                cx.notify();
+            }
+            FinderEvent::ContinueInAsk => self.go(Page::Ask, cx),
+            FinderEvent::Open(open) => match open.clone() {
+                Open::Page(Page::Settings) => self.go(Page::Settings, cx),
+                Open::Page(page) => self.go(page, cx),
+                Open::Action(action) => window.dispatch_action(action(), cx),
+                Open::Dashboard(href) => self.open_dashboard(href.to_owned(), window, cx),
+                Open::Project(name) => self.go_to_project(name, cx),
+                Open::Record { project, path } => {
+                    self.go(Page::Projects, cx);
+                    self.projects.update(cx, |projects, cx| {
+                        projects.open_record(project, path, window, cx)
+                    });
                 }
-            };
-            dialog.w(px(560.)).close_button(false).p_0().child(
-                Command::new(&palette_state)
-                    .bordered(false)
-                    .placeholder("Go to a page or open the dashboard…")
-                    .max_h(px(380.))
-                    .group(pages)
-                    .group(actions)
-                    .group(dashboard)
-                    .on_confirm(on_confirm)
-                    .on_cancel(|window, cx| window.close_dialog(cx)),
-            )
-        });
-        let query = state.read(cx).focus_handle(cx);
-        window.focus(&query, cx);
+            },
+        }
     }
 
     fn on_go_to(&mut self, GoTo(page): &GoTo, _: &mut Window, cx: &mut Context<Self>) {
@@ -1283,6 +1264,12 @@ impl Workspace {
     }
 
     fn on_clear_selection(&mut self, _: &ClearSelection, _: &mut Window, cx: &mut Context<Self>) {
+        // Escape is bound here for the whole window, and a binding is matched before any key
+        // listener runs, so this is where escape reaches an open finder.
+        if self.finder.read(cx).is_open() {
+            self.finder.update(cx, |finder, cx| finder.close(cx));
+            return;
+        }
         self.selection.clear();
         if self.page == Page::Documents {
             self.documents.update(cx, |docs, cx| docs.close(cx));
@@ -1377,7 +1364,9 @@ impl Render for Workspace {
         let tint = palette.window_tint;
         let glass_requested = self.appearance_settings.glass == GlassStyle::LiquidGlass;
         let glass = self.attach_glass(window, tint, glass_requested);
-        if std::mem::take(&mut self.refocus) {
+        // An open finder holds the keys: a page change behind it must not take them back, or the
+        // finder opened right after a navigation could not be closed with escape.
+        if std::mem::take(&mut self.refocus) && !self.finder.read(cx).is_open() {
             window.focus(&self.focus, cx);
         }
         let page = match self.page {
@@ -1578,6 +1567,8 @@ impl Render for Workspace {
                             .children(self.soundscape_panel.clone()),
                     ),
             )
+            // Over the whole window, navigation included: it is where you go next from.
+            .child(self.finder.clone())
             .children(self.frames.as_ref().map(|frames| frames.paint_marker()))
     }
 }
@@ -1691,7 +1682,10 @@ mod tests {
 
         // ⌘0 is the same toggle, one key from the nine areas.
         cx.simulate_keystrokes("cmd-0");
-        assert!(cx.update(|_, cx| again.read(cx).is_open()), "⌘0 did not open it");
+        assert!(
+            cx.update(|_, cx| again.read(cx).is_open()),
+            "⌘0 did not open it"
+        );
     }
 
     #[gpui::test]
@@ -1699,6 +1693,81 @@ mod tests {
         let (view, cx) = open(cx);
         cx.simulate_keystrokes("cmd-k j k j");
         view.read_with(cx, |view, _| assert_eq!(view.selection.cursor, None));
+    }
+
+    /// A question in Auto goes to the one Ask session, and the finder stays open to show it; ⌘↩
+    /// sends a search-looking text as a question too.
+    #[gpui::test]
+    fn the_finder_asks_when_the_words_are_a_question(cx: &mut TestAppContext) {
+        let (view, cx) = open(cx);
+        cx.simulate_keystrokes("cmd-k");
+        let (finder, ask) = view.read_with(cx, |view, _| (view.finder.clone(), view.ask.clone()));
+        cx.simulate_input("what is on my calendar today?");
+        cx.simulate_keystrokes("enter");
+        let prompt = cx.update(|_, cx| ask.read(cx).latest().map(|exchange| exchange.prompt));
+        assert_eq!(prompt.as_deref(), Some("what is on my calendar today?"));
+        assert!(
+            cx.update(|_, cx| finder.read(cx).is_open()),
+            "the answer shows in place"
+        );
+        view.read_with(cx, |view, _| {
+            assert_ne!(view.page, Page::Ask, "no page change")
+        });
+
+        cx.simulate_input("packs");
+        cx.simulate_keystrokes("cmd-enter");
+        let prompt = cx.update(|_, cx| ask.read(cx).latest().map(|exchange| exchange.prompt));
+        assert_eq!(
+            prompt.as_deref(),
+            Some("packs"),
+            "⌘↩ asked instead of opening Packs"
+        );
+    }
+
+    /// ⌘K opens the finder; typing narrows it; the arrows move through the results and Enter
+    /// goes there; escape closes it and the page keys work again.
+    #[gpui::test]
+    fn the_finder_searches_opens_and_closes(cx: &mut TestAppContext) {
+        let (view, cx) = open(cx);
+        cx.simulate_keystrokes("cmd-k");
+        let finder = view.read_with(cx, |view, _| view.finder.clone());
+        assert!(cx.update(|_, cx| finder.read(cx).is_open()));
+        cx.simulate_keystrokes("escape");
+        assert!(
+            !cx.update(|_, cx| finder.read(cx).is_open()),
+            "escape closes it"
+        );
+        cx.simulate_keystrokes("cmd-k");
+        cx.simulate_input("packs");
+        let first = cx.update(|_, cx| finder.read(cx).hits().first().map(|hit| hit.title.clone()));
+        assert_eq!(first.as_deref(), Some(page_title(Page::Packs).as_str()));
+        cx.simulate_keystrokes("enter");
+        view.read_with(cx, |view, _| assert_eq!(view.page, Page::Packs));
+        assert!(
+            !cx.update(|_, cx| finder.read(cx).is_open()),
+            "Enter closes it"
+        );
+
+        cx.simulate_keystrokes("cmd-k");
+        cx.simulate_input("set");
+        // The first arrow picks the top row, the second moves to the next one.
+        let second = cx.update(|_, cx| match finder.read(cx).hits()[1].open {
+            Open::Page(page) => page,
+            _ => panic!("\"set\" ranks pages first"),
+        });
+        cx.simulate_keystrokes("down down enter");
+        view.read_with(cx, |view, _| {
+            assert_eq!(view.page, second, "the arrows chose it")
+        });
+
+        // The input takes the focus on the frame that draws it, so the keys come one frame apart,
+        // as a hand would send them.
+        cx.simulate_keystrokes("cmd-k");
+        cx.simulate_keystrokes("escape");
+        assert!(
+            !cx.update(|_, cx| finder.read(cx).is_open()),
+            "escape closes it"
+        );
     }
 
     #[gpui::test]

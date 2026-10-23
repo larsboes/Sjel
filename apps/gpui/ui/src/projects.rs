@@ -300,6 +300,19 @@ impl Projects {
         );
     }
 
+    /// Opens one record of a project, for a caller outside the page (the Mac's finder): the
+    /// project first, so closing the record lands in the project it belongs to.
+    pub fn open_record(
+        &mut self,
+        project: String,
+        path: String,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) {
+        self.open_project(project, cx);
+        self.open_note(path, false, window, cx);
+    }
+
     /// Opens one note. A note read in the last few minutes is in memory, so it opens in the frame
     /// the click lands in; otherwise this reads it first, because a list read carries no content.
     fn open_note(&mut self, path: String, save: bool, window: &mut Window, cx: &mut Context<Self>) {

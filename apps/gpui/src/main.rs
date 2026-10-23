@@ -18,6 +18,7 @@ mod data;
 mod documents;
 mod editor;
 mod feed;
+mod finder;
 mod finance_view;
 mod frames;
 mod header;

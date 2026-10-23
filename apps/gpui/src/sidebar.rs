@@ -268,7 +268,7 @@ fn palette_hint(palette: Palette, window: &mut Window) -> impl IntoElement {
         .cursor_pointer()
         .hover(move |style| style.bg(rgba(palette.raised)))
         .on_click(|_, window, cx| window.dispatch_action(OpenPalette.boxed_clone(), cx))
-        .child("Search")
+        .child("Search or ask")
         .children(Kbd::binding_for_action(&OpenPalette, None, window).map(|k| k.appearance(false)))
 }
 

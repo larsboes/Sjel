@@ -950,6 +950,11 @@ impl Workspace {
                 Open::Action(action) => window.dispatch_action(action(), cx),
                 Open::Dashboard(href) => self.open_dashboard(href.to_owned(), window, cx),
                 Open::Project(name) => self.go_to_project(name, cx),
+                Open::Link(link) => {
+                    if let Some(target) = route::parse_deep_link(&link) {
+                        self.open_target(target, window, cx);
+                    }
+                }
                 Open::Record { project, path } => {
                     self.go(Page::Projects, cx);
                     self.projects.update(cx, |projects, cx| {

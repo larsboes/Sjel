@@ -399,8 +399,13 @@ switches between Auto, Ask and Search. An arrow key picks a result, and Enter op
 whatever the words look like. In Auto, a search that finds nothing is asked instead.
 
 A question is answered in place, through the same Ask session as ⌘2, so the Ask page shows the whole
-conversation. Results from the server (`/api/search`) are the next step: `PORTING_PLAN.md`,
-section 3.
+conversation.
+
+Local results show on every keystroke. When typing pauses for 180 ms, the shell's
+`GET /api/sjel-status/search` adds what the app does not hold: calendar events, people, documents,
+inventory items, subscriptions, trips and mail subjects, five per source, below the local results.
+Each server hit carries a `sjel://` link and opens through the deep-link parser. When nothing
+matches, the finder says what Enter will do instead.
 
 ## Keys
 

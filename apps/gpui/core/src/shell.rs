@@ -444,6 +444,17 @@ pub struct GlobalTask {
     pub project: String,
 }
 
+/// One server search result (`capabilities/sjel-status/src/status/search.rs`).
+#[derive(Clone, Debug, Deserialize, PartialEq, Eq)]
+pub struct ServerHit {
+    pub kind: String,
+    pub title: String,
+    #[serde(default)]
+    pub detail: String,
+    /// A `sjel://` deep link, opened through [`crate::route::parse_deep_link`].
+    pub link: String,
+}
+
 /// One note across projects (`GET /projects/api/records`).
 #[derive(Clone, Debug, Deserialize, Serialize, PartialEq, Eq)]
 pub struct GlobalNote {
@@ -1506,6 +1517,18 @@ impl Shell {
     pub async fn subscriptions(&self) -> ShellResult<Vec<SubscriptionRecord>> {
         self.json(Method::GET, "/finance/api/subscriptions", None, 10)
             .await
+    }
+
+    /// The finder's server results (`GET /api/sjel-status/search?q=`): rows from the shared
+    /// database that the app does not hold, each with a `sjel://` link to open it by.
+    pub async fn search(&self, query: &str) -> ShellResult<Vec<ServerHit>> {
+        #[derive(Deserialize)]
+        struct Envelope {
+            hits: Vec<ServerHit>,
+        }
+        let path = with_query("/api/sjel-status/search", &[("q", query)]);
+        let res: Envelope = self.json(Method::GET, &path, None, 10).await?;
+        Ok(res.hits)
     }
 
     /// Read people entities (`GET /entities/api/entities?kind=person`).

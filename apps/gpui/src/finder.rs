@@ -10,6 +10,9 @@
 //! Decided 2026-10-23 (`PORTING_PLAN.md`, section 3): an overlay first; the docked right panel
 //! comes with the adaptive UI. Server search (`/api/search`) is the next step and appends below
 //! the local results.
+//!
+//! The server half (`GET /api/sjel-status/search`) runs [`SERVER_DEBOUNCE`] after the last
+//! keystroke and appends below the local results, which never wait for it.
 
 use std::time::{Duration, Instant};
 
@@ -23,7 +26,7 @@ use sjel_gpui_core::search::{self, Mode};
 use crate::ask::Ask;
 use crate::data::Repo;
 use crate::route::Page;
-use crate::shell::{self, GlobalNote, GlobalTask, ProjectSummary};
+use crate::shell::{self, GlobalNote, GlobalTask, ProjectSummary, ServerHit};
 use crate::theme::Palette;
 
 actions!(finder, [SelectUp, SelectDown, NextMode, Close]);
@@ -33,6 +36,10 @@ const SHOWN: usize = 12;
 /// Records older than this are read again when the finder opens.
 const RECORDS_FRESH: Duration = Duration::from_secs(60);
 const WIDTH: f32 = 640.;
+/// How long typing has to pause before the server is asked: one request per word, not per key.
+const SERVER_DEBOUNCE: Duration = Duration::from_millis(180);
+/// Server results shown at most, below the local ones.
+const SERVER_SHOWN: usize = 15;
 
 /// Where a result goes. The workspace carries it out, so the finder never touches a page.
 #[derive(Clone)]
@@ -46,6 +53,8 @@ pub enum Open {
         project: String,
         path: String,
     },
+    /// A server result's `sjel://` link, opened the way a deep link is.
+    Link(String),
 }
 
 /// One result row.
@@ -72,6 +81,11 @@ pub struct Finder {
     /// Projects, open tasks and notes, read when the finder opens.
     records: Vec<Hit>,
     records_at: Option<Instant>,
+    /// The server's answer, and the text it answered: shown only while that is still the text.
+    server: Vec<Hit>,
+    server_query: String,
+    /// The text a server request is running for, if one is.
+    searching: Option<String>,
     input: Option<(Entity<InputState>, Subscription)>,
     query: String,
     mode: Mode,
@@ -99,6 +113,9 @@ impl Finder {
             commands,
             records: Vec::new(),
             records_at: None,
+            server: Vec::new(),
+            server_query: String::new(),
+            searching: None,
             input: None,
             query: String::new(),
             mode: Mode::Auto,
@@ -185,13 +202,62 @@ impl Finder {
                 .collect();
         }
         let all: Vec<&Hit> = self.commands.iter().chain(self.records.iter()).collect();
-        search::rank(&self.query, &all, |hit| {
+        let local = search::rank(&self.query, &all, |hit| {
             (hit.title.as_str(), vec![hit.detail.as_str(), hit.kind])
         })
         .into_iter()
         .take(SHOWN)
-        .map(|index| all[index])
-        .collect()
+        .map(|index| all[index]);
+        // The server's rows come after, in its own source order, and only for the text they
+        // answer: a late answer to an older text is dropped rather than shown under a new one.
+        let server = self
+            .server
+            .iter()
+            .filter(|_| self.server_query == self.query.trim())
+            .take(SERVER_SHOWN);
+        local.chain(server).collect()
+    }
+
+    /// Ask the server for the current text once typing pauses. Ask mode asks; it does not search.
+    fn search_server_soon(&mut self, cx: &mut Context<Self>) {
+        let text = self.query.trim().to_owned();
+        if text.is_empty() || self.mode == Mode::Ask || text == self.server_query {
+            return;
+        }
+        let Ok(shell) = self.repo.shell() else {
+            return;
+        };
+        cx.spawn(async move |this, cx| {
+            cx.background_executor().timer(SERVER_DEBOUNCE).await;
+            // Still the text on screen? A later keystroke has its own request coming.
+            let current = this
+                .update(cx, |view, cx| {
+                    let current = view.query.trim() == text;
+                    if current {
+                        view.searching = Some(text.clone());
+                        cx.notify();
+                    }
+                    current
+                })
+                .unwrap_or(false);
+            if !current {
+                return;
+            }
+            let asked = text.clone();
+            let answer = shell::run(async move { shell.search(&asked).await }).await;
+            let _ = this.update(cx, |view, cx| {
+                if view.searching.as_deref() == Some(text.as_str()) {
+                    view.searching = None;
+                }
+                // A failed search leaves the local results alone.
+                if let Some(Ok(hits)) = answer {
+                    view.server = hits.into_iter().map(server_hit).collect();
+                    view.server_query = text;
+                }
+                cx.notify();
+            });
+        })
+        .detach();
     }
 
     /// Which way Enter goes for the current text.
@@ -217,6 +283,7 @@ impl Finder {
                             if !view.query.trim().is_empty() {
                                 view.asked = false;
                             }
+                            view.search_server_soon(cx);
                             cx.notify();
                         }
                         InputEvent::PressEnter { secondary, .. } => {
@@ -289,6 +356,26 @@ impl Finder {
         }
         self.picked = true;
         cx.notify();
+    }
+}
+
+/// A server row as a result. Its link is opened through the deep-link parser, so the server can
+/// add a source without the app learning a new kind of place.
+fn server_hit(hit: ServerHit) -> Hit {
+    Hit {
+        kind: match hit.kind.as_str() {
+            "event" => "event",
+            "person" => "person",
+            "document" => "document",
+            "item" => "item",
+            "subscription" => "subscription",
+            "trip" => "trip",
+            "mail" => "mail",
+            _ => "result",
+        },
+        title: hit.title,
+        detail: hit.detail,
+        open: Open::Link(hit.link),
     }
 }
 
@@ -377,6 +464,7 @@ impl Render for Finder {
         } else {
             self.hits().into_iter().cloned().collect()
         };
+        let nothing = hits.is_empty();
 
         let modes = div().flex().gap_1().children(Mode::ALL.map(|mode| {
             let chosen = mode == self.mode;
@@ -400,6 +488,7 @@ impl Render for Finder {
                 .on_click(cx.listener(move |view, _, _, cx| {
                     view.mode = mode;
                     view.focus_next = true;
+                    view.search_server_soon(cx);
                     cx.notify();
                 }))
                 .child(mode.label())
@@ -462,6 +551,23 @@ impl Render for Finder {
                             .child(hit.kind),
                     )
             }));
+
+        // Nothing found says so, and says what Enter does instead of leaving an empty box.
+        let empty = (nothing && exchange.is_none() && !self.query.trim().is_empty()).then(|| {
+            let next = if self.searching.is_some() {
+                "Searching Sjel…"
+            } else if self.mode == Mode::Search {
+                "Nothing found. ⌘↩ asks Sjel instead."
+            } else {
+                "Nothing found. ↩ asks Sjel instead."
+            };
+            div()
+                .px_4()
+                .py_3()
+                .text_sm()
+                .text_color(rgb(palette.muted))
+                .child(next)
+        });
 
         let answer = exchange.map(|exchange| {
             let status = if exchange.loading {
@@ -528,6 +634,7 @@ impl Render for Finder {
             .on_action(cx.listener(|view, _: &SelectDown, _, cx| view.step(1, cx)))
             .on_action(cx.listener(|view, _: &NextMode, _, cx| {
                 view.mode = view.mode.next();
+                view.search_server_soon(cx);
                 cx.notify();
             }))
             .on_action(cx.listener(|view, _: &Close, _, cx| view.close(cx)))
@@ -562,6 +669,7 @@ impl Render for Finder {
                     .child(modes),
             )
             .children(answer)
+            .children(empty)
             .child(
                 // Sized to its rows: two results make a short panel, not a tall empty one.
                 div()
@@ -580,6 +688,13 @@ impl Render for Finder {
                     .border_color(rgba(palette.border))
                     .text_xs()
                     .text_color(rgb(palette.muted))
+                    .when_some(self.searching.as_ref(), |footer, _| {
+                        footer.child(
+                            div()
+                                .text_color(rgb(palette.accent))
+                                .child("searching Sjel…"),
+                        )
+                    })
                     .child("↩ open or ask")
                     .child("⌘↩ the other way")
                     .child("⌘/ mode")
@@ -592,6 +707,8 @@ impl Render for Finder {
             .inset_0()
             .flex()
             .justify_center()
+            // The panel is as tall as its rows: a stretched one is an empty box under them.
+            .items_start()
             .pt(px(72.))
             .bg(gpui_kit::hsla(0., 0., 0., 0.18))
             .on_mouse_down(
@@ -606,6 +723,36 @@ impl Render for Finder {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// Every link the server sends (`sjel-status/src/status/search.rs`) opens a native page.
+    #[test]
+    fn every_server_link_opens_a_native_page() {
+        use crate::route::{parse_deep_link, Target};
+        for link in [
+            "sjel://calendar",
+            "sjel://people",
+            "sjel://documents",
+            "sjel://inventory",
+            "sjel://finance",
+            "sjel://inbox",
+        ] {
+            assert!(
+                matches!(parse_deep_link(link), Some(Target::Native(_))),
+                "{link}"
+            );
+        }
+        assert!(matches!(
+            parse_deep_link("sjel://travel/t1/overview"),
+            Some(Target::Travel(_))
+        ));
+        let hit = server_hit(ServerHit {
+            kind: "mystery".into(),
+            title: "x".into(),
+            detail: String::new(),
+            link: "sjel://inbox".into(),
+        });
+        assert_eq!(hit.kind, "result");
+    }
 
     #[test]
     fn records_become_results_in_kind_order() {

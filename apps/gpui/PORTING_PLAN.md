@@ -111,7 +111,13 @@ These come before the roadmap in section 4. The roadmap resumes when they are do
      `src/finder.rs` (the overlay on ⌘K, which replaces the command palette and keeps its pages,
      actions and dashboard destinations as results). Projects, open tasks and notes come from the
      Mac's database. A question streams in place through the shared `Ask` session.
-   - Next: the shell's `/api/search`, appended below the local results.
+   - Done 2026-10-23, server stage: `GET /api/sjel-status/search`
+     (`capabilities/sjel-status/src/status/search.rs`) reads the shared database read-only: events,
+     people, documents, inventory, subscriptions, trips, and mail subject and sender. It returns
+     five rows per source, each with a `sjel://` link. The finder appends them 180 ms after typing
+     pauses.
+   - Open: `LIKE` folds ASCII case only ("Ä" does not find "ä"), and document text is not
+     searched, only titles. An FTS5 index fixes both when it matters.
 2. **The right sidebar is where Sjel works in view.** A docked panel beside the page is the seat
    of the later adaptive UI, driven by what Sjel is doing: while it runs a task, the operator sees
    it search, open a page and change a value, live, instead of receiving only the result. Build

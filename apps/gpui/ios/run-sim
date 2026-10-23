@@ -49,6 +49,11 @@ if ! xcrun simctl list devices | grep -q "$udid) (Booted)"; then
 fi
 xcrun simctl bootstatus "$udid" -b >/dev/null
 
+# The scanner asks for the camera the first time it opens. Answering that alert needs a hand on a
+# screen this script never opens, so the answer is given here instead: a granted camera is what a
+# phone that has already paired has anyway, and the tap check is about the finger reaching Scan.
+xcrun simctl privacy "$udid" grant camera "$BUNDLE_ID" >/dev/null 2>&1 || true
+
 if $tap; then
   # xcodebuild boots and drives the simulator itself; nothing opens Simulator.app.
   result="${TMPDIR:-/tmp}/sjel-ios-tap-$(date +%s).xcresult"

@@ -1254,18 +1254,24 @@ impl Shell {
 
     /// Architectural self-model and live state from `GET /api/sjel-status/self`.
     pub async fn self_model(&self) -> ShellResult<crate::self_model::SelfModelResponse> {
-        self.json(Method::GET, "/api/sjel-status/self", None, 15).await
+        self.json(Method::GET, "/api/sjel-status/self", None, 15)
+            .await
     }
 
     /// CV status, applications, profiles and built PDFs from `GET /api/sjel-status/cv`.
     pub async fn cv(&self) -> ShellResult<crate::cv::CvView> {
-        self.json(Method::GET, "/api/sjel-status/cv", None, 20).await
+        self.json(Method::GET, "/api/sjel-status/cv", None, 20)
+            .await
     }
 
     /// Run one CV verb (build, app-new, app-status, linkedin-diff, etc.) via `POST /api/sjel-status/cv`.
-    pub async fn write_cv(&self, req: &crate::cv::CvWriteRequest) -> ShellResult<crate::cv::CvWriteResult> {
+    pub async fn write_cv(
+        &self,
+        req: &crate::cv::CvWriteRequest,
+    ) -> ShellResult<crate::cv::CvWriteResult> {
         let body = serde_json::to_value(req).map_err(|_| ShellError::Unreadable)?;
-        self.json(Method::POST, "/api/sjel-status/cv", Some(body), 60).await
+        self.json(Method::POST, "/api/sjel-status/cv", Some(body), 60)
+            .await
     }
 
     /// Read index status totals and indexed volumes via `GET /media/api/status`.
@@ -1298,6 +1304,127 @@ impl Shell {
         Ok(crate::research::default_research_view())
     }
 
+    /// Read what this machine still needs via `GET /api/sjel-status/setup`.
+    pub async fn setup_plans(&self) -> ShellResult<crate::setup::SetupPlans> {
+        self.json(Method::GET, "/api/sjel-status/setup", None, 30)
+            .await
+    }
+
+    /// Check connection to primary via `GET /api/sjel-status/setup/verify`.
+    pub async fn setup_verify(&self) -> ShellResult<crate::setup::SetupVerification> {
+        self.json(Method::GET, "/api/sjel-status/setup/verify", None, 30)
+            .await
+    }
+
+    /// Apply setup steps via `POST /api/sjel-status/setup/apply`.
+    pub async fn setup_apply(
+        &self,
+        request: &crate::setup::SetupApplyRequest,
+    ) -> ShellResult<crate::setup::SetupApplied> {
+        let body = serde_json::to_value(request).unwrap_or(serde_json::Value::Null);
+        self.json(Method::POST, "/api/sjel-status/setup/apply", Some(body), 60)
+            .await
+    }
+
+    /// List paired devices via `GET /devices/api/devices`.
+    pub async fn setup_devices(&self) -> ShellResult<Vec<crate::setup::PairedDevice>> {
+        #[derive(serde::Deserialize)]
+        struct DevicesResp {
+            #[serde(default)]
+            devices: Vec<crate::setup::PairedDevice>,
+        }
+        match self
+            .json::<DevicesResp>(Method::GET, "/devices/api/devices", None, 10)
+            .await
+        {
+            Ok(resp) => Ok(resp.devices),
+            Err(_) => Ok(Vec::new()),
+        }
+    }
+
+    /// Revoke one device's key via `POST /devices/api/devices/{id}/revoke`. The answer is the
+    /// device as the node now holds it, which is `revoked`.
+    pub async fn setup_revoke_device(&self, id: &str) -> ShellResult<crate::setup::PairedDevice> {
+        let path = format!("/devices/api/devices/{id}/revoke");
+        self.json(Method::POST, &path, Some(serde_json::json!({})), 15)
+            .await
+    }
+
+    /// This node's Same-Wi-Fi listener via `GET /api/sjel-status/lan`, or `None` when it has none.
+    pub async fn setup_lan(&self) -> ShellResult<crate::setup::LanStatus> {
+        self.json(Method::GET, "/api/sjel-status/lan", None, 10)
+            .await
+    }
+
+    /// Mint a one-time code for one new device via `POST /devices/api/pairing/challenges`.
+    pub async fn setup_create_challenge(&self) -> ShellResult<crate::setup::PairingChallenge> {
+        self.json(
+            Method::POST,
+            "/devices/api/pairing/challenges",
+            Some(serde_json::json!({})),
+            15,
+        )
+        .await
+    }
+
+    /// List pending join requests via `GET /devices/api/pairing/requests`.
+    pub async fn setup_pending_joins(&self) -> ShellResult<Vec<crate::setup::SetupJoinRequest>> {
+        #[derive(serde::Deserialize)]
+        struct JoinsResp {
+            #[serde(default)]
+            requests: Vec<crate::setup::SetupJoinRequest>,
+        }
+        match self
+            .json::<JoinsResp>(Method::GET, "/devices/api/pairing/requests", None, 10)
+            .await
+        {
+            Ok(resp) => Ok(resp.requests),
+            Err(_) => Ok(Vec::new()),
+        }
+    }
+
+    /// Approve a device join request via `POST /devices/api/pairing/requests/{id}/approve`.
+    pub async fn setup_approve_join(
+        &self,
+        id: &str,
+    ) -> ShellResult<crate::setup::SetupJoinRequest> {
+        let path = format!("/devices/api/pairing/requests/{}/approve", id);
+        self.json(Method::POST, &path, Some(serde_json::json!({})), 15)
+            .await
+    }
+
+    /// Deny a device join request via `POST /devices/api/pairing/requests/{id}/deny`.
+    pub async fn setup_deny_join(&self, id: &str) -> ShellResult<crate::setup::SetupJoinRequest> {
+        let path = format!("/devices/api/pairing/requests/{}/deny", id);
+        self.json(Method::POST, &path, Some(serde_json::json!({})), 15)
+            .await
+    }
+
+    /// Load the combined view model for `/setup`: what this machine still needs, which devices it
+    /// trusts, which joins wait, and whether a phone can reach it at all.
+    pub async fn setup_view(&self) -> ShellResult<crate::setup::SetupView> {
+        let plans = match self.setup_plans().await {
+            Ok(p) => p.components,
+            Err(_) => Vec::new(),
+        };
+        let devices = self.setup_devices().await.unwrap_or_default();
+        let pending_joins = self.setup_pending_joins().await.unwrap_or_default();
+        // A read that fails is not the same answer as a listener that is off, so the page is told
+        // which one happened (its Devices tab says so in words).
+        let (lan, lan_error) = match self.setup_lan().await {
+            Ok(status) => (status.listener().cloned(), None),
+            Err(error) => (None, Some(error.to_string())),
+        };
+
+        Ok(crate::setup::SetupView {
+            plans,
+            devices,
+            pending_joins,
+            lan,
+            lan_error,
+        })
+    }
+
     /// Add a watch entry to `upstreams.toml` via `POST /api/sjel-status/upstreams/watch`.
     pub async fn watch_upstream(
         &self,
@@ -1312,7 +1439,13 @@ impl Shell {
         if let Some(n) = name {
             body["name"] = serde_json::Value::String(n.to_string());
         }
-        self.json(Method::POST, "/api/sjel-status/upstreams/watch", Some(body), 30).await
+        self.json(
+            Method::POST,
+            "/api/sjel-status/upstreams/watch",
+            Some(body),
+            30,
+        )
+        .await
     }
 
     /// Entries overlapping `[from, to)`, both `YYYY-MM-DD`: `to` is exclusive.

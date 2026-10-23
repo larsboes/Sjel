@@ -30,6 +30,20 @@ pub struct PairingQr {
     pub code: String,
 }
 
+/// Writes what [`parse_pairing_qr`] reads. The two live together so a field cannot be renamed on
+/// one side only: the Mac draws this and the phone refuses anything the parser would not accept.
+pub fn pairing_qr_payload(qr: &PairingQr) -> String {
+    serde_json::json!({
+        "k": QR_KIND,
+        "h": qr.host,
+        "p": qr.port,
+        "f": qr.fingerprint,
+        "i": qr.challenge_id,
+        "c": qr.code,
+    })
+    .to_string()
+}
+
 /// Reads a scanned code with the rules of `parsePairingQr` in `dashboard/src/lib/devices.ts`.
 pub fn parse_pairing_qr(content: &str) -> Result<PairingQr, String> {
     #[derive(Deserialize)]
@@ -332,6 +346,22 @@ mod tests {
         assert_eq!(parsed.host, "lars-mac");
         assert_eq!(parsed.port, 8443);
         assert_eq!(parsed.code, "123456");
+    }
+
+    #[test]
+    fn what_the_mac_writes_is_what_the_phone_reads() {
+        let written = pairing_qr_payload(&PairingQr {
+            host: "lars-mac".into(),
+            port: 8443,
+            fingerprint: "ab".repeat(32),
+            challenge_id: "pair_1234".into(),
+            code: "482913abcd".into(),
+        });
+        let parsed = parse_pairing_qr(&written).expect("the Mac's own code must parse");
+        assert_eq!(parsed.host, "lars-mac");
+        assert_eq!(parsed.port, 8443);
+        assert_eq!(parsed.challenge_id, "pair_1234");
+        assert_eq!(parsed.code, "482913abcd");
     }
 
     #[test]

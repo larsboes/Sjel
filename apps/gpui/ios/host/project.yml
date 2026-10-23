@@ -14,6 +14,7 @@ targets:
       - path: App.swift
       - path: DeviceIdentity.swift
       - path: Discovery.swift
+      - path: PairScanner.swift
       - path: Assets.xcassets
       - path: PrivacyInfo.xcprivacy
     info:
@@ -34,6 +35,10 @@ targets:
         # The service type the Mac advertises and Discovery.swift browses.
         NSBonjourServices:
           - _sjel._tcp
+        # PairScanner.swift reads the Mac's pairing code with the camera. The camera is the point:
+        # one scan carries the address, the certificate pin and a one-time code, so nothing about
+        # the pairing is compared by eye.
+        NSCameraUsageDescription: Sjel scans the pairing code on your Mac's Setup page.
         UILaunchScreen: {}
         UIApplicationSceneManifest:
           UIApplicationSupportsMultipleScenes: false

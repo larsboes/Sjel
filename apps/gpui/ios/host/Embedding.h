@@ -11,3 +11,7 @@ void gpui_ios_did_become_active(void *app);
 void gpui_ios_will_resign_active(void *app);
 // ios/src/lib.rs: one browse answer from Discovery.swift, `{"nodes":[…],"denied":false}`.
 void sjel_ios_nodes(const char *json);
+// ios/src/lib.rs: the text of a pairing code PairScanner.swift read, and why the camera could not
+// open when it could not. Both are NUL-terminated UTF-8, valid only for the call.
+void sjel_ios_scanned_pairing(const char *text);
+void sjel_ios_scan_failed(const char *text);

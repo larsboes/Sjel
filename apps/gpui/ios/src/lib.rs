@@ -60,6 +60,13 @@ enum Event {
     Found(Vec<Found>),
     /// The person tapped Join on one of them.
     Join(Found),
+    /// A pairing code was scanned with the camera (`host/PairScanner.swift`), carrying what the
+    /// Mac's Setup page drew: address, certificate pin and one-time code in one string.
+    #[cfg_attr(not(target_os = "ios"), allow(dead_code))]
+    Scanned(String),
+    /// The camera could not be opened, and why, in the words the person needs.
+    #[cfg_attr(not(target_os = "ios"), allow(dead_code))]
+    ScanFailed(String),
     Ready(Node, NodeHealth),
     /// The phone's replica after it was opened, read or written: its rows and queued count.
     Board(Board),
@@ -106,8 +113,27 @@ struct Browse {
 /// The view's event sender, so the C entry point below can reach the view it feeds.
 static EVENTS: OnceLock<Mutex<Option<UnboundedSender<Event>>>> = OnceLock::new();
 
-/// Sends one event to the live view, if there is one. Called from the main queue.
+// Opens the camera (`host/PairScanner.swift`). The screen is Swift's because a camera preview is an
+// `AVCaptureVideoPreviewLayer`, and GPUI draws its own pixels; the answer comes back through
+// `sjel_ios_scanned_pairing`.
 #[cfg(target_os = "ios")]
+#[allow(unsafe_code)] // Declaring the host's symbol is unsafe; the host owns its definition.
+unsafe extern "C" {
+    fn sjel_ios_present_pair_scanner();
+}
+
+/// Asks the host to open the scanner. Nothing happens on a build without a camera screen, which
+/// is every non-iOS target of this crate.
+fn present_pair_scanner() {
+    #[cfg(target_os = "ios")]
+    #[allow(unsafe_code)] // One call into the host, which links this symbol by name.
+    // SAFETY: it takes no arguments and keeps nothing from this call (`host/PairScanner.swift`).
+    unsafe {
+        sjel_ios_present_pair_scanner();
+    }
+}
+
+/// Sends one event to the live view, if there is one. Called from the main queue.
 fn announce(event: Event) {
     let sender = EVENTS.get().and_then(|slot| slot.lock().ok()?.clone());
     if let Some(sender) = sender {
@@ -227,6 +253,29 @@ impl Capabilities {
                                     let _ = events.unbounded_send(Event::Status(error));
                                 }
                             });
+                        }
+                        Event::Scanned(code) => {
+                            // A scanned code makes the same claim the `SJEL_PAIR` launch path makes;
+                            // it arrives after launch, so the whole claim runs here instead.
+                            view.joining = true;
+                            view.status = "Reading the code from your Mac…".into();
+                            let events = view.events.clone();
+                            shell::spawn(async move {
+                                let outcome = match node_file() {
+                                    Ok(path) => match claim_scanned(&code).await {
+                                        Ok(node) => connect(&path, node, &events).await,
+                                        Err(error) => Err(error),
+                                    },
+                                    Err(error) => Err(error),
+                                };
+                                if let Err(error) = outcome {
+                                    let _ = events.unbounded_send(Event::Status(error));
+                                }
+                            });
+                        }
+                        Event::ScanFailed(text) => {
+                            view.status = text.into();
+                            view.joining = false;
                         }
                         Event::Ready(node, health) => {
                             view.status =
@@ -445,8 +494,16 @@ async fn join_and_wait(target: &str, events: &UnboundedSender<Event>) -> Result<
     }
 }
 
-fn save(path: &std::path::Path, node: &Node) -> Result<(), String> {
-    if let Some(dir) = path.parent() {
+/// Claims a code the camera read: the Mac's address, its certificate pin and a one-time code in
+/// one string (`device::PairingQr`). The pin is what makes a scan the trusted channel: the claim
+/// goes to the host the code named, over a connection pinned to the certificate it named, so a
+/// code read off the wrong screen cannot reach a different machine.
+async fn claim_scanned(code: &str) -> Result<Node, String> {
+    let qr = device::parse_pairing_qr(code)?;
+    device::claim(&qr, label(), &identity::public_key()?).await
+}
+
+fn save(path: &std::path::Path, node: &Node) -> Result<(), String> {    if let Some(dir) = path.parent() {
         std::fs::create_dir_all(dir).map_err(|e| format!("Save the pairing: {e}"))?;
     }
     let json = serde_json::to_vec(node).map_err(|e| e.to_string())?;
@@ -521,6 +578,69 @@ impl Render for Capabilities {
                         )
                         .when_some(self.synced.clone(), |page, synced| {
                             page.child(div().text_xs().text_color(rgb(0x8e8e93)).child(synced))
+                        })
+                        // The camera is the trusted channel: one scan finds the Mac, pins its
+                        // certificate and claims a code, so nothing is compared by eye. The
+                        // Join row below stays for a phone whose camera is unavailable.
+                        .when(self.rows.is_empty(), |sub| {
+                            sub.child(
+                                div()
+                                    .rounded(px(12.))
+                                    .bg(rgb(0xffffff))
+                                    .px_4()
+                                    .py(px(12.))
+                                    .flex()
+                                    .items_center()
+                                    .gap_3()
+                                    .child(
+                                        div()
+                                            .flex()
+                                            .flex_col()
+                                            .flex_1()
+                                            // Without this the column takes its text's own width,
+                                            // the sentence runs off the card, and the pill beside
+                                            // it is pushed off screen entirely.
+                                            .min_w_0()
+                                            .gap_1()
+                                            .child("Scan your Mac’s code")
+                                            .child(
+                                                div()
+                                                    .text_sm()
+                                                    .text_color(rgb(0x646b77))
+                                                    .child(
+                                                        "Setup on the Mac shows a square code. \
+                                                         Point this phone at it.",
+                                                    ),
+                                            ),
+                                    )
+                                    .child(
+                                        div()
+                                            .flex_none()
+                                            .px_4()
+                                            .py(px(8.))
+                                            .rounded(px(8.))
+                                            .text_color(rgb(0xffffff))
+                                            .bg(if self.joining {
+                                                rgb(0x9aa0a6)
+                                            } else {
+                                                rgb(0x0a84ff)
+                                            })
+                                            .child(if self.joining { "Working…" } else { "Scan" })
+                                            .on_mouse_down(
+                                                MouseButton::Left,
+                                                cx.listener(|view, _, _, cx| {
+                                                    if view.joining {
+                                                        return;
+                                                    }
+                                                    view.status =
+                                                        "Point the camera at the code on your Mac."
+                                                            .into();
+                                                    present_pair_scanner();
+                                                    cx.notify();
+                                                }),
+                                            ),
+                                    ),
+                            )
                         })
                         .when(!self.found.is_empty() && self.rows.is_empty(), |sub| {
                             sub.child(
@@ -995,6 +1115,51 @@ pub unsafe extern "C" fn sjel_ios_nodes(json: *const std::ffi::c_char) {
         return;
     }
     announce(Event::Found(browse.nodes));
+}
+
+/// Called by `host/PairScanner.swift` with the text of a pairing code it read.
+///
+/// The scanner is offered from this app's own Settings tab, so the view already exists by the
+/// time a code can arrive: `EVENTS` is set in `Capabilities::new` before any button is drawn.
+///
+/// # Safety
+///
+/// `text` must be a NUL-terminated UTF-8 string that stays valid for the call, which is what
+/// `withCString` gives the Swift caller.
+#[cfg(target_os = "ios")]
+#[allow(unsafe_code)] // `no_mangle` is an unsafe attribute; the host links this symbol by name.
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn sjel_ios_scanned_pairing(text: *const std::ffi::c_char) {
+    if text.is_null() {
+        return;
+    }
+    // SAFETY: the header in `host/Embedding.h` is the caller's contract: a NUL-terminated string
+    // that outlives the call (`withCString`), read here and not kept.
+    let Ok(code) = unsafe { std::ffi::CStr::from_ptr(text) }.to_str() else {
+        announce(Event::ScanFailed("That code could not be read.".into()));
+        return;
+    };
+    announce(Event::Scanned(code.trim().to_string()));
+}
+
+/// Called by `host/PairScanner.swift` when the camera will not open: a simulator has none, and a
+/// person who refused it once is told where to change that instead of seeing a black rectangle.
+///
+/// # Safety
+///
+/// `text` must be a NUL-terminated UTF-8 string that stays valid for the call.
+#[cfg(target_os = "ios")]
+#[allow(unsafe_code)] // `no_mangle` is an unsafe attribute; the host links this symbol by name.
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn sjel_ios_scan_failed(text: *const std::ffi::c_char) {
+    if text.is_null() {
+        return;
+    }
+    // SAFETY: as above: a NUL-terminated string owned by the caller for the call's duration.
+    let Ok(reason) = unsafe { std::ffi::CStr::from_ptr(text) }.to_str() else {
+        return;
+    };
+    announce(Event::ScanFailed(reason.to_string()));
 }
 
 /// Called by `host/App.swift` before `gpui_ios_run_demo`: registers what the GPUI window shows.

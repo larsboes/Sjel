@@ -44,10 +44,12 @@ pub enum Page {
     Media,
     /// Research articles, upstream projects, and model benchmarks (`sjel://research`).
     Research,
+    /// Node setup, machine probes, and device pairing (`sjel://setup`).
+    Setup,
 }
 
 impl Page {
-    pub const ALL: [Page; 23] = [
+    pub const ALL: [Page; 24] = [
         Page::Home,
         Page::Context,
         Page::Capabilities,
@@ -70,6 +72,7 @@ impl Page {
         Page::Cv,
         Page::Media,
         Page::Research,
+        Page::Setup,
         Page::Settings,
     ];
 
@@ -97,6 +100,7 @@ impl Page {
             Self::Cv => "/cv",
             Self::Media => "/media",
             Self::Research => "/research",
+            Self::Setup => "/setup",
             Self::Settings => "/settings",
         }
     }

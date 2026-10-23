@@ -7,9 +7,8 @@ use std::rc::Rc;
 use gpui_kit::component::ElementExt;
 use gpui_kit::{point, prelude::*, px, rgba, Div, ScrollHandle};
 
-use crate::calendar;
 use crate::route::Page;
-use crate::shell::{CalendarEntry, GlobalTask};
+use crate::shell::GlobalTask;
 use crate::theme::Palette;
 use crate::workspace::Workspace;
 
@@ -20,9 +19,6 @@ pub enum Item {
     Approval(String),
     /// A kept-running capability that is down. Enter starts it.
     Down(String),
-    /// The calendar entry at this place in `Workspace::ahead`. Enter opens the calendar in the
-    /// dashboard.
-    Entry(usize),
     /// Urgent or due-today task shown on Home. Enter toggles completion.
     FocusTask(String),
     /// Enter starts a stopped capability, ⌘⌫ stops a running one.
@@ -114,7 +110,6 @@ impl Workspace {
                 if let Some(health) = &self.health.value {
                     items.extend(health.down().into_iter().map(Item::Down));
                 }
-                items.extend((0..self.ahead().len()).map(Item::Entry));
                 items.extend(
                     self.urgent_tasks()
                         .into_iter()
@@ -152,6 +147,7 @@ impl Workspace {
             | Page::Cv
             | Page::Media
             | Page::Research
+            | Page::Setup
             | Page::Settings => Vec::new(),
         }
     }
@@ -159,16 +155,6 @@ impl Workspace {
     /// The row under the cursor.
     pub fn selected(&self) -> Option<Item> {
         self.items().get(self.selection.cursor?).cloned()
-    }
-
-    /// Calendar entries still ahead, as Home draws them.
-    pub fn ahead(&self) -> Vec<CalendarEntry> {
-        let now = chrono::Local::now().naive_local();
-        self.calendar
-            .value
-            .clone()
-            .map(|e| calendar::ahead(e, now))
-            .unwrap_or_default()
     }
 
     /// Urgent or due-today tasks, as Home draws them.

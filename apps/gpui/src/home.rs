@@ -1,5 +1,7 @@
-//! Home answers "what needs me now": waiting agent writes and broken capabilities first, then
-//! what is still ahead today and tomorrow, then what the agents changed.
+//! Today answers "what needs me now": what is waiting on me, what is urgent, and the day itself.
+//!
+//! Home and Today were two pages and are one (`core::area`), so the day's timeline is a block
+//! here rather than a window of its own. What needs you costs no height when nothing does.
 
 use gpui_kit::component::button::{Button, ButtonVariants};
 use gpui_kit::component::checkbox::Checkbox;
@@ -7,27 +9,36 @@ use gpui_kit::component::tag::Tag;
 use gpui_kit::component::{ActiveTheme, Disableable, Sizable};
 use gpui_kit::{div, prelude::*, px, rgb, rgba, AnyElement, Context, SharedString};
 
-use crate::calendar;
 use crate::selection::Item;
 use crate::shell::{Approval, ShellError};
 use crate::theme::Palette;
 use crate::ui::{dot, due_badge, list, note, placeholder, priority_pill, row, section};
 use crate::workspace::Workspace;
 
-const RECENT_WRITES: usize = 6;
-
 pub fn render(view: &Workspace, palette: Palette, cx: &mut Context<Workspace>) -> impl IntoElement {
     div()
         .flex()
         .flex_col()
         .gap_8()
-        .child(needs_you(view, palette, cx))
-        .child(ahead(view, palette, cx))
+        .children(needs_you(view, palette, cx))
         .child(focus_tasks(view, palette, cx))
-        .child(agent_writes(view, palette, cx))
+        .child(today(view, palette, cx))
 }
 
-fn needs_you(view: &Workspace, palette: Palette, cx: &mut Context<Workspace>) -> impl IntoElement {
+/// The day on screen: the date, its three counts, and the timeline, from the Today view.
+fn today(view: &Workspace, palette: Palette, cx: &mut Context<Workspace>) -> AnyElement {
+    view.context_page
+        .update(cx, |page, cx| page.set_palette(palette, cx));
+    view.context_page.clone().into_any_element()
+}
+
+/// Nothing that needs you draws nothing: a line saying so pushes the day down for no reason.
+/// The first answer still gets its height, so the page does not jump when it arrives.
+fn needs_you(
+    view: &Workspace,
+    palette: Palette,
+    cx: &mut Context<Workspace>,
+) -> Option<AnyElement> {
     let selected = view.selected();
     let mut rows: Vec<AnyElement> = Vec::new();
     if let Some(agent) = &view.agent.value {
@@ -43,18 +54,24 @@ fn needs_you(view: &Workspace, palette: Palette, cx: &mut Context<Workspace>) ->
         }
     }
 
-    let body = match (&view.health.error, rows.is_empty()) {
-        (
-            Some(
-                error @ (ShellError::NotSetUp | ShellError::Unreachable | ShellError::NotLoopback),
-            ),
-            _,
-        ) => note(error.to_string(), palette.red),
-        (_, false) => list(rows, palette),
-        (_, true) if view.health.first_load() => placeholder(56.),
-        (_, true) => note("Nothing needs you.", palette.muted),
+    let error = view.health.error.as_ref().filter(|error| {
+        matches!(
+            error,
+            ShellError::NotSetUp | ShellError::Unreachable | ShellError::NotLoopback
+        )
+    });
+    let body = match error {
+        Some(error) => note(error.to_string(), palette.red),
+        // Nothing waiting and no shell to ask: the row would be the truth, not the answer.
+        None if rows.is_empty() => {
+            if !view.health.first_load() {
+                return None;
+            }
+            placeholder(56.)
+        }
+        None => list(rows, palette),
     };
-    section("Needs you", body, palette)
+    Some(section("Needs you", body, palette).into_any_element())
 }
 
 fn approval_row(
@@ -152,64 +169,6 @@ fn down_row(
                 })),
         )
         .into_any_element()
-}
-
-fn ahead(view: &Workspace, palette: Palette, cx: &mut Context<Workspace>) -> impl IntoElement {
-    let now = chrono::Local::now().naive_local();
-    let mono = cx.theme().mono_font_family.clone();
-    let selected = view.selected();
-    let body = match (&view.calendar.value, &view.calendar.error) {
-        (_, Some(error)) => note(
-            format!("The calendar did not answer. {error}"),
-            palette.muted,
-        ),
-        (None, None) => placeholder(96.),
-        (Some(_), None) => {
-            let entries = view.ahead();
-            if entries.is_empty() {
-                note("Nothing else today or tomorrow.", palette.muted)
-            } else {
-                list(
-                    entries
-                        .iter()
-                        .enumerate()
-                        .map(|(offset, entry)| {
-                            view.selection
-                                .mark(row(), selected == Some(Item::Entry(offset)), palette)
-                                .child(
-                                    div()
-                                        .w(px(112.))
-                                        .flex_none()
-                                        .font_family(mono.clone())
-                                        .text_sm()
-                                        .text_color(rgb(palette.muted))
-                                        .child(calendar::when(entry, now)),
-                                )
-                                .child(
-                                    div()
-                                        .flex_1()
-                                        .min_w_0()
-                                        .truncate()
-                                        .text_sm()
-                                        .child(entry.title.clone()),
-                                )
-                                .when(entry.commitment == "possible", |row| {
-                                    row.child(
-                                        div()
-                                            .text_xs()
-                                            .text_color(rgb(palette.muted))
-                                            .child("possible"),
-                                    )
-                                })
-                                .into_any_element()
-                        })
-                        .collect(),
-                    palette,
-                )
-            }
-        }
-    };
-    section("Ahead", body, palette)
 }
 
 fn focus_tasks(
@@ -329,79 +288,5 @@ fn focus_tasks(
             }
         }
     };
-    section("Today's Focus & Urgent Tasks", body, palette)
-}
-
-fn agent_writes(
-    view: &Workspace,
-    palette: Palette,
-    cx: &mut Context<Workspace>,
-) -> impl IntoElement {
-    let mono = cx.theme().mono_font_family.clone();
-    let body = match (&view.agent.value, &view.agent.error) {
-        (_, Some(error)) => note(error.to_string(), palette.muted),
-        (None, None) => placeholder(56.),
-        (Some(agent), None) => {
-            let writes: Vec<_> = agent
-                .calls
-                .iter()
-                .filter(|call| call.decision != "read")
-                .take(RECENT_WRITES)
-                .collect();
-            if writes.is_empty() {
-                note(
-                    format!("Only reads in the last {} agent calls.", agent.calls.len()),
-                    palette.muted,
-                )
-            } else {
-                list(
-                    writes
-                        .into_iter()
-                        .map(|call| {
-                            let at = chrono::DateTime::from_timestamp(call.at, 0)
-                                .map(|t| {
-                                    t.with_timezone(&chrono::Local).format("%H:%M").to_string()
-                                })
-                                .unwrap_or_default();
-                            let tone = if call.status >= 400 {
-                                palette.red
-                            } else {
-                                palette.muted
-                            };
-                            row()
-                                .font_family(mono.clone())
-                                .text_sm()
-                                .child(
-                                    div()
-                                        .w(px(56.))
-                                        .flex_none()
-                                        .text_color(rgb(palette.muted))
-                                        .child(at),
-                                )
-                                .child(div().flex_1().min_w_0().truncate().child(format!(
-                                    "{} {} · {}",
-                                    call.method, call.path, call.capability
-                                )))
-                                .child(
-                                    div()
-                                        .text_color(rgb(palette.muted))
-                                        .child(call.decision.clone()),
-                                )
-                                .child(
-                                    div()
-                                        .w(px(36.))
-                                        .flex_none()
-                                        .text_right()
-                                        .text_color(rgb(tone))
-                                        .child(call.status.to_string()),
-                                )
-                                .into_any_element()
-                        })
-                        .collect(),
-                    palette,
-                )
-            }
-        }
-    };
-    section("Agent writes", body, palette)
+    section("Urgent & overdue", body, palette)
 }

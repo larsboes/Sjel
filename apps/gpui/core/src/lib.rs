@@ -8,6 +8,7 @@
 //!   for the Mac's live database, [`data::Board`] for a phone's own replica and its offline log.
 //! - [`mail`]: mail triage proposals and the rules for showing and acting on them.
 //! - [`route`]: the destinations of the web dashboard.
+//! - [`area`]: the nine areas the app groups its pages into, and the tab each one shows.
 //! - [`systems`]: the Systems page's payloads — macmon, storage, updates, host watch and the
 //!   runtime profile — and the rules that decide how each one reads.
 //! - [`shell`]: the client for the Sjel shell, over loopback with the inbound token.
@@ -16,6 +17,7 @@
 //! - [`sync`]: replaying that queue at the Mac and taking back what it changed.
 
 pub mod accounts;
+pub mod area;
 pub mod backup;
 pub mod blocks;
 pub mod calendar;
@@ -34,6 +36,7 @@ pub mod people;
 pub mod research;
 pub mod route;
 pub mod self_model;
+pub mod setup;
 pub mod shell;
 pub mod soundscape;
 pub mod store;

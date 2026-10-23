@@ -1,5 +1,8 @@
-//! Native Today / Context page (`/context`): joins calendar entries, due tasks, and daily
-//! expenses into one consolidated daily command center.
+//! The day itself: calendar entries, due tasks, and daily expenses as one timeline.
+//!
+//! It is a block of the Today page (`home`), not a page of its own, so it holds the day on screen
+//! and nothing about where that block sits. `/` and `/context` both reach it (`core::area` folds
+//! the two addresses into one).
 
 use chrono::{Duration, Local, NaiveDate};
 use gpui_kit::component::button::{Button, ButtonVariants};
@@ -189,11 +192,22 @@ impl ContextPage {
 
 impl Render for ContextPage {
     fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
+        let palette = self.palette.unwrap_or_else(Palette::dark);
+        self.render_day(palette, window, cx)
+    }
+}
+
+impl ContextPage {
+    /// The day on screen, sized to its content: the Today page owns the scroll around it.
+    fn render_day(
+        &mut self,
+        palette: Palette,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) -> AnyElement {
         if std::mem::take(&mut self.focus_next) {
             window.focus(&self.focus, cx);
         }
-
-        let palette = self.palette.unwrap_or_else(Palette::dark);
         let today = Local::now().date_naive();
         let is_today = self.day == today;
 
@@ -208,7 +222,7 @@ impl Render for ContextPage {
 
         let context = ContextDay::build(self.day, entries, tasks, finance_txs);
 
-        // Header
+        // The date, at the weight of a block heading: the page's own title is the area's.
         let header = div()
             .flex()
             .items_center()
@@ -221,8 +235,8 @@ impl Render for ContextPage {
                     .gap_3()
                     .child(
                         div()
-                            .text_2xl()
-                            .font_weight(FontWeight::BOLD)
+                            .text_base()
+                            .font_weight(FontWeight::SEMIBOLD)
                             .text_color(rgb(palette.text))
                             .child(format_day_header(self.day)),
                     )
@@ -359,7 +373,6 @@ impl Render for ContextPage {
             .on_action(cx.listener(Self::on_next_day))
             .on_action(cx.listener(Self::on_today))
             .on_action(cx.listener(Self::on_refresh))
-            .size_full()
             .flex()
             .flex_col()
             .gap_4()
@@ -374,14 +387,7 @@ impl Render for ContextPage {
                         .child("DAILY TIMELINE"),
                 ),
             )
-            .child(
-                div()
-                    .id("context-scroll-timeline")
-                    .flex_1()
-                    .min_h_0()
-                    .overflow_y_scroll()
-                    .child(timeline_content),
-            )
+            .child(timeline_content)
             .child(
                 div()
                     .flex()
@@ -394,6 +400,7 @@ impl Render for ContextPage {
                     .child(shortcut_hint("t", "today", palette))
                     .child(shortcut_hint("⌘r", "refresh", palette)),
             )
+            .into_any_element()
     }
 }
 

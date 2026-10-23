@@ -19,7 +19,7 @@ use crate::theme::{
 };
 use crate::ui::{list, section};
 use crate::update::{RebuildState, BUILD_TIME, RUNNING_COMMIT};
-use crate::workspace::{GoTo, Workspace};
+use crate::workspace::{page_title, GoTo, OpenArea, Workspace};
 
 /// A section of the page, in rail order.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
@@ -476,7 +476,7 @@ fn shortcuts(palette: Palette, cx: &App) -> Vec<AnyElement> {
     let docs = cx.action_documentation();
     let mut groups: [ShortcutGroup; 12] = [
         ("sjel::", "WORKSPACE", Vec::new()),
-        ("context_page::", "TODAY / CONTEXT", Vec::new()),
+        ("context_page::", "TODAY", Vec::new()),
         ("calendar::", "CALENDAR", Vec::new()),
         ("finance_page::", "FINANCE", Vec::new()),
         ("people_page::", "PEOPLE", Vec::new()),
@@ -497,8 +497,14 @@ fn shortcuts(palette: Palette, cx: &App) -> Vec<AnyElement> {
             continue;
         };
         // Every page shares `GoTo`, so its label comes from the page, not the action's doc.
+        // Every page shares `GoTo` and every area `OpenArea`, so their labels come from the
+        // table both read, never from the action's doc: `Sjel › Packs`, and `Go to Sjel`.
         let label = (binding.action().as_any().downcast_ref::<GoTo>())
-            .map(|GoTo(page)| format!("Go to {}", page.label()))
+            .map(|GoTo(page)| format!("Go to {}", page_title(*page)))
+            .or_else(|| {
+                (binding.action().as_any().downcast_ref::<OpenArea>())
+                    .map(|OpenArea(area)| format!("Go to {}", area.label()))
+            })
             .or_else(|| {
                 docs.get(name)
                     .and_then(|doc| doc.lines().next())

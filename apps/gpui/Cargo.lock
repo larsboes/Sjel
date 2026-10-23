@@ -6961,6 +6961,7 @@ dependencies = [
  "reqwest 0.13.5",
  "serde",
  "serde_json",
+ "sha2 0.11.1",
  "sjel-config",
  "sjel-credentials",
  "tokio",
@@ -6971,6 +6972,7 @@ dependencies = [
 name = "sjel-gpui-ios"
 version = "0.1.0"
 dependencies = [
+ "chrono",
  "device-auth",
  "futures",
  "gpui-kit",

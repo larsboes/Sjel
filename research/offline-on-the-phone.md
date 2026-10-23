@@ -130,6 +130,37 @@ copy whole or the new one whole.
    happens when the app is never opened. The cost: a copy that nobody asks for stays stale, so the
    status line has to show the age rather than leaving it implied.
 
+## R1 on the native phone, built 2026-10-23
+
+Route R1 reached the native GPUI client, and it is the first page on the phone that reads data the
+replica does not hold. `apps/gpui/core/src/mirror.rs` is the fetch: read the manifest, compare its
+digest with the copy already on disk, take the copy only when they differ, check the bytes against
+the manifest's `sha256` and `bytes` before writing, stage as `mirror.db.part`, rename into place,
+then write the manifest. `apps/gpui/ui/src/calendar.rs` draws a day from it at phone density, and
+`apps/gpui/ios/src/lib.rs` opens the copy on disk at launch and fetches a newer one when the pairing
+answers or **Refresh** is tapped.
+
+What was measured on this machine the same day:
+
+| | |
+| --- | --- |
+| libsql reading a copy rusqlite wrote | works: 51 `calendar_entries` rows read from the 11.1 MB copy, and one entry returned for 2026-10-21 |
+| the copy's age at the time of the run | built `2026-10-21T21:21:30Z`, two days old, which the tab prints rather than hides |
+| the fetch | manifest first, so a current copy costs one small answer; a differing one costs 11.1 MB in a single signed request |
+| the page on the simulator | a 6-entry trip day (5 to 11 October, all dotted), a single all-day entry, and the no-copy state, each screenshotted |
+| tests | 8 in `mirror.rs` against a fake Mac and a real SQLite file: current copy not refetched, digest mismatch refused, byte mismatch refused, unbuilt Mac named, table set without the calendar answers empty, unmatched manifest left no partial file |
+
+What the native reader does **not** do, unlike the Tauri device module: it does not resume a
+partial transfer (one request, no `Range`), does not re-run `PRAGMA integrity_check` on the written
+file, and does not compare per-table row counts. The manifest digest and byte count cover
+transport corruption, which is the failure that was actually seen; a copy that will not open says so
+on the page instead of drawing nothing. If a resumed fetch ever matters over a tailnet slower than
+the LAN, `DeviceClient::signed` needs a header-carrying variant first.
+
+Asking for a rebuild is tolerated rather than required: the route runs `sjel mirror build` on the
+operator surface, so a paired device that is refused it still receives the copy the Mac holds, and
+the tab's own age line is what tells the person how old that is.
+
 ## Decided 2026-10-21
 
 **One database for now.** Nothing is split. The primary exists (`sqld` on `127.0.0.1:8089`, JWT

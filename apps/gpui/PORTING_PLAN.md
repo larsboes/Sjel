@@ -11,7 +11,7 @@
 |---|---|---|---|---|---|---|
 | 1 | `/` | Home (Command Center) | **Ported** | Native GPUI (`Home` + `ContextPage`) | In progress | Sjel Shell / Core |
 | 2 | `/context` | Today (Timeline & Focus) | **Ported** (`/` and `/context` are one page) | Native GPUI (`Home` + `ContextPage`) | Planned Tab | `capabilities/context` |
-| 3 | `/calendar` | Calendar (Week/Month) | **Ported** | Native GPUI (`CalendarPage`) | Planned Tab | `capabilities/calendar` |
+| 3 | `/calendar` | Calendar (Week/Month) | **Ported** | Native GPUI (`CalendarPage`) | Native GPUI Tab (day view off the Mac's read-only copy) | `capabilities/calendar` |
 | 4 | `/projects` | Projects, Tasks & Notes | **Ported** | Native GPUI (`Projects`) | Native GPUI Tab | `capabilities/projects` |
 | 5 | `/documents` | Documents & PDF Reader | **Ported** | Native GPUI (`Documents`) | Planned Reader | `capabilities/documents` |
 | 6 | `/inbox` | Capture Inbox & Triage | **Partially Ported** | Native GPUI (`Inbox`) | Planned Tab | `capabilities/comms` |
@@ -90,6 +90,27 @@
 - **Target Files**:
   - `apps/gpui/core/src/setup.rs`
   - `apps/gpui/src/setup_view.rs`
+
+### ✅ Work Package 7: the phone's Calendar tab, off the Mac's read-only copy
+- **Status**: Native iOS tab, read-only (2026-10-23). Shipped to TestFlight as build 1363.
+- **Shipped**: `apps/gpui/core/src/mirror.rs` (the manifest, the digest- and byte-checked fetch that
+  stages and renames into place, the rebuild request, and the day read; 8 tests against a fake Mac
+  and a real SQLite copy) and `apps/gpui/ui/src/calendar.rs` (one day, seven day chips with a dot on
+  every day an entry covers, entry rows at `Density::Mobile`, the copy's built-at line, and a
+  Refresh that asks the host rather than reaching the network itself). `apps/gpui/ios/src/lib.rs`
+  carries the third tab, opens the copy on disk at launch, and fetches a newer one when the pairing
+  answers or Refresh is tapped.
+- **Why the copy and not the replica**: the copy is one file the Mac builds atomically and serves
+  with a digest, so two more table sets cost the Mac nothing and the phone one fetch. It is
+  read-only by intent; writes stay in the replica, which covers projects.
+- **Data Source**: `sjel mirror build`, `GET /api/sjel-status/mirror` (+ `/rebuild`)
+- **Target Files**:
+  - `apps/gpui/core/src/mirror.rs`
+  - `apps/gpui/ui/src/calendar.rs`
+  - `apps/gpui/ios/src/lib.rs`
+- **Next**: People and Places are a page away, because `places_*` and `entities_*` are already in
+  the phone's table set. The pages that write need the replica's second domain, which is the same
+  shape as `core/src/sync.rs` per capability.
 
 ---
 
@@ -227,11 +248,13 @@ flowchart TD
 ```
 
 1. **Expanding iOS Tab Navigation**:
-   - Current tabs: `Projects`, `Travel`, `Settings`.
+   - Current tabs: `Projects` (replica, read and write), `Calendar` (the Mac's read-only copy, a day
+     at a time), `Travel`, `Settings`.
    - Add tabs:
      - `Today`: Daily context timeline, focus tasks with large tap target checkboxes.
      - `Inbox`: Fast mobile capture field with tag selector (`#buy`, `#look`, `#go`, `#learn`).
-     - `Calendar`: Mobile-friendly day view.
+     - ~~`Calendar`: Mobile-friendly day view.~~ shipped in Work Package 7, read-only; it becomes a
+       writing tab when the calendar joins the replica.
 
 2. **Autonomous Offline Store**:
    - Bundle `rusqlite` / `libsql` directly inside the iOS app sandbox.

@@ -3,6 +3,7 @@
 //! Shared across macOS desktop and iOS mobile clients.
 
 pub mod block_menu;
+pub mod calendar;
 pub mod data;
 pub mod doc_view;
 pub mod editor;

@@ -16,6 +16,8 @@
 //! - [`device`]: a paired device's client, over TLS pinned to the Mac's LAN listener.
 //! - [`store`]: the local LibSQL replica and the queue of writes waiting for the Mac.
 //! - [`sync`]: replaying that queue at the Mac and taking back what it changed.
+//! - [`mirror`]: the Mac's read-only copy of its data, fetched over the paired connection for
+//!   the pages the phone reads but does not write.
 
 pub mod accounts;
 pub mod area;
@@ -32,6 +34,7 @@ pub mod inline;
 pub mod inventory;
 pub mod mail;
 pub mod media;
+pub mod mirror;
 pub mod packs;
 pub mod people;
 pub mod research;

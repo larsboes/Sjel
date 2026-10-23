@@ -15,6 +15,8 @@ sjel-gpui-ui = { path = "../ui" }
 gpui-kit = { version = "=0.7.3", default-features = false, features = ["component"] }
 gpui = { package = "gpui-pre", version = "=0.3.9", default-features = false }
 device-auth = { path = "../../../libs/device-auth" }
+# `SJEL_DAY` names the calendar day a screenshot opens on (src/lib.rs, `launch_day`).
+chrono = { version = "0.4", default-features = false, features = ["clock"] }
 futures = "0.3"
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"

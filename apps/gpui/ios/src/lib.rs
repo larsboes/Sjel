@@ -26,8 +26,10 @@ use gpui::{div, prelude::*, px, rgb, Context, MouseButton, SharedString, Window}
 use sjel_gpui_core::data::Board;
 use sjel_gpui_core::data::Repo;
 use sjel_gpui_core::device::{self, DeviceClient, Node, Signer};
+use sjel_gpui_core::mirror::{self, Mirror};
 use sjel_gpui_core::shell::{self, NodeHealth};
 use sjel_gpui_core::sync::{self, Report};
+use sjel_gpui_ui::calendar::{Calendar, CalendarEvent};
 use sjel_gpui_ui::projects::{Projects, ProjectsEvent};
 use sjel_gpui_ui::{
     mobile_tab_bar, AccentColor, AppearanceSettings, BackgroundTone, Density, NavItem, Palette,
@@ -47,6 +49,8 @@ const LOCAL_NETWORK_DENIED: &str =
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Tab {
     Projects,
+    /// The day's entries, read from the Mac's read-only copy of its data.
+    Calendar,
     Travel,
     /// Pairing with a Mac: offered here, never required (research/offline-on-the-phone.md).
     Settings,
@@ -74,6 +78,8 @@ enum Event {
     Wrote,
     /// The replica did not open, and why. Nothing typed can be kept until it does.
     StoreFailed(String),
+    /// The Mac's read-only copy after an open or a fetch: the copy, or why there is none.
+    Copy(Result<Arc<Mirror>, String>),
     /// A sync finished: what it moved, or why it could not run, plus the replica after it.
     Synced(Result<Report, String>, Board),
 }
@@ -158,6 +164,12 @@ pub struct Capabilities {
     board: Option<Board>,
     /// The Mac's Projects page over the replica (`sjel_gpui_ui::projects`), once the store opens.
     projects: Option<gpui::Entity<Projects>>,
+    /// The Calendar page over the Mac's read-only copy (`sjel_gpui_ui::calendar`).
+    calendar: gpui::Entity<Calendar>,
+    /// The copy last opened, kept so a refresh that fails cannot blank a page that is readable.
+    copy: Option<Arc<Mirror>>,
+    /// True while a copy is being fetched, so one tap cannot start a second fetch.
+    copying: bool,
     /// Why the replica did not open, shown on the Projects page in place of a silent blank.
     store_error: Option<SharedString>,
     /// The paired Mac, once this launch has reached it. `None` means every sync rests: a phone
@@ -202,12 +214,54 @@ impl Capabilities {
             });
         });
 
+        // The Calendar page, and the copy it reads. A copy already on disk is opened before the
+        // Mac answers, so the calendar holds the last sync's data on a launch that never reaches
+        // the Mac (`core/src/mirror.rs`).
+        let calendar = cx.new(|_| Calendar::at(launch_day(), Density::Mobile));
+        cx.subscribe(&calendar, |view, _, event, cx| match event {
+            CalendarEvent::Refresh => view.refresh_copy(cx),
+        })
+        .detach();
+        let copy_events = events.clone();
+        shell::spawn(async move {
+            let _ = copy_events.unbounded_send(Event::Copy(open_copy()));
+        });
+
         cx.spawn(async move |this, cx| {
             while let Some(event) = received.next().await {
                 let alive = this.update(cx, |view, cx| {
                     match event {
                         Event::Status(text) => view.status = text.into(),
                         Event::StoreFailed(text) => view.store_error = Some(text.into()),
+                        Event::Copy(outcome) => {
+                            view.copying = false;
+                            match outcome {
+                                Ok(copy) => {
+                                    view.copy = Some(copy.clone());
+                                    view.calendar.update(cx, |calendar, cx| {
+                                        calendar.set_mirror(Some(copy), None, cx)
+                                    });
+                                }
+                                // A refresh that fails leaves the copy already on screen alone:
+                                // it is still true, only older, and the page says how old.
+                                Err(error) => {
+                                    if view.copy.is_none() {
+                                        view.calendar.update(cx, |calendar, cx| {
+                                            calendar.set_mirror(None, Some(error), cx)
+                                        });
+                                    } else {
+                                        view.calendar.update(cx, |calendar, cx| {
+                                            calendar.set_note(
+                                                Some(format!(
+                                                    "Could not fetch a newer copy: {error}"
+                                                )),
+                                                cx,
+                                            )
+                                        });
+                                    }
+                                }
+                            }
+                        }
                         Event::Board(board) => {
                             if view.projects.is_none() {
                                 if let Some(store) = board.store().cloned() {
@@ -302,6 +356,7 @@ impl Capabilities {
                                 }
                             }
                             view.maybe_sync(cx);
+                            view.refresh_copy(cx);
                         }
                         Event::Wrote => {
                             if let Some(board) = view.board.clone() {
@@ -352,9 +407,12 @@ impl Capabilities {
             rows: Vec::new(),
             found: Vec::new(),
             joining: false,
-            active_tab: Tab::Projects,
+            active_tab: launch_tab(),
             travel: cx.new(|_| sjel_gpui_ui::travel::Travel::new(None, Density::Mobile)),
             projects: None,
+            calendar,
+            copy: None,
+            copying: false,
             store_error: None,
             board: None,
             client: None,
@@ -386,6 +444,33 @@ impl Capabilities {
             let mut board = board;
             let _ = board.reload().await;
             let _ = events.unbounded_send(Event::Synced(outcome, board));
+        });
+        cx.notify();
+    }
+
+    /// Fetches the Mac's newest copy for the Calendar page.
+    ///
+    /// Called when the pairing goes live and when the person taps Refresh. A launch that never
+    /// reaches the Mac keeps the copy it already has: [`open_copy`] reads that one at startup,
+    /// and a failed fetch reports itself beside rows that are still readable.
+    fn refresh_copy(&mut self, cx: &mut Context<Self>) {
+        if self.copying {
+            return;
+        }
+        let Some(client) = self.client.clone() else {
+            // A refresh needs the Mac. Saying so is better than a button that does nothing.
+            self.calendar.update(cx, |calendar, cx| {
+                calendar.set_note(
+                    Some("Pair with your Mac in Settings to fetch a copy.".to_owned()),
+                    cx,
+                )
+            });
+            return;
+        };
+        self.copying = true;
+        let events = self.events.clone();
+        shell::spawn(async move {
+            let _ = events.unbounded_send(Event::Copy(fetch_copy(client).await));
         });
         cx.notify();
     }
@@ -503,7 +588,8 @@ async fn claim_scanned(code: &str) -> Result<Node, String> {
     device::claim(&qr, label(), &identity::public_key()?).await
 }
 
-fn save(path: &std::path::Path, node: &Node) -> Result<(), String> {    if let Some(dir) = path.parent() {
+fn save(path: &std::path::Path, node: &Node) -> Result<(), String> {
+    if let Some(dir) = path.parent() {
         std::fs::create_dir_all(dir).map_err(|e| format!("Save the pairing: {e}"))?;
     }
     let json = serde_json::to_vec(node).map_err(|e| e.to_string())?;
@@ -516,11 +602,57 @@ fn node_file() -> Result<PathBuf, String> {
     Ok(PathBuf::from(home).join("Library/Application Support/sjel-node.json"))
 }
 
+/// Where the Mac's read-only copy lives on this phone: beside the pairing, in the container.
+fn copy_dir() -> Result<PathBuf, String> {
+    let home = std::env::var_os("HOME").ok_or("No app container (HOME is not set).")?;
+    Ok(PathBuf::from(home).join("Library/Application Support/sjel-mirror"))
+}
+
+/// The copy this phone already holds, read without the Mac. The Calendar page opens on this so a
+/// launch on a train shows the last sync's day instead of an empty page (`core/src/mirror.rs`).
+fn open_copy() -> Result<Arc<Mirror>, String> {
+    let dir = copy_dir()?;
+    Mirror::open(&dir).map(Arc::new)
+}
+
+/// Asks the Mac to build a fresh copy, then fetches whatever it now has.
+async fn fetch_copy(client: Arc<DeviceClient>) -> Result<Arc<Mirror>, String> {
+    let dir = copy_dir()?;
+    // The rebuild is a request, not a demand: the route sits on the Mac's operator gate, and a
+    // device that is refused it still gets the copy the Mac already holds (whose age the page
+    // states).
+    let _ = mirror::rebuild(&*client).await;
+    mirror::refresh(&*client, &dir).await?;
+    Mirror::open(&dir).map(Arc::new)
+}
+
 fn label() -> &'static str {
     if cfg!(target_abi = "sim") {
         "GPUI iOS Simulator"
     } else {
         "GPUI iPhone"
+    }
+}
+
+/// `SJEL_DAY=2026-10-21` opens the calendar on that day, for a screenshot a hand did not navigate
+/// to. A date it cannot read is today.
+fn launch_day() -> chrono::NaiveDate {
+    std::env::var("SJEL_DAY")
+        .ok()
+        .and_then(|day| sjel_gpui_core::calendar::parse_day(&day))
+        .unwrap_or_else(|| chrono::Local::now().date_naive())
+}
+
+/// `SJEL_TAB=calendar` opens that tab at launch.
+///
+/// A screenshot of a page that is not the first one needs no hand on the screen for this: the
+/// touch checks (`host/UITests`) and `ios/run-sim` use it, and a phone never sets it.
+fn launch_tab() -> Tab {
+    match std::env::var("SJEL_TAB").unwrap_or_default().as_str() {
+        "calendar" => Tab::Calendar,
+        "travel" => Tab::Travel,
+        "settings" => Tab::Settings,
+        _ => Tab::Projects,
     }
 }
 
@@ -536,8 +668,11 @@ impl Render for Capabilities {
         let page_bg = palette.window_tint >> 8;
         let is_mac = self.active_tab == Tab::Settings;
         let is_travel = self.active_tab == Tab::Travel;
+        let is_calendar = self.active_tab == Tab::Calendar;
         self.travel
             .update(cx, |travel, cx| travel.set_palette(palette, cx));
+        self.calendar
+            .update(cx, |calendar, cx| calendar.set_palette(palette, cx));
         if let Some(projects) = &self.projects {
             projects.update(cx, |projects, cx| projects.set_palette(palette, cx));
         }
@@ -558,7 +693,9 @@ impl Render for Capabilities {
                     .flex_1()
                     .min_h_0()
                     // Projects scrolls inside itself, so the page holds still around it.
-                    .when(is_mac || is_travel, |page| page.overflow_y_scroll())
+                    .when(is_mac || is_travel || is_calendar, |page| {
+                        page.overflow_y_scroll()
+                    })
                     // gpui-mobile raises no keyboard on focus. Only text fields take focus here,
                     // so after a tap the keyboard follows whether one holds it.
                     .on_mouse_up(
@@ -604,13 +741,10 @@ impl Render for Capabilities {
                                             .gap_1()
                                             .child("Scan your Mac’s code")
                                             .child(
-                                                div()
-                                                    .text_sm()
-                                                    .text_color(rgb(0x646b77))
-                                                    .child(
-                                                        "Setup on the Mac shows a square code. \
+                                                div().text_sm().text_color(rgb(0x646b77)).child(
+                                                    "Setup on the Mac shows a square code. \
                                                          Point this phone at it.",
-                                                    ),
+                                                ),
                                             ),
                                     )
                                     .child(
@@ -964,7 +1098,8 @@ impl Render for Capabilities {
                         )
                     })
                     .when(is_travel, |page| page.child(self.travel.clone()))
-                    .when(!is_mac && !is_travel, |page| {
+                    .when(is_calendar, |page| page.child(self.calendar.clone()))
+                    .when(!is_mac && !is_travel && !is_calendar, |page| {
                         let pending = self.board.as_ref().map_or(0, Board::pending);
                         page.when_some(self.store_error.clone(), |page, error| {
                             page.child(div().text_sm().text_color(rgb(0xd70015)).child(error))
@@ -1042,6 +1177,12 @@ impl Render for Capabilities {
                         badge: if pending > 0 { Some(pending) } else { None },
                     },
                     NavItem {
+                        id: "calendar",
+                        label: "Calendar",
+                        icon: "📅",
+                        badge: None,
+                    },
+                    NavItem {
                         id: "travel",
                         label: "Travel",
                         icon: "◎",
@@ -1057,6 +1198,7 @@ impl Render for Capabilities {
                 let active_id = match self.active_tab {
                     Tab::Settings => "settings",
                     Tab::Travel => "travel",
+                    Tab::Calendar => "calendar",
                     Tab::Projects => "projects",
                 };
                 let entity = cx.entity().clone();
@@ -1072,10 +1214,19 @@ impl Render for Capabilities {
                             view.active_tab = match id {
                                 "settings" => Tab::Settings,
                                 "travel" => Tab::Travel,
+                                "calendar" => Tab::Calendar,
                                 _ => Tab::Projects,
                             };
                             if view.active_tab == Tab::Travel {
                                 view.travel.update(cx, |travel, cx| travel.activate(cx));
+                            }
+                            // Opening the calendar with no copy asks for one, so a phone that was
+                            // paired here but never fetched does not have to know to tap Refresh.
+                            if view.active_tab == Tab::Calendar
+                                && view.copy.is_none()
+                                && !view.copying
+                            {
+                                view.refresh_copy(cx);
                             }
                             cx.notify();
                         });

@@ -293,9 +293,23 @@ type columns at phone width. The software keyboard opens with a note and after a
 field, because gpui-mobile raises none on focus. A fresh install starts empty and queues
 nothing, so pairing later sends the Mac only what the person wrote. A store that cannot open says
 so on that page instead of falling back to memory. **Settings** holds the pairing: the found Mac,
-the Join tap, and the capability health list it answers with once the owner allows the device. It
-has no distribution yet, and touch is verified only through the Join tap
-(`host/UITests/JoinTap.swift`).
+the Join tap, and the capability health list it answers with once the owner allows the device.
+
+**Calendar** is the second tab, and it reads a different kind of copy: a day at a time from the
+Mac's read-only mirror (`core/src/mirror.rs`, `ui/src/calendar.rs`), which is the route R1 copy
+`sjel mirror build` writes and `GET /api/sjel-status/mirror` serves. The manifest travels first, so a
+copy already current costs one small answer; the bytes are checked against the manifest's digest
+before they replace anything, and the new file is renamed into place, so a fetch that dies halfway
+leaves the previous copy whole. The tab prints when the copy was built and takes no writes: a change
+to an entry stays a Mac action until the calendar joins the replica. The copy on disk is read before
+the Mac answers, so the day is there with the Mac out of range, and **Refresh** asks the Mac to
+rebuild its copy and then fetches it. `places_*` and `entities_*` are already in the same copy, so
+People and Places are a page away; the pages that write need the replica's second domain.
+
+Both tabs ship on TestFlight (build 1363, internal group `Team`), the only distribution today. The
+touch check is `host/UITests/JoinTap.swift`. `SJEL_TAB=calendar` and `SJEL_DAY=2026-10-21` open a
+given tab and day at launch, which is how `ios/run-sim` and a screenshot reach a page that is not
+the first one without a hand on the screen.
 
 ### Shipping it to TestFlight
 

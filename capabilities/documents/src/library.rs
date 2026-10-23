@@ -7,6 +7,8 @@ use std::{
 
 use rusqlite::{params, Connection, OptionalExtension, Row};
 use serde::{Deserialize, Serialize};
+
+use crate::review::DuplicateDecision;
 use sha2::{Digest, Sha256};
 
 const PREFIX: &str = "documents";
@@ -77,9 +79,18 @@ pub struct Review {
     pub project: Option<String>,
 }
 
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+struct ClassificationSidecar {
+    version: u32,
+    document_id: String,
+    proposals: Vec<crate::classification::StoredProposal>,
+}
+
 pub struct Library {
     pool: sjel_store::Pool,
     root: PathBuf,
+    classification: crate::classification::ClassificationConfig,
 }
 
 impl Library {
@@ -88,16 +99,38 @@ impl Library {
     /// # Errors
     /// The database cannot be migrated, or the root cannot be created.
     pub fn open(database: &Path, root: PathBuf) -> Fallible<Self> {
+        Self::open_with_config(
+            database,
+            root,
+            crate::classification::ClassificationConfig::default(),
+        )
+    }
+
+    pub(crate) fn open_with_config(
+        database: &Path,
+        root: PathBuf,
+        classification: crate::classification::ClassificationConfig,
+    ) -> Fallible<Self> {
         let blobs = root.join("blobs");
         let records = root.join("records");
+        let classifications = records.join("classification");
         fs::create_dir_all(&blobs)?;
         fs::create_dir_all(&records)?;
+        fs::create_dir_all(&classifications)?;
         fs::set_permissions(&root, fs::Permissions::from_mode(0o700))?;
         fs::set_permissions(&blobs, fs::Permissions::from_mode(0o700))?;
         fs::set_permissions(&records, fs::Permissions::from_mode(0o700))?;
+        fs::set_permissions(&classifications, fs::Permissions::from_mode(0o700))?;
         let pool = sjel_store::open_pool(database, PREFIX, migrate)
             .map_err(|e| LibraryError::Store(e.to_string()))?;
-        Ok(Self { pool, root })
+        let library = Self {
+            pool,
+            root,
+            classification,
+        };
+        library.restore_proposal_sidecars()?;
+        library.backfill_rule_proposals()?;
+        Ok(library)
     }
 
     /// Intake bytes idempotently by digest. Existing originals are never overwritten.
@@ -120,10 +153,6 @@ impl Library {
         }
         let id = record_id(&sha256, &filename);
         let extracted = extract(&media_type, bytes);
-        let (suggested_category, suggestion_reason) = suggest_category(
-            &filename,
-            extracted.as_ref().map(|result| result.text.as_str()),
-        );
         self.write_blob(&sha256, bytes)?;
         let document = Document {
             id: id.clone(),
@@ -138,8 +167,8 @@ impl Library {
             extracted_title: extracted.as_ref().and_then(|e| e.title.clone()),
             extracted_text: extracted.as_ref().map(|e| e.text.clone()),
             extractor: extracted.as_ref().map(|e| e.producer.to_string()),
-            suggested_category,
-            suggestion_reason,
+            suggested_category: None,
+            suggestion_reason: None,
         };
         let conn = self
             .pool
@@ -155,6 +184,9 @@ impl Library {
         let saved = self.get(&id)?.ok_or_else(|| {
             LibraryError::Invalid("intake did not create a document record".into())
         })?;
+        if inserted == 1 {
+            self.generate_rule_proposals(&saved, new_generation_id()?)?;
+        }
         self.write_record(&saved)?;
         if inserted == 1 {
             Ok(Stored::New(saved))
@@ -186,7 +218,294 @@ impl Library {
         } else {
             stmt.query_map([], read_document)?
         };
-        rows.collect::<Result<Vec<_>, _>>().map_err(Into::into)
+        let documents = rows.collect::<Result<Vec<_>, _>>()?;
+        Ok(documents
+            .into_iter()
+            .map(|document| self.with_configured_suggestion(document))
+            .collect())
+    }
+
+    /// Generate deterministic proposals from the library's active configuration.
+    pub fn proposals(
+        &self,
+        document: &Document,
+    ) -> Vec<crate::classification::ClassificationProposal> {
+        self.classification.proposals_for(
+            &document.id,
+            &document.filename,
+            document.extracted_text.as_deref(),
+        )
+    }
+
+    /// Read the immutable proposal records and their append-only review events.
+    ///
+    /// # Errors
+    /// The document id is invalid, storage fails, or a stored record is malformed.
+    pub fn proposal_records(
+        &self,
+        document_id: &str,
+    ) -> Fallible<Vec<crate::classification::StoredProposal>> {
+        check_id(document_id)?;
+        let conn = self
+            .pool
+            .get()
+            .map_err(|error| LibraryError::Store(error.to_string()))?;
+        let rows = {
+            let mut statement = conn.prepare(
+                "SELECT proposal_id, generation_id, generated_at, proposal_json
+                 FROM documents_classification_proposals
+                 WHERE document_id = ?1 ORDER BY generated_at, proposal_id",
+            )?;
+            let rows = statement
+                .query_map([document_id], |row| {
+                    Ok((
+                        row.get::<_, String>(0)?,
+                        row.get::<_, String>(1)?,
+                        row.get::<_, String>(2)?,
+                        row.get::<_, String>(3)?,
+                    ))
+                })?
+                .collect::<Result<Vec<_>, _>>()?;
+            rows
+        };
+        let mut records = Vec::with_capacity(rows.len());
+        for (id, generation_id, generated_at, proposal_json) in rows {
+            let mut proposal: crate::classification::ClassificationProposal =
+                serde_json::from_str(&proposal_json).map_err(|error| {
+                    LibraryError::Invalid(format!("stored classification proposal: {error}"))
+                })?;
+            let review_rows = {
+                let mut statement = conn.prepare(
+                    "SELECT review_id, outcome, reviewed_at
+                     FROM documents_classification_reviews
+                     WHERE proposal_id = ?1 ORDER BY review_id",
+                )?;
+                let rows = statement
+                    .query_map([&id], |row| {
+                        Ok((
+                            row.get::<_, i64>(0)?,
+                            row.get::<_, String>(1)?,
+                            row.get::<_, String>(2)?,
+                        ))
+                    })?
+                    .collect::<Result<Vec<_>, _>>()?;
+                rows
+            };
+            let review_history = review_rows
+                .into_iter()
+                .map(|(id, outcome, reviewed_at)| {
+                    let outcome = match outcome.as_str() {
+                        "accepted" => crate::classification::ProposalReview::Accepted,
+                        "rejected" => crate::classification::ProposalReview::Rejected,
+                        "overridden" => crate::classification::ProposalReview::Overridden,
+                        _ => {
+                            return Err(LibraryError::Invalid(
+                                "stored proposal review is invalid".into(),
+                            ))
+                        }
+                    };
+                    Ok(crate::classification::ProposalReviewEvent {
+                        id,
+                        outcome,
+                        reviewed_at,
+                    })
+                })
+                .collect::<Fallible<Vec<_>>>()?;
+            proposal.review = review_history.last().map(|event| event.outcome);
+            records.push(crate::classification::StoredProposal {
+                id,
+                generation_id,
+                generated_at,
+                proposal,
+                review_history,
+            });
+        }
+        Ok(records)
+    }
+
+    /// Append one review event without changing the proposal or filing state.
+    ///
+    /// # Errors
+    /// The document or proposal does not exist, or persistence fails.
+    pub fn review_proposal(
+        &self,
+        document_id: &str,
+        proposal_id: &str,
+        outcome: crate::classification::ProposalReview,
+    ) -> Fallible<crate::classification::StoredProposal> {
+        check_id(document_id)?;
+        check_id(proposal_id)?;
+        let mut conn = self
+            .pool
+            .get()
+            .map_err(|error| LibraryError::Store(error.to_string()))?;
+        let transaction = sjel_store::write_transaction(&mut conn)?;
+        let proposal_document = transaction
+            .query_row(
+                "SELECT document_id FROM documents_classification_proposals WHERE proposal_id = ?1",
+                [proposal_id],
+                |row| row.get::<_, String>(0),
+            )
+            .optional()?
+            .ok_or_else(|| LibraryError::Invalid("proposal not found".into()))?;
+        if proposal_document != document_id {
+            return Err(LibraryError::Invalid("proposal not found".into()));
+        }
+        transaction.execute(
+            "INSERT INTO documents_classification_reviews (proposal_id, outcome, reviewed_at)
+             VALUES (?1, ?2, ?3)",
+            params![
+                proposal_id,
+                match outcome {
+                    crate::classification::ProposalReview::Accepted => "accepted",
+                    crate::classification::ProposalReview::Rejected => "rejected",
+                    crate::classification::ProposalReview::Overridden => "overridden",
+                },
+                chrono::Utc::now().to_rfc3339(),
+            ],
+        )?;
+        transaction.commit()?;
+        self.write_classification_sidecar(document_id)?;
+        self.proposal_records(document_id)?
+            .into_iter()
+            .find(|record| record.id == proposal_id)
+            .ok_or_else(|| LibraryError::Invalid("reviewed proposal disappeared".into()))
+    }
+
+    fn backfill_rule_proposals(&self) -> Fallible<()> {
+        for document in self.list(None)? {
+            let conn = self
+                .pool
+                .get()
+                .map_err(|error| LibraryError::Store(error.to_string()))?;
+            let has_current_version = conn.query_row(
+                "SELECT EXISTS(SELECT 1 FROM documents_classification_proposals
+                 WHERE document_id = ?1 AND source_kind = 'rules' AND source_version = ?2)",
+                params![document.id, self.classification.version()],
+                |row| row.get::<_, bool>(0),
+            )?;
+            if !has_current_version {
+                self.generate_rule_proposals(&document, new_generation_id()?)?;
+            } else {
+                self.write_classification_sidecar(&document.id)?;
+            }
+        }
+        Ok(())
+    }
+
+    /// Generate a fresh rule-proposal run and append its records.
+    ///
+    /// # Errors
+    /// The document is missing or proposal persistence fails.
+    pub fn regenerate_rule_proposals(
+        &self,
+        document_id: &str,
+    ) -> Fallible<Vec<crate::classification::StoredProposal>> {
+        let document = self
+            .get(document_id)?
+            .ok_or_else(|| LibraryError::Invalid("no document with that id".into()))?;
+        let generation_id = new_generation_id()?;
+        self.generate_rule_proposals(&document, generation_id.clone())?;
+        Ok(self
+            .proposal_records(document_id)?
+            .into_iter()
+            .filter(|record| record.generation_id == generation_id)
+            .collect())
+    }
+
+    fn generate_rule_proposals(&self, document: &Document, generation_id: String) -> Fallible<()> {
+        let generated_at = chrono::Utc::now().to_rfc3339();
+        let proposals = self.proposals(document);
+        let mut conn = self
+            .pool
+            .get()
+            .map_err(|error| LibraryError::Store(error.to_string()))?;
+        let transaction = sjel_store::write_transaction(&mut conn)?;
+        for mut proposal in proposals {
+            proposal.review = None;
+            let proposal_json = serde_json::to_string(&proposal)
+                .map_err(|error| LibraryError::Invalid(error.to_string()))?;
+            let (source_kind, identity, version) = match &proposal.source {
+                crate::classification::ProposalSource::Rules { identity, version } => {
+                    ("rules", identity.as_str(), version.as_str())
+                }
+                crate::classification::ProposalSource::Model {
+                    role,
+                    model,
+                    revision,
+                } => ("model", role.as_str(), revision.as_deref().unwrap_or(model)),
+            };
+            let proposal_id =
+                classification_proposal_id(&document.id, &generation_id, &proposal_json);
+            transaction.execute(
+                "INSERT INTO documents_classification_proposals
+                 (proposal_id, document_id, generation_id, source_kind, source_identity, source_version, proposal_json, generated_at)
+                 VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8)",
+                params![
+                    proposal_id,
+                    document.id,
+                    generation_id,
+                    source_kind,
+                    identity,
+                    version,
+                    proposal_json,
+                    generated_at,
+                ],
+            )?;
+        }
+        transaction.commit()?;
+        self.write_classification_sidecar(&document.id)
+    }
+
+    fn write_classification_sidecar(&self, document_id: &str) -> Fallible<()> {
+        let sidecar = ClassificationSidecar {
+            version: 2,
+            document_id: document_id.to_string(),
+            proposals: self.proposal_records(document_id)?,
+        };
+        let path = self.classification_record_path(document_id);
+        let parent = path.parent().ok_or_else(|| {
+            LibraryError::Invalid("classification sidecar path has no parent".into())
+        })?;
+        let stamp = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .map_err(|error| LibraryError::Invalid(error.to_string()))?
+            .as_nanos();
+        let temp = parent.join(format!(
+            ".{document_id}.{}.{}.tmp",
+            std::process::id(),
+            stamp
+        ));
+        let bytes = serde_json::to_vec(&sidecar)
+            .map_err(|error| LibraryError::Invalid(error.to_string()))?;
+        let mut file = fs::OpenOptions::new()
+            .write(true)
+            .create_new(true)
+            .mode(0o600)
+            .open(&temp)?;
+        file.write_all(&bytes)?;
+        file.sync_all()?;
+        fs::rename(&temp, &path)?;
+        fs::File::open(parent)?.sync_all()?;
+        Ok(())
+    }
+
+    fn with_configured_suggestion(&self, mut document: Document) -> Document {
+        let category = self.proposals(&document).into_iter().find_map(|proposal| {
+            if let crate::classification::ProposalOutcome::Proposed { category, .. } =
+                proposal.outcome
+            {
+                Some(category)
+            } else {
+                None
+            }
+        });
+        document.suggested_category = category;
+        document.suggestion_reason = document
+            .suggested_category
+            .as_ref()
+            .map(|_| "a configured local rule matched; review before filing".into());
+        document
     }
 
     /// Read one metadata record.
@@ -199,10 +518,14 @@ impl Library {
             .pool
             .get()
             .map_err(|e| LibraryError::Store(e.to_string()))?;
-        Ok(conn.query_row(
-            "SELECT id, sha256, filename, media_type, byte_len, imported_at, status, category, project, extracted_title, extracted_text, extractor FROM documents_items WHERE id = ?1",
-            [id], read_document,
-        ).optional()?)
+        Ok(conn
+            .query_row(
+                "SELECT id, sha256, filename, media_type, byte_len, imported_at, status, category, project, extracted_title, extracted_text, extractor FROM documents_items WHERE id = ?1",
+                [id],
+                read_document,
+            )
+            .optional()?
+            .map(|document| self.with_configured_suggestion(document)))
     }
 
     fn by_hash_and_name(&self, sha256: &str, filename: &str) -> Fallible<Option<Document>> {
@@ -211,10 +534,132 @@ impl Library {
             .pool
             .get()
             .map_err(|e| LibraryError::Store(e.to_string()))?;
-        Ok(conn.query_row(
-            "SELECT id, sha256, filename, media_type, byte_len, imported_at, status, category, project, extracted_title, extracted_text, extractor FROM documents_items WHERE sha256 = ?1 AND filename = ?2",
-            params![sha256, filename], read_document,
-        ).optional()?)
+        Ok(conn
+            .query_row(
+                "SELECT id, sha256, filename, media_type, byte_len, imported_at, status, category, project, extracted_title, extracted_text, extractor FROM documents_items WHERE sha256 = ?1 AND filename = ?2",
+                params![sha256, filename],
+                read_document,
+            )
+            .optional()?
+            .map(|document| self.with_configured_suggestion(document)))
+    }
+
+    /// Every record holding these bytes, under any filename.
+    ///
+    /// # Errors
+    /// The digest is malformed or the read fails.
+    pub fn by_hash(&self, sha256: &str) -> Fallible<Vec<Document>> {
+        check_id(sha256)?;
+        let conn = self
+            .pool
+            .get()
+            .map_err(|e| LibraryError::Store(e.to_string()))?;
+        let mut stmt = conn.prepare(
+            "SELECT id, sha256, filename, media_type, byte_len, imported_at, status, category, project, extracted_title, extracted_text, extractor FROM documents_items WHERE sha256 = ?1 ORDER BY imported_at, filename",
+        )?;
+        let rows = stmt.query_map([sha256], read_document)?;
+        Ok(rows.collect::<Result<_, _>>()?)
+    }
+
+    /// Record that folder intake found this document at `path`.
+    ///
+    /// # Errors
+    /// The id is malformed, the path is not UTF-8, or the write fails.
+    pub fn record_source(&self, id: &str, path: &Path) -> Fallible<()> {
+        check_id(id)?;
+        let path = path
+            .to_str()
+            .ok_or_else(|| LibraryError::Invalid("source path is not UTF-8".into()))?;
+        let conn = self
+            .pool
+            .get()
+            .map_err(|e| LibraryError::Store(e.to_string()))?;
+        conn.execute(
+            "INSERT INTO documents_sources (id, path, seen_at) VALUES (?1, ?2, ?3)
+             ON CONFLICT (id, path) DO UPDATE SET seen_at = excluded.seen_at",
+            params![id, path, chrono::Utc::now().to_rfc3339()],
+        )?;
+        Ok(())
+    }
+
+    /// Every recorded source path, as `(id, path)`, ordered by id then path.
+    ///
+    /// # Errors
+    /// The metadata query fails.
+    pub fn sources(&self) -> Fallible<Vec<(String, String)>> {
+        let conn = self
+            .pool
+            .get()
+            .map_err(|e| LibraryError::Store(e.to_string()))?;
+        let mut stmt = conn.prepare("SELECT id, path FROM documents_sources ORDER BY id, path")?;
+        let rows = stmt.query_map([], |row| Ok((row.get(0)?, row.get(1)?)))?;
+        rows.collect::<Result<Vec<_>, _>>().map_err(Into::into)
+    }
+
+    /// Read saved human decisions for duplicate candidates.
+    ///
+    /// # Errors
+    /// The review table cannot be read or a persisted decision is malformed.
+    pub fn duplicate_decisions(&self) -> Fallible<Vec<DuplicateDecision>> {
+        let conn = self
+            .pool
+            .get()
+            .map_err(|e| LibraryError::Store(e.to_string()))?;
+        let mut statement = conn.prepare(
+            "SELECT decision_json FROM documents_duplicate_reviews ORDER BY candidate_key",
+        )?;
+        let rows = statement.query_map([], |row| row.get::<_, String>(0))?;
+        rows.map(|row| {
+            let json = row?;
+            serde_json::from_str(&json).map_err(|error| {
+                LibraryError::Invalid(format!("stored duplicate decision: {error}"))
+            })
+        })
+        .collect()
+    }
+
+    /// Persist an operator decision without deleting or changing document records or originals.
+    ///
+    /// # Errors
+    /// The decision is invalid, a referenced record is missing, or persistence fails.
+    pub fn save_duplicate_decision(&self, decision: &DuplicateDecision) -> Fallible<()> {
+        decision
+            .validate()
+            .map_err(|error| LibraryError::Invalid(error.to_string()))?;
+        let decision_json = serde_json::to_string(decision)
+            .map_err(|error| LibraryError::Invalid(format!("duplicate decision: {error}")))?;
+        let mut conn = self
+            .pool
+            .get()
+            .map_err(|e| LibraryError::Store(e.to_string()))?;
+        let transaction = sjel_store::write_transaction(&mut conn)?;
+        for id in &decision.member_ids {
+            let exists = transaction
+                .query_row("SELECT 1 FROM documents_items WHERE id = ?1", [id], |row| {
+                    row.get::<_, i64>(0)
+                })
+                .optional()?
+                .is_some();
+            if !exists {
+                return Err(LibraryError::Invalid(
+                    "duplicate candidate includes a missing document".into(),
+                ));
+            }
+        }
+        transaction.execute(
+            "INSERT INTO documents_duplicate_reviews (candidate_key, decision_json, updated_at)
+             VALUES (?1, ?2, ?3)
+             ON CONFLICT (candidate_key) DO UPDATE SET
+                 decision_json = excluded.decision_json,
+                 updated_at = excluded.updated_at",
+            params![
+                decision.candidate_key,
+                decision_json,
+                chrono::Utc::now().to_rfc3339()
+            ],
+        )?;
+        transaction.commit()?;
+        Ok(())
     }
 
     /// Read and verify the original bytes for one document id.
@@ -344,7 +789,149 @@ impl Library {
                 restored += 1;
             }
         }
+        self.restore_proposal_sidecars()?;
         Ok((restored, unchanged))
+    }
+
+    fn restore_proposal_sidecars(&self) -> Fallible<()> {
+        let directory = self.root.join("records").join("classification");
+        for entry in fs::read_dir(&directory)? {
+            let entry = entry?;
+            if entry.file_type()?.is_symlink() || !entry.file_type()?.is_file() {
+                continue;
+            }
+            let path = entry.path();
+            if path.extension().and_then(|extension| extension.to_str()) != Some("json") {
+                continue;
+            }
+            let sidecar: ClassificationSidecar = serde_json::from_slice(&fs::read(&path)?)
+                .map_err(|error| {
+                    LibraryError::Invalid(format!("invalid classification sidecar: {error}"))
+                })?;
+            check_id(&sidecar.document_id)?;
+            if sidecar.version != 2
+                || path.file_stem().and_then(|name| name.to_str())
+                    != Some(sidecar.document_id.as_str())
+            {
+                return Err(LibraryError::Invalid(
+                    "classification sidecar filename or version is invalid".into(),
+                ));
+            }
+            if self.get(&sidecar.document_id)?.is_none() {
+                continue;
+            }
+            let mut conn = self
+                .pool
+                .get()
+                .map_err(|error| LibraryError::Store(error.to_string()))?;
+            let transaction = sjel_store::write_transaction(&mut conn)?;
+            for record in sidecar.proposals {
+                check_id(&record.id)?;
+                if record.proposal.document_id != sidecar.document_id {
+                    return Err(LibraryError::Invalid(
+                        "classification proposal belongs to another document".into(),
+                    ));
+                }
+                if record
+                    .review_history
+                    .windows(2)
+                    .any(|events| events[0].id >= events[1].id)
+                    || record.review_history.iter().any(|event| event.id <= 0)
+                    || record.proposal.review
+                        != record.review_history.last().map(|event| event.outcome)
+                {
+                    return Err(LibraryError::Invalid(
+                        "classification proposal review history is invalid".into(),
+                    ));
+                }
+                let mut proposal = record.proposal;
+                proposal.review = None;
+                let proposal_json = serde_json::to_string(&proposal)
+                    .map_err(|error| LibraryError::Invalid(error.to_string()))?;
+                if classification_proposal_id(
+                    &sidecar.document_id,
+                    &record.generation_id,
+                    &proposal_json,
+                ) != record.id
+                {
+                    return Err(LibraryError::Invalid(
+                        "classification proposal id does not match its contents".into(),
+                    ));
+                }
+                let (source_kind, identity, version) = match &proposal.source {
+                    crate::classification::ProposalSource::Rules { identity, version } => {
+                        ("rules", identity.as_str(), version.as_str())
+                    }
+                    crate::classification::ProposalSource::Model {
+                        role,
+                        model,
+                        revision,
+                    } => ("model", role.as_str(), revision.as_deref().unwrap_or(model)),
+                };
+                transaction.execute(
+                    "INSERT OR IGNORE INTO documents_classification_proposals
+                     (proposal_id, document_id, generation_id, source_kind, source_identity, source_version, proposal_json, generated_at)
+                     VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8)",
+                    params![record.id, sidecar.document_id, record.generation_id, source_kind, identity, version, proposal_json, record.generated_at],
+                )?;
+                let saved_proposal = transaction.query_row(
+                    "SELECT document_id, generation_id, proposal_json, generated_at
+                     FROM documents_classification_proposals WHERE proposal_id = ?1",
+                    [&record.id],
+                    |row| {
+                        Ok((
+                            row.get::<_, String>(0)?,
+                            row.get::<_, String>(1)?,
+                            row.get::<_, String>(2)?,
+                            row.get::<_, String>(3)?,
+                        ))
+                    },
+                )?;
+                if saved_proposal
+                    != (
+                        sidecar.document_id.clone(),
+                        record.generation_id.clone(),
+                        proposal_json,
+                        record.generated_at.clone(),
+                    )
+                {
+                    return Err(LibraryError::Invalid(
+                        "classification proposal conflicts with stored history".into(),
+                    ));
+                }
+                for event in record.review_history {
+                    let outcome = match event.outcome {
+                        crate::classification::ProposalReview::Accepted => "accepted",
+                        crate::classification::ProposalReview::Rejected => "rejected",
+                        crate::classification::ProposalReview::Overridden => "overridden",
+                    };
+                    transaction.execute(
+                        "INSERT OR IGNORE INTO documents_classification_reviews
+                         (review_id, proposal_id, outcome, reviewed_at) VALUES (?1, ?2, ?3, ?4)",
+                        params![event.id, record.id, outcome, event.reviewed_at],
+                    )?;
+                    let saved_event = transaction.query_row(
+                        "SELECT proposal_id, outcome, reviewed_at
+                         FROM documents_classification_reviews WHERE review_id = ?1",
+                        [event.id],
+                        |row| {
+                            Ok((
+                                row.get::<_, String>(0)?,
+                                row.get::<_, String>(1)?,
+                                row.get::<_, String>(2)?,
+                            ))
+                        },
+                    )?;
+                    if saved_event != (record.id.clone(), outcome.to_string(), event.reviewed_at) {
+                        return Err(LibraryError::Invalid(
+                            "classification review conflicts with stored history".into(),
+                        ));
+                    }
+                }
+            }
+            transaction.commit()?;
+        }
+        Ok(())
     }
 
     /// Check every recorded original and its recovery sidecar.
@@ -365,6 +952,17 @@ impl Library {
                 Ok(bytes) if parse_sidecar(&bytes).is_ok_and(|copy| same_record(&copy, &doc)) => {}
                 _ => issues.push(format!("{}:metadata", doc.id)),
             }
+            let expected = ClassificationSidecar {
+                version: 2,
+                document_id: doc.id.clone(),
+                proposals: self.proposal_records(&doc.id)?,
+            };
+            match fs::read(self.classification_record_path(&doc.id)) {
+                Ok(bytes)
+                    if serde_json::from_slice::<ClassificationSidecar>(&bytes)
+                        .is_ok_and(|sidecar| sidecar == expected) => {}
+                _ => issues.push(format!("{}:classification", doc.id)),
+            }
         }
         for entry in fs::read_dir(self.root.join("records"))? {
             let entry = entry?;
@@ -380,11 +978,35 @@ impl Library {
                 }
             }
         }
+        for entry in fs::read_dir(self.root.join("records").join("classification"))? {
+            let entry = entry?;
+            if entry.file_type()?.is_symlink() || !entry.file_type()?.is_file() {
+                continue;
+            }
+            if entry.path().extension().and_then(|ext| ext.to_str()) == Some("json") {
+                let id = entry
+                    .path()
+                    .file_stem()
+                    .and_then(|name| name.to_str())
+                    .unwrap_or_default()
+                    .to_string();
+                if !known.contains(&id) {
+                    issues.push(format!("{id}:orphan-classification-sidecar"));
+                }
+            }
+        }
         Ok(issues)
     }
 
     fn record_path(&self, id: &str) -> PathBuf {
         self.root.join("records").join(format!("{id}.json"))
+    }
+
+    fn classification_record_path(&self, id: &str) -> PathBuf {
+        self.root
+            .join("records")
+            .join("classification")
+            .join(format!("{id}.json"))
     }
 
     fn write_record(&self, document: &Document) -> Fallible<()> {
@@ -491,7 +1113,83 @@ fn migrate(conn: &Connection) -> Result<(), Box<dyn std::error::Error>> {
         conn.execute_batch("ALTER TABLE documents_items ADD COLUMN sha256 TEXT NOT NULL DEFAULT ''; UPDATE documents_items SET sha256 = id WHERE sha256 = ''; ")?;
     }
     conn.execute_batch("CREATE UNIQUE INDEX IF NOT EXISTS documents_items_digest_filename ON documents_items (sha256, filename);")?;
+    // Where folder intake found each record. Not in the sidecars: a rescan of the
+    // same folders derives it again.
+    conn.execute_batch(
+        "CREATE TABLE IF NOT EXISTS documents_sources (
+            id TEXT NOT NULL REFERENCES documents_items(id),
+            path TEXT NOT NULL,
+            seen_at TEXT NOT NULL,
+            PRIMARY KEY (id, path)
+        );
+        CREATE TABLE IF NOT EXISTS documents_duplicate_reviews (
+            candidate_key TEXT PRIMARY KEY,
+            decision_json TEXT NOT NULL,
+            updated_at TEXT NOT NULL
+        );
+        CREATE TABLE IF NOT EXISTS documents_classification_proposals (
+            proposal_id TEXT PRIMARY KEY CHECK (length(proposal_id) = 64),
+            document_id TEXT NOT NULL REFERENCES documents_items(id) ON DELETE CASCADE,
+            generation_id TEXT NOT NULL,
+            source_kind TEXT NOT NULL CHECK (source_kind IN ('rules', 'model')),
+            source_identity TEXT NOT NULL,
+            source_version TEXT NOT NULL,
+            proposal_json TEXT NOT NULL,
+            generated_at TEXT NOT NULL
+        );
+        CREATE INDEX IF NOT EXISTS documents_classification_proposals_document
+            ON documents_classification_proposals (document_id, generated_at, proposal_id);
+        CREATE TABLE IF NOT EXISTS documents_classification_reviews (
+            review_id INTEGER PRIMARY KEY AUTOINCREMENT,
+            proposal_id TEXT NOT NULL REFERENCES documents_classification_proposals(proposal_id) ON DELETE CASCADE,
+            outcome TEXT NOT NULL CHECK (outcome IN ('accepted', 'rejected', 'overridden')),
+            reviewed_at TEXT NOT NULL
+        );",
+    )?;
+    let proposal_columns = conn
+        .prepare("PRAGMA table_info(documents_classification_proposals)")?
+        .query_map([], |row| row.get::<_, String>(1))?
+        .collect::<Result<Vec<_>, _>>()?;
+    if !proposal_columns
+        .iter()
+        .any(|column| column == "generation_id")
+    {
+        conn.execute_batch(
+            "ALTER TABLE documents_classification_proposals
+             ADD COLUMN generation_id TEXT NOT NULL DEFAULT 'legacy';
+             UPDATE documents_classification_proposals
+             SET generation_id = proposal_id WHERE generation_id = 'legacy';",
+        )?;
+    }
     Ok(())
+}
+
+fn new_generation_id() -> Fallible<String> {
+    static NEXT: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
+    let timestamp = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map_err(|error| LibraryError::Invalid(error.to_string()))?
+        .as_nanos();
+    let sequence = NEXT.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+    Ok(format!(
+        "{timestamp:032x}-{}-{sequence:016x}",
+        std::process::id()
+    ))
+}
+
+fn classification_proposal_id(
+    document_id: &str,
+    generation_id: &str,
+    proposal_json: &str,
+) -> String {
+    let mut hash = Sha256::new();
+    hash.update(b"sjel-document-classification-proposal\0");
+    hash.update(document_id.as_bytes());
+    hash.update(b"\0");
+    hash.update(generation_id.as_bytes());
+    hash.update(b"\0");
+    hash.update(proposal_json.as_bytes());
+    hex(&hash.finalize())
 }
 
 fn record_id(sha256: &str, filename: &str) -> String {
@@ -529,8 +1227,6 @@ fn same_record(left: &Document, right: &Document) -> bool {
 fn read_document(row: &Row<'_>) -> rusqlite::Result<Document> {
     let filename: String = row.get(2)?;
     let extracted_text: Option<String> = row.get(10)?;
-    let (suggested_category, suggestion_reason) =
-        suggest_category(&filename, extracted_text.as_deref());
     Ok(Document {
         id: row.get(0)?,
         sha256: row.get(1)?,
@@ -544,17 +1240,26 @@ fn read_document(row: &Row<'_>) -> rusqlite::Result<Document> {
         extracted_title: row.get(9)?,
         extracted_text,
         extractor: row.get(11)?,
-        suggested_category,
-        suggestion_reason,
+        suggested_category: None,
+        suggestion_reason: None,
     })
 }
 
 fn extract(media_type: &str, bytes: &[u8]) -> Option<sjel_extraction::Extraction> {
     use sjel_extraction::{Document as Input, InputClass};
     match media_type {
-        "application/pdf" => sjel_extraction::for_class(InputClass::Pdf)?
-            .extract(&Input::pdf(bytes))
-            .ok(),
+        "application/pdf" => {
+            let layer = sjel_extraction::for_class(InputClass::Pdf)
+                .and_then(|rung1| rung1.extract(&Input::pdf(bytes)).ok());
+            if layer.as_ref().is_some_and(|e| has_text_layer(&e.text)) {
+                return layer;
+            }
+            // No text layer: a scan. Rung 2 reads every page; if it is absent
+            // or fails, keep whatever rung 1 returned.
+            sjel_extraction::ladder::read_scanned(&Input::pdf(bytes), None)
+                .ok()
+                .or(layer)
+        }
         "text/plain" => sjel_extraction::for_class(InputClass::PlainText)?
             .extract(&Input::text(bytes))
             .ok(),
@@ -562,6 +1267,16 @@ fn extract(media_type: &str, bytes: &[u8]) -> Option<sjel_extraction::Extraction
     }
 }
 
+/// Fewer than 64 non-space characters means the PDF is a scan. A scanner's
+/// stamp or page number survives as a few characters; a real text layer does not
+/// fit under this. My estimate, not measured.
+// ponytail: whole-document threshold; a mixed PDF with one text page and many
+// scanned pages keeps only the text page. Decide per page when that shows up.
+fn has_text_layer(text: &str) -> bool {
+    text.chars().filter(|c| !c.is_whitespace()).count() >= 64
+}
+
+#[cfg(test)]
 fn suggest_category(filename: &str, text: Option<&str>) -> (Option<String>, Option<String>) {
     let evidence = format!("{filename} {}", text.unwrap_or_default()).to_lowercase();
     let category = if ["invoice", "rechnung", "receipt", "rechnungs"]
@@ -676,7 +1391,7 @@ fn check_id(id: &str) -> Fallible<()> {
     }
 }
 
-fn hex(bytes: &[u8]) -> String {
+pub(crate) fn hex(bytes: &[u8]) -> String {
     const HEX: &[u8; 16] = b"0123456789abcdef";
     let mut out = String::with_capacity(bytes.len() * 2);
     for byte in bytes {
@@ -692,6 +1407,12 @@ mod tests {
     use std::sync::atomic::{AtomicU64, Ordering};
 
     fn scratch() -> (Library, PathBuf) {
+        scratch_with_config(crate::classification::ClassificationConfig::default())
+    }
+
+    fn scratch_with_config(
+        classification: crate::classification::ClassificationConfig,
+    ) -> (Library, PathBuf) {
         static NEXT: AtomicU64 = AtomicU64::new(0);
         let path = std::env::temp_dir().join(format!(
             "sjel-documents-{}-{}",
@@ -700,7 +1421,8 @@ mod tests {
         ));
         fs::create_dir_all(&path).unwrap();
         (
-            Library::open(&path.join("test.db"), path.join("library")).unwrap(),
+            Library::open_with_config(&path.join("test.db"), path.join("library"), classification)
+                .unwrap(),
             path,
         )
     }
@@ -719,6 +1441,110 @@ mod tests {
             Stored::Unchanged(_)
         ));
         assert!(library.verify().unwrap().is_empty());
+        fs::remove_dir_all(root).unwrap();
+    }
+
+    #[test]
+    fn private_rules_replace_suggestions_without_restricting_filing() {
+        let classification = crate::classification::ClassificationConfig::from_json(
+            r#"{
+                "version": "travel-v1",
+                "categories": ["Travel"],
+                "rules": [{"id": "travel-keywords", "category": "Travel", "keywords": ["ticket"]}]
+            }"#,
+        )
+        .unwrap();
+        let (library, root) = scratch_with_config(classification);
+        let Stored::New(document) = library
+            .intake("invoice.txt", b"Synthetic ticket for a train")
+            .unwrap()
+        else {
+            panic!("new document expected")
+        };
+
+        assert_eq!(document.suggested_category.as_deref(), Some("Travel"));
+        assert_eq!(document.status, "inbox");
+        assert_eq!(
+            library.list(None).unwrap()[0].suggested_category.as_deref(),
+            Some("Travel")
+        );
+        let proposals = library.proposals(&document);
+        assert!(matches!(
+            &proposals[0].outcome,
+            crate::classification::ProposalOutcome::Proposed { category, evidence }
+                if category == "Travel"
+                    && evidence.source == crate::classification::EvidenceSource::ExtractedText
+                    && evidence.quote == "ticket"
+        ));
+
+        let filed = library
+            .review(
+                &document.id,
+                &Review {
+                    category: "Legacy filing label".into(),
+                    project: None,
+                },
+            )
+            .unwrap();
+        assert_eq!(filed.category.as_deref(), Some("Legacy filing label"));
+        assert_eq!(filed.suggested_category.as_deref(), Some("Travel"));
+        fs::remove_dir_all(root).unwrap();
+    }
+
+    #[test]
+    fn proposal_versions_and_review_events_are_append_only_across_reopen() {
+        let (library, root) = scratch();
+        let Stored::New(document) = library.intake("invoice.txt", b"invoice 42").unwrap() else {
+            panic!("new document expected")
+        };
+        let original = library.proposal_records(&document.id).unwrap().remove(0);
+        library
+            .review_proposal(
+                &document.id,
+                &original.id,
+                crate::classification::ProposalReview::Accepted,
+            )
+            .unwrap();
+        drop(library);
+
+        let replacement = crate::classification::ClassificationConfig::from_json(
+            r#"{"version":"private-v2","categories":["Tax"],"rules":[{"id":"tax-invoice","category":"Tax","keywords":["invoice"]}]}"#,
+        )
+        .unwrap();
+        let library = Library::open_with_config(
+            &root.join("test.db"),
+            root.join("library"),
+            replacement.clone(),
+        )
+        .unwrap();
+        let records = library.proposal_records(&document.id).unwrap();
+        assert_eq!(records.len(), 2);
+        assert_eq!(records[0].review_history.len(), 1);
+        assert_eq!(
+            records[0].proposal.review,
+            Some(crate::classification::ProposalReview::Accepted)
+        );
+        assert_eq!(records[1].review_history.len(), 0);
+        drop(library);
+
+        let library =
+            Library::open_with_config(&root.join("test.db"), root.join("library"), replacement)
+                .unwrap();
+        assert_eq!(library.proposal_records(&document.id).unwrap().len(), 2);
+        let regenerated_first = library
+            .regenerate_rule_proposals(&document.id)
+            .unwrap()
+            .remove(0);
+        let regenerated_second = library
+            .regenerate_rule_proposals(&document.id)
+            .unwrap()
+            .remove(0);
+        assert_ne!(regenerated_first.id, regenerated_second.id);
+        assert_ne!(
+            regenerated_first.generation_id,
+            regenerated_second.generation_id
+        );
+        assert_eq!(library.proposal_records(&document.id).unwrap().len(), 4);
         fs::remove_dir_all(root).unwrap();
     }
 
@@ -805,6 +1631,14 @@ mod tests {
         else {
             panic!("new document expected")
         };
+        let proposal = library.proposal_records(&document.id).unwrap().remove(0);
+        library
+            .review_proposal(
+                &document.id,
+                &proposal.id,
+                crate::classification::ProposalReview::Accepted,
+            )
+            .unwrap();
         assert!(library.verify().unwrap().is_empty());
         let conn = library.pool.get().unwrap();
         conn.execute("DELETE FROM documents_items WHERE id = ?1", [&document.id])
@@ -816,6 +1650,13 @@ mod tests {
         );
         let issues = library.verify().unwrap();
         assert!(issues.is_empty(), "{issues:?}");
+        let restored_proposals = library.proposal_records(&document.id).unwrap();
+        assert_eq!(restored_proposals.len(), 1);
+        assert_eq!(restored_proposals[0].review_history.len(), 1);
+        assert_eq!(
+            restored_proposals[0].proposal.review,
+            Some(crate::classification::ProposalReview::Accepted)
+        );
         fs::remove_dir_all(root).unwrap();
     }
 
@@ -825,5 +1666,112 @@ mod tests {
         assert!(library.intake("../private.pdf", b"x").is_err());
         assert!(library.get("../bad").is_err());
         fs::remove_dir_all(root).unwrap();
+    }
+
+    #[derive(serde::Deserialize)]
+    struct SyntheticSample {
+        id: String,
+        language: String,
+        expected: String,
+        text: String,
+    }
+
+    fn rule_metrics(corpus: &str) -> serde_json::Value {
+        let samples: Vec<SyntheticSample> = serde_json::from_str(corpus).unwrap();
+        let mut proposed = 0usize;
+        let mut correct = 0usize;
+        let mut wrong = 0usize;
+        let mut by_category = std::collections::BTreeMap::<String, [usize; 3]>::new();
+        let mut by_language = std::collections::BTreeMap::<String, [usize; 3]>::new();
+        let mut predictions = Vec::with_capacity(samples.len());
+        for sample in &samples {
+            let (category, _) = suggest_category("synthetic.txt", Some(&sample.text));
+            let is_correct = category.as_deref() == Some(sample.expected.as_str());
+            let category_metrics = by_category.entry(sample.expected.clone()).or_default();
+            let language_metrics = by_language.entry(sample.language.clone()).or_default();
+            if category.is_some() {
+                proposed += 1;
+                category_metrics[0] += 1;
+                language_metrics[0] += 1;
+                if is_correct {
+                    correct += 1;
+                    category_metrics[1] += 1;
+                    language_metrics[1] += 1;
+                } else {
+                    wrong += 1;
+                    category_metrics[2] += 1;
+                    language_metrics[2] += 1;
+                }
+            }
+            predictions.push(serde_json::json!({
+                "id": sample.id,
+                "language": sample.language,
+                "expected": sample.expected,
+                "predicted": category,
+                "correct": is_correct,
+            }));
+        }
+        let summarize = |metrics: std::collections::BTreeMap<String, [usize; 3]>| {
+            metrics
+                .into_iter()
+                .map(|(key, counts)| {
+                    (
+                        key,
+                        serde_json::json!({
+                            "proposed": counts[0],
+                            "correct": counts[1],
+                            "wrong": counts[2],
+                        }),
+                    )
+                })
+                .collect::<serde_json::Map<_, _>>()
+        };
+        serde_json::json!({
+            "samples": samples.len(),
+            "proposed": proposed,
+            "correct": correct,
+            "wrong": wrong,
+            "unresolved": samples.len() - proposed,
+            "precision": if proposed == 0 { 0.0 } else { correct as f64 / proposed as f64 },
+            "by_expected_category": summarize(by_category),
+            "by_language": summarize(by_language),
+            "predictions": predictions,
+        })
+    }
+
+    #[test]
+    fn current_keyword_rules_have_frozen_synthetic_baselines() {
+        let development = rule_metrics(include_str!("../eval/clm-corpus-v2.json"));
+        let holdout = rule_metrics(include_str!("../eval/clm-corpus-holdout-v1.json"));
+        let hybrid = rule_metrics(include_str!("../eval/clm-corpus-hybrid-v1.json"));
+        let combined_holdout =
+            rule_metrics(include_str!("../eval/clm-corpus-combined-holdout-v1.json"));
+        println!("RULE_BASELINE_V2={development}");
+        println!("RULE_BASELINE_HOLDOUT_V1={holdout}");
+        println!("RULE_BASELINE_HYBRID_V1={hybrid}");
+        println!("RULE_BASELINE_COMBINED_HOLDOUT_V1={combined_holdout}");
+        assert_eq!(development["samples"], 48);
+        assert_eq!(development["proposed"], 16);
+        assert_eq!(development["correct"], 14);
+        assert_eq!(development["wrong"], 2);
+        assert_eq!(development["by_expected_category"]["Events"]["correct"], 2);
+        assert_eq!(holdout["samples"], 48);
+        assert_eq!(holdout["proposed"], 10);
+        assert_eq!(holdout["correct"], 9);
+        assert_eq!(holdout["wrong"], 1);
+        assert_eq!(holdout["by_expected_category"]["Events"]["correct"], 0);
+        assert_eq!(hybrid["samples"], 48);
+        assert_eq!(hybrid["proposed"], 11);
+        assert_eq!(hybrid["correct"], 9);
+        assert_eq!(hybrid["wrong"], 2);
+        assert_eq!(hybrid["by_expected_category"]["Events"]["correct"], 0);
+        assert_eq!(combined_holdout["samples"], 48);
+        assert_eq!(combined_holdout["proposed"], 13);
+        assert_eq!(combined_holdout["correct"], 11);
+        assert_eq!(combined_holdout["wrong"], 2);
+        assert_eq!(
+            combined_holdout["by_expected_category"]["Events"]["correct"],
+            0
+        );
     }
 }

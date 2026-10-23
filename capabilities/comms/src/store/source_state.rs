@@ -88,10 +88,18 @@ impl Store {
     /// for passes: a relevance pass and a local-model drain both write into this table and
     /// neither one takes delivery of anything, so either could answer "yes, data is still
     /// reaching this capability" for a machine whose collectors have all stopped.
-    pub fn newest_source_success(&self) -> Result<Option<i64>, Box<dyn std::error::Error>> {
+    ///
+    /// `except` names more sources to leave out. The freshness handler passes the inbox sweep,
+    /// which it judges as a producer of its own: mail and feed do not stand in for each other.
+    pub fn newest_source_success(
+        &self,
+        except: &[&str],
+    ) -> Result<Option<i64>, Box<dyn std::error::Error>> {
         let conn = self.conn()?;
+        // Literals from this crate only (`PSEUDO_SOURCES`, `INBOX_SWEEP_SOURCE`), never input.
         let excluded = PSEUDO_SOURCES
             .iter()
+            .chain(except)
             .map(|name| format!("'{name}'"))
             .collect::<Vec<_>>()
             .join(",");
@@ -264,20 +272,32 @@ mod db_tests {
     /// doctor compares its answer against comms' `freshness_stale_hours`. A pass
     /// that takes delivery of nothing must not be able to answer it — and neither
     /// must the local-model drain, which writes `last_success_at` today.
+    /// The freshness handler judges the inbox sweep apart from the feed, so a mail success must
+    /// not answer for a feed that stopped.
+    #[test]
+    fn an_excepted_source_does_not_answer_for_the_rest() {
+        let store = open_test_store("freshness_except");
+        store
+            .record_sweep_success("gmail-inbox", 25, 1)
+            .expect("the sweep succeeds");
+        assert!(store.newest_source_success(&[]).unwrap().is_some());
+        assert_eq!(store.newest_source_success(&["gmail-inbox"]).unwrap(), None);
+    }
+
     #[test]
     fn a_relevance_pass_does_not_move_freshness() {
         let store = open_test_store("freshness_pseudo_sources");
         store
             .record_sweep_success("github-trending-daily", 10, 3)
             .expect("a collector succeeds");
-        let collected = store.newest_source_success().expect("a freshness answer");
+        let collected = store.newest_source_success(&[]).expect("a freshness answer");
         assert!(collected.is_some(), "a real collector answers the contract");
 
         store
             .record_relevance_pass("semantic|relevance-revision|:0", 372, 12, None)
             .expect("the receipt writes");
         assert_eq!(
-            store.newest_source_success().expect("a freshness answer"),
+            store.newest_source_success(&[]).expect("a freshness answer"),
             collected,
             "a relevance pass takes delivery of nothing and must not answer for arrivals"
         );
@@ -286,7 +306,7 @@ mod db_tests {
             .record_sweep_success(crate::capacity::LOCAL_INFERENCE_SOURCE, 0, 0)
             .expect("the local model drain succeeds");
         assert_eq!(
-            store.newest_source_success().expect("a freshness answer"),
+            store.newest_source_success(&[]).expect("a freshness answer"),
             collected,
             "a machine talking to itself cannot satisfy its own health contract"
         );

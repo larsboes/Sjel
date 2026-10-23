@@ -279,11 +279,28 @@ pub(super) async fn source_scan_handler(Json(body): Json<SourceScanBody>) -> Htt
 /// This exists because nine days of an empty Inbox passed with every check on the machine green
 /// (PRD D13). `tools/doctor` verifies declarations, health and persistence; none of those is
 /// falsified by a collector nobody is running.
+///
+/// Two producers, and the answer is the older one. Feed sources stand in for each other (the
+/// newest of them counts); the inbox sweep does not stand in for them, nor they for it. On
+/// 2026-10-23 the sweep had failed on `auth` for 2.5 days while feed arrivals kept this answer
+/// at 3.7h, so doctor stayed green over a blind inbox.
 pub(super) async fn freshness_handler() -> HttpResponse {
     let result = tokio::task::spawn_blocking(move || -> Result<Option<i64>, String> {
         let cfg = Config::load();
         let store = Store::open(&cfg.database_path).map_err(|error| error.to_string())?;
-        store.newest_source_success().map_err(|e| e.to_string())
+        let feed = store
+            .newest_source_success(&[INBOX_SWEEP_SOURCE])
+            .map_err(|e| e.to_string())?;
+        if cfg.inbox_sweep_minutes == 0 {
+            return Ok(feed);
+        }
+        let mail = store
+            .get_source_state(INBOX_SWEEP_SOURCE)
+            .map_err(|e| e.to_string())?
+            .and_then(|s| s.last_success_at)
+            .and_then(|at| at.parse::<i64>().ok());
+        // Either producer never delivering reads as "never", not as the other one's age.
+        Ok(feed.zip(mail).map(|(f, m)| f.min(m)))
     })
     .await;
     match result {

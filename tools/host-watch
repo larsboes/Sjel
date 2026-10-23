@@ -1,9 +1,10 @@
 #!/bin/bash
-# tools/host-watch — notice a runaway process, a filling disk or an unexpected wildcard listener,
+# tools/host-watch — notice a runaway process, a filling disk, an unexpected wildcard listener or a
+# declared credential that no longer works (a real Google token refresh per grant),
 # once per run, and write what it found into the shared store.
 #
 # Launcher only. The logic moved to tools/sjel-cli/src/host_watch/ on 2026-10-04 (the pure half in
-# pure.rs, the store and the three probes in mod.rs); tools/host-watch.ts and its test are deleted.
+# pure.rs, the store and the probes in mod.rs); tools/host-watch.ts and its test are deleted.
 # `tools/host-watch -h` prints the usage.
 #
 # This is the human and test interface. The hourly SCHEDULED job does not run this file: its

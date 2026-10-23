@@ -472,9 +472,35 @@ pub fn decide_resolutions(present: &[Finding], existing: &[FindingRow]) -> Vec<S
         .collect()
 }
 
+/// A declared credential whose token refresh failed this run. Keyed by the credential ID, so it
+/// stays one open row while it is broken and resolves on the first run where it works.
+pub fn credential_finding(capability: &str, label: &str, id: &str, error: &str) -> Finding {
+    Finding {
+        key: format!("credential:{id}"),
+        title: format!("{label} does not work"),
+        note: format!(
+            "{error}. {capability} cannot reach Google until it is reconnected: \
+             Sjel Desktop › Settings › Accounts."
+        ),
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn a_broken_credential_is_one_finding_per_id_with_the_fix_in_it() {
+        let f = credential_finding(
+            "comms",
+            "Google: Gmail and Calendar",
+            "google-comms",
+            "token refresh failed with HTTP 400",
+        );
+        assert_eq!(f.key, "credential:google-comms");
+        assert!(f.title.contains("Gmail and Calendar"));
+        assert!(f.note.contains("HTTP 400") && f.note.contains("Settings › Accounts"));
+    }
 
     /// The real `ps -Aceo pid,time,etime,comm` block from 2026-08-15 17:52, trimmed to the rows
     /// that matter. ApplicationsStorageExtension is the stuck System Settings Storage pane; it

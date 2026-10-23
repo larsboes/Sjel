@@ -38,7 +38,7 @@
 //!
 //! ## Differences from the TypeScript, all deliberate
 //!
-//! The three probes run concurrently here as they did under `Promise.all`. The `--json` payload
+//! The four probes run concurrently here as they did under `Promise.all`. The `--json` payload
 //! carries the same fields, in the struct's order rather than the object literal's. The host-net
 //! binary is resolved through `CARGO_TARGET_DIR` when it is set, where the TypeScript always
 //! looked in `<root>/target/release` — a custom target dir made that check silently report "not
@@ -48,7 +48,8 @@ mod pure;
 
 use crate::paths::Paths;
 use pure::{
-    classify_processes, decide_emission, decide_resolutions, net_finding, parse_ps_output,
+    classify_processes, credential_finding, decide_emission, decide_resolutions, net_finding,
+    parse_ps_output,
     storage_finding, Emission, Finding, FindingRow, NetReport, Proc, StorageReport, WatchPolicy,
 };
 use std::path::{Path, PathBuf};
@@ -137,13 +138,14 @@ pub fn run(argv: &[String]) -> ExitCode {
         Err(e) => return fail(&format!("{}: {e}", policy_path.display()), 1),
     };
 
-    // All three at once, as `Promise.all` did: the wall cost is storage's `du`/`df` and it is
+    // All at once, as `Promise.all` did: the wall cost is storage's `du`/`df` and it is
     // almost entirely I/O wait, so running them in series would add the two cheap ones to it.
-    let (procs, storage, net) = std::thread::scope(|scope| {
+    let (procs, storage, net, credentials) = std::thread::scope(|scope| {
         let ps = scope.spawn(run_ps);
         let st = scope.spawn(|| run_storage(&root));
         let hn = scope.spawn(|| run_host_net(&root));
-        (ps.join(), st.join(), hn.join())
+        let cr = scope.spawn(|| credential_findings(&root));
+        (ps.join(), st.join(), hn.join(), cr.join())
     });
     let procs: Vec<Proc> = match procs {
         Ok(Ok(procs)) => procs,
@@ -156,6 +158,7 @@ pub fn run(argv: &[String]) -> ExitCode {
     let mut findings: Vec<Finding> = proc_findings.iter().map(|f| f.finding()).collect();
     findings.extend(storage.as_ref().and_then(storage_finding));
     findings.extend(net_finding(net.as_ref()));
+    findings.extend(credentials.unwrap_or_default());
 
     if as_json {
         let mut values: Vec<serde_json::Value> = proc_findings
@@ -215,7 +218,30 @@ pub fn run(argv: &[String]) -> ExitCode {
     ExitCode::SUCCESS
 }
 
-// ── the three probes ──────────────────────────────────────────────────────────
+// ── the probes ──────────────────────────────────────────────────────────
+
+/// One real token refresh per declared Google grant (`[[credentials]]` in a capability's
+/// service.toml). A refresh is the only proof a grant works: the keychain item can be present
+/// while Google has revoked it, which is how the inbox went blind for 2.5 days on 2026-10-20.
+/// A manifest that does not parse is the schema gate's finding, not this one.
+fn credential_findings(root: &Path) -> Vec<Finding> {
+    use sjel_credentials::{declaration, google};
+    let mut found = Vec::new();
+    for (capability, declared) in declaration::declared_in(root) {
+        let Ok(declared) = declared else { continue };
+        for d in declared.into_iter().filter(|d| d.kind == google::KIND) {
+            let env = d
+                .env_fallback
+                .as_deref()
+                .and_then(sjel_config::overlay_config)
+                .unwrap_or_default();
+            if let Err(error) = google::access_token(&d.id, &env) {
+                found.push(credential_finding(&capability, &d.label, &d.id, &error));
+            }
+        }
+    }
+    found
+}
 
 /// `ps -Aceo pid,time,etime,comm`.
 fn run_ps() -> Result<Vec<Proc>, String> {

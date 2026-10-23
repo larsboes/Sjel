@@ -182,6 +182,18 @@ separate, because a failing run still ran), last failure, the error class and
 the counts from the last pass; the mail board renders it, and reads visibly
 different when the schedule is failing.
 
+### Mail into Projects tasks
+
+`src/task_links.rs`. Every sweep pass, manual or scheduled, matches the newest 300 stored
+threads against the open tasks that carry a `watch` property ([projects: Task schema](../projects/README.md#task-schema)).
+The matchers are exact and no model runs. On a match comms appends one dated line under the
+task's `## Mail` heading, with the Gmail link, and moves a `waiting` task to `open`. The Gmail
+link is the idempotency key, so a thread is linked once. A subject or preview with a delivery
+term (`zugestellt`, `delivered`) is written as `Delivered`. c3 mail never crosses. c2 mail
+crosses without its subject. Stored mail is matched rather than the fetched page, because the
+page holds only the newest threads: mail from an outage, and mail older than a new `watch`, fall
+outside it.
+
 ### Mail events into Calendar
 
 A stored inbox sweep also checks new mail for event/ticket terms in its subject and preview. Only a
@@ -1113,6 +1125,12 @@ Google credentials (`GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`,
 `GOOGLE_REFRESH_TOKEN`) live in the overlay `comms.env`; mint the refresh token
 once with `auth/get-refresh-token.ts` (bun). Token values are never logged, and
 the DB connection string is redacted before any display.
+
+The OAuth consent screen must be **In production**, not **Testing**. Google expires a refresh
+token issued to a Testing app after 7 days
+([Google: refresh token expiration](https://developers.google.com/identity/protocols/oauth2#expiration)).
+On 2026-10-20 the token minted on 2026-10-13 stopped working 7 days to the minute after it was
+written, and the sweep failed on `auth` from then on.
 
 ## Schema (`comms` schema, shared instance)
 

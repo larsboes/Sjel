@@ -87,6 +87,11 @@ A task's `status` is `open`, `doing`, `waiting` or `done`. `done:` follows `stat
 schema, and `done:` decides their status. It ran on 2026-10-18 and changed 27 tasks. A project's
 `status` is `active`, `done` or `cancelled`; archiving is the move to `Archive/`.
 
+A task can carry `watch:`, comma-separated exact matchers for the mail it waits for: a sender
+domain (`miele.de`), a sender address, a Gmail thread id, or an order number in the subject.
+comms owns the matching and writes through this capability's record routes; see
+[comms: Mail into Projects tasks](../comms/README.md#mail-into-projects-tasks).
+
 ## Embedded bases
 
 A project note that embeds a vault base (`![[Tasks.base#…]]`) shows a live table in the

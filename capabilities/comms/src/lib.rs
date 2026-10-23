@@ -47,6 +47,7 @@ pub mod relevance;
 pub mod rules;
 pub mod sources;
 pub mod store;
+pub mod task_links;
 pub mod travel;
 pub mod vault_links;
 

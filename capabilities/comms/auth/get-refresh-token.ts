@@ -13,6 +13,7 @@
  *   bun capabilities/comms/auth/get-refresh-token.ts
  *   bun capabilities/comms/auth/get-refresh-token.ts --env entities.env --scope contacts.readonly
  *   ... --clipboard   # take the client JSON from the clipboard instead
+ *   ... --client-from comms.env   # reuse the client an earlier mint wrote into the overlay
  */
 
 import { readFileSync, writeFileSync, mkdirSync, chmodSync } from "node:fs";
@@ -149,9 +150,35 @@ function upsertEnv(env: string, key: string, value: string): string {
   return `${env}${sep}${key}=${value}\n`;
 }
 
-// --- 1. credentials from Bitwarden ---
+/**
+ * `--client-from comms.env`: the client ID and secret another mint already wrote into the
+ * overlay. A Google Auth Platform client shows its secret once, at creation, so after the first
+ * mint the overlay is the only local copy (2026-10-23). Reuses that client for a second grant,
+ * for example entities' contacts scope. Values are never printed.
+ */
+function overlayEnvClient(): OAuthClient | null {
+  const from = flag("--client-from")[0];
+  if (!from) return null;
+  if (!/^[a-z][a-z0-9-]*\.env$/.test(from)) die(`--client-from must be a bare file name like comms.env, got ${from}`);
+  const root = overlayRoot();
+  if (!root) die("could not resolve the deployment overlay; run tools/install.sh or set SJEL_OVERLAY_ROOT");
+  let body = "";
+  try {
+    body = readFileSync(join(root, "config", from), "utf8");
+  } catch {
+    die(`cannot read ${from} in the overlay's config folder`);
+  }
+  const get = (key: string) =>
+    body.split("\n").find((l) => l.startsWith(`${key}=`))?.slice(key.length + 1).trim() ?? "";
+  const client_id = get("GOOGLE_CLIENT_ID");
+  const client_secret = get("GOOGLE_CLIENT_SECRET");
+  if (!client_id || !client_secret) die(`${from} holds no GOOGLE_CLIENT_ID and GOOGLE_CLIENT_SECRET`);
+  return { client_id, client_secret, token_uri: "https://oauth2.googleapis.com/token" };
+}
+
+// --- 1. the OAuth client: overlay env, clipboard, keychain, then Bitwarden ---
 const { client_id, client_secret, token_uri } =
-  (await clipboardClient()) ?? (await keychainClient()) ?? (await bwClient());
+  overlayEnvClient() ?? (await clipboardClient()) ?? (await keychainClient()) ?? (await bwClient());
 
 // --- 2. build the consent URL (offline + forced consent → guarantees a refresh_token) ---
 const authUrl =

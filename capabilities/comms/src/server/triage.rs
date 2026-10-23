@@ -117,6 +117,7 @@ pub(super) struct SweepOutcome {
     pub(super) people_registry_names: usize,
     pub(super) events: mail_events::ScanReport,
     pub(super) receipts: mail_receipts::ScanReport,
+    pub(super) tasks: comms::task_links::LinkReport,
     #[serde(skip)]
     fetched_ids: Vec<String>,
     #[serde(skip)]
@@ -147,6 +148,7 @@ pub(super) fn run_inbox_sweep(
         people_registry_names,
         events: mail_events::ScanReport::default(),
         receipts: mail_receipts::ScanReport::default(),
+        tasks: comms::task_links::LinkReport::default(),
         fetched_ids: Vec::with_capacity(page.threads.len()),
         new_ids: Vec::new(),
         next_cursor: page.next_page_token.clone(),
@@ -211,6 +213,7 @@ pub(super) async fn triage_sweep_handler(Json(body): Json<TriageSweepBody>) -> H
         let mut outcome = run_inbox_sweep(&cfg, limit, cursor.as_deref())?;
         outcome.events = mail_events::analyze_batch(&runtime, &cfg, &outcome.fetched_ids);
         outcome.receipts = mail_receipts::analyze_batch(&runtime, &cfg, &outcome.fetched_ids);
+        outcome.tasks = comms::task_links::link_recent(&cfg);
         let store = Store::open(&cfg.database_path).map_err(|error| error.to_string())?;
         let total_stored = store
             .list_triage(None)
@@ -223,6 +226,7 @@ pub(super) async fn triage_sweep_handler(Json(body): Json<TriageSweepBody>) -> H
             "redacted": outcome.redacted,
             "events": outcome.events,
             "finance_receipts": outcome.receipts,
+            "task_links": outcome.tasks,
             "total_stored": total_stored,
             // Same shape and same words as the refresh receipt's, because the
             // question is the same one: did the c2 escalation run blind?

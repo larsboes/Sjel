@@ -327,6 +327,7 @@ fn spawn_inbox_sweep(
                         outcome.events = mail_events::analyze_batch(&runtime, &cfg, &outcome.new_ids);
                         outcome.receipts =
                             mail_receipts::analyze_batch(&runtime, &cfg, &outcome.new_ids);
+                        outcome.tasks = comms::task_links::link_recent(&cfg);
                         store
                             .record_sweep_success(
                                 INBOX_SWEEP_SOURCE,
@@ -340,7 +341,8 @@ fn spawn_inbox_sweep(
                         // alone cannot tell that run from a quiet one.
                         Ok(Some(format!(
                             "{} considered, {} new, {} redacted, {} skipped, {} event proposal(s), \
-                             {} paid-receipt candidate(s), {} event failure(s), receipt failures {:?}, people registry {} ({} names)",
+                             {} paid-receipt candidate(s), {} event failure(s), receipt failures {:?}, people registry {} ({} names), \
+                             {} task link(s) ({} reopened, {} failure(s))",
                             outcome.fetched,
                             outcome.new_count,
                             outcome.redacted,
@@ -350,7 +352,10 @@ fn spawn_inbox_sweep(
                             outcome.events.failed,
                             outcome.receipts.failure_stages,
                             outcome.people_registry,
-                            outcome.people_registry_names
+                            outcome.people_registry_names,
+                            outcome.tasks.linked,
+                            outcome.tasks.reopened,
+                            outcome.tasks.failed
                         )))
                     }
                     Err(error) => {

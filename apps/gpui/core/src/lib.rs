@@ -26,6 +26,7 @@ pub mod finance;
 pub mod inline;
 pub mod inventory;
 pub mod mail;
+pub mod packs;
 pub mod people;
 pub mod route;
 pub mod shell;

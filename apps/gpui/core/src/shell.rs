@@ -1230,6 +1230,28 @@ impl Shell {
             .await
     }
 
+    /// Agent skills across installed harnesses from `tools/harnesses status --json`.
+    pub async fn packs(&self) -> ShellResult<crate::packs::PacksView> {
+        self.json(Method::GET, "/api/sjel-status/packs", None, 30)
+            .await
+    }
+
+    /// Deploy, sync or remove Packs on one harness.
+    pub async fn write_pack(
+        &self,
+        action: &str,
+        harness: &str,
+        packs: &[String],
+    ) -> ShellResult<crate::packs::PackWriteResult> {
+        let body = serde_json::json!({
+            "action": action,
+            "harness": harness,
+            "packs": packs,
+        });
+        self.json(Method::POST, "/api/sjel-status/packs", Some(body), 60)
+            .await
+    }
+
     /// Entries overlapping `[from, to)`, both `YYYY-MM-DD`: `to` is exclusive.
     pub async fn calendar(&self, from: &str, to: &str) -> ShellResult<Vec<CalendarEntry>> {
         let path = format!("/calendar/api/entries?from={from}&to={to}");

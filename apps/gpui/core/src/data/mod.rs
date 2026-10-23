@@ -115,6 +115,10 @@ impl Busy {
     pub fn contains(&self, key: &str) -> bool {
         self.0.contains(key)
     }
+
+    pub fn is_empty(&self) -> bool {
+        self.0.is_empty()
+    }
 }
 
 #[cfg(test)]

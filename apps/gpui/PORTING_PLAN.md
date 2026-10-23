@@ -28,7 +28,7 @@
 | 17 | `/capabilities`| Capability Manager | **Ported** | Native GPUI (`Capabilities`) | Status Only | Sjel Shell / Daemon |
 | 18 | `/settings` | Settings & Shortcuts | **Ported** | Native GPUI (`Settings`) | Native Tab | Local GPUI State |
 | 19 | `/systems` | Systems & Host Telemetry | **Ported** | Native GPUI (`SystemsPage`) | N/A | `capabilities/sjel-status`, `macmon` |
-| 20 | `/packs` | Packs & Harness Sync | **To Do** | Web Fallback (`/packs`) | N/A | `tools/harnesses` |
+| 20 | `/packs` | Packs & Harness Sync | **Ported** | Native GPUI (`PacksPage`) | N/A | `tools/harnesses` |
 | 21 | `/self` | Self-Model & Knowledge | **To Do** | Web Fallback (`/self`) | N/A | `self.json` / `graphify` |
 | 22 | `/cv` | CV Builder & Applications| **To Do** | Web Fallback (`/cv`) | N/A | `Packs/cv` / `cv` CLI |
 | 23 | `/media` | Media Ingest Ledger | **To Do** | Web Fallback (`/media`) | N/A | `capabilities/media` |
@@ -51,17 +51,9 @@
 - **Not here**: `/api/top-processes` is a Vite dev-server middleware and has no owner on this side,
   so the largest-RAM-users popover stays on the web page until something serves it.
 
-### 📋 Work Package 1: Packs & Harness Deployments (`/packs`)
-- **Objective**: Manage agent skills across installed harnesses (Claude Code, Pi, Codex, OpenCode) with drift status and one-click sync directly inside GPUI.
-- **Data Source**: Shelling `tools/harnesses status --json` and `tools/harnesses sync` via Sjel shell.
-- **UI Components to Build**:
-  - Harness matrix grid (Pack name, Skill name, deployed status per agent harness).
-  - Drift badge pill (`current`, `drifted`, `uninstalled`).
-  - Action buttons: "Deploy All", "Sync Harness", "Inspect Drift".
-- **Target Files**:
-  - `apps/gpui/core/src/packs.rs` (Data models and RPC)
-  - `apps/gpui/src/packs_view.rs` (Native GPUI view)
-  - Connect into `apps/gpui/src/workspace.rs` and `apps/gpui/core/src/route.rs`.
+### ✅ Work Package 1: Packs & Harness Deployments (`/packs`)
+- **Status**: Ported (2026-10-23).
+- **Shipped**: `apps/gpui/core/src/packs.rs` (data models, wire payloads, matrix rows calculation, attention detection, and RPC helpers) and `apps/gpui/src/packs_view.rs` (`PacksPage` with harness summary cards, orphan status alerts, interactive skill-by-harness matrix grid with deploy/sync cell buttons, stray inspections, and filtering). Wired into `route.rs` as `Page::Packs` (`/packs`, `g p`).
 
 ### 📋 Work Package 2: Self-Model & Knowledge Architecture (`/self`)
 - **Objective**: Replace the web Svelte `/self` route with a native GPUI architectural diagram and unit browser.

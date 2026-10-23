@@ -109,6 +109,7 @@ fn page_icon(page: Page) -> IconName {
         Page::Finance => IconName::ChartPie,
         Page::People => IconName::CircleUser,
         Page::Inventory => IconName::Folder,
+        Page::Packs => IconName::Folder,
         Page::Settings => IconName::Settings,
     }
 }
@@ -172,6 +173,7 @@ pub fn bind_keys(cx: &mut App) {
         KeyBinding::new("g s", GoTo(Page::Software), Some("Workspace")),
         KeyBinding::new("g u", GoTo(Page::Import), Some("Workspace")),
         KeyBinding::new("g x", GoTo(Page::Systems), Some("Workspace")),
+        KeyBinding::new("g p", GoTo(Page::Packs), Some("Workspace")),
         KeyBinding::new("g ,", GoTo(Page::Settings), Some("Workspace")),
     ]);
     cx.bind_keys(
@@ -225,6 +227,7 @@ pub struct Workspace {
     pub software: Entity<crate::software::Software>,
     pub import: Entity<crate::import::ImportPage>,
     pub systems: Entity<crate::systems::SystemsPage>,
+    pub packs: Entity<crate::packs_view::PacksPage>,
     /// Approval ids and capability names with a request in flight.
     pub busy: Busy,
     pub selection: Selection,
@@ -281,6 +284,7 @@ impl Workspace {
         let software = cx.new(|_| crate::software::Software::new(repo.clone()));
         let import = cx.new(|_| crate::import::ImportPage::new(repo.clone()));
         let systems = cx.new(|_| crate::systems::SystemsPage::new(repo.clone()));
+        let packs = cx.new(|_| crate::packs_view::PacksPage::new(repo.clone()));
         let appearance_settings = AppearanceSettings::load();
         let mut workspace = Self {
             page: Page::Home,
@@ -306,6 +310,7 @@ impl Workspace {
             software,
             import,
             systems,
+            packs,
             busy: Busy::default(),
             selection: Selection::default(),
             nav_scroll: ScrollHandle::new(),
@@ -390,6 +395,8 @@ impl Workspace {
                 self.import.update(cx, |import, cx| import.load(cx));
             } else if page == Page::Systems {
                 self.systems.update(cx, |systems, cx| systems.activate(cx));
+            } else if page == Page::Packs {
+                self.packs.update(cx, |packs, cx| packs.load(cx));
             } else if page == Page::Documents {
                 self.documents
                     .update(cx, |documents, cx| documents.load(cx));
@@ -963,6 +970,8 @@ impl Workspace {
             self.inventory_page.update(cx, |p, cx| p.refresh(cx));
         } else if self.page == Page::Systems {
             self.systems.update(cx, |p, cx| p.refresh(cx));
+        } else if self.page == Page::Packs {
+            self.packs.update(cx, |p, cx| p.refresh(cx));
         }
     }
 
@@ -1279,6 +1288,7 @@ impl Render for Workspace {
             Page::Software => self.software.clone().into_any_element(),
             Page::Import => self.import.clone().into_any_element(),
             Page::Systems => self.systems.clone().into_any_element(),
+            Page::Packs => self.packs.clone().into_any_element(),
             Page::Documents => {
                 self.documents
                     .update(cx, |documents, cx| documents.set_palette(palette, cx));
@@ -1650,6 +1660,8 @@ mod tests {
         // Backwards from the first page wraps to the last one the sidebar lists, and Systems
         // sits fourth in that history rather than at the end.
         cx.simulate_keystrokes("shift-cmd-[");
+        view.read_with(cx, |view, _| assert_eq!(view.page, Page::Packs));
+        cx.simulate_keystrokes("shift-cmd-[");
         view.read_with(cx, |view, _| assert_eq!(view.page, Page::Import));
         cx.simulate_keystrokes("shift-cmd-[");
         view.read_with(cx, |view, _| assert_eq!(view.page, Page::Software));
@@ -1671,6 +1683,8 @@ mod tests {
         view.read_with(cx, |view, _| assert_eq!(view.page, Page::Backup));
         cx.simulate_keystrokes("g x");
         view.read_with(cx, |view, _| assert_eq!(view.page, Page::Systems));
+        cx.simulate_keystrokes("g p");
+        view.read_with(cx, |view, _| assert_eq!(view.page, Page::Packs));
     }
 
     #[gpui::test]

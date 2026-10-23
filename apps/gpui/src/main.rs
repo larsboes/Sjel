@@ -27,6 +27,7 @@ mod inventory_view;
 #[cfg(target_os = "macos")]
 mod macos_glass;
 mod mail;
+mod packs_view;
 #[cfg(target_os = "macos")]
 mod pdf_kit;
 mod people_view;

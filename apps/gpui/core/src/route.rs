@@ -34,10 +34,12 @@ pub enum Page {
     /// Appearance, connection, updates and shortcuts (`sjel://settings`). The dashboard has no
     /// page of that name, so it is not in `DESTINATIONS`.
     Settings,
+    /// Agent skills across installed harnesses (`sjel://packs`).
+    Packs,
 }
 
 impl Page {
-    pub const ALL: [Page; 18] = [
+    pub const ALL: [Page; 19] = [
         Page::Home,
         Page::Context,
         Page::Capabilities,
@@ -55,6 +57,7 @@ impl Page {
         Page::Inventory,
         Page::Software,
         Page::Import,
+        Page::Packs,
         Page::Settings,
     ];
 
@@ -77,6 +80,7 @@ impl Page {
             Self::Software => "/software",
             Self::Import => "/import",
             Self::Systems => "/systems",
+            Self::Packs => "/packs",
             Self::Settings => "/settings",
         }
     }
@@ -88,6 +92,7 @@ impl Page {
             Self::Software => "Software",
             Self::Import => "Import",
             Self::Systems => "Systems",
+            Self::Packs => "Packs",
             _ => destination(self.href()).map_or("", |d| d.label),
         }
     }

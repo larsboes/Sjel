@@ -54,6 +54,11 @@ const ROUTES: &[route_manifest::Route] = &[
     ),
     r(
         "GET",
+        "/api/sjel-status/search",
+        "The finder's server results for `q`: events, people, documents, items, subscriptions, trips and mail subjects, five per source, each with a sjel:// link.",
+    ),
+    r(
+        "GET",
         "/api/sjel-status/lan",
         "The local-network listener for paired devices: port, host and the certificate fingerprint a phone pins.",
     ),
@@ -485,6 +490,7 @@ fn build_router(shell: proxy::Proxy) -> Router {
         .route("/api/sjel-status/health", get(sjel_status_health_handler))
         .route("/api/sjel-status/routes", get(routes_handler))
         .route("/api/sjel-status/now", get(now_handler))
+        .route("/api/sjel-status/search", get(search_handler))
         .route("/api/sjel-status/lan", get(lan_handler))
         .route("/api/sjel-status/capabilities", get(capabilities_handler))
         .route("/api/sjel-status/self", get(self_model_handler))

@@ -65,6 +65,7 @@ in this process would rebuild the plumbing the item deleted. Dependabot
 - `POST /api/sjel-status/capabilities/:name/stop` — take one down and hold it
 - `GET /api/sjel-status/runtime` — this device's selected/effective runtime profile, power source and saved exceptions
 - `POST /api/sjel-status/runtime` — save `selection` (Auto, Normal, On the go) or the `allow` category set; optional `expected_revision` rejects stale updates with 409
+- `GET /api/sjel-status/search?q=` — the app finder's server results: calendar events, people, documents, inventory items, subscriptions, trips and mail (subject and sender, never the body), read from the shared database, every word required, five per source. Each hit carries a `sjel://` link the app already opens (`src/status/search.rs`).
 - `GET /api/sjel-status/now` — aggregated "now" snapshot for menu bar and ambient surfaces: system health, pending agent approvals, current/next/upcoming calendar entries, active/next trips, and warnings
 - `GET /api/sjel-status/mirror/manifest` — what the read-only copy for another device holds, when it was built, its digest, and how many foreign keys the selection broke. The cheap half of a fetch, so a device decides before shipping a whole database.
 - `GET /api/sjel-status/mirror` — the copy itself, served with range support so a device can resume. `sjel mirror build` decides what it contains; this surface follows the manifest's `path` rather than re-deriving it.

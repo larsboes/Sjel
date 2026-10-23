@@ -46,6 +46,8 @@ final class SjelMacViewModel: ObservableObject {
     private let login = DashboardLogin()
     private let notifications = ApprovalNotifications()
     private var announced: Set<String> = []
+    /// Findings already notified, kept across launches so a restart does not repeat them.
+    private var announcedFindings = Set(UserDefaults.standard.stringArray(forKey: "announcedFindings") ?? [])
     private var quickAsk: QuickAsk?
 
     /// The menu bar icon is the only part seen without a click, so it carries the state:
@@ -88,6 +90,13 @@ final class SjelMacViewModel: ObservableObject {
                 try? await Task.sleep(for: .seconds(5))
             }
         }
+        // The host watch runs hourly, so five minutes is prompt enough to tell of a new finding.
+        Task { [weak self] in
+            while !Task.isCancelled {
+                await self?.refreshFindings()
+                try? await Task.sleep(for: .seconds(300))
+            }
+        }
         // The health asks every capability, so it polls slower. Opening the panel also
         // refreshes it, so what the panel shows is never older than one open.
         Task { [weak self] in
@@ -107,6 +116,21 @@ final class SjelMacViewModel: ObservableObject {
             announced.insert(approval.id)
             notifications.announce(approval)
         }
+    }
+
+    /// Notifies each new host-watch finding once, and withdraws the notification of one that
+    /// cleared. A shell that does not answer changes nothing.
+    func refreshFindings() async {
+        guard let findings = await bridge.hostWatchFindings() else { return }
+        let open = Set(findings.map(\.occurrence))
+        for finding in findings where !announcedFindings.contains(finding.occurrence) {
+            notifications.post(id: finding.occurrence, title: finding.title, body: finding.note)
+        }
+        for cleared in announcedFindings.subtracting(open) {
+            notifications.withdraw(id: cleared)
+        }
+        announcedFindings = open
+        UserDefaults.standard.set(Array(open), forKey: "announcedFindings")
     }
 
     func decide(id: String, allow: Bool) async {
@@ -737,7 +761,8 @@ struct CapabilityRow: View {
 }
 
 /// Posts one notification per waiting agent write, with Allow and Deny on it, and reports the
-/// owner's choice back. Needs an app bundle, which `apps/mac/install` builds.
+/// owner's choice back; also posts each new host-watch finding. Needs an app bundle, which
+/// `apps/mac/install` builds.
 final class ApprovalNotifications: NSObject, UNUserNotificationCenterDelegate, @unchecked Sendable {
     private static let category = "SJEL_AGENT_WRITE"
     var onDecision: (@Sendable (String, Bool) -> Void)?
@@ -761,6 +786,15 @@ final class ApprovalNotifications: NSObject, UNUserNotificationCenterDelegate, @
         content.sound = .default
         let request = UNNotificationRequest(identifier: approval.id, content: content, trigger: nil)
         UNUserNotificationCenter.current().add(request)
+    }
+
+    /// A plain notification with no actions, for something that needs a look, not a decision.
+    func post(id: String, title: String, body: String) {
+        let content = UNMutableNotificationContent()
+        content.title = title
+        content.body = body
+        content.sound = .default
+        UNUserNotificationCenter.current().add(UNNotificationRequest(identifier: id, content: content, trigger: nil))
     }
 
     func withdraw(id: String) {

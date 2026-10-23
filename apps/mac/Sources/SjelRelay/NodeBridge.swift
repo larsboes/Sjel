@@ -97,6 +97,18 @@ public enum AskOutcome: Sendable, Equatable {
 }
 
 /// Bridge connecting the native macOS companion to the local Sjel daemon.
+/// One condition the hourly host watch still sees (`GET /api/sjel-status/host-watch`): a
+/// runaway process, a filling disk, an exposed listener, or a credential that stopped working.
+public struct HostFinding: Sendable, Equatable, Decodable {
+    public let key: String
+    public let title: String
+    public let note: String
+    public let first_seen: String
+
+    /// One condition, one occurrence: a finding that clears and comes back is new again.
+    public var occurrence: String { "finding:\(key)@\(first_seen)" }
+}
+
 public final class NodeBridge: Sendable {
     public let baseURL: URL
     private let session: URLSession
@@ -174,6 +186,18 @@ public final class NodeBridge: Sendable {
         // A start or restart waits for the service to come up.
         request.timeoutInterval = 60
         return request
+    }
+
+    /// The host watch's open findings, or nil when the shell did not answer.
+    public func hostWatchFindings() async -> [HostFinding]? {
+        guard let bearer = token.get() else { return nil }
+        var request = URLRequest(url: baseURL.appendingPathComponent("api/sjel-status/host-watch"))
+        request.setValue("Bearer \(bearer)", forHTTPHeaderField: "Authorization")
+        guard let (data, response) = try? await session.data(for: request),
+              (response as? HTTPURLResponse)?.statusCode == 200
+        else { return nil }
+        struct Body: Decodable { let findings: [HostFinding] }
+        return try? JSONDecoder().decode(Body.self, from: data).findings
     }
 
     /// Today's and tomorrow's calendar entries through the shell's proxy, or nil when the

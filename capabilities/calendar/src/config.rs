@@ -32,7 +32,7 @@ pub struct GoogleConfig {
     /// GOOGLE_REFRESH_TOKEN. Default `$SJEL_PERSONAL_ROOT/config/calendar.env`.
     ///
     /// Pointing this at comms' `comms.env` is supported and is the cheap path:
-    /// `capabilities/comms/auth/get-refresh-token.ts` already requests
+    /// comms' grant `google-comms` already carries
     /// `calendar.events` alongside its Gmail scope, so that grant covers this
     /// capability too. Its own default is a separate file so the two can be
     /// revoked independently.

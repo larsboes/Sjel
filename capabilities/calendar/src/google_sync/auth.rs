@@ -7,9 +7,9 @@ pub(super) const CALENDAR_API: &str = "https://www.googleapis.com/calendar/v3/ca
 /// readonly scope; `calendar.events` covers reading *and* writing events and
 /// is therefore the one grant that serves both runs.
 ///
-/// `capabilities/comms/auth/get-refresh-token.ts` already requests
-/// `calendar.events`, so an operator who has run that bootstrap can point
-/// `google.env_path` at `comms.env` instead of minting a second grant.
+/// comms' grant `google-comms` already carries `calendar.events`, so an
+/// operator can point `google.env_path` at `comms.env` instead of minting a
+/// second grant; calendar then reads it from the keychain.
 pub const SCOPE_READONLY: &str = "https://www.googleapis.com/auth/calendar.readonly";
 pub const SCOPE_EVENTS: &str = "https://www.googleapis.com/auth/calendar.events";
 

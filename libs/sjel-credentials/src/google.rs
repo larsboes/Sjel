@@ -334,6 +334,36 @@ fn from_env(path: &Path) -> Result<GoogleOAuthCredential, String> {
     })
 }
 
+/// The largest client JSON accepted. Google's is about 400 bytes.
+const MAX_CLIENT_JSON: u64 = 64 * 1024;
+
+/// Connects one grant from a downloaded client JSON file: read it into a zeroizing buffer, run
+/// [`sign_in`], [`store`] the grant. The one path the desktop app (Settings › Accounts) and
+/// `sjel credentials connect` both take. Blocks until the browser returns.
+pub fn connect_from_file(
+    catalog: &Path,
+    id: &CredentialId,
+    label: &str,
+    capability: &str,
+    scopes: &[String],
+    client_file: &Path,
+    open_url: impl FnOnce(&str),
+) -> Result<(), String> {
+    let size = std::fs::metadata(client_file)
+        .map_err(|_| "cannot read the client JSON file".to_owned())?
+        .len();
+    if size > MAX_CLIENT_JSON {
+        return Err("the file is too large to be a client JSON".into());
+    }
+    let text = Zeroizing::new(
+        std::fs::read_to_string(client_file)
+            .map_err(|_| "cannot read the client JSON file".to_owned())?,
+    );
+    let client = parse_client_json(&text)?;
+    let grant = sign_in(&client, scopes, open_url)?;
+    store(catalog, id, label, vec![capability.to_owned()], &grant)
+}
+
 /// The three keys a pre-keychain grant kept in an overlay env file.
 const ENV_KEYS: [&str; 3] = [
     "GOOGLE_CLIENT_ID",

@@ -17,7 +17,7 @@
     }
   ],
 
-  "_comment_google": "Phase E, Google Calendar two-way sync. calendar_id has NO DEFAULT — 'primary' is the account's own calendar, a secondary one is its long …@group.calendar.google.com id; guessing would sync the wrong calendar. env_path points at a KEY=value file holding GOOGLE_CLIENT_ID / GOOGLE_CLIENT_SECRET / GOOGLE_REFRESH_TOKEN, defaulting to $SJEL_PERSONAL_ROOT/config/calendar.env. capabilities/comms/auth/get-refresh-token.ts already mints a token with the calendar.events scope, so pointing env_path at comms.env reuses that grant instead of creating a second one. Never put a token value in this file.",
+  "_comment_google": "Phase E, Google Calendar two-way sync. calendar_id has NO DEFAULT — 'primary' is the account's own calendar, a secondary one is its long …@group.calendar.google.com id; guessing would sync the wrong calendar. env_path points at a KEY=value file holding GOOGLE_CLIENT_ID / GOOGLE_CLIENT_SECRET / GOOGLE_REFRESH_TOKEN, defaulting to $SJEL_PERSONAL_ROOT/config/calendar.env. comms' keychain grant google-comms already carries the calendar.events scope, so pointing env_path at comms.env reuses that grant instead of creating a second one. Never put a token value in this file.",
   "google": {
     "calendar_id": "primary",
     "env_path": "",

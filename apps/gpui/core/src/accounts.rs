@@ -7,7 +7,6 @@
 //! the OS keychain. No secret crosses an HTTP route.
 
 use serde::Deserialize;
-use zeroize::Zeroizing;
 
 /// One declared credential, as sjel-status reports it.
 #[derive(Clone, Debug, Deserialize, PartialEq, Eq)]
@@ -45,10 +44,8 @@ impl CredentialRow {
     }
 }
 
-/// The largest client JSON accepted. Google's is about 400 bytes.
-const MAX_CLIENT_JSON: u64 = 64 * 1024;
-
-/// Reads the dropped client JSON file into a zeroizing buffer, then connects `row`'s grant.
+/// Connects `row`'s grant from the dropped client JSON file
+/// (`sjel_credentials::google::connect_from_file`, the path `sjel credentials connect` takes too).
 /// Blocks until the browser returns (up to five minutes); run it off the UI thread.
 pub fn connect_google(row: &CredentialRow, client_file: &std::path::Path) -> Result<(), String> {
     use sjel_credentials::{google, CredentialId};
@@ -56,24 +53,20 @@ pub fn connect_google(row: &CredentialRow, client_file: &std::path::Path) -> Res
     if row.kind != google::KIND {
         return Err(format!("{} is not a Google grant", row.label));
     }
-    let size = std::fs::metadata(client_file)
-        .map_err(|_| "cannot read the dropped file".to_owned())?
-        .len();
-    if size > MAX_CLIENT_JSON {
-        return Err("the dropped file is too large to be a client JSON".into());
-    }
-    let text = Zeroizing::new(
-        std::fs::read_to_string(client_file)
-            .map_err(|_| "cannot read the dropped file".to_owned())?,
-    );
-    let client = google::parse_client_json(&text)?;
     let id = CredentialId::parse(row.id.as_str()).map_err(|e| e.to_string())?;
     let catalog = sjel_config::overlay_config("credentials.toml")
         .ok_or("no private overlay is configured on this Mac")?;
-    let grant = google::sign_in(&client, &row.scopes, |url| {
-        let _ = std::process::Command::new("open").arg(url).spawn();
-    })?;
-    google::store(&catalog, &id, &row.label, vec![row.capability.clone()], &grant)
+    google::connect_from_file(
+        &catalog,
+        &id,
+        &row.label,
+        &row.capability,
+        &row.scopes,
+        client_file,
+        |url| {
+            let _ = std::process::Command::new("open").arg(url).spawn();
+        },
+    )
 }
 
 /// Moves `row`'s grant from its old overlay env file into the keychain, with no browser

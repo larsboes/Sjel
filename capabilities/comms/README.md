@@ -1123,9 +1123,10 @@ Browser-extension and direct HTTP clients must supply the token themselves.
 
 The Google grant is the keychain credential `google-comms`, declared in `service.toml` and
 connected in the desktop app (Settings › Accounts: drop the client JSON, press Connect).
-Until it is connected, comms reads `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET` and
-`GOOGLE_REFRESH_TOKEN` from the overlay `comms.env`, which `auth/get-refresh-token.ts` (bun)
-writes. Both paths go through `libs/sjel-credentials/src/google.rs`. Token values are never
+`sjel credentials connect google-comms <client.json>` does the same from a terminal. Until it
+is connected, comms reads `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET` and
+`GOOGLE_REFRESH_TOKEN` from the overlay `comms.env`; `sjel credentials move google-comms`
+moves them into the keychain. Both paths go through `libs/sjel-credentials/src/google.rs`. Token values are never
 logged, and the DB connection string is redacted before any display.
 
 The OAuth consent screen must be **In production**, not **Testing**. Google expires a refresh

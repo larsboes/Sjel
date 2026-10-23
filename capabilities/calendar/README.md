@@ -738,9 +738,10 @@ value is ever logged — not in an error, not in a report, not in a failed‑ref
 body (Google puts token material in some of those).
 
 `calendar.events` is the scope; it covers reading and writing events, so one
-grant serves both runs. `capabilities/comms/auth/get-refresh-token.ts` already
-requests it, so pointing `google.env_path` at `comms.env` reuses that grant
-instead of minting a second one.
+grant serves both runs. comms' grant `google-comms` already includes it, so
+pointing `google.env_path` at `comms.env` reuses that grant instead of minting a
+second one: calendar then reads it from the keychain, where comms does
+(`src/google_sync/auth.rs`).
 
 **Absent or broken credentials fail loudly and by name**, never as a no‑op:
 which key, which file, and what to do about it. An HTTP failure from Google
@@ -756,22 +757,19 @@ Detailed data models, forward-only rhythm invariants, soft conflict resolution, 
 The credential is a configured input, never something this capability acquires
 on its own. In order:
 
-1. **Reuse the grant you already have, if you have one.** `bw unlock`, then
-   `bun capabilities/comms/auth/get-refresh-token.ts` already writes
-   `GOOGLE_CLIENT_ID` / `GOOGLE_CLIENT_SECRET` / `GOOGLE_REFRESH_TOKEN` into
-   `axon-overlay/config/comms.env` **with the `calendar.events` scope
-   included**. If that file exists and its token was minted after that scope was
-   added, skip to step 4 and point `google.env_path` at it. If the token
-   predates the scope, re-run the script once (`prompt=consent` is set, so it
-   returns a fresh refresh token) — that also keeps Gmail working.
+1. **Reuse comms' grant.** `google-comms` carries the `calendar.events` scope.
+   Connect it once in the desktop app (Settings › Accounts) or with
+   `sjel credentials connect google-comms <client.json>`, skip to step 4, and
+   point `google.env_path` at `comms.env`.
 2. Otherwise, in Google Cloud Console: create (or reuse) a project, enable the
    **Google Calendar API**, and create an **OAuth 2.0 Client ID** of type
-   *Desktop app*. Add yourself as a test user on the consent screen so the grant
-   does not expire in seven days.
-3. Mint a refresh token with `scope=https://www.googleapis.com/auth/calendar.events`
-   and `access_type=offline&prompt=consent`, and write the three keys into
-   `axon-overlay/config/calendar.env` as `KEY=value` lines, mode `600`. The
-   comms bootstrap is the reference implementation.
+   *Desktop app*. Set the consent screen's publishing status to **In
+   production**. A test user does not help: Google expires every refresh token of
+   a Testing app after seven days
+   ([Google](https://developers.google.com/identity/protocols/oauth2#expiration)).
+3. A separate calendar account needs its own grant in `axon-overlay/config/calendar.env`
+   (`KEY=value` lines, mode `600`); that path is env-only, so one account's token
+   never reaches the other.
 4. Create `axon-overlay/config/calendar.json` from
    `capabilities/calendar/calendar.config.example.json`, setting at minimum
    `home_timezone` and `google.calendar_id` (`primary`, or a secondary

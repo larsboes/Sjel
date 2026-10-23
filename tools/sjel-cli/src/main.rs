@@ -31,6 +31,7 @@ mod pack_hook;
 mod packs;
 mod paths;
 mod persist;
+mod credentials;
 mod provider_login;
 mod registry;
 mod runargs;
@@ -155,6 +156,7 @@ fn sjel(root: &Path, command: &str, rest: &[String]) -> ExitCode {
         "capture" => capability::command(root, &[&["capture".to_string()], rest].concat()),
         "runtime" => runtime::run(root, rest),
         "provider" => provider_login::run(rest),
+        "credentials" => credentials::run(root, rest),
         "distribution" => distribution::run(root, rest),
         "testflight" => testflight::run(root, rest),
         "agent" => match rest.first().map(String::as_str) {
@@ -181,6 +183,7 @@ fn help(root: &Path, topic: &str) -> ExitCode {
         "capability" => help::CAPABILITY,
         "runtime" => help::RUNTIME,
         "provider" => help::PROVIDER,
+        "credentials" => help::CREDENTIALS,
         "claude" => help::CLAUDE,
         "mcp" => help::MCP,
         "pack" => help::PACK,

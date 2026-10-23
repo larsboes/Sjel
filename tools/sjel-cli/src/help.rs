@@ -29,6 +29,7 @@ Operate capabilities:
   distribution install-package <archive> --sha256 <digest>  Install into a packaged runtime; do not start
   runtime status                 Runtime mode, power and On-the-go exceptions
   provider list|login|logout     Manage model-provider sign-ins in the OS keychain
+  credentials list|connect|move  Connect the Google grants capabilities declare, into the keychain
   runtime mode <mode>            Owner-only: auto, normal or on-the-go
   runtime allow <category> on|off Owner-only: persistent On-the-go exception
   capability list                List registered HTTP capability surfaces and health
@@ -126,6 +127,18 @@ pub const PROVIDER: &str = r#"Usage: sjel provider <command>
 Providers: openai (ChatGPT browser sign-in), openai-api, deepseek, opencode-go,
 nvidia-nim and gemini. The inference profile selects the model and endpoint.
 OpenAI ChatGPT sessions use the Responses API; API keys remain a separate credential."#;
+
+pub const CREDENTIALS: &str = r#"Usage: sjel credentials <command>
+
+  list                           Every credential a capability declares, and whether the
+                                 keychain holds it
+  connect <id> <client.json>     Connect a Google grant: opens the browser for consent and
+                                 writes the grant to the keychain
+  move <id>                      Move a grant from its old overlay env file to the keychain,
+                                 with no browser; the env file keeps only its other lines
+
+The desktop app does the same in Settings › Accounts. A Google client JSON comes from Google
+Cloud › Clients › your Desktop client › Download JSON (or Add secret)."#;
 
 pub const CLAUDE: &str = r#"Usage: sjel claude [apply|check] [--force] [--dry-run]
 

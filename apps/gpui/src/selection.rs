@@ -151,6 +151,7 @@ impl Workspace {
             | Page::SelfModel
             | Page::Cv
             | Page::Media
+            | Page::Research
             | Page::Settings => Vec::new(),
         }
     }

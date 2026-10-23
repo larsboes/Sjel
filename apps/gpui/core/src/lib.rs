@@ -30,6 +30,7 @@ pub mod mail;
 pub mod media;
 pub mod packs;
 pub mod people;
+pub mod research;
 pub mod route;
 pub mod self_model;
 pub mod shell;

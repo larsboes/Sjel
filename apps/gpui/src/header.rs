@@ -134,6 +134,7 @@ fn subtitle(view: &Workspace) -> SharedString {
         }
         Page::Cv => "CV builder, profile variations, applications ledger, and LinkedIn".into(),
         Page::Media => "Exact-byte ingest gate, volume integrity ledger, and run inspection".into(),
+        Page::Research => "Why Sjel exists, evidence behind it, and questions still open".into(),
         Page::Settings => view.settings_section.summary().into(),
     }
 }

@@ -32,7 +32,7 @@
 | 21 | `/self` | Self-Model & Knowledge | **Ported** | Native GPUI (`SelfPage`) | N/A | `self.json` / `graphify` |
 | 22 | `/cv` | CV Builder & Applications| **Ported** | Native GPUI (`CvPage`) | N/A | `Packs/cv` / `cv` CLI |
 | 23 | `/media` | Media Ingest Ledger | **Ported** | Native GPUI (`MediaPage`) | N/A | `capabilities/media` |
-| 24 | `/research` | Local Models & Evals | **To Do** | Web Fallback (`/research`)| N/A | `research/` / MLX / vLLM |
+| 24 | `/research` | Local Models & Evals | **Ported** | Native GPUI (`ResearchPage`)| N/A | `research/`, `upstreams.toml`, `systems.toml` |
 | 25 | `/setup` | Node Setup & QR Pairing | **To Do** | Web Fallback (`/setup`) | Needs Scanner | `capabilities/devices` |
 
 ---
@@ -67,12 +67,16 @@
 - **Status**: Ported (2026-10-23).
 - **Shipped**: `apps/gpui/core/src/media.rs` (data models for `MediaStatus`, `MediaVolume`, `MediaIngestRun`, `MediaIngestItem`, `MediaIngestDetail`, byte formatting, leaf run labels, attention sorting, and shell RPC methods `media_status()`, `media_ingests()`, `media_ingest()`, `media_view()`) and `apps/gpui/src/media_view.rs` (`MediaPage` with index totals header, mounted volume breakdown table, recent ingest runs list with status tallies, and full run inspector with disposition filter tabs and item status badges). Wired into `route.rs` as `Page::Media` (`/media`, `g w`).
 
-### 📋 Work Package 5: Research & Local Decision Models (`/research`)
-- **Objective**: Track local MLX and vLLM model weights, eval benchmark leaderboards, and research papers.
-- **Data Source**: `research/local-decision-models.md` and model telemetry endpoints.
+### ✅ Work Package 5: Research & Local Decision Models (`/research`)
+- **Status**: Ported (2026-10-23).
+- **Shipped**: `apps/gpui/core/src/research.rs` (data models for `UpstreamRow`, `SystemRow`, `ProjectGroup`, `BenchmarkCase`, `BenchmarkResult`, `BenchmarkRun`, `BenchmarkSuite`, `ResearchArticle`, `ResearchView`, pure single-line TOML parser, upstream and suite grouping, and embedded fallback research view) and `apps/gpui/src/research_view.rs` (`ResearchPage` with 3 core tabs: Articles reader with full markdown document rendering, Projects register with search filter, "Runs alongside" systems table, upstreams grouped by verdict, "Add project to watch" live form backed by `watch_upstream()`, and Benchmarks suites evaluation tables with model latency/accuracy and per-case pass/fail breakdown matrix). Wired into `route.rs` as `Page::Research` (`/research`, `g z`).
+
+### 📋 Work Package 6: Node Setup & Device Pairing (`/setup`)
+- **Objective**: Local network node discovery, QR pairing code display and camera scanner, and device keys.
+- **Data Source**: `capabilities/devices`, `capabilities/sjel-status`
 - **Target Files**:
-  - `apps/gpui/core/src/research.rs`
-  - `apps/gpui/src/research_view.rs`
+  - `apps/gpui/core/src/setup.rs`
+  - `apps/gpui/src/setup_view.rs`
 
 ---
 

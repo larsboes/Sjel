@@ -1293,6 +1293,28 @@ impl Shell {
         })
     }
 
+    /// Read the research view containing markdown articles, systems, upstreams, and benchmarks.
+    pub async fn research_view(&self) -> ShellResult<crate::research::ResearchView> {
+        Ok(crate::research::default_research_view())
+    }
+
+    /// Add a watch entry to `upstreams.toml` via `POST /api/sjel-status/upstreams/watch`.
+    pub async fn watch_upstream(
+        &self,
+        url: &str,
+        summary: &str,
+        name: Option<&str>,
+    ) -> ShellResult<crate::research::UpstreamRow> {
+        let mut body = serde_json::json!({
+            "url": url,
+            "summary": summary,
+        });
+        if let Some(n) = name {
+            body["name"] = serde_json::Value::String(n.to_string());
+        }
+        self.json(Method::POST, "/api/sjel-status/upstreams/watch", Some(body), 30).await
+    }
+
     /// Entries overlapping `[from, to)`, both `YYYY-MM-DD`: `to` is exclusive.
     pub async fn calendar(&self, from: &str, to: &str) -> ShellResult<Vec<CalendarEntry>> {
         let path = format!("/calendar/api/entries?from={from}&to={to}");

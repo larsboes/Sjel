@@ -111,6 +111,7 @@ fn page_icon(page: Page) -> IconName {
         Page::Inventory => IconName::Folder,
         Page::Packs => IconName::Folder,
         Page::SelfModel => IconName::Cpu,
+        Page::Research => IconName::BookOpen,
         Page::Settings => IconName::Settings,
     }
 }
@@ -178,6 +179,7 @@ pub fn bind_keys(cx: &mut App) {
         KeyBinding::new("g l", GoTo(Page::SelfModel), Some("Workspace")),
         KeyBinding::new("g y", GoTo(Page::Cv), Some("Workspace")),
         KeyBinding::new("g w", GoTo(Page::Media), Some("Workspace")),
+        KeyBinding::new("g z", GoTo(Page::Research), Some("Workspace")),
         KeyBinding::new("g ,", GoTo(Page::Settings), Some("Workspace")),
     ]);
     cx.bind_keys(
@@ -235,6 +237,7 @@ pub struct Workspace {
     pub self_page: Entity<crate::self_view::SelfPage>,
     pub cv_page: Entity<crate::cv_view::CvPage>,
     pub media_page: Entity<crate::media_view::MediaPage>,
+    pub research_page: Entity<crate::research_view::ResearchPage>,
     /// Approval ids and capability names with a request in flight.
     pub busy: Busy,
     pub selection: Selection,
@@ -295,6 +298,7 @@ impl Workspace {
         let self_page = cx.new(|_| crate::self_view::SelfPage::new(repo.clone()));
         let cv_page = cx.new(|_| crate::cv_view::CvPage::new(repo.clone()));
         let media_page = cx.new(|_| crate::media_view::MediaPage::new(repo.clone()));
+        let research_page = cx.new(|_| crate::research_view::ResearchPage::new(repo.clone()));
         let appearance_settings = AppearanceSettings::load();
         let mut workspace = Self {
             page: Page::Home,
@@ -324,6 +328,7 @@ impl Workspace {
             self_page,
             cv_page,
             media_page,
+            research_page,
             busy: Busy::default(),
             selection: Selection::default(),
             nav_scroll: ScrollHandle::new(),
@@ -416,6 +421,8 @@ impl Workspace {
                 self.cv_page.update(cx, |cv, cx| cv.load(cx));
             } else if page == Page::Media {
                 self.media_page.update(cx, |m, cx| m.load(cx));
+            } else if page == Page::Research {
+                self.research_page.update(cx, |r, cx| r.load(cx));
             } else if page == Page::Documents {
                 self.documents
                     .update(cx, |documents, cx| documents.load(cx));
@@ -997,6 +1004,8 @@ impl Workspace {
             self.cv_page.update(cx, |p, cx| p.refresh(cx));
         } else if self.page == Page::Media {
             self.media_page.update(cx, |p, cx| p.refresh(cx));
+        } else if self.page == Page::Research {
+            self.research_page.update(cx, |p, cx| p.refresh(cx));
         }
     }
 
@@ -1317,6 +1326,7 @@ impl Render for Workspace {
             Page::SelfModel => self.self_page.clone().into_any_element(),
             Page::Cv => self.cv_page.clone().into_any_element(),
             Page::Media => self.media_page.clone().into_any_element(),
+            Page::Research => self.research_page.clone().into_any_element(),
             Page::Documents => {
                 self.documents
                     .update(cx, |documents, cx| documents.set_palette(palette, cx));
@@ -1688,6 +1698,8 @@ mod tests {
         // Backwards from the first page wraps to the last one the sidebar lists, and Systems
         // sits fourth in that history rather than at the end.
         cx.simulate_keystrokes("shift-cmd-[");
+        view.read_with(cx, |view, _| assert_eq!(view.page, Page::Research));
+        cx.simulate_keystrokes("shift-cmd-[");
         view.read_with(cx, |view, _| assert_eq!(view.page, Page::Media));
         cx.simulate_keystrokes("shift-cmd-[");
         view.read_with(cx, |view, _| assert_eq!(view.page, Page::Cv));
@@ -1725,6 +1737,8 @@ mod tests {
         view.read_with(cx, |view, _| assert_eq!(view.page, Page::Cv));
         cx.simulate_keystrokes("g w");
         view.read_with(cx, |view, _| assert_eq!(view.page, Page::Media));
+        cx.simulate_keystrokes("g z");
+        view.read_with(cx, |view, _| assert_eq!(view.page, Page::Research));
     }
 
     #[gpui::test]

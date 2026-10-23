@@ -2985,7 +2985,7 @@ dependencies = [
  "serde_json",
  "serde_urlencoded",
  "sync_wrapper",
- "system-configuration",
+ "system-configuration 0.6.1",
  "tokio",
  "tokio-rustls",
  "tokio-socks",
@@ -3450,9 +3450,11 @@ dependencies = [
  "percent-encoding",
  "pin-project-lite",
  "socket2",
+ "system-configuration 0.7.0",
  "tokio",
  "tower-service",
  "tracing",
+ "windows-registry 0.4.0",
 ]
 
 [[package]]
@@ -6135,7 +6137,10 @@ checksum = "16a1cfa75cc186dd73d5818e510e042e40927bccc9c236b061cea97e1eb08029"
 dependencies = [
  "base64 0.23.1",
  "bytes",
+ "encoding_rs",
+ "futures-channel",
  "futures-core",
+ "futures-util",
  "h2",
  "http",
  "http-body",
@@ -6145,6 +6150,7 @@ dependencies = [
  "hyper-util",
  "js-sys",
  "log",
+ "mime",
  "percent-encoding",
  "pin-project-lite",
  "quinn",
@@ -6153,6 +6159,7 @@ dependencies = [
  "rustls-platform-verifier",
  "serde",
  "serde_json",
+ "serde_urlencoded",
  "sync_wrapper",
  "tokio",
  "tokio-rustls",
@@ -6897,7 +6904,14 @@ version = "0.1.0"
 name = "sjel-credentials"
 version = "0.1.0"
 dependencies = [
+ "base64 0.22.1",
+ "getrandom 0.4.3",
+ "reqwest 0.13.5",
  "serde",
+ "serde_json",
+ "sha2 0.11.1",
+ "sjel-config",
+ "sjel-http",
  "thiserror 2.0.21",
  "toml 1.1.7+spec-1.1.0",
  "zeroize",
@@ -6976,6 +6990,13 @@ dependencies = [
  "serde",
  "serde_json",
  "sjel-gpui-core",
+]
+
+[[package]]
+name = "sjel-http"
+version = "0.1.0"
+dependencies = [
+ "reqwest 0.13.5",
 ]
 
 [[package]]
@@ -7353,6 +7374,17 @@ name = "system-configuration"
 version = "0.6.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "3c879d448e9d986b661742763247d3693ed13609438cf3d006f51f5368a5ba6b"
+dependencies = [
+ "bitflags 2.13.2",
+ "core-foundation 0.9.4",
+ "system-configuration-sys",
+]
+
+[[package]]
+name = "system-configuration"
+version = "0.7.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "a13f3d0daba03132c0aa9767f98351b3488edc2c100cda2d2ec2b04f3d8d3c8b"
 dependencies = [
  "bitflags 2.13.2",
  "core-foundation 0.9.4",

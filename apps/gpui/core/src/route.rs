@@ -42,10 +42,12 @@ pub enum Page {
     Cv,
     /// Media ingest gate and indexed volume integrity ledger (`sjel://media`).
     Media,
+    /// Research articles, upstream projects, and model benchmarks (`sjel://research`).
+    Research,
 }
 
 impl Page {
-    pub const ALL: [Page; 22] = [
+    pub const ALL: [Page; 23] = [
         Page::Home,
         Page::Context,
         Page::Capabilities,
@@ -67,6 +69,7 @@ impl Page {
         Page::SelfModel,
         Page::Cv,
         Page::Media,
+        Page::Research,
         Page::Settings,
     ];
 
@@ -93,6 +96,7 @@ impl Page {
             Self::SelfModel => "/self",
             Self::Cv => "/cv",
             Self::Media => "/media",
+            Self::Research => "/research",
             Self::Settings => "/settings",
         }
     }

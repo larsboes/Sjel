@@ -34,6 +34,7 @@ mod packs_view;
 mod pdf_kit;
 mod people_view;
 mod projects;
+mod research_view;
 mod selection;
 mod self_view;
 mod settings;
